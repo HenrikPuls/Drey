@@ -884,7 +884,8 @@ class BoardService {
           continue;
         }
         const record = this.newestRecordFor(runs, card.id);
-        const repo = card.meta.repo === null ? null : snap.repos.find((r) => r.name === card.meta.repo);
+        const repo =
+          card.meta.repo === null ? null : snap.repos.find((r) => r.name === card.meta.repo) ?? null;
         if (repo !== null && repo.path !== null) {
           // The record's path first (it may predate the home rule);
           // the computed path covers a stamp without a record.

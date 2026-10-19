@@ -101,6 +101,8 @@ function refreshBoard(): Promise<void> {
       // Drop persisted fold state of phases that no longer exist.
       collapse.prune(snapshot.columns.map((column) => column.phase.id));
       note = '';
+      // The worktree note rides along (own round, never blocks the board).
+      void loadWorktreesStatus();
     } catch (error) {
       note = messageOf(error);
     } finally {
@@ -181,6 +183,26 @@ let insertAt = 0;
 const LIVE_RUN_STATES: readonly string[] = ['starting', 'running', 'stopping'];
 let fleetRuns: RunInfo[] = [];
 let chain: ChainStatus | null = null;
+
+// --- the worktree home's status (T-0044, ADR-0080) ------------------------
+
+interface WorktreesStatus {
+  readonly base: string | null;
+  readonly orphans: readonly string[];
+  readonly legacyLeftovers: readonly string[];
+}
+
+let worktrees: WorktreesStatus | null = null;
+
+/** The status note's data — refreshed beside the board, never blocking it. */
+async function loadWorktreesStatus(): Promise<void> {
+  try {
+    worktrees = (await invokeBoard('worktreesStatus', {})) as WorktreesStatus;
+  } catch {
+    worktrees = null;
+  }
+  notifyViews();
+}
 
 const runForCard = (id: string): RunInfo | null =>
   fleetRuns.find((r) => r.ticketId === id && LIVE_RUN_STATES.includes(r.state)) ?? null;
@@ -641,6 +663,10 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     if (metrics !== null) {
       root.append(metrics);
     }
+    const worktreeNote = worktreesNoteNode();
+    if (worktreeNote !== null) {
+      root.append(worktreeNote);
+    }
     if (!snap.isGitRepo) {
       const warn = el('div', 'tickets-warn');
       warn.textContent =
@@ -907,9 +933,50 @@ function masterControlNode(api: DreyPluginApi): HTMLElement {
   chainLog.textContent = 'Log';
   chainLog.addEventListener('click', () => openChainLog(api));
 
+  // T-0044: tidy the worktree home — every worktree whose ticket has no
+  // live run goes (real git; dirty trees are kept and reported), then
+  // every mapped repo gets one prune.
+  const cleanup = el('button', 'icon-btn');
+  cleanup.type = 'button';
+  cleanup.title = 'Clean up worktrees — removes every worktree whose ticket has no live run, then prunes';
+  cleanup.setAttribute('aria-label', 'Clean up worktrees');
+  cleanup.append(api.ui.icon('trash', 14));
+  cleanup.addEventListener('click', () => void runWorktreesCleanup());
+
   masterButtons.push({ run, halt, abort });
-  box.append(run, halt, abort, chainLog);
+  box.append(run, halt, abort, chainLog, cleanup);
   return box;
+}
+
+/** Runs the global worktree cleanup and reports what it did (T-0044). */
+async function runWorktreesCleanup(): Promise<void> {
+  busy = true;
+  note = 'Cleaning up worktrees…';
+  notifyViews();
+  let result: {
+    ok?: boolean;
+    error?: string;
+    report?: { removed: readonly string[]; keptDirty: readonly string[]; failed: readonly unknown[] };
+  };
+  try {
+    result = (await invokeBoard('worktreesCleanup', {})) as typeof result;
+  } catch (error) {
+    result = { ok: false, error: messageOf(error) };
+  }
+  busy = false;
+  if (result.ok === true) {
+    const r = result.report;
+    note =
+      r === undefined
+        ? ''
+        : `Worktrees: ${r.removed.length} removed` +
+          (r.keptDirty.length > 0 ? `, ${r.keptDirty.length} kept dirty` : '') +
+          (r.failed.length > 0 ? `, ${r.failed.length} failed` : '');
+  } else {
+    note = result.error ?? 'the worktree cleanup failed';
+  }
+  notifyViews();
+  void loadWorktreesStatus();
 }
 
 /** Runs a chain control and applies the runner's returned state. */
@@ -959,6 +1026,33 @@ function metricsNode(snap: BoardSnapshot): HTMLElement | null {
   const line = el('div', 'tickets-metrics', parts.join(' · '));
   line.title =
     'Average time this column\'s tickets have been sitting there (from the entered-* stamps)';
+  return line;
+}
+
+/** The worktree home's note line (T-0044): legacy-root leftovers and
+ *  orphan folders under the base — listed, never auto-deleted; the
+ *  Clean up worktrees control collects them. */
+function worktreesNoteNode(): HTMLElement | null {
+  if (worktrees === null) {
+    return null;
+  }
+  const parts: string[] = [];
+  if (worktrees.legacyLeftovers.length > 0) {
+    const n = worktrees.legacyLeftovers.length;
+    parts.push(`${n} legacy worktree folder${n === 1 ? '' : 's'} to clean up`);
+  }
+  if (worktrees.orphans.length > 0) {
+    const n = worktrees.orphans.length;
+    parts.push(`${n} orphan${n === 1 ? '' : 's'} under the worktrees base`);
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  const line = el('div', 'tickets-metrics', `Worktrees: ${parts.join(' · ')}`);
+  line.title = [
+    ...worktrees.legacyLeftovers.map((name) => `legacy: ${name}`),
+    ...worktrees.orphans.map((p) => `orphan: ${p}`),
+  ].join('\n');
   return line;
 }
 
@@ -1718,6 +1812,57 @@ function openCardMenu(
           invokeBoard('openRepoFolder', { repo: card.meta.repo }),
         );
       }
+    });
+    menu.append(button);
+  }
+  {
+    // T-0044: tidy this ticket's checkout — `git worktree remove`, the
+    // branch stays (it carries the work). A dirty tree arms the button
+    // for a confirming second click (the Archive pattern); a ticket
+    // without a repo has no worktree to remove.
+    const known =
+      card.meta.repo !== null && (snapshot?.repos.some((r) => r.name === card.meta.repo) ?? false);
+    const button = el('button', 'tickets-menu-item', 'Remove worktree…');
+    button.type = 'button';
+    button.disabled = !known;
+    button.title = known
+      ? 'Removes the ticket\'s worktree (git worktree remove) — the branch with the work stays'
+      : 'This ticket names no repository';
+    let armed = false;
+    button.addEventListener('click', () => {
+      if (!known) {
+        return;
+      }
+      if (armed) {
+        menu.remove();
+        void run('Removing the worktree', () => invokeBoard('worktreeRemove', { id: card.id, force: true }));
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'Checking the worktree…';
+      void invokeBoard('worktreeRemove', { id: card.id, force: false })
+        .then((raw) => {
+          const res = raw as { ok: boolean; error?: string; dirty?: boolean; status?: string };
+          if (res.ok) {
+            menu.remove(); // the Log line's announce refreshes the board
+            return;
+          }
+          if (res.dirty === true) {
+            armed = true;
+            button.disabled = false;
+            button.textContent = 'Worktree is dirty — remove anyway';
+            button.title = `Uncommitted changes:\n${res.status ?? ''}`;
+            return;
+          }
+          menu.remove();
+          note = res.error ?? 'the worktree could not be removed';
+          notifyViews();
+        })
+        .catch((error: unknown) => {
+          menu.remove();
+          note = messageOf(error);
+          notifyViews();
+        });
     });
     menu.append(button);
   }
