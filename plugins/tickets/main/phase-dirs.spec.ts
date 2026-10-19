@@ -2,7 +2,8 @@ import { promises as fsp } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { listTicketDirs, resolvePhaseDir } from './phase-dirs';
+import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from './phase-dirs';
+import { TicketsGit } from './tickets-git';
 
 describe('resolvePhaseDir', () => {
   it('uses the derived name when it exists', () => {
@@ -49,5 +50,84 @@ describe('listTicketDirs', () => {
 
   it('a missing root reads as no directories', async () => {
     expect(await listTicketDirs(path.join(root, 'nowhere'))).toEqual([]);
+  });
+});
+
+describe('planFolderNumbering (req-50)', () => {
+  const ORDER = ['inbox', 'plan', 'build', 'done'];
+
+  it('names every unprefixed or wrongly numbered folder with its derived name', () => {
+    expect(planFolderNumbering(['_meta', 'archive', 'inbox', 'plan', '50-build', '40-done'], ORDER)).toEqual([
+      { from: 'inbox', to: '10-inbox' },
+      { from: 'plan', to: '20-plan' },
+      { from: '50-build', to: '30-build' },
+    ]);
+  });
+
+  it('folds two folders of one phase into the derived one and leaves the rest alone', () => {
+    expect(planFolderNumbering(['inbox', '10-inbox', 'stray', '_meta'], ORDER)).toEqual([
+      { from: 'inbox', to: '10-inbox' },
+    ]);
+  });
+
+  it('is empty for a numbered repo', () => {
+    expect(planFolderNumbering(['10-inbox', '20-plan', '30-build', '40-done', 'archive', '_meta'], ORDER)).toEqual([]);
+  });
+});
+
+describe('applyFolderNumbering (req-50)', () => {
+  let tickets: string;
+  beforeEach(async () => {
+    tickets = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-number-'));
+  });
+  afterEach(async () => {
+    await fsp.rm(tickets, { recursive: true, force: true });
+  });
+
+  async function put(rel: string): Promise<void> {
+    await fsp.mkdir(path.dirname(path.join(tickets, rel)), { recursive: true });
+    await fsp.writeFile(path.join(tickets, rel), rel, 'utf8');
+  }
+
+  it('swaps two numbered folders without a collision and merges into an existing target', async () => {
+    await put('50-build/T-0001.md');
+    await put('60-review/T-0002.md');
+    await put('inbox/T-0003.md');
+    await put('10-inbox/T-0004.md');
+    const moves = planFolderNumbering(await listTicketDirs(tickets), ['inbox', 'x', 'y', 'z', 'review', 'build']);
+    const touched = await applyFolderNumbering(tickets, moves);
+    expect((await listTicketDirs(tickets)).sort()).toEqual(['10-inbox', '50-review', '60-build']);
+    expect(await fsp.readFile(path.join(tickets, '60-build', 'T-0001.md'), 'utf8')).toBe('50-build/T-0001.md');
+    expect(await fsp.readFile(path.join(tickets, '50-review', 'T-0002.md'), 'utf8')).toBe('60-review/T-0002.md');
+    expect((await fsp.readdir(path.join(tickets, '10-inbox'))).sort()).toEqual(['T-0003.md', 'T-0004.md']);
+    expect(touched.sort()).toEqual(['10-inbox', '50-build', '50-review', '60-build', '60-review', 'inbox']);
+  });
+
+  it('refuses before touching anything when two files of one name would meet', async () => {
+    await put('inbox/T-0001.md');
+    await put('10-inbox/T-0001.md');
+    const moves = planFolderNumbering(await listTicketDirs(tickets), ['inbox']);
+    await expect(applyFolderNumbering(tickets, moves)).rejects.toThrow('would overwrite');
+    expect((await listTicketDirs(tickets)).sort()).toEqual(['10-inbox', 'inbox']);
+  });
+
+  it('commits the renames as one commit, removals included (TicketsGit.commitTree)', async () => {
+    const git = new TicketsGit(() => 'git');
+    const run = (args: string[]): Promise<string> =>
+      git.run(tickets, ['-c', 'user.name=spec', '-c', 'user.email=spec@example.com', ...args]);
+    await run(['init', '-q']);
+    await put('inbox/T-0001.md');
+    await put('plan/T-0002.md');
+    await run(['add', '-A']);
+    await run(['commit', '-q', '-m', 'seed']);
+    await put('plan/T-0009.md'); // untracked: rides along with its folder
+    const touched = await applyFolderNumbering(tickets, planFolderNumbering(await listTicketDirs(tickets), ['inbox', 'plan']));
+    await run(['config', 'user.name', 'spec']);
+    await run(['config', 'user.email', 'spec@example.com']);
+    await git.commitTree(tickets, touched, 'tickets: number phase folders');
+    expect((await run(['status', '--porcelain'])).trim()).toBe('');
+    const files = (await run(['ls-files'])).trim().split('\n').sort();
+    expect(files).toEqual(['10-inbox/T-0001.md', '20-plan/T-0002.md', '20-plan/T-0009.md']);
+    expect((await run(['log', '--oneline'])).trim().split('\n')).toHaveLength(2);
   });
 });

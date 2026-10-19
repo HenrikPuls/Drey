@@ -144,6 +144,13 @@ for (const entry of readdirSync(pluginsDir)) {
       }
     }
   }
+  // Text files the plugin's main side reads at runtime (the tickets
+  // plugin's shipped prompts): `plugins/<id>/prompts/*` lands beside the
+  // compiled main as `<plugin>/prompts/`.
+  const promptsSrc = path.join(pluginDir, 'prompts');
+  if (existsSync(promptsSrc)) {
+    cpSync(promptsSrc, path.join(pluginOut, 'prompts'), { recursive: true });
+  }
   // Third-party runtime files a plugin serves as they are (the diagrams
   // plugin's draw.io web app, fetched by scripts/fetch-drawio.mjs and not
   // in git): `plugins/<id>/vendor/*` lands at the plugin root, so

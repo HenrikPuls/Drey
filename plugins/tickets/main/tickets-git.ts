@@ -120,6 +120,23 @@ export class TicketsGit {
   }
 
   /**
+   * Like `commitPaths`, but stages removals too (`add -A`): for folder
+   * renames (req-50), whose old paths no longer exist on disk.
+   */
+  async commitTree(root: string, repoRelPaths: readonly string[], message: string): Promise<void> {
+    const unique = [...new Set(repoRelPaths)];
+    await this.run(root, ['add', '-A', '--', ...unique]);
+    try {
+      await this.run(root, ['commit', '-m', message, '--', ...unique]);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      if (!/nothing to commit|nothing added to commit|no changes added to commit/i.test(text)) {
+        throw error;
+      }
+    }
+  }
+
+  /**
    * Pushes HEAD to `remote` — the optional auto-push after a transition
    * commit (pipeline.md `push:`, T-0041). `remote` is a NAME from git
    * config, never a URL. Callers treat a failure as a warning: the

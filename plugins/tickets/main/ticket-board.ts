@@ -239,6 +239,49 @@ export function patchPipelinePhase(text: string, phaseId: string, patch: PhasePo
   return `---\n${yaml}---\n${body}`;
 }
 
+/**
+ * Rewrites the order of pipeline.md's phases (req-50, the settings page's
+ * sortable columns). `order` must name every phase exactly once, and the
+ * first (capture target) and last (terminal) phase keep their places.
+ * Each entry moves whole — keys, comments and the prose body stay.
+ */
+export function reorderPipelinePhases(text: string, order: readonly string[]): string {
+  const { yamlText, body, hadFence } = splitFrontmatter(text);
+  if (!hadFence || yamlText === null) {
+    throw new Error('pipeline.md has no frontmatter fence');
+  }
+  const doc = parseDocument(yamlText);
+  if (doc.errors.length > 0) {
+    throw new Error('pipeline.md does not parse');
+  }
+  const phases = doc.get('phases', true);
+  if (!isCollection(phases)) {
+    throw new Error('pipeline.md needs a phases list');
+  }
+  const items = (phases as YAMLSeq).items;
+  const idOf = (item: unknown): string | null => {
+    const id = isMap(item) ? item.get('id') : null;
+    return typeof id === 'string' ? id : null;
+  };
+  const current = items.map(idOf);
+  if (
+    order.length !== current.length ||
+    new Set(order).size !== order.length ||
+    current.some((id) => id === null || !order.includes(id))
+  ) {
+    throw new Error('the new order must name every pipeline phase exactly once');
+  }
+  if (order[0] !== current[0] || order[order.length - 1] !== current[current.length - 1]) {
+    throw new Error('the first and the last phase keep their places');
+  }
+  (phases as YAMLSeq).items = order.map((id) => items[current.indexOf(id)]!);
+  let yaml = doc.toString({ flowCollectionPadding: false, lineWidth: 0 });
+  if (!yaml.endsWith('\n')) {
+    yaml += '\n';
+  }
+  return `---\n${yaml}---\n${body}`;
+}
+
 // --- order.md --------------------------------------------------------------
 
 export interface OrderParse {

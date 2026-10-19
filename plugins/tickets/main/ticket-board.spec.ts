@@ -7,6 +7,7 @@ import {
   parsePipeline,
   parseRepos,
   patchPipelinePhase,
+  reorderPipelinePhases,
   pinsAfterDrop,
   rewriteOrderSection,
 } from './ticket-board';
@@ -368,5 +369,25 @@ describe('patchPipelinePhase - the settings dialog writer', () => {
     expect(build.model).toBe('zai/glm-5.3-flash');
     expect(() => patchPipelinePhase(PIPELINE, 'nope', { workers: 2 })).toThrow('no phase "nope"');
     expect(() => patchPipelinePhase(PIPELINE, 'build', { workers: 0 })).toThrow('whole number');
+  });
+});
+
+describe('reorderPipelinePhases - the sortable columns (req-50)', () => {
+  it('moves whole entries and keeps every key and the prose', () => {
+    const swapped = reorderPipelinePhases(PIPELINE, ['inbox', 'build', 'prioritized', 'done']);
+    const { phases, error } = parsePipeline(swapped);
+    expect(error).toBeNull();
+    expect(phases.map((p) => p.id)).toEqual(['inbox', 'build', 'prioritized', 'done']);
+    expect(phases[1]!.wip).toBe(2);
+    expect(phases[1]!.handover).toBe('agent build-default');
+    expect(swapped).toContain('Prose.');
+  });
+
+  it('refuses an order that drops, repeats or invents a phase, or moves the ends', () => {
+    expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'build', 'done'])).toThrow('exactly once');
+    expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'build', 'build', 'done'])).toThrow('exactly once');
+    expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'qa', 'prioritized', 'done'])).toThrow('exactly once');
+    expect(() => reorderPipelinePhases(PIPELINE, ['prioritized', 'inbox', 'build', 'done'])).toThrow('keep their places');
+    expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'prioritized', 'done', 'build'])).toThrow('keep their places');
   });
 });

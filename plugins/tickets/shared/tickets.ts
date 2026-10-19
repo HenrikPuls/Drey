@@ -324,6 +324,33 @@ export interface MutationResult {
   readonly ok: boolean;
   readonly error?: string;
   readonly warning?: string;
+  /** Reorder / "Number folders" (req-50): how many folders were renamed. */
+  readonly moved?: number;
+}
+
+/** One file of `tickets/_meta/prompts/` as it is on disk (req-50). */
+export interface PromptEntry {
+  readonly ref: string;
+  readonly text: string;
+  /** Drey ships a prompt of this name, so "Reset to the shipped version" applies. */
+  readonly shipped: boolean;
+}
+
+/** The settings page's prompt list: the folder's files and nothing else. */
+export interface PromptListing {
+  /** Absolute path of `tickets/_meta/prompts/`; null without a tickets vault. */
+  readonly folder: string | null;
+  readonly entries: readonly PromptEntry[];
+  /** Every prompt name Drey ships (the "Add Drey's prompts" offer). */
+  readonly shipped: readonly string[];
+}
+
+/** Whether the phase folders carry their derived numbers (T-0041, req-50). */
+export interface FolderStatus {
+  /** Absolute path of `tickets/`; null without a tickets vault. */
+  readonly root: string | null;
+  /** The renames "Number folders" would make; empty = numbered. */
+  readonly moves: readonly { readonly from: string; readonly to: string }[];
 }
 
 /** `create`'s success result: the minted id and the new file's path, so

@@ -10,6 +10,7 @@
  * The renderer only ever sees BoardSnapshot payloads — parsing,
  * validation and YAML stay here.
  */
+import { shell } from 'electron';
 import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
@@ -22,7 +23,10 @@ import {
   nextTicketId,
   TICKETS_ARCHIVE_DIR,
   type BoardSnapshot,
+  type FolderStatus,
   type PipelinePhase,
+  type PromptEntry,
+  type PromptListing,
   type TicketCard,
   type TicketPriority,
   TICKET_PRIORITIES,
@@ -35,6 +39,7 @@ import {
   parsePipeline,
   pinsAfterDrop,
   removeIdFromPins,
+  reorderPipelinePhases,
   rewriteOrderSection,
 } from './ticket-board';
 import {
@@ -43,12 +48,12 @@ import {
   ticketPathParts,
   ticketSections,
 } from './ticket-files';
-import { listTicketDirs, resolvePhaseDir } from './phase-dirs';
+import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from './phase-dirs';
 import { detectDrift, type DriftDetection } from './normalize';
 import { openTerminalAt } from './open-terminal';
 import { TicketsGit, type RepoLocation } from './tickets-git';
 import { createFleetMcpTools } from './mcp-tools';
-import { DEFAULT_PROMPTS } from './default-prompts';
+import { loadShippedPrompts } from './default-prompts';
 import { FleetClient } from './fleet-client';
 import { listWorkerModels } from './worker-models';
 import { agentIdentity, composeRunRequest } from './fleet/request';
@@ -80,15 +85,6 @@ See specs/ticket-schema.md. Edit freely; the board follows on refresh.
 const PROMPTS_DIR = 'tickets/_meta/prompts';
 const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
-interface PromptEntry {
-  readonly ref: string;
-  readonly text: string;
-  /** One of the three prompts a board is initialised with. */
-  readonly seeded: boolean;
-  /** A seeded prompt whose text differs from the shipped one. */
-  readonly edited: boolean;
-  readonly missing?: boolean;
-}
 
 const DEFAULT_ORDER = `# Column order pins — listed ids form the top of their column
 
@@ -109,7 +105,7 @@ Work repositories a ticket's \`repo:\` field may name. Example:
 `;
 
 type MutationResult =
-  | { readonly ok: true; readonly warning?: string }
+  | { readonly ok: true; readonly warning?: string; readonly moved?: number }
   | { readonly ok: false; readonly error: string };
 
 interface VaultLike {
@@ -914,47 +910,37 @@ class BoardService {
   }
 
   /**
-   * Every prompt file under `_meta/prompts/` with its text (req-46, the
-   * settings page's editor). A seeded default that was never edited is
-   * flagged so the page can offer "Reset" only where it means something.
+   * The prompt files under `_meta/prompts/`, exactly as they are on disk
+   * (req-50: the settings page shows nothing else — no rows for shipped
+   * prompts the vault lacks, no comparison with code). `shipped` marks a
+   * name Drey ships a file for, where "Reset to the shipped version" means
+   * something. `folder` is the absolute folder for display and "Open".
    */
-  async listPrompts(): Promise<readonly PromptEntry[]> {
+  async listPrompts(): Promise<PromptListing> {
     const vault = await this.detect();
     if (vault === null) {
-      return [];
+      return { folder: null, entries: [], shipped: [] };
     }
+    const shipped = await loadShippedPrompts();
     const dir = this.ctx.vault.resolveAssetPath(PROMPTS_DIR, { vaultId: vault.id });
     if (dir === null) {
-      return [];
+      return { folder: null, entries: [], shipped: [...shipped.keys()] };
     }
-    let names: string[];
-    try {
-      names = (await fsp.readdir(dir)).filter((n) => n.endsWith('.md')).sort();
-    } catch {
-      names = [];
-    }
+    const names = (await fsp.readdir(dir).catch(() => [] as string[]))
+      .filter((n) => n.endsWith('.md') && PROMPT_REF.test(n.slice(0, -3)))
+      .sort();
     const entries: PromptEntry[] = [];
     for (const name of names) {
       const ref = name.slice(0, -3);
       const text = await this.readOptional(vault.id, `${PROMPTS_DIR}/${name}`);
-      const seeded = DEFAULT_PROMPTS[ref];
-      entries.push({
-        ref,
-        text: text ?? '',
-        seeded: seeded !== undefined,
-        edited: seeded !== undefined && seeded !== text,
-      });
-    }
-    // A seeded prompt whose file was deleted still shows up, restorable.
-    for (const ref of Object.keys(DEFAULT_PROMPTS)) {
-      if (!entries.some((e) => e.ref === ref)) {
-        entries.push({ ref, text: '', seeded: true, edited: true, missing: true });
+      if (text !== null) {
+        entries.push({ ref, text, shipped: shipped.has(ref) });
       }
     }
-    return entries;
+    return { folder: dir, entries, shipped: [...shipped.keys()] };
   }
 
-  /** Writes one prompt file (create or replace); one commit per save. */
+  /** Writes one prompt file (create, replace or reset to the shipped file); one commit per save. */
   savePrompt(input: { ref: string; text?: string; reset?: boolean }): Promise<MutationResult> {
     return this.enqueue(async () => {
       if (!PROMPT_REF.test(input.ref)) {
@@ -967,11 +953,11 @@ class BoardService {
       const file = `${PROMPTS_DIR}/${input.ref}.md`;
       let text = input.text ?? '';
       if (input.reset === true) {
-        const seeded = DEFAULT_PROMPTS[input.ref];
-        if (seeded === undefined) {
-          return { ok: false, error: `"${input.ref}" has no shipped default` };
+        const shipped = (await loadShippedPrompts()).get(input.ref);
+        if (shipped === undefined) {
+          return { ok: false, error: `Drey ships no prompt "${input.ref}"` };
         }
-        text = seeded;
+        text = shipped;
       }
       const before = await this.readOptional(vault.id, file);
       if (before === text) {
@@ -990,6 +976,171 @@ class BoardService {
     });
   }
 
+  /** Adds the shipped prompts the vault lacks (never overwrites one); one commit. */
+  restoreShippedPrompts(): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const added: string[] = [];
+      try {
+        for (const [ref, text] of await loadShippedPrompts()) {
+          const file = `${PROMPTS_DIR}/${ref}.md`;
+          if ((await this.readOptional(vault.id, file)) === null) {
+            await this.ctx.vault.write(file, text, { vaultId: vault.id });
+            added.push(file);
+          }
+        }
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      if (added.length === 0) {
+        return { ok: true };
+      }
+      const warning = await this.commit(vault, added, 'tickets: prompts add the shipped defaults');
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: added });
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /** Opens `_meta/prompts/` (or the tickets folder) in the OS file manager. */
+  async openTicketsFolder(which: 'tickets' | 'prompts'): Promise<MutationResult> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return { ok: false, error: 'no tickets vault detected' };
+    }
+    const dir = this.ctx.vault.resolveAssetPath(which === 'prompts' ? PROMPTS_DIR : 'tickets', { vaultId: vault.id });
+    if (dir === null) {
+      return { ok: false, error: 'the folder is outside the vault' };
+    }
+    await fsp.mkdir(dir, { recursive: true }).catch(() => undefined);
+    const failure = await shell.openPath(dir);
+    return failure === '' ? { ok: true } : { ok: false, error: failure };
+  }
+
+  /**
+   * Whether the phase folders carry their derived numbers (T-0041), and
+   * the renames "Number folders" would make. Also names the tickets
+   * folder for the settings page's header.
+   */
+  async folderStatus(): Promise<FolderStatus> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return { root: null, moves: [] };
+    }
+    const snap = await this.snapshot();
+    const root = this.ctx.vault.resolveAssetPath('tickets', { vaultId: vault.id });
+    return {
+      root,
+      moves: planFolderNumbering(await this.ticketDirs(vault), snap.pipeline.map((p) => p.id)),
+    };
+  }
+
+  /** "Number folders": the renumbering alone, one commit (req-50). */
+  numberFolders(): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const snap = await this.snapshot();
+      return this.renumber(vault, snap, snap.pipeline.map((p) => p.id), null, 'tickets: number phase folders');
+    });
+  }
+
+  /**
+   * The settings page's sortable columns (req-50): pipeline.md takes the
+   * new order and the phase folders their new numbers — one commit.
+   * Refused while a ticket in a renamed folder has a live run (the
+   * runner holds its path).
+   */
+  reorderPhases(order: readonly string[]): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const text = await this.readOptional(vault.id, PIPELINE_PATH);
+      if (text === null) {
+        return { ok: false, error: 'tickets/_meta/pipeline.md is missing' };
+      }
+      let reordered: string;
+      try {
+        reordered = reorderPipelinePhases(text, order);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      if (reordered === text) {
+        return { ok: true };
+      }
+      const snap = await this.snapshot();
+      return this.renumber(vault, snap, order, reordered, `tickets: reorder phases ${order.join(' ')}`);
+    });
+  }
+
+  /** The shared body of reorder and "Number folders"; runs inside the queue. */
+  private async renumber(
+    vault: VaultLike,
+    snap: BoardSnapshot,
+    order: readonly string[],
+    pipelineText: string | null,
+    message: string,
+  ): Promise<MutationResult> {
+    const root = this.ctx.vault.resolveAssetPath('tickets', { vaultId: vault.id });
+    if (root === null) {
+      return { ok: false, error: 'the tickets folder is outside the vault' };
+    }
+    const moves = planFolderNumbering(await this.ticketDirs(vault), order);
+    const moved = new Set(moves.map((m) => m.from));
+    const busy = snap.columns
+      .flatMap((c) => c.tickets)
+      .filter((t) => t.meta.run !== null && moved.has(t.path.split('/')[1] ?? ''));
+    if (busy.length > 0) {
+      return {
+        ok: false,
+        error: `${busy.map((t) => t.id).join(', ')} ${busy.length === 1 ? 'has a live run' : 'have live runs'} — stop ${busy.length === 1 ? 'it' : 'them'} or wait, then try again`,
+      };
+    }
+    if (moves.length === 0 && pipelineText === null) {
+      return { ok: true };
+    }
+    let touched: string[];
+    try {
+      touched = await applyFolderNumbering(root, moves);
+    } catch (error) {
+      return { ok: false, error: messageOf(error) };
+    }
+    if (pipelineText !== null) {
+      try {
+        await this.ctx.vault.write(PIPELINE_PATH, pipelineText, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+    }
+    const paths = [...touched.map((dir) => `tickets/${dir}`), ...(pipelineText !== null ? [PIPELINE_PATH] : [])];
+    const location = await this.locate(vault.path);
+    let warning: string | null = null;
+    if (location === null) {
+      warning = 'the tickets vault is not a git repository — the change is not versioned';
+    } else {
+      try {
+        await this.git.commitTree(location.root, paths.map((p) => `${location.prefix}${p}`), message);
+      } catch (error) {
+        warning = `git commit failed: ${messageOf(error).split('\n')[0]}`;
+        this.ctx.log(warning, 'warn');
+      }
+    }
+    this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: paths });
+    this.announceChanged();
+    return {
+      ok: true,
+      moved: moves.length,
+      ...(warning === null ? {} : { warning }),
+    };
+  }
+
   initialize(vaultId: string | null): Promise<MutationResult> {
     return this.enqueue(async () => {
       const vaults = await this.ctx.vault.listVaults();
@@ -1003,12 +1154,13 @@ class BoardService {
       if (await this.readOptional(target.id, PIPELINE_PATH) !== null) {
         return { ok: false, error: `vault "${target.name}" already has a tickets board` };
       }
-      const promptPaths = Object.keys(DEFAULT_PROMPTS).map((ref) => `${PROMPTS_DIR}/${ref}.md`);
+      const shipped = await loadShippedPrompts();
+      const promptPaths = [...shipped.keys()].map((ref) => `${PROMPTS_DIR}/${ref}.md`);
       try {
         await this.ctx.vault.write(PIPELINE_PATH, DEFAULT_PIPELINE, { vaultId: target.id });
         await this.ctx.vault.write(ORDER_PATH, DEFAULT_ORDER, { vaultId: target.id });
         await this.ctx.vault.write(REPOS_PATH, DEFAULT_REPOS, { vaultId: target.id });
-        for (const [ref, text] of Object.entries(DEFAULT_PROMPTS)) {
+        for (const [ref, text] of shipped) {
           await this.ctx.vault.write(`${PROMPTS_DIR}/${ref}.md`, text, { vaultId: target.id });
         }
       } catch (error) {
@@ -1148,6 +1300,22 @@ const plugin: MainPluginModule = {
         ...(typeof p.text === 'string' ? { text: p.text } : {}),
         ...(p.reset === true ? { reset: true } : {}),
       });
+    });
+    ctx.ipc.handle('promptRestore', () => board.restoreShippedPrompts());
+    ctx.ipc.handle('openFolder', async (payload) => {
+      const p = payload as { which?: unknown };
+      return board.openTicketsFolder(p.which === 'prompts' ? 'prompts' : 'tickets');
+    });
+
+    // Sortable columns and the folder numbering (req-50).
+    ctx.ipc.handle('folders', () => board.folderStatus());
+    ctx.ipc.handle('numberFolders', () => board.numberFolders());
+    ctx.ipc.handle('reorderPhases', async (payload) => {
+      const p = payload as { order?: unknown };
+      if (!Array.isArray(p.order) || !p.order.every((id): id is string => typeof id === 'string')) {
+        return { ok: false, error: 'bad reorder payload' };
+      }
+      return board.reorderPhases(p.order);
     });
 
     // The model picker's list: what the worker CLI offers (req-46).
