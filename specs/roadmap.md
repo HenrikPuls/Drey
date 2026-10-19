@@ -102,6 +102,15 @@ plan and build columns as agent handovers plus the three prompts
 (`plan-default`, `build-default`, `review-default`) in
 `tickets/_meta/prompts/`.
 
+**req-50 — Tickets settings rework** (owner request, outside the list,
+2026-10-19; in progress on `t/T-0007`, built on T-0041 merged in). The
+page redesigned (Claude Design first, Anthrazit), the pipeline columns
+sortable — a reorder rewrites `pipeline.md` and renumbers the phase
+folders in one commit, and a "Number folders" action migrates an
+unprefixed repo — and the prompts shown are exactly the files in
+`tickets/_meta/prompts/`: the shipped defaults become real `.md` files
+(`plugins/tickets/prompts/`), no synthetic rows.
+
 **Takeover follow-ups.** The Claude Code interrupt (stream-json `control_request`)
 is not yet verified against the installed CLI. Also open: a token budget per run
 (stop a worker that reads without writing), and a tickets-repo-side credit
