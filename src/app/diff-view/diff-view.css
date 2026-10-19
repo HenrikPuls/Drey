@@ -40,7 +40,7 @@
 }
 
 .diff .row.del .sign {
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 .diff .row.gap {

@@ -53,42 +53,96 @@
   color: var(--text-3);
 }
 
+/* The cycle-time line (M85): per-column average dwell beside the run stats. */
+.tickets-metrics {
+  flex: none;
+  padding: 3px 8px;
+  font-size: 0.78rem;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tickets-chip-age {
+  color: var(--text-4);
+}
+
 .tickets-board {
   flex: 1;
   min-height: 0;
   display: flex;
   gap: 8px;
-  padding: 4px 8px 8px;
+  padding: 12px 12px 8px;
   overflow-x: auto;
   overflow-y: hidden;
   align-items: stretch;
 }
 
+/* The status pills above the board: what the fleet is doing in total. */
+.tickets-summary {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+.tickets-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 11px;
+  background: var(--bg-input);
+  color: var(--text-2);
+  font-size: 0.75rem;
+}
+
+.tickets-pill-mono {
+  font-family: var(--font-mono);
+}
+
 /* ---- columns ---- */
 
 .tickets-col {
-  flex: 0 0 208px;
+  flex: 0 0 264px;
+  width: 264px;
+  min-width: 264px;
+  max-width: 264px;
+  box-sizing: border-box;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   min-height: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-search);
+  border-radius: 8px;
+  background: var(--bg-dock);
+}
+
+/* A column with a worker pool carries the lanes: it gets more room. */
+.tickets-col.tickets-col-pool {
+  flex-basis: 320px;
+  width: 320px;
+  min-width: 320px;
+  max-width: 320px;
 }
 
 .tickets-col-head {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 8px;
-  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  padding: 10px 12px 8px;
 }
 
 .tickets-col-title {
   flex: 1;
   min-width: 0;
-  font-size: 0.78rem;
+  font-size: 0.85rem;
+  font-weight: 600;
   color: var(--text-heading);
   white-space: nowrap;
   overflow: hidden;
@@ -97,9 +151,18 @@
 
 .tickets-col-count {
   flex: none;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--bg-input);
   font-size: 0.72rem;
   font-family: var(--font-mono);
-  color: var(--text-3);
+  color: var(--text-2);
 }
 
 .tickets-col-over {
@@ -118,29 +181,114 @@
 
 .tickets-col-agent {
   flex: none;
-  max-width: 84px;
-  font-size: 0.62rem;
-  color: var(--text-5);
+  max-width: 120px;
+  height: 18px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-xs);
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  color: var(--text-4);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* The owner's checkpoint mark (M85): a manual column between automatic
+ * ones — the machine never pulls across it. */
+.tickets-col-checkpoint {
+  flex: none;
+  font-size: 0.68rem;
+  height: 18px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-xs);
+  color: var(--text-4);
+}
+
+/* A held column (paused or stopped): its head dims so the brake reads
+ * at a glance across the whole board. */
+.tickets-col.tickets-col-held {
+  border-style: dashed;
+}
+
+.tickets-col.tickets-col-held > .tickets-col-head {
+  opacity: 0.72;
+}
+
+/* The per-column brakes, next to the fold chevron (M85). */
+.tickets-col-controls {
+  flex: none;
+  display: inline-flex;
+  gap: 1px;
+}
+
+.tickets-col-controls-held {
+  color: var(--text-3);
+}
+
+.tickets-col-btn {
+  display: inline-flex;
+  padding: 1px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-5);
+  cursor: pointer;
+}
+
+.tickets-col-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-2);
+}
+
+/* The chain's master switch in the panel header (M85): An / Aus /
+ * Notaus. The active state is marked; Notaus is the red button. */
+.tickets-master {
+  display: inline-flex;
+  gap: 1px;
+  margin-left: 4px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+.tickets-master-on {
+  color: var(--accent, var(--text-1));
+  background: var(--hover-bg);
+}
+
+.tickets-master-abort:not(:hover) {
+  color: var(--text-5);
+}
+
+.tickets-master-abort:hover,
+.tickets-master-abort:focus-visible {
+  color: #d64545;
 }
 
 .tickets-col-list {
   flex: 1;
   min-height: 24px;
   overflow-y: auto;
-  padding: 6px;
+  padding: 0 8px 8px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
 }
 
 .tickets-col-empty {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
   color: var(--text-6);
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   text-align: center;
-  padding: 2px 0;
+  padding: 18px 8px;
 }
 
 /* A folded column (T-0005): a narrow strip carrying the count and the
@@ -148,8 +296,11 @@
  * click — or a dragged card hovering it — unfolds the column. */
 
 .tickets-col.tickets-collapsed {
-  flex: 0 0 26px;
-  padding: 8px 0;
+  flex: 0 0 40px;
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  padding: 10px 0;
 }
 
 .tickets-col-strip {
@@ -203,17 +354,22 @@
 
 .tickets-card {
   position: relative;
-  padding: 5px 7px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  background: var(--bg-editor);
+  border-radius: 8px;
+  background: var(--bg-input);
   cursor: pointer;
   user-select: none;
 }
 
 .tickets-card:hover {
-  border-color: var(--border-strong);
-  background: var(--hover-bg);
+  border-color: var(--accent-ring);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-input));
+}
+
+.tickets-card.tickets-card-open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .tickets-card:active {
@@ -291,10 +447,11 @@
 }
 
 .tickets-title {
-  margin-top: 2px;
-  font-size: 0.78rem;
+  margin-top: 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
   color: var(--text-primary);
-  line-height: 1.25;
+  line-height: 1.3;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -309,7 +466,7 @@
 }
 
 .tickets-chip {
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   padding: 0 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius-xs);
@@ -524,7 +681,7 @@
 }
 
 .tickets-col-fold {
-  opacity: 0.55;
+  opacity: 0.85;
 }
 
 .tickets-col:hover .tickets-col-fold,
@@ -676,76 +833,223 @@
   background: var(--hover-bg-strong);
 }
 
-/* --- the fleet (M84): live-run footer, worker chips, watch view --- */
+/* --- the fleet (M84): worker lanes in the working columns, watch view --- */
 
-.tickets-fleet {
+.tickets-lanes {
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 6px 8px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-main);
+  margin: 0 8px 8px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-editor);
+  max-height: 55%;
+  overflow-y: auto;
 }
 
-.tickets-fleet-run {
+.tickets-lanes-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  min-width: 0;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--text-3);
 }
 
-.tickets-fleet-id {
+.tickets-lanes-title {
   font-weight: 600;
+  color: var(--text-2);
 }
 
-.tickets-fleet-provider {
-  color: var(--text-secondary);
+/* The light is a dot with the state in words beside it: never colour alone. */
+.tickets-light {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
 }
 
-.tickets-fleet-state {
-  text-transform: uppercase;
-  font-size: 10px;
-  letter-spacing: 0.4px;
-  padding: 1px 6px;
+.tickets-light-green {
+  background: var(--status-added);
+}
+
+.tickets-light-amber {
+  background: var(--status-modified);
+}
+
+.tickets-light-red {
+  background: var(--status-deleted);
+}
+
+/* A running worker's light breathes; a standing one (idle) is a still, hollow gray dot. */
+.tickets-light-green {
+  animation: tickets-breathe 1.8s ease-in-out infinite;
+}
+
+.tickets-light-idle {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--text-faint);
+}
+
+@keyframes tickets-breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tickets-light-green {
+    animation: none;
+  }
+}
+
+.tickets-lane {
+  border: 1px solid var(--border);
+  border-left-width: 3px;
   border-radius: var(--radius-xs);
+  background: var(--bg-dock);
+}
+
+.tickets-lane-green {
+  border-left-color: var(--status-added);
+}
+
+.tickets-lane-amber {
+  border-left-color: var(--status-modified);
+}
+
+.tickets-lane-red {
+  border-left-color: var(--status-deleted);
+}
+
+.tickets-lane-idle {
+  border-left-color: var(--text-faint);
+}
+
+.tickets-lane-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.72rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tickets-lane-summary:hover {
   background: var(--hover-bg);
 }
 
-.tickets-fleet-running {
-  color: var(--success, #2e7d32);
+.tickets-lane-chevron {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-4);
 }
 
-.tickets-fleet-stopping,
-.tickets-fleet-detached {
-  color: var(--text-secondary);
+.tickets-lane-state {
+  flex: none;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
-.tickets-fleet-tok,
-.tickets-fleet-cost,
-.tickets-fleet-steer {
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
+.tickets-lane-state-green {
+  color: var(--status-added);
 }
 
-.tickets-fleet-btn {
-  margin-left: auto;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 2px 8px;
-  border-radius: var(--radius-xs);
-  font-size: 11px;
+.tickets-lane-state-amber {
+  color: var(--status-modified);
 }
 
-.tickets-fleet-run .tickets-fleet-btn + .tickets-fleet-btn {
-  margin-left: 0;
+.tickets-lane-state-red {
+  color: var(--status-deleted);
 }
 
-.tickets-fleet-btn:hover {
-  background: var(--hover-bg-strong);
-  color: var(--text-primary);
+.tickets-lane-state-idle {
+  color: var(--text-3);
+}
+
+.tickets-lane-ticket {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  color: var(--text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tickets-lane-mini {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+
+.tickets-lane-mini .tickets-meter {
+  width: 40px;
+}
+
+.tickets-lane-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 2px 8px 8px 22px;
+  font-size: 0.72rem;
+  color: var(--text-3);
+}
+
+.tickets-lane-activity {
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tickets-lane-context-row {
+  font-family: var(--font-mono);
+}
+
+.tickets-meter {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.tickets-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+.tickets-meter-green {
+  background: var(--status-added);
+}
+
+.tickets-meter-amber {
+  background: var(--status-modified);
+}
+
+.tickets-lane-tokens {
+  display: flex;
+  gap: 10px;
+  font-family: var(--font-mono);
+}
+
+.tickets-lane-actions {
+  display: flex;
+  gap: 4px;
 }
 
 .tickets-chip-worker {
@@ -777,5 +1081,477 @@
 .tickets-form-hint {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-3);
+}
+
+/* The fleet daemon's chain log as a readonly editor tab (T-0007 review):
+   a tail that follows the bottom while the view is scrolled down. */
+.tickets-chain-log {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-main);
+}
+
+.tickets-chain-log-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 16px;
+}
+
+.tickets-chain-log-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 16px;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.tickets-chain-log-out {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ---- the takeover tab: transcript above, prompt box below ---- */
+
+.tickets-takeover {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-main);
+}
+
+.tickets-takeover-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-dock);
+  font-size: 0.8rem;
+}
+
+.tickets-takeover-headline {
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.tickets-takeover-stats {
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.tickets-takeover-spacer {
+  flex: 1;
+}
+
+.tickets-takeover-controls {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.tickets-takeover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.tickets-takeover-btn:hover {
+  background: var(--hover-bg);
+}
+
+.tickets-takeover-btn[hidden] {
+  display: none;
+}
+
+.tickets-takeover-transcript {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tickets-takeover-prompt {
+  flex: none;
+  max-height: 40%;
+  display: flex;
+  flex-direction: column;
+  margin: 0 16px 16px;
+  border: 1px solid var(--field-border);
+  border-radius: 8px;
+  background: var(--bg-input);
+  overflow: auto;
+}
+
+.tickets-takeover-prompt-input {
+  min-height: 56px;
+}
+
+.tickets-takeover-composer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+}
+
+.tickets-takeover-hint {
+  color: var(--text-4);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-takeover-chips {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+
+.tickets-takeover-chip {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--field-border);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.tickets-takeover-chip:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.tickets-takeover-chip:disabled,
+.tickets-takeover-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tickets-takeover-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.tickets-takeover-btn-primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.1);
+}
+
+/* ---- colour layer: state tints for the takeover tab, saturated lanes and pills ---- */
+
+.tickets-takeover {
+  --tk-tone: var(--accent);
+}
+
+.tickets-takeover[data-state='working'] {
+  --tk-tone: var(--status-added);
+}
+
+.tickets-takeover[data-state='driving'] {
+  --tk-tone: var(--accent);
+}
+
+.tickets-takeover[data-state='waiting'] {
+  --tk-tone: #5aa9ff;
+}
+
+.tickets-takeover[data-state='warn'] {
+  --tk-tone: var(--status-modified);
+}
+
+.tickets-takeover[data-state='alert'] {
+  --tk-tone: var(--status-deleted);
+}
+
+.tickets-takeover[data-state='ended'] {
+  --tk-tone: var(--text-faint);
+}
+
+.tickets-takeover-banner {
+  border-bottom: 2px solid var(--tk-tone);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tk-tone) 22%, var(--bg-dock)), var(--bg-dock) 70%);
+}
+
+.tickets-takeover-headline {
+  color: color-mix(in srgb, var(--tk-tone) 55%, var(--text-heading));
+  font-size: 0.88rem;
+}
+
+.tickets-takeover-stats {
+  color: var(--text-2);
+}
+
+.tickets-takeover-btn {
+  color: var(--text-heading);
+}
+
+.tickets-takeover-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: var(--accent);
+}
+
+.tickets-takeover-controls .tickets-takeover-btn:nth-child(2) {
+  border-color: var(--status-modified);
+  color: var(--status-modified);
+}
+
+.tickets-takeover-controls .tickets-takeover-btn:nth-child(3) {
+  border-color: #5aa9ff;
+  color: #5aa9ff;
+}
+
+.tickets-takeover-controls .tickets-takeover-btn:nth-child(1) {
+  border-color: var(--status-added);
+  color: var(--status-added);
+}
+
+.tickets-takeover-prompt {
+  border-color: color-mix(in srgb, var(--tk-tone) 60%, var(--field-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tk-tone) 25%, transparent);
+}
+
+.tickets-takeover-composer {
+  background: color-mix(in srgb, var(--tk-tone) 10%, var(--bg-input));
+}
+
+.tickets-takeover-hint {
+  color: color-mix(in srgb, var(--tk-tone) 60%, var(--text-2));
+  font-weight: 500;
+}
+
+.tickets-takeover-chip {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--field-border));
+  color: var(--accent-fg);
+  background: var(--accent-surface);
+}
+
+.tickets-takeover-chip:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* Lanes: a tinted body and a louder state word */
+.tickets-lane-green {
+  background: color-mix(in srgb, var(--status-added) 12%, var(--bg-dock));
+}
+
+.tickets-lane-amber {
+  background: color-mix(in srgb, var(--status-modified) 16%, var(--bg-dock));
+}
+
+.tickets-lane-red {
+  background: color-mix(in srgb, var(--status-deleted) 18%, var(--bg-dock));
+}
+
+.tickets-lane {
+  border-left-width: 4px;
+}
+
+.tickets-lane-state {
+  font-size: 0.74rem;
+}
+
+.tickets-light {
+  width: 10px;
+  height: 10px;
+}
+
+.tickets-light-green {
+  box-shadow: 0 0 6px color-mix(in srgb, var(--status-added) 70%, transparent);
+}
+
+.tickets-light-red {
+  box-shadow: 0 0 6px color-mix(in srgb, var(--status-deleted) 70%, transparent);
+}
+
+.tickets-pill {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-dock));
+  color: var(--text-heading);
+}
+
+/* ---- takeover: progress pulse and the stop button ---- */
+
+.tickets-takeover-progress {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  font-size: 0.8rem;
+  color: color-mix(in srgb, var(--tk-tone) 70%, var(--text-heading));
+}
+
+.tickets-takeover-progress[hidden] {
+  display: none;
+}
+
+.tickets-takeover-spinner {
+  display: inline-block;
+  font-size: 1rem;
+  color: var(--tk-tone);
+  animation: tickets-spin 2.4s linear infinite;
+}
+
+.tickets-takeover-progress-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: tickets-breathe 1.8s ease-in-out infinite;
+}
+
+@keyframes tickets-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tickets-takeover-spinner,
+  .tickets-takeover-progress-text {
+    animation: none;
+  }
+}
+
+.tickets-takeover-btn-stop {
+  background: var(--status-deleted);
+  border-color: var(--status-deleted);
+  color: #1b1a19;
+  font-weight: 600;
+}
+
+.tickets-takeover-btn-stop:hover:not(:disabled) {
+  background: var(--status-deleted);
+  filter: brightness(1.12);
+}
+
+.tickets-takeover-btn[hidden],
+.tickets-takeover-btn-primary[hidden] {
+  display: none;
+}
+
+/* ---- takeover: slash-command list, attachments, the plus button ---- */
+
+.tickets-takeover-commands {
+  flex: none;
+  max-height: 168px;
+  overflow: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-dock);
+}
+
+.tickets-takeover-commands[hidden],
+.tickets-takeover-attached[hidden] {
+  display: none;
+}
+
+.tickets-takeover-command {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tickets-takeover-command:hover {
+  background: var(--accent-surface);
+}
+
+.tickets-takeover-command-name {
+  flex: none;
+  font-family: var(--font-mono);
+  color: var(--accent-fg);
+}
+
+.tickets-takeover-command-hint {
+  color: var(--text-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-takeover-attached {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px 0;
+}
+
+.tickets-takeover-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 260px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--field-border));
+  border-radius: 10px;
+  background: var(--accent-surface);
+  color: var(--accent-fg);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-takeover-attachment-x {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tickets-takeover-plus {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--field-border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-heading);
+  cursor: pointer;
+}
+
+.tickets-takeover-plus:hover:not(:disabled) {
+  background: var(--accent-surface);
+  border-color: var(--accent);
+}
+
+.tickets-takeover-plus:disabled {
+  opacity: 0.45;
+  cursor: default;
 }

@@ -21,7 +21,7 @@ const YELLOW = '#ffe066';
 
 const glow = (hex: string): string => `0 0 12px ${hex}80`;
 
-const cyberpunkHighlightStyle = HighlightStyle.define([
+export const cyberpunkHighlightStyle = HighlightStyle.define([
   { tag: t.heading1, color: PINK, textShadow: glow(PINK) },
   { tag: t.heading2, color: VIOLET, textShadow: glow(VIOLET) },
   { tag: t.heading3, color: CYAN },
@@ -41,7 +41,7 @@ const cyberpunkHighlightStyle = HighlightStyle.define([
 
   // Tokens inside fenced code -- the set stays as complete as the Drey
   // one, so nothing falls through to the light-background fallback style.
-  { tag: t.comment, color: 'var(--text-faint)', fontStyle: 'italic' },
+  { tag: t.comment, color: 'var(--text-4)', fontStyle: 'italic' },
   {
     tag: [t.keyword, t.operatorKeyword, t.modifier, t.self, t.bool, t.atom, t.null, t.tagName],
     color: PINK,

@@ -257,13 +257,119 @@
   padding: 0 3px;
 }
 
+/* Block Markdown in answers: headings, quotes, rules, tables and fenced
+   code with the host's syntax colours (`ui.highlightCode`: the editor's
+   highlight style, whose classes carry the colours -- no palette here). */
+.assistant-thread .md-h {
+  margin: 8px 0 4px;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.assistant-thread .md-h1 { font-size: 15px; }
+.assistant-thread .md-h2 { font-size: 14px; }
+.assistant-thread .md-h3 { font-size: 13px; }
+.assistant-thread .md-h4 { font-size: 12px; color: var(--text-2); }
+
+.assistant-thread div.card-body blockquote {
+  margin: 0 0 6px;
+  padding-left: 10px;
+  border-left: 2px solid var(--accent-quote);
+  color: var(--text-3);
+}
+
+.assistant-thread div.card-body hr {
+  border: none;
+  border-top: 1px solid var(--border-strong);
+  margin: 8px 0;
+}
+
+.assistant-thread .md-table-wrap {
+  margin: 0 0 6px;
+  overflow-x: auto;
+}
+
+.assistant-thread .md-table-wrap table {
+  border-collapse: collapse;
+  font-size: 11.5px;
+  white-space: normal;
+}
+
+.assistant-thread .md-table-wrap th,
+.assistant-thread .md-table-wrap td {
+  padding: 3px 8px;
+  border: 1px solid var(--border-strong);
+  text-align: left;
+  vertical-align: top;
+}
+
+.assistant-thread .md-table-wrap th {
+  background: var(--bg-input);
+  color: var(--text-heading);
+  font-weight: 600;
+}
+
+.assistant-thread .md-code {
+  margin: 0 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-editor);
+  overflow: hidden;
+}
+
+.assistant-thread .md-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 2px 8px;
+  background: var(--bg-input);
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.assistant-thread .md-code-copy {
+  display: inline-flex;
+  padding: 2px 4px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-4);
+  cursor: pointer;
+}
+
+.assistant-thread .md-code-copy:hover {
+  background: var(--hover-bg-strong);
+  color: var(--text-heading);
+}
+
+.assistant-thread .md-code pre {
+  margin: 0;
+  padding: 8px 10px;
+  overflow-x: auto;
+  white-space: pre;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  tab-size: 2;
+}
+
+.assistant-thread .md-code code {
+  font: inherit;
+}
+
+.assistant-thread .tok-diff-add { color: var(--status-added); }
+.assistant-thread .tok-diff-del { color: var(--status-deleted); }
+.assistant-thread .tok-diff-hunk { color: var(--text-4); }
+
 /* Wikilinks in answers: accent, hover underline; unresolved = muted +
    dotted (the editor's missing-note look) and a click creates the note. */
 .assistant-thread .chat-link {
   padding: 0;
   border: none;
   background: transparent;
-  color: var(--accent);
+  color: var(--accent-fg);
   font: inherit;
   cursor: pointer;
 }
@@ -393,7 +499,7 @@
 }
 
 .assistant-thread .task-due.today {
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 .assistant-thread .task-due.overdue {
@@ -424,7 +530,7 @@
 }
 
 .assistant-thread .card.q .card-label {
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 .assistant-thread .card.q .card-body {
@@ -475,7 +581,7 @@
 }
 
 .assistant-thread .tool-chip.running.failed .tool-chip-summary {
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 .assistant-thread .tool-chip.open .tool-chip-summary {
@@ -572,7 +678,7 @@
 
 .assistant-thread .card.streaming .card-body::after {
   content: '▍';
-  color: var(--accent);
+  color: var(--accent-fg);
   animation: assistant-blink 1.1s steps(2) infinite;
 }
 
@@ -830,7 +936,7 @@
 }
 
 .assistant-picker-row.new-chat {
-  color: var(--accent);
+  color: var(--accent-fg);
   font-weight: 500;
 }
 
@@ -908,7 +1014,7 @@
 }
 
 .assistant-picker-row.current {
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 .assistant-picker-row.active {
@@ -950,7 +1056,7 @@
   justify-content: center;
   width: 14px;
   height: 14px;
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 .assistant-picker-hand {
@@ -1011,7 +1117,7 @@
 .assistant-selection-tip .assistant-selection-btn {
   width: 24px;
   height: 24px;
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 .assistant-selection-popover {

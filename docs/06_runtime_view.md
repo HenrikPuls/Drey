@@ -3206,10 +3206,120 @@ sequenceDiagram
 The runner is a plain Node process (spawned detached under
 `ELECTRON_RUN_AS_NODE` from the plugin bundle), so it survives Drey
 closing and restarting; Drey re-adopts it through
-`<userRoot>/fleet/runner.json` instead of spawning a second one. All
+`<userRoot>/fleet/runner.json` instead of spawning a second one. A
+rebuild of Drey replaces the runner only when the fleet code itself
+changed, and then by a handover that keeps the runs going (req-51, the
+sequence below). All
 of the runner's ticket writes use the board's exact transition
 semantics — the same patch helpers, `add -- paths` + `commit -- paths`
 — and the deterministic validator runs before every action. A red
 gate (or a refused validation: no acceptance criteria, a non-`t/<id>`
 branch, an unknown worker pin) never moves the ticket; the reason
 lands in the Log and the run slot is freed for the next attempt.
+
+### Runner handover after a rebuild (req-51, [ADR-0079](09_architecture_decisions/0079-run-takeover.md) later change)
+
+```mermaid
+sequenceDiagram
+    participant F as FleetClient (rebuilt Drey)
+    participant O as old runner
+    participant W as workers
+    participant N as new runner
+    F->>O: GET /health → build "<builtAt>#<hash>"
+    F->>F: fleetBuildStamp(runner.js) — same hash? keep O, done
+    F->>O: POST /shutdown {handover: true}
+    alt a run is gating / starting / stopping
+        O-->>F: 409 reason — F keeps using O, asks again next poll
+    else free
+        O-->>F: 200
+        O->>O: retiring — starts nothing new
+        O->>W: OpenCode (attach.json): left running
+        O->>W: others (Claude Code): stop — the pipes die with O
+        O->>O: run.json += handover {mode, pidStartedMs}; exit
+        F->>F: wait until /health fails
+        F->>N: spawn runner.js
+        N->>W: adopt(): reattach the OpenCode server
+        N->>W: resumeInPlace: guarded kill of a leftover, spawn with resumeRef — same run id
+        N->>N: ticket Log "resumed after a runner handover"
+    end
+```
+
+The ticket keeps its run stamp throughout (only the pid changes on a
+resume in place), so the board and an open takeover tab simply carry on;
+the takeover tab's saved title lets a Drey restart reopen it before the
+first fleet snapshot.
+
+## 6.66 The chain dispatches: the board drains itself (milestone 85, [ADR-0077](09_architecture_decisions/0077-continuous-orchestration.md))
+
+```mermaid
+sequenceDiagram
+    participant B as BoardService (plugin main)
+    participant F as FleetClient
+    participant R as fleet runner — orchestrator
+    participant V as tickets vault (files)
+    participant S as RunSupervisor
+    participant W as worker (opencode / claude-code)
+
+    B->>F: POST /chain/config (every board snapshot, idempotent)
+    F->>R: configure { ticketsVaultPath, git, defaultWorker, permissionMode }
+    R->>V: read pipeline.md + order.md + repos.md + tickets/*
+    Note over R: dispatch pass — master run + column playing + free slot
+    R->>R: planDispatch: each playing automatic column serves its own queue only (the machine never pulls from a manual column)
+    R->>V: read prompt (tickets/_meta/prompts/<ref>.md)
+    R->>R: composeRunRequest (the one builder — column rides as request.column)
+    R->>S: start(request) — worktree + brief (the completion discipline at its end)
+    S->>W: spawn
+    W->>S: exit (the agent's finished turn is its done declaration)
+    S->>S: machine gate re-run — the safety net
+    alt agent-done AND green gate
+        S->>V: move one column right (one commit, "(fleet)")
+        S-->>R: onRunSettled(done) — slot freed, next pool may pull
+    else red gate
+        S-->>R: onRunSettled(failed, gateFailure)
+        R->>R: red streak + 60 s cooldown (breaker: max-red trip → column held, next candidate parked in inbox with parked-reason)
+    end
+```
+
+The pass is event-driven — configure, a control change, a run settle —
+with a 15-second safety-net rescan, so external board moves are picked
+up even with Drey closed (a running chain also keeps the runner's idle
+shutdown off). Master An/Aus/Notaus and the per-column brakes are
+runner state under `<userRoot>/fleet/chain.json`, never in the tickets
+repo (ADR-0076). The lease reaper (a 60 s sweep) fails runs whose
+worker process is provably dead; a `ci` handover column runs its `ci:`
+check on the same sweep and moves green tickets right; a sampled
+`audit:` or `semantic:` column hands a green step to a fresh second
+worker before the move.
+
+## 6.67 Reordering the pipeline renumbers the phase folders (req-50)
+
+```mermaid
+sequenceDiagram
+    actor O as Owner
+    participant P as Settings → Tickets (settings-columns.ts)
+    participant B as BoardService (plugin main)
+    participant V as tickets vault (files)
+    participant G as git (tickets repo)
+
+    O->>P: drag a row by its grip, or Alt+↑/↓ on a focused row
+    P->>P: canMove / moveItem (Inbox and Done pinned)
+    P->>B: reorderPhases(order)
+    B->>B: reorderPipelinePhases(pipeline.md, order) — whole entries move
+    B->>V: list the phase folders
+    B->>B: planFolderNumbering(dirs, order) → renames to NN-<id>
+    alt a ticket in a renamed folder has a live run
+        B-->>P: refused — the status line says which ticket
+    else
+        B->>V: applyFolderNumbering — park sources under temp names, then fill the targets
+        B->>V: write pipeline.md
+        B->>G: commitTree(folders + pipeline.md) — one commit "tickets: reorder phases …"
+        B-->>P: ok, moved = N (board-changed event)
+        P->>P: status "X moved to position NN. N folders renumbered." + Undo (the reverse move)
+    end
+```
+
+"Number folders" runs the same body with the current order and no
+`pipeline.md` change (`tickets: number phase folders`). Nothing else
+renumbers: a ticket move into a phase reuses whatever folder the phase
+already has (T-0041), so a hand-made gap column keeps its number until
+the owner reorders or numbers.

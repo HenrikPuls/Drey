@@ -192,7 +192,10 @@ describe('composeInstruction — the deterministic run brief', () => {
       plan: 'Step one. Step two.',
       prompt: 'Follow the house style.',
       acceptance: ['npm run verify:unit'],
+      ticketFile: 'E:/tickets/tickets/build/T-0007.md',
     });
+    expect(text).toContain('The ticket file: E:/tickets/tickets/build/T-0007.md');
+    expect(text).toContain('do not search the disk');
     expect(text).toContain('ticket T-0007 — Add the thing');
     expect(text).toContain('branch t/T-0007');
     expect(text).toContain('repo lariscus');

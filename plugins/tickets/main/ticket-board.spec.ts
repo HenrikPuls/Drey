@@ -6,6 +6,8 @@ import {
   parseOrderFile,
   parsePipeline,
   parseRepos,
+  patchPipelinePhase,
+  reorderPipelinePhases,
   pinsAfterDrop,
   rewriteOrderSection,
 } from './ticket-board';
@@ -29,6 +31,22 @@ describe('parsePipeline', () => {
     expect(phases[2]!.claim).toBe(true);
     expect(phases[2]!.handover).toBe('agent build-default');
     expect(phases[0]!.title).toBe('Inbox');
+  });
+
+  it('reads the optional push: remote (T-0041)', () => {
+    const withPush = PIPELINE.replace(/^---/, "---\npush: origin");
+    const parsed = parsePipeline(withPush);
+    expect(parsed.pushRemote).toBe('origin');
+    expect(parsed.issues).toEqual([]);
+    expect(parsePipeline(PIPELINE).pushRemote).toBeNull();
+  });
+
+  it('a non-string push: degrades to null with a noise finding', () => {
+    const parsed = parsePipeline(PIPELINE.replace(/^---/, '---\npush: [upstream, 42]'));
+    expect(parsed.pushRemote).toBeNull();
+    expect(parsed.issues).toHaveLength(1);
+    expect(parsed.issues[0]!.level).toBe('noise');
+    expect(parsed.issues[0]!.message).toContain('push');
   });
 
   it('refuses empty lists, duplicate ids and bad id grammar', () => {
@@ -133,7 +151,7 @@ describe('ordering', () => {
     expect(ordered.map((t) => t.id)).toEqual(['T-0002', 'T-0001', 'T-0004', 'T-0003', 'T-0005']);
   });
 
-  it('pins first in listed order, then derived — unknown pins ignored', () => {
+  it('pins first in listed order, then derived ??? unknown pins ignored', () => {
     const tickets = [
       ticket('T-0001', 'urgent', 5000, ''),
       ticket('T-0002', 'normal', 5000, ''),
@@ -175,7 +193,7 @@ describe('assembleBoard', () => {
       '',
       '## Log',
       '',
-      `- '2026-10-17T09:00:00Z' owner@desk — created in inbox`,
+      `- '2026-10-17T09:00:00Z' owner@desk ??? created in inbox`,
       '',
     ].join('\n');
 
@@ -200,6 +218,32 @@ describe('assembleBoard', () => {
     expect(snap.columns[0]!.tickets.map((t) => t.id)).toEqual(['T-0002']);
     expect(snap.columns[2]!.tickets.map((t) => t.id)).toEqual(['T-0001']);
     expect(snap.issues).toEqual([]);
+  });
+
+  it('folds numbered phase directories into the stripped phase columns (T-0041)', () => {
+    const snap = assembleBoard(baseInput([
+      { path: 'tickets/10-inbox/T-0002.md', text: ticketText('T-0002', 'Second') },
+      { path: 'tickets/35-qa/T-0001.md', text: ticketText('T-0001', 'Gap column') },
+      { path: 'tickets/inbox/T-0003.md', text: ticketText('T-0003', 'Unprefixed') },
+    ]));
+    // Configured columns first (pipeline order), numbered and unprefixed
+    // inbox files folded into ONE inbox column.
+    expect(snap.columns.slice(0, 4).map((c) => c.phase.id)).toEqual(['inbox', 'prioritized', 'build', 'done']);
+    expect(snap.columns[0]!.tickets.map((t) => t.id)).toEqual(['T-0002', 'T-0003']);
+    // 35-qa is not a pipeline phase here: it lands in the trailing unknown
+    // column under its STRIPPED id (reader-forgiving, never renumbered).
+    const unknown = snap.columns[snap.columns.length - 1]!;
+    expect(unknown.unknown).toBe(true);
+    expect(unknown.phase.id).toBe('qa');
+    // The card keeps its real on-disk path.
+    expect(snap.columns[0]!.tickets[0]!.path).toBe('tickets/10-inbox/T-0002.md');
+  });
+
+  it('threads the pipeline push: remote into the snapshot (T-0041)', () => {
+    const withPush = PIPELINE.replace(/^---/, '---\npush: origin');
+    const snap = assembleBoard({ ...baseInput([]), pipelineText: withPush });
+    expect(snap.pushRemote).toBe('origin');
+    expect(assembleBoard(baseInput([])).pushRemote).toBeNull();
   });
 
   it('carries an unknown phase directory as a trailing unknown column', () => {
@@ -240,6 +284,18 @@ describe('assembleBoard', () => {
     expect(snap.columns.flatMap((c) => c.tickets).some((t) => t.id === 'T-0099')).toBe(false);
   });
 
+  it('excludes tickets/archive/ entirely — no column, no badge, no count (T-0041)', () => {
+    const snap = assembleBoard(baseInput([
+      { path: 'tickets/inbox/T-0001.md', text: ticketText('T-0001', 'One') },
+      { path: 'tickets/archive/T-0002.md', text: ticketText('T-0002', 'Gone but kept') },
+    ]));
+    expect(snap.columns.flatMap((c) => c.tickets).some((t) => t.id === 'T-0002')).toBe(false);
+    expect(snap.issues.some((i) => i.message.includes('T-0002'))).toBe(false);
+    expect(snap.issues.some((i) => i.message.includes('archive'))).toBe(false);
+    // A pipeline phase named "archive" is not fed from the reserved folder.
+    expect(snap.columns.some((c) => c.phase.id === 'archive')).toBe(false);
+  });
+
   it('applies pins as the column top and marks cards pinned', () => {
     const snap = assembleBoard(
       baseInput(
@@ -267,5 +323,71 @@ describe('assembleBoard', () => {
     expect(snap.vaultId).toBeNull();
     expect(snap.pipelineError).toContain('missing');
     expect(snap.columns).toEqual([]);
+  });
+});
+
+describe('patchPipelinePhase - the settings dialog writer', () => {
+  it('setting a worker writes the agent handover and keeps the file shape', () => {
+    const patched = patchPipelinePhase(PIPELINE, 'prioritized', { worker: 'opencode' });
+    const { phases, error } = parsePipeline(patched);
+    expect(error).toBeNull();
+    const prioritized = phases.find((p) => p.id === 'prioritized')!;
+    expect(prioritized.worker).toBe('opencode');
+    expect(prioritized.handover).toBe('agent prioritized-default');
+    // Everything else survives untouched.
+    expect(patched).toContain('wip: 2, claim: true');
+    expect(patched).toContain('Prose.');
+    expect(parsePipeline(patched).phases.find((p) => p.id === 'inbox')!.handover).toBe('manual');
+  });
+
+  it('an explicit prompt rides the new handover; an existing ref is kept', () => {
+    const withPrompt = patchPipelinePhase(PIPELINE, 'prioritized', { worker: 'opencode', prompt: 'plan-heavy' });
+    expect(parsePipeline(withPrompt).phases.find((p) => p.id === 'prioritized')!.handover).toBe('agent plan-heavy');
+    const kept = patchPipelinePhase(PIPELINE, 'build', { worker: 'claude-code' });
+    expect(parsePipeline(kept).phases.find((p) => p.id === 'build')!.handover).toBe('agent build-default');
+  });
+
+  it('clearing the worker writes manual and takes the pool keys with it', () => {
+    const withPool = patchPipelinePhase(PIPELINE, 'build', {
+      model: 'zai/glm-5.3',
+      workers: 4,
+    });
+    const cleared = patchPipelinePhase(withPool, 'build', { worker: null });
+    const build = parsePipeline(cleared).phases.find((p) => p.id === 'build')!;
+    expect(build.handover).toBe('manual');
+    expect(build.worker).toBeNull();
+    expect(build.model).toBeNull();
+    expect(build.workers).toBe(1);
+    expect(build.claim).toBe(true); // claim and wip survive the manual flip
+    expect(build.wip).toBe(2);
+  });
+
+  it('model, workers and prompt patch independently; unknown phases refuse', () => {
+    const patched = patchPipelinePhase(PIPELINE, 'build', { workers: 4, model: 'zai/glm-5.3-flash' });
+    const build = parsePipeline(patched).phases.find((p) => p.id === 'build')!;
+    expect(build.workers).toBe(4);
+    expect(build.model).toBe('zai/glm-5.3-flash');
+    expect(() => patchPipelinePhase(PIPELINE, 'nope', { workers: 2 })).toThrow('no phase "nope"');
+    expect(() => patchPipelinePhase(PIPELINE, 'build', { workers: 0 })).toThrow('whole number');
+  });
+});
+
+describe('reorderPipelinePhases - the sortable columns (req-50)', () => {
+  it('moves whole entries and keeps every key and the prose', () => {
+    const swapped = reorderPipelinePhases(PIPELINE, ['inbox', 'build', 'prioritized', 'done']);
+    const { phases, error } = parsePipeline(swapped);
+    expect(error).toBeNull();
+    expect(phases.map((p) => p.id)).toEqual(['inbox', 'build', 'prioritized', 'done']);
+    expect(phases[1]!.wip).toBe(2);
+    expect(phases[1]!.handover).toBe('agent build-default');
+    expect(swapped).toContain('Prose.');
+  });
+
+  it('refuses an order that drops, repeats or invents a phase, or moves the ends', () => {
+    expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'build', 'done'])).toThrow('exactly once');
+    expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'build', 'build', 'done'])).toThrow('exactly once');
+    expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'qa', 'prioritized', 'done'])).toThrow('exactly once');
+    expect(() => reorderPipelinePhases(PIPELINE, ['prioritized', 'inbox', 'build', 'done'])).toThrow('keep their places');
+    expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'prioritized', 'done', 'build'])).toThrow('keep their places');
   });
 });

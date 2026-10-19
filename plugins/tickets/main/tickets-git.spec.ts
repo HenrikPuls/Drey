@@ -68,6 +68,23 @@ describe('TicketsGit', () => {
     expect(commitCount).toBe(1);
   });
 
+  it('tolerates git\'s "no changes added to commit" outcome too', async () => {
+    const { exec } = recorder((args) =>
+      args.includes('commit') ? new Error('Command failed: git commit\nno changes added to commit') : '',
+    );
+    const git = new TicketsGit(() => 'git', exec);
+    await expect(git.commitPaths('E:/repo', ['a.md'], 'msg')).resolves.toBeUndefined();
+  });
+
+  it('pushes HEAD to the named remote from the repo root (T-0041)', async () => {
+    const { calls, exec } = recorder();
+    const git = new TicketsGit(() => 'git', exec);
+    await git.push('E:/repo', 'origin');
+    const push = calls.find((c) => c.args[0] === 'push')!;
+    expect(push.args).toEqual(['push', 'origin', 'HEAD']);
+    expect(push.cwd).toBe('E:/repo');
+  });
+
   it('rethrows real failures and never interleaves queued runs', async () => {
     const order: string[] = [];
     let failFirst = true;

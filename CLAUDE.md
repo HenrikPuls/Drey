@@ -378,7 +378,9 @@ Main process (`electron/`):
 - `llm/` — the LLM transport: `LlmClient` + per-call `LlmRouter`,
   `providers/` (ADR-0047), the task registry, `tag-suggest.ts`
 - `mcp/` — the vault MCP server (ADR-0021) and the vault tools both it
-  and the assistant use (`mcp/tools/`, ADR-0071); `mcp-client/` — external MCP
+  and the assistant use (`mcp/tools/`, ADR-0071), plus the plugin-tool
+  registry (`plugin-tools.ts`, SDK 1.29: `ctx.mcp.registerTools` lists
+  a plugin's tools beside the vault tools); `mcp-client/` — external MCP
   servers, `web_search`, `web_fetch`, the assistant toolbox (ADR-0063)
 - `plugin-host/` — discovery, activation/quarantine, the per-plugin
   context (`plugin-context.ts`: `ctx.vault`, `ctx.llm`), per-plugin config,
@@ -480,7 +482,10 @@ Plugins (`plugins/<id>/`, ADR-0044 — each `plugin.json` + `main/` +
 - `tickets/` — the kanban board over a dedicated tickets repository:
   capture → inbox, transitions as one-commit git moves, claims/takeover,
   derived order + sparse pins, the deterministic validator
-  (ADR-0075/0076, M83; format spec `specs/ticket-schema.md`)
+  (ADR-0075/0076, M83; format spec `specs/ticket-schema.md`); the fleet
+  runner + run control (M84) and the chain orchestrator — dispatcher,
+  master/brakes, breaker, ci handover, the fleet_* MCP tools
+  (ADR-0077, M85)
 - `sample/` — the authoring reference, dev/test-only (ADR-0068);
   `plugins/TUTORIAL.md` + `plugins/AUTHORING.md` are the guides
 

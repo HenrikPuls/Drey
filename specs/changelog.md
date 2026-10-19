@@ -20,6 +20,90 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-51 — Fleet workers survive a Drey rebuild (owner request, outside the list)
+
+**Not yet manually verified by the owner.** The owner develops Drey with Drey's own fleet while running the
+checkout under `npm run dev`, and every rebuild used to stop all live workers. Now
+([ADR-0079](../docs/09_architecture_decisions/0079-run-takeover.md) later change):
+
+- **Content-hash build stamp** (`plugins/tickets/main/fleet/build-stamp.ts`). The runner's `build` is
+  `<builtAt>#<hash>`, a hash over `runner.js` and every module it requires from the build (18 files today), where
+  the runner's stamp used to be the mtime of `runner.js`. A rebuild that leaves that code unchanged keeps the runner
+  and its workers. When the code differs, only an older daemon is retired, as before (two checkouts on one fleet root).
+- **Handover instead of stop.** Retiring a runner sends `POST /shutdown {handover: true}`. A run that is gating,
+  starting or stopping defers the handover (409, logged once; the old runner keeps serving and the next poll asks
+  again). Otherwise the old runner starts nothing new and leaves OpenCode workers running for re-attach. It stops any
+  other worker, since a worker whose pipes nobody reads is unsupervised, and marks each live record `handover`. The
+  new runner re-attaches, or **resumes the session in place** (same run id, record, stream and ticket stamp; a held
+  run comes back held and waits for the owner). A plain `/shutdown`, Stop and Notaus still stop runs.
+- **Fixed:** both per-provider supervisors adopted every run record, so the Claude Code supervisor detached an
+  OpenCode run that had just been re-attached (and the history of a run sat in the wrong supervisor). Each now adopts
+  only its own provider's runs.
+- **Takeover tabs reopen after a restart.** The tab saves its title in the session, so the restore no longer waits
+  for a fleet snapshot that hasn't arrived yet.
+- Specs: `fleet/build-stamp.spec.ts` (stamp decision, require closure, an unchanged rebuild keeps the hash),
+  `fleet/runs.spec.ts` "RunSupervisor handover" (stop vs. leave running, gate deferral, resume in place, held,
+  no session → detached, provider filter) and `fleet-client.spec.ts` (a refused handover keeps the old runner, logged
+  once). Docs: ADR-0079, `plugins/tickets/FLEET.md`, docs/05, docs/06 §6.65, the manual.
+- Not covered: the real CLIs across a real rebuild. Whether an OpenCode server outlives its runner's exit on Windows
+  is assumed from ADR-0079's re-attach, not re-measured.
+
+### req-50 — the Tickets settings page reworked: a sortable pipeline, numbered folders, prompts as they are on disk (owner request, outside the list)
+
+**Not yet manually verified by the owner.** Designed first in Claude
+Design (Anthrazit); the mockup is the reference for the layout. Built on
+T-0041, which is merged into this branch.
+
+- **One sortable pipeline table** instead of a card per column: grip,
+  folder number (`10` … `80`), column name with a Runs itself /
+  Checkpoint chip and its folder, worker, model, pool, prompt — manual
+  columns show dashes where a pool would be. Drag a row by its grip or
+  press Alt+↑/↓ on a focused row; Inbox (capture) and Done (terminal)
+  are pinned. A move rewrites `pipeline.md` **and renumbers the phase
+  folders in one commit** (`tickets: reorder phases …`); the status line
+  says what moved and offers **Undo** (the reverse move). Refused while
+  a ticket in a renamed folder has a live run.
+- **"Number folders"** — a banner appears while any phase folder lacks
+  its number (an unprefixed repo from before T-0041, or a gap number);
+  one click renames them all in one commit
+  (`tickets: number phase folders`). **T-0041 rule change:** code still
+  never renumbers on a move or a hand-made gap column; it renumbers only
+  on the owner's explicit reorder or "Number folders".
+- **Prompts are the files on disk, nothing else.** The shipped defaults
+  are real files now, `plugins/tickets/prompts/{plan,build,review,commit}-default.md`
+  (copied beside the built plugin by `scripts/build-plugins.mjs`;
+  `commit-default` is new as a shipped prompt), read by
+  `loadShippedPrompts()` for "Initialize board" and for **Reset to the
+  shipped version**. The page lists only `tickets/_meta/prompts/*.md`
+  (no rows for prompts the folder lacks, no "Edited" badge from comparing
+  with code), shows the folder's path with an open-folder button, and
+  follows the board's change events, so an outside edit shows up
+  (silently when nothing is unsaved, as a "changed outside Drey" notice
+  otherwise). An empty folder offers **Add Drey's prompts**.
+- **The prompt editor is the host's Markdown editor**
+  (`ui.createMarkdownView`, Live Preview) in a list/detail layout; it
+  saves when the editor is left or on Save, one commit per save.
+  Ctrl+S is not offered: the app's keybinding layer takes it at window
+  capture before a plugin page sees it.
+- Main: `reorderPhases`, `numberFolders`, `folders`, `promptRestore`,
+  `openFolder` handlers; pure `reorderPipelinePhases` (ticket-board.ts),
+  `planFolderNumbering` / `applyFolderNumbering` (phase-dirs.ts, swaps
+  through temporary names, refuses before touching anything when two
+  files of one name would meet), `TicketsGit.commitTree` (`add -A` for
+  the renames). The renderer is split into `settings-page.ts`,
+  `settings-columns.ts`, `settings-prompts.ts`, `settings-model-picker.ts`,
+  `settings-order.ts` (pure) and `settings.css` (`tset-` prefix); the
+  duplicated req-46 block in `board.css` (which also overrode board
+  rules) is gone.
+- Specs: `default-prompts.spec.ts`, `settings-order.spec.ts`, reorder
+  rules in `ticket-board.spec.ts`, planner / executor / real-git commit
+  in `phase-dirs.spec.ts`. Driven in the built app against a scratch
+  clone of the tickets repo: Number folders, keyboard and drag reorder,
+  Undo, prompt save, reset, outside edit — each one clean commit.
+- Not changed: the board itself, the SDK. Known gap found on the way: a
+  `pipeline.md` with CRLF line endings does not parse (a fresh clone with
+  `core.autocrlf=true`) — a follow-up.
+
 ### Fix — fleet: worktree matching survives path aliases (`RUNNER~1`, junctions)
 
 Follow-up on the T-0047 fix below, caught by CI on the GitHub Windows
@@ -35,6 +119,273 @@ chance (`findWorktreeEntry` in `worktrees.ts`); a path that cannot be
 resolved (a registered but vanished tree) still matches by string form
 only. Spec: a junction reproduces the alias shape on any Windows
 checkout (`worktrees.spec.ts`).
+
+### Takeover steering and colour (owner request, outside the list)
+
+**Not yet manually verified by the owner.**
+
+- **Claude Code workers can be taken over**: hold (a finished turn no longer
+  closes stdin), soft interrupt (stream-json `control_request`, unverified
+  against the real CLI), turn state busy/idle, release ends a standing worker.
+  A finished turn now closes stdin, so the process exits.
+- **Composer in the takeover tab**: status hint (working / waiting for you /
+  runner driving / ended), quick prompts (Continue, Status, Run checks, Wrap
+  up), Send and Interrupt-and-send buttons.
+- **Colour**: the tab banner, prompt box and controls take the run's state
+  tone; lanes are tinted by light; stronger pills.
+- **Resume an ended run's session** ("Resume session" in the tab): a new run
+  picks the provider session up held — it answers one line and waits for the
+  tab's prompts; no ticket stamp, gate or move (the ticket may have moved on).
+  Not covered by a spec yet.
+- **Composer slimmed**: no hint text, short placeholder, a red **Stop** button
+  while a turn runs (replaces the banner's Interrupt), and a progress line
+  ("Thinking… 12s · ↓ tokens", or the current tool call) above the box.
+- **Slash commands and attachments in the takeover prompt**: typing `/`
+  lists the commands the worker reports (Claude Code: the CLI's init list;
+  OpenCode: `compact` plus the project's `GET /api/command`); a command
+  goes through as typed — for OpenCode as the real `/compact` / `/command`
+  call, not as text. The "+" button, drag-and-drop and paste (screenshots)
+  attach files: stored in the run's worktree under `.drey-attachments/`
+  (git-excluded, 10 MB each, `POST /attach`) and named in the message.
+  Attached files are not yet checked against a real worker.
+- Specs: three claude-code adapter cases in `providers.spec.ts`.
+
+### req-49 — past worker logs on the board; the board follows the runner (owner request, outside the list)
+
+**Not yet manually verified by the owner.**
+
+- A card's context menu lists the ticket's earlier runs (finished, stopped, failed, detached; newest first, eight at most) as "Past run — column · state · time"; each opens its read-only transcript in the takeover tab. The runs and their `stream.jsonl` were already kept on disk — only the menu offered the live run alone. With no fleet daemon alive (it retires when idle) the client now reads the history straight from `runs/<id>/run.json` and `stream.jsonl` (`fleet-client.ts`, `readHistory`), so past logs are listed and readable then too.
+- The board now pulls when the fleet snapshot's runs or run states change (`plugins/tickets/renderer/index.ts`, `applyFleetSnapshot`): the runner moves tickets with git commits that raise no vault event, so a run starting or ending left the columns stale until the manual refresh.
+
+### req-48 — theme contrast repair and formatted, coloured assistant answers (owner request, outside the list)
+
+**Not yet manually verified by the owner.**
+
+- Contrast: `--accent` as text measured 3.5–4.0:1 on Anthrazit docks and fields; a new `--accent-fg` token (accent lifted toward the heading colour, ≥4.5:1 on dock, editor and field surfaces) now carries every accent-coloured text/link. Code comments use `--text-4` instead of `--text-faint` (3.7:1). The tickets board used an undefined `--text-secondary` (now `--text-3`), 9px chips, and 0.55–0.72 opacity stacked on dim text — raised.
+- Assistant answers render fenced code (language label, copy button, `diff` per line), headings, quotes, rules and tables (`plugins/assistant/renderer/{rich-blocks,rich-text}.ts`). The code is coloured by the host: new SDK 1.31 `ui.highlightCode(code, lang)` (`src/app/plugin-host/code-highlight.ts`, ADR-0078 later change) -- `language-data` grammar loaded on demand, Lezer parse, the theme's `HighlightStyle`. Specs: `rich-blocks.spec.ts`, `code-highlight.spec.ts`.
+- Active states use the highlight colour again (ticket card hover, open panel icons, active Settings category, active file); the card of the ticket open in the editor is outlined; the editor selection selector matches CodeMirror's focused chain.
+
+### req-47 — the takeover transcript reads like Claude Code (owner request, outside the list)
+
+**Not yet manually verified by the owner.**
+
+- Tool calls are `● Tool target` steps (a run stays together), thinking is
+  a one-line `∴ Thinking —` quote cut at 280 characters, run setup folds
+  into one muted line, the owner's prompts are `›` quotes, and the turn's
+  end is a rule plus `✓ Turn finished` (the result body is dropped when the
+  last reply already said it). Specs: `transcript.spec.ts`.
+- **Claude Code workers now fill the transcript.** The `claude-code`
+  adapter only emitted usage events, so its takeover tab stayed empty; it
+  now writes thinking, replies and every tool call like the opencode
+  adapter, and each tool's outcome hangs under its call as a `⎿` line
+  (first line of the result, `failed:` on an error). Spec:
+  `providers.spec.ts`, `transcript.spec.ts`.
+- **Seeded prompts share a "How to work" block** (batched reads, dedicated
+  tools, smallest change, verify before claiming, short factual
+  hand-off). Only new boards seed it; edited vault prompts are untouched.
+
+### req-46 — the Tickets settings page: column cards, a model picker and editable prompts (owner request, outside the list)
+
+**Not yet manually verified by the owner.**
+
+- **Column cards.** The pipeline columns were one cramped row each (the column
+  name cut to "I…", the model pin a 110px field). Each column is now a card:
+  full title, a "Runs itself / Your checkpoint" badge, worker and pool size
+  on one line, model and prompt full width. A manual column's pool, model and
+  prompt are disabled, not hidden.
+- **Model picker.** A combobox over what the worker CLI offers: `opencode
+  models` (new `worker-models.ts`, cached for a minute, `providerID/modelID`
+  lines grouped by provider) or the Claude Code aliases; type to filter,
+  arrows/Enter/Escape, free text stays possible when the list is empty or
+  stale. Saved when a row is chosen or the field is left.
+- **Prompt editing.** The prompt is a select over `tickets/_meta/prompts/`
+  with an Edit shortcut, and a new **Prompts** section holds one editor per
+  file: saved on leaving the field or Ctrl+S, one commit per save
+  (`tickets: prompt <ref> edit|add|reset`), Revert, Reset to default for the
+  three seeded prompts (two-click confirm, no native dialog), New prompt.
+  Main gained `prompts`, `promptSave` and `models` handlers.
+- Specs: `worker-models.spec.ts`; manual updated. Not changed: ADRs, schema.
+
+### Milestone 87 — stale runner daemons retire; the board seeds its prompts (owner request, outside the list)
+
+**Not yet manually verified by the owner.**
+
+- **A daemon without a build stamp is stale.** `isStaleDaemon`
+  (`fleet-client.ts`): a runner whose descriptor carries no `build` predates
+  the stamp, so the client retires and respawns it. Before, it was trusted
+  forever and kept running pre-fix dispatch (pulling from `prioritized`,
+  refusing plan tickets for missing acceptance criteria).
+- **Setup defaults.** "Initialize board" writes the plan column as
+  `agent plan-default` (build was already `agent build-default`) and seeds
+  `tickets/_meta/prompts/{plan,build,review}-default.md`
+  (`main/default-prompts.ts`, same texts as the owner's repo). A column's
+  prompt is passed with the ticket as before (`composeInstruction`).
+- **Clear in the chain-log tab.** A "Clear" button hides every line logged
+  up to now; only newer lines show (session-only; the daemon's ring buffer and
+  `runner.log` stay untouched). Pure filter in `renderer/chain-log.ts`.
+- Specs: `fleet-client.spec.ts`, `default-prompts.spec.ts`, `chain-log.spec.ts`.
+
+### Milestone 86 — worker lanes on the tickets board (owner request, outside the list)
+
+Part of ticket T-0007's review round. **Not yet manually verified by
+the owner** — typecheck, lint and the plugin suite are green; the board
+was not yet looked at in the running app.
+
+- **Worker lanes replace the run footer.** Every working column shows a
+  "Workers" strip under its head: one lane per live run of its pool,
+  folded to a single line (traffic light, state in words, ticket, a
+  small context bar) and unfolded to the worker's current activity, its
+  context window against 200k, in/out tokens, cost, age and the
+  Watch / Steer / Stop buttons. A lane that needs a look (amber, red)
+  opens by itself until the owner folds it; the choice is per run and
+  lives in memory only.
+- **The board look follows the redesign:** wider columns (264 px, 320 px with a worker pool), count pills, 8 px cards and a dashed pool tag, a 40 px rail for folded columns, and a pill row above the board (working / need attention / stalled / tokens in flight).
+- **The light** (`renderer/worker-status.ts`, pure + spec): red = a
+  running worker silent for 5 minutes ("Stalled Nm"), amber = context at
+  80 % or more, or stopping; green otherwise. It always carries a word.
+- **Data.** `RunInfo` gained optional `activity`, `contextTokens` and
+  `column`; both adapters report them (claude-code from each assistant
+  event's usage + tool use, opencode from the last assistant message's
+  tokens + text). The context window itself is not known to the runner —
+  the board assumes 200k.
+- **Fix: a no-op bookkeeping commit no longer logs as a failure.** Git prints "nothing to commit" on stdout, which execFile's error message omits, so `commitPaths` rethrew it and the runner log showed "clearing the ticket's run stamp failed"; stdout is now folded into the message and "no changes added to commit" is recognised too (`tickets-git.spec.ts`).
+- **Fix: the run brief names the ticket file.** A plan-phase worker burned most of a run (10 model calls, ~290k input tokens counting cache reads, one line of output) recursively searching the disk for `T-0047.md`, which lives in the tickets repo, outside the worktree it was told was its only writable place. `composeInstruction` now carries the absolute ticket-file path and says it is editable and must not be searched for (`fleet-fields.spec.ts`).
+- **Fix: a run the daemon dispatches on its own now shows up.** The client polled the runner only while it already knew of a live run, so a run started by the chain (not by this client) appeared only after a manual refresh and the column looked idle while the worker ran. The poll never ran when the daemon was down at the first request (a build change retires it, the restart brings it back), so it is now always on for the plugin's lifetime (2.5 s, pushes only on change).
+- **Tool calls are visible.** The opencode adapter turns every tool call into a lane line (`read src/a.ts`, `shell git status`) and counts it as activity, so a worker that only calls tools neither looks silent nor stalls (`toolActivity`, `providers.spec.ts`).
+- **The chain log runs in the host's Markdown editor** (SDK 1.30, [ADR-0078](../docs/09_architecture_decisions/0078-markdown-view-for-plugins.md)): new `ui.createMarkdownView` hands a plugin the existing `MarkdownSurface` as an element (read-only viewer or compact prompt box, tail-following, no document behind it). The log tab replaced its `<pre>` with it, one paragraph per log line, no fence, so the text marks and copies normally (`asParagraphs`). Specs: `markdown-view.spec.ts`, `chain-log.spec.ts`.
+- **Fix: a stop no longer waits forever for the opencode interrupt.** `stop()` awaited the server's answer to the soft interrupt without a bound, so when it never came the runner's 10 s shutdown race exited first, the tree-kill never ran and the worker lived on unsupervised (it finished its plan 16 minutes later while its run sat `detached`). The wait is now 3 s (`INTERRUPT_WAIT_MS`), then the tree-kill runs (`providers.spec.ts`). The chain log also says when a detached run blocks a ticket.
+- **The takeover tab** ([ADR-0079](../docs/09_architecture_decisions/0079-run-takeover.md)). A lane's "Take over" holds the run (the runner no longer ends it after a finished turn, `held` on `RunInfo`) and opens a tab: the worker's transcript in the host's read-only Markdown view (rendered from the normalized stream, owner prompts included), a compact prompt box, Interrupt (soft stop, session kept) and Hand back (an idle worker ends the run, the gate decides). New runner routes `/takeover`, `/interrupt`, `/release`, plugin IPC `fleetControl`, adapter handle `setHold` / `interrupt` (OpenCode only). Specs: `runs.spec.ts`, `providers.spec.ts`, `transcript.spec.ts`.
+- **The ticket Log records a run's tokens** (`usageSummary`: `run done — 331k in / 2k out`, cost only when the provider reports one — the GLM coding plan reports 0).
+- **Fix: the lease reaper no longer kills healthy workers.** The runner's process probe joined `tasklist /FI "PID eq 42"` into one shell string, which tasklist rejects ("Argument/Option ungültig"), so `processAlive` answered false for every live worker and the reaper failed the run ("lease lost — the worker process is gone") about a minute in — the cause of the red plan/build gates on T-0047 and T-0003. The probes now use `execFile` with separate arguments (`probeExec`, `runs.spec.ts`).
+- **Fix: the takeover transcript was nearly empty.** The opencode adapter read a message on first sight (while it still streamed) and listed a tool call with its still-empty input, so the tab showed bare `shell` / `read` lines and lost most replies. A message is now read once complete (its text and its thinking, the latter as an italic quote) and a tool call is shown once its input is there (`providers.spec.ts`, `transcript.spec.ts`).
+- **Fix: the log and transcript no longer lose your selection.** `createMarkdownView.setContent` replaced the whole document on every 2 s refresh and so reset the caret and any selection. It now edits only what differs (common head and tail stay, the selection maps through; an unchanged text dispatches nothing) — `MarkdownSurface.patchContent`, spec in `markdown-view.spec.ts`.
+- **A detached run can be seen and stopped.** A run whose worker outlived a runner restart blocked its ticket with no way out (`stop` refused it, the board did not show it). Its column now shows a "Detached" lane with a Stop button, and `stop` ends a detached record (killing the recorded process if it still lives). Boot also no longer re-detaches an already detached run on every start (that re-stamped its ticket each time), and a stamp clear on a ticket that moved on is silent (ENOENT). Specs: `runs.spec.ts`, `worker-status.spec.ts`.
+- **Fix: a stop kills the worker before it touches the ticket.** `stop()` wrote the Log line (a ticket write plus a git commit) before the kill; a runner shutdown that stopped waiting on it after 10 s exited with the worker still alive — the orphans (the log shows "stopping 1 live run" and never "→ stopped"). The kill now comes first and the Log line (`stopped by the owner — …`) is written with the run's end (`runs.spec.ts`).
+- **A runner restart no longer orphans an OpenCode worker: it is re-attached** ([ADR-0079](../docs/09_architecture_decisions/0079-run-takeover.md), "Re-attach"). The spawn records `attach.json` (server address, per-boot credential, process + creation time) in the run's folder — never in `run.json` — and boot's `adopt()` binds a new handle to the still-running server (`ProviderAdapter.attach`): polling, steer, interrupt, stop and hold work again, already-streamed messages are not repeated, a held run stays held, a worker that finished meanwhile ends the run through the gate. An already detached run with a live process is taken back too. Claude Code workers still detach. Specs: `runs.spec.ts`, `providers.spec.ts`.
+- **Fix: a refused action refreshes the board.** Stopping a run that had already ended answered "already ended" but left its lane on screen (the failure path never re-read the runs), so every click repeated the refusal; `runMutation` now re-pulls the board on a failure too.
+- **One button; the first command takes over; running or standing** (owner request, amends ADR-0079). A lane's single
+  "Open" button opens the run's tab without holding it; the runner keeps driving until the owner's first prompt or
+  interrupt, which hold the run implicitly. A detached run with a session offers "Resume" (lane and tab): a fresh worker
+  resumes the session and the run is attached again (`POST /resume`). `RunInfo.turn` shows whether the worker runs
+  or stands — breathing green "Running" vs hollow gray "Standing" in lanes, the pill row and the tab. The Watch and
+  Steer modals are gone (the tab replaces them). Specs: `runs.spec.ts` (implicit hold, resume), `worker-status.spec.ts`.
+- Specs: `worker-status.spec.ts`.
+
+### Milestone 85 — the chain runs itself: continuous orchestration
+
+Ticket [T-0007](https://github.com/HenrikPuls/Drey) in the owner's
+tickets repo (M85 folded in by owner request); the design is
+[ADR-0077](../docs/09_architecture_decisions/0077-continuous-orchestration.md),
+which amends ADR-0075 and M84's gate rule. **Not yet manually verified
+by the owner** — the suites are green; the owner's live round (the
+verification steps in the ticket) is next.
+
+- **The board becomes a running pipeline.** A column with a worker
+  drains itself: the dispatcher (in the fleet runner, which survives
+  Drey restarting) serves the column's own queue and moves each ticket
+  one column right when its step is done. The machine never pulls from
+  a manual column — `prioritized` is the owner's queue, and he moves
+  tickets into the worker columns himself. The worker-per-column is the
+  auto/manual switch, configured
+  in the new Settings → Tickets page (one commit per change on
+  `pipeline.md`: `worker:` / `model:` / `workers:` / `prompt:`, plus
+  `max-red:` / `token-budget:` / `ci:` / `audit:` / `semantic:`). The
+  owner's live tickets repo now carries the proposed defaults (plan 2 ×
+  OpenCode/GLM-5.3, build 4 × OpenCode/GLM-5.3-Flash, review 1) and the
+  `_meta/prompts/` (plan/build/review-default — build-default had been
+  referenced since M84 and was still missing).
+- **Completion is the agent's call, the gate the safety net.** Every
+  run brief ends with the completion discipline (run the acceptance
+  commands yourself; your finished turn is the declaration). The runner
+  re-runs the gate: agent-done AND green moves one column right — a
+  pulled ticket jumps from its feeding column straight to the working
+  column's successor (prioritized → plan-review) — a red gate parks the
+  ticket (logged, slot freed).
+- **Master control and brakes.** An / Aus / Notaus in the panel header;
+  per-column pause / stop / play next to the fold chevron; stopping one
+  column never stops the rest. State persists in
+  `<userData>/fleet/chain.json` and resumes with the runner; a running
+  chain keeps the runner alive, so the board drains while Drey is
+  closed.
+- **Safety nets.** The lease reaper fails a run whose worker process is
+  provably dead and frees its ticket (a silent-but-alive worker is
+  never touched — ADR-0014). The circuit breaker counts consecutive red
+  gates per column (`max-red:`, default 3): tripping holds the column
+  and parks its next candidate in Inbox with `parked-reason` — the one
+  machine-sanctioned backward move. A red gate cools the column down
+  for a minute; daily `token-budget:` trips the same way.
+- **The ci handover works.** A `ci:` command runs in the ticket's work
+  repo; green moves the ticket one column right (one commit, `… (ci)`),
+  red backs it off for ten minutes.
+- **Quality rungs, flagged off.** `audit:` (a fraction) samples green
+  steps and `semantic: true` gates every green step — a fresh second
+  worker reviews the branch before the move, one round, its own gate
+  decides. The live trial decides whether they stay.
+- **Cycle-time metrics.** Each card carries its column dwell (from the
+  `entered-*` stamps); a line above the run footer shows every column's
+  average (`⌀`).
+- **The fleet on the MCP server.** SDK 1.29 adds the typed plugin-tool
+  seam (`ctx.mcp.registerTools`): a plugin's tools appear beside the
+  vault tools on Drey's own MCP server. The tickets plugin registers
+  `fleet_status` / `fleet_run` / `fleet_stop` / `fleet_steer` /
+  `fleet_watch` — the assistant and any connected program drive runs
+  conversationally.
+- **One request builder.** `composeRunRequest` builds every RunRequest
+  (owner-started and dispatched alike); the assignment ring gained the
+  column level (ticket pin > column > handover `@worker` > repo >
+  configured default), and model pins now reach OpenCode (v2
+  `providerID/modelID`) as well as Claude Code (`--model`).
+
+Suites and checks: the plugins suite grew to 132 files / 1676 tests
+(orchestrator, chain planning, request builder, ci sweeps, breaker,
+pipeline patcher, MCP seam, fleet tools); `tsc` (main, specs, renderer,
+plugins), ESLint, the cycle check and the plugin build are green.
+Docs: ADR-0077, docs/05 §5.41, docs/06 §6.66, the manual's fleet
+section, `specs/ticket-schema.md` (pool keys, lane rules, ci).
+### Tickets — numbered phase folders, file moves as transitions, archive, auto-push (T-0041)
+
+Owner rulings from the 2026-10-18 rounds (ADR-0076 later change,
+`specs/ticket-schema.md` updated in the same change):
+
+- **Numbered phase folders** (`10-inbox` … `80-done`, `NN` = pipeline
+  position × 10): one strip point for every reader
+  (`ticketPathParts` → prefix-stripped ids — board grouping, validator
+  and `entered-` noise checks see clean ids), one derive-and-reuse
+  resolver for every writer (new `plugins/tickets/main/phase-dirs.ts`;
+  an existing `35-qa` or unprefixed `inbox` wins over the derived name,
+  so inserting a column takes a gap number and nothing ever renames).
+  No ticket-file changes: `entered-*` keys, order.md sections and
+  branch names keep the clean ids.
+- **A file move is a ticket move:** stateless drift detection (new
+  `plugins/tickets/main/normalize.ts`, pure) runs on every `board`
+  IPC fetch — a ticket in phase B whose `entered-<B>` stamp is missing
+  or older than the newest event gets the full board-move treatment
+  (stamp, Log line, pin cleanup, one commit, actor `owner@<host>`);
+  works after restarts, skips live-`run:` tickets, logs backwards and
+  skipping moves without blocking (lane rules stay runner-only).
+  `BoardService.refresh()` (normalize + snapshot) is the board route;
+  `snapshot()` itself stays pure so enqueued mutations never deadlock.
+- **Archive instead of delete:** reserved `tickets/archive/` beside
+  `_meta` — never a column, invisible, no counter. Card menu gains a
+  two-step armed **Archive…** item; a file moved into the folder gets
+  the same treatment via normalization: Log marker `— archived` (no
+  `entered-` stamp — idempotent, and revive → re-archive stays
+  detectable), one commit `tickets: <id> archived`, pin cleanup,
+  claim fields ride along. Reviving is a move back into a phase;
+  deletion inside `archive/` stays the owner's manual act.
+- **Auto-push:** optional `push:` remote in pipeline.md (a git-config
+  remote name; non-strings degrade to noise). Every transition commit
+  — board move, normalization move, archive, runner success move —
+  pushes `git push <remote> HEAD` (`TicketsGit.push`); failures warn,
+  never block. `RunRequest` grew additively (`nextPhaseDir`,
+  `pushRemote`).
+
+Specs: numbered-dir folding and `push:` parsing
+(`ticket-files.spec.ts`, `ticket-board.spec.ts`, `tickets.spec.ts`),
+resolver (`phase-dirs.spec.ts`), every predicate row of the drift pass
+(`normalize.spec.ts`), numbered target dir + prefix-aware validation +
+push/no-push over the git seam (`runs.spec.ts`, `tickets-git.spec.ts`).
+**Not yet manually verified by the owner.**
 
 ### Fix — fleet: worktree preparation is idempotent per ticket (T-0047)
 

@@ -20,10 +20,19 @@ import * as fsSync from 'node:fs';
 import { promises as fsp } from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
+import { fleetBuildStamp } from './build-stamp';
 import { claudeCodeAdapter, opencodeAdapter } from './providers';
 import { freePort, nodeSpawnFn } from './procs';
-import { RunSupervisor } from './runs';
-import { isWorkerProvider, type RunRequest, type RunnerDescriptor } from './protocol';
+import { Orchestrator } from './orchestrator';
+import { MAX_ATTACHMENT_BYTES, RunSupervisor } from './runs';
+import {
+  isWorkerProvider,
+  type ChainConfig,
+  type ChainMaster,
+  type ColumnMode,
+  type RunRequest,
+  type RunnerDescriptor,
+} from './protocol';
 
 const VERSION = 1;
 const MAX_BODY = 1024 * 1024;
@@ -65,25 +74,70 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  // The daemon's log reaches three places: the console (lost for a
+  // detached process), a ring buffer the /log route serves, and
+  // runner.log — the owner's window into every dispatch decision
+  // (T-0007 review finding 2: the daemon's doings were invisible).
+  const logPath = path.join(args.root, 'runner.log');
+  // The build stamp (req-51): a hash of the fleet code this process
+  // loaded, plus its newest mtime. A rebuild that changed none of it
+  // keeps this daemon; one that did makes the client retire it with a
+  // handover — stale code never serves a second session.
+  const buildStamp = await fleetBuildStamp(__filename);
+  let handingOver = false;
+  const ring: string[] = [];
+  let logChain: Promise<void> = Promise.resolve();
   const log = (message: string): void => {
-    console.log(`[fleet ${new Date().toISOString()}] ${message}`);
+    const line = `[fleet ${new Date().toISOString()}] ${message}`;
+    console.log(line);
+    ring.push(line);
+    if (ring.length > 1000) {
+      ring.splice(0, ring.length - 1000);
+    }
+    logChain = logChain
+      .then(async () => {
+        await fsp.appendFile(logPath, `${line}\n`, 'utf8');
+        const stat = await fsp.stat(logPath).catch(() => null);
+        if (stat !== null && stat.size > 512 * 1024) {
+          const text = await fsp.readFile(logPath, 'utf8').catch(() => '');
+          await fsp.writeFile(logPath, text.slice(-256 * 1024), 'utf8');
+        }
+      })
+      .catch(() => undefined);
   };
+  log(`daemon pid ${process.pid} starting in ${args.root} (v${VERSION})`);
 
   // Runs carry their provider, so the entry keeps one supervisor per
-  // adapter and routes by the request's provider.
+  // adapter and routes by the request's provider. The chain
+  // orchestrator (M85) plans across both; its run-settled hook comes
+  // back through the supervisors' dep.
   const adapters = {
     opencode: opencodeAdapter(nodeSpawnFn()),
     'claude-code': claudeCodeAdapter(nodeSpawnFn()),
   };
+  let orchestrator: Orchestrator | null = null;
   const supervisors = new Map<string, RunSupervisor>(
     Object.values(adapters).map((adapter) => [
       adapter.id,
-      new RunSupervisor({ root: args.root, adapter, git: 'git', log }),
+      new RunSupervisor({
+        root: args.root,
+        adapter,
+        git: 'git',
+        log,
+        onRunSettled: (info) => void orchestrator?.onRunSettled(info),
+        secondOpinion: (request) => orchestrator?.secondOpinion(request) ?? Promise.resolve(null),
+      }),
     ]),
   );
+  orchestrator = new Orchestrator({
+    root: args.root,
+    log,
+    supervisorOf: (provider) => supervisors.get(provider) ?? supervisors.get('opencode')!,
+  });
   for (const one of supervisors.values()) {
     await one.adopt();
   }
+  await orchestrator.load();
 
   const port = await freePort();
   const token = crypto.randomBytes(24).toString('hex');
@@ -93,6 +147,7 @@ async function main(): Promise<void> {
     pid: process.pid,
     startedAt: new Date().toISOString(),
     version: VERSION,
+    build: buildStamp,
   };
   const tokenBuffer = Buffer.from(token, 'utf8');
 
@@ -117,12 +172,12 @@ async function main(): Promise<void> {
     return { pathname: parsed.pathname, parts: parsed.pathname.split('/').filter((p) => p !== '') };
   };
 
-  const readBody = async (req: http.IncomingMessage): Promise<unknown> => {
+  const readBody = async (req: http.IncomingMessage, limit = MAX_BODY): Promise<unknown> => {
     const chunks: Buffer[] = [];
     let size = 0;
     for await (const chunk of req) {
       size += (chunk as Buffer).length;
-      if (size > MAX_BODY) {
+      if (size > limit) {
         throw new Error('body too large');
       }
       chunks.push(chunk as Buffer);
@@ -139,7 +194,120 @@ async function main(): Promise<void> {
     const { pathname, parts } = url(req);
     try {
       if (req.method === 'GET' && pathname === '/health') {
-        respond(200, { ok: true, version: VERSION, live: supervisorsOfLive() });
+        respond(200, { ok: true, version: VERSION, build: buildStamp, live: supervisorsOfLive() });
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/shutdown') {
+        const body = (await readBody(req).catch(() => ({}))) as { handover?: unknown };
+        if (body.handover === true) {
+          // Retired for a newer build (req-51): the runs go on under the
+          // successor. Mid-transition runs make it wait — the client asks
+          // again on its next poll and this runner serves on meanwhile.
+          if (handingOver) {
+            respond(200, { ok: true });
+            return;
+          }
+          const blocker = [...supervisors.values()].map((sup) => sup.handoverBlocker()).find((b) => b !== null) ?? null;
+          if (blocker !== null) {
+            respond(409, { ok: false, error: blocker });
+            return;
+          }
+          handingOver = true;
+          respond(200, { ok: true });
+          log('handover requested by a newer build — leaving the live runs to the successor');
+          let count = 0;
+          for (const sup of supervisors.values()) {
+            count += await sup.handOver().catch((error) => {
+              log(`handover failed: ${String(error)}`);
+              return 0;
+            });
+          }
+          log(`handed over ${count} live run${count === 1 ? '' : 's'} — exiting`);
+          // runner.log is written behind a promise chain: flush it, or the
+          // handover's lines are lost with the process.
+          await logChain;
+          // The descriptor goes only now: until the records are written, a
+          // successor's boot guard must still find this runner alive.
+          shutdown(0);
+          return;
+        }
+        respond(200, { ok: true });
+        log('shutdown requested — stopping live runs first, then exiting (a newer build hands over instead)');
+        // Graceful: a worker left alive while its record goes detached is
+        // an unsupervised agent on a parked ticket (T-0007 review). The
+        // stop path is the owner's own button; the wait is bounded so a
+        // hung adapter cannot hold the daemon hostage.
+        const stops = [...supervisors.values()].flatMap((sup) =>
+          sup
+            .list()
+            .filter((info) => info.state === 'starting' || info.state === 'running')
+            .map((info) => sup.stop(info.id, 'the runner was shut down')),
+        );
+        if (stops.length > 0) {
+          log(`stopping ${stops.length} live run${stops.length === 1 ? '' : 's'} before exit`);
+        }
+        await Promise.race([
+          Promise.allSettled(stops),
+          new Promise((resolve) => setTimeout(resolve, 10_000)),
+        ]);
+        setTimeout(() => process.exit(0), 100);
+        return;
+      }
+      if (req.method === 'GET' && pathname === '/log') {
+        const params = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams;
+        const tail = Number(params.get('tail') ?? '');
+        const count = Number.isFinite(tail) && tail > 0 ? Math.min(Math.trunc(tail), 2000) : 300;
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end(ring.slice(-count).join('\n'));
+        return;
+      }
+      if (req.method === 'GET' && pathname === '/chain') {
+        respond(200, orchestrator.status());
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/chain/config') {
+        const body = (await readBody(req)) as Partial<ChainConfig>;
+        if (typeof body.ticketsVaultPath !== 'string' || body.ticketsVaultPath.trim() === '') {
+          respond(422, { ok: false, error: 'the chain config needs a ticketsVaultPath' });
+          return;
+        }
+        const status = await orchestrator.configure({
+          ticketsVaultPath: body.ticketsVaultPath,
+          git: typeof body.git === 'string' && body.git.trim() !== '' ? body.git : 'git',
+          defaultWorker: typeof body.defaultWorker === 'string' && body.defaultWorker.trim() !== '' ? body.defaultWorker : 'opencode',
+          permissionMode: body.permissionMode === 'bypass' ? 'bypass' : 'accept-edits',
+        });
+        respond(200, status);
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/chain/master') {
+        const body = (await readBody(req)) as { mode?: unknown };
+        if (body.mode !== 'run' && body.mode !== 'halted') {
+          respond(422, { ok: false, error: 'the master mode is "run" or "halted"' });
+          return;
+        }
+        respond(200, await orchestrator.setMaster(body.mode as ChainMaster));
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/chain/column') {
+        const body = (await readBody(req)) as { phase?: unknown; mode?: unknown; stop?: unknown };
+        if (typeof body.phase !== 'string' || body.phase.trim() === '') {
+          respond(422, { ok: false, error: 'the column control needs a phase id' });
+          return;
+        }
+        if (body.stop === true) {
+          respond(200, await orchestrator.stopColumn(body.phase));
+          return;
+        }
+        if (body.mode !== 'playing' && body.mode !== 'held') {
+          respond(422, { ok: false, error: 'the column mode is "playing" or "held"' });
+          return;
+        }
+        respond(200, await orchestrator.setColumn(body.phase, body.mode as ColumnMode));
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/chain/abort') {
+        respond(200, await orchestrator.abortAll());
         return;
       }
       if (req.method === 'GET' && pathname === '/status') {
@@ -162,6 +330,50 @@ async function main(): Promise<void> {
           return;
         }
         const outcome = await supervisor.stop(String(body.runId), typeof body.reason === 'string' ? body.reason : null);
+        respond(outcome.ok ? 200 : 422, outcome);
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/attach') {
+        // base64 of up to MAX_ATTACHMENT_BYTES, plus the JSON around it
+        const body = (await readBody(req, Math.ceil(MAX_ATTACHMENT_BYTES * 1.4) + 4096)) as {
+          runId?: unknown;
+          name?: unknown;
+          data?: unknown;
+        };
+        const supervisor = supervisorOfRun(String(body.runId ?? ''));
+        if (supervisor === null || typeof body.name !== 'string' || typeof body.data !== 'string') {
+          respond(404, { ok: false, error: 'unknown run or bad attachment' });
+          return;
+        }
+        const outcome = await supervisor.attachFile(String(body.runId), body.name, body.data);
+        respond(outcome.ok ? 200 : 422, outcome);
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/resume') {
+        const body = (await readBody(req)) as { runId?: unknown };
+        const supervisor = supervisorOfRun(String(body.runId ?? ''));
+        if (supervisor === null) {
+          respond(404, { ok: false, error: `unknown run "${String(body.runId)}"` });
+          return;
+        }
+        const outcome = await supervisor.resume(String(body.runId));
+        respond(outcome.ok ? 200 : 422, outcome);
+        return;
+      }
+      if (req.method === 'POST' && (pathname === '/takeover' || pathname === '/interrupt' || pathname === '/release')) {
+        const body = (await readBody(req)) as { runId?: unknown };
+        const supervisor = supervisorOfRun(String(body.runId ?? ''));
+        if (supervisor === null) {
+          respond(404, { ok: false, error: `unknown run "${String(body.runId)}"` });
+          return;
+        }
+        const runId = String(body.runId);
+        const outcome =
+          pathname === '/takeover'
+            ? await supervisor.takeover(runId)
+            : pathname === '/interrupt'
+              ? await supervisor.interrupt(runId)
+              : await supervisor.release(runId);
         respond(outcome.ok ? 200 : 422, outcome);
         return;
       }
@@ -221,10 +433,23 @@ async function main(): Promise<void> {
     log(`listening on 127.0.0.1:${port} (pid ${process.pid})`);
   });
 
-  // Idle shutdown: nothing live and nobody asked for a while — the
-  // plugin respawns the runner on demand.
+  // The lease reaper's round (M85): a run whose worker process is
+  // provably dead is failed and its ticket freed — chain or not.
+  const reapTimer = setInterval(() => {
+    void orchestrator.reapAll().catch((error) => log(`reap failed: ${String(error)}`));
+  }, 60_000);
+  reapTimer.unref();
+
+  // Idle shutdown: nothing live, the chain is not running, and nobody
+  // asked for a while — the plugin respawns the runner on demand. A
+  // running chain keeps the process alive: it is the thing that drains
+  // the board while Drey is closed (M85).
   const idleTimer = setInterval(() => {
-    if (!supervisorsOfLive() && Date.now() - lastRequest > args.idleMs) {
+    if (
+      !orchestrator.active &&
+      !supervisorsOfLive() &&
+      Date.now() - lastRequest > args.idleMs
+    ) {
       log(`idle for ${Math.round(args.idleMs / 1000)}s — shutting down`);
       shutdown(0);
     }

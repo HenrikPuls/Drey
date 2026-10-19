@@ -12,6 +12,18 @@
  * a chat, so it stays plain text.
  */
 import type { DreyPluginApi, InlineSegment } from '../../../shared/plugin-api/renderer';
+import {
+  FENCE,
+  FENCE_END,
+  HEADING,
+  QUOTE,
+  RULE,
+  TABLE_ROW,
+  TABLE_RULE,
+  codeBlockNode,
+  splitRow,
+  tableNode,
+} from './rich-blocks.js';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -195,7 +207,60 @@ export function renderRichBody(api: DreyPluginApi, text: string): HTMLElement {
     list = null;
   };
 
-  for (const line of lines) {
+  const block = (node: Node): void => {
+    flushParagraph();
+    flushList();
+    root.appendChild(node);
+  };
+  const inline = (text: string): Node[] => inlineNodes(api, text);
+
+  for (let n = 0; n < lines.length; n++) {
+    const line = lines[n];
+    const fence = FENCE.exec(line);
+    if (fence !== null) {
+      const body: string[] = [];
+      n += 1;
+      while (n < lines.length && !FENCE_END.test(lines[n])) {
+        body.push(lines[n]);
+        n += 1;
+      }
+      block(codeBlockNode(api, body.join('\n'), fence[1]));
+      continue;
+    }
+    const heading = HEADING.exec(line);
+    if (heading !== null) {
+      const h = el('div', 'md-h md-h' + String(Math.min(heading[1].length, 4)));
+      inline(heading[2]).forEach((node) => h.appendChild(node));
+      block(h);
+      continue;
+    }
+    if (RULE.test(line)) {
+      block(el('hr'));
+      continue;
+    }
+    if (QUOTE.test(line)) {
+      const quote = el('blockquote');
+      while (n < lines.length && QUOTE.test(lines[n])) {
+        const p = el('p');
+        inline(lines[n].replace(QUOTE, '')).forEach((node) => p.appendChild(node));
+        quote.appendChild(p);
+        n += 1;
+      }
+      n -= 1;
+      block(quote);
+      continue;
+    }
+    if (TABLE_ROW.test(line) && n + 1 < lines.length && TABLE_RULE.test(lines[n + 1])) {
+      const rows: string[][] = [splitRow(line)];
+      n += 2;
+      while (n < lines.length && TABLE_ROW.test(lines[n])) {
+        rows.push(splitRow(lines[n]));
+        n += 1;
+      }
+      n -= 1;
+      block(tableNode(rows, inline));
+      continue;
+    }
     const bullet = BULLET.exec(line);
     const ordered = bullet === null ? ORDERED.exec(line) : null;
     if (bullet !== null || ordered !== null) {

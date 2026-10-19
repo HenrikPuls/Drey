@@ -10,6 +10,7 @@
  * The renderer only ever sees BoardSnapshot payloads — parsing,
  * validation and YAML stay here.
  */
+import { shell } from 'electron';
 import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
@@ -20,7 +21,12 @@ import type {
 } from '../../../shared/plugin-api';
 import {
   nextTicketId,
+  TICKETS_ARCHIVE_DIR,
   type BoardSnapshot,
+  type FolderStatus,
+  type PipelinePhase,
+  type PromptEntry,
+  type PromptListing,
   type TicketCard,
   type TicketPriority,
   TICKET_PRIORITIES,
@@ -29,20 +35,30 @@ import {
   assembleBoard,
   orderAfterInsert,
   parseOrderFile,
+  patchPipelinePhase,
+  parsePipeline,
   pinsAfterDrop,
+  removeIdFromPins,
+  reorderPipelinePhases,
   rewriteOrderSection,
 } from './ticket-board';
 import {
-  acceptanceCommands,
   newTicketFileText,
   patchTicketFile,
+  ticketPathParts,
   ticketSections,
 } from './ticket-files';
+import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from './phase-dirs';
+import { detectDrift, type DriftDetection } from './normalize';
 import { openTerminalAt } from './open-terminal';
 import { TicketsGit, type RepoLocation } from './tickets-git';
+import { createFleetMcpTools } from './mcp-tools';
+import { loadShippedPrompts } from './default-prompts';
 import { FleetClient } from './fleet-client';
-import { composeInstruction, resolveAssignment } from './fleet/assignment';
-import type { PermissionMode, RunRequest } from './fleet/protocol';
+import { listWorkerModels } from './worker-models';
+import { agentIdentity, composeRunRequest } from './fleet/request';
+import { checkpointPhaseIds, columnPromptRef, isAutoPhase, nextPhaseIdOf } from './fleet/chain';
+import type { ChainConfig, PermissionMode } from './fleet/protocol';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
 const ORDER_PATH = 'tickets/_meta/order.md';
@@ -54,7 +70,7 @@ const DEFAULT_PIPELINE = `---
 phases:
   - { id: inbox, title: Inbox, handover: manual }
   - { id: prioritized, title: Prioritized, handover: manual }
-  - { id: plan, title: Plan, wip: 1, handover: manual }
+  - { id: plan, title: Plan, wip: 1, handover: agent plan-default }
   - { id: plan-review, title: Plan review, handover: manual }
   - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default }
   - { id: review, title: Review, handover: manual }
@@ -65,6 +81,10 @@ The pipeline: ordered phases (first = capture target, last = terminal),
 configurable per handover (manual | agent <prompt-ref> | ci | none).
 See specs/ticket-schema.md. Edit freely; the board follows on refresh.
 `;
+
+const PROMPTS_DIR = 'tickets/_meta/prompts';
+const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
 
 const DEFAULT_ORDER = `# Column order pins — listed ids form the top of their column
 
@@ -85,7 +105,7 @@ Work repositories a ticket's \`repo:\` field may name. Example:
 `;
 
 type MutationResult =
-  | { readonly ok: true; readonly warning?: string }
+  | { readonly ok: true; readonly warning?: string; readonly moved?: number }
   | { readonly ok: false; readonly error: string };
 
 interface VaultLike {
@@ -98,11 +118,14 @@ class BoardService {
   private queueTail: Promise<unknown> = Promise.resolve();
   private readonly gitLocations = new Map<string, RepoLocation | null>();
   private emitDebounce: ReturnType<typeof setTimeout> | null = null;
+  private lastChainConfig: string | null = null;
 
   constructor(
     private readonly ctx: MainPluginContext,
     private readonly git: TicketsGit,
     private readonly defaultWorker: string,
+    private readonly autoPermissionMode: PermissionMode,
+    private readonly gitPath: string,
     private readonly fleet: FleetClient,
   ) {}
 
@@ -149,6 +172,13 @@ class BoardService {
     return this.gitLocations.get(vaultPath) ?? null;
   }
 
+  /** The directories under `tickets/` as they exist on disk (T-0041) —
+   *  what every writer resolves its target directory against. */
+  private async ticketDirs(vault: VaultLike): Promise<string[]> {
+    const abs = this.ctx.vault.resolveAssetPath('tickets', { vaultId: vault.id });
+    return abs === null ? [] : await listTicketDirs(abs);
+  }
+
   /** Snapshot from files — every fetch rebuilds (no stored board state). */
   async snapshot(): Promise<BoardSnapshot> {
     const [vault, vaults] = await Promise.all([
@@ -157,6 +187,7 @@ class BoardService {
     ]);
     const active = vaults.find((v) => v.active) ?? null;
     if (vault === null) {
+      this.syncChainConfig(null, []);
       return assembleBoard({
         vaultId: null,
         vaultName: null,
@@ -183,7 +214,7 @@ class BoardService {
         text: await this.ctx.vault.read(path, { vaultId: vault.id }),
       })),
     );
-    return assembleBoard({
+    const snapshot = assembleBoard({
       vaultId: vault.id,
       vaultName: vault.name,
       activeVaultName: active?.name ?? null,
@@ -194,6 +225,36 @@ class BoardService {
       reposText,
       files,
     });
+    // The chain follows the pipeline: an automatic column anywhere
+    // points the runner at this vault (M85). Cheap and idempotent —
+    // the runner re-reads the vault on every dispatch pass anyway.
+    this.syncChainConfig(vault, snapshot.pipeline);
+    return snapshot;
+  }
+
+  /** Keeps the runner's chain config in step with the pipeline (never spawns). */
+  private syncChainConfig(
+    vault: { readonly path: string } | null,
+    pipeline: readonly PipelinePhase[],
+  ): ChainConfig | null {
+    const chain: ChainConfig | null =
+      vault !== null && pipeline.some((phase) => isAutoPhase(phase))
+        ? {
+            ticketsVaultPath: vault.path,
+            git: this.gitPath.trim() === '' ? 'git' : this.gitPath.trim(),
+            defaultWorker: this.defaultWorker,
+            permissionMode: this.autoPermissionMode,
+          }
+        : null;
+    const json = chain === null ? null : JSON.stringify(chain);
+    if (json === this.lastChainConfig) {
+      return chain;
+    }
+    this.lastChainConfig = json;
+    if (chain !== null) {
+      void this.fleet.configureChain(chain);
+    }
+    return chain;
   }
 
   /** Find a card anywhere on the board. */
@@ -210,6 +271,104 @@ class BoardService {
       }
     }
     return null;
+  }
+
+  /**
+   * The `board` IPC route (T-0041): normalize first — a file move is a
+   * ticket move — then snapshot. Normalization runs enqueued (the same
+   * single-writer queue as every mutation) and snapshots are taken
+   * OUTSIDE it, so this never nests `enqueue` inside `enqueue`.
+   */
+  async refresh(): Promise<BoardSnapshot> {
+    await this.normalizeDrift();
+    return this.snapshot();
+  }
+
+  /**
+   * Stateless drift treatment, derived from the files alone (T-0041,
+   * ADR-0076 later change): every ticket that sits in a phase its
+   * `entered-*` stamps disagree with receives the full board-move
+   * treatment — stamp, Log line, pin cleanup, exactly one commit. A
+   * file dropped into `tickets/archive/` gets the archive treatment.
+   * Idempotent by construction: the treatment makes the file's state
+   * consistent, so the next pass finds nothing (the announce → re-fetch
+   * echo lands on the fixpoint). Per-item try/catch: one broken ticket
+   * never blocks the rest or the board.
+   */
+  private normalizeDrift(): Promise<void> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return;
+      }
+      const pipelineText = await this.readOptional(vault.id, PIPELINE_PATH);
+      if (pipelineText === null) {
+        return;
+      }
+      const { phases, pushRemote } = parsePipeline(pipelineText);
+      const mdFiles = await this.ctx.vault.listMarkdownFiles({ vaultId: vault.id });
+      const paths = mdFiles.filter((p) => p.startsWith('tickets/') && !p.startsWith('tickets/_meta/'));
+      const files: { path: string; text: string }[] = [];
+      for (const p of paths) {
+        const text = await this.ctx.vault.read(p, { vaultId: vault.id }).catch(() => null);
+        if (text !== null) {
+          files.push({ path: p, text });
+        }
+      }
+      for (const drift of detectDrift(files, phases)) {
+        const text = files.find((f) => f.path === drift.path)?.text;
+        if (text === undefined) {
+          continue;
+        }
+        try {
+          await this.treatDrift(vault, drift, text, pushRemote);
+        } catch (error) {
+          this.ctx.log(`normalizing ${drift.id} (${drift.path}) failed: ${messageOf(error)}`, 'warn');
+        }
+      }
+    });
+  }
+
+  /** One drift's full transition treatment. The path never changes —
+   *  only stamps, Log and pins; exactly one commit closes it. */
+  private async treatDrift(
+    vault: VaultLike,
+    drift: DriftDetection,
+    text: string,
+    pushRemote: string | null,
+  ): Promise<void> {
+    const now = new Date();
+    const patched =
+      drift.kind === 'archive'
+        ? patchTicketFile(text, { to: 'archive', from: null, now, actor: OWNER, action: 'archived' })
+        : patchTicketFile(text, {
+            to: drift.phase,
+            // null (no event at all) logs honestly as `unknown -> <phase>`
+            from: drift.from ?? 'unknown',
+            now,
+            actor: OWNER,
+          });
+    await this.ctx.vault.write(drift.path, patched, { vaultId: vault.id });
+
+    const orderText = await this.readOptional(vault.id, ORDER_PATH);
+    const nextOrder = orderText === null ? null : removeIdFromPins(orderText, drift.id);
+    const orderChanged = nextOrder !== null && nextOrder !== orderText;
+    if (orderChanged) {
+      await this.ctx.vault.write(ORDER_PATH, nextOrder as string, { vaultId: vault.id });
+    }
+
+    const message =
+      drift.kind === 'archive'
+        ? `tickets: ${drift.id} archived`
+        : `tickets: ${drift.id} ${drift.from ?? 'unknown'} -> ${drift.phase}`;
+    await this.commit(vault, [drift.path, ...(orderChanged ? [ORDER_PATH] : [])], message);
+    // The optional auto-push (T-0041): warning-level, never a failed move.
+    await this.pushTransition(vault, pushRemote);
+    this.ctx.vault.announceChanges({
+      vaultId: vault.id,
+      changedPaths: [drift.path, ...(orderChanged ? [ORDER_PATH] : [])],
+    });
+    this.announceChanged();
   }
 
   /** Serialize mutations; failures never block the next one. */
@@ -236,6 +395,30 @@ class BoardService {
     }
   }
 
+  /**
+   * The optional auto-push after a transition commit (T-0041,
+   * pipeline.md `push:`): `git push <remote> HEAD` from the tickets repo
+   * root. A failure is a warning the panel shows — never a failed
+   * transition; the commit is already durable. Null remote = no push.
+   */
+  private async pushTransition(vault: VaultLike, remote: string | null): Promise<string | null> {
+    if (remote === null) {
+      return null;
+    }
+    const location = await this.locate(vault.path);
+    if (location === null) {
+      return null;
+    }
+    try {
+      await this.git.push(location.root, remote);
+      return null;
+    } catch (error) {
+      const text = messageOf(error).split('\n')[0] ?? 'push failed';
+      this.ctx.log(`git push to "${remote}" failed: ${text}`, 'warn');
+      return `git push to "${remote}" failed: ${text}`;
+    }
+  }
+
   createTicket(input: {
     title: string;
     priority: TicketPriority;
@@ -254,7 +437,8 @@ class BoardService {
       const ids = snap.columns.flatMap((c) => c.tickets.map((t) => t.id));
       const id = nextTicketId(ids);
       const firstPhase = snap.pipeline[0]!.id;
-      const path = `tickets/${firstPhase}/${id}.md`;
+      const firstDir = resolvePhaseDir(await this.ticketDirs(vault), 1, firstPhase);
+      const path = `tickets/${firstDir}/${id}.md`;
       const text = newTicketFileText({
         id,
         title: input.title,
@@ -301,12 +485,18 @@ class BoardService {
       if (toPhase === null) {
         return { ok: false, error: `"${input.to}" is not a phase in the pipeline` };
       }
-      if (card.path !== `tickets/${input.from}/${input.id}.md`) {
+      // Prefix-aware path guard (T-0041): the card may sit in `10-inbox`
+      // or `inbox` — the stripped phase id is the identity.
+      const parts = ticketPathParts(card.path);
+      if (parts === null || parts.phase !== input.from || parts.stem !== input.id) {
         return { ok: false, error: `${input.id} sits in an unexpected path (${card.path})` };
       }
 
       const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
-      const claims = toPhase.claim && card.meta.claimedBy === null ? { claimBy: OWNER } : {};
+      // A hand-move never touches the claim (owner ruling, 2026-10-18): a
+      // stamp here would block the target column's pool, since the
+      // dispatcher never takes claimed cards. Claims belong to the
+      // takeover/release menu and to the fleet's own moves.
       let patched: string;
       try {
         patched = patchTicketFile(text, {
@@ -314,16 +504,20 @@ class BoardService {
           from: input.from,
           now: new Date(),
           actor: OWNER,
-          ...claims,
         });
       } catch (error) {
         return { ok: false, error: messageOf(error) };
       }
 
-      const newPath = `tickets/${input.to}/${input.id}.md`;
+      const toDir = resolvePhaseDir(
+        await this.ticketDirs(vault),
+        snap.pipeline.findIndex((p) => p.id === input.to) + 1,
+        input.to,
+      );
+      const newPath = `tickets/${toDir}/${input.id}.md`;
       try {
         const oldAbs = this.ctx.vault.resolveAssetPath(card.path, { vaultId: vault.id });
-        const dirAbs = this.ctx.vault.resolveAssetPath(`tickets/${input.to}`, { vaultId: vault.id });
+        const dirAbs = this.ctx.vault.resolveAssetPath(`tickets/${toDir}`, { vaultId: vault.id });
         const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
         if (oldAbs === null || dirAbs === null || newAbs === null) {
           return { ok: false, error: 'ticket path escapes the vault' };
@@ -363,13 +557,94 @@ class BoardService {
         commitPaths,
         `tickets: ${input.id} ${input.from} -> ${input.to}`,
       );
+      // The optional auto-push (T-0041): warning-level, never a failed move.
+      const pushWarning = await this.pushTransition(vault, snap.pushRemote);
+      const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
       this.ctx.vault.announceChanges({
         vaultId: vault.id,
         changedPaths: [newPath, ...(orderChanged ? [ORDER_PATH] : [])],
         deletedPaths: [card.path],
       });
       this.announceChanged();
-      return { ok: true, ...(warning === null ? {} : { warning }) };
+      return { ok: true, ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }) };
+    });
+  }
+
+  /**
+   * Archives a ticket (T-0041): the reserved `tickets/archive/` folder
+   * beside `_meta` — not a column, invisible on the board. The treatment
+   * is exact: Log line `archived`, one commit `tickets: <id> archived`,
+   * pin cleanup; NO `entered-` stamp (the Log marker is what makes it
+   * idempotent and a revive detectable); claim fields ride along.
+   * Reviving is a move back into a phase folder — normalization stamps
+   * it as `archive -> <phase>`. Final deletion is the owner's manual
+   * act inside `archive/`.
+   */
+  archive(input: { id: string }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const snap = await this.snapshot();
+      let card: TicketCard | null = null;
+      for (const column of snap.columns) {
+        const found = column.tickets.find((t) => t.id === input.id);
+        if (found !== undefined) {
+          card = found;
+          break;
+        }
+      }
+      if (card === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
+      let patched: string;
+      try {
+        patched = patchTicketFile(text, {
+          to: 'archive',
+          from: null,
+          now: new Date(),
+          actor: OWNER,
+          action: 'archived',
+        });
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const newPath = `${TICKETS_ARCHIVE_DIR}/${card.id}.md`;
+      try {
+        const oldAbs = this.ctx.vault.resolveAssetPath(card.path, { vaultId: vault.id });
+        const dirAbs = this.ctx.vault.resolveAssetPath(TICKETS_ARCHIVE_DIR, { vaultId: vault.id });
+        const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
+        if (oldAbs === null || dirAbs === null || newAbs === null) {
+          return { ok: false, error: 'ticket path escapes the vault' };
+        }
+        await fsp.mkdir(dirAbs, { recursive: true });
+        await fsp.rename(oldAbs, newAbs);
+        await this.ctx.vault.write(newPath, patched, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `move failed: ${messageOf(error)}` };
+      }
+      const orderText = await this.readOptional(vault.id, ORDER_PATH);
+      const nextOrder = orderText === null ? null : removeIdFromPins(orderText, card.id);
+      const orderChanged = nextOrder !== null && nextOrder !== orderText;
+      if (orderChanged) {
+        await this.ctx.vault.write(ORDER_PATH, nextOrder as string, { vaultId: vault.id });
+      }
+      const warning = await this.commit(
+        vault,
+        [card.path, newPath, ...(orderChanged ? [ORDER_PATH] : [])],
+        `tickets: ${card.id} archived`,
+      );
+      const pushWarning = await this.pushTransition(vault, snap.pushRemote);
+      const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
+      this.ctx.vault.announceChanges({
+        vaultId: vault.id,
+        changedPaths: [newPath, ...(orderChanged ? [ORDER_PATH] : [])],
+        deletedPaths: [card.path],
+      });
+      this.announceChanged();
+      return { ok: true, ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }) };
     });
   }
 
@@ -475,11 +750,11 @@ class BoardService {
 
   /**
    * Starts a fleet run for one ticket (M84, ADR-0075): resolve the
-   * worker (ticket pin > handover pin > repo default > configured
-   * default), read the handover's prompt, compose the deterministic
-   * instruction and hand the runner the request. The runner owns the
-   * worker process and the ticket stamps; this side refuses early with
-   * the reason a human can act on.
+   * worker through the shared request builder (ticket pin > column >
+   * handover pin > repo default > configured default), read the
+   * handover's prompt, and hand the runner the request. The runner owns
+   * the worker process and the ticket stamps; this side refuses early
+   * with the reason a human can act on.
    */
   startRun(input: {
     ticketId: string;
@@ -508,83 +783,362 @@ class BoardService {
       if (card.meta.run !== null) {
         return { ok: false, error: `${card.id} already has a live run — stop it first` };
       }
+      const workingPhase = snap.pipeline.find((p) => p.id === phaseId) ?? null;
       const repo =
         card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card!.meta.repo) ?? null);
-      if (repo === null) {
-        return { ok: false, error: `${card.id} names no repository — set repo: to a _meta/repos.md entry` };
-      }
-      if (repo.path === null) {
-        return { ok: false, error: `"${repo.name}" has no local path: in _meta/repos.md — the worker needs a checkout` };
-      }
       const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
-      const acceptance = acceptanceCommands(text);
-      if (acceptance.length === 0) {
-        return {
-          ok: false,
-          error: `${card.id} has no acceptance criteria — the machine gate would have nothing to run`,
-        };
-      }
-      const assignment = resolveAssignment({
-        ticketWorker: input.workerChoice ?? card.meta.worker,
-        handover: snap.pipeline.find((p) => p.id === phaseId)?.handover ?? null,
-        repoWorker: repo.worker,
-        configuredDefault: this.defaultWorker,
-      });
-      if (!assignment.ok) {
-        return { ok: false, error: assignment.error };
-      }
+      const promptRef =
+        workingPhase === null ? null : columnPromptRef(workingPhase);
       let prompt: string | null = null;
-      if (assignment.promptRef !== null) {
-        prompt = await this.readOptional(vault.id, `tickets/_meta/prompts/${assignment.promptRef}.md`);
+      if (promptRef !== null) {
+        prompt = await this.readOptional(vault.id, `tickets/_meta/prompts/${promptRef}.md`);
         if (prompt === null) {
           return {
             ok: false,
-            error: `the handover names prompt "${assignment.promptRef}", but tickets/_meta/prompts/${assignment.promptRef}.md is missing`,
+            error: `the handover names prompt "${promptRef}", but tickets/_meta/prompts/${promptRef}.md is missing`,
           };
         }
       }
-      const phaseIndex = snap.pipeline.findIndex((p) => p.id === phaseId);
-      const nextPhase = phaseIndex >= 0 && phaseIndex + 1 < snap.pipeline.length
-        ? (snap.pipeline[phaseIndex + 1] ?? null)
-        : null;
-      const { description, plan } = ticketSections(text);
-      const gitPath = ((await this.ctx.config.get<string>('gitPath')) ?? '').trim();
-      const request: RunRequest = {
-        ticketId: card.id,
-        ticketsVaultPath: vault.path,
-        ticketRelPath: card.path,
-        phase: card.phase,
-        repoPath: repo.path,
-        branch: card.meta.branch ?? `t/${card.id}`,
-        baseRef: repo.branch,
-        provider: assignment.provider,
-        model: assignment.model,
+      const nextPhaseId = nextPhaseIdOf(snap.columns, phaseId);
+      const nextPhaseClaims =
+        nextPhaseId !== null ? (snap.pipeline.find((p) => p.id === nextPhaseId)?.claim === true) : false;
+      const composed = composeRunRequest({
+        card,
+        ticketText: text,
+        vaultPath: vault.path,
+        workingPhase,
+        nextPhaseId,
+        nextPhaseDir:
+          nextPhaseId === null
+            ? null
+            : resolvePhaseDir(
+                await this.ticketDirs(vault),
+                snap.pipeline.findIndex((p) => p.id === nextPhaseId) + 1,
+                nextPhaseId,
+              ),
+        pushRemote: snap.pushRemote,
+        nextPhaseClaims,
+        repo,
+        promptText: prompt,
+        defaultWorker: this.defaultWorker,
         permissionMode: input.permissionMode,
-        instruction: composeInstruction({
-          ticketId: card.id,
-          title: card.meta.title ?? card.id,
-          repo: repo.name,
-          branch: card.meta.branch ?? `t/${card.id}`,
-          worktreePath: `${repo.name}-${card.id}`,
-          phase: card.phase,
-          description,
-          plan,
-          prompt,
-          acceptance,
-        }),
-        acceptance,
-        git: gitPath === '' ? 'git' : gitPath,
-        nextPhase: nextPhase?.id ?? null,
-        claimIdentity: nextPhase?.claim === true ? `agent@${hostname().toLowerCase()}` : null,
-        ...(input.workerChoice !== null ? { recordWorker: input.workerChoice } : {}),
-      };
-      const outcome = await this.fleet.start(request);
+        gitPath: ((await this.ctx.config.get<string>('gitPath')) ?? '').trim(),
+        workerChoice: input.workerChoice,
+      });
+      if (!composed.ok) {
+        return { ok: false, error: composed.error };
+      }
+      const outcome = await this.fleet.start(composed.request);
       if (outcome.ok) {
         this.announceChanged();
         return { ok: true, runId: outcome.run.id };
       }
       return { ok: false, error: outcome.error };
     });
+  }
+
+  /**
+   * Writes one phase's pool keys in `_meta/pipeline.md` (M85, the
+   * settings dialog's writer): setting a worker writes the matching
+   * `agent <prompt-ref>` handover, clearing it writes `manual`. One
+   * commit per change (`tickets: columns <phase> <what>`).
+   */
+  setColumnConfig(input: {
+    phase: string;
+    worker?: string | null;
+    model?: string | null;
+    workers?: number | null;
+    prompt?: string | null;
+  }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const text = await this.readOptional(vault.id, PIPELINE_PATH);
+      if (text === null) {
+        return { ok: false, error: 'tickets/_meta/pipeline.md is missing' };
+      }
+      if (
+        input.worker === undefined &&
+        input.model === undefined &&
+        input.workers === undefined &&
+        input.prompt === undefined
+      ) {
+        return { ok: true }; // nothing to change (e.g. the handover-pin display state)
+      }
+      if (input.worker !== undefined) {
+        const worker = input.worker?.trim() ?? '';
+        if (worker !== '' && worker !== 'opencode' && worker !== 'claude-code') {
+          return { ok: false, error: 'the worker is "opencode" or "claude-code"' };
+        }
+      }
+      let patched: string;
+      try {
+        patched = patchPipelinePhase(text, input.phase, {
+          ...(input.worker !== undefined ? { worker: input.worker } : {}),
+          ...(input.model !== undefined ? { model: input.model } : {}),
+          ...(input.workers !== undefined ? { workers: input.workers } : {}),
+          ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
+        });
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      try {
+        await this.ctx.vault.write(PIPELINE_PATH, patched, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const what: string[] = [];
+      if (input.worker !== undefined) {
+        what.push(input.worker === null || input.worker.trim() === '' ? 'manual' : `worker ${input.worker.trim()}`);
+      }
+      if (input.model !== undefined) {
+        what.push(`model ${input.model === null || input.model.trim() === '' ? '(none)' : input.model.trim()}`);
+      }
+      if (input.workers !== undefined) {
+        what.push(`workers ${input.workers ?? '(default)'}`);
+      }
+      if (input.prompt !== undefined) {
+        what.push(`prompt ${input.prompt === null || input.prompt.trim() === '' ? '(default)' : input.prompt.trim()}`);
+      }
+      const warning = await this.commit(vault, [PIPELINE_PATH], `tickets: columns ${input.phase} ${what.join(', ')}`);
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [PIPELINE_PATH] });
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The prompt files under `_meta/prompts/`, exactly as they are on disk
+   * (req-50: the settings page shows nothing else — no rows for shipped
+   * prompts the vault lacks, no comparison with code). `shipped` marks a
+   * name Drey ships a file for, where "Reset to the shipped version" means
+   * something. `folder` is the absolute folder for display and "Open".
+   */
+  async listPrompts(): Promise<PromptListing> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return { folder: null, entries: [], shipped: [] };
+    }
+    const shipped = await loadShippedPrompts();
+    const dir = this.ctx.vault.resolveAssetPath(PROMPTS_DIR, { vaultId: vault.id });
+    if (dir === null) {
+      return { folder: null, entries: [], shipped: [...shipped.keys()] };
+    }
+    const names = (await fsp.readdir(dir).catch(() => [] as string[]))
+      .filter((n) => n.endsWith('.md') && PROMPT_REF.test(n.slice(0, -3)))
+      .sort();
+    const entries: PromptEntry[] = [];
+    for (const name of names) {
+      const ref = name.slice(0, -3);
+      const text = await this.readOptional(vault.id, `${PROMPTS_DIR}/${name}`);
+      if (text !== null) {
+        entries.push({ ref, text, shipped: shipped.has(ref) });
+      }
+    }
+    return { folder: dir, entries, shipped: [...shipped.keys()] };
+  }
+
+  /** Writes one prompt file (create, replace or reset to the shipped file); one commit per save. */
+  savePrompt(input: { ref: string; text?: string; reset?: boolean }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      if (!PROMPT_REF.test(input.ref)) {
+        return { ok: false, error: 'a prompt name is letters, digits, dot, dash and underscore' };
+      }
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const file = `${PROMPTS_DIR}/${input.ref}.md`;
+      let text = input.text ?? '';
+      if (input.reset === true) {
+        const shipped = (await loadShippedPrompts()).get(input.ref);
+        if (shipped === undefined) {
+          return { ok: false, error: `Drey ships no prompt "${input.ref}"` };
+        }
+        text = shipped;
+      }
+      const before = await this.readOptional(vault.id, file);
+      if (before === text) {
+        return { ok: true };
+      }
+      try {
+        await this.ctx.vault.write(file, text, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const verb = input.reset === true ? 'reset' : before === null ? 'add' : 'edit';
+      const warning = await this.commit(vault, [file], `tickets: prompt ${input.ref} ${verb}`);
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [file] });
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /** Adds the shipped prompts the vault lacks (never overwrites one); one commit. */
+  restoreShippedPrompts(): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const added: string[] = [];
+      try {
+        for (const [ref, text] of await loadShippedPrompts()) {
+          const file = `${PROMPTS_DIR}/${ref}.md`;
+          if ((await this.readOptional(vault.id, file)) === null) {
+            await this.ctx.vault.write(file, text, { vaultId: vault.id });
+            added.push(file);
+          }
+        }
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      if (added.length === 0) {
+        return { ok: true };
+      }
+      const warning = await this.commit(vault, added, 'tickets: prompts add the shipped defaults');
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: added });
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /** Opens `_meta/prompts/` (or the tickets folder) in the OS file manager. */
+  async openTicketsFolder(which: 'tickets' | 'prompts'): Promise<MutationResult> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return { ok: false, error: 'no tickets vault detected' };
+    }
+    const dir = this.ctx.vault.resolveAssetPath(which === 'prompts' ? PROMPTS_DIR : 'tickets', { vaultId: vault.id });
+    if (dir === null) {
+      return { ok: false, error: 'the folder is outside the vault' };
+    }
+    await fsp.mkdir(dir, { recursive: true }).catch(() => undefined);
+    const failure = await shell.openPath(dir);
+    return failure === '' ? { ok: true } : { ok: false, error: failure };
+  }
+
+  /**
+   * Whether the phase folders carry their derived numbers (T-0041), and
+   * the renames "Number folders" would make. Also names the tickets
+   * folder for the settings page's header.
+   */
+  async folderStatus(): Promise<FolderStatus> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return { root: null, moves: [] };
+    }
+    const snap = await this.snapshot();
+    const root = this.ctx.vault.resolveAssetPath('tickets', { vaultId: vault.id });
+    return {
+      root,
+      moves: planFolderNumbering(await this.ticketDirs(vault), snap.pipeline.map((p) => p.id)),
+    };
+  }
+
+  /** "Number folders": the renumbering alone, one commit (req-50). */
+  numberFolders(): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const snap = await this.snapshot();
+      return this.renumber(vault, snap, snap.pipeline.map((p) => p.id), null, 'tickets: number phase folders');
+    });
+  }
+
+  /**
+   * The settings page's sortable columns (req-50): pipeline.md takes the
+   * new order and the phase folders their new numbers — one commit.
+   * Refused while a ticket in a renamed folder has a live run (the
+   * runner holds its path).
+   */
+  reorderPhases(order: readonly string[]): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const text = await this.readOptional(vault.id, PIPELINE_PATH);
+      if (text === null) {
+        return { ok: false, error: 'tickets/_meta/pipeline.md is missing' };
+      }
+      let reordered: string;
+      try {
+        reordered = reorderPipelinePhases(text, order);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      if (reordered === text) {
+        return { ok: true };
+      }
+      const snap = await this.snapshot();
+      return this.renumber(vault, snap, order, reordered, `tickets: reorder phases ${order.join(' ')}`);
+    });
+  }
+
+  /** The shared body of reorder and "Number folders"; runs inside the queue. */
+  private async renumber(
+    vault: VaultLike,
+    snap: BoardSnapshot,
+    order: readonly string[],
+    pipelineText: string | null,
+    message: string,
+  ): Promise<MutationResult> {
+    const root = this.ctx.vault.resolveAssetPath('tickets', { vaultId: vault.id });
+    if (root === null) {
+      return { ok: false, error: 'the tickets folder is outside the vault' };
+    }
+    const moves = planFolderNumbering(await this.ticketDirs(vault), order);
+    const moved = new Set(moves.map((m) => m.from));
+    const busy = snap.columns
+      .flatMap((c) => c.tickets)
+      .filter((t) => t.meta.run !== null && moved.has(t.path.split('/')[1] ?? ''));
+    if (busy.length > 0) {
+      return {
+        ok: false,
+        error: `${busy.map((t) => t.id).join(', ')} ${busy.length === 1 ? 'has a live run' : 'have live runs'} — stop ${busy.length === 1 ? 'it' : 'them'} or wait, then try again`,
+      };
+    }
+    if (moves.length === 0 && pipelineText === null) {
+      return { ok: true };
+    }
+    let touched: string[];
+    try {
+      touched = await applyFolderNumbering(root, moves);
+    } catch (error) {
+      return { ok: false, error: messageOf(error) };
+    }
+    if (pipelineText !== null) {
+      try {
+        await this.ctx.vault.write(PIPELINE_PATH, pipelineText, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+    }
+    const paths = [...touched.map((dir) => `tickets/${dir}`), ...(pipelineText !== null ? [PIPELINE_PATH] : [])];
+    const location = await this.locate(vault.path);
+    let warning: string | null = null;
+    if (location === null) {
+      warning = 'the tickets vault is not a git repository — the change is not versioned';
+    } else {
+      try {
+        await this.git.commitTree(location.root, paths.map((p) => `${location.prefix}${p}`), message);
+      } catch (error) {
+        warning = `git commit failed: ${messageOf(error).split('\n')[0]}`;
+        this.ctx.log(warning, 'warn');
+      }
+    }
+    this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: paths });
+    this.announceChanged();
+    return {
+      ok: true,
+      moved: moves.length,
+      ...(warning === null ? {} : { warning }),
+    };
   }
 
   initialize(vaultId: string | null): Promise<MutationResult> {
@@ -600,21 +1154,26 @@ class BoardService {
       if (await this.readOptional(target.id, PIPELINE_PATH) !== null) {
         return { ok: false, error: `vault "${target.name}" already has a tickets board` };
       }
+      const shipped = await loadShippedPrompts();
+      const promptPaths = [...shipped.keys()].map((ref) => `${PROMPTS_DIR}/${ref}.md`);
       try {
         await this.ctx.vault.write(PIPELINE_PATH, DEFAULT_PIPELINE, { vaultId: target.id });
         await this.ctx.vault.write(ORDER_PATH, DEFAULT_ORDER, { vaultId: target.id });
         await this.ctx.vault.write(REPOS_PATH, DEFAULT_REPOS, { vaultId: target.id });
+        for (const [ref, text] of shipped) {
+          await this.ctx.vault.write(`${PROMPTS_DIR}/${ref}.md`, text, { vaultId: target.id });
+        }
       } catch (error) {
         return { ok: false, error: `write failed: ${messageOf(error)}` };
       }
       const warning = await this.commit(
         target,
-        [PIPELINE_PATH, ORDER_PATH, REPOS_PATH],
+        [PIPELINE_PATH, ORDER_PATH, REPOS_PATH, ...promptPaths],
         'tickets: initialize board',
       );
       this.ctx.vault.announceChanges({
         vaultId: target.id,
-        changedPaths: [PIPELINE_PATH, ORDER_PATH, REPOS_PATH],
+        changedPaths: [PIPELINE_PATH, ORDER_PATH, REPOS_PATH, ...promptPaths],
       });
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };
@@ -630,28 +1189,6 @@ class BoardService {
   }
 }
 
-/** Strips one id from every pin section, in text form. */
-function removeIdFromPins(orderText: string, id: string): string {
-  const { pins } = parseOrderFile(orderText);
-  let touched = false;
-  const cleaned: Record<string, string[]> = {};
-  for (const [section, ids] of Object.entries(pins)) {
-    const kept = ids.filter((x) => x !== id);
-    if (kept.length !== ids.length) {
-      touched = true;
-    }
-    cleaned[section] = kept;
-  }
-  if (!touched) {
-    return orderText;
-  }
-  let text = orderText;
-  for (const [section, ids] of Object.entries(cleaned)) {
-    text = rewriteOrderSection(text, section, ids);
-  }
-  return text;
-}
-
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -661,15 +1198,18 @@ const plugin: MainPluginModule = {
     const gitPath = ((await ctx.config.get<string>('gitPath')) ?? '').trim();
     const git = new TicketsGit(() => (gitPath === '' ? 'git' : gitPath));
     const defaultWorker = ((await ctx.config.get<string>('defaultWorker')) ?? '').trim() || 'opencode';
+    const autoPermissionMode: PermissionMode =
+      (await ctx.config.get<string>('autoPermissionMode')) === 'bypass' ? 'bypass' : 'accept-edits';
     const fleet = new FleetClient({
       root: path.join(ctx.app.userRoot, 'fleet'),
       runnerScript: path.join(__dirname, 'fleet', 'runner.js'),
       log: ctx.log,
-      onRunsChanged: (runs) => ctx.ipc.emit('fleet-changed', runs),
+      onFleetChanged: (fleetSnapshot) => ctx.ipc.emit('fleet-changed', fleetSnapshot),
     });
-    const board = new BoardService(ctx, git, defaultWorker, fleet);
+    fleet.startPolling();
+    const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet);
 
-    ctx.ipc.handle('board', () => board.snapshot());
+    ctx.ipc.handle('board', () => board.refresh());
 
     ctx.ipc.handle('create', async (payload) => {
       const p = payload as { title?: unknown; priority?: unknown; repo?: unknown; description?: unknown };
@@ -722,8 +1262,81 @@ const plugin: MainPluginModule = {
       return board.setClaim({ id: p.id, mode: p.mode });
     });
 
+    // The settings dialog's writer: one phase's pool keys, one commit (M85).
+    ctx.ipc.handle('columns', async (payload) => {
+      const p = payload as {
+        phase?: unknown;
+        worker?: unknown;
+        model?: unknown;
+        workers?: unknown;
+        prompt?: unknown;
+      };
+      if (typeof p.phase !== 'string' || p.phase.trim() === '') {
+        return { ok: false, error: 'bad columns payload' };
+      }
+      return board.setColumnConfig({
+        phase: p.phase,
+        ...(p.worker !== undefined ? { worker: typeof p.worker === 'string' ? p.worker : null } : {}),
+        ...(p.model !== undefined ? { model: typeof p.model === 'string' ? p.model : null } : {}),
+        ...(p.workers !== undefined
+          ? { workers: typeof p.workers === 'number' ? Math.floor(p.workers) : null }
+          : {}),
+        ...(p.prompt !== undefined ? { prompt: typeof p.prompt === 'string' ? p.prompt : null } : {}),
+      });
+    });
+
+    // The prompts the columns name, editable from the settings page (req-46).
+    ctx.ipc.handle('prompts', () => board.listPrompts());
+    ctx.ipc.handle('promptSave', async (payload) => {
+      const p = payload as { ref?: unknown; text?: unknown; reset?: unknown };
+      if (typeof p.ref !== 'string') {
+        return { ok: false, error: 'bad prompt payload' };
+      }
+      if (p.reset !== true && typeof p.text !== 'string') {
+        return { ok: false, error: 'bad prompt payload' };
+      }
+      return board.savePrompt({
+        ref: p.ref,
+        ...(typeof p.text === 'string' ? { text: p.text } : {}),
+        ...(p.reset === true ? { reset: true } : {}),
+      });
+    });
+    ctx.ipc.handle('promptRestore', () => board.restoreShippedPrompts());
+    ctx.ipc.handle('openFolder', async (payload) => {
+      const p = payload as { which?: unknown };
+      return board.openTicketsFolder(p.which === 'prompts' ? 'prompts' : 'tickets');
+    });
+
+    // Sortable columns and the folder numbering (req-50).
+    ctx.ipc.handle('folders', () => board.folderStatus());
+    ctx.ipc.handle('numberFolders', () => board.numberFolders());
+    ctx.ipc.handle('reorderPhases', async (payload) => {
+      const p = payload as { order?: unknown };
+      if (!Array.isArray(p.order) || !p.order.every((id): id is string => typeof id === 'string')) {
+        return { ok: false, error: 'bad reorder payload' };
+      }
+      return board.reorderPhases(p.order);
+    });
+
+    // The model picker's list: what the worker CLI offers (req-46).
+    ctx.ipc.handle('models', async (payload) => {
+      const p = payload as { worker?: unknown };
+      return listWorkerModels(typeof p.worker === 'string' ? p.worker : defaultWorker);
+    });
+
+    ctx.ipc.handle('archive', async (payload) => {
+      const p = payload as { id?: unknown };
+      if (typeof p.id !== 'string') {
+        return { ok: false, error: 'bad archive payload' };
+      }
+      return board.archive({ id: p.id });
+    });
+
     // --- the fleet (M84, ADR-0075) -------------------------------------
-    ctx.ipc.handle('fleetStatus', async () => ({ runs: await fleet.runs() }));
+    ctx.ipc.handle('fleetStatus', async () => ({
+      runs: await fleet.runs(),
+      chain: await fleet.chainStatus(),
+    }));
 
     ctx.ipc.handle('fleetStart', async (payload) => {
       const p = payload as { id?: unknown; worker?: unknown; permissionMode?: unknown };
@@ -756,12 +1369,68 @@ const plugin: MainPluginModule = {
       return fleet.send(p.runId, p.text.trim());
     });
 
+    ctx.ipc.handle('fleetAttach', async (payload) => {
+      const p = payload as { runId?: unknown; name?: unknown; data?: unknown };
+      if (typeof p.runId !== 'string' || typeof p.name !== 'string' || typeof p.data !== 'string') {
+        return { ok: false, error: 'bad fleet attach payload' };
+      }
+      return fleet.attach(p.runId, p.name, p.data);
+    });
+
+    ctx.ipc.handle('fleetControl', async (payload) => {
+      const p = payload as { action?: unknown; runId?: unknown };
+      if (
+        typeof p.runId !== 'string' ||
+        (p.action !== 'takeover' && p.action !== 'interrupt' && p.action !== 'release' && p.action !== 'resume')
+      ) {
+        return { ok: false, error: 'bad fleet control payload' };
+      }
+      return fleet.control(p.action, p.runId);
+    });
+
     ctx.ipc.handle('fleetStream', async (payload) => {
       const p = payload as { runId?: unknown };
       if (typeof p.runId !== 'string') {
         return { text: '' };
       }
       return { text: (await fleet.stream(p.runId)) ?? '' };
+    });
+
+    ctx.ipc.handle('fleetLog', async () => ({ text: (await fleet.log()) ?? '' }));
+
+    // --- the chain (M85, ADR-0077) -------------------------------------
+    ctx.ipc.handle('chainStatus', async () => fleet.chainStatus());
+
+    ctx.ipc.handle('chainMaster', async (payload) => {
+      const p = payload as { mode?: unknown };
+      if (p.mode !== 'run' && p.mode !== 'halted') {
+        return { ok: false, error: 'the master mode is "run" or "halted"' };
+      }
+      const status = await fleet.setMaster(p.mode);
+      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
+    });
+
+    ctx.ipc.handle('chainColumn', async (payload) => {
+      const p = payload as { phase?: unknown; mode?: unknown };
+      if (typeof p.phase !== 'string' || (p.mode !== 'playing' && p.mode !== 'held')) {
+        return { ok: false, error: 'bad chain column payload' };
+      }
+      const status = await fleet.setColumn(p.phase, p.mode);
+      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
+    });
+
+    ctx.ipc.handle('chainColumnStop', async (payload) => {
+      const p = payload as { phase?: unknown };
+      if (typeof p.phase !== 'string') {
+        return { ok: false, error: 'bad chain column payload' };
+      }
+      const status = await fleet.stopColumn(p.phase);
+      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
+    });
+
+    ctx.ipc.handle('chainAbort', async () => {
+      const status = await fleet.abortAll();
+      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
     });
 
     // T-0004: open the ticket's work checkout in the OS terminal — the
@@ -794,6 +1463,26 @@ const plugin: MainPluginModule = {
       const p = payload as { vaultId?: unknown };
       return board.initialize(typeof p.vaultId === 'string' ? p.vaultId : null);
     });
+
+    // The fleet's MCP tools (M85, SDK 1.29): the assistant and any
+    // program on Drey's MCP server can drive runs conversationally.
+    ctx.mcp.registerTools(
+      createFleetMcpTools({
+        status: async () => ({
+          runs: await fleet.runs(),
+          chain: await fleet.chainStatus(),
+        }),
+        run: (input) =>
+          board.startRun({
+            ticketId: input.ticketId,
+            workerChoice: input.worker,
+            permissionMode: input.permissionMode,
+          }),
+        stop: (runId) => fleet.stop(runId, null),
+        steer: (runId, text) => fleet.send(runId, text),
+        watch: (runId) => fleet.stream(runId),
+      }),
+    );
 
     // Everything that can change the board: external rounds, saves of
     // ticket files, our own announces (the debounced emit coalesces).

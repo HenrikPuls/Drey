@@ -344,7 +344,9 @@ describe('RunSupervisor worktree wiring', () => {
   });
 
   function fakeAdapter() {
-    const handles: Array<WorkerHandle & { fail: (code: number | null) => void; onEvent: (text: string) => void }> = [];
+    const handles: Array<
+      WorkerHandle & { fail: (code: number | null) => void; onEvent: (text: string) => void; result: () => void }
+    > = [];
     const adapter: ProviderAdapter = {
       id: 'opencode',
       label: 'OpenCode',
@@ -354,6 +356,7 @@ describe('RunSupervisor worktree wiring', () => {
         const handle: WorkerHandle & {
           fail: (code: number | null) => void;
           onEvent: (text: string) => void;
+          result: () => void;
         } = {
           pid: 4242,
           exited: new Promise<number | null>((resolve) => {
@@ -365,6 +368,7 @@ describe('RunSupervisor worktree wiring', () => {
           }),
           fail: (code) => exitResolve?.(code),
           onEvent: (text) => start.onEvent({ ts: '2026-10-17T12:00:00Z', kind: 'note', text }),
+          result: () => start.onEvent({ ts: '2026-10-17T12:00:00Z', kind: 'result', text: 'done' }),
         };
         handles.push(handle);
         return handle;
@@ -423,7 +427,10 @@ describe('RunSupervisor worktree wiring', () => {
       acceptance: ['npm run verify:unit'],
       git: 'git',
       nextPhase: 'build',
+      nextPhaseDir: 'build',
+      pushRemote: null,
       claimIdentity: null,
+      gate: 'commands',
       ...overrides,
     };
   }
@@ -463,6 +470,7 @@ describe('RunSupervisor worktree wiring', () => {
     const first = await sup.start(request({ ticketRelPath: rel }));
     expect(first.ok).toBe(true);
     expect((first as { run: RunInfo }).run.worktree).toBe('created');
+    adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
     const firstId = (first as { run: RunInfo }).run.id;
     await vi.waitFor(() => expect(sup.get(firstId)?.state).toBe('done'));

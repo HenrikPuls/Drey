@@ -5,11 +5,18 @@
  * parses a ticket file. One module-level store serves every view; a
  * view is just a DOM root plus a render call.
  */
+import { transcriptMarkdown } from './transcript';
+import { asParagraphs, chainLogStamp, visibleChainLog } from './chain-log';
 import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
 import {
   ageOf,
+  averageDwellMs,
   branchForTicket,
+  dwellMs,
   openTicketCount,
+  parseHandover,
+  spanWords,
+  timeOnBoardMs,
   type BoardColumn,
   type BoardSnapshot,
   type CreateResult,
@@ -17,7 +24,18 @@ import {
   type TicketCard,
 } from '../shared/tickets';
 import { createColumnCollapseStore } from './column-collapse';
-import type { RunInfo } from '../main/fleet/protocol';
+import { createTicketsSettingsPage } from './settings-page';
+import type { ChainStatus, RunInfo } from '../main/fleet/protocol';
+import {
+  CONTEXT_WARN,
+  contextFill,
+  DEFAULT_CONTEXT_WINDOW,
+  formatTokens,
+  lanesOfColumn,
+  opensByItself,
+  workerStatus,
+  type Light,
+} from './worker-status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -109,6 +127,10 @@ async function runMutation(label: string, invoke: () => Promise<unknown>): Promi
   }
   busy = false;
   if (!result.ok) {
+    // A refused action often means the screen is stale (a stop of a run
+    // that has already ended): pull the real state, or the lane stays and
+    // every click repeats the same refusal.
+    await refreshBoard().catch(() => undefined);
     note = result.error ?? 'the action failed';
     notifyViews();
     return result;
@@ -138,6 +160,15 @@ function openTicketFile(api: DreyPluginApi, path: string): void {
   }
 }
 
+/** Outlines the card whose ticket file is the active editor tab. */
+function markOpenCard(api: DreyPluginApi): void {
+  const active = api.documents.active();
+  const path = active !== null && active.vaultId === snapshot?.vaultId ? active.path : null;
+  for (const node of document.querySelectorAll<HTMLElement>('.tickets-card')) {
+    node.classList.toggle('tickets-card-open', path !== null && node.dataset['path'] === path);
+  }
+}
+
 // --- drag state (one interaction at a time, shared across views) -------
 
 let draggedId: string | null = null;
@@ -145,10 +176,11 @@ let draggedFrom: string | null = null;
 let insertPhase: string | null = null;
 let insertAt = 0;
 
-// --- the fleet's live runs (M84, ADR-0075) --------------------------------
+// --- the fleet's live runs and the chain (M84/M85, ADR-0075/0077) ----------
 
 const LIVE_RUN_STATES: readonly string[] = ['starting', 'running', 'stopping'];
 let fleetRuns: RunInfo[] = [];
+let chain: ChainStatus | null = null;
 
 const runForCard = (id: string): RunInfo | null =>
   fleetRuns.find((r) => r.ticketId === id && LIVE_RUN_STATES.includes(r.state)) ?? null;
@@ -156,10 +188,42 @@ const runForCard = (id: string): RunInfo | null =>
 const liveRuns = (): readonly RunInfo[] =>
   fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state));
 
-const applyFleetRuns = (runs: readonly RunInfo[]): void => {
-  fleetRuns = [...runs];
-  for (const view of views) {
-    view.render();
+/** The column's brake state — a phase the runner doesn't know is playing. */
+const columnMode = (phaseId: string): 'playing' | 'held' => chain?.columns[phaseId] ?? 'playing';
+
+/** Keeps the header's master switch in step (the buttons live outside the board). */
+const masterButtons: { run: HTMLButtonElement; halt: HTMLButtonElement; abort: HTMLButtonElement }[] = [];
+
+const applyChainStatus = (status: ChainStatus | null): void => {
+  chain = status;
+  const master = status?.master ?? 'halted';
+  for (const buttons of masterButtons) {
+    buttons.run.classList.toggle('tickets-master-on', master === 'run');
+    buttons.halt.classList.toggle('tickets-master-on', master === 'halted');
+  }
+  notifyViews();
+};
+
+/** Open takeover tabs repaint their banner when the fleet snapshot changes. */
+const fleetListeners = new Set<() => void>();
+
+/** Runs and their states: the runner moves tickets (git commits in the
+ *  tickets repository) when a run starts or ends, without a vault event, so
+ *  a change here is the board's cue to pull. */
+const runSignature = (runs: readonly RunInfo[]): string =>
+  runs.map((r) => `${r.id}:${r.state}`).join('|');
+let lastRunSignature: string | null = null;
+
+const applyFleetSnapshot = (payload: { runs?: RunInfo[]; chain?: ChainStatus | null }): void => {
+  fleetRuns = Array.isArray(payload.runs) ? [...payload.runs] : [];
+  const signature = runSignature(fleetRuns);
+  if (lastRunSignature !== null && signature !== lastRunSignature) {
+    void refreshBoard();
+  }
+  lastRunSignature = signature;
+  applyChainStatus(payload.chain ?? null);
+  for (const listener of fleetListeners) {
+    listener();
   }
 };
 
@@ -202,6 +266,7 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
   const node = el('article', 'tickets-card');
   node.draggable = true;
   node.dataset['id'] = card.id;
+  node.dataset['path'] = card.path;
   if (card.pinned) {
     node.classList.add('tickets-pinned');
   }
@@ -258,6 +323,15 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
     runChip.title = `run ${live.id} (${live.provider}) — ${live.state}; open the card menu to watch, steer or stop`;
     meta.append(runChip);
   }
+  const dwell = dwellMs(card, column.phase.id);
+  if (dwell !== null) {
+    const age = el('span', 'tickets-chip tickets-chip-age', spanWords(dwell));
+    const onBoard = timeOnBoardMs(card);
+    age.title =
+      `In this column for ${spanWords(dwell)}` +
+      (onBoard !== null ? ` — on the board for ${spanWords(onBoard)}` : '');
+    meta.append(age);
+  }
   if (card.meta.parkedReason !== null) {
     const parked = el('span', 'tickets-chip tickets-chip-parked', 'parked');
     parked.title = card.meta.parkedReason;
@@ -306,6 +380,51 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
     }
   });
   return node;
+}
+
+/** The column's prompt ref for the pool chip's tooltip. */
+const columnPromptRefOf = (phase: BoardColumn['phase']): string =>
+  phase.prompt ?? parseHandover(phase.handover).promptRef ?? '(the handover names none)';
+
+/**
+ * One column's brakes (M85): pause — no new dispatch, running work
+ * finishes; stop — this column's runs abort and the column holds; play
+ * — the pool takes the column's next ticket again. Stopping one column
+ * never stops the rest.
+ */
+function columnControlsNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
+  const phaseId = column.phase.id;
+  const box = el('span', 'tickets-col-controls');
+  const button = (icon: string, title: string, onClick: () => void): HTMLButtonElement => {
+    const b = el('button', 'tickets-col-btn');
+    b.type = 'button';
+    b.title = title;
+    b.setAttribute('aria-label', `${title} (${column.phase.title})`);
+    b.append(api.ui.icon(icon, 11));
+    b.addEventListener('click', (event) => {
+      event.stopPropagation();
+      onClick();
+    });
+    return b;
+  };
+  if (columnMode(phaseId) === 'playing') {
+    box.append(
+      button('pause', 'Pause this column — no new dispatch, running work finishes', () => {
+        void runChainAction('chainColumn', { phase: phaseId, mode: 'held' });
+      }),
+      button('square', "Stop this column — abort its runs and hold it (the rest keeps going)", () => {
+        void runChainAction('chainColumnStop', { phase: phaseId });
+      }),
+    );
+  } else {
+    box.append(
+      button('play', "Play this column — the pool takes the column's next ticket", () => {
+        void runChainAction('chainColumn', { phase: phaseId, mode: 'playing' });
+      }),
+    );
+    box.classList.add('tickets-col-controls-held');
+  }
+  return box;
 }
 
 /** Column head / strip count text: plain, or `n/wip` against a limit. */
@@ -357,6 +476,12 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
 
   const node = el('section', 'tickets-col');
   node.dataset['phase'] = column.phase.id;
+  if (parseHandover(column.phase.handover).mode === 'agent') {
+    node.classList.add('tickets-col-pool');
+    if (columnMode(column.phase.id) !== 'playing') {
+      node.classList.add('tickets-col-held');
+    }
+  }
 
   const head = el('div', 'tickets-col-head');
   head.append(el('span', 'tickets-col-title', column.phase.title));
@@ -371,10 +496,22 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
     mark.title = 'This directory has tickets but pipeline.md does not list it';
     head.append(mark);
   }
-  if (column.phase.handover.startsWith('agent')) {
-    const handover = el('span', 'tickets-col-agent', column.phase.handover);
-    handover.title = 'Agents handle this handover (from milestone 84)';
-    head.append(handover);
+  if (snapshot?.checkpoints.includes(column.phase.id) === true) {
+    const mark = el('span', 'tickets-col-checkpoint', 'checkpoint');
+    mark.title =
+      'Owner checkpoint — the machine never pulls across; tickets wait here for your review, your moves feed the next pool';
+    head.append(mark);
+  }
+  if (parseHandover(column.phase.handover).mode === 'agent') {
+    const phase = column.phase;
+    const worker = phase.worker ?? parseHandover(phase.handover).worker ?? 'opencode';
+    const chip = el('span', 'tickets-col-agent', `${worker}${phase.workers > 1 ? ` ×${phase.workers}` : ''}`);
+    chip.title =
+      `Worker pool — ${worker}` +
+      (phase.model !== null ? `, model ${phase.model}` : '') +
+      `, ${phase.workers} parallel, prompt ${columnPromptRefOf(phase)}`;
+    head.append(chip);
+    head.append(columnControlsNode(api, column));
   }
   const fold = el('button', 'tickets-col-fold');
   fold.type = 'button';
@@ -387,6 +524,13 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
   });
   head.append(fold);
   node.append(head);
+
+  if (parseHandover(column.phase.handover).mode === 'agent') {
+    const lanes = workerLanesNode(api, column);
+    if (lanes !== null) {
+      node.append(lanes);
+    }
+  }
 
   const list = el('div', 'tickets-col-list');
   for (const card of column.tickets) {
@@ -468,6 +612,7 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     const restore = restoreScroll();
     try {
       draw();
+      markOpenCard(api);
     } finally {
       restore();
     }
@@ -483,14 +628,18 @@ function buildBoardView(api: DreyPluginApi): BoardView {
       root.append(emptyState(api, snap, runMutation));
       return;
     }
+    const summary = fleetSummaryNode();
+    if (summary !== null) {
+      root.append(summary);
+    }
     const board = el('div', 'tickets-board');
     for (const column of snap.columns) {
       board.append(columnNode(api, column));
     }
     root.append(board);
-    const fleet = fleetFooterNode(api);
-    if (fleet !== null) {
-      root.append(fleet);
+    const metrics = metricsNode(snap);
+    if (metrics !== null) {
+      root.append(metrics);
     }
     if (!snap.isGitRepo) {
       const warn = el('div', 'tickets-warn');
@@ -548,6 +697,9 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       refreshButton.addEventListener('click', () => void refreshBoard());
 
       host.append(newButton, refreshButton);
+      // The chain's master switch — meaningful wherever a tickets board
+      // exists; the runner side decides whether anything is automatic.
+      host.append(masterControlNode(api));
       return () => undefined;
     },
     mount: (panel) => {
@@ -607,7 +759,7 @@ function emptyState(
   button.addEventListener('click', () => {
     if (!armed) {
       armed = true;
-      button.textContent = `Creates tickets/_meta/{pipeline,order,repos}.md in ${target} — click again`;
+      button.textContent = `Creates tickets/_meta/{pipeline,order,repos}.md and the default prompts in ${target} — click again`;
       button.classList.add('tickets-init-armed');
       return;
     }
@@ -717,6 +869,68 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
   });
 }
 
+// --- the chain's master switch (M85, ADR-0077) -------------------------------
+
+/**
+ * An / Aus / Notaus in the panel header. An dispatches every playing
+ * automatic column; Aus halts gently (running work finishes); Notaus
+ * aborts every live run through the stop ladder and halts — the red
+ * button, one click, nothing in the way.
+ */
+function masterControlNode(api: DreyPluginApi): HTMLElement {
+  const box = el('span', 'tickets-master');
+  const run = el('button', 'icon-btn');
+  run.type = 'button';
+  run.title = 'Run the chain — columns with a worker drain themselves';
+  run.setAttribute('aria-label', 'Run the chain');
+  run.append(api.ui.icon('play', 14));
+  run.addEventListener('click', () => void runChainAction('chainMaster', { mode: 'run' }));
+
+  const halt = el('button', 'icon-btn');
+  halt.type = 'button';
+  halt.title = 'Halt the chain — running work finishes, nothing new dispatches';
+  halt.setAttribute('aria-label', 'Halt the chain');
+  halt.append(api.ui.icon('pause', 14));
+  halt.addEventListener('click', () => void runChainAction('chainMaster', { mode: 'halted' }));
+
+  const abort = el('button', 'icon-btn tickets-master-abort');
+  abort.type = 'button';
+  abort.title = 'Emergency stop — abort every run and halt the chain';
+  abort.setAttribute('aria-label', 'Emergency stop');
+  abort.append(api.ui.icon('triangle-alert', 14));
+  abort.addEventListener('click', () => void runChainAction('chainAbort', {}));
+
+  const chainLog = el('button', 'icon-btn');
+  chainLog.type = 'button';
+  chainLog.title = 'Chain log — what the fleet daemon did (dispatches, skips, gates), as a readonly editor tab';
+  chainLog.setAttribute('aria-label', 'Chain log');
+  chainLog.textContent = 'Log';
+  chainLog.addEventListener('click', () => openChainLog(api));
+
+  masterButtons.push({ run, halt, abort });
+  box.append(run, halt, abort, chainLog);
+  return box;
+}
+
+/** Runs a chain control and applies the runner's returned state. */
+async function runChainAction(method: string, payload: unknown): Promise<void> {
+  let result: unknown;
+  try {
+    result = await invokeBoard(method, payload);
+  } catch (error) {
+    note = messageOf(error);
+    notifyViews();
+    return;
+  }
+  const status = (result as { status?: ChainStatus; error?: string }).status ?? null;
+  if (status === null) {
+    note = (result as { error?: string }).error ?? 'the chain control failed';
+    notifyViews();
+    return;
+  }
+  applyChainStatus(status);
+}
+
 // --- the fleet run controls (M84, ADR-0075) --------------------------------
 
 const WORKER_LABEL: ReadonlyArray<readonly [string, string]> = [
@@ -724,53 +938,209 @@ const WORKER_LABEL: ReadonlyArray<readonly [string, string]> = [
   ['claude-code', 'Claude Code'],
 ];
 
-/** One live run's row in the board footer: state, spend, and the three controls. */
-function fleetFooterNode(api: DreyPluginApi): HTMLElement | null {
+/**
+ * The cycle-time line (M85): each non-empty column's average dwell,
+ * read from the tickets' entered-* stamps — shown beside the fleet's
+ * run stats so a stuck column is visible at a glance.
+ */
+function metricsNode(snap: BoardSnapshot): HTMLElement | null {
+  const now = Date.now();
+  const parts: string[] = [];
+  for (const column of snap.columns) {
+    if (column.tickets.length === 0) {
+      continue;
+    }
+    const avg = averageDwellMs(column.tickets, column.phase.id, now);
+    parts.push(`${column.phase.title} ${avg === null ? '–' : `⌀${spanWords(avg)}`}`);
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  const line = el('div', 'tickets-metrics', parts.join(' · '));
+  line.title =
+    'Average time this column\'s tickets have been sitting there (from the entered-* stamps)';
+  return line;
+}
+
+/** The pills above the board: lights of the whole fleet and today's spend. */
+function fleetSummaryNode(): HTMLElement | null {
   const runs = liveRuns();
   if (runs.length === 0) {
     return null;
   }
-  const footer = el('div', 'tickets-fleet');
-  for (const run of runs) {
-    const row = el('div', 'tickets-fleet-run');
-    row.append(
-      el('span', 'tickets-fleet-id', run.ticketId),
-      el('span', 'tickets-fleet-provider', run.provider),
-      el('span', `tickets-fleet-state tickets-fleet-${run.state}`, run.state),
-    );
-    const age = ageOf(run.startedAt);
-    if (age !== '') {
-      const stamp = el('span', 'tickets-age', age);
-      stamp.title = `started ${run.startedAt}`;
-      row.append(stamp);
+  const now = Date.now();
+  const lights = runs.map((run) => workerStatus(run, now).light);
+  const count = (light: Light): number => lights.filter((l) => l === light).length;
+  const bar = el('div', 'tickets-summary');
+  const pill = (light: Light | null, text: string, extra = ''): void => {
+    const p = el('span', `tickets-pill${extra}`);
+    if (light !== null) {
+      p.append(el('span', `tickets-light tickets-light-${light}`));
     }
-    const tokens = run.tokensIn + run.tokensOut;
-    if (tokens > 0) {
-      row.append(el('span', 'tickets-fleet-tok', `${(tokens / 1000).toFixed(1)}k tok`));
-    }
-    if (run.costUsd !== null && run.costUsd > 0) {
-      row.append(el('span', 'tickets-fleet-cost', `$${run.costUsd.toFixed(2)}`));
-    }
-    if (run.steerCount > 0) {
-      const steer = el('span', 'tickets-fleet-steer', `${run.steerCount}× steer`);
-      steer.title = `last steer rung: ${run.lastSteerRung ?? '—'}`;
-      row.append(steer);
-    }
-    const button = (label: string, title: string, onClick: () => void): void => {
-      const b = el('button', 'tickets-fleet-btn', label);
-      b.type = 'button';
-      b.title = title;
-      b.addEventListener('click', onClick);
-      row.append(b);
-    };
-    button('Watch', `Tail the run's stream (${run.id})`, () => openWatchModal(api, run.id));
-    button('Steer', 'Send a message into the live run', () => openSteerModal(api, run.id));
-    button('Stop', 'Kill the worker (the ticket stays in its phase)', () => {
-      void runMutation('Stopping the run', () => invokeBoard('fleetStop', { runId: run.id, reason: null }));
-    });
-    footer.append(row);
+    p.append(document.createTextNode(text));
+    bar.append(p);
+  };
+  pill('green', `${count('green')} running`);
+  if (count('idle') > 0) {
+    pill('idle', `${count('idle')} standing`);
   }
-  return footer;
+  if (count('amber') > 0) {
+    pill('amber', `${count('amber')} need attention`);
+  }
+  if (count('red') > 0) {
+    pill('red', `${count('red')} stalled`);
+  }
+  const tokens = runs.reduce((sum, r) => sum + r.tokensIn + r.tokensOut, 0);
+  pill(null, `${formatTokens(tokens)} tokens in flight`, ' tickets-pill-mono');
+  return bar;
+}
+
+/** Lanes the owner folded or unfolded by hand; a lane without an entry follows its light. */
+const laneOpen = new Map<string, boolean>();
+
+/**
+ * The worker lanes of one working column (the board redesign): a header
+ * line with the pool's lights and, per live run, a lane that folds down
+ * to one status line — light, state in words, ticket, context fill —
+ * and unfolds to what the worker is doing, its context window, its
+ * token spend and the controls. A lane that needs a look (amber, red)
+ * is open until the owner folds it.
+ */
+function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement | null {
+  // A detached run (the runner restarted while its worker lived on) keeps
+  // its ticket blocked until it is stopped, so it gets a lane with a Stop.
+  const runs = lanesOfColumn(
+    fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state) || r.state === 'detached'),
+    column.phase.id,
+  );
+  const slots = column.phase.workers;
+  if (runs.length === 0 && slots <= 0) {
+    return null;
+  }
+  const now = Date.now();
+  const strip = el('div', 'tickets-lanes');
+
+  const statuses = runs.map((run) => workerStatus(run, now));
+  const worst: Light = statuses.some((s) => s.light === 'red')
+    ? 'red'
+    : statuses.some((s) => s.light === 'amber')
+      ? 'amber'
+      : statuses.some((s) => s.light === 'green')
+        ? 'green'
+        : 'idle';
+  const head = el('div', 'tickets-lanes-head');
+  head.append(
+    el('span', `tickets-light tickets-light-${runs.length === 0 ? 'idle' : worst}`),
+    el('span', 'tickets-lanes-title', 'Workers'),
+    el('span', 'tickets-lanes-count', `${runs.filter((r) => r.state !== 'detached').length} of ${slots} busy`),
+  );
+  strip.append(head);
+
+  runs.forEach((run, index) => {
+    const status = statuses[index]!;
+    const open = laneOpen.get(run.id) ?? opensByItself(status);
+    const fill = contextFill(run);
+    const fillWarn = fill !== null && fill >= CONTEXT_WARN;
+    const lane = el('div', `tickets-lane tickets-lane-${status.light}`);
+    lane.classList.toggle('tickets-lane-open', open);
+
+    const summary = el('button', 'tickets-lane-summary');
+    summary.type = 'button';
+    summary.setAttribute('aria-expanded', String(open));
+    summary.title = open ? 'Fold the lane' : 'Unfold the lane';
+    const chevron = el('span', 'tickets-lane-chevron');
+    chevron.append(api.ui.icon(open ? 'chevron-down' : 'chevron-right', 11));
+    summary.append(
+      chevron,
+      el('span', `tickets-light tickets-light-${status.light}`),
+      el('span', `tickets-lane-state tickets-lane-state-${status.light}`, status.label),
+      el('span', 'tickets-lane-ticket', run.ticketId),
+    );
+    if (fill !== null && !open) {
+      const mini = el('span', 'tickets-lane-mini');
+      const miniBar = el('span', 'tickets-meter');
+      const miniFill = el('span', `tickets-meter-fill tickets-meter-${fillWarn ? 'amber' : 'green'}`);
+      miniFill.style.width = `${Math.round(fill * 100)}%`;
+      miniBar.append(miniFill);
+      mini.append(miniBar, el('span', 'tickets-lane-pct', `${Math.round(fill * 100)}%`));
+      summary.append(mini);
+    }
+    summary.addEventListener('click', () => {
+      laneOpen.set(run.id, !open);
+      notifyViews();
+    });
+    lane.append(summary);
+
+    if (open) {
+      const body = el('div', 'tickets-lane-body');
+      const activity = run.activity ?? '';
+      const act = el(
+        'div',
+        'tickets-lane-activity',
+        run.state === 'detached'
+          ? 'The runner restarted while this worker lived on — stop the run to free the ticket'
+          : activity !== ''
+            ? activity
+            : 'No output yet',
+      );
+      act.title = activity;
+      body.append(act);
+
+      const used = run.contextTokens ?? null;
+      const label = el(
+        'div',
+        'tickets-lane-context-row',
+        used === null
+          ? 'Context — not reported yet'
+          : `Context ${formatTokens(used)} / ${formatTokens(DEFAULT_CONTEXT_WINDOW)} · ${Math.round((fill ?? 0) * 100)}%`,
+      );
+      const bar = el('div', 'tickets-meter');
+      const barFill = el('div', `tickets-meter-fill tickets-meter-${fillWarn ? 'amber' : 'green'}`);
+      barFill.style.width = `${Math.round((fill ?? 0) * 100)}%`;
+      bar.append(barFill);
+      body.append(label, bar);
+
+      const tokens = el('div', 'tickets-lane-tokens');
+      tokens.append(
+        el('span', undefined, `in ${formatTokens(run.tokensIn)}`),
+        el('span', undefined, `out ${formatTokens(run.tokensOut)}`),
+      );
+      if (run.costUsd !== null && run.costUsd > 0) {
+        tokens.append(el('span', undefined, `$${run.costUsd.toFixed(2)}`));
+      }
+      const age = ageOf(run.startedAt);
+      if (age !== '') {
+        tokens.append(el('span', undefined, age));
+      }
+      body.append(tokens);
+
+      const actions = el('div', 'tickets-lane-actions');
+      const button = (icon: string, title: string, onClick: () => void): void => {
+        const b = el('button', 'tickets-col-btn');
+        b.type = 'button';
+        b.title = title;
+        b.setAttribute('aria-label', `${title} (${run.ticketId})`);
+        b.append(api.ui.icon(icon, 12));
+        b.addEventListener('click', onClick);
+        actions.append(b);
+      };
+      button('arrow-right', 'Open the run — its conversation, controls and prompt (nothing changes until you send a command)', () => {
+        openTakeover(api, run);
+      });
+      if (run.state === 'detached' && run.sessionRef !== null) {
+        button('rotate-ccw', 'Resume the session in a new worker — the run is attached again', () => {
+          void runMutation('Resuming', () => invokeBoard('fleetControl', { action: 'resume', runId: run.id }));
+        });
+      }
+      button('square', run.state === 'detached' ? 'Stop the run — frees the ticket (the worker is killed if it still lives)' : 'Kill the worker (the ticket stays in its phase)', () => {
+        void runMutation('Stopping the run', () => invokeBoard('fleetStop', { runId: run.id, reason: null }));
+      });
+      body.append(actions);
+      lane.append(body);
+    }
+    strip.append(lane);
+  });
+  return strip;
 }
 
 function openRunModal(api: DreyPluginApi, card: TicketCard): void {
@@ -846,79 +1216,450 @@ function openRunModal(api: DreyPluginApi, card: TicketCard): void {
   });
 }
 
-function openSteerModal(api: DreyPluginApi, runId: string): void {
-  const close = api.ui.showModal((host) => {
-    const form = el('div', 'tickets-form');
-    form.append(el('h3', 'tickets-form-heading', 'Steer the run'));
-    const text = el('textarea', 'tickets-form-desc') as HTMLTextAreaElement;
-    text.rows = 4;
-    text.placeholder = 'What the worker should do differently — lands in the ticket’s Log.';
-    text.setAttribute('aria-label', 'Steer message');
-    const actions = el('div', 'tickets-form-actions');
-    const cancel = el('button', undefined, 'Cancel');
-    cancel.type = 'button';
-    cancel.addEventListener('click', () => close());
-    const send = el('button', 'tickets-form-create', 'Send');
-    send.type = 'button';
-    const submit = (): void => {
-      const message = text.value.trim();
-      if (message === '') {
-        text.focus();
-        return;
-      }
-      close();
-      void runMutation('Steering', () => invokeBoard('fleetSend', { runId, text: message }));
-    };
-    send.addEventListener('click', submit);
-    text.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-        event.preventDefault();
-        submit();
-      }
-    });
-    actions.append(cancel, send);
-    form.append(el('p', 'tickets-form-hint', 'Ctrl+Enter sends.'), text, actions);
-    host.append(form);
-    text.focus();
-  });
+// --- the takeover tab (owner request, follow-up of M86; ADR-0078) -------------
+
+const TAKEOVER_KIND = 'tickets-takeover';
+const TAKEOVER_SCHEME = 'takeover://';
+
+/** The largest file the prompt box attaches (the runner enforces the same). */
+const MAX_ATTACH_BYTES = 10 * 1024 * 1024;
+
+/** Short notes for the commands both workers share; others show their name only. */
+const COMMAND_HINTS: Readonly<Record<string, string>> = {
+  compact: 'Summarise the conversation to free context',
+  clear: 'Start over with an empty context',
+  context: 'Show what fills the context window',
+  cost: 'Show the session cost',
+  init: 'Write a CLAUDE.md for the project',
+  review: 'Review the changes',
+  help: 'List the available commands',
+};
+
+const bytesToBase64 = (bytes: Uint8Array): string => {
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+};
+
+/** One-click starters for the takeover prompt box: a label and the text it fills in. */
+const QUICK_PROMPTS: ReadonlyArray<readonly [string, string]> = [
+  ['Continue', 'Continue where you left off.'],
+  ['Status', 'Briefly summarise what you have done so far and what is left.'],
+  ['Run checks', "Run the ticket's acceptance checks now and report the result."],
+  ['Wrap up', 'Wrap up: finish the current step, update the ticket Log, and stop.'],
+];
+
+/** Opens (or focuses) the takeover tab of one run. */
+function openTakeover(api: DreyPluginApi, run: RunInfo): void {
+  api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${run.id}`, takeoverTitle(run));
 }
 
-function openWatchModal(api: DreyPluginApi, runId: string): void {
-  const close = api.ui.showModal((host) => {
-    const box = el('div', 'tickets-form tickets-watch');
-    box.append(el('h3', 'tickets-form-heading', `Run ${runId}`));
-    const out = el('pre', 'tickets-watch-out');
-    out.textContent = 'Loading the stream…';
-    const pull = (): void => {
-      void invokeBoard('fleetStream', { runId }).then((result) => {
-        const text = (result as { text: string }).text ?? '';
-        const keepBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 8;
-        out.textContent = text === '' ? '(the stream is empty so far)' : text;
-        if (keepBottom) {
-          out.scrollTop = out.scrollHeight;
-        }
+function takeoverTitle(run: RunInfo): string {
+  return `${run.ticketId} · ${run.provider}`;
+}
+
+/**
+ * The tab body: the worker's transcript in the host's read-only Markdown
+ * view (rendered from the run's normalized stream, so the same for every
+ * worker), a prompt box in the compact view below it, and the controls —
+ * interrupt the running turn (the session stays), hand the run back.
+ */
+function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): () => void {
+  const wrap = el('div', 'tickets-takeover');
+
+  const banner = el('div', 'tickets-takeover-banner');
+  const light = el('span', 'tickets-light');
+  const headline = el('span', 'tickets-takeover-headline');
+  const stats = el('span', 'tickets-takeover-stats');
+  const spacer = el('span', 'tickets-takeover-spacer');
+  const controls = el('span', 'tickets-takeover-controls');
+  const iconButton = (icon: string, label: string, title: string, onClick: () => void): HTMLButtonElement => {
+    const b = el('button', 'tickets-takeover-btn');
+    b.type = 'button';
+    b.title = title;
+    b.setAttribute('aria-label', title);
+    b.append(api.ui.icon(icon, 13), document.createTextNode(label));
+    b.addEventListener('click', onClick);
+    return b;
+  };
+  const control = (action: 'interrupt' | 'release' | 'resume'): void => {
+    void runMutation(
+      action === 'interrupt' ? 'Interrupting' : action === 'resume' ? 'Resuming' : 'Handing back',
+      () => invokeBoard('fleetControl', { action, runId }),
+    );
+  };
+  const resumeBtn = iconButton('rotate-ccw', 'Resume session', 'Pick this session up again in a new worker — it answers, then waits for your prompts', () => {
+    void runMutation('Resuming', () => invokeBoard('fleetControl', { action: 'resume', runId })).then((result) => {
+      const resumed = (result as { run?: RunInfo }).run;
+      if (result.ok && resumed !== undefined) {
+        openTakeover(api, resumed);
+      }
+    });
+  });
+  const releaseBtn = iconButton('arrow-left', 'Hand back', 'Hand the run back to the runner — an idle worker ends the run and the gate decides', () =>
+    control('release'),
+  );
+  controls.append(resumeBtn, releaseBtn);
+  banner.append(light, headline, stats, spacer, controls);
+
+  const transcript = api.ui.createMarkdownView({ mode: 'view', readOnly: true, content: '' });
+  transcript.element.classList.add('tickets-takeover-transcript');
+
+  const promptWrap = el('div', 'tickets-takeover-prompt');
+  // Files and pictures for the worker: stored in its worktree, named in the message.
+  const attached: { name: string; path: string }[] = [];
+  const attachRow = el('div', 'tickets-takeover-attached');
+  attachRow.hidden = true;
+  const paintAttached = (): void => {
+    attachRow.replaceChildren();
+    for (const [index, file] of attached.entries()) {
+      const chip = el('span', 'tickets-takeover-attachment');
+      chip.title = file.path;
+      const drop = el('button', 'tickets-takeover-attachment-x', '×');
+      drop.type = 'button';
+      drop.title = 'Remove from the message';
+      drop.setAttribute('aria-label', `Remove ${file.name}`);
+      drop.addEventListener('click', () => {
+        attached.splice(index, 1);
+        paintAttached();
+        paintBanner();
       });
-    };
-    // The poll dies with its DOM node: when the modal closed, `out` is
-    // disconnected and the interval clears itself.
-    const timer = setInterval(() => {
-      if (!out.isConnected) {
-        clearInterval(timer);
+      chip.append(document.createTextNode(file.name), drop);
+      attachRow.append(chip);
+    }
+    attachRow.hidden = attached.length === 0;
+  };
+  const addFiles = async (files: Iterable<File>): Promise<void> => {
+    for (const file of files) {
+      if (file.size > MAX_ATTACH_BYTES) {
+        note = `${file.name} is larger than ${MAX_ATTACH_BYTES / 1024 / 1024} MB`;
+        notifyViews();
+        continue;
+      }
+      const data = bytesToBase64(new Uint8Array(await file.arrayBuffer()));
+      const name = file.name !== '' ? file.name : `pasted.${(file.type.split('/')[1] ?? 'png').replace(/[^a-z0-9]/gi, '')}`;
+      const result = (await invokeBoard('fleetAttach', { runId, name, data })) as { ok?: boolean; error?: string; path?: string };
+      if (result.ok === true && typeof result.path === 'string') {
+        attached.push({ name, path: result.path });
+      } else {
+        note = result.error ?? `${name} could not be attached`;
+        notifyViews();
+      }
+    }
+    paintAttached();
+    paintBanner();
+  };
+
+  const send = async (text: string, interruptFirst: boolean): Promise<void> => {
+    const typed = text.trim();
+    if (typed === '' && attached.length === 0) {
+      return;
+    }
+    // A slash command stays a command: attachments ride after it as plain text.
+    const message =
+      attached.length === 0
+        ? typed
+        : `${typed === '' ? 'See the attached files.' : typed}\n\nAttached files:\n${attached.map((a) => `- ${a.path}`).join('\n')}`;
+    if (interruptFirst) {
+      // An idle worker refuses the interrupt — the message still goes out.
+      await invokeBoard('fleetControl', { action: 'interrupt', runId });
+    }
+    const result = await runMutation('Sending', () => invokeBoard('fleetSend', { runId, text: message }));
+    if (result.ok) {
+      prompt.setContent('');
+      attached.length = 0;
+      paintAttached();
+      prompt.focus();
+    }
+  };
+
+  // "/" lists the commands the worker accepts; anything typed goes through as it is.
+  const commandMenu = el('div', 'tickets-takeover-commands');
+  commandMenu.hidden = true;
+  const paintCommands = (text: string): void => {
+    const match = /^\/([\w.-]*)$/.exec(text);
+    const known = live()?.commands ?? [];
+    const shown = match === null ? [] : known.filter((name) => name.toLowerCase().startsWith(match[1]!.toLowerCase())).slice(0, 12);
+    commandMenu.replaceChildren();
+    for (const name of shown) {
+      const item = el('button', 'tickets-takeover-command');
+      item.type = 'button';
+      item.append(el('span', 'tickets-takeover-command-name', `/${name}`), el('span', 'tickets-takeover-command-hint', COMMAND_HINTS[name] ?? ''));
+      item.addEventListener('click', () => {
+        prompt.setContent(`/${name} `);
+        commandMenu.hidden = true;
+        prompt.focus();
+      });
+      commandMenu.append(item);
+    }
+    commandMenu.hidden = shown.length === 0;
+  };
+  const prompt = api.ui.createMarkdownView({
+    compact: true,
+    placeholder: 'Message the worker — type / for commands',
+    onChange: (text) => {
+      paintCommands(text);
+      paintBanner();
+    },
+    onSubmit: (text) => {
+      commandMenu.hidden = true;
+      void send(text, false);
+    },
+  });
+  prompt.element.classList.add('tickets-takeover-prompt-input');
+
+  const composerBar = el('div', 'tickets-takeover-composer');
+  const fileInput = el('input');
+  fileInput.type = 'file';
+  fileInput.multiple = true;
+  fileInput.hidden = true;
+  fileInput.addEventListener('change', () => {
+    const picked = [...(fileInput.files ?? [])];
+    fileInput.value = '';
+    void addFiles(picked);
+  });
+  const plusBtn = el('button', 'tickets-takeover-plus');
+  plusBtn.type = 'button';
+  plusBtn.title = 'Attach files or pictures — the worker reads them from its worktree';
+  plusBtn.setAttribute('aria-label', 'Attach files');
+  plusBtn.append(api.ui.icon('plus', 15));
+  plusBtn.addEventListener('click', () => fileInput.click());
+  promptWrap.addEventListener('dragover', (event) => {
+    if (event.dataTransfer?.types.includes('Files') === true) {
+      event.preventDefault();
+    }
+  });
+  promptWrap.addEventListener('drop', (event) => {
+    const dropped = [...(event.dataTransfer?.files ?? [])];
+    if (dropped.length > 0) {
+      event.preventDefault();
+      void addFiles(dropped);
+    }
+  });
+  promptWrap.addEventListener(
+    'paste',
+    (event) => {
+      const pasted = [...(event.clipboardData?.files ?? [])];
+      if (pasted.length > 0) {
+        event.preventDefault();
+        void addFiles(pasted);
+      }
+    },
+    true,
+  );
+  const chips = el('span', 'tickets-takeover-chips');
+  for (const [label, text] of QUICK_PROMPTS) {
+    const chip = el('button', 'tickets-takeover-chip', label);
+    chip.type = 'button';
+    chip.title = `Puts "${text}" in the box — edit it, then send`;
+    chip.addEventListener('click', () => {
+      prompt.setContent(text);
+      prompt.focus();
+    });
+    chips.append(chip);
+  }
+  const composerSpacer = el('span', 'tickets-takeover-spacer');
+  const stopBtn = iconButton('square', 'Stop', 'Stop the running turn — the session and its context stay, you can prompt it again', () =>
+    control('interrupt'),
+  );
+  stopBtn.classList.add('tickets-takeover-btn-stop');
+  const sendBtn = iconButton('corner-down-left', 'Send', 'Send the message — a working worker takes it into its turn', () => {
+    void send(prompt.getContent(), false);
+  });
+  sendBtn.classList.add('tickets-takeover-btn-primary');
+  composerBar.append(plusBtn, fileInput, chips, composerSpacer, stopBtn, sendBtn);
+
+  // The worker's pulse while a turn runs: what it does now and for how long.
+  const progress = el('div', 'tickets-takeover-progress');
+  progress.hidden = true;
+  const spinner = el('span', 'tickets-takeover-spinner', '✻');
+  const progressText = el('span', 'tickets-takeover-progress-text');
+  progress.append(spinner, progressText);
+  let busySince: number | null = null;
+  const paintProgress = (): void => {
+    const run = live();
+    const working = run !== null && LIVE_RUN_STATES.includes(run.state) && run.turn !== 'idle';
+    if (!working) {
+      busySince = null;
+      progress.hidden = true;
+      return;
+    }
+    busySince ??= run.steerCount === 0 && run.turn === undefined ? Date.parse(run.startedAt) || Date.now() : Date.now();
+    const seconds = Math.max(0, Math.round((Date.now() - busySince) / 1000));
+    const doing = (run.activity ?? '').trim();
+    const verb = doing === '' || run.activity === undefined ? 'Thinking' : doing.length > 70 ? `${doing.slice(0, 69)}…` : doing;
+    progressText.textContent = `${verb}… ${seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`} · ↓ ${formatTokens(run.tokensOut)} tokens`;
+    progress.hidden = false;
+  };
+  promptWrap.append(commandMenu, attachRow, prompt.element, composerBar);
+
+  const live = (): RunInfo | null => fleetRuns.find((r) => r.id === runId) ?? null;
+  const paintBanner = (): void => {
+    const run = live();
+    const active = run !== null && LIVE_RUN_STATES.includes(run.state);
+    const held = active && run.held === true;
+    const detached = run !== null && run.state === 'detached';
+    const status = run === null ? null : workerStatus(run, Date.now());
+    light.className = `tickets-light tickets-light-${(active || detached) && status !== null ? status.light : 'idle'}`;
+    headline.textContent =
+      run === null
+        ? 'This run is no longer known to the runner'
+        : detached
+          ? `${run.ticketId} · ${run.provider} — detached: the runner lost its worker`
+          : !active
+            ? `${run.ticketId} · ${run.provider} — run ${run.state}`
+            : held
+              ? `${run.ticketId} · ${run.provider} — you have control`
+              : `${run.ticketId} · ${run.provider} — the runner is driving; your first command takes over`;
+    const fill = run === null ? null : contextFill(run);
+    stats.textContent =
+      run === null
+        ? ''
+        : [
+            status !== null && (active || detached) ? status.label : '',
+            fill === null ? '' : `context ${Math.round(fill * 100)}%`,
+            `in ${formatTokens(run.tokensIn)} · out ${formatTokens(run.tokensOut)}`,
+          ]
+            .filter((part) => part !== '')
+            .join(' · ');
+    resumeBtn.hidden = !(run !== null && !active && run.sessionRef !== null);
+    releaseBtn.hidden = !held;
+    prompt.setReadOnly(!active);
+    const busy = active && run.turn !== 'idle';
+    wrap.dataset['state'] =
+      !active && !detached
+        ? 'ended'
+        : detached || status?.light === 'red'
+          ? 'alert'
+          : status?.light === 'amber'
+            ? 'warn'
+            : held
+              ? busy
+                ? 'driving'
+                : 'waiting'
+              : 'working';
+    stopBtn.hidden = !busy;
+    sendBtn.hidden = busy && prompt.getContent().trim() === '' && attached.length === 0;
+    sendBtn.disabled = !active;
+    plusBtn.disabled = !active;
+    for (const chip of chips.children) {
+      (chip as HTMLButtonElement).disabled = !active;
+    }
+    paintProgress();
+  };
+
+  let lastMarkdown = '\u0000';
+  let alive = true;
+  const pull = (): void => {
+    void invokeBoard('fleetStream', { runId }).then((result) => {
+      if (!alive) {
         return;
       }
-      pull();
-    }, 2_000);
-    const actions = el('div', 'tickets-form-actions');
-    const done = el('button', undefined, 'Close');
-    done.type = 'button';
-    done.addEventListener('click', () => {
-      clearInterval(timer);
-      close();
+      const markdown = transcriptMarkdown((result as { text?: string }).text ?? '');
+      const shown = markdown === '' ? '_The stream is empty so far._' : markdown;
+      if (shown !== lastMarkdown) {
+        lastMarkdown = shown;
+        transcript.setContent(shown);
+      }
     });
-    actions.append(done);
-    box.append(out, actions);
-    host.append(box);
+  };
+
+  fleetListeners.add(paintBanner);
+  paintBanner();
+  pull();
+  const timer = setInterval(pull, 2_000);
+  const tick = setInterval(paintBanner, 1_000);
+  wrap.append(banner, transcript.element, progress, promptWrap);
+  host.append(wrap);
+  return () => {
+    alive = false;
+    clearInterval(timer);
+    clearInterval(tick);
+    fleetListeners.delete(paintBanner);
+    transcript.dispose();
+    prompt.dispose();
+  };
+}
+
+/**
+ * The fleet daemon's chain log as a readonly editor tab: the same lines
+ * land in `<userData>/plugins/fleet/runner.log` (T-0007 review finding 2).
+ */
+const CHAIN_LOG_KIND = 'tickets-chain-log';
+const CHAIN_LOG_KEY = 'chain-log://fleet-daemon';
+
+/** Lines stamped at or before this instant are hidden ("Clear"); the
+ *  daemon's ring buffer and runner.log on disk stay untouched. */
+let chainLogClearedAt = '';
+
+/** Opens (or focuses) the fleet daemon's log tab. */
+function openChainLog(api: DreyPluginApi): void {
+  api.documents.addDoc(CHAIN_LOG_KIND, CHAIN_LOG_KEY, 'Fleet daemon log');
+}
+
+/**
+ * The log's pane body: a readonly tail that follows the bottom while the
+ * view is scrolled down. Scrolling up pauses the follow; scrolling back
+ * to the bottom resumes it — the terminal behavior (owner ruling).
+ */
+function mountChainLog(api: DreyPluginApi, host: HTMLElement): () => void {
+  const wrap = el('div', 'tickets-chain-log');
+  const bar = el('div', 'tickets-chain-log-bar');
+  const hint = el('div', 'tickets-chain-log-hint');
+  hint.textContent =
+    'Also on disk as <userData>/plugins/fleet/runner.log — follows the tail while you are at the bottom; scroll up to hold, back down to resume.';
+  const clear = el('button', 'icon-btn');
+  clear.type = 'button';
+  clear.title = 'Clear the view — only lines logged from now on are shown (the file on disk is kept)';
+  clear.setAttribute('aria-label', 'Clear log');
+  clear.textContent = 'Clear';
+  bar.append(hint, clear);
+  let lastText = '';
+  // The host's own Markdown editor, read-only: the log is one fenced block,
+  // and the view itself follows the tail while it is scrolled to the bottom.
+  const view = api.ui.createMarkdownView({ mode: 'view', readOnly: true, content: asParagraphs('Loading the daemon log…') });
+  view.element.classList.add('tickets-chain-log-out');
+  let alive = true;
+  const pull = (): void => {
+    void invokeBoard('fleetLog').then((result) => {
+      if (!alive) {
+        return;
+      }
+      lastText = (result as { text?: string }).text ?? '';
+      render();
+    });
+  };
+  const render = (): void => {
+    const text = visibleChainLog(lastText, chainLogClearedAt);
+    view.setContent(
+      asParagraphs(
+        text === ''
+          ? chainLogClearedAt === ''
+            ? '(the daemon has not logged anything yet)'
+            : '(cleared — new lines appear here)'
+          : text,
+      ),
+    );
+  };
+  clear.addEventListener('click', () => {
+    const stamps = lastText.split('\n').map(chainLogStamp).filter((x) => x !== '');
+    const newest = stamps[stamps.length - 1];
+    if (newest !== undefined) {
+      chainLogClearedAt = newest;
+    }
+    render();
   });
+  pull();
+  const timer = setInterval(pull, 2_000);
+  wrap.append(bar, view.element);
+  host.append(wrap);
+  return () => {
+    alive = false;
+    clearInterval(timer);
+    view.dispose();
+  };
 }
 
 // --- the card context menu ----------------------------------------------------
@@ -990,11 +1731,22 @@ function openCardMenu(
   if (live === null) {
     item(`Run agent (${card.worker})…`, () => openRunModal(api, card));
   } else {
-    item(`Watch run — ${live.state}`, () => openWatchModal(api, live.id));
-    item('Steer run…', () => openSteerModal(api, live.id));
+    item(`Open run — ${live.state}`, () => openTakeover(api, live));
     item('Stop run', () => {
       void run('Stopping the run', () => invokeBoard('fleetStop', { runId: live.id, reason: null }));
     });
+  }
+  // Earlier runs of this ticket (other columns, finished or stopped): their
+  // transcripts stay on disk, and the takeover tab shows them read-only.
+  const past = fleetRuns
+    .filter((r) => r.ticketId === card.id && !LIVE_RUN_STATES.includes(r.state))
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+    .slice(0, 8);
+  for (const earlier of past) {
+    const when = earlier.startedAt.replace('T', ' ').slice(0, 16);
+    item(`Past run — ${earlier.column ?? earlier.provider} · ${earlier.state} · ${when}`, () =>
+      openTakeover(api, earlier),
+    );
   }
   menu.append(el('div', 'tickets-menu-sep'));
   item(
@@ -1011,6 +1763,26 @@ function openCardMenu(
     },
     card.meta.claimedBy === null,
   );
+  menu.append(el('div', 'tickets-menu-sep'));
+  {
+    // T-0041: archive instead of delete — armed two-step, so a single
+    // click never sends a ticket to tickets/archive/. The first click
+    // only relabels; the menu closing disarms.
+    const button = el('button', 'tickets-menu-item', 'Archive…');
+    button.type = 'button';
+    button.title = 'Moves the ticket to tickets/archive/ — out of the board, kept in git';
+    let armed = false;
+    button.addEventListener('click', () => {
+      if (!armed) {
+        armed = true;
+        button.textContent = 'Archive — click again';
+        return;
+      }
+      menu.remove();
+      void run('Archiving', () => invokeBoard('archive', { id: card.id }));
+    });
+    menu.append(button);
+  }
 
   menu.setAttribute('role', 'menu');
   document.body.append(menu);
@@ -1040,12 +1812,57 @@ const plugin: { activate(api: DreyPluginApi): void } = {
   activate(api) {
     backend = api.backend;
     api.ui.registerWidget(createTicketsWidget(api));
+    api.ui.registerSettingsPage(createTicketsSettingsPage(api));
 
+    // The fleet daemon's chain log: a readonly, tail-following editor tab
+    // (T-0007 review finding 2). Stateless — the session snapshot reopens
+    // it from the fixed key.
+    api.ui.registerDocKind({
+      kind: CHAIN_LOG_KIND,
+      icon: 'scroll-text',
+      serialize: () => null,
+      restore: () => openChainLog(api),
+      mount: (el) => mountChainLog(api, el),
+      statusText: () => 'fleet daemon',
+    });
+
+    api.ui.registerDocKind({
+      kind: TAKEOVER_KIND,
+      icon: 'message-circle',
+      // The title rides in the session (req-51): a restore runs before the
+      // first fleet snapshot arrives, and the tab used to be dropped for
+      // want of its run. The banner fills in once the runner answers.
+      serialize: (path) => {
+        const run = fleetRuns.find((r) => r.id === path.slice(TAKEOVER_SCHEME.length));
+        return run === undefined ? null : { title: takeoverTitle(run) };
+      },
+      restore: (path, data) => {
+        const runId = path.startsWith(TAKEOVER_SCHEME) ? path.slice(TAKEOVER_SCHEME.length) : '';
+        const run = fleetRuns.find((r) => r.id === runId);
+        const saved = (data as { title?: unknown } | null)?.title;
+        const title = run !== undefined ? takeoverTitle(run) : typeof saved === 'string' ? saved : null;
+        if (runId !== '' && title !== null) {
+          api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${runId}`, title);
+        }
+      },
+      mount: (el, path) => mountTakeover(api, el, path.slice(TAKEOVER_SCHEME.length)),
+      statusText: (path) => {
+        const run = fleetRuns.find((r) => r.id === path.slice(TAKEOVER_SCHEME.length));
+        return run === undefined ? null : run.held === true ? 'you have control' : 'runner driving';
+      },
+    });
+
+    api.documents.onChange((event) => {
+      if (event.type === 'active-changed' || event.type === 'docs-changed') {
+        markOpenCard(api);
+      }
+    });
     api.backend.on('board-changed', () => void refreshBoard());
     api.vault.onChanged(() => void refreshBoard());
-    api.backend.on('fleet-changed', (runs) =>
-      applyFleetRuns(Array.isArray(runs) ? (runs as RunInfo[]) : ((runs as { runs: RunInfo[] }).runs ?? [])));
-    void invokeBoard('fleetStatus').then((result) => applyFleetRuns((result as { runs: RunInfo[] }).runs ?? []));
+    api.backend.on('fleet-changed', (payload) =>
+      applyFleetSnapshot((payload ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
+    void invokeBoard('fleetStatus').then((result) =>
+      applyFleetSnapshot((result ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
     void refreshBoard();
   },
 };

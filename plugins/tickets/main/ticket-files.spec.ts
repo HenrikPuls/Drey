@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatUtcStamp } from '../shared/tickets';
-import { newTicketFileText, parseTicketFile, patchTicketFile } from './ticket-files';
+import { newTicketFileText, parseTicketFile, patchTicketFile, ticketPathParts } from './ticket-files';
 
 const CANONICAL = [
   '---',
@@ -27,6 +27,31 @@ const CANONICAL = [
   '',
 ].join('\n');
 
+describe('ticketPathParts', () => {
+  it('splits ticket-shaped paths into dir, phase and stem', () => {
+    expect(ticketPathParts('tickets/inbox/T-0042.md')).toEqual({
+      phaseDir: 'inbox',
+      phase: 'inbox',
+      stem: 'T-0042',
+    });
+  });
+
+  it('strips a numbered directory prefix (T-0041)', () => {
+    expect(ticketPathParts('tickets/10-inbox/T-0042.md')).toEqual({
+      phaseDir: '10-inbox',
+      phase: 'inbox',
+      stem: 'T-0042',
+    });
+    expect(ticketPathParts('tickets/35-qa/T-0100.md')!.phase).toBe('qa');
+  });
+
+  it('rejects non-ticket paths', () => {
+    expect(ticketPathParts('tickets/inbox/readme.md')).toBeNull();
+    expect(ticketPathParts('tickets/T-0042.md')).toBeNull();
+    expect(ticketPathParts('notes/inbox/T-0042.md')).toBeNull();
+  });
+});
+
 describe('parseTicketFile', () => {
   it('reads a canonical file without findings', () => {
     const parsed = parseTicketFile(CANONICAL, 'tickets/inbox/T-0042.md');
@@ -37,6 +62,13 @@ describe('parseTicketFile', () => {
     expect(parsed.meta.priority).toBe('high');
     expect(parsed.meta.rank).toBe(5000);
     expect(parsed.meta.branch).toBe('t/T-0042');
+    expect(parsed.meta.entered['inbox']).toBe('2026-10-17T14:32:00Z');
+  });
+
+  it('reads the same file from a numbered directory without noise (T-0041)', () => {
+    // The entered-inbox stamp must satisfy the reader through the stripped id.
+    const parsed = parseTicketFile(CANONICAL, 'tickets/10-inbox/T-0042.md');
+    expect(parsed.issues).toEqual([]);
     expect(parsed.meta.entered['inbox']).toBe('2026-10-17T14:32:00Z');
   });
 

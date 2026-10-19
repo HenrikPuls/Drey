@@ -36,6 +36,11 @@ import { VaultService } from '../vault/vault.service';
 import { WikilinkService } from '../editor/wikilinks/wikilink.service';
 import { extractWikilinks } from '../editor/wikilinks/wikilink';
 import { HOST_CODEMIRROR } from './runtime-exports';
+import { highlightCode } from './code-highlight';
+import { mountMarkdownView } from './markdown-view';
+import { dreyHighlightStyle } from '../editor/editor-theme';
+import type { HighlightStyle } from '@codemirror/language';
+import { ThemeService } from '../services/theme.service';
 import { EditorExtensionRegistry } from './editor-extension-registry.service';
 import { DropDecoderRegistry } from './drop-decoder-registry.service';
 import { FileOpenerRegistry } from '../services/file-opener-registry.service';
@@ -76,6 +81,7 @@ export class PluginApiFactory {
   private readonly confirm = inject(ConfirmationService);
   private readonly dialogs = inject(ConfirmDialogService);
   private readonly settings = inject(SettingsService);
+  private readonly themeService = inject(ThemeService);
   private readonly overlayGuard = inject(OverlayGuardService);
   private readonly extensions = inject(EditorExtensionRegistry);
   private readonly dropDecoders = inject(DropDecoderRegistry);
@@ -354,6 +360,9 @@ export class PluginApiFactory {
           });
           return field;
         },
+        createMarkdownView: (opts) => mountMarkdownView(this.appInjector, opts),
+        highlightCode: async (code, lang) =>
+          highlightCode(code, lang, await this.codeHighlightStyle()),
         icon: (name, size) => createIconElement(name, size),
         setFileDecorations: (vaultId, decorations) =>
           this.decorations.set(pluginId, vaultId, decorations),
@@ -471,6 +480,14 @@ export class PluginApiFactory {
   }
 
   /** The focused editor surface's selection, or null when there is none. */
+  /** The highlight style of the active theme: Cyberpunk's own, the Drey token style otherwise. */
+  private async codeHighlightStyle(): Promise<HighlightStyle> {
+    if (this.themeService.theme().id === 'cyberpunk') {
+      return (await import('../editor/themes/cyberpunk-look')).cyberpunkHighlightStyle;
+    }
+    return dreyHighlightStyle;
+  }
+
   private selection(): { from: number; to: number; text: string } | null {
     const view = this.editTarget.view;
     if (view === null) {

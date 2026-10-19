@@ -12,18 +12,29 @@
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import type { PluginMcpTools } from './plugin-tools';
 import type { VaultTools } from './vault-tools';
 
 export const MCP_SERVER_NAME = 'drey-vault';
 
-/** A fresh server over the tool set; the caller connects it to a transport. */
-export function createVaultMcpServer(tools: VaultTools, version: string): Server {
+/** A fresh server over the tool set; the caller connects it to a transport.
+ *  `pluginTools` (M85) lists a plugin's registered tools after the vault
+ *  tools and routes their calls. */
+export function createVaultMcpServer(
+  tools: VaultTools,
+  version: string,
+  pluginTools?: PluginMcpTools,
+): Server {
   const server = new Server({ name: MCP_SERVER_NAME, version }, { capabilities: { tools: {} } });
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [...tools.list()] }));
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [...tools.list(), ...(pluginTools?.list() ?? [])],
+  }));
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Unknown names and bad arguments come back as `isError` text from
     // `VaultTools`, so the model can correct itself.
-    const result = await tools.call(request.params.name, request.params.arguments ?? {});
+    const result = pluginTools !== undefined && pluginTools.has(request.params.name)
+      ? await pluginTools.call(request.params.name, request.params.arguments ?? {})
+      : await tools.call(request.params.name, request.params.arguments ?? {});
     return { content: result.content, ...(result.isError ? { isError: true } : {}) };
   });
   return server;

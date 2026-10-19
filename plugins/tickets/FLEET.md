@@ -61,7 +61,7 @@ Invoke-RestMethod "http://127.0.0.1:$($d.port)/health" -Headers $h
 
 | Route | What it gives |
 |---|---|
-| `GET /health` | alive check: `{ok, version, live}` — `live` = live run count; newer builds add a `build` stamp (runner.js mtime) |
+| `GET /health` | alive check: `{ok, version, live}` — `live` = live run count; newer builds add a `build` stamp — `<builtAt>#<hash>`, a content hash of the compiled fleet code (req-51; older builds: runner.js mtime) |
 | `GET /status` | all runs (newest info per run) |
 | `GET /status/<runId>` | one run: `{run, streamPath}` |
 | `GET /stream/<runId>` | the run's stream.jsonl tail (last ~200 KB, ndjson) |
@@ -72,7 +72,7 @@ Invoke-RestMethod "http://127.0.0.1:$($d.port)/health" -Headers $h
 | `POST /chain/master` `{mode: "run"\|"halted"}` | master switch (daemon builds) |
 | `POST /chain/column` `{phase, mode: "playing"\|"held"}` or `{phase, stop: true}` | column control |
 | `POST /chain/abort` | stop every live run |
-| `POST /shutdown` | graceful retire: stops live runs (bounded), exits |
+| `POST /shutdown` | graceful retire: stops live runs (bounded), exits. With `{handover: true}` (what Drey sends for a newer build, req-51) no run ends: live runs are left to the successor (OpenCode re-attached; a worker it cannot bind to is stopped and its session resumed in place under the same run id); 409 while a run is gating/starting/stopping |
 | `POST /start` | starts a run — **do not hand-craft**: the `RunRequest` (see `plugins/tickets/main/fleet/protocol.ts`) carries the composed instruction, worktree, gate commands, phase plumbing; runs are started by the board's "Run agent" or the chain dispatcher |
 
 Writes change real state (worker processes, the board, the tickets repo).
@@ -115,7 +115,14 @@ stream; on daemon builds it also feeds `redStreak` and `cooldownUntil` in
 `run.json` = `{request, info}`: the request carries `ticketId`, `repoPath`,
 `branch`, `phase`/`column`, `instruction`, `acceptance` (the gate commands),
 `model`, `permissionMode`; the info is the same object `/status` reports.
-`stream.jsonl` lines are `{ts, kind, text, ...}` with kinds `note`
+Since T-0041 the request also carries `nextPhaseDir` (the resolved
+numbered directory the success move targets — `50-build`, the owner's
+`35-qa`, whatever exists) and `pushRemote` (pipeline.md `push:`; the
+runner pushes each transition commit `git push <remote> HEAD` when it is
+set — a failed push is a log line here, never a failed move). Ticket
+paths may be numbered (`tickets/30-plan/…`) or unprefixed — the stripped
+id is the identity everywhere. `stream.jsonl` lines are
+`{ts, kind, text, ...}` with kinds `note`
 (runner notices: gate lines, run bookkeeping), `text` (worker output),
 `usage` (token/cost updates), `result` (the worker's final answer) and
 `error`.
@@ -135,8 +142,11 @@ per-column token budget) · `ciBackoff`.
   A worktree checkout (e.g. `Drey-t0007` on its ticket branch) may run
   newer fleet code than `main` — feature parity questions go there first.
 - **Restart**: `POST /shutdown` (graceful, stops live runs) — Drey respawns
-  the runner on the next run start. Daemon builds also self-retire when the
-  plugin notices a newer `runner.js` on disk (build stamp in the descriptor).
+  the runner on the next run start. Daemon builds are also retired when the
+  plugin finds newer fleet code on disk (a different content hash in the
+  descriptor's build stamp — a rebuild of unchanged code keeps the runner);
+  that retirement is a handover, so live workers carry on under the new
+  runner (`handover` in a `run.json` marks a run in transit).
 - **Single instance**: a second runner finding a healthy peer exits quietly;
   a stale descriptor (dead peer) is taken over.
 - **Idle shutdown**: no live runs and ~15 min without requests → the runner
@@ -162,6 +172,11 @@ per-column token budget) · `ciBackoff`.
 - **Where did the agent work?** → `worktrees/<repo>-<ticket>` on branch
   `t/<id>`; inspect with `git -C <worktree> ...`. The runner commits ticket
   bookkeeping ("fleet run bookkeeping") in the tickets repo itself.
+- **A transition did not reach the remote** → check pipeline.md's `push:`
+  key first (absent = pushing is the owner's business), then
+  `GET /log?tail=50` for `push of the transition to "<remote>" failed`.
+  Archived tickets (`tickets/archive/`, T-0041) never dispatch and never
+  count toward the board — the owner archives and deletes them by hand.
 
 ## Pointers
 

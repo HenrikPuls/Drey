@@ -36,7 +36,7 @@
   white-space: nowrap;
   font-family: var(--font-sans);
   font-size: 12px;
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 /* The live-edit lock hint (ADR-0049): shown while the assistant edits this
@@ -54,7 +54,7 @@
   white-space: nowrap;
   font-family: var(--font-sans);
   font-size: 12px;
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 /* The file changed underneath unsaved edits (ADR-0060): opens the
@@ -65,7 +65,7 @@
   padding: 2px 8px;
   font-family: var(--font-sans);
   font-size: 12px;
-  color: var(--accent);
+  color: var(--accent-fg);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   border-radius: var(--radius);
@@ -131,7 +131,7 @@
 }
 
 .save.dirty {
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 .ctx-backdrop {

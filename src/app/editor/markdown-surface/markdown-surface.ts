@@ -805,6 +805,45 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
     }
   }
 
+  /**
+   * Replaces the text by editing only what differs: the common head and
+   * tail stay untouched, so the user's selection and caret survive (they
+   * map through the change) and a poll that mostly re-delivers the same
+   * text does not reset them. `setContent` replaces the whole document
+   * and moves the caret to `anchor` — right for a reload, wrong for a
+   * viewer someone is selecting text in (a log refreshed every 2 s).
+   * Follows the growing tail while the view is pinned to the bottom.
+   */
+  patchContent(text: string): void {
+    const view = this._view;
+    if (!view) {
+      return;
+    }
+    const old = view.state.doc.toString();
+    if (old === text) {
+      return;
+    }
+    let head = 0;
+    const shortest = Math.min(old.length, text.length);
+    while (head < shortest && old.charCodeAt(head) === text.charCodeAt(head)) {
+      head++;
+    }
+    let tail = 0;
+    while (
+      tail < shortest - head &&
+      old.charCodeAt(old.length - 1 - tail) === text.charCodeAt(text.length - 1 - tail)
+    ) {
+      tail++;
+    }
+    const pinned = this.pinnedToBottom();
+    view.dispatch({
+      changes: { from: head, to: old.length - tail, insert: text.slice(head, text.length - tail) },
+    });
+    if (pinned) {
+      view.scrollDOM.scrollTop = view.scrollDOM.scrollHeight;
+    }
+  }
+
   getContent(): string {
     return this._view?.state.doc.toString() ?? '';
   }

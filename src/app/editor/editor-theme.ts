@@ -32,7 +32,7 @@ export const dreyHighlightStyle = HighlightStyle.define([
   { tag: t.strong, fontWeight: '600' },
   { tag: t.emphasis, fontStyle: 'italic' },
   { tag: t.strikethrough, textDecoration: 'line-through' },
-  { tag: t.link, color: 'var(--accent)' },
+  { tag: t.link, color: 'var(--accent-fg)' },
   { tag: t.url, color: 'var(--text-6)' },
   { tag: t.monospace, fontFamily: 'var(--font-mono)', fontSize: '0.9em' },
   { tag: t.quote, fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: 'var(--text-3)' },
@@ -48,7 +48,7 @@ export const dreyHighlightStyle = HighlightStyle.define([
   // `defaultHighlightStyle` fallback, whose light-background colors
   // (#170-greens, #a11-reds) are unreadable on the dark surface -- HTML/
   // XML/CSS fences looked "uncolored" until tagName & friends were added.
-  { tag: t.comment, color: 'var(--text-faint)', fontStyle: 'italic' },
+  { tag: t.comment, color: 'var(--text-4)', fontStyle: 'italic' },
   {
     tag: [t.keyword, t.operatorKeyword, t.modifier, t.self, t.bool, t.atom, t.null, t.tagName],
     color: 'var(--accent-hover)',
@@ -220,7 +220,7 @@ export const editorStructure = EditorView.theme({
   '.cm-gutters:hover .cm-foldGutter span': { opacity: '1' },
   '.cm-foldGutter span[title="Unfold line"]': {
     opacity: '1',
-    color: 'var(--accent)',
+    color: 'var(--accent-fg)',
   },
   // The folded-content pill: CM's default is a light `#eee` chip, which
   // glares in the dark theme. Keep it a quiet "…" that still clicks to
@@ -254,7 +254,11 @@ export const dreyEditorTheme = EditorView.theme(
     '.cm-content': { caretColor: 'var(--text-primary)' },
     '.cm-cursor': { borderLeftColor: 'var(--text-primary)' },
     '.cm-dropCursor': { borderLeftColor: 'var(--accent)' },
-    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+    // The focused-selection chain mirrors CodeMirror's own base rule
+    // (`&dark.cm-focused > .cm-scroller > .cm-selectionLayer ...`) -- a
+    // shorter selector loses to it and the selection fell back to its
+    // near-black default.
+    '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, &.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
       backgroundColor: 'color-mix(in srgb, var(--accent) 28%, transparent)',
     },
     // The Drey document look wants no active-line wash (a published theme

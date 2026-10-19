@@ -1,0 +1,473 @@
+import { promises as fsp } from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Orchestrator, RED_COOLDOWN_MS, type OrchestratorDeps, type SupervisorPort } from './orchestrator';
+import type { StartOutcome, StopOutcome, SupervisorRecord } from './runs';
+import type { RunInfo, RunRequest } from './protocol';
+import { newTicketFileText } from '../ticket-files';
+import { listTicketDirs } from '../phase-dirs';
+import { stripPhasePrefix } from '../../shared/tickets';
+
+/**
+ * The chain orchestrator against a REAL tickets vault (temp dir) and a
+ * fake supervisor port — the dispatch planning runs against the same
+ * assembled board Drey renders, so the file semantics cannot drift.
+ */
+
+let vaultDir = '';
+let fleetRoot = '';
+
+const PIPELINE = [
+  '---',
+  'phases:',
+  '  - { id: inbox, title: Inbox, handover: manual }',
+  '  - { id: prioritized, title: Prioritized, handover: manual }',
+  '  - { id: plan, title: Plan, handover: agent plan-default, worker: opencode, model: zai/glm-5.3, workers: 2 }',
+  '  - { id: plan-review, title: Plan review, handover: manual }',
+  '  - { id: build, title: Build, handover: agent build-default, workers: 1, claim: true }',
+  '  - { id: done, title: Done, handover: none }',
+  '---',
+  'Prose.',
+  '',
+].join('\n');
+
+const REPOS = [
+  '---',
+  'repos:',
+  '  drey:',
+  '    url: https://example.test/drey.git',
+  '    branch: main',
+  '    path: W:/drey',
+  '---',
+  'Prose.',
+  '',
+].join('\n');
+
+function ticketText(id: string, phase: string): string {
+  return newTicketFileText({
+    id,
+    title: `Ticket ${id}`,
+    repo: 'drey',
+    priority: 'normal',
+    rank: 5000,
+    firstPhase: phase,
+    now: new Date('2026-10-18T10:00:00Z'),
+    actor: 'owner@box',
+    description: 'It should work.',
+  }).replace(
+    'Executable checks as backticked checkbox lines; the machine gate runs them.',
+    '- [ ] `npm run verify:unit` — exits 0',
+  );
+}
+
+/** Where a ticket of `phase` sits (T-0041: a machine move may create the
+ *  numbered `NN-<phase>` folder); the unprefixed path when it is nowhere. */
+async function phasePath(phase: string, id: string): Promise<string> {
+  const root = path.join(vaultDir, 'tickets');
+  for (const dir of await listTicketDirs(root)) {
+    const candidate = path.join(root, dir, `${id}.md`);
+    if (stripPhasePrefix(dir) === phase && (await fsp.access(candidate).then(() => true, () => false))) {
+      return candidate;
+    }
+  }
+  return path.join(root, phase, `${id}.md`);
+}
+
+async function writeTicket(id: string, phase: string): Promise<void> {
+  const rel = path.join(vaultDir, 'tickets', phase, `${id}.md`);
+  await fsp.mkdir(path.dirname(rel), { recursive: true });
+  await fsp.writeFile(rel, ticketText(id, phase), 'utf8');
+}
+
+async function writeMeta(prompt = 'Work the plan step.'): Promise<void> {
+  await fsp.mkdir(path.join(vaultDir, 'tickets', '_meta', 'prompts'), { recursive: true });
+  await fsp.writeFile(path.join(vaultDir, 'tickets', '_meta', 'pipeline.md'), PIPELINE, 'utf8');
+  await fsp.writeFile(path.join(vaultDir, 'tickets', '_meta', 'repos.md'), REPOS, 'utf8');
+  await fsp.writeFile(path.join(vaultDir, 'tickets', '_meta', 'prompts', 'plan-default.md'), prompt, 'utf8');
+  await fsp.writeFile(path.join(vaultDir, 'tickets', '_meta', 'prompts', 'build-default.md'), 'Build it.', 'utf8');
+}
+
+function fakePort() {
+  const records: SupervisorRecord[] = [];
+  let counter = 0;
+  const port: SupervisorPort = {
+    start: vi.fn(async (request: RunRequest): Promise<StartOutcome> => {
+      counter += 1;
+      const info: RunInfo = {
+        id: `R-${String(counter).padStart(3, '0')}`,
+        ticketId: request.ticketId,
+        provider: request.provider,
+        state: 'running',
+        pid: 4242,
+        startedAt: '2026-10-18T12:00:00Z',
+        endedAt: null,
+        sessionRef: null,
+        tokensIn: 0,
+        tokensOut: 0,
+        costUsd: null,
+        lastActivity: '2026-10-18T12:00:00Z',
+        steerCount: 0,
+        lastSteerRung: null,
+        worktreePath: 'W:/wt',
+        branch: request.branch,
+        gateFailure: null,
+      };
+      records.push({ info, request });
+      return { ok: true, run: info };
+    }),
+    stop: vi.fn(async (runId: string, reason: string | null): Promise<StopOutcome> => {
+      const index = records.findIndex((r) => r.info.id === runId);
+      if (index >= 0) {
+        records[index] = { ...records[index]!, info: { ...records[index]!.info, state: 'stopped' } };
+      }
+      return { ok: true };
+    }),
+    records: () => [...records],
+    reap: vi.fn(async (): Promise<void> => undefined),
+  };
+  return { port, records, start: port.start, stop: port.stop };
+}
+
+function orchestrator(over: Partial<OrchestratorDeps> = {}): { orch: Orchestrator; fleet: ReturnType<typeof fakePort> } {
+  const fleet = fakePort();
+  const orch = new Orchestrator({
+    root: fleetRoot,
+    log: (message) => console.log(`[orch] ${message}`),
+    supervisorOf: () => fleet.port,
+    scanIntervalMs: 60_000,
+    ...over,
+  });
+  return { orch, fleet };
+}
+
+const CONFIG = {
+  ticketsVaultPath: '', // set in beforeEach
+  git: 'git',
+  defaultWorker: 'opencode',
+  permissionMode: 'accept-edits' as const,
+};
+
+describe('Orchestrator', () => {
+  beforeEach(async () => {
+    vaultDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-vault-'));
+    fleetRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-fleet-'));
+    CONFIG.ticketsVaultPath = vaultDir;
+  });
+
+  afterEach(async () => {
+    // A sweep or pass may still hold a temp file open for a beat.
+    for (const dir of [vaultDir, fleetRoot]) {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          await fsp.rm(dir, { recursive: true, force: true });
+          break;
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+    }
+  });
+
+  it('dispatches the plan pool from its own queue — never from prioritized', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'prioritized');
+    await writeTicket('T-0002', 'prioritized');
+    await writeTicket('T-0003', 'plan');
+    const { orch, fleet } = orchestrator();
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+
+    // The owner's queue (prioritized) is never touched: only the ticket
+    // the owner moved into the worker column runs.
+    const started = fleet.records.filter((r) => r.info.state === 'running');
+    expect(started.map((r) => r.request.ticketId)).toEqual(['T-0003']);
+    expect(started[0]!.request.phase).toBe('plan');
+    expect(started[0]!.request.column).toBe('plan');
+    expect(started[0]!.request.nextPhase).toBe('plan-review');
+    expect(started[0]!.request.model).toBe('zai/glm-5.3');
+    expect(started[0]!.request.instruction).toContain('Work the plan step.');
+  });
+
+  it('never pulls from a manual column: neither prioritized nor the checkpoint feeds a pool', async () => {
+    await writeMeta();
+    await writeTicket('T-0004', 'plan-review');
+    await writeTicket('T-0005', 'commit');
+    const { orch, fleet } = orchestrator();
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    expect(fleet.records).toEqual([]);
+  });
+
+  it('the chain log says why nothing moves — once, not on every pass', async () => {
+    await writeMeta();
+    // T-0001 names a repo that is not in repos.md: the dispatch note.
+    await writeTicket('T-0001', 'plan');
+    await fsp.writeFile(
+      path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'),
+      ticketText('T-0001', 'plan').replace('repo: drey', 'repo: nowhere'),
+      'utf8',
+    );
+    // T-0002 is dispatchable, but its column is held: the held note.
+    await writeTicket('T-0002', 'plan-review');
+    const logs: string[] = [];
+    const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
+    await orch.configure(CONFIG);
+    await orch.setColumn('plan-review', 'held');
+    await orch.setMaster('run');
+    await orch.setMaster('halted');
+    await orch.setMaster('run'); // second pass — the notes must stay silent
+
+    const skips = logs.filter((line) => line.includes('T-0001'));
+    expect(skips).toHaveLength(1);
+    expect(skips[0]).toContain('repo "nowhere" is not in repos.md');
+    const held = logs.filter((line) => line.includes('held column'));
+    expect(held).toHaveLength(1);
+    expect(held[0]).toContain('T-0002');
+    expect(fleet.records).toEqual([]);
+  });
+
+  it('respects capacity, held columns and busy tickets', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    await writeTicket('T-0002', 'plan');
+    await writeTicket('T-0003', 'plan');
+    const { orch, fleet } = orchestrator();
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    // workers: 2 on plan — exactly two runs, no pull happened (none available).
+    expect(fleet.records).toHaveLength(2);
+
+    // A settled run frees the slot; the moved ticket leaves the plan
+    // column (the success move), and the third ticket goes on the next pass.
+    const first = fleet.records[0]!;
+    fleet.records[0] = { ...first, info: { ...first.info, state: 'done' } };
+    await fsp.mkdir(path.join(vaultDir, 'tickets', 'plan-review'), { recursive: true });
+    await fsp.rename(
+      path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'),
+      path.join(vaultDir, 'tickets', 'plan-review', 'T-0001.md'),
+    );
+    await orch.setMaster('halted');
+    await orch.setMaster('run');
+    expect(fleet.records.filter((r) => r.info.state === 'running')).toHaveLength(2);
+    expect(fleet.records.map((r) => r.request.ticketId)).toContain('T-0003');
+  });
+
+  it('Notaus aborts every live run and halts the chain', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    await writeTicket('T-0002', 'plan');
+    const { orch, fleet } = orchestrator();
+    await orch.configure(CONFIG);
+    const status = await orch.setMaster('run');
+    expect(status.master).toBe('run');
+    expect(fleet.records).toHaveLength(2);
+
+    const after = await orch.abortAll();
+    expect(after.master).toBe('halted');
+    expect(fleet.stop).toHaveBeenCalledTimes(2);
+    expect(orch.status().master).toBe('halted');
+  });
+
+  it('stopping one column holds only that column and aborts only its runs', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    const { orch, fleet } = orchestrator();
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    expect(fleet.records).toHaveLength(1);
+    const runId = fleet.records[0]!.info.id;
+
+    await orch.stopColumn('plan');
+    expect(fleet.stop).toHaveBeenCalledWith(runId, 'column plan stopped');
+    expect(orch.status().columns['plan']).toBe('held');
+
+    // Another configure pass dispatches nothing while the column holds.
+    await orch.configure(CONFIG);
+    expect(fleet.start).toHaveBeenCalledTimes(1);
+
+    await orch.setColumn('plan', 'playing');
+    expect(fleet.start).toHaveBeenCalledTimes(2);
+  });
+
+  it('persists column state in chain.json, but the master always boots halted', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    const first = orchestrator();
+    await first.orch.configure(CONFIG);
+    await first.orch.setMaster('run');
+    await first.orch.setColumn('plan', 'held');
+    first.orch.dispose();
+
+    const second = orchestrator();
+    await second.orch.load();
+    const status = second.orch.status();
+    expect(status.configured).toBe(true);
+    // "An" is a per-session decision: the persisted master never resumes.
+    expect(status.master).toBe('halted');
+    expect(status.columns['plan']).toBe('held');
+    // Halted means: no dispatch on boot either.
+    expect(second.fleet.records).toEqual([]);
+    // The owner's session: An, then the column's state applies again.
+    await second.orch.setMaster('run');
+    await second.orch.setColumn('plan', 'playing');
+    expect(second.fleet.records).toHaveLength(1);
+    second.orch.dispose();
+  });
+
+  it('a run-settled hook triggers a fresh pass (the slot feeds the next ticket)', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    await writeTicket('T-0002', 'plan');
+    const { orch, fleet } = orchestrator();
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    expect(fleet.records).toHaveLength(2);
+    await orch.setMaster('halted');
+
+    // T-0003 arrives externally; a settle fires the pass that takes it.
+    await writeTicket('T-0003', 'plan');
+    await orch.setMaster('run');
+    await orch.onRunSettled({
+      ...fleet.records[0]!.info,
+      state: 'done',
+    });
+    await vi.waitFor(() => expect(fleet.records.length).toBeGreaterThanOrEqual(2));
+  });
+
+  it('a missing prompt file skips the candidate instead of dispatching blind', async () => {
+    await writeMeta();
+    await fsp.rm(path.join(vaultDir, 'tickets', '_meta', 'prompts', 'plan-default.md'));
+    await writeTicket('T-0001', 'plan');
+    const { orch, fleet } = orchestrator();
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    expect(fleet.records).toEqual([]);
+  });
+
+  it('the circuit breaker trips on three red gates in a row: held column, candidate parked', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    let current = new Date('2026-10-18T12:00:00Z');
+    const { orch, fleet } = orchestrator({ now: () => current });
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    expect(fleet.records).toHaveLength(1);
+
+    // Three red gates: each settle cools the column down; past the
+    // cooldown the pass re-dispatches (the fake never moves the
+    // ticket), the streak raises, and the third red trips the breaker.
+    for (let i = 0; i < 3; i++) {
+      const record = fleet.records.find((r) => r.info.state === 'running')!;
+      const failed = { ...record.info, state: 'failed' as const, gateFailure: 'gate command failed' };
+      fleet.records[fleet.records.indexOf(record)] = { ...record, info: failed };
+      await orch.onRunSettled(failed);
+      // Past the cooldown the next pass fires again (in production the
+      // safety-net timer; here the master flip that always triggers one).
+      current = new Date(current.getTime() + RED_COOLDOWN_MS + 1_000);
+      if (i < 2) {
+        await orch.setMaster('halted');
+        await orch.setMaster('run');
+      }
+    }
+
+    expect(orch.status().columns['plan']).toBe('held');
+    expect(orch.status().redStreak['plan']).toBe(3);
+    // The candidate moved to inbox, parked with the reason (file semantics).
+    const parked = await fsp.readFile(await phasePath('inbox', 'T-0001'), 'utf8');
+    expect(parked).toContain('parked-reason');
+    expect(parked).toContain('circuit breaker');
+    await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).rejects.toBeDefined();
+  });
+
+  it('a green gate resets the streak; the cooldown only breathes between reds', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    const { orch, fleet } = orchestrator();
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+
+    const record = fleet.records[0]!;
+    fleet.records[0] = { ...record, info: { ...record.info, state: 'done' } };
+    await orch.onRunSettled({ ...record.info, state: 'done' });
+    expect(orch.status().redStreak['plan'] ?? 0).toBe(0);
+    expect(orch.status().columns['plan'] ?? 'playing').toBe('playing');
+  });
+
+  it('the lease reaper is reachable through the ports', async () => {
+    const { orch, fleet } = orchestrator();
+    await orch.reapAll();
+    expect(fleet.port.reap).toHaveBeenCalled();
+  });
+
+  describe('the ci handover', () => {
+    const CI_PIPELINE = PIPELINE.replace(
+      '  - { id: plan-review, title: Plan review, handover: manual }',
+      '  - { id: plan-review, title: Plan review, handover: ci, ci: npm run check }',
+    );
+
+    let seam: { execShell: (command: string, cwd: string) => Promise<void> };
+
+    beforeEach(() => {
+      seam = { execShell: async () => undefined };
+    });
+
+    async function writeCiMeta(green: boolean): Promise<void> {
+      await writeMeta();
+      await fsp.writeFile(path.join(vaultDir, 'tickets', '_meta', 'pipeline.md'), CI_PIPELINE, 'utf8');
+      seam.execShell = async (command) => {
+        if (!green) {
+          throw new Error('exit 1\ncheck failed');
+        }
+        void command;
+      };
+    }
+
+    it('a green check moves the ticket one column right (and stamps the claim)', async () => {
+      await writeCiMeta(true);
+      await writeTicket('T-0009', 'plan-review');
+      const { orch } = orchestrator({
+        scanIntervalMs: 20,
+        execShell: (command, cwd) => seam.execShell(command, cwd),
+      });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+      await vi.waitFor(
+        async () => {
+          await expect(fsp.access(await phasePath('build', 'T-0009'))).resolves.toBeUndefined();
+        },
+        { timeout: 5_000 },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      orch.dispose();
+      const moved = await fsp.readFile(await phasePath('build', 'T-0009'), 'utf8');
+      expect(moved).toContain('ci check passed');
+      expect(moved).toContain('claimed-by'); // build claims
+      await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan-review', 'T-0009.md'))).rejects.toBeDefined();
+    });
+
+    it('a red check backs the ticket off — it stays put and the retry waits', async () => {
+      await writeCiMeta(false);
+      await writeTicket('T-0009', 'plan-review');
+      const { orch } = orchestrator({
+        scanIntervalMs: 20,
+        execShell: (command, cwd) => seam.execShell(command, cwd),
+      });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+      await vi.waitFor(
+        async () => {
+          const text = await fsp.readFile(path.join(vaultDir, 'tickets', 'plan-review', 'T-0009.md'), 'utf8');
+          expect(text).toContain('ci check failed');
+        },
+        { timeout: 5_000 },
+      );
+      // The backoff suppresses the next sweep ticks' retries (10 min).
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      orch.dispose();
+      await expect(fsp.access(await phasePath('build', 'T-0009'))).rejects.toBeDefined();
+      const text = await fsp.readFile(path.join(vaultDir, 'tickets', 'plan-review', 'T-0009.md'), 'utf8');
+      expect(text).toContain('retry in 10 min');
+    });
+  });
+});

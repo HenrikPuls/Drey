@@ -14,6 +14,27 @@
 /** `T-` + at least four digits (`T-0042`). Grammar of ids AND file stems. */
 export const TICKET_ID_PATTERN = /^T-\d{4,}$/;
 
+// --- numbered phase folders (T-0041, ADR-0076 later change) -----------------
+//
+// Phase directories are named `NN-<id>` with `NN` = the phase's 1-based
+// pipeline position × 10. Everything inside a ticket file — `entered-*`
+// keys, order.md sections, branch names — keeps the clean id; only the
+// directory carries the number. Readers strip the prefix and match the
+// rest against pipeline.md ids; an unprefixed directory stays tolerated.
+
+/** The reserved archive folder beside `_meta` — never a column, never numbered. */
+export const TICKETS_ARCHIVE_DIR = 'tickets/archive';
+
+/** Strips a leading `\d+-` from a directory name; unprefixed stays as is. */
+export function stripPhasePrefix(dir: string): string {
+  return dir.replace(/^\d+-/, '');
+}
+
+/** `(1-based pipeline position) * 10` + '-' + id → '10-inbox' … '80-done'. */
+export function phaseDirectoryName(position1: number, id: string): string {
+  return `${String(position1 * 10).padStart(2, '0')}-${id}`;
+}
+
 // ---------------------------------------------------------------------------
 // The pipeline's handover spec (`_meta/pipeline.md`, ADR-0076):
 // `manual | agent <prompt-ref>[@<worker>] | ci | none`. Parsed here so
@@ -152,6 +173,62 @@ export interface PipelinePhase {
   readonly claim: boolean;
   /** Raw handover spec (`manual | agent <ref>[@<worker>] | ci | none`). */
   readonly handover: string;
+  /**
+   * The column's worker pin (`worker: opencode`, M85) — the assignment
+   * ring's column level; unset on a hand-edited manual column.
+   */
+  readonly worker: string | null;
+  /** The column's model pin (`model: zai/glm-5.3`, M85); null = unset. */
+  readonly model: string | null;
+  /** The column's pool size (`workers: 2`, M85) — parallel runs. Default 1. */
+  readonly workers: number;
+  /** Explicit prompt ref override (`prompt: plan-heavy`, M85); null = handover ref. */
+  readonly prompt: string | null;
+  /**
+   * The circuit breaker's threshold (`max-red:`, M85): consecutive red
+   * gates the column tolerates before it trips. Default 3.
+   */
+  readonly maxRed: number | null;
+  /**
+   * The column's daily token budget (`token-budget:`, M85); null = off.
+   * Summed over the runs the pool settles per day.
+   */
+  readonly tokenBudget: number | null;
+  /**
+   * The ci handover's check command (`ci:`, M85): a green run moves the
+   * ticket one column right — the machine gate in the work repo.
+   */
+  readonly ci: string | null;
+  /**
+   * The sampling audit's fraction (`audit:`, M85, 0–1; default off): a
+   * green step is sampled and a second worker reviews it before the
+   * move. The live trial decides whether the rung stays.
+   */
+  readonly audit: number | null;
+  /**
+   * The semantic gate (`semantic: true`, M85; default off): every green
+   * step in the column gets a second worker's review before it moves.
+   */
+  readonly semantic: boolean;
+}
+
+/** The default for a phase entry that omits the M85 pool keys —
+ *  explicit values win over the defaults. */
+export function phaseWithoutPoolKeys(
+  phase: Partial<PipelinePhase> & Pick<PipelinePhase, 'id' | 'title' | 'wip' | 'claim' | 'handover'>,
+): PipelinePhase {
+  return {
+    worker: null,
+    model: null,
+    workers: 1,
+    prompt: null,
+    maxRed: null,
+    tokenBudget: null,
+    ci: null,
+    audit: null,
+    semantic: false,
+    ...phase,
+  };
 }
 
 /**
@@ -208,11 +285,19 @@ export interface BoardSnapshot {
   readonly defaultWorker: string;
   readonly pipeline: readonly PipelinePhase[];
   readonly pipelineError: string | null;
+  /** pipeline.md's optional `push:` remote (T-0041); null = never push. */
+  readonly pushRemote: string | null;
   readonly repos: readonly RepoRef[];
   readonly reposError: string | null;
   readonly columns: readonly BoardColumn[];
   /** Board-level findings (pipeline/repos/order files). */
   readonly issues: readonly TicketIssue[];
+  /**
+   * The owner's checkpoint columns (M85): manual columns between
+   * automatic ones — the machine never pulls across them; the owner's
+   * moves feed the next pool.
+   */
+  readonly checkpoints: readonly string[];
 }
 
 /** `true` when the id parses AND matches the file stem it came from. */
@@ -239,6 +324,33 @@ export interface MutationResult {
   readonly ok: boolean;
   readonly error?: string;
   readonly warning?: string;
+  /** Reorder / "Number folders" (req-50): how many folders were renamed. */
+  readonly moved?: number;
+}
+
+/** One file of `tickets/_meta/prompts/` as it is on disk (req-50). */
+export interface PromptEntry {
+  readonly ref: string;
+  readonly text: string;
+  /** Drey ships a prompt of this name, so "Reset to the shipped version" applies. */
+  readonly shipped: boolean;
+}
+
+/** The settings page's prompt list: the folder's files and nothing else. */
+export interface PromptListing {
+  /** Absolute path of `tickets/_meta/prompts/`; null without a tickets vault. */
+  readonly folder: string | null;
+  readonly entries: readonly PromptEntry[];
+  /** Every prompt name Drey ships (the "Add Drey's prompts" offer). */
+  readonly shipped: readonly string[];
+}
+
+/** Whether the phase folders carry their derived numbers (T-0041, req-50). */
+export interface FolderStatus {
+  /** Absolute path of `tickets/`; null without a tickets vault. */
+  readonly root: string | null;
+  /** The renames "Number folders" would make; empty = numbered. */
+  readonly moves: readonly { readonly from: string; readonly to: string }[];
 }
 
 /** `create`'s success result: the minted id and the new file's path, so
@@ -269,6 +381,64 @@ export function ageOf(iso: string | null, now: number = Date.now()): string {
     return `${hours}h`;
   }
   return `${Math.floor(hours / 24)}d`;
+}
+
+/** Short human span of a duration in ms ("now", "3m", "2h", "4d"). */
+export function spanWords(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) {
+    return '';
+  }
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) {
+    return 'now';
+  }
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) {
+    return `${hours}h`;
+  }
+  return `${Math.floor(hours / 24)}d`;
+}
+
+/** The ticket's dwell in its column: now minus `entered-<phase>` (M85). */
+export function dwellMs(card: TicketCard, phaseId: string, nowMs: number = Date.now()): number | null {
+  const entered = card.meta.entered[phaseId];
+  if (entered === undefined) {
+    return null;
+  }
+  const t = Date.parse(entered);
+  return Number.isNaN(t) ? null : Math.max(0, nowMs - t);
+}
+
+/** The ticket's whole time on the board: now minus its earliest known entry stamp. */
+export function timeOnBoardMs(card: TicketCard, nowMs: number = Date.now()): number | null {
+  const stamps = Object.values(card.meta.entered)
+    .map((iso) => Date.parse(iso))
+    .filter((t) => !Number.isNaN(t));
+  if (stamps.length === 0) {
+    return null;
+  }
+  return Math.max(0, nowMs - Math.min(...stamps));
+}
+
+/**
+ * The column's average dwell in ms (M85 cycle-time metrics), or null
+ * when no ticket in the column carries an entry stamp.
+ */
+export function averageDwellMs(
+  tickets: readonly TicketCard[],
+  phaseId: string,
+  nowMs: number = Date.now(),
+): number | null {
+  const values = tickets
+    .map((card) => dwellMs(card, phaseId, nowMs))
+    .filter((ms): ms is number => ms !== null);
+  if (values.length === 0) {
+    return null;
+  }
+  return values.reduce((sum, ms) => sum + ms, 0) / values.length;
 }
 
 /** The panel header's status value: open tickets (not in the last phase). */

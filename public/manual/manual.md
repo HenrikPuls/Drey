@@ -702,15 +702,25 @@ a priority, optionally a repository and a description land as
 `T-00xx.md` in the inbox. Click a card to open the ticket file — it is
 an ordinary note (description, plan, executable acceptance criteria and
 an append-only log). Drag cards between columns to move them through
-the pipeline; drag within a column to pin an order. **Fold a column**
+the pipeline; drag within a column to pin an order. Phase folders are
+numbered (`10-inbox` … `80-done`) — the number is cosmetics for
+sorting in a file browser; everything inside a ticket keeps the plain
+phase name. **Moving the file yourself counts as a board move**: drag
+or `git mv` a ticket into another phase folder and the next board
+refresh completes the transition exactly like a drag in the panel —
+stamp, log line, one commit. **Fold a column**
 with the chevron in its head: it shrinks to a narrow strip carrying
 the count and the title rotated sideways — click the strip, or drag a
 card onto it, to unfold it again. Which columns stay folded is
 remembered across restarts (it is view state, never written to the
 repo). The context menu
 (right-click a card) opens the file, copies the deterministic branch
-name `t/T-00xx` for the work repository, and takes over or releases a
-claim. Over-WIP columns show a red count; validation findings (a
+name `t/T-00xx` for the work repository, takes over or releases a
+claim, and offers **Archive…** (armed: the first click only relabels
+the item, the second moves the ticket to `tickets/archive/` — out of
+the board, kept in git; delete files there yourself when you are sure;
+moving one back into a phase folder revives it). Over-WIP columns show
+a red count; validation findings (a
 hand-edited file, an unknown repo, a ticket in two phases) show as
 numbered badges — the board keeps rendering, nothing is guessed.
 
@@ -729,7 +739,10 @@ Pushing and pulling the tickets repo is ordinary git — use the
 [Source control](#12-git-source-control) panel like for any other
 vault. With a remote, two machines racing for the same ticket are
 decided by the first push; the loser re-reads the board and picks the
-next ticket.
+next ticket. Pipelines that want it can add a `push: <remote>` key to
+`pipeline.md`: every transition Drey or the fleet runner commits is
+then pushed to that remote automatically (a failed push warns, it
+never fails the move).
 
 The complete format — every field, the grammar, the agent rules — is
 specified in the repo's `specs/ticket-schema.md`.
@@ -746,18 +759,119 @@ it may act. The worker gets a checkout of the ticket's repo on its own
 branch (`t/<id>`), the ticket's description, plan and the phase's
 prompt as its brief.
 
-While the run is live, the board's **footer** shows its state, age,
-token usage and cost; the card carries a ▶ chip. From the card menu or
-the footer you can **Watch** (tail the run's output), **Steer** (send
-a message into the live run — it lands in the ticket's Log) or
-**Stop** it. When the worker finishes, the runner executes the
+While the run is live, its column shows a **Workers** strip with one
+lane per run: a traffic light (green working, amber context nearly full
+or stopping, red stalled for five minutes — always with the state in
+words), the worker's current activity, its context window, token usage
+and age; the card carries a ▶ chip. A lane is folded to one line until
+you unfold it (a lane that needs a look opens by itself). In a lane you
+can **Take over**, **Watch** (tail the run's output), **Steer** (send a
+message into the live run — it lands in the ticket's Log) or **Stop**
+it. **Take over** opens a tab with the worker's conversation and a
+prompt box: you can **Interrupt** the running turn (the session and its
+context stay), drive the worker with your own prompts and **Hand back**
+the run — a worker that is idle by then ends the run and the gate
+decides. While you hold a run the runner does not end it. Only OpenCode
+workers can be taken over for now. The **Log** button opens the fleet
+daemon's log in a read-only tab. When a run ends, the ticket's Log line
+records the tokens it used (and the cost, when the provider reports
+one — flat coding plans report none). When the worker finishes, the runner executes the
 ticket's **acceptance criteria** (the backticked commands under Plan):
 all green means the ticket moves to the next phase on its own; a
 failure parks the reason in the Log and leaves the ticket where it is.
 
-Runs survive closing Drey — the runner is its own small process. You
+Runs survive closing Drey — the runner is its own small process — and,
+for OpenCode workers, even a restart of the runner: the new runner takes the
+still-running worker back. (A Claude Code worker cannot be taken back; its run
+shows as **Detached** and can be stopped from its lane.)
+
+Rebuilding Drey doesn't interrupt the fleet either, so you can work on Drey
+tickets from the Drey you're changing. A rebuild that leaves the runner's code
+unchanged keeps the runner as it is. When that code did change, the old runner
+hands its runs over to the new one instead of stopping them: OpenCode workers are
+taken back, and a Claude Code worker's session continues in a fresh worker under
+the same run. Its last turn may be cut short, but the work in its folder stays.
+Open run tabs come back after the restart and pick their run up again. A run
+that is checking its acceptance criteria finishes first; the handover waits for
+it. You
 can reach it from a terminal, too: its address and token live in
 `<user data>/plugins/fleet/runner.json`.
+
+### The chain runs itself (milestone 85)
+
+A column with a **worker** runs itself. Settings → *Tickets* shows the
+tickets repository's folder at the top (the folder button opens it) and
+the **Pipeline** as one table, a row per column in pipeline order: its
+folder number (`10`, `20`, …), name, a *Runs itself* or *Checkpoint*
+chip with the folder, then the **worker** (OpenCode or Claude Code;
+*Manual* means a column only you move tickets through), the **model**,
+the **pool size** (how many tickets the column works in parallel) and
+the **prompt**. A manual column shows dashes there. The model field is a
+picker: click it to see what the worker offers (OpenCode lists its own
+`provider/model` ids, Claude Code its aliases), type to filter, or type
+an id the list does not know. The prompt is chosen from the files in
+`tickets/_meta/prompts/`. Every change is one commit; the board follows.
+
+**Reordering columns.** Drag a row by its grip, or focus a row and press
+Alt+↑ / Alt+↓. Inbox (where new tickets land) and Done stay first and
+last. A move rewrites `pipeline.md` and renames the phase folders to
+their new numbers in one commit; the line under the table says what
+moved, with **Undo**. A column whose tickets are being worked on right
+now cannot be renumbered — stop or finish the run first.
+
+**Number folders.** Phase folders carry their column number
+(`10-inbox`, `20-prioritized`, …). A repository from before that — or one
+with a folder you numbered by hand — shows a banner; **Number folders**
+renames every folder to its number in one commit. Tickets keep their
+columns.
+
+**Prompts** lists the files in `tickets/_meta/prompts/` exactly as they
+are on disk; the buttons in its header create a prompt, open the folder
+and reload it. Pick one on the left and edit it on the right, in the same
+Markdown editor as your notes. It is saved and committed when you leave
+the editor or press **Save**; the circular arrow discards unsaved
+changes, and the clock button resets a prompt Drey ships
+(`plan-default`, `build-default`, `review-default`, `commit-default`) to
+Drey's version after you confirm — your text stays in the git history.
+If the file changes outside Drey while you have unsaved text, a notice
+offers **Load from disk**. An empty folder offers **Add Drey's
+prompts**. A changed prompt reaches the next run, not one that is
+already running.
+
+The **master switch** sits in the board's header: **An** runs the
+chain — every playing automatic column drains its queue. **Aus** halts
+gently (running work finishes, nothing new starts). **Notaus** aborts
+every live run and halts — the red button, one click. Each automatic
+column carries its own **brakes** next to the fold chevron: pause (no
+new dispatch), stop (abort this column's runs and hold it — the rest
+keeps going), play again. All of it survives restarts.
+
+The machine asks the agent to decide its own step's completion — the
+brief ends with the completion discipline: run the acceptance commands
+yourself, end the turn only when they pass. The runner still re-runs
+the gate: green moves the ticket one column right, red parks it (the
+failure lands in the Log, the ticket waits). A column that goes red
+too often trips its **circuit breaker**: it holds, and its next ticket
+parks in Inbox with a reason — re-prioritize it when you're ready.
+After a red gate the column cools down for a minute before it fires
+again.
+
+Where a worker column meets your judgment, the pipeline stays yours: a
+column without a worker between two worker columns is your
+**checkpoint** (plan-review in the default pipeline) — the machine
+never pulls across it; you review, edit, and move the ticket back to
+plan, forward to build, or back to Inbox. A manual column *before* the
+first worker column is a plain queue — the next pool drains it
+(prioritized feeds plan).
+
+The board shows the chain's pulse: each column head carries its pool
+(`opencode ×2`) and its brakes; a thin **cycle-time line** above the
+run footer shows how long each column's tickets have been sitting
+there on average. The `ci` handover works, too: a column with a `ci:`
+command moves its tickets when the check passes in the work repo.
+And the assistant can drive runs: ask it about the fleet — it sees
+`fleet_status`, and can `fleet_run`, `fleet_stop`, `fleet_steer` and
+`fleet_watch` through Drey's MCP server.
 
 ---
 
@@ -1129,7 +1243,7 @@ history store is deliberately outside it).
 ---
 
 *Manual for Drey 0.7.1; manual content last changed
-2026-10-17. Screenshots were captured automatically from
+2026-10-19. Screenshots were captured automatically from
 the built app (Anthrazit theme, 1600Ã—1000) by
 `e2e/manual-screenshots.spec.ts` — run
 `$env:DREY_MANUAL_SHOTS='1'; npm run e2e:run -- manual-screenshots`

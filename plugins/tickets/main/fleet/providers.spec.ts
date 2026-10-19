@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { claudeCodeAdapter, OPENCODE_API, opencodeAdapter, type FetchFn, type NormalizedEvent, type ProviderStart } from './providers';
+import { claudeCodeAdapter, modelBody, OPENCODE_API, opencodeAdapter, type FetchFn, type NormalizedEvent, type ProviderStart, INTERRUPT_WAIT_MS, toolActivity } from './providers';
 import type { RunnerProcess, SpawnFn } from './procs';
 
 /**
@@ -93,6 +93,38 @@ describe('the claude-code adapter', () => {
     expect(result?.costUsd).toBe(0.12);
   });
 
+  it('writes thinking, replies and tool calls into the transcript', () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.stdout(JSON.stringify({
+      type: 'assistant',
+      message: {
+        usage: { input_tokens: 10, cache_read_input_tokens: 5 },
+        content: [
+          { type: 'thinking', thinking: 'Look at the file first.' },
+          { type: 'text', text: 'Reading it now.' },
+          { type: 'tool_use', name: 'Read', input: { file_path: 'src/a.ts' } },
+        ],
+      },
+    }));
+    expect(events.map((e) => [e.kind, e.text ?? ''])).toEqual([
+      ['note', 'thinking › Look at the file first.'],
+      ['text', 'Reading it now.'],
+      ['note', 'Read src/a.ts'],
+      ['usage', ''],
+    ]);
+    expect(events.at(-1)?.contextTokens).toBe(15);
+  });
+
+  it('writes a tool result as an outcome note', () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.stdout(JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', content: 'line one\nline two' }] } }));
+    expect(events.map((e) => e.text)).toEqual(['result › line one']);
+  });
+
   it('steer writes a user message into the held stdin (the injection rung)', async () => {
     const proc = fakeProcess();
     const { start } = collect();
@@ -100,6 +132,54 @@ describe('the claude-code adapter', () => {
     const rung = await handle.steer('Change course');
     expect(rung).toBe('inject');
     expect(proc.stdinWrites.at(-1)).toContain('Change course');
+  });
+
+  it('reports the slash commands the CLI lists at init', () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.stdout(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'ses_1', slash_commands: ['compact', '/cost'] }));
+    expect(events.find((e) => e.commands !== undefined)?.commands).toEqual(['compact', 'cost']);
+  });
+
+  it('a finished turn closes the input unless the owner holds the worker', () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.stdout(JSON.stringify({ type: 'result', usage: {}, result: 'done' }));
+    expect(proc.stdinWrites.at(-1)).toBe('<<end>>');
+    expect(events.at(-1)).toMatchObject({ kind: 'usage', turn: 'idle' });
+  });
+
+  it('a held worker stays open, takes another prompt and ends on release', async () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    const handle = claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    handle.setHold?.(true);
+    proc.stdout(JSON.stringify({ type: 'result', usage: {}, result: 'done' }));
+    expect(proc.stdinWrites).not.toContain('<<end>>');
+
+    expect(await handle.steer('One more thing')).toBe('inject');
+    expect(proc.stdinWrites.at(-1)).toContain('One more thing');
+    expect(events.at(-1)).toMatchObject({ kind: 'usage', turn: 'busy' });
+
+    proc.stdout(JSON.stringify({ type: 'result', usage: {}, result: 'again' }));
+    handle.setHold?.(false);
+    expect(proc.stdinWrites.at(-1)).toBe('<<end>>');
+    expect(await handle.steer('too late')).toBe('refused');
+  });
+
+  it('interrupt sends the control request only while a turn is running', async () => {
+    const proc = fakeProcess();
+    const { start } = collect();
+    const handle = claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    handle.setHold?.(true);
+    expect(await handle.interrupt?.()).toBe(true);
+    const written = JSON.parse(proc.stdinWrites.at(-1)!) as { type: string; request: { subtype: string } };
+    expect(written.type).toBe('control_request');
+    expect(written.request.subtype).toBe('interrupt');
+    proc.stdout(JSON.stringify({ type: 'result', usage: {}, result: 'interrupted' }));
+    expect(await handle.interrupt?.()).toBe(false);
   });
 
   it('a resume run carries --resume with the session ref', () => {
@@ -202,7 +282,7 @@ describe('the opencode adapter', () => {
 
     // The usage poll lands within the interval (input + cache read).
     await vi.advanceTimersByTimeAsync(2_500);
-    const usage = events.find((e) => e.kind === 'usage');
+    const usage = events.find((e) => e.kind === 'usage' && e.tokensIn !== undefined);
     expect(usage?.tokensIn).toBe(14);
     expect(usage?.tokensOut).toBe(5);
     expect(usage?.costUsd).toBe(0.02);
@@ -214,6 +294,41 @@ describe('the opencode adapter', () => {
     await handle.stop();
     expect(interrupts.length).toBe(1);
     expect(proc.killTree).toHaveBeenCalled();
+
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
+  it('lists its slash commands and runs a known one as a command, not as text', async () => {
+    vi.useFakeTimers();
+    const prompts: string[] = [];
+    const posted: Array<{ url: string; body: string }> = [];
+    const { fetch: base } = scriptedFetch({ sessionCreated: () => undefined, prompts, interrupts: [], messages: () => [] });
+    const json = (body: unknown): Response => ({ ok: true, status: 200, json: async () => body }) as unknown as Response;
+    const fetch: FetchFn = async (url, init) => {
+      if (url.endsWith(OPENCODE_API.commands)) {
+        return json({ data: [{ name: 'deploy' }] });
+      }
+      if (url.endsWith(OPENCODE_API.compact('ses_oc')) || url.endsWith(OPENCODE_API.command('ses_oc'))) {
+        posted.push({ url, body: String(init?.body) });
+        return json({ data: {} });
+      }
+      return base(url, init);
+    };
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    const handle = opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(100);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(events.find((e) => e.commands !== undefined)?.commands).toEqual(['compact', 'deploy']);
+
+    await handle.steer('/compact');
+    await handle.steer('/deploy staging now');
+    await handle.steer('/nosuch thing');
+    expect(posted.map((p) => p.url.split('/').at(-1))).toEqual(['compact', 'command']);
+    expect(JSON.parse(posted[1]!.body)).toEqual({ name: 'deploy', text: 'staging now' });
+    expect(prompts.at(-1)).toContain('/nosuch thing');
 
     proc.exit(null);
     vi.useRealTimers();
@@ -256,6 +371,163 @@ describe('the opencode adapter', () => {
     vi.useRealTimers();
   });
 
+  it('a held run ignores the idle marker until it is released, and interrupt posts to the server', async () => {
+    vi.useFakeTimers();
+    const interrupts: string[] = [];
+    const at = Date.now();
+    const { fetch } = scriptedFetch({
+      sessionCreated: () => undefined,
+      prompts: [],
+      interrupts,
+      messages: () => [
+        { id: 'msg_i', type: 'idle', time: { created: at + 5_000 }, outcome: 'interrupted' },
+        assistant(at),
+        { id: 'msg_q', type: 'user', time: { created: at }, text: 'Do the ticket.' },
+      ],
+    });
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    const handle = opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    handle.setHold?.(true);
+
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(events.find((e) => e.kind === 'result')).toBeUndefined();
+    expect(proc.killTree).not.toHaveBeenCalled();
+
+    expect(await handle.interrupt?.()).toBe(true);
+    expect(interrupts.length).toBe(1);
+
+    handle.setHold?.(false);
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(events.find((e) => e.kind === 'result')).toBeDefined();
+    expect(proc.killTree).toHaveBeenCalled();
+
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
+  it('reads a message only once it is complete and shows a tool call only with its input', async () => {
+    vi.useFakeTimers();
+    const at = Date.now();
+    let round = 0;
+    const streaming = {
+      id: 'msg_s',
+      type: 'assistant',
+      time: { created: at + 1 },
+      content: [
+        { type: 'reasoning', text: 'Let me look.' },
+        { type: 'tool', id: 'call_1', name: 'read', state: { status: 'pending', input: {} } },
+      ],
+    };
+    const finished = {
+      ...streaming,
+      time: { created: at + 1, completed: at + 3 },
+      content: [
+        { type: 'reasoning', text: 'Let me look.' },
+        { type: 'text', text: 'Found it.' },
+        { type: 'tool', id: 'call_1', name: 'read', state: { status: 'completed', input: { path: 'src/a.ts' } } },
+      ],
+    };
+    const { fetch } = scriptedFetch({
+      sessionCreated: () => undefined,
+      prompts: [],
+      interrupts: [],
+      messages: () => (round++ < 2 ? [streaming] : [finished]),
+    });
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(events.filter((e) => e.kind === 'note' && e.text === 'read')).toHaveLength(0);
+    expect(events.find((e) => e.kind === 'text')).toBeUndefined();
+
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(events.filter((e) => e.text === 'read src/a.ts')).toHaveLength(1);
+    expect(events.find((e) => e.kind === 'text')?.text).toBe('Found it.');
+    expect(events.find((e) => e.text === 'thinking › Let me look.')).toBeDefined();
+
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
+  it('attach binds to a running server: nothing is spawned, streamed messages stay out, the idle marker ends the turn through the attach kill', async () => {
+    vi.useFakeTimers();
+    const at = Date.now();
+    const earlier = {
+      ...(assistant(at - 100_000) as object),
+      id: 'msg_old',
+      content: [{ type: 'text', text: 'earlier text' }],
+    };
+    const { fetch, calls } = scriptedFetch({
+      sessionCreated: () => undefined,
+      prompts: [],
+      interrupts: [],
+      messages: () => [
+        { id: 'msg_i', type: 'idle', time: { created: at + 5_000 }, outcome: 'succeeded' },
+        { ...(assistant(at) as object), id: 'msg_new' },
+        earlier,
+      ],
+    });
+    const kill = vi.fn(async () => undefined);
+    const spawn = vi.fn();
+    const { events, start } = collect();
+    const handle = opencodeAdapter(spawn as unknown as SpawnFn, fetch, async () => 47000).attach!(start, {
+      address: 'http://127.0.0.1:50001',
+      password: 'pw',
+      sessionRef: 'ses_oc',
+      runStartedMs: at - 200_000,
+      seenBeforeMs: at - 1_000,
+      pid: 777,
+      kill,
+    });
+
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(spawn).not.toHaveBeenCalled();
+    expect(calls[0]?.url.startsWith('http://127.0.0.1:50001')).toBe(true);
+    expect((calls[0]?.init?.headers as Record<string, string>)['Authorization']).toBe(
+      `Basic ${Buffer.from('opencode:pw').toString('base64')}`,
+    );
+    expect(events.filter((e) => e.kind === 'text').map((e) => e.text)).toEqual(['Done.']);
+    expect(events.find((e) => e.kind === 'result')).toBeDefined();
+    expect(kill).toHaveBeenCalled();
+    expect(await handle.exited).toBeNull();
+    expect(handle.pid).toBe(777);
+    vi.useRealTimers();
+  });
+
+  it('an attached worker whose server stops answering ends after three failed polls; stop uses the attach kill', async () => {
+    vi.useFakeTimers();
+    const failing: FetchFn = async () => {
+      throw new Error('ECONNREFUSED');
+    };
+    const attachInfo = (kill: () => Promise<void>) => ({
+      address: 'http://127.0.0.1:50001',
+      password: 'pw',
+      sessionRef: 'ses_oc',
+      runStartedMs: Date.now(),
+      seenBeforeMs: 0,
+      pid: 777,
+      kill,
+    });
+    const { start } = collect();
+    const adapter = opencodeAdapter(vi.fn() as unknown as SpawnFn, failing, async () => 47000);
+
+    const gone = adapter.attach!(start, attachInfo(async () => undefined));
+    await vi.advanceTimersByTimeAsync(7_000);
+    await expect(gone.exited).resolves.toBeNull();
+
+    const kill = vi.fn(async () => undefined);
+    const stopping = adapter.attach!(start, attachInfo(kill));
+    await stopping.stop();
+    expect(kill).toHaveBeenCalledTimes(1);
+    await expect(stopping.exited).resolves.toBeNull();
+    vi.useRealTimers();
+  });
+
   it('stop interrupts the session and kills the serve process', async () => {
     vi.useFakeTimers();
     const prompts: string[] = [];
@@ -279,5 +551,59 @@ describe('the opencode adapter', () => {
 
     proc.exit(null);
     vi.useRealTimers();
+  });
+
+  it('stop still kills the serve process when the interrupt never answers', async () => {
+    vi.useFakeTimers();
+    const { fetch } = scriptedFetch({
+      sessionCreated: () => undefined,
+      prompts: [],
+      interrupts: [],
+      messages: () => [],
+    });
+    const hanging: FetchFn = (url, init) =>
+      url.includes('/interrupt') ? new Promise<Response>(() => undefined) : fetch(url, init);
+    const proc = fakeProcess();
+    const { start } = collect();
+    const handle = opencodeAdapter(spawnOf(proc), hanging, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    const stopped = handle.stop();
+    expect(proc.killTree).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(INTERRUPT_WAIT_MS);
+    await stopped;
+    expect(proc.killTree).toHaveBeenCalled();
+
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+});
+
+describe('modelBody — the OpenCode model pin (v2 shape)', () => {
+  it('splits providerID/modelID at the first slash', () => {
+    expect(modelBody('zai-coding-plan/glm-5.3-flash', 'go')).toEqual({
+      text: 'go',
+      model: { providerID: 'zai-coding-plan', modelID: 'glm-5.3-flash' },
+    });
+  });
+
+  it('a pin without a slash rides as the modelID; no pin sends text only', () => {
+    expect(modelBody('glm-5.3', 'go')).toEqual({ text: 'go', model: { providerID: '', modelID: 'glm-5.3' } });
+    expect(modelBody(null, 'go')).toEqual({ text: 'go' });
+  });
+});
+
+describe('toolActivity — the one line a tool call shows on the lane', () => {
+  it('names the tool and its target', () => {
+    expect(toolActivity('read', { path: 'src/a.ts' })).toBe('read src/a.ts');
+    expect(toolActivity('shell', { command: 'git status --short' })).toBe('shell git status --short');
+    expect(toolActivity('grep', { pattern: 'prepareWorktree' })).toBe('grep prepareWorktree');
+  });
+
+  it('copes with a call without input and caps a long target', () => {
+    expect(toolActivity(undefined, undefined)).toBe('tool');
+    expect(toolActivity('shell', { command: 'x'.repeat(400) }).length).toBeLessThanOrEqual(140);
   });
 });

@@ -22,11 +22,11 @@
    open at once, so the accent would light up the whole row. Closed ones
    sit a step dimmer than an ordinary icon button. */
 .icon-btn[aria-pressed='true'] {
-  background: var(--active-bg);
+  background: var(--accent-surface);
   /* The theme's own line colour as an edge: on themes whose text steps
      sit close together (Anthrazit) the fill alone reads too faintly. */
-  box-shadow: inset 0 0 0 1px var(--border);
-  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--accent-edge);
+  color: var(--accent-fg);
 }
 
 .icon-btn[aria-pressed='false']:not(:hover) {

@@ -22,6 +22,7 @@ import type {
   ToolSpec,
 } from '../llm';
 import type { AppConfig, BuiltinAction } from '../app-config';
+import type { PluginMcpToolProvider } from './mcp-tools';
 import type {
   TagEntry,
   TagPrefixStyle,
@@ -493,6 +494,17 @@ export interface MainPluginContext {
   readonly ipc: {
     handle(method: string, fn: (payload: unknown, sender: WebContents) => unknown): void;
     emit(event: string, data?: unknown): void;
+  };
+
+  /**
+   * The plugin-tool seam on Drey's own MCP server (SDK 1.29, M85): the
+   * registered tools show up beside the base vault tools for every
+   * program connected to the server. Register once at activation; names
+   * are the plugin's own and must be unique across the server (a
+   * collision keeps the earlier registration and logs the loser).
+   */
+  readonly mcp: {
+    registerTools(provider: PluginMcpToolProvider): void;
   };
 
   /** Structured log line into the field log, prefixed with the plugin id. */

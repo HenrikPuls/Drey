@@ -236,7 +236,7 @@ const foldTheme = EditorView.theme(
     },
     // The chevron in the highlight colour, in both states.
     '.cm-fm-pill svg, .cm-fm-collapse svg': {
-      color: 'var(--accent)',
+      color: 'var(--accent-fg)',
     },
     // The YAML lines while expanded: plain grey body text -- no mono face, no
     // dimming. Only the `⌄ Frontmatter` header keeps its own styling.

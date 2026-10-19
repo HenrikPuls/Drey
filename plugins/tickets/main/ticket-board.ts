@@ -5,11 +5,14 @@
  * paths, the specs feed it fixtures. Everything here is deterministic:
  * the same files always produce the same board (no stored state).
  */
-import { parseDocument } from 'yaml';
+import { isCollection, isMap, parseDocument, type YAMLMap, type YAMLSeq } from 'yaml';
 import { splitFrontmatter } from '../../../shared/frontmatter';
 import {
+  parseHandover,
   priorityWeight,
+  phaseWithoutPoolKeys,
   resolveCardWorker,
+  TICKETS_ARCHIVE_DIR,
   type BoardColumn,
   type BoardSnapshot,
   type PipelinePhase,
@@ -18,6 +21,7 @@ import {
   type TicketIssue,
   type TicketPriority,
 } from '../shared/tickets';
+import { checkpointPhaseIds } from './fleet/chain';
 import { parseTicketFile, ticketPathParts } from './ticket-files';
 
 const PHASE_ID = /^[a-z][a-z0-9-]*$/;
@@ -26,17 +30,21 @@ const PHASE_ID = /^[a-z][a-z0-9-]*$/;
 
 export interface PipelineParse {
   readonly phases: readonly PipelinePhase[];
+  /** The optional top-level `push:` remote (T-0041); null = never push. */
+  readonly pushRemote: string | null;
   readonly error: string | null;
+  /** Noise findings the parse forgave (a non-string `push:`). */
+  readonly issues: readonly TicketIssue[];
 }
 
 export function parsePipeline(text: string): PipelineParse {
   const { yamlText, hadFence } = splitFrontmatter(text);
   if (!hadFence || yamlText === null) {
-    return { phases: [], error: 'pipeline.md has no frontmatter fence' };
+    return { phases: [], pushRemote: null, error: 'pipeline.md has no frontmatter fence', issues: [] };
   }
   const doc = parseDocument(yamlText);
   if (doc.errors.length > 0) {
-    return { phases: [], error: `pipeline.md does not parse: ${doc.errors[0]!.message}` };
+    return { phases: [], pushRemote: null, error: `pipeline.md does not parse: ${doc.errors[0]!.message}`, issues: [] };
   }
   const parsed = doc.toJS() as unknown;
   const root = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
@@ -44,35 +52,234 @@ export function parsePipeline(text: string): PipelineParse {
     : {};
   const rawPhases = root['phases'];
   if (!Array.isArray(rawPhases) || rawPhases.length === 0) {
-    return { phases: [], error: 'pipeline.md needs a non-empty phases list' };
+    return { phases: [], pushRemote: null, error: 'pipeline.md needs a non-empty phases list', issues: [] };
+  }
+
+  const issues: TicketIssue[] = [];
+  const rawPush = root['push'];
+  let pushRemote: string | null = null;
+  if (rawPush !== undefined && rawPush !== null) {
+    if (typeof rawPush === 'string' && rawPush.trim() !== '') {
+      pushRemote = rawPush.trim();
+    } else {
+      // A remote NAME belongs here (git config owns URLs); anything else is forgiven visibly.
+      issues.push({ level: 'noise', message: 'pipeline.md: push must be a remote name string — ignored' });
+    }
   }
 
   const phases: PipelinePhase[] = [];
   const seen = new Set<string>();
   for (const entry of rawPhases) {
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-      return { phases: [], error: 'every pipeline phase must be a mapping' };
+      return { phases: [], pushRemote: null, error: 'every pipeline phase must be a mapping', issues };
     }
     const map = entry as Record<string, unknown>;
     const id = typeof map['id'] === 'string' ? map['id'] : '';
     if (!PHASE_ID.test(id)) {
-      return { phases: [], error: `phase id "${id}" must match ${PHASE_ID.source}` };
+      return { phases: [], pushRemote: null, error: `phase id "${id}" must match ${PHASE_ID.source}`, issues };
     }
     if (seen.has(id)) {
-      return { phases: [], error: `duplicate phase id "${id}"` };
+      return { phases: [], pushRemote: null, error: `duplicate phase id "${id}"`, issues };
     }
     seen.add(id);
     const wipRaw = map['wip'];
     const wip = typeof wipRaw === 'number' && Number.isInteger(wipRaw) && wipRaw > 0 ? wipRaw : null;
+    const workerRaw = map['worker'];
+    const worker = typeof workerRaw === 'string' && workerRaw.trim() !== '' ? workerRaw.trim() : null;
+    const modelRaw = map['model'];
+    const model = typeof modelRaw === 'string' && modelRaw.trim() !== '' ? modelRaw.trim() : null;
+    const workersRaw = map['workers'];
+    const workers =
+      typeof workersRaw === 'number' && Number.isInteger(workersRaw) && workersRaw > 0 ? workersRaw : 1;
+    const promptRaw = map['prompt'];
+    const prompt = typeof promptRaw === 'string' && promptRaw.trim() !== '' ? promptRaw.trim() : null;
+    const maxRedRaw = map['max-red'];
+    const maxRed = typeof maxRedRaw === 'number' && Number.isInteger(maxRedRaw) && maxRedRaw > 0 ? maxRedRaw : null;
+    const tokenBudgetRaw = map['token-budget'];
+    const tokenBudget =
+      typeof tokenBudgetRaw === 'number' && Number.isFinite(tokenBudgetRaw) && tokenBudgetRaw > 0
+        ? tokenBudgetRaw
+        : null;
+    const ciRaw = map['ci'];
+    const ci = typeof ciRaw === 'string' && ciRaw.trim() !== '' ? ciRaw.trim() : null;
+    const auditRaw = map['audit'];
+    const audit =
+      typeof auditRaw === 'number' && Number.isFinite(auditRaw) && auditRaw > 0 && auditRaw <= 1
+        ? auditRaw
+        : null;
+    const semantic = map['semantic'] === true;
     phases.push({
       id,
       title: typeof map['title'] === 'string' && map['title'].trim() !== '' ? map['title'] : id,
       wip,
       claim: map['claim'] === true,
       handover: typeof map['handover'] === 'string' && map['handover'].trim() !== '' ? map['handover'] : 'manual',
+      worker,
+      model,
+      workers,
+      prompt,
+      maxRed,
+      tokenBudget,
+      ci,
+      audit,
+      semantic,
     });
   }
-  return { phases, error: null };
+  return { phases, pushRemote, error: null, issues };
+}
+
+// --- pipeline.md patching (the settings dialog's writer, M85) ----------------
+
+export interface PhasePoolPatch {
+  /** `opencode` or `claude-code` sets the worker (and the `agent` handover);
+   *  null clears it — the column becomes a manual step and loses its pool. */
+  readonly worker?: string | null;
+  /** The model pin; an empty string or null clears it. */
+  readonly model?: string | null;
+  /** Pool size (≥ 1); null clears it (default 1). */
+  readonly workers?: number | null;
+  /** The prompt ref override; an empty string or null clears it. */
+  readonly prompt?: string | null;
+}
+
+/**
+ * The one patcher for a phase's pool keys in `_meta/pipeline.md` — the
+ * settings dialog writes through here, so a hand-formatted file keeps
+ * its layout, comments and unknown keys (the same document-mutation
+ * discipline as the ticket patcher). Setting a worker writes the
+ * matching `agent <prompt-ref>` handover; clearing it writes `manual`.
+ * Throws on an unparseable pipeline or an unknown phase — the caller
+ * refuses, it never guesses.
+ */
+export function patchPipelinePhase(text: string, phaseId: string, patch: PhasePoolPatch): string {
+  const { yamlText, body, hadFence } = splitFrontmatter(text);
+  if (!hadFence || yamlText === null) {
+    throw new Error('pipeline.md has no frontmatter fence');
+  }
+  const doc = parseDocument(yamlText);
+  if (doc.errors.length > 0) {
+    throw new Error('pipeline.md does not parse');
+  }
+  const phases = doc.get('phases', true);
+  if (!isCollection(phases)) {
+    throw new Error('pipeline.md needs a phases list');
+  }
+  let entry: YAMLMap | null = null;
+  for (const item of (phases as YAMLSeq).items) {
+    const value = isMap(item) ? item : null;
+    if (value !== null && value.get('id') === phaseId) {
+      entry = value;
+      break;
+    }
+  }
+  if (entry === null) {
+    throw new Error(`pipeline.md has no phase "${phaseId}"`);
+  }
+
+  const removeKey = (key: string): void => {
+    if (entry!.has(key)) {
+      entry!.delete(key);
+    }
+  };
+
+  if (patch.worker !== undefined) {
+    const worker = patch.worker?.trim() ?? '';
+    if (worker === '') {
+      // A manual step: the pool and its keys go with the worker.
+      removeKey('worker');
+      removeKey('model');
+      removeKey('workers');
+      removeKey('prompt');
+      entry.set('handover', 'manual');
+    } else {
+      entry.set('worker', worker);
+      const handover = parseHandover(String(entry.get('handover') ?? ''));
+      const promptFromPatch =
+        patch.prompt !== undefined && patch.prompt !== null && patch.prompt.trim() !== ''
+          ? patch.prompt.trim()
+          : null;
+      const promptFromKey =
+        typeof entry.get('prompt') === 'string' && (entry.get('prompt') as string).trim() !== ''
+          ? (entry.get('prompt') as string).trim()
+          : null;
+      const ref = promptFromPatch ?? promptFromKey ?? handover.promptRef ?? `${phaseId}-default`;
+      entry.set('handover', `agent ${ref}`);
+    }
+  }
+  if (patch.model !== undefined) {
+    const model = patch.model?.trim() ?? '';
+    if (model === '') {
+      removeKey('model');
+    } else {
+      entry.set('model', model);
+    }
+  }
+  if (patch.workers !== undefined) {
+    if (patch.workers === null) {
+      removeKey('workers');
+    } else if (Number.isInteger(patch.workers) && patch.workers >= 1) {
+      entry.set('workers', patch.workers);
+    } else {
+      throw new Error('workers must be a whole number of 1 or more');
+    }
+  }
+  if (patch.prompt !== undefined) {
+    const prompt = patch.prompt?.trim() ?? '';
+    if (prompt === '') {
+      removeKey('prompt');
+    } else {
+      entry.set('prompt', prompt);
+    }
+  }
+
+  let yaml = doc.toString({ flowCollectionPadding: false, lineWidth: 0 });
+  if (!yaml.endsWith('\n')) {
+    yaml += '\n';
+  }
+  return `---\n${yaml}---\n${body}`;
+}
+
+/**
+ * Rewrites the order of pipeline.md's phases (req-50, the settings page's
+ * sortable columns). `order` must name every phase exactly once, and the
+ * first (capture target) and last (terminal) phase keep their places.
+ * Each entry moves whole — keys, comments and the prose body stay.
+ */
+export function reorderPipelinePhases(text: string, order: readonly string[]): string {
+  const { yamlText, body, hadFence } = splitFrontmatter(text);
+  if (!hadFence || yamlText === null) {
+    throw new Error('pipeline.md has no frontmatter fence');
+  }
+  const doc = parseDocument(yamlText);
+  if (doc.errors.length > 0) {
+    throw new Error('pipeline.md does not parse');
+  }
+  const phases = doc.get('phases', true);
+  if (!isCollection(phases)) {
+    throw new Error('pipeline.md needs a phases list');
+  }
+  const items = (phases as YAMLSeq).items;
+  const idOf = (item: unknown): string | null => {
+    const id = isMap(item) ? item.get('id') : null;
+    return typeof id === 'string' ? id : null;
+  };
+  const current = items.map(idOf);
+  if (
+    order.length !== current.length ||
+    new Set(order).size !== order.length ||
+    current.some((id) => id === null || !order.includes(id))
+  ) {
+    throw new Error('the new order must name every pipeline phase exactly once');
+  }
+  if (order[0] !== current[0] || order[order.length - 1] !== current[current.length - 1]) {
+    throw new Error('the first and the last phase keep their places');
+  }
+  (phases as YAMLSeq).items = order.map((id) => items[current.indexOf(id)]!);
+  let yaml = doc.toString({ flowCollectionPadding: false, lineWidth: 0 });
+  if (!yaml.endsWith('\n')) {
+    yaml += '\n';
+  }
+  return `---\n${yaml}---\n${body}`;
 }
 
 // --- order.md --------------------------------------------------------------
@@ -157,6 +364,30 @@ export function rewriteOrderSection(text: string, phase: string, ids: readonly s
     result += '\n';
   }
   return result;
+}
+
+/** Strips one id from every pin section, in text form — a moved or
+ *  archived ticket leaves all of them (T-0041 moved this beside its
+ *  building blocks so every writer shares it). */
+export function removeIdFromPins(orderText: string, id: string): string {
+  const { pins } = parseOrderFile(orderText);
+  let touched = false;
+  const cleaned: Record<string, string[]> = {};
+  for (const [section, ids] of Object.entries(pins)) {
+    const kept = ids.filter((x) => x !== id);
+    if (kept.length !== ids.length) {
+      touched = true;
+    }
+    cleaned[section] = kept;
+  }
+  if (!touched) {
+    return orderText;
+  }
+  let text = orderText;
+  for (const [section, ids] of Object.entries(cleaned)) {
+    text = rewriteOrderSection(text, section, ids);
+  }
+  return text;
 }
 
 // --- repos.md --------------------------------------------------------------
@@ -318,10 +549,13 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
   const issues: TicketIssue[] = [];
 
   const pipelineParse = input.pipelineText === null
-    ? { phases: [], error: 'tickets/_meta/pipeline.md is missing' }
+    ? { phases: [], pushRemote: null, error: 'tickets/_meta/pipeline.md is missing', issues: [] }
     : parsePipeline(input.pipelineText);
   if (pipelineParse.error !== null) {
     issues.push({ level: 'error', message: pipelineParse.error });
+  }
+  for (const issue of pipelineParse.issues) {
+    issues.push({ level: issue.level, message: issue.message });
   }
   const phases = pipelineParse.phases;
   const phaseIds = new Set(phases.map((p) => p.id));
@@ -353,6 +587,13 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
   }
   const byPhase = new Map<string, AssemblyCard[]>();
   for (const file of input.files) {
+    // The reserved archive folder (T-0041): beside `_meta`, never a
+    // column, never a counter, never a stray badge — invisible here.
+    // (Normalization still treats files moved into it; deletion inside
+    // it stays the owner's manual act.)
+    if (file.path.startsWith(`${TICKETS_ARCHIVE_DIR}/`)) {
+      continue;
+    }
     const parts = ticketPathParts(file.path);
     if (parts === null) {
       // `_meta` holds the board's configuration, not tickets — only
@@ -431,7 +672,7 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     if (!knownDirs.has(dir)) {
       issues.push({ level: 'warning', message: `directory "${dir}" is not a phase in pipeline.md` });
       columns.push({
-        phase: { id: dir, title: dir, wip: null, claim: false, handover: 'manual' },
+        phase: phaseWithoutPoolKeys({ id: dir, title: dir, wip: null, claim: false, handover: 'manual' }),
         unknown: true,
         tickets: orderColumn(byPhase.get(dir)!, orderParse.pins[dir], columnKey(dir)),
       });
@@ -446,9 +687,11 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     defaultWorker: input.defaultWorker,
     pipeline: phases,
     pipelineError: pipelineParse.error,
+    pushRemote: pipelineParse.pushRemote,
     repos: reposParse.repos,
     reposError: reposParse.error,
     columns,
     issues,
+    checkpoints: [...checkpointPhaseIds(columns)],
   };
 }
