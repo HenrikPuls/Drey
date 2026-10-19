@@ -1,4 +1,6 @@
-# The shipped ticket prompts are read as raw bytes -- default-prompts.spec.ts
-# asserts pure LF -- so a fresh checkout must never smudge them to CRLF,
-# whatever the machine's core.autocrlf says.
+# The shipped ticket prompts are byte-compared raw (default-prompts.spec.ts):
+# LF, newline-terminated. GitHub's Windows runners default to
+# core.autocrlf=true, which would check the LF blobs out as CRLF and fail
+# CI while local worktrees (never re-checked out) stay green. eol=lf
+# overrides autocrlf at checkout.
 plugins/tickets/prompts/*.md text eol=lf

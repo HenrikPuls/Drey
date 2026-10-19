@@ -20,6 +20,19 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-57 — CI green on Windows runners: the shipped ticket prompts stay LF on every checkout (owner request, outside the list)
+
+M85 added `default-prompts.spec.ts`, which byte-compares the raw shipped
+prompt files against their CRLF-normalized text — the invariant that
+`plugins/tickets/prompts/*.md` are LF, newline-terminated. GitHub's
+Windows runners configure `core.autocrlf=true`, and the repo had no
+`.gitattributes`, so the runner's fresh checkout rewrote the LF blobs as
+CRLF: CI failed on `main` (two runs) while local runs — whose worktree
+files were never re-checked out — stayed green. The fix is a one-rule
+`.gitattributes`, `plugins/tickets/prompts/*.md text eol=lf`, which
+overrides `autocrlf` at checkout; the blobs were already LF, so nothing
+needed renormalizing. **Not yet manually verified by the owner.**
+
 ### req-56 — Fleet workers start oriented: a ready toolchain, a clean environment, a short map (owner request, outside the list)
 
 **Not yet manually verified by the owner.** The run audit (2026-10-19)
