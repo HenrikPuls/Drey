@@ -777,12 +777,22 @@ can reach it from a terminal, too: its address and token live in
 ### The chain runs itself (milestone 85)
 
 A column with a **worker** runs itself. In Settings → *Tickets* each
-column gets its pool — the **worker** (OpenCode or Claude Code; unset
-means a manual column that only you move tickets through), an optional
-**model** pin, the **pool size** (how many tickets the column works in
-parallel) and the **prompt** (`tickets/_meta/prompts/<ref>.md`, the
-phase's craft). Every change is one commit on the pipeline file; the
-board follows on refresh.
+column is a card: the **worker** (OpenCode or Claude Code; unset means a
+manual column that only you move tickets through), the **pool size** (how
+many tickets the column works in parallel), the **model** and the
+**prompt**. The model field is a picker: click it to see what the worker
+offers (OpenCode lists its own `provider/model` ids, Claude Code its
+aliases), type to filter, or type an id the list does not know. The
+prompt is chosen from the files in `tickets/_meta/prompts/`; **Edit**
+jumps to that prompt's editor. Every change is one commit; the board
+follows on refresh.
+
+Below the columns, **Prompts** lists every prompt file as an editor.
+Open one, change the text and leave the field (or press Ctrl+S): it is
+saved and committed. **Revert** drops unsaved changes, **Reset to
+default** restores the text Drey ships for the three seeded prompts,
+and **New prompt** creates another one to pick in a column. A changed
+prompt reaches the next run, not one that is already running.
 
 The **master switch** sits in the board's header: **An** runs the
 chain — every playing automatic column drains its queue. **Aus** halts
