@@ -107,6 +107,8 @@ interface LiveRun {
   agentDone: boolean;
   /** Why the owner stopped the run — becomes the ticket Log line when the run ends. */
   stopNote?: string;
+  /** An ended run's session the owner reopened: held from the start, no gate and no move at its end. */
+  reopened?: boolean;
 }
 
 /** What a takeover call answers. */
@@ -409,14 +411,15 @@ export class RunSupervisor {
     return run === undefined ? null : path.join(run.dir, 'stream.jsonl');
   }
 
-  async start(request: RunRequest, resumeRef: string | null = null): Promise<StartOutcome> {
+  async start(request: RunRequest, resumeRef: string | null = null, reopened = false): Promise<StartOutcome> {
     const live = this.list().find(
       (r) => r.ticketId === request.ticketId && !TERMINAL.includes(r.state) && r.state !== 'detached',
     );
     if (live !== undefined) {
       return { ok: false, error: `${request.ticketId} already has a live run (${live.id}) — stop it first` };
     }
-    const failures = this.validate(request);
+    // A reopened session belongs to a ticket that may have moved on since.
+    const failures = reopened ? [] : this.validate(request);
     if (failures.length > 0) {
       return { ok: false, error: failures.join(' ') };
     }
@@ -469,6 +472,7 @@ export class RunSupervisor {
       gating: false,
       audited: false,
       agentDone: false,
+      ...(reopened ? { reopened: true } : {}),
     };
     this.runs.set(id, run);
     await fsp.writeFile(
@@ -493,6 +497,14 @@ export class RunSupervisor {
     });
     run.handle = handle;
     run.info = { ...run.info, state: 'running', pid: handle.pid };
+    if (reopened) {
+      handle.setHold?.(true);
+      run.info = { ...run.info, held: true };
+      await this.persist(run);
+      await this.logLine(run, 'session reopened by the owner — the worker stands until you prompt it');
+      void handle.exited.then((code) => void this.onWorkerExit(run, code));
+      return { ok: true, run: run.info };
+    }
     await this.persist(run);
 
     // The ticket carries the live run (schema `run` map) — the board and
@@ -577,7 +589,7 @@ export class RunSupervisor {
    * The owner takes a live run over: the worker's session stays up past a
    * finished turn until it is handed back (`release`), and the run is
    * marked `held` so every surface can show who drives. Only providers
-   * whose handle can hold take part (claude-code cannot yet).
+   * whose handle can hold take part.
    */
   async takeover(runId: string): Promise<TakeoverOutcome> {
     const run = this.liveRunWithHold(runId);
@@ -618,8 +630,11 @@ export class RunSupervisor {
     if (old === undefined) {
       return { ok: false, error: `unknown run "${runId}"` };
     }
+    if (TERMINAL.includes(old.info.state)) {
+      return this.reopen(old);
+    }
     if (old.info.state !== 'detached') {
-      return { ok: false, error: `run ${runId} is ${old.info.state} — only a detached run is resumed` };
+      return { ok: false, error: `run ${runId} is ${old.info.state} — only a detached or ended run is resumed` };
     }
     if (old.info.sessionRef === null) {
       return { ok: false, error: `run ${runId} never reported a session — nothing to resume (start the ticket fresh)` };
@@ -638,6 +653,30 @@ export class RunSupervisor {
           'your original brief is earlier in this conversation. Do not search the disk for files already named in it.',
       },
       sessionRef,
+    );
+  }
+
+  /**
+   * An ended run's provider session, picked up again under a new run the
+   * owner holds: the worker answers the opening line and stands, waiting
+   * for the takeover tab's prompts. The ticket is left alone — no stamp,
+   * no gate, no move — because it may have gone on since.
+   */
+  private async reopen(old: LiveRun): Promise<StartOutcome> {
+    if (old.info.sessionRef === null) {
+      return { ok: false, error: `run ${old.info.id} never reported a session — nothing to resume` };
+    }
+    if (old.info.provider !== this.deps.adapter.id) {
+      return { ok: false, error: `run ${old.info.id} was a ${old.info.provider} run — the runner's worker is ${this.deps.adapter.id}` };
+    }
+    return this.start(
+      {
+        ...old.request,
+        instruction:
+          'The owner has reopened this session to talk to you. Reply with one short line that you are ready, then wait for their instructions.',
+      },
+      old.info.sessionRef,
+      true,
     );
   }
 
@@ -683,7 +722,7 @@ export class RunSupervisor {
       return `run ${runId} is ${run.info.state} — nothing to take over`;
     }
     if (run.handle === null || run.handle.setHold === undefined) {
-      return `the ${run.info.provider} worker cannot be taken over (only OpenCode can, for now)`;
+      return `the ${run.info.provider} worker cannot be taken over`;
     }
     return run;
   }
@@ -844,6 +883,11 @@ export class RunSupervisor {
         `worker ended without finishing its turn (exit ${code ?? 'signal'}) — no agent-done, the step fails`,
       );
       await this.finish(run, 'failed');
+      return;
+    }
+    if (run.reopened === true) {
+      await this.logLine(run, `reopened session ended (exit ${code ?? 'signal'})`);
+      await this.finish(run, 'done');
       return;
     }
     run.gating = true;

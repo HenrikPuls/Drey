@@ -1221,6 +1221,14 @@ function openRunModal(api: DreyPluginApi, card: TicketCard): void {
 const TAKEOVER_KIND = 'tickets-takeover';
 const TAKEOVER_SCHEME = 'takeover://';
 
+/** One-click starters for the takeover prompt box: a label and the text it fills in. */
+const QUICK_PROMPTS: ReadonlyArray<readonly [string, string]> = [
+  ['Continue', 'Continue where you left off.'],
+  ['Status', 'Briefly summarise what you have done so far and what is left.'],
+  ['Run checks', "Run the ticket's acceptance checks now and report the result."],
+  ['Wrap up', 'Wrap up: finish the current step, update the ticket Log, and stop.'],
+];
+
 /** Opens (or focuses) the takeover tab of one run. */
 function openTakeover(api: DreyPluginApi, run: RunInfo): void {
   api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${run.id}`, `${run.ticketId} · ${run.provider}`);
@@ -1256,39 +1264,95 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
       () => invokeBoard('fleetControl', { action, runId }),
     );
   };
-  const resumeBtn = iconButton('rotate-ccw', 'Resume', 'Resume the session in a new worker — the run is attached again', () =>
-    control('resume'),
-  );
-  const interruptBtn = iconButton('square', 'Interrupt', 'Interrupt the running turn — you take control, the session and its context stay', () =>
-    control('interrupt'),
-  );
+  const resumeBtn = iconButton('rotate-ccw', 'Resume session', 'Pick this session up again in a new worker — it answers, then waits for your prompts', () => {
+    void runMutation('Resuming', () => invokeBoard('fleetControl', { action: 'resume', runId })).then((result) => {
+      const resumed = (result as { run?: RunInfo }).run;
+      if (result.ok && resumed !== undefined) {
+        openTakeover(api, resumed);
+      }
+    });
+  });
   const releaseBtn = iconButton('arrow-left', 'Hand back', 'Hand the run back to the runner — an idle worker ends the run and the gate decides', () =>
     control('release'),
   );
-  controls.append(resumeBtn, interruptBtn, releaseBtn);
+  controls.append(resumeBtn, releaseBtn);
   banner.append(light, headline, stats, spacer, controls);
 
   const transcript = api.ui.createMarkdownView({ mode: 'view', readOnly: true, content: '' });
   transcript.element.classList.add('tickets-takeover-transcript');
 
   const promptWrap = el('div', 'tickets-takeover-prompt');
+  const send = async (text: string, interruptFirst: boolean): Promise<void> => {
+    const message = text.trim();
+    if (message === '') {
+      return;
+    }
+    if (interruptFirst) {
+      // An idle worker refuses the interrupt — the message still goes out.
+      await invokeBoard('fleetControl', { action: 'interrupt', runId });
+    }
+    const result = await runMutation('Sending', () => invokeBoard('fleetSend', { runId, text: message }));
+    if (result.ok) {
+      prompt.setContent('');
+      prompt.focus();
+    }
+  };
   const prompt = api.ui.createMarkdownView({
     compact: true,
-    placeholder: 'Message to the worker — Enter sends',
+    placeholder: 'Message the worker',
     onSubmit: (text) => {
-      const message = text.trim();
-      if (message === '') {
-        return;
-      }
-      void runMutation('Sending', () => invokeBoard('fleetSend', { runId, text: message })).then((result) => {
-        if (result.ok) {
-          prompt.setContent('');
-        }
-      });
+      void send(text, false);
     },
   });
   prompt.element.classList.add('tickets-takeover-prompt-input');
-  promptWrap.append(prompt.element);
+
+  const composerBar = el('div', 'tickets-takeover-composer');
+  const chips = el('span', 'tickets-takeover-chips');
+  for (const [label, text] of QUICK_PROMPTS) {
+    const chip = el('button', 'tickets-takeover-chip', label);
+    chip.type = 'button';
+    chip.title = `Puts "${text}" in the box — edit it, then send`;
+    chip.addEventListener('click', () => {
+      prompt.setContent(text);
+      prompt.focus();
+    });
+    chips.append(chip);
+  }
+  const composerSpacer = el('span', 'tickets-takeover-spacer');
+  const stopBtn = iconButton('square', 'Stop', 'Stop the running turn — the session and its context stay, you can prompt it again', () =>
+    control('interrupt'),
+  );
+  stopBtn.classList.add('tickets-takeover-btn-stop');
+  const sendBtn = iconButton('corner-down-left', 'Send', 'Send the message — a working worker takes it into its turn', () => {
+    void send(prompt.getContent(), false);
+  });
+  sendBtn.classList.add('tickets-takeover-btn-primary');
+  composerBar.append(chips, composerSpacer, stopBtn, sendBtn);
+
+  // The worker's pulse while a turn runs: what it does now and for how long.
+  const progress = el('div', 'tickets-takeover-progress');
+  progress.hidden = true;
+  const spinner = el('span', 'tickets-takeover-spinner', '✻');
+  const progressText = el('span', 'tickets-takeover-progress-text');
+  progress.append(spinner, progressText);
+  let busySince: number | null = null;
+  const paintProgress = (): void => {
+    const run = live();
+    const working = run !== null && LIVE_RUN_STATES.includes(run.state) && run.turn !== 'idle';
+    if (!working) {
+      busySince = null;
+      progress.hidden = true;
+      return;
+    }
+    busySince ??= run.steerCount === 0 && run.turn === undefined ? Date.parse(run.startedAt) || Date.now() : Date.now();
+    const seconds = Math.max(0, Math.round((Date.now() - busySince) / 1000));
+    const doing = (run.activity ?? '').trim();
+    const verb = doing === '' || run.activity === undefined ? 'Thinking' : doing.length > 70 ? `${doing.slice(0, 69)}…` : doing;
+    progressText.textContent = `${verb}… ${seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`} · ↓ ${formatTokens(run.tokensOut)} tokens`;
+    progress.hidden = false;
+  };
+  promptWrap.prepend(progress);
+  promptWrap.append(prompt.element, composerBar);
 
   const live = (): RunInfo | null => fleetRuns.find((r) => r.id === runId) ?? null;
   const paintBanner = (): void => {
@@ -1319,10 +1383,29 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
           ]
             .filter((part) => part !== '')
             .join(' · ');
-    resumeBtn.hidden = !(detached && run !== null && run.sessionRef !== null);
-    interruptBtn.hidden = !active;
+    resumeBtn.hidden = !(run !== null && !active && run.sessionRef !== null);
     releaseBtn.hidden = !held;
     prompt.setReadOnly(!active);
+    const busy = active && run.turn !== 'idle';
+    wrap.dataset['state'] =
+      !active && !detached
+        ? 'ended'
+        : detached || status?.light === 'red'
+          ? 'alert'
+          : status?.light === 'amber'
+            ? 'warn'
+            : held
+              ? busy
+                ? 'driving'
+                : 'waiting'
+              : 'working';
+    stopBtn.hidden = !busy;
+    sendBtn.hidden = busy && prompt.getContent().trim() === '';
+    sendBtn.disabled = !active;
+    for (const chip of chips.children) {
+      (chip as HTMLButtonElement).disabled = !active;
+    }
+    paintProgress();
   };
 
   let lastMarkdown = '\u0000';
@@ -1345,11 +1428,13 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   paintBanner();
   pull();
   const timer = setInterval(pull, 2_000);
+  const tick = setInterval(paintBanner, 1_000);
   wrap.append(banner, transcript.element, promptWrap);
   host.append(wrap);
   return () => {
     alive = false;
     clearInterval(timer);
+    clearInterval(tick);
     fleetListeners.delete(paintBanner);
     transcript.dispose();
     prompt.dispose();

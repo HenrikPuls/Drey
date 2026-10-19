@@ -1566,3 +1566,254 @@
 .tickets-takeover-prompt-input {
   min-height: 56px;
 }
+
+.tickets-takeover-composer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+}
+
+.tickets-takeover-hint {
+  color: var(--text-4);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-takeover-chips {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+
+.tickets-takeover-chip {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--field-border);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.tickets-takeover-chip:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.tickets-takeover-chip:disabled,
+.tickets-takeover-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tickets-takeover-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.tickets-takeover-btn-primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.1);
+}
+
+/* ---- colour layer: state tints for the takeover tab, saturated lanes and pills ---- */
+
+.tickets-takeover {
+  --tk-tone: var(--accent);
+}
+
+.tickets-takeover[data-state='working'] {
+  --tk-tone: var(--status-added);
+}
+
+.tickets-takeover[data-state='driving'] {
+  --tk-tone: var(--accent);
+}
+
+.tickets-takeover[data-state='waiting'] {
+  --tk-tone: #5aa9ff;
+}
+
+.tickets-takeover[data-state='warn'] {
+  --tk-tone: var(--status-modified);
+}
+
+.tickets-takeover[data-state='alert'] {
+  --tk-tone: var(--status-deleted);
+}
+
+.tickets-takeover[data-state='ended'] {
+  --tk-tone: var(--text-faint);
+}
+
+.tickets-takeover-banner {
+  border-bottom: 2px solid var(--tk-tone);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tk-tone) 22%, var(--bg-dock)), var(--bg-dock) 70%);
+}
+
+.tickets-takeover-headline {
+  color: color-mix(in srgb, var(--tk-tone) 55%, var(--text-heading));
+  font-size: 0.88rem;
+}
+
+.tickets-takeover-stats {
+  color: var(--text-2);
+}
+
+.tickets-takeover-btn {
+  color: var(--text-heading);
+}
+
+.tickets-takeover-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: var(--accent);
+}
+
+.tickets-takeover-controls .tickets-takeover-btn:nth-child(2) {
+  border-color: var(--status-modified);
+  color: var(--status-modified);
+}
+
+.tickets-takeover-controls .tickets-takeover-btn:nth-child(3) {
+  border-color: #5aa9ff;
+  color: #5aa9ff;
+}
+
+.tickets-takeover-controls .tickets-takeover-btn:nth-child(1) {
+  border-color: var(--status-added);
+  color: var(--status-added);
+}
+
+.tickets-takeover-prompt {
+  border-color: color-mix(in srgb, var(--tk-tone) 60%, var(--field-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tk-tone) 25%, transparent);
+}
+
+.tickets-takeover-composer {
+  background: color-mix(in srgb, var(--tk-tone) 10%, var(--bg-input));
+}
+
+.tickets-takeover-hint {
+  color: color-mix(in srgb, var(--tk-tone) 60%, var(--text-2));
+  font-weight: 500;
+}
+
+.tickets-takeover-chip {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--field-border));
+  color: var(--accent-fg);
+  background: var(--accent-surface);
+}
+
+.tickets-takeover-chip:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* Lanes: a tinted body and a louder state word */
+.tickets-lane-green {
+  background: color-mix(in srgb, var(--status-added) 12%, var(--bg-dock));
+}
+
+.tickets-lane-amber {
+  background: color-mix(in srgb, var(--status-modified) 16%, var(--bg-dock));
+}
+
+.tickets-lane-red {
+  background: color-mix(in srgb, var(--status-deleted) 18%, var(--bg-dock));
+}
+
+.tickets-lane {
+  border-left-width: 4px;
+}
+
+.tickets-lane-state {
+  font-size: 0.74rem;
+}
+
+.tickets-light {
+  width: 10px;
+  height: 10px;
+}
+
+.tickets-light-green {
+  box-shadow: 0 0 6px color-mix(in srgb, var(--status-added) 70%, transparent);
+}
+
+.tickets-light-red {
+  box-shadow: 0 0 6px color-mix(in srgb, var(--status-deleted) 70%, transparent);
+}
+
+.tickets-pill {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-dock));
+  color: var(--text-heading);
+}
+
+/* ---- takeover: progress pulse and the stop button ---- */
+
+.tickets-takeover-progress {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: color-mix(in srgb, var(--tk-tone) 70%, var(--text-heading));
+}
+
+.tickets-takeover-progress[hidden] {
+  display: none;
+}
+
+.tickets-takeover-spinner {
+  display: inline-block;
+  font-size: 1rem;
+  color: var(--tk-tone);
+  animation: tickets-spin 2.4s linear infinite;
+}
+
+.tickets-takeover-progress-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: tickets-breathe 1.8s ease-in-out infinite;
+}
+
+@keyframes tickets-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tickets-takeover-spinner,
+  .tickets-takeover-progress-text {
+    animation: none;
+  }
+}
+
+.tickets-takeover-btn-stop {
+  background: var(--status-deleted);
+  border-color: var(--status-deleted);
+  color: #1b1a19;
+  font-weight: 600;
+}
+
+.tickets-takeover-btn-stop:hover:not(:disabled) {
+  background: var(--status-deleted);
+  filter: brightness(1.12);
+}
+
+.tickets-takeover-btn[hidden],
+.tickets-takeover-btn-primary[hidden] {
+  display: none;
+}

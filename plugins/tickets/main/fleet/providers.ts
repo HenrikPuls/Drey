@@ -160,6 +160,19 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
       ];
       const proc = spawnFn('claude', args, { cwd: start.cwd });
       let buffer = '';
+      // Takeover: a held worker keeps its stdin open past a finished turn so
+      // the owner can prompt it again; otherwise the finished turn closes it
+      // and the process exits (the run ends). `busy` is "a prompt is out and
+      // its result has not come back".
+      let held = false;
+      let busy = true;
+      let inputClosed = false;
+      const closeInput = (): void => {
+        if (!inputClosed) {
+          inputClosed = true;
+          proc.endInput();
+        }
+      };
       proc.onStdout((chunk) => {
         buffer += chunk;
         let at = buffer.indexOf('\n');
@@ -251,6 +264,11 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
               tokensOut,
               ...(typeof event.total_cost_usd === 'number' ? { costUsd: event.total_cost_usd } : {}),
             });
+            busy = false;
+            start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'idle' });
+            if (!held) {
+              closeInput();
+            }
           }
         }
       });
@@ -266,11 +284,36 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
         pid: proc.pid,
         exited: new Promise<number | null>((resolve) => proc.onExit(resolve)),
         steer: async (text) => {
+          if (inputClosed) {
+            return 'refused';
+          }
           proc.write(userMessage(text));
+          if (!busy) {
+            busy = true;
+            start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'busy' });
+          }
           return 'inject';
         },
+        setHold: (value) => {
+          held = value;
+          // Released while standing: nothing more is coming, the run ends.
+          if (!held && !busy) {
+            closeInput();
+          }
+        },
+        // The stream-json control request the Claude SDK sends for its own
+        // interrupt: the turn stops, the session and the process stay.
+        interrupt: async () => {
+          if (inputClosed || !busy) {
+            return false;
+          }
+          proc.write(
+            `${JSON.stringify({ type: 'control_request', request_id: `drey-${now().getTime()}`, request: { subtype: 'interrupt' } })}\n`,
+          );
+          return true;
+        },
         stop: async () => {
-          proc.endInput();
+          closeInput();
           await proc.killTree();
         },
       };

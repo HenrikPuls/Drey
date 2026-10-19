@@ -102,11 +102,8 @@ plan and build columns as agent handovers plus the three prompts
 (`plan-default`, `build-default`, `review-default`) in
 `tickets/_meta/prompts/`.
 
-**Takeover follow-ups** (milestone 87's tab shipped for OpenCode workers only).
-Claude Code workers cannot be taken over yet: their handle has no `setHold` /
-`interrupt` (the stream-json CLI offers no soft stop we have verified), and
-the adapter reports only each turn's result, not every reply's full text, so
-the transcript is thin for them. Also open: a token budget per run
+**Takeover follow-ups.** The Claude Code interrupt (stream-json `control_request`)
+is not yet verified against the installed CLI. Also open: a token budget per run
 (stop a worker that reads without writing), and a tickets-repo-side credit
 figure for flat plans (GLM coding plan reports cost 0).
 

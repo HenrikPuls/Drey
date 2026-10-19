@@ -134,6 +134,46 @@ describe('the claude-code adapter', () => {
     expect(proc.stdinWrites.at(-1)).toContain('Change course');
   });
 
+  it('a finished turn closes the input unless the owner holds the worker', () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.stdout(JSON.stringify({ type: 'result', usage: {}, result: 'done' }));
+    expect(proc.stdinWrites.at(-1)).toBe('<<end>>');
+    expect(events.at(-1)).toMatchObject({ kind: 'usage', turn: 'idle' });
+  });
+
+  it('a held worker stays open, takes another prompt and ends on release', async () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    const handle = claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    handle.setHold?.(true);
+    proc.stdout(JSON.stringify({ type: 'result', usage: {}, result: 'done' }));
+    expect(proc.stdinWrites).not.toContain('<<end>>');
+
+    expect(await handle.steer('One more thing')).toBe('inject');
+    expect(proc.stdinWrites.at(-1)).toContain('One more thing');
+    expect(events.at(-1)).toMatchObject({ kind: 'usage', turn: 'busy' });
+
+    proc.stdout(JSON.stringify({ type: 'result', usage: {}, result: 'again' }));
+    handle.setHold?.(false);
+    expect(proc.stdinWrites.at(-1)).toBe('<<end>>');
+    expect(await handle.steer('too late')).toBe('refused');
+  });
+
+  it('interrupt sends the control request only while a turn is running', async () => {
+    const proc = fakeProcess();
+    const { start } = collect();
+    const handle = claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    handle.setHold?.(true);
+    expect(await handle.interrupt?.()).toBe(true);
+    const written = JSON.parse(proc.stdinWrites.at(-1)!) as { type: string; request: { subtype: string } };
+    expect(written.type).toBe('control_request');
+    expect(written.request.subtype).toBe('interrupt');
+    proc.stdout(JSON.stringify({ type: 'result', usage: {}, result: 'interrupted' }));
+    expect(await handle.interrupt?.()).toBe(false);
+  });
+
   it('a resume run carries --resume with the session ref', () => {
     const seen: string[][] = [];
     const spawnFn: SpawnFn = (_cmd, args) => {

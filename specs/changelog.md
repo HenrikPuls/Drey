@@ -20,6 +20,28 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Takeover steering and colour (owner request, outside the list)
+
+**Not yet manually verified by the owner.**
+
+- **Claude Code workers can be taken over**: hold (a finished turn no longer
+  closes stdin), soft interrupt (stream-json `control_request`, unverified
+  against the real CLI), turn state busy/idle, release ends a standing worker.
+  A finished turn now closes stdin, so the process exits.
+- **Composer in the takeover tab**: status hint (working / waiting for you /
+  runner driving / ended), quick prompts (Continue, Status, Run checks, Wrap
+  up), Send and Interrupt-and-send buttons.
+- **Colour**: the tab banner, prompt box and controls take the run's state
+  tone; lanes are tinted by light; stronger pills.
+- **Resume an ended run's session** ("Resume session" in the tab): a new run
+  picks the provider session up held — it answers one line and waits for the
+  tab's prompts; no ticket stamp, gate or move (the ticket may have moved on).
+  Not covered by a spec yet.
+- **Composer slimmed**: no hint text, short placeholder, a red **Stop** button
+  while a turn runs (replaces the banner's Interrupt), and a progress line
+  ("Thinking… 12s · ↓ tokens", or the current tool call) above the box.
+- Specs: three claude-code adapter cases in `providers.spec.ts`.
+
 ### req-49 — past worker logs on the board; the board follows the runner (owner request, outside the list)
 
 **Not yet manually verified by the owner.**
