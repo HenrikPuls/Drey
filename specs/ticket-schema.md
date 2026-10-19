@@ -12,9 +12,22 @@ Top-level rules, once, up front:
 - **One file per ticket. The phase is the directory. The filename is
   the identity.** A ticket file moves between directories; its name
   never changes.
+- **Phase directories are numbered** (T-0041): `NN-<id>` with `NN` the
+  phase's 1-based pipeline position × 10 — `10-inbox`, `20-prioritized`,
+  … `80-done`. The number lives ONLY in the directory name: `entered-*`
+  keys, `order.md` sections and branch names keep the clean id.
 - **Every phase transition is one git commit** (`git mv` semantics +
   the frontmatter stamp), message format
   `tickets: <id> <from> -> <to>` (ASCII arrow).
+- **A file move between phase folders is a ticket move.** Moving a
+  ticket file outside the board (Explorer, Files panel) has exactly the
+  effect of a board transition: on the next board refresh, stateless
+  normalization detects the ticket sitting in phase B with an
+  inconsistent `entered-<B>` stamp and completes the treatment — stamp,
+  Log line, pin cleanup, one commit `tickets: <id> <from> -> <to>`,
+  actor `owner@<host>`. Works after restarts (derived from the files,
+  no extra state); lane rules are never enforced on human moves —
+  logged, not blocked.
 - **Machine writers write strictly** (the exact shapes below);
   **humans edit freely**; **readers normalize visibly** — anything a
   reader cannot parse unambiguously is reported as an issue on the
@@ -32,22 +45,51 @@ tickets/
     order.md        # sparse per-column order pins (data, never config)
     repos.md        # work-repo name -> clone URL/path mapping
     prompts/        # the handover prompts (`agent <prompt-ref>` names one file)
-  inbox/
+  10-inbox/
     T-0042.md       # one ticket per file, in its current phase's folder
-  prioritized/
-  plan/
-  plan-review/
-  build/
-  review/
-  commit/
-  done/
+  20-prioritized/
+  30-plan/
+  40-plan-review/
+  50-build/
+  60-review/
+  70-commit/
+  80-done/
+  archive/          # reserved (T-0041): archived tickets, never a column
 ```
 
 The phase folders are exactly the phases configured in `pipeline.md`
-(the set above is the default, not fixed). `_meta` is reserved;
-nothing else lives beside the phase folders. A vault whose root
-contains `tickets/_meta/pipeline.md` **is** a tickets vault — that
+(the set above is the default, not fixed). `_meta` and `archive` are
+reserved; nothing else lives beside the phase folders. A vault whose
+root contains `tickets/_meta/pipeline.md` **is** a tickets vault — that
 file's presence is the detection marker.
+
+### Numbered folders (T-0041)
+
+`NN` is derived from the phase's position in pipeline.md (1-based × 10,
+two digits). Readers strip a leading `\d+-` from the directory name and
+match the rest against the pipeline ids; **an unprefixed directory
+stays tolerated** (`tickets/inbox/…` reads exactly like
+`tickets/10-inbox/…` — the migration of an existing repo is 8×
+`git mv`, and ship order is free). Writers resolve their target
+directory per move: the derived `NN-<id>` name when it exists, else any
+existing directory whose stripped id matches, else the derived name
+(created on first use). Inserting a column takes a **gap number**
+(`35-qa`) — code never renumbers existing directories, so there is no
+rename cascade. Directory names are never written into ticket files,
+order.md or branches.
+
+### Archive (T-0041)
+
+`tickets/archive/` is a reserved folder beside `_meta`: **not a board
+column, invisible on the board, no counter display**. Archiving goes
+through the card menu (two-step armed) or by moving the file into
+`archive/` — both yield the Log line `archived` (a machine-shaped
+`— archived` marker, NO `entered-archive` stamp; claim fields ride
+along) and exactly one commit `tickets: <id> archived` with pin
+cleanup. Reviving is a move back into a phase folder — normalization
+treats it as `archive -> <phase>`. Body edits after archiving never
+re-fire normalization. Final deletion is the owner's manual act inside
+`archive/`.
 
 ### Id minting
 
@@ -147,6 +189,7 @@ the runner rely on:
 
 ```markdown
 ---
+push: origin
 phases:
   - { id: inbox, title: Inbox, handover: manual }
   - { id: prioritized, title: Prioritized, handover: manual }
@@ -160,9 +203,9 @@ phases:
 Prose for humans. The board follows this file on refresh.
 ```
 
-- `id`: `[a-z][a-z0-9-]*`, unique, = the directory name. The first
-  phase is the capture target; the last is terminal (only humans move
-  tickets into it).
+- `id`: `[a-z][a-z0-9-]*`, unique, = the phase (the stripped directory
+  name). The first phase is the capture target; the last is terminal
+  (only humans move tickets into it).
 - `title`: board column header.
 - `wip`: optional integer. Over-limit shows red on the board
   (`4/3`); it warns, it does not block a human.
@@ -176,6 +219,13 @@ Prose for humans. The board follows this file on refresh.
   ladder decides), `ci` (an executable check passes — milestone 85),
   `none` (terminal). Milestone 83 parses and displays these; `agent`
   acts from M84, `ci` from M85.
+- `push`: optional (T-0041) — the **name of a git remote** (from git
+  config; never a URL). When set, every transition commit (a board
+  move, a normalization move, an archive, the runner's success move)
+  is pushed: `git push <remote> HEAD` from the tickets repo root.
+  Default off; a push failure is a warning (board) / log line
+  (runner), never a failed transition. Anything but a remote-name
+  string is ignored with a noise badge.
 - Editing this file is the owner's; the board re-reads it on every
   refresh. Unknown keys in a phase entry are ignored.
 
@@ -250,8 +300,11 @@ column; the board still renders), the fleet runner before every action
 2. Required fields present (`id`, `title`, `priority`); enums valid;
    timestamps parse; `run` map shape.
 3. `branch` matches `t/<id>` (rule wins; mismatch = badge).
-4. Phase directory ∈ `pipeline.md` phases (tickets in an unknown
-   folder render in a trailing "unknown" column — visible, not lost).
+4. Phase directory ∈ `pipeline.md` phases, compared on the
+   prefix-stripped id (`50-build` and `build` both match `build`;
+   tickets in an unknown folder render in a trailing "unknown" column —
+   visible, not lost). `tickets/archive/` is excluded from the board
+   entirely (never a column, never a badge).
 5. `entered-<phase>` keys reference known phases (unknown keys =
    noise badge).
 6. `claimed-by` grammar; `claimed-at` present with `claimed-by`.
@@ -262,3 +315,26 @@ column; the board still renders), the fleet runner before every action
 
 A validation issue never blocks rendering and never blocks a human
 transition (a warning shows); it blocks an agent action.
+
+## Normalization (a file move is a ticket move, T-0041)
+
+On every board fetch the plugin runs a **stateless drift pass** over
+the ticket files (derived from the files alone — it survives restarts
+and re-runs safely because the treatment is idempotent):
+
+- For a ticket with parseable frontmatter and no live `run:` map, in
+  known phase B: treatment ⟺ `entered-<B>` is missing or older than
+  the newest of (all `entered-*` stamps, the archived marker). The
+  treatment stamps `entered-<B>`, appends the Log line
+  `<from> -> <B>` (`from` = the holder of the newest event;
+  `archive` when the archived marker dominates; `unknown` when no
+  stamp exists at all), drops the id from every order.md pin section
+  and commits exactly once, `tickets: <id> <from> -> <to>`, actor
+  `owner@<host>`.
+- In `tickets/archive/`: treatment ⟺ no `— archived` Log marker newer
+  than every `entered-*` stamp; the treatment appends the marker and
+  commits `tickets: <id> archived` (no `entered-` stamp).
+- Skipped: files with parse errors or error-level findings, tickets
+  with a live `run:` map (the runner owns the file mid-move), unknown
+  directories, `_meta`. Backwards moves and skips are logged, never
+  blocked — lane rules stay runner-only.

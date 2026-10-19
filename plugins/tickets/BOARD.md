@@ -58,20 +58,30 @@ facts live there, not in the tickets repo.
 The tickets repository is a vault of its own — `chain.json`'s
 `config.ticketsVaultPath` names it (the board's Settings show it too).
 A transition is one commit there, per
-[`specs/ticket-schema.md`](../../../specs/ticket-schema.md):
+[`specs/ticket-schema.md`](../../../specs/ticket-schema.md). Phase
+folders are numbered (`NN-<id>`, position × 10 — T-0041); the move
+uses whatever directory names exist (`70-commit`, `80-done` in the
+default 8-phase pipeline; unprefixed names work the same):
 
 ```
-git mv tickets/commit/<id>.md tickets/done/<id>.md
+git mv tickets/70-commit/<id>.md tickets/80-done/<id>.md
 ```
 
 then, in the moved file:
 
 - frontmatter: add `entered-done: '<UTC now, quoted, seconds>'`
-  (`'2026-10-18T22:16:32Z'`) next to the other `entered-*` keys;
+  (`'2026-10-18T22:16:32Z'`) next to the other `entered-*` keys — the
+  key keeps the CLEAN phase id, never the number;
 - `## Log`: append one machine-shaped line —
   `- '<UTC timestamp>' owner@<host> — commit -> done` — plus the
   evidence in a few words (work sha, merge sha, "main pushed");
 - commit with exactly `tickets: <id> commit -> done`.
+
+Shortcut that stays schema-exact: `git mv` the file and commit only
+that — the board's next refresh completes the treatment
+(`entered-done` stamp + Log line + pin cleanup, T-0041's
+normalization) in its own commit. Writing the stamp by hand is still
+fine; both paths converge.
 
 Discipline that keeps the repo clean:
 
@@ -86,7 +96,18 @@ Discipline that keeps the repo clean:
   for the transition.
 - **Leave foreign uncommitted changes alone** — they are someone's
   work in progress, not cleanup targets. Pushing the tickets repo is
-  the owner's call, not part of the move.
+  the owner's call, not part of the move — unless pipeline.md sets a
+  `push:` remote (T-0041): then every transition the BOARD or the
+  RUNNER writes is pushed automatically; a move made by hand in a
+  terminal pushes when the owner pushes (never sweep unrelated commits
+  into a manual push to "help").
+- **Archiving is not deleting** (T-0041): a ticket that will never be
+  worked goes to `tickets/archive/` (card menu → Archive…, armed
+  two-step, or a plain file move — normalization finishes it: `—
+  archived` Log line, one commit `tickets: <id> archived`, pin
+  cleanup). Archived tickets are invisible on the board; reviving is a
+  move back into a phase folder; final deletion inside `archive/` is
+  the owner's manual act — and the owner's alone.
 - The board picks the moves up on its next refresh; the chain
   daemon's master switch is irrelevant for manual columns.
 

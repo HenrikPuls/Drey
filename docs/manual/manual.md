@@ -702,15 +702,25 @@ a priority, optionally a repository and a description land as
 `T-00xx.md` in the inbox. Click a card to open the ticket file — it is
 an ordinary note (description, plan, executable acceptance criteria and
 an append-only log). Drag cards between columns to move them through
-the pipeline; drag within a column to pin an order. **Fold a column**
+the pipeline; drag within a column to pin an order. Phase folders are
+numbered (`10-inbox` … `80-done`) — the number is cosmetics for
+sorting in a file browser; everything inside a ticket keeps the plain
+phase name. **Moving the file yourself counts as a board move**: drag
+or `git mv` a ticket into another phase folder and the next board
+refresh completes the transition exactly like a drag in the panel —
+stamp, log line, one commit. **Fold a column**
 with the chevron in its head: it shrinks to a narrow strip carrying
 the count and the title rotated sideways — click the strip, or drag a
 card onto it, to unfold it again. Which columns stay folded is
 remembered across restarts (it is view state, never written to the
 repo). The context menu
 (right-click a card) opens the file, copies the deterministic branch
-name `t/T-00xx` for the work repository, and takes over or releases a
-claim. Over-WIP columns show a red count; validation findings (a
+name `t/T-00xx` for the work repository, takes over or releases a
+claim, and offers **Archive…** (armed: the first click only relabels
+the item, the second moves the ticket to `tickets/archive/` — out of
+the board, kept in git; delete files there yourself when you are sure;
+moving one back into a phase folder revives it). Over-WIP columns show
+a red count; validation findings (a
 hand-edited file, an unknown repo, a ticket in two phases) show as
 numbered badges — the board keeps rendering, nothing is guessed.
 
@@ -729,7 +739,10 @@ Pushing and pulling the tickets repo is ordinary git — use the
 [Source control](#12-git-source-control) panel like for any other
 vault. With a remote, two machines racing for the same ticket are
 decided by the first push; the loser re-reads the board and picks the
-next ticket.
+next ticket. Pipelines that want it can add a `push: <remote>` key to
+`pipeline.md`: every transition Drey or the fleet runner commits is
+then pushed to that remote automatically (a failed push warns, it
+never fails the move).
 
 The complete format — every field, the grammar, the agent rules — is
 specified in the repo's `specs/ticket-schema.md`.

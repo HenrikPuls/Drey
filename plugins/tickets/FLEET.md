@@ -115,7 +115,14 @@ stream; on daemon builds it also feeds `redStreak` and `cooldownUntil` in
 `run.json` = `{request, info}`: the request carries `ticketId`, `repoPath`,
 `branch`, `phase`/`column`, `instruction`, `acceptance` (the gate commands),
 `model`, `permissionMode`; the info is the same object `/status` reports.
-`stream.jsonl` lines are `{ts, kind, text, ...}` with kinds `note`
+Since T-0041 the request also carries `nextPhaseDir` (the resolved
+numbered directory the success move targets — `50-build`, the owner's
+`35-qa`, whatever exists) and `pushRemote` (pipeline.md `push:`; the
+runner pushes each transition commit `git push <remote> HEAD` when it is
+set — a failed push is a log line here, never a failed move). Ticket
+paths may be numbered (`tickets/30-plan/…`) or unprefixed — the stripped
+id is the identity everywhere. `stream.jsonl` lines are
+`{ts, kind, text, ...}` with kinds `note`
 (runner notices: gate lines, run bookkeeping), `text` (worker output),
 `usage` (token/cost updates), `result` (the worker's final answer) and
 `error`.
@@ -162,6 +169,11 @@ per-column token budget) · `ciBackoff`.
 - **Where did the agent work?** → `worktrees/<repo>-<ticket>` on branch
   `t/<id>`; inspect with `git -C <worktree> ...`. The runner commits ticket
   bookkeeping ("fleet run bookkeeping") in the tickets repo itself.
+- **A transition did not reach the remote** → check pipeline.md's `push:`
+  key first (absent = pushing is the owner's business), then
+  `GET /log?tail=50` for `push of the transition to "<remote>" failed`.
+  Archived tickets (`tickets/archive/`, T-0041) never dispatch and never
+  count toward the board — the owner archives and deletes them by hand.
 
 ## Pointers
 
