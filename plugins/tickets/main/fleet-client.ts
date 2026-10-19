@@ -155,7 +155,10 @@ export class FleetClient {
     action: 'takeover' | 'interrupt' | 'release' | 'resume',
     runId: string,
   ): Promise<{ ok: boolean; error?: string }> {
-    if (!(await this.withRunner())) {
+    // Resuming an ended run is the one control that may find no daemon
+    // alive (the run is history): it brings one up, like a start does.
+    const up = action === 'resume' ? await this.ensureRunner() : await this.withRunner();
+    if (!up) {
       return { ok: false, error: 'the fleet runner is not running' };
     }
     return this.post<{ ok: boolean; error?: string }>(`/${action}`, { runId });
