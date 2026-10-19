@@ -507,13 +507,16 @@ class BoardService {
         commitPaths,
         `tickets: ${input.id} ${input.from} -> ${input.to}`,
       );
+      // The optional auto-push (T-0041): warning-level, never a failed move.
+      const pushWarning = await this.pushTransition(vault, snap.pushRemote);
+      const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
       this.ctx.vault.announceChanges({
         vaultId: vault.id,
         changedPaths: [newPath, ...(orderChanged ? [ORDER_PATH] : [])],
         deletedPaths: [card.path],
       });
       this.announceChanged();
-      return { ok: true, ...(warning === null ? {} : { warning }) };
+      return { ok: true, ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }) };
     });
   }
 
