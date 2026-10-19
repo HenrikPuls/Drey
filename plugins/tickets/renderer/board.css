@@ -109,6 +109,11 @@
 
 .tickets-col {
   flex: 0 0 264px;
+  width: 264px;
+  min-width: 264px;
+  max-width: 264px;
+  box-sizing: border-box;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -120,6 +125,9 @@
 /* A column with a worker pool carries the lanes: it gets more room. */
 .tickets-col.tickets-col-pool {
   flex-basis: 320px;
+  width: 320px;
+  min-width: 320px;
+  max-width: 320px;
 }
 
 .tickets-col-head {
@@ -654,6 +662,9 @@
 
 .tickets-col.tickets-collapsed {
   flex: 0 0 40px;
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
   padding: 10px 0;
 }
 
