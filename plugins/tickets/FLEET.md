@@ -68,7 +68,8 @@ Invoke-RestMethod "http://127.0.0.1:$($d.port)/health" -Headers $h
 | `GET /log?tail=N` | daemon log tail, plain text (default 300 lines, max 2000; daemon builds) |
 | `GET /chain` | chain state + config (daemon builds) |
 | `POST /stop` `{runId, reason}` | stop one run |
-| `POST /send` `{runId, text}` | steer a live run (rung: inject/resume/refused) |
+| `POST /send` `{runId, text}` | steer a live run (rung: inject/resume/refused); while the run waits on a question it is the answer, not a takeover |
+| `POST /permission` `{runId, decision: "once"\|"always"\|"reject"}` | answer the worker's pending approval (req-57; OpenCode) |
 | `POST /chain/master` `{mode: "run"\|"halted"}` | master switch (daemon builds) |
 | `POST /chain/column` `{phase, mode: "playing"\|"held"}` or `{phase, stop: true}` | column control |
 | `POST /chain/abort` | stop every live run |
@@ -108,6 +109,14 @@ Diagnose read-only first; only stop/steer/switch on the owner's ask.
 | `stopped` | stopped by request |
 | `failed` | worker died or errored (see stream `error` events) |
 | `detached` | the runner restarted while the worker lived on — unwatchable, treat as busy |
+
+A live run may carry `waiting` (req-57): `{kind: "question", text, since}`
+when the worker ended its turn with a `QUESTION:` message (the run stands,
+its session kept, until the owner answers via `/send`), or
+`{kind: "permission", text, since, requestId}` while OpenCode holds a tool
+call for approval (answer via `/permission`). A waiting run is not stalled,
+however long it waits; the ticket's Log carries the question, and Drey
+shows a Windows notification.
 
 A "red gate" shows as `gateFailure` on the run plus `note` events in the
 stream; on daemon builds it also feeds `redStreak` and `cooldownUntil` in

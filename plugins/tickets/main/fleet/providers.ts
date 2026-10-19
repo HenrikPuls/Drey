@@ -20,7 +20,14 @@
  * live spike rounds pin the exact CLI/API shapes.
  */
 import { freePort, type RunnerProcess, type SpawnFn } from './procs';
-import type { PermissionMode, SteerRung, WorkerProviderId } from './protocol';
+import {
+  QUESTION_MARKER,
+  type PermissionDecision,
+  type PermissionMode,
+  type RunWaiting,
+  type SteerRung,
+  type WorkerProviderId,
+} from './protocol';
 
 /** One line of the run's normalized stream file (`stream.jsonl`). */
 export interface NormalizedEvent {
@@ -40,6 +47,29 @@ export interface NormalizedEvent {
   readonly turn?: 'busy' | 'idle';
   /** The slash commands the worker accepts (names without the slash). */
   readonly commands?: readonly string[];
+  /** The worker began (or stopped) waiting on the owner (req-57); `since` is the event's `ts`. */
+  readonly waiting?: Omit<RunWaiting, 'since'> | null;
+}
+
+/** The question a turn's last message asks the owner, or null when it asks none. */
+export function questionOf(text: string): string | null {
+  const trimmed = text.trimStart();
+  if (!trimmed.toUpperCase().startsWith(QUESTION_MARKER)) {
+    return null;
+  }
+  const question = trimmed.slice(QUESTION_MARKER.length).trim();
+  return question === '' ? null : question;
+}
+
+/** One line for a permission request: what the tool wants to do, on what. */
+export function permissionText(request: {
+  readonly action?: string;
+  readonly resources?: readonly string[];
+  readonly message?: string;
+}): string {
+  const what = [request.action ?? 'tool', ...(request.resources ?? [])].join(' ').trim();
+  const message = request.message?.trim() ?? '';
+  return message !== '' && message !== what ? `${what} — ${message}` : what;
 }
 
 /** The stream lead-in of a worker's thinking (the takeover transcript shows it quoted). */
@@ -142,6 +172,11 @@ export interface WorkerHandle {
    * stay (unlike `stop`). False when there is nothing to interrupt.
    */
   interrupt?(): Promise<boolean>;
+  /**
+   * Answers the provider's pending permission request (req-57; OpenCode).
+   * False when the request is gone or the server refused the reply.
+   */
+  answerPermission?(requestId: string, decision: PermissionDecision): Promise<boolean>;
 }
 
 export interface ProviderAdapter {
@@ -201,6 +236,8 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
       // and the process exits (the run ends). `busy` is "a prompt is out and
       // its result has not come back".
       let held = false;
+      /** The last turn asked the owner something (req-57): stand until answered. */
+      let questionHold = false;
       let busy = true;
       let inputClosed = false;
       const closeInput = (): void => {
@@ -298,6 +335,17 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
             const tokensIn = (usage.input_tokens ?? 0) + cacheReadTokens;
             const tokensOut = usage.output_tokens ?? 0;
+            const cost = typeof event.total_cost_usd === 'number' ? { costUsd: event.total_cost_usd } : {};
+            const question = questionOf(event.result ?? '');
+            busy = false;
+            if (question !== null) {
+              // A question to the owner (req-57): the turn is not the
+              // step's end — the input stays open for the answer.
+              questionHold = true;
+              start.onEvent({ ts: nowIso(now), kind: 'usage', tokensIn, tokensOut, cacheReadTokens, ...cost });
+              start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'idle', waiting: { kind: 'question', text: question } });
+              continue;
+            }
             start.onEvent({
               ts: nowIso(now),
               kind: 'result',
@@ -305,9 +353,8 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
               tokensIn,
               tokensOut,
               cacheReadTokens,
-              ...(typeof event.total_cost_usd === 'number' ? { costUsd: event.total_cost_usd } : {}),
+              ...cost,
             });
-            busy = false;
             start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'idle' });
             if (!held) {
               closeInput();
@@ -331,17 +378,27 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             return 'refused';
           }
           proc.write(userMessage(text));
-          if (!busy) {
+          // The owner's message answers an open question: the next
+          // finished turn ends the run again (unless the owner holds it).
+          const answered = questionHold;
+          questionHold = false;
+          if (!busy || answered) {
             busy = true;
-            start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'busy' });
+            start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'busy', ...(answered ? { waiting: null } : {}) });
           }
           return 'inject';
         },
         setHold: (value) => {
           held = value;
           // Released while standing: nothing more is coming, the run ends.
-          if (!held && !busy) {
-            closeInput();
+          if (!held) {
+            if (questionHold) {
+              questionHold = false;
+              start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
+            }
+            if (!busy) {
+              closeInput();
+            }
           }
         },
         // The stream-json control request the Claude SDK sends for its own
@@ -403,6 +460,14 @@ interface OcSession {
   readonly tokens?: OcUsage;
 }
 
+/** One pending permission request (v2 `Permission.Request`, req-57). */
+interface OcPermissionRequest {
+  readonly id?: string;
+  readonly action?: string;
+  readonly resources?: readonly string[];
+  readonly message?: string;
+}
+
 /**
  * The v2 surface the adapter speaks, pinned by the owner's spike against
  * v2.0.32: the server prints `server password <token>` on stdout, every
@@ -420,6 +485,11 @@ export const OPENCODE_API = {
   commands: '/api/command',
   command: (id: string): string => `/api/session/${id}/command`,
   compact: (id: string): string => `/api/session/${id}/compact`,
+  /** The session's pending permission requests (`GET`, `{data: [{id, action, resources, message?}]}`; req-57). */
+  permissions: (id: string): string => `/api/session/${id}/permission`,
+  /** The answer to one (`POST {decision: once | always | reject}`, 204). */
+  permissionReply: (id: string, requestId: string): string =>
+    `/api/session/${id}/permission/${encodeURIComponent(requestId)}/reply`,
 } as const;
 
 /** The slash commands every OpenCode worker has besides the project's own. */
@@ -475,6 +545,12 @@ export function opencodeAdapter(
       turnDone: false,
       /** A human drives the session: an idle marker is not the run's end. */
       held: false,
+      /** The turn ended with a question to the owner (req-57): stand until answered. */
+      questionHold: false,
+      /** The prompt time whose question was already reported (one report per turn). */
+      questionReportedFor: -1,
+      /** The permission request now reported as the wait, or null. */
+      permissionId: null as string | null,
       turn: undefined as 'busy' | 'idle' | undefined,
       /** Idle markers older than this belong to an earlier turn. */
       lastPromptAt: 0,
@@ -761,9 +837,40 @@ export function opencodeAdapter(
               }
             }
             // The server writes the turn's end into the list itself.
-            if (m.type === 'idle' && !state.held && (m.time?.created ?? 0) >= state.lastPromptAt) {
-              state.turnDone = true;
+            if (m.type === 'idle' && (m.time?.created ?? 0) >= state.lastPromptAt) {
+              // A turn that ends asking the owner (req-57) stands instead —
+              // reported once, held or not, so the owner hears of it.
+              const question = questionOf(state.lastText);
+              if (question !== null && state.questionReportedFor !== state.lastPromptAt) {
+                state.questionReportedFor = state.lastPromptAt;
+                state.questionHold = true;
+                start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: { kind: 'question', text: question } });
+              }
+              if (!state.held && !state.questionHold) {
+                state.turnDone = true;
+              }
             }
+          }
+        }
+
+        // A tool call the server wants approved blocks the turn silently:
+        // the pending request becomes the run's wait (req-57).
+        const pending = await fetchFn(`${address}${OPENCODE_API.permissions(state.sessionRef)}`, { headers: auth }).catch(
+          () => null,
+        );
+        if (pending !== null && pending.ok) {
+          const body = (await pending.json()) as { data?: ReadonlyArray<OcPermissionRequest> };
+          const first = (body.data ?? []).find((r) => typeof r.id === 'string');
+          if (first !== undefined && first.id !== state.permissionId) {
+            state.permissionId = first.id!;
+            start.onEvent({
+              ts: nowIso(now),
+              kind: 'usage',
+              waiting: { kind: 'permission', text: permissionText(first), requestId: first.id! },
+            });
+          } else if (first === undefined && state.permissionId !== null) {
+            state.permissionId = null;
+            start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
           }
         }
 
@@ -807,6 +914,14 @@ export function opencodeAdapter(
         // While a turn is live the server queues the POST with delivery
         // `steer` — the native injection rung.
         state.lastPromptAt = now().getTime();
+        if (state.questionHold) {
+          // The owner answers the question: the next finished turn ends
+          // the run again (unless the owner holds it), and the question
+          // text is the past — it must not be asked a second time.
+          state.questionHold = false;
+          state.lastText = '';
+          start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
+        }
         const slash = /^\/([\w.-]+)(?:\s+([\s\S]*))?$/.exec(text.trim());
         if (slash !== null && (await postCommand(slash[1]!, (slash[2] ?? '').trim()))) {
           return 'inject';
@@ -816,6 +931,33 @@ export function opencodeAdapter(
       },
       setHold: (held) => {
         state.held = held;
+        if (!held && state.questionHold) {
+          // Handed back unanswered: the standing turn ends the run.
+          state.questionHold = false;
+          start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
+        }
+      },
+      answerPermission: async (requestId, decision) => {
+        if (!state.alive || state.sessionRef === null || address === '') {
+          return false;
+        }
+        try {
+          const res = await fetchFn(`${address}${OPENCODE_API.permissionReply(state.sessionRef, requestId)}`, {
+            method: 'POST',
+            headers: { ...auth, 'content-type': 'application/json' },
+            body: JSON.stringify({ decision }),
+          });
+          if (!res.ok) {
+            return false;
+          }
+        } catch {
+          return false;
+        }
+        if (state.permissionId === requestId) {
+          state.permissionId = null;
+          start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
+        }
+        return true;
       },
       interrupt: async () => {
         if (!state.alive || state.sessionRef === null || address === '') {

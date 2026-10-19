@@ -21,7 +21,7 @@ import { acceptanceCommands, patchTicketFile, ticketPathParts } from '../ticket-
 import { TicketsGit } from '../tickets-git';
 import { ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
 import { killTreeGuarded, processAlive, processStartMs, type ExecFn } from './procs';
-import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
+import type { PermissionDecision, RunInfo, RunRequest, RunState, SteerRung } from './protocol';
 import { prepareWorktree as defaultPrepareWorktree, type LinkReport, type PreparedWorktree } from './worktrees';
 
 const execAsync = promisify(nodeExec);
@@ -741,14 +741,19 @@ export class RunSupervisor {
     }
     // The first prompt of the owner takes the run over: until then the
     // runner drives as usual (the tab only watches), from here on the
-    // worker's finished turn no longer ends the run.
-    await this.holdForOwner(run, 'first prompt');
+    // worker's finished turn no longer ends the run. An answer to the
+    // worker's own question is not a takeover (req-57): the worker goes
+    // on with its step and its next finished turn ends the run as usual.
+    const answersQuestion = run.info.waiting?.kind === 'question';
+    if (!answersQuestion) {
+      await this.holdForOwner(run, 'first prompt');
+    }
     // The owner's prompt belongs in the run's transcript, whatever its rung.
     await this.appendStream(run, { ts: this.stamp(), kind: 'note', text: `you › ${text}` });
     const rung = await run.handle.steer(text);
     run.info = { ...run.info, steerCount: run.info.steerCount + 1, lastSteerRung: rung };
     await this.persist(run);
-    await this.logLine(run, `steer (${rung}): ${text.slice(0, 200)}`);
+    await this.logLine(run, `${answersQuestion ? 'answered by the owner' : `steer (${rung})`}: ${text.slice(0, 200)}`);
     if (rung === 'refused') {
       return { ok: false, error: `the ${run.info.provider} worker took no message — it may have ended` };
     }
@@ -986,11 +991,41 @@ export class RunSupervisor {
       ...(event.tokensOut !== undefined ? { tokensOut: event.tokensOut } : {}),
       ...(event.cacheReadTokens !== undefined ? { cacheReadTokens: event.cacheReadTokens } : {}),
       ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}),
+      ...(event.waiting !== undefined ? { waiting: event.waiting === null ? null : { ...event.waiting, since: event.ts } } : {}),
     };
     if (event.kind === 'error') {
       this.deps.log(`run ${run.info.id}: ${event.text ?? 'error'}`);
     }
     await this.persist(run);
+    if (event.waiting !== undefined && event.waiting !== null) {
+      // The ticket's Log keeps the question — the owner may answer from the board later.
+      const what = event.waiting.kind === 'question' ? 'asks the owner' : 'waits for approval';
+      this.deps.log(`run ${run.info.id} (${run.info.ticketId}) ${what}: ${event.waiting.text.slice(0, 200)}`);
+      await this.logLine(run, `${what} — ${event.waiting.text.slice(0, 400)}`);
+    }
+  }
+
+  /**
+   * The owner's answer to the worker's pending permission request
+   * (req-57): `once`, `always` or `reject`, passed to the provider.
+   */
+  async answerPermission(runId: string, decision: PermissionDecision): Promise<TakeoverOutcome> {
+    const run = this.runs.get(runId);
+    if (run === undefined) {
+      return { ok: false, error: `unknown run "${runId}"` };
+    }
+    const waiting = run.info.waiting ?? null;
+    if (waiting === null || waiting.kind !== 'permission' || waiting.requestId === undefined) {
+      return { ok: false, error: `run ${runId} waits for no approval` };
+    }
+    if (run.handle === null || run.handle.answerPermission === undefined) {
+      return { ok: false, error: `the ${run.info.provider} worker takes no approvals` };
+    }
+    if (!(await run.handle.answerPermission(waiting.requestId, decision))) {
+      return { ok: false, error: 'the worker took no answer — the request may be gone' };
+    }
+    await this.logLine(run, `${decision === 'reject' ? 'rejected' : decision === 'always' ? 'approved always' : 'approved once'} by the owner — ${waiting.text.slice(0, 200)}`);
+    return { ok: true };
   }
 
   /**

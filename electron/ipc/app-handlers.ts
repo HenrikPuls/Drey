@@ -33,6 +33,17 @@ export function registerAppHandlers(getMainWindow: () => BrowserWindow | null): 
 
   // Custom-titlebar window controls (the window is frameless, ADR-0019).
   ipcMain.handle(IPC_CHANNELS.windowMinimize, (): void => getMainWindow()?.minimize());
+  ipcMain.handle(IPC_CHANNELS.windowFocus, (): void => {
+    const win = getMainWindow();
+    if (!win) {
+      return;
+    }
+    if (win.isMinimized()) {
+      win.restore();
+    }
+    win.show();
+    win.focus();
+  });
   ipcMain.handle(IPC_CHANNELS.windowToggleMaximize, (): void => {
     const win = getMainWindow();
     if (!win) {

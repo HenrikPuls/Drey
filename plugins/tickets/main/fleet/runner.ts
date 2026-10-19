@@ -381,6 +381,22 @@ async function main(): Promise<void> {
         respond(outcome.ok ? 200 : 422, outcome);
         return;
       }
+      if (req.method === 'POST' && pathname === '/permission') {
+        // The owner's answer to a worker's pending approval (req-57).
+        const body = (await readBody(req)) as { runId?: unknown; decision?: unknown };
+        const supervisor = supervisorOfRun(String(body.runId ?? ''));
+        if (supervisor === null) {
+          respond(404, { ok: false, error: `unknown run "${String(body.runId)}"` });
+          return;
+        }
+        if (body.decision !== 'once' && body.decision !== 'always' && body.decision !== 'reject') {
+          respond(400, { ok: false, error: 'decision must be once, always or reject' });
+          return;
+        }
+        const outcome = await supervisor.answerPermission(String(body.runId), body.decision);
+        respond(outcome.ok ? 200 : 422, outcome);
+        return;
+      }
       if (req.method === 'POST' && pathname === '/send') {
         const body = (await readBody(req)) as { runId?: unknown; text?: unknown };
         const supervisor = supervisorOfRun(String(body.runId ?? ''));

@@ -37,6 +37,10 @@ export function workerStatus(run: RunInfo, nowMs: number, windowTokens: number =
   if (run.state === 'detached') {
     return { light: 'amber', label: 'Detached' };
   }
+  // A worker that waits on the owner (req-57) needs a look — never a stall.
+  if ((run.state === 'running' || run.state === 'starting') && run.waiting) {
+    return { light: 'amber', label: run.waiting.kind === 'question' ? 'Waits for your answer' : 'Waits for your approval' };
+  }
   // A worker that stands (no turn in progress) is neither working nor stalled.
   if (run.state === 'running' && run.turn === 'idle') {
     return { light: 'idle', label: run.held === true ? 'Standing — you drive' : 'Standing' };

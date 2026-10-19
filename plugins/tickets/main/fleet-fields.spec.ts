@@ -243,4 +243,21 @@ describe('composeInstruction — the deterministic run brief', () => {
     expect(text).toContain('Do not run an install');
     expect(composeInstruction(base)).not.toContain('Toolchain:');
   });
+
+  it('tells every worker how to ask the owner (req-57)', () => {
+    const text = composeInstruction({
+      ticketId: 'T-0007',
+      title: 'Add the thing',
+      repo: null,
+      branch: 't/T-0007',
+      worktreePath: 'W',
+      phase: 'build',
+      description: '',
+      plan: null,
+      prompt: null,
+      acceptance: [],
+    });
+    expect(text).toContain('starts with `QUESTION:`');
+    expect(text.trimEnd().endsWith("go into the ticket's Log.")).toBe(true);
+  });
 });

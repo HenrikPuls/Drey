@@ -38,9 +38,11 @@ import { extractWikilinks } from '../editor/wikilinks/wikilink';
 import { HOST_CODEMIRROR } from './runtime-exports';
 import { highlightCode } from './code-highlight';
 import { mountMarkdownView } from './markdown-view';
+import { browserNotificationApi, showOsNotification } from './os-notify';
 import { dreyHighlightStyle } from '../editor/editor-theme';
 import type { HighlightStyle } from '@codemirror/language';
 import { ThemeService } from '../services/theme.service';
+import { WindowChromeService } from '../titlebar/window-chrome.service';
 import { EditorExtensionRegistry } from './editor-extension-registry.service';
 import { DropDecoderRegistry } from './drop-decoder-registry.service';
 import { FileOpenerRegistry } from '../services/file-opener-registry.service';
@@ -80,6 +82,7 @@ export class PluginApiFactory {
   private readonly settingsPages = inject(SettingsCategoryRegistry);
   private readonly confirm = inject(ConfirmationService);
   private readonly dialogs = inject(ConfirmDialogService);
+  private readonly windowChrome = inject(WindowChromeService);
   private readonly settings = inject(SettingsService);
   private readonly themeService = inject(ThemeService);
   private readonly overlayGuard = inject(OverlayGuardService);
@@ -346,6 +349,7 @@ export class PluginApiFactory {
           return teardown;
         },
         showMessage: (message, title) => this.dialogs.message({ message, title }),
+        notify: (request) => showOsNotification(request, () => this.windowChrome.focus(), browserNotificationApi()),
         createTagField: (opts) => {
           // Same component the base entry drawer mounts (milestone 33):
           // vocabulary + prefix colors come from the base tag vocabulary

@@ -332,6 +332,7 @@ fills** — base knows the interfaces, not the features:
 | Settings pages | `ui.registerSettingsPage` | — |
 | Files-panel row decorations (badge + tone per path, folders inherit; SDK 1.17) | `ui.setFileDecorations` | — |
 | Read-only before / after dialog (the shared `DiffView`; SDK 1.17) | `ui.showDiff` | — |
+| Operating-system notification (SDK 1.32, req-57): the renderer's Web Notification API (a Windows toast; the app sets its user model id at boot), a click brings the window forward over `window:focus`, a repeated `tag` replaces | `ui.notify` → `src/app/plugin-host/os-notify.ts` | — |
 | Menu rows (`file`/`edit`/`selection`/`view`/`editor-more`) | `ui.registerMenuContributions` | — |
 | Commands + keybindings | `commands.register` / `run(id, payload?)` (payload carries invoker context, SDK 1.9 — the base tag pills run `search.open` with `{ tag }`) | — |
 | Shared tag chip field (colored chips + completion, milestone 33) | `ui.createTagField` | — |

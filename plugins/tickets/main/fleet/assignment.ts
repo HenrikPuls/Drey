@@ -8,7 +8,7 @@
  * `opencode`, `claude-code`, `claude-code/sonnet`. An unreadable value
  * is a refusal at run start — never a guess (ADR-0076).
  */
-import { isWorkerProvider, type WorkerProviderId } from './protocol';
+import { isWorkerProvider, QUESTION_MARKER, type WorkerProviderId } from './protocol';
 import { parseHandover } from '../../shared/tickets';
 
 export type AssignmentSource = 'ticket' | 'column' | 'handover' | 'repo' | 'default';
@@ -139,6 +139,18 @@ const COMPLETION_DISCIPLINE =
   'parks the step (the failure is logged and the ticket waits).';
 
 /**
+ * How a worker asks the owner (req-57): a turn whose last message opens
+ * with the marker does not end the run — the run waits, the owner is
+ * notified, and the answer arrives in this same session.
+ */
+const ASKING =
+  `Asking the owner: if you cannot go on without a decision only the owner can make, end your turn with a message ` +
+  `that starts with \`${QUESTION_MARKER}\` followed by the question (and the options you see, if any). The run then ` +
+  `waits, the owner is notified, and their answer arrives here in this session; continue the step from it. Ask only ` +
+  `what blocks the step — what the plan, the ticket or the repo already answers, decide yourself; open points that ` +
+  `can wait go into the ticket's Log.`;
+
+/**
  * Composes the run's instruction: who and where the worker is, what the
  * ticket says (description + plan), the fleet's rules (stay on the
  * branch, leave the worktree the only place), the machine gate it
@@ -198,5 +210,6 @@ export function composeInstruction(input: InstructionInput): string {
     );
   }
   parts.push(COMPLETION_DISCIPLINE);
+  parts.push(ASKING);
   return parts.join('\n\n');
 }

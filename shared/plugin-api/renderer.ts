@@ -68,6 +68,7 @@ export type {
   HighlightedSpan,
   MarkdownViewHandle,
   MarkdownViewOptions,
+  NotifyRequest,
   MenuContribution,
   OpenDocumentInfo,
   PluginChatOptions,

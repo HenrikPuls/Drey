@@ -6,6 +6,7 @@
  * view is just a DOM root plus a render call.
  */
 import { transcriptMarkdown } from './transcript';
+import { newWaits } from './waiting';
 import { asParagraphs, chainLogStamp, visibleChainLog } from './chain-log';
 import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
 import {
@@ -319,8 +320,16 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
   }
   const live = runForCard(card.id);
   if (live !== null) {
-    const runChip = el('span', 'tickets-chip tickets-chip-run', `▶ ${live.state}`);
-    runChip.title = `run ${live.id} (${live.provider}) — ${live.state}; open the card menu to watch, steer or stop`;
+    const waiting = live.waiting ?? null;
+    const runChip = el(
+      'span',
+      `tickets-chip tickets-chip-run${waiting !== null ? ' tickets-chip-waiting' : ''}`,
+      waiting !== null ? '? waits for you' : `▶ ${live.state}`,
+    );
+    runChip.title =
+      waiting !== null
+        ? `run ${live.id} ${waiting.kind === 'question' ? 'asks' : 'needs your approval'}: ${waiting.text} — open the run to answer`
+        : `run ${live.id} (${live.provider}) — ${live.state}; open the card menu to watch, steer or stop`;
     meta.append(runChip);
   }
   const dwell = dwellMs(card, column.phase.id);
@@ -1074,16 +1083,19 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
     if (open) {
       const body = el('div', 'tickets-lane-body');
       const activity = run.activity ?? '';
+      const waiting = run.waiting ?? null;
       const act = el(
         'div',
-        'tickets-lane-activity',
+        `tickets-lane-activity${waiting !== null ? ' tickets-lane-waiting' : ''}`,
         run.state === 'detached'
           ? 'The runner restarted while this worker lived on — stop the run to free the ticket'
-          : activity !== ''
-            ? activity
-            : 'No output yet',
+          : waiting !== null
+            ? `${waiting.kind === 'question' ? 'Asks' : 'Wants to'}: ${waiting.text}`
+            : activity !== ''
+              ? activity
+              : 'No output yet',
       );
-      act.title = activity;
+      act.title = waiting?.text ?? activity;
       body.append(act);
 
       const used = run.contextTokens ?? null;
@@ -1127,7 +1139,7 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
         b.addEventListener('click', onClick);
         actions.append(b);
       };
-      button('arrow-right', 'Open the run — its conversation, controls and prompt (nothing changes until you send a command)', () => {
+      button('arrow-right', waiting !== null ? 'Open the run to answer the worker' : 'Open the run — its conversation, controls and prompt (nothing changes until you send a command)', () => {
         openTakeover(api, run);
       });
       if (run.state === 'detached' && run.sessionRef !== null) {
@@ -1255,6 +1267,21 @@ const QUICK_PROMPTS: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /** Opens (or focuses) the takeover tab of one run. */
+/** The waits this window already announced (`newWaits` keeps it current). */
+const announcedWaits = new Set<string>();
+
+/** One OS notification per new wait; a click opens the run's takeover tab (req-57). */
+function announceWaits(api: DreyPluginApi): void {
+  for (const notice of newWaits(fleetRuns, announcedWaits)) {
+    void api.ui.notify({
+      title: notice.title,
+      body: notice.body,
+      tag: notice.run.id,
+      onClick: () => openTakeover(api, notice.run),
+    });
+  }
+}
+
 function openTakeover(api: DreyPluginApi, run: RunInfo): void {
   api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${run.id}`, takeoverTitle(run));
 }
@@ -1498,6 +1525,42 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   };
   promptWrap.append(commandMenu, attachRow, prompt.element, composerBar);
 
+  // What the worker waits on (req-57): its question — answered in the
+  // prompt box below — or a tool call to approve with one of the buttons.
+  const waitCard = el('div', 'tickets-takeover-wait');
+  waitCard.hidden = true;
+  const waitLabel = el('div', 'tickets-takeover-wait-label');
+  const waitText = el('div', 'tickets-takeover-wait-text');
+  const waitActions = el('div', 'tickets-takeover-wait-actions');
+  const decide = (decision: 'once' | 'always' | 'reject', label: string): HTMLButtonElement => {
+    const b = el('button', `tickets-takeover-btn${decision === 'once' ? ' tickets-takeover-btn-primary' : ''}`, label);
+    b.type = 'button';
+    b.addEventListener('click', () => {
+      void runMutation(label, () => invokeBoard('fleetPermission', { runId, decision }));
+    });
+    return b;
+  };
+  waitActions.append(decide('once', 'Allow once'), decide('always', 'Always allow'), decide('reject', 'Deny'));
+  waitCard.append(waitLabel, waitText, waitActions);
+  let shownWait = '';
+  const paintWait = (run: RunInfo | null): void => {
+    const waiting = run !== null && LIVE_RUN_STATES.includes(run.state) ? (run.waiting ?? null) : null;
+    waitCard.hidden = waiting === null;
+    if (waiting === null) {
+      shownWait = '';
+      return;
+    }
+    waitLabel.textContent =
+      waiting.kind === 'question' ? 'The worker asks you — answer below, it then goes on with its step' : 'The worker wants to do this — allow it?';
+    waitText.textContent = waiting.text;
+    waitActions.hidden = waiting.kind !== 'permission';
+    const key = `${waiting.kind}@${waiting.since}`;
+    if (key !== shownWait && waiting.kind === 'question') {
+      prompt.focus();
+    }
+    shownWait = key;
+  };
+
   const live = (): RunInfo | null => fleetRuns.find((r) => r.id === runId) ?? null;
   const paintBanner = (): void => {
     const run = live();
@@ -1513,7 +1576,9 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
           ? `${run.ticketId} · ${run.provider} — detached: the runner lost its worker`
           : !active
             ? `${run.ticketId} · ${run.provider} — run ${run.state}`
-            : held
+            : run.waiting
+              ? `${run.ticketId} · ${run.provider} — waits for you`
+              : held
               ? `${run.ticketId} · ${run.provider} — you have control`
               : `${run.ticketId} · ${run.provider} — the runner is driving; your first command takes over`;
     const fill = run === null ? null : contextFill(run);
@@ -1550,6 +1615,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     for (const chip of chips.children) {
       (chip as HTMLButtonElement).disabled = !active;
     }
+    paintWait(run);
     paintProgress();
   };
 
@@ -1574,7 +1640,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   pull();
   const timer = setInterval(pull, 2_000);
   const tick = setInterval(paintBanner, 1_000);
-  wrap.append(banner, transcript.element, progress, promptWrap);
+  wrap.append(banner, transcript.element, progress, waitCard, promptWrap);
   host.append(wrap);
   return () => {
     alive = false;
@@ -1814,6 +1880,8 @@ function openCardMenu(
 const plugin: { activate(api: DreyPluginApi): void } = {
   activate(api) {
     backend = api.backend;
+    // A worker that waits on the owner says so outside the board too (req-57).
+    fleetListeners.add(() => announceWaits(api));
     api.ui.registerWidget(createTicketsWidget(api));
     api.ui.registerSettingsPage(createTicketsSettingsPage(api));
 

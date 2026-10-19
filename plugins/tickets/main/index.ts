@@ -1388,6 +1388,14 @@ const plugin: MainPluginModule = {
       return fleet.control(p.action, p.runId);
     });
 
+    ctx.ipc.handle('fleetPermission', async (payload) => {
+      const p = payload as { runId?: unknown; decision?: unknown };
+      if (typeof p.runId !== 'string' || (p.decision !== 'once' && p.decision !== 'always' && p.decision !== 'reject')) {
+        return { ok: false, error: 'bad fleet permission payload' };
+      }
+      return fleet.answerPermission(p.runId, p.decision);
+    });
+
     ctx.ipc.handle('fleetStream', async (payload) => {
       const p = payload as { runId?: unknown };
       if (typeof p.runId !== 'string') {

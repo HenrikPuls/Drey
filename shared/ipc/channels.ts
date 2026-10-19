@@ -22,6 +22,7 @@ export const IPC_CHANNELS = {
   windowToggleFullScreen: 'window:toggle-fullscreen',
   windowIsFullScreen: 'window:is-fullscreen',
   windowFullScreenChanged: 'window:fullscreen-changed',
+  windowFocus: 'window:focus',
   editExec: 'edit:exec',
   uiSetZoom: 'ui:set-zoom',
   openExternal: 'app:open-external',

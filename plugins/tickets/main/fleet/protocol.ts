@@ -95,6 +95,32 @@ export interface RunRequest {
  *  idempotent per ticket, so a repeated run reports what it did. */
 export type WorktreeOutcome = 'reused' | 'created' | 'recreated' | 'moved-aside';
 
+/**
+ * What a live worker waits on the owner for (req-57): a question it ended
+ * its turn with (`QUESTION: …`), or a tool call the provider wants
+ * approved (OpenCode's permission requests). The run stays up, its
+ * session and context kept, until the owner answers.
+ */
+export interface RunWaiting {
+  readonly kind: 'question' | 'permission';
+  /** The question, or what the tool wants to do (action and resources). */
+  readonly text: string;
+  /** When the wait began (ISO). */
+  readonly since: string;
+  /** The provider's id of a permission request — what the answer names. */
+  readonly requestId?: string;
+}
+
+/**
+ * The lead-in a worker opens its last message with when it cannot go on
+ * without the owner (req-57). The turn then does not end the run: the
+ * worker stands, waiting, until the owner answers in the takeover tab.
+ */
+export const QUESTION_MARKER = 'QUESTION:';
+
+/** The owner's answer to a permission request (OpenCode's three replies). */
+export type PermissionDecision = 'once' | 'always' | 'reject';
+
 /** A run as the runner reports it — and as `run.json` persists it. */
 export interface RunInfo {
   readonly id: string;
@@ -141,6 +167,8 @@ export interface RunInfo {
    * cannot).
    */
   readonly turn?: 'busy' | 'idle';
+  /** What the worker waits on the owner for (req-57); null/absent = nothing. */
+  readonly waiting?: RunWaiting | null;
   /**
    * The slash commands the worker accepts (names without the slash) — the
    * takeover tab's prompt box lists them. Absent until the worker reports.

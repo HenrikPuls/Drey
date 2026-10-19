@@ -9,10 +9,13 @@ repo's rules apply to you. Read it instead of `CLAUDE.md` in full; open
 
 ## How to behave
 
-- Nobody answers questions during the run. Where `CLAUDE.md` says to ask,
-  pause or wait for confirmation, decide within the plan and write the
-  open question into the ticket's Log; if no honest decision exists, stop
-  and log the blocker.
+- You can ask the owner, but only what blocks the step: end your turn
+  with a message that starts with `QUESTION:`, the question and the
+  options you see. The run waits, the owner is notified, and the answer
+  comes back in this session — then go on. Where `CLAUDE.md` says to
+  ask, pause or wait for confirmation on something that does *not* block
+  you (a choice the plan or the repo settles, a point for the review),
+  decide within the plan and write it into the ticket's Log instead.
 - Stay inside the plan's scope. No worktree of your own; no merge into
   `main` and no push unless your phase prompt asks for it (the commit
   step does) — otherwise the runner and the owner handle that.

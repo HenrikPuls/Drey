@@ -60,7 +60,7 @@ leaves the app on the previous build. Verify with
 
 - `apiVersion` is a **major gate**: a manifest whose major differs from
   `PLUGIN_API_VERSION.major` (`shared/plugin-api/versions.ts`, currently
-  `{ major: 1, minor: 31 }`) is never imported — the plugin shows up in
+  `{ major: 1, minor: 32 }`) is never imported — the plugin shows up in
   Settings → Panels & plugins as incompatible. Minor bumps are additive;
   1.9 added `commands.run(id, payload?)`, `ui.createTagField` (the shared
   tag chip field — prefer it over a hand-rolled chip row), the main-side
@@ -73,6 +73,10 @@ leaves the app on the previous build. Verify with
   1.31 added `ui.highlightCode(code, lang)` -- the editor's own syntax
   colouring for code outside an editor (async; runs of `{ text, className }`,
   `null` for an unknown language), so a plugin never ships its own tokenizer.
+  1.32 added `ui.notify({ title, body?, tag?, onClick? })` -- an
+  operating-system notification for what needs the user while they look
+  elsewhere; a click brings Drey to the front, a repeated `tag` replaces
+  the earlier one (the tickets board uses it for a worker that waits).
   `ui.registerComposerContribution` is a deprecated no-op since the
   "Add entry" drawer was removed (ADR-0057). 1.11 added the task-index
   seam (`ctx.tasks.registerTaskQuery` / `queryProvider` — the `TaskQueryProvider`

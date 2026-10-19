@@ -16,6 +16,13 @@ one means moving it back to the roadmap with a new justification.
   part of the Req-29 remainder any more.
 - **Req-17** — Jira integration: inline live ticket status, create
   tickets from the editor.
+- **req-57 alternative — an MCP `ask_owner` tool for fleet workers**
+  (2026-10-20). The runner would serve a tool that blocks inside the
+  worker's turn until the owner answers — the cleanest shape for the
+  model. Decided against for the `QUESTION:` text marker: it needs an MCP
+  server in the runner and per-worker config injection for each CLI, and
+  whether OpenCode keeps a tool call blocked for minutes to hours was
+  unverified; the marker works for both workers with what they have.
 - **req-9** — OCR remainder (iPad): on-device handwriting recognition.
   Desktop half shipped (`ocr` plugin, vision-capable LLM, ADR-0050).
 - **req-21** — dataview.js support.
