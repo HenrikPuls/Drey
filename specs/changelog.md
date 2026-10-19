@@ -22,7 +22,7 @@ recorded as an explicit decision. The parity checklist lives in
 
 ### req-52 — Test splitting: scoped day-to-day runs, full gate at release (owner request, outside the list)
 
-**Not yet manually verified by the owner.** The two unit suites grew past 240
+The two unit suites grew past 240
 spec files, and every change — even in one plugin — ran all of them. The suites
 themselves stay as they are; what changed is how they are *selected*:
 
