@@ -20,6 +20,38 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — fleet: worktree preparation is idempotent per ticket (T-0047)
+
+Split from T-0046. The runner's `prepareWorktree` always ran
+`git worktree add`, so a second run for the same ticket (the next
+phase, a gate retry) failed with "already exists". Preparation is now
+a state machine (`plugins/tickets/main/fleet/worktrees.ts`) over
+`git worktree list --porcelain`:
+
+- registered and on `t/<id>` — **reused** as is, clean or dirty (a
+  retry wants exactly the half-finished work; untracked counts as
+  dirty);
+- unregistered, directory missing or empty — **created** (`worktree
+  prune`, then add — `-b` only when the branch does not exist yet);
+- stale (content at the path, no healthy registration) and clean —
+  **recreated**; stale and dirty — **moved-aside** to
+  `<path>.stale-<stamp>`, never deleted (a directory that no longer
+  answers to git counts as dirty);
+- wrong branch, locked, or a rebase/merge in progress — a descriptive
+  error, nothing modified.
+
+The outcome (`reused | created | recreated | moved-aside`) rides
+`RunInfo.worktree` (absent on adopted pre-T-0047 records), the run
+stream's opening note and the ticket Log's start action; a moved-aside
+worktree adds a stream note with the parking path. `recreated` /
+`moved-aside` also set `sessionInvalidated` on the prepared result —
+exposed for T-0049's resume work, read by nothing in v1. Preparation
+is serialized by a module-level lock keyed by the repo, so two
+concurrent starts — one ticket, or two tickets in one repo at
+`workers: 2/4` — cannot race on `worktree add`. Spec: real git in
+temp repos over every state, the fail rows and the lock
+(`worktrees.spec.ts`). **Not yet manually verified by the owner.**
+
 ### Architecture cleanup A6 — plugin settings out of the base config
 
 Roadmap item A6 (the 2026-10-13 review, finding 4 in
