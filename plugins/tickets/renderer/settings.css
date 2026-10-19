@@ -92,6 +92,13 @@
   color: var(--text-4);
 }
 
+/* The store-on-leave marker (T-0043): something is buffered. */
+.tset-chip-dirty {
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent-fg, var(--accent));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 /* --- the folder-numbering banner ------------------------------------------ */
 
 .tset-banner {
@@ -122,7 +129,7 @@
   display: grid;
   grid-template-columns:
     18px 24px minmax(110px, 1.2fr) 104px minmax(110px, 1.4fr)
-    48px minmax(100px, 1fr) 14px;
+    48px minmax(100px, 1fr) 62px;
   column-gap: 8px;
   align-items: center;
   min-width: 600px;
@@ -245,6 +252,27 @@
 
 .tset-dash {
   color: var(--text-4);
+}
+
+/* --- the row's actions: ↑/↓ and the armed − (T-0043) ---------------------- */
+
+.tset-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0;
+}
+
+.tset-row-actions > .icon-btn {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+}
+
+/* The armed remove: a refusal one click away, tinted so it reads as armed. */
+.icon-btn.tset-armed {
+  color: var(--status-deleted);
+  background: color-mix(in srgb, var(--status-deleted) 14%, transparent);
+  border-radius: var(--radius-xs);
 }
 
 .tset-cell-status {
@@ -478,6 +506,20 @@
 .tset-newprompt-row > input {
   flex: 1;
   min-width: 0;
+}
+
+/* --- the new-column modal's live slug preview (T-0043) -------------------- */
+
+.tickets-form > .tset-newcol-preview {
+  display: block;
+  min-height: 16px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-4);
+}
+
+.tickets-form > .tset-newcol-preview.tset-error {
+  color: var(--status-deleted);
 }
 
 /* --- fleet ---------------------------------------------------------------- */

@@ -20,7 +20,7 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
     label: 'Tickets',
     hint: 'Board & fleet',
     description:
-      'The pipeline and its worker pools. A column with a worker runs itself; manual columns are your checkpoints.',
+      'The pipeline and its worker pools. A column with a worker runs itself; manual columns are your checkpoints. Changes are buffered here and written as one commit when you leave the page.',
     mount: (body) => {
       body.classList.add('tset');
 
@@ -51,11 +51,18 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
             usage.set(ref, [...(usage.get(ref) ?? []), phase.title]);
           }
         }
+        // Tickets per phase id, straight off the snapshot: the removal
+        // pre-check's data (T-0043).
+        const counts: Record<string, number> = {};
+        for (const column of snap.columns) {
+          counts[column.phase.id] = column.tickets.length;
+        }
         columns.update({
           pipeline: snap.pipeline,
           folders,
-          promptRefs: listing.entries.map((e) => e.ref),
+          promptRefs: snap.promptRefs,
           defaultWorker: (configured ?? '') || 'opencode',
+          counts,
         });
         prompts.update(listing, usage);
       };
@@ -82,6 +89,9 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
         if (timer !== null) {
           clearTimeout(timer);
         }
+        // Leaving the page is the store-on-leave moment: the buffered
+        // columns batch goes out as one fire-and-forget commit.
+        columns.flush();
         prompts.dispose();
       };
     },
