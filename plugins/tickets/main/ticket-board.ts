@@ -175,6 +175,30 @@ export function rewriteOrderSection(text: string, phase: string, ids: readonly s
   return result;
 }
 
+/** Strips one id from every pin section, in text form — a moved or
+ *  archived ticket leaves all of them (T-0041 moved this beside its
+ *  building blocks so every writer shares it). */
+export function removeIdFromPins(orderText: string, id: string): string {
+  const { pins } = parseOrderFile(orderText);
+  let touched = false;
+  const cleaned: Record<string, string[]> = {};
+  for (const [section, ids] of Object.entries(pins)) {
+    const kept = ids.filter((x) => x !== id);
+    if (kept.length !== ids.length) {
+      touched = true;
+    }
+    cleaned[section] = kept;
+  }
+  if (!touched) {
+    return orderText;
+  }
+  let text = orderText;
+  for (const [section, ids] of Object.entries(cleaned)) {
+    text = rewriteOrderSection(text, section, ids);
+  }
+  return text;
+}
+
 // --- repos.md --------------------------------------------------------------
 
 export interface ReposParse {
