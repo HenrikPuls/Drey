@@ -14,6 +14,27 @@
 /** `T-` + at least four digits (`T-0042`). Grammar of ids AND file stems. */
 export const TICKET_ID_PATTERN = /^T-\d{4,}$/;
 
+// --- numbered phase folders (T-0041, ADR-0076 later change) -----------------
+//
+// Phase directories are named `NN-<id>` with `NN` = the phase's 1-based
+// pipeline position × 10. Everything inside a ticket file — `entered-*`
+// keys, order.md sections, branch names — keeps the clean id; only the
+// directory carries the number. Readers strip the prefix and match the
+// rest against pipeline.md ids; an unprefixed directory stays tolerated.
+
+/** The reserved archive folder beside `_meta` — never a column, never numbered. */
+export const TICKETS_ARCHIVE_DIR = 'tickets/archive';
+
+/** Strips a leading `\d+-` from a directory name; unprefixed stays as is. */
+export function stripPhasePrefix(dir: string): string {
+  return dir.replace(/^\d+-/, '');
+}
+
+/** `(1-based pipeline position) * 10` + '-' + id → '10-inbox' … '80-done'. */
+export function phaseDirectoryName(position1: number, id: string): string {
+  return `${String(position1 * 10).padStart(2, '0')}-${id}`;
+}
+
 // ---------------------------------------------------------------------------
 // The pipeline's handover spec (`_meta/pipeline.md`, ADR-0076):
 // `manual | agent <prompt-ref>[@<worker>] | ci | none`. Parsed here so

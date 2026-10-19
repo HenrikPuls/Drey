@@ -16,6 +16,7 @@ import {
   TICKET_ID_PATTERN,
   branchForTicket,
   formatUtcStamp,
+  stripPhasePrefix,
   TICKET_PRIORITIES,
   type TicketIssue,
   type TicketMeta,
@@ -36,15 +37,20 @@ export interface ParsedTicket {
  * Extracted path facts: which phase directory, which stem. Only
  * ticket-shaped paths qualify (`tickets/<dir>/<T-nnnn>.md`); anything
  * else under `tickets/` is a stray file for the board to badge.
+ * `phase` is the prefix-stripped directory id (`10-inbox` → `inbox`,
+ * T-0041) — every consumer downstream sees clean ids; `phaseDir` keeps
+ * the directory as written.
  */
 export function ticketPathParts(
   relPath: string,
-): { phase: string; stem: string } | null {
+): { phaseDir: string; phase: string; stem: string } | null {
   const match = /^tickets\/([^/]+)\/([^/]+)\.md$/.exec(relPath);
   if (match === null) {
     return null;
   }
-  return TICKET_ID_PATTERN.test(match[2]!) ? { phase: match[1]!, stem: match[2]! } : null;
+  return TICKET_ID_PATTERN.test(match[2]!)
+    ? { phaseDir: match[1]!, phase: stripPhasePrefix(match[1]!), stem: match[2]! }
+    : null;
 }
 
 /** Reads one ticket file into normalized meta + the issues found. */
