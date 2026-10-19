@@ -451,7 +451,7 @@ export class RunSupervisor {
       pid: null,
       startedAt: this.stamp(),
       endedAt: null,
-      sessionRef: null,
+      sessionRef: resumeRef,
       tokensIn: 0,
       tokensOut: 0,
       costUsd: null,
