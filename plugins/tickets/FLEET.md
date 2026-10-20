@@ -30,20 +30,49 @@ The fleet root is `<userRoot>/fleet`, where `userRoot` =
 id is `drey`).
 
 ```
-<fleet root>/
+<fleet root>/                 (machine state; runner owned)
 ├── runner.json     descriptor: {port, token, pid, startedAt, version, build?}
 ├── runner.log      the daemon log (every dispatch decision; ring-capped ~512 KB)
 ├── chain.json      persisted chain state (only on daemon builds)
 ├── runs/<run-id>/
 │   ├── run.json    the full record: {request, info}
 │   └── stream.jsonl the run's output events (ndjson)
-└── worktrees/<repo>-<ticket>/   the agent's checkout, branch t/<ticket-id>
+└── worktrees/      LEGACY (pre-T-0044): emptied by the boot migration
+                    and the Clean up worktrees control, never written again
+
+<tickets repo root>/_worktrees/<ticket-id>/   the agent's checkout since
+                    T-0044 (ADR-0080), branch t/<ticket-id> — visible,
+                    gitignored, skipped by the vault's tree/index/watcher;
+                    a repo's `worktrees:` key in _meta/repos.md overrides
+                    the base
 ```
 
 `runner.json` missing means the runner is **down** (it exits cleanly after
 ~15 min idle with no live runs; Drey respawns it on demand). A present
 descriptor with an unreachable port means it died hard — the stale
 descriptor gets taken over by the next spawn.
+
+### Cleanup surfaces (T-0044, ADR-0080)
+
+All removal goes through **real git** (`git worktree remove` /
+`git worktree prune`), never a bare rmdir; the **branch always stays**
+(it carries the work).
+
+- **Per ticket:** the card menu's "Remove worktree…" — refuses a dirty
+  tree unless the owner confirms the armed second click; refuses a live
+  run; appends the ticket's Log line (one commit).
+- **Global:** "Clean up worktrees" in the panel header — removes every
+  worktree whose ticket has no live run (dirty ones kept and reported),
+  then prunes every mapped repo. Liveness = the ticket's `run:` stamp ∪
+  non-terminal fleet records — never fleet status alone.
+- **Boot sweep:** every plugin boot migrates the legacy root (clean
+  leftovers removed automatically, dirty ones kept and reported; a live
+  run's tree waits for its settle) and **lists** orphan folders under
+  the new base as cleanable — listed, never auto-deleted.
+- **Re-run healing:** a leftover *registered checkout* of `t/<id>`
+  anywhere (the re-run trap) is removed by the runner before
+  `worktree add` when provably clean and not live — refused
+  descriptively otherwise.
 
 ## Talking to the runner
 
@@ -113,8 +142,10 @@ stream; on daemon builds it also feeds `redStreak` and `cooldownUntil` in
 ### run.json and stream events
 
 `run.json` = `{request, info}`: the request carries `ticketId`, `repoPath`,
-`branch`, `phase`/`column`, `instruction`, `acceptance` (the gate commands),
-`model`, `permissionMode`; the info is the same object `/status` reports.
+`worktreePath` (since T-0044 — computed plugin-side, the runner never
+derives paths), `branch`, `phase`/`column`, `instruction`, `acceptance`
+(the gate commands), `model`, `permissionMode`; the info is the same
+object `/status` reports.
 Since T-0041 the request also carries `nextPhaseDir` (the resolved
 numbered directory the success move targets — `50-build`, the owner's
 `35-qa`, whatever exists) and `pushRemote` (pipeline.md `push:`; the
@@ -169,9 +200,17 @@ per-column token budget) · `ciBackoff`.
 - **Run stuck** → `/status` state + stream tail; `stopping` for long means
   the worker ignores the stop — the supervisor tree-kills, give it a moment,
   then check the pid.
-- **Where did the agent work?** → `worktrees/<repo>-<ticket>` on branch
-  `t/<id>`; inspect with `git -C <worktree> ...`. The runner commits ticket
-  bookkeeping ("fleet run bookkeeping") in the tickets repo itself.
+- **Where did the agent work?** → since T-0044:
+  `<tickets repo>/_worktrees/<ticket-id>/` on branch `t/<id>` (a repo's
+  `worktrees:` override moves the base); pre-T-0044 runs:
+  `<fleet root>/worktrees/<repo>-<ticket>`, until the boot migration
+  collects them. Inspect with `git -C <worktree> ...`. The runner commits
+  ticket bookkeeping ("fleet run bookkeeping") in the tickets repo itself.
+- **`worktree add` says the branch is "already checked out"** (a settled
+  ticket's leftover checkout somewhere — the re-run trap) → the runner
+  heals this itself when the conflicting tree is clean and not live; if
+  it refuses (dirty or live), clean or stop that tree, or use the board's
+  card menu / "Clean up worktrees".
 - **A transition did not reach the remote** → check pipeline.md's `push:`
   key first (absent = pushing is the owner's business), then
   `GET /log?tail=50` for `push of the transition to "<remote>" failed`.
