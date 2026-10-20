@@ -3188,7 +3188,7 @@ sequenceDiagram
     B->>B: read prompt (tickets/_meta/prompts/<ref>.md), compose instruction
     B->>F: start(RunRequest)
     F->>R: POST /start (loopback + bearer)
-    R->>G: worktree add <root>/worktrees/<repo>-<id> (branch t/<id>)
+    R->>G: worktree add <ticketsRepo>/_worktrees/<id> (branch t/<id>, path on RunRequest)
     R->>W: spawn (opencode serve | claude -p stream-json), stdout -> stream.jsonl
     R->>G: ticket patch: run map + Log "run R-… started" (one commit)
     W-->>R: events (session ref, tokens, cost) -> stream.jsonl + run.json

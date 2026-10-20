@@ -192,6 +192,51 @@ describe('prepareWorktree (real git)', () => {
     expect(await headOf(worktreePath)).toBe(BRANCH);
   });
 
+  // --- the re-run trap (T-0044): the branch checked out elsewhere ---
+
+  /** A leftover registration of the branch somewhere else — the settled
+   *  ticket's checkout in another base (the legacy fleet root). */
+  const legacyConflict = async (): Promise<string> => {
+    const legacy = path.join(baseDir, 'legacy-root', 'worktrees', 'repo-T-0091');
+    await prepareWorktree(fleetGit(), req(), legacy, frozen);
+    return legacy;
+  };
+
+  it('removes a clean conflicting registration when it is not live, then creates', async () => {
+    const legacy = await legacyConflict();
+
+    const result = await prepareWorktree(fleetGit(), req(), worktreePath, frozen, () => false);
+    expect(result).toEqual({ outcome: 'created', sessionInvalidated: false, movedTo: null });
+    expect(await headOf(worktreePath)).toBe(BRANCH);
+    // The conflicting registration and its folder are gone (real git
+    // remove, branch untouched).
+    expect(await listing()).not.toContain(legacy.replaceAll('\\', '/'));
+    await expect(fsp.stat(legacy)).rejects.toThrow();
+    expect((await git(repo, ['rev-parse', BRANCH])).trim()).toBeDefined();
+  });
+
+  it('refuses descriptively when the conflicting registration is live', async () => {
+    const legacy = await legacyConflict();
+
+    const refused = prepareWorktree(fleetGit(), req(), worktreePath, frozen, (p) =>
+      p.replaceAll('\\', '/') === legacy.replaceAll('\\', '/'),
+    );
+    await expect(refused).rejects.toThrow('live run');
+    await expect(fsp.stat(legacy)).resolves.toBeDefined();
+  });
+
+  it('refuses when the conflicting registration is dirty — nothing is destroyed', async () => {
+    const legacy = await legacyConflict();
+    await fsp.writeFile(path.join(legacy, 'uncommitted.txt'), 'half-finished\n');
+
+    await expect(prepareWorktree(fleetGit(), req(), worktreePath, frozen)).rejects.toThrow(
+      'dirty worktree',
+    );
+    await expect(fsp.readFile(path.join(legacy, 'uncommitted.txt'), 'utf8')).resolves.toBe(
+      'half-finished\n',
+    );
+  });
+
   it('recreates a stale clean worktree (registration lost, tree still runnable)', async () => {
     await prepareWorktree(fleetGit(), req(), worktreePath, frozen);
     // The verified leftover: the admin gitdir file is gone — the entry
@@ -465,6 +510,7 @@ describe('RunSupervisor worktree wiring', () => {
       ticketRelPath: 'tickets/plan/T-0001.md',
       phase: 'plan',
       repoPath: 'W:/kt',
+      worktreePath: path.join(fleetRoot, 'worktrees', 'kt-T-0001'),
       branch: 't/T-0001',
       baseRef: null,
       provider: 'opencode',

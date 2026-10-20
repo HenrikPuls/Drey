@@ -58,7 +58,14 @@ import { FleetClient } from './fleet-client';
 import { listWorkerModels } from './worker-models';
 import { agentIdentity, composeRunRequest } from './fleet/request';
 import { checkpointPhaseIds, columnPromptRef, isAutoPhase, nextPhaseIdOf } from './fleet/chain';
-import type { ChainConfig, PermissionMode } from './fleet/protocol';
+import {
+  cleanWorktrees,
+  listOrphans,
+  removeWorktree,
+  type CleanupReport,
+} from './fleet/worktree-clean';
+import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } from './fleet/worktree-home';
+import type { ChainConfig, PermissionMode, RunInfo } from './fleet/protocol';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
 const ORDER_PATH = 'tickets/_meta/order.md';
@@ -127,6 +134,7 @@ class BoardService {
     private readonly autoPermissionMode: PermissionMode,
     private readonly gitPath: string,
     private readonly fleet: FleetClient,
+    private readonly fleetRoot: string,
   ) {}
 
   /** The board's emit, debounced — one push per burst of changes. */
@@ -837,6 +845,268 @@ class BoardService {
     });
   }
 
+  // --- worktree cleanup (T-0044, ADR-0080) ---------------------------
+
+  /** Every fleet run record (live or historical) the client can see. */
+  private async fleetRecords(): Promise<readonly RunInfo[]> {
+    return this.fleet.runs();
+  }
+
+  /**
+   * The newest record for a ticket that names a worktree, or null.
+   * Historical records settle on disk, so this survives a down runner.
+   */
+  private newestRecordFor(runs: readonly RunInfo[], ticketId: string): RunInfo | null {
+    const found = runs
+      .filter((r) => r.ticketId === ticketId && r.worktreePath.trim() !== '')
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    return found[0] ?? null;
+  }
+
+  /**
+   * Liveness is the ticket's `run:` stamp ∪ non-terminal fleet records
+   * (ADR-0080): never fleet status alone — `readHistory` marks a
+   * still-live run `stopped` when the runner is down, and the stamps
+   * are the persisted truth. A `detached` worker may still be running:
+   * it counts as live.
+   */
+  private async liveWorktreePaths(vault: VaultLike, snap: BoardSnapshot): Promise<string[]> {
+    const runs = await this.fleetRecords();
+    const live = new Set<string>();
+    for (const run of runs) {
+      if (!['done', 'stopped', 'failed'].includes(run.state) && run.worktreePath.trim() !== '') {
+        live.add(run.worktreePath);
+      }
+    }
+    for (const column of snap.columns) {
+      for (const card of column.tickets) {
+        if (card.meta.run === null) {
+          continue;
+        }
+        const record = this.newestRecordFor(runs, card.id);
+        const repo =
+          card.meta.repo === null ? null : snap.repos.find((r) => r.name === card.meta.repo) ?? null;
+        if (repo !== null && repo.path !== null) {
+          // The record's path first (it may predate the home rule);
+          // the computed path covers a stamp without a record.
+          live.add(record !== null ? record.worktreePath : worktreePathFor(vault.path, repo, card.id));
+        }
+      }
+    }
+    return [...live];
+  }
+
+  /**
+   * The card menu's "Remove worktree" (T-0044): `git worktree remove`
+   * through `worktree-clean`, the branch stays (it carries the work).
+   * A dirty tree refuses unless `force` (the renderer's armed second
+   * click); a live run refuses outright. The Log line + one commit are
+   * the board's own single-writer treatment.
+   */
+  removeWorktreeForTicket(input: { id: string; force: boolean }): Promise<
+    | { readonly ok: true; readonly warning?: string }
+    | { readonly ok: false; readonly error: string; readonly dirty?: boolean; readonly status?: string }
+  > {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const snap = await this.snapshot();
+      let card: TicketCard | null = null;
+      for (const column of snap.columns) {
+        const found = column.tickets.find((t) => t.id === input.id);
+        if (found !== undefined) {
+          card = found;
+          break;
+        }
+      }
+      if (card === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      if (card.meta.repo === null) {
+        return { ok: false, error: `${card.id} names no repository — there is no worktree` };
+      }
+      const repo = snap.repos.find((r) => r.name === card.meta.repo) ?? null;
+      if (repo === null || repo.path === null) {
+        return { ok: false, error: `"${card.meta.repo}" has no local path in _meta/repos.md` };
+      }
+      const runs = await this.fleetRecords();
+      const liveRecord = runs.some(
+        (r) => r.ticketId === card.id && !['done', 'stopped', 'failed'].includes(r.state),
+      );
+      if (card.meta.run !== null || liveRecord) {
+        return { ok: false, error: `${card.id} has a live run — stop it before removing its worktree` };
+      }
+      const record = this.newestRecordFor(runs, card.id);
+      const worktreePath = record !== null ? record.worktreePath : worktreePathFor(vault.path, repo, card.id);
+
+      const outcome = await removeWorktree(this.git, repo.path, worktreePath, { force: input.force });
+      if (!outcome.ok) {
+        if (outcome.dirty === true) {
+          return {
+            ok: false,
+            error: `the worktree is dirty — confirm to remove it anyway`,
+            dirty: true,
+            status: outcome.status,
+          };
+        }
+        return { ok: false, error: outcome.error };
+      }
+
+      // The owner's button: one action-only Log line, one commit.
+      const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
+      let warning: string | null = null;
+      try {
+        const patched = patchTicketFile(text, {
+          to: card.phase,
+          from: null,
+          now: new Date(),
+          actor: OWNER,
+          action: `worktree removed (${worktreePath})`,
+        });
+        await this.ctx.vault.write(card.path, patched, { vaultId: vault.id });
+        warning = await this.commit(vault, [card.path], `tickets: ${card.id} worktree removed`);
+        this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [card.path] });
+      } catch (error) {
+        warning = `the worktree was removed, but the Log line failed: ${messageOf(error)}`;
+      }
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The "Clean up worktrees" control (T-0044): every fleet worktree
+   * whose ticket has no live run is removed (real git, dirty trees
+   * kept and reported), then every mapped repo gets one
+   * `git worktree prune`. Plugin-side by design (ADR-0080): the plugin
+   * holds repos.md, the run history and the stamps, and cleanup usually
+   * happens with the runner down.
+   */
+  async worktreeCleanup(): Promise<{ ok: boolean; report?: CleanupReport; error?: string }> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return { ok: false, error: 'no tickets vault detected' };
+    }
+    const snap = await this.snapshot();
+    const protectedPaths = await this.liveWorktreePaths(vault, snap);
+    const report = await cleanWorktrees(this.git, {
+      repos: snap.repos,
+      vaultPath: vault.path,
+      fleetRoot: this.fleetRoot,
+      protectedPaths,
+    });
+    this.ctx.log(
+      `worktree cleanup: ${report.removed.length} removed, ${report.keptDirty.length} kept dirty` +
+        (report.failed.length > 0 ? `, ${report.failed.length} failed` : '') +
+        `, pruned ${report.prunedRepos.length} repo(s)`,
+    );
+    return { ok: true, report };
+  }
+
+  /**
+   * The boot sweep (T-0044, ADR-0080): the legacy-base migration (every
+   * boot until the legacy root is empty — live runs keep theirs until
+   * they settle, clean trees go, dirty ones stay and are reported),
+   * the .gitignore ensure, and the orphan listing for the status note.
+   */
+  worktreeBootSweep(): Promise<void> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return;
+      }
+      await this.ensureWorktreesIgnored(vault);
+      const snap = await this.snapshot();
+      const protectedPaths = await this.liveWorktreePaths(vault, snap);
+      const report = await cleanWorktrees(this.git, {
+        repos: snap.repos,
+        vaultPath: vault.path,
+        fleetRoot: this.fleetRoot,
+        protectedPaths,
+        legacyOnly: true,
+      });
+      const runs = await this.fleetRecords();
+      const bases = snap.repos.filter((r) => r.path !== null).map((r) => worktreeBaseFor(vault.path, r));
+      const known = [
+        ...runs.map((r) => r.worktreePath).filter((p) => p.trim() !== ''),
+        ...protectedPaths,
+      ];
+      const orphans = await listOrphans(bases, known);
+      const leftovers = await fsp
+        .readdir(legacyWorktreeBase(this.fleetRoot), { withFileTypes: true })
+        .then((entries) => entries.filter((e) => e.isDirectory()).map((e) => e.name))
+        .catch(() => [] as string[]);
+      if (
+        report.removed.length > 0 ||
+        report.keptDirty.length > 0 ||
+        report.failed.length > 0 ||
+        orphans.length > 0 ||
+        leftovers.length > 0
+      ) {
+        this.ctx.log(
+          `worktree boot sweep: migrated ${report.removed.length}, kept dirty ${report.keptDirty.length}` +
+            `, orphans ${orphans.length}, legacy leftovers ${leftovers.length}` +
+            (report.failed.length > 0 ? `, failed ${report.failed.length}` : ''),
+        );
+      }
+    });
+  }
+
+  /** The status note under the board (T-0044): where worktrees live,
+   *  which folders are orphans, what still sits in the legacy root. */
+  async worktreesStatus(): Promise<{
+    base: string | null;
+    orphans: readonly string[];
+    legacyLeftovers: readonly string[];
+  }> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return { base: null, orphans: [], legacyLeftovers: [] };
+    }
+    const snap = await this.snapshot();
+    const runs = await this.fleetRecords();
+    const bases = snap.repos.filter((r) => r.path !== null).map((r) => worktreeBaseFor(vault.path, r));
+    const known = runs.map((r) => r.worktreePath).filter((p) => p.trim() !== '');
+    const orphans = await listOrphans(bases, known);
+    const legacyLeftovers = await fsp
+      .readdir(legacyWorktreeBase(this.fleetRoot), { withFileTypes: true })
+      .then((entries) => entries.filter((e) => e.isDirectory()).map((e) => e.name))
+      .catch(() => [] as string[]);
+    return {
+      // The default base — a repo with a `worktrees:` override has its own.
+      base: path.join(vault.path, WORKTREES_DIR),
+      orphans,
+      legacyLeftovers,
+    };
+  }
+
+  /**
+   * The repo's .gitignore covers the worktrees base (ADR-0080: ensured,
+   * not documented — drifts on new boards otherwise). One commit when
+   * it changes; never fails the caller.
+   */
+  private async ensureWorktreesIgnored(vault: VaultLike): Promise<void> {
+    const location = await this.locate(vault.path);
+    if (location === null) {
+      return; // not a git repo — nothing to ignore in
+    }
+    const entry = `/${location.prefix}_worktrees/`;
+    const gitignore = path.join(location.root, '.gitignore');
+    const current = await fsp.readFile(gitignore, 'utf8').catch(() => null);
+    if (current !== null && current.split('\n').some((line) => line.trim() === entry)) {
+      return;
+    }
+    const lead = current === null || current === '' ? '' : current.endsWith('\n') ? '' : '\n';
+    try {
+      await fsp.writeFile(gitignore, `${current ?? ''}${lead}${entry}\n`, 'utf8');
+      await this.git.commitPaths(location.root, ['.gitignore'], 'tickets: ignore the worktrees base');
+    } catch (error) {
+      this.ctx.log(`ignoring the worktrees base failed: ${messageOf(error)}`, 'warn');
+    }
+  }
+
   /**
    * Writes one phase's pool keys in `_meta/pipeline.md` (M85, the
    * settings dialog's writer): setting a worker writes the matching
@@ -1166,6 +1436,9 @@ class BoardService {
       } catch (error) {
         return { ok: false, error: `write failed: ${messageOf(error)}` };
       }
+      // The worktrees base is ignored from day one (ADR-0080: ensured,
+      // not documented — one own commit when it changes something).
+      await this.ensureWorktreesIgnored(target);
       const warning = await this.commit(
         target,
         [PIPELINE_PATH, ORDER_PATH, REPOS_PATH, ...promptPaths],
@@ -1207,7 +1480,8 @@ const plugin: MainPluginModule = {
       onFleetChanged: (fleetSnapshot) => ctx.ipc.emit('fleet-changed', fleetSnapshot),
     });
     fleet.startPolling();
-    const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet);
+    const fleetRoot = path.join(ctx.app.userRoot, 'fleet');
+    const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet, fleetRoot);
 
     ctx.ipc.handle('board', () => board.refresh());
 
@@ -1397,6 +1671,24 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('fleetLog', async () => ({ text: (await fleet.log()) ?? '' }));
+
+    // --- worktree cleanup (T-0044, ADR-0080) --------------------------
+    // Everything through real git (worktree remove/prune); the branch
+    // stays. The boot sweep migrates the legacy base, ensures the
+    // .gitignore entry and lists orphans (never auto-deletes them).
+    ctx.ipc.handle('worktreeRemove', async (payload) => {
+      const p = payload as { id?: unknown; force?: unknown };
+      if (typeof p.id !== 'string') {
+        return { ok: false, error: 'bad worktree remove payload' };
+      }
+      return board.removeWorktreeForTicket({ id: p.id, force: p.force === true });
+    });
+
+    ctx.ipc.handle('worktreesCleanup', async () => board.worktreeCleanup());
+
+    ctx.ipc.handle('worktreesStatus', async () => board.worktreesStatus());
+
+    void board.worktreeBootSweep();
 
     // --- the chain (M85, ADR-0077) -------------------------------------
     ctx.ipc.handle('chainStatus', async () => fleet.chainStatus());

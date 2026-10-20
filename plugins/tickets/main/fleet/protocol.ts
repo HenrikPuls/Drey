@@ -41,6 +41,12 @@ export interface RunRequest {
   readonly phase: string;
   /** Absolute path of the work repo's checkout. */
   readonly repoPath: string;
+  /**
+   * The run's worktree, absolute (`<ticketsRepo>/_worktrees/<ticket-id>`
+   * by default, ADR-0080). Computed in `composeRunRequest` — the runner
+   * never derives paths; an old sender without the field is refused.
+   */
+  readonly worktreePath: string;
   /** The deterministic branch — `t/<id>` (ADR-0076). */
   readonly branch: string;
   /** The base ref a fresh worktree branches from (repos.md `branch:` or HEAD). */

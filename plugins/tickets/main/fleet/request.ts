@@ -17,6 +17,7 @@ import {
 import { acceptanceCommands, ticketSections } from '../ticket-files';
 import { composeInstruction, resolveAssignment } from './assignment';
 import type { PermissionMode, RunRequest } from './protocol';
+import { worktreePathFor } from './worktree-home';
 
 export interface ComposeRunInput {
   readonly card: TicketCard;
@@ -93,6 +94,10 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     return { ok: false, error: assignment.error };
   }
   const branch = input.card.meta.branch ?? branchForTicket(input.card.id);
+  // The worktree's home (ADR-0080): computed here, carried on the
+  // request — the runner never derives paths, and the brief names the
+  // absolute location so the worker never has to find it.
+  const worktreePath = worktreePathFor(input.vaultPath, input.repo, input.card.id);
   const sections = ticketSections(input.ticketText);
   const request: RunRequest = {
     ticketId: input.card.id,
@@ -100,6 +105,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     ticketRelPath: input.card.path,
     phase: input.card.phase,
     repoPath: input.repo.path,
+    worktreePath,
     branch,
     baseRef: input.repo.branch,
     ...(input.repo.link !== undefined && input.repo.link.length > 0 ? { links: input.repo.link } : {}),
@@ -111,7 +117,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
       title: input.card.meta.title ?? input.card.id,
       repo: input.repo.name,
       branch,
-      worktreePath: `${input.repo.name}-${input.card.id}`,
+      worktreePath,
       phase: input.card.phase,
       description: sections.description,
       plan: sections.plan,

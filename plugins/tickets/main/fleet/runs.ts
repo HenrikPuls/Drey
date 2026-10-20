@@ -22,7 +22,7 @@ import { TicketsGit } from '../tickets-git';
 import { ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
 import { killTreeGuarded, processAlive, processStartMs, type ExecFn } from './procs';
 import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
-import { prepareWorktree as defaultPrepareWorktree, type LinkReport, type PreparedWorktree } from './worktrees';
+import { normalizeForMatch, prepareWorktree as defaultPrepareWorktree, type LinkReport, type PreparedWorktree } from './worktrees';
 
 const execAsync = promisify(nodeExec);
 const execFileAsync = promisify(nodeExecFile);
@@ -201,7 +201,8 @@ export class RunSupervisor {
     this.exec = deps.exec ?? probeExec(this.deps.root);
     this.prepareWorktree =
       deps.prepareWorktree ??
-      ((request, worktreePath) => defaultPrepareWorktree(this.git, request, worktreePath, this.now));
+      ((request, worktreePath) =>
+        defaultPrepareWorktree(this.git, request, worktreePath, this.now, (p) => this.isWorktreeLive(p)));
   }
 
   /**
@@ -579,11 +580,9 @@ export class RunSupervisor {
 
     const id = `R-${this.stamp().replaceAll(/[-:.]/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 6)}`;
     const dir = path.join(this.deps.root, 'runs', id);
-    const worktreePath = path.join(
-      this.deps.root,
-      'worktrees',
-      `${request.repoPath.split(/[\\/]/).at(-1) ?? 'repo'}-${request.ticketId}`,
-    );
+    // The home rule's path (ADR-0080), computed in `composeRunRequest` and
+    // carried on the request — the runner never derives paths.
+    const worktreePath = request.worktreePath;
 
     let prepared: PreparedWorktree;
     try {
@@ -942,6 +941,17 @@ export class RunSupervisor {
     return this.list().some((r) => !TERMINAL.includes(r.state) && r.state !== 'detached');
   }
 
+  /** Whether a live run (starting/running/stopping, or a detached one —
+   *  unwatchable, treat as busy) is working in this worktree: the
+   *  prepare-time branch-conflict healing (T-0044) never removes a tree
+   *  a live run holds. */
+  private isWorktreeLive(worktreePath: string): boolean {
+    const needle = normalizeForMatch(worktreePath);
+    return this.list().some(
+      (r) => !TERMINAL.includes(r.state) && normalizeForMatch(r.worktreePath) === needle,
+    );
+  }
+
   // -------------------------------------------------------------------------
 
   /** The rules the runner enforces itself (ADR-0076: the validator runs where the data is). */
@@ -961,6 +971,9 @@ export class RunSupervisor {
     }
     if (request.branch !== `t/${request.ticketId}`) {
       failures.push(`the branch is not the deterministic t/${request.ticketId}`);
+    }
+    if (request.worktreePath.trim() === '') {
+      failures.push('the worktree path is empty (a pre-T-0044 sender derived it itself)');
     }
     if (request.acceptance.length === 0 && request.gate !== 'structural') {
       failures.push('the ticket has no acceptance criteria — the machine gate would have nothing to run');

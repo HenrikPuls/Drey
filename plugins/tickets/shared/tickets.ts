@@ -263,6 +263,13 @@ export interface RepoRef {
   readonly path: string | null;
   /** The repo's default fleet worker (`worker: opencode`), or null. */
   readonly worker: string | null;
+  /**
+   * The repo's worktree base override (`worktrees:`, T-0044): where the
+   * fleet's checkouts for this repo live — `<base>/<ticket-id>`.
+   * Absolute, or relative to the tickets repo root. Null = the default
+   * `<ticketsRepo>/_worktrees` (ADR-0080).
+   */
+  readonly worktrees: string | null;
   /** Git-ignored folders a fleet worktree links from the checkout (`link:`, req-56); absent = none. */
   readonly link?: readonly string[];
 }

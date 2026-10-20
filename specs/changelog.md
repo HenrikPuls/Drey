@@ -20,6 +20,54 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### T-0044 — Fleet worktrees: home in the tickets repo and git-only cleanup (owner request, outside the list)
+
+The workers' checkouts hid under the machine-local fleet root
+(`<userRoot>/fleet/worktrees/<repo>-<ticket>`) with no supported way to
+tidy up. Now they have a visible home and real-git cleanup
+([ADR-0080](../docs/09_architecture_decisions/0080-fleet-worktrees-home-and-cleanup.md)):
+
+- **Home:** `<ticketsRepo>/_worktrees/<ticket-id>/` — a sibling of
+  `tickets/` at the repo root. `_`-prefixed folders at the vault root
+  are reserved: file tree, markdown index and the opt-in watcher skip
+  them (root depth only — `tickets/_meta` stays indexed); the repo's
+  `.gitignore` covers the base (ensured by the boot sweep and the board
+  initialize, one commit when appended). A repo may override its base
+  with a `worktrees:` key in `_meta/repos.md` (`RepoRef.worktrees`,
+  absolute or repo-root-relative). The path is computed in
+  `composeRunRequest` and carried as the required
+  `RunRequest.worktreePath` — the runner never derives paths, and the
+  worker's brief names the absolute location.
+- **Cleanup — everything through real git, never a bare rmdir:**
+  - per ticket, the card menu's "Remove worktree…" runs
+    `git worktree remove` (dirty → armed confirm, live run → refusal,
+    a tree that no longer answers → error); the **branch stays**, the
+    removal is a Log line with one commit;
+  - global, "Clean up worktrees" in the panel header removes every
+    worktree whose ticket has no live run (dirty ones kept and
+    reported), then prunes every mapped repo — plugin-side
+    (`worktree-clean.ts` over `TicketsGit`), no new runner routes;
+  - the boot sweep migrates the legacy fleet root on every boot until
+    it is empty (clean leftovers go automatically, dirty ones stay and
+    are reported, a live run's tree waits for its settle) and lists
+    orphan folders under the new base — listed, never auto-deleted.
+  - Liveness is the ticket's `run:` stamp ∪ non-terminal fleet records,
+    never fleet status alone (a down runner's history marks still-live
+    runs `stopped`).
+- **Re-run healing:** `prepareWorktree` removes a conflicting
+  *registered* checkout of the same branch before `worktree add` when
+  provably clean and not live (guarded by the supervisor's live set;
+  never `--force`) — otherwise a settled ticket's leftover checkout
+  would make every dispatch skip-and-retry forever.
+
+Specs: `worktree-home.spec.ts` (base/naming/parse/compose), extended
+`worktrees.spec.ts` (healing) and `runs.spec.ts` (request-carried path),
+`worktree-clean.spec.ts` (real-git removal/cleanup/orphans),
+`vault-scan-rules.spec.ts` + extended `vault-manager.spec.ts`
+(reserved-root skip). FLEET.md and `specs/ticket-schema.md` document the
+layout, the `worktrees:` key and the cleanup surfaces. **Not yet
+manually verified by the owner.**
+
 ### req-57 — CI green on Windows runners: the shipped ticket prompts stay LF on every checkout (owner request, outside the list)
 
 M85 added `default-prompts.spec.ts`, which byte-compares the raw shipped
