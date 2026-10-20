@@ -130,10 +130,16 @@ export interface RunInfo {
   /**
    * The size of the worker's current context window in tokens (the
    * last model call's input incl. cache reads); null/absent while the
-   * provider has reported none. The limit is not known to the runner —
-   * the board measures it against a configured window.
+   * provider has reported none.
    */
   readonly contextTokens?: number | null;
+  /**
+   * The model's context window in tokens — the limit the board measures
+   * `contextTokens` against. Null/absent while the provider has
+   * reported none (the board then measures against its default window);
+   * absent on run.json records written before the field existed.
+   */
+  readonly contextWindow?: number | null;
   /**
    * The owner has taken the run over (the takeover tab): the worker's
    * finished turn does not end the run, the reaper leaves a quiet worker

@@ -59,8 +59,8 @@ describe('contextFill', () => {
   });
 
   it('is the share of the window, capped at 1', () => {
-    expect(contextFill(run({ contextTokens: 50_000 }), 200_000)).toBe(0.25);
-    expect(contextFill(run({ contextTokens: 300_000 }), 200_000)).toBe(1);
+    expect(contextFill(run({ contextTokens: 50_000 }))).toBe(0.25);
+    expect(contextFill(run({ contextTokens: 300_000 }))).toBe(1);
   });
 });
 

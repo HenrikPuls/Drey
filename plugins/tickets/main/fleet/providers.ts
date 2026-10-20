@@ -36,6 +36,8 @@ export interface NormalizedEvent {
   readonly activity?: string;
   /** The current context window's size in tokens. */
   readonly contextTokens?: number;
+  /** The model's context window in tokens (its limit), reported once when known. */
+  readonly contextWindow?: number;
   /** The worker's turn state, when it changed: mid-turn or standing. */
   readonly turn?: 'busy' | 'idle';
   /** The slash commands the worker accepts (names without the slash). */
@@ -403,6 +405,14 @@ interface OcSession {
   readonly tokens?: OcUsage;
 }
 
+/** One model-catalog entry — v2's `Model.Info` (`limit.context` is the window). */
+interface OcModel {
+  readonly id?: string;
+  readonly modelID?: string;
+  readonly providerID?: string;
+  readonly limit?: { readonly context?: number };
+}
+
 /**
  * The v2 surface the adapter speaks, pinned by the owner's spike against
  * v2.0.32: the server prints `server password <token>` on stdout, every
@@ -420,6 +430,10 @@ export const OPENCODE_API = {
   commands: '/api/command',
   command: (id: string): string => `/api/session/${id}/command`,
   compact: (id: string): string => `/api/session/${id}/compact`,
+  /** The model catalog (`GET`, `{data: Model.Info[]}`). */
+  models: '/api/model',
+  /** The server's default model (`GET`, `{data: Model.Info | undefined}`). */
+  modelDefault: '/api/model/default',
 } as const;
 
 /** The slash commands every OpenCode worker has besides the project's own. */
@@ -450,6 +464,12 @@ export function modelBody(model: string | null, text: string): {
       modelID: model.slice(slashAt + 1).trim(),
     },
   };
+}
+
+/** Drops a `#variant` suffix a pin or a catalog id may carry (`glm-5.3#fast`). */
+export function stripVariant(id: string): string {
+  const at = id.indexOf('#');
+  return at === -1 ? id : id.slice(0, at);
 }
 
 /** How long a stop waits for the server's answer to the soft interrupt before it kills the tree. */
@@ -555,6 +575,61 @@ export function opencodeAdapter(
         // the built-ins alone are still offered
       }
       start.onEvent({ ts: nowIso(now), kind: 'usage', commands: [...OPENCODE_BUILTIN_COMMANDS, ...customCommands] });
+    };
+
+    /**
+     * The model's context window, asked of the server once per worker
+     * (the catalog does not change mid-run): the entry the run's pin
+     * names — `providerID` + `id` first, then `providerID` + `modelID`
+     * (a config-added model can key differently from its upstream id),
+     * a `#variant` suffix stripped before matching; without a pin the
+     * server's default model. A miss or a failed fetch is one stream
+     * note — the number is never guessed.
+     */
+    const reportContextWindow = async (): Promise<void> => {
+      const note = (why: string): void => {
+        start.onEvent({ ts: nowIso(now), kind: 'note', text: `context window not reported — ${why}` });
+      };
+      try {
+        let info: OcModel | undefined;
+        if (start.model !== null && start.model.trim() !== '') {
+          const slashAt = start.model.indexOf('/');
+          const providerID = (slashAt === -1 ? '' : start.model.slice(0, slashAt)).trim();
+          const pinned = stripVariant((slashAt === -1 ? start.model : start.model.slice(slashAt + 1)).trim());
+          const res = await fetchFn(`${address}${OPENCODE_API.models}`, { headers: auth });
+          if (!res.ok) {
+            note(`the model catalog fetch failed (${res.status})`);
+            return;
+          }
+          const catalog = ((await res.json()) as { data?: ReadonlyArray<OcModel> }).data ?? [];
+          info =
+            catalog.find((m) => m.providerID === providerID && stripVariant(m.id ?? '') === pinned) ??
+            catalog.find((m) => m.providerID === providerID && stripVariant(m.modelID ?? '') === pinned);
+          if (info === undefined) {
+            note(`the catalog has no entry for ${providerID === '' ? '' : `${providerID}/`}${pinned}`);
+            return;
+          }
+        } else {
+          const res = await fetchFn(`${address}${OPENCODE_API.modelDefault}`, { headers: auth });
+          if (!res.ok) {
+            note(`the default model fetch failed (${res.status})`);
+            return;
+          }
+          info = ((await res.json()) as { data?: OcModel }).data;
+          if (info === undefined) {
+            note('the server names no default model');
+            return;
+          }
+        }
+        const window = info.limit?.context;
+        if (typeof window !== 'number' || window <= 0) {
+          note('the model entry carries no context limit');
+          return;
+        }
+        start.onEvent({ ts: nowIso(now), kind: 'usage', contextWindow: window });
+      } catch (error) {
+        note(String(error).slice(0, 160));
+      }
     };
 
     /**
@@ -870,6 +945,7 @@ export function opencodeAdapter(
       });
       pollTimer = setInterval(() => void pollTurn(), 2_000);
       void loadCommands();
+      void reportContextWindow();
       return handle;
     }
 
@@ -979,6 +1055,7 @@ export function opencodeAdapter(
 
       pollTimer = setInterval(() => void pollTurn(), 2_000);
       await loadCommands();
+      void reportContextWindow();
 
       // The prompt POST queues the turn and returns at once; the poll
       // loop watches the message list for the `idle` end marker.

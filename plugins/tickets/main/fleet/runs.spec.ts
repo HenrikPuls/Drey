@@ -223,6 +223,20 @@ describe('RunSupervisor', () => {
     expect(sup.get(runId)?.held).toBe(true);
   });
 
+  it('a reported context window survives later events without it (T-0052)', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    const fire = adapter.starts[0]!.onEvent;
+    fire({ ts: '2026-10-17T12:00:00Z', kind: 'usage', contextWindow: 1_000_000 });
+    await vi.waitFor(() => expect(sup.get(runId)?.contextWindow).toBe(1_000_000));
+    // A later event without the field must not erase the once-set value.
+    fire({ ts: '2026-10-17T12:00:01Z', kind: 'note', text: 'working' });
+    await vi.waitFor(() => expect(sup.get(runId)?.lastActivity).toBe('2026-10-17T12:00:01Z'));
+    expect(sup.get(runId)?.contextWindow).toBe(1_000_000);
+  });
+
   it('resume ends a detached run and resumes its session in a new run', async () => {
     const rel = await writeTicket();
     const dir = path.join(fleetRoot, 'runs', 'R-gone');
