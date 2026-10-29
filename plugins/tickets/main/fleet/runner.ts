@@ -24,9 +24,11 @@ import { fleetBuildStamp } from './build-stamp';
 import { claudeCodeAdapter, opencodeAdapter } from './providers';
 import { freePort, nodeSpawnFn } from './procs';
 import { Orchestrator } from './orchestrator';
-import { MAX_ATTACHMENT_BYTES, RunSupervisor } from './runs';
+import { MAX_ATTACHMENT_BYTES, RunSupervisor, type SupervisorRecord } from './runs';
+import { tokenReport, type ReportRun } from './report';
 import {
   isWorkerProvider,
+  normalizeFleetCaps,
   type ChainConfig,
   type ChainMaster,
   type ColumnMode,
@@ -276,6 +278,9 @@ async function main(): Promise<void> {
           git: typeof body.git === 'string' && body.git.trim() !== '' ? body.git : 'git',
           defaultWorker: typeof body.defaultWorker === 'string' && body.defaultWorker.trim() !== '' ? body.defaultWorker : 'opencode',
           permissionMode: body.permissionMode === 'bypass' ? 'bypass' : 'accept-edits',
+          // Absent or invalid keys degrade to the defaults per key (T-0048):
+          // an older plugin keeps a newer runner working.
+          caps: normalizeFleetCaps(body.caps),
         });
         respond(200, status);
         return;
@@ -313,6 +318,31 @@ async function main(): Promise<void> {
       if (req.method === 'GET' && pathname === '/status') {
         const runs = [...supervisors.values()].flatMap((s) => s.list());
         respond(200, { runs });
+        return;
+      }
+      if (req.method === 'GET' && pathname === '/report') {
+        // Token telemetry grouped by ticket, phase and model (T-0048) —
+        // curl-able next to /status and /log. One run belongs to exactly
+        // one supervisor; dedupe keeps a shared port honest.
+        const byId = new Map<string, SupervisorRecord>();
+        for (const sup of supervisors.values()) {
+          for (const record of sup.records()) {
+            if (!byId.has(record.info.id)) {
+              byId.set(record.info.id, record);
+            }
+          }
+        }
+        const runs: ReportRun[] = [...byId.values()].map((record) => ({
+          ticketId: record.info.ticketId,
+          phase: record.info.phase ?? record.request.phase,
+          model: record.info.model ?? record.request.model,
+          provider: record.info.provider,
+          usage: record.info.usage ?? null,
+          tokensIn: record.info.tokensIn,
+          tokensOut: record.info.tokensOut,
+          tokensBeforeFirstWrite: record.info.tokensBeforeFirstWrite ?? null,
+        }));
+        respond(200, { ok: true, groups: tokenReport(runs) });
         return;
       }
       if (req.method === 'POST' && pathname === '/start') {

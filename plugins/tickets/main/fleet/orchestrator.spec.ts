@@ -148,6 +148,32 @@ const CONFIG = {
   permissionMode: 'accept-edits' as const,
 };
 
+/** A failed run of `ticket` whose gate failed with `failure` (T-0048's retry context). */
+function failedRecord(ticket: string, failure: string): SupervisorRecord {
+  return {
+    info: {
+      id: `R-old-${ticket}`,
+      ticketId: ticket,
+      provider: 'opencode',
+      state: 'failed',
+      pid: null,
+      startedAt: '2026-10-18T11:00:00Z',
+      endedAt: '2026-10-18T11:20:00Z',
+      sessionRef: null,
+      tokensIn: 0,
+      tokensOut: 0,
+      costUsd: null,
+      lastActivity: '2026-10-18T11:20:00Z',
+      steerCount: 0,
+      lastSteerRung: null,
+      worktreePath: 'W:/wt',
+      branch: `t/${ticket}`,
+      gateFailure: failure,
+    },
+    request: { ticketId: ticket } as RunRequest,
+  };
+}
+
 describe('Orchestrator', () => {
   beforeEach(async () => {
     vaultDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-vault-'));
@@ -392,6 +418,44 @@ describe('Orchestrator', () => {
     await orch.onRunSettled({ ...record.info, state: 'done' });
     expect(orch.status().redStreak['plan'] ?? 0).toBe(0);
     expect(orch.status().columns['plan'] ?? 'playing').toBe('playing');
+  });
+
+  it('a failed-then-requeued ticket dispatches with the gate failure section (T-0048 retry)', async () => {
+    await writeMeta();
+    await writeTicket('T-0041', 'plan');
+    const { orch, fleet } = orchestrator();
+    // The ticket's previous run failed its gate and was requeued.
+    fleet.records.push(failedRecord('T-0041', '`npm run verify:unit` failed\n\nkeep row 39\nkeep row 40'));
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+
+    const started = fleet.records.find((r) => r.info.state === 'running')!;
+    expect(started.request.instruction).toContain('The previous run failed the machine gate — fix this first');
+    expect(started.request.instruction).toContain('keep row 40');
+    // The instruction keeps the context pack's order: the phase template
+    // before the plan, the retry section in the variable parts.
+    expect(started.request.instruction.indexOf('Work the plan step.')).toBeLessThan(
+      started.request.instruction.indexOf('The previous run failed the machine gate'),
+    );
+  });
+
+  it('caps from the chain config reach the composed instruction', async () => {
+    await writeMeta();
+    await writeTicket('T-0042', 'plan');
+    const logs: string[] = [];
+    const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
+    const failure = [...Array(10).keys()].map((i) => `drop row ${i + 1}`).join('\n');
+    fleet.records.push(failedRecord('T-0042', `\`npm test\` failed\n\n${failure}\nkeep row 10`));
+    await orch.configure({
+      ...CONFIG,
+      caps: { gateFailureLines: 1, gateFailureBytes: 4_096, diffStatLines: 50, diffStatBytes: 4_096 },
+    });
+    await orch.setMaster('run');
+
+    const started = fleet.records.find((r) => r.info.state === 'running')!;
+    expect(started.request.instruction).toContain('keep row 10');
+    expect(started.request.instruction).not.toContain('drop row 9');
+    expect(logs.some((line) => line.includes('T-0042 gateFailure truncated: true, originalSize'))).toBe(true);
   });
 
   it('the lease reaper is reachable through the ports', async () => {
