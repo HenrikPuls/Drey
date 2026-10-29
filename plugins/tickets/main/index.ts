@@ -956,10 +956,14 @@ class BoardService {
         nextPhaseId !== null ? (snap.pipeline.find((p) => p.id === nextPhaseId)?.claim === true) : false;
       // The context pack (T-0048): repo instructions, the worktree's diff
       // stat, and the previous run's gate failure on a retry — the file
-      // reads stay here, the composer stays pure.
-      const repoInstructions = repo.path === null ? null : await readRepoInstructions(repo.path);
+      // reads stay here, the composer stays pure. (The null guards were
+      // missing after the T-0042/T-0048 merge — `repo` is `RepoRef | null`
+      // — and no gate command runs this tsc config; T-0045 found it via
+      // build:plugins.)
+      const repoReady = repo !== null && repo.path !== null;
+      const repoInstructions = !repoReady ? null : await readRepoInstructions(repo.path);
       const diffStat =
-        repo.path === null ? null : await worktreeDiffStat(this.git, worktreePathFor(vault.path, repo, card.id), repo.branch);
+        !repoReady ? null : await worktreeDiffStat(this.git, worktreePathFor(vault.path, repo, card.id), repo.branch);
       const gateFailure = await this.lastGateFailure(card.id);
       const composed = composeRunRequest({
         card,
