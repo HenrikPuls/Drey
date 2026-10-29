@@ -769,7 +769,10 @@ While the run is live, its column shows a **Workers** strip with one
 lane per run: a traffic light (green working, amber context nearly full
 or stopping, red stalled for five minutes — always with the state in
 words), the worker's current activity, its context window, token usage
-and age; the card carries a ▶ chip. A lane is folded to one line until
+and age; the card carries a ▶ chip reading the state, the turn count,
+the run's own tokens and its age (`▶ running · 2 · 45k/1.2k · 03:41`),
+and the pills above the board add how long the oldest live run has
+been at it. A lane is folded to one line until
 you unfold it (a lane that needs a look opens by itself). In a lane you
 can **Take over**, **Watch** (tail the run's output), **Steer** (send a
 message into the live run — it lands in the ticket's Log) or **Stop**
@@ -780,7 +783,10 @@ the run — a worker that is idle by then ends the run and the gate
 decides. While you hold a run the runner does not end it. In the
 conversation each of the worker's thoughts is a folded **Thinking** box
 whose title previews it; click the title to read the whole thought, and
-again to fold it. Only OpenCode
+again to fold it. The transcript streams live on OpenCode workers: a
+tool step appears as the worker calls it (`● Read src/a.ts`, its result
+hung underneath once it settles) and reply text grows while it is
+written. Only OpenCode
 workers can be taken over for now. The **Log** button opens the fleet
 daemon's log in a read-only tab. When a run ends, the ticket's Log line
 records the tokens it used — how much of the input came from the

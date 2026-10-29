@@ -102,6 +102,43 @@ files were never re-checked out — stayed green. The fix is a one-rule
 overrides `autocrlf` at checkout; the blobs were already LF, so nothing
 needed renormalizing. **Not yet manually verified by the owner.**
 
+### T-0051 — Live run streaming, complete editor syntax colors (ticket build)
+
+**Not yet manually verified by the owner.** The test ticket's pipeline
+run surfaced two defects; both are fixed on the branch `t/T-0051`:
+
+- **Runs stream live (OpenCode workers).** The adapter subscribes to
+  `opencode serve`'s SSE `/api/event` (verified live against v2.0.32):
+  reply text streams as throttled `text-delta` events sealed whole per
+  part, tool calls emit `tool` events at start, call and settle, model
+  steps report the context size, and `session.usage.updated` drives the
+  run's own token totals. Polling stays as the fallback and owns the
+  turn end; the takeover transcript (now formatted by the pure
+  `watch-format.ts` view model, which `transcript.ts` delegates to)
+  shows tool steps and growing replies while the turn runs. The card
+  chip reads `▶ running · <turns> · <kIn>/<kOut> · <mm:ss>`, the
+  summary pills add the oldest live run's age, and the takeover stats
+  line carries the turn count and a clock.
+- **Editor syntax colors are complete.** `dreyHighlightStyle` gains the
+  three tags that fell through (`escape`, `literal`, `name`), pinned by
+  a coverage-guard spec over the mandatory tag set of the common
+  grammars (js/ts, json, html, css, python, markdown). A dark
+  `dreyFallbackStyle` mounted before `basicSetup` replaces the light
+  `defaultHighlightStyle` in the fallback slot. Fenced code in rendered
+  Markdown (Live Preview table cells, HTML regions) now colors through
+  the same Lezer grammars and palette via `preview-highlight.ts` and
+  `applyExtendedMarkdown`'s new `fenceHighlight` option — the PDF
+  export keeps plain fences (its print palette has no editor tokens).
+- **The legacy Karma gate command runs again.** `npm test` is a small
+  wrapper (`scripts/test.mjs`) that drops the fossil `--browsers` flag
+  (loudly, on stderr) and forwards everything else verbatim to `ng
+  test`: the tickets pipeline still invokes
+  `npm test -- --watch=false --browsers=ChromeHeadless`, which vitest
+  otherwise fails at launch demanding an uninstallable
+  `@vitest/browser-*` provider. The suite itself is untouched — it
+  runs headless in jsdom as it did, and the exit code is the real
+  suite's.
+
 ### req-56 — Fleet workers start oriented: a ready toolchain, a clean environment, a short map (owner request, outside the list)
 
 **Not yet manually verified by the owner.** The run audit (2026-10-19)

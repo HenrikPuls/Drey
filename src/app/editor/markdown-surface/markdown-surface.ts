@@ -26,7 +26,7 @@ import { ImageLightboxService } from '../../image-viewer';
 import { VaultService } from '../../vault';
 import { ThemeService } from '../../services/theme.service';
 import { ThemeCatalogEntry } from '../themes/theme-catalog';
-import { dreyEditorLook, editorStructure, headingTypographyStyle } from '../editor-theme';
+import { dreyEditorLook, dreyFallbackStyle, editorStructure, headingTypographyStyle } from '../editor-theme';
 import { editorIndentation } from '../editor-indent';
 import { imagePaste, ImagePasteConfig, insertImageFiles } from '../image-paste';
 import {
@@ -610,6 +610,13 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
     const seed = (compartment: Compartment, initial: Extension): Extension =>
       previous === null ? initial : (compartment.get(previous) ?? initial);
     return [
+      // The dark fallback palette (T-0051, plan decision 3): BEFORE
+      // `basicSetup`, because the fallback slot keeps only the FIRST
+      // registered fallback style — after it, `basicSetup`'s light
+      // `defaultHighlightStyle` would own the slot and its light
+      // colors would glare wherever no main style is active. Outside
+      // the theme compartment, so no theme swap can drop it.
+      syntaxHighlighting(dreyFallbackStyle, { fallback: true }),
       // Above basicSetup so Enter wins over insertNewline -- but an
       // active completion popup keeps its Enter (accept).
       this.compact() && this.submitOnEnter() ? Prec.highest(keymap.of(this.submitKeymap())) : [],

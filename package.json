@@ -9,7 +9,7 @@
     "ng": "ng",
     "start": "ng serve",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test",
+    "test": "node scripts/test.mjs",
     "test:plugins": "vitest run --config vitest.plugins.config.mts",
     "test:plugin": "node scripts/test-plugin.mjs",
     "test:app": "ng test --watch=false",

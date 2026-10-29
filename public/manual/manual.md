@@ -231,7 +231,9 @@ in Settings â†’ *Templates*.
 ### Editing aids
 
 - **Formatting strip** — one row of icons: the template picker,
-  paragraph style (body text, headings, blockquote, callouts), Bold,
+  paragraph style (body text, headings, blockquote, callouts — a
+  callout written `> [!note]-` starts folded and `> [!note]+` open; a
+  click on its title folds or unfolds it), Bold,
   Italic, more text formats (strikethrough, highlight, sub- and
   superscript, *Clear formatting*), lists, Task list, Link, Table (a
   size grid) and an *Insert* menu (image, emoji, footnote, math,
@@ -757,13 +759,20 @@ then the phase's `@worker` pin in `pipeline.md`, then the repo's
 `worker:` in `repos.md`, then the configured default) and how freely
 it may act. The worker gets a checkout of the ticket's repo on its own
 branch (`t/<id>`), the ticket's description, plan and the phase's
-prompt as its brief.
+prompt as its brief. Folders the checkout has but git ignores — its
+toolchain, say `.tools` and `node_modules` — can be shared with every
+such checkout instead of rebuilt: list them as `link: [.tools,
+node_modules]` under the repository in `repos.md`, and the worker is
+told to use them and install nothing.
 
 While the run is live, its column shows a **Workers** strip with one
 lane per run: a traffic light (green working, amber context nearly full
 or stopping, red stalled for five minutes — always with the state in
 words), the worker's current activity, its context window, token usage
-and age; the card carries a ▶ chip. A lane is folded to one line until
+and age; the card carries a ▶ chip reading the state, the turn count,
+the run's own tokens and its age (`▶ running · 2 · 45k/1.2k · 03:41`),
+and the pills above the board add how long the oldest live run has
+been at it. A lane is folded to one line until
 you unfold it (a lane that needs a look opens by itself). In a lane you
 can **Take over**, **Watch** (tail the run's output), **Steer** (send a
 message into the live run — it lands in the ticket's Log) or **Stop**
@@ -771,11 +780,19 @@ it. **Take over** opens a tab with the worker's conversation and a
 prompt box: you can **Interrupt** the running turn (the session and its
 context stay), drive the worker with your own prompts and **Hand back**
 the run — a worker that is idle by then ends the run and the gate
-decides. While you hold a run the runner does not end it. Only OpenCode
+decides. While you hold a run the runner does not end it. In the
+conversation each of the worker's thoughts is a folded **Thinking** box
+whose title previews it; click the title to read the whole thought, and
+again to fold it. The transcript streams live on OpenCode workers: a
+tool step appears as the worker calls it (`● Read src/a.ts`, its result
+hung underneath once it settles) and reply text grows while it is
+written. Only OpenCode
 workers can be taken over for now. The **Log** button opens the fleet
 daemon's log in a read-only tab. When a run ends, the ticket's Log line
-records the tokens it used (and the cost, when the provider reports
-one — flat coding plans report none). When the worker finishes, the runner executes the
+records the tokens it used — how much of the input came from the
+provider's cache, and the cost, when the provider reports one (flat
+coding plans report none). A run that continues an earlier session
+counts only its own tokens. When the worker finishes, the runner executes the
 ticket's **acceptance criteria** (the backticked commands under Plan):
 all green means the ticket moves to the next phase on its own; a
 failure parks the reason in the Log and leaves the ticket where it is.
@@ -1243,7 +1260,7 @@ history store is deliberately outside it).
 ---
 
 *Manual for Drey 0.7.1; manual content last changed
-2026-10-19. Screenshots were captured automatically from
+2026-10-20. Screenshots were captured automatically from
 the built app (Anthrazit theme, 1600Ã—1000) by
 `e2e/manual-screenshots.spec.ts` — run
 `$env:DREY_MANUAL_SHOTS='1'; npm run e2e:run -- manual-screenshots`

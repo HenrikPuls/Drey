@@ -8,9 +8,12 @@
  *   prompt POST queues the turn (delivery `steer` while one is live — the
  *   native injection rung), `interrupt` is the soft stop, and the session
  *   object carries cumulative tokens and cost for the Tickets panel
- *   footer. Progress is POLLED, not streamed — v1's event stream dropped
- *   mid-turn, and the runner must not care which generation it found; the
- *   message list's `idle` marker ends the turn.
+ *   footer. Progress is SUBSCRIBED, with polling as the fallback: the
+ *   server's SSE `/api/event` stream (verified live, T-0051) reports
+ *   text parts while they generate (`text-delta`) and every tool call as
+ *   it starts and settles (`tool`); the 2 s poll keeps the usage totals,
+ *   the seen-message bookkeeping and the turn end — the message list's
+ *   `idle` marker stays the one authoritative "turn is over".
  * - `claude-code` drives the CLI over stream-json: stdin is held open
  *   (`--input-format stream-json`), so injection writes a user message
  *   in; resume is `--resume <sessionRef>`.
@@ -25,8 +28,16 @@ import type { PermissionMode, SteerRung, WorkerProviderId } from './protocol';
 /** One line of the run's normalized stream file (`stream.jsonl`). */
 export interface NormalizedEvent {
   readonly ts: string;
-  readonly kind: 'note' | 'text' | 'usage' | 'result' | 'error';
+  readonly kind: 'note' | 'text' | 'usage' | 'result' | 'error' | 'tool' | 'text-delta';
   readonly text?: string;
+  /** For `tool` events: the called tool's name. */
+  readonly tool?: string;
+  /**
+   * For `text-delta`: `'end'` seals the part — its `text` then carries the
+   * WHOLE part (the deltas before it may have been throttled). For `tool`:
+   * `'running'` | `'done'` | `'failed'`.
+   */
+  readonly detail?: string;
   readonly tokensIn?: number;
   readonly tokensOut?: number;
   /** The part of `tokensIn` the provider served from its prompt cache. */
@@ -400,6 +411,32 @@ interface OcMessage {
   readonly time?: { readonly created?: number; readonly completed?: number };
 }
 
+/**
+ * One SSE event of `GET /api/event`, as verified live against v2.0.32
+ * (T-0051 spike — names pinned, shapes truncated to what the adapter
+ * reads): `session.text.delta|ended`, `session.tool.input.started`,
+ * `session.tool.called`, `session.tool.success|error`,
+ * `session.step.started|ended`, `session.usage.updated`. Everything else
+ * (server.connected, shell.exited, project.updated, …) is ignored.
+ */
+interface OcServerEvent {
+  readonly type?: string;
+  readonly data?: {
+    readonly sessionID?: string;
+    readonly assistantMessageID?: string;
+    readonly ordinal?: number;
+    /** A `tool` part: the call's id. */
+    readonly id?: string;
+    readonly name?: string;
+    readonly text?: string;
+    readonly delta?: string;
+    readonly input?: Readonly<Record<string, unknown>>;
+    readonly content?: ReadonlyArray<{ readonly type?: string; readonly text?: string }>;
+    readonly tokens?: OcUsage;
+    readonly cost?: number;
+  };
+}
+
 interface OcSession {
   readonly cost?: number;
   readonly tokens?: OcUsage;
@@ -426,6 +463,8 @@ export const OPENCODE_API = {
   prompt: (id: string): string => `/api/session/${id}/prompt`,
   messages: (id: string): string => `/api/session/${id}/message`,
   interrupt: (id: string): string => `/api/session/${id}/interrupt`,
+  /** The server's SSE event stream (T-0051): `data:` lines, one `{id, type, data}` JSON object each. */
+  event: '/api/event',
   /** The project's custom commands (`GET`, `{data: [{name, …}]}`). */
   commands: '/api/command',
   command: (id: string): string => `/api/session/${id}/command`,
@@ -435,6 +474,18 @@ export const OPENCODE_API = {
   /** The server's default model (`GET`, `{data: Model.Info | undefined}`). */
   modelDefault: '/api/model/default',
 } as const;
+
+/** A dropped event subscription is retried after this long; polling covers the gap. */
+export const EVENT_RETRY_MS = 2_000;
+
+/**
+ * Live `text-delta` events are capped at this spacing per part (the seal
+ * carries the whole part, so nothing is lost) — every append to the run's
+ * stream file also rewrites `run.json`, and per-token deltas would melt
+ * that path. Two per second reads live in the watch view, which polls at
+ * the same cadence.
+ */
+export const TEXT_DELTA_MIN_MS = 500;
 
 /** The slash commands every OpenCode worker has besides the project's own. */
 export const OPENCODE_BUILTIN_COMMANDS: readonly string[] = ['compact'];
@@ -525,6 +576,7 @@ export function opencodeAdapter(
         clearInterval(pollTimer);
         pollTimer = null;
       }
+      stopEvents();
       exitResolve.current?.(code);
     };
 
@@ -693,6 +745,208 @@ export function opencodeAdapter(
       };
     };
 
+    /** Emits the run's own usage (totals minus base) when any number moved. */
+    const reportUsage = (total: UsageTotals): void => {
+      if (state.usageBase === null) {
+        return;
+      }
+      const own = usageSince(total, state.usageBase);
+      if (
+        own.tokensIn === state.tokensIn &&
+        own.tokensOut === state.tokensOut &&
+        own.cacheReadTokens === state.cacheReadTokens &&
+        own.costUsd === state.costUsd
+      ) {
+        return;
+      }
+      state.tokensIn = own.tokensIn;
+      state.tokensOut = own.tokensOut;
+      state.cacheReadTokens = own.cacheReadTokens;
+      state.costUsd = own.costUsd;
+      start.onEvent({
+        ts: nowIso(now),
+        kind: 'usage',
+        tokensIn: own.tokensIn,
+        tokensOut: own.tokensOut,
+        cacheReadTokens: own.cacheReadTokens,
+        ...(own.costUsd !== null ? { costUsd: own.costUsd } : {}),
+      });
+    };
+
+    // --- the live event subscription (T-0051) ----------------------------
+    // The SSE half: what streams while a turn generates. The poll below
+    // keeps running — it owns the turn end, the usage totals and every
+    // message the subscription missed.
+    /** Final text parts per message id, sealed by `session.text.ended`. */
+    const sseParts = new Map<string, string[]>();
+    /** Tool names by call id (`session.tool.success` reports no name). */
+    const toolNames = new Map<string, string>();
+    /** When the last delta of a part was forwarded (the throttle). */
+    const deltaAt = new Map<string, number>();
+    let eventAbort: AbortController | null = null;
+    let eventRetry: ReturnType<typeof setTimeout> | null = null;
+
+    const stopEvents = (): void => {
+      eventAbort?.abort();
+      eventAbort = null;
+      if (eventRetry !== null) {
+        clearTimeout(eventRetry);
+        eventRetry = null;
+      }
+    };
+
+    const onServerEvent = (raw: string): void => {
+      if (raw === '' || !state.alive || state.sessionRef === null) {
+        return;
+      }
+      let event: OcServerEvent;
+      try {
+        event = JSON.parse(raw) as OcServerEvent;
+      } catch {
+        return;
+      }
+      const data = event.data;
+      if (data?.sessionID !== state.sessionRef) {
+        return;
+      }
+      const ts = nowIso(now);
+      switch (event.type) {
+        case 'session.text.delta': {
+          if (data.assistantMessageID === undefined || typeof data.delta !== 'string') {
+            return;
+          }
+          const key = `${data.assistantMessageID}#${data.ordinal ?? 0}`;
+          const at = now().getTime();
+          const last = deltaAt.get(key);
+          if (last !== undefined && at - last < TEXT_DELTA_MIN_MS) {
+            return; // throttled — the seal brings the whole part
+          }
+          deltaAt.set(key, at);
+          start.onEvent({ ts, kind: 'text-delta', text: data.delta });
+          return;
+        }
+        case 'session.text.ended': {
+          if (data.assistantMessageID === undefined) {
+            return;
+          }
+          const text = typeof data.text === 'string' ? data.text : '';
+          const parts = sseParts.get(data.assistantMessageID) ?? [];
+          parts.push(text);
+          sseParts.set(data.assistantMessageID, parts);
+          if (text.trim() !== '') {
+            start.onEvent({ ts, kind: 'text-delta', text, detail: 'end', activity: activityLine(text) });
+          }
+          return;
+        }
+        case 'session.tool.input.started': {
+          if (typeof data.id !== 'string') {
+            return;
+          }
+          const name = typeof data.name === 'string' && data.name !== '' ? data.name : 'tool';
+          toolNames.set(data.id, name);
+          start.onEvent({ ts, kind: 'tool', tool: name, detail: 'running', activity: name });
+          return;
+        }
+        case 'session.tool.called': {
+          if (typeof data.id !== 'string') {
+            return;
+          }
+          const name = toolNames.get(data.id) ?? 'tool';
+          // The poll must not repeat this call as its own note.
+          state.seenTools.add(data.id);
+          const activity = toolActivity(name, data.input);
+          start.onEvent({ ts, kind: 'tool', tool: name, text: activity, activity });
+          return;
+        }
+        case 'session.tool.success':
+        case 'session.tool.error': {
+          if (typeof data.id !== 'string') {
+            return;
+          }
+          const failed = event.type === 'session.tool.error';
+          const name = toolNames.get(data.id) ?? 'tool';
+          state.seenTools.add(data.id);
+          const first = activityLine((data.content ?? []).map((part) => part.text ?? '').join('\n'));
+          start.onEvent({
+            ts,
+            kind: 'tool',
+            tool: name,
+            detail: failed ? 'failed' : 'done',
+            ...(first !== '' ? { text: `${RESULT_PREFIX}${failed ? 'failed: ' : ''}${first}` } : {}),
+          });
+          return;
+        }
+        case 'session.step.started': {
+          if (state.turn !== 'busy') {
+            state.turn = 'busy';
+            start.onEvent({ ts, kind: 'usage', turn: 'busy' });
+          }
+          return;
+        }
+        case 'session.step.ended': {
+          const contextTokens = (data.tokens?.input ?? 0) + (data.tokens?.cache?.read ?? 0);
+          if (contextTokens > 0) {
+            state.contextTokens = contextTokens;
+            start.onEvent({ ts, kind: 'usage', contextTokens });
+          }
+          return;
+        }
+        case 'session.usage.updated': {
+          reportUsage(sessionTotals({ tokens: data.tokens, cost: data.cost }));
+          return;
+        }
+        default:
+          return;
+      }
+    };
+
+    /**
+     * Subscribes to `/api/event` (SSE, BASIC auth). A dropped or refused
+     * stream is noise — the poll still covers everything — and is retried
+     * after `EVENT_RETRY_MS` until the run ends.
+     */
+    const subscribeEvents = (): void => {
+      if (eventAbort !== null || !state.alive || address === '') {
+        return;
+      }
+      const controller = new AbortController();
+      eventAbort = controller;
+      void (async (): Promise<void> => {
+        try {
+          const res = await fetchFn(`${address}${OPENCODE_API.event}`, { headers: auth, signal: controller.signal });
+          if (!res.ok || res.body === null) {
+            throw new Error(`event stream answered ${res.status}`);
+          }
+          const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) {
+              break;
+            }
+            buffer += decoder.decode(value, { stream: true });
+            let nl = buffer.indexOf('\n');
+            while (nl >= 0) {
+              const line = buffer.slice(0, nl).trim();
+              buffer = buffer.slice(nl + 1);
+              nl = buffer.indexOf('\n');
+              if (line.startsWith('data:')) {
+                onServerEvent(line.slice(5).trim());
+              }
+            }
+          }
+        } catch {
+          // aborted with the run, or the stream dropped — retried below
+        }
+        if (controller.signal.aborted || !state.alive) {
+          return;
+        }
+        eventAbort = null;
+        eventRetry = setTimeout(subscribeEvents, EVENT_RETRY_MS);
+      })();
+    };
+
     /**
      * A resumed session's spend before this run (req-53): OpenCode's
      * session totals are cumulative, so without the base a resumed run
@@ -735,26 +989,7 @@ export function opencodeAdapter(
           const body = (await res.json()) as { data?: OcSession };
           const s = body.data;
           if (s !== undefined) {
-            const own = usageSince(sessionTotals(s), state.usageBase);
-            if (
-              own.tokensIn !== state.tokensIn ||
-              own.tokensOut !== state.tokensOut ||
-              own.cacheReadTokens !== state.cacheReadTokens ||
-              own.costUsd !== state.costUsd
-            ) {
-              state.tokensIn = own.tokensIn;
-              state.tokensOut = own.tokensOut;
-              state.cacheReadTokens = own.cacheReadTokens;
-              state.costUsd = own.costUsd;
-              start.onEvent({
-                ts: nowIso(now),
-                kind: 'usage',
-                tokensIn: own.tokensIn,
-                tokensOut: own.tokensOut,
-                cacheReadTokens: own.cacheReadTokens,
-                ...(own.costUsd !== null ? { costUsd: own.costUsd } : {}),
-              });
-            }
+            reportUsage(sessionTotals(s));
           }
         }
 
@@ -804,13 +1039,21 @@ export function opencodeAdapter(
                 const text = messageText(m);
                 if (text !== '') {
                   state.lastText = text;
-                  start.onEvent({
-                    ts: nowIso(now),
-                    kind: 'text',
-                    text: text.slice(0, 8_000),
-                    activity: activityLine(text),
-                    ...(state.contextTokens > 0 ? { contextTokens: state.contextTokens } : {}),
-                  });
+                  // The subscription already streamed this message's text
+                  // parts (sealed whole): emitting the joined text again
+                  // would show the reply twice in the watch view. A
+                  // degraded subscription (dropped mid-message) falls back
+                  // to the polled text.
+                  const sealed = sseParts.get(m.id)?.join('\n');
+                  if (sealed !== text) {
+                    start.onEvent({
+                      ts: nowIso(now),
+                      kind: 'text',
+                      text: text.slice(0, 8_000),
+                      activity: activityLine(text),
+                      ...(state.contextTokens > 0 ? { contextTokens: state.contextTokens } : {}),
+                    });
+                  }
                 }
               }
               // Every tool call is one visible step — shown once its input is
@@ -943,6 +1186,8 @@ export function opencodeAdapter(
         kind: 'note',
         text: `re-attached to the opencode server on ${attached.address}, session ${attached.sessionRef}`,
       });
+      // Live parts and tool calls from here on; the poll keeps usage and the turn end.
+      subscribeEvents();
       pollTimer = setInterval(() => void pollTurn(), 2_000);
       void loadCommands();
       void reportContextWindow();
@@ -1053,6 +1298,7 @@ export function opencodeAdapter(
       state.startedAt = now().getTime();
       state.lastPromptAt = state.startedAt;
 
+      subscribeEvents();
       pollTimer = setInterval(() => void pollTurn(), 2_000);
       await loadCommands();
       void reportContextWindow();
