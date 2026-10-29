@@ -63,7 +63,7 @@ describe('transcriptMarkdown', () => {
     const md = transcriptMarkdown(
       [line({ kind: 'note', text: 'Read src/a.ts' }), line({ kind: 'note', text: 'result › 120 lines' })].join('\n'),
     );
-    expect(md).toBe('● **Read** `src/a.ts`  \n&nbsp;&nbsp;⎿ _120 lines_');
+    expect(md).toBe('● **Read** `src/a.ts`  \n⎿ _120 lines_');
   });
 
   it('is empty for an empty stream', () => {

@@ -41,6 +41,21 @@ describe('formatWatch', () => {
     expect(view.blocks[0]?.markdown).toBe('Half a reply');
   });
 
+  it('a seal replaces the fragments its tool calls cut up, at the first fragment', () => {
+    const view = formatWatch([
+      ev({ kind: 'text-delta', text: 'The model is' }),
+      ev({ kind: 'tool', tool: 'read', text: 'read a.ts' }),
+      ev({ kind: 'text-delta', text: ' clear now.' }),
+      ev({ kind: 'tool', tool: 'grep', text: 'grep x' }),
+      ev({ kind: 'text-delta', text: 'The model is clear now.', detail: 'end' }),
+    ]);
+    expect(view.blocks.map((b) => [b.kind, b.markdown])).toEqual([
+      ['text', 'The model is clear now.'],
+      ['step', '● **Read** `a.ts`'],
+      ['step', '● **Grep** `x`'],
+    ]);
+  });
+
   it('renders tool events as steps: running, enriched call, settled outcome', () => {
     const view = formatWatch([
       ev({ kind: 'tool', tool: 'read', detail: 'running' }),
@@ -53,9 +68,54 @@ describe('formatWatch', () => {
     ]);
     const steps = view.blocks.filter((b) => b.kind === 'step');
     expect(steps.map((b) => b.markdown)).toEqual([
-      '● **Read** `src/a.ts`  \n&nbsp;&nbsp;⎿ _42 lines_',
-      '● **Shell** `git status`  \n&nbsp;&nbsp;⎿ _failed: exit 1_',
+      '● **Read** `src/a.ts`  \n⎿ _42 lines_',
+      '● **Shell** `git status`  \n⎿ _failed: exit 1_',
     ]);
+    expect(steps.map((b) => b.step)).toEqual([
+      { name: 'Read', target: 'src/a.ts', outcome: '42 lines' },
+      { name: 'Shell', target: 'git status', outcome: 'exit 1', failed: true },
+    ]);
+  });
+
+  it('pairs parallel calls in call order and drops input-less placeholders when the turn ends', () => {
+    const view = formatWatch([
+      ev({ kind: 'tool', tool: 'read', detail: 'running' }),
+      ev({ kind: 'tool', tool: 'read', detail: 'running' }),
+      ev({ kind: 'tool', tool: 'read', text: 'read a.ts' }),
+      ev({ kind: 'tool', tool: 'read', text: 'read b.ts' }),
+      ev({ kind: 'tool', tool: 'read', detail: 'done', text: 'result › 1 line' }),
+      ev({ kind: 'tool', tool: 'read', detail: 'done', text: 'result › 2 lines' }),
+      ev({ kind: 'tool', tool: 'grep', detail: 'running' }),
+      ev({ kind: 'note', text: 'run finished (exit 0)' }),
+      ev({ kind: 'result', text: '' }),
+    ]);
+    expect(view.blocks.filter((b) => b.kind === 'step').map((b) => [b.step, b.live])).toEqual([
+      [{ name: 'Read', target: 'a.ts', outcome: '1 line' }, false],
+      [{ name: 'Read', target: 'b.ts', outcome: '2 lines' }, false],
+    ]);
+    expect(view.blocks.map((b) => b.kind)).toEqual(['step', 'step', 'setup', 'result']);
+  });
+
+  it('hangs an outcome that names its target under that call, whatever the order', () => {
+    const view = formatWatch([
+      ev({ kind: 'tool', tool: 'read', text: 'read src/main' }),
+      ev({ kind: 'tool', tool: 'read', text: 'read src/renderer' }),
+      ev({ kind: 'tool', tool: 'read', detail: 'done', text: 'result › Read directory src/renderer, 3 entries' }),
+      ev({ kind: 'tool', tool: 'read', detail: 'done', text: 'result › Read directory src/main, 5 entries' }),
+    ]);
+    expect(view.blocks.map((b) => [b.step?.target, b.step?.outcome])).toEqual([
+      ['src/main', 'Read directory src/main, 5 entries'],
+      ['src/renderer', 'Read directory src/renderer, 3 entries'],
+    ]);
+  });
+
+  it('carries a running call and a thought as data for the DOM view', () => {
+    const view = formatWatch([
+      ev({ kind: 'note', text: 'thinking › First line\nsecond line' }),
+      ev({ kind: 'tool', tool: 'grep', detail: 'running' }),
+    ]);
+    expect(view.blocks[0]?.thought).toBe('First line\nsecond line');
+    expect(view.blocks[1]).toMatchObject({ kind: 'step', live: true, step: { name: 'Grep', target: '' } });
   });
 
   it('keeps the note language: thinking callouts, owner quotes, setup, results, errors', () => {
@@ -69,7 +129,7 @@ describe('formatWatch', () => {
     ]);
     expect(view.blocks.map((b) => b.kind)).toEqual(['thinking', 'you', 'setup', 'step', 'error']);
     expect(view.blocks[0]?.markdown).toContain('[!QUOTE]- Thinking — Look here');
-    expect(view.blocks[3]?.markdown).toBe('● **Read** `src/a.ts`  \n&nbsp;&nbsp;⎿ _3 files_');
+    expect(view.blocks[3]?.markdown).toBe('● **Read** `src/a.ts`  \n⎿ _3 files_');
   });
 
   it('drops a result body the last sealed reply already said', () => {

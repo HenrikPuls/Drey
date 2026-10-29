@@ -2,9 +2,9 @@
  * The watch view's formatter (T-0051): a run's normalized stream
  * (`stream.jsonl`, one event per line — the same shape for every
  * provider) as a transcript view model. Pure, DOM-free: the takeover
- * tab renders it through the host's Markdown view
- * (`transcript.ts` delegates here), anything else can render the blocks
- * directly.
+ * tab draws the blocks as its own DOM (`transcript-view.ts`, req-58,
+ * from the `step` / `thought` data), `transcript.ts` keeps the whole
+ * view as one Markdown document.
  *
  * Layout like Claude Code's own transcript: replies as paragraphs, every
  * tool call one `● Tool target` step (a run of steps stays together),
@@ -26,11 +26,31 @@ export const THINK_PREFIX = 'thinking › ';
 /** A tool's outcome rides the stream with this lead-in (mirrors providers.ts). */
 export const RESULT_PREFIX = 'result › ';
 
+/** A tool call as data (req-58): the DOM view draws it without parsing Markdown. */
+export interface WatchStep {
+  /** The tool's display name, capitalized (`Read`). */
+  readonly name: string;
+  /** What it was called on (`src/a.ts`); empty while the input is unknown. */
+  readonly target: string;
+  /** The one-line outcome, once the call settled. */
+  readonly outcome?: string;
+  /** The call settled as failed. */
+  readonly failed?: boolean;
+}
+
 /** One rendered block of the transcript. */
 export interface WatchBlock {
   readonly kind: 'text' | 'step' | 'thinking' | 'you' | 'setup' | 'result' | 'error';
   /** The block's Markdown; step blocks are `● **Read** \`src/a.ts\`` lines. */
   readonly markdown: string;
+  /** A step block's call as data. */
+  readonly step?: WatchStep;
+  /** A thinking block's whole thought, the worker's line breaks kept. */
+  readonly thought?: string;
+  /** The plain text of a `you`, `setup` or `error` block, or a result's own body. */
+  readonly text?: string;
+  /** A text delta run another event cut off before its seal; the seal replaces it. */
+  readonly fragment?: boolean;
   /** True while the block still streams (an unsealed text-delta run, a running tool call). */
   readonly live?: boolean;
   /** A step's tool name (settling outcomes find their call by it). */
@@ -74,8 +94,8 @@ export function parseStreamEvents(ndjson: string): NormalizedEvent[] {
   return events;
 }
 
-/** Run-setup notes the worker adapters write (not a tool call). */
-const SETUP_NOTE = /^(run R-|opencode serve|re-attached|worktree links:)/i;
+/** Run lifecycle notes the runner and worker adapters write: setup, gate checks, the end (not a tool call). */
+const SETUP_NOTE = /^(run R-|run finished|gate: |opencode serve|re-attached|worktree links:)/i;
 
 /** How much of a thought its folded title previews. */
 const THINK_PREVIEW = 100;
@@ -99,17 +119,32 @@ const thinkingBlock = (raw: string): string => {
   return `> [!QUOTE]- Thinking — ${title}\n${body}`;
 };
 
-/** `read src/a.ts` becomes `● **Read** \`src/a.ts\`` — a tool call as Claude Code shows it. */
-const toolLine = (text: string): string => {
+/** `read src/a.ts` as `{ name: 'Read', target: 'src/a.ts' }`. */
+const toolParts = (text: string): WatchStep => {
   const [verb = '', ...rest] = flat(text).split(' ');
-  const name = verb.charAt(0).toUpperCase() + verb.slice(1);
-  const target = rest.join(' ');
-  return target === '' ? `● **${name}**` : `● **${name}** \`${target}\``;
+  return { name: verb.charAt(0).toUpperCase() + verb.slice(1), target: rest.join(' ') };
 };
 
+/** `read src/a.ts` becomes `● **Read** \`src/a.ts\`` — a tool call as Claude Code shows it. */
+const toolLine = (step: WatchStep): string =>
+  step.target === '' ? `● **${step.name}**` : `● **${step.name}** \`${step.target}\``;
+
 /** `result › 42 lines` (or the same line on a `tool` event) as the `⎿` line under its call. */
-const outcomeLine = (raw: string, failed: boolean): string =>
-  `&nbsp;&nbsp;⎿ _${failed ? 'failed: ' : ''}${flat(raw)}_`;
+const outcomeLine = (outcome: string, failed: boolean): string => `⎿ _${failed ? 'failed: ' : ''}${outcome}_`;
+
+/** A step settled with its outcome: the data and the Markdown line together. */
+const settle = (block: WatchBlock, raw: string, failed: boolean): WatchBlock => {
+  const outcome = flat(raw);
+  const base = block.step ?? { name: '', target: '' };
+  return {
+    ...block,
+    kind: 'step',
+    markdown: `${block.markdown}  \n${outcomeLine(outcome, failed)}`,
+    step: { ...base, outcome, ...(failed ? { failed: true } : {}) },
+    settled: true,
+    live: false,
+  };
+};
 
 /** The running marker of a call whose input is not known yet. */
 const RUNNING_SUFFIX = ' _…_';
@@ -130,19 +165,87 @@ export function formatWatch(events: readonly NormalizedEvent[]): WatchView {
   const sealLive = (): void => {
     const last = blocks[blocks.length - 1];
     if (last !== undefined && last.kind === 'text' && last.live === true) {
-      blocks[blocks.length - 1] = { ...last, live: false };
+      blocks[blocks.length - 1] = { ...last, live: false, fragment: true };
     }
   };
 
-  /** The last unsettled step of `tool`, if any — where its outcome hangs. */
-  const openStepOf = (tool: string): number => {
+  /**
+   * A seal whose deltas were cut up by other events (a worker's reply
+   * part interleaved with its tool calls): the whole part takes the place
+   * of its first fragment, the other fragments go. False when no fragment
+   * belongs to it.
+   */
+  const sealFragments = (text: string): boolean => {
+    const whole = text.replace(/\s+/g, ' ');
+    let first = -1;
     for (let i = blocks.length - 1; i >= 0; i--) {
       const block = blocks[i]!;
-      if (block.kind === 'step' && block.tool === tool && block.settled !== true) {
+      const piece = block.markdown.replace(/\s+/g, ' ').trim();
+      if (block.kind === 'text' && block.fragment === true && piece !== '' && whole.includes(piece)) {
+        if (first >= 0) {
+          blocks.splice(first, 1);
+        }
+        first = i;
+      }
+    }
+    if (first < 0) {
+      return false;
+    }
+    blocks[first] = { kind: 'text', markdown: text };
+    return true;
+  };
+
+  /** Where the trailing run of steps starts (`blocks.length` when the tail is no step). */
+  const tailRunStart = (): number => {
+    let i = blocks.length;
+    while (i > 0 && blocks[i - 1]!.kind === 'step') {
+      i -= 1;
+    }
+    return i;
+  };
+
+  /** A running call whose input is not known yet. */
+  const isPlaceholder = (block: WatchBlock): boolean => block.live === true && block.step?.target === '';
+
+  /** The earliest step of `tool` in the trailing run that `match` accepts — parallel calls settle in call order. */
+  const firstInTailRun = (tool: string, match: (block: WatchBlock) => boolean): number => {
+    for (let i = tailRunStart(); i < blocks.length; i++) {
+      if (blocks[i]!.tool === tool && match(blocks[i]!)) {
         return i;
       }
     }
     return -1;
+  };
+
+  /**
+   * The unsettled step of `tool` its outcome hangs under: the call whose
+   * target the outcome names (parallel calls finish in any order), else
+   * call order, else the last one anywhere.
+   */
+  const openStepOf = (tool: string, outcome: string): number => {
+    const unsettled = (block: WatchBlock): boolean => block.settled !== true;
+    const said = flat(outcome).toLowerCase();
+    // The longest named target wins (`src/main` over `src`).
+    let at = -1;
+    for (let i = tailRunStart(); i < blocks.length; i++) {
+      const target = blocks[i]!.step?.target.toLowerCase() ?? '';
+      if (blocks[i]!.tool === tool && unsettled(blocks[i]!) && target !== '' && said.includes(target) && (at < 0 || target.length > blocks[at]!.step!.target.length)) {
+        at = i;
+      }
+    }
+    if (at < 0) {
+      at = firstInTailRun(tool, (block) => unsettled(block) && !isPlaceholder(block));
+    }
+    if (at < 0) {
+      at = firstInTailRun(tool, unsettled);
+    }
+    for (let i = blocks.length - 1; i >= 0 && at < 0; i--) {
+      const block = blocks[i]!;
+      if (block.kind === 'step' && block.tool === tool && unsettled(block)) {
+        at = i;
+      }
+    }
+    return at;
   };
 
   for (const event of events) {
@@ -169,8 +272,9 @@ export function formatWatch(events: readonly NormalizedEvent[]): WatchView {
           // The seal carries the WHOLE part — it replaces whatever the
           // (throttled) deltas assembled.
           if (last !== undefined && last.kind === 'text' && last.live === true) {
-            blocks[blocks.length - 1] = { kind: 'text', markdown: text };
-          } else {
+            blocks.pop();
+          }
+          if (!sealFragments(text)) {
             blocks.push({ kind: 'text', markdown: text });
           }
           if (text.trim() !== '') {
@@ -193,7 +297,8 @@ export function formatWatch(events: readonly NormalizedEvent[]): WatchView {
         }
         sealLive();
         if (text.startsWith(THINK_PREFIX)) {
-          blocks.push({ kind: 'thinking', markdown: thinkingBlock(text.slice(THINK_PREFIX.length)) });
+          const thought = text.slice(THINK_PREFIX.length).trim();
+          blocks.push({ kind: 'thinking', markdown: thinkingBlock(thought), thought });
         } else if (text.startsWith(RESULT_PREFIX)) {
           // A tool outcome (the claude-code stream language): it hangs under
           // the newest step that is still waiting for one.
@@ -205,19 +310,16 @@ export function formatWatch(events: readonly NormalizedEvent[]): WatchView {
             }
           }
           if (at >= 0) {
-            blocks[at] = {
-              ...blocks[at]!,
-              kind: 'step',
-              markdown: `${blocks[at]!.markdown}  \n${outcomeLine(text.slice(RESULT_PREFIX.length), false)}`,
-              settled: true,
-            };
+            blocks[at] = settle(blocks[at]!, text.slice(RESULT_PREFIX.length), false);
           }
         } else if (text.startsWith(YOU_PREFIX)) {
-          blocks.push({ kind: 'you', markdown: `> **›** ${text.slice(YOU_PREFIX.length).replace(/\n/g, '\n> ')}` });
+          const said = text.slice(YOU_PREFIX.length);
+          blocks.push({ kind: 'you', markdown: `> **›** ${said.replace(/\n/g, '\n> ')}`, text: said });
         } else if (SETUP_NOTE.test(text)) {
-          blocks.push({ kind: 'setup', markdown: `<sub>${flat(text)}</sub>` });
+          blocks.push({ kind: 'setup', markdown: `<sub>${flat(text)}</sub>`, text: flat(text) });
         } else {
-          blocks.push({ kind: 'step', markdown: toolLine(text), tool: text.split(' ')[0] });
+          const step = toolParts(text);
+          blocks.push({ kind: 'step', markdown: toolLine(step), step, tool: text.split(' ')[0] });
         }
         break;
       }
@@ -226,28 +328,25 @@ export function formatWatch(events: readonly NormalizedEvent[]): WatchView {
         const tool = event.tool ?? 'tool';
         sealLive();
         if (event.detail === 'running') {
-          blocks.push({ kind: 'step', markdown: `${toolLine(tool)}${RUNNING_SUFFIX}`, live: true, tool });
+          const step = toolParts(tool);
+          blocks.push({ kind: 'step', markdown: `${toolLine(step)}${RUNNING_SUFFIX}`, step, live: true, tool });
         } else if (text.startsWith(RESULT_PREFIX)) {
           // The call settling: the outcome hangs under its own step (matched
           // by tool name — the stream carries no call ids).
-          const at = openStepOf(tool);
+          const at = openStepOf(tool, text.slice(RESULT_PREFIX.length));
           if (at >= 0) {
-            blocks[at] = {
-              ...blocks[at]!,
-              kind: 'step',
-              markdown: `${blocks[at]!.markdown}  \n${outcomeLine(text.slice(RESULT_PREFIX.length), event.detail === 'failed')}`,
-              settled: true,
-              live: false,
-            };
+            blocks[at] = settle(blocks[at]!, text.slice(RESULT_PREFIX.length), event.detail === 'failed');
           }
         } else if (text !== '') {
-          // The call with its input — replaces the bare running step of the
-          // same tool directly above it (same call, now enriched).
-          const last = blocks[blocks.length - 1];
-          if (last !== undefined && last.kind === 'step' && last.live === true && last.tool === tool) {
-            blocks[blocks.length - 1] = { kind: 'step', markdown: toolLine(text), tool };
+          // The call with its input — replaces the earliest bare running step
+          // of the same tool in the run of steps above (same call, now
+          // enriched; parallel calls announce in order).
+          const step = toolParts(text);
+          const at = firstInTailRun(tool, isPlaceholder);
+          if (at >= 0) {
+            blocks[at] = { kind: 'step', markdown: toolLine(step), step, tool };
           } else {
-            blocks.push({ kind: 'step', markdown: toolLine(text), tool });
+            blocks.push({ kind: 'step', markdown: toolLine(step), step, tool });
           }
         }
         break;
@@ -255,9 +354,22 @@ export function formatWatch(events: readonly NormalizedEvent[]): WatchView {
       case 'result': {
         const text = (event.text ?? '').trim();
         sealLive();
+        // The turn is over: nothing runs any more. A call that never told
+        // its input carries nothing worth showing.
+        for (let i = blocks.length - 1; i >= 0; i--) {
+          const block = blocks[i]!;
+          if (block.kind === 'step' && block.live === true) {
+            if (isPlaceholder(block) && block.settled !== true) {
+              blocks.splice(i, 1);
+            } else {
+              blocks[i] = { ...block, live: false };
+            }
+          }
+        }
         blocks.push({
           kind: 'result',
           markdown: text === '' || text === lastText ? '---\n\n**✓ Turn finished**' : `---\n\n**✓ Turn finished**\n\n${text}`,
+          ...(text === '' || text === lastText ? {} : { text }),
         });
         break;
       }
@@ -265,7 +377,7 @@ export function formatWatch(events: readonly NormalizedEvent[]): WatchView {
         const text = (event.text ?? '').trim();
         sealLive();
         if (text !== '') {
-          blocks.push({ kind: 'error', markdown: `**✗ Error** — ${text}` });
+          blocks.push({ kind: 'error', markdown: `**✗ Error** — ${text}`, text });
         }
         break;
       }

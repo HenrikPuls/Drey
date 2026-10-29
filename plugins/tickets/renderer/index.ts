@@ -5,7 +5,8 @@
  * parses a ticket file. One module-level store serves every view; a
  * view is just a DOM root plus a render call.
  */
-import { transcriptMarkdown } from './transcript';
+import { createTranscriptView } from './transcript-view';
+import { formatWatch, parseStreamEvents } from './watch-format';
 import { asParagraphs, chainLogStamp, visibleChainLog } from './chain-log';
 import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
 import {
@@ -1363,19 +1364,41 @@ function takeoverTitle(run: RunInfo): string {
 }
 
 /**
- * The tab body: the worker's transcript in the host's read-only Markdown
- * view (rendered from the run's normalized stream, so the same for every
- * worker), a prompt box in the compact view below it, and the controls —
+ * The tab body: the worker's transcript as the plugin's own DOM
+ * (`transcript-view.ts`, drawn from the run's normalized stream, so the
+ * same for every worker), a prompt box in the compact view below it, and the controls —
  * interrupt the running turn (the session stays), hand the run back.
  */
 function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): () => void {
   const wrap = el('div', 'tickets-takeover');
 
+  // The header (req-58): who and in which mode on top, the numbers as
+  // labelled metrics below.
   const banner = el('div', 'tickets-takeover-banner');
+  const titleRow = el('div', 'tickets-takeover-title-row');
   const light = el('span', 'tickets-light');
-  const headline = el('span', 'tickets-takeover-headline');
-  const stats = el('span', 'tickets-takeover-stats');
+  const ticketName = el('span', 'tickets-takeover-ticket');
+  const providerName = el('span', 'tickets-takeover-provider');
+  const modePill = el('span', 'tickets-takeover-mode');
+  const statusWord = el('span', 'tickets-takeover-status');
   const spacer = el('span', 'tickets-takeover-spacer');
+  const metricsRow = el('div', 'tickets-takeover-metrics');
+  const metric = (label: string, title: string): { node: HTMLElement; value: HTMLElement } => {
+    const node = el('span', 'tickets-takeover-metric');
+    node.title = title;
+    const value = el('span', 'tickets-takeover-metric-value');
+    node.append(el('span', 'tickets-takeover-metric-label', label), value);
+    return { node, value };
+  };
+  const turnMetric = metric('Turn', 'Turns of this run: the first prompt plus every message sent since');
+  const contextMetric = metric('Context', "How full the worker's context window is");
+  const contextBar = el('span', 'tickets-takeover-meter');
+  const contextFillEl = el('span', 'tickets-takeover-meter-fill');
+  contextBar.append(contextFillEl);
+  contextMetric.node.insertBefore(contextBar, contextMetric.value);
+  const tokensMetric = metric('Tokens', '');
+  const elapsedMetric = metric('Elapsed', 'Time since the run started');
+  metricsRow.append(turnMetric.node, contextMetric.node, tokensMetric.node, elapsedMetric.node);
   const controls = el('span', 'tickets-takeover-controls');
   const iconButton = (icon: string, label: string, title: string, onClick: () => void): HTMLButtonElement => {
     const b = el('button', 'tickets-takeover-btn');
@@ -1404,9 +1427,10 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     control('release'),
   );
   controls.append(resumeBtn, releaseBtn);
-  banner.append(light, headline, stats, spacer, controls);
+  titleRow.append(light, ticketName, providerName, modePill, statusWord, spacer, controls);
+  banner.append(titleRow, metricsRow);
 
-  const transcript = api.ui.createMarkdownView({ mode: 'view', readOnly: true, content: '' });
+  const transcript = createTranscriptView(api, fleetRuns.find((r) => r.id === runId)?.worktreePath ?? '');
   transcript.element.classList.add('tickets-takeover-transcript');
 
   const promptWrap = el('div', 'tickets-takeover-prompt');
@@ -1605,32 +1629,40 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     const detached = run !== null && run.state === 'detached';
     const status = run === null ? null : workerStatus(run, Date.now());
     light.className = `tickets-light tickets-light-${(active || detached) && status !== null ? status.light : 'idle'}`;
-    headline.textContent =
+    ticketName.textContent = run === null ? 'Unknown run' : run.ticketId;
+    providerName.textContent = run === null ? '' : run.model !== undefined && run.model !== null && run.model !== '' ? `${run.provider} · ${run.model}` : run.provider;
+    const [mode, modeTip] =
       run === null
-        ? 'This run is no longer known to the runner'
+        ? ['Gone', 'This run is no longer known to the runner']
         : detached
-          ? `${run.ticketId} · ${run.provider} — detached: the runner lost its worker`
+          ? ['Detached', 'The runner lost its worker']
           : !active
-            ? `${run.ticketId} · ${run.provider} — run ${run.state}`
+            ? [`Run ${run.state}`, 'The run has ended — Resume session picks it up in a new worker']
             : held
-              ? `${run.ticketId} · ${run.provider} — you have control`
-              : `${run.ticketId} · ${run.provider} — the runner is driving; your first command takes over`;
-    const fill = run === null ? null : contextFill(run);
-    const started = run === null ? NaN : Date.parse(run.startedAt);
-    const elapsed = Number.isNaN(started) ? 0 : Math.max(0, Date.now() - started);
-    stats.textContent =
-      run === null
-        ? ''
-        : [
-            status !== null && (active || detached) ? status.label : '',
-            `turn ${run.steerCount + 1}`,
-            fill === null ? '' : `context ${Math.round(fill * 100)}%`,
-            `in ${formatTokens(run.tokensIn)}${(run.cacheReadTokens ?? 0) > 0 ? ` (${formatTokens(run.cacheReadTokens ?? 0)} cached)` : ''} · out ${formatTokens(run.tokensOut)}`,
-            ...telemetryParts(run),
-            `⏱ ${spanClock(elapsed)}`,
-          ]
-            .filter((part) => part !== '')
-            .join(' · ');
+              ? ['You have control', 'The runner sends nothing of its own until you hand the run back']
+              : ['Runner driving', 'The runner is driving this worker — your first message takes over'];
+    modePill.textContent = mode;
+    modePill.title = modeTip;
+    statusWord.textContent = status !== null && (active || detached) ? status.label : '';
+    metricsRow.hidden = run === null;
+    if (run !== null) {
+      turnMetric.value.textContent = String(run.steerCount + 1);
+      const fill = contextFill(run);
+      contextMetric.node.hidden = fill === null;
+      const percent = fill === null ? 0 : Math.round(fill * 100);
+      contextMetric.value.textContent = `${percent}%`;
+      contextFillEl.style.width = `${Math.min(100, percent)}%`;
+      contextMetric.node.dataset['level'] = percent >= 90 ? 'high' : percent >= 70 ? 'mid' : 'low';
+      const cached = run.cacheReadTokens ?? 0;
+      tokensMetric.value.textContent = `${formatTokens(run.tokensIn)} in${cached > 0 ? ` (${formatTokens(cached)} cached)` : ''} · ${formatTokens(run.tokensOut)} out`;
+      tokensMetric.node.title = [
+        'Tokens this run sent to the model (in, the cached share in brackets) and got back (out)',
+        ...telemetryParts(run).map((part) => part.replace(/^ctx /, 'last turn context ')),
+      ].join('\n');
+      const started = Date.parse(run.startedAt);
+      elapsedMetric.value.textContent = spanClock(Number.isNaN(started) ? 0 : Math.max(0, Date.now() - started));
+      transcript.setWorktree(run.worktreePath);
+    }
     resumeBtn.hidden = !(run !== null && !active && run.sessionRef !== null);
     releaseBtn.hidden = !held;
     prompt.setReadOnly(!active);
@@ -1657,18 +1689,17 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     paintProgress();
   };
 
-  let lastMarkdown = '\u0000';
+  let lastStream = '\u0000';
   let alive = true;
   const pull = (): void => {
     void invokeBoard('fleetStream', { runId }).then((result) => {
       if (!alive) {
         return;
       }
-      const markdown = transcriptMarkdown((result as { text?: string }).text ?? '');
-      const shown = markdown === '' ? '_The stream is empty so far._' : markdown;
-      if (shown !== lastMarkdown) {
-        lastMarkdown = shown;
-        transcript.setContent(shown);
+      const text = (result as { text?: string }).text ?? '';
+      if (text !== lastStream) {
+        lastStream = text;
+        transcript.update(formatWatch(parseStreamEvents(text)));
       }
     });
   };
@@ -1685,7 +1716,6 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     clearInterval(timer);
     clearInterval(tick);
     fleetListeners.delete(paintBanner);
-    transcript.dispose();
     prompt.dispose();
   };
 }
