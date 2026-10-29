@@ -746,6 +746,39 @@ Claims: moving a ticket into a claim-flagged phase (Build by default)
 stamps who works on it and when. A stale claim is visible by its age;
 taking over replaces it and logs the previous holder.
 
+**Dependencies (`blocked-by`).** A ticket that must not start before
+another one is done carries `blocked-by: [T-0048]` in its frontmatter —
+write the ids by hand, a list, and save like any edit. The blocked
+state is derived from the board, never stored: the card shows a
+**blocked by T-0048** chip naming the open blockers for exactly as long
+as one of them has not reached the last phase, and the blocking card
+shows **blocks T-0049**. Both chips hide once satisfied — no manual
+unblock edit exists. The fleet never picks a blocked ticket (no
+dispatch, no manual run start, no `ci` move); the chain log names it
+and its blockers, so an idle column explains itself. You stay the
+final authority: dragging a blocked card into a worker column asks
+first (**Cancel** / **Move anyway**); anywhere else it just moves. A
+blocker id that is not on the board — deleted, renamed, or archived —
+warns and keeps the ticket blocked; nothing unblocks silently. The
+filter icon above the columns hides the blocked cards when you want the
+overview; they stay on the board and their order is never touched.
+
+Dependencies: a ticket that must not start before another one is done
+carries a `blocked-by: [T-00xx]` list in its frontmatter (comma and
+space between several ids). The blocked state is derived — while any
+referenced ticket has not reached the pipeline's last phase, the card
+shows a **blocked by …** chip naming the open blockers, and the
+blocking card shows **blocks …** listing what waits on it; both chips
+disappear the moment every blocker is done, no manual unblock needed.
+The fleet never picks up a blocked ticket (the chain log says which
+blockers hold it), and starting a run on one refuses — but you stay in
+charge: dragging a blocked card into a worker column only asks for
+confirmation first. A blocker that was deleted, renamed or archived
+leaves the ticket blocked with a warning — never silently unblocked.
+The **filter** toggle above the columns hides all blocked cards for a
+quieter board (view state only — nothing moves, the counts stay
+honest).
+
 The context menu also opens the ticket's **work folder in a terminal**
 ("Open work folder in terminal") — the local checkout configured as
 `path:` for the ticket's repository in `repos.md`, so testing is one
@@ -916,7 +949,9 @@ column without a worker between two worker columns is your
 never pulls across it; you review, edit, and move the ticket back to
 plan, forward to build, or back to Inbox. A manual column *before* the
 first worker column is a plain queue — the next pool drains it
-(prioritized feeds plan).
+(prioritized feeds plan). And a ticket held by `blocked-by` never
+enters a pool while a blocker is open — the chain log line names it
+and its blockers.
 
 The board shows the chain's pulse: each column head carries its pool
 (`opencode ×2`) and its brakes; a thin **cycle-time line** above the

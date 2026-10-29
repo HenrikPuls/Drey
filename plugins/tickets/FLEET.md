@@ -240,7 +240,13 @@ tail and 50/4096 head). Each application is logged:
   master `halted`? column `held`? cooldown active? token budget exhausted
   (`tokensUsed` vs day)? ticket claimed, carries a `run` stamp, has
   validation errors, or — most common — **no backticked acceptance criteria**,
-  which the machine gate refuses to run.
+  which the machine gate refuses to run. Since T-0050 also: the ticket
+  is **blocked** — `blocked-by:` names ids that have not reached the
+  last phase, and the dispatcher skips it by design; the log says
+  `dispatch holds <id>: blocked by <ids> — the blockers must reach the
+  terminal phase first` (an id missing from the board blocks too, and
+  warns on the card). It dispatches by itself once every blocker
+  reaches the last phase.
 - **Run stuck** → `/status` state + stream tail; `stopping` for long means
   the worker ignores the stop — the supervisor tree-kills, give it a moment,
   then check the pid.

@@ -180,3 +180,83 @@ T-0041:
   normalization move, archive, runner success move — is pushed with
   `git push <remote> HEAD`. Default off; a failure is a warning (board)
   or log line (runner), never a failed transition.
+
+## Later change — ticket dependencies, `blocked-by` (2026-10-29, T-0050)
+
+Tickets could not express "do not start before X is done"; the order
+lived in prose (T-0049: "Blocked by T-0048"), invisible to the board
+and the fleet — a worker could claim a ticket whose input data did not
+exist yet. T-0050 adds the first-class dependency field:
+
+- **`blocked-by: [T-0048]`** — a list of ticket ids, canonical as a
+  flow list with comma + space. The transition patcher round-trips that
+  form byte-stably (no patcher change was needed: the vendored `yaml`
+  preserves flow collections under the serializer options in use); any
+  YAML list shape parses, a hand-written no-space list normalizes
+  cosmetically on the next machine rewrite.
+- **Blocked is derived, never stored** — the same discipline as
+  columns, order and claims: every board assembly runs a dependency
+  pass over the final card list (after the duplicate-id pass) and
+  stamps each card with its open blockers (`blocked`, unknown ids
+  included) and the open-edge inverse (`blocks`). A reference is
+  satisfied exactly when the referenced ticket sits in the terminal
+  (last) phase — one global rule; per-reference override syntax
+  (`T-0048@commit`) was rejected as grammar and UI cost with no user.
+- **Never a silent unblock.** A blocker id that resolves to no board
+  ticket (deleted, renamed, or moved into the archive, which the board
+  never reads) is a warning and keeps the dependent blocked.
+  Self-reference and cycles are one error per member naming the cycle;
+  cyclic members count as blocked — a cycle can never be satisfied,
+  phases aside.
+- **Enforcement at the machine gates only**: the dispatcher's pick
+  (`dispatchable`), the manual run start and the ci sweep refuse a
+  blocked ticket and say why (the chain log names the blocked id and
+  its blockers). A redundant third gate in the request composer was
+  rejected — no path is uncovered and a duplicate gate drifts. The
+  owner stays the final authority: a manual drag into an agent column
+  asks for confirmation naming the open blockers (Cancel / Move
+  anyway); moves into non-agent columns never ask. The board shows
+  `blocked by` / `blocks` chips and an optional "hide blocked" view
+  filter (localStorage, never the repo); ordering is never touched,
+  and the drift pass never enforces blocked-ness — a file move is an
+  owner move.
+
+## Later change — ticket dependencies: the blocked-by field (2026-10-29, T-0050)
+
+Tickets could not express "do not start before X is done"; the order
+lived in prose (T-0049: "blocked by T-0048"), invisible to the board
+and the fleet. T-0050 adds a first-class `blocked-by:` id list to the
+frontmatter (`specs/ticket-schema.md` § Dependencies holds the full
+rules):
+
+- **Derived, never stored** — the same discipline as columns, order
+  and claims: every board assembly runs a pure dependency pass
+  (`plugins/tickets/main/blocked.ts`) that computes each card's open
+  blockers and the inverse dependents. A reference is satisfied exactly
+  when the referenced ticket sits in the pipeline's terminal phase —
+  one global rule (per-reference overrides were considered and left
+  out: grammar and UI cost with no user; ids stay plain ids, so
+  parsing, round-trip and validation stay trivial).
+- **Never a silent unblock.** A blocker id that resolves to no board
+  ticket (deleted, renamed, archived — the board never reads
+  `tickets/archive/`) is a warning and keeps the dependent blocked.
+  Self-reference and cycles are one error per member naming the cycle;
+  cyclic members count as blocked.
+- **Enforcement at exactly the machine gates**: `dispatchable` (the
+  dispatcher's pick), the manual run start and the ci sweep all refuse
+  a blocked ticket; the chain log names the blocked id and its
+  blockers. The owner stays the final authority — manual moves are
+  free, only a drag into an agent column asks for confirmation. The
+  drift pass deliberately never enforces blocked-ness (a file move is
+  an owner move, consistent with lane rules staying runner-only).
+- **Round-trip safety**: the canonical flow list
+  (`blocked-by: [T-0048, T-0049]`, comma + space) survives a transition
+  patch byte-identically — verified against the vendored `yaml`, so no
+  patcher change was needed; the parser accepts every list shape and a
+  hand-written no-space list normalizes cosmetically on the next
+  machine rewrite.
+- The board shows `blocked by <ids>` / `blocks <ids>` chips (both hide
+  when satisfied) and an optional "hide blocked" filter — pure view
+  state (`drey.tickets.hideBlocked`, the column-collapse pattern);
+  ordering is never touched. Cross-repo dependencies, soft links and
+  scheduling views are out of scope by the owner's list.

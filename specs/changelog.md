@@ -20,6 +20,51 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### T-0050 — Ticket dependencies: the `blocked-by` field, board display and fleet enforcement
+
+Tickets could not express "do not start before X is done" — the order
+lived in prose (T-0049: "Blocked by T-0048"), invisible to the board
+and the fleet. A first-class dependency field now exists
+([ADR-0076 later change](../docs/09_architecture_decisions/0076-ticket-repository-format-and-coordination.md),
+`specs/ticket-schema.md` § Dependencies):
+
+- **The field**: `blocked-by: [T-0048, T-0049]` — a flow list with
+  comma + space as the canonical form, round-tripped byte-stably by the
+  transition patcher (no patcher change was needed, verified against
+  the vendored `yaml`; every list shape parses, a no-space list
+  normalizes cosmetically on the next machine rewrite). The parser
+  keeps entries as written; an unreadable shape warns and reads absent.
+- **Blocked is derived, never stored** — the columns/order/claims
+  discipline: a pure dependency pass (`plugins/tickets/main/blocked.ts`)
+  runs in every board assembly after the duplicate-id pass and stamps
+  each card with its open blockers (`blocked`, unknown ids included)
+  and the open-edge inverse (`blocks`). A reference is satisfied
+  exactly in the terminal phase — one global rule; per-reference
+  override syntax was rejected (no user, grammar cost). Never a silent
+  unblock: an unknown id (deleted, renamed, archived — the board never
+  reads `tickets/archive/`) warns and keeps blocking; self-reference
+  and cycles are one error per member naming the cycle, and cyclic
+  members count as blocked.
+- **Enforcement at the machine gates**: `dispatchable` refuses blocked
+  cards, the chain's `noteWaits` logs the hold naming the blockers
+  (before the claim/run branches, per-reason dedup), the ci sweep skips
+  them, and the manual run start refuses through `blockedRefusal`. The
+  owner stays the final authority: a drag into an agent column opens a
+  Cancel / Move anyway confirmation; other columns never ask. The drift
+  pass never enforces blocked-ness.
+- **The board**: `blocked by <ids>` / `blocks <ids>` chips (titles name
+  the ids; both hide once satisfied), and a "hide blocked" toolbar
+  filter above the columns — pure view state
+  (`localStorage['drey.tickets.hideBlocked']`, the column-collapse
+  pattern): it hides cards, it never reorders anything.
+- Follow-up data edit: T-0049's prose dependency became
+  `blocked-by: [T-0048]`.
+- Specs added: `main/blocked.spec.ts` (parse shapes, derivation,
+  validation, byte-stable round-trip), `main/fleet/blocked-dispatch.spec.ts`
+  (the real orchestrator over a temp vault), `renderer/blocked-view.spec.ts`;
+  manual §13, `BOARD.md`, `FLEET.md`, `docs/05` §5.0/§5.41 updated.
+  **Not yet manually verified by the owner.**
+
 ### Fix — fleet: cleanup survives path aliases (`RUNNER~1`, junctions); CI green again
 
 Follow-up in the family of the T-0047 alias fix below, caught by CI on
