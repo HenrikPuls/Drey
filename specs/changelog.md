@@ -20,6 +20,52 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### T-0042 — Files vault extension: per-vault operations, plugin-managed repositories
+
+The Files panel treated every vault the same; a dedicated vault (the tickets
+repository) needs its operations to BE the feature's semantics. Owner
+decisions from the 2026-10-18 rounds, shipped as
+[ADR-0080](../docs/09_architecture_decisions/0080-per-vault-files-seam-and-plugin-managed-repositories.md):
+
+- **The `files` SDK seam (1.32).** A plugin registers an operations handler
+  (`api.files.registerOperations`) that the Files panel consults BEFORE any
+  dialog or base-side work — create, rename, move (drag & drop), copy
+  (paste/duplicate), delete: `allow` runs the base flow, `refuse` shows its
+  reason and replaces the flow, `handle` performs the operation as a
+  structured action (open tabs re-key to the outcome path). First refusal
+  wins, then the first handler, registration order. Plugin context rows
+  (`api.files.registerContextMenuItems`) append to both Files menus,
+  re-evaluated per open.
+- **The tickets vault is guarded and its drags are transitions.** Inside
+  `tickets/`: create/rename/delete/copy refuse with educating reasons
+  (capture, filename identity, pipeline, archive); a drag between phase
+  folders or into `tickets/archive/` performs the SAME single-writer
+  mutation the board runs — stamp, Log line, pin cleanup, one commit. A
+  drag out of `tickets/archive/` is a new one-commit `unarchive`
+  (`archive -> <phase>`), never a raw move. Context rows: "Archive
+  ticket", "Unarchive ticket" (to the first phase), "Remove worktree" on
+  `_worktrees/<id>` (dormant until T-0044 creates the folder).
+- **Plugin-managed vaults are read-only in Source control.** The tickets
+  plugin flags the detected vault (`ctx.vault.markManaged`, main-side
+  base-owned registry, follows detection both ways); the git plugin
+  refuses stage/discard/commit(+amend)/pull/push with "Managed by
+  Tickets" — first statement of each handler, no repo lookup needed — and
+  the panel shows a "Managed by" banner with those actions disabled.
+  Branch, dirty state, log, file history and decorations stay. T-0045
+  (repo auto-detection) is sequenced after this protection.
+- **Housekeeping:** `.gitattributes` keeps the shipped tickets prompts LF
+  (fresh worktrees under `core.autocrlf=true` smudged them CRLF and
+  `default-prompts.spec.ts` asserts raw LF — every fresh worktree was red
+  before this).
+
+Tests: `plugins/tickets/shared/files-guard.spec.ts` (the verdict table),
+`plugins/git/main/managed.spec.ts` (the five refusals, queries untouched),
+`electron/plugin-host/managed-vaults.spec.ts`, the two renderer registry
+specs, `files-panel.spec.ts` (refused/handled moves, plugin rows),
+`worktree-removal.spec.ts`, `ticket-files.spec.ts` (the `archive ->` patch).
+
+**Not yet manually verified by the owner.**
+
 ### req-52 — Test splitting: scoped day-to-day runs, full gate at release (owner request, outside the list)
 
 The two unit suites grew past 240

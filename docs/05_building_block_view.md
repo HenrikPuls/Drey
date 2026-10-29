@@ -178,7 +178,11 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   `<userData>/plugins/*`, `DREY_EXTRA_PLUGIN_DIR`; manifest validation;
   `plugins.disabled` + `apiVersion` gating), the host
   (`plugin-host.ts`: activate/quarantine, `plugin://` root resolution),
-  per-plugin config store (`plugin-config-store.ts`), and the local
+  per-plugin config store (`plugin-config-store.ts`), the
+  plugin-managed vault registry (`managed-vaults.ts`: `ctx.vault
+  .markManaged`/`managedBy`, SDK 1.32, ADR-0080 — one claim per plugin,
+  cleared on deactivation/quarantine; the git plugin's read-only guard
+  reads it), and the local
   package installer (`plugin-installer.ts`, ADR-0068: native `.zip` pick,
   discovery-grade validation, extract-swap under `<userData>/plugins/`
   preserving `config.json`, remove — applies on restart).
@@ -338,7 +342,8 @@ fills** — base knows the interfaces, not the features:
 | Syntax colouring of code outside an editor (SDK 1.31): `language-data` grammar loaded on demand, Lezer parse, the active theme's `HighlightStyle` (Cyberpunk's own, else Drey's) | `ui.highlightCode` → `src/app/plugin-host/code-highlight.ts` | — |
 | Editor extensions (host CM instances), drop decoders, context-menu items (with the click target, ADR-0050), composer slot | `editor.*` | — |
 | Document read/observe/insert/confirmed rewrite/open + the live-edit input lock | `documents.*` (incl. `setEditLock`, ADR-0049) | — |
-| Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`; `announceChanges` after a plugin rewrote the working tree, SDK 1.17) |
+| Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`; `announceChanges` after a plugin rewrote the working tree, SDK 1.17; `markManaged`/`managedBy` — the plugin-managed vault registry behind the Source-control read-only guard, SDK 1.32, ADR-0080) |
+| Files-panel operations (veto with a reason / takeover as a structured action, tabs re-keyed from the outcome path) + per-target Files context rows (SDK 1.32, ADR-0080) | `files.registerOperations` / `files.registerContextMenuItems` → `src/app/services/files-operations-registry.service.ts` + `files-commands.service.ts`, consulted by `FileOperationsService` before any dialog | — |
 | Backend methods + pushes (the plugin's own IPC) | `backend.invoke` / `backend.on` | `ctx.ipc.handle` / `ctx.ipc.emit` |
 | Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` (`notifyChanged` pushes `search:changed` to the base vocabulary service, SDK 1.9; the provider's optional `styles()` serves the tag prefix colors; `sectionSearchProvider()` is the seam's read side for other plugins — SDK 1.21, the assistant's action engine takes the tag vocabulary for `{{AVAILABLE_TAGS}}` from it; the assistant's vault context block reads the section index through the same getter, ADR-0072) |
 | LLM transport | `llm.chat/cancelTask/onDebugEntry/onDelta/listModels/capabilities/onCapabilitiesChanged` | `ctx.llm.chat/suggestTags/capabilities` (chat gains `tools`/`onToolCall`/`maxToolRounds`, ADR-0049; `maxOutputTokens` + the capability push, ADR-0050) |
@@ -701,8 +706,10 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   the `plugin:event` fan-out, native-surface visibility synthesis),
   `plugin-api-impl.ts` (implements `DreyPluginApi` over the base
   services), the registries (editor extensions, drop decoders, doc kinds,
-  menu contributions, settings pages) and the three DOM mount hosts for
-  widgets / settings pages / doc kinds
+  menu contributions, settings pages, the Files operations / context-rows
+  registries in `src/app/services/files-operations-registry.service.ts` +
+  `files-commands.service.ts` — SDK 1.32, ADR-0080) and the three DOM
+  mount hosts for widgets / settings pages / doc kinds
 - `SettingsComponent` — master-detail settings screen (category list +
   detail pane), core categories in alphabetical order — "Appearance",
   [ADR-0020](09_architecture_decisions/0020-app-wide-appearance-accent-and-ui-scale.md),
@@ -2593,7 +2600,7 @@ Since 2026-10-11 the Files panel is four files under
 | --- | --- |
 | `files-tree.ts` | The tree as plain data, no Angular: the visible rows (`flattenVisible`), row keys, selection ranges, where a drop may land, name validation. |
 | `files-tree-state.ts` | `FilesTreeState`, one instance per panel: expanded folders, folded vault sections, keyboard cursor, multi-selection. Nothing persisted. |
-| `file-operations.service.ts` | `FileOperationsService`: create, rename, move, copy / paste, delete and the vault registry actions — each with its confirmation, the tab and clipboard follow-up and its error message. Knows nothing about the tree's view state. |
+| `file-operations.service.ts` | `FileOperationsService`: create, rename, move, copy / paste, delete and the vault registry actions — each with its confirmation, the tab and clipboard follow-up and its error message. Knows nothing about the tree's view state. Every operation first consults the plugin seam (`FilesOperationsRegistryService`, SDK 1.32, ADR-0080): a `refuse` replaces the flow before any dialog, a `handle` performs in the plugin and re-keys tabs from the outcome path. |
 | `files-panel.ts` | `FilesPanel`: pointer, keyboard and drag events, the two context menus, the inline name inputs. |
 
 ```mermaid

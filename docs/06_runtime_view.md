@@ -3323,3 +3323,50 @@ sequenceDiagram
 renumbers: a ticket move into a phase reuses whatever folder the phase
 already has (T-0041), so a hand-made gap column keeps its number until
 the owner reorders or numbers.
+
+## 6.68 A ticket dragged in the Files panel: the plugin seam and the one-commit transition (T-0042, ADR-0080)
+
+```mermaid
+sequenceDiagram
+    actor O as Owner
+    participant F as FilesPanel
+    participant Ops as FileOperationsService
+    participant R as FilesOperationsRegistryService
+    participant T as tickets plugin (renderer bridge)
+    participant B as BoardService (plugin main, single-writer queue)
+    participant V as tickets vault (files)
+    participant G as git (tickets repo)
+    participant E as EditorService
+
+    O->>F: drag tickets/30-plan/T-0001.md onto tickets/40-build
+    F->>Ops: move(fromVault, path, toVault, dir)
+    Ops->>R: check({kind: move, …}) — BEFORE any dialog or link planning
+    R->>T: handler.check(operation)
+    T->>T: filesVerdict(snapshot: vault id + pipeline ids) → handle
+    R-->>Ops: {action: handle, perform}
+    Ops->>T: perform → moveTarget maps plan→build (a transition)
+    T->>B: backend.invoke('transition', {id, from, to, index: null})
+    B->>V: patch (entered-build stamp, Log line) + rename into the phase folder
+    B->>V: pin cleanup in _meta/order.md
+    B->>G: one commit "tickets: T-0001 plan -> build" (+ optional auto-push)
+    B-->>T: {ok, path: tickets/40-build/T-0001.md}
+    T-->>Ops: outcome {ok, path}
+    Ops->>E: retargetTabs(vault::old, vault::new) — open tabs follow
+    Ops-->>F: moved=true → the tree reveals the destination
+```
+
+A **refusal** takes the left-hand branch and stops at the dialog: the
+pure verdict table (`plugins/tickets/shared/files-guard.ts`) answers
+`refuse` for create/rename/delete/copy inside `tickets/` (capture,
+filename-identity, pipeline and archive reasons) and for moves that are
+not phase-to-phase or into `tickets/archive/`; `Ops` shows the reason in
+the panel's message dialog and nothing runs — no confirm, no link update.
+A drag **out of `tickets/archive/`** maps to `unarchive` (a new one-commit
+mutation: `archive -> <phase>` stamp, Log, one commit) — the drag IS the
+board treatment. The same seam feeds the Files context rows ("Archive
+ticket", "Unarchive ticket", "Remove worktree"). Main-side, the detected
+tickets vault is flagged plugin-managed (`ctx.vault.markManaged`, in step
+with every detect), so the Source control panel shows it read-only:
+stage / discard / commit (+amend) / pull / push refuse with "Managed by
+Tickets" — the whole read surface (branch, status, log, file history,
+decorations) stays.

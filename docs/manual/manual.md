@@ -141,6 +141,16 @@ file tree.
   vault's header row, or onto a folder or file row. Renames and moves
   can automatically rewrite wikilinks that pointed at the old path
   (see [Settings â†’ Vault](#settings-vault)).
+- Some vaults are **managed by a plugin** (the tickets vault): their
+  files have meaning the plugin owns, so the panel guards them. A
+  refused operation explains itself in a message — inside `tickets/`,
+  files are created on the board (New ticket), the filename is the
+  ticket's identity, columns come from the pipeline, and deletion goes
+  through the archive. **Dragging a ticket between phase folders (or
+  into `tickets/archive/`) IS a board move** — stamp, log line, one
+  commit, exactly like dragging the card (see
+  [Tickets](#13-tickets)). Plugins can also add their own rows to the
+  context menus (for example *Archive ticket* on a ticket file).
 
 ![A folder's context menu](img/panel-files-context-menu.png)
 
@@ -659,6 +669,12 @@ The panel shows the repository of the focused document's vault:
   stashes, amend — never of a pushed commit — file history) · Refresh.
 - A merge shows a banner with an abort button; the conflict surface is
   keep mine / keep theirs / mark resolved.
+- A **plugin-managed** repository (the tickets vault) is **read-only
+  here**: a "Managed by Tickets" banner sits above the commit box and
+  staging, discarding, committing (and amending), pulling and pushing
+  are disabled — the plugin writes that repository's history itself
+  (one ticket transition is one commit). Everything read-only stays:
+  branch, dirty state, history, file history and the Files-panel badges.
 
 ![Git decorations in the Files panel](img/git-files-badges.png)
 
