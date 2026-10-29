@@ -215,6 +215,8 @@ const plugin: MainPluginModule = {
         fetchedAt,
         stashCount,
         managedBy: ctx.vault.managedBy(vaultId),
+        subPath: '',
+        discovered: false,
       };
     };
 
