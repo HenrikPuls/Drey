@@ -31,7 +31,7 @@ const card = (over: Partial<TicketMeta> = {}): TicketCard => ({
 });
 
 const repos = (over: Partial<RepoRef> = {}): RepoRef[] => [
-  { name: 'drey', url: 'https://example/drey', branch: 'main', policy: null, path: 'E:/projects/drey', worker: null, ...over },
+  { name: 'drey', url: 'https://example/drey', branch: 'main', policy: null, path: 'E:/projects/drey', worker: null, worktrees: null, ...over },
 ];
 
 describe('planWorktreeRemoval (T-0042)', () => {
