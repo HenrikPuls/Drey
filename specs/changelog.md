@@ -20,6 +20,24 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-59 — Tickets board: one-row status bar
+
+Owner request, outside the list. The board's status area under the
+columns stacked two `tickets-metrics` text lines — the per-column
+average dwell (M85, `Inbox ⌀11d · Prioritized ⌀30m · …`) and below it
+the worktree note (T-0044, "Worktrees: 9 legacy worktree folders to
+clean up"). Now one 26px bar (`statusBarNode` in
+`plugins/tickets/renderer/index.ts`, `.tickets-statusbar*` in
+`board.css`): on the left the label *Avg. time in column* and one
+segment per non-empty column (name muted, value in tabular mono); on
+the right an amber warning pill with an icon (`9 legacy worktrees ·
+2 orphans`) whose tooltip lists the folders and points at the Clean up
+worktrees control. When the panel is narrow the cycle times are cut
+off, the pill stays visible; the bar is absent when neither has
+anything to say. Renderer-only. Supersedes the never-merged one-line
+variant left in `stash@{0}` (not applied, not dropped). Manual: the
+board paragraph. **Not yet manually verified by the owner.**
+
 ### Fix — fleet: the build column dispatches again (worktree leftovers, the walk-up misread, the silent queue)
 
 Owner request, outside the list (the runner stopped picking up tickets
