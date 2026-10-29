@@ -58,8 +58,6 @@ queued ticket behind it in silence. Now:
   folder that IS its own repo on a wrong branch still refuses; removal
   unlinks and the delete never reaches through a junction; both queue
   notes are pinned in the orchestrator suite.
-
-**Not yet manually verified by the owner.**
 ### req-58 — Takeover tab: readable transcript + structured header
 
 Owner request, outside the list. The takeover transcript ran through
