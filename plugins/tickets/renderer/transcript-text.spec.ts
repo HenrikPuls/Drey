@@ -43,6 +43,34 @@ describe('renderReply', () => {
     expect(node.querySelector('td strong')?.textContent).toBe('no');
   });
 
+  it("colours a fence with the host's highlighter, aliases included, and diffs per line", async () => {
+    const asked: string[] = [];
+    const colouring = {
+      ui: {
+        highlightCode: (code: string, lang: string) => {
+          asked.push(lang);
+          return Promise.resolve([{ text: code, className: 'tok-keyword' }]);
+        },
+      },
+    } as unknown as DreyPluginApi;
+    const node = renderReply(colouring, '```ts\nconst x = 1;\n```\n\n```ps1\nGet-Item .\n```\n\n```diff\n@@ a\n+new\n-old\n```');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(asked).toEqual(['ts', 'powershell']);
+    expect(node.querySelector('pre span.tok-keyword')?.textContent).toBe('const x = 1;');
+    expect([...node.querySelectorAll('.tickets-tx-codeblock-lang')].map((n) => n.textContent)).toEqual(['ts', 'ps1', 'diff']);
+    expect([...node.querySelectorAll('pre span[class^="tickets-tx-diff"]')].map((n) => n.className)).toEqual([
+      'tickets-tx-diff-hunk',
+      'tickets-tx-diff-add',
+      'tickets-tx-diff-del',
+    ]);
+  });
+
+  it('takes the indent of a fence inside a list item off its code lines', () => {
+    const node = renderReply(api, '1. Wire it:\n   ```ts\n   if (a) {\n     b();\n   }\n   ```');
+    expect(node.querySelector('pre')?.textContent).toBe('if (a) {\n  b();\n}');
+  });
+
   it('never interprets HTML in worker text', () => {
     const node = renderReply(api, '<img src=x onerror=alert(1)>');
     expect(node.querySelector('img')).toBeNull();

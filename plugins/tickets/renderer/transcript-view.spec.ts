@@ -57,6 +57,14 @@ describe('createTranscriptView', () => {
     expect(root.querySelector('.tickets-tx-reply strong')?.textContent).toBe('this');
   });
 
+  it('renders a thought like a reply, so its code fences become code blocks', () => {
+    const view = createTranscriptView(api, '');
+    view.update(formatWatch([ev({ kind: 'note', text: 'thinking › The helper:\n\n```ts\nexport const a = 1;\n```' })]));
+    const body = view.element.querySelector('.tickets-tx-think-body');
+    expect(body?.querySelector('p')?.textContent).toBe('The helper:');
+    expect(body?.querySelector('pre')?.textContent).toBe('export const a = 1;');
+  });
+
   it('keeps unchanged nodes across pulls, so an opened thought stays open', () => {
     const view = createTranscriptView(api, '');
     const first = [ev({ kind: 'note', text: 'thinking › Plan' })];

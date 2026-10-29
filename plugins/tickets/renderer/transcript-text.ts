@@ -78,20 +78,69 @@ function inlineInto(parent: HTMLElement, text: string): void {
   }
 }
 
-/** A fenced block: plain text at once, the host's colours once the grammar has loaded. */
+/** Common worker spellings the host's language catalogue does not know by that name. */
+const LANG_ALIAS: Readonly<Record<string, string>> = {
+  ps1: 'powershell',
+  pwsh: 'powershell',
+  sh: 'shell',
+  bash: 'shell',
+  console: 'shell',
+  jsonl: 'json',
+  ndjson: 'json',
+};
+
+/** A `diff` / `patch` line's colour class. */
+const diffClass = (line: string): string =>
+  line.startsWith('@@') ? 'tickets-tx-diff-hunk' : line.startsWith('+') ? 'tickets-tx-diff-add' : line.startsWith('-') ? 'tickets-tx-diff-del' : '';
+
+/**
+ * A fenced block: a head with the language and a copy button over the
+ * code — plain text at once, the host's syntax colours (the editor's own
+ * theme) once the grammar has loaded; diffs colour per line.
+ */
 function codeBlock(api: DreyPluginApi, code: string, lang: string): HTMLElement {
+  const block = el('div', 'tickets-tx-codeblock');
+  const head = el('div', 'tickets-tx-codeblock-head');
+  head.append(el('span', 'tickets-tx-codeblock-lang', lang === '' ? 'text' : lang));
+  const copy = el('button', 'tickets-tx-codeblock-copy', 'Copy');
+  copy.type = 'button';
+  copy.title = 'Copy the code';
+  copy.setAttribute('aria-label', 'Copy the code');
+  copy.addEventListener('click', () => {
+    void navigator.clipboard.writeText(code).then(
+      () => {
+        copy.textContent = 'Copied';
+        setTimeout(() => (copy.textContent = 'Copy'), 1_200);
+      },
+      () => undefined,
+    );
+  });
+  head.append(copy);
   const pre = el('pre', 'tickets-tx-pre');
   const body = el('code', undefined, code);
   pre.append(body);
-  if (lang !== '') {
-    void api.ui.highlightCode(code, lang).then((spans) => {
-      if (spans === null) {
-        return;
-      }
-      body.replaceChildren(...spans.map((span) => (span.className === '' ? document.createTextNode(span.text) : el('span', span.className, span.text))));
-    });
+  block.append(head, pre);
+  const kind = lang.toLowerCase();
+  if (kind === 'diff' || kind === 'patch') {
+    const lines = code.split('\n');
+    body.replaceChildren(
+      ...lines.map((line, index) => {
+        const text = index < lines.length - 1 ? `${line}\n` : line;
+        const cls = diffClass(line);
+        return cls === '' ? document.createTextNode(text) : el('span', cls, text);
+      }),
+    );
+  } else if (kind !== '') {
+    void api.ui
+      .highlightCode(code, LANG_ALIAS[kind] ?? kind)
+      .then((spans) => {
+        if (spans !== null) {
+          body.replaceChildren(...spans.map((span) => (span.className === '' ? document.createTextNode(span.text) : el('span', span.className, span.text))));
+        }
+      })
+      .catch(() => undefined);
   }
-  return pre;
+  return block;
 }
 
 /** `| a | b |` as its trimmed cells. */
@@ -171,10 +220,12 @@ export function renderReply(api: DreyPluginApi, text: string): HTMLElement {
     const line = lines[n]!;
     const fence = FENCE.exec(line);
     if (fence !== null) {
+      // A fence inside a list item is indented; its code lines lose that indent.
+      const indent = new RegExp(`^ {0,${line.length - line.trimStart().length}}`);
       const body: string[] = [];
       n += 1;
       while (n < lines.length && !FENCE_END.test(lines[n]!)) {
-        body.push(lines[n]!);
+        body.push(lines[n]!.replace(indent, ''));
         n += 1;
       }
       block(codeBlock(api, body.join('\n'), fence[1] ?? ''));

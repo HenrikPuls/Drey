@@ -816,7 +816,9 @@ than three calls in a row fold into one **N tool calls** line that is
 open while the worker is still busy there. Each of the worker's
 thoughts is a folded **Thinking** line that previews it; click it to
 read the whole thought, and again to fold it — an unfolded thought
-stays unfolded while the transcript updates. The transcript streams
+stays unfolded while the transcript updates. Code in replies and
+thoughts is coloured like code in your notes, with its language on top
+and a **Copy** button that shows when you point at the block. The transcript streams
 live on OpenCode workers: a tool step appears as the worker calls it
 and reply text grows while it is written. The view follows new output
 while you are at the bottom; scrolled up, it stays put and a

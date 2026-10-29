@@ -198,7 +198,11 @@ export function createTranscriptView(api: DreyPluginApi, worktreePath: string): 
           el('span', 'tickets-tx-think-label', 'Thinking'),
           el('span', 'tickets-tx-think-preview', thought.replace(/\s+/g, ' ').trim()),
         );
-        return fold(key, false, summary, el('div', 'tickets-tx-think-body', thought), 'tickets-tx-think');
+        // A thought often carries the code the worker is about to write: it
+        // renders like a reply (coloured fences), only muted.
+        const body = renderReply(api, thought);
+        body.classList.add('tickets-tx-think-body');
+        return fold(key, false, summary, body, 'tickets-tx-think');
       }
       case 'you': {
         const row = el('div', 'tickets-tx-you');

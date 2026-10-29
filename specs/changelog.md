@@ -38,8 +38,13 @@ into one mono `·` string. Now:
   bubble, errors a tinted row, "Turn finished" a divider. Replies render
   a small Markdown subset as nodes, never `innerHTML`
   (`transcript-text.ts`: paragraphs, headings, lists, quotes, rules,
-  pipe tables, fenced code coloured by `ui.highlightCode`); prose keeps
-  a 76ch reading width, tables and code use the whole column.
+  pipe tables, fenced code); prose keeps a 76ch reading width, tables
+  and code use the whole column. A fenced block has a head (language,
+  Copy on hover) and the editor theme's syntax colours via
+  `ui.highlightCode` (worker spellings `ps1`/`pwsh`/`sh`/`bash`/`jsonl`
+  mapped to the catalogue's names; `diff`/`patch` coloured per line); a
+  fence inside a list item loses its indent. Thoughts render through the
+  same subset, muted — that is where workers write most of their code.
   Items whose content did not change keep their nodes across the 2 s
   pull, so an unfolded thought stays unfolded; the view follows new
   output only while the reader is at the bottom (else a

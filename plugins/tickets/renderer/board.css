@@ -1377,15 +1377,75 @@
   font-size: 0.8em;
 }
 
-.tickets-tx-pre {
-  margin: 0 0 8px;
-  padding: 8px 10px;
+.tickets-tx-codeblock {
+  margin: 0 0 10px;
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-dock);
+  overflow: hidden;
+  font-style: normal;
+}
+
+.tickets-tx-codeblock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 26px;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.7rem;
+  color: var(--text-4);
+}
+
+.tickets-tx-codeblock-lang {
+  font-family: var(--font-mono);
+}
+
+.tickets-tx-codeblock-copy {
+  height: 20px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-4);
+  font: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.tickets-tx-codeblock:hover .tickets-tx-codeblock-copy,
+.tickets-tx-codeblock-copy:focus-visible {
+  opacity: 1;
+}
+
+.tickets-tx-codeblock-copy:hover {
+  background: var(--hover-bg);
+  color: var(--text-heading);
+}
+
+.tickets-tx-pre {
+  margin: 0;
+  padding: 8px 10px;
   font-family: var(--font-mono);
   font-size: 0.78rem;
   line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre;
   overflow-x: auto;
+  overflow-wrap: normal;
+}
+
+.tickets-tx-diff-add {
+  color: var(--status-added);
+}
+
+.tickets-tx-diff-del {
+  color: var(--status-deleted);
+}
+
+.tickets-tx-diff-hunk {
+  color: var(--text-4);
 }
 
 .tickets-tx-table {
@@ -1579,14 +1639,11 @@ details[open] > summary > .tickets-tx-think-preview {
   color: var(--status-deleted);
 }
 
-.tickets-tx-think-body {
+.tickets-tx-reply.tickets-tx-think-body {
   margin: 2px 0 8px 10px;
   padding: 2px 0 2px 12px;
   border-left: 2px solid var(--border);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
   font-size: 0.8rem;
-  font-style: italic;
   color: var(--text-2);
 }
 
