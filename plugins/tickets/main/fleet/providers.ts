@@ -30,7 +30,10 @@ export interface NormalizedEvent {
   readonly ts: string;
   readonly kind: 'note' | 'text' | 'usage' | 'result' | 'error' | 'tool' | 'text-delta';
   readonly text?: string;
-  /** For `tool` events: the called tool's name. */
+  /**
+   * The tool's name — on `tool` events the called tool, on a tool-call
+   * note the name the telemetry counts (read/grep/glob/write/edit).
+   */
   readonly tool?: string;
   /**
    * For `text-delta`: `'end'` seals the part — its `text` then carries the
@@ -53,8 +56,6 @@ export interface NormalizedEvent {
   readonly turn?: 'busy' | 'idle';
   /** The slash commands the worker accepts (names without the slash). */
   readonly commands?: readonly string[];
-  /** The tool name on a tool-call note (telemetry: read/grep/glob/write/edit). */
-  readonly tool?: string;
   /**
    * Exactly one per assistant model call: THAT call's usage. The
    * providers' aggregates (`tokensIn`/`tokensOut`, the result event) are

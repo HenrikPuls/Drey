@@ -179,6 +179,9 @@ describe('composeRunRequest carries the home rule', () => {
       permissionMode: 'accept-edits',
       gitPath: '',
       workerChoice: null,
+      repoInstructions: null,
+      diffStat: null,
+      gateFailure: null,
     });
 
   it('the request and the brief name the absolute worktree path', () => {

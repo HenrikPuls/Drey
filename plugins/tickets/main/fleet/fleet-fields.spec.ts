@@ -5,14 +5,14 @@ import {
   parseTicketFile,
   patchTicketFile,
   ticketSections,
-} from './ticket-files';
-import { parseHandover } from '../shared/tickets';
+} from '../ticket-files';
+import { parseHandover } from '../../shared/tickets';
 import {
   composeInstruction,
   parseWorkerValue,
   resolveAssignment,
-} from './fleet/assignment';
-import { DEFAULT_FLEET_CAPS } from './fleet/protocol';
+} from './assignment';
+import { DEFAULT_FLEET_CAPS } from './protocol';
 
 /**
  * The fleet's assignment brain (M84, the owner's ruling): ticket pin >
@@ -311,12 +311,16 @@ Do it in two steps.
       prompt: null,
       acceptance: [],
       ticketFile: 'E:/tickets/T-0007.md',
+      repoInstructions: null,
+      diffStat: null,
+      gateFailure: null,
+      caps: DEFAULT_FLEET_CAPS,
     };
-    const text = composeInstruction({ ...base, plan: 'Step one.' });
-    expect(text).toContain('description and plan are quoted in full below — do not read the ticket file');
-    expect(text.indexOf('quoted in full below')).toBeLessThan(text.indexOf('What and why:'));
-    expect(composeInstruction({ ...base, plan: null })).toContain('description is quoted in full below');
-    expect(composeInstruction({ ...base, plan: null, ticketFile: undefined })).not.toContain('quoted in full');
+    const { text } = composeInstruction({ ...base, plan: 'Step one.' });
+    expect(text).toContain('description and plan are quoted in full in this brief — do not read the ticket file');
+    expect(text.indexOf('quoted in full in this brief')).toBeLessThan(text.indexOf('What and why:'));
+    expect(composeInstruction({ ...base, plan: null }).text).toContain('description is quoted in full in this brief');
+    expect(composeInstruction({ ...base, plan: null, ticketFile: undefined }).text).not.toContain('quoted in full');
   });
 
   it("names the linked toolchain and forbids an install, only when the repo links something (req-56)", () => {
@@ -331,10 +335,14 @@ Do it in two steps.
       plan: null,
       prompt: null,
       acceptance: [],
+      repoInstructions: null,
+      diffStat: null,
+      gateFailure: null,
+      caps: DEFAULT_FLEET_CAPS,
     };
-    const text = composeInstruction({ ...base, links: ['.tools', 'node_modules'] });
+    const { text } = composeInstruction({ ...base, links: ['.tools', 'node_modules'] });
     expect(text).toContain('Toolchain: `.tools`, `node_modules` are linked into the checkout');
     expect(text).toContain('Do not run an install');
-    expect(composeInstruction(base)).not.toContain('Toolchain:');
+    expect(composeInstruction(base).text).not.toContain('Toolchain:');
   });
 });
