@@ -696,15 +696,19 @@ export class Orchestrator {
       this.lastPhases = snap.pipeline;
       this.notedThisPass = new Set();
       const dispatched = new Set<string>(plan.map((item) => item.card.id));
+      const refusedByColumn = new Map<string, string>();
       for (const item of plan) {
-        await this.dispatchOne(config, snap.columns, item.workingPhase, item.card, snap);
+        const outcome = await this.dispatchOne(config, snap.columns, item.workingPhase, item.card, snap);
+        if (outcome === 'refused' && !refusedByColumn.has(item.workingPhase)) {
+          refusedByColumn.set(item.workingPhase, item.card.id);
+        }
       }
       const detachedTickets = new Set<string>(
         this.allRecords()
           .filter((record) => record.info.state === 'detached')
           .map((record) => record.info.ticketId),
       );
-      this.noteWaits(snap, busyTickets, dispatched, detachedTickets);
+      this.noteWaits(snap, busyTickets, dispatched, detachedTickets, refusedByColumn);
       for (const ticket of [...this.notes.keys()]) {
         if (!this.notedThisPass.has(ticket)) {
           this.notes.delete(ticket);
@@ -730,14 +734,18 @@ export class Orchestrator {
   /**
    * The silent cases the plan leaves behind: a held column with a
    * waiting candidate, a claim or a leftover run stamp parking a ticket
-   * in a playing column. The chain log should say WHY nothing moves —
-   * the owner once watched ten silent minutes with no explanation.
+   * in a playing column, and a dispatchable candidate the column had no
+   * slot for — behind a live run (ordinary queueing) or behind a refused
+   * start (the queue is parked). The chain log should say WHY nothing
+   * moves — the owner once watched ten silent minutes with no
+   * explanation.
    */
   private noteWaits(
     snap: BoardSnapshot,
     busy: ReadonlySet<string>,
     dispatched: ReadonlySet<string>,
     detached: ReadonlySet<string>,
+    refusedByColumn: ReadonlyMap<string, string>,
   ): void {
     if (this.master !== 'run') {
       return; // the chain is off — silence is the honest state
@@ -777,6 +785,16 @@ export class Orchestrator {
             card.id,
             `dispatch holds ${card.id}: a run stamp without a live run — stop or resume the detached run`,
           );
+        } else if (dispatchable(card, busy)) {
+          const refused = refusedByColumn.get(column.phase.id);
+          if (refused !== undefined) {
+            this.noteSkip(
+              card.id,
+              `dispatch waits ${card.id}: ${column.phase.id}'s dispatch of ${refused} was refused — the queue cannot advance`,
+            );
+          } else {
+            this.noteSkip(card.id, `dispatch waits ${card.id}: no free ${column.phase.id} worker slot yet`);
+          }
         }
       }
     }
@@ -792,13 +810,14 @@ export class Orchestrator {
     }
   }
 
+  /** One planned dispatch; the pass collects the refusals per column. */
   private async dispatchOne(
     config: ChainConfig,
     columns: readonly BoardColumn[],
     workingPhaseId: string,
     card: BoardColumn['tickets'][number],
     snap: BoardSnapshot,
-  ): Promise<void> {
+  ): Promise<'dispatched' | 'refused' | 'skipped'> {
     const workingPhase = snap.pipeline.find((p) => p.id === workingPhaseId) ?? null;
     const repo =
       card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card.meta.repo) ?? null);
@@ -807,7 +826,7 @@ export class Orchestrator {
         card.id,
         `dispatch skips ${card.id}: ${repo === null ? `repo "${card.meta.repo ?? ''}" is not in repos.md` : 'unknown working phase'}`,
       );
-      return;
+      return 'skipped';
     }
     const promptRef = columnPromptRef(workingPhase);
     let promptText: string | null = null;
@@ -820,7 +839,7 @@ export class Orchestrator {
           card.id,
           `dispatch skips ${card.id}: prompt "${promptRef}" is missing (tickets/_meta/prompts/${promptRef}.md)`,
         );
-        return;
+        return 'skipped';
       }
     }
     const nextPhaseId = nextPhaseIdOf(columns, workingPhaseId);
@@ -831,7 +850,7 @@ export class Orchestrator {
       .catch(() => null);
     if (text === null) {
       this.noteSkip(card.id, `dispatch skips ${card.id}: the ticket file is unreadable`);
-      return;
+      return 'skipped';
     }
     // The context pack (T-0048): the repo's agent instructions and the
     // worktree's diff stat are read here, outside the pure composer; a
@@ -887,7 +906,7 @@ export class Orchestrator {
     });
     if (!composed.ok) {
       this.noteSkip(card.id, `dispatch skips ${card.id}: ${composed.error}`);
-      return;
+      return 'skipped';
     }
     for (const truncation of composed.truncations) {
       this.deps.log(
@@ -901,9 +920,10 @@ export class Orchestrator {
           `${composed.request.model !== null ? `/${composed.request.model}` : ''}) as ${outcome.run.id}`,
       );
       this.notes.delete(card.id);
-    } else {
-      this.noteSkip(card.id, `dispatch refused ${card.id}: ${outcome.error}`);
+      return 'dispatched';
     }
+    this.noteSkip(card.id, `dispatch refused ${card.id}: ${outcome.error}`);
+    return 'refused';
   }
 }
 

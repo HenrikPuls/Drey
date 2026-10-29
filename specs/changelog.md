@@ -20,6 +20,46 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — fleet: the build column dispatches again (worktree leftovers, the walk-up misread, the silent queue)
+
+Owner request, outside the list (the runner stopped picking up tickets
+under `50-build`). Three defects compounded: a worktree cleanup left the
+repo's `link:` junctions (`.tools`, `node_modules`) behind as
+unregistered folders; `prepareWorktree`'s stale-row check then ran
+`git rev-parse` inside such a leftover, which walked up into the tickets
+vault — itself a repo on `main` — and reported the VAULT's branch as the
+folder's, turning the designed "uninspectable → move aside" into a
+permanent wrong-branch refusal (`worktree … is on main, expected t/<id>
+— refusing to touch it`); and with `workers: 1` the refused candidate
+consumed the column's only plan slot on every 15 s pass, parking every
+queued ticket behind it in silence. Now:
+
+- **`worktrees.ts`**: `currentBranch` resolves `--show-toplevel` first
+  and answers only when the toplevel IS the worktree path (either
+  spelling — the `findWorktreeEntry` alias discipline); an inherited
+  answer from an enclosing repo reads as "no longer answers to git", so
+  the leftover is moved aside and a fresh checkout takes its place
+  (self-healing, reported as `moved-aside`).
+- **Every removal path unlinks the junctions first** (`unlinkShared`,
+  now exported from `worktrees.ts`): `removeWorktree`/`cleanWorktrees`
+  (`worktree-clean.ts`, new `links` option carrying the repo's `link:`),
+  the card-menu and Files "Remove worktree" commands (`main/index.ts`),
+  and the re-run healing's own `worktree remove` (`healBranchConflict`).
+  git's removal never passes through a reparse point cleanly, so none is
+  left in its way — a cleanup can no longer leave a poisoned folder.
+- **`orchestrator.ts`**: a dispatchable candidate the plan had no slot
+  for is no longer silent — `dispatch waits <id>: no free <column>
+  worker slot yet` behind a live run, and `dispatch waits <id>:
+  <column>'s dispatch of <id> was refused — the queue cannot advance`
+  when a refused start parks the queue (deduped like every note: one
+  line per episode).
+- Specs: the walk-up trap reproduces the production layout (a junction
+  leftover inside a git vault) and pins the self-healing; an unregistered
+  folder that IS its own repo on a wrong branch still refuses; removal
+  unlinks and the delete never reaches through a junction; both queue
+  notes are pinned in the orchestrator suite.
+
+**Not yet manually verified by the owner.**
 ### req-58 — Takeover tab: readable transcript + structured header
 
 Owner request, outside the list. The takeover transcript ran through

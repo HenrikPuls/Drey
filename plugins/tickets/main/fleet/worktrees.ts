@@ -12,7 +12,9 @@
  *   **recreated**;
  * - stale and dirty — **moved-aside** to `<path>.stale-<stamp>`, never
  *   deleted; an uninspectable directory counts as dirty (what cannot be
- *   proven clean is not destroyed);
+ *   proven clean is not destroyed) — including a leftover folder whose
+ *   git answer is an inherited one: the base sits inside the tickets
+ *   vault, itself a repo, and a rev-parse would walk up into it;
  * - wrong branch, locked, or a rebase/merge in progress — a descriptive
  *   error, nothing modified (no automatic repair).
  *
@@ -181,8 +183,10 @@ export async function linkShared(
  * can never reach through a junction into the checkout's own folders.
  * Only symbolic links / junctions are removed; a real folder stays. The
  * top level is swept too: earlier workers made such junctions themselves.
+ * Shared with every removal path (worktree-clean, the board's Files
+ * command) — git's own worktree removal leaves junctions behind.
  */
-async function unlinkShared(worktreePath: string, links: readonly string[]): Promise<void> {
+export async function unlinkShared(worktreePath: string, links: readonly string[]): Promise<void> {
   const top = await fsp.readdir(worktreePath).catch(() => [] as string[]);
   for (const rel of new Set([...links, ...top])) {
     const target = path.join(worktreePath, rel);
@@ -366,6 +370,9 @@ async function healBranchConflict(
         `branch ${request.branch} is checked out in the dirty worktree ${entry.path} — commit or stash there, then retry`,
       );
     }
+    // The links go first: git's worktree removal leaves junctions behind,
+    // and a leftover folder at the path poisons the next prepare.
+    await unlinkShared(entry.path, request.links ?? []);
     await git.run(request.repoPath, ['worktree', 'remove', entry.path]);
   }
 }
@@ -398,13 +405,32 @@ async function assertNoOperationInProgress(git: GitSeam, worktreePath: string): 
 }
 
 /** The branch a still-runnable directory is on (`t/<id>`; `HEAD` when
- *  detached), or null when the directory no longer answers to git. */
+ *  detached), or null when the directory no longer answers to git *as
+ *  itself*. The worktree base sits inside the tickets vault — itself a
+ *  git repo — so a bare rev-parse walks up out of a leftover folder and
+ *  reports the VAULT's branch as if it were the folder's; the toplevel
+ *  guard turns that inherited answer back into "no longer answers". */
 async function currentBranch(git: GitSeam, worktreePath: string): Promise<string | null> {
   try {
+    const toplevel = (await git.run(worktreePath, ['rev-parse', '--show-toplevel'])).trim();
+    if (!(await isOwnToplevel(toplevel, worktreePath))) {
+      return null;
+    }
     return (await git.run(worktreePath, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
   } catch {
     return null;
   }
+}
+
+/** True when git's toplevel IS the worktree path (either spelling — git
+ *  reports canonical paths while the caller may hold an alias). */
+async function isOwnToplevel(toplevel: string, worktreePath: string): Promise<boolean> {
+  if (sameWorktreePath(toplevel, worktreePath)) {
+    return true;
+  }
+  const realToplevel = await realPathOrNull(toplevel);
+  const realWorktree = await realPathOrNull(worktreePath);
+  return realToplevel !== null && realWorktree !== null && sameWorktreePath(realToplevel, realWorktree);
 }
 
 type DirState = 'missing' | 'empty' | 'content';
