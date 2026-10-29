@@ -63,6 +63,13 @@ export type VaultGitState =
       readonly fetchedAt: string | null;
       /** Number of stashes in the repository. */
       readonly stashCount: number;
+      /**
+       * The plugin that structurally manages this vault (SDK 1.32),
+       * `null` for an ordinary repository: everything stays visible,
+       * stage/commit/amend/discard/pull/push are refused with the
+       * manager's name.
+       */
+      readonly managedBy: string | null;
     };
 
 export interface GitBranch {

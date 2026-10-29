@@ -38,7 +38,7 @@ export function createSourceControlWidget(
   const icon = (name: string, label: string, onClick: () => void): HTMLButtonElement =>
     iconButton(api, name, label, onClick);
 
-  const changeRow = (change: GitChange, group: Group, vaultId: string): HTMLElement => {
+  const changeRow = (change: GitChange, group: Group, vaultId: string, managed: boolean): HTMLElement => {
     const { badge, tone, label } = describeKind(change.kind);
     const row = el('div', 'git-change');
     row.dataset['status'] = tone;
@@ -63,20 +63,23 @@ export function createSourceControlWidget(
       );
     }
     if (group === 'changes') {
-      actions.appendChild(icon('rotate-ccw', 'Discard changes', () => void commands.discard(change)));
+      const discardButton = icon('rotate-ccw', 'Discard changes', () => void commands.discard(change));
+      discardButton.disabled = managed;
+      actions.appendChild(discardButton);
     }
     if (group === 'staged') {
       actions.appendChild(
         icon('minus', 'Unstage', () => void session.run('Unstaging…', 'unstage', { vaultId, paths: [change.path] })),
       );
     } else {
-      actions.appendChild(
-        icon(
-          'plus',
-          group === 'conflicts' ? 'Mark as resolved (stage)' : 'Stage',
-          () => void session.run('Staging…', 'stage', { vaultId, paths: [change.path] }),
-        ),
+      // Staging (and resolving = staging) is refused for a plugin-managed vault.
+      const stageButton = icon(
+        'plus',
+        group === 'conflicts' ? 'Mark as resolved (stage)' : 'Stage',
+        () => void session.run('Staging…', 'stage', { vaultId, paths: [change.path] }),
       );
+      stageButton.disabled = managed;
+      actions.appendChild(stageButton);
     }
     row.append(actions, el('span', 'badge', badge));
     const open = (): void => void commands.showDiff(change, group);
@@ -97,6 +100,7 @@ export function createSourceControlWidget(
     changes: readonly GitChange[],
     group: Group,
     vaultId: string,
+    managed: boolean,
     action?: HTMLButtonElement,
   ): void => {
     if (changes.length === 0) {
@@ -105,11 +109,12 @@ export function createSourceControlWidget(
     const header = el('div', 'git-group');
     header.append(el('span', 'title', title), el('span', 'count', String(changes.length)));
     if (action !== undefined) {
+      action.disabled = managed;
       header.appendChild(action);
     }
     list.appendChild(header);
     for (const change of changes) {
-      list.appendChild(changeRow(change, group, vaultId));
+      list.appendChild(changeRow(change, group, vaultId, managed));
     }
   };
 
@@ -186,6 +191,17 @@ export function createSourceControlWidget(
         ),
       );
       banner.append(alert, text, icon('x', 'Abort the merge', () => void commands.abortMerge()));
+    } else if (vault.managedBy !== null) {
+      // SDK 1.32 plugin-managed vault: fully visible, read-only — the
+      // managing plugin writes the history through its own flows.
+      banner.hidden = false;
+      banner.className = 'git-banner git-managed';
+      const text = el('span', 'text');
+      text.append(
+        el('span', undefined, `Managed by ${vault.managedBy}`),
+        el('span', 'sub', 'Read-only — this repository\'s history is written by the plugin.'),
+      );
+      banner.append(api.ui.icon('lock', 14), text);
     } else if (state.amend) {
       banner.hidden = false;
       banner.className = 'git-banner git-amend';
@@ -247,14 +263,16 @@ export function createSourceControlWidget(
       return;
     }
     const vaultId = vault.vaultId;
+    const managed = vault.managedBy !== null;
     const { staged, unstaged, conflicts } = vault.status;
-    appendGroup(list, 'Merge conflicts', conflicts, 'conflicts', vaultId);
+    appendGroup(list, 'Merge conflicts', conflicts, 'conflicts', vaultId, managed);
     appendGroup(
       list,
       'Staged changes',
       staged,
       'staged',
       vaultId,
+      managed,
       icon('minus', 'Unstage all', () => void session.run('Unstaging…', 'unstage', { vaultId, paths: [] })),
     );
     appendGroup(
@@ -263,6 +281,7 @@ export function createSourceControlWidget(
       unstaged,
       'changes',
       vaultId,
+      managed,
       icon('plus', 'Stage all changes', () => void session.run('Staging…', 'stage', { vaultId, paths: [] })),
     );
     if (staged.length + unstaged.length + conflicts.length === 0) {
@@ -294,9 +313,14 @@ export function createSourceControlWidget(
       const render = (): void => {
         const vault = session.currentOk();
         const off = vault === null || state.busy !== null;
+        // A plugin-managed vault (SDK 1.32) refuses pull and push main-side;
+        // fetch stays — it changes nothing in the working tree.
+        const managed = vault !== null && vault.managedBy !== null;
         for (const button of buttons) {
           button.disabled = off;
         }
+        pullButton.disabled = off || managed;
+        pushButton.disabled = off || managed;
         setLabel(pullButton, pullButtonLabel(vault?.status.behind ?? 0));
         setLabel(pushButton, pushButtonLabel(vault?.status.ahead ?? 0));
       };
@@ -341,7 +365,11 @@ export function createSourceControlWidget(
         if (message.value !== draft) {
           message.value = draft;
         }
-        const blocked = state.busy !== null || (merging && conflictsLeft > 0);
+        // The commit box is inert for a plugin-managed vault: main refuses
+        // the commit anyway, an empty box says why the buttons are off.
+        const managed = vault !== null && vault.managedBy !== null;
+        message.disabled = managed;
+        const blocked = managed || state.busy !== null || (merging && conflictsLeft > 0);
         commitButton.disabled = blocked;
         pushCommitButton.disabled = blocked;
         setLabel(commitButton, commitButtonLabel(merging, amending, conflictsLeft));

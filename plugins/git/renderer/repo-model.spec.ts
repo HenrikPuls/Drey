@@ -40,6 +40,7 @@ function repo(vaultId: string, patch: Partial<OkVault> = {}, status: Partial<Git
     operation: null,
     fetchedAt: null,
     stashCount: 0,
+    managedBy: null,
     ...patch,
   };
 }
