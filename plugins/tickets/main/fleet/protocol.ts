@@ -89,6 +89,61 @@ export interface RunRequest {
  *  idempotent per ticket, so a repeated run reports what it did. */
 export type WorktreeOutcome = 'reused' | 'created' | 'recreated' | 'moved-aside';
 
+// ---------------------------------------------------------------------------
+// Token telemetry (T-0048): what a provider reported one run used. A
+// counter is `null` when the provider never reported it — 0 is a
+// measurement, absence is not (the pinned plan provider may report no
+// cache fields at all).
+
+export interface RunUsage {
+  readonly input: number | null;
+  readonly cacheRead: number | null;
+  readonly cacheCreation: number | null;
+  readonly output: number | null;
+}
+
+/**
+ * How the run's context reached the worker. Only `'fresh'` exists yet —
+ * the field is written from the start so later handover modes (T-0049)
+ * join real data instead of backfilling.
+ */
+export type HandoverMode = 'fresh';
+
+/** The output caps an instruction applies (T-0048); configurable `fleet.cap.*`. */
+export interface FleetCaps {
+  /** The gate failure's tail, injected into a retry's instruction. */
+  readonly gateFailureLines: number;
+  readonly gateFailureBytes: number;
+  /** The worktree diff stat's head, injected into every instruction. */
+  readonly diffStatLines: number;
+  readonly diffStatBytes: number;
+}
+
+/** The caps' defaults — an absent or invalid config degrades to these. */
+export const DEFAULT_FLEET_CAPS: FleetCaps = {
+  gateFailureLines: 40,
+  gateFailureBytes: 4096,
+  diffStatLines: 50,
+  diffStatBytes: 4096,
+};
+
+/** Resolves a caps value of unknown shape (wire body, plugin config) to
+ *  a valid one: every non-negative finite number wins per key, anything
+ *  else falls back to the default of that key. */
+export function normalizeFleetCaps(value: unknown): FleetCaps {
+  const raw = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
+  const num = (key: keyof FleetCaps): number => {
+    const given = raw[key];
+    return typeof given === 'number' && Number.isFinite(given) && given >= 0 ? given : DEFAULT_FLEET_CAPS[key];
+  };
+  return {
+    gateFailureLines: num('gateFailureLines'),
+    gateFailureBytes: num('gateFailureBytes'),
+    diffStatLines: num('diffStatLines'),
+    diffStatBytes: num('diffStatBytes'),
+  };
+}
+
 /** A run as the runner reports it — and as `run.json` persists it. */
 export interface RunInfo {
   readonly id: string;
@@ -144,6 +199,33 @@ export interface RunInfo {
   readonly branch: string;
   /** On every run started after T-0047; absent on adopted pre-T-0047 records. */
   readonly worktree?: WorktreeOutcome;
+  /** The machine gate's verdict, once it ran (T-0048); absent when it never did. */
+  readonly gateResult?: 'green' | 'red' | null;
+  // --- token telemetry (T-0048); all optional so adopt() restores older
+  // --- records — every reader treats absent as unknown.
+  /** The model pin the run started with (`provider/model` or bare). */
+  readonly model?: string | null;
+  /** The phase the ticket sat in when the run started. */
+  readonly phase?: string | null;
+  /** Usage summed over the run's model calls; a null counter was never reported. */
+  readonly usage?: RunUsage;
+  /**
+   * The input side (input + cacheRead + cacheCreation) of the LAST
+   * assistant turn — the real context size, unlike the providers'
+   * cumulative aggregates.
+   */
+  readonly lastTurnContext?: number | null;
+  /** How many model calls reported usage. */
+  readonly turns?: number;
+  /** Read/grep/glob tool calls — the exploration counter. */
+  readonly readCalls?: number;
+  /**
+   * Input-side tokens over the turns before the first write/edit tool
+   * call; the full input side when no write came; null without any usage.
+   */
+  readonly tokensBeforeFirstWrite?: number | null;
+  /** Always 'fresh' in T-0048; the field exists for T-0049's handover modes. */
+  readonly handoverMode?: HandoverMode;
   /** The last gate failure, when the machine gate stopped the run short. */
   readonly gateFailure: string | null;
 }
@@ -219,6 +301,8 @@ export interface ChainConfig {
   readonly defaultWorker: string;
   /** Permission mode of dispatched runs (no dialog to ask in). */
   readonly permissionMode: PermissionMode;
+  /** The instruction output caps (T-0048); absent = `DEFAULT_FLEET_CAPS`. */
+  readonly caps?: FleetCaps;
 }
 
 /** The chain's control state as the runner reports it. */
