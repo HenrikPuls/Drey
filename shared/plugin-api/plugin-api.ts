@@ -279,6 +279,73 @@ export type EditorContextMenuTarget =
     };
 
 /**
+ * A file operation the Files panel is about to run (SDK 1.32): create,
+ * rename, move (drag & drop, within or across vaults), copy (paste /
+ * duplicate) or delete. Paths are vault-relative, forward-slashed.
+ */
+export type VaultFileOperation =
+  | { kind: 'create'; vaultId: string; path: string; type: 'file' | 'directory' }
+  | { kind: 'rename'; vaultId: string; fromPath: string; toPath: string }
+  | {
+      kind: 'move';
+      fromVaultId: string;
+      fromPath: string;
+      toVaultId: string;
+      toDir: string;
+    }
+  | {
+      kind: 'copy';
+      fromVaultId: string;
+      fromPath: string;
+      toVaultId: string;
+      toDir: string;
+    }
+  | { kind: 'delete'; vaultId: string; paths: readonly string[] };
+
+/**
+ * A handler's verdict on a `VaultFileOperation`: `allow` runs the base
+ * flow unchanged; `refuse` blocks it (the reason is shown in the panel's
+ * message dialog); `handle` lets the plugin perform the operation itself
+ * as a structured action instead of the raw file operation.
+ */
+export type VaultFileOperationVerdict =
+  | { action: 'allow' }
+  | { action: 'refuse'; reason: string }
+  | { action: 'handle' };
+
+/** What a handler's `perform` came back with. */
+export interface VaultFileOperationOutcome {
+  readonly ok: boolean;
+  readonly error?: string;
+  /** Final vault-relative path of a performed move/rename (tabs re-key). */
+  readonly path?: string;
+}
+
+/** Takes over / vetoes Files-panel operations for the plugin's vaults. */
+export interface VaultFileOperationsHandler {
+  check(operation: VaultFileOperation): Promise<VaultFileOperationVerdict>;
+  perform(operation: VaultFileOperation): Promise<VaultFileOperationOutcome>;
+}
+
+/** What the Files-panel context menu was opened on (SDK 1.32). */
+export interface FilesContextMenuTarget {
+  readonly vaultId: string;
+  readonly vaultName: string;
+  /** Vault-relative path; `''` is the vault root row. */
+  readonly path: string;
+  readonly type: 'file' | 'directory';
+}
+
+/** One plugin-contributed row in the Files-panel context menu. */
+export interface FilesContextMenuItem {
+  readonly label: string;
+  readonly title?: string;
+  /** Grayed out, unclickable. */
+  readonly disabled?: boolean;
+  run(): void | Promise<void>;
+}
+
+/**
  * A drop decoder: consulted BEFORE the base file/image handling, so a
  * plugin can own a MIME family (`.ics`/`.msg` meetings, template drags).
  */
@@ -594,6 +661,25 @@ export interface DreyPluginApi {
     listFiles(opts?: VaultOpOptions): Promise<readonly VaultFileEntry[]>;
     /** Vault content changed (refresh/external write/MCP write) — re-read anything cached. */
     onChanged(listener: () => void): Unsubscribe;
+  };
+
+  /**
+   * The Files-panel extension seam (SDK 1.32): veto or take over file
+   * operations, and contribute rows to the Files context menus. Handlers
+   * are consulted in registration order; the first `refuse` wins, then
+   * the first `handle`. One registration per plugin; a deactivated or
+   * quarantined plugin's registrations are cleared.
+   */
+  readonly files: {
+    registerOperations(handler: VaultFileOperationsHandler): Unsubscribe;
+    /**
+     * Rows appended to the Files-panel context menus, re-evaluated per
+     * open — a sync callback over the plugin's cached state, so the rows
+     * can be target-scoped (specific vaults or folders).
+     */
+    registerContextMenuItems(
+      items: (target: FilesContextMenuTarget) => readonly FilesContextMenuItem[],
+    ): Unsubscribe;
   };
 
   readonly commands: {

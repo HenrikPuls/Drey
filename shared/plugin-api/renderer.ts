@@ -65,6 +65,8 @@ export type {
   EditorExtensionSlot,
   EditorSurfaceContext,
   FileOpenerContrib,
+  FilesContextMenuItem,
+  FilesContextMenuTarget,
   HighlightedSpan,
   MarkdownViewHandle,
   MarkdownViewOptions,
@@ -81,4 +83,8 @@ export type {
   PluginWidgetContrib,
   RewriteRequest,
   ToolbarButtonContrib,
+  VaultFileOperation,
+  VaultFileOperationOutcome,
+  VaultFileOperationsHandler,
+  VaultFileOperationVerdict,
 } from './plugin-api';

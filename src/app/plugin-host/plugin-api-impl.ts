@@ -28,6 +28,8 @@ import { EditTargetService } from '../services/edit-target.service';
 import { EditorService } from '../services/editor.service';
 import { ConfirmDialogService } from '../services/confirm-dialog.service';
 import { FileDecorationService } from '../services/file-decoration.service';
+import { FilesCommandsService } from '../services/files-commands.service';
+import { FilesOperationsRegistryService } from '../services/files-operations-registry.service';
 import { DiffDialogService } from '../diff-view';
 import { LogService } from '../services/log.service';
 import { OverlayGuardService } from '../services/overlay-guard.service';
@@ -92,6 +94,8 @@ export class PluginApiFactory {
   private readonly toolbarButtons = inject(ToolbarContributionsService);
   private readonly log = inject(LogService);
   private readonly decorations = inject(FileDecorationService);
+  private readonly filesOperations = inject(FilesOperationsRegistryService);
+  private readonly filesCommands = inject(FilesCommandsService);
   private readonly diffDialog = inject(DiffDialogService);
   /**
    * Resolves services at call time instead of at construction
@@ -128,8 +132,11 @@ export class PluginApiFactory {
       return unsubscribe as Unsubscribe;
     };
     const pluginId = plugin.id;
-    // A deactivated or quarantined plugin leaves no decorations behind.
+    // A deactivated or quarantined plugin leaves no decorations or Files
+    // seam registrations behind.
     disposables.push(() => this.decorations.clear(pluginId));
+    disposables.push(() => this.filesOperations.clear(pluginId));
+    disposables.push(() => this.filesCommands.clear(pluginId));
     const invokeBackend = (method: string, payload?: unknown): Promise<unknown> =>
       window.dreyApi.invokePlugin(pluginId, method, payload).catch((error: unknown) => {
         // Electron wraps a handler throw into "Error invoking remote method
@@ -282,6 +289,11 @@ export class PluginApiFactory {
               listener();
             }),
           ),
+      },
+      files: {
+        registerOperations: (handler) => track(this.filesOperations.register(pluginId, handler)),
+        registerContextMenuItems: (items) =>
+          track(this.filesCommands.register(pluginId, items)),
       },
       commands: {
         register: (command: PluginCommand) => {

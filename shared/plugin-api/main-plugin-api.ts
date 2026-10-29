@@ -410,6 +410,17 @@ export interface MainPluginContext {
     onChanged(cb: (event: VaultChangeEvent) => void): Unsubscribe;
     /** Native save dialog rooted at the vault (Save-as), vault-relative result or null. */
     pickSavePath(suggestedName: string, opts?: VaultOpOptions): Promise<string | null>;
+    /**
+     * Marks a vault as managed by THIS plugin (SDK 1.32; label = the
+     * plugin's manifest name): the vault stays fully visible in the
+     * Source control panel, but its mutating actions are refused as
+     * "Managed by <name>" — the plugin owns the structured history.
+     * One mark per plugin — marking again moves the claim; `null`
+     * clears it (a re-detect that found nothing).
+     */
+    markManaged(vaultId: string | null): void;
+    /** The managing plugin's display name for a vault, or null. */
+    managedBy(vaultId: string): string | null;
   };
 
   /** The base app config (ADR-0010). Read-only from a plugin — no patching from main. */
