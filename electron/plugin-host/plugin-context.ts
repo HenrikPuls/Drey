@@ -69,7 +69,7 @@ export async function runVaultTool(
 /** `ctx.vault`: file IO in the vaults, with the plugin's id as the history origin. */
 export function buildVaultContext(
   pluginId: string,
-  deps: Pick<PluginHostDeps, 'vaultManager' | 'vaultAnnouncer' | 'confirmWrite' | 'managedVaults'>,
+  deps: Pick<PluginHostDeps, 'vaultManager' | 'vaultAnnouncer' | 'confirmWrite' | 'managedVaults' | 'registerVaultAt'>,
   manifestName: string,
   onChanged: (cb: (event: VaultChangeEvent) => void) => Unsubscribe,
 ): MainPluginContext['vault'] {
@@ -140,6 +140,9 @@ export function buildVaultContext(
       managedVaults.mark(pluginId, vaultId, manifestName);
     },
     managedBy: (vaultId) => managedVaults.managedBy(vaultId),
+    // One-click vault registration (SDK 1.33, T-0045): the composed
+    // round — register + watcher sync + full refresh — lives in the dep.
+    register: (path) => deps.registerVaultAt(path),
   };
 }
 

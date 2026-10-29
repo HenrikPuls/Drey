@@ -52,6 +52,11 @@ async function harness(vaults: Array<{ id: string; name: string; path: string; e
         readFile(join(vaults.find((v) => v.id === (opts?.vaultId ?? ''))?.path ?? '.', path), 'utf8'),
       onChanged: () => () => undefined,
       managedBy: vi.fn(() => null),
+      register: vi.fn(async (folderPath: string): Promise<{ id: string; name: string; path: string }> => ({
+        id: 'v9',
+        name: 'Registered',
+        path: folderPath,
+      })),
     },
     save: { onNoteSaved: () => () => undefined },
     log: () => undefined,
@@ -216,5 +221,19 @@ describe('git plugin: repositories found under a parent vault', () => {
       'parent-vault:drey',
       'tickets:',
     ]);
+  });
+
+  it('registerVault routes the found repository root to ctx.vault.register', async () => {
+    const h = await harness([{ id: PARENT, name: 'Parent', path: parentPath, exists: true }]);
+    const added = (await h.invoke('registerVault', { path: join(parentPath, 'drey') })) as {
+      id: string;
+      path: string;
+    };
+    expect(added).toMatchObject({ id: 'v9', path: join(parentPath, 'drey') });
+  });
+
+  it('registerVault refuses without a folder', async () => {
+    const h = await harness([{ id: PARENT, name: 'Parent', path: parentPath, exists: true }]);
+    await expect(h.invoke('registerVault', {})).rejects.toThrow('No folder given.');
   });
 });

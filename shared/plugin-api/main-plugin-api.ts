@@ -29,7 +29,7 @@ import type {
   TagSearchHit,
   TagSearchQuery,
 } from './search-types';
-import type { VaultFileEntry, VaultStatus } from '../ipc-api';
+import type { VaultFileEntry, VaultRegistration, VaultStatus } from '../ipc-api';
 import type { PluginManifest } from './manifest';
 
 /** Fired after a note save has been written to disk (ADR-0044 rule 4). */
@@ -490,6 +490,14 @@ export interface MainPluginContext {
     markManaged(vaultId: string | null): void;
     /** The managing plugin's display name for a vault, or null. */
     managedBy(vaultId: string): string | null;
+    /**
+     * Registers an existing folder as a vault (SDK 1.33, T-0045) and
+     * runs the full registry refresh round — the one click on "Register
+     * as vault" for a repository the Source control panel's scan found
+     * under a parent vault. Same rules as the picker: the folder's
+     * basename becomes the name, an already-registered folder throws.
+     */
+    register(path: string): Promise<VaultRegistration>;
   };
 
   /** The base app config (ADR-0010). Read-only from a plugin — no patching from main. */

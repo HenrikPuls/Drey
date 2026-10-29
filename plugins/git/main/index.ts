@@ -959,6 +959,20 @@ const plugin: MainPluginModule = {
       return controller !== undefined;
     });
 
+    /**
+     * One click on "Register as vault" for a repository the scan found
+     * under a parent vault (T-0045): the SDK's composed registration
+     * round — the refresh that follows makes the panel drop the
+     * discovered twin and show the vault's own entry.
+     */
+    ctx.ipc.handle('registerVault', async (payload) => {
+      const path = stringOf(payload, 'path');
+      if (path === '') {
+        throw new Error('No folder given.');
+      }
+      return ctx.vault.register(path);
+    });
+
     /** Settings changed the executable: look for git (and the repositories) again. */
     ctx.ipc.handle('configChanged', async () => {
       gitPath = ((await ctx.config.get<string>('gitPath')) ?? '').trim();

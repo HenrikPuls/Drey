@@ -234,7 +234,18 @@ export class VaultManager {
     if (result.canceled || result.filePaths.length === 0) {
       return null;
     }
-    const chosen = path.resolve(result.filePaths[0]);
+    return this.addVaultAt(result.filePaths[0]);
+  }
+
+  /**
+   * Registers an existing folder as a vault without a picker (T-0045:
+   * the one click on "Register as vault" for a repository the scan
+   * found under a parent vault). Same rules as {@link addVault}: the
+   * name defaults to the folder's basename, an already-registered
+   * folder is rejected, the first vault ever registered becomes active.
+   */
+  addVaultAt(folderPath: string): VaultRegistration {
+    const chosen = path.resolve(folderPath);
     const existing = this.registry.find((v) => path.resolve(v.path).toLowerCase() === chosen.toLowerCase());
     if (existing) {
       throw new Error(`That folder is already registered as vault "${existing.name}".`);
