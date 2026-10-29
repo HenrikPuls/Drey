@@ -678,6 +678,30 @@ The panel shows the repository of the focused document's vault:
   (one ticket transition is one commit). Everything read-only stays:
   branch, dirty state, history, file history and the Files-panel badges.
 
+### Found repositories (a vault that is only a parent folder)
+
+A vault does not have to be a repository itself. If it is just a parent
+folder — `E:\projects` with several repositories inside — Drey scans a
+few levels below it (folders starting with a dot, `node_modules` and
+reserved `_` folders are skipped) and surfaces every repository it
+finds, up to 25 per vault, in the Source control panel **and** as Files
+badges. A `.git` file (a linked worktree) counts like a `.git` folder.
+
+A found repository is **read-only by design**: a hint row
+*Found by scanning \<vault\> — read-only* sits above its changes, there
+is no commit box, and stage/discard, fetch/pull/push, merge, stash and
+amend are all disabled or refused — clicking a row still compares, and
+history and file history still work. When a focused document lies
+inside one of several found repositories, the panel shows exactly that
+one; the selector at the top switches between them (its tooltip shows
+each repository's absolute path).
+
+**Register as vault** (the button in the hint row) turns a found
+repository into a vault of its own with one click — after that you can
+work with it like with any vault. The scan re-runs whenever the vault
+list changes or you refresh the status, and repositories that already
+belong to another registered vault are never listed twice.
+
 ![Git decorations in the Files panel](img/git-files-badges.png)
 
 Changed files carry status badges (`M` modified, `U` untracked) and

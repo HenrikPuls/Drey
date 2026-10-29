@@ -3370,3 +3370,45 @@ with every detect), so the Source control panel shows it read-only:
 stage / discard / commit (+amend) / pull / push refuse with "Managed by
 Tickets" — the whole read surface (branch, status, log, file history,
 decorations) stays.
+
+## 6.69 A parent vault finds its repositories: discovery → states → decorations (T-0045, ADR-0083)
+
+```mermaid
+sequenceDiagram
+    actor U as Owner
+    participant P as Source control panel
+    participant M as git plugin (main)
+    participant D as discoverRepos (fs-only walk)
+    participant G as git
+    participant S as FileDecorationService
+    participant VM as VaultManager
+
+    U->>P: Refresh the status (relocate)
+    P->>M: status {relocate: true}
+    M->>M: locate(vault) — the vault itself is no repository (none)
+    M->>D: discoverRepos(vaultRoot, otherVaults' roots)
+    D-->>M: [drey, drey-tickets] (.git files count; skips dot-dirs, node_modules, other vaults)
+    loop each found repository (≤ 25)
+        M->>G: status --porcelain=v2 (cwd = the repo's root)
+        G-->>M: repository-relative changes
+        M->>M: prefixStatusPaths(status, subPath) — vault-relative
+    end
+    M-->>P: states: [ok subPath: drey (discovered), ok subPath: drey-tickets] — no "not a repository"
+    P->>S: setFileDecorations(vaultId, own + found merged) — ONE call (the service replaces per vault)
+    P-->>P: read-only surface: hint row "Found by scanning <vault> — read-only", Register button, no commit box
+    U->>P: Register as vault
+    P->>M: registerVault {path: the found root}
+    M->>VM: ctx.vault.register(path) — addVaultAt + watcher sync + full refresh
+    VM-->>P: registry push (vault:changed) → the panel re-pulls
+    M-->>P: the new vault's own entry; the found twin is gone (its subtree is now a skip root)
+```
+
+Every mutation on a found repository — stage, unstage, discard, commit,
+checkout, createBranch, fetch, pull, push, merge, mergeAbort, resolve,
+stashPush/Pop/Drop — is refused by the plugin's FIRST guard, before any
+repository is located or git runs ("This repository was found under
+"\<vault\>" and is read-only here. Register it as a vault to work with
+it."); the queries (branches, log, file history, diffs, stash list)
+answer, with the paths stripped back repository-relative main-side.
+Rescans run on registry changes and relocate only.
+
