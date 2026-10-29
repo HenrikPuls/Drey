@@ -66,6 +66,7 @@ import {
   removeWorktree,
   type CleanupReport,
 } from './fleet/worktree-clean';
+import { unlinkShared } from './fleet/worktrees';
 import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } from './fleet/worktree-home';
 import type { ChainConfig, FleetCaps, PermissionMode, RunInfo } from './fleet/protocol';
 import { normalizeFleetCaps } from './fleet/protocol';
@@ -791,6 +792,11 @@ class BoardService {
       return { ok: false, error: 'the worktree path escapes the vault' };
     }
     try {
+      // The repo's `link:` junctions go first (the top-level sweep catches
+      // the rest): git's worktree removal leaves them behind, and a
+      // leftover folder at the path poisons the next prepare.
+      const links = snap.repos.find((r) => r.path === plan.repoPath)?.link ?? [];
+      await unlinkShared(worktreeAbs, links);
       await this.git.worktreeRemove(plan.repoPath, worktreeAbs);
     } catch (error) {
       return { ok: false, error: `git worktree remove failed: ${messageOf(error).split('\n')[0]}` };
@@ -1108,7 +1114,7 @@ class BoardService {
       const record = this.newestRecordFor(runs, card.id);
       const worktreePath = record !== null ? record.worktreePath : worktreePathFor(vault.path, repo, card.id);
 
-      const outcome = await removeWorktree(this.git, repo.path, worktreePath, { force: input.force });
+      const outcome = await removeWorktree(this.git, repo.path, worktreePath, { force: input.force, links: repo.link });
       if (!outcome.ok) {
         if (outcome.dirty === true) {
           return {

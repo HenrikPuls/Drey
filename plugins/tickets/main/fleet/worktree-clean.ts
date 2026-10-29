@@ -13,7 +13,7 @@ import type { Dirent } from 'node:fs';
 import type { RepoRef } from '../../shared/tickets';
 import type { TicketsGit } from '../tickets-git';
 import { isUnderAnyBase, legacyWorktreeBase, worktreeBaseFor } from './worktree-home';
-import { normalizeForMatch, parseWorktreePorcelain, realPathOrNull } from './worktrees';
+import { normalizeForMatch, parseWorktreePorcelain, realPathOrNull, unlinkShared } from './worktrees';
 
 /** The exec seam cleanup drives (a `TicketsGit` instance). */
 type GitSeam = Pick<TicketsGit, 'run'>;
@@ -21,6 +21,11 @@ type GitSeam = Pick<TicketsGit, 'run'>;
 export interface RemoveOptions {
   /** Skip the dirty refusal — the owner confirmed. Never the default. */
   readonly force?: boolean;
+  /** The repo's `link:` folders (repos.md, req-56) — unlinked before the
+   *  removal. git's `worktree remove` leaves junctions behind, and a
+   *  leftover folder at the path poisons the next prepare (the sweep
+   *  catches every top-level reparse point, named or not). */
+  readonly links?: readonly string[];
 }
 
 export type RemoveOutcome =
@@ -31,8 +36,10 @@ export type RemoveOutcome =
 /**
  * Removes one registered worktree. `status --porcelain` reads the tree
  * first — a tree that no longer answers to git is an error, not an
- * empty status — then `git worktree remove` does the work (`--force`
- * only with `force`). No `fsp.rm` on registered trees.
+ * empty status — then the `link:` junctions go (git's removal leaves
+ * them behind; a recursive delete must never reach through them) and
+ * `git worktree remove` does the work (`--force` only with `force`).
+ * No `fsp.rm` on registered trees.
  */
 export async function removeWorktree(
   git: GitSeam,
@@ -50,6 +57,7 @@ export async function removeWorktree(
     return { ok: false, dirty: true, status };
   }
   try {
+    await unlinkShared(worktreePath, options.links ?? []);
     const args = ['worktree', 'remove', ...(options.force === true ? ['--force'] : []), worktreePath];
     await git.run(repoPath, args);
   } catch (error) {
@@ -140,7 +148,7 @@ export async function cleanWorktrees(git: GitSeam, input: CleanWorktreesInput): 
       if (entryForms.some((form) => protectedSet.has(form))) {
         continue;
       }
-      const outcome = await removeWorktree(git, repo.path, entry.path);
+      const outcome = await removeWorktree(git, repo.path, entry.path, { links: repo.link });
       if (outcome.ok) {
         removed.push(entry.path);
       } else if (outcome.dirty === true) {

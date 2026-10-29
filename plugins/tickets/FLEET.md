@@ -56,7 +56,10 @@ descriptor gets taken over by the next spawn.
 
 All removal goes through **real git** (`git worktree remove` /
 `git worktree prune`), never a bare rmdir; the **branch always stays**
-(it carries the work).
+(it carries the work). The repo's `link:` junctions are unlinked first
+(the top level is swept, named or not) on every removal path — git's
+removal does not pass through a reparse point cleanly, and a leftover
+folder at the path would poison the next prepare.
 
 - **Per ticket:** the card menu's "Remove worktree…" — refuses a dirty
   tree unless the owner confirms the armed second click; refuses a live
@@ -240,7 +243,17 @@ tail and 50/4096 head). Each application is logged:
   master `halted`? column `held`? cooldown active? token budget exhausted
   (`tokensUsed` vs day)? ticket claimed, carries a `run` stamp, has
   validation errors, or — most common — **no backticked acceptance criteria**,
-  which the machine gate refuses to run.
+  which the machine gate refuses to run. A candidate queued behind
+  something says so (`dispatch waits … no free <column> worker slot yet`,
+  or `… <column>'s dispatch of <id> was refused — the queue cannot
+  advance` when a refused start parks the queue; the refusal itself is
+  logged once, deduped).
+- **`worktree … is on main, expected t/<id>`** (an old refusal) → a
+  removal leftover at the path (junctions, no `.git` of its own) whose
+  rev-parse walked up into the tickets vault — a repo — and reported the
+  vault's branch. The toplevel guard now reads that as "no longer answers
+  to git": the leftover is moved aside (`.stale-<stamp>`) and a fresh
+  checkout takes its place, logged as `moved-aside`.
 - **Run stuck** → `/status` state + stream tail; `stopping` for long means
   the worker ignores the stop — the supervisor tree-kills, give it a moment,
   then check the pid.

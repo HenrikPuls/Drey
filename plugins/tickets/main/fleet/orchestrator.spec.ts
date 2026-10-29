@@ -253,6 +253,58 @@ describe('Orchestrator', () => {
     expect(fleet.records).toEqual([]);
   });
 
+  it('a refused start parks the column queue behind it — the chain log says so', async () => {
+    await writeMeta();
+    // build has workers: 1 — the plan takes one ticket, and its refused
+    // start must not leave the queued one silently waiting (the outage
+    // shape: one poisoned worktree parked a whole column).
+    await writeTicket('T-0001', 'build');
+    await writeTicket('T-0002', 'build');
+    const logs: string[] = [];
+    const fleet = fakePort();
+    const refusing: SupervisorPort = {
+      ...fleet.port,
+      start: vi.fn(async (): Promise<StartOutcome> => ({
+        ok: false,
+        error: 'worktree failed: worktree W:/wt is on main, expected t/T-0001',
+      })),
+    };
+    const orch = new Orchestrator({
+      root: fleetRoot,
+      log: (message) => logs.push(message),
+      supervisorOf: () => refusing,
+      scanIntervalMs: 60_000,
+    });
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    await orch.setMaster('halted');
+    await orch.setMaster('run'); // second pass — the notes must stay silent
+
+    expect(fleet.records).toEqual([]);
+    const refusal = logs.filter((line) => line.startsWith('dispatch refused'));
+    expect(refusal).toHaveLength(1);
+    expect(refusal[0]).toContain('is on main, expected');
+    const waits = logs.filter((line) => line.startsWith('dispatch waits'));
+    expect(waits).toHaveLength(1);
+    expect(waits[0]).toContain("build's dispatch of");
+    expect(waits[0]).toContain('was refused — the queue cannot advance');
+  });
+
+  it('a queued candidate behind a live run says why it waits (no free slot)', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'build');
+    await writeTicket('T-0002', 'build');
+    const logs: string[] = [];
+    const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+
+    expect(fleet.records).toHaveLength(1); // workers: 1 — one runs, one queues
+    const waits = logs.filter((line) => line.startsWith('dispatch waits'));
+    expect(waits).toHaveLength(1);
+    expect(waits[0]).toContain('no free build worker slot yet');
+  });
+
   it('respects capacity, held columns and busy tickets', async () => {
     await writeMeta();
     await writeTicket('T-0001', 'plan');

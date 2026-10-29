@@ -356,6 +356,47 @@ describe('prepareWorktree (real git)', () => {
     await expect(fsp.readFile(path.join(foreign, 'uncommitted.txt'), 'utf8')).resolves.toBe('keep\n');
   });
 
+  it('still refuses an unregistered folder that is its own repo on the wrong branch', async () => {
+    const stray = path.join(baseDir, 'stray-repo');
+    await fsp.mkdir(stray);
+    await git(stray, ['init', '-b', 'main']);
+    await fsp.writeFile(path.join(stray, 'file.txt'), 'committed elsewhere\n');
+    await git(stray, ['add', '.']);
+    await git(stray, ['commit', '-m', 'initial']);
+    await fsp.writeFile(path.join(stray, 'uncommitted.txt'), 'keep\n');
+
+    const before = await listing();
+    await expect(prepareWorktree(fleetGit(), req(), stray, frozen)).rejects.toThrow(
+      'is on main, expected t/T-0091 — refusing to touch it',
+    );
+    expect(await listing()).toBe(before);
+    await expect(fsp.readFile(path.join(stray, 'uncommitted.txt'), 'utf8')).resolves.toBe('keep\n');
+  });
+
+  it('moves a junction-leftover folder inside a git vault aside instead of refusing (the walk-up trap)', async () => {
+    // The production shape: the worktree base lives inside the tickets
+    // vault — itself a git repo on `main`. A removal leftover (junctions,
+    // no `.git` of its own) made rev-parse answer with the VAULT's
+    // branch, and every dispatch was refused forever.
+    const vault = path.join(baseDir, 'vault-repo');
+    await fsp.mkdir(vault);
+    await git(vault, ['init', '-b', 'main']);
+    const trap = path.join(vault, '_worktrees', 'T-0091');
+    await fsp.mkdir(trap, { recursive: true });
+    const shared = path.join(baseDir, 'shared-tools');
+    await fsp.mkdir(shared);
+    await fsp.symlink(shared, path.join(trap, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+
+    const result = await prepareWorktree(fleetGit(), req(), trap, frozen);
+    expect(result.outcome).toBe('moved-aside');
+    expect(result.sessionInvalidated).toBe(true);
+    expect(await headOf(trap)).toBe(BRANCH);
+    // The leftover's content survives in the move-aside, junction included.
+    await expect(fsp.stat(path.join(result.movedTo!, 'node_modules'))).resolves.toBeDefined();
+    // The junction's target was never touched.
+    await expect(fsp.stat(path.join(trap, 'file.txt'))).resolves.toBeDefined();
+  });
+
   it('refuses a locked worktree and modifies nothing', async () => {
     await prepareWorktree(fleetGit(), req(), worktreePath, frozen);
     await fsp.writeFile(path.join(worktreePath, 'uncommitted.txt'), 'dirty\n');

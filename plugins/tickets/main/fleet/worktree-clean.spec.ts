@@ -91,6 +91,28 @@ describe('removeWorktree (real git)', () => {
     await expect(fsp.stat(wt)).rejects.toThrow();
   });
 
+  it('unlinks the link: junctions so the removal leaves no folder behind (the poisoned-path trap)', async () => {
+    // git's worktree removal leaves junctions behind; a leftover folder at
+    // the path poisons the next prepare (worktrees.spec.ts's walk-up trap).
+    // The junction is git-ignored in the worktree — the req-56 rule the
+    // real repos follow (a link git would see is never made).
+    await fsp.writeFile(path.join(repo, '.gitignore'), 'node_modules/\n');
+    await git(repo, ['add', '.']);
+    await git(repo, ['commit', '-m', 'ignore node_modules']);
+    const wt = await addWorktree('T-0001');
+    const shared = path.join(baseDir, 'shared');
+    await fsp.mkdir(shared);
+    await fsp.writeFile(path.join(shared, 'binary.txt'), 'still here\n');
+    await fsp.symlink(shared, path.join(wt, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+
+    const outcome = await removeWorktree(fleetGit(), repo, wt, { links: ['node_modules'] });
+    expect(outcome).toEqual({ ok: true });
+    await expect(fsp.stat(wt)).rejects.toThrow();
+    expect(await fsp.readdir(path.join(repo, '.git', 'worktrees')).catch(() => [] as string[])).toEqual([]);
+    // The delete never reached through the link.
+    await expect(fsp.readFile(path.join(shared, 'binary.txt'), 'utf8')).resolves.toBe('still here\n');
+  });
+
   it('errors on a folder without worktree registration', async () => {
     const plain = path.join(home, 'T-0001');
     await fsp.mkdir(plain, { recursive: true });
