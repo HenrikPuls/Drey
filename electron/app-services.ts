@@ -12,8 +12,7 @@ import { McpHttpTransport, PluginMcpTools, VaultTools, createVaultMcpServer } fr
 import { AssistantToolbox, McpClientManager, createMcpClientManager } from './mcp-client';
 import { NoteManager } from './note-manager';
 import { OwnWriteLedger } from './own-write-ledger';
-import { ManagedVaults } from './plugin-host/managed-vaults';
-import { PluginHost, PluginInstaller, type PluginHostDeps } from './plugin-host';
+import { ManagedVaults, PluginHost, PluginInstaller, type PluginHostDeps } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
 import { UpdateService } from './updater/update-service';

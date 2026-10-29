@@ -6,6 +6,7 @@
  * (`eslint.config.mjs`).
  */
 export { PluginHost, type PluginHostDeps } from './plugin-host';
+export { ManagedVaults } from './managed-vaults';
 export { PluginInstaller, type PluginInstallerDeps } from './plugin-installer';
 export {
   discoverPlugins,
