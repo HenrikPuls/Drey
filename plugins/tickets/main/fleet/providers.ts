@@ -23,7 +23,7 @@
  * live spike rounds pin the exact CLI/API shapes.
  */
 import { freePort, type RunnerProcess, type SpawnFn } from './procs';
-import type { PermissionMode, SteerRung, WorkerProviderId } from './protocol';
+import type { PermissionMode, RunUsage, SteerRung, WorkerProviderId } from './protocol';
 
 /** One line of the run's normalized stream file (`stream.jsonl`). */
 export interface NormalizedEvent {
@@ -53,6 +53,14 @@ export interface NormalizedEvent {
   readonly turn?: 'busy' | 'idle';
   /** The slash commands the worker accepts (names without the slash). */
   readonly commands?: readonly string[];
+  /** The tool name on a tool-call note (telemetry: read/grep/glob/write/edit). */
+  readonly tool?: string;
+  /**
+   * Exactly one per assistant model call: THAT call's usage. The
+   * providers' aggregates (`tokensIn`/`tokensOut`, the result event) are
+   * cumulative over the run and must never pose as a turn's context.
+   */
+  readonly turnUsage?: RunUsage;
 }
 
 /** The stream lead-in of a worker's thinking (the takeover transcript shows it quoted). */
@@ -274,12 +282,23 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
           }
           if (event.type === 'assistant' && event.message !== undefined) {
             // Every model call reports its own usage: the input side of
-            // the latest one is the size of the context right now.
+            // the latest one is the size of the context right now, and
+            // the per-turn copy (turnUsage) feeds the run's telemetry —
+            // the aggregate on the later result event never does.
             const usage = event.message.usage;
             const contextTokens =
               usage === undefined
                 ? undefined
                 : (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
+            const turnUsage: RunUsage | undefined =
+              usage === undefined
+                ? undefined
+                : {
+                    input: usage.input_tokens ?? null,
+                    cacheRead: usage.cache_read_input_tokens ?? null,
+                    cacheCreation: usage.cache_creation_input_tokens ?? null,
+                    output: usage.output_tokens ?? null,
+                  };
             const parts = event.message.content ?? [];
             // The transcript the takeover tab shows: thinking, replies and
             // every tool call, as the opencode adapter writes them.
@@ -292,7 +311,12 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
                 start.onEvent({ ts: nowIso(now), kind: 'text', text: (part.text ?? '').slice(0, 8_000) });
               } else if (part.type === 'tool_use') {
                 activity = toolActivity(part.name, part.input);
-                start.onEvent({ ts: nowIso(now), kind: 'note', text: activity });
+                start.onEvent({
+                  ts: nowIso(now),
+                  kind: 'note',
+                  text: activity,
+                  ...(part.name !== undefined ? { tool: part.name } : {}),
+                });
               }
             }
             if (contextTokens !== undefined || activity !== '') {
@@ -300,6 +324,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
                 ts: nowIso(now),
                 kind: 'usage',
                 ...(contextTokens !== undefined ? { contextTokens } : {}),
+                ...(turnUsage !== undefined ? { turnUsage } : {}),
                 ...(activity !== '' ? { activity } : {}),
               });
             }
@@ -1026,8 +1051,10 @@ export function opencodeAdapter(
               // A message's text and thinking are read once it is COMPLETE: the
               // list shows a message while it still streams, and reading it on
               // first sight lost most of what the worker said.
+              let fresh = false;
               if ((m.time?.completed ?? 0) > 0 && m.id !== undefined && !state.seenAssistant.has(m.id)) {
                 state.seenAssistant.add(m.id);
+                fresh = true;
                 const thought = (m.content ?? [])
                   .filter((part) => part.type === 'reasoning')
                   .map((part) => part.text ?? '')
@@ -1070,9 +1097,26 @@ export function opencodeAdapter(
                     kind: 'note',
                     text: activity,
                     activity,
+                    ...(part.name !== undefined ? { tool: part.name } : {}),
                     ...(state.contextTokens > 0 ? { contextTokens: state.contextTokens } : {}),
                   });
                 }
+              }
+              // The message's own per-turn usage, once, AFTER its tool calls —
+              // the session `tokens` are cumulative and never leave this
+              // adapter as context size. Emitted under the same once-guard as
+              // the text, so a 2 s poll cannot inflate the telemetry sums.
+              if (fresh && m.tokens !== undefined) {
+                start.onEvent({
+                  ts: nowIso(now),
+                  kind: 'usage',
+                  turnUsage: {
+                    input: m.tokens.input ?? null,
+                    cacheRead: m.tokens.cache?.read ?? null,
+                    cacheCreation: m.tokens.cache?.write ?? null,
+                    output: m.tokens.output ?? null,
+                  },
+                });
               }
               if ((m.time?.completed ?? 0) > 0) {
                 state.lastText = messageText(m) || state.lastText;

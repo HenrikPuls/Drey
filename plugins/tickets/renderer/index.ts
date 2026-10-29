@@ -35,6 +35,7 @@ import {
   opensByItself,
   runChipLine,
   spanClock,
+  telemetryParts,
   workerStatus,
   type Light,
 } from './worker-status';
@@ -1202,6 +1203,9 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
       if ((run.cacheReadTokens ?? 0) > 0) {
         tokens.append(el('span', undefined, `cached ${formatTokens(run.cacheReadTokens ?? 0)}`));
       }
+      for (const part of telemetryParts(run)) {
+        tokens.append(el('span', undefined, part));
+      }
       if (run.costUsd !== null && run.costUsd > 0) {
         tokens.append(el('span', undefined, `$${run.costUsd.toFixed(2)}`));
       }
@@ -1621,6 +1625,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
             `turn ${run.steerCount + 1}`,
             fill === null ? '' : `context ${Math.round(fill * 100)}%`,
             `in ${formatTokens(run.tokensIn)}${(run.cacheReadTokens ?? 0) > 0 ? ` (${formatTokens(run.cacheReadTokens ?? 0)} cached)` : ''} · out ${formatTokens(run.tokensOut)}`,
+            ...telemetryParts(run),
             `⏱ ${spanClock(elapsed)}`,
           ]
             .filter((part) => part !== '')

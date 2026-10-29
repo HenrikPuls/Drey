@@ -15,8 +15,8 @@ import {
   type TicketCard,
 } from '../../shared/tickets';
 import { acceptanceCommands, ticketSections } from '../ticket-files';
-import { composeInstruction, resolveAssignment } from './assignment';
-import type { PermissionMode, RunRequest } from './protocol';
+import { composeInstruction, resolveAssignment, type Truncation } from './assignment';
+import { DEFAULT_FLEET_CAPS, type FleetCaps, type PermissionMode, type RunRequest } from './protocol';
 import { worktreePathFor } from './worktree-home';
 
 export interface ComposeRunInput {
@@ -47,6 +47,17 @@ export interface ComposeRunInput {
   /** The run dialog's explicit worker choice (owner runs only). */
   readonly workerChoice: string | null;
   /**
+   * The work repo's agent instructions (T-0048 context pack), read by the
+   * caller; null = the repo carries none.
+   */
+  readonly repoInstructions: string | null;
+  /** The worktree's raw diff stat (T-0048), read by the caller; null = none. */
+  readonly diffStat: string | null;
+  /** The previous run's raw gate failure (T-0048 retry), read by the caller; null = a first run. */
+  readonly gateFailure: string | null;
+  /** The instruction output caps (T-0048); absent = `DEFAULT_FLEET_CAPS`. */
+  readonly caps?: FleetCaps;
+  /**
    * Set by the orchestrator for the pipeline's first worker column: a
    * ticket entering there carries no acceptance criteria yet (writing
    * them is the plan's job), so the run gates structurally — the gate
@@ -58,7 +69,7 @@ export interface ComposeRunInput {
 }
 
 export type ComposeRunResult =
-  | { readonly ok: true; readonly request: RunRequest }
+  | { readonly ok: true; readonly request: RunRequest; readonly truncations: readonly Truncation[] }
   | { readonly ok: false; readonly error: string };
 
 export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
@@ -99,6 +110,24 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
   // absolute location so the worker never has to find it.
   const worktreePath = worktreePathFor(input.vaultPath, input.repo, input.card.id);
   const sections = ticketSections(input.ticketText);
+  const instruction = composeInstruction({
+    ticketId: input.card.id,
+    title: input.card.meta.title ?? input.card.id,
+    repo: input.repo.name,
+    branch,
+    worktreePath,
+    phase: input.card.phase,
+    description: sections.description,
+    plan: sections.plan,
+    prompt: input.promptText,
+    acceptance,
+    ticketFile: path.join(input.vaultPath, input.card.path),
+    ...(input.repo.link !== undefined && input.repo.link.length > 0 ? { links: input.repo.link } : {}),
+    repoInstructions: input.repoInstructions,
+    diffStat: input.diffStat,
+    gateFailure: input.gateFailure,
+    caps: input.caps ?? DEFAULT_FLEET_CAPS,
+  });
   const request: RunRequest = {
     ticketId: input.card.id,
     ticketsVaultPath: input.vaultPath,
@@ -109,23 +138,11 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     branch,
     baseRef: input.repo.branch,
     ...(input.repo.link !== undefined && input.repo.link.length > 0 ? { links: input.repo.link } : {}),
+    ...(input.repo.link !== undefined && input.repo.link.length > 0 ? { links: input.repo.link } : {}),
     provider: assignment.provider,
     model: assignment.model,
     permissionMode: input.permissionMode,
-    instruction: composeInstruction({
-      ticketId: input.card.id,
-      title: input.card.meta.title ?? input.card.id,
-      repo: input.repo.name,
-      branch,
-      worktreePath,
-      phase: input.card.phase,
-      description: sections.description,
-      plan: sections.plan,
-      prompt: input.promptText,
-      acceptance,
-      ticketFile: path.join(input.vaultPath, input.card.path),
-      ...(input.repo.link !== undefined ? { links: input.repo.link } : {}),
-    }),
+    instruction: instruction.text,
     acceptance,
     gate: acceptance.length > 0 ? 'commands' : 'structural',
     git: input.gitPath.trim() === '' ? 'git' : input.gitPath.trim(),
@@ -136,7 +153,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     ...(input.workerChoice !== null ? { recordWorker: input.workerChoice } : {}),
     ...(input.dispatchedBy !== undefined ? { column: input.dispatchedBy } : {}),
   };
-  return { ok: true, request };
+  return { ok: true, request, truncations: instruction.truncations };
 }
 
 /** The fleet's actor identity for stamps (`agent@<host>`). */

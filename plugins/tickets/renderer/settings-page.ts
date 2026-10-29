@@ -123,6 +123,30 @@ function fleetSection(api: DreyPluginApi): HTMLElement {
       'Runs the chain starts on its own have no dialog to ask in.',
     ),
     ...kv('tset-git', 'Git executable', textConfig(api, 'gitPath'), 'Empty uses git from PATH.'),
+    ...kv(
+      'tset-cap-gate-lines',
+      'Gate failure cap — lines',
+      numberConfig(api, 'fleet.cap.gateFailureLines'),
+      'How many lines of a failed gate\'s output a retry\'s instruction keeps (the tail).',
+    ),
+    ...kv(
+      'tset-cap-gate-bytes',
+      'Gate failure cap — bytes',
+      numberConfig(api, 'fleet.cap.gateFailureBytes'),
+      'The same cap as a byte bound.',
+    ),
+    ...kv(
+      'tset-cap-diff-lines',
+      'Diff stat cap — lines',
+      numberConfig(api, 'fleet.cap.diffStatLines'),
+      'How many lines of the worktree\'s diff stat an instruction carries (the head).',
+    ),
+    ...kv(
+      'tset-cap-diff-bytes',
+      'Diff stat cap — bytes',
+      numberConfig(api, 'fleet.cap.diffStatBytes'),
+      'The same cap as a byte bound.',
+    ),
   );
   section.append(head, rows);
   return section;
@@ -165,6 +189,24 @@ function textConfig(api: DreyPluginApi, key: string): HTMLInputElement {
   });
   input.addEventListener('change', () => {
     void api.settings.set(key, input.value.trim()).catch(() => undefined);
+  });
+  return input;
+}
+
+/** A whole-number config field; empty or invalid clears back to the default. */
+function numberConfig(api: DreyPluginApi, key: string): HTMLInputElement {
+  const input = el('input', 'mono-input');
+  input.type = 'number';
+  input.min = '0';
+  input.step = '1';
+  void api.settings.get<number>(key).then((value) => {
+    input.value = typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+  });
+  input.addEventListener('change', () => {
+    const parsed = Number(input.value);
+    void api.settings
+      .set(key, input.value.trim() !== '' && Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : '')
+      .catch(() => undefined);
   });
   return input;
 }

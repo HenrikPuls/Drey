@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { claudeCodeAdapter, modelBody, OPENCODE_API, opencodeAdapter, type FetchFn, type NormalizedEvent, type ProviderStart, INTERRUPT_WAIT_MS, toolActivity } from './providers';
+import { telemetryFromEvents } from './telemetry';
 import type { RunnerProcess, SpawnFn } from './procs';
 
 /**
@@ -193,6 +194,52 @@ describe('the claude-code adapter', () => {
     claudeCodeAdapter(spawnFn).spawn(start);
     expect(seen[0]).toContain('--resume');
     expect(seen[0]).toContain('ses_9');
+  });
+
+  it('emits one turnUsage per assistant call — telemetry sums turns, never the cumulative result', () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.stdout(JSON.stringify({
+      type: 'assistant',
+      message: {
+        usage: { input_tokens: 900, cache_read_input_tokens: 20_000, cache_creation_input_tokens: 4_000, output_tokens: 210 },
+        content: [{ type: 'tool_use', name: 'Read', input: { file_path: 'src/a.ts' } }],
+      },
+    }));
+    proc.stdout(JSON.stringify({
+      type: 'assistant',
+      message: {
+        usage: { input_tokens: 1_100, cache_read_input_tokens: 30_000, output_tokens: 300 },
+        content: [{ type: 'tool_use', name: 'Edit', input: { file_path: 'src/a.ts' } }],
+      },
+    }));
+    // The CLI's result carries the run's CUMULATIVE usage.
+    proc.stdout(JSON.stringify({
+      type: 'result',
+      usage: { input_tokens: 52_000, cache_read_input_tokens: 50_000, output_tokens: 510 },
+      result: 'done',
+    }));
+    const t = telemetryFromEvents(events);
+    expect(t.turns).toBe(2);
+    expect(t.usage).toEqual({ input: 2_000, cacheRead: 50_000, cacheCreation: 4_000, output: 510 });
+    expect(t.lastTurnContext).toBe(31_100); // the LAST turn only — not the 102_000 aggregate
+    expect(t.tokensBeforeFirstWrite).toBe(24_900); // the Edit's turn no longer counts
+    expect(t.readCalls).toBe(1);
+    expect(events.find((e) => e.text === 'Read src/a.ts')?.tool).toBe('Read');
+    expect(events.find((e) => e.text === 'Edit src/a.ts')?.tool).toBe('Edit');
+  });
+
+  it('an assistant event without a usage block omits turnUsage entirely (no zeros)', () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.stdout(JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: 'No usage here.' }] },
+    }));
+    expect(events.some((e) => e.kind === 'usage')).toBe(true); // the activity line still lands
+    expect(events.filter((e) => e.turnUsage !== undefined)).toHaveLength(0);
   });
 });
 
@@ -774,6 +821,55 @@ describe('the opencode adapter', () => {
     await handle.stop();
     expect(interrupts.length).toBe(1);
     expect(proc.killTree).toHaveBeenCalled();
+
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
+  it('emits turnUsage once per completed message — telemetry sums turns, never the session aggregate', async () => {
+    vi.useFakeTimers();
+    const at = Date.now();
+    const first = {
+      id: 'msg_1',
+      type: 'assistant',
+      time: { created: at + 1, completed: at + 2 },
+      content: [{ type: 'tool', id: 'call_1', name: 'read', state: { status: 'completed', input: { path: 'src/a.ts' } } }],
+      tokens: { input: 700, cache: { read: 12_000 }, output: 200 },
+    };
+    const second = {
+      id: 'msg_2',
+      type: 'assistant',
+      time: { created: at + 3, completed: at + 4 },
+      content: [{ type: 'tool', id: 'call_2', name: 'write', state: { status: 'completed', input: { path: 'src/b.ts' } } }],
+      tokens: { input: 800, cache: { read: 30_000, write: 900 }, output: 400 },
+    };
+    const { fetch } = scriptedFetch({
+      sessionCreated: () => undefined,
+      prompts: [],
+      interrupts: [],
+      // Newest first, as the API lists them; the session usage is CUMULATIVE.
+      messages: () => [second, first],
+      usage: { tokens: { input: 31_500, cache: { read: 42_000 }, output: 600 }, cost: 0.05 },
+    });
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(2_500);
+
+    const t = telemetryFromEvents(events);
+    expect(t.turns).toBe(2);
+    expect(t.usage).toEqual({ input: 1_500, cacheRead: 42_000, cacheCreation: 900, output: 600 });
+    expect(t.lastTurnContext).toBe(800 + 30_000 + 900); // the last message, not the session's sum
+    expect(t.tokensBeforeFirstWrite).toBe(12_700); // the write's own turn no longer counts
+    expect(t.readCalls).toBe(1);
+    expect(events.find((e) => e.text === 'read src/a.ts')?.tool).toBe('read');
+    expect(events.find((e) => e.text === 'write src/b.ts')?.tool).toBe('write');
+
+    // The 2 s poll re-reads the list: the once-guard must hold, or the sums inflate.
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(telemetryFromEvents(events).turns).toBe(2);
 
     proc.exit(null);
     vi.useRealTimers();

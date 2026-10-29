@@ -587,6 +587,76 @@ describe('RunSupervisor', () => {
     expect(text).toContain('machine gate failed');
   });
 
+  it('a red gate records its verdict, a bounded multi-line failure and a one-line Log entry', async () => {
+    const { sup, adapter } = supervisor({
+      execShell: async () => {
+        const err = new Error('command failed');
+        // What promisify(exec) rejects with: stdout and stderr ride the error.
+        Object.assign(err, { stdout: 'running tests…', stderr: `${'detail\n'.repeat(600)}FAIL src/a.spec.ts` });
+        throw err;
+      },
+    });
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+    const info = sup.get(id)!;
+    expect(info.gateResult).toBe('red');
+    expect(info.gateFailure).toContain('\n'); // multi-line: the command line, then the output
+    expect(info.gateFailure).toContain('FAIL src/a.spec.ts');
+    expect(info.gateFailure!.split('\n').length).toBeLessThanOrEqual(400 + 2); // SANITY_CAP + the two heading lines
+
+    // The ticket Log keeps the single-line discipline: the failure's first line only.
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    const gateLines = text.split('\n').filter((line) => line.includes('machine gate failed'));
+    expect(gateLines).toHaveLength(1);
+    expect(gateLines[0]).toContain('machine gate failed — `npm run verify:unit` failed');
+    expect(gateLines[0]).not.toContain('detail');
+  });
+
+  it('a green gate records its verdict (gateResult on the record)', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    expect(sup.get(id)?.gateResult).toBe('green');
+  });
+
+  it('folds the run telemetry into the record as events arrive', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel, model: 'zai/glm-5.3' }));
+    const id = (started as { run: { id: string } }).run.id;
+    const onEvent = adapter.starts[0]!.onEvent;
+    onEvent({ ts: '2026-10-17T12:00:01Z', kind: 'note', text: 'read src/a.ts', tool: 'read' });
+    onEvent({ ts: '2026-10-17T12:00:02Z', kind: 'usage', turnUsage: { input: 900, cacheRead: 20_000, cacheCreation: 4_000, output: 210 } });
+    onEvent({ ts: '2026-10-17T12:00:03Z', kind: 'note', text: 'edit src/a.ts', tool: 'edit' });
+    onEvent({ ts: '2026-10-17T12:00:04Z', kind: 'usage', turnUsage: { input: 1_100, cacheRead: 30_000, cacheCreation: null, output: 300 } });
+    await vi.waitFor(() => expect(sup.get(id)?.turns).toBe(2));
+
+    const info = sup.get(id)!;
+    expect(info.handoverMode).toBe('fresh');
+    expect(info.model).toBe('zai/glm-5.3');
+    expect(info.phase).toBe('plan');
+    expect(info.turns).toBe(2);
+    expect(info.usage).toEqual({ input: 2_000, cacheRead: 50_000, cacheCreation: 4_000, output: 510 });
+    expect(info.lastTurnContext).toBe(31_100);
+    expect(info.readCalls).toBe(1);
+    expect(info.tokensBeforeFirstWrite).toBe(24_900);
+    // The record is durable: run.json carries the fields.
+    const stored = JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')) as {
+      info: { turns?: number; usage?: unknown };
+    };
+    expect(stored.info.turns).toBe(2);
+    expect(stored.info.usage).toBeDefined();
+  });
+
   it('stop kills the worker and frees the run slot', async () => {
     const { sup, adapter } = supervisor();
     const rel = await writeTicket();
@@ -702,7 +772,8 @@ describe('RunSupervisor', () => {
     adapter.handles[1]!.fail(0);
     await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).resolves.toBeUndefined();
-    expect(sup.get(id)?.gateFailure).toContain('failed — exit 1');
+    expect(sup.get(id)?.gateFailure).toContain('exit 1');
+    expect(sup.get(id)?.gateResult).toBe('red');
   });
 
   it('a worker that ends without a result fails red — the gate never runs', async () => {

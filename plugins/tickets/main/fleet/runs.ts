@@ -22,7 +22,14 @@ import { TicketsGit } from '../tickets-git';
 import { ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
 import { killTreeGuarded, processAlive, processStartMs, type ExecFn } from './procs';
 import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
-import { normalizeForMatch, prepareWorktree as defaultPrepareWorktree, type LinkReport, type PreparedWorktree } from './worktrees';
+import {
+  normalizeForMatch,
+  prepareWorktree as defaultPrepareWorktree,
+  type LinkReport,
+  type PreparedWorktree,
+} from './worktrees';
+import { capTail, SANITY_CAP } from './capping';
+import { TelemetryFold, type RunTelemetry } from './telemetry';
 
 const execAsync = promisify(nodeExec);
 const execFileAsync = promisify(nodeExecFile);
@@ -134,6 +141,8 @@ interface LiveRun {
   audited: boolean;
   /** The worker finished its turn — the adapter's `result` event, the agent-done signal. */
   agentDone: boolean;
+  /** Folds the run's token telemetry (T-0048) out of every stream event. */
+  telemetry: TelemetryFold;
   /** Why the owner stopped the run — becomes the ticket Log line when the run ends. */
   stopNote?: string;
   /** An ended run's session the owner reopened: held from the start, no gate and no move at its end. */
@@ -142,6 +151,26 @@ interface LiveRun {
   handover?: RunHandover;
   /** The resumed session's spend before this run, once the adapter read it (req-53). */
   usageBase?: UsageTotals;
+}
+
+/** The telemetry a persisted record carries, for restoring a fold (an adopted run). */
+function telemetryOf(info: RunInfo): RunTelemetry | undefined {
+  if (
+    info.usage === undefined &&
+    info.turns === undefined &&
+    info.readCalls === undefined &&
+    info.lastTurnContext === undefined &&
+    info.tokensBeforeFirstWrite === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    usage: info.usage ?? { input: null, cacheRead: null, cacheCreation: null, output: null },
+    lastTurnContext: info.lastTurnContext ?? null,
+    turns: info.turns ?? 0,
+    readCalls: info.readCalls ?? 0,
+    tokensBeforeFirstWrite: info.tokensBeforeFirstWrite ?? null,
+  };
 }
 
 /** What a takeover call answers. */
@@ -255,6 +284,7 @@ export class RunSupervisor {
             gating: false,
             audited: false,
             agentDone: false,
+            telemetry: new TelemetryFold(telemetryOf(stored.info)),
           });
           continue;
         }
@@ -275,6 +305,7 @@ export class RunSupervisor {
           gating: false,
           audited: false,
           agentDone: false,
+          telemetry: new TelemetryFold(telemetryOf(stored.info)),
         };
         this.runs.set(detached.id, live);
         await this.persist(live);
@@ -357,6 +388,7 @@ export class RunSupervisor {
       gating: false,
       audited: false,
       agentDone: false,
+      telemetry: new TelemetryFold(telemetryOf(stored.info)),
       ...(stored.usageBase !== undefined ? { usageBase: stored.usageBase } : {}),
     };
     this.runs.set(info.id, run);
@@ -436,6 +468,7 @@ export class RunSupervisor {
       gating: false,
       audited: false,
       agentDone: false,
+      telemetry: new TelemetryFold(telemetryOf(stored.info)),
       ...(stored.usageBase !== undefined ? { usageBase: stored.usageBase } : {}),
     };
     let handle: WorkerHandle;
@@ -613,6 +646,15 @@ export class RunSupervisor {
       worktreePath,
       branch: request.branch,
       worktree: prepared.outcome,
+      gateResult: null,
+      model: request.model,
+      phase: request.phase,
+      usage: { input: null, cacheRead: null, cacheCreation: null, output: null },
+      lastTurnContext: null,
+      turns: 0,
+      readCalls: 0,
+      tokensBeforeFirstWrite: null,
+      handoverMode: 'fresh',
       gateFailure: null,
     };
     const run: LiveRun = {
@@ -626,6 +668,7 @@ export class RunSupervisor {
       gating: false,
       audited: false,
       agentDone: false,
+      telemetry: new TelemetryFold(),
       ...(reopened ? { reopened: true } : {}),
     };
     this.runs.set(id, run);
@@ -987,7 +1030,9 @@ export class RunSupervisor {
     if (event.kind === 'result') {
       run.agentDone = true;
     }
+    run.telemetry.apply(event);
     await this.appendStream(run, event);
+    const telemetry = run.telemetry.get();
     run.info = {
       ...run.info,
       lastActivity: event.ts,
@@ -1000,6 +1045,11 @@ export class RunSupervisor {
       ...(event.tokensOut !== undefined ? { tokensOut: event.tokensOut } : {}),
       ...(event.cacheReadTokens !== undefined ? { cacheReadTokens: event.cacheReadTokens } : {}),
       ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}),
+      usage: telemetry.usage,
+      lastTurnContext: telemetry.lastTurnContext,
+      turns: telemetry.turns,
+      readCalls: telemetry.readCalls,
+      tokensBeforeFirstWrite: telemetry.tokensBeforeFirstWrite,
     };
     if (event.kind === 'error') {
       this.deps.log(`run ${run.info.id}: ${event.text ?? 'error'}`);
@@ -1084,8 +1134,11 @@ export class RunSupervisor {
       try {
         await (this.deps.execShell ?? execShell)(command, run.info.worktreePath);
       } catch (error) {
-        const detail = messageOf(error).split('\n')[0] ?? 'failed';
-        return `\`${command}\` failed — ${detail.slice(0, 300)}`;
+        // The full output is bounded by SANITY_CAP so run.json stays sane;
+        // the configurable 40/4096 tail applies when it is injected into a
+        // retry's instruction, and the Log line takes only the first line.
+        const capped = capTail(combinedOutput(error), SANITY_CAP);
+        return `\`${command}\` failed\n\n${capped.text}`;
       }
     }
     return null;
@@ -1125,11 +1178,12 @@ export class RunSupervisor {
     run.gating = true;
     const failure = await this.runGate(run);
     if (failure !== null) {
-      run.info = { ...run.info, gateFailure: failure };
-      await this.logLine(run, `machine gate failed — ${failure}`);
+      run.info = { ...run.info, gateFailure: failure, gateResult: 'red' };
+      await this.logLine(run, `machine gate failed — ${shortGateLine(failure)}`);
       await this.finish(run, 'failed');
       return;
     }
+    run.info = { ...run.info, gateResult: 'green' };
     // The quality rungs (M85): a green gate may hand the step to a
     // second worker before it moves — the sampling audit or the
     // semantic gate's review. One round only; its own gate decides.
@@ -1351,4 +1405,28 @@ export class RunSupervisor {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * A gate failure's one line — what the ticket Log and a park reason may
+ * carry (T-0048): the first non-empty line, whitespace-flattened, capped
+ * at 300 chars. The multi-line block lives in `RunInfo.gateFailure` and
+ * the retry instruction, never in a ticket action line.
+ */
+export function shortGateLine(text: string): string {
+  const first =
+    text
+      .split('\n')
+      .map((line) => line.replace(/\s+/g, ' ').trim())
+      .find((line) => line !== '') ?? '';
+  return first.length > 300 ? `${first.slice(0, 299)}…` : first;
+}
+
+/** The failed command's combined output — stdout and stderr, or the error's message. */
+function combinedOutput(error: unknown): string {
+  const err = error as { stdout?: unknown; stderr?: unknown };
+  const out = [typeof err.stdout === 'string' ? err.stdout : '', typeof err.stderr === 'string' ? err.stderr : '']
+    .join('\n')
+    .trim();
+  return out !== '' ? out : messageOf(error);
 }

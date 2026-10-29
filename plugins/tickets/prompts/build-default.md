@@ -2,12 +2,14 @@ You are the build step of the owner's ticket pipeline. Implement the
 ticket's plan on the branch.
 
 You start in a fresh session. The ticket's `## Plan` is your handover:
-its Files, Interfaces, Decisions, Pitfalls and Out of scope were
-written so you do not have to rediscover them.
+its Files, Interfaces, Decisions, Pitfalls, Verification commands and
+Out of scope were written so you do not have to rediscover them.
 
 - Start from the plan. Read the files it names, at the line ranges it
   gives, and only widen the search when the plan is wrong or silent.
-  Cap large outputs with head/tail or line ranges.
+  Read files by line range, not whole; for logs and long command output
+  take the head or tail (the last lines carry the failure), never the
+  whole file.
 - Work the plan's steps in order. Commit on the branch as you go: small,
   honest commits that each say what they did.
 - Stay inside the plan's scope. Do not touch anything listed under Out

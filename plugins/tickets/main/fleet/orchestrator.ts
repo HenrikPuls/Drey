@@ -25,16 +25,20 @@ import { TicketsGit } from '../tickets-git';
 import { columnPromptRef, dispatchable, isAutoPhase, nextPhaseIdOf, planDispatch } from './chain';
 import { composeRunRequest } from './request';
 import { listTicketDirs, resolvePhaseDir } from '../phase-dirs';
-import { execShell, type SupervisorRecord, type StartOutcome, type StopOutcome } from './runs';
+import { execShell, shortGateLine, type SupervisorRecord, type StartOutcome, type StopOutcome } from './runs';
+import { readRepoInstructions, worktreeDiffStat } from './context-pack';
+import { worktreePathFor } from './worktree-home';
 import type {
   ChainConfig,
   ChainMaster,
   ChainStatus,
   ColumnMode,
+  FleetCaps,
   RunInfo,
   RunRequest,
   WorkerProviderId,
 } from './protocol';
+import { DEFAULT_FLEET_CAPS } from './protocol';
 
 const CHAIN_FILE = 'chain.json';
 
@@ -293,7 +297,7 @@ export class Orchestrator {
     this.columns[column] = 'held';
     this.deps.log(`circuit breaker tripped on ${column} — ${reason}; the column holds`);
     await this.persist();
-    await this.parkNextCandidate(column, `${reason}; last gate: ${gateFailure.slice(0, 200)}`);
+    await this.parkNextCandidate(column, `${reason}; last gate: ${shortGateLine(gateFailure).slice(0, 200)}`);
   }
 
   /**
@@ -625,6 +629,19 @@ export class Orchestrator {
     await Promise.all(stops);
   }
 
+  /**
+   * The ticket's most recent failed run's gate failure, or null (T-0048):
+   * what a retry's instruction carries so the worker fixes the gate
+   * first and continues from the branch instead of starting over. No new
+   * state — the supervisors' records are the truth.
+   */
+  private lastGateFailure(ticketId: string): string | null {
+    const failed = this.allRecords()
+      .filter((r) => r.info.ticketId === ticketId && r.info.state === 'failed' && r.info.gateFailure !== null)
+      .sort((a, b) => b.info.startedAt.localeCompare(a.info.startedAt))[0];
+    return failed?.info.gateFailure ?? null;
+  }
+
   private async persist(): Promise<void> {
     const file: ChainFile = {
       version: 1,
@@ -816,6 +833,25 @@ export class Orchestrator {
       this.noteSkip(card.id, `dispatch skips ${card.id}: the ticket file is unreadable`);
       return;
     }
+    // The context pack (T-0048): the repo's agent instructions and the
+    // worktree's diff stat are read here, outside the pure composer; a
+    // retry also carries the ticket's most recent gate failure. A repo
+    // without a checkout lets the request builder refuse below.
+    const repoInstructions = repo.path === null ? null : await readRepoInstructions(repo.path);
+    const gateFailure = this.lastGateFailure(card.id);
+    const diffStat =
+      repo.path === null
+        ? null
+        : await worktreeDiffStat(
+            new TicketsGit(() => config.git),
+            worktreePathFor(config.ticketsVaultPath, repo, card.id),
+            repo.branch,
+          );
+    if (gateFailure !== null && diffStat === null) {
+      // A first run has nothing to show (silent); a retry expects to
+      // continue existing work, so a missing stat is worth a line.
+      this.deps.log(`instruction: ${card.id} diff stat unavailable (no worktree yet)`);
+    }
     // The pipeline's first worker column takes in fresh tickets: a run
     // there gates structurally (the plan WRITES the acceptance criteria)
     // instead of demanding criteria the ticket cannot have yet.
@@ -842,12 +878,21 @@ export class Orchestrator {
       permissionMode: config.permissionMode,
       gitPath: config.git,
       workerChoice: null,
+      repoInstructions,
+      diffStat,
+      gateFailure,
+      caps: config.caps ?? DEFAULT_FLEET_CAPS,
       structuralGateAllowed: firstWorker?.id === workingPhaseId,
       dispatchedBy: workingPhaseId,
     });
     if (!composed.ok) {
       this.noteSkip(card.id, `dispatch skips ${card.id}: ${composed.error}`);
       return;
+    }
+    for (const truncation of composed.truncations) {
+      this.deps.log(
+        `instruction: ${card.id} ${truncation.section} truncated: true, originalSize ${truncation.originalSize}`,
+      );
     }
     const outcome = await this.deps.supervisorOf(composed.request.provider).start(composed.request);
     if (outcome.ok) {

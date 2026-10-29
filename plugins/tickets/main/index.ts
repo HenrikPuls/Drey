@@ -58,6 +58,7 @@ import { FleetClient } from './fleet-client';
 import { listWorkerModels } from './worker-models';
 import { agentIdentity, composeRunRequest } from './fleet/request';
 import { checkpointPhaseIds, columnPromptRef, isAutoPhase, nextPhaseIdOf } from './fleet/chain';
+import { readRepoInstructions, worktreeDiffStat } from './fleet/context-pack';
 import {
   cleanWorktrees,
   listOrphans,
@@ -65,7 +66,8 @@ import {
   type CleanupReport,
 } from './fleet/worktree-clean';
 import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } from './fleet/worktree-home';
-import type { ChainConfig, PermissionMode, RunInfo } from './fleet/protocol';
+import type { ChainConfig, FleetCaps, PermissionMode, RunInfo } from './fleet/protocol';
+import { normalizeFleetCaps } from './fleet/protocol';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
 const ORDER_PATH = 'tickets/_meta/order.md';
@@ -134,7 +136,10 @@ class BoardService {
     private readonly autoPermissionMode: PermissionMode,
     private readonly gitPath: string,
     private readonly fleet: FleetClient,
+    /** The fleet root — the worktrees the context pack stats live there. */
     private readonly fleetRoot: string,
+    /** The instruction output caps (T-0048), resolved once at activation. */
+    private readonly caps: FleetCaps,
   ) {}
 
   /** The board's emit, debounced — one push per burst of changes. */
@@ -252,6 +257,7 @@ class BoardService {
             git: this.gitPath.trim() === '' ? 'git' : this.gitPath.trim(),
             defaultWorker: this.defaultWorker,
             permissionMode: this.autoPermissionMode,
+            caps: this.caps,
           }
         : null;
     const json = chain === null ? null : JSON.stringify(chain);
@@ -810,6 +816,13 @@ class BoardService {
       const nextPhaseId = nextPhaseIdOf(snap.columns, phaseId);
       const nextPhaseClaims =
         nextPhaseId !== null ? (snap.pipeline.find((p) => p.id === nextPhaseId)?.claim === true) : false;
+      // The context pack (T-0048): repo instructions, the worktree's diff
+      // stat, and the previous run's gate failure on a retry — the file
+      // reads stay here, the composer stays pure.
+      const repoInstructions = repo.path === null ? null : await readRepoInstructions(repo.path);
+      const diffStat =
+        repo.path === null ? null : await worktreeDiffStat(this.git, worktreePathFor(vault.path, repo, card.id), repo.branch);
+      const gateFailure = await this.lastGateFailure(card.id);
       const composed = composeRunRequest({
         card,
         ticketText: text,
@@ -832,9 +845,18 @@ class BoardService {
         permissionMode: input.permissionMode,
         gitPath: ((await this.ctx.config.get<string>('gitPath')) ?? '').trim(),
         workerChoice: input.workerChoice,
+        repoInstructions,
+        diffStat,
+        gateFailure,
+        caps: this.caps,
       });
       if (!composed.ok) {
         return { ok: false, error: composed.error };
+      }
+      for (const truncation of composed.truncations) {
+        this.ctx.log(
+          `instruction: ${card.id} ${truncation.section} truncated: true, originalSize ${truncation.originalSize}`,
+        );
       }
       const outcome = await this.fleet.start(composed.request);
       if (outcome.ok) {
@@ -1105,6 +1127,19 @@ class BoardService {
     } catch (error) {
       this.ctx.log(`ignoring the worktrees base failed: ${messageOf(error)}`, 'warn');
     }
+  }
+
+  /**
+   * The ticket's most recent failed run's gate failure, or null (T-0048):
+   * what a retry's instruction carries. The runs snapshot is the truth —
+   * live from the runner, history from disk when it is down.
+   */
+  private async lastGateFailure(ticketId: string): Promise<string | null> {
+    const runs = await this.fleet.runs().catch(() => [] as readonly RunInfo[]);
+    const failed = runs
+      .filter((r) => r.ticketId === ticketId && r.state === 'failed' && r.gateFailure !== null)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+    return failed?.gateFailure ?? null;
   }
 
   /**
@@ -1481,7 +1516,18 @@ const plugin: MainPluginModule = {
     });
     fleet.startPolling();
     const fleetRoot = path.join(ctx.app.userRoot, 'fleet');
-    const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet, fleetRoot);
+    // The instruction output caps (T-0048): flat dotted keys in the
+    // plugin config, opaque strings to the store — read once, applied on
+    // restart like every fleet setting here.
+    const capConfig: Record<string, unknown> = {};
+    for (const key of ['gateFailureLines', 'gateFailureBytes', 'diffStatLines', 'diffStatBytes']) {
+      const value = await ctx.config.get<number>(`fleet.cap.${key}`);
+      if (value !== undefined) {
+        capConfig[key] = value;
+      }
+    }
+    const caps = normalizeFleetCaps(capConfig);
+    const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet, fleetRoot, caps);
 
     ctx.ipc.handle('board', () => board.refresh());
 

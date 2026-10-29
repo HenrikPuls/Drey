@@ -89,6 +89,25 @@ export function formatTokens(n: number): string {
   return String(n);
 }
 
+/**
+ * The run's telemetry as the short lane/takeover chips (T-0048): context
+ * of the last turn, model calls with usage, read calls. Empty while the
+ * run reports nothing (also every pre-T-0048 record) — absence is not 0.
+ */
+export function telemetryParts(run: RunInfo): readonly string[] {
+  const parts: string[] = [];
+  if (run.lastTurnContext !== undefined && run.lastTurnContext !== null) {
+    parts.push(`ctx ${formatTokens(run.lastTurnContext)}`);
+  }
+  if (run.turns !== undefined && run.turns > 0) {
+    parts.push(`turns ${run.turns}`);
+  }
+  if (run.readCalls !== undefined && run.readCalls > 0) {
+    parts.push(`reads ${run.readCalls}`);
+  }
+  return parts;
+}
+
 /** A duration as `mm:ss` (an hour and up rolls into `h:mm:ss`). */
 export function spanClock(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));

@@ -96,6 +96,7 @@ Invoke-RestMethod "http://127.0.0.1:$($d.port)/health" -Headers $h
 | `GET /stream/<runId>` | the run's stream.jsonl tail (last ~200 KB, ndjson) |
 | `GET /log?tail=N` | daemon log tail, plain text (default 300 lines, max 2000; daemon builds) |
 | `GET /chain` | chain state + config (daemon builds) |
+| `GET /report` | token telemetry grouped by ticket, phase and model, sorted by total desc: `{ok, groups: [{ticket, phase, model, runs, total, input, cacheRead, cacheCreation, output, beforeFirstWrite, beforeFirstWriteShare}]}` — a counter the provider never reports counts 0 into the sums; pre-T-0048 records fall back to their cumulative `tokensIn`+`tokensOut` (T-0048) |
 | `POST /stop` `{runId, reason}` | stop one run |
 | `POST /send` `{runId, text}` | steer a live run (rung: inject/resume/refused) |
 | `POST /chain/master` `{mode: "run"\|"halted"}` | master switch (daemon builds) |
@@ -123,7 +124,9 @@ Diagnose read-only first; only stop/steer/switch on the owner's ask.
 4. `GET /log?tail=50` — what the daemon last decided and why
    (e.g. `dispatch skips T-0041: ... no acceptance criteria`).
 5. `GET /chain` — master/columns/cooldowns/token budget (daemon builds).
-6. For a specific run: `GET /status/<id>` then tail `stream.jsonl` directly
+6. `GET /report` — token cost per ticket/phase/model (T-0048): what the
+   columns spend, sorted by total.
+7. For a specific run: `GET /status/<id>` then tail `stream.jsonl` directly
    from disk (`Get-Content "$root\runs\<id>\stream.jsonl" -Tail 20`) — that
    works even after the run ended.
 
@@ -161,12 +164,50 @@ id is the identity everywhere. `stream.jsonl` lines are
 `usage` (token/cost updates), `result` (the worker's final answer) and
 `error`.
 
+Since T-0048 the info also carries the run's **token telemetry** (all
+optional — adopted pre-T-0048 records lack them, and every reader
+treats absent as unknown):
+
+- `usage`: `{input, cacheRead, cacheCreation, output}` summed over the
+  run's model calls — a counter the provider never reports stays `null`,
+  never 0 (the pinned plan provider may report no cache fields);
+- `lastTurnContext`: input+cacheRead+cacheCreation of the LAST assistant
+  turn — the real context size (the providers' `tokensIn` and the result
+  events are cumulative aggregates, not context);
+- `turns` (model calls that reported usage), `readCalls`
+  (read/grep/glob tool calls), `tokensBeforeFirstWrite` (input-side
+  tokens over the turns before the first write/edit — the exploration
+  cost; the full input side when no write came);
+- `gateResult` (`green`/`red` once the gate ran), `model`, `phase`,
+  `handoverMode` (`fresh` — the field exists for T-0049's modes).
+
+`GET /report` groups these by ticket, phase and model (see the route
+table); the board's lanes show `ctx`/`turns`/`reads` chips per run.
+
+### The instruction (T-0048: the context pack)
+
+Every phase's instruction is composed in one stable order — repo agent
+instructions (`CLAUDE.md`, fallback `AGENTS.md`, verbatim) → phase
+template → the ticket's `## Plan` verbatim → the variable parts
+(who/where, description, the worktree's `git diff --stat` head-capped,
+and on a retry the previous run's gate failure tail-capped). The prefix
+up to the plan is byte-identical across runs of the same repo and
+phase, so a warm prompt cache survives. A red-gate retry is a fresh run
+whose instruction carries the ticket's most recent `gateFailure`
+section — the worker continues the branch instead of starting over.
+
+The caps are the plugin config keys `fleet.cap.gateFailureLines` /
+`fleet.cap.gateFailureBytes` / `fleet.cap.diffStatLines` /
+`fleet.cap.diffStatBytes` (Settings → Tickets → Fleet; defaults 40/4096
+tail and 50/4096 head). Each application is logged:
+`instruction: <ticket> gateFailure truncated: true, originalSize 9821`.
+
 ### chain.json fields (daemon builds)
 
-`config` (tickets vault path, git, defaultWorker, permissionMode) · `master`
-(`run` / `halted`) · `columns` (per-phase `playing` / `held`) · `redStreak` ·
-`cooldownUntil` (per column ISO instant) · `tokensDay` + `tokensUsed` (the
-per-column token budget) · `ciBackoff`.
+`config` (tickets vault path, git, defaultWorker, permissionMode, caps)
+· `master` (`run` / `halted`) · `columns` (per-phase `playing` / `held`)
+· `redStreak` · `cooldownUntil` (per column ISO instant) · `tokensDay` +
+`tokensUsed` (the per-column token budget) · `ciBackoff`.
 
 ## Lifecycle gotchas
 
