@@ -17,7 +17,16 @@
  */
 import type { ActionOutcome, ChatMessage, LlmCapabilities, LlmDebugEntry } from '../llm';
 import type { AppConfig } from '../app-config';
-import type { SectionSearchScope, VaultOpOptions } from './main-plugin-api';
+import type {
+  FilesContextMenuItem,
+  FilesContextMenuTarget,
+  SectionSearchScope,
+  VaultFileOperation,
+  VaultFileOperationOutcome,
+  VaultFileOperationsHandler,
+  VaultFileOperationVerdict,
+  VaultOpOptions,
+} from './main-plugin-api';
 import type {
   TagSearchHit,
   TagSearchQuery,
@@ -25,6 +34,18 @@ import type {
 import type { TagEntry, VaultFileEntry, VaultStatus } from '../ipc-api';
 import type { PluginManifest } from './manifest';
 import type { Unsubscribe } from './main-plugin-api';
+
+// The Files-seam shapes live in main-plugin-api.ts (DOM-free, so a
+// plugin's shared ground can import them on both sides); re-exported
+// here so a plugin renderer imports everything from one surface.
+export type {
+  FilesContextMenuItem,
+  FilesContextMenuTarget,
+  VaultFileOperation,
+  VaultFileOperationOutcome,
+  VaultFileOperationsHandler,
+  VaultFileOperationVerdict,
+} from './main-plugin-api';
 
 /** The text selection in the focused editor surface, as offsets into the buffer. */
 export interface PluginSelection {
@@ -277,73 +298,6 @@ export type EditorContextMenuTarget =
       /** Vault-relative path of the image the tab shows. */
       readonly imagePath: string;
     };
-
-/**
- * A file operation the Files panel is about to run (SDK 1.32): create,
- * rename, move (drag & drop, within or across vaults), copy (paste /
- * duplicate) or delete. Paths are vault-relative, forward-slashed.
- */
-export type VaultFileOperation =
-  | { kind: 'create'; vaultId: string; path: string; type: 'file' | 'directory' }
-  | { kind: 'rename'; vaultId: string; fromPath: string; toPath: string }
-  | {
-      kind: 'move';
-      fromVaultId: string;
-      fromPath: string;
-      toVaultId: string;
-      toDir: string;
-    }
-  | {
-      kind: 'copy';
-      fromVaultId: string;
-      fromPath: string;
-      toVaultId: string;
-      toDir: string;
-    }
-  | { kind: 'delete'; vaultId: string; paths: readonly string[] };
-
-/**
- * A handler's verdict on a `VaultFileOperation`: `allow` runs the base
- * flow unchanged; `refuse` blocks it (the reason is shown in the panel's
- * message dialog); `handle` lets the plugin perform the operation itself
- * as a structured action instead of the raw file operation.
- */
-export type VaultFileOperationVerdict =
-  | { action: 'allow' }
-  | { action: 'refuse'; reason: string }
-  | { action: 'handle' };
-
-/** What a handler's `perform` came back with. */
-export interface VaultFileOperationOutcome {
-  readonly ok: boolean;
-  readonly error?: string;
-  /** Final vault-relative path of a performed move/rename (tabs re-key). */
-  readonly path?: string;
-}
-
-/** Takes over / vetoes Files-panel operations for the plugin's vaults. */
-export interface VaultFileOperationsHandler {
-  check(operation: VaultFileOperation): Promise<VaultFileOperationVerdict>;
-  perform(operation: VaultFileOperation): Promise<VaultFileOperationOutcome>;
-}
-
-/** What the Files-panel context menu was opened on (SDK 1.32). */
-export interface FilesContextMenuTarget {
-  readonly vaultId: string;
-  readonly vaultName: string;
-  /** Vault-relative path; `''` is the vault root row. */
-  readonly path: string;
-  readonly type: 'file' | 'directory';
-}
-
-/** One plugin-contributed row in the Files-panel context menu. */
-export interface FilesContextMenuItem {
-  readonly label: string;
-  readonly title?: string;
-  /** Grayed out, unclickable. */
-  readonly disabled?: boolean;
-  run(): void | Promise<void>;
-}
 
 /**
  * A drop decoder: consulted BEFORE the base file/image handling, so a

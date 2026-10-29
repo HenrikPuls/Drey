@@ -69,5 +69,11 @@ export type {
   Unsubscribe,
   VaultChangeEvent,
   VaultChangeEventKind,
+  VaultFileOperation,
+  VaultFileOperationOutcome,
+  VaultFileOperationsHandler,
+  VaultFileOperationVerdict,
+  FilesContextMenuTarget,
+  FilesContextMenuItem,
   VaultOpOptions,
 } from './main-plugin-api';

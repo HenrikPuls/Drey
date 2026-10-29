@@ -49,6 +49,7 @@ import {
   ticketSections,
 } from './ticket-files';
 import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from './phase-dirs';
+import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, type DriftDetection } from './normalize';
 import { openTerminalAt } from './open-terminal';
 import { TicketsGit, type RepoLocation } from './tickets-git';
@@ -150,6 +151,15 @@ class BoardService {
 
   /** A registered, existing vault containing the pipeline marker file. */
   async detect(): Promise<VaultLike | null> {
+    const vault = await this.probeVaults();
+    // The plugin-managed flag follows detection both ways (SDK 1.32,
+    // ADR-0080): while a board lives in a vault, that vault's free-form
+    // git history is refused — one transition is one structured commit.
+    this.ctx.vault.markManaged(vault === null ? null : vault.id);
+    return vault;
+  }
+
+  private async probeVaults(): Promise<VaultLike | null> {
     const vaults = await this.ctx.vault.listVaults();
     const candidates = vaults.filter((v) => v.exists);
     const configured = await this.ctx.config.get<string>('vaultId');
@@ -566,7 +576,11 @@ class BoardService {
         deletedPaths: [card.path],
       });
       this.announceChanged();
-      return { ok: true, ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }) };
+      return {
+        ok: true,
+        path: newPath,
+        ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }),
+      };
     });
   }
 
@@ -644,8 +658,132 @@ class BoardService {
         deletedPaths: [card.path],
       });
       this.announceChanged();
-      return { ok: true, ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }) };
+      return {
+        ok: true,
+        path: newPath,
+        ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }),
+      };
     });
+  }
+
+  /**
+   * Unarchives a ticket (T-0042): a move out of `tickets/archive/` back
+   * into a phase folder IS the board treatment — `archive -> <phase>`
+   * stamp, Log line, one commit — never a raw move plus drift
+   * normalization. The drag in Files feels exactly like the board's own
+   * move (decision 7). The board itself shows nothing in archive/; the
+   * file is read directly.
+   */
+  unarchive(input: { id: string; to: string }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const snap = await this.snapshot();
+      const toPhase = snap.pipeline.find((p) => p.id === input.to) ?? null;
+      if (toPhase === null) {
+        return { ok: false, error: `"${input.to}" is not a phase in the pipeline` };
+      }
+      const oldPath = `${TICKETS_ARCHIVE_DIR}/${input.id}.md`;
+      let text: string;
+      try {
+        text = await this.ctx.vault.read(oldPath, { vaultId: vault.id });
+      } catch {
+        return { ok: false, error: `${input.id} is not in the archive` };
+      }
+      let patched: string;
+      try {
+        patched = patchTicketFile(text, {
+          to: input.to,
+          from: 'archive',
+          now: new Date(),
+          actor: OWNER,
+        });
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const toDir = resolvePhaseDir(
+        await this.ticketDirs(vault),
+        snap.pipeline.findIndex((p) => p.id === input.to) + 1,
+        input.to,
+      );
+      const newPath = `tickets/${toDir}/${input.id}.md`;
+      try {
+        const oldAbs = this.ctx.vault.resolveAssetPath(oldPath, { vaultId: vault.id });
+        const dirAbs = this.ctx.vault.resolveAssetPath(`tickets/${toDir}`, { vaultId: vault.id });
+        const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
+        if (oldAbs === null || dirAbs === null || newAbs === null) {
+          return { ok: false, error: 'ticket path escapes the vault' };
+        }
+        await fsp.mkdir(dirAbs, { recursive: true });
+        await fsp.rename(oldAbs, newAbs);
+        await this.ctx.vault.write(newPath, patched, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `move failed: ${messageOf(error)}` };
+      }
+      // Pin cleanup only: an archived ticket holds no board place to re-pin.
+      const orderText = await this.readOptional(vault.id, ORDER_PATH);
+      const nextOrder = orderText === null ? null : removeIdFromPins(orderText, input.id);
+      const orderChanged = nextOrder !== null && nextOrder !== orderText;
+      if (orderChanged) {
+        await this.ctx.vault.write(ORDER_PATH, nextOrder as string, { vaultId: vault.id });
+      }
+      const warning = await this.commit(
+        vault,
+        [oldPath, newPath, ...(orderChanged ? [ORDER_PATH] : [])],
+        `tickets: ${input.id} archive -> ${input.to}`,
+      );
+      const pushWarning = await this.pushTransition(vault, snap.pushRemote);
+      const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
+      this.ctx.vault.announceChanges({
+        vaultId: vault.id,
+        changedPaths: [newPath, ...(orderChanged ? [ORDER_PATH] : [])],
+        deletedPaths: [oldPath],
+      });
+      this.announceChanged();
+      return {
+        ok: true,
+        path: newPath,
+        ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }),
+      };
+    });
+  }
+
+  /**
+   * "Remove worktree" (T-0042, Files context command on `_worktrees/<id>`):
+   * the pure planner (`planWorktreeRemoval`) decides over the board — a
+   * running ticket's worktree is never touched — and `git worktree remove`
+   * executes from the repo's main checkout. The vault re-reads afterwards;
+   * the worktree folder lives OUTSIDE `tickets/`, so no transition commit
+   * belongs to it.
+   */
+  async removeWorktree(folder: string): Promise<MutationResult> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return { ok: false, error: 'no tickets vault detected' };
+    }
+    const snap = await this.snapshot();
+    const plan = planWorktreeRemoval({
+      folder,
+      cards: snap.columns.flatMap((column) => column.tickets),
+      repos: snap.repos,
+    });
+    if (!plan.ok) {
+      return { ok: false, error: plan.error };
+    }
+    const worktreeAbs = this.ctx.vault.resolveAssetPath(folder, { vaultId: vault.id });
+    if (worktreeAbs === null) {
+      return { ok: false, error: 'the worktree path escapes the vault' };
+    }
+    try {
+      await this.git.worktreeRemove(plan.repoPath, worktreeAbs);
+    } catch (error) {
+      return { ok: false, error: `git worktree remove failed: ${messageOf(error).split('\n')[0]}` };
+    }
+    this.ctx.vault.announceChanges({ vaultId: vault.id, deletedPaths: [folder] });
+    this.announceChanged();
+    return { ok: true };
   }
 
   reorder(input: { phase: string; id: string; index: number }): Promise<MutationResult> {
@@ -1330,6 +1468,27 @@ const plugin: MainPluginModule = {
         return { ok: false, error: 'bad archive payload' };
       }
       return board.archive({ id: p.id });
+    });
+
+    // T-0042: a move out of tickets/archive/ performed as the board
+    // treatment (archive -> <phase> stamp, Log, one commit).
+    ctx.ipc.handle('unarchive', async (payload) => {
+      const p = payload as { id?: unknown; to?: unknown };
+      if (typeof p.id !== 'string' || typeof p.to !== 'string') {
+        return { ok: false, error: 'bad unarchive payload' };
+      }
+      return board.unarchive({ id: p.id, to: p.to });
+    });
+
+    // T-0042: "Remove worktree" on _worktrees/<id> (dormant until T-0044
+    // creates the folder): the pure planner decides, git executes.
+    ctx.ipc.handle('removeWorktree', async (payload) => {
+      const p = payload as { folder?: unknown };
+      const folder = typeof p.folder === 'string' ? p.folder.trim() : '';
+      if (folder === '') {
+        return { ok: false, error: 'bad removeWorktree payload' };
+      }
+      return board.removeWorktree(folder);
     });
 
     // --- the fleet (M84, ADR-0075) -------------------------------------

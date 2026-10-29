@@ -326,6 +326,12 @@ export interface MutationResult {
   readonly warning?: string;
   /** Reorder / "Number folders" (req-50): how many folders were renamed. */
   readonly moved?: number;
+  /**
+   * A move's final vault-relative path (`transition` / `archive` /
+   * `unarchive`, T-0042): the Files panel re-keys open tabs to it when
+   * the plugin performed the move as a structured action.
+   */
+  readonly path?: string;
 }
 
 /** One file of `tickets/_meta/prompts/` as it is on disk (req-50). */
