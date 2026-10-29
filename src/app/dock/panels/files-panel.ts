@@ -11,8 +11,10 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import { EditorService, docKey } from '../../services/editor.service';
 import { FileDecorationService, RowDecoration } from '../../services/file-decoration.service';
+import { FilesCommandsService } from '../../services/files-commands.service';
 import { VaultService } from '../../vault';
 import { VaultFileEntry, VaultStatus } from '../../../../shared/ipc-api';
+import type { FilesContextMenuItem } from '../../../../shared/plugin-api/renderer';
 import { Icon } from '../../icons/icon';
 import { PanelHeaderActions } from '../panel-header-actions';
 import { FileOperationsService } from './file-operations.service';
@@ -39,6 +41,8 @@ interface TreeMenu {
   dir: string;
   /** The entry the menu was opened on, if any -- the "Delete" target. */
   entry: VaultFileEntry | null;
+  /** Plugin-contributed rows for this open (SDK 1.32), computed at open. */
+  pluginItems: readonly FilesContextMenuItem[];
 }
 
 /** Anchor + target for a vault row's right-click menu. */
@@ -46,6 +50,8 @@ interface VaultMenu {
   x: number;
   y: number;
   vault: VaultStatus;
+  /** Plugin-contributed rows for this open (SDK 1.32), computed at open. */
+  pluginItems: readonly FilesContextMenuItem[];
 }
 
 /** An in-progress "new file" / "new folder" with its inline name input showing. */
@@ -100,6 +106,7 @@ export class FilesPanel {
   private readonly tree = inject(FilesTreeState);
   private readonly operations = inject(FileOperationsService);
   private readonly decorations = inject(FileDecorationService);
+  private readonly pluginMenuItems = inject(FilesCommandsService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
   protected readonly collapsedVaults = this.tree.collapsedVaults;
@@ -576,6 +583,12 @@ export class FilesPanel {
       vaultId,
       dir: entry ? destinationDir(entry) : '',
       entry: entry ?? null,
+      pluginItems: this.pluginMenuItems.itemsFor({
+        vaultId,
+        vaultName: this.vault.vaults().find((v) => v.id === vaultId)?.name ?? '',
+        path: entry?.relativePath ?? '',
+        type: entry?.type ?? 'directory',
+      }),
     });
   }
 
@@ -589,7 +602,19 @@ export class FilesPanel {
       x: Math.min(event.clientX, window.innerWidth - 220),
       y: Math.min(event.clientY, window.innerHeight - 260),
       vault,
+      pluginItems: this.pluginMenuItems.itemsFor({
+        vaultId: vault.id,
+        vaultName: vault.name,
+        path: '',
+        type: 'directory',
+      }),
     });
+  }
+
+  /** Runs one plugin-contributed menu row (SDK 1.32); the menu closes first. */
+  protected runPluginItem(item: FilesContextMenuItem): void {
+    this.closeMenus();
+    void item.run();
   }
 
   protected closeMenus(): void {

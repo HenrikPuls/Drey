@@ -1,9 +1,14 @@
 import { Injectable, inject } from '@angular/core';
-import { EditorService } from '../../services/editor.service';
+import { EditorService, docKey } from '../../services/editor.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { VaultService } from '../../vault';
 import { LinkUpdateService } from '../../link-update';
 import { VaultFileEntry, VaultStatus } from '../../../../shared/ipc-api';
+import type { VaultFileOperationOutcome } from '../../../../shared/plugin-api/renderer';
+import {
+  FilesOperationDecision,
+  FilesOperationsRegistryService,
+} from '../../services/files-operations-registry.service';
 import { TreeTarget, isInvalidEntryName, parentDir } from './files-tree';
 
 /**
@@ -23,6 +28,7 @@ export class FileOperationsService {
   private readonly editor = inject(EditorService);
   private readonly dialogs = inject(ConfirmDialogService);
   private readonly linkUpdate = inject(LinkUpdateService);
+  private readonly pluginOps = inject(FilesOperationsRegistryService);
 
   /** Registers another vault via the native folder picker. */
   addVault(): Promise<boolean> {
@@ -119,10 +125,38 @@ export class FileOperationsService {
     if (!clip) {
       return false;
     }
+    const decision = await this.consult({
+      kind: 'copy',
+      fromVaultId: clip.vaultId,
+      fromPath: clip.path,
+      toVaultId: vaultId,
+      toDir: dir,
+    });
+    if (decision === null) {
+      return false;
+    }
+    if (decision.action === 'handle') {
+      return (await this.runPerformed(decision)).ok;
+    }
     return this.guarded(() => this.vault.copyEntry(clip.path, dir, clip.vaultId, vaultId));
   }
 
-  duplicate(vaultId: string, relativePath: string): Promise<boolean> {
+  async duplicate(vaultId: string, relativePath: string): Promise<boolean> {
+    // A duplicate lands beside the original, in its folder.
+    const parent = parentDir(relativePath);
+    const decision = await this.consult({
+      kind: 'copy',
+      fromVaultId: vaultId,
+      fromPath: relativePath,
+      toVaultId: vaultId,
+      toDir: parent,
+    });
+    if (decision === null) {
+      return false;
+    }
+    if (decision.action === 'handle') {
+      return (await this.runPerformed(decision)).ok;
+    }
     return this.guarded(() => this.vault.duplicateEntry(relativePath, vaultId));
   }
 
@@ -151,6 +185,15 @@ export class FileOperationsService {
     }
     const finalName = kind === 'file' && !name.includes('.') ? `${name}.md` : name;
     const relativePath = dir ? `${dir}/${finalName}` : finalName;
+    const decision = await this.consult({ kind: 'create', vaultId, path: relativePath, type: kind });
+    if (decision === null) {
+      return;
+    }
+    if (decision.action === 'handle') {
+      // The plugin owns what this create became; it announces its changes.
+      await this.runPerformed(decision);
+      return;
+    }
     await this.guarded(async () => {
       await this.vault.createEntry(kind, relativePath, vaultId);
       if (kind === 'file') {
@@ -175,7 +218,10 @@ export class FileOperationsService {
     }
     const parent = parentDir(entry.relativePath);
     const toPath = parent ? `${parent}/${nextName}` : nextName;
-    await this.relocate(vaultId, entry.relativePath, vaultId, toPath, nextName);
+    await this.relocate(
+      { kind: 'rename', vaultId, fromPath: entry.relativePath, toPath },
+      { fromVaultId: vaultId, fromRel: entry.relativePath, toVaultId: vaultId, toRel: toPath },
+    );
   }
 
   /**
@@ -187,7 +233,10 @@ export class FileOperationsService {
   move(fromVaultId: string, fromRel: string, toVaultId: string, destDir: string): Promise<boolean> {
     const name = fromRel.slice(fromRel.lastIndexOf('/') + 1);
     const toRel = destDir ? `${destDir}/${name}` : name;
-    return this.relocate(fromVaultId, fromRel, toVaultId, toRel, name);
+    return this.relocate(
+      { kind: 'move', fromVaultId, fromPath: fromRel, toVaultId, toDir: destDir },
+      { fromVaultId, fromRel, toVaultId, toRel },
+    );
   }
 
   /**
@@ -199,6 +248,37 @@ export class FileOperationsService {
   async deleteEntries(targets: readonly TreeTarget[]): Promise<boolean> {
     if (targets.length === 0) {
       return false;
+    }
+    // Group first (a selection can span vaults since ADR-0051) — the
+    // plugin seam runs per vault-batch, BEFORE the confirm dialog: one
+    // refused target refuses the whole batch and the message names it.
+    const byVault = new Map<string, string[]>();
+    for (const target of targets) {
+      const list = byVault.get(target.vaultId) ?? [];
+      list.push(target.entry.relativePath);
+      byVault.set(target.vaultId, list);
+    }
+    const multi = targets.length > 1;
+    for (const [vaultId, paths] of byVault) {
+      const decision = await this.consult(
+        { kind: 'delete', vaultId, paths },
+        multi ? paths[0] : undefined,
+      );
+      if (decision === null) {
+        return false;
+      }
+      if (decision.action === 'handle') {
+        const outcome = await this.runPerformed(decision);
+        if (!outcome.ok) {
+          return false;
+        }
+        // The plugin stood in for the delete — nothing on disk for the
+        // base flow to reach; tabs under the paths must not strand.
+        for (const path of paths) {
+          this.editor.closeTabsUnder(vaultId, path);
+        }
+        return true;
+      }
     }
     const what =
       targets.length === 1
@@ -229,12 +309,6 @@ export class FileOperationsService {
       }
     }
     await this.guarded(async () => {
-      const byVault = new Map<string, string[]>();
-      for (const target of targets) {
-        const list = byVault.get(target.vaultId) ?? [];
-        list.push(target.entry.relativePath);
-        byVault.set(target.vaultId, list);
-      }
       const notTrashed: string[] = [];
       for (const [vaultId, paths] of byVault) {
         notTrashed.push(...(await this.vault.deleteEntries(paths, vaultId)));
@@ -254,23 +328,61 @@ export class FileOperationsService {
     return true;
   }
 
-  /** The shared half of rename and move: the link-aware rename, then the clipboard follows. */
+  /**
+   * The shared half of rename and move: the plugin seam first (a refusal
+   * replaces the flow — no link-update dialog for a veto, a takeover never
+   * runs the raw rename), then the link-aware rename, then the clipboard
+   * follows. A plugin-performed relocation re-keys open tabs to the
+   * outcome path (the plugin moved the file as a structured action).
+   */
   private async relocate(
-    fromVaultId: string,
-    fromRel: string,
-    toVaultId: string,
-    toRel: string,
-    name: string,
+    operation: Parameters<FilesOperationsRegistryService['check']>[0],
+    follow: { fromVaultId: string; fromRel: string; toVaultId: string; toRel: string },
   ): Promise<boolean> {
+    const decision = await this.consult(operation);
+    if (decision === null) {
+      return false;
+    }
+    if (decision.action === 'handle') {
+      const outcome = await this.runPerformed(decision);
+      if (!outcome.ok) {
+        return false;
+      }
+      const finalPath = outcome.path ?? follow.toRel;
+      this.editor.retargetTabs(
+        docKey(follow.fromVaultId, follow.fromRel),
+        docKey(follow.toVaultId, finalPath),
+      );
+      const clip = this.vault.clipboard();
+      if (clip && clip.vaultId === follow.fromVaultId && clip.path === follow.fromRel) {
+        this.vault.clipboard.set({
+          vaultId: follow.toVaultId,
+          path: finalPath,
+          name: finalPath.slice(finalPath.lastIndexOf('/') + 1),
+        });
+      }
+      return true;
+    }
     let relocated = false;
     await this.guarded(async () => {
       // null = the user cancelled the link-update dialog.
-      if ((await this.linkUpdate.rename(fromVaultId, fromRel, toVaultId, toRel)) === null) {
+      if (
+        (await this.linkUpdate.rename(
+          follow.fromVaultId,
+          follow.fromRel,
+          follow.toVaultId,
+          follow.toRel,
+        )) === null
+      ) {
         return;
       }
       const clip = this.vault.clipboard();
-      if (clip && clip.vaultId === fromVaultId && clip.path === fromRel) {
-        this.vault.clipboard.set({ vaultId: toVaultId, path: toRel, name });
+      if (clip && clip.vaultId === follow.fromVaultId && clip.path === follow.fromRel) {
+        this.vault.clipboard.set({
+          vaultId: follow.toVaultId,
+          path: follow.toRel,
+          name: follow.toRel.slice(follow.toRel.lastIndexOf('/') + 1),
+        });
       }
       relocated = true;
     });
@@ -286,5 +398,37 @@ export class FileOperationsService {
       void this.dialogs.message({ message: err instanceof Error ? err.message : String(err) });
       return false;
     }
+  }
+
+  /**
+   * The plugin seam consult (SDK 1.32), run BEFORE any dialog and any
+   * base-side work: a `refuse` replaces the whole flow — its reason is
+   * shown (prefixed with `item` in a multi-entry batch, so the message
+   * names the refused entry). Returns the decision to act on, or `null`
+   * when the flow must stop (already refused or performed).
+   */
+  private async consult(
+    operation: Parameters<FilesOperationsRegistryService['check']>[0],
+    item?: string,
+  ): Promise<FilesOperationDecision | null> {
+    const decision = await this.pluginOps.check(operation);
+    if (decision.action === 'refuse') {
+      await this.dialogs.message({
+        message: item !== undefined ? `"${item}" — ${decision.reason}` : decision.reason,
+      });
+      return null;
+    }
+    return decision;
+  }
+
+  /** Runs a plugin-performed operation; shows its error, answers whether it stood. */
+  private async runPerformed(
+    decision: Extract<FilesOperationDecision, { action: 'handle' }>,
+  ): Promise<VaultFileOperationOutcome> {
+    const outcome = await decision.perform();
+    if (!outcome.ok) {
+      await this.dialogs.message({ message: outcome.error ?? 'The operation failed.' });
+    }
+    return outcome;
   }
 }

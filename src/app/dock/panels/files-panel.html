@@ -79,6 +79,14 @@
       <div class="ctx-sep"></div>
       <button type="button" class="danger" (click)="onDelete()">Delete</button>
     }
+    @if (m.pluginItems.length > 0) {
+      <div class="ctx-sep"></div>
+      @for (item of m.pluginItems; track item.label) {
+        <button type="button" [disabled]="item.disabled" [title]="item.title ?? null" (click)="runPluginItem(item)">
+          {{ item.label }}
+        </button>
+      }
+    }
   </div>
 }
 
@@ -102,6 +110,14 @@
     <button type="button" (click)="onRevealVault(vm.vault.id)">Open in File Explorer</button>
     <div class="ctx-sep"></div>
     <button type="button" class="danger" (click)="onRemoveVault(vm.vault)">Remove…</button>
+    @if (vm.pluginItems.length > 0) {
+      <div class="ctx-sep"></div>
+      @for (item of vm.pluginItems; track item.label) {
+        <button type="button" [disabled]="item.disabled" [title]="item.title ?? null" (click)="runPluginItem(item)">
+          {{ item.label }}
+        </button>
+      }
+    }
   </div>
 }
 
