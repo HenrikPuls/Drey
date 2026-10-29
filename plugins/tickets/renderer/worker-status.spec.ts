@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunInfo } from '../main/fleet/protocol';
-import { contextFill, formatTokens, lanesOfColumn, opensByItself, STALL_MS, workerStatus } from './worker-status';
+import { contextFill, formatTokens, lanesOfColumn, opensByItself, STALL_MS, telemetryParts, workerStatus } from './worker-status';
 
 const NOW = Date.parse('2026-10-18T12:00:00Z');
 
@@ -70,6 +70,26 @@ describe('formatTokens', () => {
     expect(formatTokens(9_100)).toBe('9.1k');
     expect(formatTokens(182_000)).toBe('182k');
     expect(formatTokens(3_400_000)).toBe('3.4M');
+  });
+});
+
+describe('telemetryParts — the run\'s telemetry as short chips', () => {
+  it('is empty while the run reports nothing (and for pre-T-0048 records)', () => {
+    expect(telemetryParts(run())).toEqual([]);
+    expect(telemetryParts(run({ lastTurnContext: null }))).toEqual([]);
+  });
+
+  it('shows the last turn\'s context, the turns and the read calls', () => {
+    expect(telemetryParts(run({ lastTurnContext: 131_000, turns: 14, readCalls: 21 }))).toEqual([
+      'ctx 131k',
+      'turns 14',
+      'reads 21',
+    ]);
+    expect(telemetryParts(run({ lastTurnContext: 9_500, turns: 2 }))).toEqual(['ctx 9.5k', 'turns 2']);
+  });
+
+  it('never invents a zero out of an absent counter', () => {
+    expect(telemetryParts(run({ turns: 0, readCalls: 0 }))).toEqual([]);
   });
 });
 

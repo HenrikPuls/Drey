@@ -33,6 +33,7 @@ import {
   formatTokens,
   lanesOfColumn,
   opensByItself,
+  telemetryParts,
   workerStatus,
   type Light,
 } from './worker-status';
@@ -1105,6 +1106,9 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
         el('span', undefined, `in ${formatTokens(run.tokensIn)}`),
         el('span', undefined, `out ${formatTokens(run.tokensOut)}`),
       );
+      for (const part of telemetryParts(run)) {
+        tokens.append(el('span', undefined, part));
+      }
       if (run.costUsd !== null && run.costUsd > 0) {
         tokens.append(el('span', undefined, `$${run.costUsd.toFixed(2)}`));
       }
@@ -1521,6 +1525,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
             status !== null && (active || detached) ? status.label : '',
             fill === null ? '' : `context ${Math.round(fill * 100)}%`,
             `in ${formatTokens(run.tokensIn)} · out ${formatTokens(run.tokensOut)}`,
+            ...telemetryParts(run),
           ]
             .filter((part) => part !== '')
             .join(' · ');
