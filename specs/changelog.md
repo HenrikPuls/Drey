@@ -43,6 +43,53 @@ both. Specs: fixtures start canonical (the runner's temp dir no
 longer decides which shape a test exercises), and a junction test pins
 the alias case on any Windows checkout. **Not yet manually verified by
 the owner.**
+### T-0045 — Git repository auto-detection under parent vaults
+
+A vault that is only a **parent folder of repositories** (`E:\projects`
+with `drey/`, `drey-tickets/`, … inside) showed nothing in Source
+control — every repository below had to be registered as its own vault.
+Shipped as
+[ADR-0083](../docs/09_architecture_decisions/0083-repository-discovery-under-parent-vaults.md),
+layered strictly on T-0042's protections:
+
+- **The bounded scan** (`plugins/git/main/discover.ts`): fs-only, at
+  most 3 folder levels below a vault that is no repository itself, at
+  most 25 repositories per vault (clipped + logged). A `.git` FILE
+  counts like a `.git` directory (linked worktrees); dot-directories,
+  `node_modules`, reserved `_`-root folders, other registered vaults'
+  subtrees and symlinks are skipped; a found repository is never
+  descended into; a candidate overlapping another registered vault
+  (ancestor or descendant) is dropped.
+- **Read-only by construction**: every found repository surfaces in the
+  panel and as Files badges with vault-relative paths
+  (`prefixStatusPaths`), but ALL mutating handlers refuse it as their
+  FIRST guard — before a repository is located or git runs — with
+  "This repository was found under "\<vault>" and is read-only here.
+  Register it as a vault to work with it." (the scan could surface an
+  unregistered tickets repo that no plugin claimed — refusing
+  everything is the airtight boundary; queries answer, diffs and file
+  history stay).
+- **One-click registration (SDK 1.33)**: `ctx.vault.register(path)` —
+  `VaultManager.addVaultAt` plus the same watcher-sync + full-refresh
+  round the vaultAdd IPC handler runs — is the hint row's *Register as
+  vault* button; the refresh makes the panel swap the found twin for
+  the vault's own entry.
+- **Repo-keyed panel**: commands carry `{vaultId, subPath}` (`''` = the
+  vault's own repository — every existing payload stays valid); the
+  panel's current repository, drafts and busy bookkeeping key by
+  `vaultId::subPath`; the focused document's path picks between several
+  found repositories; one vault's decorations (own + found) ride one
+  `setFileDecorations` call. Rescans on registry changes and relocate.
+- Specs: `plugins/git/main/discover.spec.ts` (the walk: depth, skips,
+  `.git` files, overlap, cap), `plugins/git/main/discovered.spec.ts`
+  (real git over temp dirs: states, all fifteen refusals, queries,
+  registerVault routing), `status.spec.ts` / `repo-model.spec.ts` (the
+  mapping helpers and the repo picker), an `e2e/git.spec.ts` flow.
+- Also fixes a pre-existing tsc error the T-0042/T-0048 merge left in
+  `plugins/tickets/main/index.ts` (a `RepoRef | null` deref no gate
+  command covers — found via `npm run build:plugins`).
+
+**Not yet manually verified by the owner.**
 
 ### T-0042 — Files vault extension: per-vault operations, plugin-managed repositories
 

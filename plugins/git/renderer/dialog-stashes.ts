@@ -13,7 +13,7 @@ export async function openStashList(api: DreyPluginApi, session: RepoSession): P
   const vaultId = vault.vaultId;
   let stashes: GitStash[];
   try {
-    stashes = (await api.backend.invoke('stashList', { vaultId })) as GitStash[];
+    stashes = (await api.backend.invoke('stashList', { vaultId, subPath: vault.subPath })) as GitStash[];
   } catch (error) {
     await api.ui.showMessage(messageOf(error), 'Git');
     return;
@@ -22,6 +22,9 @@ export async function openStashList(api: DreyPluginApi, session: RepoSession): P
     await api.ui.showMessage('There are no stashes.', 'Stashes');
     return;
   }
+  // A repository found by the scan (T-0045) reads the list only —
+  // applying or deleting a stash rewrites the tree or the history.
+  const readOnly = vault.discovered;
   const close = api.ui.showModal((box) => {
     box.classList.add('git-dialog', 'wide');
     box.append(el('h2', 'git-dialog-title', 'Stashes'));
@@ -30,26 +33,30 @@ export async function openStashList(api: DreyPluginApi, session: RepoSession): P
       const row = el('div', 'git-stash');
       const text = el('span', 'text');
       text.append(el('span', 'subject', stash.message), el('span', 'meta', formatWhen(stash.date)));
-      const apply = iconButton(api, 'rotate-ccw', 'Apply and remove this stash', () => {
-        close();
-        void (async () => {
-          if (await session.cleanTabsOrExplain(vaultId, 'Applying a stash')) {
-            await session.run('Applying the stash…', 'stashPop', { vaultId, index: stash.index });
-          }
-        })();
-      });
-      const drop = iconButton(api, 'trash', 'Delete this stash', () => {
-        close();
-        void (async () => {
-          const answer = await ask(api, 'Delete stash', `"${stash.message}" is deleted for good.`, [
-            { label: 'Delete', value: 'drop', danger: true },
-          ]);
-          if (answer !== null) {
-            await session.run('Deleting the stash…', 'stashDrop', { vaultId, index: stash.index });
-          }
-        })();
-      });
-      row.append(text, apply, drop);
+      if (!readOnly) {
+        const apply = iconButton(api, 'rotate-ccw', 'Apply and remove this stash', () => {
+          close();
+          void (async () => {
+            if (await session.cleanTabsOrExplain(vaultId, 'Applying a stash')) {
+              await session.run('Applying the stash…', 'stashPop', { vaultId, subPath: vault.subPath, index: stash.index });
+            }
+          })();
+        });
+        const drop = iconButton(api, 'trash', 'Delete this stash', () => {
+          close();
+          void (async () => {
+            const answer = await ask(api, 'Delete stash', `"${stash.message}" is deleted for good.`, [
+              { label: 'Delete', value: 'drop', danger: true },
+            ]);
+            if (answer !== null) {
+              await session.run('Deleting the stash…', 'stashDrop', { vaultId, subPath: vault.subPath, index: stash.index });
+            }
+          })();
+        });
+        row.append(text, apply, drop);
+      } else {
+        row.append(text);
+      }
       list.appendChild(row);
     }
     const actions = el('div', 'git-dialog-actions');

@@ -170,6 +170,7 @@ describe('VaultManager registry', () => {
     expect(() => manager.setActiveVault('nope')).toThrow('Unknown vault');
 
     manager.setActiveVault('vb');
+    expect(manager.getActiveVaultId()).toBe('vb');
     expect(manager.getActiveVaultPath()).toBe(b);
 
     // Removing the active vault promotes the first one left.
@@ -180,6 +181,23 @@ describe('VaultManager registry', () => {
     expect(readRegistry()).toEqual({ version: 2, vaults: [], activeVaultId: null });
     expect(fs.existsSync(a) && fs.existsSync(b)).toBe(true);
     expect(() => manager.resolveVaultId()).toThrow('No vault is active');
+  });
+
+  it('addVaultAt registers a folder directly: basename name, dedupe, first-active, persisted', () => {
+    const a = vaultDir('drey');
+    const manager = new VaultManager();
+
+    const added = manager.addVaultAt(a);
+
+    expect(added).toMatchObject({ name: 'drey', path: a });
+    expect(manager.getActiveVaultId()).toBe(added.id); // the first vault becomes active
+    expect(readRegistry().vaults).toEqual([added]);
+
+    expect(() => manager.addVaultAt(path.join(tmp, 'DREY'))).toThrow('already registered as vault "drey"');
+
+    const second = manager.addVaultAt(vaultDir('drey-tickets'));
+    expect(manager.getActiveVaultId()).toBe(added.id); // a later vault does not steal active
+    expect(readRegistry().vaults.map((v) => v.id)).toEqual([added.id, second.id]);
   });
 });
 

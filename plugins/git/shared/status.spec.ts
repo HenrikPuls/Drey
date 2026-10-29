@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import type { GitStatus } from './status';
 import {
   changeCount,
   decorationsFor,
+  intoRepoPath,
+  intoVaultPath,
   isCommitId,
   isPlausibleBranchName,
   mergeSourceFromMessage,
@@ -11,6 +14,8 @@ import {
   parsePatch,
   parseStashList,
   parseStatus,
+  prefixStatusPaths,
+  repoKey,
   toRepoPath,
   toVaultPath,
 } from './status';
@@ -36,6 +41,56 @@ describe('toVaultPath / toRepoPath', () => {
     expect(toVaultPath('docs-old/a.md', 'docs/')).toBeNull();
     expect(toVaultPath('docs/', 'docs/')).toBeNull();
     expect(toRepoPath('a.md', 'docs/')).toBe('docs/a.md');
+  });
+});
+
+describe('intoVaultPath / intoRepoPath / repoKey (discovered repositories)', () => {
+  it('moves a repository path into the vault by the scan folder', () => {
+    expect(intoVaultPath('src/a.ts', 'drey')).toBe('drey/src/a.ts');
+    expect(intoVaultPath('src/a.ts', 'tools/drey')).toBe('tools/drey/src/a.ts');
+    expect(intoVaultPath('a.md', '')).toBe('a.md');
+  });
+
+  it('strips the scan folder back off a vault path', () => {
+    expect(intoRepoPath('drey/src/a.ts', 'drey')).toBe('src/a.ts');
+    expect(intoRepoPath('dreyrey/a.md', 'drey')).toBe('dreyrey/a.md'); // no separator: not the prefix
+    expect(intoRepoPath('a.md', '')).toBe('a.md');
+  });
+
+  it('keys the own repository by the vault id and a discovered one by vault::folder', () => {
+    expect(repoKey('v1', '')).toBe('v1');
+    expect(repoKey('v1', 'drey')).toBe('v1::drey');
+    expect(repoKey('v1', 'tools/drey')).toBe('v1::tools/drey');
+  });
+});
+
+describe('prefixStatusPaths', () => {
+  const status: GitStatus = {
+    branch: 'main',
+    head: 'abc1234',
+    upstream: null,
+    ahead: 0,
+    behind: 0,
+    staged: [{ path: 'new name.md', kind: 'renamed', origPath: 'old name.md' }],
+    unstaged: [{ path: 'src/a.ts', kind: 'modified' }, { path: 'notes/new.md', kind: 'untracked' }],
+    conflicts: [{ path: 'both.md', kind: 'conflict' }],
+  };
+
+  it('re-maps path and origPath of every change into vault-relative paths', () => {
+    const moved = prefixStatusPaths(status, 'drey');
+    expect(moved.staged).toEqual([{ path: 'drey/new name.md', kind: 'renamed', origPath: 'drey/old name.md' }]);
+    expect(moved.unstaged).toEqual([
+      { path: 'drey/src/a.ts', kind: 'modified' },
+      { path: 'drey/notes/new.md', kind: 'untracked' },
+    ]);
+    expect(moved.conflicts).toEqual([{ path: 'drey/both.md', kind: 'conflict' }]);
+  });
+
+  it('leaves branch facts alone and returns the own-repo status untouched', () => {
+    const moved = prefixStatusPaths(status, 'drey');
+    expect(moved.branch).toBe('main');
+    expect(moved.ahead).toBe(0);
+    expect(prefixStatusPaths(status, '')).toBe(status);
   });
 });
 

@@ -22,17 +22,21 @@ export function openRepoActions(api: DreyPluginApi, session: RepoSession, comman
   }
   const merging = vault.operation !== null;
   const dirtyTree = vault.status.staged.length + vault.status.unstaged.length > 0;
+  // A repository found by the scan (T-0045) offers the read rows only:
+  // merge, stash and amend rewrite history or the tree and are refused
+  // main-side; the stash list stays open (it reads).
+  const found = vault.discovered;
   const rows: ActionRow[] = [
     {
       icon: 'git-merge',
       label: 'Merge a branch…',
-      disabled: merging,
+      disabled: merging || found,
       run: () => void openBranchPicker(api, session, commands, 'merge'),
     },
     {
       icon: 'archive',
       label: 'Stash changes',
-      disabled: merging || !dirtyTree,
+      disabled: merging || !dirtyTree || found,
       run: () => void commands.stashChanges(),
     },
     {
@@ -45,7 +49,7 @@ export function openRepoActions(api: DreyPluginApi, session: RepoSession, comman
     {
       icon: 'pencil',
       label: session.state.amend ? 'Stop amending' : 'Amend the last commit',
-      disabled: merging,
+      disabled: merging || found,
       run: () => void commands.toggleAmend(),
     },
     { icon: 'history', label: 'Git history of this file…', run: () => void openFileHistory(api, session) },

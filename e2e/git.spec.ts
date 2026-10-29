@@ -184,4 +184,61 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(dialog).toBeHidden();
   });
+
+  test('a vault that is only a parent folder surfaces the repository below it, read-only (T-0045)', async ({
+    page,
+    vaultDir,
+  }) => {
+    // The seeded vault stays NO repository itself; one child folder
+    // becomes one before the app looks again.
+    const child = path.join(vaultDir, 'drey');
+    fs.mkdirSync(child, { recursive: true });
+    fs.writeFileSync(path.join(child, 'readme.md'), 'first\n');
+    const git = (...args: string[]): string => execFileSync('git', args, { cwd: child, encoding: 'utf8' });
+    git('init', '-b', 'main');
+    git('config', 'user.name', 'E2E');
+    git('config', 'user.email', 'e2e@example.invalid');
+    git('config', 'core.autocrlf', 'false');
+    git('add', '-A');
+    git('commit', '-m', 'Initial commit');
+    fs.writeFileSync(path.join(child, 'readme.md'), 'second\n');
+    fs.writeFileSync(path.join(child, 'notes.md'), 'new\n');
+
+    await page.locator('app-dock-strip button[aria-label="Show Source control"]').click();
+    const panel = page.locator('app-panel-frame', { has: page.locator('.git-panel') });
+    // Refresh relocates: the parent is no repository, so the scan runs.
+    await panel.locator('button[aria-label="Refresh the status"]').click();
+
+    // The found repository: its branch line, the read-only hint, the
+    // Register button — and no commit box, no group actions.
+    await expect(panel.locator('.git-branch-btn .name')).toHaveText('main');
+    await expect(panel.locator('.git-found')).toContainText('Found by scanning');
+    await expect(panel.locator('.git-found')).toContainText('read-only');
+    await expect(panel.locator('.git-found button', { hasText: 'Register as vault' })).toBeVisible();
+    await expect(panel.locator('.git-message')).toBeHidden();
+    await expect(panel.locator('button[aria-label="Stage all changes"]')).toHaveCount(0);
+    await expect(panel.locator('button[aria-label="Fetch from the remote"]')).toBeDisabled();
+
+    // The changes are the child's, addressed vault-relative.
+    await expect(panel.locator('.git-change')).toHaveCount(2);
+    await expect(panel.locator('.git-change[data-status="modified"] .dir')).toHaveText('drey');
+    await expect(panel.locator('.git-change[data-status="untracked"] .name')).toHaveText('notes.md');
+
+    // The Files tree decorates the child folder and its files.
+    await page.locator('button[aria-label="Refresh files"]').click();
+    const folder = page.locator('app-files-panel .node.folder', { hasText: 'drey' });
+    await expect(folder).toHaveAttribute('data-status', 'modified');
+    // (The parent seeds its own readme.md at the root — the accessible
+    // name carries the folder, so the two never collide.)
+    await expect(page.getByRole('button', { name: 'readme.md drey M' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'notes.md drey U' })).toBeVisible();
+
+    // One click registers the child as its own vault: the found entry
+    // makes room for the vault's own repository, the commit box returns.
+    await panel.locator('.git-found button', { hasText: 'Register as vault' }).click();
+    await expect(panel.locator('.git-found')).toHaveCount(0);
+    await expect(panel.locator('.git-message')).toBeVisible();
+    await expect(panel.locator('.git-branch-btn .name')).toHaveText('main');
+    await expect(panel.locator('button[aria-label="Stage all changes"]')).toBeVisible();
+  });
 });

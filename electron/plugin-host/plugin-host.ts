@@ -34,7 +34,7 @@ import { normalizeActionsConfig, PROVIDER_PRESETS } from '../../shared/app-confi
 import type { ActionsConfig } from '../../shared/app-config';
 import type { AppConfigStore } from '../app-config';
 import type { LlmClient, LlmDebugLog, LlmTaskRegistry, TagSuggester } from '../llm';
-import { IPC_CHANNELS } from '../../shared/ipc-api';
+import { IPC_CHANNELS, type VaultRegistration } from '../../shared/ipc-api';
 import type { PluginMcpTools, VaultTools } from '../mcp';
 import type { AssistantToolbox } from '../mcp-client';
 import type { VaultManager } from '../vault-manager';
@@ -97,6 +97,15 @@ export interface PluginHostDeps {
    * each other (ADR-0044).
    */
   readonly managedVaults: ManagedVaults;
+  /**
+   * Registers an existing folder as a vault AND runs the same round the
+   * `vaultAdd` IPC handler runs — watcher sync + one full refresh — for
+   * `ctx.vault.register` (SDK 1.33, T-0045). The refresh round is what
+   * makes every vault-keyed surface follow: the Files panel grows the
+   * vault, and Source control drops the discovered twin for the vault's
+   * own entry.
+   */
+  readonly registerVaultAt: (path: string) => Promise<VaultRegistration>;
   /**
    * The assistant's external tool set (ADR-0063): `web_fetch` + the
    * user's MCP servers, wired in when a plugin passes `externalTools`.

@@ -2,6 +2,7 @@ import { app, type BrowserWindow } from 'electron';
 import chokidar from 'chokidar';
 import * as path from 'node:path';
 import { DEFAULT_ACTIONS_CONFIG } from '../shared/app-config';
+import type { VaultRegistration } from '../shared/ipc-api';
 import { AppConfigStore } from './app-config';
 import { DailyNoteManager } from './daily-note';
 import { NoteHistoryStore } from './history/note-history-store';
@@ -186,6 +187,16 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
   // structured vaults through ctx.vault.markManaged, the git plugin's
   // read-only guard reads them back through ctx.vault.managedBy.
   const managedVaults = new ManagedVaults();
+  // One-click vault registration for plugins (SDK 1.33, T-0045): the
+  // same composed round the `vaultAdd` IPC handler runs — register the
+  // folder, sync the watcher to the new registry, then one full refresh
+  // round so trees, indexes and the Source control panel all follow.
+  const registerVaultAt = async (folderPath: string): Promise<VaultRegistration> => {
+    const added = vaultManager.addVaultAt(folderPath);
+    await vaultWatcher.syncFromConfig();
+    vaultAnnouncer.announceFullRefresh();
+    return added;
+  };
   // The plugin host registers its method handlers during activate().
   // Since milestone 61 discovery+activation STARTS before the window is
   // created and runs while the renderer parses its bundle — every IPC
@@ -204,6 +215,7 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
     llmTasks,
     vaultTools,
     managedVaults,
+    registerVaultAt,
     assistantToolbox,
     mcpTools: pluginMcpTools,
     confirmWrite: (request) => deps.mcpWriteBridge.requestConfirmation(request),

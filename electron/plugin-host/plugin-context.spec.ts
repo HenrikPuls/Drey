@@ -257,6 +257,11 @@ describe('buildVaultContext - the ctx.vault of a plugin', () => {
     let subscribed: ((event: unknown) => void) | null = null;
     const confirmWrite = vi.fn(async (request: { path: string }) => request.path === 'ok.md');
     const managedVaults = new ManagedVaults();
+    const registerVaultAt = vi.fn(async (folderPath: string): Promise<{ id: string; name: string; path: string }> => ({
+      id: 'v9',
+      name: 'Registered',
+      path: folderPath,
+    }));
     const ctx = buildVaultContext(
       'my-plugin',
       {
@@ -264,6 +269,7 @@ describe('buildVaultContext - the ctx.vault of a plugin', () => {
         vaultAnnouncer: () => announcer as never,
         confirmWrite,
         managedVaults,
+        registerVaultAt: registerVaultAt as never,
       },
       'My Plugin',
       (cb: (event: VaultChangeEvent) => void) => {
@@ -273,7 +279,7 @@ describe('buildVaultContext - the ctx.vault of a plugin', () => {
         };
       },
     );
-    return { ctx, vaultManager, announcer, confirmWrite, managedVaults, subscribed: () => subscribed };
+    return { ctx, vaultManager, announcer, confirmWrite, managedVaults, registerVaultAt, subscribed: () => subscribed };
   }
 
   it('reads and writes with the plugin id as the history origin', async () => {
@@ -323,11 +329,22 @@ describe('buildVaultContext - the ctx.vault of a plugin', () => {
         vaultAnnouncer: () => null as never,
         confirmWrite: undefined,
         managedVaults: new ManagedVaults(),
+        registerVaultAt: (async (folderPath: string) => folderPath) as never,
       },
       'My Plugin',
       () => () => undefined,
     );
     await expect(ctx.confirmWrite({ path: 'x.md' } as never)).resolves.toBe(false);
+  });
+
+  it('register hands the folder to the composed registration round', async () => {
+    const h = vaultHarness();
+    await expect(h.ctx.register('E:/projects/drey')).resolves.toMatchObject({
+      id: 'v9',
+      name: 'Registered',
+      path: 'E:/projects/drey',
+    });
+    expect(h.registerVaultAt).toHaveBeenCalledWith('E:/projects/drey');
   });
 
   it('markManaged claims under the manifest name; null clears the claim', () => {
