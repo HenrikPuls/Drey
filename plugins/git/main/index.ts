@@ -1,10 +1,11 @@
 import { access, readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { MainPluginContext, MainPluginModule } from '../../../shared/plugin-api';
 import {
   BRANCH_FORMAT,
   LOG_FORMAT,
   STASH_FORMAT,
+  intoRepoPath,
   isCommitId,
   isPlausibleBranchName,
   mergeSourceFromMessage,
@@ -13,6 +14,7 @@ import {
   parseNameStatus,
   parseStashList,
   parseStatus,
+  prefixStatusPaths,
   toRepoPath,
   type GitBranch,
   type GitLogEntry,
@@ -20,6 +22,7 @@ import {
   type GitStash,
   type VaultGitState,
 } from '../shared/status';
+import { SCAN_LIMIT, discoverRepos, type DiscoveredRepo } from './discover';
 import { GitError, GitRunner } from './git-runner';
 
 /**
@@ -45,6 +48,11 @@ interface Repo {
   readonly cwd: string;
   /** Absolute git directory (`.git`, or the worktree's own) -- where `MERGE_HEAD` lives. */
   readonly gitDir: string;
+  /**
+   * The repository's folder inside the vault (T-0045): `''` for the
+   * vault's own repository, the scan folder for a discovered one.
+   */
+  readonly subPath: string;
 }
 
 type Located = { kind: 'repo'; repo: Repo } | { kind: 'none'; detail?: string } | { kind: 'no-git' };
@@ -59,6 +67,12 @@ function vaultIdOf(payload: unknown): string {
     throw new Error('No vault given.');
   }
   return id;
+}
+
+/** Same forward-slash folder compare, case-insensitive on Windows. */
+function sameFolder(a: string, b: string): boolean {
+  const key = (p: string): string => (process.platform === 'win32' ? p.toLowerCase() : p);
+  return key(a) === key(b);
 }
 
 function stringOf(payload: unknown, key: string): string {
@@ -87,6 +101,17 @@ const plugin: MainPluginModule = {
     const located = new Map<string, Located>();
     const states = new Map<string, VaultGitState>();
     const running = new Map<string, AbortController>();
+    /** Repositories the scan found below a vault that is no repository itself (T-0045). */
+    const discovered = new Map<string, readonly DiscoveredRepo[]>();
+    /** The status entries of those found repositories, per vault, in scan order. */
+    const discoveredStates = new Map<string, readonly VaultGitState[]>();
+    /**
+     * Vault display names, for refusal messages that name the vault.
+     * Filled at activation (a registry read — activation must not block
+     * on git) so a refusal before the first status round still names the
+     * vault; every refresh round keeps it current.
+     */
+    let vaultNames = new Map<string, string>((await ctx.vault.listVaults()).map((v) => [v.id, v.name]));
 
     const locate = async (vaultId: string): Promise<Located> => {
       const cached = located.get(vaultId);
@@ -105,7 +130,7 @@ const plugin: MainPluginModule = {
             { readOnly: true },
           );
           const [root = '', prefix = '', gitDir = ''] = out.split(/\r?\n/);
-          result = { kind: 'repo', repo: { root, prefix, cwd: vault.path, gitDir } };
+          result = { kind: 'repo', repo: { root, prefix, cwd: vault.path, gitDir, subPath: '' } };
         } catch (error) {
           if (error instanceof GitError && error.kind === 'not-found') {
             result = { kind: 'no-git' };
@@ -122,7 +147,21 @@ const plugin: MainPluginModule = {
     };
 
     /** The vault's repository, or a throw the panel shows as it is. */
-    const repoOf = async (vaultId: string): Promise<Repo> => {
+    const repoOf = async (vaultId: string, subPath = ''): Promise<Repo> => {
+      if (subPath !== '') {
+        // A discovered repository: revalidated against the CURRENT scan —
+        // a folder deleted since must never hand out a stale cwd.
+        const match = (discovered.get(vaultId) ?? []).find((r) => sameFolder(r.subPath, subPath));
+        if (match === undefined) {
+          throw new Error(`No repository "${subPath}" was found under this vault. Refresh the status.`);
+        }
+        try {
+          await access(join(match.root, '.git'));
+        } catch {
+          throw new Error(`The repository "${subPath}" under this vault is gone. Refresh the status.`);
+        }
+        return { root: match.root, prefix: '', cwd: match.root, gitDir: join(match.root, '.git'), subPath };
+      }
       const found = await locate(vaultId);
       if (found.kind === 'no-git') {
         throw new Error('git was not found. Install Git or set its path in Settings.');
@@ -131,6 +170,25 @@ const plugin: MainPluginModule = {
         throw new Error(found.detail ?? 'This vault is not a Git repository.');
       }
       return found.repo;
+    };
+
+    /**
+     * The discovered-repository guard (T-0045): a repository the scan
+     * found under a parent vault is read-only — one click on "Register
+     * as vault" grants work rights. FIRST statement of every mutating
+     * handler, before any repository is located or git runs: the scan
+     * can surface a structured repository (a tickets repo) that no
+     * plugin claimed, so refusing here is the only airtight boundary.
+     */
+    const refuseDiscovered = (payload: unknown): void => {
+      const subPath = stringOf(payload, 'subPath');
+      if (subPath === '') {
+        return;
+      }
+      const vaultId = vaultIdOf(payload);
+      throw new Error(
+        `This repository was found under "${vaultNames.get(vaultId) ?? vaultId}" and is read-only here. Register it as a vault to work with it.`,
+      );
     };
 
     /**
@@ -177,7 +235,39 @@ const plugin: MainPluginModule = {
       }
     };
 
-    const computeState = async (vaultId: string): Promise<VaultGitState> => {
+    const computeState = async (vaultId: string, subPath = ''): Promise<VaultGitState> => {
+      if (subPath !== '') {
+        // A discovered repository: repository-relative paths parsed with
+        // no prefix, then re-mapped into vault-relative ones, so "Open
+        // file", diffs and decorations all address vault paths.
+        const repo = await repoOf(vaultId, subPath);
+        const out = await git.run(
+          repo.cwd,
+          ['status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all', '--', '.'],
+          { readOnly: true },
+          repo.root,
+        );
+        const status = prefixStatusPaths(parseStatus(out, ''), subPath);
+        const [operation, fetchedAt, stashCount] = await Promise.all([
+          readOperation(repo),
+          readFetchedAt(repo),
+          countStashes(repo),
+        ]);
+        return {
+          vaultId,
+          state: 'ok',
+          root: repo.root,
+          prefix: '',
+          status,
+          stagedOutside: 0,
+          operation,
+          fetchedAt,
+          stashCount,
+          managedBy: null,
+          subPath,
+          discovered: true,
+        };
+      }
       const found = await locate(vaultId);
       if (found.kind === 'no-git') {
         return { vaultId, state: 'no-git' };
@@ -223,25 +313,68 @@ const plugin: MainPluginModule = {
     /** Recomputes every vault's (or one vault's) state and pushes the full list. */
     const refreshNow = async (only?: string): Promise<VaultGitState[]> => {
       const vaults = await ctx.vault.listVaults();
+      vaultNames = new Map(vaults.map((v) => [v.id, v.name]));
       const registered = new Set(vaults.map((v) => v.id));
       for (const id of [...states.keys()]) {
         if (!registered.has(id)) {
           states.delete(id);
           located.delete(id);
+          discovered.delete(id);
+          discoveredStates.delete(id);
         }
       }
       const targets = only !== undefined && registered.has(only) ? [only] : vaults.map((v) => v.id);
       await Promise.all(
         targets.map(async (id) => {
+          const vault = vaults.find((v) => v.id === id);
           try {
-            states.set(id, await computeState(id));
+            const own = await computeState(id);
+            states.set(id, own);
+            // The repository scan (T-0045): only a vault that is no
+            // repository itself, and only where git exists — a vault
+            // with `no-git` keeps its vault-level entry and finds
+            // nothing it could report below.
+            if (own.state === 'not-a-repo' && vault !== undefined && vault.exists) {
+              const skipRoots = vaults
+                .filter((v) => v.id !== id && v.exists)
+                .map((v) => resolve(v.path));
+              const scan = await discoverRepos(vault.path, skipRoots);
+              if (scan.clipped) {
+                ctx.log(
+                  `repository scan under vault ${id} found more than ${SCAN_LIMIT} repositories; showing the first ${SCAN_LIMIT}`,
+                  'warn',
+                );
+              }
+              discovered.set(id, scan.repos);
+              const entries: VaultGitState[] = [];
+              for (const repo of scan.repos) {
+                try {
+                  entries.push(await computeState(id, repo.subPath));
+                } catch (error) {
+                  ctx.log(`status of repository ${repo.subPath} under vault ${id} failed: ${String(error)}`, 'warn');
+                }
+              }
+              discoveredStates.set(id, entries);
+              // With found repositories the vault never appears as
+              // "not a repository" — the panel shows the entries.
+              if (entries.length > 0) {
+                states.delete(id);
+              }
+            } else {
+              discovered.delete(id);
+              discoveredStates.delete(id);
+            }
           } catch (error) {
             ctx.log(`status of vault ${id} failed: ${String(error)}`, 'warn');
             states.set(id, { vaultId: id, state: 'not-a-repo' });
           }
         }),
       );
-      const list = vaults.map((v) => states.get(v.id)).filter((s): s is VaultGitState => s !== undefined);
+      const list = vaults.flatMap((v) => {
+        const own = states.get(v.id);
+        const found = discoveredStates.get(v.id) ?? [];
+        return [...(own !== undefined ? [own] : []), ...found];
+      });
       ctx.ipc.emit('status-updated', list);
       return list;
     };
@@ -283,12 +416,17 @@ const plugin: MainPluginModule = {
 
     ctx.vault.onChanged((event) => {
       // A round without a path can be a registry change or a folder that
-      // became a repository in the meantime: look again where the vault sits.
+      // became a repository in the meantime: look again where the vault
+      // sits, and scan again for repositories below it.
       if (event.path === undefined) {
         if (event.vaultId === undefined) {
           located.clear();
+          discovered.clear();
+          discoveredStates.clear();
         } else {
           located.delete(event.vaultId);
+          discovered.delete(event.vaultId);
+          discoveredStates.delete(event.vaultId);
         }
       }
       scheduleRefresh(event.vaultId);
@@ -322,17 +460,17 @@ const plugin: MainPluginModule = {
         .then((out) => out.trim())
         .catch(() => '');
 
-    /** Runs a command the user can cancel; one at a time per vault. */
-    const cancellable = async <T>(vaultId: string, work: (signal: AbortSignal) => Promise<T>): Promise<T> => {
-      if (running.has(vaultId)) {
-        throw new Error('Another Git command is still running for this vault.');
+    /** Runs a command the user can cancel; one at a time per repository (the panel's repo key). */
+    const cancellable = async <T>(key: string, work: (signal: AbortSignal) => Promise<T>): Promise<T> => {
+      if (running.has(key)) {
+        throw new Error('Another Git command is still running for this repository.');
       }
       const controller = new AbortController();
-      running.set(vaultId, controller);
+      running.set(key, controller);
       try {
         return await work(controller.signal);
       } finally {
-        running.delete(vaultId);
+        running.delete(key);
       }
     };
 
@@ -343,6 +481,8 @@ const plugin: MainPluginModule = {
       const refresh = request?.refresh === true;
       if (request?.relocate === true) {
         located.clear();
+        discovered.clear();
+        discoveredStates.clear();
       }
       if (refresh || states.size === 0) {
         return refreshNow();
@@ -352,7 +492,7 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('branches', async (payload): Promise<GitBranch[]> => {
-      const repo = await repoOf(vaultIdOf(payload));
+      const repo = await repoOf(vaultIdOf(payload), stringOf(payload, 'subPath'));
       const out = await git.run(
         repo.root,
         ['for-each-ref', `--format=${BRANCH_FORMAT}`, 'refs/heads', 'refs/remotes'],
@@ -360,7 +500,6 @@ const plugin: MainPluginModule = {
       );
       return parseBranches(out);
     });
-
     /** Commits HEAD has that no remote has: what a push would send. */
     const unpushedIds = async (repo: Repo, upstream: string | null): Promise<Set<string>> => {
       try {
@@ -384,7 +523,8 @@ const plugin: MainPluginModule = {
 
     ctx.ipc.handle('log', async (payload): Promise<GitLogEntry[]> => {
       const vaultId = vaultIdOf(payload);
-      const repo = await repoOf(vaultId);
+      const subPath = stringOf(payload, 'subPath');
+      const repo = await repoOf(vaultId, subPath);
       if ((await headOf(repo)) === '') {
         return []; // a repository without commits has no log
       }
@@ -393,7 +533,10 @@ const plugin: MainPluginModule = {
         ['log', '-n', String(LOG_LIMIT), `--pretty=format:${LOG_FORMAT}`],
         { readOnly: true },
       );
-      const known = states.get(vaultId);
+      const known =
+        subPath === ''
+          ? states.get(vaultId)
+          : (discoveredStates.get(vaultId) ?? []).find((s) => s.state === 'ok' && s.subPath === subPath);
       const unpushed = await unpushedIds(repo, known?.state === 'ok' ? known.status.upstream : null);
       return parseLog(out).map((entry) =>
         entry.id !== undefined && unpushed.has(entry.id) ? { ...entry, unpushed: true } : entry,
@@ -402,7 +545,8 @@ const plugin: MainPluginModule = {
 
     /** The commits that changed one file, newest first (renames end the list). */
     ctx.ipc.handle('fileLog', async (payload): Promise<GitLogEntry[]> => {
-      const repo = await repoOf(vaultIdOf(payload));
+      const subPath = stringOf(payload, 'subPath');
+      const repo = await repoOf(vaultIdOf(payload), subPath);
       const path = stringOf(payload, 'path');
       if (path === '') {
         throw new Error('No file given.');
@@ -412,7 +556,14 @@ const plugin: MainPluginModule = {
       }
       const out = await git.run(
         repo.root,
-        ['log', '-n', String(FILE_LOG_LIMIT), `--pretty=format:${LOG_FORMAT}`, '--', toRepoPath(path, repo.prefix)],
+        [
+          'log',
+          '-n',
+          String(FILE_LOG_LIMIT),
+          `--pretty=format:${LOG_FORMAT}`,
+          '--',
+          toRepoPath(intoRepoPath(path, subPath), repo.prefix),
+        ],
         { readOnly: true },
       );
       return parseLog(out);
@@ -420,22 +571,28 @@ const plugin: MainPluginModule = {
 
     /** What one commit did to one file, as git's unified diff (the panel parses it). */
     ctx.ipc.handle('filePatch', async (payload): Promise<string> => {
-      const repo = await repoOf(vaultIdOf(payload));
+      const subPath = stringOf(payload, 'subPath');
+      const repo = await repoOf(vaultIdOf(payload), subPath);
       const path = stringOf(payload, 'path');
       const hash = stringOf(payload, 'hash');
       if (path === '' || !isCommitId(hash)) {
         throw new Error('No file or commit given.');
       }
-      return git.run(
-        repo.root,
-        ['show', '--format=', '--no-color', '--no-ext-diff', '--unified=3', hash, '--', toRepoPath(path, repo.prefix)],
-        { readOnly: true },
-      );
+      return git.run(repo.root, [
+        'show',
+        '--format=',
+        '--no-color',
+        '--no-ext-diff',
+        '--unified=3',
+        hash,
+        '--',
+        toRepoPath(intoRepoPath(path, subPath), repo.prefix),
+      ], { readOnly: true });
     });
 
     /** The message of the last commit -- what "Amend" starts from. */
     ctx.ipc.handle('headMessage', async (payload): Promise<string> => {
-      const repo = await repoOf(vaultIdOf(payload));
+      const repo = await repoOf(vaultIdOf(payload), stringOf(payload, 'subPath'));
       if ((await headOf(repo)) === '') {
         return '';
       }
@@ -449,6 +606,7 @@ const plugin: MainPluginModule = {
      */
     ctx.ipc.handle('fileAt', async (payload) => {
       const vaultId = vaultIdOf(payload);
+      const subPath = stringOf(payload, 'subPath');
       const request = payload as { path?: unknown; rev?: unknown };
       const path = typeof request.path === 'string' ? request.path : '';
       if (path === '') {
@@ -458,11 +616,11 @@ const plugin: MainPluginModule = {
       if (request.rev === 'worktree') {
         content = await ctx.vault.read(path, { vaultId }).catch(() => null);
       } else {
-        const repo = await repoOf(vaultId);
+        const repo = await repoOf(vaultId, subPath);
         const rev = request.rev;
         // 'head' = the last commit, a hex id = that commit, anything else = the index.
         const treeish = rev === 'head' ? 'HEAD' : typeof rev === 'string' && isCommitId(rev) ? rev : '';
-        const spec = `${treeish}:${toRepoPath(path, repo.prefix)}`;
+        const spec = `${treeish}:${toRepoPath(intoRepoPath(path, subPath), repo.prefix)}`;
         content = await git.run(repo.root, ['show', spec], { readOnly: true }).catch(() => null);
       }
       if (content !== null && content.includes('\0')) {
@@ -474,6 +632,7 @@ const plugin: MainPluginModule = {
     // -- index -------------------------------------------------------------
 
     ctx.ipc.handle('stage', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       refuseIfManaged(vaultId);
       const repo = await repoOf(vaultId);
@@ -484,6 +643,7 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('unstage', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       const repo = await repoOf(vaultId);
       const paths = pathsOf(payload);
@@ -503,6 +663,7 @@ const plugin: MainPluginModule = {
      * over the app's own delete path.
      */
     ctx.ipc.handle('discard', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       refuseIfManaged(vaultId);
       const repo = await repoOf(vaultId);
@@ -530,6 +691,7 @@ const plugin: MainPluginModule = {
      * says so.
      */
     ctx.ipc.handle('commit', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       refuseIfManaged(vaultId); // covers amend and commit-and-push alike
       const repo = await repoOf(vaultId);
@@ -577,6 +739,7 @@ const plugin: MainPluginModule = {
     // -- branches ----------------------------------------------------------
 
     ctx.ipc.handle('checkout', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       const repo = await repoOf(vaultId);
       const request = payload as { name?: unknown; remote?: unknown };
@@ -592,6 +755,7 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('createBranch', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       const repo = await repoOf(vaultId);
       const name = (payload as { name?: unknown }).name;
@@ -605,6 +769,7 @@ const plugin: MainPluginModule = {
     // -- remote ------------------------------------------------------------
 
     ctx.ipc.handle('fetch', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       const repo = await repoOf(vaultId);
       await cancellable(vaultId, (signal) => git.run(repo.root, ['fetch', '--prune'], { signal }));
@@ -612,6 +777,7 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('pull', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       refuseIfManaged(vaultId);
       const repo = await repoOf(vaultId);
@@ -652,6 +818,7 @@ const plugin: MainPluginModule = {
     };
 
     ctx.ipc.handle('push', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       refuseIfManaged(vaultId);
       const repo = await repoOf(vaultId);
@@ -672,6 +839,7 @@ const plugin: MainPluginModule = {
      * is completed with a commit.
      */
     ctx.ipc.handle('merge', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       const repo = await repoOf(vaultId);
       const name = stringOf(payload, 'name');
@@ -694,6 +862,7 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('mergeAbort', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       const repo = await repoOf(vaultId);
       await git.run(repo.root, ['merge', '--abort']);
@@ -707,6 +876,7 @@ const plugin: MainPluginModule = {
      * deleted the file, the file is removed instead.
      */
     ctx.ipc.handle('resolve', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       const repo = await repoOf(vaultId);
       const path = stringOf(payload, 'path');
@@ -733,13 +903,14 @@ const plugin: MainPluginModule = {
     // -- stash ---------------------------------------------------------------
 
     ctx.ipc.handle('stashList', async (payload): Promise<GitStash[]> => {
-      const repo = await repoOf(vaultIdOf(payload));
+      const repo = await repoOf(vaultIdOf(payload), stringOf(payload, 'subPath'));
       const out = await git.run(repo.root, ['stash', 'list', `--format=${STASH_FORMAT}`], { readOnly: true });
       return parseStashList(out);
     });
 
     /** Puts the vault's changes (untracked files included) away and restores a clean tree. */
     ctx.ipc.handle('stashPush', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       const repo = await repoOf(vaultId);
       const note = stringOf(payload, 'message').trim();
@@ -759,6 +930,7 @@ const plugin: MainPluginModule = {
 
     /** Applies a stash and drops it (git keeps it when applying conflicts). */
     ctx.ipc.handle('stashPop', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       const repo = await repoOf(vaultId);
       const ref = stashRef(payload);
@@ -774,6 +946,7 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('stashDrop', async (payload) => {
+      refuseDiscovered(payload);
       const vaultId = vaultIdOf(payload);
       const repo = await repoOf(vaultId);
       await git.run(repo.root, ['stash', 'drop', stashRef(payload)]);
@@ -790,6 +963,8 @@ const plugin: MainPluginModule = {
     ctx.ipc.handle('configChanged', async () => {
       gitPath = ((await ctx.config.get<string>('gitPath')) ?? '').trim();
       located.clear();
+      discovered.clear();
+      discoveredStates.clear();
       return refreshNow();
     });
 

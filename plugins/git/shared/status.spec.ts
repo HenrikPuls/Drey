@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { GitStatus } from './status';
 import {
   changeCount,
   decorationsFor,
