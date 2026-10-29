@@ -7,12 +7,15 @@ import {
   commitBusyLabel,
   commitButtonLabel,
   counted,
+  foundReadOnlyMessage,
+  keyOf,
   okVaults,
   patchLineText,
-  pickCurrentVault,
+  pickCurrentRepo,
   pullButtonLabel,
   pushButtonLabel,
   pushCommitButtonLabel,
+  repoLabel,
   syncBadge,
   unsavedSubject,
   type OkVault,
@@ -49,29 +52,77 @@ function repo(vaultId: string, patch: Partial<OkVault> = {}, status: Partial<Git
 
 const plain = (vaultId: string): VaultGitState => ({ vaultId, state: 'not-a-repo' });
 
-describe('pickCurrentVault', () => {
+/** A repository the scan found under a parent vault (`p`). */
+const found = (vaultId: string, subPath: string, patch: Partial<OkVault> = {}): OkVault =>
+  repo(vaultId, { subPath, discovered: true, ...patch });
+
+describe('pickCurrentRepo (ported from pickCurrentVault)', () => {
   it('follows the focused document into a repository', () => {
-    expect(pickCurrentVault([repo('a'), repo('b')], 'a', 'b')).toBe('b');
+    expect(pickCurrentRepo([repo('a'), repo('b')], 'a', 'b')).toBe('b');
   });
 
   it('keeps the shown repository when the focused vault is none', () => {
-    expect(pickCurrentVault([repo('a'), plain('b')], 'a', 'b')).toBe('a');
-    expect(pickCurrentVault([repo('a'), repo('b')], 'b', null)).toBe('b');
+    expect(pickCurrentRepo([repo('a'), plain('b')], 'a', 'b')).toBe('a');
+    expect(pickCurrentRepo([repo('a'), repo('b')], 'b', null)).toBe('b');
   });
 
   it('starts with the first repository, or the first vault when there is none', () => {
-    expect(pickCurrentVault([plain('a'), repo('b')], null, null)).toBe('b');
-    expect(pickCurrentVault([plain('a'), plain('b')], null, null)).toBe('a');
-    expect(pickCurrentVault([], 'gone', null)).toBeNull();
+    expect(pickCurrentRepo([plain('a'), repo('b')], null, null)).toBe('b');
+    expect(pickCurrentRepo([plain('a'), plain('b')], null, null)).toBe('a');
+    expect(pickCurrentRepo([], 'gone', null)).toBeNull();
   });
 
   it('leaves a vault that was removed or stopped being a repository', () => {
-    expect(pickCurrentVault([repo('b')], 'a', null)).toBe('b');
-    expect(pickCurrentVault([plain('a'), repo('b')], 'a', null)).toBe('b');
+    expect(pickCurrentRepo([repo('b')], 'a', null)).toBe('b');
+    expect(pickCurrentRepo([plain('a'), repo('b')], 'a', null)).toBe('b');
   });
 
   it('stays on a plain vault while no vault is a repository', () => {
-    expect(pickCurrentVault([plain('a'), plain('b')], 'b', null)).toBe('b');
+    expect(pickCurrentRepo([plain('a'), plain('b')], 'b', null)).toBe('b');
+  });
+});
+
+describe('pickCurrentRepo (found repositories, T-0045)', () => {
+  const parent = 'p';
+
+  it('prefers the found repository whose folder prefixes the focused document', () => {
+    const states = [found(parent, 'drey'), found(parent, 'drey-tickets')];
+    expect(pickCurrentRepo(states, null, parent, 'drey/src/a.ts')).toBe('p::drey');
+    expect(pickCurrentRepo(states, null, parent, 'drey-tickets/tickets/T-0001.md')).toBe('p::drey-tickets');
+    // A folder name that only starts like the path is not a prefix.
+    expect(pickCurrentRepo([found(parent, 'drey')], null, parent, 'drey-old/x.md')).toBe('p::drey');
+  });
+
+  it('falls back to the vault\'s own repository, or the first found one', () => {
+    expect(pickCurrentRepo([repo(parent), found(parent, 'drey')], null, parent, 'outside/readme.md')).toBe(parent);
+    expect(pickCurrentRepo([plain(parent), found(parent, 'drey')], null, parent, null)).toBe('p::drey');
+    expect(pickCurrentRepo([plain(parent), found(parent, 'a'), found(parent, 'b')], null, parent)).toBe('p::a');
+  });
+
+  it('keeps a selected found repository while it exists', () => {
+    const states = [repo(parent), found(parent, 'drey')];
+    expect(pickCurrentRepo(states, 'p::drey', null)).toBe('p::drey');
+  });
+});
+
+describe('keyOf / repoLabel / foundReadOnlyMessage', () => {
+  it('keys the own repository by the vault id, a found one by vault::folder', () => {
+    expect(keyOf(repo('v1'))).toBe('v1');
+    expect(keyOf(plain('v1'))).toBe('v1');
+    expect(keyOf(found('v1', 'drey'))).toBe('v1::drey');
+  });
+
+  it('labels the own repository with the vault name, a found one with its folder', () => {
+    expect(repoLabel(repo('v1'), 'Notes')).toBe('Notes');
+    expect(repoLabel(repo('v1'), undefined)).toBe('v1');
+    expect(repoLabel(found('v1', 'drey'), 'Notes')).toBe('drey');
+    expect(repoLabel(found('v1', 'tools/drey'), 'Notes')).toBe('drey');
+  });
+
+  it('words the read-only refusal the same way main does', () => {
+    expect(foundReadOnlyMessage('Projects')).toBe(
+      'This repository was found under "Projects" and is read-only here. Register it as a vault to work with it.',
+    );
   });
 });
 
