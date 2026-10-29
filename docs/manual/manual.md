@@ -803,12 +803,24 @@ conversation and a prompt box: you can **Interrupt** the running turn
 (the session and its context stay), drive the worker with your own
 prompts and **Hand back** the run — a worker that is idle by then ends
 the run and the gate decides. While you hold a run the runner does not
-end it. In the conversation each of the worker's thoughts is a folded
-**Thinking** box whose title previews it; click the title to read the
-whole thought, and again to fold it. The transcript streams live on
-OpenCode workers: a tool step appears as the worker calls it
-(`● Read src/a.ts`, its result hung underneath once it settles) and
-reply text grows while it is written. Only OpenCode workers can be
+end it. The tab's header names the ticket, the worker and its model,
+and a pill says who is driving (**Runner driving** — your first message
+takes over — or **You have control**); below it sit the turn count, how
+full the context window is (a small bar that turns amber at 70 % and
+red at 90 %), the tokens in (with the cached share) and out, and the
+elapsed time — hover a value for its explanation. In the conversation
+each tool call is one quiet row: a dot (green when it settled, red when
+it failed), the tool, what it was called on — paths relative to the
+run's worktree, the full path in the tooltip — and its result. More
+than three calls in a row fold into one **N tool calls** line that is
+open while the worker is still busy there. Each of the worker's
+thoughts is a folded **Thinking** line that previews it; click it to
+read the whole thought, and again to fold it — an unfolded thought
+stays unfolded while the transcript updates. The transcript streams
+live on OpenCode workers: a tool step appears as the worker calls it
+and reply text grows while it is written. The view follows new output
+while you are at the bottom; scrolled up, it stays put and a
+**↓ New output** button brings you back. Only OpenCode workers can be
 taken over for now. The **Log** button opens the fleet daemon's log in
 a read-only tab. When a run ends, the ticket's Log line records the
 tokens it used — how much of the input came from the provider's cache,

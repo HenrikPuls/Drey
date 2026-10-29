@@ -20,6 +20,51 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-58 — Takeover tab: readable transcript + structured header
+
+Owner request, outside the list. The takeover transcript ran through
+the host's Markdown view, which showed every tool outcome as a literal
+`&nbsp;&nbsp;⎿ …`, drew thinking as a heavy blue quote callout and
+printed full absolute worktree paths; the banner packed every number
+into one mono `·` string. Now:
+
+- **Own DOM transcript** (`plugins/tickets/renderer/transcript-view.ts`)
+  over the watch view model, which carries tool calls and thoughts as
+  data (`WatchBlock.step` / `thought` / `text`): tool calls are quiet
+  rows (state dot, tool, target relative to the run's worktree with the
+  full path in the tooltip, result muted), runs of four or more fold
+  into an "N tool calls" line (open while it is the live tail), thinking
+  is a borderless fold with a one-line preview, the owner's messages a
+  bubble, errors a tinted row, "Turn finished" a divider. Replies render
+  a small Markdown subset as nodes, never `innerHTML`
+  (`transcript-text.ts`: paragraphs, headings, lists, quotes, rules,
+  pipe tables, fenced code coloured by `ui.highlightCode`); prose keeps
+  a 76ch reading width, tables and code use the whole column.
+  Items whose content did not change keep their nodes across the 2 s
+  pull, so an unfolded thought stays unfolded; the view follows new
+  output only while the reader is at the bottom (else a
+  "↓ New output" button).
+- **View-model fixes the new view surfaced** (`watch-format.ts`):
+  parallel calls of one tool pair with their inputs in call order and
+  their outcomes by the target the outcome names (longest wins), else
+  call order — they used to leave orphan "running…" steps and swap
+  results; a turn's end drops input-less placeholders and stops every
+  running step; a reply part whose deltas tool calls cut up is replaced
+  whole at its first fragment by its seal (no more half sentences
+  followed by the full one); `run finished` and `gate:` notes are muted
+  lifecycle lines instead of tool steps.
+- **Two-row header**: ticket, worker · model, a mode pill (Runner
+  driving / You have control / Detached / Run …, the explanation in its
+  tooltip), the status word; below, labelled metrics — Turn, Context as
+  a mini bar (amber ≥ 70 %, red ≥ 90 %), Tokens in (cached) / out with
+  the ctx/turns/reads telemetry in the tooltip, Elapsed. The banner's
+  gradient is gone (flat, the state colour stays as the bottom border).
+
+Specs: `transcript-view.spec.ts`, `transcript-text.spec.ts` (new),
+`watch-format.spec.ts` (structured blocks, parallel pairing, fragment
+seal, outcome by target). Manual: the takeover paragraph. **Not yet
+manually verified by the owner.**
+
 ### Fix — fleet: cleanup survives path aliases (`RUNNER~1`, junctions); CI green again
 
 Follow-up in the family of the T-0047 alias fix below, caught by CI on
