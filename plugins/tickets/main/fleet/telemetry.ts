@@ -53,6 +53,11 @@ function inputSide(usage: RunUsage): number {
  * The folding state — one instance per run, applied in event order
  * (tool-call notes of a turn arrive before that turn's usage event, so
  * the first write correctly excludes its own turn's input).
+ *
+ * `initial` restores a run the runner re-adopted after a restart: the
+ * persisted counters come back, and `wrote` is derived from the
+ * before-first-write split (strictly less than the input total means a
+ * write happened).
  */
 export class TelemetryFold {
   private input: number | null = null;
@@ -65,6 +70,21 @@ export class TelemetryFold {
   private wrote = false;
   private inputBeforeWrite = 0;
   private inputTotal = 0;
+
+  constructor(initial?: RunTelemetry) {
+    if (initial !== undefined) {
+      this.input = initial.usage.input;
+      this.cacheRead = initial.usage.cacheRead;
+      this.cacheCreation = initial.usage.cacheCreation;
+      this.output = initial.usage.output;
+      this.turns = initial.turns;
+      this.readCalls = initial.readCalls;
+      this.lastTurnContext = initial.lastTurnContext;
+      this.inputTotal = inputSide(initial.usage);
+      this.inputBeforeWrite = initial.tokensBeforeFirstWrite ?? 0;
+      this.wrote = initial.tokensBeforeFirstWrite !== null && initial.tokensBeforeFirstWrite < this.inputTotal;
+    }
+  }
 
   apply(event: NormalizedEvent): void {
     if (event.tool !== undefined && event.tool !== '') {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { NormalizedEvent } from './providers';
-import { READ_TOOLS, telemetryFromEvents, WRITE_TOOLS } from './telemetry';
+import { READ_TOOLS, TelemetryFold, telemetryFromEvents, WRITE_TOOLS } from './telemetry';
 
 /**
  * Telemetry over fixture event streams shaped exactly like the two
@@ -106,5 +106,21 @@ describe('telemetryFromEvents — per-adapter fixtures', () => {
       readCalls: 0,
       tokensBeforeFirstWrite: null,
     });
+  });
+
+  it('a restored fold (an adopted run) continues the persisted numbers', () => {
+    const before = telemetryFromEvents(claudeFixture);
+    const fold = new TelemetryFold(before);
+    fold.apply(turn({ input: 50, output: 10 }));
+    const after = fold.get();
+    expect(after.turns).toBe(3);
+    expect(after.usage.input).toBe(2_250);
+    // The fixture's first write already happened: later turns count into the total, not beforeFirstWrite.
+    expect(after.tokensBeforeFirstWrite).toBe(26_000);
+    expect(after.lastTurnContext).toBe(50);
+    // A no-write state restores as one: the next turn still counts as exploration.
+    const exploring = new TelemetryFold(telemetryFromEvents([turn({ input: 100 })]));
+    exploring.apply(turn({ input: 20 }));
+    expect(exploring.get().tokensBeforeFirstWrite).toBe(120);
   });
 });
