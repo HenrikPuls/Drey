@@ -20,6 +20,21 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### T-0053 — Tickets board: card-menu move to top / bottom
+
+The card context menu gains "Move to top" / "Move to bottom": the same
+`reorder` operation a within-column drag performs, with drop index 0 /
+the column's end — no new IPC and no main-process change, so a menu
+move and the equivalent drag write identical `order.md` pins (the top
+pins only that ticket, the bottom pins the whole column in its visual
+order with it last). Both items are disabled when the card already
+sits at that end (a single-ticket column disables both) and carry
+tooltips naming the pin effect, which a plain menu item cannot show.
+The index math lives in the pure, specced helper
+`plugins/tickets/renderer/card-order.ts`; `specs/ticket-schema.md`
+records the drag equivalence. **Not yet manually verified by the
+owner.**
+
 ### Fix — fleet: cleanup survives path aliases (`RUNNER~1`, junctions); CI green again
 
 Follow-up in the family of the T-0047 alias fix below, caught by CI on

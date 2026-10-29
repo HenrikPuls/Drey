@@ -322,7 +322,10 @@ everything above and including the drop position. Unknown ids in a
 section are ignored with a noise badge. Two branches adding different
 pins union on merge; a text conflict is resolved by hand, union
 semantics. Rank collisions in derived order fall back to
-`entered-<phase>`, then id.
+`entered-<phase>`, then id. The card context menu's "Move to top" /
+"Move to bottom" is the same reorder operation with drop index 0 / the
+column's end — a menu move and the equivalent drag write identical
+pins.
 
 ## `_meta/repos.md` — work repositories
 
