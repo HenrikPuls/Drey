@@ -100,7 +100,11 @@ describe('prepareWorktree (real git)', () => {
   let adminName = '';
 
   beforeEach(async () => {
-    baseDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-wt-'));
+    // Canonical from the start: the runner's temp dir can be an alias
+    // (the GitHub Windows runner's is the 8.3 `RUNNER~1` form) while git
+    // reports canonical long paths — alias behaviour has its own junction
+    // test below, never the temp dir's accident.
+    baseDir = await fsp.realpath(await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-wt-')));
     repo = path.join(baseDir, 'repo');
     await fsp.mkdir(repo);
     await git(repo, ['init', '-b', 'main']);

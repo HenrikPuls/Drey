@@ -13,7 +13,7 @@ import type { Dirent } from 'node:fs';
 import type { RepoRef } from '../../shared/tickets';
 import type { TicketsGit } from '../tickets-git';
 import { isUnderAnyBase, legacyWorktreeBase, worktreeBaseFor } from './worktree-home';
-import { normalizeForMatch, parseWorktreePorcelain } from './worktrees';
+import { normalizeForMatch, parseWorktreePorcelain, realPathOrNull } from './worktrees';
 
 /** The exec seam cleanup drives (a `TicketsGit` instance). */
 type GitSeam = Pick<TicketsGit, 'run'>;
@@ -91,10 +91,19 @@ export interface CleanupReport {
  * one rule: per repo, every registered worktree under the repo's new or
  * legacy base that is not protected gets `removeWorktree`'s treatment;
  * then one `git worktree prune` clears the admin entries. The legacy
- * base folder itself is rmdir'd when empty (best effort).
+ * base folder itself is rmdir'd when empty (best effort). Boundaries
+ * (bases, protected paths, the repo's own checkout) match through both
+ * spellings, the given form and its realpath: git reports the paths it
+ * registers canonically while the caller can hold an alias — an 8.3
+ * short name, a junction — the `findWorktreeEntry` discipline.
  */
 export async function cleanWorktrees(git: GitSeam, input: CleanWorktreesInput): Promise<CleanupReport> {
-  const protectedSet = new Set(input.protectedPaths.map(normalizeForMatch));
+  const protectedSet = new Set<string>();
+  for (const protectedPath of input.protectedPaths) {
+    for (const form of await matchForms(protectedPath)) {
+      protectedSet.add(form);
+    }
+  }
   const removed: string[] = [];
   const keptDirty: string[] = [];
   const failed: { path: string; error: string }[] = [];
@@ -108,6 +117,8 @@ export async function cleanWorktrees(git: GitSeam, input: CleanWorktreesInput): 
         worktreeBaseFor(input.vaultPath, repo),
         legacyWorktreeBase(input.fleetRoot),
       ];
+    const baseForms = (await Promise.all(bases.map(matchForms))).flat();
+    const repoForms = await matchForms(repo.path);
     let listing: string;
     try {
       listing = await git.run(repo.path, ['worktree', 'list', '--porcelain']);
@@ -118,10 +129,15 @@ export async function cleanWorktrees(git: GitSeam, input: CleanWorktreesInput): 
     for (const entry of parseWorktreePorcelain(listing)) {
       // Prunable entries (vanished trees) are the prune's job; the
       // repo's own checkout is never a fleet worktree.
-      if (entry.prunable || !isUnderAnyBase(entry.path, bases) || samePath(entry.path, repo.path)) {
+      if (entry.prunable) {
         continue;
       }
-      if (protectedSet.has(normalizeForMatch(entry.path))) {
+      const entryForms = await matchForms(entry.path);
+      const isRepoCheckout = entryForms.some((form) => repoForms.includes(form));
+      if (isRepoCheckout || !entryForms.some((form) => isUnderAnyBase(form, baseForms))) {
+        continue;
+      }
+      if (entryForms.some((form) => protectedSet.has(form))) {
         continue;
       }
       const outcome = await removeWorktree(git, repo.path, entry.path);
@@ -171,8 +187,16 @@ export async function listOrphans(
   return orphans.sort();
 }
 
-function samePath(a: string, b: string): boolean {
-  return normalizeForMatch(a) === normalizeForMatch(b);
+/** Both spellings a boundary path can match in, normalized: the given
+ *  form and its realpath — git registers and reports canonical paths
+ *  while the caller's path can reach the same directory through an
+ *  alias (an 8.3 short name, a junction). A path that cannot be
+ *  resolved (a base that does not exist yet, a vanished tree) keeps
+ *  its given form. */
+async function matchForms(p: string): Promise<string[]> {
+  const real = await realPathOrNull(p);
+  const forms = real === null || real === p ? [p] : [p, real];
+  return forms.map(normalizeForMatch);
 }
 
 function messageOf(error: unknown): string {

@@ -487,7 +487,9 @@ async function findWorktreeEntry(
   return null;
 }
 
-async function realPathOrNull(p: string): Promise<string | null> {
+/** realpath, or null when the path does not resolve — the resolver of the
+ *  alias second chance, shared with the worktree-clean rules. */
+export async function realPathOrNull(p: string): Promise<string | null> {
   try {
     return await fsp.realpath(p);
   } catch {

@@ -34,7 +34,10 @@ describe('removeWorktree (real git)', () => {
   let home = '';
 
   beforeEach(async () => {
-    baseDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-wtc-'));
+    // Canonical from the start (the runner's 8.3 `RUNNER~1` temp vs git's
+    // long paths — see worktrees.spec.ts); the alias case is the junction
+    // test in the cleanWorktrees describe.
+    baseDir = await fsp.realpath(await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-wtc-')));
     repo = path.join(baseDir, 'repo');
     home = path.join(baseDir, 'vault', WORKTREES_DIR);
     await fsp.mkdir(repo);
@@ -118,7 +121,10 @@ describe('cleanWorktrees (real git)', () => {
   let repoRef: RepoRef;
 
   beforeEach(async () => {
-    baseDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-wtcx-'));
+    // Canonical from the start (the runner's 8.3 `RUNNER~1` temp vs git's
+    // long paths — see worktrees.spec.ts); the alias case is the junction
+    // test below.
+    baseDir = await fsp.realpath(await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-wtcx-')));
     repo = path.join(baseDir, 'repo');
     vault = path.join(baseDir, 'vault');
     fleetRoot = path.join(baseDir, 'fleet-root');
@@ -175,6 +181,33 @@ describe('cleanWorktrees (real git)', () => {
     await expect(fsp.stat(kept)).resolves.toBeDefined();
     expect(await adminNames()).toEqual([path.basename(kept)]);
   });
+
+  it.skipIf(process.platform !== 'win32')(
+    'removes worktrees when the vault path is an alias (git reports the canonical path)',
+    async () => {
+      // A junction reproduces the alias shape of the GitHub Windows
+      // runner's 8.3 temp dir on any checkout: cleanup is asked through
+      // the alias while git lists the canonical paths.
+      const gone = await addAt(homeWt('T-0001'), 't/T-0001');
+      const aliasVault = `${vault}-alias`;
+      await execFileAsync('cmd', ['/c', 'mklink', '/J', aliasVault, vault], { windowsHide: true });
+      try {
+        const report = await cleanWorktrees(fleetGit(), {
+          repos: [repoRef],
+          vaultPath: aliasVault,
+          fleetRoot,
+          protectedPaths: [],
+        });
+        expect(report.removed).toHaveLength(1);
+        expect(report.keptDirty).toEqual([]);
+        expect(report.failed).toEqual([]);
+        expect(await adminNames()).toEqual([]);
+        await expect(fsp.stat(gone)).rejects.toThrow();
+      } finally {
+        await execFileAsync('cmd', ['/c', 'rmdir', aliasVault], { windowsHide: true });
+      }
+    },
+  );
 
   it('drops the legacy base folder when it is empty afterwards', async () => {
     await addAt(legacyWt('T-0002'), 't/T-0002');

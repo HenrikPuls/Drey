@@ -20,6 +20,25 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — fleet: cleanup survives path aliases (`RUNNER~1`, junctions); CI green again
+
+Follow-up in the family of the T-0047 alias fix below, caught by CI on
+the GitHub Windows runner: `cleanWorktrees` compared the porcelain
+listing against the bases, the protected paths and the repo's own
+checkout by string form — while git reports the paths it registers
+canonically and the caller can hold an alias, the runner's 8.3 temp dir
+(`C:\Users\RUNNER~1\…` for `runneradmin`) being the live case. Under an
+alias every entry fell outside the bases, so the Clean up button and
+the boot migration silently removed nothing (and the specs' own path
+compares missed too). Boundaries now match through both spellings, the
+given form and its realpath (`matchForms` in `worktree-clean.ts`, the
+`findWorktreeEntry` discipline); the report keeps git's paths, and
+`realPathOrNull` is now part of `worktrees.ts`'s exported compare
+discipline. Specs: fixtures start canonical (the runner's temp dir no
+longer decides which shape a test exercises), and a junction test pins
+the alias case on any Windows checkout. **Not yet manually verified by
+the owner.**
+
 ### T-0042 — Files vault extension: per-vault operations, plugin-managed repositories
 
 The Files panel treated every vault the same; a dedicated vault (the tickets
