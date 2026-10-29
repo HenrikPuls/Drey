@@ -49,6 +49,7 @@ import {
   ticketSections,
 } from './ticket-files';
 import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from './phase-dirs';
+import { blockedRefusal } from './blocked';
 import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, type DriftDetection } from './normalize';
 import { openTerminalAt } from './open-terminal';
@@ -934,6 +935,10 @@ class BoardService {
       }
       if (card.meta.run !== null) {
         return { ok: false, error: `${card.id} already has a live run — stop it first` };
+      }
+      const blocked = blockedRefusal(card);
+      if (blocked !== null) {
+        return { ok: false, error: blocked };
       }
       const workingPhase = snap.pipeline.find((p) => p.id === phaseId) ?? null;
       const repo =

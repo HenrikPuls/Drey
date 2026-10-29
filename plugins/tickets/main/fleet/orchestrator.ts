@@ -478,6 +478,9 @@ export class Orchestrator {
           if (card.meta.run !== null || card.meta.claimedBy !== null) {
             continue;
           }
+          if (card.blocked.length > 0) {
+            continue; // T-0050: a blocked ticket waits for its blockers — no ci move either
+          }
           const backoff = this.ciBackoff[card.id];
           if (backoff !== undefined && this.now().getTime() < Date.parse(backoff)) {
             continue;
@@ -769,6 +772,15 @@ export class Orchestrator {
         }
         if (!isAutoPhase(column.phase)) {
           continue; // manual columns are the owner's queue — silence there
+        }
+        if (card.blocked.length > 0) {
+          // T-0050: the dependency holds the ticket, not the pool —
+          // say so, or the column looks idle for no reason.
+          this.noteSkip(
+            card.id,
+            `dispatch holds ${card.id}: blocked by ${card.blocked.join(', ')} — the blockers must reach the terminal phase first`,
+          );
+          continue;
         }
         if (card.meta.claimedBy !== null) {
           this.noteSkip(card.id, `dispatch holds ${card.id}: claimed by ${card.meta.claimedBy} — the pool waits`);
