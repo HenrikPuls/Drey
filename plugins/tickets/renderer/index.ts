@@ -24,6 +24,12 @@ import {
   type TicketCard,
 } from '../shared/tickets';
 import { createColumnCollapseStore } from './column-collapse';
+import {
+  blockedBadge,
+  blocksBadge,
+  createHideBlockedStore,
+  needsBlockedConfirm,
+} from './blocked-view';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import type { ChainStatus, RunInfo } from '../main/fleet/protocol';
@@ -86,6 +92,9 @@ const views = new Set<BoardView>();
 /** Which phases are folded to their narrow strip (T-0005) — one state
  *  for every view, persisted as pure view state (never in the repo). */
 const collapse = createColumnCollapseStore(window.localStorage);
+
+/** The hide-blocked filter (T-0050) — pure view state like the fold. */
+const hideBlocked = createHideBlockedStore(window.localStorage);
 
 const notifyViews = (): void => {
   for (const view of views) {
@@ -210,6 +219,17 @@ async function loadWorktreesStatus(): Promise<void> {
 
 const runForCard = (id: string): RunInfo | null =>
   fleetRuns.find((r) => r.ticketId === id && LIVE_RUN_STATES.includes(r.state)) ?? null;
+
+/** A card by id from the current snapshot (the drop payload carries none). */
+const boardCard = (id: string): TicketCard | null => {
+  for (const column of snapshot?.columns ?? []) {
+    const found = column.tickets.find((t) => t.id === id);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return null;
+};
 
 const liveRuns = (): readonly RunInfo[] =>
   fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state));
@@ -363,6 +383,20 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
     parked.title = card.meta.parkedReason;
     meta.append(parked);
   }
+  const blockedLine = blockedBadge(card);
+  if (blockedLine !== null) {
+    const chip = el('span', 'tickets-chip tickets-chip-blocked', blockedLine);
+    chip.title =
+      `Blocked by ${card.blocked.join(', ')} — worker columns will not pick it up ` +
+      `until every blocker reaches the pipeline's terminal phase; unknown ids stay blocking`;
+    meta.append(chip);
+  }
+  const blocksLine = blocksBadge(card);
+  if (blocksLine !== null) {
+    const chip = el('span', 'tickets-chip tickets-chip-blocks', blocksLine);
+    chip.title = `Holds back ${card.blocks.join(', ')} — those tickets wait until this one reaches the terminal phase`;
+    meta.append(chip);
+  }
   if (card.meta.claimedBy !== null) {
     const claim = el('span', 'tickets-chip tickets-chip-claim', card.meta.claimedBy);
     claim.title = `claimed ${ageOf(card.meta.claimedAt)} ago`;
@@ -495,6 +529,28 @@ function collapsedColumnNode(column: BoardColumn): HTMLElement {
   return node;
 }
 
+/** The board's small toolbar (T-0050): the hide-blocked filter — pure
+ *  view state, it hides cards and never reorders anything. */
+function hideBlockedToolbar(api: DreyPluginApi): HTMLElement {
+  const toolbar = el('div', 'tickets-toolbar');
+  const hide = el('button', 'tickets-toolbar-btn');
+  hide.type = 'button';
+  const hidden = hideBlocked.isHidden();
+  if (hidden) {
+    hide.classList.add('tickets-toolbar-on');
+  }
+  hide.title = hidden ? 'Show blocked tickets' : 'Hide blocked tickets';
+  hide.setAttribute('aria-label', hide.title);
+  hide.setAttribute('aria-pressed', String(hidden));
+  hide.append(api.ui.icon('filter', 12));
+  hide.addEventListener('click', () => {
+    hideBlocked.setHidden(!hideBlocked.isHidden());
+    notifyViews();
+  });
+  toolbar.append(hide);
+  return toolbar;
+}
+
 function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
   if (collapse.isCollapsed(column.phase.id)) {
     return collapsedColumnNode(column);
@@ -560,6 +616,11 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
 
   const list = el('div', 'tickets-col-list');
   for (const card of column.tickets) {
+    // The hide-blocked filter (T-0050) — a hidden card is skipped in
+    // the view only: ordering, pins and the column count stay honest.
+    if (hideBlocked.isHidden() && card.blocked.length > 0) {
+      continue;
+    }
     list.append(cardNode(api, card, column));
   }
   if (column.tickets.length === 0) {
@@ -595,7 +656,16 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
     if (from === phase) {
       void runMutation('Reordering', () => invokeBoard('reorder', { phase, id, index }));
     } else {
-      void runMutation('Moving', () => invokeBoard('transition', { id, from, to: phase, index }));
+      // A blocked card dragged into an agent column asks first (T-0050):
+      // the drag payload holds only id/from, so the blocked state is
+      // read from the current snapshot at drop time.
+      const card = boardCard(id);
+      const handover = snapshot?.columns.find((c) => c.phase.id === phase)?.phase.handover ?? 'manual';
+      if (card !== null && needsBlockedConfirm(card, handover)) {
+        openBlockedMoveConfirm(api, card, from, phase, index);
+      } else {
+        void runMutation('Moving', () => invokeBoard('transition', { id, from, to: phase, index }));
+      }
     }
   });
   node.append(list);
@@ -658,6 +728,7 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     if (summary !== null) {
       root.append(summary);
     }
+    root.append(hideBlockedToolbar(api));
     const board = el('div', 'tickets-board');
     for (const column of snap.columns) {
       board.append(columnNode(api, column));
@@ -1315,6 +1386,49 @@ function openRunModal(api: DreyPluginApi, card: TicketCard): void {
     });
     host.append(form);
     worker.focus();
+  });
+}
+
+/** The blocked-move ask (T-0050): a blocked card dropped into a worker
+ *  column. The owner is the final authority — Cancel keeps the ticket
+ *  where it is, Move anyway performs the ordinary transition. */
+function openBlockedMoveConfirm(
+  api: DreyPluginApi,
+  card: TicketCard,
+  from: string,
+  to: string,
+  index: number,
+): void {
+  const close = api.ui.showModal((host) => {
+    const form = el('div', 'tickets-form');
+    form.append(el('h3', 'tickets-form-heading', `Move ${card.id} — it is blocked`));
+    form.append(
+      el(
+        'p',
+        'tickets-form-hint',
+        `${card.id} is blocked by ${card.blocked.join(', ')} — the blockers have not reached the ` +
+          'terminal phase, so the worker column will not pick it up until they do. You stay the final authority.',
+      ),
+    );
+    const actions = el('div', 'tickets-form-actions');
+    const cancel = el('button', undefined, 'Cancel');
+    cancel.type = 'button';
+    cancel.addEventListener('click', () => close());
+    const move = el('button', 'tickets-form-create', 'Move anyway');
+    move.type = 'button';
+    move.addEventListener('click', () => {
+      close();
+      void runMutation('Moving', () => invokeBoard('transition', { id: card.id, from, to, index }));
+    });
+    actions.append(cancel, move);
+    form.append(actions);
+    form.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        close();
+      }
+    });
+    host.append(form);
+    cancel.focus();
   });
 }
 

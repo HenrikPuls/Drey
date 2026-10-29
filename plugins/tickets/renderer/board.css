@@ -105,6 +105,37 @@
   font-family: var(--font-mono);
 }
 
+/* The board's small toolbar row (T-0050): sits above the columns. */
+.tickets-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 0;
+}
+
+.tickets-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-5);
+  cursor: pointer;
+}
+
+.tickets-toolbar-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-2);
+}
+
+.tickets-toolbar-on {
+  color: var(--accent-text);
+  background: var(--hover-bg);
+}
+
 /* ---- columns ---- */
 
 .tickets-col {
@@ -484,6 +515,17 @@
 
 .tickets-chip-parked {
   border-color: var(--status-modified);
+  color: var(--text-3);
+}
+
+/* The dependency chips (T-0050): blocked-by carries the warning hue,
+ * blocks stays quiet — it informs, it does not alarm. */
+.tickets-chip-blocked {
+  border-color: var(--status-modified);
+  color: var(--status-modified);
+}
+
+.tickets-chip-blocks {
   color: var(--text-3);
 }
 
