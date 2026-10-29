@@ -327,6 +327,75 @@ export interface MainChatOptions {
 }
 
 /**
+ * A file operation the Files panel is about to run (SDK 1.32): create,
+ * rename, move (drag & drop, within or across vaults), copy (paste /
+ * duplicate) or delete. Paths are vault-relative, forward-slashed.
+ * Defined here (DOM-free) so the plugin `shared/` ground — pure guards —
+ * can import the shapes on both sides.
+ */
+export type VaultFileOperation =
+  | { kind: 'create'; vaultId: string; path: string; type: 'file' | 'directory' }
+  | { kind: 'rename'; vaultId: string; fromPath: string; toPath: string }
+  | {
+      kind: 'move';
+      fromVaultId: string;
+      fromPath: string;
+      toVaultId: string;
+      toDir: string;
+    }
+  | {
+      kind: 'copy';
+      fromVaultId: string;
+      fromPath: string;
+      toVaultId: string;
+      toDir: string;
+    }
+  | { kind: 'delete'; vaultId: string; paths: readonly string[] };
+
+/**
+ * A handler's verdict on a `VaultFileOperation`: `allow` runs the base
+ * flow unchanged; `refuse` blocks it (the reason is shown in the panel's
+ * message dialog); `handle` lets the plugin perform the operation itself
+ * as a structured action instead of the raw file operation.
+ */
+export type VaultFileOperationVerdict =
+  | { action: 'allow' }
+  | { action: 'refuse'; reason: string }
+  | { action: 'handle' };
+
+/** What a handler's `perform` came back with. */
+export interface VaultFileOperationOutcome {
+  readonly ok: boolean;
+  readonly error?: string;
+  /** Final vault-relative path of a performed move/rename (tabs re-key). */
+  readonly path?: string;
+}
+
+/** Takes over / vetoes Files-panel operations for the plugin's vaults. */
+export interface VaultFileOperationsHandler {
+  check(operation: VaultFileOperation): Promise<VaultFileOperationVerdict>;
+  perform(operation: VaultFileOperation): Promise<VaultFileOperationOutcome>;
+}
+
+/** What the Files-panel context menu was opened on (SDK 1.32). */
+export interface FilesContextMenuTarget {
+  readonly vaultId: string;
+  readonly vaultName: string;
+  /** Vault-relative path; `''` is the vault root row. */
+  readonly path: string;
+  readonly type: 'file' | 'directory';
+}
+
+/** One plugin-contributed row in the Files-panel context menu. */
+export interface FilesContextMenuItem {
+  readonly label: string;
+  readonly title?: string;
+  /** Grayed out, unclickable. */
+  readonly disabled?: boolean;
+  run(): void | Promise<void>;
+}
+
+/**
  * The context handed to a plugin's main entry. Everything is scoped to the
  * activating plugin: `ipc.handle` registers into that plugin's method
  * allowlist, `config` reads that plugin's own config file, `log` prefixes
@@ -410,6 +479,17 @@ export interface MainPluginContext {
     onChanged(cb: (event: VaultChangeEvent) => void): Unsubscribe;
     /** Native save dialog rooted at the vault (Save-as), vault-relative result or null. */
     pickSavePath(suggestedName: string, opts?: VaultOpOptions): Promise<string | null>;
+    /**
+     * Marks a vault as managed by THIS plugin (SDK 1.32; label = the
+     * plugin's manifest name): the vault stays fully visible in the
+     * Source control panel, but its mutating actions are refused as
+     * "Managed by <name>" — the plugin owns the structured history.
+     * One mark per plugin — marking again moves the claim; `null`
+     * clears it (a re-detect that found nothing).
+     */
+    markManaged(vaultId: string | null): void;
+    /** The managing plugin's display name for a vault, or null. */
+    managedBy(vaultId: string): string | null;
   };
 
   /** The base app config (ADR-0010). Read-only from a plugin — no patching from main. */

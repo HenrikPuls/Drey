@@ -17,7 +17,16 @@
  */
 import type { ActionOutcome, ChatMessage, LlmCapabilities, LlmDebugEntry } from '../llm';
 import type { AppConfig } from '../app-config';
-import type { SectionSearchScope, VaultOpOptions } from './main-plugin-api';
+import type {
+  FilesContextMenuItem,
+  FilesContextMenuTarget,
+  SectionSearchScope,
+  VaultFileOperation,
+  VaultFileOperationOutcome,
+  VaultFileOperationsHandler,
+  VaultFileOperationVerdict,
+  VaultOpOptions,
+} from './main-plugin-api';
 import type {
   TagSearchHit,
   TagSearchQuery,
@@ -25,6 +34,18 @@ import type {
 import type { TagEntry, VaultFileEntry, VaultStatus } from '../ipc-api';
 import type { PluginManifest } from './manifest';
 import type { Unsubscribe } from './main-plugin-api';
+
+// The Files-seam shapes live in main-plugin-api.ts (DOM-free, so a
+// plugin's shared ground can import them on both sides); re-exported
+// here so a plugin renderer imports everything from one surface.
+export type {
+  FilesContextMenuItem,
+  FilesContextMenuTarget,
+  VaultFileOperation,
+  VaultFileOperationOutcome,
+  VaultFileOperationsHandler,
+  VaultFileOperationVerdict,
+} from './main-plugin-api';
 
 /** The text selection in the focused editor surface, as offsets into the buffer. */
 export interface PluginSelection {
@@ -594,6 +615,25 @@ export interface DreyPluginApi {
     listFiles(opts?: VaultOpOptions): Promise<readonly VaultFileEntry[]>;
     /** Vault content changed (refresh/external write/MCP write) — re-read anything cached. */
     onChanged(listener: () => void): Unsubscribe;
+  };
+
+  /**
+   * The Files-panel extension seam (SDK 1.32): veto or take over file
+   * operations, and contribute rows to the Files context menus. Handlers
+   * are consulted in registration order; the first `refuse` wins, then
+   * the first `handle`. One registration per plugin; a deactivated or
+   * quarantined plugin's registrations are cleared.
+   */
+  readonly files: {
+    registerOperations(handler: VaultFileOperationsHandler): Unsubscribe;
+    /**
+     * Rows appended to the Files-panel context menus, re-evaluated per
+     * open — a sync callback over the plugin's cached state, so the rows
+     * can be target-scoped (specific vaults or folders).
+     */
+    registerContextMenuItems(
+      items: (target: FilesContextMenuTarget) => readonly FilesContextMenuItem[],
+    ): Unsubscribe;
   };
 
   readonly commands: {

@@ -133,6 +133,22 @@ const plugin: MainPluginModule = {
       return found.repo;
     };
 
+    /**
+     * The plugin-managed guard (SDK 1.32, ADR-0082): a vault another
+     * plugin structurally manages keeps its full read surface — the
+     * free-form mutations are refused, the manager's own flows write
+     * the history. FIRST statement of every guarded handler: no repo
+     * needs to be located to refuse.
+     */
+    const refuseIfManaged = (vaultId: string): void => {
+      const manager = ctx.vault.managedBy(vaultId);
+      if (manager !== null) {
+        throw new Error(
+          `Managed by ${manager} — staging, committing, discarding, pulling and pushing are disabled for this vault.`,
+        );
+      }
+    };
+
     /** The merge in progress (`MERGE_HEAD` exists), with what is merged in. */
     const readOperation = async (repo: Repo): Promise<GitOperation | null> => {
       try {
@@ -198,6 +214,7 @@ const plugin: MainPluginModule = {
         operation,
         fetchedAt,
         stashCount,
+        managedBy: ctx.vault.managedBy(vaultId),
       };
     };
 
@@ -456,6 +473,7 @@ const plugin: MainPluginModule = {
 
     ctx.ipc.handle('stage', async (payload) => {
       const vaultId = vaultIdOf(payload);
+      refuseIfManaged(vaultId);
       const repo = await repoOf(vaultId);
       const paths = pathsOf(payload);
       // `-A` so a deleted file is staged as a deletion; no paths = the vault.
@@ -484,6 +502,7 @@ const plugin: MainPluginModule = {
      */
     ctx.ipc.handle('discard', async (payload) => {
       const vaultId = vaultIdOf(payload);
+      refuseIfManaged(vaultId);
       const repo = await repoOf(vaultId);
       const paths = pathsOf(payload);
       const state = await computeState(vaultId);
@@ -510,6 +529,7 @@ const plugin: MainPluginModule = {
      */
     ctx.ipc.handle('commit', async (payload) => {
       const vaultId = vaultIdOf(payload);
+      refuseIfManaged(vaultId); // covers amend and commit-and-push alike
       const repo = await repoOf(vaultId);
       const request = payload as { message?: unknown; amend?: unknown; push?: unknown };
       const message = typeof request.message === 'string' ? request.message : '';
@@ -591,6 +611,7 @@ const plugin: MainPluginModule = {
 
     ctx.ipc.handle('pull', async (payload) => {
       const vaultId = vaultIdOf(payload);
+      refuseIfManaged(vaultId);
       const repo = await repoOf(vaultId);
       const before = await headOf(repo);
       try {
@@ -630,6 +651,7 @@ const plugin: MainPluginModule = {
 
     ctx.ipc.handle('push', async (payload) => {
       const vaultId = vaultIdOf(payload);
+      refuseIfManaged(vaultId);
       const repo = await repoOf(vaultId);
       const args = await pushArguments(vaultId, repo);
       await cancellable(vaultId, (signal) => git.run(repo.root, args, { signal }));

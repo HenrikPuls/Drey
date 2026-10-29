@@ -36,6 +36,13 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
     if (vault === null || state.busy !== null) {
       return;
     }
+    if (vault.managedBy !== null) {
+      await api.ui.showMessage(
+        `Managed by ${vault.managedBy} — this repository's history is written by the plugin.`,
+        'Source control',
+      );
+      return;
+    }
     const vaultId = vault.vaultId;
     const merging = vault.operation !== null;
     const amend = state.amend && !merging;
@@ -226,6 +233,13 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
     if (vault === null) {
       return;
     }
+    if (method !== 'fetch' && vault.managedBy !== null) {
+      await api.ui.showMessage(
+        `Managed by ${vault.managedBy} — this repository's history is written by the plugin.`,
+        'Source control',
+      );
+      return;
+    }
     if (method === 'pull' && !(await session.cleanTabsOrExplain(vault.vaultId, 'A pull'))) {
       return;
     }
@@ -235,6 +249,13 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
   const discard = async (change: GitChange): Promise<void> => {
     const vault = session.currentOk();
     if (vault === null) {
+      return;
+    }
+    if (vault.managedBy !== null) {
+      await api.ui.showMessage(
+        `Managed by ${vault.managedBy} — this repository's history is written by the plugin.`,
+        'Source control',
+      );
       return;
     }
     if (session.dirtyDocs(vault.vaultId).some((d) => d.path === change.path)) {

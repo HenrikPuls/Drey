@@ -12,7 +12,7 @@ import { McpHttpTransport, PluginMcpTools, VaultTools, createVaultMcpServer } fr
 import { AssistantToolbox, McpClientManager, createMcpClientManager } from './mcp-client';
 import { NoteManager } from './note-manager';
 import { OwnWriteLedger } from './own-write-ledger';
-import { PluginHost, PluginInstaller, type PluginHostDeps } from './plugin-host';
+import { ManagedVaults, PluginHost, PluginInstaller, type PluginHostDeps } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
 import { UpdateService } from './updater/update-service';
@@ -182,6 +182,10 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
     llm,
     llmTasks,
   );
+  // The plugin-managed vault registry (SDK 1.32): plugins claim their
+  // structured vaults through ctx.vault.markManaged, the git plugin's
+  // read-only guard reads them back through ctx.vault.managedBy.
+  const managedVaults = new ManagedVaults();
   // The plugin host registers its method handlers during activate().
   // Since milestone 61 discovery+activation STARTS before the window is
   // created and runs while the renderer parses its bundle — every IPC
@@ -199,6 +203,7 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
     llm,
     llmTasks,
     vaultTools,
+    managedVaults,
     assistantToolbox,
     mcpTools: pluginMcpTools,
     confirmWrite: (request) => deps.mcpWriteBridge.requestConfirmation(request),

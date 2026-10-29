@@ -39,6 +39,7 @@ import type { PluginMcpTools, VaultTools } from '../mcp';
 import type { AssistantToolbox } from '../mcp-client';
 import type { VaultManager } from '../vault-manager';
 import type { VaultChangeAnnouncer } from '../vault-change-announcer';
+import { ManagedVaults } from './managed-vaults';
 import { PluginConfigStore } from './plugin-config-store';
 import { ACTIONS_CONFIG_KEY, ACTIONS_PLUGIN_ID, migrateLegacyActions } from './actions-migration';
 import {
@@ -89,6 +90,13 @@ export interface PluginHostDeps {
    * never gets the instance itself.
    */
   readonly vaultTools: VaultTools;
+  /**
+   * The plugin-managed vault registry (SDK 1.32, ADR-0082): `ctx.vault
+   * .markManaged` writes here, the git plugin's read-only guard reads
+   * through `ctx.vault.managedBy`. Base-owned so plugins never talk to
+   * each other (ADR-0044).
+   */
+  readonly managedVaults: ManagedVaults;
   /**
    * The assistant's external tool set (ADR-0063): `web_fetch` + the
    * user's MCP servers, wired in when a plugin passes `externalTools`.
@@ -595,6 +603,8 @@ export class PluginHost {
       for (const dispose of plugin.disposables) {
         this.runGuarded(dispose, 'disposable');
       }
+      // A deactivated plugin manages no vault anymore (SDK 1.32).
+      this.deps.managedVaults.clearPlugin(id);
     }
     this.activated.clear();
   }
@@ -634,6 +644,8 @@ export class PluginHost {
       return true;
     } catch (error) {
       this.activated.delete(id);
+      // A quarantined plugin manages no vault anymore (SDK 1.32).
+      this.deps.managedVaults.clearPlugin(id);
       this.discovered.set(id, {
         ...discovered,
         status: 'failed',
@@ -661,7 +673,7 @@ export class PluginHost {
       pluginId: id,
       manifest: plugin.discovered.manifest,
       app: this.buildAppContext(plugin, track),
-      vault: buildVaultContext(id, this.deps, (cb) => {
+      vault: buildVaultContext(id, this.deps, plugin.discovered.manifest.name, (cb) => {
         this.vaultChangeCallbacks.push(cb);
         return track(() => removeItem(this.vaultChangeCallbacks, cb));
       }),

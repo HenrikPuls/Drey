@@ -25,6 +25,7 @@ import {
 } from '../shared/tickets';
 import { createColumnCollapseStore } from './column-collapse';
 import { createTicketsSettingsPage } from './settings-page';
+import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import type { ChainStatus, RunInfo } from '../main/fleet/protocol';
 import {
   CONTEXT_WARN,
@@ -1970,6 +1971,18 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     backend = api.backend;
     api.ui.registerWidget(createTicketsWidget(api));
     api.ui.registerSettingsPage(createTicketsSettingsPage(api));
+
+    // The Files-panel seam (T-0042, SDK 1.32): veto/takeover over the
+    // board's ground, and the per-target context rows. Both read the
+    // module-level board store, so they follow every board-changed
+    // refresh — including a re-registered tickets vault.
+    const filesDeps = {
+      snapshot: () => snapshot,
+      invoke: invokeBoard,
+      showMessage: (message: string, title?: string) => api.ui.showMessage(message, title),
+    };
+    api.files.registerOperations(createFilesOperationsHandler(filesDeps));
+    api.files.registerContextMenuItems(ticketsContextMenuItems(filesDeps));
 
     // The fleet daemon's chain log: a readonly, tail-following editor tab
     // (T-0007 review finding 2). Stateless — the session snapshot reopens
