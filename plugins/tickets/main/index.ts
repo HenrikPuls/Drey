@@ -957,9 +957,16 @@ class BoardService {
       // The context pack (T-0048): repo instructions, the worktree's diff
       // stat, and the previous run's gate failure on a retry — the file
       // reads stay here, the composer stays pure.
-      const repoInstructions = repo.path === null ? null : await readRepoInstructions(repo.path);
-      const diffStat =
-        repo.path === null ? null : await worktreeDiffStat(this.git, worktreePathFor(vault.path, repo, card.id), repo.branch);
+      let repoInstructions: string | null = null;
+      let diffStat: string | null = null;
+      if (repo !== null && repo.path !== null) {
+        repoInstructions = await readRepoInstructions(repo.path);
+        diffStat = await worktreeDiffStat(
+          this.git,
+          worktreePathFor(vault.path, repo, card.id),
+          repo.branch,
+        );
+      }
       const gateFailure = await this.lastGateFailure(card.id);
       const composed = composeRunRequest({
         card,

@@ -34,7 +34,12 @@ compares missed too). Boundaries now match through both spellings, the
 given form and its realpath (`matchForms` in `worktree-clean.ts`, the
 `findWorktreeEntry` discipline); the report keeps git's paths, and
 `realPathOrNull` is now part of `worktrees.ts`'s exported compare
-discipline. Specs: fixtures start canonical (the runner's temp dir no
+discipline. Second, caught by the first `npm run dev`/build since the
+merge: the T-0048 context pack in `plugins/tickets/main/index.ts`
+narrowed `repo.path` but not `repo` itself (`RepoRef | null`), so
+`plugins/tsconfig.main.json` — compiled by the build step, not by the
+four typecheck gates — failed with five errors; the guard now checks
+both. Specs: fixtures start canonical (the runner's temp dir no
 longer decides which shape a test exercises), and a junction test pins
 the alias case on any Windows checkout. **Not yet manually verified by
 the owner.**
