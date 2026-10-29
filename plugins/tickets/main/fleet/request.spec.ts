@@ -84,6 +84,9 @@ function base(over: Partial<Parameters<typeof composeRunRequest>[0]> = {}): Para
     permissionMode: 'accept-edits',
     gitPath: '',
     workerChoice: null,
+    repoInstructions: null,
+    diffStat: null,
+    gateFailure: null,
     ...over,
   };
 }
@@ -162,5 +165,24 @@ describe('composeRunRequest', () => {
       base({ ticketText: TICKET.replace('- [ ] `npm run verify:unit` — exits 0', 'prose only') }),
     );
     expect(noGate.ok).toBe(false);
+  });
+
+  it('threads the context pack into the instruction and reports its truncations', () => {
+    const failure = [...Array(80).keys()].map((i) => `row ${i + 1}: assertion ${i + 1} failed`).join('\n');
+    const result = composeRunRequest(
+      base({
+        repoInstructions: '# Repo rules',
+        diffStat: ' src/a.ts | 2 +-',
+        gateFailure: `\`npm run verify:unit\` failed\n\n${failure}`,
+        caps: { gateFailureLines: 40, gateFailureBytes: 4096, diffStatLines: 50, diffStatBytes: 4096 },
+      }),
+    );
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.instruction).toContain('# Repo rules');
+    expect(result.request.instruction).toContain('src/a.ts | 2 +-');
+    expect(result.request.instruction).toContain('row 80: assertion 80 failed');
+    expect(result.truncations).toEqual([{ section: 'gateFailure', originalSize: Buffer.byteLength(`\`npm run verify:unit\` failed\n\n${failure}`, 'utf8') }]);
   });
 });

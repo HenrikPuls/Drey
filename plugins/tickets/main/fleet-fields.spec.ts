@@ -4,6 +4,7 @@ import {
   newTicketFileText,
   parseTicketFile,
   patchTicketFile,
+  ticketSections,
 } from './ticket-files';
 import { parseHandover } from '../shared/tickets';
 import {
@@ -11,6 +12,7 @@ import {
   parseWorkerValue,
   resolveAssignment,
 } from './fleet/assignment';
+import { DEFAULT_FLEET_CAPS } from './fleet/protocol';
 
 /**
  * The fleet's assignment brain (M84, the owner's ruling): ticket pin >
@@ -179,29 +181,121 @@ describe('worker values and the assignment ladder', () => {
   });
 });
 
-describe('composeInstruction — the deterministic run brief', () => {
-  it('carries identity, checkout, gate and the phase prompt', () => {
-    const text = composeInstruction({
-      ticketId: 'T-0007',
-      title: 'Add the thing',
-      repo: 'lariscus',
-      branch: 't/T-0007',
-      worktreePath: 'C:\\fleet\\worktrees\\lariscus-T-0007',
-      phase: 'build',
-      description: 'It should work.',
-      plan: 'Step one. Step two.',
-      prompt: 'Follow the house style.',
-      acceptance: ['npm run verify:unit'],
-      ticketFile: 'E:/tickets/tickets/build/T-0007.md',
-    });
+describe('composeInstruction — the context pack (T-0048)', () => {
+  const baseInput = (over: Partial<Parameters<typeof composeInstruction>[0]> = {}): Parameters<typeof composeInstruction>[0] => ({
+    ticketId: 'T-0007',
+    title: 'Add the thing',
+    repo: 'lariscus',
+    branch: 't/T-0007',
+    worktreePath: 'C:\\fleet\\worktrees\\lariscus-T-0007',
+    phase: 'build',
+    description: 'It should work.',
+    plan: 'Files: a.ts. Steps: one.',
+    prompt: 'You are the build step. Work the plan.',
+    acceptance: ['npm run verify:unit'],
+    ticketFile: 'E:/tickets/tickets/build/T-0007.md',
+    repoInstructions: '# Repo rules\nFollow the house style.',
+    diffStat: null,
+    gateFailure: null,
+    caps: DEFAULT_FLEET_CAPS,
+    ...over,
+  });
+
+  it('orders the pack: repo instructions, phase template, plan, then the variable parts', () => {
+    const { text } = composeInstruction(baseInput());
+    const order = [
+      text.indexOf('# Repo rules'),
+      text.indexOf('You are the build step.'),
+      text.indexOf('## Plan'),
+      text.indexOf('You are working ticket T-0007'),
+    ];
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(order.every((at) => at >= 0)).toBe(true);
+  });
+
+  it('the prefix through the plan header is byte-identical for two tickets of the same repo and phase', () => {
+    const a = composeInstruction(baseInput()).text;
+    const b = composeInstruction(
+      baseInput({
+        ticketId: 'T-0042',
+        title: 'A different ticket entirely',
+        description: 'Another description.',
+        plan: 'Files: b.ts. Steps: two.',
+        diffStat: ' src/x.ts | 2 +-\n 1 file changed',
+        gateFailure: '`npm run verify:unit` failed\n\nexit 1',
+      }),
+    ).text;
+    const prefixOf = (text: string): string => text.slice(0, text.indexOf('## Plan'));
+    expect(prefixOf(a)).toBe(prefixOf(b));
+  });
+
+  it('a repo without agent instructions starts straight at the phase template', () => {
+    const { text } = composeInstruction(baseInput({ repoInstructions: null }));
+    expect(text.startsWith('You are the build step.')).toBe(true);
+  });
+
+  it('carries the checkout, the ticket file and the gate commands in the variable parts', () => {
+    const { text } = composeInstruction(baseInput());
     expect(text).toContain('The ticket file: E:/tickets/tickets/build/T-0007.md');
     expect(text).toContain('do not search the disk');
     expect(text).toContain('ticket T-0007 — Add the thing');
     expect(text).toContain('branch t/T-0007');
     expect(text).toContain('repo lariscus');
     expect(text).toContain('It should work.');
-    expect(text).toContain('Step one. Step two.');
-    expect(text).toContain('Follow the house style.');
     expect(text).toContain('- `npm run verify:unit`');
+    expect(text).toContain('Completion discipline');
+  });
+
+  it('a retry carries the previous run\'s gate failure as its tail; a first run has no such section', () => {
+    const failure = [...Array(80).keys()].map((i) => `row ${i + 1}: assertion ${i + 1} failed`).join('\n');
+    const retry = composeInstruction(baseInput({ gateFailure: `\`npm test\` failed\n\n${failure}` }));
+    expect(retry.text).toContain('The previous run failed the machine gate — fix this first');
+    // The tail: the LAST lines survive, the head does not.
+    expect(retry.text).toContain('row 80: assertion 80 failed');
+    expect(retry.text).not.toContain('row 1: assertion 1 failed');
+    expect(retry.truncations).toEqual([{ section: 'gateFailure', originalSize: Buffer.byteLength(`\`npm test\` failed\n\n${failure}`, 'utf8') }]);
+
+    const first = composeInstruction(baseInput());
+    expect(first.text).not.toContain('The previous run failed the machine gate');
+    expect(first.truncations).toEqual([]);
+  });
+
+  it('the diff stat is injected head-capped and reported; nothing leaks when there is none', () => {
+    const stat = [...Array(80).keys()].map((i) => ` src/file${i + 1}.ts | ${i + 1} ++++`).join('\n');
+    const withStat = composeInstruction(baseInput({ diffStat: stat }));
+    expect(withStat.text).toContain('git diff --stat');
+    expect(withStat.text).toContain('src/file1.ts');
+    expect(withStat.text).not.toContain('src/file80.ts');
+    expect(withStat.truncations).toEqual([{ section: 'diffStat', originalSize: Buffer.byteLength(stat, 'utf8') }]);
+
+    const without = composeInstruction(baseInput({ diffStat: null }));
+    expect(without.text).not.toContain('git diff --stat');
+    expect(without.truncations).toEqual([]);
+  });
+
+  it('custom caps replace the defaults', () => {
+    const failure = [...Array(10).keys()].map((i) => `line ${i + 1}`).join('\n');
+    const { text } = composeInstruction(
+      baseInput({ gateFailure: failure, caps: { gateFailureLines: 2, gateFailureBytes: 4096, diffStatLines: 50, diffStatBytes: 4096 } }),
+    );
+    expect(text).toContain('line 9\nline 10');
+    expect(text).not.toContain('line 8');
+  });
+
+  it('no ## Log content ever leaks into an instruction', () => {
+    // ticketSections is what feeds the composer; a Log section must not ride along.
+    const ticket = `${newTicket()}
+## Plan
+
+Do it in two steps.
+
+## Log
+
+- 2026-10-18 owner@box SECRET-LOG-LINE
+`;
+    const sections = ticketSections(ticket);
+    expect(sections.plan).not.toContain('SECRET-LOG-LINE');
+    const { text } = composeInstruction(baseInput({ plan: sections.plan, description: sections.description }));
+    expect(text).not.toContain('SECRET-LOG-LINE');
   });
 });

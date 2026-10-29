@@ -25,6 +25,7 @@ import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
 import { prepareWorktree as defaultPrepareWorktree, type PreparedWorktree } from './worktrees';
 import { capTail, SANITY_CAP } from './capping';
 import { TelemetryFold, type RunTelemetry } from './telemetry';
+import { worktreePathFor } from './context-pack';
 
 const execAsync = promisify(nodeExec);
 const execFileAsync = promisify(nodeExecFile);
@@ -586,11 +587,7 @@ export class RunSupervisor {
 
     const id = `R-${this.stamp().replaceAll(/[-:.]/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 6)}`;
     const dir = path.join(this.deps.root, 'runs', id);
-    const worktreePath = path.join(
-      this.deps.root,
-      'worktrees',
-      `${request.repoPath.split(/[\\/]/).at(-1) ?? 'repo'}-${request.ticketId}`,
-    );
+    const worktreePath = worktreePathFor(this.deps.root, request.repoPath, request.ticketId);
 
     let prepared: PreparedWorktree;
     try {
