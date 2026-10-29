@@ -24,6 +24,7 @@ import {
   type MutationResult,
   type TicketCard,
 } from '../shared/tickets';
+import { cardOrderTargets } from './card-order';
 import { createColumnCollapseStore } from './column-collapse';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
@@ -386,7 +387,7 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
   });
   node.addEventListener('contextmenu', (event) => {
     event.preventDefault();
-    openCardMenu(api, card, event, runMutation, (path) => openTicketFile(api, path));
+    openCardMenu(api, card, column, event, runMutation, (path) => openTicketFile(api, path));
   });
   node.addEventListener('dragstart', (event) => {
     draggedId = card.id;
@@ -1804,6 +1805,7 @@ function mountChainLog(api: DreyPluginApi, host: HTMLElement): () => void {
 function openCardMenu(
   api: DreyPluginApi,
   card: TicketCard,
+  column: BoardColumn,
   event: MouseEvent,
   run: (label: string, invoke: () => Promise<unknown>) => Promise<MutationResult>,
   openFile: (path: string) => void,
@@ -1908,6 +1910,52 @@ function openCardMenu(
         });
     });
     menu.append(button);
+  }
+  {
+    // T-0053: move to a column end — the same `reorder` a drag performs
+    // (drop index 0 / the column's end), so a menu move cannot drift
+    // from drag semantics: the top pins only this ticket, the bottom
+    // pins the whole column above it. Disabled when the card already
+    // sits at that end.
+    const targets = cardOrderTargets(column.tickets, card.id);
+    const moves: readonly {
+      readonly label: string;
+      readonly busy: string;
+      readonly index: number | null;
+      readonly title: string;
+      readonly blocked: string;
+    }[] = [
+      {
+        label: 'Move to top',
+        busy: 'Moving to top',
+        index: targets.top,
+        title: 'Same as dragging to the top — pins this ticket first; the rest falls to derived order',
+        blocked: 'This ticket is already first in the column',
+      },
+      {
+        label: 'Move to bottom',
+        busy: 'Moving to bottom',
+        index: targets.bottom,
+        title: 'Same as dragging to the bottom — pins the whole column in its current order with this ticket last',
+        blocked: 'This ticket is already last in the column',
+      },
+    ];
+    for (const move of moves) {
+      const button = el('button', 'tickets-menu-item', move.label);
+      button.type = 'button';
+      button.disabled = move.index === null;
+      button.title = move.index === null ? move.blocked : move.title;
+      button.addEventListener('click', () => {
+        if (move.index === null) {
+          return;
+        }
+        menu.remove();
+        void run(move.busy, () =>
+          invokeBoard('reorder', { phase: column.phase.id, id: card.id, index: move.index }),
+        );
+      });
+      menu.append(button);
+    }
   }
   if (card.pinned) {
     item('Unpin from order', () => {
