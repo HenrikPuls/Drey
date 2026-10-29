@@ -145,6 +145,12 @@ export interface TicketMeta {
   readonly claimedAt: string | null;
   readonly run: TicketRun | null;
   readonly references: readonly string[];
+  /**
+   * The `blocked-by:` ids as written (T-0050): never resolved or
+   * filtered here — the dependency pass turns them into the derived
+   * `blocked` state; empty = the field is absent.
+   */
+  readonly blockedBy: readonly string[];
   readonly parkedReason: string | null;
   readonly parkedAt: string | null;
   /** phase id -> most recent `entered-<phase>` stamp as written. */
@@ -162,6 +168,14 @@ export interface TicketCard {
   readonly pinned: boolean;
   /** The resolved fleet worker for this card (M84 display resolution). */
   readonly worker: string;
+  /**
+   * The OPEN blockers (T-0050): referenced ids that have not reached the
+   * terminal phase, unknown ids included; `[]` = unblocked. Derived on
+   * every board assembly, never stored.
+   */
+  readonly blocked: readonly string[];
+  /** The derived inverse: ids currently blocked by this card (open edges). */
+  readonly blocks: readonly string[];
   readonly issues: readonly TicketIssue[];
 }
 

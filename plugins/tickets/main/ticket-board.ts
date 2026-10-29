@@ -22,6 +22,7 @@ import {
   type TicketPriority,
 } from '../shared/tickets';
 import { checkpointPhaseIds } from './fleet/chain';
+import { runDependencyPass } from './blocked';
 import { parseTicketFile, ticketPathParts } from './ticket-files';
 
 const PHASE_ID = /^[a-z][a-z0-9-]*$/;
@@ -617,9 +618,12 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
   const repoNames = new Set(reposParse.repos.map((r) => r.name));
 
   // Parse every ticket; group by directory. Cards stay mutable through
-  // the duplicate pass, then flow into columns as-is (structural match).
+  // the duplicate and dependency passes, then flow into columns as-is
+  // (structural match).
   interface AssemblyCard extends TicketCard {
     issues: TicketIssue[];
+    blocked: readonly string[];
+    blocks: readonly string[];
   }
   const byPhase = new Map<string, AssemblyCard[]>();
   for (const file of input.files) {
@@ -662,6 +666,8 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
         input.defaultWorker,
       ),
       issues: [...parsed.issues],
+      blocked: [],
+      blocks: [],
     };
     const list = byPhase.get(parts.phase) ?? [];
     list.push(card);
@@ -688,6 +694,27 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     }
   }
 
+  // The dependency pass (T-0050) runs on the final card list in column
+  // order (configured phases first, then unknown directories sorted —
+  // a duplicate id resolves to the first occurrence): every card gains
+  // its derived blocked/blocks state, and the pass's findings join the
+  // per-card issues. Blocked is derived, never stored.
+  const knownDirs = new Set([...phaseIds, '_meta']);
+  const orderedCards: readonly AssemblyCard[] = [
+    ...phases.flatMap((phase) => byPhase.get(phase.id) ?? []),
+    ...[...byPhase.keys()]
+      .filter((dir) => !knownDirs.has(dir))
+      .sort()
+      .flatMap((dir) => byPhase.get(dir) ?? []),
+  ];
+  const terminalPhase = phases.length > 0 ? phases[phases.length - 1]!.id : '';
+  const dependencies = runDependencyPass(orderedCards, terminalPhase);
+  for (const card of orderedCards) {
+    card.blocked = dependencies.blocked.get(card.id) ?? [];
+    card.blocks = dependencies.blocks.get(card.id) ?? [];
+    card.issues.push(...(dependencies.issuesByCard.get(card.id) ?? []));
+  }
+
   // Columns: configured phases in order, then unknown directories.
   const columnKey = (phase: string) => (card: TicketCard): OrderKey => ({
     id: card.id,
@@ -703,7 +730,6 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
       tickets: orderColumn(tickets, orderParse.pins[phase.id], columnKey(phase.id)),
     };
   });
-  const knownDirs = new Set([...phaseIds, '_meta']);
   for (const dir of [...byPhase.keys()].sort()) {
     if (!knownDirs.has(dir)) {
       issues.push({ level: 'warning', message: `directory "${dir}" is not a phase in pipeline.md` });
