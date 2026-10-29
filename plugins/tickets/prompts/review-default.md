@@ -8,7 +8,8 @@ adopt them.
 
 - Read the ticket first (Description, Plan, Acceptance criteria), then
   the branch's diff against its base. Read surrounding code only where
-  the diff needs it, and cap large outputs with head/tail or line ranges.
+  the diff needs it — by line range, not whole files; for logs and long
+  command output take the head or tail, never the whole file.
 - Check in this order:
   1. Correctness: the behaviour the ticket asks for, edge cases,
      error paths.

@@ -20,6 +20,51 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### T-0048 — Run token telemetry, output capping and the plan context pack
+
+**Not yet manually verified by the owner.** Cost visibility and context
+hygiene for the fleet (ADR-0080):
+
+- **Telemetry per run**, folded live into `run.json` (`RunInfo`): `usage`
+  (`input`/`cacheRead`/`cacheCreation`/`output`, summed over the run's
+  model calls — a counter the provider never reports stays `null`, never
+  0), `lastTurnContext` (the LAST assistant turn's input side — the real
+  context size; the providers' aggregates are cumulative and never used
+  for it), `turns`, `readCalls` (read/grep/glob), `tokensBeforeFirstWrite`
+  (the exploration metric), plus `gateResult`, `model`, `phase`,
+  `handoverMode: 'fresh'` (the field exists for T-0049). Both adapters
+  emit one `turnUsage` per model call and the tool name on tool-call
+  notes; the board's lanes and the takeover tab show `ctx · turns ·
+  reads` chips. `GET /report` on the runner groups tokens by ticket,
+  phase and model, sorted by total (curl-able; pre-T-0048 records fall
+  back to their cumulative counters).
+- **Output capping**: a gate failure is stored multi-line but
+  sanity-bounded (400 lines / 64 KiB) on the record, and injected into a
+  retry's instruction as a configurable tail (default 40 lines / 4096
+  bytes); the worktree's diff stat rides every instruction as a
+  configurable head (50 / 4096). Keys `fleet.cap.*` (Settings → Tickets
+  → Fleet); every application is logged with `truncated: true,
+  originalSize`. The ticket Log keeps its single-line discipline
+  (`shortGateLine`).
+- **The plan as context pack**: `composeInstruction` now orders every
+  instruction repo agent instructions (verbatim, `CLAUDE.md` preferred)
+  → phase template → `## Plan` verbatim → variable parts (who/where,
+  description, diff stat, the previous run's gate failure on a retry,
+  gate commands, completion discipline) — the prefix up to the plan is
+  byte-identical across runs of the same repo and phase, so a warm
+  prompt cache survives. A red-gate retry is a fresh run carrying the
+  ticket's most recent `gateFailure` (owner-started and dispatched
+  retries behave identically). The plan prompt now demands six fields
+  (Files, Interfaces, Decisions, Pitfalls, **Verification commands**,
+  Out of scope); build/review prompts sharpen tool-output guidance
+  (line ranges, head/tail for logs).
+- Specs: `capping.spec.ts`, `telemetry.spec.ts`, `report.spec.ts` (new),
+  fixture-driven per-adapter multi-turn cases in `providers.spec.ts`,
+  the fold and gate verdicts in `runs.spec.ts`, the pack order/prefix/
+  retry in `fleet-fields.spec.ts` + `request.spec.ts`, the retry
+  dispatch in `orchestrator.spec.ts`, `telemetryParts` in
+  `worker-status.spec.ts`.
+
 ### req-52 — Test splitting: scoped day-to-day runs, full gate at release (owner request, outside the list)
 
 The two unit suites grew past 240

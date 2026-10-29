@@ -20,6 +20,9 @@ write down is paid for again by the build step.
     alternatives that look tempting.
   - **Pitfalls:** known traps, ordering constraints, things that look
     related but must stay untouched.
+  - **Verification commands:** exactly what the machine gate will run
+    for each step — non-interactive, exiting non-zero when the work is
+    missing. They become the ticket's acceptance criteria.
   - **Out of scope:** what the build must not do.
 - Then the steps: concrete, ordered, each naming the files or modules it
   touches and how its result is verified. Small, shippable steps win over

@@ -763,22 +763,39 @@ While the run is live, its column shows a **Workers** strip with one
 lane per run: a traffic light (green working, amber context nearly full
 or stopping, red stalled for five minutes — always with the state in
 words), the worker's current activity, its context window, token usage
-and age; the card carries a ▶ chip. A lane is folded to one line until
-you unfold it (a lane that needs a look opens by itself). In a lane you
-can **Take over**, **Watch** (tail the run's output), **Steer** (send a
-message into the live run — it lands in the ticket's Log) or **Stop**
-it. **Take over** opens a tab with the worker's conversation and a
-prompt box: you can **Interrupt** the running turn (the session and its
-context stay), drive the worker with your own prompts and **Hand back**
-the run — a worker that is idle by then ends the run and the gate
-decides. While you hold a run the runner does not end it. Only OpenCode
-workers can be taken over for now. The **Log** button opens the fleet
-daemon's log in a read-only tab. When a run ends, the ticket's Log line
-records the tokens it used (and the cost, when the provider reports
-one — flat coding plans report none). When the worker finishes, the runner executes the
-ticket's **acceptance criteria** (the backticked commands under Plan):
-all green means the ticket moves to the next phase on its own; a
-failure parks the reason in the Log and leaves the ticket where it is.
+and age, plus the run's telemetry chips — **ctx** (the last turn's real
+context size), **turns** (model calls) and **reads** (read/search tool
+calls) — once the worker reports them; the card carries a ▶ chip. A lane
+is folded to one line until you unfold it (a lane that needs a look
+opens by itself). In a lane you can **Take over**, **Watch** (tail the
+run's output), **Steer** (send a message into the live run — it lands in
+the ticket's Log) or **Stop** it. **Take over** opens a tab with the
+worker's conversation and a prompt box: you can **Interrupt** the
+running turn (the session and its context stay), drive the worker with
+your own prompts and **Hand back** the run — a worker that is idle by
+then ends the run and the gate decides. While you hold a run the runner
+does not end it. Only OpenCode workers can be taken over for now. The
+**Log** button opens the fleet daemon's log in a read-only tab. When a
+run ends, the ticket's Log line records the tokens it used (and the
+cost, when the provider reports one — flat coding plans report none).
+When the worker finishes, the runner executes the ticket's **acceptance
+criteria** (the backticked commands under Plan): all green means the
+ticket moves to the next phase on its own; a failure parks the reason in
+the Log and leaves the ticket where it is — the next run of that ticket
+carries the failed gate's output (its tail) so the worker fixes it first
+and continues the branch instead of starting over.
+
+Every run's instruction is a **context pack**, assembled in a fixed
+order: the repo's own agent instructions (its `CLAUDE.md` or
+`AGENTS.md`), the phase's prompt, the ticket's plan verbatim, then the
+run-specific parts (the worktree's diff so far, and on a retry the gate
+failure). Long parts are capped — the gate failure keeps its tail, the
+diff stat its head (40 lines / 4 KB and 50 lines / 4 KB by default; the
+four caps are number fields under Settings → Tickets → Fleet). A
+terminal can read the cost overview the same way the board does:
+`GET /report` on the runner (see `plugins/tickets/FLEET.md`) groups the
+runs' tokens by ticket, phase and model, and shows how much of each
+run's input was spent before its first write — the exploration cost.
 
 Runs survive closing Drey — the runner is its own small process — and,
 for OpenCode workers, even a restart of the runner: the new runner takes the
