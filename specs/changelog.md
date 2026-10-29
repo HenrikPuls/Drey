@@ -67,8 +67,8 @@ into one mono `·` string. Now:
 
 Specs: `transcript-view.spec.ts`, `transcript-text.spec.ts` (new),
 `watch-format.spec.ts` (structured blocks, parallel pairing, fragment
-seal, outcome by target). Manual: the takeover paragraph. **Not yet
-manually verified by the owner.**
+seal, outcome by target). Manual: the takeover paragraph. Owner-verified
+(signed off 2026-10-29).
 
 ### Fix — fleet: cleanup survives path aliases (`RUNNER~1`, junctions); CI green again
 
