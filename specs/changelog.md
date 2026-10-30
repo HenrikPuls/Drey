@@ -39,7 +39,7 @@ with any real entry is not touched and stays listed. The report gains
 FLEET.md's cleanup paragraph says so. Specs: `worktree-clean.spec.ts`
 (link-only folders swept with the link targets intact; real content,
 protected paths and stale move-asides kept; `legacyOnly` leaves the home
-base alone). **Not yet manually verified by the owner.**
+base alone). Owner-verified (signed off 2026-10-30).
 
 ### req-66 — Readable board issues, one toolbar row
 
