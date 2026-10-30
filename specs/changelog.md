@@ -20,7 +20,7 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
-### req-69 — The ticket card's context menu, regrouped
+### req-70 — The ticket card's context menu, regrouped
 
 Owner request, outside the list (2026-10-30). The card menu had grown to some twenty rows — up to eight
 "Past run — …" rows in the middle of the actions, a terminal row as wide
@@ -49,6 +49,25 @@ Renderer only, no SDK, IPC or format change. Manual: the board section's
 context-menu paragraph. e2e: `e2e/ticket-card-menu.spec.ts` (finished
 runs pushed as a `fleet-changed` snapshot — the submenu, its keyboard
 round trip, the claim rows for a free, an own and a foreign claim).
+
+### req-69 — The board's view controls move into the Tickets header
+
+Owner request, outside the
+list. req-66 had left one toolbar row above the columns holding only the
+hide-blocked filter and the board issues chip — a whole line of panel
+height for two small controls. Both now sit in the panel header as one
+group (`boardViewControlsNode` in `plugins/tickets/renderer/index.ts`,
+between the fleet status and New / Refresh), repainted with every board
+update; the filter is an ordinary `.icon-btn` whose pressed state is
+`aria-pressed`. The unfolded issue list still opens above the columns.
+The `.tickets-toolbar` row and its CSS are gone. Fixed on the way: the
+header's controls sat about 4px above the title since req-62, whose
+editor ticket header (`ticket-header.css`) also used the class
+`.tickets-head` — `display: block` and a 14px bottom padding leaked into
+the panel header. The panel header's host is now `.tickets-panel-head`.
+
+Specs: `e2e/board-issues.spec.ts` now finds filter and chip in the
+header and checks they are centred on the title's line (within 2px).
 
 ### req-65 — Interactive mode at the plan phase and every checkpoint
 

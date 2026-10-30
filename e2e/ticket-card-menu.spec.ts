@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures/drey';
 
 /**
- * The card context menu, regrouped (req-69): finished runs behind one
+ * The card context menu, regrouped (req-70): finished runs behind one
  * "Past runs ›" submenu, only the claim rows that apply, arrow keys
  * through the rows. The fleet runner does not run under e2e, so the
  * finished runs arrive as a pushed `fleet-changed` snapshot.
@@ -73,7 +73,7 @@ test.use({
   },
 });
 
-test.describe('Ticket card menu (req-69)', () => {
+test.describe('Ticket card menu (req-70)', () => {
   test('past runs sit behind one submenu row', async ({ page, electronApp }, testInfo) => {
     await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     const card = page.locator('.tickets-card[data-id="T-0051"]').filter({ visible: true });

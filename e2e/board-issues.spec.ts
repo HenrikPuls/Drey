@@ -27,18 +27,22 @@ test.use({
   },
 });
 
-test('the board issues are a toolbar chip that unfolds readable messages', async ({ page }) => {
+test('the board issues are a header chip that unfolds readable messages', async ({ page }) => {
   await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
-  const toolbar = page.locator('.tickets-toolbar').filter({ visible: true });
-  const chip = toolbar.locator('.tickets-issues-chip');
+  // req-69: filter and chip sit in the panel header, not a row of their own.
+  const controls = page.locator('.tickets-head-view').filter({ visible: true });
+  const chip = controls.locator('.tickets-issues-chip');
   // req-66's final shape: icon and count only, the summary in the tooltip.
   await expect(chip).toContainText('2');
-  await expect(toolbar.locator('.tickets-toolbar-btn')).toHaveCount(1);
+  const filter = controls.locator('.tickets-filter-btn');
+  await expect(filter).toHaveCount(1);
 
-  // Same height as the filter button: one row, one size.
-  const chipBox = (await chip.boundingBox())!;
-  const filterBox = (await toolbar.locator('.tickets-toolbar-btn').boundingBox())!;
-  expect(Math.round(chipBox.height)).toBe(Math.round(filterBox.height));
+  // One line: the header's title and the controls share a row.
+  // Centred on it, too: the editor's `.tickets-head` rule once leaked in here.
+  const title = page.locator('.head', { has: page.locator('.tickets-panel-head') }).locator('.title');
+  const titleBox = (await title.boundingBox())!;
+  const filterBox = (await filter.boundingBox())!;
+  expect(Math.abs(titleBox.y + titleBox.height / 2 - (filterBox.y + filterBox.height / 2))).toBeLessThan(2);
   await page.screenshot({ path: test.info().outputPath('board-issues-folded.png') });
 
   await chip.click();
