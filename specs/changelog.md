@@ -22,8 +22,8 @@ recorded as an explicit decision. The parity checklist lives in
 
 ### req-72 — Projects, multi-repo tickets, the repositories settings
 
-Owner request, outside the list. **Not yet manually verified by the
-owner.** Four owner asks shipped as one round (2026-10-30):
+Owner-verified (signed off 2026-10-30). Owner request, outside the
+list. Four owner asks shipped as one round (2026-10-30):
 
 - **Refine in every manual column** (req-65's column rule, amended in
   `end-moves.ts`): the first automatic column still plans; every manual

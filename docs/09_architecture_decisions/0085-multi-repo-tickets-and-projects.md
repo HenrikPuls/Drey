@@ -1,6 +1,6 @@
 # 0085 — Multi-repo tickets and named projects
 
-Status: Accepted (req-72, owner request 2026-10-30 — not yet manually verified)
+Status: Accepted (req-72, owner request, signed off 2026-10-30)
 
 ## Context
 
