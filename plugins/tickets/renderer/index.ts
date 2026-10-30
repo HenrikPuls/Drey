@@ -721,11 +721,14 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       refreshButton.append(api.ui.icon('refresh-cw', 14));
       refreshButton.addEventListener('click', () => void refreshBoard());
 
+      // req-60: status chip │ board actions │ chain controls │ overflow.
       const fleet = fleetHeaderNode();
-      host.append(fleet.node, newButton, refreshButton);
+      const actions = el('span', 'tickets-head-group');
+      actions.append(newButton, refreshButton);
       // The chain's master switch — meaningful wherever a tickets board
       // exists; the runner side decides whether anything is automatic.
-      host.append(masterControlNode(api));
+      host.classList.add('tickets-head');
+      host.append(fleet.node, actions, masterControlNode(api), headerMenuButton(api));
       return fleet.dispose;
     },
     mount: (panel) => {
@@ -907,13 +910,15 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
 // --- the chain's master switch (M85, ADR-0077) -------------------------------
 
 /**
- * An / Aus / Notaus in the panel header. An dispatches every playing
- * automatic column; Aus halts gently (running work finishes); Notaus
- * aborts every live run through the stop ladder and halts — the red
- * button, one click, nothing in the way.
+ * The chain controls in the panel header (req-60): run / halt as one
+ * segmented switch whose active half is marked (run dispatches every
+ * playing automatic column; halt is gentle — running work finishes),
+ * then the emergency stop — every live run through the stop ladder and
+ * halt, the red button, one click, nothing in the way.
  */
 function masterControlNode(api: DreyPluginApi): HTMLElement {
-  const box = el('span', 'tickets-master');
+  const box = el('span', 'tickets-head-group');
+  const seg = el('span', 'seg tickets-master');
   const run = el('button', 'icon-btn');
   run.type = 'button';
   run.title = 'Run the chain — columns with a worker drain themselves';
@@ -932,29 +937,76 @@ function masterControlNode(api: DreyPluginApi): HTMLElement {
   abort.type = 'button';
   abort.title = 'Emergency stop — abort every run and halt the chain';
   abort.setAttribute('aria-label', 'Emergency stop');
-  abort.append(api.ui.icon('triangle-alert', 14));
+  abort.append(api.ui.icon('square', 13));
   abort.addEventListener('click', () => void runChainAction('chainAbort', {}));
 
-  const chainLog = el('button', 'icon-btn');
-  chainLog.type = 'button';
-  chainLog.title = 'Chain log — what the fleet daemon did (dispatches, skips, gates), as a readonly editor tab';
-  chainLog.setAttribute('aria-label', 'Chain log');
-  chainLog.textContent = 'Log';
-  chainLog.addEventListener('click', () => openChainLog(api));
-
-  // T-0044: tidy the worktree home — every worktree whose ticket has no
-  // live run goes (real git; dirty trees are kept and reported), then
-  // every mapped repo gets one prune.
-  const cleanup = el('button', 'icon-btn');
-  cleanup.type = 'button';
-  cleanup.title = 'Clean up worktrees — removes every worktree whose ticket has no live run, then prunes';
-  cleanup.setAttribute('aria-label', 'Clean up worktrees');
-  cleanup.append(api.ui.icon('trash', 14));
-  cleanup.addEventListener('click', () => void runWorktreesCleanup());
-
   masterButtons.push({ run, halt, abort });
-  box.append(run, halt, abort, chainLog, cleanup);
+  seg.append(run, halt);
+  box.append(seg, abort);
   return box;
+}
+
+/**
+ * The header's overflow (req-60): the rarer tools behind one `⋯` —
+ * the chain log as a readonly tab, and the worktree cleanup (T-0044:
+ * every worktree whose ticket has no live run goes, real git, dirty
+ * trees kept and reported, then one prune per mapped repo).
+ */
+function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
+  const more = el('button', 'icon-btn');
+  more.type = 'button';
+  more.title = 'More — chain log, clean up worktrees';
+  more.setAttribute('aria-label', 'More actions');
+  more.setAttribute('aria-haspopup', 'menu');
+  more.append(api.ui.icon('more-horizontal', 14));
+  more.addEventListener('click', () => {
+    for (const other of document.querySelectorAll('.tickets-menu')) {
+      other.remove();
+    }
+    const menu = el('div', 'tickets-menu');
+    menu.setAttribute('role', 'menu');
+    const close = (): void => {
+      menu.remove();
+      window.removeEventListener('mousedown', outside, true);
+      more.focus();
+    };
+    const outside = (e: Event): void => {
+      if (!menu.contains(e.target as Node) && e.target !== more && !more.contains(e.target as Node)) {
+        close();
+      }
+    };
+    const item = (label: string, hint: string, onClick: () => void): void => {
+      const button = el('button', 'tickets-menu-item', label);
+      button.type = 'button';
+      button.title = hint;
+      button.setAttribute('role', 'menuitem');
+      button.addEventListener('click', () => {
+        close();
+        onClick();
+      });
+      menu.append(button);
+    };
+    item('Chain log', 'What the fleet daemon did (dispatches, skips, gates), as a readonly editor tab', () => openChainLog(api));
+    item('Clean up worktrees…', 'Removes every worktree whose ticket has no live run, then prunes', () => void runWorktreesCleanup());
+    document.body.append(menu);
+    const anchor = more.getBoundingClientRect();
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, Math.min(anchor.right - rect.width, window.innerWidth - rect.width - 8))}px`;
+    menu.style.top = `${Math.min(anchor.bottom + 4, window.innerHeight - rect.height - 8)}px`;
+    menu.querySelector<HTMLButtonElement>('.tickets-menu-item')?.focus();
+    window.addEventListener('mousedown', outside, true);
+    menu.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        close();
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const items = [...menu.querySelectorAll<HTMLButtonElement>('.tickets-menu-item')];
+        const at = items.indexOf(document.activeElement as HTMLButtonElement);
+        items[(at + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus();
+      }
+    });
+  });
+  return more;
 }
 
 /** Runs the global worktree cleanup and reports what it did (T-0044). */
@@ -1054,7 +1106,7 @@ function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot): HTMLElement | n
     const warn = el('span', 'tickets-statusbar-warn');
     warn.append(api.ui.icon('triangle-alert', 12), el('span', undefined, parts.join(' · ')));
     warn.title = [
-      'Worktree folders to clean up — the Clean up worktrees control (trash icon above) removes them',
+      'Worktree folders to clean up — Clean up worktrees… in the header\'s ⋯ menu removes them',
       ...worktrees.legacyLeftovers.map((name) => `legacy: ${name}`),
       ...worktrees.orphans.map((p) => `orphan: ${p}`),
     ].join('\n');
@@ -1072,6 +1124,9 @@ function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot): HTMLElement | n
 /** Below this panel width the header group drops its numbers (they stay in the tooltip). */
 const HEAD_FLEET_NARROW_PX = 480;
 
+/** Below this one the group is its light alone. */
+const HEAD_FLEET_TINY_PX = 380;
+
 /** The Tickets panel's current width (its body is as wide as its header); 0 before the first measure. */
 let panelWidth = 0;
 const panelWidthListeners = new Set<() => void>();
@@ -1086,6 +1141,7 @@ function fleetHeaderNode(): { node: HTMLElement; dispose: () => void } {
     const summary = fleetSummary(liveRuns(), Date.now());
     node.hidden = summary === null;
     node.toggleAttribute('data-narrow', panelWidth > 0 && panelWidth < HEAD_FLEET_NARROW_PX);
+    node.toggleAttribute('data-tiny', panelWidth > 0 && panelWidth < HEAD_FLEET_TINY_PX);
     if (summary === null) {
       return;
     }

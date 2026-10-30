@@ -128,19 +128,45 @@
   align-items: stretch;
 }
 
-/* The fleet's status in the panel header (req-60): one compact group before the buttons. */
+/*
+ * The panel header's controls (req-60): status chip │ board actions │
+ * chain controls │ overflow — groups set apart by air and a hairline,
+ * every control icon-only (ADR-0057).
+ */
+.tickets-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tickets-head-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+/* The fleet's status: a quiet chip, the long form in its tooltip. */
 .tickets-head-fleet {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 22px;
-  margin-right: 6px;
+  margin-right: 2px;
   padding: 0 10px 0 8px;
-  border-right: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--bg-input);
   font-size: 0.72rem;
   color: var(--text-2);
   white-space: nowrap;
   cursor: help;
+}
+
+.tickets-head-fleet .tickets-light {
+  width: 7px;
+  height: 7px;
+  box-shadow: none;
 }
 
 .tickets-head-fleet[hidden] {
@@ -160,8 +186,13 @@
 }
 
 /* A narrow panel keeps the light and the count, the numbers stay in the tooltip. */
-.tickets-head-fleet[data-narrow] .tickets-head-fleet-numbers {
+.tickets-head-fleet[data-narrow] .tickets-head-fleet-numbers,
+.tickets-head-fleet[data-tiny] .tickets-head-fleet-label {
   display: none;
+}
+
+.tickets-head-fleet[data-tiny] {
+  padding: 0 7px;
 }
 
 /* ---- columns ---- */
@@ -309,17 +340,14 @@
 
 /* The chain's master switch in the panel header (M85): An / Aus /
  * Notaus. The active state is marked; Notaus is the red button. */
+/* Run | halt: one segmented switch, the active half filled. */
 .tickets-master {
-  display: inline-flex;
-  gap: 1px;
-  margin-left: 4px;
-  padding-left: 6px;
-  border-left: 1px solid var(--border);
+  margin-right: 2px;
 }
 
-.tickets-master-on {
-  color: var(--accent, var(--text-1));
-  background: var(--hover-bg);
+.tickets-master .tickets-master-on {
+  color: var(--accent-fg, var(--accent));
+  background: var(--accent-surface);
 }
 
 .tickets-master-abort:not(:hover) {

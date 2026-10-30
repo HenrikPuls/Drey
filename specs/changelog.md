@@ -38,8 +38,21 @@ the pure `fleetSummary` in `worker-status.ts` (spec added). The
 "Tickets" title stays — the uniform panel head (ADR-0057/M69); hiding it
 was considered and declined with the owner (it would need an SDK option
 like the calendar's `headerReplacesTitle`). `fleetSummaryNode` and the
-`.tickets-summary` / `.tickets-pill*` styles are gone. Manual: the lane
-paragraph. **Not yet manually verified by the owner.**
+`.tickets-summary` / `.tickets-pill*` styles are gone.
+
+The whole header row was then redesigned (owner request, same item):
+four groups set apart by air and a hairline — **status chip** (the
+fleet group as a quiet `--bg-input` chip; below 380px its light alone)
+│ **board actions** (new, refresh) │ **chain controls** — run / halt
+as one global `.seg` switch with the active half filled
+(`--accent-surface`), then the emergency stop as a `square` icon (was
+`triangle-alert`, which read as a warning, not a stop), muted until
+hovered │ **`⋯` overflow** (`headerMenuButton`) with *Chain log* and
+*Clean up worktrees…*. The text button "Log" and the always-visible
+trash icon are gone: every header control is icon-only (ADR-0057); the
+menu is keyboard-usable (focus on open, arrows, Escape returns focus).
+Manual: the lane paragraph, the master switch, the Log and cleanup
+mentions. **Not yet manually verified by the owner.**
 
 ### req-59 — Tickets board: one-row status bar
 
