@@ -775,6 +775,10 @@ moving one back into a phase folder revives it). Over-WIP columns show
 a red count; validation findings (a
 hand-edited file, an unknown repo, a ticket in two phases) show as
 numbered badges — the board keeps rendering, nothing is guessed.
+Findings about the board's own files (`pipeline.md`, `repos.md`,
+`order.md`) show as a chip beside the filter above the columns
+("2 board issues", coloured by the most serious one); click it to list
+the messages, and **Open** beside a message opens the file it is about.
 
 Claims: moving a ticket into a claim-flagged phase (Build by default)
 stamps who works on it and when. A stale claim is visible by its age;

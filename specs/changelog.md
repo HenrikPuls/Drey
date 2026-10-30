@@ -22,7 +22,7 @@ recorded as an explicit decision. The parity checklist lives in
 
 ### req-66 — Readable board issues, one toolbar row
 
-**Not yet manually verified by the owner.** Owner request, outside the
+Owner request, outside the
 list. The board's own findings (pipeline / repos / order files) sat in a
 full-width bordered box ("2 board issues") whose messages were only a
 tooltip, above a second row holding just the hide-blocked filter — three
