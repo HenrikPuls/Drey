@@ -37,7 +37,7 @@ import {
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import { createTicketHeader, ticketLogFold } from './ticket-header';
-import { boardIssuesChip, boardIssuesList } from './board-issues';
+import { boardIssuesChip, boardIssuesList, type BoardIssuesDeps } from './board-issues';
 import type { ChainStatus, FleetHandoverConfig, RunInfo, WaitQuestion } from '../main/fleet/protocol';
 import { DEFAULT_FLEET_HANDOVER, normalizeFleetHandover } from '../main/fleet/protocol';
 import { handoverDialogState } from './handover-ui';
@@ -138,9 +138,15 @@ const collapse = createColumnCollapseStore(window.localStorage);
 /** The hide-blocked filter (T-0050) — pure view state like the fold. */
 const hideBlocked = createHideBlockedStore(window.localStorage);
 
+/** Repaints the board's view controls in every panel header (req-69). */
+const headerViewPainters = new Set<() => void>();
+
 const notifyViews = (): void => {
   for (const view of views) {
     view.render();
+  }
+  for (const paint of headerViewPainters) {
+    paint();
   }
 };
 
@@ -596,13 +602,10 @@ function collapsedColumnNode(column: BoardColumn): HTMLElement {
 /** Whether the board issues are unfolded under the toolbar (req-66; view state, per session). */
 let boardIssuesOpen = false;
 
-/** The board's one toolbar row: the hide-blocked filter (T-0050 — pure
- *  view state, it hides cards and never reorders anything) and the board
- *  issues chip (req-66), whose messages unfold under the row. */
-function boardToolbar(api: DreyPluginApi, snap: BoardSnapshot): HTMLElement[] {
-  const issuesDeps = {
+function boardIssuesDeps(api: DreyPluginApi, issues: BoardSnapshot['issues']): BoardIssuesDeps {
+  return {
     api,
-    issues: snap.issues,
+    issues,
     open: boardIssuesOpen,
     onToggle: () => {
       boardIssuesOpen = !boardIssuesOpen;
@@ -610,33 +613,46 @@ function boardToolbar(api: DreyPluginApi, snap: BoardSnapshot): HTMLElement[] {
     },
     openFile: (path: string) => openTicketFile(api, path),
   };
-  const toolbar = hideBlockedToolbar(api);
-  const chip = boardIssuesChip(issuesDeps);
-  if (chip !== null) {
-    toolbar.append(chip);
-  }
-  const list = boardIssuesList(issuesDeps);
-  return list === null ? [toolbar] : [toolbar, list];
 }
 
-function hideBlockedToolbar(api: DreyPluginApi): HTMLElement {
-  const toolbar = el('div', 'tickets-toolbar');
-  const hide = el('button', 'tickets-toolbar-btn');
+/** The board's view controls, in the panel header since req-69 (they had
+ *  a toolbar row of their own above the columns): the hide-blocked filter
+ *  (T-0050 — pure view state, it hides cards and never reorders anything)
+ *  and the board issues chip (req-66), whose messages unfold above the
+ *  columns. */
+function boardViewControlsNode(api: DreyPluginApi): { node: HTMLElement; dispose: () => void } {
+  const node = el('span', 'tickets-head-group tickets-head-view');
+  const paint = (): void => {
+    node.textContent = '';
+    const snap = snapshot;
+    node.hidden = snap === null || snap.vaultId === null;
+    if (snap === null || snap.vaultId === null) {
+      return;
+    }
+    node.append(hideBlockedButton(api));
+    const chip = boardIssuesChip(boardIssuesDeps(api, snap.issues));
+    if (chip !== null) {
+      node.append(chip);
+    }
+  };
+  headerViewPainters.add(paint);
+  paint();
+  return { node, dispose: () => headerViewPainters.delete(paint) };
+}
+
+function hideBlockedButton(api: DreyPluginApi): HTMLButtonElement {
+  const hide = el('button', 'icon-btn tickets-filter-btn');
   hide.type = 'button';
   const hidden = hideBlocked.isHidden();
-  if (hidden) {
-    hide.classList.add('tickets-toolbar-on');
-  }
   hide.title = hidden ? 'Show blocked tickets' : 'Hide blocked tickets';
   hide.setAttribute('aria-label', hide.title);
   hide.setAttribute('aria-pressed', String(hidden));
-  hide.append(api.ui.icon('filter', 12));
+  hide.append(api.ui.icon('filter', 14));
   hide.addEventListener('click', () => {
     hideBlocked.setHidden(!hideBlocked.isHidden());
     notifyViews();
   });
-  toolbar.append(hide);
-  return toolbar;
+  return hide;
 }
 
 function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
@@ -813,7 +829,10 @@ function buildBoardView(api: DreyPluginApi): BoardView {
       }
       return;
     }
-    root.append(...boardToolbar(api, snap));
+    const issues = boardIssuesList(boardIssuesDeps(api, snap.issues));
+    if (issues !== null) {
+      root.append(issues);
+    }
     const board = el('div', 'tickets-board');
     for (const column of snap.columns) {
       board.append(columnNode(api, column));
@@ -872,15 +891,19 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       refreshButton.append(api.ui.icon('refresh-cw', 14));
       refreshButton.addEventListener('click', () => void refreshBoard());
 
-      // req-60: status chip │ board actions │ chain controls │ overflow.
+      // req-60: status chip │ view controls (req-69) │ board actions │ chain controls │ overflow.
       const fleet = fleetHeaderNode();
+      const viewControls = boardViewControlsNode(api);
       const actions = el('span', 'tickets-head-group');
       actions.append(newButton, refreshButton);
       // The chain's master switch — meaningful wherever a tickets board
       // exists; the runner side decides whether anything is automatic.
-      host.classList.add('tickets-head');
-      host.append(fleet.node, actions, masterControlNode(api), headerMenuButton(api));
-      return fleet.dispose;
+      host.classList.add('tickets-panel-head');
+      host.append(fleet.node, viewControls.node, actions, masterControlNode(api), headerMenuButton(api));
+      return () => {
+        fleet.dispose();
+        viewControls.dispose();
+      };
     },
     mount: (panel) => {
       panel.classList.add('tickets-panel');
