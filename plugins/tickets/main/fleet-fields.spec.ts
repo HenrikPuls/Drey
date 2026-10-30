@@ -345,4 +345,25 @@ Do it in two steps.
     expect(text).toContain('Do not run an install');
     expect(composeInstruction(base).text).not.toContain('Toolchain:');
   });
+
+  it('tells every worker how to ask the owner (req-64)', () => {
+    const { text } = composeInstruction({
+      ticketId: 'T-0007',
+      title: 'Add the thing',
+      repo: null,
+      branch: 't/T-0007',
+      worktreePath: 'W',
+      phase: 'build',
+      description: '',
+      plan: null,
+      prompt: null,
+      acceptance: [],
+      repoInstructions: null,
+      diffStat: null,
+      gateFailure: null,
+      caps: DEFAULT_FLEET_CAPS,
+    });
+    expect(text).toContain('starts with `QUESTION:`');
+    expect(text.trimEnd().endsWith("go into the ticket's Log.")).toBe(true);
+  });
 });

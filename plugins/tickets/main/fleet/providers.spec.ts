@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { claudeCodeAdapter, modelBody, OPENCODE_API, opencodeAdapter, type FetchFn, type NormalizedEvent, type ProviderStart, INTERRUPT_WAIT_MS, toolActivity } from './providers';
+import { answersFromText, answersText, claudeCodeAdapter, formText, modelBody, OPENCODE_API, opencodeAdapter, permissionText, questionOf, type FetchFn, type NormalizedEvent, type ProviderStart, INTERRUPT_WAIT_MS, toolActivity } from './providers';
 import { telemetryFromEvents } from './telemetry';
 import type { RunnerProcess, SpawnFn } from './procs';
 
@@ -190,6 +190,22 @@ describe('the claude-code adapter', () => {
     expect(await handle.interrupt?.()).toBe(false);
   });
 
+  it('a result that asks QUESTION: keeps the input open and waits; the answer lets the next result end it (req-64)', async () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    const handle = claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.stdout(JSON.stringify({ type: 'result', usage: { input_tokens: 10, output_tokens: 2 }, result: 'QUESTION: Which one, A or B?' }));
+    expect(events.find((e) => e.kind === 'result')).toBeUndefined();
+    expect(events.find((e) => e.waiting !== undefined)?.waiting).toEqual({ kind: 'question', text: 'Which one, A or B?' });
+    expect(proc.stdinWrites).not.toContain('<<end>>');
+
+    expect(await handle.steer('A')).toBe('inject');
+    expect(events.at(-1)).toMatchObject({ turn: 'busy', waiting: null });
+    proc.stdout(JSON.stringify({ type: 'result', usage: {}, result: 'Done with A.' }));
+    expect(events.find((e) => e.kind === 'result')?.text).toBe('Done with A.');
+    expect(proc.stdinWrites.at(-1)).toBe('<<end>>');
+  });
+
   it('a resume run carries --resume with the session ref', () => {
     const seen: string[][] = [];
     const spawnFn: SpawnFn = (_cmd, args) => {
@@ -311,6 +327,14 @@ describe('the opencode adapter', () => {
     /** Messages newest-first, as the API lists them. */
     messages: () => unknown[];
     usage?: { tokens: { input: number; cache?: { read?: number }; output: number }; cost: number };
+    /** Pending permission requests (req-64). */
+    permissions?: () => unknown[];
+    /** Recorded permission replies: [requestId, body]. */
+    replies?: Array<[string, unknown]>;
+    /** Pending question forms (OpenCode's `question` tool). */
+    forms?: () => unknown[];
+    /** Recorded form replies: [formId, body]. */
+    formReplies?: Array<[string, unknown]>;
     /** The `/api/event` SSE response; default: a bodyless 200 the adapter must survive. */
     eventStream?: () => Response;
   }): { fetch: FetchFn; calls: Array<{ url: string; init?: RequestInit }> } {
@@ -335,6 +359,22 @@ describe('the opencode adapter', () => {
       if (url.endsWith(OPENCODE_API.prompt('ses_oc'))) {
         opts.prompts.push(String(init?.body));
         return json({ data: { id: 'msg_q', type: 'user', delivery: 'steer' } });
+      }
+      if (url.endsWith(OPENCODE_API.permissions('ses_oc'))) {
+        return json({ data: opts.permissions?.() ?? [] });
+      }
+      if (url.endsWith(OPENCODE_API.forms('ses_oc'))) {
+        return json({ data: opts.forms?.() ?? [] });
+      }
+      const formReply = /\/form\/([^/]+)\/reply$/.exec(url);
+      if (formReply !== null && init?.method === 'POST') {
+        opts.formReplies?.push([decodeURIComponent(formReply[1]!), JSON.parse(String(init.body))]);
+        return { ok: true, status: 204, json: async () => ({}) } as unknown as Response;
+      }
+      const reply = /\/permission\/([^/]+)\/reply$/.exec(url);
+      if (reply !== null && init?.method === 'POST') {
+        opts.replies?.push([decodeURIComponent(reply[1]!), JSON.parse(String(init.body))]);
+        return { ok: true, status: 204, json: async () => ({}) } as unknown as Response;
       }
       if (url.endsWith(OPENCODE_API.messages('ses_oc'))) {
         return json({ data: opts.messages(), cursor: { previous: null, next: null } });
@@ -467,6 +507,153 @@ describe('the opencode adapter', () => {
     expect(result?.costUsd).toBe(0.02);
     expect(proc.killTree).toHaveBeenCalled();
 
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
+  it('a turn that ends with QUESTION: waits instead of ending; the answer lets the next turn end the run (req-64)', async () => {
+    vi.useFakeTimers();
+    const prompts: string[] = [];
+    const at = Date.now();
+    let messages: unknown[] = [
+      { id: 'msg_i', type: 'idle', time: { created: at + 5_000 }, outcome: 'succeeded' },
+      {
+        id: 'msg_a',
+        type: 'assistant',
+        time: { created: at + 1, completed: at + 2 },
+        content: [{ type: 'text', text: 'QUESTION: Which API — v1 or v2?' }],
+      },
+    ];
+    const { fetch } = scriptedFetch({ sessionCreated: () => undefined, prompts, interrupts: [], messages: () => messages });
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    const handle = opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(12_500);
+
+    const waits = events.filter((e) => e.waiting !== undefined);
+    expect(waits).toEqual([expect.objectContaining({ waiting: { kind: 'question', text: 'Which API — v1 or v2?' } })]);
+    expect(events.find((e) => e.kind === 'result')).toBeUndefined();
+    expect(proc.killTree).not.toHaveBeenCalled();
+
+    await handle.steer('v2');
+    expect(events.at(-1)).toMatchObject({ kind: 'usage', waiting: null });
+    expect(prompts.at(-1)).toContain('v2');
+    messages = [
+      { id: 'msg_i2', type: 'idle', time: { created: Date.now() + 5_000 }, outcome: 'succeeded' },
+      {
+        id: 'msg_b',
+        type: 'assistant',
+        time: { created: Date.now() + 1, completed: Date.now() + 2 },
+        content: [{ type: 'text', text: 'Done with v2.' }],
+      },
+      ...messages,
+    ];
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(events.find((e) => e.kind === 'result')?.text).toBe('Done with v2.');
+    expect(proc.killTree).toHaveBeenCalled();
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
+  it('a pending permission request becomes the wait; the answer posts the decision and clears it (req-64)', async () => {
+    vi.useFakeTimers();
+    let pending: unknown[] = [{ id: 'per_1', sessionID: 'ses_oc', action: 'bash', resources: ['rm -rf dist'] }];
+    const replies: Array<[string, unknown]> = [];
+    const { fetch } = scriptedFetch({
+      sessionCreated: () => undefined,
+      prompts: [],
+      interrupts: [],
+      messages: () => [],
+      permissions: () => pending,
+      replies,
+    });
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    const handle = opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(events.filter((e) => e.waiting !== undefined)).toEqual([
+      expect.objectContaining({ waiting: { kind: 'permission', text: 'bash rm -rf dist', requestId: 'per_1' } }),
+    ]);
+
+    expect(await handle.answerPermission?.('per_1', 'once')).toBe(true);
+    expect(replies).toEqual([['per_1', { decision: 'once' }]]);
+    expect(events.at(-1)).toMatchObject({ waiting: null });
+    pending = [];
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(events.filter((e) => e.waiting !== undefined)).toHaveLength(2);
+    await handle.stop();
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
+  it('a pending question form becomes the wait with its choices; the answer replies to the form and clears it', async () => {
+    vi.useFakeTimers();
+    let pending: unknown[] = [
+      {
+        id: 'frm_1',
+        sessionID: 'ses_oc',
+        title: 'Questions',
+        metadata: { kind: 'question' },
+        fields: [
+          {
+            key: 'q0',
+            title: 'Merge',
+            description: 'How should I merge?',
+            type: 'string',
+            options: [
+              { value: 'Rebase', label: 'Rebase', description: 'linear history' },
+              { value: 'Merge', label: 'Merge' },
+            ],
+            custom: true,
+          },
+        ],
+      },
+    ];
+    const formReplies: Array<[string, unknown]> = [];
+    const { fetch } = scriptedFetch({
+      sessionCreated: () => undefined,
+      prompts: [],
+      interrupts: [],
+      messages: () => [],
+      forms: () => pending,
+      formReplies,
+    });
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    const handle = opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(events.filter((e) => e.waiting !== undefined)).toEqual([
+      expect.objectContaining({
+        waiting: {
+          kind: 'question',
+          text: 'How should I merge?',
+          requestId: 'frm_1',
+          questions: [
+            {
+              key: 'q0',
+              header: 'Merge',
+              question: 'How should I merge?',
+              options: [{ label: 'Rebase', description: 'linear history' }, { label: 'Merge' }],
+              multiple: false,
+            },
+          ],
+        },
+      }),
+    ]);
+
+    expect(await handle.answerQuestion?.('frm_1', { q0: 'Rebase' })).toBe(true);
+    expect(formReplies).toEqual([['frm_1', { answer: { q0: 'Rebase' } }]]);
+    expect(events.at(-1)).toMatchObject({ waiting: null });
+    pending = [];
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(events.filter((e) => e.waiting !== undefined)).toHaveLength(2);
+    await handle.stop();
     proc.exit(null);
     vi.useRealTimers();
   });
@@ -1033,6 +1220,45 @@ describe('the opencode adapter', () => {
   });
 });
 
+describe('question forms — what the owner answers', () => {
+  const pick = { key: 'q0', header: 'Merge', question: 'How?', options: [{ label: 'Rebase' }, { label: 'Merge' }], multiple: false };
+  const many = { key: 'q1', header: 'Checks', question: 'Which?', options: [{ label: 'lint' }, { label: 'tests' }], multiple: true };
+
+  it('maps a typed answer to a choice by number or label, else keeps the words', () => {
+    expect(answersFromText([pick], '2')).toEqual({ q0: 'Merge' });
+    expect(answersFromText([pick], 'rebase')).toEqual({ q0: 'Rebase' });
+    expect(answersFromText([pick], 'squash it, please')).toEqual({ q0: 'squash it, please' });
+  });
+
+  it('takes one line per question, commas for a multiple choice', () => {
+    expect(answersFromText([pick, many], '1\n1, tests')).toEqual({ q0: 'Rebase', q1: ['lint', 'tests'] });
+    expect(answersFromText([pick, many], '1')).toEqual({ q0: 'Rebase' });
+  });
+
+  it('says the questions and the answers in one line each', () => {
+    expect(formText([pick])).toBe('How?');
+    expect(formText([pick, many])).toBe('How? (+1 more)');
+    expect(answersText([pick], { q0: 'Rebase' })).toBe('Rebase');
+    expect(answersText([pick, many], { q1: ['lint'] })).toBe('Merge: —; Checks: lint');
+  });
+});
+
+describe('questionOf / permissionText — what a worker waits on (req-64)', () => {
+  it('reads the marker case-insensitively at the start of the message only', () => {
+    expect(questionOf('QUESTION: Which API?')).toBe('Which API?');
+    expect(questionOf('  question:\nA or B?\n')).toBe('A or B?');
+    expect(questionOf('Done. QUESTION: none')).toBeNull();
+    expect(questionOf('QUESTION:   ')).toBeNull();
+  });
+
+  it('names the action and its resources, plus a message that says more', () => {
+    expect(permissionText({ action: 'bash', resources: ['rm -rf dist'] })).toBe('bash rm -rf dist');
+    expect(permissionText({ action: 'edit', resources: ['a.ts'], message: 'outside the worktree' })).toBe(
+      'edit a.ts — outside the worktree',
+    );
+  });
+});
+
 describe('modelBody — the OpenCode model pin (v2 shape)', () => {
   it('splits providerID/modelID at the first slash', () => {
     expect(modelBody('zai-coding-plan/glm-5.3-flash', 'go')).toEqual({
@@ -1056,6 +1282,7 @@ describe('toolActivity — the one line a tool call shows on the lane', () => {
 
   it('copes with a call without input and caps a long target', () => {
     expect(toolActivity(undefined, undefined)).toBe('tool');
+    expect(toolActivity('question', { questions: [{ question: 'How should I merge?' }] })).toBe('asks How should I merge?');
     expect(toolActivity('shell', { command: 'x'.repeat(400) }).length).toBeLessThanOrEqual(140);
   });
 });

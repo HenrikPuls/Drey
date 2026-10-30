@@ -7,6 +7,7 @@
  */
 import { createTranscriptView } from './transcript-view';
 import { formatWatch, parseStreamEvents } from './watch-format';
+import { newWaits } from './waiting';
 import { asParagraphs, chainLogStamp, visibleChainLog } from './chain-log';
 import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
 import {
@@ -34,7 +35,7 @@ import {
 } from './blocked-view';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
-import type { ChainStatus, FleetHandoverConfig, RunInfo } from '../main/fleet/protocol';
+import type { ChainStatus, FleetHandoverConfig, RunInfo, WaitQuestion } from '../main/fleet/protocol';
 import { DEFAULT_FLEET_HANDOVER, normalizeFleetHandover } from '../main/fleet/protocol';
 import { handoverDialogState } from './handover-ui';
 import type { HandoverCandidate } from '../main/fleet/handover';
@@ -407,8 +408,16 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
   }
   const live = runForCard(card.id);
   if (live !== null) {
-    const runChip = el('span', 'tickets-chip tickets-chip-run', runChipLine(live, Date.now()));
+    const waiting = live.waiting ?? null;
+    const runChip = el(
+      'span',
+      `tickets-chip tickets-chip-run${waiting !== null ? ' tickets-chip-waiting' : ''}`,
+      waiting !== null ? '? waits for you' : runChipLine(live, Date.now()),
+    );
     runChip.title = `run ${live.id} (${live.provider}) — ${live.state}, turn ${live.steerCount + 1}, ${formatTokens(live.tokensIn)} in / ${formatTokens(live.tokensOut)} out, ${spanClock(Date.now() - (Date.parse(live.startedAt) || Date.now()))} so far; open the card menu to watch, steer or stop`;
+    if (waiting !== null) {
+      runChip.title = `run ${live.id} ${waiting.kind === 'question' ? 'asks' : 'needs your approval'}: ${waiting.text} — open the run to answer`;
+    }
     meta.append(runChip);
   }
   const dwell = dwellMs(card, column.phase.id);
@@ -1386,16 +1395,19 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
     if (open) {
       const body = el('div', 'tickets-lane-body');
       const activity = run.activity ?? '';
+      const waiting = run.waiting ?? null;
       const act = el(
         'div',
-        'tickets-lane-activity',
+        `tickets-lane-activity${waiting !== null ? ' tickets-lane-waiting' : ''}`,
         run.state === 'detached'
           ? 'The runner restarted while this worker lived on — stop the run to free the ticket'
-          : activity !== ''
-            ? activity
-            : 'No output yet',
+          : waiting !== null
+            ? `${waiting.kind === 'question' ? 'Asks' : 'Wants to'}: ${waiting.text}`
+            : activity !== ''
+              ? activity
+              : 'No output yet',
       );
-      act.title = activity;
+      act.title = waiting?.text ?? activity;
       body.append(act);
 
       const label = el('div', 'tickets-lane-context-row', contextLabel(run));
@@ -1435,7 +1447,7 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
         b.addEventListener('click', onClick);
         actions.append(b);
       };
-      button('arrow-right', 'Open the run — its conversation, controls and prompt (nothing changes until you send a command)', () => {
+      button('arrow-right', waiting !== null ? 'Open the run to answer the worker' : 'Open the run — its conversation, controls and prompt (nothing changes until you send a command)', () => {
         openTakeover(api, run);
       });
       if (run.state === 'detached' && run.sessionRef !== null) {
@@ -1679,6 +1691,21 @@ const QUICK_PROMPTS: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /** Opens (or focuses) the takeover tab of one run. */
+/** The waits this window already announced (`newWaits` keeps it current). */
+const announcedWaits = new Set<string>();
+
+/** One OS notification per new wait; a click opens the run's takeover tab (req-64). */
+function announceWaits(api: DreyPluginApi): void {
+  for (const notice of newWaits(fleetRuns, announcedWaits)) {
+    void api.ui.notify({
+      title: notice.title,
+      body: notice.body,
+      tag: notice.run.id,
+      onClick: () => openTakeover(api, notice.run),
+    });
+  }
+}
+
 function openTakeover(api: DreyPluginApi, run: RunInfo): void {
   api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${run.id}`, takeoverTitle(run));
 }
@@ -1945,6 +1972,122 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   };
   promptWrap.append(commandMenu, attachRow, prompt.element, composerBar);
 
+  // What the worker waits on (req-64): its question — answered in the
+  // prompt box below — or a tool call to approve with one of the buttons.
+  const waitCard = el('div', 'tickets-takeover-wait');
+  waitCard.hidden = true;
+  const waitLabel = el('div', 'tickets-takeover-wait-label');
+  const waitText = el('div', 'tickets-takeover-wait-text');
+  const waitActions = el('div', 'tickets-takeover-wait-actions');
+  const decide = (decision: 'once' | 'always' | 'reject', label: string): HTMLButtonElement => {
+    const b = el('button', `tickets-takeover-btn${decision === 'once' ? ' tickets-takeover-btn-primary' : ''}`, label);
+    b.type = 'button';
+    b.addEventListener('click', () => {
+      void runMutation(label, () => invokeBoard('fleetPermission', { runId, decision }));
+    });
+    return b;
+  };
+  waitActions.append(decide('once', 'Allow once'), decide('always', 'Always allow'), decide('reject', 'Deny'));
+  // A question asked with OpenCode's `question` tool comes with choices:
+  // one click answers a single question, several are picked and sent.
+  const waitQuestions = el('div', 'tickets-takeover-wait-questions');
+  const picks = new Map<string, Set<string>>();
+  const sendPicks = el('button', 'tickets-takeover-btn tickets-takeover-btn-primary', 'Send answer');
+  sendPicks.type = 'button';
+  const sendAnswers = (answers: Record<string, string | string[]>): void => {
+    void runMutation('Answer', () => invokeBoard('fleetAnswer', { runId, answers }));
+  };
+  sendPicks.addEventListener('click', () => {
+    const answers: Record<string, string | string[]> = {};
+    for (const [key, chosen] of picks) {
+      if (chosen.size > 0) {
+        answers[key] = [...chosen];
+      }
+    }
+    sendAnswers(answers);
+  });
+  const paintQuestions = (questions: readonly WaitQuestion[]): void => {
+    picks.clear();
+    const oneClick = questions.length === 1 && !questions[0]!.multiple;
+    waitQuestions.replaceChildren(
+      ...questions.map((q) => {
+        const block = el('div', 'tickets-takeover-wait-question');
+        if (q.header !== undefined) {
+          block.append(el('div', 'tickets-takeover-wait-header', q.header));
+        }
+        block.append(el('div', 'tickets-takeover-wait-text', q.question));
+        const choices = el('div', 'tickets-takeover-wait-choices');
+        for (const option of q.options) {
+          const b = el('button', 'tickets-takeover-btn tickets-takeover-choice', option.label);
+          b.type = 'button';
+          b.title = option.description ?? option.label;
+          b.addEventListener('click', () => {
+            if (oneClick) {
+              sendAnswers({ [q.key]: option.label });
+              return;
+            }
+            const chosen = picks.get(q.key) ?? new Set<string>();
+            if (!q.multiple) {
+              chosen.clear();
+              for (const sibling of choices.children) {
+                sibling.classList.remove('tickets-takeover-choice-picked');
+              }
+            }
+            if (chosen.has(option.label)) {
+              chosen.delete(option.label);
+            } else {
+              chosen.add(option.label);
+            }
+            picks.set(q.key, chosen);
+            b.classList.toggle('tickets-takeover-choice-picked', chosen.has(option.label));
+            sendPicks.disabled = ![...picks.values()].some((s) => s.size > 0);
+          });
+          choices.append(b);
+        }
+        block.append(choices);
+        return block;
+      }),
+    );
+    sendPicks.hidden = oneClick;
+    sendPicks.disabled = true;
+    if (!oneClick) {
+      waitQuestions.append(sendPicks);
+    }
+  };
+  waitCard.append(waitLabel, waitText, waitQuestions, waitActions);
+  let shownWait = '';
+  const paintWait = (run: RunInfo | null): void => {
+    const waiting = run !== null && LIVE_RUN_STATES.includes(run.state) ? (run.waiting ?? null) : null;
+    waitCard.hidden = waiting === null;
+    if (waiting === null) {
+      shownWait = '';
+      return;
+    }
+    const questions = waiting.questions ?? null;
+    waitLabel.textContent =
+      waiting.kind === 'permission'
+        ? 'The worker wants to do this — allow it?'
+        : questions === null
+          ? 'The worker asks you — answer below, it then goes on with its step'
+          : questions.length > 1
+            ? 'The worker asks you — pick the answers, or type your own below, one line per question'
+            : 'The worker asks you — pick an answer, or type your own below';
+    waitText.textContent = waiting.text;
+    waitText.hidden = questions !== null;
+    waitQuestions.hidden = questions === null;
+    waitActions.hidden = waiting.kind !== 'permission';
+    const key = `${waiting.kind}@${waiting.since}`;
+    if (key !== shownWait) {
+      if (questions !== null) {
+        paintQuestions(questions);
+      }
+      if (waiting.kind === 'question') {
+        prompt.focus();
+      }
+    }
+    shownWait = key;
+  };
+
   const live = (): RunInfo | null => fleetRuns.find((r) => r.id === runId) ?? null;
   const paintBanner = (): void => {
     const run = live();
@@ -1962,9 +2105,11 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
           ? ['Detached', 'The runner lost its worker']
           : !active
             ? [`Run ${run.state}`, 'The run has ended — Resume session picks it up in a new worker']
-            : held
-              ? ['You have control', 'The runner sends nothing of its own until you hand the run back']
-              : ['Runner driving', 'The runner is driving this worker — your first message takes over'];
+            : run.waiting
+              ? ['Waits for you', 'The worker asks you or wants an approval — answer in the card above the prompt box']
+              : held
+                ? ['You have control', 'The runner sends nothing of its own until you hand the run back']
+                : ['Runner driving', 'The runner is driving this worker — your first message takes over'];
     modePill.textContent = mode;
     modePill.title = modeTip;
     statusWord.textContent = status !== null && (active || detached) ? status.label : '';
@@ -2010,6 +2155,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     for (const chip of chips.children) {
       (chip as HTMLButtonElement).disabled = !active;
     }
+    paintWait(run);
     paintProgress();
   };
 
@@ -2033,7 +2179,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   pull();
   const timer = setInterval(pull, 2_000);
   const tick = setInterval(paintBanner, 1_000);
-  wrap.append(banner, transcript.element, progress, promptWrap);
+  wrap.append(banner, transcript.element, progress, waitCard, promptWrap);
   host.append(wrap);
   return () => {
     alive = false;
@@ -2370,6 +2516,8 @@ function openCardMenu(
 const plugin: { activate(api: DreyPluginApi): void } = {
   activate(api) {
     backend = api.backend;
+    // A worker that waits on the owner says so outside the board too (req-64).
+    fleetListeners.add(() => announceWaits(api));
     api.ui.registerWidget(createTicketsWidget(api));
     api.ui.registerSettingsPage(createTicketsSettingsPage(api));
 

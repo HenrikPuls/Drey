@@ -923,6 +923,23 @@ terminal can read the cost overview the same way the board does:
 runs' tokens by ticket, phase and model, and shows how much of each
 run's input was spent before its first write — the exploration cost.
 
+**When a worker needs you.** A worker that cannot go on without a
+decision of yours asks: its run stops at the question instead of ending,
+and keeps its session. The same happens when an OpenCode worker wants to
+run a tool that needs approval. Drey then shows a Windows notification
+(*T-0042 asks you*); clicking it opens the run's tab. The lane turns
+amber and says what the worker asks, the card's chip reads *? waits for
+you*, and the question also lands in the ticket's Log. In the tab the
+question sits above the prompt box — type your answer and send it; the
+worker goes on with its step and the run ends normally when it is done.
+When the worker offers choices, they appear as buttons: with one
+question a click is the answer; with several, pick one per question and
+press **Send answer**. You can always type your own answer instead — for
+several questions one line each, a choice by its number or its name.
+An approval has three buttons instead: **Allow once**, **Always allow**
+and **Deny**. A waiting run never counts as stalled, however long it
+waits.
+
 Runs survive closing Drey — the runner is its own small process — and,
 for OpenCode workers, even a restart of the runner: the new runner takes the
 still-running worker back. (A Claude Code worker cannot be taken back; its run

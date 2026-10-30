@@ -157,6 +157,18 @@ describe('workerStatus — a detached run', () => {
   });
 });
 
+describe('workerStatus — a worker that waits on the owner (req-64)', () => {
+  it('is amber with what it waits for, never stalled however long the wait', () => {
+    const silent = new Date(NOW - 60 * 60_000).toISOString();
+    expect(
+      workerStatus(run({ turn: 'idle', lastActivity: silent, waiting: { kind: 'question', text: 'Q', since: silent } }), NOW),
+    ).toEqual({ light: 'amber', label: 'Waits for your answer' });
+    expect(
+      workerStatus(run({ turn: 'busy', waiting: { kind: 'permission', text: 'bash x', since: silent, requestId: 'p' } }), NOW),
+    ).toEqual({ light: 'amber', label: 'Waits for your approval' });
+  });
+});
+
 describe('workerStatus — running or standing', () => {
   it('says Running for a worker in the middle of a turn', () => {
     expect(workerStatus(run({ turn: 'busy' }), NOW)).toEqual({ light: 'green', label: 'Running' });

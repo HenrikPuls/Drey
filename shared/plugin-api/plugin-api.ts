@@ -398,6 +398,16 @@ export interface HighlightedSpan {
   readonly className: string;
 }
 
+/** One operating-system notification (`ui.notify`, SDK 1.34). */
+export interface NotifyRequest {
+  readonly title: string;
+  readonly body?: string;
+  /** Replaces an earlier notification with the same tag instead of stacking. */
+  readonly tag?: string;
+  /** Runs after the window came to the front on a click. */
+  readonly onClick?: () => void;
+}
+
 /** Options for `ui.createMarkdownView` (SDK 1.30). */
 export interface MarkdownViewOptions {
   /** Initial text. */
@@ -668,6 +678,14 @@ export interface DreyPluginApi {
      * acknowledged; sequential calls queue like the native dialogs did.
      */
     showMessage(message: string, title?: string): Promise<void>;
+    /**
+     * An operating-system notification (SDK 1.34, req-64) — for something
+     * that needs the owner while they may be looking elsewhere. A click
+     * brings Drey's window to the front and runs `onClick`. A later
+     * notification with the same `tag` replaces the earlier one. Resolves
+     * false when the system shows none (notifications off).
+     */
+    notify(request: NotifyRequest): Promise<boolean>;
     /**
      * The shared tag chip field (SDK 1.9): colored chips with a completion
      * dropdown fed by the section-search provider's vocabulary — the same

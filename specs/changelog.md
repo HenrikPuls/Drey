@@ -20,6 +20,60 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-64 — A worker that needs the owner asks, waits and says so (owner request, outside the list)
+
+**Not yet manually verified by the owner.** No worker ever got an answer:
+OpenCode 2.0.32's own `question` tool asks through a *form*
+(`/api/session/{id}/form`, not under any "question" route) and blocks its
+call until the form is answered — the adapter never looked, so such a
+worker stood for good; a question at the end of a turn counted as "done"
+and went to the gate; and req-56's orientation told workers nobody
+answers. A second wait was invisible: OpenCode holds a tool call that needs
+approval (`/api/session/{id}/permission`), and the adapter never looked —
+such a worker looked busy and turned red after five minutes.
+
+- **Asking** (owner's choice: a text marker over an MCP `ask_owner` tool):
+  a turn whose last message starts with `QUESTION:` does not end the run.
+  The adapter stands the worker — OpenCode keeps its server, Claude Code
+  its stdin — and reports `waiting: {kind: 'question', text}`; the owner's
+  next message is the answer (no takeover: the next finished turn ends the
+  run as usual), and handing back unanswered ends it. Every brief carries
+  the rule (`composeInstruction`), and `docs/agents/fleet-worker.md` says
+  to ask only what blocks the step.
+- **OpenCode's `question` tool**: the adapter polls the session's pending
+  forms; one becomes `waiting: {kind: 'question', text, requestId,
+  questions}` — each question with its header, its choices and whether
+  several may be picked. The takeover's wait card shows them as buttons
+  (one click answers a single question; several are picked, then sent);
+  a typed answer works too (one line per question, a choice by its number
+  or label, otherwise the owner's own words). `POST /answer` replies to
+  the form (`/form/{id}/reply`, `{answer: {q0: …}}`), the blocked call
+  returns, and the turn goes on — no takeover. The transcript shows the
+  call as "asks …", not a bare "question".
+- **Approvals**: the OpenCode adapter polls the session's pending
+  permission requests and reports `waiting: {kind: 'permission', text,
+  requestId}`; `POST /permission` (`once` / `always` / `reject`) answers
+  it through `/permission/{id}/reply`.
+- **The run records it**: `RunInfo.waiting` (with `since`), a ticket Log
+  line ("asks the owner — …", "rejected by the owner — …"), a runner log
+  line. A waiting run is amber, never stalled.
+- **Telling the owner** (owner's choice: Windows plus the board): SDK 1.34
+  adds `ui.notify` — the renderer's Web Notification API, a Windows toast
+  (the app now sets its AppUserModelID: `de.lariscus.drey` packaged, the
+  executable in dev), a click brings the window forward over the new
+  `window:focus` channel. The tickets renderer announces each new wait
+  once (`newWaits`); a click opens the run's takeover tab, where a wait
+  card shows the question above the prompt box or the three approval
+  buttons. Lane and card chip turn amber ("? waits for you").
+- Fixed while the owner tested: the wait card stayed on screen with its
+  approval buttons when nothing waited (its `display: flex` beat
+  `[hidden]`), so a click answered "waits for no approval".
+- Specs: `providers.spec.ts` (both adapters' question flow, the permission
+  and form polls and replies, `questionOf`, `permissionText`,
+  `answersFromText`, `formText`, `answersText`), `runs.spec.ts`,
+  `waiting.spec.ts`, `worker-status.spec.ts`, `fleet-fields.spec.ts`,
+  `src/app/plugin-host/os-notify.spec.ts`.
+
 ### req-63 — Fleet: provider pools and column priority instead of per-column slots
 
 Owner-verified (signed off 2026-10-30). Owner request, outside the

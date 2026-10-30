@@ -678,6 +678,30 @@ The panel shows the repository of the focused document's vault:
   (one ticket transition is one commit). Everything read-only stays:
   branch, dirty state, history, file history and the Files-panel badges.
 
+### Found repositories (a vault that is only a parent folder)
+
+A vault does not have to be a repository itself. If it is just a parent
+folder — `E:\projects` with several repositories inside — Drey scans a
+few levels below it (folders starting with a dot, `node_modules` and
+reserved `_` folders are skipped) and surfaces every repository it
+finds, up to 25 per vault, in the Source control panel **and** as Files
+badges. A `.git` file (a linked worktree) counts like a `.git` folder.
+
+A found repository is **read-only by design**: a hint row
+*Found by scanning \<vault\> — read-only* sits above its changes, there
+is no commit box, and stage/discard, fetch/pull/push, merge, stash and
+amend are all disabled or refused — clicking a row still compares, and
+history and file history still work. When a focused document lies
+inside one of several found repositories, the panel shows exactly that
+one; the selector at the top switches between them (its tooltip shows
+each repository's absolute path).
+
+**Register as vault** (the button in the hint row) turns a found
+repository into a vault of its own with one click — after that you can
+work with it like with any vault. The scan re-runs whenever the vault
+list changes or you refresh the status, and repositories that already
+belong to another registered vault are never listed twice.
+
 ![Git decorations in the Files panel](img/git-files-badges.png)
 
 Changed files carry status badges (`M` modified, `U` untracked) and
@@ -773,7 +797,21 @@ choose **Run agent**: the dialog lets you pick the worker (the card
 shows the one your pins resolve to: the ticket's `worker:` field wins,
 then the phase's `@worker` pin in `pipeline.md`, then the repo's
 `worker:` in `repos.md`, then the configured default) and how freely
-it may act. The worker gets a checkout of the ticket's repo on its own
+it may act. The **Handover** choice says how the run's context reaches
+the worker: **Fresh session** (the default the rules compute), **Resume
+last session** (continue the previous run's conversation of the same
+ticket, worker and model — worthwhile on a warm pause or a small
+context) or **Resume + compact first** (the same, natively compacted
+before the brief rides — offered only where the worker can). The line
+under it shows the run these options would continue — its phase, how it
+ended, its last context size and its age — and options that make no
+sense are disabled with the reason instead of silently switched: a
+review always starts fresh, another worker's session is never resumed,
+and a worktree that was rebuilt invalidates the old session. The choice
+applies to this run only; dispatched runs decide by the same rules
+themselves, and a resume that cannot be established falls back to a
+fresh run under the same ticket. The worker gets a checkout of the
+ticket's repo on its own
 branch (`t/<id>`), the ticket's description, plan and the phase's
 prompt as its brief. Folders the checkout has but git ignores — its
 toolchain, say `.tools` and `node_modules` — can be shared with every
@@ -793,8 +831,12 @@ and age, plus the run's telemetry chips — **ctx** (the last turn's real
 context size), **turns** (model calls) and **reads** (read/search tool
 calls) — once the worker reports them; the card carries a ▶ chip reading
 the state, the turn count, the run's own tokens and its age
-(`▶ running · 2 · 45k/1.2k · 03:41`), and the pills above the board add
-how long the oldest live run has been at it. A lane is folded to one
+(`▶ running · 2 · 45k/1.2k · 03:41`). While workers run, the panel
+header sums up the whole fleet next to its buttons
+(`● 1 running · 18.9M tok · 26:22`): the worst light, the states in
+words, the tokens in flight and how long the oldest live run has been
+at it — hover it for the long form; a narrow panel keeps only the light
+and the states. A lane is folded to one
 line until you unfold it (a lane that needs a look opens by itself). In
 a lane you can **Take over**, **Watch** (tail the run's output),
 **Steer** (send a message into the live run — it lands in the ticket's
@@ -803,14 +845,28 @@ conversation and a prompt box: you can **Interrupt** the running turn
 (the session and its context stay), drive the worker with your own
 prompts and **Hand back** the run — a worker that is idle by then ends
 the run and the gate decides. While you hold a run the runner does not
-end it. In the conversation each of the worker's thoughts is a folded
-**Thinking** box whose title previews it; click the title to read the
-whole thought, and again to fold it. The transcript streams live on
-OpenCode workers: a tool step appears as the worker calls it
-(`● Read src/a.ts`, its result hung underneath once it settles) and
-reply text grows while it is written. Only OpenCode workers can be
-taken over for now. The **Log** button opens the fleet daemon's log in
-a read-only tab. When a run ends, the ticket's Log line records the
+end it. The tab's header names the ticket, the worker and its model,
+and a pill says who is driving (**Runner driving** — your first message
+takes over — or **You have control**); below it sit the turn count, how
+full the context window is (a small bar that turns amber at 70 % and
+red at 90 %), the tokens in (with the cached share) and out, and the
+elapsed time — hover a value for its explanation. In the conversation
+each tool call is one quiet row: a dot (green when it settled, red when
+it failed), the tool, what it was called on — paths relative to the
+run's worktree, the full path in the tooltip — and its result. More
+than three calls in a row fold into one **N tool calls** line that is
+open while the worker is still busy there. Each of the worker's
+thoughts is a folded **Thinking** line that previews it; click it to
+read the whole thought, and again to fold it — an unfolded thought
+stays unfolded while the transcript updates. Code in replies and
+thoughts is coloured like code in your notes, with its language on top
+and a **Copy** button that shows when you point at the block. The transcript streams
+live on OpenCode workers: a tool step appears as the worker calls it
+and reply text grows while it is written. The view follows new output
+while you are at the bottom; scrolled up, it stays put and a
+**↓ New output** button brings you back. Only OpenCode workers can be
+taken over for now. **Chain log** in the header's **⋯** menu opens the
+fleet daemon's log in a read-only tab. When a run ends, the ticket's Log line records the
 tokens it used — how much of the input came from the provider's cache,
 and the cost, when the provider reports one (flat coding plans report
 none). A run that continues an earlier session counts only its own
@@ -833,6 +889,23 @@ terminal can read the cost overview the same way the board does:
 `GET /report` on the runner (see `plugins/tickets/FLEET.md`) groups the
 runs' tokens by ticket, phase and model, and shows how much of each
 run's input was spent before its first write — the exploration cost.
+
+**When a worker needs you.** A worker that cannot go on without a
+decision of yours asks: its run stops at the question instead of ending,
+and keeps its session. The same happens when an OpenCode worker wants to
+run a tool that needs approval. Drey then shows a Windows notification
+(*T-0042 asks you*); clicking it opens the run's tab. The lane turns
+amber and says what the worker asks, the card's chip reads *? waits for
+you*, and the question also lands in the ticket's Log. In the tab the
+question sits above the prompt box — type your answer and send it; the
+worker goes on with its step and the run ends normally when it is done.
+When the worker offers choices, they appear as buttons: with one
+question a click is the answer; with several, pick one per question and
+press **Send answer**. You can always type your own answer instead — for
+several questions one line each, a choice by its number or its name.
+An approval has three buttons instead: **Allow once**, **Always allow**
+and **Deny**. A waiting run never counts as stalled, however long it
+waits.
 
 Runs survive closing Drey — the runner is its own small process — and,
 for OpenCode workers, even a restart of the runner: the new runner takes the
@@ -858,9 +931,8 @@ tickets repository's folder at the top (the folder button opens it) and
 the **Pipeline** as one table, a row per column in pipeline order: its
 folder number (`10`, `20`, …), name, a *Runs itself* or *Checkpoint*
 chip with the folder, then the **worker** (OpenCode or Claude Code;
-*Manual* means a column only you move tickets through), the **model**,
-the **pool size** (how many tickets the column works in parallel) and
-the **prompt**. A manual column shows dashes there. The model field is a
+*Manual* means a column only you move tickets through), the **model**
+and the **prompt**. A manual column shows dashes there. The model field is a
 picker: click it to see what the worker offers (OpenCode lists its own
 `provider/model` ids, Claude Code its aliases), type to filter, or type
 an id the list does not know. The prompt is chosen from the files in
@@ -892,10 +964,12 @@ offers **Load from disk**. An empty folder offers **Add Drey's
 prompts**. A changed prompt reaches the next run, not one that is
 already running.
 
-The **master switch** sits in the board's header: **An** runs the
-chain — every playing automatic column drains its queue. **Aus** halts
-gently (running work finishes, nothing new starts). **Notaus** aborts
-every live run and halts — the red button, one click. Each automatic
+The **master switch** sits in the board's header as one switch with
+two halves, the active one filled: **▷ run** runs the chain — every
+playing automatic column drains its queue; **❙❙ halt** halts gently
+(running work finishes, nothing new starts). The **■ emergency stop**
+next to it aborts every live run and halts — it turns red when you
+point at it, one click. Each automatic
 column carries its own **brakes** next to the fold chevron: pause (no
 new dispatch), stop (abort this column's runs and hold it — the rest
 keeps going), play again. All of it survives restarts.
@@ -918,10 +992,31 @@ plan, forward to build, or back to Inbox. A manual column *before* the
 first worker column is a plain queue — the next pool drains it
 (prioritized feeds plan).
 
-The board shows the chain's pulse: each column head carries its pool
-(`opencode ×2`) and its brakes; a thin **cycle-time line** above the
-run footer shows how long each column's tickets have been sitting
-there on average. The `ci` handover works, too: a column with a `ci:`
+**How many runs go at once** is set per worker, not per column:
+Settings → *Tickets* → *Fleet* has an **OpenCode pool** and a **Claude
+Code pool** (one each when empty). Every run of that worker takes a
+slot, wherever its column is. When a slot frees up, the next ticket is
+chosen like this: tickets marked **urgent** or **high** first, then the
+column furthest to the right (finishing work beats starting new work),
+then the column's own order. A running ticket is never interrupted for
+a more important one. If OpenCode talks to a llama.cpp server, put its
+address into **OpenCode pool probe** — the server's own parallel slots
+then cap the pool. A run that fails on the provider's rate limit makes
+that pool one slot smaller for five minutes.
+
+The board shows the chain's pulse: each column head carries its worker
+(`opencode`) and its brakes; a one-row **status bar** under the
+columns shows how long each column's tickets have been sitting there
+on average (*Avg. time in column*), and — on its right — an amber pill
+when worktree folders are waiting to be cleaned up (legacy leftovers
+or orphans; hover it for the list, **Clean up worktrees…** in the
+header's **⋯** menu removes them). The board's messages show at the
+right end of that bar, just before the pill, so the cycle times never
+move: an action in progress pulses there (*Cleaning up worktrees…*), a
+result shows with a green tick and fades after a few seconds
+(*Worktrees: 2 removed*), and a warning (amber) or failure (red) stays
+until you close it with **×** — hover a cut-off message for its full
+text. The `ci` handover works, too: a column with a `ci:`
 command moves its tickets when the check passes in the work repo.
 And the assistant can drive runs: ask it about the fleet — it sees
 `fleet_status`, and can `fleet_run`, `fleet_stop`, `fleet_steer` and
@@ -1297,7 +1392,7 @@ history store is deliberately outside it).
 ---
 
 *Manual for Drey 0.7.1; manual content last changed
-2026-10-29. Screenshots were captured automatically from
+2026-10-30. Screenshots were captured automatically from
 the built app (Anthrazit theme, 1600Ã—1000) by
 `e2e/manual-screenshots.spec.ts` — run
 `$env:DREY_MANUAL_SHOTS='1'; npm run e2e:run -- manual-screenshots`

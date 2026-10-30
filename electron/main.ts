@@ -154,6 +154,14 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
     mainWindow.raise();
   });
 
+  // Windows shows a toast (`ui.notify`, req-64) only for an app with a
+  // user model id: the installer's shortcut carries electron-builder's
+  // appId; an unpackaged dev run uses the executable path, Electron's
+  // documented dev convention.
+  if (process.platform === 'win32') {
+    app.setAppUserModelId(app.isPackaged ? 'de.lariscus.drey' : process.execPath);
+  }
+
   app.whenReady().then(async () => {
     startupMark('Electron app ready');
 

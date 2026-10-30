@@ -18,6 +18,7 @@ import type {
   ChainMaster,
   ChainStatus,
   ColumnMode,
+  QuestionAnswers,
   RunInfo,
   RunRequest,
   RunnerDescriptor,
@@ -137,6 +138,22 @@ export class FleetClient {
       return { ok: false, error: 'the fleet runner is not running' };
     }
     return this.post<{ ok: boolean; error?: string; path?: string }>('/attach', { runId, name, data });
+  }
+
+  /** The owner's answer to a worker's pending approval (req-64). */
+  async answerPermission(runId: string, decision: 'once' | 'always' | 'reject'): Promise<{ ok: boolean; error?: string }> {
+    if (!(await this.withRunner())) {
+      return { ok: false, error: 'the fleet runner is not running' };
+    }
+    return this.post<{ ok: boolean; error?: string }>('/permission', { runId, decision });
+  }
+
+  /** The owner's choices for a worker's question form (OpenCode's `question` tool). */
+  async answerQuestion(runId: string, answers: QuestionAnswers): Promise<{ ok: boolean; error?: string }> {
+    if (!(await this.withRunner())) {
+      return { ok: false, error: 'the fleet runner is not running' };
+    }
+    return this.post<{ ok: boolean; error?: string }>('/answer', { runId, answers });
   }
 
   /** Takeover control of a live run: take over, interrupt the turn, hand back. */

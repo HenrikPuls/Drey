@@ -70,7 +70,14 @@ import {
 import { unlinkShared } from './fleet/worktrees';
 import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } from './fleet/worktree-home';
 import type { ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, PermissionMode, RunInfo } from './fleet/protocol';
-import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools, WORKER_PROVIDERS, type FleetPools } from './fleet/protocol';
+import {
+  normalizeFleetCaps,
+  normalizeFleetHandover,
+  normalizeFleetPools,
+  questionAnswersOf,
+  WORKER_PROVIDERS,
+  type FleetPools,
+} from './fleet/protocol';
 import { parseWorkerValue } from './fleet/assignment';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
@@ -1979,6 +1986,23 @@ const plugin: MainPluginModule = {
         return { ok: false, error: 'bad fleet control payload' };
       }
       return fleet.control(p.action, p.runId);
+    });
+
+    ctx.ipc.handle('fleetPermission', async (payload) => {
+      const p = payload as { runId?: unknown; decision?: unknown };
+      if (typeof p.runId !== 'string' || (p.decision !== 'once' && p.decision !== 'always' && p.decision !== 'reject')) {
+        return { ok: false, error: 'bad fleet permission payload' };
+      }
+      return fleet.answerPermission(p.runId, p.decision);
+    });
+
+    ctx.ipc.handle('fleetAnswer', async (payload) => {
+      const p = payload as { runId?: unknown; answers?: unknown };
+      const answers = questionAnswersOf(p.answers);
+      if (typeof p.runId !== 'string' || answers === null) {
+        return { ok: false, error: 'bad fleet answer payload' };
+      }
+      return fleet.answerQuestion(p.runId, answers);
     });
 
     ctx.ipc.handle('fleetStream', async (payload) => {

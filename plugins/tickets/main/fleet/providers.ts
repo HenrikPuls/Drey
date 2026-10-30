@@ -23,7 +23,17 @@
  * live spike rounds pin the exact CLI/API shapes.
  */
 import { freePort, type RunnerProcess, type SpawnFn } from './procs';
-import type { PermissionMode, RunUsage, SteerRung, WorkerProviderId } from './protocol';
+import {
+  QUESTION_MARKER,
+  type PermissionDecision,
+  type PermissionMode,
+  type QuestionAnswers,
+  type RunUsage,
+  type RunWaiting,
+  type SteerRung,
+  type WaitQuestion,
+  type WorkerProviderId,
+} from './protocol';
 
 // One table with the pure resolution rules (T-0049): the supervisor and
 // the start dialog read the same capability per provider.
@@ -60,12 +70,114 @@ export interface NormalizedEvent {
   readonly turn?: 'busy' | 'idle';
   /** The slash commands the worker accepts (names without the slash). */
   readonly commands?: readonly string[];
+  /** The worker began (or stopped) waiting on the owner (req-64); `since` is the event's `ts`. */
+  readonly waiting?: Omit<RunWaiting, 'since'> | null;
   /**
    * Exactly one per assistant model call: THAT call's usage. The
    * providers' aggregates (`tokensIn`/`tokensOut`, the result event) are
    * cumulative over the run and must never pose as a turn's context.
    */
   readonly turnUsage?: RunUsage;
+}
+
+/** The question a turn's last message asks the owner, or null when it asks none. */
+export function questionOf(text: string): string | null {
+  const trimmed = text.trimStart();
+  if (!trimmed.toUpperCase().startsWith(QUESTION_MARKER)) {
+    return null;
+  }
+  const question = trimmed.slice(QUESTION_MARKER.length).trim();
+  return question === '' ? null : question;
+}
+
+/** One line for a permission request: what the tool wants to do, on what. */
+export function permissionText(request: {
+  readonly action?: string;
+  readonly resources?: readonly string[];
+  readonly message?: string;
+}): string {
+  const what = [request.action ?? 'tool', ...(request.resources ?? [])].join(' ').trim();
+  const message = request.message?.trim() ?? '';
+  return message !== '' && message !== what ? `${what} — ${message}` : what;
+}
+
+/** One field of an OpenCode form (v2 `Form.Field`, the parts the fleet reads). */
+interface OcFormField {
+  readonly key?: string;
+  readonly title?: string;
+  readonly description?: string;
+  readonly type?: string;
+  readonly options?: ReadonlyArray<{ readonly value?: string; readonly label?: string; readonly description?: string }>;
+}
+
+/** A pending OpenCode form (v2 `Form.Info`); the `question` tool asks through one. */
+export interface OcForm {
+  readonly id?: string;
+  readonly title?: string;
+  readonly metadata?: { readonly kind?: string };
+  readonly fields?: readonly OcFormField[];
+}
+
+/**
+ * The questions of a pending form, as the run's wait shows them. The
+ * `question` tool puts each question into one field: `title` = its short
+ * header, `description` = the question, the options' `value` = their label.
+ */
+export function formQuestions(form: OcForm): WaitQuestion[] {
+  return (form.fields ?? [])
+    .filter((f): f is OcFormField & { key: string } => typeof f.key === 'string')
+    .map((f) => ({
+      key: f.key,
+      ...(f.title !== undefined && f.title.trim() !== '' ? { header: f.title.trim() } : {}),
+      question: (f.description ?? f.title ?? '').trim() || (form.title ?? 'Question'),
+      options: (f.options ?? [])
+        .map((o) => ({ label: o.value ?? o.label ?? '', ...(o.description !== undefined ? { description: o.description } : {}) }))
+        .filter((o) => o.label !== ''),
+      multiple: f.type === 'multiselect',
+    }));
+}
+
+/** One line for a question form: the first question, and how many more follow. */
+export function formText(questions: readonly WaitQuestion[]): string {
+  const first = questions[0]?.question ?? 'The worker asks you';
+  return questions.length > 1 ? `${first} (+${questions.length - 1} more)` : first;
+}
+
+/**
+ * The owner's typed answer to a question form. One question takes the
+ * whole text; several take one line each, in order. A line that names a
+ * choice — its number or its label — picks that choice (comma-separated
+ * for a multiple choice), anything else is the owner's own answer.
+ */
+export function answersFromText(questions: readonly WaitQuestion[], text: string): QuestionAnswers {
+  const lines = questions.length > 1 ? text.split('\n').map((l) => l.trim()).filter((l) => l !== '') : [text.trim()];
+  const pick = (q: WaitQuestion, token: string): string => {
+    const n = /^\d+$/.test(token) ? Number(token) : NaN;
+    if (n >= 1 && n <= q.options.length) {
+      return q.options[n - 1]!.label;
+    }
+    return q.options.find((o) => o.label.toLowerCase() === token.toLowerCase())?.label ?? token;
+  };
+  const answers: Record<string, string | string[]> = {};
+  questions.forEach((q, i) => {
+    const line = lines[i];
+    if (line === undefined || line === '') {
+      return;
+    }
+    answers[q.key] = q.multiple ? line.split(',').map((t) => pick(q, t.trim())).filter((t) => t !== '') : pick(q, line);
+  });
+  return answers;
+}
+
+/** One line for the Log and the transcript: what the owner answered. */
+export function answersText(questions: readonly WaitQuestion[], answers: QuestionAnswers): string {
+  return questions
+    .map((q) => {
+      const a = answers[q.key];
+      const said = a === undefined ? '—' : typeof a === 'string' ? a : a.join(', ');
+      return questions.length > 1 ? `${q.header ?? q.key}: ${said}` : said;
+    })
+    .join('; ');
 }
 
 /** The stream lead-in of a worker's thinking (the takeover transcript shows it quoted). */
@@ -182,6 +294,17 @@ export interface WorkerHandle {
    * stay (unlike `stop`). False when there is nothing to interrupt.
    */
   interrupt?(): Promise<boolean>;
+  /**
+   * Answers the provider's pending permission request (req-64; OpenCode).
+   * False when the request is gone or the server refused the reply.
+   */
+  answerPermission?(requestId: string, decision: PermissionDecision): Promise<boolean>;
+  /**
+   * Answers the provider's pending question form (OpenCode's `question`
+   * tool): the worker's tool call returns the answers and its turn goes on.
+   * False when the form is gone or the server refused the reply.
+   */
+  answerQuestion?(formId: string, answers: QuestionAnswers): Promise<boolean>;
 }
 
 export interface ProviderAdapter {
@@ -241,6 +364,8 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
       // and the process exits (the run ends). `busy` is "a prompt is out and
       // its result has not come back".
       let held = false;
+      /** The last turn asked the owner something (req-64): stand until answered. */
+      let questionHold = false;
       let busy = true;
       let inputClosed = false;
       // T-0049: the resume's health signal — a CLI that exits before its
@@ -372,6 +497,17 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
             const tokensIn = (usage.input_tokens ?? 0) + cacheReadTokens;
             const tokensOut = usage.output_tokens ?? 0;
+            const cost = typeof event.total_cost_usd === 'number' ? { costUsd: event.total_cost_usd } : {};
+            const question = questionOf(event.result ?? '');
+            busy = false;
+            if (question !== null) {
+              // A question to the owner (req-64): the turn is not the
+              // step's end — the input stays open for the answer.
+              questionHold = true;
+              start.onEvent({ ts: nowIso(now), kind: 'usage', tokensIn, tokensOut, cacheReadTokens, ...cost });
+              start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'idle', waiting: { kind: 'question', text: question } });
+              continue;
+            }
             start.onEvent({
               ts: nowIso(now),
               kind: 'result',
@@ -379,9 +515,8 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
               tokensIn,
               tokensOut,
               cacheReadTokens,
-              ...(typeof event.total_cost_usd === 'number' ? { costUsd: event.total_cost_usd } : {}),
+              ...cost,
             });
-            busy = false;
             start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'idle' });
             if (compactPending) {
               // The compact's own result: the session is compacted, the
@@ -424,17 +559,27 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             return 'refused';
           }
           proc.write(userMessage(text));
-          if (!busy) {
+          // The owner's message answers an open question: the next
+          // finished turn ends the run again (unless the owner holds it).
+          const answered = questionHold;
+          questionHold = false;
+          if (!busy || answered) {
             busy = true;
-            start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'busy' });
+            start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'busy', ...(answered ? { waiting: null } : {}) });
           }
           return 'inject';
         },
         setHold: (value) => {
           held = value;
           // Released while standing: nothing more is coming, the run ends.
-          if (!held && !busy) {
-            closeInput();
+          if (!held) {
+            if (questionHold) {
+              questionHold = false;
+              start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
+            }
+            if (!busy) {
+              closeInput();
+            }
           }
         },
         // The stream-json control request the Claude SDK sends for its own
@@ -477,6 +622,12 @@ interface OcContentPart {
 
 /** One line for a tool call: `read src/a.ts`, `shell git status`, `grep prepareWorktree`. */
 export function toolActivity(name: string | undefined, input: Readonly<Record<string, unknown>> | undefined): string {
+  const questions = input?.['questions'];
+  if (name === 'question' && Array.isArray(questions)) {
+    // OpenCode's `question` tool: the line is what it asks, not a bare "question".
+    const first = (questions[0] as { question?: unknown } | undefined)?.question;
+    return activityLine(`asks ${typeof first === 'string' ? first : 'the owner'}`);
+  }
   const target = input?.['path'] ?? input?.['filePath'] ?? input?.['file_path'] ?? input?.['command'] ?? input?.['pattern'] ?? '';
   return activityLine(`${name ?? 'tool'} ${typeof target === 'string' ? target : ''}`);
 }
@@ -522,6 +673,14 @@ interface OcSession {
   readonly tokens?: OcUsage;
 }
 
+/** One pending permission request (v2 `Permission.Request`, req-64). */
+interface OcPermissionRequest {
+  readonly id?: string;
+  readonly action?: string;
+  readonly resources?: readonly string[];
+  readonly message?: string;
+}
+
 /** One model-catalog entry — v2's `Model.Info` (`limit.context` is the window). */
 interface OcModel {
   readonly id?: string;
@@ -549,6 +708,15 @@ export const OPENCODE_API = {
   commands: '/api/command',
   command: (id: string): string => `/api/session/${id}/command`,
   compact: (id: string): string => `/api/session/${id}/compact`,
+  /** The session's pending permission requests (`GET`, `{data: [{id, action, resources, message?}]}`; req-64). */
+  permissions: (id: string): string => `/api/session/${id}/permission`,
+  /** The answer to one (`POST {decision: once | always | reject}`, 204). */
+  permissionReply: (id: string, requestId: string): string =>
+    `/api/session/${id}/permission/${encodeURIComponent(requestId)}/reply`,
+  /** The session's pending forms — the `question` tool asks through one (`GET`, `{data: [Form.Info]}`). */
+  forms: (id: string): string => `/api/session/${id}/form`,
+  /** The answer to one (`POST {answer: {q0: …}}`, 204). */
+  formReply: (id: string, formId: string): string => `/api/session/${id}/form/${encodeURIComponent(formId)}/reply`,
   /** The model catalog (`GET`, `{data: Model.Info[]}`). */
   models: '/api/model',
   /** The server's default model (`GET`, `{data: Model.Info | undefined}`). */
@@ -626,6 +794,14 @@ export function opencodeAdapter(
       turnDone: false,
       /** A human drives the session: an idle marker is not the run's end. */
       held: false,
+      /** The turn ended with a question to the owner (req-64): stand until answered. */
+      questionHold: false,
+      /** The prompt time whose question was already reported (one report per turn). */
+      questionReportedFor: -1,
+      /** The permission request now reported as the wait, or null. */
+      permissionId: null as string | null,
+      /** The question form now reported as the wait, or null. */
+      formId: null as string | null,
       turn: undefined as 'busy' | 'idle' | undefined,
       /** Idle markers older than this belong to an earlier turn. */
       lastPromptAt: 0,
@@ -1260,9 +1436,61 @@ export function opencodeAdapter(
               }
             }
             // The server writes the turn's end into the list itself.
-            if (m.type === 'idle' && !state.held && (m.time?.created ?? 0) >= state.lastPromptAt) {
-              state.turnDone = true;
+            if (m.type === 'idle' && (m.time?.created ?? 0) >= state.lastPromptAt) {
+              // A turn that ends asking the owner (req-64) stands instead —
+              // reported once, held or not, so the owner hears of it.
+              const question = questionOf(state.lastText);
+              if (question !== null && state.questionReportedFor !== state.lastPromptAt) {
+                state.questionReportedFor = state.lastPromptAt;
+                state.questionHold = true;
+                start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: { kind: 'question', text: question } });
+              }
+              if (!state.held && !state.questionHold) {
+                state.turnDone = true;
+              }
             }
+          }
+        }
+
+        // A tool call the server wants approved blocks the turn silently:
+        // the pending request becomes the run's wait (req-64).
+        const pending = await fetchFn(`${address}${OPENCODE_API.permissions(state.sessionRef)}`, { headers: auth }).catch(
+          () => null,
+        );
+        if (pending !== null && pending.ok) {
+          const body = (await pending.json()) as { data?: ReadonlyArray<OcPermissionRequest> };
+          const first = (body.data ?? []).find((r) => typeof r.id === 'string');
+          if (first !== undefined && first.id !== state.permissionId) {
+            state.permissionId = first.id!;
+            start.onEvent({
+              ts: nowIso(now),
+              kind: 'usage',
+              waiting: { kind: 'permission', text: permissionText(first), requestId: first.id! },
+            });
+          } else if (first === undefined && state.permissionId !== null) {
+            state.permissionId = null;
+            start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
+          }
+        }
+
+        // The `question` tool asks through a form and blocks its call until
+        // the form is answered — the turn neither ends nor goes on, so the
+        // pending form becomes the run's wait, with its choices.
+        const forms = await fetchFn(`${address}${OPENCODE_API.forms(state.sessionRef)}`, { headers: auth }).catch(() => null);
+        if (forms !== null && forms.ok) {
+          const body = (await forms.json()) as { data?: readonly OcForm[] };
+          const form = (body.data ?? []).find((f) => typeof f.id === 'string' && (f.fields ?? []).length > 0);
+          if (form !== undefined && form.id !== state.formId) {
+            state.formId = form.id!;
+            const questions = formQuestions(form);
+            start.onEvent({
+              ts: nowIso(now),
+              kind: 'usage',
+              waiting: { kind: 'question', text: formText(questions), requestId: form.id!, questions },
+            });
+          } else if (form === undefined && state.formId !== null) {
+            state.formId = null;
+            start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
           }
         }
 
@@ -1306,6 +1534,14 @@ export function opencodeAdapter(
         // While a turn is live the server queues the POST with delivery
         // `steer` — the native injection rung.
         state.lastPromptAt = now().getTime();
+        if (state.questionHold) {
+          // The owner answers the question: the next finished turn ends
+          // the run again (unless the owner holds it), and the question
+          // text is the past — it must not be asked a second time.
+          state.questionHold = false;
+          state.lastText = '';
+          start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
+        }
         const slash = /^\/([\w.-]+)(?:\s+([\s\S]*))?$/.exec(text.trim());
         if (slash !== null && (await postCommand(slash[1]!, (slash[2] ?? '').trim()))) {
           return 'inject';
@@ -1315,6 +1551,55 @@ export function opencodeAdapter(
       },
       setHold: (held) => {
         state.held = held;
+        if (!held && state.questionHold) {
+          // Handed back unanswered: the standing turn ends the run.
+          state.questionHold = false;
+          start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
+        }
+      },
+      answerPermission: async (requestId, decision) => {
+        if (!state.alive || state.sessionRef === null || address === '') {
+          return false;
+        }
+        try {
+          const res = await fetchFn(`${address}${OPENCODE_API.permissionReply(state.sessionRef, requestId)}`, {
+            method: 'POST',
+            headers: { ...auth, 'content-type': 'application/json' },
+            body: JSON.stringify({ decision }),
+          });
+          if (!res.ok) {
+            return false;
+          }
+        } catch {
+          return false;
+        }
+        if (state.permissionId === requestId) {
+          state.permissionId = null;
+          start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
+        }
+        return true;
+      },
+      answerQuestion: async (formId, answers) => {
+        if (!state.alive || state.sessionRef === null || address === '') {
+          return false;
+        }
+        try {
+          const res = await fetchFn(`${address}${OPENCODE_API.formReply(state.sessionRef, formId)}`, {
+            method: 'POST',
+            headers: { ...auth, 'content-type': 'application/json' },
+            body: JSON.stringify({ answer: answers }),
+          });
+          if (!res.ok) {
+            return false;
+          }
+        } catch {
+          return false;
+        }
+        if (state.formId === formId) {
+          state.formId = null;
+          start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
+        }
+        return true;
       },
       interrupt: async () => {
         if (!state.alive || state.sessionRef === null || address === '') {
