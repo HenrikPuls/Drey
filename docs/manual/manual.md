@@ -1078,15 +1078,24 @@ first worker column is a plain queue — the next pool drains it
 enters a pool while a blocker is open — the chain log line names it
 and its blockers.
 
-**How many runs go at once** is set per worker, not per column:
-Settings → *Tickets* → *Fleet* has an **OpenCode pool** and a **Claude
-Code pool** (one each when empty). Every run of that worker takes a
+**Each worker has its own settings.** Settings → *Tickets* → *Workers*
+has a switch between **OpenCode** and **Claude Code**. It opens on your
+default worker and shows only the settings of the selected worker:
+- **Pool size**: how many of its runs go at once.
+- **Resume compact threshold**: the worker's own value for the shared
+  setting in *Fleet*. Leave it empty to use the shared value.
+- **Pool probe** (OpenCode only).
+- **Dispatched-run permissions** (Claude Code only). OpenCode takes its
+  permissions from its own configuration and asks on the card.
+
+**How many runs go at once** is set per worker, not per column: the
+**Pool size** of each worker (one when empty). Every run of that worker takes a
 slot, wherever its column is. When a slot frees up, the next ticket is
 chosen like this: tickets marked **urgent** or **high** first, then the
 column furthest to the right (finishing work beats starting new work),
 then the column's own order. A running ticket is never interrupted for
 a more important one. If OpenCode talks to a llama.cpp server, put its
-address into **OpenCode pool probe** — the server's own parallel slots
+address into OpenCode's **Pool probe** — the server's own parallel slots
 then cap the pool. A run that fails on the provider's rate limit makes
 that pool one slot smaller for five minutes.
 

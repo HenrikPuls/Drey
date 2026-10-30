@@ -34,6 +34,68 @@ export function textButton(label: string, kind: 'ghost' | 'primary' = 'ghost'): 
   return button;
 }
 
+// --- plugin-config fields (the Fleet and Workers sections) -----------------
+
+/** One label/value row of a `tset-kv` grid: the control above its hint. */
+export function kv(id: string, label: string, control: HTMLInputElement | HTMLSelectElement, hint: string): HTMLElement[] {
+  control.id = id;
+  const name = el('label', 'tset-kv-label', label);
+  name.htmlFor = id;
+  const value = el('div', 'tset-kv-value');
+  value.append(control, el('span', 'field-hint', hint));
+  return [name, value];
+}
+
+export function selectConfig(
+  api: DreyPluginApi,
+  key: string,
+  choices: ReadonlyArray<readonly [string, string]>,
+  fallback: string,
+): HTMLSelectElement {
+  const select = el('select');
+  for (const [value, label] of choices) {
+    select.append(Object.assign(el('option', undefined, label), { value }));
+  }
+  void api.settings.get<string>(key).then((value) => {
+    select.value = value ?? fallback;
+  });
+  select.addEventListener('change', () => {
+    void api.settings.set(key, select.value).catch(() => undefined);
+  });
+  return select;
+}
+
+export function textConfig(api: DreyPluginApi, key: string): HTMLInputElement {
+  const input = el('input', 'mono-input');
+  input.type = 'text';
+  input.spellcheck = false;
+  void api.settings.get<string>(key).then((value) => {
+    input.value = value ?? '';
+  });
+  input.addEventListener('change', () => {
+    void api.settings.set(key, input.value.trim()).catch(() => undefined);
+  });
+  return input;
+}
+
+/** A whole-number config field; empty or invalid clears back to the default. */
+export function numberConfig(api: DreyPluginApi, key: string): HTMLInputElement {
+  const input = el('input', 'mono-input');
+  input.type = 'number';
+  input.min = '0';
+  input.step = '1';
+  void api.settings.get<number>(key).then((value) => {
+    input.value = typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+  });
+  input.addEventListener('change', () => {
+    const parsed = Number(input.value);
+    void api.settings
+      .set(key, input.value.trim() !== '' && Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : '')
+      .catch(() => undefined);
+  });
+  return input;
+}
+
 /** A backend call that never throws: a failure is an `{ ok: false }` result. */
 export async function mutate(api: DreyPluginApi, method: string, payload?: unknown): Promise<MutationResult> {
   try {

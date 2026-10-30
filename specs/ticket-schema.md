@@ -328,7 +328,7 @@ commit per change; hand edits win on refresh):
   `providerID/modelID`).
 - `workers:` — **retired (req-63).** The parallel slots belong to the
   worker providers (`fleet.pool.<provider>.size` in the plugin config,
-  Settings → Tickets → Fleet), shared by every column. A leftover key is
+  Settings → Tickets → Workers, req-71), shared by every column. A leftover key is
   ignored with a noise badge; clearing a column's worker removes it.
 - `prompt:` — the prompt ref override; the default is the handover's
   ref (and setting a worker in the dialog writes the matching

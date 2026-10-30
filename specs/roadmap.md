@@ -59,8 +59,8 @@ owner's verification round for 1–81 closed 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 87; latest requirement id: req-70
-(the ticket card's context menu, regrouped)),
+highest used (latest: milestone 87; latest requirement id: req-71
+(Settings → Tickets grouped per CLI runner)),
 the update check's positive answer is inline text — req-43 and req-44
 were owner requests outside the list, shipped and owner-verified in
 the same step).

@@ -387,7 +387,7 @@ describe('patchPipelinePhase - the settings dialog writer', () => {
     const noise = parsed.issues.filter((issue) => issue.message.includes('workers:'));
     expect(noise).toHaveLength(1);
     expect(noise[0]!.level).toBe('noise');
-    expect(noise[0]!.message).toContain('Settings → Tickets → Fleet');
+    expect(noise[0]!.message).toContain('Settings → Tickets → Workers');
   });
 });
 

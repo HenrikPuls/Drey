@@ -93,7 +93,7 @@ export function parsePipeline(text: string): PipelineParse {
       // req-63: the pools belong to the providers now — the old column key is forgiven visibly.
       issues.push({
         level: 'noise',
-        message: `pipeline.md: ${id}'s workers: is no longer read — set the provider pool size in Settings → Tickets → Fleet`,
+        message: `pipeline.md: ${id}'s workers: is no longer read — set the pool size in Settings → Tickets → Workers`,
       });
     }
     const promptRaw = map['prompt'];

@@ -20,6 +20,38 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-71 — Settings → Tickets: each CLI runner's settings behind a switch
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list. The Fleet section listed every fleet setting in one column, so a
+setting for one runner looked as if it applied to every runner:
+OpenCode pool, OpenCode pool probe and Claude Code pool sat in one list,
+and *Dispatched-run permissions* looked shared although only the Claude
+Code adapter reads it (`--permission-mode`); OpenCode takes its
+permissions from its own config and asks on the card (req-64). The
+per-provider compact-threshold overrides T-0049 reads
+(`fleet.compactAboveTokens.<provider>`) had no UI at all.
+
+- **Fleet** keeps the shared settings: default worker, git executable,
+  the four output caps, the shared resume compact threshold and the
+  resume pause TTL.
+- **Workers** (new, `plugins/tickets/renderer/settings-workers.ts`) has
+  an OpenCode | Claude Code switch. It opens on the default worker's
+  runner and shows the selected runner's fields:
+  - OpenCode: pool size, pool probe, compact-threshold override.
+  - Claude Code: pool size, dispatched-run permissions,
+    compact-threshold override.
+  An empty override uses the shared threshold.
+- No config key changed, including `autoPermissionMode`. Nothing on the
+  main side changed either, so existing settings carry over as they
+  are. The kv/config field helpers moved from `settings-page.ts` to
+  `settings-dom.ts`.
+
+Specs: `plugins/tickets/renderer/settings-workers.spec.ts`. It pins the
+table to the keys the main side reads per provider: probe for OpenCode
+only, permissions for Claude Code only, unique control ids. Docs:
+`plugins/tickets/FLEET.md` (handover config), the manual §13.
+
 ### Fix — fleet: run events fold in arrival order (the req-67 clock-freeze flake)
 
 Follow-up of req-67. Its "the clock freezes when the run ends" spec was
