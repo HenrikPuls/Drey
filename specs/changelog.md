@@ -47,7 +47,7 @@ The spec keeps its rapid-fire pair as the regression test (a comment now
 says why), and two events can no longer append to `stream.jsonl` out of
 order either. Specs: `plugins/tickets/main/fleet/runs.spec.ts` (the
 rapid-fire pair; the fleet suite 314 tests green, the flaky spec 20
-consecutive rounds green). **Not yet manually verified by the owner.**
+consecutive rounds green). Owner-verified (signed off 2026-10-30).
 
 ### req-65 — Interactive mode at the plan phase and every checkpoint
 
