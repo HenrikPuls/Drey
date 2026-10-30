@@ -204,6 +204,17 @@ export function makeDesk() {
       move(cmd.id, cmd.to);
       return { ok: true };
     },
+    reorder: async (cmd: { phase: string; id: string; index: number }) => {
+      calls.push({ what: 'reorder', args: [cmd] });
+      const list = tickets[cmd.phase]!;
+      const at = list.findIndex((c) => c.id === cmd.id);
+      if (at >= 0) {
+        const [c] = list.splice(at, 1);
+        list.splice(cmd.index, 0, c!);
+      }
+      emit();
+      return { ok: true };
+    },
     claim: async (cmd: unknown, actor: string) => {
       calls.push({ what: 'claim', args: [cmd, actor] });
       return { ok: true };

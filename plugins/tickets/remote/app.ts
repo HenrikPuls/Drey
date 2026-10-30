@@ -12,6 +12,7 @@ import type { BoardSnapshot } from '../shared/tickets';
 import { Api, ApiError } from './api';
 import { h, icon, present, toast } from './dom';
 import type { Ctx, State, View } from './context';
+import { kanbanView } from './kanban';
 import { refineTabOf, refineView } from './refine-view';
 import { runsView, runView } from './runs-views';
 import { boardView, captureView, fleetChip, gestureInProgress, needsView, pairView, ticketView } from './views';
@@ -56,6 +57,9 @@ class App {
     stream: null,
   };
   private pendingRender = false;
+  /** iPad widths: the kanban from 768 px, the kanban with a detail pane from 1100 px. */
+  private readonly wideQuery = matchMedia('(min-width: 768px)');
+  private readonly splitQuery = matchMedia('(min-width: 1100px)');
   private lastWasForm = false;
   private forcePaint = false;
   /** What the current page was drawn from — an identical refresh draws nothing. */
@@ -102,6 +106,13 @@ class App {
   start(): void {
     document.body.append(this.header, this.main, this.footer, this.tabbar);
     window.addEventListener('hashchange', () => this.onRoute());
+    const relayout = (): void => {
+      this.forcePaint = true;
+      this.paintedFrom = '';
+      this.render();
+    };
+    this.wideQuery.addEventListener('change', relayout);
+    this.splitQuery.addEventListener('change', relayout);
     // A field being typed in is never redrawn under the cursor: the redraw waits for blur.
     document.addEventListener('focusout', () => {
       if (this.pendingRender) {
@@ -252,10 +263,12 @@ class App {
     let view: View;
     switch (route.name) {
       case 'board':
-        view = boardView(this.ctx, route.arg);
+        view = this.wideQuery.matches ? kanbanView(this.ctx, null, 'ticket', this.splitQuery.matches) : boardView(this.ctx, route.arg);
         break;
       case 'ticket':
-        view = ticketView(this.ctx, route.arg!, route.sub === 'log' ? 'log' : 'ticket');
+        view = this.splitQuery.matches
+          ? kanbanView(this.ctx, route.arg!, route.sub === 'log' ? 'log' : 'ticket', true)
+          : ticketView(this.ctx, route.arg!, route.sub === 'log' ? 'log' : 'ticket');
         break;
       case 'capture':
         view = captureView(this.ctx);
@@ -318,6 +331,7 @@ class App {
     this.main.replaceChildren(...view.body);
     this.footer.replaceChildren(...(view.actions ? [view.actions] : []));
     document.body.classList.toggle('has-actions', Boolean(view.actions));
+    document.body.classList.toggle('wide', view.wide === true);
     document.title = `${view.title} · Drey Tickets`;
     window.scrollTo(0, scroll);
   }

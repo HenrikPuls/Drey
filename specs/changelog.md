@@ -20,6 +20,39 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-66 R6 — Tickets remote: the iPad board
+
+**Not yet manually verified by the owner** (press-and-hold drag with a
+real finger in iPad Safari above all). Owner request, outside the list
+(ADR-0084). From tablet width the Board is a kanban:
+
+- **≥ 768 px**: every column side by side in a sideways-scrolling strip
+  (snap per column, the scroll position kept across live redraws), each
+  column with its count/WIP, the checkpoint or Playing/Held chip
+  (opens the column sheet) and its own vertical scroll.
+- **≥ 1100 px** (landscape): the tapped ticket opens in a detail pane
+  beside the strip — the phone's ticket view with its action bar — the
+  selected card outlined and scrolled into view; the phone ticket page
+  stays for narrower screens.
+- **Press and hold to drag** (350 ms; moving earlier is a scroll): the
+  card lifts as a ghost, a blue marker shows the landing, the strip and
+  the column scroll near their edges; a drop in another column is a
+  `transition` with the landing index, within the column a `reorder`
+  pin, a drop in place nothing — the index counted without the dragged
+  card, as the desk's board does (`dropIndexOf` / `dropActionOf`).
+  While lifted, a non-passive `touchmove` keeps Safari from scrolling;
+  pointer capture keeps a release outside the strip from leaving a
+  drag behind.
+- Found by the e2e round: a live redraw during the hold replaced the
+  strip under the finger and lost the drag — redraws are now held from
+  the first touch, not from the lift.
+
+Specs: `remote/model.spec.ts` (drop index and action);
+`e2e/tickets-remote.spec.ts` iPad case (iPad Pro 11 landscape: eight
+columns, tap selects into the detail pane, drag across columns with the
+index and the device actor, reorder within Build, an early move is a
+scroll). Docs: docs/05 §5.41, manual "On an iPad".
+
 ### req-66 R5 — Tickets remote: refine from the phone
 
 **Not yet manually verified by the owner** (above all the on-screen

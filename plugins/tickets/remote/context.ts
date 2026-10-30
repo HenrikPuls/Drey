@@ -40,5 +40,7 @@ export interface View {
   readonly followTail?: boolean;
   /** A form: a live update never redraws it under the typing hand. */
   readonly form?: boolean;
+  /** Uses the full width (the iPad kanban) instead of the reading column. */
+  readonly wide?: boolean;
 }
 

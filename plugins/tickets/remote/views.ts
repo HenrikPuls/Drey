@@ -39,7 +39,7 @@ const runs = (ctx: Ctx): NonNullable<FleetSnapshot['runs']> => ctx.state.fleet?.
 
 // --- shared pieces ----------------------------------------------------------
 
-function prioClass(priority: TicketPriority): string {
+export function prioClass(priority: TicketPriority): string {
   return `prio prio-${priority}`;
 }
 
@@ -138,6 +138,15 @@ export function gestureInProgress(): boolean {
   return gestures > 0;
 }
 
+/** A drag elsewhere (the iPad kanban) holds redraws the same way a swipe does. */
+export function beginGesture(): void {
+  gestures++;
+}
+
+export function endGesture(): void {
+  gestures = Math.max(0, gestures - 1);
+}
+
 const PHASE_KEY = 'drey.remote.phase';
 
 function selectedPhase(board: BoardSnapshot, hashPhase: string | null): BoardColumn | null {
@@ -219,7 +228,7 @@ export function boardView(ctx: Ctx, hashPhase: string | null): View {
   };
 }
 
-function cardChips(ctx: Ctx, card: TicketCard): HTMLElement[] {
+export function cardChips(ctx: Ctx, card: TicketCard): HTMLElement[] {
   const out: HTMLElement[] = [];
   const live = liveRunOf(card.id, runs(ctx));
   const latest = latestRunOf(card.id, runs(ctx));

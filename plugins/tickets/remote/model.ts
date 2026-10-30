@@ -282,3 +282,26 @@ export function sectionTextOf(text: string, key: RefineKey): string {
   const section = sectionsOf(text).find((s) => s.title.toLowerCase() === REFINE_TITLES[key].toLowerCase());
   return section === undefined ? '' : section.lines.join('\n').trim();
 }
+
+// --- kanban drag (iPad) -----------------------------------------------------
+
+/** Where a dragged card lands: how many of the column's other cards sit above the pointer. */
+export function dropIndexOf(otherMidpoints: readonly number[], y: number): number {
+  return otherMidpoints.filter((mid) => mid < y).length;
+}
+
+export type DropAction =
+  | { readonly kind: 'move'; readonly from: string; readonly to: string; readonly index: number }
+  | { readonly kind: 'reorder'; readonly phase: string; readonly index: number };
+
+/**
+ * The desk call a drop makes — the index counts the target column
+ * WITHOUT the dragged card, as `transition` and `reorder` read it; null
+ * when the card lands where it was.
+ */
+export function dropActionOf(from: string, fromIndex: number, to: string, index: number): DropAction | null {
+  if (from !== to) {
+    return { kind: 'move', from, to, index };
+  }
+  return index === fromIndex ? null : { kind: 'reorder', phase: to, index };
+}

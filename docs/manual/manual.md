@@ -1132,6 +1132,14 @@ ticket whose run is still going cannot be refined. If the same ticket is
 open in Drey with unsaved changes, Drey shows its merge view when you
 save there.
 
+**On an iPad.** From tablet width the Board shows every column side by
+side, scrolling sideways; in landscape the ticket you tap opens in a
+pane beside the board, with the same buttons as on the phone. To move a
+card, **press and hold it** until it lifts, then drag it — into another
+column to move it there, or up and down in its column to change the
+order (a blue line shows where it lands). Moving your finger before the
+card lifts scrolls instead. **Move…** works here too.
+
 **The fleet's switches.** The chip at the top right (*Running*,
 *Halted*) opens the fleet switch: **Run** / **Halt** for every column,
 and **Stop every live run** (tap twice). On the Board, the

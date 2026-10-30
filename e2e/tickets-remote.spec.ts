@@ -220,3 +220,83 @@ test('refines a section, keeps the draft through a conflict, and edits the heade
 
   expect(errors).toEqual([]);
 });
+
+test.describe('on an iPad in landscape (R6)', () => {
+  const PAD_PORT = 47866;
+  const { defaultBrowserType: _padEngine, ...ipad } = devices['iPad Pro 11 landscape'];
+  test.use(ipad);
+  let pad: typeof service;
+  let padCalls: { what: string; args: unknown[] }[];
+
+  test.beforeAll(async () => {
+    const desk = makeDesk();
+    padCalls = desk.calls;
+    const padStore = new Map<string, unknown>();
+    pad = new RemoteService({
+      config: { get: async (k: string) => padStore.get(k), set: async (k: string, v: unknown) => void padStore.set(k, v) },
+      port: desk.port,
+      clientDir: path.resolve('dist-electron/plugins/tickets/remote'),
+      log: () => undefined,
+      onChanged: () => undefined,
+    });
+    await pad.init();
+    await pad.configure({ enabled: true, port: PAD_PORT });
+  });
+
+  test.afterAll(async () => {
+    await pad.stop();
+  });
+
+  async function drag(page: Page, from: string, to: { x: number; y: number }): Promise<void> {
+    const box = (await page.locator(`.kcard[data-id="${from}"]`).boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(450);
+    await page.mouse.move(to.x, to.y, { steps: 8 });
+    await page.waitForTimeout(100);
+    await page.mouse.up();
+  }
+
+  test('shows every column with a detail pane, and moves cards by press-and-drag', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(pad.pair('iPad', false).pairing.url);
+    await page.locator('.tab', { hasText: 'Board' }).click();
+    await expect(page.locator('.kcol')).toHaveCount(8);
+    await expect(page.locator('.detail')).toContainText('Select a ticket.');
+
+    // A tap selects: the ticket opens beside the board.
+    await page.locator('.kcard[data-id="T-0053"]').click();
+    await expect(page.locator('.detail .ticket-title')).toHaveText('Phase chip moves the ticket');
+    await expect(page.locator('.kcard[data-id="T-0053"]')).toHaveClass(/selected/);
+    await expect(page.locator('.detail .btn-primary')).toHaveText('Approve → Build');
+
+    // Hold, then drag into another column: a transition with the landing index.
+    const prioritized = (await page.locator('.kcol[aria-label="Prioritized"] .kcol-list').boundingBox())!;
+    await drag(page, 'T-0055', { x: prioritized.x + prioritized.width / 2, y: prioritized.y + 20 });
+    await expect(page.locator('.toast')).toContainText('T-0055 → Prioritized');
+    expect(padCalls.at(-1)).toEqual({ what: 'move', args: [{ id: 'T-0055', from: 'inbox', to: 'prioritized', index: 0 }, 'owner@ipad'] });
+    await expect(page.locator('.kcol[aria-label="Prioritized"] .kcard[data-id="T-0055"]')).toBeVisible();
+
+    // Within a column: a reorder above the first card (Build sits off screen at first).
+    await page.locator('.kcol[aria-label="Build"]').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(150);
+    const first = (await page.locator('.kcard[data-id="T-0052"]').boundingBox())!;
+    await drag(page, 'T-0050', { x: first.x + first.width / 2, y: first.y + 4 });
+    await expect(page.locator('.toast')).toContainText('T-0050 reordered');
+    expect(padCalls.at(-1)).toEqual({ what: 'reorder', args: [{ phase: 'build', id: 'T-0050', index: 0 }] });
+
+    // Moving before the hold is a scroll, never a drag.
+    const count = padCalls.length;
+    await page.locator('.kcard[data-id="T-0048"]').scrollIntoViewIfNeeded();
+    const card = (await page.locator('.kcard[data-id="T-0048"]').boundingBox())!;
+    await page.mouse.move(card.x + 20, card.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(card.x - 200, card.y + 20, { steps: 4 });
+    await page.mouse.up();
+    expect(padCalls.length).toBe(count);
+    await expect(page.locator('.ghost')).toHaveCount(0);
+
+    expect(errors).toEqual([]);
+  });
+});

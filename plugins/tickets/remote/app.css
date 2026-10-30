@@ -320,3 +320,54 @@ textarea { resize: vertical; line-height: 1.45; }
 @media (min-width: 768px) {
   .view { max-width: 720px; margin: 0 auto; width: 100%; }
 }
+
+/* --- the iPad board (R6) ----------------------------------------------------- */
+body.wide .view { max-width: none; margin: 0; }
+.kanban, .detail { height: calc(100dvh - 52px - env(safe-area-inset-top) - var(--tab-h) - env(safe-area-inset-bottom) - 24px); }
+.kanban {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  padding-bottom: 4px;
+}
+.kcol {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--line);
+  scroll-snap-align: start;
+}
+.kcol.unknown { border-style: dashed; }
+.kcol-head { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.kcol-title { font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kcol-list { flex: 1; min-height: 60px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px; }
+.kcard { cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; transition: none; }
+.kcard.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.kcard.placeholder { opacity: 0.3; }
+.ghost { position: fixed; z-index: 40; pointer-events: none; transform: rotate(-2deg); box-shadow: 0 14px 32px rgba(0, 0, 0, 0.55); border-color: var(--accent); }
+.drop-marker { flex: none; height: 3px; margin: -2px 4px; border-radius: 2px; background: var(--accent); }
+
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 420px); gap: 12px; }
+.split .kanban { min-width: 0; }
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 4px 4px 0 12px;
+  border-left: 1px solid var(--line);
+}
+.detail > .empty { margin-top: 30vh; }
+.detail .actionbar {
+  position: sticky;
+  bottom: 0;
+  margin: auto -4px 0 -12px;
+  padding: 10px 4px 10px 12px;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}

@@ -12,6 +12,8 @@ import {
   sectionsOf,
   swipeCommits,
   answersOf,
+  dropActionOf,
+  dropIndexOf,
   refineKeyOf,
   sectionTextOf,
   runsForList,
@@ -189,5 +191,19 @@ describe('refining', () => {
     expect(sectionTextOf('---\nid: T-1\n---\n', 'description')).toBe('');
     expect(refineKeyOf('Acceptance criteria')).toBe('acceptance');
     expect(refineKeyOf('Log')).toBeNull();
+  });
+});
+
+describe('kanban drops', () => {
+  it('counts the other cards above the pointer', () => {
+    expect(dropIndexOf([50, 150, 250], 10)).toBe(0);
+    expect(dropIndexOf([50, 150, 250], 200)).toBe(2);
+    expect(dropIndexOf([], 999)).toBe(0);
+  });
+
+  it('moves across columns, reorders within one, and skips a drop in place', () => {
+    expect(dropActionOf('build', 1, 'review', 0)).toEqual({ kind: 'move', from: 'build', to: 'review', index: 0 });
+    expect(dropActionOf('build', 1, 'build', 0)).toEqual({ kind: 'reorder', phase: 'build', index: 0 });
+    expect(dropActionOf('build', 1, 'build', 1)).toBeNull();
   });
 });
