@@ -22,7 +22,7 @@ recorded as an explicit decision. The parity checklist lives in
 
 ### req-69 — The board's view controls move into the Tickets header
 
-**Not yet manually verified by the owner.** Owner request, outside the
+Owner request, outside the
 list. req-66 had left one toolbar row above the columns holding only the
 hide-blocked filter and the board issues chip — a whole line of panel
 height for two small controls. Both now sit in the panel header as one
