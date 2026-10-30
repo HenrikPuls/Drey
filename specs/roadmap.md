@@ -59,8 +59,8 @@ owner's verification round for 1–81 closed 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 85; latest requirement id: req-60 (the fleet status in the
-Tickets panel header),
+highest used (latest: milestone 85; latest requirement id: req-61 (the board's messages at
+the right end of the status bar),
 the update check's positive answer is inline text — req-43 and req-44
 were owner requests outside the list, shipped and owner-verified in
 the same step).

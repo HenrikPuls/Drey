@@ -968,8 +968,9 @@ columns shows how long each column's tickets have been sitting there
 on average (*Avg. time in column*), and — on its right — an amber pill
 when worktree folders are waiting to be cleaned up (legacy leftovers
 or orphans; hover it for the list, **Clean up worktrees…** in the
-header's **⋯** menu removes them). The board's messages lead that bar
-too: an action in progress pulses there (*Cleaning up worktrees…*), a
+header's **⋯** menu removes them). The board's messages show at the
+right end of that bar, just before the pill, so the cycle times never
+move: an action in progress pulses there (*Cleaning up worktrees…*), a
 result shows with a green tick and fades after a few seconds
 (*Worktrees: 2 removed*), and a warning (amber) or failure (red) stays
 until you close it with **×** — hover a cut-off message for its full

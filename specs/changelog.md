@@ -20,6 +20,22 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-61 — Tickets board: messages at the right end of the status bar
+
+Owner request, outside the list. req-60 put the board's message at the
+left of the status bar, so every message that appeared or faded shoved
+the cycle times sideways — restless in use. The bar's right end is now
+one group (`.tickets-statusbar-right`, `statusBarNode` in
+`plugins/tickets/renderer/index.ts`): the message, then the worktree
+pill anchored at the edge. A message comes and goes in the free space
+left of the pill, so neither the cycle times nor the pill move. In a
+narrow panel the cycle-time segments that do not fit drop whole (they
+wrap onto a hidden second line) instead of being cut mid-word; the
+right group takes at most 60 % and cuts the message text with an
+ellipsis (full text in its tooltip). Also: the `fleetHeaderNode` doc
+comment sits on its function again. Manual: the status-bar sentence.
+**Not yet manually verified by the owner.**
+
 ### req-60 — Tickets panel: fleet status in the panel header
 
 Owner request, outside the list. The fleet summary sat as a row of three

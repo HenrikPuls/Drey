@@ -54,16 +54,27 @@
   white-space: nowrap;
 }
 
-/* The board's message (req-60): leads the bar, cut before the cycle times are. */
+/*
+ * The right end of the bar (req-61): the board's message, then the
+ * worktree pill. The message comes and goes in the free space on the
+ * left of the pill, so neither the cycle times nor the pill move.
+ */
+.tickets-statusbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 60%;
+  margin-left: auto;
+}
+
 .tickets-statusbar-note {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   flex: 0 1 auto;
   min-width: 0;
-  max-width: 60%;
-  padding-right: 12px;
-  border-right: 1px solid var(--border);
   color: var(--text-2);
 }
 
@@ -97,11 +108,15 @@
   color: inherit;
 }
 
+/* Segments that do not fit wrap onto a hidden second line: a column drops whole, never mid-word. */
 .tickets-statusbar-dwell {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 12px;
+  column-gap: 12px;
+  height: 26px;
   min-width: 0;
+  line-height: 26px;
   overflow: hidden;
   cursor: default;
 }
@@ -134,7 +149,6 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-left: auto;
   padding: 1px 8px;
   border-radius: 10px;
   color: var(--status-modified);
