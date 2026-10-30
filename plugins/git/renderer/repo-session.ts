@@ -4,20 +4,20 @@
  * the commit message drafts. Everything that draws subscribes here.
  */
 import type { DreyPluginApi, OpenDocumentInfo } from '../../../shared/plugin-api/renderer';
-import { decorationsFor, type GitLogEntry, type VaultGitState } from '../shared/status.js';
+import { decorationsFor, type ChangeDecoration, type GitLogEntry, type VaultGitState } from '../shared/status.js';
 import { messageOf } from './dom.js';
-import { okVaults, pickCurrentVault, unsavedSubject, type OkVault } from './repo-model.js';
+import { keyOf, okVaults, pickCurrentRepo, unsavedSubject, type OkVault } from './repo-model.js';
 
 export interface RepoState {
   vaults: VaultGitState[];
   names: Map<string, string>;
-  /** The vault whose repository the panel shows. */
+  /** Which repository the panel shows — a repo key (`vaultId`, `vaultId::folder`). */
   current: string | null;
   /** The command in flight (`Pulling…`), or null. */
   busy: string | null;
   /** True while the running command can be cancelled (network). */
   cancellable: boolean;
-  /** Commit message drafts, per vault. */
+  /** Commit message drafts, per repository key. */
   drafts: Map<string, string>;
   historyOpen: boolean;
   /** Amend mode: the next commit rewrites the last one. */
@@ -32,10 +32,10 @@ export interface RepoSession {
   notify(): void;
   okVaults(): OkVault[];
   currentState(): VaultGitState | null;
-  /** The shown vault when it is a repository git can read. */
+  /** The shown repository when it is one git can read. */
   currentOk(): OkVault | null;
-  /** Shows another repository (the panel's select). */
-  select(vaultId: string): void;
+  /** Shows another repository (the panel's select, keyed like `keyOf`). */
+  select(key: string): void;
   applyStates(vaults: readonly VaultGitState[]): void;
   /**
    * Pulls the state: `cached` = what main already knows, `refresh` = run
@@ -76,28 +76,37 @@ export function createRepoSession(api: DreyPluginApi): RepoSession {
     }
   };
 
-  const currentState = (): VaultGitState | null => state.vaults.find((v) => v.vaultId === state.current) ?? null;
+  const currentState = (): VaultGitState | null => state.vaults.find((v) => keyOf(v) === state.current) ?? null;
   const currentOk = (): OkVault | null => {
     const found = currentState();
     return found !== null && found.state === 'ok' ? found : null;
   };
 
-  /** Follows the focused document's vault when it is a repository. */
+  /** Follows the focused document's repository when it lies in one. */
   const pickCurrent = (): void => {
-    state.current = pickCurrentVault(state.vaults, state.current, api.documents.active()?.vaultId ?? null);
+    const active = api.documents.active();
+    state.current = pickCurrentRepo(state.vaults, state.current, active?.vaultId ?? null, active?.path ?? null);
   };
 
   const applyStates = (vaults: readonly VaultGitState[]): void => {
     state.vaults = [...vaults];
+    // Decorations are REPLACED per vault by the service, so every entry
+    // of one vault — its own repository and each found one, their
+    // changes already vault-relative — must ride ONE call, or the
+    // entries would clear each other.
+    const merged = new Map<string, ChangeDecoration[]>();
     const now = new Set<string>();
     for (const vault of state.vaults) {
       if (vault.state === 'ok') {
         const decorations = decorationsFor(vault.status);
-        api.ui.setFileDecorations(vault.vaultId, decorations);
+        merged.set(vault.vaultId, [...(merged.get(vault.vaultId) ?? []), ...decorations]);
         if (decorations.length > 0) {
           now.add(vault.vaultId);
         }
       }
+    }
+    for (const [vaultId, decorations] of merged) {
+      api.ui.setFileDecorations(vaultId, decorations);
     }
     for (const id of decorated) {
       if (!now.has(id)) {
@@ -129,15 +138,19 @@ export function createRepoSession(api: DreyPluginApi): RepoSession {
   };
 
   const loadLog = async (): Promise<void> => {
-    const vaultId = state.current;
-    if (!state.historyOpen || vaultId === null || currentOk() === null) {
+    const shown = currentState();
+    if (!state.historyOpen || shown === null || shown.state !== 'ok') {
       state.log = [];
       notify();
       return;
     }
+    const key = keyOf(shown);
     try {
-      const log = (await api.backend.invoke('log', { vaultId })) as GitLogEntry[];
-      if (state.current === vaultId) {
+      const log = (await api.backend.invoke('log', {
+        vaultId: shown.vaultId,
+        subPath: shown.subPath,
+      })) as GitLogEntry[];
+      if (state.current === key) {
         state.log = log;
         notify();
       }
@@ -233,8 +246,8 @@ export function createRepoSession(api: DreyPluginApi): RepoSession {
     okVaults: () => okVaults(state.vaults),
     currentState,
     currentOk,
-    select: (vaultId) => {
-      state.current = vaultId;
+    select: (key) => {
+      state.current = key;
       notify();
       void loadLog();
     },

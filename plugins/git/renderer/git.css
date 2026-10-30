@@ -470,7 +470,8 @@ button.git-history:hover {
 }
 
 .git-merge,
-.git-amend {
+.git-amend,
+.git-managed {
   flex: none;
   display: flex;
   align-items: center;
@@ -486,8 +487,15 @@ button.git-history:hover {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+/* A plugin-managed vault (SDK 1.32): neutral, informational. */
+.git-managed {
+  border-color: color-mix(in srgb, var(--text-5) 35%, transparent);
+  background: color-mix(in srgb, var(--text-5) 8%, transparent);
+}
+
 .git-merge .text,
-.git-amend .text {
+.git-amend .text,
+.git-managed .text {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -497,7 +505,8 @@ button.git-history:hover {
 }
 
 .git-merge .text .sub,
-.git-amend .text .sub {
+.git-amend .text .sub,
+.git-managed .text .sub {
   font-size: 0.76rem;
   color: var(--text-6);
 }

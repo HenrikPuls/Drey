@@ -140,7 +140,7 @@ export class FleetClient {
     return this.post<{ ok: boolean; error?: string; path?: string }>('/attach', { runId, name, data });
   }
 
-  /** The owner's answer to a worker's pending approval (req-57). */
+  /** The owner's answer to a worker's pending approval (req-64). */
   async answerPermission(runId: string, decision: 'once' | 'always' | 'reject'): Promise<{ ok: boolean; error?: string }> {
     if (!(await this.withRunner())) {
       return { ok: false, error: 'the fleet runner is not running' };

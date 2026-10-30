@@ -16,7 +16,7 @@ one means moving it back to the roadmap with a new justification.
   part of the Req-29 remainder any more.
 - **Req-17** — Jira integration: inline live ticket status, create
   tickets from the editor.
-- **req-57 alternative — an MCP `ask_owner` tool for fleet workers**
+- **req-64 alternative — an MCP `ask_owner` tool for fleet workers**
   (2026-10-20). The runner would serve a tool that blocks inside the
   worker's turn until the owner answers — the cleanest shape for the
   model. Decided against for the `QUESTION:` text marker: it needs an MCP
@@ -65,6 +65,12 @@ one means moving it back to the roadmap with a new justification.
   the owner's confirmation).
 
 ## Won't do (decided against, kept for the record)
+
+- **Per-column worker slots** (`workers:` in `pipeline.md`, M85) — and
+  keeping the key as a per-column cap or a reserved minimum. Decided with
+  the owner for req-63 (2026-10-30): slots bound to columns blocked work
+  while the provider had capacity; the parallelism is the provider pool,
+  the order is priority class, then the rightmost column.
 
 - **One composer switch per external source** (search, fetch, each MCP
   server) — decided with the owner for milestone 79 (2026-10-13): one

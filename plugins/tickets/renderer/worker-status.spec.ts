@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { RunInfo } from '../main/fleet/protocol';
-import { contextFill, formatTokens, lanesOfColumn, opensByItself, STALL_MS, workerStatus } from './worker-status';
+import {
+  contextFill,
+  fleetSummary,
+  formatTokens,
+  lanesOfColumn,
+  opensByItself,
+  runChipLine,
+  spanClock,
+  STALL_MS,
+  telemetryParts,
+  workerStatus,
+} from './worker-status';
 
 const NOW = Date.parse('2026-10-18T12:00:00Z');
 
@@ -59,8 +70,8 @@ describe('contextFill', () => {
   });
 
   it('is the share of the window, capped at 1', () => {
-    expect(contextFill(run({ contextTokens: 50_000 }), 200_000)).toBe(0.25);
-    expect(contextFill(run({ contextTokens: 300_000 }), 200_000)).toBe(1);
+    expect(contextFill(run({ contextTokens: 50_000 }))).toBe(0.25);
+    expect(contextFill(run({ contextTokens: 300_000 }))).toBe(1);
   });
 });
 
@@ -70,6 +81,57 @@ describe('formatTokens', () => {
     expect(formatTokens(9_100)).toBe('9.1k');
     expect(formatTokens(182_000)).toBe('182k');
     expect(formatTokens(3_400_000)).toBe('3.4M');
+  });
+});
+
+describe('telemetryParts — the run\'s telemetry as short chips', () => {
+  it('is empty while the run reports nothing (and for pre-T-0048 records)', () => {
+    expect(telemetryParts(run())).toEqual([]);
+    expect(telemetryParts(run({ lastTurnContext: null }))).toEqual([]);
+  });
+
+  it('shows the last turn\'s context, the turns and the read calls', () => {
+    expect(telemetryParts(run({ lastTurnContext: 131_000, turns: 14, readCalls: 21 }))).toEqual([
+      'ctx 131k',
+      'turns 14',
+      'reads 21',
+    ]);
+    expect(telemetryParts(run({ lastTurnContext: 9_500, turns: 2 }))).toEqual(['ctx 9.5k', 'turns 2']);
+  });
+
+  it('never invents a zero out of an absent counter', () => {
+    expect(telemetryParts(run({ turns: 0, readCalls: 0 }))).toEqual([]);
+  });
+
+  it('appends the resumed chip for a resumed run — fresh and absent stay silent (T-0049)', () => {
+    expect(telemetryParts(run({ handoverMode: 'resume', lastTurnContext: 131_000 }))).toEqual(['ctx 131k', 'resumed']);
+    expect(telemetryParts(run({ handoverMode: 'resume-compact' }))).toEqual(['resumed']);
+    expect(telemetryParts(run({ handoverMode: 'fresh' }))).toEqual([]);
+    expect(telemetryParts(run({ handoverMode: undefined }))).toEqual([]);
+  });
+});
+
+describe('spanClock', () => {
+  it('is mm:ss and rolls hours into h:mm:ss', () => {
+    expect(spanClock(0)).toBe('00:00');
+    expect(spanClock(221_000)).toBe('03:41');
+    expect(spanClock(3_723_000)).toBe('1:02:03');
+    expect(spanClock(-5_000)).toBe('00:00');
+  });
+});
+
+describe('runChipLine', () => {
+  it('shows state, turns, this run\'s own tokens and elapsed (T-0051)', () => {
+    expect(runChipLine(run({ steerCount: 1, tokensIn: 45_000, tokensOut: 1_234 }), NOW)).toBe(
+      '▶ running · 2 · 45.0k/1.2k · 1:00:00',
+    );
+  });
+
+  it('waits for the first usage that reported tokens', () => {
+    expect(runChipLine(run(), NOW)).toBe('▶ running · 1 · 1:00:00');
+    expect(runChipLine(run({ state: 'stopping', startedAt: '2026-10-18T11:59:30Z' }), NOW)).toBe(
+      '▶ stopping · 1 · 00:30',
+    );
   });
 });
 
@@ -95,7 +157,7 @@ describe('workerStatus — a detached run', () => {
   });
 });
 
-describe('workerStatus — a worker that waits on the owner (req-57)', () => {
+describe('workerStatus — a worker that waits on the owner (req-64)', () => {
   it('is amber with what it waits for, never stalled however long the wait', () => {
     const silent = new Date(NOW - 60 * 60_000).toISOString();
     expect(
@@ -119,5 +181,28 @@ describe('workerStatus — running or standing', () => {
 
   it('says whose turn it is when the owner holds a standing worker', () => {
     expect(workerStatus(run({ turn: 'idle', held: true }), NOW).label).toBe('Standing — you drive');
+  });
+});
+
+describe('fleetSummary', () => {
+  it('is null without live runs', () => {
+    expect(fleetSummary([], NOW)).toBeNull();
+  });
+
+  it('counts the states in words, takes the worst light, sums tokens and ages from the oldest start', () => {
+    const silent = new Date(NOW - STALL_MS).toISOString();
+    const summary = fleetSummary(
+      [
+        run({ tokensIn: 1_000, tokensOut: 200 }),
+        run({ id: 'r2', turn: 'idle', startedAt: '2026-10-18T10:30:00Z', tokensIn: 500 }),
+        run({ id: 'r3', lastActivity: silent }),
+      ],
+      NOW,
+    );
+    expect(summary).toEqual({ light: 'red', label: '1 running · 1 standing · 1 stalled', tokens: 1_700, ageMs: 90 * 60_000 });
+  });
+
+  it('is green for working runs alone', () => {
+    expect(fleetSummary([run(), run({ id: 'r2' })], NOW)).toMatchObject({ light: 'green', label: '2 running' });
   });
 });

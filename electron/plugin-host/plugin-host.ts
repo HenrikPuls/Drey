@@ -34,11 +34,12 @@ import { normalizeActionsConfig, PROVIDER_PRESETS } from '../../shared/app-confi
 import type { ActionsConfig } from '../../shared/app-config';
 import type { AppConfigStore } from '../app-config';
 import type { LlmClient, LlmDebugLog, LlmTaskRegistry, TagSuggester } from '../llm';
-import { IPC_CHANNELS } from '../../shared/ipc-api';
+import { IPC_CHANNELS, type VaultRegistration } from '../../shared/ipc-api';
 import type { PluginMcpTools, VaultTools } from '../mcp';
 import type { AssistantToolbox } from '../mcp-client';
 import type { VaultManager } from '../vault-manager';
 import type { VaultChangeAnnouncer } from '../vault-change-announcer';
+import { ManagedVaults } from './managed-vaults';
 import { PluginConfigStore } from './plugin-config-store';
 import { ACTIONS_CONFIG_KEY, ACTIONS_PLUGIN_ID, migrateLegacyActions } from './actions-migration';
 import {
@@ -89,6 +90,22 @@ export interface PluginHostDeps {
    * never gets the instance itself.
    */
   readonly vaultTools: VaultTools;
+  /**
+   * The plugin-managed vault registry (SDK 1.32, ADR-0082): `ctx.vault
+   * .markManaged` writes here, the git plugin's read-only guard reads
+   * through `ctx.vault.managedBy`. Base-owned so plugins never talk to
+   * each other (ADR-0044).
+   */
+  readonly managedVaults: ManagedVaults;
+  /**
+   * Registers an existing folder as a vault AND runs the same round the
+   * `vaultAdd` IPC handler runs — watcher sync + one full refresh — for
+   * `ctx.vault.register` (SDK 1.33, T-0045). The refresh round is what
+   * makes every vault-keyed surface follow: the Files panel grows the
+   * vault, and Source control drops the discovered twin for the vault's
+   * own entry.
+   */
+  readonly registerVaultAt: (path: string) => Promise<VaultRegistration>;
   /**
    * The assistant's external tool set (ADR-0063): `web_fetch` + the
    * user's MCP servers, wired in when a plugin passes `externalTools`.
@@ -595,6 +612,8 @@ export class PluginHost {
       for (const dispose of plugin.disposables) {
         this.runGuarded(dispose, 'disposable');
       }
+      // A deactivated plugin manages no vault anymore (SDK 1.32).
+      this.deps.managedVaults.clearPlugin(id);
     }
     this.activated.clear();
   }
@@ -634,6 +653,8 @@ export class PluginHost {
       return true;
     } catch (error) {
       this.activated.delete(id);
+      // A quarantined plugin manages no vault anymore (SDK 1.32).
+      this.deps.managedVaults.clearPlugin(id);
       this.discovered.set(id, {
         ...discovered,
         status: 'failed',
@@ -661,7 +682,7 @@ export class PluginHost {
       pluginId: id,
       manifest: plugin.discovered.manifest,
       app: this.buildAppContext(plugin, track),
-      vault: buildVaultContext(id, this.deps, (cb) => {
+      vault: buildVaultContext(id, this.deps, plugin.discovered.manifest.name, (cb) => {
         this.vaultChangeCallbacks.push(cb);
         return track(() => removeItem(this.vaultChangeCallbacks, cb));
       }),

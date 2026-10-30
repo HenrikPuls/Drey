@@ -2,6 +2,7 @@ import { app, type BrowserWindow } from 'electron';
 import chokidar from 'chokidar';
 import * as path from 'node:path';
 import { DEFAULT_ACTIONS_CONFIG } from '../shared/app-config';
+import type { VaultRegistration } from '../shared/ipc-api';
 import { AppConfigStore } from './app-config';
 import { DailyNoteManager } from './daily-note';
 import { NoteHistoryStore } from './history/note-history-store';
@@ -12,12 +13,13 @@ import { McpHttpTransport, PluginMcpTools, VaultTools, createVaultMcpServer } fr
 import { AssistantToolbox, McpClientManager, createMcpClientManager } from './mcp-client';
 import { NoteManager } from './note-manager';
 import { OwnWriteLedger } from './own-write-ledger';
-import { PluginHost, PluginInstaller, type PluginHostDeps } from './plugin-host';
+import { ManagedVaults, PluginHost, PluginInstaller, type PluginHostDeps } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
 import { UpdateService } from './updater/update-service';
 import { VaultChangeAnnouncer } from './vault-change-announcer';
 import { VaultManager } from './vault-manager';
+import { vaultScanIgnore } from './vault-scan-rules';
 import { VaultWatcher } from './vault-watcher';
 
 /** What building the services needs from the window-and-lifecycle half. */
@@ -105,9 +107,12 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
         // The initial scan must not announce every existing file as a
         // change; the `ready` gate covers anything that slips through.
         ignoreInitial: true,
-        // Same dot-entries the file tree and the indexes exclude
-        // (.git, .obsidian, .drafts/, .<name>.chat.json sidecars).
-        ignored: /(^|[\\/])\./,
+        // The vault-scan rules (T-0044): the dot entries the file tree
+        // and the indexes exclude (.git, .obsidian, .drafts/,
+        // .<name>.chat.json sidecars), plus reserved `_` root folders
+        // (the fleet's `_worktrees/` base) — agent writes there must
+        // never reach the indexes.
+        ignored: vaultScanIgnore(root),
         // OneDrive & friends deliver files in flux; wait for the write
         // to settle so indexes never see half a file.
         awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
@@ -178,6 +183,20 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
     llm,
     llmTasks,
   );
+  // The plugin-managed vault registry (SDK 1.32): plugins claim their
+  // structured vaults through ctx.vault.markManaged, the git plugin's
+  // read-only guard reads them back through ctx.vault.managedBy.
+  const managedVaults = new ManagedVaults();
+  // One-click vault registration for plugins (SDK 1.33, T-0045): the
+  // same composed round the `vaultAdd` IPC handler runs — register the
+  // folder, sync the watcher to the new registry, then one full refresh
+  // round so trees, indexes and the Source control panel all follow.
+  const registerVaultAt = async (folderPath: string): Promise<VaultRegistration> => {
+    const added = vaultManager.addVaultAt(folderPath);
+    await vaultWatcher.syncFromConfig();
+    vaultAnnouncer.announceFullRefresh();
+    return added;
+  };
   // The plugin host registers its method handlers during activate().
   // Since milestone 61 discovery+activation STARTS before the window is
   // created and runs while the renderer parses its bundle — every IPC
@@ -195,6 +214,8 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
     llm,
     llmTasks,
     vaultTools,
+    managedVaults,
+    registerVaultAt,
     assistantToolbox,
     mcpTools: pluginMcpTools,
     confirmWrite: (request) => deps.mcpWriteBridge.requestConfirmation(request),

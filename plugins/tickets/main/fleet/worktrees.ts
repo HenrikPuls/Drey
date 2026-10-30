@@ -12,14 +12,16 @@
  *   **recreated**;
  * - stale and dirty — **moved-aside** to `<path>.stale-<stamp>`, never
  *   deleted; an uninspectable directory counts as dirty (what cannot be
- *   proven clean is not destroyed);
+ *   proven clean is not destroyed) — including a leftover folder whose
+ *   git answer is an inherited one: the base sits inside the tickets
+ *   vault, itself a repo, and a rev-parse would walk up into it;
  * - wrong branch, locked, or a rebase/merge in progress — a descriptive
  *   error, nothing modified (no automatic repair).
  *
  * Every call is serialized by a module-level lock keyed by the repo
  * path: two concurrent starts for one ticket cannot race on
  * `worktree add`, and neither can two different tickets' prepares in
- * the same repo (workers: 2/4 share it — one runner process, one
+ * the same repo (parallel runs of a pool share it — one runner process, one
  * supervisor per adapter, only module scope is shared).
  */
 import { promises as fsp } from 'node:fs';
@@ -106,16 +108,19 @@ export function parseWorktreePorcelain(text: string): readonly WorktreeListEntry
 /**
  * Decides the worktree's fate per the ticket's state table. Throws
  * (descriptively, before any mutation) for the fail rows; serialized by
- * the module-level repo lock.
+ * the module-level repo lock. `isLive` (T-0044) guards the create path's
+ * branch-conflict healing: a registered checkout of the same branch that
+ * belongs to a live run is never touched.
  */
 export async function prepareWorktree(
   git: GitSeam,
   request: PrepareRequest,
   worktreePath: string,
   now: () => Date,
+  isLive?: (worktreePath: string) => boolean,
 ): Promise<PreparedWorktree> {
   return withRepoLock(request.repoPath, async () => {
-    const prepared = await prepareUnlocked(git, request, worktreePath, now);
+    const prepared = await prepareUnlocked(git, request, worktreePath, now, isLive);
     const links = request.links ?? [];
     return links.length === 0 ? prepared : { ...prepared, links: await linkShared(git, request.repoPath, worktreePath, links) };
   });
@@ -178,8 +183,10 @@ export async function linkShared(
  * can never reach through a junction into the checkout's own folders.
  * Only symbolic links / junctions are removed; a real folder stays. The
  * top level is swept too: earlier workers made such junctions themselves.
+ * Shared with every removal path (worktree-clean, the board's Files
+ * command) — git's own worktree removal leaves junctions behind.
  */
-async function unlinkShared(worktreePath: string, links: readonly string[]): Promise<void> {
+export async function unlinkShared(worktreePath: string, links: readonly string[]): Promise<void> {
   const top = await fsp.readdir(worktreePath).catch(() => [] as string[]);
   for (const rel of new Set([...links, ...top])) {
     const target = path.join(worktreePath, rel);
@@ -230,6 +237,7 @@ async function prepareUnlocked(
   request: PrepareRequest,
   worktreePath: string,
   now: () => Date,
+  isLive?: (worktreePath: string) => boolean,
 ): Promise<PreparedWorktree> {
   const listing = await git.run(request.repoPath, ['worktree', 'list', '--porcelain']);
   const entry = await findWorktreeEntry(listing, worktreePath);
@@ -256,7 +264,7 @@ async function prepareUnlocked(
   const state = await directoryState(worktreePath);
   if (state !== 'content') {
     await git.run(request.repoPath, ['worktree', 'prune']);
-    await addWorktree(git, request, worktreePath);
+    await addWorktree(git, request, worktreePath, isLive);
     return { outcome: 'created', sessionInvalidated: false, movedTo: null };
   }
 
@@ -265,7 +273,7 @@ async function prepareUnlocked(
   // it is moved aside, never deleted.
   const branch = await currentBranch(git, worktreePath);
   if (branch === null) {
-    return replaceStale(git, request, worktreePath, now);
+    return replaceStale(git, request, worktreePath, now, isLive);
   }
   if (branch !== request.branch) {
     const found = branch === 'HEAD' ? 'a detached HEAD' : branch;
@@ -279,10 +287,10 @@ async function prepareUnlocked(
     await git.run(request.repoPath, ['worktree', 'prune']);
     await unlinkShared(worktreePath, request.links ?? []);
     await fsp.rm(worktreePath, { recursive: true, force: true });
-    await addWorktree(git, request, worktreePath);
+    await addWorktree(git, request, worktreePath, isLive);
     return { outcome: 'recreated', sessionInvalidated: true, movedTo: null };
   }
-  return replaceStale(git, request, worktreePath, now);
+  return replaceStale(git, request, worktreePath, now, isLive);
 }
 
 /** The dirty-stale row: rename aside (kept), then a fresh checkout. */
@@ -291,16 +299,23 @@ async function replaceStale(
   request: PrepareRequest,
   worktreePath: string,
   now: () => Date,
+  isLive?: (worktreePath: string) => boolean,
 ): Promise<PreparedWorktree> {
   const movedTo = await moveAside(worktreePath, now);
   await git.run(request.repoPath, ['worktree', 'prune']);
-  await addWorktree(git, request, worktreePath);
+  await addWorktree(git, request, worktreePath, isLive);
   return { outcome: 'moved-aside', sessionInvalidated: true, movedTo };
 }
 
 /** `worktree add` on the existing branch, or `-b` from the base ref
  *  when the ticket's branch does not exist yet. Never `--force`. */
-async function addWorktree(git: GitSeam, request: PrepareRequest, worktreePath: string): Promise<void> {
+async function addWorktree(
+  git: GitSeam,
+  request: PrepareRequest,
+  worktreePath: string,
+  isLive?: (worktreePath: string) => boolean,
+): Promise<void> {
+  await healBranchConflict(git, request, isLive);
   await fsp.mkdir(path.dirname(worktreePath), { recursive: true });
   const hasBranch = await git
     .run(request.repoPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${request.branch}`])
@@ -310,6 +325,56 @@ async function addWorktree(git: GitSeam, request: PrepareRequest, worktreePath: 
     ? ['worktree', 'add', worktreePath, request.branch]
     : ['worktree', 'add', '-b', request.branch, worktreePath, request.baseRef ?? 'HEAD'];
   await git.run(request.repoPath, args);
+}
+
+/**
+ * The re-run trap (T-0044, ADR-0080): `git worktree add` refuses a
+ * branch another registered worktree still has checked out — a settled
+ * ticket's leftover checkout (typically in the legacy fleet root) would
+ * make every retry fail forever. A conflicting registration that is
+ * provably clean and not live is removed first (real git, never
+ * `--force`); anything else is a descriptive refusal.
+ */
+async function healBranchConflict(
+  git: GitSeam,
+  request: PrepareRequest,
+  isLive?: (worktreePath: string) => boolean,
+): Promise<void> {
+  const listing = await git.run(request.repoPath, ['worktree', 'list', '--porcelain']);
+  const expected = `refs/heads/${request.branch}`;
+  for (const entry of parseWorktreePorcelain(listing)) {
+    if (entry.branch !== expected || entry.prunable) {
+      continue; // prunable admin leftovers are the following prune's job
+    }
+    if (sameWorktreePath(entry.path, request.repoPath)) {
+      throw new Error(
+        `branch ${request.branch} is checked out in the repo's own checkout (${entry.path}) — switch it back first`,
+      );
+    }
+    if (isLive !== undefined && isLive(entry.path)) {
+      throw new Error(
+        `branch ${request.branch} is checked out in ${entry.path}, which a live run is working in — stop the run first`,
+      );
+    }
+    if (entry.locked) {
+      throw new Error(`branch ${request.branch} is checked out in the locked worktree ${entry.path}`);
+    }
+    const status = await git.run(entry.path, ['status', '--porcelain']).catch(() => null);
+    if (status === null) {
+      throw new Error(
+        `branch ${request.branch} is checked out in ${entry.path}, which no longer answers to git — remove it by hand`,
+      );
+    }
+    if (status.trim() !== '') {
+      throw new Error(
+        `branch ${request.branch} is checked out in the dirty worktree ${entry.path} — commit or stash there, then retry`,
+      );
+    }
+    // The links go first: git's worktree removal leaves junctions behind,
+    // and a leftover folder at the path poisons the next prepare.
+    await unlinkShared(entry.path, request.links ?? []);
+    await git.run(request.repoPath, ['worktree', 'remove', entry.path]);
+  }
 }
 
 /** A rebase/merge must never be reused over or moved aside mid-flight.
@@ -340,13 +405,32 @@ async function assertNoOperationInProgress(git: GitSeam, worktreePath: string): 
 }
 
 /** The branch a still-runnable directory is on (`t/<id>`; `HEAD` when
- *  detached), or null when the directory no longer answers to git. */
+ *  detached), or null when the directory no longer answers to git *as
+ *  itself*. The worktree base sits inside the tickets vault — itself a
+ *  git repo — so a bare rev-parse walks up out of a leftover folder and
+ *  reports the VAULT's branch as if it were the folder's; the toplevel
+ *  guard turns that inherited answer back into "no longer answers". */
 async function currentBranch(git: GitSeam, worktreePath: string): Promise<string | null> {
   try {
+    const toplevel = (await git.run(worktreePath, ['rev-parse', '--show-toplevel'])).trim();
+    if (!(await isOwnToplevel(toplevel, worktreePath))) {
+      return null;
+    }
     return (await git.run(worktreePath, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
   } catch {
     return null;
   }
+}
+
+/** True when git's toplevel IS the worktree path (either spelling — git
+ *  reports canonical paths while the caller may hold an alias). */
+async function isOwnToplevel(toplevel: string, worktreePath: string): Promise<boolean> {
+  if (sameWorktreePath(toplevel, worktreePath)) {
+    return true;
+  }
+  const realToplevel = await realPathOrNull(toplevel);
+  const realWorktree = await realPathOrNull(worktreePath);
+  return realToplevel !== null && realWorktree !== null && sameWorktreePath(realToplevel, realWorktree);
 }
 
 type DirState = 'missing' | 'empty' | 'content';
@@ -429,7 +513,9 @@ async function findWorktreeEntry(
   return null;
 }
 
-async function realPathOrNull(p: string): Promise<string | null> {
+/** realpath, or null when the path does not resolve — the resolver of the
+ *  alias second chance, shared with the worktree-clean rules. */
+export async function realPathOrNull(p: string): Promise<string | null> {
   try {
     return await fsp.realpath(p);
   } catch {
@@ -437,7 +523,10 @@ async function realPathOrNull(p: string): Promise<string | null> {
   }
 }
 
-function normalizeForMatch(p: string): string {
+/** Resolved, forward-slashed, case-folded on win32 — the one way paths
+ *  from git porcelain and paths from `path.join` compare equal. Shared
+ *  with the worktree home/clean rules (T-0044). */
+export function normalizeForMatch(p: string): string {
   const resolved = path.resolve(p).replaceAll('\\', '/');
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
 }

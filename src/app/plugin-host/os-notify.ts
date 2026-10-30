@@ -13,7 +13,7 @@ export function browserNotificationApi(): NotificationApi | undefined {
 }
 
 /**
- * `ui.notify` (SDK 1.32, req-57): an operating-system notification through
+ * `ui.notify` (SDK 1.34, req-64): an operating-system notification through
  * the renderer's Web Notification API, which Electron turns into a Windows
  * toast. A click brings the window to the front, then runs the plugin's
  * callback. False when the system shows none (permission denied, no API).

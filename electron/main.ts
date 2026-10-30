@@ -154,7 +154,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
     mainWindow.raise();
   });
 
-  // Windows shows a toast (`ui.notify`, req-57) only for an app with a
+  // Windows shows a toast (`ui.notify`, req-64) only for an app with a
   // user model id: the installer's shortcut carries electron-builder's
   // appId; an unpackaged dev run uses the executable path, Electron's
   // documented dev convention.

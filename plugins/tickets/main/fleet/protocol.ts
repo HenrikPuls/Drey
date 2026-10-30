@@ -41,6 +41,12 @@ export interface RunRequest {
   readonly phase: string;
   /** Absolute path of the work repo's checkout. */
   readonly repoPath: string;
+  /**
+   * The run's worktree, absolute (`<ticketsRepo>/_worktrees/<ticket-id>`
+   * by default, ADR-0080). Computed in `composeRunRequest` — the runner
+   * never derives paths; an old sender without the field is refused.
+   */
+  readonly worktreePath: string;
   /** The deterministic branch — `t/<id>` (ADR-0076). */
   readonly branch: string;
   /** The base ref a fresh worktree branches from (repos.md `branch:` or HEAD). */
@@ -82,6 +88,13 @@ export interface RunRequest {
   /** The dialog's explicit worker choice, recorded on the ticket (`worker:`). */
   readonly recordWorker?: string;
   /**
+   * How the run's context should reach the worker (T-0049): `'auto'`
+   * lets the supervisor resolve it from the ticket's run history, an
+   * explicit mode is honoured when structurally legal. Absent — every
+   * request from an older plugin — means `'fresh'`.
+   */
+  readonly handover?: HandoverMode | 'auto';
+  /**
    * The working column when the orchestrator dispatched the run (M85,
    * ADR-0077): the pool whose slot the run occupies — which can differ
    * from `phase`, because a pool tops up from the previous column (the
@@ -95,6 +108,157 @@ export interface RunRequest {
  *  idempotent per ticket, so a repeated run reports what it did. */
 export type WorktreeOutcome = 'reused' | 'created' | 'recreated' | 'moved-aside';
 
+// ---------------------------------------------------------------------------
+// Token telemetry (T-0048): what a provider reported one run used. A
+// counter is `null` when the provider never reported it — 0 is a
+// measurement, absence is not (the pinned plan provider may report no
+// cache fields at all).
+
+export interface RunUsage {
+  readonly input: number | null;
+  readonly cacheRead: number | null;
+  readonly cacheCreation: number | null;
+  readonly output: number | null;
+}
+
+/**
+ * How the run's context reached the worker (T-0049): `'fresh'` — a new
+ * session with the composed instruction (the T-0048 behaviour);
+ * `'resume'` — the previous run's provider session, continued;
+ * `'resume-compact'` — the same, natively compacted before the first
+ * prompt. `'fresh'` is the default everywhere an older sender omits it.
+ */
+export type HandoverMode = 'fresh' | 'resume' | 'resume-compact';
+
+/** The handover thresholds (T-0049); configurable `fleet.*`. */
+export interface FleetHandoverConfig {
+  /**
+   * A resumed session whose last known context is at or above this many
+   * tokens is compacted first (provider capability permitting). The bar
+   * guards fidelity loss, not tokens — the compact itself is cheap
+   * (spike 2: ~0.75k tokens halving an 8k context). Provisional.
+   */
+  readonly compactAboveTokens: number;
+  /**
+   * Per-provider and per-model thresholds over the base, keyed
+   * `<workerProvider>` or `<workerProvider>/<modelPin>` — the
+   * most-specific key wins at resolution. No UI: a hand-edited power
+   * knob (`fleet.compactAboveTokens.<key>` flat keys plugin-side).
+   */
+  readonly compactAboveTokensOverrides?: Readonly<Record<string, number>>;
+  /**
+   * A pause shorter than this many minutes counts as warm (spike 3: a
+   * resumed turn re-pays the transcript as cache reads, still ~99 %
+   * cached after 6 min; measured auto-retry gaps ran 1–13 min).
+   */
+  readonly resumePauseTtlMin: number;
+}
+
+/** The handover thresholds' defaults — an absent or invalid config degrades to these. */
+export const DEFAULT_FLEET_HANDOVER: FleetHandoverConfig = {
+  compactAboveTokens: 60_000,
+  resumePauseTtlMin: 15,
+};
+
+/** Resolves handover thresholds of unknown shape to valid ones, per key
+ *  like the caps: every non-negative finite number wins, anything else
+ *  falls back to that key's default (an invalid override entry drops). */
+export function normalizeFleetHandover(value: unknown): FleetHandoverConfig {
+  const raw = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
+  const num = (key: 'compactAboveTokens' | 'resumePauseTtlMin'): number => {
+    const given = raw[key];
+    return typeof given === 'number' && Number.isFinite(given) && given >= 0 ? given : DEFAULT_FLEET_HANDOVER[key];
+  };
+  const overridesRaw = raw['compactAboveTokensOverrides'];
+  const overrides: Record<string, number> = {};
+  if (typeof overridesRaw === 'object' && overridesRaw !== null) {
+    for (const [key, given] of Object.entries(overridesRaw as Record<string, unknown>)) {
+      if (typeof given === 'number' && Number.isFinite(given) && given >= 0) {
+        overrides[key] = given;
+      }
+    }
+  }
+  return {
+    compactAboveTokens: num('compactAboveTokens'),
+    ...(Object.keys(overrides).length > 0 ? { compactAboveTokensOverrides: overrides } : {}),
+    resumePauseTtlMin: num('resumePauseTtlMin'),
+  };
+}
+
+/** The output caps an instruction applies (T-0048); configurable `fleet.cap.*`. */
+export interface FleetCaps {
+  /** The gate failure's tail, injected into a retry's instruction. */
+  readonly gateFailureLines: number;
+  readonly gateFailureBytes: number;
+  /** The worktree diff stat's head, injected into every instruction. */
+  readonly diffStatLines: number;
+  readonly diffStatBytes: number;
+}
+
+/** The caps' defaults — an absent or invalid config degrades to these. */
+export const DEFAULT_FLEET_CAPS: FleetCaps = {
+  gateFailureLines: 40,
+  gateFailureBytes: 4096,
+  diffStatLines: 50,
+  diffStatBytes: 4096,
+};
+
+/** Resolves a caps value of unknown shape (wire body, plugin config) to
+ *  a valid one: every non-negative finite number wins per key, anything
+ *  else falls back to the default of that key. */
+export function normalizeFleetCaps(value: unknown): FleetCaps {
+  const raw = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
+  const num = (key: keyof FleetCaps): number => {
+    const given = raw[key];
+    return typeof given === 'number' && Number.isFinite(given) && given >= 0 ? given : DEFAULT_FLEET_CAPS[key];
+  };
+  return {
+    gateFailureLines: num('gateFailureLines'),
+    gateFailureBytes: num('gateFailureBytes'),
+    diffStatLines: num('diffStatLines'),
+    diffStatBytes: num('diffStatBytes'),
+  };
+}
+
+/**
+ * One worker provider's pool (req-63): how many runs of that provider
+ * the machine carries at once, across every column. Configurable
+ * `fleet.pool.<provider>.size` / `.probe`.
+ */
+export interface FleetPool {
+  /** Parallel runs (≥ 1). */
+  readonly size: number;
+  /**
+   * An OpenAI-compatible llama.cpp server's base URL: its `/props`
+   * `total_slots` caps `size` (the only local server that reports its
+   * parallelism). Null = no probe.
+   */
+  readonly probeUrl: string | null;
+}
+
+export type FleetPools = Readonly<Record<WorkerProviderId, FleetPool>>;
+
+export const DEFAULT_FLEET_POOL: FleetPool = { size: 1, probeUrl: null };
+
+/** Resolves pools of unknown shape (wire body, plugin config) per
+ *  provider: a whole size ≥ 1 and an http(s) probe URL win, anything
+ *  else falls back to the default. */
+export function normalizeFleetPools(value: unknown): FleetPools {
+  const raw = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
+  const one = (provider: WorkerProviderId): FleetPool => {
+    const entry = (typeof raw[provider] === 'object' && raw[provider] !== null ? raw[provider] : {}) as Record<
+      string,
+      unknown
+    >;
+    const size = entry['size'];
+    const probe = entry['probeUrl'];
+    return {
+      size: typeof size === 'number' && Number.isInteger(size) && size >= 1 ? size : DEFAULT_FLEET_POOL.size,
+      probeUrl: typeof probe === 'string' && /^https?:\/\/\S+$/.test(probe.trim()) ? probe.trim() : null,
+    };
+  };
+  return { opencode: one('opencode'), 'claude-code': one('claude-code') };
+}
 /** One question of OpenCode's `question` tool (a field of its pending form). */
 export interface WaitQuestion {
   /** The form field the answer goes to (`q0`, `q1`, …). */
@@ -130,7 +294,7 @@ export function questionAnswersOf(raw: unknown): QuestionAnswers | null {
 }
 
 /**
- * What a live worker waits on the owner for (req-57): a question it ended
+ * What a live worker waits on the owner for (req-64): a question it ended
  * its turn with (`QUESTION: …`) or asked with OpenCode's `question` tool,
  * or a tool call the provider wants approved (OpenCode's permission
  * requests). The run stays up, its session and context kept, until the
@@ -150,7 +314,7 @@ export interface RunWaiting {
 
 /**
  * The lead-in a worker opens its last message with when it cannot go on
- * without the owner (req-57). The turn then does not end the run: the
+ * without the owner (req-64). The turn then does not end the run: the
  * worker stands, waiting, until the owner answers in the takeover tab.
  */
 export const QUESTION_MARKER = 'QUESTION:';
@@ -187,10 +351,16 @@ export interface RunInfo {
   /**
    * The size of the worker's current context window in tokens (the
    * last model call's input incl. cache reads); null/absent while the
-   * provider has reported none. The limit is not known to the runner —
-   * the board measures it against a configured window.
+   * provider has reported none.
    */
   readonly contextTokens?: number | null;
+  /**
+   * The model's context window in tokens — the limit the board measures
+   * `contextTokens` against. Null/absent while the provider has
+   * reported none (the board then measures against its default window);
+   * absent on run.json records written before the field existed.
+   */
+  readonly contextWindow?: number | null;
   /**
    * The owner has taken the run over (the takeover tab): the worker's
    * finished turn does not end the run, the reaper leaves a quiet worker
@@ -204,7 +374,7 @@ export interface RunInfo {
    * cannot).
    */
   readonly turn?: 'busy' | 'idle';
-  /** What the worker waits on the owner for (req-57); null/absent = nothing. */
+  /** What the worker waits on the owner for (req-64); null/absent = nothing. */
   readonly waiting?: RunWaiting | null;
   /**
    * The slash commands the worker accepts (names without the slash) — the
@@ -220,6 +390,41 @@ export interface RunInfo {
   readonly branch: string;
   /** On every run started after T-0047; absent on adopted pre-T-0047 records. */
   readonly worktree?: WorktreeOutcome;
+  /** The machine gate's verdict, once it ran (T-0048); absent when it never did. */
+  readonly gateResult?: 'green' | 'red' | null;
+  /** The worker's last error event (req-63: a rate limit shrinks the pool). */
+  readonly lastError?: string | null;
+  // --- token telemetry (T-0048); all optional so adopt() restores older
+  // --- records — every reader treats absent as unknown.
+  /** The model pin the run started with (`provider/model` or bare). */
+  readonly model?: string | null;
+  /** The phase the ticket sat in when the run started. */
+  readonly phase?: string | null;
+  /** Usage summed over the run's model calls; a null counter was never reported. */
+  readonly usage?: RunUsage;
+  /**
+   * The input side (input + cacheRead + cacheCreation) of the LAST
+   * assistant turn — the real context size, unlike the providers'
+   * cumulative aggregates.
+   */
+  readonly lastTurnContext?: number | null;
+  /** How many model calls reported usage. */
+  readonly turns?: number;
+  /** Read/grep/glob tool calls — the exploration counter. */
+  readonly readCalls?: number;
+  /**
+   * Input-side tokens over the turns before the first write/edit tool
+   * call; the full input side when no write came; null without any usage.
+   */
+  readonly tokensBeforeFirstWrite?: number | null;
+  /** Always 'fresh' in T-0048; the field exists for T-0049's handover modes. */
+  readonly handoverMode?: HandoverMode;
+  /**
+   * The provider session this run resumed (T-0049) — taken from the
+   * candidate record, never the init event (a forked id would lose the
+   * lineage). Null on a fresh run and on a resume that fell back fresh.
+   */
+  readonly resumedFrom?: string | null;
   /** The last gate failure, when the machine gate stopped the run short. */
   readonly gateFailure: string | null;
 }
@@ -295,6 +500,12 @@ export interface ChainConfig {
   readonly defaultWorker: string;
   /** Permission mode of dispatched runs (no dialog to ask in). */
   readonly permissionMode: PermissionMode;
+  /** The instruction output caps (T-0048); absent = `DEFAULT_FLEET_CAPS`. */
+  readonly caps?: FleetCaps;
+  /** The per-provider pools (req-63); absent = one run per provider. */
+  readonly pools?: FleetPools;
+  /** The handover thresholds (T-0049); absent = `DEFAULT_FLEET_HANDOVER`. */
+  readonly handover?: FleetHandoverConfig;
 }
 
 /** The chain's control state as the runner reports it. */

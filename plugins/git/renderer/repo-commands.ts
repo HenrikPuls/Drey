@@ -7,7 +7,7 @@ import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import type { GitChange } from '../shared/status.js';
 import { ask } from './dialogs.js';
 import { messageOf } from './dom.js';
-import { commitBusyLabel, unsavedSubject, type Group } from './repo-model.js';
+import { commitBusyLabel, foundReadOnlyMessage, keyOf, unsavedSubject, type Group, type OkVault } from './repo-model.js';
 import type { RepoSession } from './repo-session.js';
 
 export interface RepoCommands {
@@ -31,12 +31,36 @@ export interface RepoCommands {
 export function createRepoCommands(api: DreyPluginApi, session: RepoSession): RepoCommands {
   const { state } = session;
 
+  /**
+   * A repository found by the scan (T-0045) is read-only; the UI hides
+   * the paths in, this guard answers the ones that still fire (a
+   * keyboard shortcut, a stale panel) with the same sentence main uses.
+   */
+  const refuseFound = async (vault: OkVault): Promise<boolean> => {
+    if (!vault.discovered) {
+      return false;
+    }
+    await api.ui.showMessage(
+      foundReadOnlyMessage(state.names.get(vault.vaultId) ?? vault.vaultId),
+      'Source control',
+    );
+    return true;
+  };
+
   const commit = async (push = false): Promise<void> => {
     const vault = session.currentOk();
-    if (vault === null || state.busy !== null) {
+    if (vault === null || state.busy !== null || (await refuseFound(vault))) {
+      return;
+    }
+    if (vault.managedBy !== null) {
+      await api.ui.showMessage(
+        `Managed by ${vault.managedBy} — this repository's history is written by the plugin.`,
+        'Source control',
+      );
       return;
     }
     const vaultId = vault.vaultId;
+    const subPath = vault.subPath;
     const merging = vault.operation !== null;
     const amend = state.amend && !merging;
     if (merging && vault.status.conflicts.length > 0) {
@@ -81,7 +105,7 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
       const answer = await ask(api, 'Nothing is staged', 'Stage all changes of this vault and commit them?', [
         { label: 'Stage all and commit', value: 'stage', primary: true },
       ]);
-      if (answer === null || !(await session.run('Staging…', 'stage', { vaultId, paths: [] }))) {
+      if (answer === null || !(await session.run('Staging…', 'stage', { vaultId, subPath, paths: [] }))) {
         return;
       }
       now = session.currentOk();
@@ -98,8 +122,8 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
       }
     }
     const label = commitBusyLabel(merging, amend, push);
-    if (await session.run(label, 'commit', { vaultId, message, amend, push }, push)) {
-      state.drafts.delete(vaultId);
+    if (await session.run(label, 'commit', { vaultId, subPath, message, amend, push }, push)) {
+      state.drafts.delete(keyOf(vault));
       state.amend = false;
       session.notify();
     }
@@ -107,7 +131,7 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
 
   const mergeBranch = async (name: string): Promise<void> => {
     const vault = session.currentOk();
-    if (vault === null) {
+    if (vault === null || (await refuseFound(vault))) {
       return;
     }
     const into = vault.status.branch ?? 'the detached HEAD';
@@ -120,12 +144,12 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
     if (answer === null || !(await session.cleanTabsOrExplain(vault.vaultId, 'A merge'))) {
       return;
     }
-    await session.run('Merging…', 'merge', { vaultId: vault.vaultId, name });
+    await session.run('Merging…', 'merge', { vaultId: vault.vaultId, subPath: vault.subPath, name });
   };
 
   const abortMerge = async (): Promise<void> => {
     const vault = session.currentOk();
-    if (vault === null || vault.operation === null) {
+    if (vault === null || vault.operation === null || (await refuseFound(vault))) {
       return;
     }
     const answer = await ask(
@@ -137,12 +161,12 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
     if (answer === null || !(await session.cleanTabsOrExplain(vault.vaultId, 'Aborting the merge'))) {
       return;
     }
-    await session.run('Aborting the merge…', 'mergeAbort', { vaultId: vault.vaultId });
+    await session.run('Aborting the merge…', 'mergeAbort', { vaultId: vault.vaultId, subPath: vault.subPath });
   };
 
   const resolveConflict = async (change: GitChange, side: 'ours' | 'theirs'): Promise<void> => {
     const vault = session.currentOk();
-    if (vault === null) {
+    if (vault === null || (await refuseFound(vault))) {
       return;
     }
     if (session.dirtyDocs(vault.vaultId).some((d) => d.path === change.path)) {
@@ -158,13 +182,13 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
       [{ label: side === 'ours' ? 'Keep mine' : 'Keep theirs', value: 'resolve', primary: true }],
     );
     if (answer !== null) {
-      await session.run('Resolving…', 'resolve', { vaultId: vault.vaultId, path: change.path, side });
+      await session.run('Resolving…', 'resolve', { vaultId: vault.vaultId, subPath: vault.subPath, path: change.path, side });
     }
   };
 
   const toggleAmend = async (): Promise<void> => {
     const vault = session.currentOk();
-    if (vault === null || state.busy !== null) {
+    if (vault === null || state.busy !== null || (await refuseFound(vault))) {
       return;
     }
     if (state.amend) {
@@ -189,10 +213,13 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
       return;
     }
     state.amend = true;
-    if ((state.drafts.get(vault.vaultId) ?? '').trim() === '') {
+    if ((state.drafts.get(keyOf(vault)) ?? '').trim() === '') {
       try {
-        const text = (await api.backend.invoke('headMessage', { vaultId: vault.vaultId })) as string;
-        state.drafts.set(vault.vaultId, text);
+        const text = (await api.backend.invoke('headMessage', {
+          vaultId: vault.vaultId,
+          subPath: vault.subPath,
+        })) as string;
+        state.drafts.set(keyOf(vault), text);
       } catch {
         // The box stays empty: the commit keeps its message.
       }
@@ -202,7 +229,7 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
 
   const stashChanges = async (): Promise<void> => {
     const vault = session.currentOk();
-    if (vault === null) {
+    if (vault === null || (await refuseFound(vault))) {
       return;
     }
     if (vault.status.staged.length + vault.status.unstaged.length === 0) {
@@ -218,23 +245,37 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
     if (answer === null || !(await session.cleanTabsOrExplain(vault.vaultId, 'Stashing'))) {
       return;
     }
-    await session.run('Stashing…', 'stashPush', { vaultId: vault.vaultId });
+    await session.run('Stashing…', 'stashPush', { vaultId: vault.vaultId, subPath: vault.subPath });
   };
 
   const remote = async (label: string, method: 'fetch' | 'pull' | 'push'): Promise<void> => {
     const vault = session.currentOk();
-    if (vault === null) {
+    if (vault === null || (await refuseFound(vault))) {
+      return;
+    }
+    if (method !== 'fetch' && vault.managedBy !== null) {
+      await api.ui.showMessage(
+        `Managed by ${vault.managedBy} — this repository's history is written by the plugin.`,
+        'Source control',
+      );
       return;
     }
     if (method === 'pull' && !(await session.cleanTabsOrExplain(vault.vaultId, 'A pull'))) {
       return;
     }
-    await session.run(label, method, { vaultId: vault.vaultId }, true);
+    await session.run(label, method, { vaultId: vault.vaultId, subPath: vault.subPath }, true);
   };
 
   const discard = async (change: GitChange): Promise<void> => {
     const vault = session.currentOk();
-    if (vault === null) {
+    if (vault === null || (await refuseFound(vault))) {
+      return;
+    }
+    if (vault.managedBy !== null) {
+      await api.ui.showMessage(
+        `Managed by ${vault.managedBy} — this repository's history is written by the plugin.`,
+        'Source control',
+      );
       return;
     }
     if (session.dirtyDocs(vault.vaultId).some((d) => d.path === change.path)) {
@@ -251,7 +292,7 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
       [{ label: untracked ? 'Delete file' : 'Discard', value: 'discard', danger: true }],
     );
     if (answer !== null) {
-      await session.run('Discarding…', 'discard', { vaultId: vault.vaultId, paths: [change.path] });
+      await session.run('Discarding…', 'discard', { vaultId: vault.vaultId, subPath: vault.subPath, paths: [change.path] });
     }
   };
 
@@ -261,12 +302,13 @@ export function createRepoCommands(api: DreyPluginApi, session: RepoSession): Re
       return;
     }
     const vaultId = vault.vaultId;
+    const subPath = vault.subPath;
     if (group === 'conflicts') {
       await api.documents.open(change.path, undefined, { vaultId });
       return;
     }
     const side = async (path: string, rev: 'head' | 'index' | 'worktree') =>
-      (await api.backend.invoke('fileAt', { vaultId, path, rev })) as { content: string | null; binary: boolean };
+      (await api.backend.invoke('fileAt', { vaultId, subPath, path, rev })) as { content: string | null; binary: boolean };
     try {
       const before = await side(
         group === 'staged' ? (change.origPath ?? change.path) : change.path,

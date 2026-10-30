@@ -25,6 +25,7 @@ import {
   readJsonObjectGuarded,
   type UnreadableFile,
 } from './safe-file';
+import { isReservedRootName } from './vault-scan-rules';
 
 /**
  * `vault-config.json` v2 (ADR-0051): every registered vault plus which one
@@ -233,7 +234,18 @@ export class VaultManager {
     if (result.canceled || result.filePaths.length === 0) {
       return null;
     }
-    const chosen = path.resolve(result.filePaths[0]);
+    return this.addVaultAt(result.filePaths[0]);
+  }
+
+  /**
+   * Registers an existing folder as a vault without a picker (T-0045:
+   * the one click on "Register as vault" for a repository the scan
+   * found under a parent vault). Same rules as {@link addVault}: the
+   * name defaults to the folder's basename, an already-registered
+   * folder is rejected, the first vault ever registered becomes active.
+   */
+  addVaultAt(folderPath: string): VaultRegistration {
+    const chosen = path.resolve(folderPath);
     const existing = this.registry.find((v) => path.resolve(v.path).toLowerCase() === chosen.toLowerCase());
     if (existing) {
       throw new Error(`That folder is already registered as vault "${existing.name}".`);
@@ -918,10 +930,23 @@ function launchTerminal(cmd: string, args: string[], cwd?: string): Promise<bool
   });
 }
 
+/** Same directory, slash-insensitive on win32 (the scan root compare). */
+function samePath(a: string, b: string): boolean {
+  const key = (p: string): string => {
+    const resolved = path.resolve(p).replaceAll('\\', '/');
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  };
+  return key(a) === key(b);
+}
+
 async function collectMarkdown(dir: string, vaultRoot: string, out: string[]): Promise<void> {
   const dirents = await fsp.readdir(dir, { withFileTypes: true });
+  // Root depth only (T-0044, ADR-0080): reserved `_`-folders (the
+  // fleet's `_worktrees/` base) are machine state, not vault content —
+  // `tickets/_meta` below the root stays indexed.
+  const atRoot = samePath(dir, vaultRoot);
   for (const dirent of dirents) {
-    if (dirent.name.startsWith('.')) {
+    if (dirent.name.startsWith('.') || (atRoot && isReservedRootName(dirent.name))) {
       continue;
     }
     const fullPath = path.join(dir, dirent.name);
@@ -936,12 +961,14 @@ async function collectMarkdown(dir: string, vaultRoot: string, out: string[]): P
 async function readDirRecursive(dir: string, vaultRoot: string): Promise<VaultFileEntry[]> {
   const dirents = await fsp.readdir(dir, { withFileTypes: true });
   const entries: VaultFileEntry[] = [];
+  const atRoot = samePath(dir, vaultRoot);
 
   for (const dirent of dirents) {
     // Skips dotfiles/dotfolders (.git, .obsidian, ...). Nothing in the
     // Phase-1 spec needs those surfaced, and hiding them by default is
-    // the conventional behavior for this kind of file tree.
-    if (dirent.name.startsWith('.')) {
+    // the conventional behavior for this kind of file tree. Reserved
+    // `_`-folders at the root (T-0044) join them — machine state.
+    if (dirent.name.startsWith('.') || (atRoot && isReservedRootName(dirent.name))) {
       continue;
     }
 

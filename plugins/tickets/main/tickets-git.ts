@@ -145,4 +145,15 @@ export class TicketsGit {
   async push(root: string, remote: string): Promise<void> {
     await this.run(root, ['push', remote, 'HEAD']);
   }
+
+  /**
+   * Removes one worktree from the repository at `root` (T-0042:
+   * `_worktrees/<id>` beside `tickets/`, the "Remove worktree" Files
+   * command). `git worktree remove` itself refuses a worktree with
+   * uncommitted changes or locked files — that error surfaces as the
+   * command's result. `worktreePath` is absolute.
+   */
+  async worktreeRemove(root: string, worktreePath: string): Promise<void> {
+    await this.run(root, ['worktree', 'remove', '--', worktreePath]);
+  }
 }

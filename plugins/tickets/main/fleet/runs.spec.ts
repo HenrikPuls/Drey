@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AttachInfo, ProviderAdapter, ProviderStart, WorkerHandle } from './providers';
 import { HANDOVER_CONTINUE, HANDOVER_HELD, probeExec, RunSupervisor, usageSummary, type RunSupervisorDeps } from './runs';
 import { processAlive } from './procs';
-import type { RunRequest } from './protocol';
+import type { RunInfo, RunRequest, RunState } from './protocol';
 import { newTicketFileText, patchTicketFile, parseTicketFile } from '../ticket-files';
 import { TicketsGit, type GitExecFn } from '../tickets-git';
 
@@ -120,6 +120,7 @@ function request(overrides: Partial<RunRequest> = {}): RunRequest {
     ticketRelPath: 'tickets/plan/T-0001.md',
     phase: 'plan',
     repoPath: 'W:/kt',
+    worktreePath: 'W:/fleet-worktrees/T-0001',
     branch: 't/T-0001',
     baseRef: null,
     provider: 'opencode',
@@ -173,6 +174,256 @@ describe('RunSupervisor', () => {
     await fsp.rm(fleetRoot, { recursive: true, force: true });
   });
 
+  // --- the session handover (T-0049) --------------------------------
+
+  /** A settled record the next start may resume — seeded as a runner
+   *  boot would adopt it (the supervisor's `now` is fixed at 12:00). */
+  async function seedRun(
+    id: string,
+    over: {
+      ticket?: string;
+      model?: string | null;
+      phase?: string;
+      state?: RunState;
+      sessionRef?: string | null;
+      endedAt?: string | null;
+      startedAt?: string;
+      lastTurnContext?: number | null;
+    } = {},
+  ): Promise<void> {
+    const ticket = over.ticket ?? 'T-0001';
+    const started = over.startedAt ?? '2026-10-17T10:00:00Z';
+    const info: RunInfo = {
+      id,
+      ticketId: ticket,
+      provider: 'opencode',
+      state: over.state ?? 'failed',
+      pid: null,
+      startedAt: started,
+      endedAt: over.endedAt ?? '2026-10-17T11:57:00Z',
+      sessionRef: over.sessionRef ?? `ses_${id}`,
+      tokensIn: 0,
+      tokensOut: 0,
+      costUsd: null,
+      lastActivity: started,
+      steerCount: 0,
+      lastSteerRung: null,
+      worktreePath: 'W:/gone',
+      branch: `t/${ticket}`,
+      ...(over.model !== undefined ? { model: over.model } : {}),
+      ...(over.phase !== undefined ? { phase: over.phase } : {}),
+      ...(over.lastTurnContext !== undefined ? { lastTurnContext: over.lastTurnContext } : {}),
+      gateFailure: null,
+    };
+    const dir = path.join(fleetRoot, 'runs', id);
+    await fsp.mkdir(dir, { recursive: true });
+    await fsp.writeFile(
+      path.join(dir, 'run.json'),
+      JSON.stringify({
+        request: request({
+          ...(ticket !== 'T-0001' ? { ticketId: ticket, branch: `t/${ticket}`, ticketRelPath: `tickets/plan/${ticket}.md` } : {}),
+          ...(over.model !== undefined ? { model: over.model } : {}),
+          ...(over.phase !== undefined ? { phase: over.phase, ticketRelPath: `tickets/${over.phase}/T-0001.md` } : {}),
+        }),
+        info,
+      }),
+      'utf8',
+    );
+  }
+
+  it('an auto handover resumes a warm same-phase retry and stamps mode and lineage (T-0049)', async () => {
+    const rel = await writeTicket();
+    await seedRun('R-old', { endedAt: '2026-10-17T11:57:00Z' }); // 3 min before the fixed now
+    const { sup, adapter } = supervisor();
+    await sup.adopt();
+
+    const started = await sup.start(request({ ticketRelPath: rel, handover: 'auto' }));
+    const id = (started as { run: { id: string } }).run.id;
+    expect(adapter.starts[0]!.resumeRef).toBe('ses_R-old');
+    expect(adapter.starts[0]!.compactFirst).not.toBe(true);
+
+    const info = sup.get(id)!;
+    expect(info.handoverMode).toBe('resume');
+    expect(info.resumedFrom).toBe('ses_R-old');
+    expect(info.sessionRef).toBe('ses_R-old');
+    // The stamps are durable and the decision is on the record's trail.
+    const stored = JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')) as {
+      info: { handoverMode?: string; resumedFrom?: string | null };
+    };
+    expect(stored.info.handoverMode).toBe('resume');
+    expect(stored.info.resumedFrom).toBe('ses_R-old');
+    const stream = await fsp.readFile(path.join(fleetRoot, 'runs', id, 'stream.jsonl'), 'utf8');
+    expect(stream).toContain('handover: resume');
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    expect(text).toContain('handover resume');
+  });
+
+  it('the resolution picks the newest terminal run of the same ticket and model — other tickets and models never', async () => {
+    const rel = await writeTicket();
+    await seedRun('R-match', { startedAt: '2026-10-17T10:00:00Z', endedAt: '2026-10-17T11:57:00Z' });
+    await seedRun('R-newer-match', { startedAt: '2026-10-17T10:30:00Z', endedAt: '2026-10-17T11:58:00Z' });
+    await seedRun('R-other-ticket', { ticket: 'T-0002', startedAt: '2026-10-17T11:00:00Z' });
+    await seedRun('R-other-model', { model: 'glm-x', startedAt: '2026-10-17T11:30:00Z' });
+    const { sup, adapter } = supervisor();
+    await sup.adopt();
+
+    await sup.start(request({ ticketRelPath: rel, handover: 'auto' }));
+    expect(adapter.starts[0]!.resumeRef).toBe('ses_R-newer-match');
+  });
+
+  it('a candidate of another phase (build after plan) resolves fresh (T-0049)', async () => {
+    await fsp.mkdir(path.join(vaultDir, 'tickets', 'build'), { recursive: true });
+    await fsp.writeFile(path.join(vaultDir, 'tickets', 'build', 'T-0001.md'), ticketText(), 'utf8');
+    await seedRun('R-plan', { phase: 'plan', endedAt: '2026-10-17T11:57:00Z' });
+    const { sup, adapter } = supervisor();
+    await sup.adopt();
+
+    const started = await sup.start(
+      request({ ticketRelPath: 'tickets/build/T-0001.md', phase: 'build', nextPhase: 'review', handover: 'auto' }),
+    );
+    expect((started as { run: { handoverMode?: string } }).run.handoverMode).toBe('fresh');
+    expect(adapter.starts[0]!.resumeRef).toBeNull();
+    const stream = await fsp.readFile(
+      path.join(fleetRoot, 'runs', (started as { run: { id: string } }).run.id, 'stream.jsonl'),
+      'utf8',
+    );
+    expect(stream).toContain('worked the plan phase');
+  });
+
+  it('a recreated or moved-aside worktree resolves fresh — the session is stale (T-0049)', async () => {
+    await seedRun('R-stale', { endedAt: '2026-10-17T11:57:00Z' });
+    const { sup, adapter } = supervisor({
+      prepareWorktree: async () => ({ outcome: 'recreated', sessionInvalidated: true, movedTo: null }),
+    });
+    await sup.adopt();
+    const rel = await writeTicket();
+
+    const started = await sup.start(request({ ticketRelPath: rel, handover: 'auto' }));
+    expect((started as { run: { handoverMode?: string } }).run.handoverMode).toBe('fresh');
+    expect(adapter.starts[0]!.resumeRef).toBeNull();
+    const stream = await fsp.readFile(
+      path.join(fleetRoot, 'runs', (started as { run: { id: string } }).run.id, 'stream.jsonl'),
+      'utf8',
+    );
+    expect(stream).toContain('stale');
+  });
+
+  it('a session another non-terminal run holds resolves fresh — never double-resumed (T-0049)', async () => {
+    // The ticket's candidate session…
+    await seedRun('R-held', { endedAt: '2026-10-17T11:57:00Z', sessionRef: 'ses_busy' });
+    // …is held by another ticket's live worker (adopted as running).
+    await seedRun('R-live2', {
+      ticket: 'T-0002',
+      state: 'running',
+      endedAt: null,
+      sessionRef: 'ses_busy',
+      startedAt: '2026-10-17T11:00:00Z',
+    });
+    const { sup, adapter } = supervisor();
+    await sup.adopt();
+    const rel = await writeTicket();
+
+    const started = await sup.start(request({ ticketRelPath: rel, handover: 'auto' }));
+    expect((started as { run: { handoverMode?: string } }).run.handoverMode).toBe('fresh');
+    expect(adapter.starts[0]!.resumeRef).toBeNull();
+    const stream = await fsp.readFile(
+      path.join(fleetRoot, 'runs', (started as { run: { id: string } }).run.id, 'stream.jsonl'),
+      'utf8',
+    );
+    expect(stream).toContain('twice');
+  });
+
+  it('a cold pause above the configured threshold resumes with a native compact first (T-0049)', async () => {
+    const rel = await writeTicket();
+    await seedRun('R-big', {
+      endedAt: '2026-10-17T10:00:00Z', // two hours before the fixed now: cold
+      sessionRef: 'ses_big',
+      lastTurnContext: 30_000,
+    });
+    const { sup, adapter } = supervisor();
+    await sup.adopt();
+    sup.setHandoverConfig({ compactAboveTokens: 20_000, resumePauseTtlMin: 15 });
+    const started = await sup.start(request({ ticketRelPath: rel, handover: 'auto' }));
+    expect(adapter.starts[0]!.compactFirst).toBe(true);
+    expect((started as { run: { handoverMode?: string } }).run.handoverMode).toBe('resume-compact');
+
+    // The same record with the default threshold is below the bar: a plain resume.
+    const plain = supervisor();
+    await plain.sup.adopt();
+    await plain.sup.start(request({ ticketRelPath: rel, handover: 'auto' }));
+    expect(plain.adapter.starts[0]!.compactFirst).not.toBe(true);
+  });
+
+  it('a resume the adapter cannot establish respawns fresh under the same run id (T-0049)', async () => {
+    const rel = await writeTicket();
+    await seedRun('R-gone', { sessionRef: 'ses_gone', endedAt: '2026-10-17T11:57:00Z' });
+    const { sup, adapter } = supervisor();
+    await sup.adopt();
+
+    const started = await sup.start(request({ ticketRelPath: rel, handover: 'resume' }));
+    const id = (started as { run: { id: string } }).run.id;
+    expect(adapter.starts[0]!.resumeRef).toBe('ses_gone');
+
+    adapter.starts[0]!.onResumeFailed!('the session answered HTTP 404');
+    await vi.waitFor(() => expect(adapter.starts.length).toBe(2));
+    expect(adapter.handles[0]!.stop).toHaveBeenCalled();
+    expect(adapter.starts[1]!.resumeRef).toBeNull();
+    expect(adapter.starts[1]!.instruction).toBe('Do the ticket.');
+
+    // One run id, fresh stamps, the note on the stream — and the run is alive.
+    const info = sup.get(id)!;
+    expect(sup.list().filter((r) => !['done', 'stopped', 'failed'].includes(r.state))).toHaveLength(1);
+    expect(info.handoverMode).toBe('fresh');
+    expect(info.resumedFrom).toBeNull();
+    const stream = await fsp.readFile(path.join(fleetRoot, 'runs', id, 'stream.jsonl'), 'utf8');
+    expect(stream).toContain('the run starts fresh');
+
+    // The replacement worker's turn decides the run as usual.
+    adapter.handles[1]!.result();
+    adapter.handles[1]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+  });
+
+  it('resume strips the stored handover ask from the copied request (T-0049)', async () => {
+    const rel = await writeTicket();
+    const dir = path.join(fleetRoot, 'runs', 'R-det');
+    await fsp.mkdir(dir, { recursive: true });
+    const info = {
+      id: 'R-det',
+      ticketId: 'T-0001',
+      provider: 'opencode',
+      state: 'detached',
+      pid: null,
+      startedAt: '2026-10-17T11:00:00Z',
+      endedAt: null,
+      sessionRef: 'ses_det',
+      tokensIn: 0,
+      tokensOut: 0,
+      costUsd: null,
+      lastActivity: '2026-10-17T11:00:00Z',
+      steerCount: 0,
+      lastSteerRung: null,
+      worktreePath: 'x',
+      branch: 't/T-0001',
+      gateFailure: null,
+    };
+    await fsp.writeFile(
+      path.join(dir, 'run.json'),
+      JSON.stringify({ request: request({ ticketRelPath: rel, handover: 'auto' }), info }),
+      'utf8',
+    );
+    const { sup } = supervisor();
+    await sup.adopt();
+
+    const outcome = await sup.resume('R-det');
+    expect(outcome.ok).toBe(true);
+    const id = (outcome as { run: { id: string } }).run.id;
+    const stored = JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')) as {
+      request: { handover?: string };
+    };
+    expect(stored.request.handover).toBeUndefined();
+  });
+
   it('refuses a second live run for the ticket', async () => {
     const { sup, adapter } = supervisor();
     const rel = await writeTicket();
@@ -214,7 +465,7 @@ describe('RunSupervisor', () => {
     expect(sup.get(runId)?.held).toBe(true);
   });
 
-  it('a waiting worker is recorded with its question and logged; the answer is no takeover (req-57)', async () => {
+  it('a waiting worker is recorded with its question and logged; the answer is no takeover (req-64)', async () => {
     const { sup, adapter } = supervisor();
     const rel = await writeTicket();
     const started = await sup.start(request({ ticketRelPath: rel }));
@@ -234,7 +485,7 @@ describe('RunSupervisor', () => {
     await vi.waitFor(() => expect(sup.get(runId)?.waiting).toBeNull());
   });
 
-  it('passes the owner\'s approval to the worker, and refuses when nothing waits for one (req-57)', async () => {
+  it('passes the owner\'s approval to the worker, and refuses when nothing waits for one (req-64)', async () => {
     const { sup, adapter } = supervisor();
     const rel = await writeTicket();
     const started = await sup.start(request({ ticketRelPath: rel }));
@@ -284,6 +535,20 @@ describe('RunSupervisor', () => {
     expect((await sup.interrupt(runId)).ok).toBe(true);
     expect(adapter.handles[0]!.setHold).toHaveBeenCalledWith(true);
     expect(sup.get(runId)?.held).toBe(true);
+  });
+
+  it('a reported context window survives later events without it (T-0052)', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    const fire = adapter.starts[0]!.onEvent;
+    fire({ ts: '2026-10-17T12:00:00Z', kind: 'usage', contextWindow: 1_000_000 });
+    await vi.waitFor(() => expect(sup.get(runId)?.contextWindow).toBe(1_000_000));
+    // A later event without the field must not erase the once-set value.
+    fire({ ts: '2026-10-17T12:00:01Z', kind: 'note', text: 'working' });
+    await vi.waitFor(() => expect(sup.get(runId)?.lastActivity).toBe('2026-10-17T12:00:01Z'));
+    expect(sup.get(runId)?.contextWindow).toBe(1_000_000);
   });
 
   it('resume ends a detached run and resumes its session in a new run', async () => {
@@ -636,6 +901,76 @@ describe('RunSupervisor', () => {
     expect(text).toContain('machine gate failed');
   });
 
+  it('a red gate records its verdict, a bounded multi-line failure and a one-line Log entry', async () => {
+    const { sup, adapter } = supervisor({
+      execShell: async () => {
+        const err = new Error('command failed');
+        // What promisify(exec) rejects with: stdout and stderr ride the error.
+        Object.assign(err, { stdout: 'running tests…', stderr: `${'detail\n'.repeat(600)}FAIL src/a.spec.ts` });
+        throw err;
+      },
+    });
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+    const info = sup.get(id)!;
+    expect(info.gateResult).toBe('red');
+    expect(info.gateFailure).toContain('\n'); // multi-line: the command line, then the output
+    expect(info.gateFailure).toContain('FAIL src/a.spec.ts');
+    expect(info.gateFailure!.split('\n').length).toBeLessThanOrEqual(400 + 2); // SANITY_CAP + the two heading lines
+
+    // The ticket Log keeps the single-line discipline: the failure's first line only.
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    const gateLines = text.split('\n').filter((line) => line.includes('machine gate failed'));
+    expect(gateLines).toHaveLength(1);
+    expect(gateLines[0]).toContain('machine gate failed — `npm run verify:unit` failed');
+    expect(gateLines[0]).not.toContain('detail');
+  });
+
+  it('a green gate records its verdict (gateResult on the record)', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    expect(sup.get(id)?.gateResult).toBe('green');
+  });
+
+  it('folds the run telemetry into the record as events arrive', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel, model: 'zai/glm-5.3' }));
+    const id = (started as { run: { id: string } }).run.id;
+    const onEvent = adapter.starts[0]!.onEvent;
+    onEvent({ ts: '2026-10-17T12:00:01Z', kind: 'note', text: 'read src/a.ts', tool: 'read' });
+    onEvent({ ts: '2026-10-17T12:00:02Z', kind: 'usage', turnUsage: { input: 900, cacheRead: 20_000, cacheCreation: 4_000, output: 210 } });
+    onEvent({ ts: '2026-10-17T12:00:03Z', kind: 'note', text: 'edit src/a.ts', tool: 'edit' });
+    onEvent({ ts: '2026-10-17T12:00:04Z', kind: 'usage', turnUsage: { input: 1_100, cacheRead: 30_000, cacheCreation: null, output: 300 } });
+    await vi.waitFor(() => expect(sup.get(id)?.turns).toBe(2));
+
+    const info = sup.get(id)!;
+    expect(info.handoverMode).toBe('fresh');
+    expect(info.model).toBe('zai/glm-5.3');
+    expect(info.phase).toBe('plan');
+    expect(info.turns).toBe(2);
+    expect(info.usage).toEqual({ input: 2_000, cacheRead: 50_000, cacheCreation: 4_000, output: 510 });
+    expect(info.lastTurnContext).toBe(31_100);
+    expect(info.readCalls).toBe(1);
+    expect(info.tokensBeforeFirstWrite).toBe(24_900);
+    // The record is durable: run.json carries the fields.
+    const stored = JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')) as {
+      info: { turns?: number; usage?: unknown };
+    };
+    expect(stored.info.turns).toBe(2);
+    expect(stored.info.usage).toBeDefined();
+  });
+
   it('stop kills the worker and frees the run slot', async () => {
     const { sup, adapter } = supervisor();
     const rel = await writeTicket();
@@ -751,7 +1086,8 @@ describe('RunSupervisor', () => {
     adapter.handles[1]!.fail(0);
     await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).resolves.toBeUndefined();
-    expect(sup.get(id)?.gateFailure).toContain('failed — exit 1');
+    expect(sup.get(id)?.gateFailure).toContain('exit 1');
+    expect(sup.get(id)?.gateResult).toBe('red');
   });
 
   it('a worker that ends without a result fails red — the gate never runs', async () => {
@@ -775,8 +1111,10 @@ describe('RunSupervisor', () => {
 
   it('reuses an existing registered worktree for a re-run', async () => {
     const { sup, git } = supervisor({ prepareWorktree: undefined });
+    // The path comes from the request (T-0044) — the runner never derives one.
+    const wt = request().worktreePath.replace(/\\/g, '/');
     git.worktreeList = [
-      `worktree ${path.join(fleetRoot, 'worktrees', 'kt-T-0001').replace(/\\/g, '/')}`,
+      `worktree ${wt}`,
       'branch refs/heads/t/T-0001',
       '',
       `worktree ${path.join(fleetRoot, 'worktrees', 'kt-other')}`,
@@ -793,8 +1131,9 @@ describe('RunSupervisor', () => {
 
   it('refuses a start whose worktree path is registered for another branch', async () => {
     const { sup, git } = supervisor({ prepareWorktree: undefined });
+    const wt = request().worktreePath.replace(/\\/g, '/');
     git.worktreeList = [
-      `worktree ${path.join(fleetRoot, 'worktrees', 'kt-T-0001').replace(/\\/g, '/')}`,
+      `worktree ${wt}`,
       'branch refs/heads/other',
       '',
     ].join('\n');

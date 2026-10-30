@@ -5,6 +5,7 @@
  */
 import {
   isPlausibleBranchName,
+  repoKey,
   type GitBranch,
   type PatchLine,
   type VaultGitState,
@@ -22,25 +23,59 @@ export function okVaults(vaults: readonly VaultGitState[]): OkVault[] {
   return vaults.filter((v): v is OkVault => v.state === 'ok');
 }
 
+/** The key one state entry is shown under: the vault id, or `vaultId::folder` for a found repository. */
+export function keyOf(state: VaultGitState): string {
+  return repoKey(state.vaultId, state.state === 'ok' ? state.subPath : '');
+}
+
+/** What the repository select shows: the vault's name for its own repository, the folder for a found one. */
+export function repoLabel(repo: OkVault, vaultName: string | undefined): string {
+  if (!repo.discovered) {
+    return vaultName ?? repo.vaultId;
+  }
+  const slash = repo.subPath.lastIndexOf('/');
+  return repo.subPath.slice(slash + 1);
+}
+
+/** The read-only sentence for a repository the scan found under a vault. */
+export function foundReadOnlyMessage(vaultName: string): string {
+  return `This repository was found under "${vaultName}" and is read-only here. Register it as a vault to work with it.`;
+}
+
 /**
- * The vault whose repository the panel shows: the focused document's
- * vault when that is a repository, otherwise the one shown so far while
- * it still is one, otherwise the first repository.
+ * Which repository the panel shows, keyed like {@link keyOf}: the
+ * focused document's repository when it lies in one — inside the
+ * focused vault that is the vault's own repository, or the found one
+ * whose folder prefixes the document's path — otherwise the one shown
+ * so far while it still exists, otherwise the first repository.
  */
-export function pickCurrentVault(
+export function pickCurrentRepo(
   vaults: readonly VaultGitState[],
   current: string | null,
   activeVault: string | null,
+  activeDocPath?: string | null,
 ): string | null {
   const repos = okVaults(vaults);
-  if (activeVault !== null && repos.some((v) => v.vaultId === activeVault)) {
-    return activeVault;
+  if (activeVault !== null) {
+    const own = repos.find((v) => v.vaultId === activeVault && v.subPath === '');
+    const found = repos.filter((v) => v.vaultId === activeVault && v.discovered);
+    if (own !== undefined || found.length > 0) {
+      if (typeof activeDocPath === 'string' && activeDocPath !== '') {
+        const inside = found
+          .filter((v) => activeDocPath === v.subPath || activeDocPath.startsWith(`${v.subPath}/`))
+          .sort((a, b) => b.subPath.length - a.subPath.length)[0];
+        if (inside !== undefined) {
+          return keyOf(inside);
+        }
+      }
+      return own !== undefined ? keyOf(own) : keyOf(found[0]);
+    }
   }
-  if (current === null || !vaults.some((v) => v.vaultId === current)) {
-    return repos[0]?.vaultId ?? vaults[0]?.vaultId ?? null;
+  if (current === null || !vaults.some((v) => keyOf(v) === current)) {
+    return repos.length > 0 ? keyOf(repos[0]) : vaults.length > 0 ? keyOf(vaults[0]) : null;
   }
-  if (repos.length > 0 && !repos.some((v) => v.vaultId === current)) {
-    return repos[0].vaultId;
+  if (repos.length > 0 && !repos.some((v) => keyOf(v) === current)) {
+    return keyOf(repos[0]);
   }
   return current;
 }

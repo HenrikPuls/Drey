@@ -63,6 +63,22 @@ export type VaultGitState =
       readonly fetchedAt: string | null;
       /** Number of stashes in the repository. */
       readonly stashCount: number;
+      /**
+       * The plugin that structurally manages this vault (SDK 1.32),
+       * `null` for an ordinary repository: everything stays visible,
+       * stage/commit/amend/discard/pull/push are refused with the
+       * manager's name.
+       */
+      readonly managedBy: string | null;
+      /**
+       * Which repository under the vault this entry reports (T-0045):
+       * `''` = the vault's own repository at or around the vault root; a
+       * forward-slash folder path = a repository the scan found below a
+       * vault that is no repository itself.
+       */
+      readonly subPath: string;
+      /** True when the scan found this repository under a parent vault — read-only in the panel. */
+      readonly discovered: boolean;
     };
 
 export interface GitBranch {
@@ -120,6 +136,60 @@ export function toVaultPath(repoPath: string, prefix: string): string | null {
 
 export function toRepoPath(vaultPath: string, prefix: string): string {
   return `${prefix}${vaultPath}`;
+}
+
+/**
+ * A discovered repository's path (relative to ITS root) as a vault path:
+ * the scan folder is what sits inside the vault. `subPath: ''` (the
+ * vault's own repository) passes through.
+ */
+export function intoVaultPath(repoPath: string, subPath: string): string {
+  return subPath === '' ? repoPath : `${subPath}/${repoPath}`;
+}
+
+/**
+ * A vault path of a discovered repository back to that repository's own
+ * path — the inverse of {@link intoVaultPath}. A path without the
+ * prefix passes through unchanged (the panel only sends the current
+ * repository's paths).
+ */
+export function intoRepoPath(vaultPath: string, subPath: string): string {
+  return subPath !== '' && vaultPath.startsWith(`${subPath}/`)
+    ? vaultPath.slice(subPath.length + 1)
+    : vaultPath;
+}
+
+/**
+ * Re-maps every change of a discovered repository's status (parsed with
+ * `parseStatus(out, '')`, so repository-relative) into vault-relative
+ * paths — what the renderer, `ctx.vault.read` and the decorations seam
+ * expect. `subPath: ''` returns the status as it is.
+ */
+export function prefixStatusPaths(status: GitStatus, subPath: string): GitStatus {
+  if (subPath === '') {
+    return status;
+  }
+  const move = (change: GitChange): GitChange => ({
+    ...change,
+    path: intoVaultPath(change.path, subPath),
+    ...(change.origPath !== undefined ? { origPath: intoVaultPath(change.origPath, subPath) } : {}),
+  });
+  return {
+    ...status,
+    staged: status.staged.map(move),
+    unstaged: status.unstaged.map(move),
+    conflicts: status.conflicts.map(move),
+  };
+}
+
+/**
+ * The key one repository entry is addressed by (T-0045): the vault id
+ * for the vault's own repository, `vaultId::subPath` for a discovered
+ * one. Both sides (main's command bookkeeping, the panel's state) key
+ * by this, so they share it here.
+ */
+export function repoKey(vaultId: string, subPath: string): string {
+  return subPath === '' ? vaultId : `${vaultId}::${subPath}`;
 }
 
 function kindOf(code: string): GitChangeKind | null {

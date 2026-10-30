@@ -39,22 +39,26 @@ Top-level rules, once, up front:
 ## Layout
 
 ```
-tickets/
-  _meta/
-    pipeline.md     # the phases + handover config (config, never data)
-    order.md        # sparse per-column order pins (data, never config)
-    repos.md        # work-repo name -> clone URL/path mapping
-    prompts/        # the handover prompts (`agent <prompt-ref>` names one file)
-  10-inbox/
-    T-0042.md       # one ticket per file, in its current phase's folder
-  20-prioritized/
-  30-plan/
-  40-plan-review/
-  50-build/
-  60-review/
-  70-commit/
-  80-done/
-  archive/          # reserved (T-0041): archived tickets, never a column
+<tickets repo root>/
+  _worktrees/       # reserved (T-0044): the fleet's worktree home —
+                    #   <ticket-id>/ per ticket, gitignored, invisible to
+                    #   the vault's tree/index/watcher
+  tickets/
+    _meta/
+      pipeline.md     # the phases + handover config (config, never data)
+      order.md        # sparse per-column order pins (data, never config)
+      repos.md        # work-repo name -> clone URL/path mapping
+      prompts/        # the handover prompts (`agent <prompt-ref>` names one file)
+    10-inbox/
+      T-0042.md       # one ticket per file, in its current phase's folder
+    20-prioritized/
+    30-plan/
+    40-plan-review/
+    50-build/
+    60-review/
+    70-commit/
+    80-done/
+    archive/          # reserved (T-0041): archived tickets, never a column
 ```
 
 The phase folders are exactly the phases configured in `pipeline.md`
@@ -62,6 +66,15 @@ The phase folders are exactly the phases configured in `pipeline.md`
 reserved; nothing else lives beside the phase folders. A vault whose
 root contains `tickets/_meta/pipeline.md` **is** a tickets vault — that
 file's presence is the detection marker.
+
+**Reserved `_`-prefixed folders at the repo root (T-0044, ADR-0080).**
+`_`-prefixed names directly beside `tickets/` are machine state, never
+ticket data: the board, the vault's markdown index and the file watcher
+skip them entirely, and the repo's `.gitignore` covers them (ensured by
+the boot sweep, one commit when appended). The fleet's worktrees live in
+`_worktrees/<ticket-id>/` by default; a repo can override its base with
+a `worktrees:` key in repos.md. The skip is root-depth only —
+`tickets/_meta` stays indexed and watched.
 
 ### Numbered folders (T-0041)
 
@@ -225,7 +238,7 @@ Prose for humans. The board follows this file on refresh.
 - `title`: board column header.
 - `wip`: optional integer. Over-limit shows red on the board
   (`4/3`); it warns, it does not block a human (and it never gates the
-  dispatcher — the pool size is the parallelism, M85).
+  dispatcher — the provider pools are the parallelism, req-63).
 - `claim`: optional `true` — entering this phase stamps the claim
   fields.
 - `handover`: what must happen for a ticket to LEAVE this phase:
@@ -257,8 +270,10 @@ commit per change; hand edits win on refresh):
   configured default). Unset on a manual column.
 - `model:` — the model pin for the column's runs (OpenCode:
   `providerID/modelID`).
-- `workers:` — the pool size (integer ≥ 1, default 1): up to N
-  concurrent runs drain the column.
+- `workers:` — **retired (req-63).** The parallel slots belong to the
+  worker providers (`fleet.pool.<provider>.size` in the plugin config,
+  Settings → Tickets → Fleet), shared by every column. A leftover key is
+  ignored with a noise badge; clearing a column's worker removes it.
 - `prompt:` — the prompt ref override; the default is the handover's
   ref (and setting a worker in the dialog writes the matching
   `agent <phase>-default` handover, clearing it writes `manual`).
@@ -287,6 +302,14 @@ pulls across it, and only the owner's moves cross it (refine /
 implement / park). Backward moves are human moves — the one exception
 is the circuit breaker's park into inbox, always logged.
 
+**Dispatch order** (req-63): one candidate list over every playing
+automatic column, ordered by priority class (`urgent` / `high` before
+`normal` / `low`), then column rank — the rightmost column first, so
+finishing beats starting — then the column's own order (pins, then
+derived). Each candidate takes a slot of the provider pool its
+assignment resolves to; a full pool makes it wait, a running run is
+never preempted.
+
 ## `_meta/order.md` — sparse order pins
 
 ```markdown
@@ -309,7 +332,10 @@ everything above and including the drop position. Unknown ids in a
 section are ignored with a noise badge. Two branches adding different
 pins union on merge; a text conflict is resolved by hand, union
 semantics. Rank collisions in derived order fall back to
-`entered-<phase>`, then id.
+`entered-<phase>`, then id. The card context menu's "Move to top" /
+"Move to bottom" is the same reorder operation with drop index 0 / the
+column's end — a menu move and the equivalent drag write identical
+pins.
 
 ## `_meta/repos.md` — work repositories
 
@@ -336,17 +362,19 @@ which protection exists (ADR-0075: hosts are interchangeable, the
 fleet never calls a host API). `path` is the **local checkout /
 worktree** where the repo's work is tested — the board's card context
 menu opens a terminal there ("Open work folder in terminal": run
-`.\dev.ps1`, the repo's build, whatever it uses). `worker` (M84) is
-the repo's default fleet worker for tickets on this repo. `link`
-(req-56) names git-ignored folders of the checkout at `path` — one
-name or a list, relative, never leaving the repo — that the runner
-links into every fleet worktree (a junction on Windows, a directory
-symlink elsewhere) instead of the worker rebuilding them: the toolchain
-(`.tools`, `node_modules`). A folder is linked only when the checkout
-has it, the worktree does not, and git ignores it there; the brief then
-tells the worker not to install anything. Names are
-unique; a ticket's `repo:` must name one of them once it is in a work
-phase.
+`.\dev.ps1`, the repo's build, whatever it uses). `worker` (M84) is the repo's default fleet worker for tickets on this
+repo. `worktrees` (T-0044, ADR-0080) overrides where the fleet's
+worktrees for this repo live — an absolute folder, or one relative to
+the tickets repo root; the worktree is `<base>/<ticket-id>`. Unset (the
+default) is `<ticketsRepo>/_worktrees`. `link` (req-56) names
+git-ignored folders of the checkout at `path` — one name or a list,
+relative, never leaving the repo — that the runner links into every
+fleet worktree (a junction on Windows, a directory symlink elsewhere)
+instead of the worker rebuilding them: the toolchain (`.tools`,
+`node_modules`). A folder is linked only when the checkout has it, the
+worktree does not, and git ignores it there; the brief then tells the
+worker not to install anything. Names are unique; a ticket's `repo:`
+must name one of them once it is in a work phase.
 
 ## Validation (where it runs, what it checks)
 

@@ -180,8 +180,6 @@ export interface PipelinePhase {
   readonly worker: string | null;
   /** The column's model pin (`model: zai/glm-5.3`, M85); null = unset. */
   readonly model: string | null;
-  /** The column's pool size (`workers: 2`, M85) — parallel runs. Default 1. */
-  readonly workers: number;
   /** Explicit prompt ref override (`prompt: plan-heavy`, M85); null = handover ref. */
   readonly prompt: string | null;
   /**
@@ -220,7 +218,6 @@ export function phaseWithoutPoolKeys(
   return {
     worker: null,
     model: null,
-    workers: 1,
     prompt: null,
     maxRed: null,
     tokenBudget: null,
@@ -263,6 +260,13 @@ export interface RepoRef {
   readonly path: string | null;
   /** The repo's default fleet worker (`worker: opencode`), or null. */
   readonly worker: string | null;
+  /**
+   * The repo's worktree base override (`worktrees:`, T-0044): where the
+   * fleet's checkouts for this repo live — `<base>/<ticket-id>`.
+   * Absolute, or relative to the tickets repo root. Null = the default
+   * `<ticketsRepo>/_worktrees` (ADR-0080).
+   */
+  readonly worktrees: string | null;
   /** Git-ignored folders a fleet worktree links from the checkout (`link:`, req-56); absent = none. */
   readonly link?: readonly string[];
 }
@@ -328,6 +332,12 @@ export interface MutationResult {
   readonly warning?: string;
   /** Reorder / "Number folders" (req-50): how many folders were renamed. */
   readonly moved?: number;
+  /**
+   * A move's final vault-relative path (`transition` / `archive` /
+   * `unarchive`, T-0042): the Files panel re-keys open tabs to it when
+   * the plugin performed the move as a structured action.
+   */
+  readonly path?: string;
 }
 
 /** One file of `tickets/_meta/prompts/` as it is on disk (req-50). */

@@ -36,7 +36,7 @@ export class WindowChromeService {
       .catch(() => undefined);
   }
 
-  /** Brings the window to the front (a clicked OS notification, req-57). */
+  /** Brings the window to the front (a clicked OS notification, req-64). */
   focus(): Promise<void> {
     return this.api?.focusWindow() ?? Promise.resolve();
   }

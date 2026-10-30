@@ -123,6 +123,60 @@ function fleetSection(api: DreyPluginApi): HTMLElement {
       'Runs the chain starts on its own have no dialog to ask in.',
     ),
     ...kv('tset-git', 'Git executable', textConfig(api, 'gitPath'), 'Empty uses git from PATH.'),
+    ...kv(
+      'tset-pool-opencode',
+      'OpenCode pool',
+      numberConfig(api, 'fleet.pool.opencode.size'),
+      'How many OpenCode runs go at once, across every column. Empty is one.',
+    ),
+    ...kv(
+      'tset-pool-opencode-probe',
+      'OpenCode pool probe',
+      textConfig(api, 'fleet.pool.opencode.probe'),
+      'A llama.cpp server URL: its parallel slots cap the pool. Other servers do not report theirs.',
+    ),
+    ...kv(
+      'tset-pool-claude-code',
+      'Claude Code pool',
+      numberConfig(api, 'fleet.pool.claude-code.size'),
+      'How many Claude Code runs go at once, across every column. Empty is one.',
+    ),
+    ...kv(
+      'tset-cap-gate-lines',
+      'Gate failure cap — lines',
+      numberConfig(api, 'fleet.cap.gateFailureLines'),
+      'How many lines of a failed gate\'s output a retry\'s instruction keeps (the tail).',
+    ),
+    ...kv(
+      'tset-cap-gate-bytes',
+      'Gate failure cap — bytes',
+      numberConfig(api, 'fleet.cap.gateFailureBytes'),
+      'The same cap as a byte bound.',
+    ),
+    ...kv(
+      'tset-cap-diff-lines',
+      'Diff stat cap — lines',
+      numberConfig(api, 'fleet.cap.diffStatLines'),
+      'How many lines of the worktree\'s diff stat an instruction carries (the head).',
+    ),
+    ...kv(
+      'tset-cap-diff-bytes',
+      'Diff stat cap — bytes',
+      numberConfig(api, 'fleet.cap.diffStatBytes'),
+      'The same cap as a byte bound.',
+    ),
+    ...kv(
+      'tset-handover-compact',
+      'Resume compact threshold — tokens',
+      numberConfig(api, 'fleet.compactAboveTokens'),
+      'A resumed session whose last context is at or above this many tokens is natively compacted first (T-0049).',
+    ),
+    ...kv(
+      'tset-handover-ttl',
+      'Resume pause TTL — minutes',
+      numberConfig(api, 'fleet.resumePauseTtlMin'),
+      'A pause within this window counts as warm: the previous session resumes and re-pays its transcript as cache reads.',
+    ),
   );
   section.append(head, rows);
   return section;
@@ -165,6 +219,24 @@ function textConfig(api: DreyPluginApi, key: string): HTMLInputElement {
   });
   input.addEventListener('change', () => {
     void api.settings.set(key, input.value.trim()).catch(() => undefined);
+  });
+  return input;
+}
+
+/** A whole-number config field; empty or invalid clears back to the default. */
+function numberConfig(api: DreyPluginApi, key: string): HTMLInputElement {
+  const input = el('input', 'mono-input');
+  input.type = 'number';
+  input.min = '0';
+  input.step = '1';
+  void api.settings.get<number>(key).then((value) => {
+    input.value = typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+  });
+  input.addEventListener('change', () => {
+    const parsed = Number(input.value);
+    void api.settings
+      .set(key, input.value.trim() !== '' && Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : '')
+      .catch(() => undefined);
   });
   return input;
 }

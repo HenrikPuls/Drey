@@ -24,7 +24,7 @@ const run = (overrides: Partial<RunInfo>): RunInfo =>
     ...overrides,
   }) as RunInfo;
 
-describe('newWaits — what a snapshot announces (req-57)', () => {
+describe('newWaits — what a snapshot announces (req-64)', () => {
   it('announces a new question once, and again only when the worker asks anew', () => {
     const seen = new Set<string>();
     const asking = run({ waiting: { kind: 'question', text: 'Which API?', since: '2026-10-20T10:05:00Z' } });

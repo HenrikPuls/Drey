@@ -19,20 +19,6 @@
   flex-direction: column;
 }
 
-.tickets-note {
-  flex: none;
-  padding: 2px 8px;
-  font-size: 0.75rem;
-  color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tickets-note-busy {
-  color: var(--text-2);
-}
-
 .tickets-board-issues {
   flex: none;
   margin: 0 8px 2px;
@@ -54,14 +40,120 @@
 }
 
 /* The cycle-time line (M85): per-column average dwell beside the run stats. */
-.tickets-metrics {
+/* The status bar under the board (req-59): one row, cycle times left, a warning pill right. */
+.tickets-statusbar {
   flex: none;
-  padding: 3px 8px;
-  font-size: 0.78rem;
-  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
   white-space: nowrap;
+}
+
+/*
+ * The right end of the bar (req-61): the board's message, then the
+ * worktree pill. The message comes and goes in the free space on the
+ * left of the pill, so neither the cycle times nor the pill move.
+ */
+.tickets-statusbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 60%;
+  margin-left: auto;
+}
+
+.tickets-statusbar-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--text-2);
+}
+
+.tickets-statusbar-note-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.tickets-statusbar-note[data-kind='ok'] svg {
+  flex: none;
+  color: var(--status-added);
+}
+
+.tickets-statusbar-note[data-kind='warn'] {
+  color: var(--status-modified);
+}
+
+.tickets-statusbar-note[data-kind='error'] {
+  color: var(--status-deleted);
+}
+
+.tickets-statusbar-note svg {
+  flex: none;
+}
+
+.tickets-statusbar-note-close {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: inherit;
+}
+
+/* Segments that do not fit wrap onto a hidden second line: a column drops whole, never mid-word. */
+.tickets-statusbar-dwell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 12px;
+  height: 26px;
+  min-width: 0;
+  line-height: 26px;
+  overflow: hidden;
+  cursor: default;
+}
+
+.tickets-statusbar-label {
+  flex: none;
+  color: var(--text-4);
+}
+
+.tickets-statusbar-seg {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.tickets-statusbar-name {
+  color: var(--text-2);
+}
+
+.tickets-statusbar-value {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tickets-statusbar-warn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  color: var(--status-modified);
+  background: color-mix(in srgb, var(--status-modified) 14%, transparent);
+  cursor: help;
 }
 
 .tickets-chip-age {
@@ -79,30 +171,71 @@
   align-items: stretch;
 }
 
-/* The status pills above the board: what the fleet is doing in total. */
-.tickets-summary {
-  flex: none;
+/*
+ * The panel header's controls (req-60): status chip │ board actions │
+ * chain controls │ overflow — groups set apart by air and a hairline,
+ * every control icon-only (ADR-0057).
+ */
+.tickets-head {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px 0;
+  gap: 4px;
 }
 
-.tickets-pill {
+.tickets-head-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+/* The fleet's status: a quiet chip, the long form in its tooltip. */
+.tickets-head-fleet {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 22px;
-  padding: 0 10px;
+  margin-right: 2px;
+  padding: 0 10px 0 8px;
   border-radius: 11px;
   background: var(--bg-input);
+  font-size: 0.72rem;
   color: var(--text-2);
-  font-size: 0.75rem;
+  white-space: nowrap;
+  cursor: help;
 }
 
-.tickets-pill-mono {
+.tickets-head-fleet .tickets-light {
+  width: 7px;
+  height: 7px;
+  box-shadow: none;
+}
+
+.tickets-head-fleet[hidden] {
+  display: none;
+}
+
+.tickets-head-fleet-numbers {
+  color: var(--text-4);
   font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tickets-head-fleet-numbers::before {
+  content: '· ';
+  font-family: inherit;
+}
+
+/* A narrow panel keeps the light and the count, the numbers stay in the tooltip. */
+.tickets-head-fleet[data-narrow] .tickets-head-fleet-numbers,
+.tickets-head-fleet[data-tiny] .tickets-head-fleet-label {
+  display: none;
+}
+
+.tickets-head-fleet[data-tiny] {
+  padding: 0 7px;
 }
 
 /* ---- columns ---- */
@@ -250,17 +383,14 @@
 
 /* The chain's master switch in the panel header (M85): An / Aus /
  * Notaus. The active state is marked; Notaus is the red button. */
+/* Run | halt: one segmented switch, the active half filled. */
 .tickets-master {
-  display: inline-flex;
-  gap: 1px;
-  margin-left: 4px;
-  padding-left: 6px;
-  border-left: 1px solid var(--border);
+  margin-right: 2px;
 }
 
-.tickets-master-on {
-  color: var(--accent, var(--text-1));
-  background: var(--hover-bg);
+.tickets-master .tickets-master-on {
+  color: var(--accent-fg, var(--accent));
+  background: var(--accent-surface);
 }
 
 .tickets-master-abort:not(:hover) {
@@ -756,7 +886,7 @@
   margin-left: 4px;
 }
 
-.tickets-note-busy {
+.tickets-statusbar-note[data-kind='busy'] .tickets-statusbar-note-text {
   animation: tickets-pulse 1.2s ease-in-out infinite;
 }
 
@@ -767,7 +897,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tickets-note-busy {
+  .tickets-statusbar-note[data-kind='busy'] .tickets-statusbar-note-text {
     animation: none;
   }
 }
@@ -1060,7 +1190,7 @@
   background: var(--hover-bg-strong);
 }
 
-/* A worker that waits on the owner (req-57). */
+/* A worker that waits on the owner (req-64). */
 .tickets-chip-waiting {
   background: color-mix(in srgb, var(--status-modified) 28%, transparent);
   color: var(--text-heading);
@@ -1213,23 +1343,111 @@
 .tickets-takeover-banner {
   flex: none;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 16px 8px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-dock);
   font-size: 0.8rem;
 }
 
-.tickets-takeover-headline {
+.tickets-takeover-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tickets-takeover-ticket {
+  flex: none;
   font-weight: 600;
+  font-size: 0.92rem;
   color: var(--text-heading);
 }
 
-.tickets-takeover-stats {
+.tickets-takeover-provider {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.tickets-takeover-mode {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: help;
+  color: color-mix(in srgb, var(--tk-tone, var(--accent)) 70%, var(--text-heading));
+  background: color-mix(in srgb, var(--tk-tone, var(--accent)) 16%, transparent);
+}
+
+.tickets-takeover-status {
+  flex: none;
+  color: var(--text-2);
+  font-size: 0.75rem;
+}
+
+.tickets-takeover-status:empty {
+  display: none;
+}
+
+.tickets-takeover-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 20px;
+  padding-left: 20px;
+  font-size: 0.75rem;
+}
+
+.tickets-takeover-metrics[hidden],
+.tickets-takeover-metric[hidden] {
+  display: none;
+}
+
+.tickets-takeover-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+
+.tickets-takeover-metric-label {
   color: var(--text-4);
+}
+
+.tickets-takeover-metric-value {
+  color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tickets-takeover-meter {
+  position: relative;
+  width: 48px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.tickets-takeover-meter-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  background: var(--status-added);
+}
+
+.tickets-takeover-metric[data-level='mid'] .tickets-takeover-meter-fill {
+  background: var(--status-modified);
+}
+
+.tickets-takeover-metric[data-level='high'] .tickets-takeover-meter-fill {
+  background: var(--status-deleted);
 }
 
 .tickets-takeover-spacer {
@@ -1267,6 +1485,482 @@
 .tickets-takeover-transcript {
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/* ---- the transcript (req-58): the plugin's own DOM ---- */
+
+.tickets-tx-frame {
+  position: relative;
+  display: flex;
+}
+
+.tickets-tx {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 16px 16px 24px;
+}
+
+.tickets-tx-column {
+  max-width: 880px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.tickets-tx-empty {
+  color: var(--text-4);
+  font-style: italic;
+}
+
+/* Replies: readable prose, set off from the tool rows by air. */
+.tickets-tx-reply {
+  margin: 10px 0;
+  overflow-wrap: anywhere;
+}
+
+/* Prose keeps a reading width; tables and code may use the whole column. */
+.tickets-tx-reply > p,
+.tickets-tx-reply > ul,
+.tickets-tx-reply > ol,
+.tickets-tx-reply > blockquote,
+.tickets-tx-reply > .tickets-tx-h {
+  max-width: 76ch;
+}
+
+.tickets-tx-table td {
+  overflow-wrap: normal;
+}
+
+.tickets-tx-reply > :first-child {
+  margin-top: 0;
+}
+
+.tickets-tx-reply > :last-child {
+  margin-bottom: 0;
+}
+
+.tickets-tx-reply p,
+.tickets-tx-reply ul,
+.tickets-tx-reply ol,
+.tickets-tx-reply blockquote {
+  margin: 0 0 8px;
+}
+
+.tickets-tx-reply ul,
+.tickets-tx-reply ol {
+  padding-left: 22px;
+}
+
+.tickets-tx-reply blockquote {
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+  color: var(--text-2);
+}
+
+.tickets-tx-reply hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 10px 0;
+}
+
+.tickets-tx-h {
+  margin: 12px 0 6px;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.tickets-tx-h1 {
+  font-size: 1.05rem;
+}
+
+.tickets-tx-h2 {
+  font-size: 0.96rem;
+}
+
+.tickets-tx-code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--hover-bg);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+}
+
+.tickets-tx-codeblock {
+  margin: 0 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-dock);
+  overflow: hidden;
+  font-style: normal;
+}
+
+.tickets-tx-codeblock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 26px;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.7rem;
+  color: var(--text-4);
+}
+
+.tickets-tx-codeblock-lang {
+  font-family: var(--font-mono);
+}
+
+.tickets-tx-codeblock-copy {
+  height: 20px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-4);
+  font: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.tickets-tx-codeblock:hover .tickets-tx-codeblock-copy,
+.tickets-tx-codeblock-copy:focus-visible {
+  opacity: 1;
+}
+
+.tickets-tx-codeblock-copy:hover {
+  background: var(--hover-bg);
+  color: var(--text-heading);
+}
+
+.tickets-tx-pre {
+  margin: 0;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre;
+  overflow-x: auto;
+  overflow-wrap: normal;
+}
+
+.tickets-tx-diff-add {
+  color: var(--status-added);
+}
+
+.tickets-tx-diff-del {
+  color: var(--status-deleted);
+}
+
+.tickets-tx-diff-hunk {
+  color: var(--text-4);
+}
+
+.tickets-tx-table {
+  margin: 0 0 8px;
+  overflow-x: auto;
+}
+
+.tickets-tx-table table {
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.tickets-tx-table th,
+.tickets-tx-table td {
+  padding: 4px 12px 4px 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.tickets-tx-table th {
+  font-weight: 600;
+  color: var(--text-heading);
+  border-bottom-color: var(--field-border);
+}
+
+.tickets-tx-table tr:last-child td {
+  border-bottom: none;
+}
+
+.tickets-tx-live > :last-child::after {
+  content: '▍';
+  margin-left: 2px;
+  color: var(--tk-tone, var(--accent));
+  animation: tickets-breathe 1s ease-in-out infinite;
+}
+
+/* Tool calls: one quiet row each. */
+.tickets-tx-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.tickets-tx-step:hover {
+  background: var(--hover-bg);
+}
+
+.tickets-tx-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.tickets-tx-step[data-state='done'] .tickets-tx-dot {
+  background: var(--status-added);
+}
+
+.tickets-tx-step[data-state='failed'] .tickets-tx-dot {
+  background: var(--status-deleted);
+}
+
+.tickets-tx-step[data-state='running'] .tickets-tx-dot {
+  background: var(--tk-tone, var(--accent));
+  animation: tickets-breathe 1s ease-in-out infinite;
+}
+
+.tickets-tx-tool {
+  flex: none;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.tickets-tx-target {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--text-2);
+}
+
+.tickets-tx-outcome {
+  flex: 0 10 auto;
+  min-width: 40px;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-4);
+  font-size: 0.74rem;
+}
+
+.tickets-tx-outcome::before {
+  content: '— ';
+}
+
+.tickets-tx-step[data-state='failed'] .tickets-tx-outcome {
+  color: var(--status-deleted);
+}
+
+/* Folds: thinking and long runs of tool calls. */
+.tickets-tx-think,
+.tickets-tx-group {
+  margin: 2px 0;
+}
+
+.tickets-tx-think > summary,
+.tickets-tx-group > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 4px;
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--text-4);
+}
+
+.tickets-tx-think > summary::-webkit-details-marker,
+.tickets-tx-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tickets-tx-think > summary:hover,
+.tickets-tx-group > summary:hover {
+  background: var(--hover-bg);
+  color: var(--text-2);
+}
+
+.tickets-tx-think > summary:focus-visible,
+.tickets-tx-group > summary:focus-visible,
+.tickets-tx-jump:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tickets-tx-chevron {
+  flex: none;
+  width: 8px;
+  font-size: 0.9rem;
+  line-height: 1;
+  transition: transform 0.12s ease;
+}
+
+details[open] > summary > .tickets-tx-chevron {
+  transform: rotate(90deg);
+}
+
+.tickets-tx-think-label,
+.tickets-tx-group-count {
+  flex: none;
+  font-weight: 500;
+}
+
+.tickets-tx-think-preview,
+.tickets-tx-group-last {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-tx-think-preview {
+  font-style: italic;
+}
+
+details[open] > summary > .tickets-tx-think-preview {
+  visibility: hidden;
+}
+
+.tickets-tx-group-last {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+}
+
+.tickets-tx-group-failed {
+  flex: none;
+  color: var(--status-deleted);
+}
+
+.tickets-tx-reply.tickets-tx-think-body {
+  margin: 2px 0 8px 10px;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+
+.tickets-tx-group-body {
+  margin-left: 10px;
+  padding-left: 4px;
+  border-left: 2px solid var(--border);
+}
+
+/* The owner's own messages: a bubble on the right. */
+.tickets-tx-you {
+  display: flex;
+  justify-content: flex-end;
+  margin: 12px 0 6px;
+}
+
+.tickets-tx-you-bubble {
+  max-width: 75%;
+  padding: 6px 12px;
+  border-radius: 12px 12px 4px 12px;
+  background: var(--accent-surface);
+  color: var(--text-heading);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tickets-tx-setup {
+  padding: 0 6px;
+  font-size: 0.72rem;
+  color: var(--text-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-tx-result {
+  margin: 12px 0 4px;
+}
+
+.tickets-tx-result-rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 0.74rem;
+}
+
+.tickets-tx-result-rule::before,
+.tickets-tx-result-rule::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+.tickets-tx-result-chip {
+  color: var(--status-added);
+  font-weight: 500;
+}
+
+.tickets-tx-error {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--status-deleted) 12%, transparent);
+  overflow-wrap: anywhere;
+}
+
+.tickets-tx-error-label {
+  flex: none;
+  font-weight: 600;
+  color: var(--status-deleted);
+}
+
+.tickets-tx-jump {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 14px;
+  background: var(--bg-dock);
+  color: var(--text-heading);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 25%);
+}
+
+.tickets-tx-jump[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tickets-tx-live > :last-child::after,
+  .tickets-tx-step[data-state='running'] .tickets-tx-dot {
+    animation: none;
+  }
+
+  .tickets-tx-chevron {
+    transition: none;
+  }
 }
 
 .tickets-takeover-prompt {
@@ -1374,16 +2068,6 @@
 
 .tickets-takeover-banner {
   border-bottom: 2px solid var(--tk-tone);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--tk-tone) 22%, var(--bg-dock)), var(--bg-dock) 70%);
-}
-
-.tickets-takeover-headline {
-  color: color-mix(in srgb, var(--tk-tone) 55%, var(--text-heading));
-  font-size: 0.88rem;
-}
-
-.tickets-takeover-stats {
-  color: var(--text-2);
 }
 
 .tickets-takeover-btn {
@@ -1466,12 +2150,6 @@
 
 .tickets-light-red {
   box-shadow: 0 0 6px color-mix(in srgb, var(--status-deleted) 70%, transparent);
-}
-
-.tickets-pill {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-dock));
-  color: var(--text-heading);
 }
 
 /* ---- takeover: progress pulse and the stop button ---- */

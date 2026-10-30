@@ -8,9 +8,12 @@
  *   prompt POST queues the turn (delivery `steer` while one is live — the
  *   native injection rung), `interrupt` is the soft stop, and the session
  *   object carries cumulative tokens and cost for the Tickets panel
- *   footer. Progress is POLLED, not streamed — v1's event stream dropped
- *   mid-turn, and the runner must not care which generation it found; the
- *   message list's `idle` marker ends the turn.
+ *   footer. Progress is SUBSCRIBED, with polling as the fallback: the
+ *   server's SSE `/api/event` stream (verified live, T-0051) reports
+ *   text parts while they generate (`text-delta`) and every tool call as
+ *   it starts and settles (`tool`); the 2 s poll keeps the usage totals,
+ *   the seen-message bookkeeping and the turn end — the message list's
+ *   `idle` marker stays the one authoritative "turn is over".
  * - `claude-code` drives the CLI over stream-json: stdin is held open
  *   (`--input-format stream-json`), so injection writes a user message
  *   in; resume is `--resume <sessionRef>`.
@@ -25,17 +28,33 @@ import {
   type PermissionDecision,
   type PermissionMode,
   type QuestionAnswers,
+  type RunUsage,
   type RunWaiting,
   type SteerRung,
   type WaitQuestion,
   type WorkerProviderId,
 } from './protocol';
 
+// One table with the pure resolution rules (T-0049): the supervisor and
+// the start dialog read the same capability per provider.
+export { COMPACT_CAPABILITY } from './handover';
+
 /** One line of the run's normalized stream file (`stream.jsonl`). */
 export interface NormalizedEvent {
   readonly ts: string;
-  readonly kind: 'note' | 'text' | 'usage' | 'result' | 'error';
+  readonly kind: 'note' | 'text' | 'usage' | 'result' | 'error' | 'tool' | 'text-delta';
   readonly text?: string;
+  /**
+   * The tool's name — on `tool` events the called tool, on a tool-call
+   * note the name the telemetry counts (read/grep/glob/write/edit).
+   */
+  readonly tool?: string;
+  /**
+   * For `text-delta`: `'end'` seals the part — its `text` then carries the
+   * WHOLE part (the deltas before it may have been throttled). For `tool`:
+   * `'running'` | `'done'` | `'failed'`.
+   */
+  readonly detail?: string;
   readonly tokensIn?: number;
   readonly tokensOut?: number;
   /** The part of `tokensIn` the provider served from its prompt cache. */
@@ -45,12 +64,20 @@ export interface NormalizedEvent {
   readonly activity?: string;
   /** The current context window's size in tokens. */
   readonly contextTokens?: number;
+  /** The model's context window in tokens (its limit), reported once when known. */
+  readonly contextWindow?: number;
   /** The worker's turn state, when it changed: mid-turn or standing. */
   readonly turn?: 'busy' | 'idle';
   /** The slash commands the worker accepts (names without the slash). */
   readonly commands?: readonly string[];
-  /** The worker began (or stopped) waiting on the owner (req-57); `since` is the event's `ts`. */
+  /** The worker began (or stopped) waiting on the owner (req-64); `since` is the event's `ts`. */
   readonly waiting?: Omit<RunWaiting, 'since'> | null;
+  /**
+   * Exactly one per assistant model call: THAT call's usage. The
+   * providers' aggregates (`tokensIn`/`tokensOut`, the result event) are
+   * cumulative over the run and must never pose as a turn's context.
+   */
+  readonly turnUsage?: RunUsage;
 }
 
 /** The question a turn's last message asks the owner, or null when it asks none. */
@@ -176,6 +203,20 @@ export interface ProviderStart {
   readonly permissionMode: PermissionMode;
   /** A previous run's session — the adapter resumes it when it can. */
   readonly resumeRef: string | null;
+  /**
+   * Compact the resumed session before the first prompt (T-0049): the
+   * compact must complete before the instruction rides and stay
+   * invisible as a turn. Only meaningful with a `resumeRef`.
+   */
+  readonly compactFirst?: boolean;
+  /**
+   * The resume could not be established (a missing session, a CLI
+   * refusal) — reported instead of prompting; the supervisor falls
+   * back to a fresh worker under the same run id. Fires at most once,
+   * always before the first successful prompt (a failure after a
+   * successful resume fails the run normally).
+   */
+  readonly onResumeFailed?: (reason: string) => void;
   readonly ticketId: string;
   /** Events land here; the run store writes them to the stream file. */
   readonly onEvent: (event: NormalizedEvent) => void;
@@ -254,7 +295,7 @@ export interface WorkerHandle {
    */
   interrupt?(): Promise<boolean>;
   /**
-   * Answers the provider's pending permission request (req-57; OpenCode).
+   * Answers the provider's pending permission request (req-64; OpenCode).
    * False when the request is gone or the server refused the reply.
    */
   answerPermission?(requestId: string, decision: PermissionDecision): Promise<boolean>;
@@ -323,10 +364,26 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
       // and the process exits (the run ends). `busy` is "a prompt is out and
       // its result has not come back".
       let held = false;
-      /** The last turn asked the owner something (req-57): stand until answered. */
+      /** The last turn asked the owner something (req-64): stand until answered. */
       let questionHold = false;
       let busy = true;
       let inputClosed = false;
+      // T-0049: the resume's health signal — a CLI that exits before its
+      // init event never established the session, so the supervisor respawns
+      // fresh instead of failing the run.
+      let initSeen = false;
+      // T-0049 compact-first: the `/compact` user message rides before the
+      // instruction and its result is awaited (spike 1: native routing, zero
+      // model usage) — the instruction follows only once the compact settled.
+      const compactFirst = start.compactFirst === true && start.resumeRef !== null;
+      let compactPending = compactFirst;
+      const sendInstruction = (): void => {
+        proc.write(userMessage(start.instruction));
+        if (!busy) {
+          busy = true;
+          start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'busy' });
+        }
+      };
       const closeInput = (): void => {
         if (!inputClosed) {
           inputClosed = true;
@@ -363,6 +420,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             continue;
           }
           if (event.type === 'system' && event.subtype === 'init' && typeof event.session_id === 'string') {
+            initSeen = true;
             start.onSessionRef(event.session_id);
             if (Array.isArray(event.slash_commands)) {
               const names = event.slash_commands.filter((c): c is string => typeof c === 'string').map((c) => c.replace(/^\//, ''));
@@ -385,12 +443,23 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
           }
           if (event.type === 'assistant' && event.message !== undefined) {
             // Every model call reports its own usage: the input side of
-            // the latest one is the size of the context right now.
+            // the latest one is the size of the context right now, and
+            // the per-turn copy (turnUsage) feeds the run's telemetry —
+            // the aggregate on the later result event never does.
             const usage = event.message.usage;
             const contextTokens =
               usage === undefined
                 ? undefined
                 : (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
+            const turnUsage: RunUsage | undefined =
+              usage === undefined
+                ? undefined
+                : {
+                    input: usage.input_tokens ?? null,
+                    cacheRead: usage.cache_read_input_tokens ?? null,
+                    cacheCreation: usage.cache_creation_input_tokens ?? null,
+                    output: usage.output_tokens ?? null,
+                  };
             const parts = event.message.content ?? [];
             // The transcript the takeover tab shows: thinking, replies and
             // every tool call, as the opencode adapter writes them.
@@ -403,7 +472,12 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
                 start.onEvent({ ts: nowIso(now), kind: 'text', text: (part.text ?? '').slice(0, 8_000) });
               } else if (part.type === 'tool_use') {
                 activity = toolActivity(part.name, part.input);
-                start.onEvent({ ts: nowIso(now), kind: 'note', text: activity });
+                start.onEvent({
+                  ts: nowIso(now),
+                  kind: 'note',
+                  text: activity,
+                  ...(part.name !== undefined ? { tool: part.name } : {}),
+                });
               }
             }
             if (contextTokens !== undefined || activity !== '') {
@@ -411,6 +485,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
                 ts: nowIso(now),
                 kind: 'usage',
                 ...(contextTokens !== undefined ? { contextTokens } : {}),
+                ...(turnUsage !== undefined ? { turnUsage } : {}),
                 ...(activity !== '' ? { activity } : {}),
               });
             }
@@ -426,7 +501,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             const question = questionOf(event.result ?? '');
             busy = false;
             if (question !== null) {
-              // A question to the owner (req-57): the turn is not the
+              // A question to the owner (req-64): the turn is not the
               // step's end — the input stays open for the answer.
               questionHold = true;
               start.onEvent({ ts: nowIso(now), kind: 'usage', tokensIn, tokensOut, cacheReadTokens, ...cost });
@@ -443,6 +518,13 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
               ...cost,
             });
             start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'idle' });
+            if (compactPending) {
+              // The compact's own result: the session is compacted, the
+              // real instruction follows now — the input stays open.
+              compactPending = false;
+              sendInstruction();
+              return;
+            }
             if (!held) {
               closeInput();
             }
@@ -456,7 +538,19 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
           }
         }
       });
-      proc.write(userMessage(start.instruction));
+      // Registered before the handle's exited promise so it fires first:
+      // the supervisor's fallback guard is set synchronously before the
+      // exit can be misread as the run's end.
+      proc.onExit((code) => {
+        if (!initSeen && start.resumeRef !== null) {
+          start.onResumeFailed?.(`the CLI exited (${code ?? 'signal'}) before its session was established`);
+        }
+      });
+      if (compactFirst) {
+        proc.write(userMessage('/compact'));
+      } else {
+        proc.write(userMessage(start.instruction));
+      }
       return {
         pid: proc.pid,
         exited: new Promise<number | null>((resolve) => proc.onExit(resolve)),
@@ -548,17 +642,51 @@ interface OcMessage {
   readonly time?: { readonly created?: number; readonly completed?: number };
 }
 
+/**
+ * One SSE event of `GET /api/event`, as verified live against v2.0.32
+ * (T-0051 spike — names pinned, shapes truncated to what the adapter
+ * reads): `session.text.delta|ended`, `session.tool.input.started`,
+ * `session.tool.called`, `session.tool.success|error`,
+ * `session.step.started|ended`, `session.usage.updated`. Everything else
+ * (server.connected, shell.exited, project.updated, …) is ignored.
+ */
+interface OcServerEvent {
+  readonly type?: string;
+  readonly data?: {
+    readonly sessionID?: string;
+    readonly assistantMessageID?: string;
+    readonly ordinal?: number;
+    /** A `tool` part: the call's id. */
+    readonly id?: string;
+    readonly name?: string;
+    readonly text?: string;
+    readonly delta?: string;
+    readonly input?: Readonly<Record<string, unknown>>;
+    readonly content?: ReadonlyArray<{ readonly type?: string; readonly text?: string }>;
+    readonly tokens?: OcUsage;
+    readonly cost?: number;
+  };
+}
+
 interface OcSession {
   readonly cost?: number;
   readonly tokens?: OcUsage;
 }
 
-/** One pending permission request (v2 `Permission.Request`, req-57). */
+/** One pending permission request (v2 `Permission.Request`, req-64). */
 interface OcPermissionRequest {
   readonly id?: string;
   readonly action?: string;
   readonly resources?: readonly string[];
   readonly message?: string;
+}
+
+/** One model-catalog entry — v2's `Model.Info` (`limit.context` is the window). */
+interface OcModel {
+  readonly id?: string;
+  readonly modelID?: string;
+  readonly providerID?: string;
+  readonly limit?: { readonly context?: number };
 }
 
 /**
@@ -574,11 +702,13 @@ export const OPENCODE_API = {
   prompt: (id: string): string => `/api/session/${id}/prompt`,
   messages: (id: string): string => `/api/session/${id}/message`,
   interrupt: (id: string): string => `/api/session/${id}/interrupt`,
+  /** The server's SSE event stream (T-0051): `data:` lines, one `{id, type, data}` JSON object each. */
+  event: '/api/event',
   /** The project's custom commands (`GET`, `{data: [{name, …}]}`). */
   commands: '/api/command',
   command: (id: string): string => `/api/session/${id}/command`,
   compact: (id: string): string => `/api/session/${id}/compact`,
-  /** The session's pending permission requests (`GET`, `{data: [{id, action, resources, message?}]}`; req-57). */
+  /** The session's pending permission requests (`GET`, `{data: [{id, action, resources, message?}]}`; req-64). */
   permissions: (id: string): string => `/api/session/${id}/permission`,
   /** The answer to one (`POST {decision: once | always | reject}`, 204). */
   permissionReply: (id: string, requestId: string): string =>
@@ -587,7 +717,23 @@ export const OPENCODE_API = {
   forms: (id: string): string => `/api/session/${id}/form`,
   /** The answer to one (`POST {answer: {q0: …}}`, 204). */
   formReply: (id: string, formId: string): string => `/api/session/${id}/form/${encodeURIComponent(formId)}/reply`,
+  /** The model catalog (`GET`, `{data: Model.Info[]}`). */
+  models: '/api/model',
+  /** The server's default model (`GET`, `{data: Model.Info | undefined}`). */
+  modelDefault: '/api/model/default',
 } as const;
+
+/** A dropped event subscription is retried after this long; polling covers the gap. */
+export const EVENT_RETRY_MS = 2_000;
+
+/**
+ * Live `text-delta` events are capped at this spacing per part (the seal
+ * carries the whole part, so nothing is lost) — every append to the run's
+ * stream file also rewrites `run.json`, and per-token deltas would melt
+ * that path. Two per second reads live in the watch view, which polls at
+ * the same cadence.
+ */
+export const TEXT_DELTA_MIN_MS = 500;
 
 /** The slash commands every OpenCode worker has besides the project's own. */
 export const OPENCODE_BUILTIN_COMMANDS: readonly string[] = ['compact'];
@@ -619,6 +765,12 @@ export function modelBody(model: string | null, text: string): {
   };
 }
 
+/** Drops a `#variant` suffix a pin or a catalog id may carry (`glm-5.3#fast`). */
+export function stripVariant(id: string): string {
+  const at = id.indexOf('#');
+  return at === -1 ? id : id.slice(0, at);
+}
+
 /** How long a stop waits for the server's answer to the soft interrupt before it kills the tree. */
 export const INTERRUPT_WAIT_MS = 3_000;
 
@@ -642,7 +794,7 @@ export function opencodeAdapter(
       turnDone: false,
       /** A human drives the session: an idle marker is not the run's end. */
       held: false,
-      /** The turn ended with a question to the owner (req-57): stand until answered. */
+      /** The turn ended with a question to the owner (req-64): stand until answered. */
       questionHold: false,
       /** The prompt time whose question was already reported (one report per turn). */
       questionReportedFor: -1,
@@ -680,6 +832,7 @@ export function opencodeAdapter(
         clearInterval(pollTimer);
         pollTimer = null;
       }
+      stopEvents();
       exitResolve.current?.(code);
     };
 
@@ -730,6 +883,61 @@ export function opencodeAdapter(
         // the built-ins alone are still offered
       }
       start.onEvent({ ts: nowIso(now), kind: 'usage', commands: [...OPENCODE_BUILTIN_COMMANDS, ...customCommands] });
+    };
+
+    /**
+     * The model's context window, asked of the server once per worker
+     * (the catalog does not change mid-run): the entry the run's pin
+     * names — `providerID` + `id` first, then `providerID` + `modelID`
+     * (a config-added model can key differently from its upstream id),
+     * a `#variant` suffix stripped before matching; without a pin the
+     * server's default model. A miss or a failed fetch is one stream
+     * note — the number is never guessed.
+     */
+    const reportContextWindow = async (): Promise<void> => {
+      const note = (why: string): void => {
+        start.onEvent({ ts: nowIso(now), kind: 'note', text: `context window not reported — ${why}` });
+      };
+      try {
+        let info: OcModel | undefined;
+        if (start.model !== null && start.model.trim() !== '') {
+          const slashAt = start.model.indexOf('/');
+          const providerID = (slashAt === -1 ? '' : start.model.slice(0, slashAt)).trim();
+          const pinned = stripVariant((slashAt === -1 ? start.model : start.model.slice(slashAt + 1)).trim());
+          const res = await fetchFn(`${address}${OPENCODE_API.models}`, { headers: auth });
+          if (!res.ok) {
+            note(`the model catalog fetch failed (${res.status})`);
+            return;
+          }
+          const catalog = ((await res.json()) as { data?: ReadonlyArray<OcModel> }).data ?? [];
+          info =
+            catalog.find((m) => m.providerID === providerID && stripVariant(m.id ?? '') === pinned) ??
+            catalog.find((m) => m.providerID === providerID && stripVariant(m.modelID ?? '') === pinned);
+          if (info === undefined) {
+            note(`the catalog has no entry for ${providerID === '' ? '' : `${providerID}/`}${pinned}`);
+            return;
+          }
+        } else {
+          const res = await fetchFn(`${address}${OPENCODE_API.modelDefault}`, { headers: auth });
+          if (!res.ok) {
+            note(`the default model fetch failed (${res.status})`);
+            return;
+          }
+          info = ((await res.json()) as { data?: OcModel }).data;
+          if (info === undefined) {
+            note('the server names no default model');
+            return;
+          }
+        }
+        const window = info.limit?.context;
+        if (typeof window !== 'number' || window <= 0) {
+          note('the model entry carries no context limit');
+          return;
+        }
+        start.onEvent({ ts: nowIso(now), kind: 'usage', contextWindow: window });
+      } catch (error) {
+        note(String(error).slice(0, 160));
+      }
     };
 
     /**
@@ -793,6 +1001,208 @@ export function opencodeAdapter(
       };
     };
 
+    /** Emits the run's own usage (totals minus base) when any number moved. */
+    const reportUsage = (total: UsageTotals): void => {
+      if (state.usageBase === null) {
+        return;
+      }
+      const own = usageSince(total, state.usageBase);
+      if (
+        own.tokensIn === state.tokensIn &&
+        own.tokensOut === state.tokensOut &&
+        own.cacheReadTokens === state.cacheReadTokens &&
+        own.costUsd === state.costUsd
+      ) {
+        return;
+      }
+      state.tokensIn = own.tokensIn;
+      state.tokensOut = own.tokensOut;
+      state.cacheReadTokens = own.cacheReadTokens;
+      state.costUsd = own.costUsd;
+      start.onEvent({
+        ts: nowIso(now),
+        kind: 'usage',
+        tokensIn: own.tokensIn,
+        tokensOut: own.tokensOut,
+        cacheReadTokens: own.cacheReadTokens,
+        ...(own.costUsd !== null ? { costUsd: own.costUsd } : {}),
+      });
+    };
+
+    // --- the live event subscription (T-0051) ----------------------------
+    // The SSE half: what streams while a turn generates. The poll below
+    // keeps running — it owns the turn end, the usage totals and every
+    // message the subscription missed.
+    /** Final text parts per message id, sealed by `session.text.ended`. */
+    const sseParts = new Map<string, string[]>();
+    /** Tool names by call id (`session.tool.success` reports no name). */
+    const toolNames = new Map<string, string>();
+    /** When the last delta of a part was forwarded (the throttle). */
+    const deltaAt = new Map<string, number>();
+    let eventAbort: AbortController | null = null;
+    let eventRetry: ReturnType<typeof setTimeout> | null = null;
+
+    const stopEvents = (): void => {
+      eventAbort?.abort();
+      eventAbort = null;
+      if (eventRetry !== null) {
+        clearTimeout(eventRetry);
+        eventRetry = null;
+      }
+    };
+
+    const onServerEvent = (raw: string): void => {
+      if (raw === '' || !state.alive || state.sessionRef === null) {
+        return;
+      }
+      let event: OcServerEvent;
+      try {
+        event = JSON.parse(raw) as OcServerEvent;
+      } catch {
+        return;
+      }
+      const data = event.data;
+      if (data?.sessionID !== state.sessionRef) {
+        return;
+      }
+      const ts = nowIso(now);
+      switch (event.type) {
+        case 'session.text.delta': {
+          if (data.assistantMessageID === undefined || typeof data.delta !== 'string') {
+            return;
+          }
+          const key = `${data.assistantMessageID}#${data.ordinal ?? 0}`;
+          const at = now().getTime();
+          const last = deltaAt.get(key);
+          if (last !== undefined && at - last < TEXT_DELTA_MIN_MS) {
+            return; // throttled — the seal brings the whole part
+          }
+          deltaAt.set(key, at);
+          start.onEvent({ ts, kind: 'text-delta', text: data.delta });
+          return;
+        }
+        case 'session.text.ended': {
+          if (data.assistantMessageID === undefined) {
+            return;
+          }
+          const text = typeof data.text === 'string' ? data.text : '';
+          const parts = sseParts.get(data.assistantMessageID) ?? [];
+          parts.push(text);
+          sseParts.set(data.assistantMessageID, parts);
+          if (text.trim() !== '') {
+            start.onEvent({ ts, kind: 'text-delta', text, detail: 'end', activity: activityLine(text) });
+          }
+          return;
+        }
+        case 'session.tool.input.started': {
+          if (typeof data.id !== 'string') {
+            return;
+          }
+          const name = typeof data.name === 'string' && data.name !== '' ? data.name : 'tool';
+          toolNames.set(data.id, name);
+          start.onEvent({ ts, kind: 'tool', tool: name, detail: 'running', activity: name });
+          return;
+        }
+        case 'session.tool.called': {
+          if (typeof data.id !== 'string') {
+            return;
+          }
+          const name = toolNames.get(data.id) ?? 'tool';
+          // The poll must not repeat this call as its own note.
+          state.seenTools.add(data.id);
+          const activity = toolActivity(name, data.input);
+          start.onEvent({ ts, kind: 'tool', tool: name, text: activity, activity });
+          return;
+        }
+        case 'session.tool.success':
+        case 'session.tool.error': {
+          if (typeof data.id !== 'string') {
+            return;
+          }
+          const failed = event.type === 'session.tool.error';
+          const name = toolNames.get(data.id) ?? 'tool';
+          state.seenTools.add(data.id);
+          const first = activityLine((data.content ?? []).map((part) => part.text ?? '').join('\n'));
+          start.onEvent({
+            ts,
+            kind: 'tool',
+            tool: name,
+            detail: failed ? 'failed' : 'done',
+            ...(first !== '' ? { text: `${RESULT_PREFIX}${failed ? 'failed: ' : ''}${first}` } : {}),
+          });
+          return;
+        }
+        case 'session.step.started': {
+          if (state.turn !== 'busy') {
+            state.turn = 'busy';
+            start.onEvent({ ts, kind: 'usage', turn: 'busy' });
+          }
+          return;
+        }
+        case 'session.step.ended': {
+          const contextTokens = (data.tokens?.input ?? 0) + (data.tokens?.cache?.read ?? 0);
+          if (contextTokens > 0) {
+            state.contextTokens = contextTokens;
+            start.onEvent({ ts, kind: 'usage', contextTokens });
+          }
+          return;
+        }
+        case 'session.usage.updated': {
+          reportUsage(sessionTotals({ tokens: data.tokens, cost: data.cost }));
+          return;
+        }
+        default:
+          return;
+      }
+    };
+
+    /**
+     * Subscribes to `/api/event` (SSE, BASIC auth). A dropped or refused
+     * stream is noise — the poll still covers everything — and is retried
+     * after `EVENT_RETRY_MS` until the run ends.
+     */
+    const subscribeEvents = (): void => {
+      if (eventAbort !== null || !state.alive || address === '') {
+        return;
+      }
+      const controller = new AbortController();
+      eventAbort = controller;
+      void (async (): Promise<void> => {
+        try {
+          const res = await fetchFn(`${address}${OPENCODE_API.event}`, { headers: auth, signal: controller.signal });
+          if (!res.ok || res.body === null) {
+            throw new Error(`event stream answered ${res.status}`);
+          }
+          const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) {
+              break;
+            }
+            buffer += decoder.decode(value, { stream: true });
+            let nl = buffer.indexOf('\n');
+            while (nl >= 0) {
+              const line = buffer.slice(0, nl).trim();
+              buffer = buffer.slice(nl + 1);
+              nl = buffer.indexOf('\n');
+              if (line.startsWith('data:')) {
+                onServerEvent(line.slice(5).trim());
+              }
+            }
+          }
+        } catch {
+          // aborted with the run, or the stream dropped — retried below
+        }
+        if (controller.signal.aborted || !state.alive) {
+          return;
+        }
+        eventAbort = null;
+        eventRetry = setTimeout(subscribeEvents, EVENT_RETRY_MS);
+      })();
+    };
+
     /**
      * A resumed session's spend before this run (req-53): OpenCode's
      * session totals are cumulative, so without the base a resumed run
@@ -824,6 +1234,88 @@ export function opencodeAdapter(
       start.onUsageBase?.(state.usageBase);
     };
 
+    /**
+     * T-0049 resume pre-flight: a session the server no longer has (it
+     * aged out, the storage was cleared) would otherwise surface as a
+     * failed prompt POST on a live worker — reported here instead, before
+     * anything is prompted, so the supervisor can respawn fresh.
+     */
+    const preflightResume = async (): Promise<boolean> => {
+      if (state.sessionRef === null) {
+        return true;
+      }
+      let reason: string | null = null;
+      try {
+        const res = await fetchFn(`${address}${OPENCODE_API.session(state.sessionRef)}`, { headers: auth });
+        if (!res.ok) {
+          reason = `the session answered HTTP ${res.status}`;
+        }
+      } catch (error) {
+        reason = String(error).slice(0, 200);
+      }
+      if (reason === null) {
+        return true;
+      }
+      start.onEvent({ ts: nowIso(now), kind: 'error', text: `resume pre-flight failed — ${reason}` });
+      start.onResumeFailed?.(reason);
+      await server?.killTree();
+      finish(-1);
+      return false;
+    };
+
+    /**
+     * T-0049 compact-first: the compaction runs as a turn of its own
+     * (delivery `steer`, spike 2) — the `idle` marker in the message list
+     * is the one signal it settled. No deadline: a local model may think
+     * for minutes (ADR-0014); the owner's stop ends the run.
+     */
+    const compactBeforePrompt = async (): Promise<void> => {
+      if (start.compactFirst !== true || state.sessionRef === null || address === '') {
+        return;
+      }
+      const note = (text: string): void => {
+        start.onEvent({ ts: nowIso(now), kind: 'note', text });
+      };
+      const startedAt = now().getTime();
+      try {
+        const res = await fetchFn(`${address}${OPENCODE_API.compact(state.sessionRef)}`, {
+          method: 'POST',
+          headers: { ...auth, 'content-type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        if (!res.ok) {
+          note(`the pre-run compact failed (HTTP ${res.status}) — the session continues un-compacted`);
+          return;
+        }
+      } catch (error) {
+        note(`the pre-run compact failed — ${String(error).slice(0, 200)}`);
+        return;
+      }
+      // The compact must complete before the instruction rides — and
+      // before `lastPromptAt` exists, or the poll's `turnDone` would fire
+      // on the compact's own idle marker and kill the worker before the
+      // real turn starts (the T-0049 pitfall).
+      for (;;) {
+        if (!state.alive) {
+          return;
+        }
+        try {
+          const list = await fetchFn(`${address}${OPENCODE_API.messages(state.sessionRef)}`, { headers: auth });
+          if (list.ok) {
+            const body = (await list.json()) as { data?: OcMessage[] };
+            const newest = (body.data ?? [])[0];
+            if (newest !== undefined && newest.type === 'idle' && (newest.time?.created ?? 0) >= startedAt) {
+              note('the resumed session was natively compacted before the first prompt');
+              return;
+            }
+          }
+        } catch {
+          // retried by the next round
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    };
+
     /** One poll round: cumulative usage + stream text + the turn's end. */
     const pollTurn = async (): Promise<void> => {
       if (!state.alive || state.sessionRef === null || address === '' || state.turnDone || state.usageBase === null) {
@@ -835,26 +1327,7 @@ export function opencodeAdapter(
           const body = (await res.json()) as { data?: OcSession };
           const s = body.data;
           if (s !== undefined) {
-            const own = usageSince(sessionTotals(s), state.usageBase);
-            if (
-              own.tokensIn !== state.tokensIn ||
-              own.tokensOut !== state.tokensOut ||
-              own.cacheReadTokens !== state.cacheReadTokens ||
-              own.costUsd !== state.costUsd
-            ) {
-              state.tokensIn = own.tokensIn;
-              state.tokensOut = own.tokensOut;
-              state.cacheReadTokens = own.cacheReadTokens;
-              state.costUsd = own.costUsd;
-              start.onEvent({
-                ts: nowIso(now),
-                kind: 'usage',
-                tokensIn: own.tokensIn,
-                tokensOut: own.tokensOut,
-                cacheReadTokens: own.cacheReadTokens,
-                ...(own.costUsd !== null ? { costUsd: own.costUsd } : {}),
-              });
-            }
+            reportUsage(sessionTotals(s));
           }
         }
 
@@ -891,8 +1364,10 @@ export function opencodeAdapter(
               // A message's text and thinking are read once it is COMPLETE: the
               // list shows a message while it still streams, and reading it on
               // first sight lost most of what the worker said.
+              let fresh = false;
               if ((m.time?.completed ?? 0) > 0 && m.id !== undefined && !state.seenAssistant.has(m.id)) {
                 state.seenAssistant.add(m.id);
+                fresh = true;
                 const thought = (m.content ?? [])
                   .filter((part) => part.type === 'reasoning')
                   .map((part) => part.text ?? '')
@@ -904,13 +1379,21 @@ export function opencodeAdapter(
                 const text = messageText(m);
                 if (text !== '') {
                   state.lastText = text;
-                  start.onEvent({
-                    ts: nowIso(now),
-                    kind: 'text',
-                    text: text.slice(0, 8_000),
-                    activity: activityLine(text),
-                    ...(state.contextTokens > 0 ? { contextTokens: state.contextTokens } : {}),
-                  });
+                  // The subscription already streamed this message's text
+                  // parts (sealed whole): emitting the joined text again
+                  // would show the reply twice in the watch view. A
+                  // degraded subscription (dropped mid-message) falls back
+                  // to the polled text.
+                  const sealed = sseParts.get(m.id)?.join('\n');
+                  if (sealed !== text) {
+                    start.onEvent({
+                      ts: nowIso(now),
+                      kind: 'text',
+                      text: text.slice(0, 8_000),
+                      activity: activityLine(text),
+                      ...(state.contextTokens > 0 ? { contextTokens: state.contextTokens } : {}),
+                    });
+                  }
                 }
               }
               // Every tool call is one visible step — shown once its input is
@@ -927,9 +1410,26 @@ export function opencodeAdapter(
                     kind: 'note',
                     text: activity,
                     activity,
+                    ...(part.name !== undefined ? { tool: part.name } : {}),
                     ...(state.contextTokens > 0 ? { contextTokens: state.contextTokens } : {}),
                   });
                 }
+              }
+              // The message's own per-turn usage, once, AFTER its tool calls —
+              // the session `tokens` are cumulative and never leave this
+              // adapter as context size. Emitted under the same once-guard as
+              // the text, so a 2 s poll cannot inflate the telemetry sums.
+              if (fresh && m.tokens !== undefined) {
+                start.onEvent({
+                  ts: nowIso(now),
+                  kind: 'usage',
+                  turnUsage: {
+                    input: m.tokens.input ?? null,
+                    cacheRead: m.tokens.cache?.read ?? null,
+                    cacheCreation: m.tokens.cache?.write ?? null,
+                    output: m.tokens.output ?? null,
+                  },
+                });
               }
               if ((m.time?.completed ?? 0) > 0) {
                 state.lastText = messageText(m) || state.lastText;
@@ -937,7 +1437,7 @@ export function opencodeAdapter(
             }
             // The server writes the turn's end into the list itself.
             if (m.type === 'idle' && (m.time?.created ?? 0) >= state.lastPromptAt) {
-              // A turn that ends asking the owner (req-57) stands instead —
+              // A turn that ends asking the owner (req-64) stands instead —
               // reported once, held or not, so the owner hears of it.
               const question = questionOf(state.lastText);
               if (question !== null && state.questionReportedFor !== state.lastPromptAt) {
@@ -953,7 +1453,7 @@ export function opencodeAdapter(
         }
 
         // A tool call the server wants approved blocks the turn silently:
-        // the pending request becomes the run's wait (req-57).
+        // the pending request becomes the run's wait (req-64).
         const pending = await fetchFn(`${address}${OPENCODE_API.permissions(state.sessionRef)}`, { headers: auth }).catch(
           () => null,
         );
@@ -1152,8 +1652,11 @@ export function opencodeAdapter(
         kind: 'note',
         text: `re-attached to the opencode server on ${attached.address}, session ${attached.sessionRef}`,
       });
+      // Live parts and tool calls from here on; the poll keeps usage and the turn end.
+      subscribeEvents();
       pollTimer = setInterval(() => void pollTurn(), 2_000);
       void loadCommands();
+      void reportContextWindow();
       return handle;
     }
 
@@ -1236,6 +1739,13 @@ export function opencodeAdapter(
         return;
       }
 
+      // T-0049: a resumed session is verified before anything is
+      // prompted — a missing session respawns the run fresh, never a
+      // failed one.
+      if (!(await preflightResume())) {
+        return;
+      }
+
       if (state.sessionRef === null) {
         const res = await fetchFn(`${address}${OPENCODE_API.createSession}`, {
           method: 'POST',
@@ -1258,11 +1768,16 @@ export function opencodeAdapter(
       });
       // Before the prompt: the resumed session's totals are its past only.
       await readUsageBase();
+      // Then, when asked, the native compact — it must settle BEFORE the
+      // prompt and before the poll's `lastPromptAt` exists (T-0049).
+      await compactBeforePrompt();
       state.startedAt = now().getTime();
       state.lastPromptAt = state.startedAt;
 
+      subscribeEvents();
       pollTimer = setInterval(() => void pollTurn(), 2_000);
       await loadCommands();
+      void reportContextWindow();
 
       // The prompt POST queues the turn and returns at once; the poll
       // loop watches the message list for the `idle` end marker.

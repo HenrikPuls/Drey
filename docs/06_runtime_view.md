@@ -3188,7 +3188,7 @@ sequenceDiagram
     B->>B: read prompt (tickets/_meta/prompts/<ref>.md), compose instruction
     B->>F: start(RunRequest)
     F->>R: POST /start (loopback + bearer)
-    R->>G: worktree add <root>/worktrees/<repo>-<id> (branch t/<id>)
+    R->>G: worktree add <ticketsRepo>/_worktrees/<id> (branch t/<id>, path on RunRequest)
     R->>W: spawn (opencode serve | claude -p stream-json), stdout -> stream.jsonl
     R->>G: ticket patch: run map + Log "run R-… started" (one commit)
     W-->>R: events (session ref, tokens, cost) -> stream.jsonl + run.json
@@ -3261,10 +3261,10 @@ sequenceDiagram
     participant W as worker (opencode / claude-code)
 
     B->>F: POST /chain/config (every board snapshot, idempotent)
-    F->>R: configure { ticketsVaultPath, git, defaultWorker, permissionMode }
+    F->>R: configure { ticketsVaultPath, git, defaultWorker, permissionMode, pools }
     R->>V: read pipeline.md + order.md + repos.md + tickets/*
-    Note over R: dispatch pass — master run + column playing + free slot
-    R->>R: planDispatch: each playing automatic column serves its own queue only (the machine never pulls from a manual column)
+    Note over R: dispatch pass — master run + column playing + a free slot in the provider's pool
+    R->>R: planDispatch (req-63): one list over the playing automatic columns' own queues — urgent/high first, then the rightmost column, then column order; each takes a slot of its provider's pool (probe-capped, shrunk after a 429)
     R->>V: read prompt (tickets/_meta/prompts/<ref>.md)
     R->>R: composeRunRequest (the one builder — column rides as request.column)
     R->>S: start(request) — worktree + brief (the completion discipline at its end)
@@ -3273,7 +3273,7 @@ sequenceDiagram
     S->>S: machine gate re-run — the safety net
     alt agent-done AND green gate
         S->>V: move one column right (one commit, "(fleet)")
-        S-->>R: onRunSettled(done) — slot freed, next pool may pull
+        S-->>R: onRunSettled(done) — the provider's slot is freed for the next candidate
     else red gate
         S-->>R: onRunSettled(failed, gateFailure)
         R->>R: red streak + 60 s cooldown (breaker: max-red trip → column held, next candidate parked in inbox with parked-reason)
@@ -3323,3 +3323,92 @@ sequenceDiagram
 renumbers: a ticket move into a phase reuses whatever folder the phase
 already has (T-0041), so a hand-made gap column keeps its number until
 the owner reorders or numbers.
+
+## 6.68 A ticket dragged in the Files panel: the plugin seam and the one-commit transition (T-0042, ADR-0082)
+
+```mermaid
+sequenceDiagram
+    actor O as Owner
+    participant F as FilesPanel
+    participant Ops as FileOperationsService
+    participant R as FilesOperationsRegistryService
+    participant T as tickets plugin (renderer bridge)
+    participant B as BoardService (plugin main, single-writer queue)
+    participant V as tickets vault (files)
+    participant G as git (tickets repo)
+    participant E as EditorService
+
+    O->>F: drag tickets/30-plan/T-0001.md onto tickets/40-build
+    F->>Ops: move(fromVault, path, toVault, dir)
+    Ops->>R: check({kind: move, …}) — BEFORE any dialog or link planning
+    R->>T: handler.check(operation)
+    T->>T: filesVerdict(snapshot: vault id + pipeline ids) → handle
+    R-->>Ops: {action: handle, perform}
+    Ops->>T: perform → moveTarget maps plan→build (a transition)
+    T->>B: backend.invoke('transition', {id, from, to, index: null})
+    B->>V: patch (entered-build stamp, Log line) + rename into the phase folder
+    B->>V: pin cleanup in _meta/order.md
+    B->>G: one commit "tickets: T-0001 plan -> build" (+ optional auto-push)
+    B-->>T: {ok, path: tickets/40-build/T-0001.md}
+    T-->>Ops: outcome {ok, path}
+    Ops->>E: retargetTabs(vault::old, vault::new) — open tabs follow
+    Ops-->>F: moved=true → the tree reveals the destination
+```
+
+A **refusal** takes the left-hand branch and stops at the dialog: the
+pure verdict table (`plugins/tickets/shared/files-guard.ts`) answers
+`refuse` for create/rename/delete/copy inside `tickets/` (capture,
+filename-identity, pipeline and archive reasons) and for moves that are
+not phase-to-phase or into `tickets/archive/`; `Ops` shows the reason in
+the panel's message dialog and nothing runs — no confirm, no link update.
+A drag **out of `tickets/archive/`** maps to `unarchive` (a new one-commit
+mutation: `archive -> <phase>` stamp, Log, one commit) — the drag IS the
+board treatment. The same seam feeds the Files context rows ("Archive
+ticket", "Unarchive ticket", "Remove worktree"). Main-side, the detected
+tickets vault is flagged plugin-managed (`ctx.vault.markManaged`, in step
+with every detect), so the Source control panel shows it read-only:
+stage / discard / commit (+amend) / pull / push refuse with "Managed by
+Tickets" — the whole read surface (branch, status, log, file history,
+decorations) stays.
+
+## 6.69 A parent vault finds its repositories: discovery → states → decorations (T-0045, ADR-0083)
+
+```mermaid
+sequenceDiagram
+    actor U as Owner
+    participant P as Source control panel
+    participant M as git plugin (main)
+    participant D as discoverRepos (fs-only walk)
+    participant G as git
+    participant S as FileDecorationService
+    participant VM as VaultManager
+
+    U->>P: Refresh the status (relocate)
+    P->>M: status {relocate: true}
+    M->>M: locate(vault) — the vault itself is no repository (none)
+    M->>D: discoverRepos(vaultRoot, otherVaults' roots)
+    D-->>M: [drey, drey-tickets] (.git files count; skips dot-dirs, node_modules, other vaults)
+    loop each found repository (≤ 25)
+        M->>G: status --porcelain=v2 (cwd = the repo's root)
+        G-->>M: repository-relative changes
+        M->>M: prefixStatusPaths(status, subPath) — vault-relative
+    end
+    M-->>P: states: [ok subPath: drey (discovered), ok subPath: drey-tickets] — no "not a repository"
+    P->>S: setFileDecorations(vaultId, own + found merged) — ONE call (the service replaces per vault)
+    P-->>P: read-only surface: hint row "Found by scanning <vault> — read-only", Register button, no commit box
+    U->>P: Register as vault
+    P->>M: registerVault {path: the found root}
+    M->>VM: ctx.vault.register(path) — addVaultAt + watcher sync + full refresh
+    VM-->>P: registry push (vault:changed) → the panel re-pulls
+    M-->>P: the new vault's own entry; the found twin is gone (its subtree is now a skip root)
+```
+
+Every mutation on a found repository — stage, unstage, discard, commit,
+checkout, createBranch, fetch, pull, push, merge, mergeAbort, resolve,
+stashPush/Pop/Drop — is refused by the plugin's FIRST guard, before any
+repository is located or git runs ("This repository was found under
+"\<vault\>" and is read-only here. Register it as a vault to work with
+it."); the queries (branches, log, file history, diffs, stash list)
+answer, with the paths stripped back repository-relative main-side.
+Rescans run on registry changes and relocate only.
+

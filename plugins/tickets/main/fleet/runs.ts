@@ -20,9 +20,26 @@ import { parseOrderFile, rewriteOrderSection } from '../ticket-board';
 import { acceptanceCommands, patchTicketFile, ticketPathParts } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
 import { answersFromText, answersText, ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
+import { COMPACT_CAPABILITY, HANDOVER_CANDIDATE_STATES, resolveHandover, type HandoverCandidate, type HandoverDecision } from './handover';
 import { killTreeGuarded, processAlive, processStartMs, type ExecFn } from './procs';
-import type { PermissionDecision, QuestionAnswers, RunInfo, RunRequest, RunState, SteerRung } from './protocol';
-import { prepareWorktree as defaultPrepareWorktree, type LinkReport, type PreparedWorktree } from './worktrees';
+import {
+  DEFAULT_FLEET_HANDOVER,
+  type FleetHandoverConfig,
+  type PermissionDecision,
+  type QuestionAnswers,
+  type RunInfo,
+  type RunRequest,
+  type RunState,
+  type SteerRung,
+} from './protocol';
+import {
+  normalizeForMatch,
+  prepareWorktree as defaultPrepareWorktree,
+  type LinkReport,
+  type PreparedWorktree,
+} from './worktrees';
+import { capTail, SANITY_CAP } from './capping';
+import { TelemetryFold, type RunTelemetry } from './telemetry';
 
 const execAsync = promisify(nodeExec);
 const execFileAsync = promisify(nodeExecFile);
@@ -134,6 +151,8 @@ interface LiveRun {
   audited: boolean;
   /** The worker finished its turn — the adapter's `result` event, the agent-done signal. */
   agentDone: boolean;
+  /** Folds the run's token telemetry (T-0048) out of every stream event. */
+  telemetry: TelemetryFold;
   /** Why the owner stopped the run — becomes the ticket Log line when the run ends. */
   stopNote?: string;
   /** An ended run's session the owner reopened: held from the start, no gate and no move at its end. */
@@ -142,6 +161,32 @@ interface LiveRun {
   handover?: RunHandover;
   /** The resumed session's spend before this run, once the adapter read it (req-53). */
   usageBase?: UsageTotals;
+  /**
+   * A failed resume is being replaced by a fresh worker under the same
+   * run id (T-0049): the dying worker's exit decides nothing while this
+   * is set.
+   */
+  fallbackActive?: boolean;
+}
+
+/** The telemetry a persisted record carries, for restoring a fold (an adopted run). */
+function telemetryOf(info: RunInfo): RunTelemetry | undefined {
+  if (
+    info.usage === undefined &&
+    info.turns === undefined &&
+    info.readCalls === undefined &&
+    info.lastTurnContext === undefined &&
+    info.tokensBeforeFirstWrite === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    usage: info.usage ?? { input: null, cacheRead: null, cacheCreation: null, output: null },
+    lastTurnContext: info.lastTurnContext ?? null,
+    turns: info.turns ?? 0,
+    readCalls: info.readCalls ?? 0,
+    tokensBeforeFirstWrite: info.tokensBeforeFirstWrite ?? null,
+  };
 }
 
 /** What a takeover call answers. */
@@ -190,6 +235,11 @@ export class RunSupervisor {
   private readonly runs = new Map<string, LiveRun>();
   /** Set by `handOver`: this runner is going, it starts nothing new. */
   private retiring = false;
+  /**
+   * The handover thresholds (T-0049), pushed by the runner whenever the
+   * plugin's chain config names them; the defaults until then.
+   */
+  private handoverConfig: FleetHandoverConfig = DEFAULT_FLEET_HANDOVER;
   private readonly git: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths' | 'push'>;
   private readonly now: () => Date;
   private readonly exec: ExecFn;
@@ -201,7 +251,13 @@ export class RunSupervisor {
     this.exec = deps.exec ?? probeExec(this.deps.root);
     this.prepareWorktree =
       deps.prepareWorktree ??
-      ((request, worktreePath) => defaultPrepareWorktree(this.git, request, worktreePath, this.now));
+      ((request, worktreePath) =>
+        defaultPrepareWorktree(this.git, request, worktreePath, this.now, (p) => this.isWorktreeLive(p)));
+  }
+
+  /** The handover thresholds the plugin configured (T-0049) — idempotent, applied to the next start. */
+  setHandoverConfig(config: FleetHandoverConfig): void {
+    this.handoverConfig = config;
   }
 
   /**
@@ -254,6 +310,7 @@ export class RunSupervisor {
             gating: false,
             audited: false,
             agentDone: false,
+            telemetry: new TelemetryFold(telemetryOf(stored.info)),
           });
           continue;
         }
@@ -274,6 +331,7 @@ export class RunSupervisor {
           gating: false,
           audited: false,
           agentDone: false,
+          telemetry: new TelemetryFold(telemetryOf(stored.info)),
         };
         this.runs.set(detached.id, live);
         await this.persist(live);
@@ -356,6 +414,7 @@ export class RunSupervisor {
       gating: false,
       audited: false,
       agentDone: false,
+      telemetry: new TelemetryFold(telemetryOf(stored.info)),
       ...(stored.usageBase !== undefined ? { usageBase: stored.usageBase } : {}),
     };
     this.runs.set(info.id, run);
@@ -435,6 +494,7 @@ export class RunSupervisor {
       gating: false,
       audited: false,
       agentDone: false,
+      telemetry: new TelemetryFold(telemetryOf(stored.info)),
       ...(stored.usageBase !== undefined ? { usageBase: stored.usageBase } : {}),
     };
     let handle: WorkerHandle;
@@ -579,11 +639,9 @@ export class RunSupervisor {
 
     const id = `R-${this.stamp().replaceAll(/[-:.]/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 6)}`;
     const dir = path.join(this.deps.root, 'runs', id);
-    const worktreePath = path.join(
-      this.deps.root,
-      'worktrees',
-      `${request.repoPath.split(/[\\/]/).at(-1) ?? 'repo'}-${request.ticketId}`,
-    );
+    // The home rule's path (ADR-0080), computed in `composeRunRequest` and
+    // carried on the request — the runner never derives paths.
+    const worktreePath = request.worktreePath;
 
     let prepared: PreparedWorktree;
     try {
@@ -591,6 +649,31 @@ export class RunSupervisor {
       prepared = await this.prepareWorktree(request, worktreePath);
     } catch (error) {
       return { ok: false, error: `worktree failed: ${messageOf(error)}` };
+    }
+
+    // T-0049: the handover resolution. Only the supervisor holds every
+    // record (boot-adopted terminal ones included), and only the
+    // preparation above tells whether the worktree invalidated prior
+    // sessions — so this is the one place the rules run. The pre-T-0049
+    // explicit-session paths (reattach, resumeInPlace, reopen, a detached
+    // run's resume) pass their own session and skip resolution entirely.
+    let decision: HandoverDecision | null = null;
+    if (resumeRef === null && !reopened && request.handover !== undefined) {
+      const candidate = this.handoverCandidate(request);
+      decision = resolveHandover({
+        requested: request.handover,
+        phase: request.phase,
+        candidate,
+        provider: this.deps.adapter.id,
+        model: request.model,
+        sessionInvalidated: prepared.sessionInvalidated,
+        sessionInUse: this.sessionInUse(candidate?.sessionRef ?? null),
+        capability: COMPACT_CAPABILITY[this.deps.adapter.id],
+        config: this.handoverConfig,
+        nowMs: this.now().getTime(),
+      });
+      resumeRef = decision.resumeRef;
+      this.deps.log(`run ${id} (${request.ticketId}): handover ${decision.mode} — ${decision.why}`);
     }
 
     const info: RunInfo = {
@@ -614,6 +697,18 @@ export class RunSupervisor {
       worktreePath,
       branch: request.branch,
       worktree: prepared.outcome,
+      gateResult: null,
+      model: request.model,
+      phase: request.phase,
+      usage: { input: null, cacheRead: null, cacheCreation: null, output: null },
+      lastTurnContext: null,
+      turns: 0,
+      readCalls: 0,
+      tokensBeforeFirstWrite: null,
+      handoverMode: decision?.mode ?? 'fresh',
+      // The candidate's session, never the init event — a forked id
+      // would lose the lineage (T-0049).
+      resumedFrom: decision !== null && decision.mode !== 'fresh' ? decision.resumeRef : null,
       gateFailure: null,
     };
     const run: LiveRun = {
@@ -627,6 +722,7 @@ export class RunSupervisor {
       gating: false,
       audited: false,
       agentDone: false,
+      telemetry: new TelemetryFold(),
       ...(reopened ? { reopened: true } : {}),
     };
     this.runs.set(id, run);
@@ -639,36 +735,26 @@ export class RunSupervisor {
               `stale dirty worktree moved aside to ${prepared.movedTo} — kept, not deleted; earlier session context is invalid`,
             )
           : '') +
-        (prepared.links !== undefined ? openNote(linkNote(prepared.links)) : ''),
+        (prepared.links !== undefined ? openNote(linkNote(prepared.links)) : '') +
+        (decision !== null ? openNote(`handover: ${decision.mode} — ${decision.why}`) : ''),
       'utf8',
     );
 
-    const handle = this.deps.adapter.spawn({
-      cwd: worktreePath,
-      instruction: request.instruction,
-      model: request.model,
-      permissionMode: request.permissionMode,
+    const handle = this.spawnWorker(run, {
       resumeRef,
-      ticketId: request.ticketId,
-      onEvent: (event) => void this.onEvent(run, event),
-      onSessionRef: (ref) => {
-        run.info = { ...run.info, sessionRef: ref };
-        void this.persist(run);
-      },
-      onAttachInfo: (info) => void this.recordAttach(run, info),
-      onUsageBase: (base) => {
-        run.usageBase = base;
-        void this.persist(run);
-      },
+      ...(decision?.compactFirst === true ? { compactFirst: true } : {}),
+      // A resume the adapter cannot establish respawns fresh under the
+      // same run id (T-0049) — only the resolution path asks for that.
+      ...(decision !== null && resumeRef !== null
+        ? { onResumeFailed: (reason: string) => void this.freshFallback(run, reason) }
+        : {}),
     });
-    run.handle = handle;
     run.info = { ...run.info, state: 'running', pid: handle.pid };
     if (reopened) {
       handle.setHold?.(true);
       run.info = { ...run.info, held: true };
       await this.persist(run);
       await this.logLine(run, 'session reopened by the owner — the worker stands until you prompt it');
-      void handle.exited.then((code) => void this.onWorkerExit(run, code));
       return { ok: true, run: run.info };
     }
     await this.persist(run);
@@ -681,7 +767,7 @@ export class RunSupervisor {
         from: null,
         now: this.now(),
         actor: this.agentActor(),
-        action: `run ${id} started (${request.provider}${request.model !== null ? `, ${request.model}` : ''}) — worktree ${prepared.outcome}`,
+        action: `run ${id} started (${request.provider}${request.model !== null ? `, ${request.model}` : ''}) — worktree ${prepared.outcome}${decision !== null ? `, handover ${decision.mode}` : ''}`,
         ...(request.recordWorker !== undefined && request.recordWorker !== '' ? { setWorker: request.recordWorker } : {}),
         ...(handle.pid !== null
           ? { run: { pid: handle.pid, 'started-at': this.stamp(), stream: id } }
@@ -689,8 +775,125 @@ export class RunSupervisor {
       }),
     );
 
-    void handle.exited.then((code) => void this.onWorkerExit(run, code));
     return { ok: true, run: run.info };
+  }
+
+  /**
+   * Spawns the run's worker and wires its events — the one spawn path
+   * for the first worker and the fresh fallback's replacement alike
+   * (T-0049). The handle the run currently owns decides its exit; a
+   * worker a fallback replaced decides nothing.
+   */
+  private spawnWorker(
+    run: LiveRun,
+    resume: {
+      readonly resumeRef: string | null;
+      readonly compactFirst?: boolean;
+      readonly onResumeFailed?: (reason: string) => void;
+    },
+  ): WorkerHandle {
+    const request = run.request;
+    const handle = this.deps.adapter.spawn({
+      cwd: run.info.worktreePath,
+      instruction: request.instruction,
+      model: request.model,
+      permissionMode: request.permissionMode,
+      resumeRef: resume.resumeRef,
+      ...(resume.compactFirst === true ? { compactFirst: true } : {}),
+      ticketId: request.ticketId,
+      onEvent: (event) => void this.onEvent(run, event),
+      onSessionRef: (ref) => {
+        run.info = { ...run.info, sessionRef: ref };
+        void this.persist(run);
+      },
+      onAttachInfo: (info) => void this.recordAttach(run, info),
+      onUsageBase: (base) => {
+        run.usageBase = base;
+        void this.persist(run);
+      },
+      ...(resume.onResumeFailed !== undefined ? { onResumeFailed: resume.onResumeFailed } : {}),
+    });
+    run.handle = handle;
+    void handle.exited.then((code) => {
+      if (run.handle === handle) {
+        void this.onWorkerExit(run, code);
+      }
+    });
+    return handle;
+  }
+
+  /**
+   * The newest terminal record of this ticket and model in this
+   * supervisor (T-0049): its provider is the supervisor's own (adopt
+   * filters by it), `detached` never qualifies — its worker may still
+   * live — and the resolution judges phase, session and staleness.
+   */
+  private handoverCandidate(request: RunRequest): HandoverCandidate | null {
+    const newest = [...this.runs.values()]
+      .filter(
+        (r) =>
+          r.request.ticketId === request.ticketId &&
+          (r.info.model ?? r.request.model) === request.model &&
+          HANDOVER_CANDIDATE_STATES.includes(r.info.state),
+      )
+      .sort((a, b) => b.info.startedAt.localeCompare(a.info.startedAt))[0];
+    if (newest === undefined) {
+      return null;
+    }
+    return {
+      phase: newest.info.phase ?? newest.request.phase,
+      provider: newest.info.provider,
+      model: newest.info.model ?? null,
+      state: newest.info.state,
+      sessionRef: newest.info.sessionRef,
+      lastTurnContext: newest.info.lastTurnContext ?? null,
+      endedAt: newest.info.endedAt,
+    };
+  }
+
+  /** Whether any non-terminal run of this supervisor holds the session
+   *  (T-0049) — a detached one counts, its worker may still live. */
+  private sessionInUse(sessionRef: string | null): boolean {
+    if (sessionRef === null) {
+      return false;
+    }
+    return [...this.runs.values()].some(
+      (r) => !TERMINAL.includes(r.info.state) && r.info.sessionRef === sessionRef,
+    );
+  }
+
+  /**
+   * The resume the adapter reported unestablishable (T-0049): the dying
+   * worker is stopped and a FRESH one takes the run over — same id,
+   * record, stream, ticket stamp and instruction — so a broken session
+   * never fails the run. A failure after a successful resume never lands
+   * here (the adapters report only before their first prompt).
+   */
+  private async freshFallback(run: LiveRun, reason: string): Promise<void> {
+    if (run.fallbackActive === true || TERMINAL.includes(run.info.state) || run.handle === null) {
+      return;
+    }
+    run.fallbackActive = true;
+    this.deps.log(`run ${run.info.id}: the resume failed — ${reason}; starting fresh under the same run id`);
+    await run.handle.stop().catch(() => undefined);
+    run.handle = null;
+    run.info = {
+      ...run.info,
+      state: 'starting',
+      pid: null,
+      handoverMode: 'fresh',
+      resumedFrom: null,
+      sessionRef: null,
+    };
+    const handle = this.spawnWorker(run, { resumeRef: null });
+    run.fallbackActive = false;
+    run.info = { ...run.info, state: 'running', pid: handle.pid };
+    await this.appendStream(run, {
+      ts: this.stamp(),
+      kind: 'note',
+      text: `the resume failed (${reason}) — the run starts fresh with the same instruction`,
+    });
+    await this.persist(run);
   }
 
   async stop(runId: string, reason: string | null): Promise<StopOutcome> {
@@ -742,7 +945,7 @@ export class RunSupervisor {
     // The first prompt of the owner takes the run over: until then the
     // runner drives as usual (the tab only watches), from here on the
     // worker's finished turn no longer ends the run. An answer to the
-    // worker's own question is not a takeover (req-57): the worker goes
+    // worker's own question is not a takeover (req-64): the worker goes
     // on with its step and its next finished turn ends the run as usual.
     const answersQuestion = run.info.waiting?.kind === 'question';
     const form = run.info.waiting?.questions;
@@ -826,9 +1029,13 @@ export class RunSupervisor {
       await killTreeGuarded(old.info.pid, this.exec, old.startedAtMs);
     }
     await this.finish(old, 'stopped');
+    // The stored request's handover ask is stripped (T-0049): this start
+    // carries its own session explicitly, and a stored 'auto' must not
+    // double-resolve against the record being replaced.
+    const { handover: _storedAsk, ...restored } = old.request;
     return this.start(
       {
-        ...old.request,
+        ...restored,
         instruction:
           'The runner restarted and this session was resumed. Continue the step where you left off; ' +
           'your original brief is earlier in this conversation. Do not search the disk for files already named in it.',
@@ -953,6 +1160,17 @@ export class RunSupervisor {
     return this.list().some((r) => !TERMINAL.includes(r.state) && r.state !== 'detached');
   }
 
+  /** Whether a live run (starting/running/stopping, or a detached one —
+   *  unwatchable, treat as busy) is working in this worktree: the
+   *  prepare-time branch-conflict healing (T-0044) never removes a tree
+   *  a live run holds. */
+  private isWorktreeLive(worktreePath: string): boolean {
+    const needle = normalizeForMatch(worktreePath);
+    return this.list().some(
+      (r) => !TERMINAL.includes(r.state) && normalizeForMatch(r.worktreePath) === needle,
+    );
+  }
+
   // -------------------------------------------------------------------------
 
   /** The rules the runner enforces itself (ADR-0076: the validator runs where the data is). */
@@ -973,6 +1191,9 @@ export class RunSupervisor {
     if (request.branch !== `t/${request.ticketId}`) {
       failures.push(`the branch is not the deterministic t/${request.ticketId}`);
     }
+    if (request.worktreePath.trim() === '') {
+      failures.push('the worktree path is empty (a pre-T-0044 sender derived it itself)');
+    }
     if (request.acceptance.length === 0 && request.gate !== 'structural') {
       failures.push('the ticket has no acceptance criteria — the machine gate would have nothing to run');
     }
@@ -985,12 +1206,15 @@ export class RunSupervisor {
     if (event.kind === 'result') {
       run.agentDone = true;
     }
+    run.telemetry.apply(event);
     await this.appendStream(run, event);
+    const telemetry = run.telemetry.get();
     run.info = {
       ...run.info,
       lastActivity: event.ts,
       ...(event.activity !== undefined && event.activity !== '' ? { activity: event.activity } : {}),
       ...(event.contextTokens !== undefined ? { contextTokens: event.contextTokens } : {}),
+      ...(event.contextWindow !== undefined ? { contextWindow: event.contextWindow } : {}),
       ...(event.turn !== undefined ? { turn: event.turn } : {}),
       ...(event.commands !== undefined ? { commands: event.commands } : {}),
       ...(event.tokensIn !== undefined ? { tokensIn: event.tokensIn } : {}),
@@ -998,6 +1222,12 @@ export class RunSupervisor {
       ...(event.cacheReadTokens !== undefined ? { cacheReadTokens: event.cacheReadTokens } : {}),
       ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}),
       ...(event.waiting !== undefined ? { waiting: event.waiting === null ? null : { ...event.waiting, since: event.ts } } : {}),
+      usage: telemetry.usage,
+      lastTurnContext: telemetry.lastTurnContext,
+      turns: telemetry.turns,
+      readCalls: telemetry.readCalls,
+      tokensBeforeFirstWrite: telemetry.tokensBeforeFirstWrite,
+      ...(event.kind === 'error' ? { lastError: event.text ?? 'error' } : {}),
     };
     if (event.kind === 'error') {
       this.deps.log(`run ${run.info.id}: ${event.text ?? 'error'}`);
@@ -1013,7 +1243,7 @@ export class RunSupervisor {
 
   /**
    * The owner's answer to the worker's pending permission request
-   * (req-57): `once`, `always` or `reject`, passed to the provider.
+   * (req-64): `once`, `always` or `reject`, passed to the provider.
    */
   async answerPermission(runId: string, decision: PermissionDecision): Promise<TakeoverOutcome> {
     const run = this.runs.get(runId);
@@ -1140,8 +1370,11 @@ export class RunSupervisor {
       try {
         await (this.deps.execShell ?? execShell)(command, run.info.worktreePath);
       } catch (error) {
-        const detail = messageOf(error).split('\n')[0] ?? 'failed';
-        return `\`${command}\` failed — ${detail.slice(0, 300)}`;
+        // The full output is bounded by SANITY_CAP so run.json stays sane;
+        // the configurable 40/4096 tail applies when it is injected into a
+        // retry's instruction, and the Log line takes only the first line.
+        const capped = capTail(combinedOutput(error), SANITY_CAP);
+        return `\`${command}\` failed\n\n${capped.text}`;
       }
     }
     return null;
@@ -1153,6 +1386,9 @@ export class RunSupervisor {
     }
     if (run.handover !== undefined) {
       return; // handed over: the successor decides how this run goes on
+    }
+    if (run.fallbackActive === true) {
+      return; // a failed resume being replaced (T-0049): the replacement decides
     }
     if (run.info.state === 'stopping') {
       await this.finish(run, 'stopped');
@@ -1181,11 +1417,12 @@ export class RunSupervisor {
     run.gating = true;
     const failure = await this.runGate(run);
     if (failure !== null) {
-      run.info = { ...run.info, gateFailure: failure };
-      await this.logLine(run, `machine gate failed — ${failure}`);
+      run.info = { ...run.info, gateFailure: failure, gateResult: 'red' };
+      await this.logLine(run, `machine gate failed — ${shortGateLine(failure)}`);
       await this.finish(run, 'failed');
       return;
     }
+    run.info = { ...run.info, gateResult: 'green' };
     // The quality rungs (M85): a green gate may hand the step to a
     // second worker before it moves — the sampling audit or the
     // semantic gate's review. One round only; its own gate decides.
@@ -1407,4 +1644,28 @@ export class RunSupervisor {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * A gate failure's one line — what the ticket Log and a park reason may
+ * carry (T-0048): the first non-empty line, whitespace-flattened, capped
+ * at 300 chars. The multi-line block lives in `RunInfo.gateFailure` and
+ * the retry instruction, never in a ticket action line.
+ */
+export function shortGateLine(text: string): string {
+  const first =
+    text
+      .split('\n')
+      .map((line) => line.replace(/\s+/g, ' ').trim())
+      .find((line) => line !== '') ?? '';
+  return first.length > 300 ? `${first.slice(0, 299)}…` : first;
+}
+
+/** The failed command's combined output — stdout and stderr, or the error's message. */
+function combinedOutput(error: unknown): string {
+  const err = error as { stdout?: unknown; stderr?: unknown };
+  const out = [typeof err.stdout === 'string' ? err.stdout : '', typeof err.stderr === 'string' ? err.stderr : '']
+    .join('\n')
+    .trim();
+  return out !== '' ? out : messageOf(error);
 }

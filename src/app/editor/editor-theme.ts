@@ -54,7 +54,10 @@ export const dreyHighlightStyle = HighlightStyle.define([
     color: 'var(--accent-hover)',
   },
   {
-    tag: [t.string, t.special(t.string), t.regexp, t.inserted, t.attributeValue],
+    // `escape`/`literal` (a string's `\\n`, a char literal): they derive
+    // from `literal`, NOT from `string` — until T-0051 they fell through
+    // to basicSetup's light default (the documented trap).
+    tag: [t.string, t.special(t.string), t.regexp, t.inserted, t.attributeValue, t.escape, t.literal],
     color: '#8fae7d',
   },
   { tag: [t.number, t.integer, t.float, t.unit, t.color], color: '#c99a6a' },
@@ -72,7 +75,9 @@ export const dreyHighlightStyle = HighlightStyle.define([
     color: 'var(--text-heading)',
   },
   {
-    tag: [t.variableName, t.propertyName, t.attributeName, t.operator, t.punctuation],
+    // `name` is the generic parent of the identifier tags — a grammar that
+    // emits it bare (no variableName) still reads as an identifier.
+    tag: [t.variableName, t.propertyName, t.attributeName, t.operator, t.punctuation, t.name],
     color: 'var(--text-2)',
   },
   { tag: [t.angleBracket, t.separator, t.derefOperator, t.bracket], color: 'var(--text-5)' },
@@ -267,6 +272,42 @@ export const dreyEditorTheme = EditorView.theme(
   },
   { dark: true },
 );
+
+/**
+ * The FALLBACK highlight style (T-0051, plan decision 3): the palette a
+ * token gets on a surface where NO main highlight style is active — and
+ * the replacement for `basicSetup`'s `defaultHighlightStyle`, whose
+ * light-background colors (#170-greens, #a11-reds) glare on the dark
+ * surface (the documented trap). CodeMirror's fallback slot keeps only
+ * the FIRST registered fallback style, so `markdown-surface.ts` mounts
+ * this BEFORE `basicSetup` — registered after it, the light default
+ * would keep the slot and the trap would stay. Dark-readable, reading
+ * the same design tokens as `dreyHighlightStyle`; a published theme's
+ * own (non-fallback) style still wins wherever one is active.
+ */
+export const dreyFallbackStyle = HighlightStyle.define([
+  { tag: t.comment, color: 'var(--text-4)', fontStyle: 'italic' },
+  {
+    tag: [t.keyword, t.operatorKeyword, t.modifier, t.controlKeyword, t.self, t.bool, t.atom, t.null, t.tagName],
+    color: 'var(--accent-hover)',
+  },
+  { tag: [t.string, t.special(t.string), t.regexp, t.escape, t.literal], color: '#8fae7d' },
+  { tag: [t.number, t.integer, t.float, t.unit, t.color], color: '#c99a6a' },
+  { tag: [t.typeName, t.className, t.namespace, t.macroName, t.labelName], color: 'var(--text-heading)' },
+  { tag: [t.variableName, t.propertyName, t.attributeName, t.name], color: 'var(--text-2)' },
+  { tag: [t.attributeValue, t.inserted], color: '#8fae7d' },
+  { tag: [t.operator, t.punctuation, t.separator, t.bracket, t.angleBracket, t.derefOperator], color: 'var(--text-5)' },
+  { tag: [t.meta, t.processingInstruction, t.documentMeta], color: 'var(--text-6)' },
+  { tag: [t.link, t.url], color: 'var(--accent-fg)' },
+  { tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6], color: 'var(--text-heading)' },
+  { tag: [t.strong], fontWeight: '600' },
+  { tag: [t.emphasis], fontStyle: 'italic' },
+  { tag: [t.strikethrough], textDecoration: 'line-through' },
+  { tag: [t.quote], fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: 'var(--text-3)' },
+  { tag: [t.list, t.contentSeparator], color: 'var(--text-5)' },
+  { tag: [t.monospace], fontFamily: 'var(--font-mono)', fontSize: '0.9em' },
+  { tag: [t.deleted, t.invalid], color: '#e0776d' },
+]);
 
 /** Drey palette + highlight as one extension, added after `basicSetup` so it wins. */
 export const dreyEditorLook = [dreyEditorTheme, syntaxHighlighting(dreyHighlightStyle)];

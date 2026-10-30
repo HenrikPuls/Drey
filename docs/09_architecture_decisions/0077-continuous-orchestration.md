@@ -71,6 +71,24 @@ Drey's own MCP server beside the vault tools (listed after them, routed by wire 
 collision). The tickets plugin registers `fleet_status`, `fleet_run`, `fleet_stop`, `fleet_steer`, `fleet_watch` —
 the assistant and any connected program can drive runs conversationally.
 
+## Later change — provider pools and column priority (2026-10-30, req-63)
+
+The per-column `workers:` pool is retired. Slots bound to a column blocked
+work while the provider had capacity (an idle plan slot could not serve
+build), and the left-to-right fill started work before it finished it.
+The parallel slots now belong to the **worker providers**
+(`fleet.pool.<provider>.size`, plugin config); every live run of a
+provider takes one. The dispatcher orders one candidate list across all
+playing automatic columns by priority class (`urgent`/`high` before
+`normal`/`low`), then the rightmost column first, then column order — and
+never preempts a running run. The owner decided against keeping
+`workers:` as a per-column cap or reservation.
+
+The capacity cannot generally be read from the provider: only llama.cpp
+reports it (`/props` → `total_slots`, an optional probe URL that caps the
+pool); hosted APIs report rate limits, not concurrency. A run that fails
+on a rate limit shrinks its pool by one slot for five minutes.
+
 ## Consequences
 
 - The board runs itself wherever a column has a worker; the owner's leverage concentrates in triage (inbox), the

@@ -100,7 +100,11 @@ describe('prepareWorktree (real git)', () => {
   let adminName = '';
 
   beforeEach(async () => {
-    baseDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-wt-'));
+    // Canonical from the start: the runner's temp dir can be an alias
+    // (the GitHub Windows runner's is the 8.3 `RUNNER~1` form) while git
+    // reports canonical long paths — alias behaviour has its own junction
+    // test below, never the temp dir's accident.
+    baseDir = await fsp.realpath(await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-wt-')));
     repo = path.join(baseDir, 'repo');
     await fsp.mkdir(repo);
     await git(repo, ['init', '-b', 'main']);
@@ -190,6 +194,51 @@ describe('prepareWorktree (real git)', () => {
     expect(result).toEqual({ outcome: 'created', sessionInvalidated: false, movedTo: null });
     expect((await git(repo, ['rev-parse', BRANCH])).trim()).toBe(tip);
     expect(await headOf(worktreePath)).toBe(BRANCH);
+  });
+
+  // --- the re-run trap (T-0044): the branch checked out elsewhere ---
+
+  /** A leftover registration of the branch somewhere else — the settled
+   *  ticket's checkout in another base (the legacy fleet root). */
+  const legacyConflict = async (): Promise<string> => {
+    const legacy = path.join(baseDir, 'legacy-root', 'worktrees', 'repo-T-0091');
+    await prepareWorktree(fleetGit(), req(), legacy, frozen);
+    return legacy;
+  };
+
+  it('removes a clean conflicting registration when it is not live, then creates', async () => {
+    const legacy = await legacyConflict();
+
+    const result = await prepareWorktree(fleetGit(), req(), worktreePath, frozen, () => false);
+    expect(result).toEqual({ outcome: 'created', sessionInvalidated: false, movedTo: null });
+    expect(await headOf(worktreePath)).toBe(BRANCH);
+    // The conflicting registration and its folder are gone (real git
+    // remove, branch untouched).
+    expect(await listing()).not.toContain(legacy.replaceAll('\\', '/'));
+    await expect(fsp.stat(legacy)).rejects.toThrow();
+    expect((await git(repo, ['rev-parse', BRANCH])).trim()).toBeDefined();
+  });
+
+  it('refuses descriptively when the conflicting registration is live', async () => {
+    const legacy = await legacyConflict();
+
+    const refused = prepareWorktree(fleetGit(), req(), worktreePath, frozen, (p) =>
+      p.replaceAll('\\', '/') === legacy.replaceAll('\\', '/'),
+    );
+    await expect(refused).rejects.toThrow('live run');
+    await expect(fsp.stat(legacy)).resolves.toBeDefined();
+  });
+
+  it('refuses when the conflicting registration is dirty — nothing is destroyed', async () => {
+    const legacy = await legacyConflict();
+    await fsp.writeFile(path.join(legacy, 'uncommitted.txt'), 'half-finished\n');
+
+    await expect(prepareWorktree(fleetGit(), req(), worktreePath, frozen)).rejects.toThrow(
+      'dirty worktree',
+    );
+    await expect(fsp.readFile(path.join(legacy, 'uncommitted.txt'), 'utf8')).resolves.toBe(
+      'half-finished\n',
+    );
   });
 
   it('recreates a stale clean worktree (registration lost, tree still runnable)', async () => {
@@ -305,6 +354,47 @@ describe('prepareWorktree (real git)', () => {
     );
     expect(await listing()).toBe(before);
     await expect(fsp.readFile(path.join(foreign, 'uncommitted.txt'), 'utf8')).resolves.toBe('keep\n');
+  });
+
+  it('still refuses an unregistered folder that is its own repo on the wrong branch', async () => {
+    const stray = path.join(baseDir, 'stray-repo');
+    await fsp.mkdir(stray);
+    await git(stray, ['init', '-b', 'main']);
+    await fsp.writeFile(path.join(stray, 'file.txt'), 'committed elsewhere\n');
+    await git(stray, ['add', '.']);
+    await git(stray, ['commit', '-m', 'initial']);
+    await fsp.writeFile(path.join(stray, 'uncommitted.txt'), 'keep\n');
+
+    const before = await listing();
+    await expect(prepareWorktree(fleetGit(), req(), stray, frozen)).rejects.toThrow(
+      'is on main, expected t/T-0091 — refusing to touch it',
+    );
+    expect(await listing()).toBe(before);
+    await expect(fsp.readFile(path.join(stray, 'uncommitted.txt'), 'utf8')).resolves.toBe('keep\n');
+  });
+
+  it('moves a junction-leftover folder inside a git vault aside instead of refusing (the walk-up trap)', async () => {
+    // The production shape: the worktree base lives inside the tickets
+    // vault — itself a git repo on `main`. A removal leftover (junctions,
+    // no `.git` of its own) made rev-parse answer with the VAULT's
+    // branch, and every dispatch was refused forever.
+    const vault = path.join(baseDir, 'vault-repo');
+    await fsp.mkdir(vault);
+    await git(vault, ['init', '-b', 'main']);
+    const trap = path.join(vault, '_worktrees', 'T-0091');
+    await fsp.mkdir(trap, { recursive: true });
+    const shared = path.join(baseDir, 'shared-tools');
+    await fsp.mkdir(shared);
+    await fsp.symlink(shared, path.join(trap, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+
+    const result = await prepareWorktree(fleetGit(), req(), trap, frozen);
+    expect(result.outcome).toBe('moved-aside');
+    expect(result.sessionInvalidated).toBe(true);
+    expect(await headOf(trap)).toBe(BRANCH);
+    // The leftover's content survives in the move-aside, junction included.
+    await expect(fsp.stat(path.join(result.movedTo!, 'node_modules'))).resolves.toBeDefined();
+    // The junction's target was never touched.
+    await expect(fsp.stat(path.join(trap, 'file.txt'))).resolves.toBeDefined();
   });
 
   it('refuses a locked worktree and modifies nothing', async () => {
@@ -465,6 +555,7 @@ describe('RunSupervisor worktree wiring', () => {
       ticketRelPath: 'tickets/plan/T-0001.md',
       phase: 'plan',
       repoPath: 'W:/kt',
+      worktreePath: path.join(fleetRoot, 'worktrees', 'kt-T-0001'),
       branch: 't/T-0001',
       baseRef: null,
       provider: 'opencode',

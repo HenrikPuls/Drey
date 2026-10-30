@@ -30,20 +30,52 @@ The fleet root is `<userRoot>/fleet`, where `userRoot` =
 id is `drey`).
 
 ```
-<fleet root>/
+<fleet root>/                 (machine state; runner owned)
 ├── runner.json     descriptor: {port, token, pid, startedAt, version, build?}
 ├── runner.log      the daemon log (every dispatch decision; ring-capped ~512 KB)
 ├── chain.json      persisted chain state (only on daemon builds)
 ├── runs/<run-id>/
 │   ├── run.json    the full record: {request, info}
 │   └── stream.jsonl the run's output events (ndjson)
-└── worktrees/<repo>-<ticket>/   the agent's checkout, branch t/<ticket-id>
+└── worktrees/      LEGACY (pre-T-0044): emptied by the boot migration
+                    and the Clean up worktrees control, never written again
+
+<tickets repo root>/_worktrees/<ticket-id>/   the agent's checkout since
+                    T-0044 (ADR-0080), branch t/<ticket-id> — visible,
+                    gitignored, skipped by the vault's tree/index/watcher;
+                    a repo's `worktrees:` key in _meta/repos.md overrides
+                    the base
 ```
 
 `runner.json` missing means the runner is **down** (it exits cleanly after
 ~15 min idle with no live runs; Drey respawns it on demand). A present
 descriptor with an unreachable port means it died hard — the stale
 descriptor gets taken over by the next spawn.
+
+### Cleanup surfaces (T-0044, ADR-0080)
+
+All removal goes through **real git** (`git worktree remove` /
+`git worktree prune`), never a bare rmdir; the **branch always stays**
+(it carries the work). The repo's `link:` junctions are unlinked first
+(the top level is swept, named or not) on every removal path — git's
+removal does not pass through a reparse point cleanly, and a leftover
+folder at the path would poison the next prepare.
+
+- **Per ticket:** the card menu's "Remove worktree…" — refuses a dirty
+  tree unless the owner confirms the armed second click; refuses a live
+  run; appends the ticket's Log line (one commit).
+- **Global:** "Clean up worktrees" in the panel header — removes every
+  worktree whose ticket has no live run (dirty ones kept and reported),
+  then prunes every mapped repo. Liveness = the ticket's `run:` stamp ∪
+  non-terminal fleet records — never fleet status alone.
+- **Boot sweep:** every plugin boot migrates the legacy root (clean
+  leftovers removed automatically, dirty ones kept and reported; a live
+  run's tree waits for its settle) and **lists** orphan folders under
+  the new base as cleanable — listed, never auto-deleted.
+- **Re-run healing:** a leftover *registered checkout* of `t/<id>`
+  anywhere (the re-run trap) is removed by the runner before
+  `worktree add` when provably clean and not live — refused
+  descriptively otherwise.
 
 ## Talking to the runner
 
@@ -67,10 +99,11 @@ Invoke-RestMethod "http://127.0.0.1:$($d.port)/health" -Headers $h
 | `GET /stream/<runId>` | the run's stream.jsonl tail (last ~200 KB, ndjson) |
 | `GET /log?tail=N` | daemon log tail, plain text (default 300 lines, max 2000; daemon builds) |
 | `GET /chain` | chain state + config (daemon builds) |
+| `GET /report` | token telemetry grouped by ticket, phase and model, sorted by total desc: `{ok, groups: [{ticket, phase, model, runs, total, input, cacheRead, cacheCreation, output, beforeFirstWrite, beforeFirstWriteShare}]}` — a counter the provider never reports counts 0 into the sums; pre-T-0048 records fall back to their cumulative `tokensIn`+`tokensOut` (T-0048) |
 | `POST /stop` `{runId, reason}` | stop one run |
 | `POST /send` `{runId, text}` | steer a live run (rung: inject/resume/refused); while the run waits on a question it is the answer, not a takeover |
-| `POST /permission` `{runId, decision: "once"\|"always"\|"reject"}` | answer the worker's pending approval (req-57; OpenCode) |
-| `POST /answer` `{runId, answers: {q0: "label", …}}` | answer the worker's question form — a choice, free text, or a list for a multiple choice per question key (req-57; OpenCode's `question` tool) |
+| `POST /permission` `{runId, decision: "once"\|"always"\|"reject"}` | answer the worker's pending approval (req-64; OpenCode) |
+| `POST /answer` `{runId, answers: {q0: "label", …}}` | answer the worker's question form — a choice, free text, or a list for a multiple choice per question key (req-64; OpenCode's `question` tool) |
 | `POST /chain/master` `{mode: "run"\|"halted"}` | master switch (daemon builds) |
 | `POST /chain/column` `{phase, mode: "playing"\|"held"}` or `{phase, stop: true}` | column control |
 | `POST /chain/abort` | stop every live run |
@@ -96,7 +129,9 @@ Diagnose read-only first; only stop/steer/switch on the owner's ask.
 4. `GET /log?tail=50` — what the daemon last decided and why
    (e.g. `dispatch skips T-0041: ... no acceptance criteria`).
 5. `GET /chain` — master/columns/cooldowns/token budget (daemon builds).
-6. For a specific run: `GET /status/<id>` then tail `stream.jsonl` directly
+6. `GET /report` — token cost per ticket/phase/model (T-0048): what the
+   columns spend, sorted by total.
+7. For a specific run: `GET /status/<id>` then tail `stream.jsonl` directly
    from disk (`Get-Content "$root\runs\<id>\stream.jsonl" -Tail 20`) — that
    works even after the run ended.
 
@@ -111,7 +146,7 @@ Diagnose read-only first; only stop/steer/switch on the owner's ask.
 | `failed` | worker died or errored (see stream `error` events) |
 | `detached` | the runner restarted while the worker lived on — unwatchable, treat as busy |
 
-A live run may carry `waiting` (req-57): `{kind: "question", text, since}`
+A live run may carry `waiting` (req-64): `{kind: "question", text, since}`
 when the worker ended its turn with a `QUESTION:` message (the run stands,
 its session kept, until the owner answers via `/send`); the same kind with
 `requestId` and `questions` (each `{key, header?, question, options,
@@ -129,8 +164,10 @@ stream; on daemon builds it also feeds `redStreak` and `cooldownUntil` in
 ### run.json and stream events
 
 `run.json` = `{request, info}`: the request carries `ticketId`, `repoPath`,
-`branch`, `phase`/`column`, `instruction`, `acceptance` (the gate commands),
-`model`, `permissionMode`; the info is the same object `/status` reports.
+`worktreePath` (since T-0044 — computed plugin-side, the runner never
+derives paths), `branch`, `phase`/`column`, `instruction`, `acceptance`
+(the gate commands), `model`, `permissionMode`; the info is the same
+object `/status` reports.
 Since T-0041 the request also carries `nextPhaseDir` (the resolved
 numbered directory the success move targets — `50-build`, the owner's
 `35-qa`, whatever exists) and `pushRemote` (pipeline.md `push:`; the
@@ -143,12 +180,94 @@ id is the identity everywhere. `stream.jsonl` lines are
 `usage` (token/cost updates), `result` (the worker's final answer) and
 `error`.
 
+Since T-0048 the info also carries the run's **token telemetry** (all
+optional — adopted pre-T-0048 records lack them, and every reader
+treats absent as unknown):
+
+- `usage`: `{input, cacheRead, cacheCreation, output}` summed over the
+  run's model calls — a counter the provider never reports stays `null`,
+  never 0 (the pinned plan provider may report no cache fields);
+- `lastTurnContext`: input+cacheRead+cacheCreation of the LAST assistant
+  turn — the real context size (the providers' `tokensIn` and the result
+  events are cumulative aggregates, not context);
+- `turns` (model calls that reported usage), `readCalls`
+  (read/grep/glob tool calls), `tokensBeforeFirstWrite` (input-side
+  tokens over the turns before the first write/edit — the exploration
+  cost; the full input side when no write came);
+- `gateResult` (`green`/`red` once the gate ran), `model`, `phase`,
+  `handoverMode` (`fresh` | `resume` | `resume-compact` — T-0049) and
+  `resumedFrom` (the candidate's session a resumed run continued; null
+  on fresh and on a resume that fell back fresh).
+
+`GET /report` groups these by ticket, phase and model (see the route
+table); the board's lanes show `ctx`/`turns`/`reads` chips per run (a
+resumed run appends `resumed`).
+
+### Session handover (T-0049)
+
+How a run's context reaches its worker. `RunRequest.handover` rides the
+start: the dialog sends the owner's explicit choice, the dispatcher
+sends `auto`, an older sender's absence means `fresh`. One resolver —
+`main/fleet/handover.ts`, pure — decides:
+
+- The **review phase always resolves fresh** (an independent worker
+  judges the step).
+- The candidate is the **newest terminal run** (`done`/`stopped`/
+  `failed`) of the same ticket, provider and model in that supervisor —
+  `detached` never qualifies (its worker may still live). No candidate,
+  no session, another phase's session, a recreated/moved-aside worktree
+  (T-0047's `sessionInvalidated`) or a session another non-terminal run
+  holds → fresh.
+- A **warm pause** (within the TTL) or a **known context below the
+  compact threshold** → `resume`; a cold pause with a context at/above
+  the threshold → `resume-compact` when the provider compacts natively
+  (opencode: measured; claude-code: not yet), else fresh. An unknown
+  context (pre-T-0048 records) never auto-compacts.
+- An explicit dialog choice is honoured when structurally legal; the
+  dialog disables the options that are not (same rules, client-side).
+
+The decision lands on the record (`handoverMode`, `resumedFrom`), the
+stream (`handover: <mode> — <why>`) and the ticket's start line.
+
+**Fallback:** a resume the adapter cannot establish — opencode pre-flights
+the session with a GET before prompting; claude-code treats an exit
+before any init event as one — never fails the run. The supervisor stops
+that worker and respawns **fresh under the same run id** with the same
+instruction (`handoverMode: 'fresh'`, `resumedFrom: null`, one stream
+note). A failure after a successful resume fails the run normally.
+
+**Config** (`Settings → Tickets → Fleet`): `fleet.compactAboveTokens`
+(default 60000, provisional) and `fleet.resumePauseTtlMin` (default 15).
+Per-provider/model overrides are flat keys the plugin reads and pushes
+with the chain config — `fleet.compactAboveTokens.opencode`,
+`fleet.compactAboveTokens.opencode/<model-pin>` — most specific wins; no
+UI writes them.
+
+### The instruction (T-0048: the context pack)
+
+Every phase's instruction is composed in one stable order — repo agent
+instructions (`CLAUDE.md`, fallback `AGENTS.md`, verbatim) → phase
+template → the ticket's `## Plan` verbatim → the variable parts
+(who/where, description, the worktree's `git diff --stat` head-capped,
+and on a retry the previous run's gate failure tail-capped). The prefix
+up to the plan is byte-identical across runs of the same repo and
+phase, so a warm prompt cache survives. A red-gate retry is a fresh run
+whose instruction carries the ticket's most recent `gateFailure`
+section — the worker continues the branch instead of starting over.
+
+The caps are the plugin config keys `fleet.cap.gateFailureLines` /
+`fleet.cap.gateFailureBytes` / `fleet.cap.diffStatLines` /
+`fleet.cap.diffStatBytes` (Settings → Tickets → Fleet; defaults 40/4096
+tail and 50/4096 head). Each application is logged:
+`instruction: <ticket> gateFailure truncated: true, originalSize 9821`.
+
 ### chain.json fields (daemon builds)
 
-`config` (tickets vault path, git, defaultWorker, permissionMode) · `master`
-(`run` / `halted`) · `columns` (per-phase `playing` / `held`) · `redStreak` ·
-`cooldownUntil` (per column ISO instant) · `tokensDay` + `tokensUsed` (the
-per-column token budget) · `ciBackoff`.
+`config` (tickets vault path, git, defaultWorker, permissionMode, caps,
+handover thresholds) · `master` (`run` / `halted`) · `columns`
+(per-phase `playing` / `held`) · `redStreak` · `cooldownUntil` (per
+column ISO instant) · `tokensDay` + `tokensUsed` (the per-column token
+budget) · `ciBackoff`.
 
 ## Lifecycle gotchas
 
@@ -181,23 +300,41 @@ per-column token budget) · `ciBackoff`.
   master `halted`? column `held`? cooldown active? token budget exhausted
   (`tokensUsed` vs day)? ticket claimed, carries a `run` stamp, has
   validation errors, or — most common — **no backticked acceptance criteria**,
-  which the machine gate refuses to run.
+  which the machine gate refuses to run. A candidate queued behind
+  something says so (`dispatch waits … no free <column> worker slot yet`,
+  or `… <column>'s dispatch of <id> was refused — the queue cannot
+  advance` when a refused start parks the queue; the refusal itself is
+  logged once, deduped).
+- **`worktree … is on main, expected t/<id>`** (an old refusal) → a
+  removal leftover at the path (junctions, no `.git` of its own) whose
+  rev-parse walked up into the tickets vault — a repo — and reported the
+  vault's branch. The toplevel guard now reads that as "no longer answers
+  to git": the leftover is moved aside (`.stale-<stamp>`) and a fresh
+  checkout takes its place, logged as `moved-aside`.
 - **Run stuck** → `/status` state + stream tail; `stopping` for long means
   the worker ignores the stop — the supervisor tree-kills, give it a moment,
   then check the pid.
-- **Where did the agent work?** → `worktrees/<repo>-<ticket>` on branch
-  `t/<id>`; inspect with `git -C <worktree> ...`. Folders listed under
+- **Where did the agent work?** → since T-0044:
+  `<tickets repo>/_worktrees/<ticket-id>/` on branch `t/<id>` (a repo's
+  `worktrees:` override moves the base); pre-T-0044 runs:
+  `<fleet root>/worktrees/<repo>-<ticket>`, until the boot migration
+  collects them. Inspect with `git -C <worktree> ...`. Folders listed under
   the repo's `link:` in `repos.md` (req-56) are junctions into the
   owner's checkout — the stream's `worktree links:` line says which were
   linked or left out and why. Before removing a worktree by hand, remove
   its junctions (`cmd /c rmdir <worktree>\node_modules` removes the link,
   not the target) — never a recursive delete through them. The runner's
-  own recreate does that itself.
+  own recreate does that itself. The runner commits
+  ticket bookkeeping ("fleet run bookkeeping") in the tickets repo itself.
+- **`worktree add` says the branch is "already checked out"** (a settled
+  ticket's leftover checkout somewhere — the re-run trap) → the runner
+  heals this itself when the conflicting tree is clean and not live; if
+  it refuses (dirty or live), clean or stop that tree, or use the board's
+  card menu / "Clean up worktrees".
 - **A worker's npm or Electron behaves oddly** → the runner drops the
   `npm_*`, `INIT_CWD` and `ELECTRON_RUN_AS_NODE` variables it inherits
   at boot (req-56; `runner.log` names them); a runner started before that
-  build still hands them on. The runner commits ticket
-  bookkeeping ("fleet run bookkeeping") in the tickets repo itself.
+  build still hands them on.
 - **A transition did not reach the remote** → check pipeline.md's `push:`
   key first (absent = pushing is the owner's business), then
   `GET /log?tail=50` for `push of the transition to "<remote>" failed`.

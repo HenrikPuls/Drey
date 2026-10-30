@@ -8,8 +8,9 @@
  * `opencode`, `claude-code`, `claude-code/sonnet`. An unreadable value
  * is a refusal at run start — never a guess (ADR-0076).
  */
-import { isWorkerProvider, QUESTION_MARKER, type WorkerProviderId } from './protocol';
+import { isWorkerProvider, QUESTION_MARKER, type FleetCaps, type WorkerProviderId } from './protocol';
 import { parseHandover } from '../../shared/tickets';
+import { capHead, capTail } from './capping';
 
 export type AssignmentSource = 'ticket' | 'column' | 'handover' | 'repo' | 'default';
 
@@ -103,7 +104,9 @@ function promptRefOf(handover: string | null): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// The instruction the worker receives.
+// The instruction the worker receives (T-0048: the context pack — stable
+// parts first so the prompt prefix stays identical across runs, variable
+// parts last).
 
 export interface InstructionInput {
   readonly ticketId: string;
@@ -122,8 +125,33 @@ export interface InstructionInput {
    * disk for it — a plan-phase worker spent most of a run doing that.
    */
   readonly ticketFile?: string;
+  /**
+   * The work repo's agent instructions (`CLAUDE.md` preferred,
+   * `AGENTS.md` fallback), read by the caller: inlined VERBATIM as the
+   * instruction's first section, never capped — the CLI's own auto-load
+   * differs by provider and version and cannot be the cache-stability
+   * anchor.
+   */
+  readonly repoInstructions: string | null;
+  /** The worktree's raw `git diff --stat` vs the base; capped here (head). */
+  readonly diffStat: string | null;
+  /** The previous run's raw gate failure; capped here (tail). */
+  readonly gateFailure: string | null;
+  /** The output caps; the caller resolves them from `fleet.cap.*`. */
+  readonly caps: FleetCaps;
   /** The repo's `link:` folders the runner links into the worktree (req-56). */
   readonly links?: readonly string[];
+}
+
+/** One capped section of the instruction — the caller logs each application. */
+export interface Truncation {
+  readonly section: 'diffStat' | 'gateFailure';
+  readonly originalSize: number;
+}
+
+export interface ComposedInstruction {
+  readonly text: string;
+  readonly truncations: readonly Truncation[];
 }
 
 /**
@@ -139,7 +167,7 @@ const COMPLETION_DISCIPLINE =
   'parks the step (the failure is logged and the ticket waits).';
 
 /**
- * How a worker asks the owner (req-57): a turn whose last message opens
+ * How a worker asks the owner (req-64): a turn whose last message opens
  * with the marker does not end the run — the run waits, the owner is
  * notified, and the answer arrives in this same session.
  */
@@ -151,14 +179,38 @@ const ASKING =
   `can wait go into the ticket's Log.`;
 
 /**
- * Composes the run's instruction: who and where the worker is, what the
- * ticket says (description + plan), the fleet's rules (stay on the
- * branch, leave the worktree the only place), the machine gate it
- * must keep green, and the completion discipline. Deterministic text —
- * no model involved.
+ * Composes the run's instruction as a context pack (T-0048), in this
+ * order — stable first, so the prefix up to the `## Plan` heading is
+ * byte-identical for any two runs of the same repo and phase:
+ *
+ * 1. the repo's agent instructions, verbatim;
+ * 2. the phase instruction template;
+ * 3. `## Plan` verbatim;
+ * 4. the variable parts: who/where, the description, the diff stat
+ *    (head-capped), the previous run's gate failure on a retry
+ *    (tail-capped), the gate commands, the completion discipline and
+ *    how to ask the owner.
+ *
+ * Deterministic text — no model involved; the capping is reported, never
+ * marked inside the text (bookkeeping the model does not need).
  */
-export function composeInstruction(input: InstructionInput): string {
+export function composeInstruction(input: InstructionInput): ComposedInstruction {
   const parts: string[] = [];
+  const truncations: Truncation[] = [];
+
+  const repoInstructions = input.repoInstructions?.trim();
+  if (repoInstructions != null && repoInstructions !== '') {
+    parts.push(repoInstructions);
+  }
+  const prompt = input.prompt?.trim();
+  if (prompt != null && prompt !== '') {
+    parts.push(prompt);
+  }
+  const plan = input.plan?.trim();
+  if (plan != null && plan !== '') {
+    parts.push(`## Plan\n\n${plan}`);
+  }
+
   parts.push(`You are working ticket ${input.ticketId} — ${input.title}.`);
   parts.push(
     `Work checkout: ${input.worktreePath} (branch ${input.branch}` +
@@ -182,26 +234,43 @@ export function composeInstruction(input: InstructionInput): string {
     );
   }
   const description = input.description.trim();
-  const plan = input.plan?.trim() ?? '';
-  if (input.ticketFile !== undefined && input.ticketFile !== '' && (description !== '' || plan !== '')) {
+  if (input.ticketFile !== undefined && input.ticketFile !== '' && (description !== '' || plan !== null)) {
     // The worker re-read the whole ticket file first thing in every run
-    // (req-55): a second copy of what follows here, carried by every
-    // model call of the run.
+    // (req-55): a second copy of what this brief already carries, paid
+    // again by every model call of the run.
     parts.push(
       'The ticket\'s description' +
-        (plan !== '' ? ' and plan are' : ' is') +
-        ' quoted in full below — do not read the ticket file to learn them. When you edit it, read only the ' +
+        (plan != null && plan !== '' ? ' and plan are' : ' is') +
+        ' quoted in full in this brief — do not read the ticket file to learn them. When you edit it, read only the ' +
         'section you change (the Log is at its end: read its last lines).',
     );
   }
   if (description !== '') {
     parts.push(`What and why:\n${description}`);
   }
-  if (plan !== '') {
-    parts.push(`The ticket's plan:\n${plan}`);
+  const diffStat = input.diffStat?.trim();
+  if (diffStat != null && diffStat !== '') {
+    const capped = capHead(input.diffStat!, { lines: input.caps.diffStatLines, bytes: input.caps.diffStatBytes });
+    if (capped.truncated) {
+      truncations.push({ section: 'diffStat', originalSize: capped.originalSize });
+    }
+    parts.push(
+      `The branch so far — \`git diff --stat\` against the base (committed and uncommitted):\n\n${capped.text}`,
+    );
   }
-  if (input.prompt !== null && input.prompt.trim() !== '') {
-    parts.push(`The phase's prompt:\n${input.prompt.trim()}`);
+  const gateFailure = input.gateFailure?.trim();
+  if (gateFailure != null && gateFailure !== '') {
+    const capped = capTail(input.gateFailure!, {
+      lines: input.caps.gateFailureLines,
+      bytes: input.caps.gateFailureBytes,
+    });
+    if (capped.truncated) {
+      truncations.push({ section: 'gateFailure', originalSize: capped.originalSize });
+    }
+    parts.push(
+      `The previous run failed the machine gate — fix this first. The branch already holds the earlier work, ` +
+        `so continue from the existing diff instead of starting over. The failure's tail:\n\n${capped.text}`,
+    );
   }
   if (input.acceptance.length > 0) {
     parts.push(
@@ -211,5 +280,5 @@ export function composeInstruction(input: InstructionInput): string {
   }
   parts.push(COMPLETION_DISCIPLINE);
   parts.push(ASKING);
-  return parts.join('\n\n');
+  return { text: parts.join('\n\n'), truncations };
 }

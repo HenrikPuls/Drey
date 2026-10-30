@@ -97,7 +97,7 @@ export interface AppIpc {
   /** Toggles OS fullscreen (the `F11` command / View-menu row). */
   toggleFullScreen(): Promise<void>;
   isWindowFullScreen(): Promise<boolean>;
-  /** Brings the window to the front, restoring it when minimized (a clicked OS notification, req-57). */
+  /** Brings the window to the front, restoring it when minimized (a clicked OS notification, req-64). */
   focusWindow(): Promise<void>;
 
   /**

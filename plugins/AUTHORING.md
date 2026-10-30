@@ -73,7 +73,7 @@ leaves the app on the previous build. Verify with
   1.31 added `ui.highlightCode(code, lang)` -- the editor's own syntax
   colouring for code outside an editor (async; runs of `{ text, className }`,
   `null` for an unknown language), so a plugin never ships its own tokenizer.
-  1.32 added `ui.notify({ title, body?, tag?, onClick? })` -- an
+  1.34 added `ui.notify({ title, body?, tag?, onClick? })` -- an
   operating-system notification for what needs the user while they look
   elsewhere; a click brings Drey to the front, a repeated `tag` replaces
   the earlier one (the tickets board uses it for a worker that waits).

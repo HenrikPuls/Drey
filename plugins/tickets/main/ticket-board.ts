@@ -88,9 +88,13 @@ export function parsePipeline(text: string): PipelineParse {
     const worker = typeof workerRaw === 'string' && workerRaw.trim() !== '' ? workerRaw.trim() : null;
     const modelRaw = map['model'];
     const model = typeof modelRaw === 'string' && modelRaw.trim() !== '' ? modelRaw.trim() : null;
-    const workersRaw = map['workers'];
-    const workers =
-      typeof workersRaw === 'number' && Number.isInteger(workersRaw) && workersRaw > 0 ? workersRaw : 1;
+    if (map['workers'] !== undefined) {
+      // req-63: the pools belong to the providers now — the old column key is forgiven visibly.
+      issues.push({
+        level: 'noise',
+        message: `pipeline.md: ${id}'s workers: is no longer read — set the provider pool size in Settings → Tickets → Fleet`,
+      });
+    }
     const promptRaw = map['prompt'];
     const prompt = typeof promptRaw === 'string' && promptRaw.trim() !== '' ? promptRaw.trim() : null;
     const maxRedRaw = map['max-red'];
@@ -116,7 +120,6 @@ export function parsePipeline(text: string): PipelineParse {
       handover: typeof map['handover'] === 'string' && map['handover'].trim() !== '' ? map['handover'] : 'manual',
       worker,
       model,
-      workers,
       prompt,
       maxRed,
       tokenBudget,
@@ -136,8 +139,6 @@ export interface PhasePoolPatch {
   readonly worker?: string | null;
   /** The model pin; an empty string or null clears it. */
   readonly model?: string | null;
-  /** Pool size (≥ 1); null clears it (default 1). */
-  readonly workers?: number | null;
   /** The prompt ref override; an empty string or null clears it. */
   readonly prompt?: string | null;
 }
@@ -212,15 +213,6 @@ export function patchPipelinePhase(text: string, phaseId: string, patch: PhasePo
       removeKey('model');
     } else {
       entry.set('model', model);
-    }
-  }
-  if (patch.workers !== undefined) {
-    if (patch.workers === null) {
-      removeKey('workers');
-    } else if (Number.isInteger(patch.workers) && patch.workers >= 1) {
-      entry.set('workers', patch.workers);
-    } else {
-      throw new Error('workers must be a whole number of 1 or more');
     }
   }
   if (patch.prompt !== undefined) {
@@ -437,6 +429,7 @@ export function parseRepos(text: string | null): ReposParse {
       policy: typeof map['policy'] === 'string' && map['policy'].trim() !== '' ? map['policy'] : null,
       path: typeof map['path'] === 'string' && map['path'].trim() !== '' ? map['path'].trim() : null,
       worker: typeof map['worker'] === 'string' && map['worker'].trim() !== '' ? map['worker'].trim() : null,
+      worktrees: typeof map['worktrees'] === 'string' && map['worktrees'].trim() !== '' ? map['worktrees'].trim() : null,
     });
     const links = parseRepoLinks(map['link']);
     if (typeof links === 'string') {

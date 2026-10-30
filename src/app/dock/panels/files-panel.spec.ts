@@ -1,8 +1,11 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { DreyApi, VaultFileEntry, VaultStatus } from '../../../../shared/ipc-api';
+import type { VaultFileOperation } from '../../../../shared/plugin-api/renderer';
 import { EditorService } from '../../services/editor.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { FileDecorationService } from '../../services/file-decoration.service';
+import { FilesCommandsService } from '../../services/files-commands.service';
+import { FilesOperationsRegistryService } from '../../services/files-operations-registry.service';
 import { VaultService } from '../../vault';
 import { FilesPanel } from './files-panel';
 
@@ -952,5 +955,261 @@ describe('FilesPanel "Open in new tab" (row menu)', () => {
 
     openMenuOn(rows()[2]); // notes/
     expect(menuButton('Open in new tab')).toBeNull();
+  });
+});
+
+describe('FilesPanel plugin seam (SDK 1.32)', () => {
+  /** vault row · a.md · notes/ · notes/b.md · archive/ -- for the drag specs. */
+  function seamTree(): VaultFileEntry[] {
+    return [
+      { name: 'a.md', relativePath: 'a.md', type: 'file' },
+      {
+        name: 'notes',
+        relativePath: 'notes',
+        type: 'directory',
+        children: [{ name: 'b.md', relativePath: 'notes/b.md', type: 'file' }],
+      },
+      { name: 'archive', relativePath: 'archive', type: 'directory', children: [] },
+    ];
+  }
+
+  let fixture: ComponentFixture<FilesPanel>;
+  let renamed: Array<{ from: string; to: string; fromVaultId?: string; toVaultId?: string }>;
+  let registry: FilesOperationsRegistryService;
+
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  beforeEach(async () => {
+    renamed = [];
+    window.dreyApi = registryApi({
+      listVaultFiles: () => Promise.resolve(seamTree()),
+      renameVaultEntry: (
+        fromRel: string,
+        toRel: string,
+        fromVaultId?: string,
+        toVaultId?: string,
+      ) => {
+        renamed.push({ from: fromRel, to: toRel, fromVaultId, toVaultId });
+        return Promise.resolve(toRel);
+      },
+      deleteVaultEntries: (paths: string[]) => {
+        renamed.push({ from: `deleted:${paths.join(',')}`, to: '' });
+        return Promise.resolve([]);
+      },
+    }) as DreyApi;
+    await TestBed.configureTestingModule({ imports: [FilesPanel] }).compileComponents();
+    fixture = TestBed.createComponent(FilesPanel);
+    document.body.appendChild(fixture.nativeElement);
+    registry = TestBed.inject(FilesOperationsRegistryService);
+  });
+
+  afterEach(() => {
+    fixture.nativeElement.remove();
+    delete (window as { dreyApi?: unknown }).dreyApi;
+  });
+
+  function rows(): NodeListOf<HTMLElement> {
+    return fixture.nativeElement.querySelectorAll('.node');
+  }
+
+  /** The protected drag handlers, reached through a cast (same as the dnd specs). */
+  type DragHostShape = {
+    onFileDragStart(event: DragEvent, vaultId: string, entry: VaultFileEntry): void;
+    onRowDrop(event: DragEvent, vaultId: string, entry: VaultFileEntry): void;
+  };
+  function host(): DragHostShape {
+    return fixture.componentInstance as unknown as DragHostShape;
+  }
+
+  function dropEvent(): DragEvent {
+    return {
+      dataTransfer: fakeDataTransfer(),
+      preventDefault: () => undefined,
+      stopPropagation: () => undefined,
+    } as unknown as DragEvent;
+  }
+
+  async function renderTree(): Promise<void> {
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(rows().length).toBe(4); // vault · a.md · notes · archive (b.md hidden)
+    });
+    await expandAll(fixture);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(rows().length).toBe(5); // b.md revealed
+    });
+  }
+
+  const aMd = { name: 'a.md', relativePath: 'a.md', type: 'file' } as VaultFileEntry;
+  const notes = { name: 'notes', relativePath: 'notes', type: 'directory' } as VaultFileEntry;
+
+  it('a refused move shows the reason and runs nothing', async () => {
+    await renderTree();
+    const seen: VaultFileOperation[] = [];
+    registry.register('tickets', {
+      check: (operation) => {
+        seen.push(operation);
+        return Promise.resolve({
+          action: 'refuse',
+          reason: 'The filename is the ticket\'s identity.',
+        });
+      },
+      perform: () => Promise.resolve({ ok: true }),
+    });
+    const message = vi.spyOn(TestBed.inject(ConfirmDialogService), 'message').mockResolvedValue();
+    const retarget = vi.spyOn(TestBed.inject(EditorService), 'retargetTabs');
+
+    host().onFileDragStart(dropEvent(), V, aMd);
+    host().onRowDrop(dropEvent(), V, notes);
+
+    await vi.waitFor(() => expect(message).toHaveBeenCalledTimes(1));
+    expect(message.mock.calls[0][0].message).toBe('The filename is the ticket\'s identity.');
+    expect(seen).toEqual([
+      { kind: 'move', fromVaultId: V, fromPath: 'a.md', toVaultId: V, toDir: 'notes' },
+    ]);
+    // A veto replaces the flow entirely: no raw rename, no tab re-key.
+    expect(renamed).toEqual([]);
+    expect(retarget).not.toHaveBeenCalled();
+  });
+
+  it('a refused delete skips the confirm dialog; a multi-select message names the item', async () => {
+    await renderTree();
+    registry.register('tickets', {
+      check: (operation) =>
+        Promise.resolve(
+          operation.kind === 'delete'
+            ? { action: 'refuse', reason: 'Archive the ticket instead.' }
+            : { action: 'allow' },
+        ),
+      perform: () => Promise.resolve({ ok: true }),
+    });
+    const confirm = vi.spyOn(TestBed.inject(ConfirmDialogService), 'confirm');
+    const message = vi.spyOn(TestBed.inject(ConfirmDialogService), 'message').mockResolvedValue();
+
+    // Ctrl+click a.md and notes/b.md, then Delete.
+    const treeScroll = fixture.nativeElement.querySelector('.tree-scroll');
+    rows()[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    rows()[3].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    treeScroll.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+
+    await vi.waitFor(() => expect(message).toHaveBeenCalledTimes(1));
+    expect(message.mock.calls[0][0].message).toBe('"a.md" — Archive the ticket instead.');
+    expect(confirm).not.toHaveBeenCalled();
+    expect(renamed).toEqual([]);
+  });
+
+  it('a handled move performs in the plugin, re-keys tabs to outcome.path, runs no raw rename', async () => {
+    await renderTree();
+    const performed: VaultFileOperation[] = [];
+    registry.register('tickets', {
+      check: (operation) =>
+        Promise.resolve(operation.kind === 'move' ? { action: 'handle' } : { action: 'allow' }),
+      perform: (operation) => {
+        performed.push(operation);
+        return Promise.resolve({ ok: true, path: 'tickets/40-done/T-0001.md' });
+      },
+    });
+    const retarget = vi.spyOn(TestBed.inject(EditorService), 'retargetTabs');
+    const vault = TestBed.inject(VaultService);
+    vault.clipboard.set({ vaultId: V, path: 'a.md', name: 'a.md' });
+
+    host().onFileDragStart(dropEvent(), V, aMd);
+    host().onRowDrop(dropEvent(), V, notes);
+
+    await vi.waitFor(() => expect(performed).toHaveLength(1));
+    expect(performed[0]).toEqual({
+      kind: 'move',
+      fromVaultId: V,
+      fromPath: 'a.md',
+      toVaultId: V,
+      toDir: 'notes',
+    });
+    // The takeover never runs the raw rename; the tab follows the plugin's
+    // final path (the structured transition), and the clipboard follows too.
+    expect(renamed).toEqual([]);
+    await vi.waitFor(() =>
+      expect(retarget).toHaveBeenCalledWith(`${V}::a.md`, `${V}::tickets/40-done/T-0001.md`),
+    );
+    expect(vault.clipboard()).toEqual({
+      vaultId: V,
+      path: 'tickets/40-done/T-0001.md',
+      name: 'T-0001.md',
+    });
+  });
+
+  it('a failed takeover shows the error and leaves tabs alone', async () => {
+    await renderTree();
+    registry.register('tickets', {
+      check: () => Promise.resolve({ action: 'handle' }),
+      perform: () => Promise.resolve({ ok: false, error: 'no tickets vault detected' }),
+    });
+    const message = vi.spyOn(TestBed.inject(ConfirmDialogService), 'message').mockResolvedValue();
+    const retarget = vi.spyOn(TestBed.inject(EditorService), 'retargetTabs');
+
+    host().onFileDragStart(dropEvent(), V, aMd);
+    host().onRowDrop(dropEvent(), V, notes);
+
+    await vi.waitFor(() => expect(message).toHaveBeenCalledTimes(1));
+    expect(message.mock.calls[0][0].message).toBe('no tickets vault detected');
+    expect(renamed).toEqual([]);
+    expect(retarget).not.toHaveBeenCalled();
+  });
+
+  it('plugin rows land in the tree menu and run on click', async () => {
+    await renderTree();
+    const commands = TestBed.inject(FilesCommandsService);
+    const seen: string[] = [];
+    commands.register('tickets', (target) =>
+      target.type === 'directory'
+        ? [
+            {
+              label: 'Remove worktree',
+              title: 'git worktree remove',
+              run: () => {
+                seen.push(`${target.vaultId}:${target.path}`);
+              },
+            },
+          ]
+        : [],
+    );
+
+    rows()[2].dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })); // notes/
+    fixture.detectChanges();
+    const item = [...fixture.nativeElement.querySelectorAll('.ctx-menu button')].find(
+      (b) => b.textContent?.trim() === 'Remove worktree',
+    ) as HTMLButtonElement | undefined;
+    expect(item).toBeDefined();
+    expect(item!.getAttribute('title')).toBe('git worktree remove');
+
+    item!.click();
+    fixture.detectChanges();
+    expect(seen).toEqual([`${V}:notes`]);
+    // The menu closed with the click.
+    expect(fixture.nativeElement.querySelectorAll('.ctx-menu').length).toBe(0);
+  });
+
+  it('plugin rows land in the vault-row menu with the vault root as target', async () => {
+    await renderTree();
+    const commands = TestBed.inject(FilesCommandsService);
+    const seen: string[] = [];
+    commands.register('tickets', (target) =>
+      target.path === ''
+        ? [{ label: 'Re-detect board', run: () => { seen.push(target.vaultName); } }]
+        : [],
+    );
+
+    rows()[0].dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })); // vault row
+    fixture.detectChanges();
+    const item = [...fixture.nativeElement.querySelectorAll('.ctx-menu button')].find(
+      (b) => b.textContent?.trim() === 'Re-detect board',
+    ) as HTMLButtonElement | undefined;
+    expect(item).toBeDefined();
+
+    item!.click();
+    fixture.detectChanges();
+    expect(seen).toEqual(['vault']);
   });
 });

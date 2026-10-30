@@ -15,7 +15,7 @@ function fakeApi(permission: NotificationPermission, afterRequest: NotificationP
   return { api: FakeNotification as unknown as NotificationApi, shown, requestPermission: FakeNotification.requestPermission };
 }
 
-describe('showOsNotification (ui.notify, req-57)', () => {
+describe('showOsNotification (ui.notify, req-64)', () => {
   it('shows title, body and tag; a click focuses the window, then runs the callback', async () => {
     const { api, shown } = fakeApi('granted');
     const order: string[] = [];

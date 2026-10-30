@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defaultToolsConfig } from '../../shared/app-config';
+import type { VaultChangeEvent } from '../../shared/plugin-api';
 import type { ToolSpec } from '../../shared/llm';
 import type { LlmChatOptions } from '../llm';
 import type { VaultCallOptions } from '../mcp';
+import { ManagedVaults } from './managed-vaults';
 import { assistantVaultOptions, buildLlmContext, buildVaultContext, runVaultTool } from './plugin-context';
 
 /**
@@ -254,21 +256,30 @@ describe('buildVaultContext - the ctx.vault of a plugin', () => {
     };
     let subscribed: ((event: unknown) => void) | null = null;
     const confirmWrite = vi.fn(async (request: { path: string }) => request.path === 'ok.md');
+    const managedVaults = new ManagedVaults();
+    const registerVaultAt = vi.fn(async (folderPath: string): Promise<{ id: string; name: string; path: string }> => ({
+      id: 'v9',
+      name: 'Registered',
+      path: folderPath,
+    }));
     const ctx = buildVaultContext(
       'my-plugin',
       {
         vaultManager: vaultManager as never,
         vaultAnnouncer: () => announcer as never,
         confirmWrite,
+        managedVaults,
+        registerVaultAt: registerVaultAt as never,
       },
-      (cb) => {
+      'My Plugin',
+      (cb: (event: VaultChangeEvent) => void) => {
         subscribed = cb as never;
         return () => {
           subscribed = null;
         };
       },
     );
-    return { ctx, vaultManager, announcer, confirmWrite, subscribed: () => subscribed };
+    return { ctx, vaultManager, announcer, confirmWrite, managedVaults, registerVaultAt, subscribed: () => subscribed };
   }
 
   it('reads and writes with the plugin id as the history origin', async () => {
@@ -313,10 +324,41 @@ describe('buildVaultContext - the ctx.vault of a plugin', () => {
   it('confirmWrite answers false when no bridge is wired', async () => {
     const ctx = buildVaultContext(
       'my-plugin',
-      { vaultManager: {} as never, vaultAnnouncer: () => null as never, confirmWrite: undefined },
+      {
+        vaultManager: {} as never,
+        vaultAnnouncer: () => null as never,
+        confirmWrite: undefined,
+        managedVaults: new ManagedVaults(),
+        registerVaultAt: (async (folderPath: string) => folderPath) as never,
+      },
+      'My Plugin',
       () => () => undefined,
     );
     await expect(ctx.confirmWrite({ path: 'x.md' } as never)).resolves.toBe(false);
+  });
+
+  it('register hands the folder to the composed registration round', async () => {
+    const h = vaultHarness();
+    await expect(h.ctx.register('E:/projects/drey')).resolves.toMatchObject({
+      id: 'v9',
+      name: 'Registered',
+      path: 'E:/projects/drey',
+    });
+    expect(h.registerVaultAt).toHaveBeenCalledWith('E:/projects/drey');
+  });
+
+  it('markManaged claims under the manifest name; null clears the claim', () => {
+    const h = vaultHarness();
+    expect(h.ctx.managedBy('v1')).toBeNull();
+    h.ctx.markManaged('v1');
+    expect(h.managedVaults.managedBy('v1')).toBe('My Plugin');
+    expect(h.ctx.managedBy('v1')).toBe('My Plugin');
+    // The claim follows detection: moving it leaves nothing behind.
+    h.ctx.markManaged('v2');
+    expect(h.managedVaults.managedBy('v1')).toBeNull();
+    expect(h.managedVaults.managedBy('v2')).toBe('My Plugin');
+    h.ctx.markManaged(null);
+    expect(h.ctx.managedBy('v2')).toBeNull();
   });
 
   it('announceChanges sends an empty round as a full refresh', () => {

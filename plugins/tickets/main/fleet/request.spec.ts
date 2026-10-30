@@ -66,7 +66,7 @@ const TICKET = [
   '',
 ].join('\n');
 
-const REPO = { name: 'drey', url: 'https://example.test/drey.git', branch: 'main', policy: null, path: 'W:/drey', worker: null };
+const REPO = { name: 'drey', url: 'https://example.test/drey.git', branch: 'main', policy: null, path: 'W:/drey', worker: null, worktrees: null };
 
 function base(over: Partial<Parameters<typeof composeRunRequest>[0]> = {}): Parameters<typeof composeRunRequest>[0] {
   return {
@@ -84,6 +84,9 @@ function base(over: Partial<Parameters<typeof composeRunRequest>[0]> = {}): Para
     permissionMode: 'accept-edits',
     gitPath: '',
     workerChoice: null,
+    repoInstructions: null,
+    diffStat: null,
+    gateFailure: null,
     ...over,
   };
 }
@@ -92,7 +95,7 @@ describe('composeRunRequest', () => {
   it('builds a dispatched run: the pull stays in its phase, the move follows the working column', () => {
     const result = composeRunRequest(
       base({
-        workingPhase: phase('plan', { handover: 'agent plan-default', worker: 'opencode', model: 'zai/glm-5.3', workers: 2 }),
+        workingPhase: phase('plan', { handover: 'agent plan-default', worker: 'opencode', model: 'zai/glm-5.3' }),
         nextPhaseId: 'plan-review',
         dispatchedBy: 'plan',
       }),
@@ -132,6 +135,16 @@ describe('composeRunRequest', () => {
     expect(result.request.column).toBeUndefined();
   });
 
+  it('threads the handover ask through — explicit from the dialog, auto from the dispatcher (T-0049)', () => {
+    const explicit = composeRunRequest(base({ handover: 'resume-compact' }));
+    expect(explicit.ok && explicit.request.handover).toBe('resume-compact');
+    const auto = composeRunRequest(base({ dispatchedBy: 'build', handover: 'auto' }));
+    expect(auto.ok && auto.request.handover).toBe('auto');
+    // Absent — every older caller — stays absent: the supervisor reads fresh.
+    const absent = composeRunRequest(base({}));
+    expect(absent.ok && absent.request.handover).toBeUndefined();
+  });
+
   it('the assignment ring: ticket pin over column over handover pin over repo over default', () => {
     const pinned = card({ meta: { ...card().meta, worker: 'claude-code' } });
     const ticketWins = composeRunRequest(
@@ -162,5 +175,24 @@ describe('composeRunRequest', () => {
       base({ ticketText: TICKET.replace('- [ ] `npm run verify:unit` — exits 0', 'prose only') }),
     );
     expect(noGate.ok).toBe(false);
+  });
+
+  it('threads the context pack into the instruction and reports its truncations', () => {
+    const failure = [...Array(80).keys()].map((i) => `row ${i + 1}: assertion ${i + 1} failed`).join('\n');
+    const result = composeRunRequest(
+      base({
+        repoInstructions: '# Repo rules',
+        diffStat: ' src/a.ts | 2 +-',
+        gateFailure: `\`npm run verify:unit\` failed\n\n${failure}`,
+        caps: { gateFailureLines: 40, gateFailureBytes: 4096, diffStatLines: 50, diffStatBytes: 4096 },
+      }),
+    );
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.instruction).toContain('# Repo rules');
+    expect(result.request.instruction).toContain('src/a.ts | 2 +-');
+    expect(result.request.instruction).toContain('row 80: assertion 80 failed');
+    expect(result.truncations).toEqual([{ section: 'gateFailure', originalSize: Buffer.byteLength(`\`npm run verify:unit\` failed\n\n${failure}`, 'utf8') }]);
   });
 });

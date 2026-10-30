@@ -1,5 +1,5 @@
 /**
- * The pure half of "a worker waits for you" (req-57): which waits in a
+ * The pure half of "a worker waits for you" (req-64): which waits in a
  * fleet snapshot are new to this window and what their notification says.
  * The board calls it on every snapshot; `seen` remembers what it already
  * announced, so a wait is announced once — and again only when the worker

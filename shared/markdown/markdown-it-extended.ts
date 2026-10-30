@@ -37,6 +37,15 @@ export interface ExtendedMarkdownOptions {
    * `[^1]` there must stay literal text.
    */
   footnotes?: boolean;
+  /**
+   * Colors fenced code blocks (` ```lang `): markdown-it's `highlight`
+   * option. The editor's Live Preview passes `highlightFence`
+   * (`src/app/editor/preview-highlight.ts`) so fences read like the
+   * source editor; absent, fences render plain (the PDF print palette
+   * has no editor tokens). Returning `''` falls back to markdown-it's
+   * own rendering.
+   */
+  fenceHighlight?: (code: string, lang: string) => string;
 }
 
 /**
@@ -296,6 +305,9 @@ export function applyExtendedMarkdown(
   opts: ExtendedMarkdownOptions = {},
 ): void {
   md.set({ linkify: true });
+  if (opts.fenceHighlight !== undefined) {
+    md.set({ highlight: opts.fenceHighlight });
+  }
   if (opts.footnotes === true) {
     md.use(footnote);
   }

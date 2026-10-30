@@ -5,7 +5,8 @@
  * parses a ticket file. One module-level store serves every view; a
  * view is just a DOM root plus a render call.
  */
-import { transcriptMarkdown } from './transcript';
+import { createTranscriptView } from './transcript-view';
+import { formatWatch, parseStreamEvents } from './watch-format';
 import { newWaits } from './waiting';
 import { asParagraphs, chainLogStamp, visibleChainLog } from './chain-log';
 import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
@@ -24,16 +25,26 @@ import {
   type MutationResult,
   type TicketCard,
 } from '../shared/tickets';
+import { cardOrderTargets } from './card-order';
 import { createColumnCollapseStore } from './column-collapse';
 import { createTicketsSettingsPage } from './settings-page';
-import type { ChainStatus, RunInfo, WaitQuestion } from '../main/fleet/protocol';
+import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
+import type { ChainStatus, FleetHandoverConfig, RunInfo, WaitQuestion } from '../main/fleet/protocol';
+import { DEFAULT_FLEET_HANDOVER, normalizeFleetHandover } from '../main/fleet/protocol';
+import { handoverDialogState } from './handover-ui';
+import type { HandoverCandidate } from '../main/fleet/handover';
+import { parseWorkerValue } from '../main/fleet/assignment';
 import {
   CONTEXT_WARN,
   contextFill,
-  DEFAULT_CONTEXT_WINDOW,
+  contextLabel,
+  fleetSummary,
   formatTokens,
   lanesOfColumn,
   opensByItself,
+  runChipLine,
+  spanClock,
+  telemetryParts,
   workerStatus,
   type Light,
 } from './worker-status';
@@ -70,10 +81,40 @@ let busy = false;
 let note = '';
 let inFlight: Promise<void> | null = null;
 
+/**
+ * What the board's message is (req-60): `busy` while an action runs,
+ * `ok` a result that fades by itself, `warn` / `error` stay until the
+ * owner closes them — a failure never disappears unseen.
+ */
+type NoteKind = 'busy' | 'ok' | 'warn' | 'error';
+let noteKind: NoteKind = 'ok';
+let noteTimer: ReturnType<typeof setTimeout> | null = null;
+/** The message is the board pull's own failure (the next good pull clears it). */
+let noteFromLoad = false;
+
+/** How long an `ok` message stays in the status bar. */
+const NOTE_FADE_MS = 6_000;
+
+/** Sets the board's message; the caller repaints (`notifyViews`). */
+function setNote(text: string, kind: NoteKind): void {
+  note = text;
+  noteKind = kind;
+  noteFromLoad = false;
+  if (noteTimer !== null) {
+    clearTimeout(noteTimer);
+    noteTimer = null;
+  }
+  if (kind === 'ok' && text !== '') {
+    noteTimer = setTimeout(() => {
+      noteTimer = null;
+      note = '';
+      notifyViews();
+    }, NOTE_FADE_MS);
+  }
+}
+
 interface BoardView {
   readonly root: HTMLElement;
-  /** Status-line text for this view ('' hides the line). */
-  readonly status: () => string;
   render(): void;
   dispose(): void;
 }
@@ -101,9 +142,16 @@ function refreshBoard(): Promise<void> {
       snapshot = (await invokeBoard('board')) as BoardSnapshot;
       // Drop persisted fold state of phases that no longer exist.
       collapse.prune(snapshot.columns.map((column) => column.phase.id));
-      note = '';
+      // A fresh board clears its own earlier load error; results and
+      // failures of actions keep their own lifetime.
+      if (noteFromLoad) {
+        setNote('', 'ok');
+      }
+      // The worktree note rides along (own round, never blocks the board).
+      void loadWorktreesStatus();
     } catch (error) {
-      note = messageOf(error);
+      setNote(messageOf(error), 'error');
+      noteFromLoad = true;
     } finally {
       busy = false;
       inFlight = null;
@@ -118,7 +166,7 @@ function refreshBoard(): Promise<void> {
  *  An error keeps its note (no refresh would clear it into view). */
 async function runMutation(label: string, invoke: () => Promise<unknown>): Promise<MutationResult> {
   busy = true;
-  note = `${label}…`;
+  setNote(`${label}…`, 'busy');
   notifyViews();
   let result: MutationResult;
   try {
@@ -132,12 +180,12 @@ async function runMutation(label: string, invoke: () => Promise<unknown>): Promi
     // that has already ended): pull the real state, or the lane stays and
     // every click repeats the same refusal.
     await refreshBoard().catch(() => undefined);
-    note = result.error ?? 'the action failed';
+    setNote(result.error ?? 'the action failed', 'error');
     notifyViews();
     return result;
   }
   await refreshBoard();
-  note = result.warning ?? '';
+  setNote(result.warning ?? '', result.warning === undefined ? 'ok' : 'warn');
   notifyViews();
   return result;
 }
@@ -182,6 +230,26 @@ let insertAt = 0;
 const LIVE_RUN_STATES: readonly string[] = ['starting', 'running', 'stopping'];
 let fleetRuns: RunInfo[] = [];
 let chain: ChainStatus | null = null;
+
+// --- the worktree home's status (T-0044, ADR-0080) ------------------------
+
+interface WorktreesStatus {
+  readonly base: string | null;
+  readonly orphans: readonly string[];
+  readonly legacyLeftovers: readonly string[];
+}
+
+let worktrees: WorktreesStatus | null = null;
+
+/** The status note's data — refreshed beside the board, never blocking it. */
+async function loadWorktreesStatus(): Promise<void> {
+  try {
+    worktrees = (await invokeBoard('worktreesStatus', {})) as WorktreesStatus;
+  } catch {
+    worktrees = null;
+  }
+  notifyViews();
+}
 
 const runForCard = (id: string): RunInfo | null =>
   fleetRuns.find((r) => r.ticketId === id && LIVE_RUN_STATES.includes(r.state)) ?? null;
@@ -324,12 +392,12 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
     const runChip = el(
       'span',
       `tickets-chip tickets-chip-run${waiting !== null ? ' tickets-chip-waiting' : ''}`,
-      waiting !== null ? '? waits for you' : `▶ ${live.state}`,
+      waiting !== null ? '? waits for you' : runChipLine(live, Date.now()),
     );
-    runChip.title =
-      waiting !== null
-        ? `run ${live.id} ${waiting.kind === 'question' ? 'asks' : 'needs your approval'}: ${waiting.text} — open the run to answer`
-        : `run ${live.id} (${live.provider}) — ${live.state}; open the card menu to watch, steer or stop`;
+    runChip.title = `run ${live.id} (${live.provider}) — ${live.state}, turn ${live.steerCount + 1}, ${formatTokens(live.tokensIn)} in / ${formatTokens(live.tokensOut)} out, ${spanClock(Date.now() - (Date.parse(live.startedAt) || Date.now()))} so far; open the card menu to watch, steer or stop`;
+    if (waiting !== null) {
+      runChip.title = `run ${live.id} ${waiting.kind === 'question' ? 'asks' : 'needs your approval'}: ${waiting.text} — open the run to answer`;
+    }
     meta.append(runChip);
   }
   const dwell = dwellMs(card, column.phase.id);
@@ -368,7 +436,7 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
   });
   node.addEventListener('contextmenu', (event) => {
     event.preventDefault();
-    openCardMenu(api, card, event, runMutation, (path) => openTicketFile(api, path));
+    openCardMenu(api, card, column, event, runMutation, (path) => openTicketFile(api, path));
   });
   node.addEventListener('dragstart', (event) => {
     draggedId = card.id;
@@ -514,11 +582,11 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
   if (parseHandover(column.phase.handover).mode === 'agent') {
     const phase = column.phase;
     const worker = phase.worker ?? parseHandover(phase.handover).worker ?? 'opencode';
-    const chip = el('span', 'tickets-col-agent', `${worker}${phase.workers > 1 ? ` ×${phase.workers}` : ''}`);
+    const chip = el('span', 'tickets-col-agent', worker);
     chip.title =
-      `Worker pool — ${worker}` +
+      `Worker — ${worker}` +
       (phase.model !== null ? `, model ${phase.model}` : '') +
-      `, ${phase.workers} parallel, prompt ${columnPromptRefOf(phase)}`;
+      `, prompt ${columnPromptRefOf(phase)}; runs take slots of the ${worker} pool`;
     head.append(chip);
     head.append(columnControlsNode(api, column));
   }
@@ -629,26 +697,23 @@ function buildBoardView(api: DreyPluginApi): BoardView {
   const draw = (): void => {
     root.textContent = '';
     const snap = snapshot;
-    if (snap === null) {
-      root.append(el('div', 'tickets-empty', 'Loading the board…'));
+    if (snap === null || snap.vaultId === null) {
+      root.append(snap === null ? el('div', 'tickets-empty', 'Loading the board…') : emptyState(api, snap, runMutation));
+      // A failed load or setup action still reports where every message does.
+      const bar = statusBarNode(api, null);
+      if (bar !== null) {
+        root.append(bar);
+      }
       return;
-    }
-    if (snap.vaultId === null) {
-      root.append(emptyState(api, snap, runMutation));
-      return;
-    }
-    const summary = fleetSummaryNode();
-    if (summary !== null) {
-      root.append(summary);
     }
     const board = el('div', 'tickets-board');
     for (const column of snap.columns) {
       board.append(columnNode(api, column));
     }
     root.append(board);
-    const metrics = metricsNode(snap);
-    if (metrics !== null) {
-      root.append(metrics);
+    const statusBar = statusBarNode(api, snap);
+    if (statusBar !== null) {
+      root.append(statusBar);
     }
     if (!snap.isGitRepo) {
       const warn = el('div', 'tickets-warn');
@@ -663,7 +728,7 @@ function buildBoardView(api: DreyPluginApi): BoardView {
       root.prepend(issues);
     }
   };
-  const view: BoardView = { root, status: () => (busy ? note || 'Loading…' : note), render, dispose: () => undefined };
+  const view: BoardView = { root, render, dispose: () => undefined };
   render();
   return view;
 }
@@ -705,37 +770,34 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       refreshButton.append(api.ui.icon('refresh-cw', 14));
       refreshButton.addEventListener('click', () => void refreshBoard());
 
-      host.append(newButton, refreshButton);
+      // req-60: status chip │ board actions │ chain controls │ overflow.
+      const fleet = fleetHeaderNode();
+      const actions = el('span', 'tickets-head-group');
+      actions.append(newButton, refreshButton);
       // The chain's master switch — meaningful wherever a tickets board
       // exists; the runner side decides whether anything is automatic.
-      host.append(masterControlNode(api));
-      return () => undefined;
+      host.classList.add('tickets-head');
+      host.append(fleet.node, actions, masterControlNode(api), headerMenuButton(api));
+      return fleet.dispose;
     },
     mount: (panel) => {
       panel.classList.add('tickets-panel');
-      const statusEl = el('div', 'tickets-note');
+      // The board's messages live in its status bar (req-60), not above it.
       const view = buildBoardView(api);
       views.add(view);
-      const renderStatus = (): void => {
-        statusEl.textContent = view.status();
-        statusEl.classList.toggle('tickets-note-busy', busy);
-        statusEl.style.display = statusEl.textContent === '' ? 'none' : '';
-      };
-      const decorated: BoardView = {
-        root: view.root,
-        status: view.status,
-        render: () => {
-          view.render();
-          renderStatus();
-        },
-        dispose: view.dispose,
-      };
-      views.delete(view);
-      views.add(decorated);
-      panel.append(statusEl, view.root);
-      decorated.render();
+      panel.append(view.root);
+      view.render();
+      // The header group follows the panel's width (req-60).
+      const widthObserver = new ResizeObserver((entries) => {
+        panelWidth = entries[0]?.contentRect.width ?? 0;
+        for (const listener of panelWidthListeners) {
+          listener();
+        }
+      });
+      widthObserver.observe(panel);
       return () => {
-        views.delete(decorated);
+        widthObserver.disconnect();
+        views.delete(view);
       };
     },
   };
@@ -881,13 +943,15 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
 // --- the chain's master switch (M85, ADR-0077) -------------------------------
 
 /**
- * An / Aus / Notaus in the panel header. An dispatches every playing
- * automatic column; Aus halts gently (running work finishes); Notaus
- * aborts every live run through the stop ladder and halts — the red
- * button, one click, nothing in the way.
+ * The chain controls in the panel header (req-60): run / halt as one
+ * segmented switch whose active half is marked (run dispatches every
+ * playing automatic column; halt is gentle — running work finishes),
+ * then the emergency stop — every live run through the stop ladder and
+ * halt, the red button, one click, nothing in the way.
  */
 function masterControlNode(api: DreyPluginApi): HTMLElement {
-  const box = el('span', 'tickets-master');
+  const box = el('span', 'tickets-head-group');
+  const seg = el('span', 'seg tickets-master');
   const run = el('button', 'icon-btn');
   run.type = 'button';
   run.title = 'Run the chain — columns with a worker drain themselves';
@@ -906,19 +970,109 @@ function masterControlNode(api: DreyPluginApi): HTMLElement {
   abort.type = 'button';
   abort.title = 'Emergency stop — abort every run and halt the chain';
   abort.setAttribute('aria-label', 'Emergency stop');
-  abort.append(api.ui.icon('triangle-alert', 14));
+  abort.append(api.ui.icon('square', 13));
   abort.addEventListener('click', () => void runChainAction('chainAbort', {}));
 
-  const chainLog = el('button', 'icon-btn');
-  chainLog.type = 'button';
-  chainLog.title = 'Chain log — what the fleet daemon did (dispatches, skips, gates), as a readonly editor tab';
-  chainLog.setAttribute('aria-label', 'Chain log');
-  chainLog.textContent = 'Log';
-  chainLog.addEventListener('click', () => openChainLog(api));
-
   masterButtons.push({ run, halt, abort });
-  box.append(run, halt, abort, chainLog);
+  seg.append(run, halt);
+  box.append(seg, abort);
   return box;
+}
+
+/**
+ * The header's overflow (req-60): the rarer tools behind one `⋯` —
+ * the chain log as a readonly tab, and the worktree cleanup (T-0044:
+ * every worktree whose ticket has no live run goes, real git, dirty
+ * trees kept and reported, then one prune per mapped repo).
+ */
+function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
+  const more = el('button', 'icon-btn');
+  more.type = 'button';
+  more.title = 'More — chain log, clean up worktrees';
+  more.setAttribute('aria-label', 'More actions');
+  more.setAttribute('aria-haspopup', 'menu');
+  more.append(api.ui.icon('more-horizontal', 14));
+  more.addEventListener('click', () => {
+    for (const other of document.querySelectorAll('.tickets-menu')) {
+      other.remove();
+    }
+    const menu = el('div', 'tickets-menu');
+    menu.setAttribute('role', 'menu');
+    const close = (): void => {
+      menu.remove();
+      window.removeEventListener('mousedown', outside, true);
+      more.focus();
+    };
+    const outside = (e: Event): void => {
+      if (!menu.contains(e.target as Node) && e.target !== more && !more.contains(e.target as Node)) {
+        close();
+      }
+    };
+    const item = (label: string, hint: string, onClick: () => void): void => {
+      const button = el('button', 'tickets-menu-item', label);
+      button.type = 'button';
+      button.title = hint;
+      button.setAttribute('role', 'menuitem');
+      button.addEventListener('click', () => {
+        close();
+        onClick();
+      });
+      menu.append(button);
+    };
+    item('Chain log', 'What the fleet daemon did (dispatches, skips, gates), as a readonly editor tab', () => openChainLog(api));
+    item('Clean up worktrees…', 'Removes every worktree whose ticket has no live run, then prunes', () => void runWorktreesCleanup());
+    document.body.append(menu);
+    const anchor = more.getBoundingClientRect();
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(8, Math.min(anchor.right - rect.width, window.innerWidth - rect.width - 8))}px`;
+    menu.style.top = `${Math.min(anchor.bottom + 4, window.innerHeight - rect.height - 8)}px`;
+    menu.querySelector<HTMLButtonElement>('.tickets-menu-item')?.focus();
+    window.addEventListener('mousedown', outside, true);
+    menu.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        close();
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const items = [...menu.querySelectorAll<HTMLButtonElement>('.tickets-menu-item')];
+        const at = items.indexOf(document.activeElement as HTMLButtonElement);
+        items[(at + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus();
+      }
+    });
+  });
+  return more;
+}
+
+/** Runs the global worktree cleanup and reports what it did (T-0044). */
+async function runWorktreesCleanup(): Promise<void> {
+  busy = true;
+  setNote('Cleaning up worktrees…', 'busy');
+  notifyViews();
+  let result: {
+    ok?: boolean;
+    error?: string;
+    report?: { removed: readonly string[]; keptDirty: readonly string[]; failed: readonly unknown[] };
+  };
+  try {
+    result = (await invokeBoard('worktreesCleanup', {})) as typeof result;
+  } catch (error) {
+    result = { ok: false, error: messageOf(error) };
+  }
+  busy = false;
+  if (result.ok === true) {
+    const r = result.report;
+    setNote(
+      r === undefined
+        ? ''
+        : `Worktrees: ${r.removed.length} removed` +
+            (r.keptDirty.length > 0 ? `, ${r.keptDirty.length} kept dirty` : '') +
+            (r.failed.length > 0 ? `, ${r.failed.length} failed` : ''),
+      r !== undefined && (r.keptDirty.length > 0 || r.failed.length > 0) ? 'warn' : 'ok',
+    );
+  } else {
+    setNote(result.error ?? 'the worktree cleanup failed', 'error');
+  }
+  notifyViews();
+  void loadWorktreesStatus();
 }
 
 /** Runs a chain control and applies the runner's returned state. */
@@ -927,13 +1081,13 @@ async function runChainAction(method: string, payload: unknown): Promise<void> {
   try {
     result = await invokeBoard(method, payload);
   } catch (error) {
-    note = messageOf(error);
+    setNote(messageOf(error), 'error');
     notifyViews();
     return;
   }
   const status = (result as { status?: ChainStatus; error?: string }).status ?? null;
   if (status === null) {
-    note = (result as { error?: string }).error ?? 'the chain control failed';
+    setNote((result as { error?: string }).error ?? 'the chain control failed', 'error');
     notifyViews();
     return;
   }
@@ -948,60 +1102,148 @@ const WORKER_LABEL: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /**
- * The cycle-time line (M85): each non-empty column's average dwell,
- * read from the tickets' entered-* stamps — shown beside the fleet's
- * run stats so a stuck column is visible at a glance.
+ * The status bar under the board (req-59), one row: the cycle times on
+ * the left — each non-empty column's average dwell from the tickets'
+ * entered-* stamps (M85), so a stuck column is visible at a glance —
+ * and the worktree home's note (T-0044) as a warning pill on the right:
+ * legacy-root leftovers and orphan folders under the base, listed in
+ * its tooltip, never auto-deleted (the Clean up worktrees control
+ * collects them). The board's message (req-60) sits right-aligned, just
+ * before that pill (req-61): an action in progress, a result that fades
+ * by itself, a warning or failure that stays until closed — it comes and
+ * goes in the free space, so the cycle times never move. Null when there
+ * is nothing to say.
  */
-function metricsNode(snap: BoardSnapshot): HTMLElement | null {
+function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null): HTMLElement | null {
+  const bar = el('div', 'tickets-statusbar');
+  const right = el('span', 'tickets-statusbar-right');
+  if (note !== '') {
+    const message = el('span', 'tickets-statusbar-note');
+    message.dataset['kind'] = noteKind;
+    message.setAttribute('role', noteKind === 'error' ? 'alert' : 'status');
+    message.title = note;
+    if (noteKind === 'ok') {
+      message.append(api.ui.icon('check', 12));
+    } else if (noteKind !== 'busy') {
+      message.append(api.ui.icon('triangle-alert', 12));
+    }
+    message.append(el('span', 'tickets-statusbar-note-text', note));
+    if (noteKind === 'warn' || noteKind === 'error') {
+      const close = el('button', 'icon-btn tickets-statusbar-note-close');
+      close.type = 'button';
+      close.title = 'Dismiss';
+      close.setAttribute('aria-label', 'Dismiss the message');
+      close.append(api.ui.icon('x', 11));
+      close.addEventListener('click', () => {
+        setNote('', 'ok');
+        notifyViews();
+      });
+      message.append(close);
+    }
+    right.append(message);
+  }
+  if (snap === null) {
+    if (right.childElementCount === 0) {
+      return null;
+    }
+    bar.append(right);
+    return bar;
+  }
   const now = Date.now();
-  const parts: string[] = [];
+  const dwell = el('span', 'tickets-statusbar-dwell');
+  dwell.title = "Average time the tickets in each column have been sitting there (from the entered-* stamps)";
   for (const column of snap.columns) {
     if (column.tickets.length === 0) {
       continue;
     }
     const avg = averageDwellMs(column.tickets, column.phase.id, now);
-    parts.push(`${column.phase.title} ${avg === null ? '–' : `⌀${spanWords(avg)}`}`);
+    const seg = el('span', 'tickets-statusbar-seg');
+    seg.append(el('span', 'tickets-statusbar-name', column.phase.title), el('span', 'tickets-statusbar-value', avg === null ? '–' : spanWords(avg)));
+    dwell.append(seg);
   }
-  if (parts.length === 0) {
-    return null;
+  if (dwell.childElementCount > 0) {
+    dwell.prepend(el('span', 'tickets-statusbar-label', 'Avg. time in column'));
+    bar.append(dwell);
   }
-  const line = el('div', 'tickets-metrics', parts.join(' · '));
-  line.title =
-    'Average time this column\'s tickets have been sitting there (from the entered-* stamps)';
-  return line;
+  const legacy = worktrees?.legacyLeftovers.length ?? 0;
+  const orphans = worktrees?.orphans.length ?? 0;
+  if (worktrees !== null && legacy + orphans > 0) {
+    const parts: string[] = [];
+    if (legacy > 0) {
+      parts.push(`${legacy} legacy worktree${legacy === 1 ? '' : 's'}`);
+    }
+    if (orphans > 0) {
+      parts.push(`${orphans} orphan${orphans === 1 ? '' : 's'}`);
+    }
+    const warn = el('span', 'tickets-statusbar-warn');
+    warn.append(api.ui.icon('triangle-alert', 12), el('span', undefined, parts.join(' · ')));
+    warn.title = [
+      'Worktree folders to clean up — Clean up worktrees… in the header\'s ⋯ menu removes them',
+      ...worktrees.legacyLeftovers.map((name) => `legacy: ${name}`),
+      ...worktrees.orphans.map((p) => `orphan: ${p}`),
+    ].join('\n');
+    right.append(warn);
+  }
+  if (right.childElementCount > 0) {
+    bar.append(right);
+  }
+  return bar.childElementCount === 0 ? null : bar;
 }
 
-/** The pills above the board: lights of the whole fleet and today's spend. */
-function fleetSummaryNode(): HTMLElement | null {
-  const runs = liveRuns();
-  if (runs.length === 0) {
-    return null;
-  }
-  const now = Date.now();
-  const lights = runs.map((run) => workerStatus(run, now).light);
-  const count = (light: Light): number => lights.filter((l) => l === light).length;
-  const bar = el('div', 'tickets-summary');
-  const pill = (light: Light | null, text: string, extra = ''): void => {
-    const p = el('span', `tickets-pill${extra}`);
-    if (light !== null) {
-      p.append(el('span', `tickets-light tickets-light-${light}`));
+/** Below this panel width the header group drops its numbers (they stay in the tooltip). */
+const HEAD_FLEET_NARROW_PX = 480;
+
+/** Below this one the group is its light alone. */
+const HEAD_FLEET_TINY_PX = 380;
+
+/** The Tickets panel's current width (its body is as wide as its header); 0 before the first measure. */
+let panelWidth = 0;
+const panelWidthListeners = new Set<() => void>();
+
+/**
+ * The fleet's status in the panel header (req-60): the worst light, the
+ * states in words, tokens in flight and the oldest run's age — one
+ * compact group before the header buttons, the long form in its tooltip.
+ * Repaints on every fleet update and once a second for the clock.
+ */
+function fleetHeaderNode(): { node: HTMLElement; dispose: () => void } {
+  const node = el('span', 'tickets-head-fleet');
+  const light = el('span', 'tickets-light');
+  const label = el('span', 'tickets-head-fleet-label');
+  const numbers = el('span', 'tickets-head-fleet-numbers');
+  node.append(light, label, numbers);
+  const paint = (): void => {
+    const summary = fleetSummary(liveRuns(), Date.now());
+    node.hidden = summary === null;
+    node.toggleAttribute('data-narrow', panelWidth > 0 && panelWidth < HEAD_FLEET_NARROW_PX);
+    node.toggleAttribute('data-tiny', panelWidth > 0 && panelWidth < HEAD_FLEET_TINY_PX);
+    if (summary === null) {
+      return;
     }
-    p.append(document.createTextNode(text));
-    bar.append(p);
+    light.className = `tickets-light tickets-light-${summary.light}`;
+    label.textContent = summary.label;
+    const age = summary.ageMs === null ? '' : spanClock(summary.ageMs);
+    numbers.textContent = `${formatTokens(summary.tokens)} tok${age === '' ? '' : ` · ${age}`}`;
+    const long = [
+      summary.label,
+      `${formatTokens(summary.tokens)} tokens in flight (in + out of all live runs)`,
+      ...(age === '' ? [] : [`the oldest run has been at it for ${age}`]),
+    ].join(' · ');
+    node.title = long;
+    node.setAttribute('aria-label', long);
   };
-  pill('green', `${count('green')} running`);
-  if (count('idle') > 0) {
-    pill('idle', `${count('idle')} standing`);
-  }
-  if (count('amber') > 0) {
-    pill('amber', `${count('amber')} need attention`);
-  }
-  if (count('red') > 0) {
-    pill('red', `${count('red')} stalled`);
-  }
-  const tokens = runs.reduce((sum, r) => sum + r.tokensIn + r.tokensOut, 0);
-  pill(null, `${formatTokens(tokens)} tokens in flight`, ' tickets-pill-mono');
-  return bar;
+  fleetListeners.add(paint);
+  panelWidthListeners.add(paint);
+  const tick = setInterval(paint, 1_000);
+  paint();
+  return {
+    node,
+    dispose: () => {
+      fleetListeners.delete(paint);
+      panelWidthListeners.delete(paint);
+      clearInterval(tick);
+    },
+  };
 }
 
 /** Lanes the owner folded or unfolded by hand; a lane without an entry follows its light. */
@@ -1022,9 +1264,8 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
     fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state) || r.state === 'detached'),
     column.phase.id,
   );
-  const slots = column.phase.workers;
-  if (runs.length === 0 && slots <= 0) {
-    return null;
+  if (runs.length === 0) {
+    return null; // the slots are the provider pools' (req-63) — an idle column shows no lane strip
   }
   const now = Date.now();
   const strip = el('div', 'tickets-lanes');
@@ -1041,7 +1282,7 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
   head.append(
     el('span', `tickets-light tickets-light-${runs.length === 0 ? 'idle' : worst}`),
     el('span', 'tickets-lanes-title', 'Workers'),
-    el('span', 'tickets-lanes-count', `${runs.filter((r) => r.state !== 'detached').length} of ${slots} busy`),
+    el('span', 'tickets-lanes-count', `${runs.filter((r) => r.state !== 'detached').length} busy`),
   );
   strip.append(head);
 
@@ -1098,14 +1339,7 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
       act.title = waiting?.text ?? activity;
       body.append(act);
 
-      const used = run.contextTokens ?? null;
-      const label = el(
-        'div',
-        'tickets-lane-context-row',
-        used === null
-          ? 'Context — not reported yet'
-          : `Context ${formatTokens(used)} / ${formatTokens(DEFAULT_CONTEXT_WINDOW)} · ${Math.round((fill ?? 0) * 100)}%`,
-      );
+      const label = el('div', 'tickets-lane-context-row', contextLabel(run));
       const bar = el('div', 'tickets-meter');
       const barFill = el('div', `tickets-meter-fill tickets-meter-${fillWarn ? 'amber' : 'green'}`);
       barFill.style.width = `${Math.round((fill ?? 0) * 100)}%`;
@@ -1119,6 +1353,9 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
       );
       if ((run.cacheReadTokens ?? 0) > 0) {
         tokens.append(el('span', undefined, `cached ${formatTokens(run.cacheReadTokens ?? 0)}`));
+      }
+      for (const part of telemetryParts(run)) {
+        tokens.append(el('span', undefined, part));
       }
       if (run.costUsd !== null && run.costUsd > 0) {
         tokens.append(el('span', undefined, `$${run.costUsd.toFixed(2)}`));
@@ -1194,6 +1431,77 @@ function openRunModal(api: DreyPluginApi, card: TicketCard): void {
     const rowFields = el('div', 'tickets-form-row');
     rowFields.append(field('Worker', worker), field('Permissions', permission));
 
+    // --- the handover choice (T-0049): the pure rules over the fleet
+    // snapshot decide the default and which options are legal at all;
+    // nothing is persisted — each run asks anew.
+    const handover = el('select') as HTMLSelectElement;
+    handover.setAttribute('aria-label', 'Handover');
+    const handoverStatus = el('p', 'tickets-form-hint', '');
+    const candidate: HandoverCandidate | null = (() => {
+      const newest = fleetRuns
+        .filter((r) => r.ticketId === card.id && ['done', 'stopped', 'failed'].includes(r.state))
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+      if (newest === undefined) {
+        return null;
+      }
+      return {
+        phase: newest.phase ?? '',
+        provider: newest.provider,
+        model: newest.model ?? null,
+        state: newest.state,
+        sessionRef: newest.sessionRef,
+        lastTurnContext: newest.lastTurnContext ?? null,
+        endedAt: newest.endedAt,
+      };
+    })();
+    const cardPin = parseWorkerValue(card.worker);
+    let handoverConfig: FleetHandoverConfig = DEFAULT_FLEET_HANDOVER;
+    const renderHandover = (): void => {
+      const provider = worker.value;
+      const state = handoverDialogState({
+        phase: card.phase,
+        candidate,
+        provider,
+        // The dialog offers no model pin of its own; the card's applies
+        // while the worker stays the card's resolved one.
+        model: cardPin !== null && cardPin.provider === provider ? cardPin.model : null,
+        config: handoverConfig,
+        nowMs: Date.now(),
+      });
+      handover.replaceChildren();
+      for (const option of state.options) {
+        const node = el('option', undefined, option.label) as HTMLOptionElement;
+        node.value = option.mode;
+        node.disabled = option.disabled;
+        node.title = option.why;
+        node.selected = option.mode === state.defaultMode;
+        handover.append(node);
+      }
+      handover.title = state.options.find((o) => o.mode === handover.value)?.why ?? '';
+      handoverStatus.textContent = state.statusLine;
+    };
+    renderHandover();
+    worker.addEventListener('change', renderHandover);
+    void (async () => {
+      const raw: Record<string, number> = {};
+      const base = await api.settings.get<number>('fleet.compactAboveTokens').catch(() => undefined);
+      if (base !== undefined) {
+        raw.compactAboveTokens = base;
+      }
+      const ttl = await api.settings.get<number>('fleet.resumePauseTtlMin').catch(() => undefined);
+      if (ttl !== undefined) {
+        raw.resumePauseTtlMin = ttl;
+      }
+      const providerOverride = await api.settings
+        .get<number>(`fleet.compactAboveTokens.${worker.value}`)
+        .catch(() => undefined);
+      handoverConfig = normalizeFleetHandover({
+        ...raw,
+        ...(providerOverride !== undefined ? { compactAboveTokensOverrides: { [worker.value]: providerOverride } } : {}),
+      });
+      renderHandover();
+    })();
+
     const hint = el(
       'p',
       'tickets-form-hint',
@@ -1209,18 +1517,20 @@ function openRunModal(api: DreyPluginApi, card: TicketCard): void {
     start.type = 'button';
     start.addEventListener('click', () => {
       const workerValue = worker.value;
+      const handoverValue = handover.value;
       close();
       void runMutation('Starting the run', () =>
         invokeBoard('fleetStart', {
           id: card.id,
           worker: workerValue,
           permissionMode: permission.value,
+          handover: handoverValue,
         }),
       );
     });
     actions.append(cancel, start);
 
-    form.append(rowFields, hint, actions);
+    form.append(rowFields, field('Handover', handover), handoverStatus, hint, actions);
     form.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
         close();
@@ -1270,7 +1580,7 @@ const QUICK_PROMPTS: ReadonlyArray<readonly [string, string]> = [
 /** The waits this window already announced (`newWaits` keeps it current). */
 const announcedWaits = new Set<string>();
 
-/** One OS notification per new wait; a click opens the run's takeover tab (req-57). */
+/** One OS notification per new wait; a click opens the run's takeover tab (req-64). */
 function announceWaits(api: DreyPluginApi): void {
   for (const notice of newWaits(fleetRuns, announcedWaits)) {
     void api.ui.notify({
@@ -1291,19 +1601,41 @@ function takeoverTitle(run: RunInfo): string {
 }
 
 /**
- * The tab body: the worker's transcript in the host's read-only Markdown
- * view (rendered from the run's normalized stream, so the same for every
- * worker), a prompt box in the compact view below it, and the controls —
+ * The tab body: the worker's transcript as the plugin's own DOM
+ * (`transcript-view.ts`, drawn from the run's normalized stream, so the
+ * same for every worker), a prompt box in the compact view below it, and the controls —
  * interrupt the running turn (the session stays), hand the run back.
  */
 function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): () => void {
   const wrap = el('div', 'tickets-takeover');
 
+  // The header (req-58): who and in which mode on top, the numbers as
+  // labelled metrics below.
   const banner = el('div', 'tickets-takeover-banner');
+  const titleRow = el('div', 'tickets-takeover-title-row');
   const light = el('span', 'tickets-light');
-  const headline = el('span', 'tickets-takeover-headline');
-  const stats = el('span', 'tickets-takeover-stats');
+  const ticketName = el('span', 'tickets-takeover-ticket');
+  const providerName = el('span', 'tickets-takeover-provider');
+  const modePill = el('span', 'tickets-takeover-mode');
+  const statusWord = el('span', 'tickets-takeover-status');
   const spacer = el('span', 'tickets-takeover-spacer');
+  const metricsRow = el('div', 'tickets-takeover-metrics');
+  const metric = (label: string, title: string): { node: HTMLElement; value: HTMLElement } => {
+    const node = el('span', 'tickets-takeover-metric');
+    node.title = title;
+    const value = el('span', 'tickets-takeover-metric-value');
+    node.append(el('span', 'tickets-takeover-metric-label', label), value);
+    return { node, value };
+  };
+  const turnMetric = metric('Turn', 'Turns of this run: the first prompt plus every message sent since');
+  const contextMetric = metric('Context', "How full the worker's context window is");
+  const contextBar = el('span', 'tickets-takeover-meter');
+  const contextFillEl = el('span', 'tickets-takeover-meter-fill');
+  contextBar.append(contextFillEl);
+  contextMetric.node.insertBefore(contextBar, contextMetric.value);
+  const tokensMetric = metric('Tokens', '');
+  const elapsedMetric = metric('Elapsed', 'Time since the run started');
+  metricsRow.append(turnMetric.node, contextMetric.node, tokensMetric.node, elapsedMetric.node);
   const controls = el('span', 'tickets-takeover-controls');
   const iconButton = (icon: string, label: string, title: string, onClick: () => void): HTMLButtonElement => {
     const b = el('button', 'tickets-takeover-btn');
@@ -1332,9 +1664,10 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     control('release'),
   );
   controls.append(resumeBtn, releaseBtn);
-  banner.append(light, headline, stats, spacer, controls);
+  titleRow.append(light, ticketName, providerName, modePill, statusWord, spacer, controls);
+  banner.append(titleRow, metricsRow);
 
-  const transcript = api.ui.createMarkdownView({ mode: 'view', readOnly: true, content: '' });
+  const transcript = createTranscriptView(api, fleetRuns.find((r) => r.id === runId)?.worktreePath ?? '');
   transcript.element.classList.add('tickets-takeover-transcript');
 
   const promptWrap = el('div', 'tickets-takeover-prompt');
@@ -1364,7 +1697,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   const addFiles = async (files: Iterable<File>): Promise<void> => {
     for (const file of files) {
       if (file.size > MAX_ATTACH_BYTES) {
-        note = `${file.name} is larger than ${MAX_ATTACH_BYTES / 1024 / 1024} MB`;
+        setNote(`${file.name} is larger than ${MAX_ATTACH_BYTES / 1024 / 1024} MB`, 'error');
         notifyViews();
         continue;
       }
@@ -1374,7 +1707,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
       if (result.ok === true && typeof result.path === 'string') {
         attached.push({ name, path: result.path });
       } else {
-        note = result.error ?? `${name} could not be attached`;
+        setNote(result.error ?? `${name} could not be attached`, 'error');
         notifyViews();
       }
     }
@@ -1525,7 +1858,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   };
   promptWrap.append(commandMenu, attachRow, prompt.element, composerBar);
 
-  // What the worker waits on (req-57): its question — answered in the
+  // What the worker waits on (req-64): its question — answered in the
   // prompt box below — or a tool call to approve with one of the buttons.
   const waitCard = el('div', 'tickets-takeover-wait');
   waitCard.hidden = true;
@@ -1649,29 +1982,42 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     const detached = run !== null && run.state === 'detached';
     const status = run === null ? null : workerStatus(run, Date.now());
     light.className = `tickets-light tickets-light-${(active || detached) && status !== null ? status.light : 'idle'}`;
-    headline.textContent =
+    ticketName.textContent = run === null ? 'Unknown run' : run.ticketId;
+    providerName.textContent = run === null ? '' : run.model !== undefined && run.model !== null && run.model !== '' ? `${run.provider} · ${run.model}` : run.provider;
+    const [mode, modeTip] =
       run === null
-        ? 'This run is no longer known to the runner'
+        ? ['Gone', 'This run is no longer known to the runner']
         : detached
-          ? `${run.ticketId} · ${run.provider} — detached: the runner lost its worker`
+          ? ['Detached', 'The runner lost its worker']
           : !active
-            ? `${run.ticketId} · ${run.provider} — run ${run.state}`
+            ? [`Run ${run.state}`, 'The run has ended — Resume session picks it up in a new worker']
             : run.waiting
-              ? `${run.ticketId} · ${run.provider} — waits for you`
+              ? ['Waits for you', 'The worker asks you or wants an approval — answer in the card above the prompt box']
               : held
-              ? `${run.ticketId} · ${run.provider} — you have control`
-              : `${run.ticketId} · ${run.provider} — the runner is driving; your first command takes over`;
-    const fill = run === null ? null : contextFill(run);
-    stats.textContent =
-      run === null
-        ? ''
-        : [
-            status !== null && (active || detached) ? status.label : '',
-            fill === null ? '' : `context ${Math.round(fill * 100)}%`,
-            `in ${formatTokens(run.tokensIn)}${(run.cacheReadTokens ?? 0) > 0 ? ` (${formatTokens(run.cacheReadTokens ?? 0)} cached)` : ''} · out ${formatTokens(run.tokensOut)}`,
-          ]
-            .filter((part) => part !== '')
-            .join(' · ');
+                ? ['You have control', 'The runner sends nothing of its own until you hand the run back']
+                : ['Runner driving', 'The runner is driving this worker — your first message takes over'];
+    modePill.textContent = mode;
+    modePill.title = modeTip;
+    statusWord.textContent = status !== null && (active || detached) ? status.label : '';
+    metricsRow.hidden = run === null;
+    if (run !== null) {
+      turnMetric.value.textContent = String(run.steerCount + 1);
+      const fill = contextFill(run);
+      contextMetric.node.hidden = fill === null;
+      const percent = fill === null ? 0 : Math.round(fill * 100);
+      contextMetric.value.textContent = `${percent}%`;
+      contextFillEl.style.width = `${Math.min(100, percent)}%`;
+      contextMetric.node.dataset['level'] = percent >= 90 ? 'high' : percent >= 70 ? 'mid' : 'low';
+      const cached = run.cacheReadTokens ?? 0;
+      tokensMetric.value.textContent = `${formatTokens(run.tokensIn)} in${cached > 0 ? ` (${formatTokens(cached)} cached)` : ''} · ${formatTokens(run.tokensOut)} out`;
+      tokensMetric.node.title = [
+        'Tokens this run sent to the model (in, the cached share in brackets) and got back (out)',
+        ...telemetryParts(run).map((part) => part.replace(/^ctx /, 'last turn context ')),
+      ].join('\n');
+      const started = Date.parse(run.startedAt);
+      elapsedMetric.value.textContent = spanClock(Number.isNaN(started) ? 0 : Math.max(0, Date.now() - started));
+      transcript.setWorktree(run.worktreePath);
+    }
     resumeBtn.hidden = !(run !== null && !active && run.sessionRef !== null);
     releaseBtn.hidden = !held;
     prompt.setReadOnly(!active);
@@ -1699,18 +2045,17 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     paintProgress();
   };
 
-  let lastMarkdown = '\u0000';
+  let lastStream = '\u0000';
   let alive = true;
   const pull = (): void => {
     void invokeBoard('fleetStream', { runId }).then((result) => {
       if (!alive) {
         return;
       }
-      const markdown = transcriptMarkdown((result as { text?: string }).text ?? '');
-      const shown = markdown === '' ? '_The stream is empty so far._' : markdown;
-      if (shown !== lastMarkdown) {
-        lastMarkdown = shown;
-        transcript.setContent(shown);
+      const text = (result as { text?: string }).text ?? '';
+      if (text !== lastStream) {
+        lastStream = text;
+        transcript.update(formatWatch(parseStreamEvents(text)));
       }
     });
   };
@@ -1727,7 +2072,6 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     clearInterval(timer);
     clearInterval(tick);
     fleetListeners.delete(paintBanner);
-    transcript.dispose();
     prompt.dispose();
   };
 }
@@ -1816,6 +2160,7 @@ function mountChainLog(api: DreyPluginApi, host: HTMLElement): () => void {
 function openCardMenu(
   api: DreyPluginApi,
   card: TicketCard,
+  column: BoardColumn,
   event: MouseEvent,
   run: (label: string, invoke: () => Promise<unknown>) => Promise<MutationResult>,
   openFile: (path: string) => void,
@@ -1869,6 +2214,103 @@ function openCardMenu(
       }
     });
     menu.append(button);
+  }
+  {
+    // T-0044: tidy this ticket's checkout — `git worktree remove`, the
+    // branch stays (it carries the work). A dirty tree arms the button
+    // for a confirming second click (the Archive pattern); a ticket
+    // without a repo has no worktree to remove.
+    const known =
+      card.meta.repo !== null && (snapshot?.repos.some((r) => r.name === card.meta.repo) ?? false);
+    const button = el('button', 'tickets-menu-item', 'Remove worktree…');
+    button.type = 'button';
+    button.disabled = !known;
+    button.title = known
+      ? 'Removes the ticket\'s worktree (git worktree remove) — the branch with the work stays'
+      : 'This ticket names no repository';
+    let armed = false;
+    button.addEventListener('click', () => {
+      if (!known) {
+        return;
+      }
+      if (armed) {
+        menu.remove();
+        void run('Removing the worktree', () => invokeBoard('worktreeRemove', { id: card.id, force: true }));
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'Checking the worktree…';
+      void invokeBoard('worktreeRemove', { id: card.id, force: false })
+        .then((raw) => {
+          const res = raw as { ok: boolean; error?: string; dirty?: boolean; status?: string };
+          if (res.ok) {
+            menu.remove(); // the Log line's announce refreshes the board
+            return;
+          }
+          if (res.dirty === true) {
+            armed = true;
+            button.disabled = false;
+            button.textContent = 'Worktree is dirty — remove anyway';
+            button.title = `Uncommitted changes:\n${res.status ?? ''}`;
+            return;
+          }
+          menu.remove();
+          setNote(res.error ?? 'the worktree could not be removed', 'error');
+          notifyViews();
+        })
+        .catch((error: unknown) => {
+          menu.remove();
+          setNote(messageOf(error), 'error');
+          notifyViews();
+        });
+    });
+    menu.append(button);
+  }
+  {
+    // T-0053: move to a column end — the same `reorder` a drag performs
+    // (drop index 0 / the column's end), so a menu move cannot drift
+    // from drag semantics: the top pins only this ticket, the bottom
+    // pins the whole column above it. Disabled when the card already
+    // sits at that end.
+    const targets = cardOrderTargets(column.tickets, card.id);
+    const moves: readonly {
+      readonly label: string;
+      readonly busy: string;
+      readonly index: number | null;
+      readonly title: string;
+      readonly blocked: string;
+    }[] = [
+      {
+        label: 'Move to top',
+        busy: 'Moving to top',
+        index: targets.top,
+        title: 'Same as dragging to the top — pins this ticket first; the rest falls to derived order',
+        blocked: 'This ticket is already first in the column',
+      },
+      {
+        label: 'Move to bottom',
+        busy: 'Moving to bottom',
+        index: targets.bottom,
+        title: 'Same as dragging to the bottom — pins the whole column in its current order with this ticket last',
+        blocked: 'This ticket is already last in the column',
+      },
+    ];
+    for (const move of moves) {
+      const button = el('button', 'tickets-menu-item', move.label);
+      button.type = 'button';
+      button.disabled = move.index === null;
+      button.title = move.index === null ? move.blocked : move.title;
+      button.addEventListener('click', () => {
+        if (move.index === null) {
+          return;
+        }
+        menu.remove();
+        void run(move.busy, () =>
+          invokeBoard('reorder', { phase: column.phase.id, id: card.id, index: move.index }),
+        );
+      });
+      menu.append(button);
+    }
   }
   if (card.pinned) {
     item('Unpin from order', () => {
@@ -1960,10 +2402,22 @@ function openCardMenu(
 const plugin: { activate(api: DreyPluginApi): void } = {
   activate(api) {
     backend = api.backend;
-    // A worker that waits on the owner says so outside the board too (req-57).
+    // A worker that waits on the owner says so outside the board too (req-64).
     fleetListeners.add(() => announceWaits(api));
     api.ui.registerWidget(createTicketsWidget(api));
     api.ui.registerSettingsPage(createTicketsSettingsPage(api));
+
+    // The Files-panel seam (T-0042, SDK 1.32): veto/takeover over the
+    // board's ground, and the per-target context rows. Both read the
+    // module-level board store, so they follow every board-changed
+    // refresh — including a re-registered tickets vault.
+    const filesDeps = {
+      snapshot: () => snapshot,
+      invoke: invokeBoard,
+      showMessage: (message: string, title?: string) => api.ui.showMessage(message, title),
+    };
+    api.files.registerOperations(createFilesOperationsHandler(filesDeps));
+    api.files.registerContextMenuItems(ticketsContextMenuItems(filesDeps));
 
     // The fleet daemon's chain log: a readonly, tail-following editor tab
     // (T-0007 review finding 2). Stateless — the session snapshot reopens

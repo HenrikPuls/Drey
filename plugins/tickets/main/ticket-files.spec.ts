@@ -198,6 +198,17 @@ describe('patchTicketFile', () => {
     expect(patched).toContain('## Log');
     expect(patched.trimEnd().endsWith("- '2026-10-17T15:01:12Z' owner@desk — inbox -> prioritized")).toBe(true);
   });
+
+  it("an unarchive patch logs 'archive -> <phase>' and stamps entered-<phase> (T-0042)", () => {
+    const patched = patchTicketFile(CANONICAL, {
+      to: 'prioritized',
+      from: 'archive',
+      now,
+      actor: 'owner@desk',
+    });
+    expect(patched).toContain("entered-prioritized: '2026-10-17T15:01:12Z'");
+    expect(patched).toContain("- '2026-10-17T15:01:12Z' owner@desk — archive -> prioritized");
+  });
 });
 
 describe('newTicketFileText', () => {

@@ -20,7 +20,7 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
-### req-57 — A worker that needs the owner asks, waits and says so (owner request, outside the list)
+### req-64 — A worker that needs the owner asks, waits and says so (owner request, outside the list)
 
 **Not yet manually verified by the owner.** No worker ever got an answer:
 OpenCode 2.0.32's own `question` tool asks through a *form*
@@ -57,7 +57,7 @@ such a worker looked busy and turned red after five minutes.
 - **The run records it**: `RunInfo.waiting` (with `since`), a ticket Log
   line ("asks the owner — …", "rejected by the owner — …"), a runner log
   line. A waiting run is amber, never stalled.
-- **Telling the owner** (owner's choice: Windows plus the board): SDK 1.32
+- **Telling the owner** (owner's choice: Windows plus the board): SDK 1.34
   adds `ui.notify` — the renderer's Web Notification API, a Windows toast
   (the app now sets its AppUserModelID: `de.lariscus.drey` packaged, the
   executable in dev), a click brings the window forward over the new
@@ -74,6 +74,521 @@ such a worker looked busy and turned red after five minutes.
   `waiting.spec.ts`, `worker-status.spec.ts`, `fleet-fields.spec.ts`,
   `src/app/plugin-host/os-notify.spec.ts`.
 
+### req-63 — Fleet: provider pools and column priority instead of per-column slots
+
+Owner-verified (signed off 2026-10-30). Owner request, outside the
+list. A column's `workers:` pool bound its slots to that column: an idle
+`plan` slot could not serve `build`, the dispatcher filled columns left
+to right (starting work before finishing it), and a ticket's priority
+only sorted inside its own column.
+
+The parallel slots now belong to the **worker providers**
+(`fleet.pool.opencode.size`, `fleet.pool.claude-code.size`, Settings →
+Tickets → Fleet; default one each). Every live run of a provider — the
+owner's on-demand runs included — takes one of its slots. `planDispatch`
+(`plugins/tickets/main/fleet/chain.ts`) builds one candidate list over
+every playing automatic column and orders it by **priority class**
+(`urgent`/`high` before `normal`/`low`), then **column rank — rightmost
+first**, then the column's own order; a candidate takes a slot of the
+pool its assignment resolves to (the same ladder as the run request) and
+waits when that pool is full. A running run is never preempted. Master,
+brakes, cooldown, breaker and the checkpoint rule are unchanged.
+
+Can the capacity be read from the provider? Only from a **llama.cpp**
+server (`/props` → `total_slots`): `fleet.pool.opencode.probe` takes its
+base URL, and the probe (every five minutes) caps the configured size.
+vLLM, LM Studio and Ollama keep their parallelism in server flags;
+hosted APIs and the CLIs' subscriptions report none. Instead a run that
+fails on a **rate limit** (`429`, "rate limit", "too many requests" in
+the worker's last error, new `RunInfo.lastError`) shrinks its provider's
+pool by one slot for five minutes (never below one).
+
+The column `workers:` key is gone (owner decision — no per-column cap or
+reservation): `PipelinePhase.workers`, the settings table's Pool column
+and the `×N` on the column chip are removed; a leftover key is ignored
+with a noise badge that points at the Fleet settings, and clearing a
+column's worker still removes it. The lane strip shows a column's busy
+runs without a slot count. Specs: `chain.spec.ts` (shared pool,
+rightmost-first, priority classes, two providers, live runs, an
+unresolvable assignment), `orchestrator.spec.ts` (shared pool, probe
+cap, rate-limit shrink, pool helpers), `ticket-board.spec.ts` (the
+retired key). Docs: `specs/ticket-schema.md`, ADR-0077 later change,
+`docs/05`, `docs/06`, the manual.
+
+### req-61 — Tickets board: messages at the right end of the status bar
+
+Owner request, outside the list. req-60 put the board's message at the
+left of the status bar, so every message that appeared or faded shoved
+the cycle times sideways — restless in use. The bar's right end is now
+one group (`.tickets-statusbar-right`, `statusBarNode` in
+`plugins/tickets/renderer/index.ts`): the message, then the worktree
+pill anchored at the edge. A message comes and goes in the free space
+left of the pill, so neither the cycle times nor the pill move. In a
+narrow panel the cycle-time segments that do not fit drop whole (they
+wrap onto a hidden second line) instead of being cut mid-word; the
+right group takes at most 60 % and cuts the message text with an
+ellipsis (full text in its tooltip). Also: the `fleetHeaderNode` doc
+comment sits on its function again. Manual: the status-bar sentence.
+Owner-verified (signed off 2026-10-30).
+
+### req-60 — Tickets panel: fleet status in the panel header
+
+Owner request, outside the list. The fleet summary sat as a row of three
+pills between the panel header and the board (`● 1 running` ·
+`18.9M tokens in flight` · `running 26:22`), a whole row of board height.
+It now rides the panel header as one compact group before the New /
+Refresh / master buttons (`fleetHeaderNode` in
+`plugins/tickets/renderer/index.ts`): the worst light of all live runs,
+the non-zero states in words (`2 running · 1 stalled`), then tokens in
+flight and the oldest run's age in muted tabular mono
+(`· 18.9M tok · 26:22`); the long form is its tooltip and `aria-label`.
+It repaints on fleet updates and once a second, hides without live runs,
+and drops the numbers below a 480px panel width (a `ResizeObserver` on
+the panel — no size container around the base header). The counting is
+the pure `fleetSummary` in `worker-status.ts` (spec added). The
+"Tickets" title stays — the uniform panel head (ADR-0057/M69); hiding it
+was considered and declined with the owner (it would need an SDK option
+like the calendar's `headerReplacesTitle`). `fleetSummaryNode` and the
+`.tickets-summary` / `.tickets-pill*` styles are gone.
+
+The whole header row was then redesigned (owner request, same item):
+four groups set apart by air and a hairline — **status chip** (the
+fleet group as a quiet `--bg-input` chip; below 380px its light alone)
+│ **board actions** (new, refresh) │ **chain controls** — run / halt
+as one global `.seg` switch with the active half filled
+(`--accent-surface`), then the emergency stop as a `square` icon (was
+`triangle-alert`, which read as a warning, not a stop), muted until
+hovered │ **`⋯` overflow** (`headerMenuButton`) with *Chain log* and
+*Clean up worktrees…*. The text button "Log" and the always-visible
+trash icon are gone: every header control is icon-only (ADR-0057); the
+menu is keyboard-usable (focus on open, arrows, Escape returns focus).
+
+The board's messages moved too (owner request, same item): they were
+an extra `tickets-note` row between the header and the board that
+pushed the board down and stayed until the next action overwrote it.
+They now lead the one-row status bar under the board (req-59) as a
+typed message (`setNote(text, kind)`): **busy** pulses while an action
+runs, **ok** shows a green tick and fades after 6 s, **warn** (amber —
+a mutation's warning, a cleanup that kept dirty trees) and **error**
+(red, `role="alert"`) stay until closed with ×. A failed board pull
+clears itself on the next good pull; the bar also shows on the
+loading / no-vault screens so a failure there is visible. The plain
+refresh no longer flashes a "Loading…" line. `BoardView.status` is
+gone.
+
+Manual: the lane paragraph, the master switch, the Log and cleanup
+mentions, the status bar's messages. Owner-verified (signed off
+2026-10-30).
+
+### T-0049 — Fleet: session resume and native compact (measurement-gated)
+
+The remainder of the original T-0046, gated on T-0048's numbers: the
+start condition was met via the retry arm (gate-failure retries on 3 of
+5 post-pack tickets, each re-paying 0.5–1.3M input-side tokens before
+its first write; the token arm stayed under the bar at 6.6 %). Three
+spikes measured the ground first — `/compact` routes natively in both
+CLIs' command plumbing, opencode's `POST /api/session/{id}/compact`
+compacts for real (context halved, facts kept, ~0.75k tokens), and a
+resumed turn re-pays the transcript as cache reads (still ~99 % cached
+after a ≥ 6 min pause; measured auto-retry gaps ran 1–13 min).
+
+- **The handover modes** (`HandoverMode` on `RunRequest.handover`:
+  `fresh` | `resume` | `resume-compact` | `auto`, absent = fresh — wire
+  compatible). One pure resolver, `main/fleet/handover.ts`, runs inside
+  `RunSupervisor.start()` after worktree preparation: review always
+  fresh; the candidate is the newest terminal run of the same ticket +
+  provider + model (`detached` never qualifies); a recreated/moved-aside
+  worktree (T-0047's `sessionInvalidated`) or a session another
+  non-terminal run holds resolves fresh; a warm pause (TTL) or a context
+  below the threshold resumes; a cold pause with a big context resumes
+  and compacts first — natively, where the provider can (opencode:
+  measured; claude-code: `COMPACT_CAPABILITY` stays `none` until an
+  effect is verified). An unknown context (pre-T-0048 records) never
+  auto-compacts. `handoverMode` and `resumedFrom` are recorded per run.
+- **The adapters** (`ProviderStart.compactFirst`/`onResumeFailed`):
+  opencode pre-flights every resume with a session GET and settles the
+  compact's turn (its `idle` marker) before the instruction rides —
+  `lastPromptAt` only exists after, so the poll cannot kill the worker
+  on the compact's own idle; claude-code sends `/compact` as a
+  stream-json user message and awaits its `result`, and treats an exit
+  before any init as a failed resume. A failed resume never fails the
+  run: the supervisor respawns fresh under the same run id, same
+  instruction, one stream note.
+- **The start dialog** (renderer `handover-ui.ts`, pure) offers the
+  three options with the computed default preselected and the last run's
+  phase · state · ctx · age in one status line; an option is enabled
+  exactly when an explicit ask for it would be honoured (the same rules
+  asked per mode), so illegal choices are disabled with their reason —
+  never silently switched. Per-run choice, nothing persisted; the lanes
+  append a `resumed` chip. The dispatcher sends `auto`.
+- **Config**: `fleet.compactAboveTokens` (default 60000, provisional —
+  the bar guards fidelity loss, not tokens) and `fleet.resumePauseTtlMin`
+  (default 15) in Settings → Tickets → Fleet, pushed to the runner with
+  the chain config; per-provider/model override flat keys
+  (`fleet.compactAboveTokens.<provider>[/<model-pin>]`, most specific
+  wins) ride along for the providers and the board's pins — no UI.
+
+Specs: `handover.spec.ts`, `handover-ui.spec.ts` (new — one case per
+rule), `providers.spec.ts` (pre-flight, compact-first, no-init failure),
+`runs.spec.ts` (resolution, guards, fallback, stamps, resume strip),
+`request.spec.ts`/`orchestrator.spec.ts` (passthrough, `auto`),
+`worker-status.spec.ts` (resumed chip). ADR-0075 carries the
+T-0047–T-0049 later-change note; FLEET.md documents the modes, fields
+and fallback; manual §13 the dialog. **Not yet manually verified by the
+owner.**
+
+### req-59 — Tickets board: one-row status bar
+
+Owner request, outside the list. The board's status area under the
+columns stacked two `tickets-metrics` text lines — the per-column
+average dwell (M85, `Inbox ⌀11d · Prioritized ⌀30m · …`) and below it
+the worktree note (T-0044, "Worktrees: 9 legacy worktree folders to
+clean up"). Now one 26px bar (`statusBarNode` in
+`plugins/tickets/renderer/index.ts`, `.tickets-statusbar*` in
+`board.css`): on the left the label *Avg. time in column* and one
+segment per non-empty column (name muted, value in tabular mono); on
+the right an amber warning pill with an icon (`9 legacy worktrees ·
+2 orphans`) whose tooltip lists the folders and points at the Clean up
+worktrees control. When the panel is narrow the cycle times are cut
+off, the pill stays visible; the bar is absent when neither has
+anything to say. Renderer-only. Supersedes the never-merged one-line
+variant left in `stash@{0}` (not applied, not dropped). Manual: the
+board paragraph. Owner-verified (signed off 2026-10-30).
+
+### Fix — fleet: the build column dispatches again (worktree leftovers, the walk-up misread, the silent queue)
+
+Owner request, outside the list (the runner stopped picking up tickets
+under `50-build`). Three defects compounded: a worktree cleanup left the
+repo's `link:` junctions (`.tools`, `node_modules`) behind as
+unregistered folders; `prepareWorktree`'s stale-row check then ran
+`git rev-parse` inside such a leftover, which walked up into the tickets
+vault — itself a repo on `main` — and reported the VAULT's branch as the
+folder's, turning the designed "uninspectable → move aside" into a
+permanent wrong-branch refusal (`worktree … is on main, expected t/<id>
+— refusing to touch it`); and with `workers: 1` the refused candidate
+consumed the column's only plan slot on every 15 s pass, parking every
+queued ticket behind it in silence. Now:
+
+- **`worktrees.ts`**: `currentBranch` resolves `--show-toplevel` first
+  and answers only when the toplevel IS the worktree path (either
+  spelling — the `findWorktreeEntry` alias discipline); an inherited
+  answer from an enclosing repo reads as "no longer answers to git", so
+  the leftover is moved aside and a fresh checkout takes its place
+  (self-healing, reported as `moved-aside`).
+- **Every removal path unlinks the junctions first** (`unlinkShared`,
+  now exported from `worktrees.ts`): `removeWorktree`/`cleanWorktrees`
+  (`worktree-clean.ts`, new `links` option carrying the repo's `link:`),
+  the card-menu and Files "Remove worktree" commands (`main/index.ts`),
+  and the re-run healing's own `worktree remove` (`healBranchConflict`).
+  git's removal never passes through a reparse point cleanly, so none is
+  left in its way — a cleanup can no longer leave a poisoned folder.
+- **`orchestrator.ts`**: a dispatchable candidate the plan had no slot
+  for is no longer silent — `dispatch waits <id>: no free <column>
+  worker slot yet` behind a live run, and `dispatch waits <id>:
+  <column>'s dispatch of <id> was refused — the queue cannot advance`
+  when a refused start parks the queue (deduped like every note: one
+  line per episode).
+- Specs: the walk-up trap reproduces the production layout (a junction
+  leftover inside a git vault) and pins the self-healing; an unregistered
+  folder that IS its own repo on a wrong branch still refuses; removal
+  unlinks and the delete never reaches through a junction; both queue
+  notes are pinned in the orchestrator suite.
+### req-58 — Takeover tab: readable transcript + structured header
+
+Owner request, outside the list. The takeover transcript ran through
+the host's Markdown view, which showed every tool outcome as a literal
+`&nbsp;&nbsp;⎿ …`, drew thinking as a heavy blue quote callout and
+printed full absolute worktree paths; the banner packed every number
+into one mono `·` string. Now:
+
+- **Own DOM transcript** (`plugins/tickets/renderer/transcript-view.ts`)
+  over the watch view model, which carries tool calls and thoughts as
+  data (`WatchBlock.step` / `thought` / `text`): tool calls are quiet
+  rows (state dot, tool, target relative to the run's worktree with the
+  full path in the tooltip, result muted), runs of four or more fold
+  into an "N tool calls" line (open while it is the live tail), thinking
+  is a borderless fold with a one-line preview, the owner's messages a
+  bubble, errors a tinted row, "Turn finished" a divider. Replies render
+  a small Markdown subset as nodes, never `innerHTML`
+  (`transcript-text.ts`: paragraphs, headings, lists, quotes, rules,
+  pipe tables, fenced code); prose keeps a 76ch reading width, tables
+  and code use the whole column. A fenced block has a head (language,
+  Copy on hover) and the editor theme's syntax colours via
+  `ui.highlightCode` (worker spellings `ps1`/`pwsh`/`sh`/`bash`/`jsonl`
+  mapped to the catalogue's names; `diff`/`patch` coloured per line); a
+  fence inside a list item loses its indent. Thoughts render through the
+  same subset, muted — that is where workers write most of their code.
+  Items whose content did not change keep their nodes across the 2 s
+  pull, so an unfolded thought stays unfolded; the view follows new
+  output only while the reader is at the bottom (else a
+  "↓ New output" button).
+- **View-model fixes the new view surfaced** (`watch-format.ts`):
+  parallel calls of one tool pair with their inputs in call order and
+  their outcomes by the target the outcome names (longest wins), else
+  call order — they used to leave orphan "running…" steps and swap
+  results; a turn's end drops input-less placeholders and stops every
+  running step; a reply part whose deltas tool calls cut up is replaced
+  whole at its first fragment by its seal (no more half sentences
+  followed by the full one); `run finished` and `gate:` notes are muted
+  lifecycle lines instead of tool steps.
+- **Two-row header**: ticket, worker · model, a mode pill (Runner
+  driving / You have control / Detached / Run …, the explanation in its
+  tooltip), the status word; below, labelled metrics — Turn, Context as
+  a mini bar (amber ≥ 70 %, red ≥ 90 %), Tokens in (cached) / out with
+  the ctx/turns/reads telemetry in the tooltip, Elapsed. The banner's
+  gradient is gone (flat, the state colour stays as the bottom border).
+
+Specs: `transcript-view.spec.ts`, `transcript-text.spec.ts` (new),
+`watch-format.spec.ts` (structured blocks, parallel pairing, fragment
+seal, outcome by target). Manual: the takeover paragraph. Owner-verified
+(signed off 2026-10-29).
+
+### T-0053 — Tickets board: card-menu move to top / bottom
+
+The card context menu gains "Move to top" / "Move to bottom": the same
+`reorder` operation a within-column drag performs, with drop index 0 /
+the column's end — no new IPC and no main-process change, so a menu
+move and the equivalent drag write identical `order.md` pins (the top
+pins only that ticket, the bottom pins the whole column in its visual
+order with it last). Both items are disabled when the card already
+sits at that end (a single-ticket column disables both) and carry
+tooltips naming the pin effect, which a plain menu item cannot show.
+The index math lives in the pure, specced helper
+`plugins/tickets/renderer/card-order.ts`; `specs/ticket-schema.md`
+records the drag equivalence. **Not yet manually verified by the
+owner.**
+
+### Fix — fleet: cleanup survives path aliases (`RUNNER~1`, junctions); CI green again
+
+Follow-up in the family of the T-0047 alias fix below, caught by CI on
+the GitHub Windows runner: `cleanWorktrees` compared the porcelain
+listing against the bases, the protected paths and the repo's own
+checkout by string form — while git reports the paths it registers
+canonically and the caller can hold an alias, the runner's 8.3 temp dir
+(`C:\Users\RUNNER~1\…` for `runneradmin`) being the live case. Under an
+alias every entry fell outside the bases, so the Clean up button and
+the boot migration silently removed nothing (and the specs' own path
+compares missed too). Boundaries now match through both spellings, the
+given form and its realpath (`matchForms` in `worktree-clean.ts`, the
+`findWorktreeEntry` discipline); the report keeps git's paths, and
+`realPathOrNull` is now part of `worktrees.ts`'s exported compare
+discipline. Second, caught by the first `npm run dev`/build since the
+merge: the T-0048 context pack in `plugins/tickets/main/index.ts`
+narrowed `repo.path` but not `repo` itself (`RepoRef | null`), so
+`plugins/tsconfig.main.json` — compiled by the build step, not by the
+four typecheck gates — failed with five errors; the guard now checks
+both. Specs: fixtures start canonical (the runner's temp dir no
+longer decides which shape a test exercises), and a junction test pins
+the alias case on any Windows checkout. **Not yet manually verified by
+the owner.**
+### T-0045 — Git repository auto-detection under parent vaults
+
+A vault that is only a **parent folder of repositories** (`E:\projects`
+with `drey/`, `drey-tickets/`, … inside) showed nothing in Source
+control — every repository below had to be registered as its own vault.
+Shipped as
+[ADR-0083](../docs/09_architecture_decisions/0083-repository-discovery-under-parent-vaults.md),
+layered strictly on T-0042's protections:
+
+- **The bounded scan** (`plugins/git/main/discover.ts`): fs-only, at
+  most 3 folder levels below a vault that is no repository itself, at
+  most 25 repositories per vault (clipped + logged). A `.git` FILE
+  counts like a `.git` directory (linked worktrees); dot-directories,
+  `node_modules`, reserved `_`-root folders, other registered vaults'
+  subtrees and symlinks are skipped; a found repository is never
+  descended into; a candidate overlapping another registered vault
+  (ancestor or descendant) is dropped.
+- **Read-only by construction**: every found repository surfaces in the
+  panel and as Files badges with vault-relative paths
+  (`prefixStatusPaths`), but ALL mutating handlers refuse it as their
+  FIRST guard — before a repository is located or git runs — with
+  "This repository was found under "\<vault>" and is read-only here.
+  Register it as a vault to work with it." (the scan could surface an
+  unregistered tickets repo that no plugin claimed — refusing
+  everything is the airtight boundary; queries answer, diffs and file
+  history stay).
+- **One-click registration (SDK 1.33)**: `ctx.vault.register(path)` —
+  `VaultManager.addVaultAt` plus the same watcher-sync + full-refresh
+  round the vaultAdd IPC handler runs — is the hint row's *Register as
+  vault* button; the refresh makes the panel swap the found twin for
+  the vault's own entry.
+- **Repo-keyed panel**: commands carry `{vaultId, subPath}` (`''` = the
+  vault's own repository — every existing payload stays valid); the
+  panel's current repository, drafts and busy bookkeeping key by
+  `vaultId::subPath`; the focused document's path picks between several
+  found repositories; one vault's decorations (own + found) ride one
+  `setFileDecorations` call. Rescans on registry changes and relocate.
+- Specs: `plugins/git/main/discover.spec.ts` (the walk: depth, skips,
+  `.git` files, overlap, cap), `plugins/git/main/discovered.spec.ts`
+  (real git over temp dirs: states, all fifteen refusals, queries,
+  registerVault routing), `status.spec.ts` / `repo-model.spec.ts` (the
+  mapping helpers and the repo picker), an `e2e/git.spec.ts` flow.
+- Also fixes a pre-existing tsc error the T-0042/T-0048 merge left in
+  `plugins/tickets/main/index.ts` (a `RepoRef | null` deref no gate
+  command covers — found via `npm run build:plugins`).
+
+**Not yet manually verified by the owner.**
+
+### T-0042 — Files vault extension: per-vault operations, plugin-managed repositories
+
+The Files panel treated every vault the same; a dedicated vault (the tickets
+repository) needs its operations to BE the feature's semantics. Owner
+decisions from the 2026-10-18 rounds, shipped as
+[ADR-0082](../docs/09_architecture_decisions/0082-per-vault-files-seam-and-plugin-managed-repositories.md):
+
+- **The `files` SDK seam (1.32).** A plugin registers an operations handler
+  (`api.files.registerOperations`) that the Files panel consults BEFORE any
+  dialog or base-side work — create, rename, move (drag & drop), copy
+  (paste/duplicate), delete: `allow` runs the base flow, `refuse` shows its
+  reason and replaces the flow, `handle` performs the operation as a
+  structured action (open tabs re-key to the outcome path). First refusal
+  wins, then the first handler, registration order. Plugin context rows
+  (`api.files.registerContextMenuItems`) append to both Files menus,
+  re-evaluated per open.
+- **The tickets vault is guarded and its drags are transitions.** Inside
+  `tickets/`: create/rename/delete/copy refuse with educating reasons
+  (capture, filename identity, pipeline, archive); a drag between phase
+  folders or into `tickets/archive/` performs the SAME single-writer
+  mutation the board runs — stamp, Log line, pin cleanup, one commit. A
+  drag out of `tickets/archive/` is a new one-commit `unarchive`
+  (`archive -> <phase>`), never a raw move. Context rows: "Archive
+  ticket", "Unarchive ticket" (to the first phase), "Remove worktree" on
+  `_worktrees/<id>` (dormant until T-0044 creates the folder).
+- **Plugin-managed vaults are read-only in Source control.** The tickets
+  plugin flags the detected vault (`ctx.vault.markManaged`, main-side
+  base-owned registry, follows detection both ways); the git plugin
+  refuses stage/discard/commit(+amend)/pull/push with "Managed by
+  Tickets" — first statement of each handler, no repo lookup needed — and
+  the panel shows a "Managed by" banner with those actions disabled.
+  Branch, dirty state, log, file history and decorations stay. T-0045
+  (repo auto-detection) is sequenced after this protection.
+- **Housekeeping:** `.gitattributes` keeps the shipped tickets prompts LF
+  (fresh worktrees under `core.autocrlf=true` smudged them CRLF and
+  `default-prompts.spec.ts` asserts raw LF — every fresh worktree was red
+  before this).
+
+Tests: `plugins/tickets/shared/files-guard.spec.ts` (the verdict table),
+`plugins/git/main/managed.spec.ts` (the five refusals, queries untouched),
+`electron/plugin-host/managed-vaults.spec.ts`, the two renderer registry
+specs, `files-panel.spec.ts` (refused/handled moves, plugin rows),
+`worktree-removal.spec.ts`, `ticket-files.spec.ts` (the `archive ->` patch).
+
+**Not yet manually verified by the owner.**
+
+### T-0048 — Run token telemetry, output capping and the plan context pack
+
+**Not yet manually verified by the owner.** Cost visibility and context
+hygiene for the fleet (ADR-0081):
+
+- **Telemetry per run**, folded live into `run.json` (`RunInfo`): `usage`
+  (`input`/`cacheRead`/`cacheCreation`/`output`, summed over the run's
+  model calls — a counter the provider never reports stays `null`, never
+  0), `lastTurnContext` (the LAST assistant turn's input side — the real
+  context size; the providers' aggregates are cumulative and never used
+  for it), `turns`, `readCalls` (read/grep/glob), `tokensBeforeFirstWrite`
+  (the exploration metric), plus `gateResult`, `model`, `phase`,
+  `handoverMode: 'fresh'` (the field exists for T-0049). Both adapters
+  emit one `turnUsage` per model call and the tool name on tool-call
+  notes; the board's lanes and the takeover tab show `ctx · turns ·
+  reads` chips. `GET /report` on the runner groups tokens by ticket,
+  phase and model, sorted by total (curl-able; pre-T-0048 records fall
+  back to their cumulative counters).
+- **Output capping**: a gate failure is stored multi-line but
+  sanity-bounded (400 lines / 64 KiB) on the record, and injected into a
+  retry's instruction as a configurable tail (default 40 lines / 4096
+  bytes); the worktree's diff stat rides every instruction as a
+  configurable head (50 / 4096). Keys `fleet.cap.*` (Settings → Tickets
+  → Fleet); every application is logged with `truncated: true,
+  originalSize`. The ticket Log keeps its single-line discipline
+  (`shortGateLine`).
+- **The plan as context pack**: `composeInstruction` now orders every
+  instruction repo agent instructions (verbatim, `CLAUDE.md` preferred)
+  → phase template → `## Plan` verbatim → variable parts (who/where,
+  description, diff stat, the previous run's gate failure on a retry,
+  gate commands, completion discipline) — the prefix up to the plan is
+  byte-identical across runs of the same repo and phase, so a warm
+  prompt cache survives. A red-gate retry is a fresh run carrying the
+  ticket's most recent `gateFailure` (owner-started and dispatched
+  retries behave identically). The plan prompt now demands six fields
+  (Files, Interfaces, Decisions, Pitfalls, **Verification commands**,
+  Out of scope); build/review prompts sharpen tool-output guidance
+  (line ranges, head/tail for logs).
+- Specs: `capping.spec.ts`, `telemetry.spec.ts`, `report.spec.ts` (new),
+  fixture-driven per-adapter multi-turn cases in `providers.spec.ts`,
+  the fold and gate verdicts in `runs.spec.ts`, the pack order/prefix/
+  retry in `fleet-fields.spec.ts` + `request.spec.ts`, the retry
+  dispatch in `orchestrator.spec.ts`, `telemetryParts` in
+  `worker-status.spec.ts`.
+
+### Fix — fleet: the context bar measures the model's real window (T-0052)
+
+The worker lanes measured the used context (`RunInfo.contextTokens`,
+the last model call's input incl. cache reads) against a hardcoded
+200k — a 1M-token model read ~5× too full and warned "Context full"
+from the first call. The runner now asks the opencode v2 server for
+the model's window once per worker (`GET /api/model`, matched by the
+run's model pin — `providerID` + `id`, then `providerID` + `modelID`,
+a `#variant` suffix stripped; without a pin `GET /api/model/default`):
+a hit rides the run as `RunInfo.contextWindow` (absent on old run.json
+records), a miss or a failed fetch is one stream note — the number is
+never guessed. The board (`plugins/tickets/renderer/worker-status.ts`)
+defaults the denominator to `run.contextWindow ?? DEFAULT_CONTEXT_WINDOW`;
+200k stays only as the documented fallback, and the new pure
+`contextLabel(run)` builds the lane row text in one place. claude-code
+stays on the fallback (its stream-json surface reports no window).
+Specs: `main/fleet/context-window.spec.ts` (the adapter against
+scripted fakes), `renderer/context-window.spec.ts` (fill, status,
+label), plus a runs.spec.ts pin that a once-reported window survives
+later events. **Not yet manually verified by the owner.**
+
+### T-0044 — Fleet worktrees: home in the tickets repo and git-only cleanup (owner request, outside the list)
+
+The workers' checkouts hid under the machine-local fleet root
+(`<userRoot>/fleet/worktrees/<repo>-<ticket>`) with no supported way to
+tidy up. Now they have a visible home and real-git cleanup
+([ADR-0080](../docs/09_architecture_decisions/0080-fleet-worktrees-home-and-cleanup.md)):
+
+- **Home:** `<ticketsRepo>/_worktrees/<ticket-id>/` — a sibling of
+  `tickets/` at the repo root. `_`-prefixed folders at the vault root
+  are reserved: file tree, markdown index and the opt-in watcher skip
+  them (root depth only — `tickets/_meta` stays indexed); the repo's
+  `.gitignore` covers the base (ensured by the boot sweep and the board
+  initialize, one commit when appended). A repo may override its base
+  with a `worktrees:` key in `_meta/repos.md` (`RepoRef.worktrees`,
+  absolute or repo-root-relative). The path is computed in
+  `composeRunRequest` and carried as the required
+  `RunRequest.worktreePath` — the runner never derives paths, and the
+  worker's brief names the absolute location.
+- **Cleanup — everything through real git, never a bare rmdir:**
+  - per ticket, the card menu's "Remove worktree…" runs
+    `git worktree remove` (dirty → armed confirm, live run → refusal,
+    a tree that no longer answers → error); the **branch stays**, the
+    removal is a Log line with one commit;
+  - global, "Clean up worktrees" in the panel header removes every
+    worktree whose ticket has no live run (dirty ones kept and
+    reported), then prunes every mapped repo — plugin-side
+    (`worktree-clean.ts` over `TicketsGit`), no new runner routes;
+  - the boot sweep migrates the legacy fleet root on every boot until
+    it is empty (clean leftovers go automatically, dirty ones stay and
+    are reported, a live run's tree waits for its settle) and lists
+    orphan folders under the new base — listed, never auto-deleted.
+  - Liveness is the ticket's `run:` stamp ∪ non-terminal fleet records,
+    never fleet status alone (a down runner's history marks still-live
+    runs `stopped`).
+- **Re-run healing:** `prepareWorktree` removes a conflicting
+  *registered* checkout of the same branch before `worktree add` when
+  provably clean and not live (guarded by the supervisor's live set;
+  never `--force`) — otherwise a settled ticket's leftover checkout
+  would make every dispatch skip-and-retry forever.
+
+Specs: `worktree-home.spec.ts` (base/naming/parse/compose), extended
+`worktrees.spec.ts` (healing) and `runs.spec.ts` (request-carried path),
+`worktree-clean.spec.ts` (real-git removal/cleanup/orphans),
+`vault-scan-rules.spec.ts` + extended `vault-manager.spec.ts`
+(reserved-root skip). FLEET.md and `specs/ticket-schema.md` document the
+layout, the `worktrees:` key and the cleanup surfaces. **Not yet
+manually verified by the owner.**
+
 ### req-57 — CI green on Windows runners: the shipped ticket prompts stay LF on every checkout (owner request, outside the list)
 
 M85 added `default-prompts.spec.ts`, which byte-compares the raw shipped
@@ -86,6 +601,43 @@ files were never re-checked out — stayed green. The fix is a one-rule
 `.gitattributes`, `plugins/tickets/prompts/*.md text eol=lf`, which
 overrides `autocrlf` at checkout; the blobs were already LF, so nothing
 needed renormalizing. **Not yet manually verified by the owner.**
+
+### T-0051 — Live run streaming, complete editor syntax colors (ticket build)
+
+**Not yet manually verified by the owner.** The test ticket's pipeline
+run surfaced two defects; both are fixed on the branch `t/T-0051`:
+
+- **Runs stream live (OpenCode workers).** The adapter subscribes to
+  `opencode serve`'s SSE `/api/event` (verified live against v2.0.32):
+  reply text streams as throttled `text-delta` events sealed whole per
+  part, tool calls emit `tool` events at start, call and settle, model
+  steps report the context size, and `session.usage.updated` drives the
+  run's own token totals. Polling stays as the fallback and owns the
+  turn end; the takeover transcript (now formatted by the pure
+  `watch-format.ts` view model, which `transcript.ts` delegates to)
+  shows tool steps and growing replies while the turn runs. The card
+  chip reads `▶ running · <turns> · <kIn>/<kOut> · <mm:ss>`, the
+  summary pills add the oldest live run's age, and the takeover stats
+  line carries the turn count and a clock.
+- **Editor syntax colors are complete.** `dreyHighlightStyle` gains the
+  three tags that fell through (`escape`, `literal`, `name`), pinned by
+  a coverage-guard spec over the mandatory tag set of the common
+  grammars (js/ts, json, html, css, python, markdown). A dark
+  `dreyFallbackStyle` mounted before `basicSetup` replaces the light
+  `defaultHighlightStyle` in the fallback slot. Fenced code in rendered
+  Markdown (Live Preview table cells, HTML regions) now colors through
+  the same Lezer grammars and palette via `preview-highlight.ts` and
+  `applyExtendedMarkdown`'s new `fenceHighlight` option — the PDF
+  export keeps plain fences (its print palette has no editor tokens).
+- **The legacy Karma gate command runs again.** `npm test` is a small
+  wrapper (`scripts/test.mjs`) that drops the fossil `--browsers` flag
+  (loudly, on stderr) and forwards everything else verbatim to `ng
+  test`: the tickets pipeline still invokes
+  `npm test -- --watch=false --browsers=ChromeHeadless`, which vitest
+  otherwise fails at launch demanding an uninstallable
+  `@vitest/browser-*` provider. The suite itself is untouched — it
+  runs headless in jsdom as it did, and the exit code is the real
+  suite's.
 
 ### req-56 — Fleet workers start oriented: a ready toolchain, a clean environment, a short map (owner request, outside the list)
 

@@ -10,6 +10,7 @@ import type { MainPluginContext, Unsubscribe, VaultChangeEvent } from '../../sha
 import type { ActionsConfig } from '../../shared/app-config';
 import { NO_VAULT, type VaultCallOptions, type VaultTools, type VaultWriteRule } from '../mcp';
 import type { PluginHostDeps } from './plugin-host';
+import type { ManagedVaults } from './managed-vaults';
 
 /** Remembers an `Unsubscribe` the context handed out, so deactivation can drain it. */
 export type TrackDisposable = <T>(unsubscribe: T) => T;
@@ -68,10 +69,11 @@ export async function runVaultTool(
 /** `ctx.vault`: file IO in the vaults, with the plugin's id as the history origin. */
 export function buildVaultContext(
   pluginId: string,
-  deps: Pick<PluginHostDeps, 'vaultManager' | 'vaultAnnouncer' | 'confirmWrite'>,
+  deps: Pick<PluginHostDeps, 'vaultManager' | 'vaultAnnouncer' | 'confirmWrite' | 'managedVaults' | 'registerVaultAt'>,
+  manifestName: string,
   onChanged: (cb: (event: VaultChangeEvent) => void) => Unsubscribe,
 ): MainPluginContext['vault'] {
-  const { vaultManager } = deps;
+  const { vaultManager, managedVaults } = deps;
   return {
     listVaults: () => Promise.resolve(vaultManager.listVaults()),
     read: (p, opts) => vaultManager.readFile(p, opts?.vaultId).then((f) => f.content),
@@ -128,6 +130,19 @@ export function buildVaultContext(
     resolveAssetPath: (p, opts) => vaultManager.resolveAssetPath(p, opts?.vaultId),
     onChanged,
     pickSavePath: (suggestedName, opts) => vaultManager.pickSavePath(suggestedName, opts?.vaultId),
+    // The plugin-managed flag (SDK 1.32): the label is the manifest name,
+    // one claim per plugin, `null` clears — the claim follows detection.
+    markManaged: (vaultId) => {
+      if (vaultId === null) {
+        managedVaults.clearPlugin(pluginId);
+        return;
+      }
+      managedVaults.mark(pluginId, vaultId, manifestName);
+    },
+    managedBy: (vaultId) => managedVaults.managedBy(vaultId),
+    // One-click vault registration (SDK 1.33, T-0045): the composed
+    // round — register + watcher sync + full refresh — lives in the dep.
+    register: (path) => deps.registerVaultAt(path),
   };
 }
 
