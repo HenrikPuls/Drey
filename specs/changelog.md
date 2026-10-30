@@ -22,7 +22,7 @@ recorded as an explicit decision. The parity checklist lives in
 
 ### req-71 — Settings → Tickets: each CLI runner's settings behind a switch
 
-**Not yet manually verified by the owner.** Owner request, outside the
+Owner-verified (signed off 2026-10-30). Owner request, outside the
 list. The Fleet section listed every fleet setting in one column, so a
 setting for one runner looked as if it applied to every runner:
 OpenCode pool, OpenCode pool probe and Claude Code pool sat in one list,
