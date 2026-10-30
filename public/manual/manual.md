@@ -1095,8 +1095,26 @@ for good. A device paired **Read only** can look but not change
 anything. Runs that skip permission prompts cannot be started from a
 device unless you allow **Bypass runs**.
 
-Until the phone app arrives, the paired page shows how many things
-wait on you.
+On the phone, three tabs sit at the bottom:
+
+- **Needs you** — what waits on you: a worker's question or permission
+  request, a red gate or a failed run, and below them the tickets in
+  your checkpoint columns (Plan review, Commit). The badge counts the
+  first group. Tap an entry to open its ticket.
+- **Board** — one column at a time; the chips at the top switch
+  columns and show their counts. **Swipe a card left** to move it to
+  the next column (a card with a live run does not swipe — open it
+  instead). Tap a card to open it.
+- **Capture** — a new ticket into the Inbox: title, priority,
+  repository, description.
+
+A ticket shows its description, plan and acceptance criteria, and its
+Log on the second tab. The big button at the bottom is the step that
+fits: **Approve → <next column>** in a checkpoint column, **Run agent**
+in an agent column, **Move to <next column>** otherwise. **Move…**
+lists every column with the commit the move makes; **⋯** claims, takes
+over or releases the ticket, and archives it (tap twice). Everything
+updates live while the app is open.
 
 ---
 

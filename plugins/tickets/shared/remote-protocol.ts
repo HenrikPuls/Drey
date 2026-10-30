@@ -19,7 +19,7 @@ import type {
 } from '../main/commands';
 import type { FleetSnapshot } from '../main/fleet-client';
 import type { ChainMaster, ChainStatus, ColumnMode, WaitQuestion } from '../main/fleet/protocol';
-import type { BoardSnapshot, CreateResult, MutationResult } from './tickets';
+import type { BoardSnapshot, CreateResult, MutationResult, TicketCard } from './tickets';
 
 /** What the "Needs you" list holds, in the order it shows them. */
 export type NeedKind = 'question' | 'permission' | 'red-gate' | 'failed' | 'checkpoint';
@@ -44,6 +44,10 @@ export interface NeedItem {
 export type RunReply = { readonly ok: boolean; readonly error?: string; readonly runId?: string };
 export type ChainReply = { readonly ok: true; readonly status: ChainStatus } | { readonly ok: false; readonly error: string };
 export type RemoteChange = 'board' | 'fleet';
+/** One ticket as the remote's ticket view reads it: the card and the file text. */
+export type TicketReply =
+  | { readonly ok: true; readonly card: TicketCard; readonly text: string }
+  | { readonly ok: false; readonly error: string };
 
 /**
  * The host's remote surface. Every writing call carries the actor the
@@ -54,6 +58,7 @@ export interface TicketsRemotePort {
   board(): Promise<BoardSnapshot>;
   fleet(): Promise<FleetSnapshot>;
   needs(): Promise<readonly NeedItem[]>;
+  ticket(id: string): Promise<TicketReply>;
 
   create(cmd: CreateCommand, actor: string): Promise<CreateResult>;
   move(cmd: TransitionCommand, actor: string): Promise<MutationResult>;

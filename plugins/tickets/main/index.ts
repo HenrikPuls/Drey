@@ -56,6 +56,7 @@ import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, type DriftDetection } from './normalize';
 import { openTerminalAt } from './open-terminal';
 import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
+import type { TicketReply } from '../shared/remote-protocol';
 import { RemoteService } from './remote/service';
 import {
   chainResult,
@@ -351,6 +352,12 @@ class BoardService {
       }
     }
     return null;
+  }
+
+  /** One ticket's card and file text, for the remote's ticket view (req-66). */
+  async readTicket(id: string): Promise<TicketReply> {
+    const found = await this.findCard(id);
+    return found === null ? { ok: false, error: `${id} is not on the board` } : { ok: true, card: found.card, text: found.text };
   }
 
   /**

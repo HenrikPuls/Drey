@@ -157,6 +157,11 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
       case '/api/needs':
         return json(await port.needs());
     }
+    const ticket = /^\/api\/tickets\/([^/]+)$/.exec(req.path);
+    if (ticket !== null) {
+      const id = decodeURIComponent(ticket[1]!);
+      return TICKET_ID_PATTERN.test(id) ? json(await port.ticket(id)) : fail(404, 'no such ticket id');
+    }
     const stream = /^\/api\/runs\/([A-Za-z0-9_.-]+)\/stream$/.exec(req.path);
     if (stream !== null) {
       return json({ text: await port.stream(stream[1]!) });

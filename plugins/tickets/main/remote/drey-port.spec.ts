@@ -14,6 +14,7 @@ const ok = { ok: true } as const;
 function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
   const board: RemoteBoard = {
     refresh: vi.fn(async () => ({ columns: [], checkpoints: [] }) as unknown as BoardSnapshot),
+    readTicket: vi.fn(async () => ({ ok: false as const, error: 'x' })),
     createTicket: vi.fn(async () => ({ ok: true, id: 'T-0001' })),
     transition: vi.fn(async () => ok),
     reorder: vi.fn(async () => ok),

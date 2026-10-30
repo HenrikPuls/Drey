@@ -147,12 +147,9 @@ VS Code host serves the same client. Loopback by default, reached
 through Tailscale Serve (HTTPS); a LAN mode is opt-in with a warning.
 Off by default; QR pairing, per-device tokens (hashes only), revoke,
 Host/Origin check, bypass runs refused remotely. Owner decisions D1–D5
-of 2026-10-30 confirmed. R1 (command layer + port) and R2 (gateway, pairing,
-Settings) shipped — see the changelog. Remaining steps, each shipped on its own:
+of 2026-10-30 confirmed. R1 (command layer + port), R2 (gateway, pairing,
+Settings) and R3 (the phone client) shipped — see the changelog. Remaining steps, each shipped on its own:
 
-- **R3 — phone client**: Needs you, Board (one column, phase chips,
-  swipe to the next phase), Ticket, Move sheet, Capture, claim/takeover,
-  Run agent; home-screen web app. Usable from here on.
 - **R4 — runs on the phone**: transcript, question forms, permissions,
   steer, stop, chain master and column play/hold.
 - **R5 — refine**: section editing with a revision guard (409 on a

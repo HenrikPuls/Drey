@@ -17,6 +17,7 @@ function port(): TicketsRemotePort {
     board: vi.fn(async () => ({ columns: [] })),
     fleet: vi.fn(async () => ({ runs: [], chain: null })),
     needs: vi.fn(async () => []),
+    ticket: vi.fn(async (id: string) => ({ ok: true, card: { id }, text: '# x' })),
     create: vi.fn(ok),
     move: vi.fn(ok),
     reorder: vi.fn(ok),
@@ -130,5 +131,7 @@ describe('route', () => {
     });
     expect((await route(req({ method: 'POST', path: '/api/tickets/..%2Fx/move', authorization: auth }), deps)).status).toBe(404);
     expect((await route(req({ path: '/api/nope', authorization: auth }), deps)).status).toBe(404);
+    expect((await route(req({ path: '/api/tickets/notes.md', authorization: auth }), deps)).status).toBe(404);
+    expect((await route(req({ path: '/api/tickets/T-0007', authorization: auth }), deps)).body).toMatchObject({ ok: true, card: { id: 'T-0007' } });
   });
 });

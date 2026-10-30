@@ -25,6 +25,7 @@ import type {
   NeedItem,
   RemoteChange,
   RunReply,
+  TicketReply,
   TicketsRemotePort,
 } from '../../shared/remote-protocol';
 import type { BoardSnapshot, CreateResult, MutationResult } from '../../shared/tickets';
@@ -33,6 +34,7 @@ import { needsOf } from './needs';
 /** The board service's part the remote uses (`BoardService` fits it). */
 export interface RemoteBoard {
   refresh(): Promise<BoardSnapshot>;
+  readTicket(id: string): Promise<TicketReply>;
   createTicket(input: CreateCommand & { actor?: string }): Promise<CreateResult>;
   transition(input: TransitionCommand & { actor?: string }): Promise<MutationResult>;
   reorder(input: ReorderCommand): Promise<MutationResult>;
@@ -100,6 +102,10 @@ export class DreyTicketsPort implements TicketsRemotePort {
   async needs(): Promise<readonly NeedItem[]> {
     const [board, runs] = await Promise.all([this.boardService.refresh(), this.fleetClient.runs()]);
     return needsOf(board, runs);
+  }
+
+  ticket(id: string): Promise<TicketReply> {
+    return this.boardService.readTicket(id);
   }
 
   create(cmd: CreateCommand, actor: string): Promise<CreateResult> {

@@ -20,6 +20,53 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-66 R3 — Tickets remote: the phone client
+
+**Not yet manually verified by the owner** — above all on a real
+iPhone/iPad in Safari (the automated round runs Chromium at iPhone
+size; WebKit is not part of the toolchain). Owner request, outside the
+list (ADR-0084). The gateway now serves a real client instead of the
+pairing page:
+
+- **Needs you** (start screen): waiting questions and permission
+  requests, red gates and failed runs, then the checkpoint tickets;
+  the tab badge counts the first group.
+- **Board**: one column at a time behind scrollable phase chips with
+  counts, WIP and the column's play/hold state; cards with priority
+  edge, run / blocked / claim / issue chips. **Swipe left** moves a
+  card to the next column (not while a run lives); a tap opens it.
+- **Ticket**: title, chips, description / plan / acceptance criteria
+  (checkboxes) and the Log tab, rendered as text only. One primary
+  action — *Approve → next* in a checkpoint column, *Run agent* in an
+  agent column, *Move to next* otherwise, disabled while a run lives —
+  plus **Move…** (every phase, the commit line it makes) and **⋯**
+  (claim / take over / release, archive with the armed second tap).
+- **Capture**: title, priority, repository, description into the Inbox,
+  then the new ticket opens.
+- Pairing from the QR link or a typed code; an unknown or revoked token
+  returns to pairing. Home-screen web app (manifest, icons), safe-area
+  insets, 44 px targets, Anthrazit palette.
+- Live: the event stream (read with `fetch`, bearer header) redraws on
+  every board or fleet change, reconnects with backoff and when the app
+  returns to the foreground; a redraw waits while a swipe is under a
+  finger (found by the e2e round: an update mid-swipe dropped the
+  gesture). The Move sheet's hover preview was dropped — on touch it
+  fired on the tap itself.
+- Server side: `GET /api/tickets/:id` (card + file text,
+  `BoardService.readTicket`, `TicketsRemotePort.ticket`).
+- Build: `scripts/build-plugins.mjs` bundles `plugins/<id>/remote/app.ts`
+  into one IIFE script (Safari 15 target, own-sources rule) and copies
+  the client's static files; `plugins/tsconfig.renderer.json`
+  typechecks `plugins/*/remote/`.
+
+Specs: `remote/model.spec.ts`, `remote/sse.spec.ts`; router spec for
+the ticket route; `e2e/tickets-remote.spec.ts` (Chromium at iPhone 13
+size against the built gateway and client with an in-memory English
+demo board, `e2e/fixtures/tickets-remote-desk.ts`: pairing from the
+link, Needs you, a swipe move with the device actor, approve, the Move
+sheet, Capture, the unpaired path, no console errors). Docs: docs/05
+§5.41, manual "The board from a phone or tablet".
+
 ### req-66 R2 — Tickets remote: gateway, pairing and settings
 
 **Not yet manually verified by the owner.** Owner request, outside the
