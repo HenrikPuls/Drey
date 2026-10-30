@@ -10,7 +10,7 @@ import type { DeviceView } from '../main/remote/auth';
 import type { NeedItem, TicketReply } from '../shared/remote-protocol';
 import type { BoardSnapshot } from '../shared/tickets';
 import { Api, ApiError } from './api';
-import { h, icon, present, toast } from './dom';
+import { bodyKey, h, icon, present, toast } from './dom';
 import type { Ctx, State, View } from './context';
 import { kanbanView } from './kanban';
 import { refineTabOf, refineView } from './refine-view';
@@ -300,8 +300,10 @@ class App {
       return;
     }
     this.pendingRender = false;
-    const from = `${key}|${this.state.connected}|${JSON.stringify([this.state.board, this.state.fleet, this.state.needs, this.state.ticket, this.state.stream])}`;
+    const from = bodyKey(view);
     if (same && from === this.paintedFrom) {
+      this.paintHeaderOnly();
+      this.paintTabs(route);
       return;
     }
     this.paintedFrom = from;
