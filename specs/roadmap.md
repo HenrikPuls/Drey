@@ -59,9 +59,7 @@ owner's verification round for 1–81 closed 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 85; latest requirement id: req-66
-(readable board issues in one toolbar row); req-65 is reserved for
-interactive mode),
+highest used (latest: milestone 87; latest requirement id: req-66),
 the update check's positive answer is inline text — req-43 and req-44
 were owner requests outside the list, shipped and owner-verified in
 the same step).
@@ -117,25 +115,6 @@ plan and build columns as agent handovers plus the three prompts
 is not yet verified against the installed CLI. Also open: a token budget per run
 (stop a worker that reads without writing), and a tickets-repo-side credit
 figure for flat plans (GLM coding plan reports cost 0).
-
-**req-65 — Interactive mode at the plan phase and every checkpoint**
-(owner request, outside the list, 2026-10-30; after req-62). The owner
-refines tickets in a dialog with the fleet worker inside Drey instead of
-by hand or with an outside LLM — so the switch must be one click, above
-all on the review checkpoints (plan-review, review, commit), not only in
-plan. "Plan with agent" / "Refine with agent" starts a run that is the
-owner's from turn one (held), with an interactive prompt that interviews
-the owner and writes the result into the ticket (plan) or the branch
-(review findings); ticket and takeover tab side by side in a split
-view (owner, 2026-10-30 — the SDK cannot open a tab in a split pane yet,
-so this needs a `documents.open` / `addDoc` split option); the dialog ends
-with a choice of where the ticket goes next (e.g. **Finish → Plan
-review** / **Approve → Build** in plan; back to the agent column or on
-to the next phase at a checkpoint — the forward move an owner move
-across the checkpoint after a green gate). An optional `plan:
-interactive` field keeps the dispatcher from pulling a ticket the owner
-wants to plan in a dialog. Open design point: which prompt and which
-end moves a checkpoint's interactive run uses.
 
 ### Next
 
@@ -256,6 +235,11 @@ rest are kept so they still match `docs/11`.
 
 ### Follow-ups of shipped milestones (none committed)
 
+- **req-65 (interactive dialog):** the fleet's MCP tool `fleet_run`
+  cannot start an interactive dialog — `interactive` rides neither its
+  input schema nor `fleetStart`'s MCP mirror; an assistant-driven
+  dialog would want it. Also open: a per-column picker for the
+  interactive worker (today the assignment ladder decides silently).
 - **req-62 (ticket header):** move the ticket from the header's phase
   chip. A board move renames the file, and an open tab whose file
   vanished turns into a draft that a save recreates at the old path (a

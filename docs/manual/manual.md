@@ -870,10 +870,6 @@ While the run is live, its column shows a **Workers** strip with one
 lane per run: a traffic light (green working, amber context nearly full
 or stopping, red stalled for five minutes — always with the state in
 words), the worker's current activity, its context window, token usage
-While the run is live, its column shows a **Workers** strip with one
-lane per run: a traffic light (green working, amber context nearly full
-or stopping, red stalled for five minutes — always with the state in
-words), the worker's current activity, its context window, token usage
 and age, plus the run's telemetry chips — **ctx** (the last turn's real
 context size), **turns** (model calls) and **reads** (read/search tool
 calls) — once the worker reports them; the card carries a ▶ chip reading
@@ -953,6 +949,42 @@ several questions one line each, a choice by its number or its name.
 An approval has three buttons instead: **Allow once**, **Always allow**
 and **Deny**. A waiting run never counts as stalled, however long it
 waits.
+
+### The interactive dialog (req-65)
+
+Some steps you want to do *with* a worker, not hand to one: shaping a
+ticket's plan in a conversation, or walking a checkpoint — the plan
+review, the review, the commit step — together. Where a column offers
+it, the card menu and the ticket header show a one-click start:
+
+- **Plan with agent** on the plan column — the worker reads the ticket
+  and the repo, asks you the few things it cannot learn there, proposes
+  the plan in the chat, and writes only the agreed result into the
+  ticket (plan, acceptance criteria, Log).
+- **Refine with agent** at the owner's checkpoints (plan review,
+  review) and the commit column — the worker checks the branch with
+  you, applies the fixes you approve as small commits, and records the
+  verdict in the ticket's Log; at commit it also drives the push.
+
+The start opens **the ticket and the dialog side by side** (a split
+pane, SDK 1.35). The dialog tab is the takeover tab, in the **Interactive
+dialog** mode: the worker is yours from the first turn, the runner runs
+no gate and moves nothing — you keep talking until you are both done.
+Ending the dialog is a move, right in the tab: a plan dialog offers
+**Finish → Plan review** and **Approve → Build** (when you settled the
+open points yourself, your own checkpoint can be skipped); a refine
+dialog offers **On to** the next column or **Back to** the nearest agent
+column for rework. A click stops the run and makes the move — the same
+one-commit move as dragging the card. Closing the tab without a move
+keeps everything: the reservation stays on the ticket (the small
+**dialog** chip on its card — the fleet will not pick it up), and
+**Resume session** in the tab continues the conversation later.
+
+Each column's dialog prompt is a prompt file like any other: a phase's
+`interactive:` key in `pipeline.md` names one, otherwise the shipped
+defaults apply (`plan-interactive-default` and
+`refine-interactive-default` — editable in Settings → Tickets, re-added
+by "Add Drey's prompts").
 
 Runs survive closing Drey — the runner is its own small process — and,
 for OpenCode workers, even a restart of the runner: the new runner takes the

@@ -2175,6 +2175,7 @@ const plugin: MainPluginModule = {
             permissionMode: input.permissionMode,
             // The MCP tool asks no handover — a fresh run (T-0049 wire default).
             handover: null,
+            interactive: null,
           }),
         stop: (runId) => fleet.stop(runId, null),
         steer: (runId, text) => fleet.send(runId, text),

@@ -31,7 +31,8 @@ test('the board issues are a toolbar chip that unfolds readable messages', async
   await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
   const toolbar = page.locator('.tickets-toolbar').filter({ visible: true });
   const chip = toolbar.locator('.tickets-issues-chip');
-  await expect(chip).toHaveText('2 board issues');
+  // req-66's final shape: icon and count only, the summary in the tooltip.
+  await expect(chip).toContainText('2');
   await expect(toolbar.locator('.tickets-toolbar-btn')).toHaveCount(1);
 
   // Same height as the filter button: one row, one size.

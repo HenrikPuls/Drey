@@ -2169,17 +2169,21 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   const endMoves = el('div', 'tickets-takeover-endmoves');
   endMoves.hidden = true;
   const paintEndMoves = (run: RunInfo | null): void => {
-    const mode = run?.interactive;
-    if (mode === undefined || snapshot === null) {
+    if (run === null || run.interactive === undefined || snapshot === null) {
       endMoves.hidden = true;
       return;
     }
+    const mode = run.interactive;
     // Where the ticket sits NOW — the owner may have moved it since the
     // run started, and a ticket off the board has nowhere to go.
     const card = snapshot.columns.flatMap((c) => c.tickets).find((t) => t.id === run.ticketId) ?? null;
-    const phaseId = card?.phase ?? null;
-    const moves = phaseId === null ? [] : interactiveEndMoves(mode, phaseId, snapshot.columns);
-    if (card === null || moves.length === 0) {
+    if (card === null) {
+      endMoves.hidden = true;
+      return;
+    }
+    const phaseId = card.phase;
+    const moves = interactiveEndMoves(mode, phaseId, snapshot.columns);
+    if (moves.length === 0) {
       endMoves.hidden = true;
       return;
     }
