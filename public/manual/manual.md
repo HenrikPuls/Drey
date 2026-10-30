@@ -767,8 +767,11 @@ card onto it, to unfold it again. Which columns stay folded is
 remembered across restarts (it is view state, never written to the
 repo). The context menu
 (right-click a card) opens the file, copies the deterministic branch
-name `t/T-00xx` for the work repository, takes over or releases a
-claim, and offers **Archive…** (armed: the first click only relabels
+name `t/T-00xx` for the work repository, claims, takes over or releases
+a claim (only the rows that apply to the ticket's claim are listed),
+lists the ticket's finished agent runs under **Past runs ›** — a
+submenu, newest first; a row opens that run's transcript read-only —
+and offers **Archive…** (armed: the first click only relabels
 the item, the second moves the ticket to `tickets/archive/` — out of
 the board, kept in git; delete files there yourself when you are sure;
 moving one back into a phase folder revives it). Over-WIP columns show
@@ -776,7 +779,7 @@ a red count; validation findings (a
 hand-edited file, an unknown repo, a ticket in two phases) show as
 numbered badges — the board keeps rendering, nothing is guessed.
 Findings about the board's own files (`pipeline.md`, `repos.md`,
-`order.md`) show as a chip beside the filter above the columns
+`order.md`) show as a chip beside the filter in the panel header
 ("2 board issues", coloured by the most serious one); click it to list
 the messages, and **Open** beside a message opens the file it is about.
 
@@ -798,7 +801,7 @@ final authority: dragging a blocked card into a worker column asks
 first (**Cancel** / **Move anyway**); anywhere else it just moves. A
 blocker id that is not on the board — deleted, renamed, or archived —
 warns and keeps the ticket blocked; nothing unblocks silently. The
-filter icon above the columns hides the blocked cards when you want the
+filter icon in the panel header hides the blocked cards when you want the
 overview; they stay on the board and their order is never touched.
 
 Dependencies: a ticket that must not start before another one is done
@@ -813,7 +816,7 @@ blockers hold it), and starting a run on one refuses — but you stay in
 charge: dragging a blocked card into a worker column only asks for
 confirmation first. A blocker that was deleted, renamed or archived
 leaves the ticket blocked with a warning — never silently unblocked.
-The **filter** toggle above the columns hides all blocked cards for a
+The **filter** toggle in the panel header hides all blocked cards for a
 quieter board (view state only — nothing moves, the counts stay
 honest).
 
@@ -866,10 +869,6 @@ such checkout instead of rebuilt: list them as `link: [.tools,
 node_modules]` under the repository in `repos.md`, and the worker is
 told to use them and install nothing.
 
-While the run is live, its column shows a **Workers** strip with one
-lane per run: a traffic light (green working, amber context nearly full
-or stopping, red stalled for five minutes — always with the state in
-words), the worker's current activity, its context window, token usage
 While the run is live, its column shows a **Workers** strip with one
 lane per run: a traffic light (green working, amber context nearly full
 or stopping, red stalled for five minutes — always with the state in
@@ -955,6 +954,42 @@ several questions one line each, a choice by its number or its name.
 An approval has three buttons instead: **Allow once**, **Always allow**
 and **Deny**. A waiting run never counts as stalled, however long it
 waits.
+
+### The interactive dialog (req-65)
+
+Some steps you want to do *with* a worker, not hand to one: shaping a
+ticket's plan in a conversation, or walking a checkpoint — the plan
+review, the review, the commit step — together. Where a column offers
+it, the card menu and the ticket header show a one-click start:
+
+- **Plan with agent** on the plan column — the worker reads the ticket
+  and the repo, asks you the few things it cannot learn there, proposes
+  the plan in the chat, and writes only the agreed result into the
+  ticket (plan, acceptance criteria, Log).
+- **Refine with agent** at the owner's checkpoints (plan review,
+  review) and the commit column — the worker checks the branch with
+  you, applies the fixes you approve as small commits, and records the
+  verdict in the ticket's Log; at commit it also drives the push.
+
+The start opens **the ticket and the dialog side by side** (a split
+pane, SDK 1.35). The dialog tab is the takeover tab, in the **Interactive
+dialog** mode: the worker is yours from the first turn, the runner runs
+no gate and moves nothing — you keep talking until you are both done.
+Ending the dialog is a move, right in the tab: a plan dialog offers
+**Finish → Plan review** and **Approve → Build** (when you settled the
+open points yourself, your own checkpoint can be skipped); a refine
+dialog offers **On to** the next column or **Back to** the nearest agent
+column for rework. A click stops the run and makes the move — the same
+one-commit move as dragging the card. Closing the tab without a move
+keeps everything: the reservation stays on the ticket (the small
+**dialog** chip on its card — the fleet will not pick it up), and
+**Resume session** in the tab continues the conversation later.
+
+Each column's dialog prompt is a prompt file like any other: a phase's
+`interactive:` key in `pipeline.md` names one, otherwise the shipped
+defaults apply (`plan-interactive-default` and
+`refine-interactive-default` — editable in Settings → Tickets, re-added
+by "Add Drey's prompts").
 
 Runs survive closing Drey — the runner is its own small process — and,
 for OpenCode workers, even a restart of the runner: the new runner takes the
@@ -1043,15 +1078,24 @@ first worker column is a plain queue — the next pool drains it
 enters a pool while a blocker is open — the chain log line names it
 and its blockers.
 
-**How many runs go at once** is set per worker, not per column:
-Settings → *Tickets* → *Fleet* has an **OpenCode pool** and a **Claude
-Code pool** (one each when empty). Every run of that worker takes a
+**Each worker has its own settings.** Settings → *Tickets* → *Workers*
+has a switch between **OpenCode** and **Claude Code**. It opens on your
+default worker and shows only the settings of the selected worker:
+- **Pool size**: how many of its runs go at once.
+- **Resume compact threshold**: the worker's own value for the shared
+  setting in *Fleet*. Leave it empty to use the shared value.
+- **Pool probe** (OpenCode only).
+- **Dispatched-run permissions** (Claude Code only). OpenCode takes its
+  permissions from its own configuration and asks on the card.
+
+**How many runs go at once** is set per worker, not per column: the
+**Pool size** of each worker (one when empty). Every run of that worker takes a
 slot, wherever its column is. When a slot frees up, the next ticket is
 chosen like this: tickets marked **urgent** or **high** first, then the
 column furthest to the right (finishing work beats starting new work),
 then the column's own order. A running ticket is never interrupted for
 a more important one. If OpenCode talks to a llama.cpp server, put its
-address into **OpenCode pool probe** — the server's own parallel slots
+address into OpenCode's **Pool probe** — the server's own parallel slots
 then cap the pool. A run that fails on the provider's rate limit makes
 that pool one slot smaller for five minutes.
 

@@ -1,15 +1,18 @@
 import type { DreyPluginApi, PluginSettingsPageContrib } from '../../../shared/plugin-api/renderer';
 import { parseHandover, type BoardSnapshot, type FolderStatus, type PromptListing } from '../shared/tickets';
 import { createColumnsSection, effectivePrompt } from './settings-columns';
-import { el, iconButton, mutate } from './settings-dom';
+import { parseWorkerValue } from '../main/fleet/assignment';
+import { el, iconButton, kv, mutate, numberConfig, selectConfig, textConfig } from './settings-dom';
 import { createPromptsSection } from './settings-prompts';
+import { createWorkersSection } from './settings-workers';
 
 /**
  * Settings — Tickets (M85, req-46, reworked in req-50 after the Claude
  * Design mockup): the tickets repository's path, the pipeline as one
  * sortable table (settings-columns.ts), the prompt files as a list with
  * the host's Markdown editor (settings-prompts.ts), then the fleet's own
- * settings. Everything shown is read from the tickets vault on every
+ * settings — the shared ones, then each CLI runner's behind a switch
+ * (settings-workers.ts, req-71). Everything shown is read from the tickets vault on every
  * refresh — `pipeline.md`, the phase folders, `_meta/prompts/` — and the
  * page follows the board's change events, so it never shows a copy that
  * drifted from disk.
@@ -20,7 +23,7 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
     label: 'Tickets',
     hint: 'Board & fleet',
     description:
-      'The pipeline and its worker pools. A column with a worker runs itself; manual columns are your checkpoints.',
+      'The pipeline and its workers. A column with a worker runs itself; manual columns are your checkpoints. Each CLI runner has its own pool and settings.',
     mount: (body) => {
       body.classList.add('tset');
 
@@ -58,12 +61,19 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
           defaultWorker: (configured ?? '') || 'opencode',
         });
         prompts.update(listing, usage);
+        if (!workersOpened) {
+          workersOpened = true;
+          workers.select(parseWorkerValue((configured ?? '') || 'opencode')?.provider ?? 'opencode');
+        }
       };
       const reload = (): Promise<void> => load().catch(() => undefined);
 
       const columns = createColumnsSection(api, reload);
       const prompts = createPromptsSection(api, reload);
-      body.append(repo, columns.root, prompts.root, fleetSection(api));
+      // Opens on the default worker's runner once the first load knows it.
+      const workers = createWorkersSection(api, 'opencode');
+      let workersOpened = false;
+      body.append(repo, columns.root, prompts.root, fleetSection(api), workers.root);
 
       // The board's change events cover every write here and the runner's.
       const off = api.backend.on('board-changed', () => {
@@ -108,39 +118,7 @@ function fleetSection(api: DreyPluginApi): HTMLElement {
       ], 'opencode'),
       'For a run no ticket, column or repository assigns a worker to.',
     ),
-    ...kv(
-      'tset-permissions',
-      'Dispatched-run permissions',
-      selectConfig(
-        api,
-        'autoPermissionMode',
-        [
-          ['accept-edits', 'Accept edits (asks before commands)'],
-          ['bypass', 'Bypass permissions (unattended)'],
-        ],
-        'accept-edits',
-      ),
-      'Runs the chain starts on its own have no dialog to ask in.',
-    ),
     ...kv('tset-git', 'Git executable', textConfig(api, 'gitPath'), 'Empty uses git from PATH.'),
-    ...kv(
-      'tset-pool-opencode',
-      'OpenCode pool',
-      numberConfig(api, 'fleet.pool.opencode.size'),
-      'How many OpenCode runs go at once, across every column. Empty is one.',
-    ),
-    ...kv(
-      'tset-pool-opencode-probe',
-      'OpenCode pool probe',
-      textConfig(api, 'fleet.pool.opencode.probe'),
-      'A llama.cpp server URL: its parallel slots cap the pool. Other servers do not report theirs.',
-    ),
-    ...kv(
-      'tset-pool-claude-code',
-      'Claude Code pool',
-      numberConfig(api, 'fleet.pool.claude-code.size'),
-      'How many Claude Code runs go at once, across every column. Empty is one.',
-    ),
     ...kv(
       'tset-cap-gate-lines',
       'Gate failure cap — lines',
@@ -169,7 +147,7 @@ function fleetSection(api: DreyPluginApi): HTMLElement {
       'tset-handover-compact',
       'Resume compact threshold — tokens',
       numberConfig(api, 'fleet.compactAboveTokens'),
-      'A resumed session whose last context is at or above this many tokens is natively compacted first (T-0049).',
+      'A resumed session whose last context is at or above this many tokens is natively compacted first (T-0049). A runner below may override it.',
     ),
     ...kv(
       'tset-handover-ttl',
@@ -180,63 +158,4 @@ function fleetSection(api: DreyPluginApi): HTMLElement {
   );
   section.append(head, rows);
   return section;
-}
-
-function kv(id: string, label: string, control: HTMLInputElement | HTMLSelectElement, hint: string): HTMLElement[] {
-  control.id = id;
-  const name = el('label', 'tset-kv-label', label);
-  name.htmlFor = id;
-  const value = el('div', 'tset-kv-value');
-  value.append(control, el('span', 'field-hint', hint));
-  return [name, value];
-}
-
-function selectConfig(
-  api: DreyPluginApi,
-  key: string,
-  choices: ReadonlyArray<readonly [string, string]>,
-  fallback: string,
-): HTMLSelectElement {
-  const select = el('select');
-  for (const [value, label] of choices) {
-    select.append(Object.assign(el('option', undefined, label), { value }));
-  }
-  void api.settings.get<string>(key).then((value) => {
-    select.value = value ?? fallback;
-  });
-  select.addEventListener('change', () => {
-    void api.settings.set(key, select.value).catch(() => undefined);
-  });
-  return select;
-}
-
-function textConfig(api: DreyPluginApi, key: string): HTMLInputElement {
-  const input = el('input', 'mono-input');
-  input.type = 'text';
-  input.spellcheck = false;
-  void api.settings.get<string>(key).then((value) => {
-    input.value = value ?? '';
-  });
-  input.addEventListener('change', () => {
-    void api.settings.set(key, input.value.trim()).catch(() => undefined);
-  });
-  return input;
-}
-
-/** A whole-number config field; empty or invalid clears back to the default. */
-function numberConfig(api: DreyPluginApi, key: string): HTMLInputElement {
-  const input = el('input', 'mono-input');
-  input.type = 'number';
-  input.min = '0';
-  input.step = '1';
-  void api.settings.get<number>(key).then((value) => {
-    input.value = typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
-  });
-  input.addEventListener('change', () => {
-    const parsed = Number(input.value);
-    void api.settings
-      .set(key, input.value.trim() !== '' && Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : '')
-      .catch(() => undefined);
-  });
-  return input;
 }

@@ -259,8 +259,9 @@ note). A failure after a successful resume fails the run normally.
 (default 60000, provisional) and `fleet.resumePauseTtlMin` (default 15).
 Per-provider/model overrides are flat keys the plugin reads and pushes
 with the chain config — `fleet.compactAboveTokens.opencode`,
-`fleet.compactAboveTokens.opencode/<model-pin>` — most specific wins; no
-UI writes them.
+`fleet.compactAboveTokens.opencode/<model-pin>` — most specific wins. The
+per-provider key is written by Settings → Tickets → Workers (req-71); the
+per-model keys have no UI.
 
 ### The instruction (T-0048: the context pack)
 

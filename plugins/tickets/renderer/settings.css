@@ -503,6 +503,44 @@
   max-width: 360px;
 }
 
+/* The Workers section's runner switch (req-71) — the look of the host's
+   `.segmented` control, which is scoped to its Angular component. */
+.tset-runner-switch {
+  display: inline-flex;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+}
+
+.tset-runner-switch > button {
+  height: 24px;
+  padding: 0 12px;
+  border: 0;
+  border-left: 1px solid var(--field-border);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tset-runner-switch > button:first-child {
+  border-left: 0;
+}
+
+.tset-runner-switch > button:hover {
+  background: var(--hover-bg-strong);
+  color: var(--text-primary);
+}
+
+.tset-runner-switch > button.active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.tset-runner-switch > button:focus-visible {
+  outline-offset: -2px;
+}
+
 @media (max-width: 720px) {
   .tset-kv {
     grid-template-columns: minmax(0, 1fr);
