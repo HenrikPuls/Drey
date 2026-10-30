@@ -1715,7 +1715,7 @@ export async function handoverFromConfig(
 export function handoverOverrideKeys(snap: BoardSnapshot, defaultWorker: string): readonly string[] {
   const keys = new Set<string>(WORKER_PROVIDERS);
   const add = (value: string | null): void => {
-    const text = value.trim();
+    const text = value?.trim() ?? '';
     if (text !== '') {
       keys.add(text);
     }
