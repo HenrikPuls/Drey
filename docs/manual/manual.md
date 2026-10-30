@@ -817,8 +817,12 @@ and age, plus the run's telemetry chips — **ctx** (the last turn's real
 context size), **turns** (model calls) and **reads** (read/search tool
 calls) — once the worker reports them; the card carries a ▶ chip reading
 the state, the turn count, the run's own tokens and its age
-(`▶ running · 2 · 45k/1.2k · 03:41`), and the pills above the board add
-how long the oldest live run has been at it. A lane is folded to one
+(`▶ running · 2 · 45k/1.2k · 03:41`). While workers run, the panel
+header sums up the whole fleet next to its buttons
+(`● 1 running · 18.9M tok · 26:22`): the worst light, the states in
+words, the tokens in flight and how long the oldest live run has been
+at it — hover it for the long form; a narrow panel keeps only the light
+and the states. A lane is folded to one
 line until you unfold it (a lane that needs a look opens by itself). In
 a lane you can **Take over**, **Watch** (tail the run's output),
 **Steer** (send a message into the live run — it lands in the ticket's
@@ -847,8 +851,8 @@ live on OpenCode workers: a tool step appears as the worker calls it
 and reply text grows while it is written. The view follows new output
 while you are at the bottom; scrolled up, it stays put and a
 **↓ New output** button brings you back. Only OpenCode workers can be
-taken over for now. The **Log** button opens the fleet daemon's log in
-a read-only tab. When a run ends, the ticket's Log line records the
+taken over for now. **Chain log** in the header's **⋯** menu opens the
+fleet daemon's log in a read-only tab. When a run ends, the ticket's Log line records the
 tokens it used — how much of the input came from the provider's cache,
 and the cost, when the provider reports one (flat coding plans report
 none). A run that continues an earlier session counts only its own
@@ -930,10 +934,12 @@ offers **Load from disk**. An empty folder offers **Add Drey's
 prompts**. A changed prompt reaches the next run, not one that is
 already running.
 
-The **master switch** sits in the board's header: **An** runs the
-chain — every playing automatic column drains its queue. **Aus** halts
-gently (running work finishes, nothing new starts). **Notaus** aborts
-every live run and halts — the red button, one click. Each automatic
+The **master switch** sits in the board's header as one switch with
+two halves, the active one filled: **▷ run** runs the chain — every
+playing automatic column drains its queue; **❙❙ halt** halts gently
+(running work finishes, nothing new starts). The **■ emergency stop**
+next to it aborts every live run and halts — it turns red when you
+point at it, one click. Each automatic
 column carries its own **brakes** next to the fold chevron: pause (no
 new dispatch), stop (abort this column's runs and hold it — the rest
 keeps going), play again. All of it survives restarts.
@@ -961,8 +967,13 @@ The board shows the chain's pulse: each column head carries its pool
 columns shows how long each column's tickets have been sitting there
 on average (*Avg. time in column*), and — on its right — an amber pill
 when worktree folders are waiting to be cleaned up (legacy leftovers
-or orphans; hover it for the list, the trash icon in the panel header
-removes them). The `ci` handover works, too: a column with a `ci:`
+or orphans; hover it for the list, **Clean up worktrees…** in the
+header's **⋯** menu removes them). The board's messages lead that bar
+too: an action in progress pulses there (*Cleaning up worktrees…*), a
+result shows with a green tick and fades after a few seconds
+(*Worktrees: 2 removed*), and a warning (amber) or failure (red) stays
+until you close it with **×** — hover a cut-off message for its full
+text. The `ci` handover works, too: a column with a `ci:`
 command moves its tickets when the check passes in the work repo.
 And the assistant can drive runs: ask it about the fleet — it sees
 `fleet_status`, and can `fleet_run`, `fleet_stop`, `fleet_steer` and

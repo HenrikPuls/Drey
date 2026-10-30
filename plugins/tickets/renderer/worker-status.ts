@@ -78,6 +78,47 @@ export function workerStatus(run: RunInfo, nowMs: number): WorkerStatus {
   return { light: 'green', label: run.turn === 'busy' ? 'Running' : 'Working' };
 }
 
+/** The whole fleet in one line (req-60): the panel header's status group. */
+export interface FleetSummary {
+  /** The worst light of all live runs: red beats amber beats green beats idle. */
+  readonly light: Light;
+  /** The non-zero states as words: `2 running · 1 stalled`. */
+  readonly label: string;
+  /** Tokens in + out of every live run. */
+  readonly tokens: number;
+  /** How long the oldest live run has been at it; null when no start is known. */
+  readonly ageMs: number | null;
+}
+
+const LIGHT_RANK: readonly Light[] = ['idle', 'green', 'amber', 'red'];
+
+const LIGHT_WORDS: ReadonlyArray<readonly [Light, string]> = [
+  ['green', 'running'],
+  ['idle', 'standing'],
+  ['amber', 'need attention'],
+  ['red', 'stalled'],
+];
+
+/** The live runs as the header's summary; null when none runs. */
+export function fleetSummary(runs: readonly RunInfo[], nowMs: number): FleetSummary | null {
+  if (runs.length === 0) {
+    return null;
+  }
+  const lights = runs.map((run) => workerStatus(run, nowMs).light);
+  const light = lights.reduce((worst, l) => (LIGHT_RANK.indexOf(l) > LIGHT_RANK.indexOf(worst) ? l : worst), 'idle' as Light);
+  const label = LIGHT_WORDS.map(([l, word]) => [lights.filter((x) => x === l).length, word] as const)
+    .filter(([n]) => n > 0)
+    .map(([n, word]) => `${n} ${word}`)
+    .join(' · ');
+  const starts = runs.map((r) => Date.parse(r.startedAt)).filter((ts) => !Number.isNaN(ts));
+  return {
+    light,
+    label,
+    tokens: runs.reduce((sum, r) => sum + r.tokensIn + r.tokensOut, 0),
+    ageMs: starts.length === 0 ? null : Math.max(0, nowMs - Math.min(...starts)),
+  };
+}
+
 /** 1234 -> `1.2k`, 3_400_000 -> `3.4M`; small numbers stay whole. */
 export function formatTokens(n: number): string {
   if (n >= 1_000_000) {

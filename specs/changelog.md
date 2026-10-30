@@ -20,6 +20,55 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-60 — Tickets panel: fleet status in the panel header
+
+Owner request, outside the list. The fleet summary sat as a row of three
+pills between the panel header and the board (`● 1 running` ·
+`18.9M tokens in flight` · `running 26:22`), a whole row of board height.
+It now rides the panel header as one compact group before the New /
+Refresh / master buttons (`fleetHeaderNode` in
+`plugins/tickets/renderer/index.ts`): the worst light of all live runs,
+the non-zero states in words (`2 running · 1 stalled`), then tokens in
+flight and the oldest run's age in muted tabular mono
+(`· 18.9M tok · 26:22`); the long form is its tooltip and `aria-label`.
+It repaints on fleet updates and once a second, hides without live runs,
+and drops the numbers below a 480px panel width (a `ResizeObserver` on
+the panel — no size container around the base header). The counting is
+the pure `fleetSummary` in `worker-status.ts` (spec added). The
+"Tickets" title stays — the uniform panel head (ADR-0057/M69); hiding it
+was considered and declined with the owner (it would need an SDK option
+like the calendar's `headerReplacesTitle`). `fleetSummaryNode` and the
+`.tickets-summary` / `.tickets-pill*` styles are gone.
+
+The whole header row was then redesigned (owner request, same item):
+four groups set apart by air and a hairline — **status chip** (the
+fleet group as a quiet `--bg-input` chip; below 380px its light alone)
+│ **board actions** (new, refresh) │ **chain controls** — run / halt
+as one global `.seg` switch with the active half filled
+(`--accent-surface`), then the emergency stop as a `square` icon (was
+`triangle-alert`, which read as a warning, not a stop), muted until
+hovered │ **`⋯` overflow** (`headerMenuButton`) with *Chain log* and
+*Clean up worktrees…*. The text button "Log" and the always-visible
+trash icon are gone: every header control is icon-only (ADR-0057); the
+menu is keyboard-usable (focus on open, arrows, Escape returns focus).
+
+The board's messages moved too (owner request, same item): they were
+an extra `tickets-note` row between the header and the board that
+pushed the board down and stayed until the next action overwrote it.
+They now lead the one-row status bar under the board (req-59) as a
+typed message (`setNote(text, kind)`): **busy** pulses while an action
+runs, **ok** shows a green tick and fades after 6 s, **warn** (amber —
+a mutation's warning, a cleanup that kept dirty trees) and **error**
+(red, `role="alert"`) stay until closed with ×. A failed board pull
+clears itself on the next good pull; the bar also shows on the
+loading / no-vault screens so a failure there is visible. The plain
+refresh no longer flashes a "Loading…" line. `BoardView.status` is
+gone.
+
+Manual: the lane paragraph, the master switch, the Log and cleanup
+mentions, the status bar's messages. Owner-verified (signed off
+2026-10-30).
+
 ### req-59 — Tickets board: one-row status bar
 
 Owner request, outside the list. The board's status area under the
