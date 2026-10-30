@@ -81,7 +81,7 @@ export function makeDesk() {
   const revisions = new Map<string, number>();
   const textOf = (id: string): string =>
     texts.get(id) ??
-    `---\nid: ${id}\n---\n\n## Description\n\nThe phase chip is display only.\n\n## Plan\n\nReuse the board's move list.\n\n### Acceptance criteria\n\n- [x] The chip opens the move menu\n- [ ] One commit per move\n\n## Log\n\n- '2026-10-30T08:00:00Z' owner@desk — created in inbox\n`;
+    `---\nid: ${id}\n---\n\n## Description\n\nThe phase chip is **display only**: a tap opens the move menu, it never *moves* the ticket itself. The chip's target comes from \`chip → menu\`.\n\n| Surface | Formatting |\n|---|---|\n| Ticket view | bold, italic, code |\n| Transcript | tables and rules |\n\n## Plan\n\nReuse the board's move list.\n\n### Acceptance criteria\n\n- [x] The chip opens the move menu\n- [ ] One commit per move\n\n## Log\n\n- '2026-10-30T08:00:00Z' owner@desk — created in inbox\n`;
   const revisionOf = (id: string): string => (revisions.get(id) ?? 1).toString(16).padStart(16, '0');
   const bump = (id: string): void => void revisions.set(id, (revisions.get(id) ?? 1) + 1);
   const listeners = new Set<(what: string) => void>();
@@ -160,6 +160,12 @@ export function makeDesk() {
   ]
     .map((e) => JSON.stringify(e))
     .join('\n');
+  const stream2 = [
+    { ts: '2026-10-30T10:30:01Z', kind: 'note', text: 'run R-2 started for T-0050' },
+    { ts: '2026-10-30T10:30:05Z', kind: 'text-delta', detail: 'end', text: 'Reading the ticket first, then **three bold steps** to review.' },
+  ]
+    .map((e) => JSON.stringify(e))
+    .join('\n');
   const chain = { configured: true, master: 'run', columns: { build: 'playing', review: 'held' } as Record<string, string>, redStreak: {}, cooldownUntil: {} };
   const fleetEmit = (): void => listeners.forEach((l) => l('fleet'));
   const move = (id: string, to: string): void => {
@@ -175,7 +181,7 @@ export function makeDesk() {
   const port = {
     board: async () => board(),
     fleet: async () => ({ runs, chain }),
-    stream: async (runId: string) => (runId === 'run-1' ? stream : ''),
+    stream: async (runId: string) => (runId === 'run-1' ? stream : runId === 'run-2' ? stream2 : ''),
     needs: async () => needsOf(board(), runs),
     ticket: async (id: string) => {
       const c = Object.values(tickets).flat().find((t) => t.id === id);
@@ -219,8 +225,22 @@ export function makeDesk() {
       calls.push({ what: 'claim', args: [cmd, actor] });
       return { ok: true };
     },
-    startRun: async (cmd: unknown) => {
+    startRun: async (cmd: { ticketId: string }) => {
       calls.push({ what: 'run', args: [cmd] });
+      runs.push({
+        id: 'run-2',
+        ticketId: cmd.ticketId,
+        provider: 'opencode',
+        model: 'zai/glm-5.3',
+        state: 'running',
+        turn: 'busy',
+        startedAt: '2026-10-30T10:30:00Z',
+        endedAt: null,
+        tokensIn: 1_000,
+        tokensOut: 100,
+        gateFailure: null,
+      });
+      fleetEmit();
       return { ok: true, runId: 'run-2' };
     },
     answer: async (cmd: { runId: string; answers: unknown }) => {
