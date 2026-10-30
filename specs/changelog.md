@@ -20,7 +20,7 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
-### req-61 — Fleet: provider pools and column priority instead of per-column slots
+### req-63 — Fleet: provider pools and column priority instead of per-column slots
 
 **Not yet manually verified by the owner.** Owner request, outside the
 list. A column's `workers:` pool bound its slots to that column: an idle

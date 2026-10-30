@@ -157,7 +157,7 @@ export function normalizeFleetCaps(value: unknown): FleetCaps {
 }
 
 /**
- * One worker provider's pool (req-61): how many runs of that provider
+ * One worker provider's pool (req-63): how many runs of that provider
  * the machine carries at once, across every column. Configurable
  * `fleet.pool.<provider>.size` / `.probe`.
  */
@@ -264,7 +264,7 @@ export interface RunInfo {
   readonly worktree?: WorktreeOutcome;
   /** The machine gate's verdict, once it ran (T-0048); absent when it never did. */
   readonly gateResult?: 'green' | 'red' | null;
-  /** The worker's last error event (req-61: a rate limit shrinks the pool). */
+  /** The worker's last error event (req-63: a rate limit shrinks the pool). */
   readonly lastError?: string | null;
   // --- token telemetry (T-0048); all optional so adopt() restores older
   // --- records — every reader treats absent as unknown.
@@ -368,7 +368,7 @@ export interface ChainConfig {
   readonly permissionMode: PermissionMode;
   /** The instruction output caps (T-0048); absent = `DEFAULT_FLEET_CAPS`. */
   readonly caps?: FleetCaps;
-  /** The per-provider pools (req-61); absent = one run per provider. */
+  /** The per-provider pools (req-63); absent = one run per provider. */
   readonly pools?: FleetPools;
 }
 

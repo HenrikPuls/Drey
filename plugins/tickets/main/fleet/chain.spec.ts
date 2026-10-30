@@ -159,7 +159,7 @@ describe('planDispatch', () => {
       column(phase('done')),
     ];
     const plan = planDispatch(input({ columns }));
-    expect(plan.map((p) => p.workingPhase)).toEqual(['build', 'plan']); // rightmost first (req-61)
+    expect(plan.map((p) => p.workingPhase)).toEqual(['build', 'plan']); // rightmost first (req-63)
   });
 
   it('skips held columns and busy, claimed and blemished tickets', () => {
@@ -200,7 +200,7 @@ describe('planDispatch', () => {
   });
 });
 
-describe('planDispatch — provider pools and column priority (req-61)', () => {
+describe('planDispatch — provider pools and column priority (req-63)', () => {
   const inPlan = (id: string, priority: TicketCard['meta']['priority'] = 'normal'): TicketCard =>
     card(id, { phase: 'plan', path: `tickets/plan/${id}.md`, meta: { ...card(id).meta, priority } });
   const inBuild = (id: string, priority: TicketCard['meta']['priority'] = 'normal'): TicketCard =>

@@ -1242,7 +1242,7 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
     column.phase.id,
   );
   if (runs.length === 0) {
-    return null; // the slots are the provider pools' (req-61) — an idle column shows no lane strip
+    return null; // the slots are the provider pools' (req-63) — an idle column shows no lane strip
   }
   const now = Date.now();
   const strip = el('div', 'tickets-lanes');

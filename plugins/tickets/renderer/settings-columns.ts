@@ -11,7 +11,7 @@ import { canMove, dropIndex, folderNumber, moveItem } from './settings-order';
  * pinned. A move rewrites pipeline.md and renumbers the phase folders in
  * one commit (main's `reorderPhases`); Undo is the reverse move. A
  * column with a worker runs itself — its model and prompt are edited
- * in place (the parallel slots are the provider pools, Fleet, req-61); a manual column is the owner's checkpoint and shows
+ * in place (the parallel slots are the provider pools, Fleet, req-63); a manual column is the owner's checkpoint and shows
  * dashes there.
  */
 

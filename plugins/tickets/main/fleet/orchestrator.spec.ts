@@ -149,7 +149,7 @@ function orchestrator(over: Partial<OrchestratorDeps> = {}): { orch: Orchestrato
   return { orch, fleet };
 }
 
-/** Two OpenCode slots shared by every column (req-61). */
+/** Two OpenCode slots shared by every column (req-63). */
 const TWO: FleetPools = normalizeFleetPools({ opencode: { size: 2 } });
 const ONE: FleetPools = normalizeFleetPools({});
 
@@ -318,7 +318,7 @@ describe('Orchestrator', () => {
     expect(waits[0]).toContain('no free opencode pool slot yet');
   });
 
-  it('the provider pool is shared: an idle slot serves the rightmost column first (req-61)', async () => {
+  it('the provider pool is shared: an idle slot serves the rightmost column first (req-63)', async () => {
     await writeMeta();
     await writeTicket('T-0001', 'plan');
     await writeTicket('T-0002', 'build');
@@ -328,7 +328,7 @@ describe('Orchestrator', () => {
     expect(fleet.records.map((r) => r.info.ticketId)).toEqual(['T-0002']);
   });
 
-  it('a probed llama.cpp server caps the pool (req-61)', async () => {
+  it('a probed llama.cpp server caps the pool (req-63)', async () => {
     await writeMeta();
     await writeTicket('T-0001', 'plan');
     await writeTicket('T-0002', 'plan');
@@ -345,7 +345,7 @@ describe('Orchestrator', () => {
     expect(logs.some((line) => line.includes('runs 1 parallel slot'))).toBe(true);
   });
 
-  it('a rate-limited run shrinks its provider pool for a while (req-61)', async () => {
+  it('a rate-limited run shrinks its provider pool for a while (req-63)', async () => {
     await writeMeta();
     await writeTicket('T-0001', 'plan');
     await writeTicket('T-0002', 'plan');
@@ -646,7 +646,7 @@ describe('Orchestrator', () => {
   });
 });
 
-describe('provider pools (req-61)', () => {
+describe('provider pools (req-63)', () => {
   const pools = normalizeFleetPools({ opencode: { size: 4 }, 'claude-code': { size: 2 } });
 
   it('normalizes sizes and probe URLs per provider', () => {

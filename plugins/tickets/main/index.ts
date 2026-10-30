@@ -142,7 +142,7 @@ class BoardService {
     private readonly fleetRoot: string,
     /** The instruction output caps (T-0048), resolved once at activation. */
     private readonly caps: FleetCaps,
-    /** The per-provider pools (req-61), resolved once at activation. */
+    /** The per-provider pools (req-63), resolved once at activation. */
     private readonly pools: FleetPools,
   ) {}
 
@@ -1675,7 +1675,7 @@ const plugin: MainPluginModule = {
       }
     }
     const caps = normalizeFleetCaps(capConfig);
-    // The provider pools (req-61): `fleet.pool.<provider>.size` / `.probe`.
+    // The provider pools (req-63): `fleet.pool.<provider>.size` / `.probe`.
     const poolConfig: Record<string, { size?: number; probeUrl?: string }> = {};
     for (const provider of WORKER_PROVIDERS) {
       const size = await ctx.config.get<number>(`fleet.pool.${provider}.size`);

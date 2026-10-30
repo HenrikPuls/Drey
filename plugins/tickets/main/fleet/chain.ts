@@ -8,7 +8,7 @@
  * - A column with a worker (handover `agent …`) drains itself; a column
  *   without one is a manual step — the human moves its tickets.
  * - The parallel slots belong to the provider pools, not to columns
- *   (req-61): an idle slot serves whichever column has the most
+ *   (req-63): an idle slot serves whichever column has the most
  *   important ticket — high priority first, then the rightmost column.
  * - A manual column that sits between automatic columns is the owner's
  *   **checkpoint** (plan-review in the live default): the machine never
@@ -85,7 +85,7 @@ export interface PlanDispatchInput {
   readonly columns: readonly BoardColumn[];
   /** Per-column mode; a phase absent here is `playing`. */
   readonly modes: Readonly<Record<string, ColumnMode>>;
-  /** The parallel runs each provider's pool carries (req-61). */
+  /** The parallel runs each provider's pool carries (req-63). */
   readonly poolSize: Readonly<Record<WorkerProviderId, number>>;
   /** Live (starting/running/stopping) runs per provider — every run, the
    *  owner's on-demand ones included, takes a pool slot. */
@@ -122,7 +122,7 @@ export function dispatchable(card: TicketCard, busyTickets: ReadonlySet<string>)
 }
 
 /**
- * The dispatch class of a priority (req-61): `urgent` and `high` jump
+ * The dispatch class of a priority (req-63): `urgent` and `high` jump
  * every column's `normal` / `low` tickets; inside a class the column
  * rank decides.
  */
@@ -131,7 +131,7 @@ export function priorityClass(priority: TicketPriority): 0 | 1 {
 }
 
 /**
- * What to dispatch right now, in dispatch order (req-61). The slots
+ * What to dispatch right now, in dispatch order (req-63). The slots
  * belong to the provider pools, not to the columns: one candidate list
  * across every automatic, playing column with a move target, ordered by
  * priority class (urgent/high first), then column rank — the rightmost

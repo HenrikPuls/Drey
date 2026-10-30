@@ -238,7 +238,7 @@ Prose for humans. The board follows this file on refresh.
 - `title`: board column header.
 - `wip`: optional integer. Over-limit shows red on the board
   (`4/3`); it warns, it does not block a human (and it never gates the
-  dispatcher — the provider pools are the parallelism, req-61).
+  dispatcher — the provider pools are the parallelism, req-63).
 - `claim`: optional `true` — entering this phase stamps the claim
   fields.
 - `handover`: what must happen for a ticket to LEAVE this phase:
@@ -270,7 +270,7 @@ commit per change; hand edits win on refresh):
   configured default). Unset on a manual column.
 - `model:` — the model pin for the column's runs (OpenCode:
   `providerID/modelID`).
-- `workers:` — **retired (req-61).** The parallel slots belong to the
+- `workers:` — **retired (req-63).** The parallel slots belong to the
   worker providers (`fleet.pool.<provider>.size` in the plugin config,
   Settings → Tickets → Fleet), shared by every column. A leftover key is
   ignored with a noise badge; clearing a column's worker removes it.
@@ -302,7 +302,7 @@ pulls across it, and only the owner's moves cross it (refine /
 implement / park). Backward moves are human moves — the one exception
 is the circuit breaker's park into inbox, always logged.
 
-**Dispatch order** (req-61): one candidate list over every playing
+**Dispatch order** (req-63): one candidate list over every playing
 automatic column, ordered by priority class (`urgent` / `high` before
 `normal` / `low`), then column rank — the rightmost column first, so
 finishing beats starting — then the column's own order (pins, then

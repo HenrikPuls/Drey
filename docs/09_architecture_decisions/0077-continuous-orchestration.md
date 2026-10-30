@@ -71,7 +71,7 @@ Drey's own MCP server beside the vault tools (listed after them, routed by wire 
 collision). The tickets plugin registers `fleet_status`, `fleet_run`, `fleet_stop`, `fleet_steer`, `fleet_watch` —
 the assistant and any connected program can drive runs conversationally.
 
-## Later change — provider pools and column priority (2026-10-30, req-61)
+## Later change — provider pools and column priority (2026-10-30, req-63)
 
 The per-column `workers:` pool is retired. Slots bound to a column blocked
 work while the provider had capacity (an idle plan slot could not serve

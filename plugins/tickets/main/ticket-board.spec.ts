@@ -380,7 +380,7 @@ describe('patchPipelinePhase - the settings dialog writer', () => {
     expect(() => patchPipelinePhase(PIPELINE, 'nope', { model: 'x' })).toThrow('no phase "nope"');
   });
 
-  it('a column workers: key is no longer read — the pools are the providers\' (req-61)', () => {
+  it('a column workers: key is no longer read — the pools are the providers\' (req-63)', () => {
     const legacy = PIPELINE.replace('id: build,', 'id: build, workers: 4,');
     const parsed = parsePipeline(legacy);
     expect(parsed.error).toBeNull();

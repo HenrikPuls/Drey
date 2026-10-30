@@ -101,7 +101,7 @@ export function isRateLimitError(text: string | null | undefined): boolean {
 }
 
 /**
- * The pools' effective sizes (req-61): the configured size, capped by a
+ * The pools' effective sizes (req-63): the configured size, capped by a
  * probe's `total_slots`, minus an active rate-limit shrink — never below
  * one, so a throttled provider still moves.
  */
@@ -176,7 +176,7 @@ export class Orchestrator {
   private notedThisPass = new Set<string>();
   /** The last held-column line, logged on change only. */
   private heldNote = '';
-  /** Per provider: a rate limit's pool shrink (req-61; not persisted). */
+  /** Per provider: a rate limit's pool shrink (req-63; not persisted). */
   private readonly poolShrink: Partial<Record<WorkerProviderId, { count: number; untilMs: number }>> = {};
   /** Per provider: the last probe's slots and when it was asked. */
   private readonly probed: Partial<Record<WorkerProviderId, { slots: number | null; atMs: number; url: string }>> = {};
