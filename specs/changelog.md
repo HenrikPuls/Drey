@@ -22,7 +22,7 @@ recorded as an explicit decision. The parity checklist lives in
 
 ### req-63 — Fleet: provider pools and column priority instead of per-column slots
 
-**Not yet manually verified by the owner.** Owner request, outside the
+Owner-verified (signed off 2026-10-30). Owner request, outside the
 list. A column's `workers:` pool bound its slots to that column: an idle
 `plan` slot could not serve `build`, the dispatcher filled columns left
 to right (starting work before finishing it), and a ticket's priority
