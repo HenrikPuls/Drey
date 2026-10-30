@@ -1143,6 +1143,112 @@ And the assistant can drive runs: ask it about the fleet — it sees
 `fleet_status`, and can `fleet_run`, `fleet_stop`, `fleet_steer` and
 `fleet_watch` through Drey's MCP server.
 
+
+### The board from a phone or tablet
+
+Settings → Tickets → **Remote access** offers the board to a phone or
+tablet on your network or over Tailscale. It is off until you switch
+it on, and only devices you pair get in.
+
+1. Switch **Enabled** on. **Reach** chooses how the phone gets there:
+   - *This computer only, through Tailscale Serve* (recommended): Drey
+     listens only on this computer. Run `tailscale serve --bg 47811`
+     once (the port shown), and enter the address Tailscale gives you —
+     `https://<computer>.<tailnet>.ts.net` — as **Device address**. The
+     connection is encrypted, also away from home.
+   - *Local network (plain HTTP)*: Drey listens on the network interface
+     you pick. Simpler, but anyone on the same Wi-Fi can read the
+     traffic.
+2. Under **Pair a device**, give the device a name and press **Pair**.
+   Scan the QR code with the phone's camera — or open the address and
+   type the code. The code works once and for five minutes.
+3. On the phone, add the page to the home screen.
+
+Every ticket move from a device is logged with the device's name
+(`owner@ipad`), so the Log shows where it came from. **Paired devices**
+lists each device with when it was last seen; **Revoke** locks one out
+for good. A device paired **Read only** can look but not change
+anything. Runs that skip permission prompts cannot be started from a
+device unless you allow **Bypass runs**.
+
+On the phone, four tabs sit at the bottom:
+
+- **Needs you** — what waits on you: a worker's question or permission
+  request, a red gate or a failed run, and below them the tickets in
+  your checkpoint columns (Plan review, Commit). The badge counts the
+  first group. Tap an entry to open its ticket.
+- **Board** — one column at a time; the chips at the top switch
+  columns and show their counts. **Swipe a card left** to move it to
+  the next column (a card with a live run does not swipe — open it
+  instead). Tap a card to open it.
+- **Runs** — the live runs first (what each worker is doing right
+  now), then the recent ones. Tap one to follow it.
+- **Capture** — a new ticket into the Inbox: title, priority,
+  repository, description.
+- **Images.** Wherever a Description or Plan text is edited on the
+  phone, an image can go straight in: paste it into the field, or tap
+  **Image** and pick one. It is uploaded to the desk, saved in the
+  tickets vault under `tickets/attachments/` and embedded where the
+  cursor sits — PNG, JPEG, GIF or WebP, up to 6 MB. The desk shows it
+  like any embedded image.
+
+**Answering a worker.** A worker's question shows its choices as
+buttons right in Needs you — a question with one choice is answered
+with one tap; or type your own words. A permission request offers
+**Once**, **Always** and **Reject**.
+
+**Following a run.** A run shows the worker's steps (each tool call on
+one line), its replies, and what it waits for. The ticket's title and
+the run's numbers (state, model, tokens, how long it has been running)
+stay pinned under the top bar while the transcript scrolls on. The one
+button beside **Steer the run…** does both jobs: with something typed
+it is **Send** (tell the worker something); over an empty field it is
+**Stop**, which ends the run (tap twice). An ended run still takes a
+message: type into **Message to reopen the run…** and **Send** picks
+its session up again as a new run, which the view then shows. The same
+works in the desk's run tab — its prompt box stays open after the run
+ended.
+
+**Refining a ticket.** On a ticket, **Edit** beside Description, Plan
+or Acceptance criteria opens that part for editing (a missing part
+shows as **+ Plan** and the like); **⋯ → Refine title, priority,
+repository** edits the header. Description and Plan take pasted or
+picked images (see **Images** above); Acceptance criteria do not —
+they are the gate's commands. **Save** makes one commit and a Log line
+naming your device. What you type is kept on the device until it is
+saved, so leaving the screen loses nothing. If the ticket changed on the
+desk in the meantime, the save is refused and your text stays: tap
+**Reload**, check your text against the new version, and save again. A
+ticket whose run is still going cannot be refined. If the same ticket is
+open in Drey with unsaved changes, Drey shows its merge view when you
+save there.
+
+**On an iPad.** From tablet width the Board shows every column side by
+side, scrolling sideways; in landscape the ticket you tap opens in a
+pane beside the board, with the same buttons as on the phone. To move a
+card, **press and hold it** until it lifts, then drag it — into another
+column to move it there, or up and down in its column to change the
+order (a blue line shows where it lands). Moving your finger before the
+card lifts scrolls instead. **Move…** works here too.
+
+**The fleet's switches.** The chip at the top right (*Running*,
+*Halted*) opens the fleet switch: **Run** / **Halt** for every column,
+and **Stop every live run** (tap twice). On the Board, the
+*Playing* / *Held* chip of an agent column plays or holds that column,
+or stops it.
+
+A ticket shows its description, plan and acceptance criteria, its
+Log on the second tab, and its latest run on the third. The text
+renders its formatting — **bold**, *italic*, `code`, tables, rules
+and smaller in-section headings — both in the ticket and in a run's
+replies and results. The big button at the bottom is the step that
+fits: **Approve → <next column>** in a checkpoint column, **Run
+agent** in an agent column (starting a run opens its transcript, so
+you see what the worker does), **Move to <next column>** otherwise.
+**Move…** lists every column with the commit the move makes; **⋯**
+claims, takes over or releases the ticket, and archives it (tap
+twice). Everything updates live while the app is open.
+
 ---
 
 ## 14. Diagrams (draw.io)

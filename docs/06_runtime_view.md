@@ -3462,3 +3462,53 @@ approves straight past the checkpoint; a refine dialog goes on to the
 next column or back to the nearest agent column. Closing the tab
 without a move keeps the run and the reservation — "Resume session"
 continues the dialog.
+
+## 6.71 Pairing a phone and moving a ticket from it (req-66, [ADR-0086](09_architecture_decisions/0086-tickets-remote-access.md))
+
+```mermaid
+sequenceDiagram
+    actor O as Owner (desk)
+    participant ST as Settings → Remote access
+    participant RS as RemoteService (tickets main)
+    participant GW as RemoteGateway (node:http)
+    participant PH as Phone (Safari)
+    participant PT as DreyTicketsPort
+    participant BS as BoardService
+    O->>ST: Enabled on, device address set
+    ST->>RS: remoteConfigure {enabled, publicUrl}
+    RS->>GW: start(127.0.0.1, 47811) — Host allowlist from the config
+    O->>ST: Pair "iPad"
+    ST->>RS: remotePair {name}
+    RS-->>ST: code + QR of <deviceUrl>/#pair=<code> (5 min, single use)
+    PH->>GW: GET / (via Tailscale Serve) — Host checked, CSP page
+    PH->>GW: POST /api/pair {code} (the fragment never reached the server)
+    GW->>RS: consume code → DeviceRegistry.add (hash stored)
+    GW-->>PH: {token} → localStorage
+    RS-->>ST: remote-changed → device list redraws
+    PH->>GW: GET /api/events (Bearer) — Server-Sent Events
+    PH->>GW: POST /api/tickets/T-0052/move {from, to} (Bearer, Origin checked)
+    GW->>PT: parseTransition → move(cmd, "owner@ipad")
+    PT->>BS: transition({…, actor}) — the board queue, one commit
+    BS-->>GW: board-changed (debounced) → ChangeHub
+    GW-->>PH: event: board → the phone re-fetches
+```
+
+On that `event: board` re-fetch the phone repaints only when the built
+view's serialized output changed — data churn no visible part of the
+page renders (a run's token tick, the connection flag) paints nothing
+(T-0053).
+
+The gateway checks the `Host` header before anything else (a page whose
+DNS name was rebound to this machine names a host the allowlist does not
+hold), refuses a foreign `Origin` on writes, and limits failed pairings
+and unknown tokens per client address. The fleet runner is never exposed:
+run controls go through the plugin's `FleetClient`.
+
+Refining from the phone (R5) follows the same path with one guard more:
+`GET /api/tickets/:id` returns the file text with its `revision`; `POST
+/api/tickets/:id/refine` carries that revision back, and the board
+service compares it inside its queue — a changed file answers
+`{ ok: false, conflict: true }` and nothing is written, so the device
+keeps its draft and reloads. A Drey tab showing the ticket is not asked
+(no plugin seam reaches open tabs yet): a clean tab reloads on the
+announce, a dirty one meets the ADR-0060 merge when it is saved.

@@ -28,6 +28,14 @@ Top-level rules, once, up front:
   actor `owner@<host>`. Works after restarts (derived from the files,
   no extra state); lane rules are never enforced on human moves —
   logged, not blocked.
+- **A refine from the remote is one commit** (req-66):
+  `tickets: <id> refined`, with one Log line
+  `- '<UTC>' owner@<device> — refined (<what changed>)` — the header
+  keys (`title`, `priority`, `repo`) and section names (`description`,
+  `plan`, `acceptance criteria`). It replaces a section's body up to the
+  next heading of any level (so `## Plan` keeps its `### Acceptance
+  criteria`), adds a missing section before `## Log` (Acceptance
+  criteria at the end of Plan), and never touches the Log otherwise.
 - **Machine writers write strictly** (the exact shapes below);
   **humans edit freely**; **readers normalize visibly** — anything a
   reader cannot parse unambiguously is reported as an issue on the
@@ -59,13 +67,16 @@ Top-level rules, once, up front:
     70-commit/
     80-done/
     archive/          # reserved (T-0041): archived tickets, never a column
+    attachments/      # reserved (req-66 R8): images a paired device
+                      #   uploaded — binary only, never a column, never
+                      #   a ticket
 ```
 
 The phase folders are exactly the phases configured in `pipeline.md`
-(the set above is the default, not fixed). `_meta` and `archive` are
-reserved; nothing else lives beside the phase folders. A vault whose
-root contains `tickets/_meta/pipeline.md` **is** a tickets vault — that
-file's presence is the detection marker.
+(the set above is the default, not fixed). `_meta`, `archive` and
+`attachments` are reserved; nothing else lives beside the phase
+folders. A vault whose root contains `tickets/_meta/pipeline.md` **is**
+a tickets vault — that file's presence is the detection marker.
 
 **Reserved `_`-prefixed folders at the repo root (T-0044, ADR-0080).**
 `_`-prefixed names directly beside `tickets/` are machine state, never
@@ -116,6 +127,21 @@ cleanup. Reviving is a move back into a phase folder — normalization
 treats it as `archive -> <phase>`. Body edits after archiving never
 re-fire normalization. Final deletion is the owner's manual act inside
 `archive/`.
+
+### Attachments (req-66 R8)
+
+`tickets/attachments/` is a reserved folder beside `_meta` and
+`archive`: **binary image files only, never a column, never a ticket**
+(the board lists markdown only, so no column ever appears). An image
+pasted or picked on a paired device is saved here by the desk — the
+type sniffed from the bytes (PNG, JPEG, GIF, WebP, ≤ 6 MB), never from
+a client-sent name — as `img-<yyyyMMdd>-<HHmmss>-<4 hex>.<ext>`, in
+exactly one commit `tickets: attachment <name>` (no Log line: the Log
+lives in ticket files and an upload touches none — Capture uploads
+before a ticket exists; the audit is the gateway's `remote <device>:
+attachment` line and the commit). Notes and ticket files embed the
+image with `![](../attachments/<name>)` — a phase folder moves on every
+transition, so only this fixed folder keeps the links intact.
 
 ### Id minting
 
@@ -184,7 +210,7 @@ How. Filled in the plan phase; must end with the acceptance criteria.
 | `rank` | integer 0–999999 | Default `5000`. Fine ordering inside derived order. |
 | `branch` | `t/<id>` | Written by machine writers; validated against the rule; rule wins. |
 | `entered-<phase>` | UTC timestamp | One per phase ever entered; holds the **most recent** entry time into that phase (first entry lives in git history). `entered-inbox` exists from creation. |
-| `claimed-by` | `<who>@<host>` (agents append `:<session>`) | Set when the ticket enters a claim-flagged phase (default: build); `owner@<host>` for the human. Takeover overwrites and logs the old value. |
+| `claimed-by` | `<who>@<host>` (agents append `:<session>`) | Set when the ticket enters a claim-flagged phase (default: build); `owner@<host>` for the human — `owner@<device>` (e.g. `owner@ipad`) when the action came from a paired remote device (req-66: the device name lowercased, reduced to `[a-z0-9-]`, `remote` when empty). Takeover overwrites and logs the old value. |
 | `claimed-at` | UTC timestamp | Set with `claimed-by`. |
 | `run` | map `{pid, started-at, stream}` | The live run (ADR-0075 run control): stamped by the fleet runner at start, cleared at end — at most one live run per ticket. `stream` names the **run id**; the stream file itself lives machine-local under `<userData>/fleet/runs/<id>/stream.jsonl`, so the ticket stays portable across the machines the repo syncs to. Readers validate the shape. |
 | `references` | list of strings | Optional. Ticket ids (`t/T-0041`), URLs, vault paths. |

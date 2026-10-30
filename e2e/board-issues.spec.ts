@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures/drey';
 
 /**
- * Board issues (req-66): the validator's findings about the meta files sit
+ * Board issues (req-73): the validator's findings about the meta files sit
  * as a chip in the board toolbar beside the filter; the chip unfolds the
  * messages, and a message that names a meta file opens it.
  */
@@ -32,7 +32,7 @@ test('the board issues are a header chip that unfolds readable messages', async 
   // req-69: filter and chip sit in the panel header, not a row of their own.
   const controls = page.locator('.tickets-head-view').filter({ visible: true });
   const chip = controls.locator('.tickets-issues-chip');
-  // req-66's final shape: icon and count only, the summary in the tooltip.
+  // req-73's final shape: icon and count only, the summary in the tooltip.
   await expect(chip).toContainText('2');
   const filter = controls.locator('.tickets-filter-btn');
   await expect(filter).toHaveCount(1);

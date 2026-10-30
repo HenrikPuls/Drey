@@ -20,6 +20,396 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### fix — req-66 follow-up: a run follows a moved ticket; every run takes a message
+
+Owner-verified (signed off 2026-10-31). Owner request, outside the
+list. T-0054 refused "already has a live run — stop it first" although
+no run was live: the owner moved the card (build → review → commit,
+from the phone) while its run went on, the runner kept writing to the
+old path (`ENOENT`) and its end never cleared the `run:` stamp — a
+stamp no surface could stop.
+
+- **The runner follows the ticket.** `RunSupervisor.patchTicket` looks
+  the ticket up by id in every phase folder when its path is gone
+  (`relocateTicket`) and points the run there, so Log lines and the
+  stamp clearing land; the success move skips when the owner already
+  moved the card (that move stands, no second one).
+- **A leftover stamp heals on Run agent.** `startRun` clears a `run:`
+  stamp whose run record settled with an end time (a down runner's
+  synthetic `stopped` has none) — one Log line, one commit — instead
+  of refusing.
+- **Every run takes a message.** `POST /send` to an ended run
+  (done/stopped/failed) with a session reopens it under a new held run,
+  the message as its first prompt (`rung: resume`, the new `runId` in
+  the reply). The phone's run view shows **Message to reopen the run…**
+  on ended runs and follows to the new run; the desk's takeover tab
+  keeps its prompt box open after the run ended and opens the new
+  run's tab.
+
+Specs: `runs.spec.ts` — a prompt to an ended run reopens with the
+prompt; a ticket moved during the run is followed, its stamp cleared,
+no second move. Manual "Following a run", `plugins/tickets/FLEET.md`
+route table.
+
+### fix — T-0053: the tickets remote paints only what changed (req-66 follow-up)
+
+Owner-verified (signed off 2026-10-31). The remote's display
+flickered as if the page loaded twice. Both causes sat in the phone
+client's repaint guard (`render()`), whose key embedded more than the
+page shows:
+
+- **Startup / wake double paint.** The key embedded the connection
+  flag; the first paint happened while `/api/events` was still
+  connecting, and the connect — with `Api.listen`'s catch-up refresh
+  250 ms later — tore the identical page down and rebuilt it. The same
+  strike after every phone wake (reconnect → catch-up).
+- **Live-run ticks.** The key embedded the raw board/fleet/needs JSON,
+  so a running worker's tick (`activity`, token counts — nothing the
+  Needs or Board page renders) repainted the whole page every few
+  seconds although nothing on it changed.
+
+`dom.ts` gains `bodyKey(view)` — the built view serialized (title,
+body nodes, actions); `render()` repaints only when that key moves,
+and the skip path still refreshes the header chip and the tab bar
+(connection state, needs badge — node swaps outside the key). Visible
+changes paint exactly as before, and a visible age bucket flipping
+("13 h" → "14 h") repaints, as intended. `Api.listen`'s connect-time
+catch-up stays as it is: it is free now, and still covers changes
+missed while a first connect is slow.
+
+- `plugins/tickets/remote/dom.spec.ts` (new) — the key's contract:
+  stable across rebuilds, blind to `connected` and a live run's
+  activity/token tick while the run is on the page, moved by a
+  card-title or needs-list change.
+- `e2e/tickets-remote-repaint.spec.ts` (new, own service on 47862) —
+  startup paints exactly once (the event stream held back 600 ms so
+  the first paint is deterministically offline), a desk-side run tick
+  the page does not render paints nothing, a desk-side board move
+  still paints. Paints are counted by a MutationObserver on `main`;
+  on req-66's guard the legs measure red (2 startup paints, +1 per
+  tick). The desk fixture gains `touchFleet(patch)`.
+- docs/06 §6.71 — one sentence: the `event: board` re-fetch repaints
+  only when the built view's serialized output changed.
+
+### req-66 R8 — Tickets remote: images from the phone, the run view's pinned header
+
+Owner-verified (signed off 2026-10-31). Owner request, outside the list (ADR-0086, later change):
+
+- **Images into the phone's text fields.** An image pasted into
+  Capture's Description or the refine view's Description/Plan — or
+  picked through the new **Image** button under the field — uploads to
+  the desk (base64 in JSON on the existing API,
+  `POST /api/attachments`), is saved into the tickets vault's new
+  reserved `tickets/attachments/` folder (`img-<stamp>-<rand>.<ext>`,
+  type sniffed from the magic bytes — PNG, JPEG, GIF, WebP, ≤ 6 MB,
+  never from a client-sent name) in exactly one commit
+  (`tickets: attachment <name>`, no Log line — the Log lives in ticket
+  files and an upload touches none), and `![](../attachments/<file>)`
+  is inserted at the caret, followed by a bubbling `input` event so the
+  refine draft saves. Acceptance criteria keep the affordance out (an
+  image line would corrupt the gate); the desk shows the images as
+  ordinary vault files. The gateway's body cap grows for this one route
+  only (12 MB instead of 64 KB).
+- **The run view's header stays put.** The run page opened with
+  `followTail`, so the ticket title and the meta row (state, model,
+  tokens, `started … ago`) scrolled away and never came back while the
+  run streamed. Title + meta now sit in a sticky `.runhead` under the
+  top bar — CSS only, because the 3-second live repaint rebuilds the
+  DOM.
+- **One composer button.** The run view's **Send** and **Stop** are one
+  button now (owner request, in-run): with something typed in **Steer
+  the run…** it is **Send**, over an empty field it is **Stop** (armed,
+  two taps) — the composer keeps one narrow row.
+- The phone does not display the images yet (an `<img>` cannot send the
+  bearer token); an authed asset route plus the phone's markdown
+  rendering is the recorded follow-up.
+
+Specs: `main/commands.spec.ts` (the attachment parser: four magic-byte
+types, the extension derived from the bytes, refusals for text bytes /
+non-base64 / > 6 MB), `main/remote/router.spec.ts` (the route: ok path
+with `owner@<device>`, a parser refusal as `{ ok: false }`, behind
+auth), `main/remote/drey-port.spec.ts` (delegation with the actor, a
+failed commit as a warning); `e2e/tickets-remote.spec.ts` (a picked PNG
+in Capture → `#cap-desc` contains the embed, the call recorded with the
+device actor; the run header still pinned after scrolling the
+transcript to its end). Docs: ticket schema "Attachments (req-66 R8)",
+manual "Images" and the run paragraph, ADR-0086 later change. In-run
+owner addition: the composer's combined Send/Stop button (R4 case
+extended: one button, Stop over an empty field, Send with text typed,
+back to Stop after the send).
+
+### req-66 R9 — Tickets remote: markdown in the reading surfaces, Run agent jumps to the run
+
+Owner-verified (signed off 2026-10-31). Owner request, outside the
+list (ADR-0086). Basic markdown renders where the phone/iPad client
+reads ticket and worker text, and starting a run opens it:
+
+- **One canonical inline parser** — `parseReplyInline`, `ReplySpan`
+  and `splitRow` moved verbatim from `renderer/transcript-text.ts`
+  into `plugins/tickets/shared/markdown.ts`; the desk renderer imports
+  them (behaviour unchanged), the client buys its bold/italic/`code`
+  spans from the same source (share, don't copy).
+- **Block model** (`remote/model.ts`, breaking for the client-internal
+  `Block` union): `blocksOf` additionally reads pipe tables (header
+  row + `---` rule + body rows, cells via `splitRow`), `---` rules
+  and in-section `####`+ headings; `p` keeps its space-joined
+  soft-break text. A lone table-rule line stays a paragraph.
+- **DOM builder** (`remote/markdown.ts`): `markdownBlocks` /
+  `renderMarkdown` build the blocks as nodes through `h()` and
+  `textContent` only — never `innerHTML`, ticket and worker text is
+  untrusted (pinned by a literal `<img onerror>` spec case). The
+  ticket view (and the iPad detail pane) renders through it, keeping
+  the `.box`/`.box.done`/`.li-log` chrome and the Log tab's dotless
+  look; the transcript's `text` and `result` rows render their
+  markdown (the result's `---`/`**✓ Turn finished**` included) while
+  `step`/`you`/`thinking`/`setup`/`error` stay plain — desk parity.
+  Tables sit in an `overflow-x` wrapper so they are visible on a
+  phone; the rendered container owns whitespace (the rows'
+  `pre-wrap` would double-space it).
+- **Run agent jumps to the run**: the primary button POSTs
+  `/api/runs` and, on `ok`, switches to `#run/<runId>` (`#runs` when
+  a host omits the id); a refusal or network error toasts the same
+  text `ctx.act` shows. The success toast is dropped — the view
+  switch is the feedback.
+- Found by the e2e round: the iPad drag test failed on the untouched
+  base here — the detail pane's reveal centers the selected column
+  and pushed the source card off screen, so the press landed outside
+  the viewport (verified against a pristine R6 build). The drags now
+  scroll the source card into view before anything is measured, and
+  the last scroll waits out the reorder's strip rebuild; no assertion
+  changed.
+
+Numbered R9 because T-0054 (images on the phone) built first and
+claimed R8.
+
+Specs: `plugins/tickets/shared/markdown.spec.ts` (moved cases),
+`remote/model.spec.ts` (the new block kinds),
+`remote/markdown.spec.ts` (jsdom: spans, table DOM, checkbox + inline
+mix, no-HTML), `e2e/tickets-remote.spec.ts` (rendered strong/em/code/
+table; after Run agent the hash is `#run/run-2`, the title
+`T-0050 · Run`, the transcript's bold visible, Back returns to the
+ticket). Docs: docs/05 §5.0 (takeover transcript + remote client
+rows), manual "The board from a phone or tablet".
+
+### req-66 R6 — Tickets remote: the iPad board
+
+Owner-verified (signed off 2026-10-31). Owner request, outside the list
+(ADR-0086). From tablet width the Board is a kanban:
+
+- **≥ 768 px**: every column side by side in a sideways-scrolling strip
+  (snap per column, the scroll position kept across live redraws), each
+  column with its count/WIP, the checkpoint or Playing/Held chip
+  (opens the column sheet) and its own vertical scroll.
+- **≥ 1100 px** (landscape): the tapped ticket opens in a detail pane
+  beside the strip — the phone's ticket view with its action bar — the
+  selected card outlined and scrolled into view; the phone ticket page
+  stays for narrower screens.
+- **Press and hold to drag** (350 ms; moving earlier is a scroll): the
+  card lifts as a ghost, a blue marker shows the landing, the strip and
+  the column scroll near their edges; a drop in another column is a
+  `transition` with the landing index, within the column a `reorder`
+  pin, a drop in place nothing — the index counted without the dragged
+  card, as the desk's board does (`dropIndexOf` / `dropActionOf`).
+  While lifted, a non-passive `touchmove` keeps Safari from scrolling;
+  pointer capture keeps a release outside the strip from leaving a
+  drag behind.
+- Found by the e2e round: a live redraw during the hold replaced the
+  strip under the finger and lost the drag — redraws are now held from
+  the first touch, not from the lift.
+
+Specs: `remote/model.spec.ts` (drop index and action);
+`e2e/tickets-remote.spec.ts` iPad case (iPad Pro 11 landscape: eight
+columns, tap selects into the detail pane, drag across columns with the
+index and the device actor, reorder within Build, an early move is a
+scroll). Docs: docs/05 §5.41, manual "On an iPad".
+
+### req-66 R5 — Tickets remote: refine from the phone
+
+Owner-verified (signed off 2026-10-31). Owner request, outside the
+list (ADR-0086, later change). Description, Plan, Acceptance criteria
+and the header (title, priority, repository) are editable on the phone:
+
+- **Ticket view**: an **Edit** link beside each of the three sections,
+  **+ Description / Plan / Acceptance criteria** for a missing one, and
+  "Refine title, priority, repository" in the ⋯ sheet. Hidden on a
+  read-only device and while a run lives.
+- **Refine view** (`#refine/<id>/<part>`): one part at a time behind
+  chips; the typed text is kept as an on-device draft until it is saved
+  (restored on return, flagged when it started from an older version).
+  A form is never redrawn under the typing hand.
+- **Desk side**: `POST /api/tickets/:id/refine` → `parseRefine`
+  (sections up to 20 000 characters, title 1–200, known priority, at
+  least one change) → `BoardService.refineTicket` inside the board
+  queue: refused when the file's revision (16-hex SHA-256, now also in
+  `GET /api/tickets/:id`) differs from the one the device read, refused
+  while a run owns the ticket; else the pure `refineTicket`
+  (`main/ticket-refine.ts`) — header keys through `patchHeaderFields`
+  (comments and other keys survive), sections replaced up to the next
+  heading of any level, a missing one added before the Log — one Log
+  line `refined (<what>)` with the device actor, one commit
+  `tickets: <id> refined`, announced.
+- **Deviation from ADR-0086 as first written**: the remote was to refuse
+  a refine while the ticket is dirty in a Drey tab, but no plugin seam
+  reaches open tabs. It relies on ADR-0060 like every board write; the
+  SDK seam is a roadmap follow-up. `specs/ticket-schema.md` records the
+  refine commit and Log line.
+
+Specs: `main/ticket-refine.spec.ts`, `parseRefine` in
+`commands.spec.ts`, the refine route in `router.spec.ts`, the port in
+`drey-port.spec.ts`, `remote/model.spec.ts` (section text);
+`e2e/tickets-remote.spec.ts` R5 case (save, a desk-side change refused
+with the draft kept through Reload, the header priority). Docs: ADR-0086
+later change, docs/05 §5.41, docs/06 §6.71, manual.
+
+### req-66 R4 — Tickets remote: runs on the phone
+
+Owner-verified (signed off 2026-10-31). Owner request, outside the list (ADR-0086). The phone
+client now drives the fleet:
+
+- **Answer a waiting worker** in Needs you and in the run view:
+  OpenCode's question form as choice buttons (a one-question,
+  one-choice form answers with one tap; several fields or multiple
+  choice collect, then send), own words instead of a choice, a
+  `QUESTION:` turn answered as a message, and permission requests
+  with Once / Always / Reject. Read-only devices see the question only.
+- **Runs** tab (fourth tab): live runs newest first with their current
+  activity line, then the ten most recent settled ones.
+- **Run view** (`#run/<id>`, also the ticket's third tab): state, model,
+  context and token figures, the gate failure, the transcript — the
+  desk's own `watch-format.ts` view model drawn as text (tool steps one
+  line each, replies, the owner's prompts, results, errors; thinking
+  as one muted line; the last 80 blocks), following the end while you
+  are at the bottom and pulled every 3 s while the run lives; a
+  composer to steer (`/send`) and Stop with the armed second tap.
+- **Fleet switches**: the header chip opens Run / Halt and "Stop every
+  live run" (armed); an agent column's Playing / Held chip opens Play /
+  Hold and "Stop <column>" (armed).
+- Redraws: skipped when a refresh brought identical data (no flicker,
+  no lost touch target — found by the e2e round), and deferred while a
+  text field has focus, so an update never wipes what is being typed.
+
+Specs: `remote/model.spec.ts` (run lists, state labels, `answersOf`);
+`e2e/tickets-remote.spec.ts` R4 case (answer from Needs you, the Runs
+list, the transcript, steer, the master and column switches, the armed
+stop). Docs: docs/05 §5.41, manual.
+
+### req-66 R3 — Tickets remote: the phone client
+
+Owner-verified (signed off 2026-10-31; the automated round runs
+Chromium at iPhone size, WebKit is not part of the toolchain). Owner request, outside the
+list (ADR-0086). The gateway now serves a real client instead of the
+pairing page:
+
+- **Needs you** (start screen): waiting questions and permission
+  requests, red gates and failed runs, then the checkpoint tickets;
+  the tab badge counts the first group.
+- **Board**: one column at a time behind scrollable phase chips with
+  counts, WIP and the column's play/hold state; cards with priority
+  edge, run / blocked / claim / issue chips. **Swipe left** moves a
+  card to the next column (not while a run lives); a tap opens it.
+- **Ticket**: title, chips, description / plan / acceptance criteria
+  (checkboxes) and the Log tab, rendered as text only. One primary
+  action — *Approve → next* in a checkpoint column, *Run agent* in an
+  agent column, *Move to next* otherwise, disabled while a run lives —
+  plus **Move…** (every phase, the commit line it makes) and **⋯**
+  (claim / take over / release, archive with the armed second tap).
+- **Capture**: title, priority, repository, description into the Inbox,
+  then the new ticket opens.
+- Pairing from the QR link or a typed code; an unknown or revoked token
+  returns to pairing. Home-screen web app (manifest, icons), safe-area
+  insets, 44 px targets, Anthrazit palette.
+- Live: the event stream (read with `fetch`, bearer header) redraws on
+  every board or fleet change, reconnects with backoff and when the app
+  returns to the foreground; a redraw waits while a swipe is under a
+  finger (found by the e2e round: an update mid-swipe dropped the
+  gesture). The Move sheet's hover preview was dropped — on touch it
+  fired on the tap itself.
+- Server side: `GET /api/tickets/:id` (card + file text,
+  `BoardService.readTicket`, `TicketsRemotePort.ticket`).
+- Build: `scripts/build-plugins.mjs` bundles `plugins/<id>/remote/app.ts`
+  into one IIFE script (Safari 15 target, own-sources rule) and copies
+  the client's static files; `plugins/tsconfig.renderer.json`
+  typechecks `plugins/*/remote/`.
+
+Specs: `remote/model.spec.ts`, `remote/sse.spec.ts`; router spec for
+the ticket route; `e2e/tickets-remote.spec.ts` (Chromium at iPhone 13
+size against the built gateway and client with an in-memory English
+demo board, `e2e/fixtures/tickets-remote-desk.ts`: pairing from the
+link, Needs you, a swipe move with the device actor, approve, the Move
+sheet, Capture, the unpaired path, no console errors). Docs: docs/05
+§5.41, manual "The board from a phone or tablet".
+
+### req-66 R2 — Tickets remote: gateway, pairing and settings
+
+Owner-verified (signed off 2026-10-31). Owner request, outside the
+list (ADR-0086). The tickets plugin now serves the board over HTTP to
+paired devices — off by default:
+
+- **Settings → Tickets → Remote access** (`renderer/settings-remote.ts`):
+  Enabled, Reach (loopback through Tailscale Serve, or one LAN
+  interface with a plain-HTTP warning), port (default 47811), device
+  address, bypass runs. Changes apply at once (the gateway restarts).
+  Pairing shows a QR code of `<device address>/#pair=<code>` plus the
+  typeable code (10 characters, Crockford base32, single use, 5
+  minutes); paired devices list with "last seen" and Revoke; a device
+  can be paired read-only.
+- `main/remote/gateway.ts` — `node:http`, strict CSP and security
+  headers on every response, JSON API, Server-Sent Events
+  (`board` / `fleet`), static client files (the built-in pairing page
+  until R3), 64 KB body cap.
+- `main/remote/router.ts` — the API as a pure function: Host allowlist
+  first (DNS rebinding), foreign Origin refused on writes, pairing,
+  bearer auth, failure limit (10 per 10 minutes per address), read-only
+  devices, the device actor (`owner@<device>`) on every write. Routes
+  as in ADR-0086; a board refusal stays a 200 with `{ ok: false }`.
+- `main/remote/auth.ts` — pairing codes, device registry storing only
+  SHA-256 token hashes (in the plugin config, `remote.devices`), the
+  failure limiter. `config.ts` — normalized `remote.*` settings, bind
+  address (never 0.0.0.0), allowed hosts, device URL.
+- `main/remote/qr.ts` — a dependency-free QR encoder (byte mode, level
+  M, versions 1–10); every version was decoded with OpenCV when it was
+  written, instead of adding a package.
+- Wiring: the board's debounced change and the fleet push feed a
+  `ChangeHub`; the plugin's new `deactivate` stops the server.
+
+Specs: `remote/qr.spec.ts`, `auth.spec.ts`, `config.spec.ts`,
+`router.spec.ts`, `gateway.spec.ts` (real loopback socket: headers,
+Host refusal, bad JSON, the event stream). Checked beyond the specs: the
+built service end to end (pair by the QR's code, `/api/me` actor,
+foreign Origin 403, no plain token stored) and the pairing page in
+Chromium at iPhone size (pairs from the link, strips the fragment,
+survives a reload, no CSP errors). Docs: docs/05 §5.41, docs/06 §6.71,
+manual "The board from a phone or tablet", FLEET.md.
+
+### req-66 R1 — Tickets remote: command layer and port
+
+Owner-verified (signed off 2026-10-31). Owner request, outside the
+list (ADR-0086). The first step of the tickets remote, behaviour-neutral
+in Drey:
+
+- `plugins/tickets/main/commands.ts` — one parser per board command
+  (create, transition, reorder, unpin, claim, archive, unarchive, run
+  start/stop/send/answer/permission, chain master/column/stop) and
+  `chainResult`. The IPC handlers now call them; refusal texts are
+  unchanged. The gateway (R2) will call the same parsers.
+- The board writes (create, transition, archive, unarchive, claim)
+  take an optional actor; Drey keeps `owner@<host>`, a remote device
+  will write `owner@<device>` (`remoteActorOf`, `specs/ticket-schema.md`).
+- `plugins/tickets/shared/remote-protocol.ts` — `TicketsRemotePort`,
+  the host-neutral surface a gateway talks to, and the "Needs you"
+  item shape.
+- `plugins/tickets/main/remote/needs.ts` — the pure `needsOf`: waiting
+  questions and permissions, red gates and failed runs whose ticket
+  still sits in the run's phase (latest run only), checkpoint tickets
+  without a live run, in that order, oldest first.
+- `plugins/tickets/main/remote/drey-port.ts` — `DreyTicketsPort` over
+  the board service and the fleet client, plus `ChangeHub`; a bypass
+  run is refused unless the (R2) setting allows it. Not wired to a
+  server yet.
+
+Specs: `commands.spec.ts`, `remote/needs.spec.ts`,
+`remote/drey-port.spec.ts` (16 cases). Docs: ADR-0086, docs/05 §5.41.
+
 ### req-72 — Projects, multi-repo tickets, the repositories settings
 
 Owner-verified (signed off 2026-10-30). Owner request, outside the
@@ -164,7 +554,7 @@ round trip, the claim rows for a free, an own and a foreign claim).
 ### req-69 — The board's view controls move into the Tickets header
 
 Owner request, outside the
-list. req-66 had left one toolbar row above the columns holding only the
+list. req-73 (then numbered req-66) had left one toolbar row above the columns holding only the
 hide-blocked filter and the board issues chip — a whole line of panel
 height for two small controls. Both now sit in the panel header as one
 group (`boardViewControlsNode` in `plugins/tickets/renderer/index.ts`,
@@ -242,7 +632,7 @@ only from a bare `true`; a move drops it, a claim does not),
 `e2e/interactive-dialog.spec.ts` (the switches appear exactly where the
 columns offer them). Also repaired on the way: the manual had a
 duplicated Workers-strip paragraph (shipped in the req-64 entry), and
-req-66's final chip shape had left its e2e expecting the old text.
+req-73's final chip shape had left its e2e expecting the old text.
 
 ### req-68 — Clean up worktrees sweeps the link-only leftover folders
 
@@ -293,10 +683,11 @@ busy run resumes at the next report without the unwatched gap) and
 fallbacks, the chip line). Manual: the workers strip and the takeover
 paragraph.
 
-### req-66 — Readable board issues, one toolbar row
+### req-73 — Readable board issues, one toolbar row
 
-Owner request, outside the
-list. The board's own findings (pipeline / repos / order files) sat in a
+Shipped and signed off as req-66; renumbered 2026-10-31 when the
+tickets remote, which had reserved req-66 on its own branch, merged
+into main. Owner request, outside the list. The board's own findings (pipeline / repos / order files) sat in a
 full-width bordered box ("2 board issues") whose messages were only a
 tooltip, above a second row holding just the hide-blocked filter — three
 rows of different heights over the columns. Now there is one toolbar row

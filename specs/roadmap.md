@@ -59,8 +59,9 @@ owner's verification round for 1–81 closed 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 87; latest requirement id: req-71
-(Settings → Tickets grouped per CLI runner)),
+highest used (latest: milestone 87; latest requirement id: req-73
+(readable board issues, renumbered from req-66 — the tickets remote
+holds req-66)),
 the update check's positive answer is inline text — req-43 and req-44
 were owner requests outside the list, shipped and owner-verified in
 the same step).
@@ -116,6 +117,33 @@ plan and build columns as agent handovers plus the three prompts
 is not yet verified against the installed CLI. Also open: a token budget per run
 (stop a worker that reads without writing), and a tickets-repo-side credit
 figure for flat plans (GLM coding plan reports cost 0).
+
+**req-66 — Tickets remote: the board from a phone or tablet**
+(owner request, outside the list, 2026-10-30; ADR-0086). Move, run,
+take over, answer and refine tickets from an iPhone or iPad on the
+couch — the tickets plugin only, not Drey on the device (that stays
+excluded as req-10). An HTTP gateway in the tickets plugin's main side
+behind a host-neutral `TicketsRemotePort`, so a later standalone or
+VS Code host serves the same client. Loopback by default, reached
+through Tailscale Serve (HTTPS); a LAN mode is opt-in with a warning.
+Off by default; QR pairing, per-device tokens (hashes only), revoke,
+Host/Origin check, bypass runs refused remotely. Owner decisions D1–D5
+of 2026-10-30 confirmed. R1 (command layer + port), R2 (gateway,
+pairing, Settings), R3 (the phone client), R4 (runs on the phone), R5
+(refine), R6 (the iPad board), R8 (images from the phone, the run
+view's pinned header) and R9 (markdown on the phone) shipped — see the changelog; only the optional
+R7 remains. The client's display flicker (a double paint at
+startup/wake and one per live-run tick) was fixed as T-0053 — the
+paint is keyed on the built view (see the changelog). Follow-up of R5: an SDK seam
+over `OpenDocsBridge` so a plugin's main side (the remote's refine)
+edits a ticket open in a Drey tab through that tab instead of relying
+on the ADR-0060 save-conflict merge. Follow-up of R8: an authed image
+route (query token or cookie) so the phone can *display* the uploaded
+attachments — an `<img>` cannot send the bearer token; rides the
+phone's markdown rendering. Remaining steps, each shipped on its own:
+
+- **R7 (optional, its own decision)** — Web Push: needs HTTPS and
+  Apple's push service, a further cloud exception.
 
 ### Next
 

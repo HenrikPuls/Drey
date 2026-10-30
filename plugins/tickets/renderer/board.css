@@ -237,7 +237,7 @@
   display: none;
 }
 
-/* The board issues (req-66): a bubble beside the filter — icon and count
+/* The board issues (req-73): a bubble beside the filter — icon and count
    only, the summary in the tooltip — coloured by the worst level; it
    unfolds the messages above the columns, inset like the board. */
 .tickets-issues-chip {

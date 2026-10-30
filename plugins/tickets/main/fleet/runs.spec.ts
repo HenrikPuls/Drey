@@ -1159,6 +1159,53 @@ describe('RunSupervisor', () => {
     expect(text).toContain('stopped by the owner — wrong direction');
   });
 
+  it('a prompt to an ended run reopens its session with the prompt as the first message', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+    adapter.handles[0]!.onEvent('session');
+    await sup.stop(id, 'pause');
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('stopped'));
+    // The fake worker reported no session; give the record one.
+    (sup as unknown as { runs: Map<string, { info: RunInfo }> }).runs.get(id)!.info = {
+      ...sup.get(id)!,
+      sessionRef: 'ses_1',
+    };
+
+    expect((await sup.send(id, '   ')).ok).toBe(false);
+    const sent = await sup.send(id, 'Also fix the header');
+    expect(sent.ok).toBe(true);
+    expect(sent.rung).toBe('resume');
+    expect(sent.runId).toBeDefined();
+    expect(sent.runId).not.toBe(id);
+    expect(adapter.starts[1]!.resumeRef).toBe('ses_1');
+    expect(adapter.starts[1]!.instruction).toBe('Also fix the header');
+    expect(sup.get(sent.runId!)?.held).toBe(true);
+    const stream = await fsp.readFile(path.join(fleetRoot, 'runs', sent.runId!, 'stream.jsonl'), 'utf8');
+    expect(stream).toContain('you › Also fix the header');
+  });
+
+  it('follows a ticket the owner moved during the run: the stamp is cleared, no second move', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+
+    // The owner moves the card on by hand (two columns on) while the worker runs.
+    const movedRel = 'tickets/commit/T-0001.md';
+    await fsp.mkdir(path.dirname(path.join(vaultDir, movedRel)), { recursive: true });
+    await fsp.rename(path.join(vaultDir, rel), path.join(vaultDir, movedRel));
+
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+
+    const text = await fsp.readFile(path.join(vaultDir, movedRel), 'utf8');
+    expect(parseTicketFile(text, movedRel).meta.run).toBeNull();
+    await expect(fsp.access(path.join(vaultDir, 'tickets/build/T-0001.md'))).rejects.toBeDefined();
+  });
+
   it('steer reaches the worker and lands in the ticket Log', async () => {
     const { sup, adapter } = supervisor();
     const rel = await writeTicket();

@@ -1,5 +1,5 @@
 /**
- * The board's own findings (req-66): what the validator reports about
+ * The board's own findings (req-73): what the validator reports about
  * pipeline.md, repos.md and order.md. A bubble in the board toolbar —
  * icon and count, coloured by the worst level, the full summary in its
  * tooltip — unfolds the messages under the row, and each message that

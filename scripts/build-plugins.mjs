@@ -9,6 +9,9 @@
  *   plugins/<id>/renderer/index.ts  -> dist-electron/plugins/<id>/renderer/index.js (esbuild, one ES module)
  *   plugins/<id>/plugin.json        -> dist-electron/plugins/<id>/plugin.json
  *   plugins/<id>/renderer/*.css     -> dist-electron/plugins/<id>/renderer/*.css
+ *   plugins/<id>/remote/app.ts      -> dist-electron/plugins/<id>/remote/app.js (esbuild, one IIFE script;
+ *                                      the tickets remote's phone client, req-66 — served over HTTP, not plugin://)
+ *   plugins/<id>/remote/<assets>    -> dist-electron/plugins/<id>/remote/ (html, css, manifest, icon)
  *
  * The renderer is bundled (ADR-0044, later change) so it can use the same
  * `shared/` modules as the base and the plugin's main side instead of
@@ -141,6 +144,32 @@ for (const entry of readdirSync(pluginsDir)) {
         const dest = path.join(pluginOut, 'renderer');
         mkdirSync(dest, { recursive: true });
         cpSync(path.join(rendererSrc, file), path.join(dest, file));
+      }
+    }
+  }
+  // A browser client the plugin serves itself (the tickets remote, req-66,
+  // ADR-0084): one classic script — iOS home-screen apps and the gateway's
+  // CSP take a plain `<script src>` — under the same own-sources rule.
+  const remoteSrc = path.join(pluginDir, 'remote');
+  const remoteEntry = path.join(remoteSrc, 'app.ts');
+  if (existsSync(remoteEntry)) {
+    const remoteOut = path.join(pluginOut, 'remote');
+    rmSync(remoteOut, { recursive: true, force: true });
+    await build({
+      entryPoints: [remoteEntry],
+      outfile: path.join(remoteOut, 'app.js'),
+      bundle: true,
+      platform: 'browser',
+      format: 'iife',
+      target: ['safari15', 'es2020'],
+      minify: true,
+      sourcemap: false,
+      logLevel: 'warning',
+      plugins: [onlyOwnSources(pluginDir)],
+    });
+    for (const file of readdirSync(remoteSrc)) {
+      if (!file.endsWith('.ts')) {
+        cpSync(path.join(remoteSrc, file), path.join(remoteOut, file));
       }
     }
   }

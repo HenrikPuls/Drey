@@ -428,6 +428,15 @@ export function patchTicketFile(text: string, patch: TransitionPatch): string {
   return `---\n${yamlOf(doc)}---\n${appendLogLine(body, stamp, patch.actor, what)}`;
 }
 
+/** Appends one machine-shaped Log line to a whole ticket file (req-66 refine). */
+export function withLogLine(text: string, now: Date, who: string, what: string): string {
+  const { yamlText, body, hadFence } = splitFrontmatter(text);
+  if (!hadFence || yamlText === null) {
+    throw new Error('ticket has no frontmatter fence');
+  }
+  return `---\n${yamlText}\n---\n${appendLogLine(body, formatUtcStamp(now), who, what)}`;
+}
+
 function appendLogLine(body: string, stamp: string, who: string, what: string): string {
   const line = `- '${stamp}' ${who} — ${what}`;
   const lines = body.split('\n');

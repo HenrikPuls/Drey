@@ -11,6 +11,7 @@
  * validation and YAML stay here.
  */
 import { BrowserWindow, dialog, shell, type OpenDialogOptions } from 'electron';
+import { randomBytes } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
@@ -33,7 +34,6 @@ import {
   type ReposListing,
   type TicketCard,
   type TicketPriority,
-  TICKET_PRIORITIES,
 } from '../shared/tickets';
 import {
   assembleBoard,
@@ -63,6 +63,28 @@ import { blockedRefusal } from './blocked';
 import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, type DriftDetection } from './normalize';
 import { openTerminalAt } from './open-terminal';
+import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
+import type { AttachmentReply, RefineReply, TicketReply } from '../shared/remote-protocol';
+import type { AttachmentCommand, RefineCommand } from './commands';
+import { refineTicket, revisionOf } from './ticket-refine';
+import { RemoteService } from './remote/service';
+import {
+  chainResult,
+  parseAnswer,
+  parseChainColumn,
+  parseChainColumnStop,
+  parseChainMaster,
+  parseClaim,
+  parseCreate,
+  parsePermission,
+  parseReorder,
+  parseSend,
+  parseStartRun,
+  parseStopRun,
+  parseTicketId,
+  parseTransition,
+  parseUnarchive,
+} from './commands';
 import { TicketsGit, type RepoLocation } from './tickets-git';
 import { createFleetMcpTools } from './mcp-tools';
 import { loadShippedPrompts } from './default-prompts';
@@ -84,7 +106,6 @@ import {
   normalizeFleetCaps,
   normalizeFleetHandover,
   normalizeFleetPools,
-  questionAnswersOf,
   WORKER_PROVIDERS,
   type FleetPools,
 } from './fleet/protocol';
@@ -94,6 +115,7 @@ import { scanRepoFolder } from './repos-scan';
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
 const ORDER_PATH = 'tickets/_meta/order.md';
 const REPOS_PATH = 'tickets/_meta/repos.md';
+const ATTACHMENTS_DIR = 'tickets/attachments';
 
 const OWNER = `owner@${hostname().toLowerCase()}`;
 
@@ -153,6 +175,8 @@ class BoardService {
   private queueTail: Promise<unknown> = Promise.resolve();
   private readonly gitLocations = new Map<string, RepoLocation | null>();
   private emitDebounce: ReturnType<typeof setTimeout> | null = null;
+  /** Who hears the debounced board change besides the renderer (the remote, req-66). */
+  private readonly changeListeners = new Set<() => void>();
   private lastChainConfig: string | null = null;
 
   constructor(
@@ -181,7 +205,15 @@ class BoardService {
     this.emitDebounce = setTimeout(() => {
       this.emitDebounce = null;
       this.ctx.ipc.emit('board-changed');
+      for (const listener of this.changeListeners) {
+        listener();
+      }
     }, 200);
+  }
+
+  onChanged(listener: () => void): () => void {
+    this.changeListeners.add(listener);
+    return () => this.changeListeners.delete(listener);
   }
 
   private async readOptional(vaultId: string, path: string): Promise<string | null> {
@@ -338,6 +370,92 @@ class BoardService {
     return null;
   }
 
+  /** One ticket's card and file text, for the remote's ticket view (req-66). */
+  async readTicket(id: string): Promise<TicketReply> {
+    const found = await this.findCard(id);
+    return found === null
+      ? { ok: false, error: `${id} is not on the board` }
+      : { ok: true, card: found.card, text: found.text, revision: revisionOf(found.text) };
+  }
+
+  /**
+   * The remote's refine (req-66 R5): sections and header fields of one
+   * ticket, refused when the file changed since the device read it or a
+   * run owns it. One commit; a Drey tab showing the file reloads when
+   * clean and meets the save-conflict merge when dirty (ADR-0060).
+   */
+  refineTicket(input: RefineCommand & { actor?: string }): Promise<RefineReply> {
+    return this.enqueue(async () => {
+      const found = await this.findCard(input.id);
+      if (found === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const { vault, card, text } = found;
+      if (revisionOf(text) !== input.baseRevision) {
+        return { ok: false, conflict: true, error: 'The ticket changed since you opened it. Reload it and edit again.' };
+      }
+      if (card.meta.run !== null) {
+        return { ok: false, error: 'A run is live on this ticket. Refine it when the run has ended.' };
+      }
+      let refined: string;
+      try {
+        refined = refineTicket(text, { sections: input.sections, header: input.header }, input.actor ?? OWNER, new Date());
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      try {
+        await this.ctx.vault.write(card.path, refined, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, [card.path], `tickets: ${input.id} refined`);
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [card.path] });
+      this.announceChanged();
+      return { ok: true, revision: revisionOf(refined), ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * An image a paired device pasted or picked (req-66 R8): written under
+   * the reserved `tickets/attachments/` folder, exactly one commit. No
+   * Log line — the Log lives in ticket files and no ticket file is
+   * touched (Capture uploads before a ticket exists); the audit is the
+   * router's `remote <device>: attachment` line and the commit itself.
+   */
+  saveAttachment(input: AttachmentCommand & { actor?: string }): Promise<AttachmentReply> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const dir = this.ctx.vault.resolveAssetPath(ATTACHMENTS_DIR, { vaultId: vault.id });
+      if (dir === null) {
+        return { ok: false, error: 'the attachments folder is not reachable' };
+      }
+      await fsp.mkdir(dir, { recursive: true });
+      const now = new Date();
+      const p = (n: number): string => String(n).padStart(2, '0');
+      const stamp = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
+      let name = `img-${stamp}-${randomBytes(2).toString('hex')}.${input.ext}`;
+      for (;;) {
+        try {
+          await fsp.writeFile(path.join(dir, name), input.bytes, { flag: 'wx' });
+          break;
+        } catch (error) {
+          if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'EEXIST') {
+            name = `img-${stamp}-${randomBytes(2).toString('hex')}.${input.ext}`;
+            continue;
+          }
+          return { ok: false, error: `write failed: ${messageOf(error)}` };
+        }
+      }
+      const file = `${ATTACHMENTS_DIR}/${name}`;
+      const warning = await this.commit(vault, [file], `tickets: attachment ${name}`);
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [file] });
+      return { ok: true, file, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
   /**
    * The `board` IPC route (T-0041): normalize first — a file move is a
    * ticket move — then snapshot. Normalization runs enqueued (the same
@@ -486,6 +604,8 @@ class BoardService {
 
   createTicket(input: {
     title: string;
+    /** Who acts (req-66): `owner@<device>` from the remote; default the desk owner. */
+    actor?: string;
     priority: TicketPriority;
     /** The primary work repo. */
     repo: string | null;
@@ -516,7 +636,7 @@ class BoardService {
         rank: 5000,
         firstPhase,
         now: new Date(),
-        actor: OWNER,
+        actor: input.actor ?? OWNER,
         description: input.description,
       });
       try {
@@ -532,6 +652,7 @@ class BoardService {
 
   transition(input: {
     id: string;
+    actor?: string;
     from: string;
     to: string;
     index: number | null;
@@ -572,7 +693,7 @@ class BoardService {
           to: input.to,
           from: input.from,
           now: new Date(),
-          actor: OWNER,
+          actor: input.actor ?? OWNER,
         });
       } catch (error) {
         return { ok: false, error: messageOf(error) };
@@ -653,7 +774,7 @@ class BoardService {
    * it as `archive -> <phase>`. Final deletion is the owner's manual
    * act inside `archive/`.
    */
-  archive(input: { id: string }): Promise<MutationResult> {
+  archive(input: { id: string; actor?: string }): Promise<MutationResult> {
     return this.enqueue(async () => {
       const vault = await this.detect();
       if (vault === null) {
@@ -678,7 +799,7 @@ class BoardService {
           to: 'archive',
           from: null,
           now: new Date(),
-          actor: OWNER,
+          actor: input.actor ?? OWNER,
           action: 'archived',
         });
       } catch (error) {
@@ -733,7 +854,7 @@ class BoardService {
    * move (decision 7). The board itself shows nothing in archive/; the
    * file is read directly.
    */
-  unarchive(input: { id: string; to: string }): Promise<MutationResult> {
+  unarchive(input: { id: string; to: string; actor?: string }): Promise<MutationResult> {
     return this.enqueue(async () => {
       const vault = await this.detect();
       if (vault === null) {
@@ -757,7 +878,7 @@ class BoardService {
           to: input.to,
           from: 'archive',
           now: new Date(),
-          actor: OWNER,
+          actor: input.actor ?? OWNER,
         });
       } catch (error) {
         return { ok: false, error: messageOf(error) };
@@ -908,7 +1029,7 @@ class BoardService {
     });
   }
 
-  setClaim(input: { id: string; mode: 'takeover' | 'release' }): Promise<MutationResult> {
+  setClaim(input: { id: string; mode: 'takeover' | 'release'; actor?: string }): Promise<MutationResult> {
     return this.enqueue(async () => {
       const found = await this.findCard(input.id);
       if (found === null) {
@@ -916,7 +1037,7 @@ class BoardService {
       }
       const { vault, card, text } = found;
       const previous = card.meta.claimedBy;
-      if (input.mode === 'takeover' && previous === OWNER) {
+      if (input.mode === 'takeover' && previous === (input.actor ?? OWNER)) {
         return { ok: false, error: 'you already hold this claim' };
       }
       if (input.mode === 'release' && previous === null) {
@@ -928,12 +1049,12 @@ class BoardService {
           to: card.phase,
           from: null,
           now: new Date(),
-          actor: OWNER,
+          actor: input.actor ?? OWNER,
           action:
             input.mode === 'takeover'
               ? `claim takeover${previous !== null ? ` (was ${previous})` : ''}`
               : 'claim release',
-          ...(input.mode === 'takeover' ? { claimBy: OWNER } : { releaseClaim: true }),
+          ...(input.mode === 'takeover' ? { claimBy: input.actor ?? OWNER } : { releaseClaim: true }),
         });
       } catch (error) {
         return { ok: false, error: messageOf(error) };
@@ -990,7 +1111,7 @@ class BoardService {
       if (card === null || phaseId === null) {
         return { ok: false, error: `${input.ticketId} is not on the board` };
       }
-      if (card.meta.run !== null) {
+      if (card.meta.run !== null && !(await this.clearEndedRunStamp(vault, card))) {
         return { ok: false, error: `${card.id} already has a live run — stop it first` };
       }
       const blocked = blockedRefusal(card);
@@ -1107,6 +1228,36 @@ class BoardService {
   /** Every fleet run record (live or historical) the client can see. */
   private async fleetRecords(): Promise<readonly RunInfo[]> {
     return this.fleet.runs();
+  }
+
+  /**
+   * A `run:` stamp whose run provably ended (its record settled with an
+   * end time — a down runner's synthetic `stopped` carries none) is a
+   * leftover, e.g. of a card moved while its run went on: cleared with a
+   * Log line and one commit. True when the ticket is free now.
+   */
+  private async clearEndedRunStamp(vault: VaultLike, card: TicketCard): Promise<boolean> {
+    const stream = card.meta.run?.stream ?? null;
+    if (stream === null) {
+      return true;
+    }
+    const record = (await this.fleetRecords()).find((r) => r.id === stream) ?? null;
+    if (record === null || !['done', 'stopped', 'failed'].includes(record.state) || record.endedAt === null) {
+      return false;
+    }
+    const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
+    const patched = patchTicketFile(text, {
+      to: card.phase,
+      from: null,
+      now: new Date(),
+      actor: OWNER,
+      clearRun: true,
+      action: `stale run stamp cleared — run ${stream} had ended (${record.state})`,
+    });
+    await this.ctx.vault.write(card.path, patched, { vaultId: vault.id });
+    await this.commit(vault, [card.path], `tickets: ${card.id} stale run stamp cleared`);
+    this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [card.path] });
+    return true;
   }
 
   /**
@@ -1947,18 +2098,30 @@ export function handoverOverrideKeys(snap: BoardSnapshot, defaultWorker: string)
   return [...keys];
 }
 
+/** The remote gateway's owner (req-66); stopped on deactivate. */
+let remote: RemoteService | null = null;
+
 const plugin: MainPluginModule = {
+  async deactivate() {
+    await remote?.stop();
+    remote = null;
+  },
+
   async activate(ctx: MainPluginContext) {
     const gitPath = ((await ctx.config.get<string>('gitPath')) ?? '').trim();
     const git = new TicketsGit(() => (gitPath === '' ? 'git' : gitPath));
     const defaultWorker = ((await ctx.config.get<string>('defaultWorker')) ?? '').trim() || 'opencode';
     const autoPermissionMode: PermissionMode =
       (await ctx.config.get<string>('autoPermissionMode')) === 'bypass' ? 'bypass' : 'accept-edits';
+    const remoteChanges = new ChangeHub();
     const fleet = new FleetClient({
       root: path.join(ctx.app.userRoot, 'fleet'),
       runnerScript: path.join(__dirname, 'fleet', 'runner.js'),
       log: ctx.log,
-      onFleetChanged: (fleetSnapshot) => ctx.ipc.emit('fleet-changed', fleetSnapshot),
+      onFleetChanged: (fleetSnapshot) => {
+        ctx.ipc.emit('fleet-changed', fleetSnapshot);
+        remoteChanges.emit('fleet');
+      },
     });
     fleet.startPolling();
     const fleetRoot = path.join(ctx.app.userRoot, 'fleet');
@@ -1989,37 +2152,49 @@ const plugin: MainPluginModule = {
     const handover = await handoverFromConfig(ctx.config.get.bind(ctx.config));
     const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet, fleetRoot, caps, pools, handover);
 
+    // The tickets remote (req-66, ADR-0086): off until Settings enables it.
+    board.onChanged(() => remoteChanges.emit('board'));
+    const remoteService: RemoteService = new RemoteService({
+      config: ctx.config,
+      port: new DreyTicketsPort(board, fleet, remoteChanges, { allowBypass: () => remoteService.allowBypass() }),
+      clientDir: path.join(__dirname, '..', 'remote'),
+      log: ctx.log,
+      onChanged: () => ctx.ipc.emit('remote-changed'),
+    });
+    remote = remoteService;
+    void remoteService.init().catch((error: unknown) => ctx.log(`remote: ${messageOf(error)}`, 'error'));
+    ctx.ipc.handle('remoteStatus', () => remoteService.status());
+    ctx.ipc.handle('remoteConfigure', async (payload) => {
+      const p = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+      return remoteService.configure({
+        ...(typeof p['enabled'] === 'boolean' ? { enabled: p['enabled'] } : {}),
+        ...(typeof p['mode'] === 'string' ? { mode: p['mode'] } : {}),
+        ...(typeof p['lanAddress'] === 'string' || p['lanAddress'] === null ? { lanAddress: p['lanAddress'] as string | null } : {}),
+        ...(typeof p['port'] === 'number' ? { port: p['port'] } : {}),
+        ...(typeof p['publicUrl'] === 'string' || p['publicUrl'] === null ? { publicUrl: p['publicUrl'] as string | null } : {}),
+        ...(typeof p['allowBypass'] === 'boolean' ? { allowBypass: p['allowBypass'] } : {}),
+      });
+    });
+    ctx.ipc.handle('remotePair', (payload) => {
+      const p = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+      return remoteService.pair(typeof p['name'] === 'string' ? p['name'] : '', p['readOnly'] === true);
+    });
+    ctx.ipc.handle('remotePairCancel', () => remoteService.cancelPairing());
+    ctx.ipc.handle('remoteRevoke', async (payload) => {
+      const id = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>)['id'] : undefined;
+      return typeof id === 'string' ? remoteService.revoke(id) : remoteService.status();
+    });
+
     ctx.ipc.handle('board', () => board.refresh());
 
     ctx.ipc.handle('create', async (payload) => {
-      const p = payload as { title?: unknown; priority?: unknown; repo?: unknown; repos?: unknown; description?: unknown };
-      const title = typeof p.title === 'string' ? p.title.trim() : '';
-      if (title === '') {
-        return { ok: false, error: 'the title is empty' };
-      }
-      const priority = TICKET_PRIORITIES.includes(p.priority as TicketPriority)
-        ? (p.priority as TicketPriority)
-        : 'normal';
-      const repo = typeof p.repo === 'string' && p.repo.trim() !== '' ? p.repo.trim() : null;
-      const repos =
-        Array.isArray(p.repos) && p.repos.every((r): r is string => typeof r === 'string')
-          ? p.repos
-          : undefined;
-      const description = typeof p.description === 'string' ? p.description : '';
-      return board.createTicket({ title, priority, repo, ...(repos !== undefined ? { repos } : {}), description });
+      const cmd = parseCreate(payload);
+      return cmd.ok ? board.createTicket(cmd.value) : cmd;
     });
 
     ctx.ipc.handle('transition', async (payload) => {
-      const p = payload as { id?: unknown; from?: unknown; to?: unknown; index?: unknown };
-      if (typeof p.id !== 'string' || typeof p.from !== 'string' || typeof p.to !== 'string') {
-        return { ok: false, error: 'bad transition payload' };
-      }
-      return board.transition({
-        id: p.id,
-        from: p.from,
-        to: p.to,
-        index: typeof p.index === 'number' && p.index >= 0 ? Math.floor(p.index) : null,
-      });
+      const cmd = parseTransition(payload);
+      return cmd.ok ? board.transition(cmd.value) : cmd;
     });
 
     // The ticket header in the editor (req-62): it shows the buffer's
@@ -2056,27 +2231,18 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('reorder', async (payload) => {
-      const p = payload as { phase?: unknown; id?: unknown; index?: unknown };
-      if (typeof p.phase !== 'string' || typeof p.id !== 'string' || typeof p.index !== 'number') {
-        return { ok: false, error: 'bad reorder payload' };
-      }
-      return board.reorder({ phase: p.phase, id: p.id, index: Math.floor(p.index) });
+      const cmd = parseReorder(payload);
+      return cmd.ok ? board.reorder(cmd.value) : cmd;
     });
 
     ctx.ipc.handle('unpin', async (payload) => {
-      const p = payload as { id?: unknown };
-      if (typeof p.id !== 'string') {
-        return { ok: false, error: 'bad unpin payload' };
-      }
-      return board.unpin({ id: p.id });
+      const cmd = parseTicketId(payload, 'unpin');
+      return cmd.ok ? board.unpin(cmd.value) : cmd;
     });
 
     ctx.ipc.handle('claim', async (payload) => {
-      const p = payload as { id?: unknown; mode?: unknown };
-      if (typeof p.id !== 'string' || (p.mode !== 'takeover' && p.mode !== 'release')) {
-        return { ok: false, error: 'bad claim payload' };
-      }
-      return board.setClaim({ id: p.id, mode: p.mode });
+      const cmd = parseClaim(payload);
+      return cmd.ok ? board.setClaim(cmd.value) : cmd;
     });
 
     // The settings dialog's writer: one phase's pool keys, one commit (M85).
@@ -2187,21 +2353,15 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('archive', async (payload) => {
-      const p = payload as { id?: unknown };
-      if (typeof p.id !== 'string') {
-        return { ok: false, error: 'bad archive payload' };
-      }
-      return board.archive({ id: p.id });
+      const cmd = parseTicketId(payload, 'archive');
+      return cmd.ok ? board.archive(cmd.value) : cmd;
     });
 
     // T-0042: a move out of tickets/archive/ performed as the board
     // treatment (archive -> <phase> stamp, Log, one commit).
     ctx.ipc.handle('unarchive', async (payload) => {
-      const p = payload as { id?: unknown; to?: unknown };
-      if (typeof p.id !== 'string' || typeof p.to !== 'string') {
-        return { ok: false, error: 'bad unarchive payload' };
-      }
-      return board.unarchive({ id: p.id, to: p.to });
+      const cmd = parseUnarchive(payload);
+      return cmd.ok ? board.unarchive(cmd.value) : cmd;
     });
 
     // T-0042: "Remove worktree" on _worktrees/<id> (dormant until T-0044
@@ -2222,41 +2382,18 @@ const plugin: MainPluginModule = {
     }));
 
     ctx.ipc.handle('fleetStart', async (payload) => {
-      const p = payload as { id?: unknown; worker?: unknown; permissionMode?: unknown; handover?: unknown; interactive?: unknown };
-      if (typeof p.id !== 'string') {
-        return { ok: false, error: 'bad fleet start payload' };
-      }
-      const handover =
-        p.handover === 'fresh' || p.handover === 'resume' || p.handover === 'resume-compact' || p.handover === 'auto'
-          ? p.handover
-          : null;
-      const interactive = p.interactive === 'plan' || p.interactive === 'refine' ? p.interactive : null;
-      return board.startRun({
-        ticketId: p.id,
-        workerChoice: typeof p.worker === 'string' && p.worker.trim() !== '' ? p.worker.trim() : null,
-        permissionMode: p.permissionMode === 'bypass' ? 'bypass' : 'accept-edits',
-        handover,
-        interactive,
-      });
+      const cmd = parseStartRun(payload);
+      return cmd.ok ? board.startRun(cmd.value) : cmd;
     });
 
     ctx.ipc.handle('fleetStop', async (payload) => {
-      const p = payload as { runId?: unknown; reason?: unknown };
-      if (typeof p.runId !== 'string') {
-        return { ok: false, error: 'bad fleet stop payload' };
-      }
-      return fleet.stop(
-        p.runId,
-        typeof p.reason === 'string' && p.reason.trim() !== '' ? p.reason.trim() : null,
-      );
+      const cmd = parseStopRun(payload);
+      return cmd.ok ? fleet.stop(cmd.value.runId, cmd.value.reason) : cmd;
     });
 
     ctx.ipc.handle('fleetSend', async (payload) => {
-      const p = payload as { runId?: unknown; text?: unknown };
-      if (typeof p.runId !== 'string' || typeof p.text !== 'string' || p.text.trim() === '') {
-        return { ok: false, error: 'bad fleet send payload' };
-      }
-      return fleet.send(p.runId, p.text.trim());
+      const cmd = parseSend(payload);
+      return cmd.ok ? fleet.send(cmd.value.runId, cmd.value.text) : cmd;
     });
 
     ctx.ipc.handle('fleetAttach', async (payload) => {
@@ -2279,20 +2416,13 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('fleetPermission', async (payload) => {
-      const p = payload as { runId?: unknown; decision?: unknown };
-      if (typeof p.runId !== 'string' || (p.decision !== 'once' && p.decision !== 'always' && p.decision !== 'reject')) {
-        return { ok: false, error: 'bad fleet permission payload' };
-      }
-      return fleet.answerPermission(p.runId, p.decision);
+      const cmd = parsePermission(payload);
+      return cmd.ok ? fleet.answerPermission(cmd.value.runId, cmd.value.decision) : cmd;
     });
 
     ctx.ipc.handle('fleetAnswer', async (payload) => {
-      const p = payload as { runId?: unknown; answers?: unknown };
-      const answers = questionAnswersOf(p.answers);
-      if (typeof p.runId !== 'string' || answers === null) {
-        return { ok: false, error: 'bad fleet answer payload' };
-      }
-      return fleet.answerQuestion(p.runId, answers);
+      const cmd = parseAnswer(payload);
+      return cmd.ok ? fleet.answerQuestion(cmd.value.runId, cmd.value.answers) : cmd;
     });
 
     ctx.ipc.handle('fleetStream', async (payload) => {
@@ -2327,36 +2457,21 @@ const plugin: MainPluginModule = {
     ctx.ipc.handle('chainStatus', async () => fleet.chainStatus());
 
     ctx.ipc.handle('chainMaster', async (payload) => {
-      const p = payload as { mode?: unknown };
-      if (p.mode !== 'run' && p.mode !== 'halted') {
-        return { ok: false, error: 'the master mode is "run" or "halted"' };
-      }
-      const status = await fleet.setMaster(p.mode);
-      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
+      const cmd = parseChainMaster(payload);
+      return cmd.ok ? chainResult(await fleet.setMaster(cmd.value.mode)) : cmd;
     });
 
     ctx.ipc.handle('chainColumn', async (payload) => {
-      const p = payload as { phase?: unknown; mode?: unknown };
-      if (typeof p.phase !== 'string' || (p.mode !== 'playing' && p.mode !== 'held')) {
-        return { ok: false, error: 'bad chain column payload' };
-      }
-      const status = await fleet.setColumn(p.phase, p.mode);
-      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
+      const cmd = parseChainColumn(payload);
+      return cmd.ok ? chainResult(await fleet.setColumn(cmd.value.phase, cmd.value.mode)) : cmd;
     });
 
     ctx.ipc.handle('chainColumnStop', async (payload) => {
-      const p = payload as { phase?: unknown };
-      if (typeof p.phase !== 'string') {
-        return { ok: false, error: 'bad chain column payload' };
-      }
-      const status = await fleet.stopColumn(p.phase);
-      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
+      const cmd = parseChainColumnStop(payload);
+      return cmd.ok ? chainResult(await fleet.stopColumn(cmd.value.phase)) : cmd;
     });
 
-    ctx.ipc.handle('chainAbort', async () => {
-      const status = await fleet.abortAll();
-      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
-    });
+    ctx.ipc.handle('chainAbort', async () => chainResult(await fleet.abortAll()));
 
     // T-0004: open the ticket's work checkout in the OS terminal — the
     // directory where `.\dev.ps1` (or the repo's own build) runs.

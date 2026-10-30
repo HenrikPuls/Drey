@@ -4,6 +4,7 @@ import { createColumnsSection, effectivePrompt } from './settings-columns';
 import { parseWorkerValue } from '../main/fleet/assignment';
 import { el, iconButton, kv, mutate, numberConfig, selectConfig, textConfig } from './settings-dom';
 import { createPromptsSection } from './settings-prompts';
+import { createRemoteSection } from './settings-remote';
 import { createReposSection } from './settings-repos';
 import { createWorkersSection } from './settings-workers';
 
@@ -77,7 +78,8 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
       // Opens on the default worker's runner once the first load knows it.
       const workers = createWorkersSection(api, 'opencode');
       let workersOpened = false;
-      body.append(repo, columns.root, repos.root, prompts.root, fleetSection(api), workers.root);
+      const remote = createRemoteSection(api);
+      body.append(repo, columns.root, repos.root, prompts.root, fleetSection(api), workers.root, remote.root);
 
       // The board's change events cover every write here and the runner's.
       const off = api.backend.on('board-changed', () => {
@@ -97,6 +99,7 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
           clearTimeout(timer);
         }
         prompts.dispose();
+        remote.dispose();
       };
     },
   };

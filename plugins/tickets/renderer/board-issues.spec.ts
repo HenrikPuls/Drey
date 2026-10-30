@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { issueMetaFile, issueSummary, sortedIssues } from './board-issues';
 
-describe('board issues (req-66)', () => {
+describe('board issues (req-73)', () => {
   it('summarises the count and the worst level', () => {
     expect(issueSummary([])).toBeNull();
     expect(issueSummary([{ level: 'noise', message: 'a' }])).toEqual({ text: '1 board issue', worst: 'noise' });

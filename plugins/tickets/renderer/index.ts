@@ -616,7 +616,7 @@ function collapsedColumnNode(column: BoardColumn): HTMLElement {
   return node;
 }
 
-/** Whether the board issues are unfolded under the toolbar (req-66; view state, per session). */
+/** Whether the board issues are unfolded under the toolbar (req-73; view state, per session). */
 let boardIssuesOpen = false;
 
 function boardIssuesDeps(api: DreyPluginApi, issues: BoardSnapshot['issues']): BoardIssuesDeps {
@@ -635,7 +635,7 @@ function boardIssuesDeps(api: DreyPluginApi, issues: BoardSnapshot['issues']): B
 /** The board's view controls, in the panel header since req-69 (they had
  *  a toolbar row of their own above the columns): the hide-blocked filter
  *  (T-0050 — pure view state, it hides cards and never reorders anything)
- *  and the board issues chip (req-66), whose messages unfold above the
+ *  and the board issues chip (req-73), whose messages unfold above the
  *  columns. */
 function boardViewControlsNode(api: DreyPluginApi): { node: HTMLElement; dispose: () => void } {
   const node = el('span', 'tickets-head-group tickets-head-view');
@@ -2000,6 +2000,12 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
       attached.length = 0;
       paintAttached();
       prompt.focus();
+      // A message to an ended run reopened its session as a new run: follow it.
+      const reopened = (result as { runId?: string }).runId;
+      const ended = live();
+      if (reopened !== undefined && reopened !== runId && ended !== null) {
+        openTakeover(api, { ...ended, id: reopened });
+      }
     }
   };
 
@@ -2323,9 +2329,12 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
       elapsedMetric.value.textContent = spanClock(execClockMs(run, Date.now()));
       transcript.setWorktree(run.worktreePath);
     }
+    // Every run takes a message: an ended one with a session reopens on send.
+    const reopenable = run !== null && !active && !detached && run.sessionRef !== null;
+    const typable = active || reopenable;
     resumeBtn.hidden = !(run !== null && !active && run.sessionRef !== null);
     releaseBtn.hidden = !held;
-    prompt.setReadOnly(!active);
+    prompt.setReadOnly(!typable);
     const busy = active && run.turn !== 'idle';
     wrap.dataset['state'] =
       !active && !detached
@@ -2341,8 +2350,8 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
               : 'working';
     stopBtn.hidden = !busy;
     sendBtn.hidden = busy && prompt.getContent().trim() === '' && attached.length === 0;
-    sendBtn.disabled = !active;
-    plusBtn.disabled = !active;
+    sendBtn.disabled = !typable;
+    plusBtn.disabled = !typable;
     for (const chip of chips.children) {
       (chip as HTMLButtonElement).disabled = !active;
     }
