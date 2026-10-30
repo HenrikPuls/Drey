@@ -12,6 +12,8 @@ import {
   sectionsOf,
   swipeCommits,
   answersOf,
+  refineKeyOf,
+  sectionTextOf,
   runsForList,
   runStateLabel,
   tokensLabel,
@@ -176,5 +178,16 @@ describe('answersOf', () => {
     expect(answersOf(qs, new Map([['q0', ['Fold']]]), new Map())).toBeNull();
     expect(answersOf(qs, new Map([['q0', ['Fold']], ['q1', ['a', 'b']]]), new Map())).toEqual({ q0: 'Fold', q1: ['a', 'b'] });
     expect(answersOf(qs, new Map([['q0', ['Fold']]]), new Map([['q1', ' only docs ']]))).toEqual({ q0: 'Fold', q1: 'only docs' });
+  });
+});
+
+describe('refining', () => {
+  const file = '---\nid: T-1\n---\n\n## Description\n\nWhy.\n\n## Plan\n\nHow.\n\n### Acceptance criteria\n\n- [ ] `npm test`\n\n## Log\n';
+  it('reads one section as the editor starts from it', () => {
+    expect(sectionTextOf(file, 'plan')).toBe('How.');
+    expect(sectionTextOf(file, 'acceptance')).toBe('- [ ] `npm test`');
+    expect(sectionTextOf('---\nid: T-1\n---\n', 'description')).toBe('');
+    expect(refineKeyOf('Acceptance criteria')).toBe('acceptance');
+    expect(refineKeyOf('Log')).toBeNull();
   });
 });

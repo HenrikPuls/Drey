@@ -77,6 +77,13 @@ export function makeDesk() {
     done: [card('T-0048', 'done', 'Run telemetry')],
   };
   const calls: { what: string; args: unknown[] }[] = [];
+  const texts = new Map<string, string>();
+  const revisions = new Map<string, number>();
+  const textOf = (id: string): string =>
+    texts.get(id) ??
+    `---\nid: ${id}\n---\n\n## Description\n\nThe phase chip is display only.\n\n## Plan\n\nReuse the board's move list.\n\n### Acceptance criteria\n\n- [x] The chip opens the move menu\n- [ ] One commit per move\n\n## Log\n\n- '2026-10-30T08:00:00Z' owner@desk — created in inbox\n`;
+  const revisionOf = (id: string): string => (revisions.get(id) ?? 1).toString(16).padStart(16, '0');
+  const bump = (id: string): void => void revisions.set(id, (revisions.get(id) ?? 1) + 1);
   const listeners = new Set<(what: string) => void>();
   const emit = (): void => listeners.forEach((l) => l('board'));
   const board = () => ({
@@ -172,13 +179,19 @@ export function makeDesk() {
     needs: async () => needsOf(board(), runs),
     ticket: async (id: string) => {
       const c = Object.values(tickets).flat().find((t) => t.id === id);
-      return c === undefined
-        ? { ok: false, error: 'not found' }
-        : {
-            ok: true,
-            card: c,
-            text: `---\nid: ${id}\n---\n\n## Description\n\nThe phase chip is display only.\n\n## Plan\n\nReuse the board's move list.\n\n### Acceptance criteria\n\n- [x] The chip opens the move menu\n- [ ] One commit per move\n\n## Log\n\n- '2026-10-30T08:00:00Z' owner@desk — created in inbox\n`,
-          };
+      return c === undefined ? { ok: false, error: 'not found' } : { ok: true, card: c, text: textOf(id), revision: revisionOf(id) };
+    },
+    refine: async (cmd: { id: string; baseRevision: string; sections: Record<string, string>; header: Record<string, string> }, actor: string) => {
+      calls.push({ what: 'refine', args: [cmd, actor] });
+      if (cmd.baseRevision !== revisionOf(cmd.id)) {
+        return { ok: false, conflict: true, error: 'The ticket changed since you opened it.' };
+      }
+      if (cmd.sections['plan'] !== undefined) {
+        texts.set(cmd.id, textOf(cmd.id).replace(/## Plan\n\n[\s\S]*?\n\n###/, `## Plan\n\n${cmd.sections['plan']}\n\n###`));
+      }
+      bump(cmd.id);
+      emit();
+      return { ok: true, revision: revisionOf(cmd.id) };
     },
     create: async (cmd: { title: string }, actor: string) => {
       calls.push({ what: 'create', args: [cmd, actor] });
@@ -239,6 +252,11 @@ export function makeDesk() {
       return () => listeners.delete(l);
     },
   };
-  return { port, calls };
+  /** Someone saved the ticket on the desk: its revision moves on. */
+  const editOnDesk = (id: string): void => {
+    bump(id);
+    emit();
+  };
+  return { port, calls, editOnDesk };
 }
 

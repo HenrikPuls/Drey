@@ -7,6 +7,7 @@ import {
   parseClaim,
   parseCreate,
   parsePermission,
+  parseRefine,
   parseSend,
   parseStartRun,
   parseStopRun,
@@ -63,5 +64,23 @@ describe('command parsers', () => {
   it('chainResult maps a missing status to "not running"', () => {
     expect(chainResult(null)).toEqual({ ok: false, error: 'the fleet runner is not running' });
     expect(chainResult({ master: 'run' })).toEqual({ ok: true, status: { master: 'run' } });
+  });
+});
+
+describe('parseRefine', () => {
+  const base = { id: 'T-0001', baseRevision: '0123456789abcdef' };
+  it('takes sections and header fields, and needs at least one change', () => {
+    expect(parseRefine({ ...base, sections: { plan: 'P', log: 'x' }, header: { title: ' T ', priority: 'high' } })).toEqual({
+      ok: true,
+      value: { ...base, sections: { plan: 'P' }, header: { title: 'T', priority: 'high' } },
+    });
+    expect(parseRefine(base)).toEqual({ ok: false, error: 'nothing to refine' });
+  });
+
+  it('refuses a missing revision, an empty title, an unknown priority and an oversized text', () => {
+    expect(parseRefine({ id: 'T-0001', sections: { plan: 'P' } })).toEqual({ ok: false, error: 'bad refine payload' });
+    expect(parseRefine({ ...base, header: { title: '  ' } })).toMatchObject({ ok: false });
+    expect(parseRefine({ ...base, header: { priority: 'asap' } })).toEqual({ ok: false, error: 'unknown priority' });
+    expect(parseRefine({ ...base, sections: { plan: 'x'.repeat(20_001) } })).toMatchObject({ ok: false });
   });
 });

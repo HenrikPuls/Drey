@@ -20,6 +20,7 @@ const PORT = 47861;
 const store = new Map<string, unknown>();
 let service: { init(): Promise<void>; configure(p: unknown): Promise<unknown>; pair(n: string, r: boolean): { pairing: { url: string } }; stop(): Promise<void> };
 let calls: { what: string; args: unknown[] }[];
+let editOnDesk: (id: string) => void;
 
 // iPhone size, touch and user agent; the engine stays the suite's Chromium
 // (WebKit is not part of the toolchain) — real Safari is the owner's round.
@@ -29,6 +30,7 @@ test.use(iphone);
 test.beforeAll(async () => {
   const desk = makeDesk();
   calls = desk.calls;
+  editOnDesk = desk.editOnDesk;
   service = new RemoteService({
     config: { get: async (k: string) => store.get(k), set: async (k: string, v: unknown) => void store.set(k, v) },
     port: desk.port,
@@ -173,6 +175,48 @@ test('answers a waiting worker, follows and steers the run, and switches the fle
   await stop.click();
   expect(calls.at(-1)).toEqual({ what: 'stop', args: [{ runId: 'run-1', reason: 'stopped from a device' }] });
   await expect(page.locator('.composer')).toHaveCount(0);
+
+  expect(errors).toEqual([]);
+});
+
+test('refines a section, keeps the draft through a conflict, and edits the header (R5)', async ({ page }) => {
+  const errors: string[] = [];
+  await pairedPage(page, errors);
+  await page.goto(`http://127.0.0.1:${PORT}/#ticket/T-0055`);
+  await page.locator('.md-h', { hasText: 'Plan' }).locator('.edit').click();
+  await expect(page.locator('.topbar-title')).toHaveText('Refine T-0055');
+  await expect(page.locator('#ref-text')).toHaveValue("Reuse the board's move list.");
+
+  await page.locator('#ref-text').fill('Open the move menu from the chip.');
+  await page.locator('.btn-primary', { hasText: 'Save' }).click();
+  await expect(page.locator('.toast')).toContainText('T-0055 saved');
+  expect(calls.at(-1)).toEqual({
+    what: 'refine',
+    args: [{ id: 'T-0055', baseRevision: '0000000000000001', sections: { plan: 'Open the move menu from the chip.' }, header: {} }, 'owner@iphone'],
+  });
+  await expect(page.locator('.ticket-title')).toBeVisible();
+  await expect(page.locator('.md')).toContainText('Open the move menu from the chip.');
+
+  // The desk saves the ticket while the phone edits: the save is refused, the text survives.
+  await page.locator('.md-h', { hasText: 'Plan' }).locator('.edit').click();
+  await page.locator('#ref-text').fill('A second thought.');
+  editOnDesk('T-0055');
+  await page.locator('.btn-primary', { hasText: 'Save' }).click();
+  await expect(page.locator('.banner')).toContainText('changed on the desk');
+  await expect(page.locator('#ref-text')).toHaveValue('A second thought.');
+  await page.locator('.banner .link', { hasText: 'Reload' }).click();
+  await expect(page.locator('.banner')).toContainText('older version');
+  await expect(page.locator('#ref-text')).toHaveValue('A second thought.');
+  await page.locator('.btn-primary', { hasText: 'Save' }).click();
+  await expect(page.locator('.toast')).toContainText('T-0055 saved');
+  expect(calls.at(-1)).toMatchObject({ what: 'refine', args: [{ baseRevision: '0000000000000003', sections: { plan: 'A second thought.' } }, 'owner@iphone'] });
+
+  // The header: priority from the ⋯ sheet.
+  await page.locator('.btn-icon[aria-label="More actions"]').click();
+  await page.locator('.sheet .btn', { hasText: 'Refine title' }).click();
+  await page.locator('.seg button', { hasText: 'urgent' }).click();
+  await page.locator('.btn-primary', { hasText: 'Save' }).click();
+  expect(calls.at(-1)).toMatchObject({ what: 'refine', args: [{ id: 'T-0055', header: { priority: 'urgent' } }, 'owner@iphone'] });
 
   expect(errors).toEqual([]);
 });

@@ -9,6 +9,7 @@ import type {
   AnswerCommand,
   ClaimCommand,
   CreateCommand,
+  RefineCommand,
   PermissionCommand,
   ReorderCommand,
   SendCommand,
@@ -44,9 +45,17 @@ export interface NeedItem {
 export type RunReply = { readonly ok: boolean; readonly error?: string; readonly runId?: string };
 export type ChainReply = { readonly ok: true; readonly status: ChainStatus } | { readonly ok: false; readonly error: string };
 export type RemoteChange = 'board' | 'fleet';
+/** A refine's outcome: the new revision, or why not (`conflict` when the file changed meanwhile). */
+export interface RefineReply {
+  readonly ok: boolean;
+  readonly error?: string;
+  readonly warning?: string;
+  readonly conflict?: boolean;
+  readonly revision?: string;
+}
 /** One ticket as the remote's ticket view reads it: the card and the file text. */
 export type TicketReply =
-  | { readonly ok: true; readonly card: TicketCard; readonly text: string }
+  | { readonly ok: true; readonly card: TicketCard; readonly text: string; readonly revision: string }
   | { readonly ok: false; readonly error: string };
 
 /**
@@ -66,6 +75,7 @@ export interface TicketsRemotePort {
   unpin(cmd: TicketIdCommand): Promise<MutationResult>;
   claim(cmd: ClaimCommand, actor: string): Promise<MutationResult>;
   archive(cmd: TicketIdCommand, actor: string): Promise<MutationResult>;
+  refine(cmd: RefineCommand, actor: string): Promise<RefineReply>;
 
   startRun(cmd: StartRunCommand): Promise<RunReply>;
   stopRun(cmd: StopRunCommand): Promise<RunReply>;

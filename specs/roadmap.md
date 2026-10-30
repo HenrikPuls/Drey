@@ -148,12 +148,12 @@ through Tailscale Serve (HTTPS); a LAN mode is opt-in with a warning.
 Off by default; QR pairing, per-device tokens (hashes only), revoke,
 Host/Origin check, bypass runs refused remotely. Owner decisions D1–D5
 of 2026-10-30 confirmed. R1 (command layer + port), R2 (gateway, pairing,
-Settings), R3 (the phone client) and R4 (runs on the phone) shipped —
-see the changelog. Remaining steps, each shipped on its own:
+Settings), R3 (the phone client), R4 (runs on the phone) and R5
+(refine) shipped — see the changelog. Follow-up of R5: an SDK seam
+over `OpenDocsBridge` so a plugin's main side (the remote's refine)
+edits a ticket open in a Drey tab through that tab instead of relying
+on the ADR-0060 save-conflict merge. Remaining steps, each shipped on its own:
 
-- **R5 — refine**: section editing with a revision guard (409 on a
-  changed file); a ticket open and dirty in a Drey tab is refused
-  unless the SDK reaches the open-docs bridge (milestone 78).
 - **R6 — iPad layout**: kanban with long-press drag, detail split.
 - **R7 (optional, its own decision)** — Web Push: needs HTTPS and
   Apple's push service, a further cloud exception.

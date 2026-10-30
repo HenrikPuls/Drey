@@ -1120,6 +1120,18 @@ one line), its replies, and what it waits for. Type in **Steer the
 run…** and **Send** to tell the worker something; **Stop** ends the run
 (tap twice).
 
+**Refining a ticket.** On a ticket, **Edit** beside Description, Plan
+or Acceptance criteria opens that part for editing (a missing part
+shows as **+ Plan** and the like); **⋯ → Refine title, priority,
+repository** edits the header. **Save** makes one commit and a Log line
+naming your device. What you type is kept on the device until it is
+saved, so leaving the screen loses nothing. If the ticket changed on the
+desk in the meantime, the save is refused and your text stays: tap
+**Reload**, check your text against the new version, and save again. A
+ticket whose run is still going cannot be refined. If the same ticket is
+open in Drey with unsaved changes, Drey shows its merge view when you
+save there.
+
 **The fleet's switches.** The chip at the top right (*Running*,
 *Halted*) opens the fleet switch: **Run** / **Halt** for every column,
 and **Stop every live run** (tap twice). On the Board, the

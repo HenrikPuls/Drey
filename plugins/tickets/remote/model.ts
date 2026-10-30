@@ -261,3 +261,24 @@ export function answersOf(
   }
   return out;
 }
+
+// --- refining ---------------------------------------------------------------
+
+export type RefineKey = 'description' | 'plan' | 'acceptance';
+
+export const REFINE_TITLES: Readonly<Record<RefineKey, string>> = {
+  description: 'Description',
+  plan: 'Plan',
+  acceptance: 'Acceptance criteria',
+};
+
+export function refineKeyOf(title: string): RefineKey | null {
+  const key = (Object.keys(REFINE_TITLES) as RefineKey[]).find((k) => REFINE_TITLES[k].toLowerCase() === title.toLowerCase());
+  return key ?? null;
+}
+
+/** One section's text as it stands in the file, trimmed — what the editor starts from. */
+export function sectionTextOf(text: string, key: RefineKey): string {
+  const section = sectionsOf(text).find((s) => s.title.toLowerCase() === REFINE_TITLES[key].toLowerCase());
+  return section === undefined ? '' : section.lines.join('\n').trim();
+}

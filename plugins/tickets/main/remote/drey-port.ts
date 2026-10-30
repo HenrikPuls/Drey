@@ -10,6 +10,7 @@ import type {
   ClaimCommand,
   CreateCommand,
   PermissionCommand,
+  RefineCommand,
   ReorderCommand,
   SendCommand,
   StartRunCommand,
@@ -24,6 +25,7 @@ import type {
   ChainReply,
   NeedItem,
   RemoteChange,
+  RefineReply,
   RunReply,
   TicketReply,
   TicketsRemotePort,
@@ -35,6 +37,7 @@ import { needsOf } from './needs';
 export interface RemoteBoard {
   refresh(): Promise<BoardSnapshot>;
   readTicket(id: string): Promise<TicketReply>;
+  refineTicket(input: RefineCommand & { actor?: string }): Promise<RefineReply>;
   createTicket(input: CreateCommand & { actor?: string }): Promise<CreateResult>;
   transition(input: TransitionCommand & { actor?: string }): Promise<MutationResult>;
   reorder(input: ReorderCommand): Promise<MutationResult>;
@@ -130,6 +133,10 @@ export class DreyTicketsPort implements TicketsRemotePort {
 
   archive(cmd: TicketIdCommand, actor: string): Promise<MutationResult> {
     return this.boardService.archive({ ...cmd, actor });
+  }
+
+  refine(cmd: RefineCommand, actor: string): Promise<RefineReply> {
+    return this.boardService.refineTicket({ ...cmd, actor });
   }
 
   async startRun(cmd: StartRunCommand): Promise<RunReply> {

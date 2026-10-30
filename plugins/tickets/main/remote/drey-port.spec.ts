@@ -15,6 +15,7 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
   const board: RemoteBoard = {
     refresh: vi.fn(async () => ({ columns: [], checkpoints: [] }) as unknown as BoardSnapshot),
     readTicket: vi.fn(async () => ({ ok: false as const, error: 'x' })),
+    refineTicket: vi.fn(async () => ({ ok: true, revision: '0123456789abcdef' })),
     createTicket: vi.fn(async () => ({ ok: true, id: 'T-0001' })),
     transition: vi.fn(async () => ok),
     reorder: vi.fn(async () => ok),
@@ -47,6 +48,8 @@ describe('DreyTicketsPort', () => {
     await port.claim({ id: 'T-0001', mode: 'takeover' }, 'owner@ipad');
     await port.archive({ id: 'T-0001' }, 'owner@ipad');
     await port.create({ title: 'x', priority: 'normal', repo: null, description: '' }, 'owner@ipad');
+    await port.refine({ id: 'T-0001', baseRevision: '0123456789abcdef', sections: { plan: 'p' }, header: {} }, 'owner@ipad');
+    expect(board.refineTicket).toHaveBeenCalledWith(expect.objectContaining({ actor: 'owner@ipad', sections: { plan: 'p' } }));
     expect(board.transition).toHaveBeenCalledWith(expect.objectContaining({ actor: 'owner@ipad', to: 'review' }));
     expect(board.setClaim).toHaveBeenCalledWith(expect.objectContaining({ actor: 'owner@ipad', mode: 'takeover' }));
     expect(board.archive).toHaveBeenCalledWith({ id: 'T-0001', actor: 'owner@ipad' });

@@ -24,6 +24,7 @@ function port(): TicketsRemotePort {
     unpin: vi.fn(ok),
     claim: vi.fn(ok),
     archive: vi.fn(ok),
+    refine: vi.fn(ok),
     startRun: vi.fn(ok),
     stopRun: vi.fn(ok),
     send: vi.fn(ok),
@@ -118,6 +119,15 @@ describe('route', () => {
     expect(remote.move).toHaveBeenCalledWith({ id: 'T-0052', from: 'build', to: 'review', index: null }, 'owner@iphone-15');
 
     await route(req({ method: 'POST', path: '/api/runs/r-1/answer', authorization: auth, body: { answers: { q0: 'Yes' } } }), deps);
+
+    await route(
+      req({ method: 'POST', path: '/api/tickets/T-0052/refine', authorization: auth, body: { baseRevision: '0123456789abcdef', sections: { plan: 'P' } } }),
+      deps,
+    );
+    expect(remote.refine).toHaveBeenCalledWith(
+      { id: 'T-0052', baseRevision: '0123456789abcdef', sections: { plan: 'P' }, header: {} },
+      'owner@iphone-15',
+    );
     expect(remote.answer).toHaveBeenCalledWith({ runId: 'r-1', answers: { q0: 'Yes' } });
   });
 

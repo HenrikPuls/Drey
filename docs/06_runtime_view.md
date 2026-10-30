@@ -3448,3 +3448,12 @@ DNS name was rebound to this machine names a host the allowlist does not
 hold), refuses a foreign `Origin` on writes, and limits failed pairings
 and unknown tokens per client address. The fleet runner is never exposed:
 run controls go through the plugin's `FleetClient`.
+
+Refining from the phone (R5) follows the same path with one guard more:
+`GET /api/tickets/:id` returns the file text with its `revision`; `POST
+/api/tickets/:id/refine` carries that revision back, and the board
+service compares it inside its queue — a changed file answers
+`{ ok: false, conflict: true }` and nothing is written, so the device
+keeps its draft and reloads. A Drey tab showing the ticket is not asked
+(no plugin seam reaches open tabs yet): a clean tab reloads on the
+announce, a dirty one meets the ADR-0060 merge when it is saved.

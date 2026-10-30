@@ -72,6 +72,15 @@ but no board logic. The owner plans to split the tickets plugin later
   it is opt-in for that reason.
 - Web Push (notifications on the phone) needs HTTPS and Apple's push
   service — a further cloud exception, left to its own decision (R7).
-- Refining a ticket that is open and dirty in a Drey tab must not
-  write past the tab; until the SDK reaches the open-docs bridge
-  (milestone 78), the remote refuses that case.
+- Refining a ticket writes the file like every other board write
+  (claims, takeovers, moves) and announces it. **Later change (R5,
+  2026-10-30):** the plan was to refuse a refine while the ticket is
+  open and dirty in a Drey tab, but the plugin SDK gives a plugin's main
+  side no access to open tabs (`OpenDocsBridge` is base-only). The
+  refine therefore relies on ADR-0060, as the board's own writes
+  already do: a clean tab reloads, a dirty tab meets the save-conflict
+  merge on its next save — nothing is lost. A refine carries the
+  revision (hash of the file text) the device read and is refused when
+  the file changed since; it is refused while a run owns the ticket.
+  Editing through the tab (an SDK seam over `OpenDocsBridge`) is a
+  roadmap follow-up.

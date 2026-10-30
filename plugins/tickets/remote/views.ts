@@ -28,6 +28,7 @@ import {
   nextColumnOf,
   placeOf,
   primaryActionOf,
+  refineKeyOf,
   sectionsOf,
   swipeCommits,
   type Block,
@@ -381,6 +382,7 @@ export function ticketView(ctx: Ctx, id: string, tab: TicketTab): View {
       }),
     ),
   );
+  const canRefine = !ctx.state.readOnly && !isBusy(card, runs(ctx));
   const content: Node[] = [];
   if (text === null) {
     content.push(empty(reply !== null && !reply.ok ? reply.error : 'Loading…'));
@@ -390,9 +392,26 @@ export function ticketView(ctx: Ctx, id: string, tab: TicketTab): View {
     if (shown.length === 0) {
       content.push(empty(tab === 'log' ? 'No Log yet.' : 'The ticket has no text yet.'));
     }
+    if (tab === 'ticket' && canRefine) {
+      const present_ = new Set(sections.map((s) => refineKeyOf(s.title)));
+      const missing = (['description', 'plan', 'acceptance'] as const).filter((k) => !present_.has(k));
+      if (missing.length > 0) {
+        content.push(
+          h('div', { class: 'row wrap add-sections' }, ...missing.map((k) => h('a', { class: 'chip chip-btn', text: `+ ${k === 'acceptance' ? 'Acceptance criteria' : k[0]!.toUpperCase() + k.slice(1)}`, attrs: { href: `#refine/${id}/${k}` } }))),
+        );
+      }
+    }
     for (const section of shown) {
       if (tab === 'ticket' && section.title !== '') {
-        content.push(h(section.level <= 2 ? 'h3' : 'h4', { class: 'md-h', text: section.title }));
+        const key = refineKeyOf(section.title);
+        content.push(
+          h(
+            section.level <= 2 ? 'h3' : 'h4',
+            { class: 'md-h' },
+            h('span', { text: section.title }),
+            key !== null && canRefine ? h('a', { class: 'edit', text: 'Edit', attrs: { href: `#refine/${id}/${key}`, 'aria-label': `Edit ${section.title}` } }) : null,
+          ),
+        );
       }
       content.push(...blocksOf(section.lines).map((b) => blockNode(b, tab === 'log')));
     }
@@ -508,6 +527,10 @@ function moreSheet(ctx: Ctx, card: TicketCard): void {
           void ctx.act(ctx.api.post(`/api/tickets/${card.id}/claim`, { mode: claim }), claim === 'release' ? 'Claim released' : 'Claim taken over');
         },
       ),
+      button('Refine title, priority, repository', () => {
+        close();
+        ctx.go(`#refine/${card.id}/header`);
+      }),
       armedButton('Archive', 'Tap again to archive', () => {
         close();
         void ctx.act(ctx.api.post(`/api/tickets/${card.id}/archive`), `${card.id} archived`).then((ok) => {
@@ -594,6 +617,7 @@ export function captureView(ctx: Ctx): View {
       ),
     ],
     actions: ctx.state.readOnly ? h('div', { class: 'actionbar' }, h('p', { class: 'hint', text: 'This device is paired read only.' })) : h('div', { class: 'actionbar' }, create),
+    form: true,
   };
 }
 

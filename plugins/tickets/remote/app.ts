@@ -12,11 +12,12 @@ import type { BoardSnapshot } from '../shared/tickets';
 import { Api, ApiError } from './api';
 import { h, icon, present, toast } from './dom';
 import type { Ctx, State, View } from './context';
+import { refineTabOf, refineView } from './refine-view';
 import { runsView, runView } from './runs-views';
 import { boardView, captureView, fleetChip, gestureInProgress, needsView, pairView, ticketView } from './views';
 
 interface Route {
-  readonly name: 'needs' | 'board' | 'ticket' | 'capture' | 'runs' | 'run';
+  readonly name: 'needs' | 'board' | 'ticket' | 'capture' | 'runs' | 'run' | 'refine';
   readonly arg: string | null;
   readonly sub: string | null;
 }
@@ -32,6 +33,8 @@ function routeOf(hash: string): Route {
       return { name: 'capture', arg: null, sub: null };
     case 'runs':
       return { name: 'runs', arg: null, sub: null };
+    case 'refine':
+      return arg !== undefined ? { name: 'refine', arg: decodeURIComponent(arg), sub: sub ?? null } : { name: 'needs', arg: null, sub: null };
     case 'run':
       return arg !== undefined ? { name: 'run', arg: decodeURIComponent(arg), sub: null } : { name: 'runs', arg: null, sub: null };
     default:
@@ -53,6 +56,8 @@ class App {
     stream: null,
   };
   private pendingRender = false;
+  private lastWasForm = false;
+  private forcePaint = false;
   /** What the current page was drawn from — an identical refresh draws nothing. */
   private paintedFrom = '';
   private stopEvents: (() => void) | null = null;
@@ -72,6 +77,11 @@ class App {
       } else {
         location.hash = hash;
       }
+    },
+    reload: () => {
+      this.forcePaint = true;
+      this.paintedFrom = '';
+      void this.refresh();
     },
     act: async (call, success) => {
       try {
@@ -192,7 +202,7 @@ class App {
         this.api.get<BoardSnapshot>('/api/board'),
         this.api.get<FleetSnapshot>('/api/fleet'),
         this.api.get<NeedItem[]>('/api/needs'),
-        route.name === 'ticket' && route.arg !== null
+        (route.name === 'ticket' || route.name === 'refine') && route.arg !== null
           ? this.api.get<TicketReply>(`/api/tickets/${encodeURIComponent(route.arg)}`)
           : Promise.resolve(null),
         route.name === 'run' && route.arg !== null
@@ -220,7 +230,7 @@ class App {
       this.state.stream = null;
       this.scheduleRefresh(0);
     }
-    if (route.name === 'ticket') {
+    if (route.name === 'ticket' || route.name === 'refine') {
       const current = this.state.ticket;
       if (current === null || !current.ok || current.card.id !== route.arg) {
         this.state.ticket = null;
@@ -256,16 +266,20 @@ class App {
       case 'run':
         view = runView(this.ctx, route.arg!);
         break;
+      case 'refine':
+        view = refineView(this.ctx, route.arg!, refineTabOf(route.sub));
+        break;
       default:
         view = needsView(this.ctx);
     }
     // Capture is a form: a live update must not wipe what is being typed.
     const key = `${route.name}/${route.arg ?? ''}/${route.sub ?? ''}`;
     const same = key === this.lastRouteKey;
-    if (route.name === 'capture' && same && this.main.childElementCount > 0) {
+    if (same && view.form === true && this.lastWasForm && !this.forcePaint) {
       this.paintHeaderOnly();
       return;
     }
+    this.forcePaint = false;
     const active = document.activeElement;
     if (same && active instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName) && document.body.contains(active)) {
       this.pendingRender = true;
@@ -280,6 +294,7 @@ class App {
     this.paintedFrom = from;
     const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 40;
     this.paint(view, same);
+    this.lastWasForm = view.form === true;
     if (view.followTail === true && (!same || atEnd)) {
       window.scrollTo(0, document.documentElement.scrollHeight);
     }
@@ -320,7 +335,7 @@ class App {
       h(
         'a',
         {
-          class: `tab${route.name === name || (name === 'board' && route.name === 'ticket') || (name === 'runs' && route.name === 'run') ? ' on' : ''}`,
+          class: `tab${route.name === name || (name === 'board' && (route.name === 'ticket' || route.name === 'refine')) || (name === 'runs' && route.name === 'run') ? ' on' : ''}`,
           attrs: { href: hash, ...(route.name === name ? { 'aria-current': 'page' } : {}) },
         },
         icon(glyph),

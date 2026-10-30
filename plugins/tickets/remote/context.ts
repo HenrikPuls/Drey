@@ -25,6 +25,8 @@ export interface Ctx {
   readonly api: Api;
   readonly state: State;
   go(hash: string): void;
+  /** Fetches everything again and redraws even a form. */
+  reload(): void;
   /** Runs a desk call, shows its outcome; true when it went through. */
   act(call: Promise<MutationResult | { ok: boolean; error?: string }>, success: string): Promise<boolean>;
 }
@@ -36,5 +38,7 @@ export interface View {
   readonly actions?: Node | null;
   /** Keep the page scrolled to its end while it grows (a live transcript). */
   readonly followTail?: boolean;
+  /** A form: a live update never redraws it under the typing hand. */
+  readonly form?: boolean;
 }
 

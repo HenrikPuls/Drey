@@ -28,6 +28,14 @@ Top-level rules, once, up front:
   actor `owner@<host>`. Works after restarts (derived from the files,
   no extra state); lane rules are never enforced on human moves —
   logged, not blocked.
+- **A refine from the remote is one commit** (req-66):
+  `tickets: <id> refined`, with one Log line
+  `- '<UTC>' owner@<device> — refined (<what changed>)` — the header
+  keys (`title`, `priority`, `repo`) and section names (`description`,
+  `plan`, `acceptance criteria`). It replaces a section's body up to the
+  next heading of any level (so `## Plan` keeps its `### Acceptance
+  criteria`), adds a missing section before `## Log` (Acceptance
+  criteria at the end of Plan), and never touches the Log otherwise.
 - **Machine writers write strictly** (the exact shapes below);
   **humans edit freely**; **readers normalize visibly** — anything a
   reader cannot parse unambiguously is reported as an issue on the

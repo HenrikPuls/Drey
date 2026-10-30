@@ -20,6 +20,45 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-66 R5 — Tickets remote: refine from the phone
+
+**Not yet manually verified by the owner** (above all the on-screen
+keyboard over the editor in real Safari). Owner request, outside the
+list (ADR-0084, later change). Description, Plan, Acceptance criteria
+and the header (title, priority, repository) are editable on the phone:
+
+- **Ticket view**: an **Edit** link beside each of the three sections,
+  **+ Description / Plan / Acceptance criteria** for a missing one, and
+  "Refine title, priority, repository" in the ⋯ sheet. Hidden on a
+  read-only device and while a run lives.
+- **Refine view** (`#refine/<id>/<part>`): one part at a time behind
+  chips; the typed text is kept as an on-device draft until it is saved
+  (restored on return, flagged when it started from an older version).
+  A form is never redrawn under the typing hand.
+- **Desk side**: `POST /api/tickets/:id/refine` → `parseRefine`
+  (sections up to 20 000 characters, title 1–200, known priority, at
+  least one change) → `BoardService.refineTicket` inside the board
+  queue: refused when the file's revision (16-hex SHA-256, now also in
+  `GET /api/tickets/:id`) differs from the one the device read, refused
+  while a run owns the ticket; else the pure `refineTicket`
+  (`main/ticket-refine.ts`) — header keys through `patchHeaderFields`
+  (comments and other keys survive), sections replaced up to the next
+  heading of any level, a missing one added before the Log — one Log
+  line `refined (<what>)` with the device actor, one commit
+  `tickets: <id> refined`, announced.
+- **Deviation from ADR-0084 as first written**: the remote was to refuse
+  a refine while the ticket is dirty in a Drey tab, but no plugin seam
+  reaches open tabs. It relies on ADR-0060 like every board write; the
+  SDK seam is a roadmap follow-up. `specs/ticket-schema.md` records the
+  refine commit and Log line.
+
+Specs: `main/ticket-refine.spec.ts`, `parseRefine` in
+`commands.spec.ts`, the refine route in `router.spec.ts`, the port in
+`drey-port.spec.ts`, `remote/model.spec.ts` (section text);
+`e2e/tickets-remote.spec.ts` R5 case (save, a desk-side change refused
+with the draft kept through Reload, the header priority). Docs: ADR-0084
+later change, docs/05 §5.41, docs/06 §6.70, manual.
+
 ### req-66 R4 — Tickets remote: runs on the phone
 
 **Not yet manually verified by the owner** (real Safari on iPhone/iPad

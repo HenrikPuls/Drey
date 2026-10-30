@@ -235,3 +235,58 @@ export function chainResult<S>(
 ): { readonly ok: true; readonly status: S } | { readonly ok: false; readonly error: string } {
   return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
 }
+
+/** The longest section text a refine accepts (a ticket, not a novel). */
+export const MAX_SECTION_CHARS = 20_000;
+
+export interface RefineCommand {
+  readonly id: string;
+  /** The revision the device read (`revisionOf`); a changed file refuses. */
+  readonly baseRevision: string;
+  readonly sections: Partial<Record<'description' | 'plan' | 'acceptance', string>>;
+  readonly header: { readonly title?: string; readonly priority?: TicketPriority; readonly repo?: string };
+}
+
+export function parseRefine(payload: unknown): Parsed<RefineCommand> {
+  const p = record(payload);
+  if (typeof p['id'] !== 'string' || typeof p['baseRevision'] !== 'string' || !/^[0-9a-f]{16}$/.test(p['baseRevision'])) {
+    return refuse('bad refine payload');
+  }
+  const rawSections = record(p['sections']);
+  const sections: Partial<Record<'description' | 'plan' | 'acceptance', string>> = {};
+  for (const key of ['description', 'plan', 'acceptance'] as const) {
+    const value = rawSections[key];
+    if (value === undefined) {
+      continue;
+    }
+    if (typeof value !== 'string' || value.length > MAX_SECTION_CHARS) {
+      return refuse(`the ${key} text is not usable`);
+    }
+    sections[key] = value;
+  }
+  const rawHeader = record(p['header']);
+  const header: { title?: string; priority?: TicketPriority; repo?: string } = {};
+  if (rawHeader['title'] !== undefined) {
+    const title = typeof rawHeader['title'] === 'string' ? rawHeader['title'].trim() : '';
+    if (title === '' || title.length > 200) {
+      return refuse('the title is empty or too long');
+    }
+    header.title = title;
+  }
+  if (rawHeader['priority'] !== undefined) {
+    if (!TICKET_PRIORITIES.includes(rawHeader['priority'] as TicketPriority)) {
+      return refuse('unknown priority');
+    }
+    header.priority = rawHeader['priority'] as TicketPriority;
+  }
+  if (rawHeader['repo'] !== undefined) {
+    if (typeof rawHeader['repo'] !== 'string') {
+      return refuse('bad repository');
+    }
+    header.repo = rawHeader['repo'].trim();
+  }
+  if (Object.keys(sections).length === 0 && Object.keys(header).length === 0) {
+    return refuse('nothing to refine');
+  }
+  return ok({ id: p['id'], baseRevision: p['baseRevision'], sections, header });
+}

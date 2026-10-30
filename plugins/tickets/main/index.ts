@@ -56,7 +56,9 @@ import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, type DriftDetection } from './normalize';
 import { openTerminalAt } from './open-terminal';
 import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
-import type { TicketReply } from '../shared/remote-protocol';
+import type { RefineReply, TicketReply } from '../shared/remote-protocol';
+import type { RefineCommand } from './commands';
+import { refineTicket, revisionOf } from './ticket-refine';
 import { RemoteService } from './remote/service';
 import {
   chainResult,
@@ -357,7 +359,46 @@ class BoardService {
   /** One ticket's card and file text, for the remote's ticket view (req-66). */
   async readTicket(id: string): Promise<TicketReply> {
     const found = await this.findCard(id);
-    return found === null ? { ok: false, error: `${id} is not on the board` } : { ok: true, card: found.card, text: found.text };
+    return found === null
+      ? { ok: false, error: `${id} is not on the board` }
+      : { ok: true, card: found.card, text: found.text, revision: revisionOf(found.text) };
+  }
+
+  /**
+   * The remote's refine (req-66 R5): sections and header fields of one
+   * ticket, refused when the file changed since the device read it or a
+   * run owns it. One commit; a Drey tab showing the file reloads when
+   * clean and meets the save-conflict merge when dirty (ADR-0060).
+   */
+  refineTicket(input: RefineCommand & { actor?: string }): Promise<RefineReply> {
+    return this.enqueue(async () => {
+      const found = await this.findCard(input.id);
+      if (found === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const { vault, card, text } = found;
+      if (revisionOf(text) !== input.baseRevision) {
+        return { ok: false, conflict: true, error: 'The ticket changed since you opened it. Reload it and edit again.' };
+      }
+      if (card.meta.run !== null) {
+        return { ok: false, error: 'A run is live on this ticket. Refine it when the run has ended.' };
+      }
+      let refined: string;
+      try {
+        refined = refineTicket(text, { sections: input.sections, header: input.header }, input.actor ?? OWNER, new Date());
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      try {
+        await this.ctx.vault.write(card.path, refined, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, [card.path], `tickets: ${input.id} refined`);
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [card.path] });
+      this.announceChanged();
+      return { ok: true, revision: revisionOf(refined), ...(warning === null ? {} : { warning }) };
+    });
   }
 
   /**

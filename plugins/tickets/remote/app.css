@@ -303,6 +303,15 @@ textarea { resize: vertical; line-height: 1.45; }
 .composer-field { flex: 1; min-height: 44px; max-height: 120px; resize: none; }
 .composer .btn-danger { padding: 0 12px; }
 
+/* --- refine (R5) -------------------------------------------------------------- */
+.md-h { display: flex; align-items: baseline; gap: 10px; }
+.md-h .edit { margin-left: auto; font-size: 14px; font-weight: 600; padding: 6px 0 6px 12px; }
+.add-sections { margin-top: 10px; }
+.add-sections .chip-btn { color: var(--accent); background: rgba(122, 167, 240, 0.12); }
+.refine-area { min-height: 45vh; font: 16px/1.5 var(--sans); }
+.banner { display: flex; align-items: center; gap: 8px; }
+.banner .link { min-height: 32px; }
+
 @media (prefers-reduced-motion: reduce) {
   .card { transition: none; }
 }
