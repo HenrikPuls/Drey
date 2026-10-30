@@ -489,6 +489,8 @@ describe('Orchestrator', () => {
     expect(started.request.instruction.indexOf('Work the plan step.')).toBeLessThan(
       started.request.instruction.indexOf('The previous run failed the machine gate'),
     );
+    // T-0049: the dispatcher asks the supervisor's rules to decide.
+    expect(started.request.handover).toBe('auto');
   });
 
   it('caps from the chain config reach the composed instruction', async () => {

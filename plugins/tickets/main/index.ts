@@ -68,8 +68,9 @@ import {
 } from './fleet/worktree-clean';
 import { unlinkShared } from './fleet/worktrees';
 import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } from './fleet/worktree-home';
-import type { ChainConfig, FleetCaps, PermissionMode, RunInfo } from './fleet/protocol';
-import { normalizeFleetCaps } from './fleet/protocol';
+import type { ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, PermissionMode, RunInfo } from './fleet/protocol';
+import { normalizeFleetCaps, normalizeFleetHandover, WORKER_PROVIDERS } from './fleet/protocol';
+import { parseWorkerValue } from './fleet/assignment';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
 const ORDER_PATH = 'tickets/_meta/order.md';
@@ -142,6 +143,9 @@ class BoardService {
     private readonly fleetRoot: string,
     /** The instruction output caps (T-0048), resolved once at activation. */
     private readonly caps: FleetCaps,
+    /** The handover thresholds (T-0049) — refreshed from the config with
+     *  every snapshot (the override keys follow the board's pins). */
+    private handover: FleetHandoverConfig,
   ) {}
 
   /** The board's emit, debounced — one push per burst of changes. */
@@ -252,8 +256,17 @@ class BoardService {
     // The chain follows the pipeline: an automatic column anywhere
     // points the runner at this vault (M85). Cheap and idempotent —
     // the runner re-reads the vault on every dispatch pass anyway.
+    await this.refreshHandover(snapshot);
     this.syncChainConfig(vault, snapshot.pipeline);
     return snapshot;
+  }
+
+  /** Re-reads the handover thresholds with the board's override keys (T-0049). */
+  private async refreshHandover(snap: BoardSnapshot): Promise<void> {
+    this.handover = await handoverFromConfig(
+      this.ctx.config.get.bind(this.ctx.config),
+      handoverOverrideKeys(snap, this.defaultWorker),
+    );
   }
 
   /** Keeps the runner's chain config in step with the pipeline (never spawns). */
@@ -269,6 +282,7 @@ class BoardService {
             defaultWorker: this.defaultWorker,
             permissionMode: this.autoPermissionMode,
             caps: this.caps,
+            handover: this.handover,
           }
         : null;
     const json = chain === null ? null : JSON.stringify(chain);
@@ -918,6 +932,8 @@ class BoardService {
     ticketId: string;
     workerChoice: string | null;
     permissionMode: PermissionMode;
+    /** The dialog's handover choice (T-0049); null = not asked — fresh. */
+    handover: HandoverMode | 'auto' | null;
   }): Promise<{ ok: boolean; error?: string; runId?: string }> {
     return this.enqueue(async () => {
       const vault = await this.detect();
@@ -1000,6 +1016,7 @@ class BoardService {
         diffStat,
         gateFailure,
         caps: this.caps,
+        ...(input.handover !== null ? { handover: input.handover } : {}),
       });
       if (!composed.ok) {
         return { ok: false, error: composed.error };
@@ -1652,6 +1669,73 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * The handover thresholds from the plugin config (T-0049): the two base
+ * keys plus every per-provider/model override flat key named — the store's
+ * keys are opaque strings, so the caller hands over the key set worth
+ * reading (the board's worker/model pins); no UI writes the overrides.
+ */
+export async function handoverFromConfig(
+  get: <T>(key: string) => Promise<T | undefined>,
+  overrideKeys: readonly string[] = [],
+): Promise<FleetHandoverConfig> {
+  const raw: Record<string, unknown> = {};
+  const base = await get<number>('fleet.compactAboveTokens');
+  if (base !== undefined) {
+    raw.compactAboveTokens = base;
+  }
+  const ttl = await get<number>('fleet.resumePauseTtlMin');
+  if (ttl !== undefined) {
+    raw.resumePauseTtlMin = ttl;
+  }
+  const overrides: Record<string, number> = {};
+  for (const key of [...WORKER_PROVIDERS, ...overrideKeys]) {
+    const value = await get<number>(`fleet.compactAboveTokens.${key}`);
+    if (value !== undefined) {
+      overrides[key] = value;
+    }
+  }
+  if (Object.keys(overrides).length > 0) {
+    raw.compactAboveTokensOverrides = overrides;
+  }
+  return normalizeFleetHandover(raw);
+}
+
+/**
+ * The override keys worth reading for one board (T-0049): both worker
+ * providers always, plus every worker/model pin a run of this board can
+ * resolve to — pipeline columns, tickets, repos and the configured
+ * default. A column's bare `model:` pairs with its pin's provider (the
+ * fleet floor when the column names none).
+ */
+export function handoverOverrideKeys(snap: BoardSnapshot, defaultWorker: string): readonly string[] {
+  const keys = new Set<string>(WORKER_PROVIDERS);
+  const add = (value: string | null): void => {
+    const text = value.trim();
+    if (text !== '') {
+      keys.add(text);
+    }
+  };
+  const floorProvider = parseWorkerValue(defaultWorker)?.provider ?? 'opencode';
+  add(defaultWorker);
+  for (const phase of snap.pipeline) {
+    add(phase.worker);
+    if (phase.model !== null && phase.model.trim() !== '') {
+      const provider = phase.worker !== null ? parseWorkerValue(phase.worker)?.provider : undefined;
+      keys.add(`${provider ?? floorProvider}/${phase.model.trim()}`);
+    }
+  }
+  for (const column of snap.columns) {
+    for (const card of column.tickets) {
+      add(card.meta.worker);
+    }
+  }
+  for (const repo of snap.repos) {
+    add(repo.worker);
+  }
+  return [...keys];
+}
+
 const plugin: MainPluginModule = {
   async activate(ctx: MainPluginContext) {
     const gitPath = ((await ctx.config.get<string>('gitPath')) ?? '').trim();
@@ -1678,7 +1762,10 @@ const plugin: MainPluginModule = {
       }
     }
     const caps = normalizeFleetCaps(capConfig);
-    const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet, fleetRoot, caps);
+    // The handover thresholds (T-0049): the base keys once at activation;
+    // every board snapshot re-reads them with the board's override keys.
+    const handover = await handoverFromConfig(ctx.config.get.bind(ctx.config));
+    const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet, fleetRoot, caps, handover);
 
     ctx.ipc.handle('board', () => board.refresh());
 
@@ -1831,14 +1918,19 @@ const plugin: MainPluginModule = {
     }));
 
     ctx.ipc.handle('fleetStart', async (payload) => {
-      const p = payload as { id?: unknown; worker?: unknown; permissionMode?: unknown };
+      const p = payload as { id?: unknown; worker?: unknown; permissionMode?: unknown; handover?: unknown };
       if (typeof p.id !== 'string') {
         return { ok: false, error: 'bad fleet start payload' };
       }
+      const handover =
+        p.handover === 'fresh' || p.handover === 'resume' || p.handover === 'resume-compact' || p.handover === 'auto'
+          ? p.handover
+          : null;
       return board.startRun({
         ticketId: p.id,
         workerChoice: typeof p.worker === 'string' && p.worker.trim() !== '' ? p.worker.trim() : null,
         permissionMode: p.permissionMode === 'bypass' ? 'bypass' : 'accept-edits',
+        handover,
       });
     });
 
@@ -1987,6 +2079,8 @@ const plugin: MainPluginModule = {
             ticketId: input.ticketId,
             workerChoice: input.worker,
             permissionMode: input.permissionMode,
+            // The MCP tool asks no handover — a fresh run (T-0049 wire default).
+            handover: null,
           }),
         stop: (runId) => fleet.stop(runId, null),
         steer: (runId, text) => fleet.send(runId, text),

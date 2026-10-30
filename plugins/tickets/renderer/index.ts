@@ -28,7 +28,11 @@ import { cardOrderTargets } from './card-order';
 import { createColumnCollapseStore } from './column-collapse';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
-import type { ChainStatus, RunInfo } from '../main/fleet/protocol';
+import type { ChainStatus, FleetHandoverConfig, RunInfo } from '../main/fleet/protocol';
+import { DEFAULT_FLEET_HANDOVER, normalizeFleetHandover } from '../main/fleet/protocol';
+import { handoverDialogState } from './handover-ui';
+import type { HandoverCandidate } from '../main/fleet/handover';
+import { parseWorkerValue } from '../main/fleet/assignment';
 import {
   CONTEXT_WARN,
   contextFill,
@@ -1406,6 +1410,77 @@ function openRunModal(api: DreyPluginApi, card: TicketCard): void {
     const rowFields = el('div', 'tickets-form-row');
     rowFields.append(field('Worker', worker), field('Permissions', permission));
 
+    // --- the handover choice (T-0049): the pure rules over the fleet
+    // snapshot decide the default and which options are legal at all;
+    // nothing is persisted — each run asks anew.
+    const handover = el('select') as HTMLSelectElement;
+    handover.setAttribute('aria-label', 'Handover');
+    const handoverStatus = el('p', 'tickets-form-hint', '');
+    const candidate: HandoverCandidate | null = (() => {
+      const newest = fleetRuns
+        .filter((r) => r.ticketId === card.id && ['done', 'stopped', 'failed'].includes(r.state))
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+      if (newest === undefined) {
+        return null;
+      }
+      return {
+        phase: newest.phase ?? '',
+        provider: newest.provider,
+        model: newest.model ?? null,
+        state: newest.state,
+        sessionRef: newest.sessionRef,
+        lastTurnContext: newest.lastTurnContext ?? null,
+        endedAt: newest.endedAt,
+      };
+    })();
+    const cardPin = parseWorkerValue(card.worker);
+    let handoverConfig: FleetHandoverConfig = DEFAULT_FLEET_HANDOVER;
+    const renderHandover = (): void => {
+      const provider = worker.value;
+      const state = handoverDialogState({
+        phase: card.phase,
+        candidate,
+        provider,
+        // The dialog offers no model pin of its own; the card's applies
+        // while the worker stays the card's resolved one.
+        model: cardPin !== null && cardPin.provider === provider ? cardPin.model : null,
+        config: handoverConfig,
+        nowMs: Date.now(),
+      });
+      handover.replaceChildren();
+      for (const option of state.options) {
+        const node = el('option', undefined, option.label) as HTMLOptionElement;
+        node.value = option.mode;
+        node.disabled = option.disabled;
+        node.title = option.why;
+        node.selected = option.mode === state.defaultMode;
+        handover.append(node);
+      }
+      handover.title = state.options.find((o) => o.mode === handover.value)?.why ?? '';
+      handoverStatus.textContent = state.statusLine;
+    };
+    renderHandover();
+    worker.addEventListener('change', renderHandover);
+    void (async () => {
+      const raw: Record<string, number> = {};
+      const base = await api.settings.get<number>('fleet.compactAboveTokens').catch(() => undefined);
+      if (base !== undefined) {
+        raw.compactAboveTokens = base;
+      }
+      const ttl = await api.settings.get<number>('fleet.resumePauseTtlMin').catch(() => undefined);
+      if (ttl !== undefined) {
+        raw.resumePauseTtlMin = ttl;
+      }
+      const providerOverride = await api.settings
+        .get<number>(`fleet.compactAboveTokens.${worker.value}`)
+        .catch(() => undefined);
+      handoverConfig = normalizeFleetHandover({
+        ...raw,
+        ...(providerOverride !== undefined ? { compactAboveTokensOverrides: { [worker.value]: providerOverride } } : {}),
+      });
+      renderHandover();
+    })();
+
     const hint = el(
       'p',
       'tickets-form-hint',
@@ -1421,18 +1496,20 @@ function openRunModal(api: DreyPluginApi, card: TicketCard): void {
     start.type = 'button';
     start.addEventListener('click', () => {
       const workerValue = worker.value;
+      const handoverValue = handover.value;
       close();
       void runMutation('Starting the run', () =>
         invokeBoard('fleetStart', {
           id: card.id,
           worker: workerValue,
           permissionMode: permission.value,
+          handover: handoverValue,
         }),
       );
     });
     actions.append(cancel, start);
 
-    form.append(rowFields, hint, actions);
+    form.append(rowFields, field('Handover', handover), handoverStatus, hint, actions);
     form.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
         close();

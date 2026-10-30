@@ -25,6 +25,10 @@
 import { freePort, type RunnerProcess, type SpawnFn } from './procs';
 import type { PermissionMode, RunUsage, SteerRung, WorkerProviderId } from './protocol';
 
+// One table with the pure resolution rules (T-0049): the supervisor and
+// the start dialog read the same capability per provider.
+export { COMPACT_CAPABILITY } from './handover';
+
 /** One line of the run's normalized stream file (`stream.jsonl`). */
 export interface NormalizedEvent {
   readonly ts: string;
@@ -87,6 +91,20 @@ export interface ProviderStart {
   readonly permissionMode: PermissionMode;
   /** A previous run's session — the adapter resumes it when it can. */
   readonly resumeRef: string | null;
+  /**
+   * Compact the resumed session before the first prompt (T-0049): the
+   * compact must complete before the instruction rides and stay
+   * invisible as a turn. Only meaningful with a `resumeRef`.
+   */
+  readonly compactFirst?: boolean;
+  /**
+   * The resume could not be established (a missing session, a CLI
+   * refusal) — reported instead of prompting; the supervisor falls
+   * back to a fresh worker under the same run id. Fires at most once,
+   * always before the first successful prompt (a failure after a
+   * successful resume fails the run normally).
+   */
+  readonly onResumeFailed?: (reason: string) => void;
   readonly ticketId: string;
   /** Events land here; the run store writes them to the stream file. */
   readonly onEvent: (event: NormalizedEvent) => void;
@@ -225,6 +243,22 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
       let held = false;
       let busy = true;
       let inputClosed = false;
+      // T-0049: the resume's health signal — a CLI that exits before its
+      // init event never established the session, so the supervisor respawns
+      // fresh instead of failing the run.
+      let initSeen = false;
+      // T-0049 compact-first: the `/compact` user message rides before the
+      // instruction and its result is awaited (spike 1: native routing, zero
+      // model usage) — the instruction follows only once the compact settled.
+      const compactFirst = start.compactFirst === true && start.resumeRef !== null;
+      let compactPending = compactFirst;
+      const sendInstruction = (): void => {
+        proc.write(userMessage(start.instruction));
+        if (!busy) {
+          busy = true;
+          start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'busy' });
+        }
+      };
       const closeInput = (): void => {
         if (!inputClosed) {
           inputClosed = true;
@@ -261,6 +295,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             continue;
           }
           if (event.type === 'system' && event.subtype === 'init' && typeof event.session_id === 'string') {
+            initSeen = true;
             start.onSessionRef(event.session_id);
             if (Array.isArray(event.slash_commands)) {
               const names = event.slash_commands.filter((c): c is string => typeof c === 'string').map((c) => c.replace(/^\//, ''));
@@ -348,6 +383,13 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             });
             busy = false;
             start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'idle' });
+            if (compactPending) {
+              // The compact's own result: the session is compacted, the
+              // real instruction follows now — the input stays open.
+              compactPending = false;
+              sendInstruction();
+              return;
+            }
             if (!held) {
               closeInput();
             }
@@ -361,7 +403,19 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
           }
         }
       });
-      proc.write(userMessage(start.instruction));
+      // Registered before the handle's exited promise so it fires first:
+      // the supervisor's fallback guard is set synchronously before the
+      // exit can be misread as the run's end.
+      proc.onExit((code) => {
+        if (!initSeen && start.resumeRef !== null) {
+          start.onResumeFailed?.(`the CLI exited (${code ?? 'signal'}) before its session was established`);
+        }
+      });
+      if (compactFirst) {
+        proc.write(userMessage('/compact'));
+      } else {
+        proc.write(userMessage(start.instruction));
+      }
       return {
         pid: proc.pid,
         exited: new Promise<number | null>((resolve) => proc.onExit(resolve)),
@@ -1004,6 +1058,88 @@ export function opencodeAdapter(
       start.onUsageBase?.(state.usageBase);
     };
 
+    /**
+     * T-0049 resume pre-flight: a session the server no longer has (it
+     * aged out, the storage was cleared) would otherwise surface as a
+     * failed prompt POST on a live worker — reported here instead, before
+     * anything is prompted, so the supervisor can respawn fresh.
+     */
+    const preflightResume = async (): Promise<boolean> => {
+      if (state.sessionRef === null) {
+        return true;
+      }
+      let reason: string | null = null;
+      try {
+        const res = await fetchFn(`${address}${OPENCODE_API.session(state.sessionRef)}`, { headers: auth });
+        if (!res.ok) {
+          reason = `the session answered HTTP ${res.status}`;
+        }
+      } catch (error) {
+        reason = String(error).slice(0, 200);
+      }
+      if (reason === null) {
+        return true;
+      }
+      start.onEvent({ ts: nowIso(now), kind: 'error', text: `resume pre-flight failed — ${reason}` });
+      start.onResumeFailed?.(reason);
+      await server?.killTree();
+      finish(-1);
+      return false;
+    };
+
+    /**
+     * T-0049 compact-first: the compaction runs as a turn of its own
+     * (delivery `steer`, spike 2) — the `idle` marker in the message list
+     * is the one signal it settled. No deadline: a local model may think
+     * for minutes (ADR-0014); the owner's stop ends the run.
+     */
+    const compactBeforePrompt = async (): Promise<void> => {
+      if (start.compactFirst !== true || state.sessionRef === null || address === '') {
+        return;
+      }
+      const note = (text: string): void => {
+        start.onEvent({ ts: nowIso(now), kind: 'note', text });
+      };
+      const startedAt = now().getTime();
+      try {
+        const res = await fetchFn(`${address}${OPENCODE_API.compact(state.sessionRef)}`, {
+          method: 'POST',
+          headers: { ...auth, 'content-type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        if (!res.ok) {
+          note(`the pre-run compact failed (HTTP ${res.status}) — the session continues un-compacted`);
+          return;
+        }
+      } catch (error) {
+        note(`the pre-run compact failed — ${String(error).slice(0, 200)}`);
+        return;
+      }
+      // The compact must complete before the instruction rides — and
+      // before `lastPromptAt` exists, or the poll's `turnDone` would fire
+      // on the compact's own idle marker and kill the worker before the
+      // real turn starts (the T-0049 pitfall).
+      for (;;) {
+        if (!state.alive) {
+          return;
+        }
+        try {
+          const list = await fetchFn(`${address}${OPENCODE_API.messages(state.sessionRef)}`, { headers: auth });
+          if (list.ok) {
+            const body = (await list.json()) as { data?: OcMessage[] };
+            const newest = (body.data ?? [])[0];
+            if (newest !== undefined && newest.type === 'idle' && (newest.time?.created ?? 0) >= startedAt) {
+              note('the resumed session was natively compacted before the first prompt');
+              return;
+            }
+          }
+        } catch {
+          // retried by the next round
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    };
+
     /** One poll round: cumulative usage + stream text + the turn's end. */
     const pollTurn = async (): Promise<void> => {
       if (!state.alive || state.sessionRef === null || address === '' || state.turnDone || state.usageBase === null) {
@@ -1318,6 +1454,13 @@ export function opencodeAdapter(
         return;
       }
 
+      // T-0049: a resumed session is verified before anything is
+      // prompted — a missing session respawns the run fresh, never a
+      // failed one.
+      if (!(await preflightResume())) {
+        return;
+      }
+
       if (state.sessionRef === null) {
         const res = await fetchFn(`${address}${OPENCODE_API.createSession}`, {
           method: 'POST',
@@ -1340,6 +1483,9 @@ export function opencodeAdapter(
       });
       // Before the prompt: the resumed session's totals are its past only.
       await readUsageBase();
+      // Then, when asked, the native compact — it must settle BEFORE the
+      // prompt and before the poll's `lastPromptAt` exists (T-0049).
+      await compactBeforePrompt();
       state.startedAt = now().getTime();
       state.lastPromptAt = state.startedAt;
 

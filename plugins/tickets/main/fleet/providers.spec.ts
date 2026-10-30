@@ -16,9 +16,11 @@ function fakeProcess(): RunnerProcess & {
   killTree: ReturnType<typeof vi.fn>;
   exit: (code: number | null) => void;
 } {
+  // Multiple listeners, like the real child's `once('exit')` (T-0049:
+  // the resume-failure report registers a second one).
+  const exitListeners: Array<(code: number | null) => void> = [];
   const listeners = {
     stdout: (_line: string): void => undefined,
-    exit: (_code: number | null): void => undefined,
   };
   const stdinWrites: string[] = [];
   const killTree = vi.fn(async () => undefined);
@@ -40,12 +42,16 @@ function fakeProcess(): RunnerProcess & {
     },
     onStderr: () => undefined,
     onExit: (cb) => {
-      listeners.exit = cb;
+      exitListeners.push(cb);
     },
     stdout: (line) => listeners.stdout(`${line}\n`),
     stdinWrites,
     killTree,
-    exit: (code) => listeners.exit(code),
+    exit: (code) => {
+      for (const cb of [...exitListeners]) {
+        cb(code);
+      }
+    },
   };
   return proc;
 }
@@ -194,6 +200,46 @@ describe('the claude-code adapter', () => {
     claudeCodeAdapter(spawnFn).spawn(start);
     expect(seen[0]).toContain('--resume');
     expect(seen[0]).toContain('ses_9');
+  });
+
+  it('compact-first routes /compact natively and waits for its result before the instruction (T-0049)', () => {
+    const proc = fakeProcess();
+    const { events, start } = collect({ resumeRef: 'ses_9', compactFirst: true });
+    const handle = claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    expect(proc.stdinWrites[0]).toContain('/compact');
+    expect(proc.stdinWrites.join('\n')).not.toContain('Do the ticket.');
+
+    proc.stdout(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'ses_9' }));
+    proc.stdout(JSON.stringify({ type: 'result', usage: {}, result: 'compacted' }));
+    // The compact's result is not the run's end: the input stays open
+    // and the instruction follows as its own turn.
+    expect(proc.stdinWrites.at(-1)).toContain('Do the ticket.');
+    expect(proc.stdinWrites).not.toContain('<<end>>');
+    expect(events.at(-1)).toMatchObject({ kind: 'usage', turn: 'busy' });
+
+    // …and the instruction's result ends the turn as usual.
+    proc.stdout(JSON.stringify({ type: 'result', usage: {}, result: 'done' }));
+    expect(proc.stdinWrites.at(-1)).toBe('<<end>>');
+    proc.exit(0);
+  });
+
+  it('a resumed CLI that exits before its init reports the failed resume — a fresh one does not (T-0049)', async () => {
+    const proc = fakeProcess();
+    const failures: string[] = [];
+    const { start } = collect({ resumeRef: 'ses_gone', onResumeFailed: (reason) => failures.push(reason) });
+    const handle = claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.exit(1);
+    await expect(handle.exited).resolves.toBe(1);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toContain('before its session was established');
+
+    const freshProc = fakeProcess();
+    const freshFailures: string[] = [];
+    const { start: freshStart } = collect({ onResumeFailed: (reason) => freshFailures.push(reason) });
+    const freshHandle = claudeCodeAdapter(spawnOf(freshProc)).spawn(freshStart);
+    freshProc.exit(1);
+    await expect(freshHandle.exited).resolves.toBe(1);
+    expect(freshFailures).toHaveLength(0);
   });
 
   it('emits one turnUsage per assistant call — telemetry sums turns, never the cumulative result', () => {
@@ -768,6 +814,90 @@ describe('the opencode adapter', () => {
     expect(last?.cacheReadTokens).toBe(3_000);
     expect(last?.tokensOut).toBe(30);
     expect(last?.costUsd).toBeCloseTo(0.2);
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
+  it('a resume pre-flights the session — a missing one is reported, never prompted (T-0049)', async () => {
+    vi.useFakeTimers();
+    const prompts: string[] = [];
+    const { fetch: base } = scriptedFetch({ sessionCreated: () => undefined, prompts, interrupts: [], messages: () => [] });
+    const fetch: FetchFn = async (url, init) => {
+      if (url.endsWith(OPENCODE_API.session('ses_oc'))) {
+        return { ok: false, status: 404 } as unknown as Response;
+      }
+      return base(url, init);
+    };
+    const failures: string[] = [];
+    const proc = fakeProcess();
+    const { events, start } = collect({ resumeRef: 'ses_oc', onResumeFailed: (reason) => failures.push(reason) });
+    const handle = opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(1_500);
+
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toContain('404');
+    expect(prompts).toHaveLength(0);
+    expect(events.some((e) => e.kind === 'error' && (e.text ?? '').includes('pre-flight'))).toBe(true);
+    expect(proc.killTree).toHaveBeenCalled();
+    await expect(handle.exited).resolves.toBe(-1);
+    vi.useRealTimers();
+  });
+
+  it('compact-first settles the compact (its idle marker) before the instruction prompts (T-0049)', async () => {
+    vi.useFakeTimers();
+    const at = Date.now();
+    const prompts: string[] = [];
+    const promptWhenSettled: boolean[] = [];
+    let compacts = 0;
+    let rounds = 0;
+    let settled = false;
+    // While the compaction runs: only the `compaction` message, no idle
+    // marker. From the third wait round on: the turn ended.
+    const messages = (): unknown[] => {
+      rounds += 1;
+      if (rounds <= 2) {
+        return [{ id: 'msg_c', type: 'compaction', time: { created: at + 1 } }];
+      }
+      settled = true;
+      return [
+        { id: 'msg_i2', type: 'idle', time: { created: at + 5_000 } },
+        { id: 'msg_c', type: 'compaction', time: { created: at + 1 } },
+      ];
+    };
+    const { fetch: base } = scriptedFetch({ sessionCreated: () => undefined, prompts: [], interrupts: [], messages });
+    const json = (body: unknown): Response => ({ ok: true, status: 200, json: async () => body }) as unknown as Response;
+    const fetch: FetchFn = async (url, init) => {
+      if (url.endsWith(OPENCODE_API.compact('ses_oc'))) {
+        compacts += 1;
+        return json({ data: {} });
+      }
+      if (url.endsWith(OPENCODE_API.prompt('ses_oc'))) {
+        promptWhenSettled.push(settled);
+        prompts.push(String(init?.body));
+        return json({ data: { id: 'msg_q', type: 'user', delivery: 'steer' } });
+      }
+      return base(url, init);
+    };
+    const proc = fakeProcess();
+    const { events, start } = collect({ resumeRef: 'ses_oc', compactFirst: true });
+    const handle = opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(6_000);
+
+    expect(compacts).toBe(1);
+    // The instruction rode only once the compact had settled — and never
+    // before (the idle-marker race the T-0049 pitfall pins).
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('Do the ticket.');
+    expect(promptWhenSettled).toEqual([true]);
+    expect(events.some((e) => (e.text ?? '').includes('natively compacted'))).toBe(true);
+    // The compact's own idle marker sits BEFORE lastPromptAt: the turn end
+    // the poll saw belongs to the prompt, and the worker was killed then.
+    expect(events.find((e) => e.kind === 'result')).toBeDefined();
+    expect(proc.killTree).toHaveBeenCalled();
     proc.exit(null);
     vi.useRealTimers();
   });
