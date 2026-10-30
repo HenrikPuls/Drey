@@ -1100,6 +1100,49 @@
   gap: 8px;
 }
 
+/* The card and its parts set display themselves, so [hidden] must win. */
+.tickets-takeover-wait[hidden],
+.tickets-takeover-wait-text[hidden],
+.tickets-takeover-wait-questions[hidden],
+.tickets-takeover-wait-actions[hidden] {
+  display: none;
+}
+
+.tickets-takeover-wait-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.tickets-takeover-wait-question {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tickets-takeover-wait-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.tickets-takeover-wait-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tickets-takeover-choice-picked {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.tickets-takeover-wait-questions > .tickets-takeover-btn {
+  align-self: flex-start;
+}
+
 .tickets-watch {
   width: min(720px, 80vw);
 }

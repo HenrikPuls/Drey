@@ -23,6 +23,9 @@ one means moving it back to the roadmap with a new justification.
   server in the runner and per-worker config injection for each CLI, and
   whether OpenCode keeps a tool call blocked for minutes to hours was
   unverified; the marker works for both workers with what they have.
+  (Later finding: OpenCode's own `question` tool does block for hours —
+  through a form — and the adapter now answers it; the marker stays for
+  Claude Code and for a question at a turn's end.)
 - **req-9** — OCR remainder (iPad): on-device handwriting recognition.
   Desktop half shipped (`ocr` plugin, vision-capable LLM, ADR-0050).
 - **req-21** — dataview.js support.

@@ -26,7 +26,7 @@ import {
 } from '../shared/tickets';
 import { createColumnCollapseStore } from './column-collapse';
 import { createTicketsSettingsPage } from './settings-page';
-import type { ChainStatus, RunInfo } from '../main/fleet/protocol';
+import type { ChainStatus, RunInfo, WaitQuestion } from '../main/fleet/protocol';
 import {
   CONTEXT_WARN,
   contextFill,
@@ -1541,7 +1541,73 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     return b;
   };
   waitActions.append(decide('once', 'Allow once'), decide('always', 'Always allow'), decide('reject', 'Deny'));
-  waitCard.append(waitLabel, waitText, waitActions);
+  // A question asked with OpenCode's `question` tool comes with choices:
+  // one click answers a single question, several are picked and sent.
+  const waitQuestions = el('div', 'tickets-takeover-wait-questions');
+  const picks = new Map<string, Set<string>>();
+  const sendPicks = el('button', 'tickets-takeover-btn tickets-takeover-btn-primary', 'Send answer');
+  sendPicks.type = 'button';
+  const sendAnswers = (answers: Record<string, string | string[]>): void => {
+    void runMutation('Answer', () => invokeBoard('fleetAnswer', { runId, answers }));
+  };
+  sendPicks.addEventListener('click', () => {
+    const answers: Record<string, string | string[]> = {};
+    for (const [key, chosen] of picks) {
+      if (chosen.size > 0) {
+        answers[key] = [...chosen];
+      }
+    }
+    sendAnswers(answers);
+  });
+  const paintQuestions = (questions: readonly WaitQuestion[]): void => {
+    picks.clear();
+    const oneClick = questions.length === 1 && !questions[0]!.multiple;
+    waitQuestions.replaceChildren(
+      ...questions.map((q) => {
+        const block = el('div', 'tickets-takeover-wait-question');
+        if (q.header !== undefined) {
+          block.append(el('div', 'tickets-takeover-wait-header', q.header));
+        }
+        block.append(el('div', 'tickets-takeover-wait-text', q.question));
+        const choices = el('div', 'tickets-takeover-wait-choices');
+        for (const option of q.options) {
+          const b = el('button', 'tickets-takeover-btn tickets-takeover-choice', option.label);
+          b.type = 'button';
+          b.title = option.description ?? option.label;
+          b.addEventListener('click', () => {
+            if (oneClick) {
+              sendAnswers({ [q.key]: option.label });
+              return;
+            }
+            const chosen = picks.get(q.key) ?? new Set<string>();
+            if (!q.multiple) {
+              chosen.clear();
+              for (const sibling of choices.children) {
+                sibling.classList.remove('tickets-takeover-choice-picked');
+              }
+            }
+            if (chosen.has(option.label)) {
+              chosen.delete(option.label);
+            } else {
+              chosen.add(option.label);
+            }
+            picks.set(q.key, chosen);
+            b.classList.toggle('tickets-takeover-choice-picked', chosen.has(option.label));
+            sendPicks.disabled = ![...picks.values()].some((s) => s.size > 0);
+          });
+          choices.append(b);
+        }
+        block.append(choices);
+        return block;
+      }),
+    );
+    sendPicks.hidden = oneClick;
+    sendPicks.disabled = true;
+    if (!oneClick) {
+      waitQuestions.append(sendPicks);
+    }
+  };
+  waitCard.append(waitLabel, waitText, waitQuestions, waitActions);
   let shownWait = '';
   const paintWait = (run: RunInfo | null): void => {
     const waiting = run !== null && LIVE_RUN_STATES.includes(run.state) ? (run.waiting ?? null) : null;
@@ -1550,13 +1616,27 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
       shownWait = '';
       return;
     }
+    const questions = waiting.questions ?? null;
     waitLabel.textContent =
-      waiting.kind === 'question' ? 'The worker asks you — answer below, it then goes on with its step' : 'The worker wants to do this — allow it?';
+      waiting.kind === 'permission'
+        ? 'The worker wants to do this — allow it?'
+        : questions === null
+          ? 'The worker asks you — answer below, it then goes on with its step'
+          : questions.length > 1
+            ? 'The worker asks you — pick the answers, or type your own below, one line per question'
+            : 'The worker asks you — pick an answer, or type your own below';
     waitText.textContent = waiting.text;
+    waitText.hidden = questions !== null;
+    waitQuestions.hidden = questions === null;
     waitActions.hidden = waiting.kind !== 'permission';
     const key = `${waiting.kind}@${waiting.since}`;
-    if (key !== shownWait && waiting.kind === 'question') {
-      prompt.focus();
+    if (key !== shownWait) {
+      if (questions !== null) {
+        paintQuestions(questions);
+      }
+      if (waiting.kind === 'question') {
+        prompt.focus();
+      }
     }
     shownWait = key;
   };

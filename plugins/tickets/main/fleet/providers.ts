@@ -24,8 +24,10 @@ import {
   QUESTION_MARKER,
   type PermissionDecision,
   type PermissionMode,
+  type QuestionAnswers,
   type RunWaiting,
   type SteerRung,
+  type WaitQuestion,
   type WorkerProviderId,
 } from './protocol';
 
@@ -70,6 +72,85 @@ export function permissionText(request: {
   const what = [request.action ?? 'tool', ...(request.resources ?? [])].join(' ').trim();
   const message = request.message?.trim() ?? '';
   return message !== '' && message !== what ? `${what} — ${message}` : what;
+}
+
+/** One field of an OpenCode form (v2 `Form.Field`, the parts the fleet reads). */
+interface OcFormField {
+  readonly key?: string;
+  readonly title?: string;
+  readonly description?: string;
+  readonly type?: string;
+  readonly options?: ReadonlyArray<{ readonly value?: string; readonly label?: string; readonly description?: string }>;
+}
+
+/** A pending OpenCode form (v2 `Form.Info`); the `question` tool asks through one. */
+export interface OcForm {
+  readonly id?: string;
+  readonly title?: string;
+  readonly metadata?: { readonly kind?: string };
+  readonly fields?: readonly OcFormField[];
+}
+
+/**
+ * The questions of a pending form, as the run's wait shows them. The
+ * `question` tool puts each question into one field: `title` = its short
+ * header, `description` = the question, the options' `value` = their label.
+ */
+export function formQuestions(form: OcForm): WaitQuestion[] {
+  return (form.fields ?? [])
+    .filter((f): f is OcFormField & { key: string } => typeof f.key === 'string')
+    .map((f) => ({
+      key: f.key,
+      ...(f.title !== undefined && f.title.trim() !== '' ? { header: f.title.trim() } : {}),
+      question: (f.description ?? f.title ?? '').trim() || (form.title ?? 'Question'),
+      options: (f.options ?? [])
+        .map((o) => ({ label: o.value ?? o.label ?? '', ...(o.description !== undefined ? { description: o.description } : {}) }))
+        .filter((o) => o.label !== ''),
+      multiple: f.type === 'multiselect',
+    }));
+}
+
+/** One line for a question form: the first question, and how many more follow. */
+export function formText(questions: readonly WaitQuestion[]): string {
+  const first = questions[0]?.question ?? 'The worker asks you';
+  return questions.length > 1 ? `${first} (+${questions.length - 1} more)` : first;
+}
+
+/**
+ * The owner's typed answer to a question form. One question takes the
+ * whole text; several take one line each, in order. A line that names a
+ * choice — its number or its label — picks that choice (comma-separated
+ * for a multiple choice), anything else is the owner's own answer.
+ */
+export function answersFromText(questions: readonly WaitQuestion[], text: string): QuestionAnswers {
+  const lines = questions.length > 1 ? text.split('\n').map((l) => l.trim()).filter((l) => l !== '') : [text.trim()];
+  const pick = (q: WaitQuestion, token: string): string => {
+    const n = /^\d+$/.test(token) ? Number(token) : NaN;
+    if (n >= 1 && n <= q.options.length) {
+      return q.options[n - 1]!.label;
+    }
+    return q.options.find((o) => o.label.toLowerCase() === token.toLowerCase())?.label ?? token;
+  };
+  const answers: Record<string, string | string[]> = {};
+  questions.forEach((q, i) => {
+    const line = lines[i];
+    if (line === undefined || line === '') {
+      return;
+    }
+    answers[q.key] = q.multiple ? line.split(',').map((t) => pick(q, t.trim())).filter((t) => t !== '') : pick(q, line);
+  });
+  return answers;
+}
+
+/** One line for the Log and the transcript: what the owner answered. */
+export function answersText(questions: readonly WaitQuestion[], answers: QuestionAnswers): string {
+  return questions
+    .map((q) => {
+      const a = answers[q.key];
+      const said = a === undefined ? '—' : typeof a === 'string' ? a : a.join(', ');
+      return questions.length > 1 ? `${q.header ?? q.key}: ${said}` : said;
+    })
+    .join('; ');
 }
 
 /** The stream lead-in of a worker's thinking (the takeover transcript shows it quoted). */
@@ -177,6 +258,12 @@ export interface WorkerHandle {
    * False when the request is gone or the server refused the reply.
    */
   answerPermission?(requestId: string, decision: PermissionDecision): Promise<boolean>;
+  /**
+   * Answers the provider's pending question form (OpenCode's `question`
+   * tool): the worker's tool call returns the answers and its turn goes on.
+   * False when the form is gone or the server refused the reply.
+   */
+  answerQuestion?(formId: string, answers: QuestionAnswers): Promise<boolean>;
 }
 
 export interface ProviderAdapter {
@@ -441,6 +528,12 @@ interface OcContentPart {
 
 /** One line for a tool call: `read src/a.ts`, `shell git status`, `grep prepareWorktree`. */
 export function toolActivity(name: string | undefined, input: Readonly<Record<string, unknown>> | undefined): string {
+  const questions = input?.['questions'];
+  if (name === 'question' && Array.isArray(questions)) {
+    // OpenCode's `question` tool: the line is what it asks, not a bare "question".
+    const first = (questions[0] as { question?: unknown } | undefined)?.question;
+    return activityLine(`asks ${typeof first === 'string' ? first : 'the owner'}`);
+  }
   const target = input?.['path'] ?? input?.['filePath'] ?? input?.['file_path'] ?? input?.['command'] ?? input?.['pattern'] ?? '';
   return activityLine(`${name ?? 'tool'} ${typeof target === 'string' ? target : ''}`);
 }
@@ -490,6 +583,10 @@ export const OPENCODE_API = {
   /** The answer to one (`POST {decision: once | always | reject}`, 204). */
   permissionReply: (id: string, requestId: string): string =>
     `/api/session/${id}/permission/${encodeURIComponent(requestId)}/reply`,
+  /** The session's pending forms — the `question` tool asks through one (`GET`, `{data: [Form.Info]}`). */
+  forms: (id: string): string => `/api/session/${id}/form`,
+  /** The answer to one (`POST {answer: {q0: …}}`, 204). */
+  formReply: (id: string, formId: string): string => `/api/session/${id}/form/${encodeURIComponent(formId)}/reply`,
 } as const;
 
 /** The slash commands every OpenCode worker has besides the project's own. */
@@ -551,6 +648,8 @@ export function opencodeAdapter(
       questionReportedFor: -1,
       /** The permission request now reported as the wait, or null. */
       permissionId: null as string | null,
+      /** The question form now reported as the wait, or null. */
+      formId: null as string | null,
       turn: undefined as 'busy' | 'idle' | undefined,
       /** Idle markers older than this belong to an earlier turn. */
       lastPromptAt: 0,
@@ -874,6 +973,27 @@ export function opencodeAdapter(
           }
         }
 
+        // The `question` tool asks through a form and blocks its call until
+        // the form is answered — the turn neither ends nor goes on, so the
+        // pending form becomes the run's wait, with its choices.
+        const forms = await fetchFn(`${address}${OPENCODE_API.forms(state.sessionRef)}`, { headers: auth }).catch(() => null);
+        if (forms !== null && forms.ok) {
+          const body = (await forms.json()) as { data?: readonly OcForm[] };
+          const form = (body.data ?? []).find((f) => typeof f.id === 'string' && (f.fields ?? []).length > 0);
+          if (form !== undefined && form.id !== state.formId) {
+            state.formId = form.id!;
+            const questions = formQuestions(form);
+            start.onEvent({
+              ts: nowIso(now),
+              kind: 'usage',
+              waiting: { kind: 'question', text: formText(questions), requestId: form.id!, questions },
+            });
+          } else if (form === undefined && state.formId !== null) {
+            state.formId = null;
+            start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
+          }
+        }
+
         if (state.turnDone && !state.ended) {
           state.ended = true;
           start.onEvent({
@@ -955,6 +1075,28 @@ export function opencodeAdapter(
         }
         if (state.permissionId === requestId) {
           state.permissionId = null;
+          start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
+        }
+        return true;
+      },
+      answerQuestion: async (formId, answers) => {
+        if (!state.alive || state.sessionRef === null || address === '') {
+          return false;
+        }
+        try {
+          const res = await fetchFn(`${address}${OPENCODE_API.formReply(state.sessionRef, formId)}`, {
+            method: 'POST',
+            headers: { ...auth, 'content-type': 'application/json' },
+            body: JSON.stringify({ answer: answers }),
+          });
+          if (!res.ok) {
+            return false;
+          }
+        } catch {
+          return false;
+        }
+        if (state.formId === formId) {
+          state.formId = null;
           start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: null });
         }
         return true;

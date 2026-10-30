@@ -27,6 +27,7 @@ import { Orchestrator } from './orchestrator';
 import { MAX_ATTACHMENT_BYTES, RunSupervisor } from './runs';
 import {
   isWorkerProvider,
+  questionAnswersOf,
   type ChainConfig,
   type ChainMaster,
   type ColumnMode,
@@ -394,6 +395,23 @@ async function main(): Promise<void> {
           return;
         }
         const outcome = await supervisor.answerPermission(String(body.runId), body.decision);
+        respond(outcome.ok ? 200 : 422, outcome);
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/answer') {
+        // The owner's choices for a worker's question form (OpenCode's `question` tool).
+        const body = (await readBody(req)) as { runId?: unknown; answers?: unknown };
+        const supervisor = supervisorOfRun(String(body.runId ?? ''));
+        if (supervisor === null) {
+          respond(404, { ok: false, error: `unknown run "${String(body.runId)}"` });
+          return;
+        }
+        const answers = questionAnswersOf(body.answers);
+        if (answers === null) {
+          respond(400, { ok: false, error: 'answers must map question keys to a string or a list of strings' });
+          return;
+        }
+        const outcome = await supervisor.answerQuestion(String(body.runId), answers);
         respond(outcome.ok ? 200 : 422, outcome);
         return;
       }

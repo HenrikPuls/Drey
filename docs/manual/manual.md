@@ -800,6 +800,10 @@ amber and says what the worker asks, the card's chip reads *? waits for
 you*, and the question also lands in the ticket's Log. In the tab the
 question sits above the prompt box — type your answer and send it; the
 worker goes on with its step and the run ends normally when it is done.
+When the worker offers choices, they appear as buttons: with one
+question a click is the answer; with several, pick one per question and
+press **Send answer**. You can always type your own answer instead — for
+several questions one line each, a choice by its number or its name.
 An approval has three buttons instead: **Allow once**, **Always allow**
 and **Deny**. A waiting run never counts as stalled, however long it
 waits.

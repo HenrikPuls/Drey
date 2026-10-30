@@ -70,6 +70,7 @@ Invoke-RestMethod "http://127.0.0.1:$($d.port)/health" -Headers $h
 | `POST /stop` `{runId, reason}` | stop one run |
 | `POST /send` `{runId, text}` | steer a live run (rung: inject/resume/refused); while the run waits on a question it is the answer, not a takeover |
 | `POST /permission` `{runId, decision: "once"\|"always"\|"reject"}` | answer the worker's pending approval (req-57; OpenCode) |
+| `POST /answer` `{runId, answers: {q0: "label", …}}` | answer the worker's question form — a choice, free text, or a list for a multiple choice per question key (req-57; OpenCode's `question` tool) |
 | `POST /chain/master` `{mode: "run"\|"halted"}` | master switch (daemon builds) |
 | `POST /chain/column` `{phase, mode: "playing"\|"held"}` or `{phase, stop: true}` | column control |
 | `POST /chain/abort` | stop every live run |
@@ -112,9 +113,12 @@ Diagnose read-only first; only stop/steer/switch on the owner's ask.
 
 A live run may carry `waiting` (req-57): `{kind: "question", text, since}`
 when the worker ended its turn with a `QUESTION:` message (the run stands,
-its session kept, until the owner answers via `/send`), or
-`{kind: "permission", text, since, requestId}` while OpenCode holds a tool
-call for approval (answer via `/permission`). A waiting run is not stalled,
+its session kept, until the owner answers via `/send`); the same kind with
+`requestId` and `questions` (each `{key, header?, question, options,
+multiple}`) while OpenCode's `question` tool waits on its form (answer via
+`/answer`, or `/send` — one line per question, a choice by number or
+label); or `{kind: "permission", text, since, requestId}` while OpenCode
+holds a tool call for approval (answer via `/permission`). A waiting run is not stalled,
 however long it waits; the ticket's Log carries the question, and Drey
 shows a Windows notification.
 

@@ -19,9 +19,9 @@ import { promisify } from 'node:util';
 import { parseOrderFile, rewriteOrderSection } from '../ticket-board';
 import { acceptanceCommands, patchTicketFile, ticketPathParts } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
-import { ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
+import { answersFromText, answersText, ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
 import { killTreeGuarded, processAlive, processStartMs, type ExecFn } from './procs';
-import type { PermissionDecision, RunInfo, RunRequest, RunState, SteerRung } from './protocol';
+import type { PermissionDecision, QuestionAnswers, RunInfo, RunRequest, RunState, SteerRung } from './protocol';
 import { prepareWorktree as defaultPrepareWorktree, type LinkReport, type PreparedWorktree } from './worktrees';
 
 const execAsync = promisify(nodeExec);
@@ -745,6 +745,12 @@ export class RunSupervisor {
     // worker's own question is not a takeover (req-57): the worker goes
     // on with its step and its next finished turn ends the run as usual.
     const answersQuestion = run.info.waiting?.kind === 'question';
+    const form = run.info.waiting?.questions;
+    if (answersQuestion && form !== undefined && run.handle.answerQuestion !== undefined) {
+      // A question the worker asked with its `question` tool: the typed
+      // text is the form's answer — the blocked tool call returns it.
+      return this.answerQuestion(runId, answersFromText(form, text));
+    }
     if (!answersQuestion) {
       await this.holdForOwner(run, 'first prompt');
     }
@@ -1026,6 +1032,35 @@ export class RunSupervisor {
     }
     await this.logLine(run, `${decision === 'reject' ? 'rejected' : decision === 'always' ? 'approved always' : 'approved once'} by the owner — ${waiting.text.slice(0, 200)}`);
     return { ok: true };
+  }
+
+  /**
+   * The owner's answer to the worker's pending question form (OpenCode's
+   * `question` tool): per question a choice or the owner's own words. Not
+   * a takeover — the worker goes on with its step.
+   */
+  async answerQuestion(runId: string, answers: QuestionAnswers): Promise<StopOutcome & { rung?: SteerRung }> {
+    const run = this.runs.get(runId);
+    if (run === undefined) {
+      return { ok: false, error: `unknown run "${runId}"` };
+    }
+    const waiting = run.info.waiting ?? null;
+    if (waiting === null || waiting.questions === undefined || waiting.requestId === undefined) {
+      return { ok: false, error: `run ${runId} asks no question` };
+    }
+    if (run.handle === null || run.handle.answerQuestion === undefined) {
+      return { ok: false, error: `the ${run.info.provider} worker takes no answers` };
+    }
+    const said = answersText(waiting.questions, answers);
+    if (Object.keys(answers).length === 0) {
+      return { ok: false, error: 'the answer is empty' };
+    }
+    if (!(await run.handle.answerQuestion(waiting.requestId, answers))) {
+      return { ok: false, error: 'the worker took no answer — the question may be gone' };
+    }
+    await this.appendStream(run, { ts: this.stamp(), kind: 'note', text: `you › ${said}` });
+    await this.logLine(run, `answered by the owner: ${said.slice(0, 200)}`);
+    return { ok: true, rung: 'inject' };
   }
 
   /**

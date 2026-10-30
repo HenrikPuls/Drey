@@ -58,7 +58,7 @@ import { FleetClient } from './fleet-client';
 import { listWorkerModels } from './worker-models';
 import { agentIdentity, composeRunRequest } from './fleet/request';
 import { checkpointPhaseIds, columnPromptRef, isAutoPhase, nextPhaseIdOf } from './fleet/chain';
-import type { ChainConfig, PermissionMode } from './fleet/protocol';
+import { questionAnswersOf, type ChainConfig, type PermissionMode } from './fleet/protocol';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
 const ORDER_PATH = 'tickets/_meta/order.md';
@@ -1394,6 +1394,15 @@ const plugin: MainPluginModule = {
         return { ok: false, error: 'bad fleet permission payload' };
       }
       return fleet.answerPermission(p.runId, p.decision);
+    });
+
+    ctx.ipc.handle('fleetAnswer', async (payload) => {
+      const p = payload as { runId?: unknown; answers?: unknown };
+      const answers = questionAnswersOf(p.answers);
+      if (typeof p.runId !== 'string' || answers === null) {
+        return { ok: false, error: 'bad fleet answer payload' };
+      }
+      return fleet.answerQuestion(p.runId, answers);
     });
 
     ctx.ipc.handle('fleetStream', async (payload) => {

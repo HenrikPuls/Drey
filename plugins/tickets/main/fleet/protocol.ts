@@ -95,11 +95,46 @@ export interface RunRequest {
  *  idempotent per ticket, so a repeated run reports what it did. */
 export type WorktreeOutcome = 'reused' | 'created' | 'recreated' | 'moved-aside';
 
+/** One question of OpenCode's `question` tool (a field of its pending form). */
+export interface WaitQuestion {
+  /** The form field the answer goes to (`q0`, `q1`, …). */
+  readonly key: string;
+  /** The short label the worker gave the question. */
+  readonly header?: string;
+  readonly question: string;
+  /** The choices offered; the owner may also answer in their own words. */
+  readonly options: readonly { readonly label: string; readonly description?: string }[];
+  /** Several choices may be picked. */
+  readonly multiple: boolean;
+}
+
+/** The owner's answer to a question form: per field key, a choice or free text (several for `multiple`). */
+export type QuestionAnswers = Readonly<Record<string, string | readonly string[]>>;
+
+/** Checks an answers payload off the wire; null when it is not one. */
+export function questionAnswersOf(raw: unknown): QuestionAnswers | null {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null;
+  }
+  const answers: Record<string, string | string[]> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === 'string') {
+      answers[key] = value;
+    } else if (Array.isArray(value) && value.every((v) => typeof v === 'string')) {
+      answers[key] = value as string[];
+    } else {
+      return null;
+    }
+  }
+  return answers;
+}
+
 /**
  * What a live worker waits on the owner for (req-57): a question it ended
- * its turn with (`QUESTION: …`), or a tool call the provider wants
- * approved (OpenCode's permission requests). The run stays up, its
- * session and context kept, until the owner answers.
+ * its turn with (`QUESTION: …`) or asked with OpenCode's `question` tool,
+ * or a tool call the provider wants approved (OpenCode's permission
+ * requests). The run stays up, its session and context kept, until the
+ * owner answers.
  */
 export interface RunWaiting {
   readonly kind: 'question' | 'permission';
@@ -107,8 +142,10 @@ export interface RunWaiting {
   readonly text: string;
   /** When the wait began (ISO). */
   readonly since: string;
-  /** The provider's id of a permission request — what the answer names. */
+  /** The provider's id of the permission request or question form — what the answer names. */
   readonly requestId?: string;
+  /** The questions of a question form, with their choices (absent for a `QUESTION:` turn). */
+  readonly questions?: readonly WaitQuestion[];
 }
 
 /**

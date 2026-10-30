@@ -48,6 +48,7 @@ function fakeAdapter() {
         setHold: vi.fn(),
         interrupt: vi.fn(async () => true),
         answerPermission: vi.fn(async () => true),
+        answerQuestion: vi.fn(async () => true),
         stop: vi.fn(async () => {
           exitResolve?.(null);
         }),
@@ -249,6 +250,30 @@ describe('RunSupervisor', () => {
     expect((await sup.answerPermission(runId, 'reject')).ok).toBe(true);
     expect(adapter.handles[0]!.answerPermission).toHaveBeenCalledWith('per_1', 'reject');
     expect(await fsp.readFile(path.join(vaultDir, rel), 'utf8')).toContain('rejected by the owner — bash rm -rf dist');
+  });
+
+  it("answers a question form with the owner's choices or typed words — no takeover, no prompt", async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    expect((await sup.answerQuestion(runId, { q0: 'Rebase' })).ok).toBe(false);
+
+    const questions = [{ key: 'q0', header: 'Merge', question: 'How should I merge?', options: [{ label: 'Rebase' }, { label: 'Merge' }], multiple: false }];
+    adapter.starts[0]!.onEvent({
+      ts: '2026-10-20T10:05:00Z',
+      kind: 'usage',
+      waiting: { kind: 'question', text: 'How should I merge?', requestId: 'frm_1', questions },
+    });
+    await vi.waitFor(() => expect(sup.get(runId)?.waiting?.requestId).toBe('frm_1'));
+    expect((await sup.answerQuestion(runId, { q0: 'Rebase' })).ok).toBe(true);
+    expect(adapter.handles[0]!.answerQuestion).toHaveBeenLastCalledWith('frm_1', { q0: 'Rebase' });
+
+    expect((await sup.send(runId, '2')).ok).toBe(true);
+    expect(adapter.handles[0]!.answerQuestion).toHaveBeenLastCalledWith('frm_1', { q0: 'Merge' });
+    expect(adapter.handles[0]!.steer).not.toHaveBeenCalled();
+    expect(adapter.handles[0]!.setHold).not.toHaveBeenCalled();
+    expect(await fsp.readFile(path.join(vaultDir, rel), 'utf8')).toContain('answered by the owner: Merge');
   });
 
   it('an interrupt of a run nobody holds takes it over first', async () => {
