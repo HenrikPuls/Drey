@@ -1158,12 +1158,16 @@ and **Stop every live run** (tap twice). On the Board, the
 or stops it.
 
 A ticket shows its description, plan and acceptance criteria, its
-Log on the second tab, and its latest run on the third. The big button at the bottom is the step that
-fits: **Approve → <next column>** in a checkpoint column, **Run agent**
-in an agent column, **Move to <next column>** otherwise. **Move…**
-lists every column with the commit the move makes; **⋯** claims, takes
-over or releases the ticket, and archives it (tap twice). Everything
-updates live while the app is open.
+Log on the second tab, and its latest run on the third. The text
+renders its formatting — **bold**, *italic*, `code`, tables, rules
+and smaller in-section headings — both in the ticket and in a run's
+replies and results. The big button at the bottom is the step that
+fits: **Approve → <next column>** in a checkpoint column, **Run
+agent** in an agent column (starting a run opens its transcript, so
+you see what the worker does), **Move to <next column>** otherwise.
+**Move…** lists every column with the commit the move makes; **⋯**
+claims, takes over or releases the ticket, and archives it (tap
+twice). Everything updates live while the app is open.
 
 ---
 

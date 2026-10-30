@@ -1,25 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
-import { parseReplyInline, renderReply } from './transcript-text';
+import { renderReply } from './transcript-text';
 
 const api = { ui: { highlightCode: () => Promise.resolve(null) } } as unknown as DreyPluginApi;
-
-describe('parseReplyInline', () => {
-  it('splits code, bold and italic, leaving snake_case words alone', () => {
-    expect(parseReplyInline('a `x` **b** *c* _d_ my_var_name')).toEqual([
-      { kind: 'text', text: 'a ' },
-      { kind: 'code', text: 'x' },
-      { kind: 'text', text: ' ' },
-      { kind: 'bold', text: 'b' },
-      { kind: 'text', text: ' ' },
-      { kind: 'italic', text: 'c' },
-      { kind: 'text', text: ' ' },
-      { kind: 'italic', text: 'd' },
-      { kind: 'text', text: ' my_var_name' },
-    ]);
-  });
-});
 
 describe('renderReply', () => {
   it('builds paragraphs, lists, headings and code blocks as nodes', () => {

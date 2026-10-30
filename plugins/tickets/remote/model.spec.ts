@@ -137,6 +137,35 @@ describe('the ticket file as blocks', () => {
       { kind: 'code', text: 'npm test' },
     ]);
   });
+
+  it('reads a pipe table right after a paragraph line, closing the paragraph', () => {
+    expect(
+      blocksOf(['Ledger:', '', '| Phase | Gate |', '|---|---|', '| plan | lint |', '| build | e2e |']),
+    ).toEqual([
+      { kind: 'p', text: 'Ledger:' },
+      { kind: 'table', rows: [['Phase', 'Gate'], ['plan', 'lint'], ['build', 'e2e']] },
+    ]);
+    expect(blocksOf(['| a | b |', '|---|---|', '| 1 | `x` |'])).toEqual([
+      { kind: 'table', rows: [['a', 'b'], ['1', '`x`']] },
+    ]);
+  });
+
+  it('reads rules and in-section headings as their own blocks', () => {
+    expect(
+      blocksOf(['Before', '---', '#### Details', 'After **bold**', '##### Deeper']),
+    ).toEqual([
+      { kind: 'p', text: 'Before' },
+      { kind: 'hr' },
+      { kind: 'h', level: 4, text: 'Details' },
+      { kind: 'p', text: 'After **bold**' },
+      { kind: 'h', level: 5, text: 'Deeper' },
+    ]);
+  });
+
+  it('keeps a lone table-rule line and table-less pipe text as a paragraph', () => {
+    expect(blocksOf(['|---|'])).toEqual([{ kind: 'p', text: '|---|' }]);
+    expect(blocksOf(['| not a table'])).toEqual([{ kind: 'p', text: '| not a table' }]);
+  });
 });
 
 describe('swipeCommits', () => {

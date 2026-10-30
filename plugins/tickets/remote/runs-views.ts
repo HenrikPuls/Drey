@@ -2,13 +2,15 @@
  * The phone client's run screens (req-66 R4): answering a waiting
  * worker, the Runs list, one run's transcript with steer and stop, and
  * the chain's master and column switches. The transcript is the desk's
- * own watch view model (`renderer/watch-format.ts`), drawn as text.
+ * own watch view model (`renderer/watch-format.ts`); replies and
+ * results render its Markdown (`markdown.ts`), the rest stays text.
  */
 import type { RunInfo, WaitQuestion } from '../main/fleet/protocol';
 import { formatWatch, parseStreamEvents, type WatchBlock } from '../renderer/watch-format';
 import { ageOf } from '../shared/tickets';
 import type { Ctx, View } from './context';
 import { armedButton, button, chip, empty, h, present, sheet } from './dom';
+import { renderMarkdown } from './markdown';
 import { answersOf, isLive, runsForList, runStateLabel, tokensLabel } from './model';
 
 /** What a worker waits on, from a run or a Needs-you entry. */
@@ -279,9 +281,10 @@ function blockRow(block: WatchBlock): HTMLElement {
     case 'error':
       return h('div', { class: 't-error', text: block.text ?? block.markdown });
     case 'result':
-      return h('div', { class: 't-result', text: block.text ?? block.markdown });
+      // The turn's own words are Markdown; the row keeps its rule look.
+      return h('div', { class: 't-result' }, renderMarkdown(block.text ?? block.markdown));
     default:
-      return h('div', { class: `t-text${block.live ? ' live' : ''}`, text: block.markdown });
+      return h('div', { class: `t-text${block.live ? ' live' : ''}` }, renderMarkdown(block.markdown));
   }
 }
 

@@ -259,6 +259,31 @@ test('keeps the run view header pinned while the transcript scrolls (R8)', async
   expect(errors).toEqual([]);
 });
 
+test('renders markdown in the ticket view and jumps to the run it starts (R9)', async ({ page }) => {
+  const errors: string[] = [];
+  await pairedPage(page, errors);
+  await page.goto(`http://127.0.0.1:${PORT}/#ticket/T-0055`);
+
+  // The Description's formatting renders, not its Markdown marks.
+  await expect(page.locator('.md strong')).toHaveText('display only');
+  await expect(page.locator('.md em')).toHaveText('moves');
+  await expect(page.locator('.md code.ic')).toHaveText('chip → menu');
+  await expect(page.locator('.md thead th')).toHaveCount(2);
+  await expect(page.locator('.md tbody tr')).toHaveCount(2);
+  await expect(page.locator('.md td').first()).toHaveText('Ticket view');
+
+  // Run agent switches to the started run's transcript; back returns to the ticket.
+  await page.goto(`http://127.0.0.1:${PORT}/#ticket/T-0050`);
+  await page.locator('.btn-primary', { hasText: 'Run agent' }).click();
+  await expect(page.locator('.topbar-title')).toHaveText('T-0050 · Run');
+  expect(new URL(page.url()).hash).toBe('#run/run-2');
+  await expect(page.locator('.t-text strong')).toHaveText('three bold steps');
+  await page.locator('.back').click();
+  await expect(page.locator('.ticket-title')).toHaveText('Blocked-by chips on cards');
+
+  expect(errors).toEqual([]);
+});
+
 test.describe('on an iPad in landscape (R6)', () => {
   const PAD_PORT = 47866;
   const { defaultBrowserType: _padEngine, ...ipad } = devices['iPad Pro 11 landscape'];
@@ -310,6 +335,9 @@ test.describe('on an iPad in landscape (R6)', () => {
     await expect(page.locator('.detail .btn-primary')).toHaveText('Approve → Build');
 
     // Hold, then drag into another column: a transition with the landing index.
+    // The selection's reveal centers the selected column; both the source card
+    // and the landing column are measured after the strip is back at the start.
+    await page.locator('.kcard[data-id="T-0055"]').scrollIntoViewIfNeeded();
     const prioritized = (await page.locator('.kcol[aria-label="Prioritized"] .kcol-list').boundingBox())!;
     await drag(page, 'T-0055', { x: prioritized.x + prioritized.width / 2, y: prioritized.y + 20 });
     await expect(page.locator('.toast')).toContainText('T-0055 → Prioritized');
@@ -317,7 +345,7 @@ test.describe('on an iPad in landscape (R6)', () => {
     await expect(page.locator('.kcol[aria-label="Prioritized"] .kcard[data-id="T-0055"]')).toBeVisible();
 
     // Within a column: a reorder above the first card (Build sits off screen at first).
-    await page.locator('.kcol[aria-label="Build"]').scrollIntoViewIfNeeded();
+    await page.locator('.kcard[data-id="T-0050"]').scrollIntoViewIfNeeded();
     await page.waitForTimeout(150);
     const first = (await page.locator('.kcard[data-id="T-0052"]').boundingBox())!;
     await drag(page, 'T-0050', { x: first.x + first.width / 2, y: first.y + 4 });
@@ -325,6 +353,8 @@ test.describe('on an iPad in landscape (R6)', () => {
     expect(padCalls.at(-1)).toEqual({ what: 'reorder', args: [{ phase: 'build', id: 'T-0050', index: 0 }] });
 
     // Moving before the hold is a scroll, never a drag.
+    // The reorder's refresh rebuilds the strip; let it settle before scrolling.
+    await page.waitForTimeout(400);
     const count = padCalls.length;
     await page.locator('.kcard[data-id="T-0048"]').scrollIntoViewIfNeeded();
     const card = (await page.locator('.kcard[data-id="T-0048"]').boundingBox())!;

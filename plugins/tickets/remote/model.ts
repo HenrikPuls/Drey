@@ -4,6 +4,7 @@
  * action is, the ticket file as display blocks, and the swipe rule.
  */
 import type { RunInfo } from '../main/fleet/protocol';
+import { splitRow } from '../shared/markdown';
 import { parseHandover, type BoardColumn, type BoardSnapshot, type TicketCard } from '../shared/tickets';
 
 const LIVE: ReadonlySet<string> = new Set(['starting', 'running', 'stopping', 'detached']);
@@ -133,9 +134,19 @@ export function sectionsOf(text: string): Section[] {
 export type Block =
   | { readonly kind: 'p'; readonly text: string }
   | { readonly kind: 'li'; readonly text: string; readonly checked: boolean | null }
-  | { readonly kind: 'code'; readonly text: string };
+  | { readonly kind: 'code'; readonly text: string }
+  | { readonly kind: 'table'; readonly rows: readonly string[][] }
+  | { readonly kind: 'hr' }
+  | { readonly kind: 'h'; readonly level: number; readonly text: string };
 
-/** Paragraphs, list items (with checkbox state) and fenced code — enough for a ticket. */
+/** Tables and rules, shaped like the desk's transcript renderer. */
+const TABLE_ROW = /^\s*\|.*\|\s*$/;
+const TABLE_RULE = /^\s*\|?(?:\s*:?-{2,}:?\s*\|)+(?:\s*:?-{2,}:?\s*)?\|?\s*$/;
+
+/**
+ * Paragraphs, list items (with checkbox state), fenced code, pipe tables,
+ * rules and in-section headings — enough for a ticket and a worker reply.
+ */
 export function blocksOf(lines: readonly string[]): Block[] {
   const blocks: Block[] = [];
   let paragraph: string[] = [];
@@ -146,7 +157,8 @@ export function blocksOf(lines: readonly string[]): Block[] {
       paragraph = [];
     }
   };
-  for (const raw of lines) {
+  for (let n = 0; n < lines.length; n++) {
+    const raw = lines[n]!;
     if (code !== null) {
       if (/^\s*```/.test(raw)) {
         blocks.push({ kind: 'code', text: code.join('\n') });
@@ -159,6 +171,29 @@ export function blocksOf(lines: readonly string[]): Block[] {
     if (/^\s*```/.test(raw)) {
       flush();
       code = [];
+      continue;
+    }
+    const heading = /^\s*(#{1,6})[ \t]+(.*?)[ \t#]*$/.exec(raw);
+    if (heading !== null) {
+      flush();
+      blocks.push({ kind: 'h', level: heading[1]!.length, text: heading[2]!.trim() });
+      continue;
+    }
+    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(raw)) {
+      flush();
+      blocks.push({ kind: 'hr' });
+      continue;
+    }
+    if (TABLE_ROW.test(raw) && n + 1 < lines.length && TABLE_RULE.test(lines[n + 1]!)) {
+      const rows: string[][] = [splitRow(raw)];
+      n += 2;
+      while (n < lines.length && TABLE_ROW.test(lines[n]!)) {
+        rows.push(splitRow(lines[n]!));
+        n += 1;
+      }
+      n -= 1;
+      flush();
+      blocks.push({ kind: 'table', rows });
       continue;
     }
     const item = /^\s*(?:[-*+]|\d+[.)])\s+(?:\[([ xX])\]\s+)?(.*)$/.exec(raw);
