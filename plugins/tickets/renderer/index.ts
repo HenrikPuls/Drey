@@ -76,10 +76,40 @@ let busy = false;
 let note = '';
 let inFlight: Promise<void> | null = null;
 
+/**
+ * What the board's message is (req-60): `busy` while an action runs,
+ * `ok` a result that fades by itself, `warn` / `error` stay until the
+ * owner closes them — a failure never disappears unseen.
+ */
+type NoteKind = 'busy' | 'ok' | 'warn' | 'error';
+let noteKind: NoteKind = 'ok';
+let noteTimer: ReturnType<typeof setTimeout> | null = null;
+/** The message is the board pull's own failure (the next good pull clears it). */
+let noteFromLoad = false;
+
+/** How long an `ok` message stays in the status bar. */
+const NOTE_FADE_MS = 6_000;
+
+/** Sets the board's message; the caller repaints (`notifyViews`). */
+function setNote(text: string, kind: NoteKind): void {
+  note = text;
+  noteKind = kind;
+  noteFromLoad = false;
+  if (noteTimer !== null) {
+    clearTimeout(noteTimer);
+    noteTimer = null;
+  }
+  if (kind === 'ok' && text !== '') {
+    noteTimer = setTimeout(() => {
+      noteTimer = null;
+      note = '';
+      notifyViews();
+    }, NOTE_FADE_MS);
+  }
+}
+
 interface BoardView {
   readonly root: HTMLElement;
-  /** Status-line text for this view ('' hides the line). */
-  readonly status: () => string;
   render(): void;
   dispose(): void;
 }
@@ -107,11 +137,16 @@ function refreshBoard(): Promise<void> {
       snapshot = (await invokeBoard('board')) as BoardSnapshot;
       // Drop persisted fold state of phases that no longer exist.
       collapse.prune(snapshot.columns.map((column) => column.phase.id));
-      note = '';
+      // A fresh board clears its own earlier load error; results and
+      // failures of actions keep their own lifetime.
+      if (noteFromLoad) {
+        setNote('', 'ok');
+      }
       // The worktree note rides along (own round, never blocks the board).
       void loadWorktreesStatus();
     } catch (error) {
-      note = messageOf(error);
+      setNote(messageOf(error), 'error');
+      noteFromLoad = true;
     } finally {
       busy = false;
       inFlight = null;
@@ -126,7 +161,7 @@ function refreshBoard(): Promise<void> {
  *  An error keeps its note (no refresh would clear it into view). */
 async function runMutation(label: string, invoke: () => Promise<unknown>): Promise<MutationResult> {
   busy = true;
-  note = `${label}…`;
+  setNote(`${label}…`, 'busy');
   notifyViews();
   let result: MutationResult;
   try {
@@ -140,12 +175,12 @@ async function runMutation(label: string, invoke: () => Promise<unknown>): Promi
     // that has already ended): pull the real state, or the lane stays and
     // every click repeats the same refusal.
     await refreshBoard().catch(() => undefined);
-    note = result.error ?? 'the action failed';
+    setNote(result.error ?? 'the action failed', 'error');
     notifyViews();
     return result;
   }
   await refreshBoard();
-  note = result.warning ?? '';
+  setNote(result.warning ?? '', result.warning === undefined ? 'ok' : 'warn');
   notifyViews();
   return result;
 }
@@ -649,12 +684,13 @@ function buildBoardView(api: DreyPluginApi): BoardView {
   const draw = (): void => {
     root.textContent = '';
     const snap = snapshot;
-    if (snap === null) {
-      root.append(el('div', 'tickets-empty', 'Loading the board…'));
-      return;
-    }
-    if (snap.vaultId === null) {
-      root.append(emptyState(api, snap, runMutation));
+    if (snap === null || snap.vaultId === null) {
+      root.append(snap === null ? el('div', 'tickets-empty', 'Loading the board…') : emptyState(api, snap, runMutation));
+      // A failed load or setup action still reports where every message does.
+      const bar = statusBarNode(api, null);
+      if (bar !== null) {
+        root.append(bar);
+      }
       return;
     }
     const board = el('div', 'tickets-board');
@@ -679,7 +715,7 @@ function buildBoardView(api: DreyPluginApi): BoardView {
       root.prepend(issues);
     }
   };
-  const view: BoardView = { root, status: () => (busy ? note || 'Loading…' : note), render, dispose: () => undefined };
+  const view: BoardView = { root, render, dispose: () => undefined };
   render();
   return view;
 }
@@ -733,27 +769,11 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
     },
     mount: (panel) => {
       panel.classList.add('tickets-panel');
-      const statusEl = el('div', 'tickets-note');
+      // The board's messages live in its status bar (req-60), not above it.
       const view = buildBoardView(api);
       views.add(view);
-      const renderStatus = (): void => {
-        statusEl.textContent = view.status();
-        statusEl.classList.toggle('tickets-note-busy', busy);
-        statusEl.style.display = statusEl.textContent === '' ? 'none' : '';
-      };
-      const decorated: BoardView = {
-        root: view.root,
-        status: view.status,
-        render: () => {
-          view.render();
-          renderStatus();
-        },
-        dispose: view.dispose,
-      };
-      views.delete(view);
-      views.add(decorated);
-      panel.append(statusEl, view.root);
-      decorated.render();
+      panel.append(view.root);
+      view.render();
       // The header group follows the panel's width (req-60).
       const widthObserver = new ResizeObserver((entries) => {
         panelWidth = entries[0]?.contentRect.width ?? 0;
@@ -764,7 +784,7 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       widthObserver.observe(panel);
       return () => {
         widthObserver.disconnect();
-        views.delete(decorated);
+        views.delete(view);
       };
     },
   };
@@ -1012,7 +1032,7 @@ function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
 /** Runs the global worktree cleanup and reports what it did (T-0044). */
 async function runWorktreesCleanup(): Promise<void> {
   busy = true;
-  note = 'Cleaning up worktrees…';
+  setNote('Cleaning up worktrees…', 'busy');
   notifyViews();
   let result: {
     ok?: boolean;
@@ -1027,14 +1047,16 @@ async function runWorktreesCleanup(): Promise<void> {
   busy = false;
   if (result.ok === true) {
     const r = result.report;
-    note =
+    setNote(
       r === undefined
         ? ''
         : `Worktrees: ${r.removed.length} removed` +
-          (r.keptDirty.length > 0 ? `, ${r.keptDirty.length} kept dirty` : '') +
-          (r.failed.length > 0 ? `, ${r.failed.length} failed` : '');
+            (r.keptDirty.length > 0 ? `, ${r.keptDirty.length} kept dirty` : '') +
+            (r.failed.length > 0 ? `, ${r.failed.length} failed` : ''),
+      r !== undefined && (r.keptDirty.length > 0 || r.failed.length > 0) ? 'warn' : 'ok',
+    );
   } else {
-    note = result.error ?? 'the worktree cleanup failed';
+    setNote(result.error ?? 'the worktree cleanup failed', 'error');
   }
   notifyViews();
   void loadWorktreesStatus();
@@ -1046,13 +1068,13 @@ async function runChainAction(method: string, payload: unknown): Promise<void> {
   try {
     result = await invokeBoard(method, payload);
   } catch (error) {
-    note = messageOf(error);
+    setNote(messageOf(error), 'error');
     notifyViews();
     return;
   }
   const status = (result as { status?: ChainStatus; error?: string }).status ?? null;
   if (status === null) {
-    note = (result as { error?: string }).error ?? 'the chain control failed';
+    setNote((result as { error?: string }).error ?? 'the chain control failed', 'error');
     notifyViews();
     return;
   }
@@ -1073,10 +1095,40 @@ const WORKER_LABEL: ReadonlyArray<readonly [string, string]> = [
  * and the worktree home's note (T-0044) as a warning pill on the right:
  * legacy-root leftovers and orphan folders under the base, listed in
  * its tooltip, never auto-deleted (the Clean up worktrees control
- * collects them). Null when there is nothing to say.
+ * collects them). The board's message (req-60) leads the bar: an action
+ * in progress, a result that fades by itself, a warning or failure that
+ * stays until closed. Null when there is nothing to say.
  */
-function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot): HTMLElement | null {
+function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null): HTMLElement | null {
   const bar = el('div', 'tickets-statusbar');
+  if (note !== '') {
+    const message = el('span', 'tickets-statusbar-note');
+    message.dataset['kind'] = noteKind;
+    message.setAttribute('role', noteKind === 'error' ? 'alert' : 'status');
+    message.title = note;
+    if (noteKind === 'ok') {
+      message.append(api.ui.icon('check', 12));
+    } else if (noteKind !== 'busy') {
+      message.append(api.ui.icon('triangle-alert', 12));
+    }
+    message.append(el('span', 'tickets-statusbar-note-text', note));
+    if (noteKind === 'warn' || noteKind === 'error') {
+      const close = el('button', 'icon-btn tickets-statusbar-note-close');
+      close.type = 'button';
+      close.title = 'Dismiss';
+      close.setAttribute('aria-label', 'Dismiss the message');
+      close.append(api.ui.icon('x', 11));
+      close.addEventListener('click', () => {
+        setNote('', 'ok');
+        notifyViews();
+      });
+      message.append(close);
+    }
+    bar.append(message);
+  }
+  if (snap === null) {
+    return bar.childElementCount === 0 ? null : bar;
+  }
   const now = Date.now();
   const dwell = el('span', 'tickets-statusbar-dwell');
   dwell.title = "Average time the tickets in each column have been sitting there (from the entered-* stamps)";
@@ -1532,7 +1584,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   const addFiles = async (files: Iterable<File>): Promise<void> => {
     for (const file of files) {
       if (file.size > MAX_ATTACH_BYTES) {
-        note = `${file.name} is larger than ${MAX_ATTACH_BYTES / 1024 / 1024} MB`;
+        setNote(`${file.name} is larger than ${MAX_ATTACH_BYTES / 1024 / 1024} MB`, 'error');
         notifyViews();
         continue;
       }
@@ -1542,7 +1594,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
       if (result.ok === true && typeof result.path === 'string') {
         attached.push({ name, path: result.path });
       } else {
-        note = result.error ?? `${name} could not be attached`;
+        setNote(result.error ?? `${name} could not be attached`, 'error');
         notifyViews();
       }
     }
@@ -1971,12 +2023,12 @@ function openCardMenu(
             return;
           }
           menu.remove();
-          note = res.error ?? 'the worktree could not be removed';
+          setNote(res.error ?? 'the worktree could not be removed', 'error');
           notifyViews();
         })
         .catch((error: unknown) => {
           menu.remove();
-          note = messageOf(error);
+          setNote(messageOf(error), 'error');
           notifyViews();
         });
     });

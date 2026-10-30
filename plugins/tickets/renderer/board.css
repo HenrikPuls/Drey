@@ -19,20 +19,6 @@
   flex-direction: column;
 }
 
-.tickets-note {
-  flex: none;
-  padding: 2px 8px;
-  font-size: 0.75rem;
-  color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tickets-note-busy {
-  color: var(--text-2);
-}
-
 .tickets-board-issues {
   flex: none;
   margin: 0 8px 2px;
@@ -66,6 +52,49 @@
   border-top: 1px solid var(--border);
   font-size: 0.75rem;
   white-space: nowrap;
+}
+
+/* The board's message (req-60): leads the bar, cut before the cycle times are. */
+.tickets-statusbar-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 60%;
+  padding-right: 12px;
+  border-right: 1px solid var(--border);
+  color: var(--text-2);
+}
+
+.tickets-statusbar-note-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tickets-statusbar-note[data-kind='ok'] svg {
+  flex: none;
+  color: var(--status-added);
+}
+
+.tickets-statusbar-note[data-kind='warn'] {
+  color: var(--status-modified);
+}
+
+.tickets-statusbar-note[data-kind='error'] {
+  color: var(--status-deleted);
+}
+
+.tickets-statusbar-note svg {
+  flex: none;
+}
+
+.tickets-statusbar-note-close {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: inherit;
 }
 
 .tickets-statusbar-dwell {
@@ -843,7 +872,7 @@
   margin-left: 4px;
 }
 
-.tickets-note-busy {
+.tickets-statusbar-note[data-kind='busy'] .tickets-statusbar-note-text {
   animation: tickets-pulse 1.2s ease-in-out infinite;
 }
 
@@ -854,7 +883,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tickets-note-busy {
+  .tickets-statusbar-note[data-kind='busy'] .tickets-statusbar-note-text {
     animation: none;
   }
 }

@@ -51,8 +51,23 @@ hovered │ **`⋯` overflow** (`headerMenuButton`) with *Chain log* and
 *Clean up worktrees…*. The text button "Log" and the always-visible
 trash icon are gone: every header control is icon-only (ADR-0057); the
 menu is keyboard-usable (focus on open, arrows, Escape returns focus).
+
+The board's messages moved too (owner request, same item): they were
+an extra `tickets-note` row between the header and the board that
+pushed the board down and stayed until the next action overwrote it.
+They now lead the one-row status bar under the board (req-59) as a
+typed message (`setNote(text, kind)`): **busy** pulses while an action
+runs, **ok** shows a green tick and fades after 6 s, **warn** (amber —
+a mutation's warning, a cleanup that kept dirty trees) and **error**
+(red, `role="alert"`) stay until closed with ×. A failed board pull
+clears itself on the next good pull; the bar also shows on the
+loading / no-vault screens so a failure there is visible. The plain
+refresh no longer flashes a "Loading…" line. `BoardView.status` is
+gone.
+
 Manual: the lane paragraph, the master switch, the Log and cleanup
-mentions. **Not yet manually verified by the owner.**
+mentions, the status bar's messages. **Not yet manually verified by the
+owner.**
 
 ### req-59 — Tickets board: one-row status bar
 
