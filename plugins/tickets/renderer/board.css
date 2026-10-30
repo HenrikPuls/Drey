@@ -1087,6 +1087,50 @@
   background: var(--hover-bg-strong);
 }
 
+/* A row that opens a submenu (req-69). */
+.tickets-menu-item.has-sub {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.tickets-menu-item.has-sub[aria-expanded='true'] {
+  background: var(--hover-bg-strong);
+}
+
+.tickets-menu-label {
+  flex: 1;
+}
+
+.tickets-menu-chevron {
+  color: var(--text-4);
+}
+
+.tickets-submenu {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* One past run: phase · how it ended · when, in aligned columns. */
+.tickets-menu-run {
+  display: grid;
+  grid-template-columns: 4.5rem 4.5rem auto;
+  gap: 8px;
+}
+
+.tickets-menu-run-state.is-failed {
+  color: var(--status-deleted);
+}
+
+.tickets-menu-run-state.is-stopped,
+.tickets-menu-run-when {
+  color: var(--text-4);
+}
+
+.tickets-menu-run-when {
+  font-variant-numeric: tabular-nums;
+}
+
 .tickets-mark-btn {
   cursor: pointer;
   border-radius: var(--radius-xs);
