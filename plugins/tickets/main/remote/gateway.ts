@@ -12,6 +12,8 @@ import { FALLBACK_FILES } from './fallback-client';
 import { authorize, hostRefusal, route, type RemoteRequest, type RouterDeps } from './router';
 
 const MAX_BODY = 64 * 1024;
+/** `/api/attachments` alone may grow: 6 MB of image plus its base64 overhead. */
+const ATTACHMENT_BODY = 12 * 1024 * 1024;
 const KEEPALIVE_MS = 25_000;
 
 const SECURITY_HEADERS: Readonly<Record<string, string>> = {
@@ -122,7 +124,8 @@ export class RemoteGateway {
 
     let body: unknown;
     if (method === 'POST') {
-      const raw = await readBody(req);
+      const cap = url.pathname === '/api/attachments' ? ATTACHMENT_BODY : MAX_BODY;
+      const raw = await readBody(req, cap);
       if (raw === null) {
         send(res, 413, { ok: false, error: 'the request is too large' });
         return;
@@ -215,14 +218,14 @@ function send(res: http.ServerResponse, status: number, body: unknown): void {
 }
 
 /** The body as text, or null when it exceeds the cap. */
-function readBody(req: http.IncomingMessage): Promise<string | null> {
+function readBody(req: http.IncomingMessage, maxBytes: number): Promise<string | null> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
     let over = false;
     req.on('data', (chunk: Buffer) => {
       size += chunk.length;
-      if (size > MAX_BODY) {
+      if (size > maxBytes) {
         over = true;
         return;
       }

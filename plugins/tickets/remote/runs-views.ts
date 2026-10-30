@@ -178,8 +178,14 @@ export function runView(ctx: Ctx, runId: string): View {
   const blocks = stream === null ? null : formatWatch(parseStreamEvents(stream)).blocks;
 
   const body: Node[] = present<Node>([
-    h('h1', { class: 'ticket-title', text: titleOf(ctx, run.ticketId) }),
-    meta,
+    // Sticky (R8): what the run is about and how long it has been going
+    // stays under the top bar while followTail scrolls the transcript on.
+    h(
+      'div',
+      { class: 'runhead' },
+      h('h1', { class: 'ticket-title', text: titleOf(ctx, run.ticketId) }),
+      meta,
+    ),
     run.gateFailure !== null ? h('p', { class: 'issue issue-error', text: run.gateFailure }) : null,
     h(
       'div',
@@ -204,24 +210,50 @@ export function runView(ctx: Ctx, runId: string): View {
   let actions: HTMLElement | null = null;
   if (live && !ctx.state.readOnly) {
     const input = h('textarea', { class: 'composer-field', attrs: { rows: '1', placeholder: 'Steer the run…', 'aria-label': 'Steer the run', enterkeyhint: 'send' } });
-    const send = (): void => {
+    // One button, two jobs (owner, 2026-10-30): with something typed it
+    // sends the text, over an empty field it is the run's Stop (armed,
+    // two taps) — the composer stays one narrow row.
+    let armed = false;
+    let armTimer: ReturnType<typeof setTimeout> | null = null;
+    const disarm = (): void => {
+      armed = false;
+      if (armTimer !== null) {
+        clearTimeout(armTimer);
+        armTimer = null;
+      }
+      node.classList.remove('armed');
+    };
+    const paint = (): void => {
+      disarm();
+      const hasText = input.value.trim() !== '';
+      node.className = hasText ? 'btn btn-primary' : 'btn btn-danger';
+      node.textContent = hasText ? 'Send' : 'Stop';
+      node.setAttribute('aria-label', hasText ? 'Send to the worker' : 'Stop the run');
+    };
+    const node = button('Stop', () => {
       const text = input.value.trim();
-      if (text === '') {
+      if (text !== '') {
+        void ctx.act(ctx.api.post(`/api/runs/${encodeURIComponent(run.id)}/send`, { text }), 'Sent to the worker').then((ok) => {
+          if (ok) {
+            input.value = '';
+            paint();
+          }
+        });
         return;
       }
-      void ctx.act(ctx.api.post(`/api/runs/${encodeURIComponent(run.id)}/send`, { text }), 'Sent to the worker').then((ok) => {
-        if (ok) {
-          input.value = '';
-        }
-      });
-    };
-    actions = h(
-      'div',
-      { class: 'composer' },
-      input,
-      button('Send', send, 'btn btn-primary'),
-      armedButton('Stop', 'Stop?', () => void ctx.act(ctx.api.post(`/api/runs/${encodeURIComponent(run.id)}/stop`, { reason: 'stopped from a device' }), 'Run stopped')),
-    );
+      if (armed) {
+        disarm();
+        void ctx.act(ctx.api.post(`/api/runs/${encodeURIComponent(run.id)}/stop`, { reason: 'stopped from a device' }), 'Run stopped');
+        return;
+      }
+      armed = true;
+      node.textContent = 'Stop?';
+      node.classList.add('armed');
+      armTimer = setTimeout(disarm, 3000);
+    }, 'btn btn-danger');
+    input.addEventListener('input', paint);
+    paint();
+    actions = h('div', { class: 'composer' }, input, node);
   }
   return { title: `${run.ticketId} · Run`, back: `#ticket/${run.ticketId}`, body, actions, followTail: true };
 }

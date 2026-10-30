@@ -9,6 +9,7 @@
 import type { RefineReply } from '../shared/remote-protocol';
 import { TICKET_PRIORITIES, type TicketPriority } from '../shared/tickets';
 import type { Ctx, View } from './context';
+import { bindImagePaste, imageControls } from './attachments';
 import { button, empty, h, present, toast } from './dom';
 import { placeOf, REFINE_TITLES, sectionTextOf, type RefineKey } from './model';
 
@@ -157,12 +158,19 @@ export function refineView(ctx: Ctx, id: string, tab: RefineTab): View {
       }
     }
     area.addEventListener('input', () => writeDraft(id, tab, { base: draft?.base ?? revision, text: area.value }));
+    // Acceptance criteria are backticked gate commands — an image line there
+    // would corrupt the gate; Description and Plan take images.
+    const takesImages = tab === 'description' || tab === 'plan';
+    if (takesImages) {
+      bindImagePaste(ctx, area);
+    }
     body = present<Node>([
       h('label', { class: 'label', text: REFINE_TITLES[tab], attrs: { for: 'ref-text' } }),
       area,
       tab === 'acceptance'
         ? h('p', { class: 'small', text: 'One checkbox line per check; a line that starts with a `command` is what the gate runs.' })
         : null,
+      takesImages ? imageControls(ctx, area) : null,
     ]);
     collect = () => (area.value.trim() === original.trim() ? null : { sections: { [tab]: area.value } });
     clearDraft = () => writeDraft(id, tab, null);

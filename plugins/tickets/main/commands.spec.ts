@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   chainResult,
   parseAnswer,
+  parseAttachment,
   parseChainColumn,
   parseChainMaster,
   parseClaim,
@@ -82,5 +83,35 @@ describe('parseRefine', () => {
     expect(parseRefine({ ...base, header: { title: '  ' } })).toMatchObject({ ok: false });
     expect(parseRefine({ ...base, header: { priority: 'asap' } })).toEqual({ ok: false, error: 'unknown priority' });
     expect(parseRefine({ ...base, sections: { plan: 'x'.repeat(20_001) } })).toMatchObject({ ok: false });
+  });
+});
+
+describe('parseAttachment', () => {
+  // Minimal real headers of each type — enough bytes for the sniff.
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16]);
+  const gif = Buffer.from('GIF89a', 'latin1');
+  const webp = Buffer.concat([Buffer.from('RIFF', 'latin1'), Buffer.alloc(4), Buffer.from('WEBPVP8 ', 'latin1')]);
+
+  it("takes an image by its magic bytes and derives the extension — never the client's name", () => {
+    expect(parseAttachment({ dataBase64: png.toString('base64') })).toEqual({ ok: true, value: { bytes: png, ext: 'png' } });
+    expect(parseAttachment({ dataBase64: jpeg.toString('base64'), name: 'photo.tif' })).toEqual({ ok: true, value: { bytes: jpeg, ext: 'jpeg' } });
+    expect(parseAttachment({ dataBase64: gif.toString('base64') })).toEqual({ ok: true, value: { bytes: gif, ext: 'gif' } });
+    expect(parseAttachment({ dataBase64: webp.toString('base64') })).toEqual({ ok: true, value: { bytes: webp, ext: 'webp' } });
+  });
+
+  it('refuses text bytes, empties and non-base64 with the four accepted types named', () => {
+    expect(parseAttachment({ dataBase64: Buffer.from('just some text', 'utf8').toString('base64') })).toEqual({
+      ok: false,
+      error: 'the file is not a PNG, JPEG, GIF or WebP image',
+    });
+    expect(parseAttachment({})).toEqual({ ok: false, error: 'the image data is missing or not base64' });
+    expect(parseAttachment({ dataBase64: '' })).toEqual({ ok: false, error: 'the image data is missing or not base64' });
+    expect(parseAttachment({ dataBase64: 'not base64!' })).toEqual({ ok: false, error: 'the image data is missing or not base64' });
+  });
+
+  it('refuses a decoded image over 6 MB', () => {
+    const big = Buffer.concat([png, Buffer.alloc(6 * 1024 * 1024)]);
+    expect(parseAttachment({ dataBase64: big.toString('base64') })).toEqual({ ok: false, error: 'the image is larger than 6 MB' });
   });
 });

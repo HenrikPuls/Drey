@@ -149,10 +149,17 @@ test('answers a waiting worker, follows and steers the run, and switches the fle
   await expect(page.locator('.t-step', { hasText: 'phase-dirs.ts' })).toBeVisible();
   await expect(page.locator('.t-text')).toContainText('Two directories resolve to the inbox phase.');
 
+  // One composer button (R8): Stop over an empty field, Send once text is
+  // typed — and back to Stop after the send cleared the field.
+  const composerButton = page.locator('.composer button');
+  await expect(composerButton).toHaveCount(1);
+  await expect(composerButton).toHaveText('Stop');
   await page.locator('.composer-field').fill('Keep the unprefixed folder as it is.');
-  await page.locator('.composer .btn-primary', { hasText: 'Send' }).click();
+  await expect(composerButton).toHaveText('Send');
+  await composerButton.click();
   await expect(page.locator('.toast')).toContainText('Sent to the worker');
   expect(calls.at(-1)).toEqual({ what: 'send', args: [{ runId: 'run-1', text: 'Keep the unprefixed folder as it is.' }] });
+  await expect(composerButton).toHaveText('Stop');
 
   // The master switch sits behind the header chip.
   await page.locator('.topbar .chip-btn').click();
@@ -217,6 +224,37 @@ test('refines a section, keeps the draft through a conflict, and edits the heade
   await page.locator('.seg button', { hasText: 'urgent' }).click();
   await page.locator('.btn-primary', { hasText: 'Save' }).click();
   expect(calls.at(-1)).toMatchObject({ what: 'refine', args: [{ id: 'T-0055', header: { priority: 'urgent' } }, 'owner@iphone'] });
+
+  expect(errors).toEqual([]);
+});
+
+test('inserts a picked image in Capture, uploaded and embedded (R8)', async ({ page }) => {
+  const errors: string[] = [];
+  await pairedPage(page, errors);
+
+  await page.locator('.tab', { hasText: 'Capture' }).click();
+  await page.locator('#cap-desc').click();
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await page.locator('.attach-row input[type="file"]').setInputFiles({ name: 'shot.png', mimeType: 'image/png', buffer: png });
+  await expect(page.locator('#cap-desc')).toHaveValue('![](../attachments/img-test.png)');
+  await expect(page.locator('.toast')).toContainText('Image inserted');
+  expect(calls.at(-1)).toEqual({ what: 'attachment', args: [{ bytes: png, ext: 'png' }, 'owner@iphone'] });
+
+  expect(errors).toEqual([]);
+});
+
+test('keeps the run view header pinned while the transcript scrolls (R8)', async ({ page }) => {
+  const errors: string[] = [];
+  await pairedPage(page, errors);
+
+  await page.goto(`http://127.0.0.1:${PORT}/#run/run-1`);
+  await expect(page.locator('.runhead .ticket-title')).toHaveText('Fold duplicate phase folders');
+  await expect(page.locator('.runhead')).toContainText('started');
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBeGreaterThan(0);
+  const head = (await page.locator('.runhead').boundingBox())!;
+  const bar = (await page.locator('.topbar').boundingBox())!;
+  expect(Math.abs(head.y - (bar.y + bar.height))).toBeLessThanOrEqual(1);
 
   expect(errors).toEqual([]);
 });

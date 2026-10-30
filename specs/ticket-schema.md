@@ -67,13 +67,16 @@ Top-level rules, once, up front:
     70-commit/
     80-done/
     archive/          # reserved (T-0041): archived tickets, never a column
+    attachments/      # reserved (req-66 R8): images a paired device
+                      #   uploaded — binary only, never a column, never
+                      #   a ticket
 ```
 
 The phase folders are exactly the phases configured in `pipeline.md`
-(the set above is the default, not fixed). `_meta` and `archive` are
-reserved; nothing else lives beside the phase folders. A vault whose
-root contains `tickets/_meta/pipeline.md` **is** a tickets vault — that
-file's presence is the detection marker.
+(the set above is the default, not fixed). `_meta`, `archive` and
+`attachments` are reserved; nothing else lives beside the phase
+folders. A vault whose root contains `tickets/_meta/pipeline.md` **is**
+a tickets vault — that file's presence is the detection marker.
 
 **Reserved `_`-prefixed folders at the repo root (T-0044, ADR-0080).**
 `_`-prefixed names directly beside `tickets/` are machine state, never
@@ -124,6 +127,21 @@ cleanup. Reviving is a move back into a phase folder — normalization
 treats it as `archive -> <phase>`. Body edits after archiving never
 re-fire normalization. Final deletion is the owner's manual act inside
 `archive/`.
+
+### Attachments (req-66 R8)
+
+`tickets/attachments/` is a reserved folder beside `_meta` and
+`archive`: **binary image files only, never a column, never a ticket**
+(the board lists markdown only, so no column ever appears). An image
+pasted or picked on a paired device is saved here by the desk — the
+type sniffed from the bytes (PNG, JPEG, GIF, WebP, ≤ 6 MB), never from
+a client-sent name — as `img-<yyyyMMdd>-<HHmmss>-<4 hex>.<ext>`, in
+exactly one commit `tickets: attachment <name>` (no Log line: the Log
+lives in ticket files and an upload touches none — Capture uploads
+before a ticket exists; the audit is the gateway's `remote <device>:
+attachment` line and the commit). Notes and ticket files embed the
+image with `![](../attachments/<name>)` — a phase folder moves on every
+transition, so only this fixed folder keeps the links intact.
 
 ### Id minting
 

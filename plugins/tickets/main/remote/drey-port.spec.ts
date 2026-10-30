@@ -16,6 +16,7 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
     refresh: vi.fn(async () => ({ columns: [], checkpoints: [] }) as unknown as BoardSnapshot),
     readTicket: vi.fn(async () => ({ ok: false as const, error: 'x' })),
     refineTicket: vi.fn(async () => ({ ok: true, revision: '0123456789abcdef' })),
+    saveAttachment: vi.fn(async () => ({ ok: true, file: 'tickets/attachments/img-test.png' })),
     createTicket: vi.fn(async () => ({ ok: true, id: 'T-0001' })),
     transition: vi.fn(async () => ok),
     reorder: vi.fn(async () => ok),
@@ -49,11 +50,24 @@ describe('DreyTicketsPort', () => {
     await port.archive({ id: 'T-0001' }, 'owner@ipad');
     await port.create({ title: 'x', priority: 'normal', repo: null, description: '' }, 'owner@ipad');
     await port.refine({ id: 'T-0001', baseRevision: '0123456789abcdef', sections: { plan: 'p' }, header: {} }, 'owner@ipad');
+    await port.saveAttachment({ bytes: Buffer.from([0x89, 0x50]), ext: 'png' }, 'owner@ipad');
     expect(board.refineTicket).toHaveBeenCalledWith(expect.objectContaining({ actor: 'owner@ipad', sections: { plan: 'p' } }));
+    expect(board.saveAttachment).toHaveBeenCalledWith({ bytes: Buffer.from([0x89, 0x50]), ext: 'png', actor: 'owner@ipad' });
     expect(board.transition).toHaveBeenCalledWith(expect.objectContaining({ actor: 'owner@ipad', to: 'review' }));
     expect(board.setClaim).toHaveBeenCalledWith(expect.objectContaining({ actor: 'owner@ipad', mode: 'takeover' }));
     expect(board.archive).toHaveBeenCalledWith({ id: 'T-0001', actor: 'owner@ipad' });
     expect(board.createTicket).toHaveBeenCalledWith(expect.objectContaining({ actor: 'owner@ipad' }));
+  });
+
+  it('hands an attachment upload to the board service and passes a failed commit through as a warning', async () => {
+    const { board, fleet } = fakes();
+    board.saveAttachment = vi.fn(async () => ({ ok: true, file: 'tickets/attachments/img-test.png', warning: 'git commit failed: no user' }));
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+    expect(await port.saveAttachment({ bytes: Buffer.alloc(4), ext: 'png' }, 'owner@iphone')).toEqual({
+      ok: true,
+      file: 'tickets/attachments/img-test.png',
+      warning: 'git commit failed: no user',
+    });
   });
 
   it('refuses a bypass run unless the setting allows it', async () => {

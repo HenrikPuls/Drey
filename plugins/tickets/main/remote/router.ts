@@ -9,6 +9,7 @@
  */
 import {
   parseAnswer,
+  parseAttachment,
   parseChainColumn,
   parseChainColumnStop,
   parseChainMaster,
@@ -175,6 +176,9 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
   }
   if (req.path === '/api/tickets') {
     return write('create', parseCreate(body), (cmd) => port.create(cmd, actor));
+  }
+  if (req.path === '/api/attachments') {
+    return write('attachment', parseAttachment(body), (cmd) => port.saveAttachment(cmd, actor));
   }
   const ticket = /^\/api\/tickets\/([^/]+)\/(move|reorder|unpin|claim|archive|refine)$/.exec(req.path);
   if (ticket !== null) {

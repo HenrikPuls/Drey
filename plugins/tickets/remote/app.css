@@ -303,6 +303,29 @@ textarea { resize: vertical; line-height: 1.45; }
 .composer-field { flex: 1; min-height: 44px; max-height: 120px; resize: none; }
 .composer .btn-danger { padding: 0 12px; }
 
+/* The run view's pinned header (R8): the ticket title and the meta row
+   (state, model, tokens, "started … ago") stay under the top bar while
+   the transcript scrolls — the 3-second live repaint rebuilds the DOM,
+   so the pinning is CSS only. Top offset like the board's chipbar: the
+   bar's min-height plus its safe-area padding. */
+.runhead {
+  position: sticky;
+  top: calc(52px + env(safe-area-inset-top));
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: -12px calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter-l));
+  padding: 12px var(--gutter-r) 10px var(--gutter-l);
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Image uploads from the phone (R8): the controls row under a field. */
+.attach-row { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.attach-btn { min-height: 34px; padding: 0 12px; font-size: 14px; }
+.attach-input { display: none; }
+
 /* --- refine (R5) -------------------------------------------------------------- */
 .md-h { display: flex; align-items: baseline; gap: 10px; }
 .md-h .edit { margin-left: auto; font-size: 14px; font-weight: 600; padding: 6px 0 6px 12px; }

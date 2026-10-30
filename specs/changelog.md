@@ -60,6 +60,55 @@ missed while a first connect is slow.
 - docs/06 §6.70 — one sentence: the `event: board` re-fetch repaints
   only when the built view's serialized output changed.
 
+### req-66 R8 — Tickets remote: images from the phone, the run view's pinned header
+
+**Not yet manually verified by the owner** (above all a real paste from
+the iOS photo picker in Safari and the pinned header on a notched
+iPhone). Owner request, outside the list (ADR-0084, later change):
+
+- **Images into the phone's text fields.** An image pasted into
+  Capture's Description or the refine view's Description/Plan — or
+  picked through the new **Image** button under the field — uploads to
+  the desk (base64 in JSON on the existing API,
+  `POST /api/attachments`), is saved into the tickets vault's new
+  reserved `tickets/attachments/` folder (`img-<stamp>-<rand>.<ext>`,
+  type sniffed from the magic bytes — PNG, JPEG, GIF, WebP, ≤ 6 MB,
+  never from a client-sent name) in exactly one commit
+  (`tickets: attachment <name>`, no Log line — the Log lives in ticket
+  files and an upload touches none), and `![](../attachments/<file>)`
+  is inserted at the caret, followed by a bubbling `input` event so the
+  refine draft saves. Acceptance criteria keep the affordance out (an
+  image line would corrupt the gate); the desk shows the images as
+  ordinary vault files. The gateway's body cap grows for this one route
+  only (12 MB instead of 64 KB).
+- **The run view's header stays put.** The run page opened with
+  `followTail`, so the ticket title and the meta row (state, model,
+  tokens, `started … ago`) scrolled away and never came back while the
+  run streamed. Title + meta now sit in a sticky `.runhead` under the
+  top bar — CSS only, because the 3-second live repaint rebuilds the
+  DOM.
+- **One composer button.** The run view's **Send** and **Stop** are one
+  button now (owner request, in-run): with something typed in **Steer
+  the run…** it is **Send**, over an empty field it is **Stop** (armed,
+  two taps) — the composer keeps one narrow row.
+- The phone does not display the images yet (an `<img>` cannot send the
+  bearer token); an authed asset route plus the phone's markdown
+  rendering is the recorded follow-up.
+
+Specs: `main/commands.spec.ts` (the attachment parser: four magic-byte
+types, the extension derived from the bytes, refusals for text bytes /
+non-base64 / > 6 MB), `main/remote/router.spec.ts` (the route: ok path
+with `owner@<device>`, a parser refusal as `{ ok: false }`, behind
+auth), `main/remote/drey-port.spec.ts` (delegation with the actor, a
+failed commit as a warning); `e2e/tickets-remote.spec.ts` (a picked PNG
+in Capture → `#cap-desc` contains the embed, the call recorded with the
+device actor; the run header still pinned after scrolling the
+transcript to its end). Docs: ticket schema "Attachments (req-66 R8)",
+manual "Images" and the run paragraph, ADR-0084 later change. In-run
+owner addition: the composer's combined Send/Stop button (R4 case
+extended: one button, Stop over an empty field, Send with text typed,
+back to Stop after the send).
+
 ### req-66 R6 — Tickets remote: the iPad board
 
 **Not yet manually verified by the owner** (press-and-hold drag with a

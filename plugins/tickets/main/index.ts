@@ -11,6 +11,7 @@
  * validation and YAML stay here.
  */
 import { shell } from 'electron';
+import { randomBytes } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
@@ -56,8 +57,8 @@ import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, type DriftDetection } from './normalize';
 import { openTerminalAt } from './open-terminal';
 import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
-import type { RefineReply, TicketReply } from '../shared/remote-protocol';
-import type { RefineCommand } from './commands';
+import type { AttachmentReply, RefineReply, TicketReply } from '../shared/remote-protocol';
+import type { AttachmentCommand, RefineCommand } from './commands';
 import { refineTicket, revisionOf } from './ticket-refine';
 import { RemoteService } from './remote/service';
 import {
@@ -106,6 +107,7 @@ import { parseWorkerValue } from './fleet/assignment';
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
 const ORDER_PATH = 'tickets/_meta/order.md';
 const REPOS_PATH = 'tickets/_meta/repos.md';
+const ATTACHMENTS_DIR = 'tickets/attachments';
 
 const OWNER = `owner@${hostname().toLowerCase()}`;
 
@@ -398,6 +400,47 @@ class BoardService {
       this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [card.path] });
       this.announceChanged();
       return { ok: true, revision: revisionOf(refined), ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * An image a paired device pasted or picked (req-66 R8): written under
+   * the reserved `tickets/attachments/` folder, exactly one commit. No
+   * Log line — the Log lives in ticket files and no ticket file is
+   * touched (Capture uploads before a ticket exists); the audit is the
+   * router's `remote <device>: attachment` line and the commit itself.
+   */
+  saveAttachment(input: AttachmentCommand & { actor?: string }): Promise<AttachmentReply> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const dir = this.ctx.vault.resolveAssetPath(ATTACHMENTS_DIR, { vaultId: vault.id });
+      if (dir === null) {
+        return { ok: false, error: 'the attachments folder is not reachable' };
+      }
+      await fsp.mkdir(dir, { recursive: true });
+      const now = new Date();
+      const p = (n: number): string => String(n).padStart(2, '0');
+      const stamp = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
+      let name = `img-${stamp}-${randomBytes(2).toString('hex')}.${input.ext}`;
+      for (;;) {
+        try {
+          await fsp.writeFile(path.join(dir, name), input.bytes, { flag: 'wx' });
+          break;
+        } catch (error) {
+          if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'EEXIST') {
+            name = `img-${stamp}-${randomBytes(2).toString('hex')}.${input.ext}`;
+            continue;
+          }
+          return { ok: false, error: `write failed: ${messageOf(error)}` };
+        }
+      }
+      const file = `${ATTACHMENTS_DIR}/${name}`;
+      const warning = await this.commit(vault, [file], `tickets: attachment ${name}`);
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [file] });
+      return { ok: true, file, ...(warning === null ? {} : { warning }) };
     });
   }
 

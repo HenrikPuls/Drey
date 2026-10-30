@@ -157,6 +157,9 @@ export function makeDesk() {
     { ts: '2026-10-30T09:00:06Z', kind: 'tool', tool: 'read', detail: 'done', text: 'result › 214 lines' },
     { ts: '2026-10-30T09:00:09Z', kind: 'tool', tool: 'grep', text: 'grep "10-inbox" plugins/tickets' },
     { ts: '2026-10-30T09:00:12Z', kind: 'text-delta', detail: 'end', text: 'Two directories resolve to the inbox phase. I will ask before folding them.' },
+    // Long enough that the run view's page really scrolls — the pinned
+    // header's e2e case (R8) needs an overflowing transcript.
+    ...Array.from({ length: 45 }, (_, i) => ({ ts: '2026-10-30T09:01:00Z', kind: 'note', text: `read src/app/core/widget-${i}.ts` })),
   ]
     .map((e) => JSON.stringify(e))
     .join('\n');
@@ -192,6 +195,10 @@ export function makeDesk() {
       bump(cmd.id);
       emit();
       return { ok: true, revision: revisionOf(cmd.id) };
+    },
+    saveAttachment: async (cmd: { bytes: Buffer; ext: string }, actor: string) => {
+      calls.push({ what: 'attachment', args: [cmd, actor] });
+      return { ok: true, file: 'tickets/attachments/img-test.png' };
     },
     create: async (cmd: { title: string }, actor: string) => {
       calls.push({ what: 'create', args: [cmd, actor] });
