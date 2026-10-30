@@ -66,8 +66,8 @@ refresh no longer flashes a "Loading…" line. `BoardView.status` is
 gone.
 
 Manual: the lane paragraph, the master switch, the Log and cleanup
-mentions, the status bar's messages. **Not yet manually verified by the
-owner.**
+mentions, the status bar's messages. Owner-verified (signed off
+2026-10-30).
 
 ### req-59 — Tickets board: one-row status bar
 
