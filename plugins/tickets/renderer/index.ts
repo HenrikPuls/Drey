@@ -36,6 +36,7 @@ import {
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import { createTicketHeader, ticketLogFold } from './ticket-header';
+import { boardIssuesChip, boardIssuesList } from './board-issues';
 import type { ChainStatus, FleetHandoverConfig, RunInfo, WaitQuestion } from '../main/fleet/protocol';
 import { DEFAULT_FLEET_HANDOVER, normalizeFleetHandover } from '../main/fleet/protocol';
 import { handoverDialogState } from './handover-ui';
@@ -585,8 +586,32 @@ function collapsedColumnNode(column: BoardColumn): HTMLElement {
   return node;
 }
 
-/** The board's small toolbar (T-0050): the hide-blocked filter — pure
- *  view state, it hides cards and never reorders anything. */
+/** Whether the board issues are unfolded under the toolbar (req-66; view state, per session). */
+let boardIssuesOpen = false;
+
+/** The board's one toolbar row: the hide-blocked filter (T-0050 — pure
+ *  view state, it hides cards and never reorders anything) and the board
+ *  issues chip (req-66), whose messages unfold under the row. */
+function boardToolbar(api: DreyPluginApi, snap: BoardSnapshot): HTMLElement[] {
+  const issuesDeps = {
+    api,
+    issues: snap.issues,
+    open: boardIssuesOpen,
+    onToggle: () => {
+      boardIssuesOpen = !boardIssuesOpen;
+      notifyViews();
+    },
+    openFile: (path: string) => openTicketFile(api, path),
+  };
+  const toolbar = hideBlockedToolbar(api);
+  const chip = boardIssuesChip(issuesDeps);
+  if (chip !== null) {
+    toolbar.append(chip);
+  }
+  const list = boardIssuesList(issuesDeps);
+  return list === null ? [toolbar] : [toolbar, list];
+}
+
 function hideBlockedToolbar(api: DreyPluginApi): HTMLElement {
   const toolbar = el('div', 'tickets-toolbar');
   const hide = el('button', 'tickets-toolbar-btn');
@@ -781,7 +806,7 @@ function buildBoardView(api: DreyPluginApi): BoardView {
       }
       return;
     }
-    root.append(hideBlockedToolbar(api));
+    root.append(...boardToolbar(api, snap));
     const board = el('div', 'tickets-board');
     for (const column of snap.columns) {
       board.append(columnNode(api, column));
@@ -796,12 +821,6 @@ function buildBoardView(api: DreyPluginApi): BoardView {
       warn.textContent =
         'The tickets vault is not a git repository — transitions are not versioned.';
       root.append(warn);
-    }
-    if (snap.issues.length > 0) {
-      const issues = el('div', 'tickets-board-issues');
-      issues.textContent = `${snap.issues.length} board issue${snap.issues.length === 1 ? '' : 's'}`;
-      issues.title = snap.issues.map((i) => `[${i.level}] ${i.message}`).join('\n');
-      root.prepend(issues);
     }
   };
   const view: BoardView = { root, render, dispose: () => undefined };
