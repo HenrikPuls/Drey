@@ -22,8 +22,8 @@ recorded as an explicit decision. The parity checklist lives in
 
 ### req-67 — The elapsed clocks count only working time
 
-**Not yet manually verified by the owner.** Owner request, outside the
-list. The takeover tab's Elapsed metric ran on the wall clock since the
+Owner request, outside the list. The takeover tab's Elapsed metric ran on
+the wall clock since the
 run's start: it kept ticking while the worker waited for the owner, while a
 held run stood idle, and after the run had ended — and the card's ▶ chip
 and its tooltip showed the same wall clock. Now the runner folds the run's
