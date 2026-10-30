@@ -16,7 +16,7 @@ import {
 } from '../../shared/tickets';
 import { acceptanceCommands, ticketSections } from '../ticket-files';
 import { composeInstruction, resolveAssignment, type Truncation } from './assignment';
-import { DEFAULT_FLEET_CAPS, type FleetCaps, type PermissionMode, type RunRequest } from './protocol';
+import { DEFAULT_FLEET_CAPS, type FleetCaps, type HandoverMode, type PermissionMode, type RunRequest } from './protocol';
 import { worktreePathFor } from './worktree-home';
 
 export interface ComposeRunInput {
@@ -66,6 +66,11 @@ export interface ComposeRunInput {
   readonly structuralGateAllowed?: boolean;
   /** Set when the orchestrator dispatches — the pool whose slot this run occupies. */
   readonly dispatchedBy?: string;
+  /**
+   * The handover ask (T-0049): the start dialog's explicit mode, or
+   * 'auto' from the dispatcher — absent (an older caller) means fresh.
+   */
+  readonly handover?: HandoverMode | 'auto';
 }
 
 export type ComposeRunResult =
@@ -152,6 +157,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     claimIdentity: input.nextPhaseClaims && input.nextPhaseId !== null ? agentIdentity() : null,
     ...(input.workerChoice !== null ? { recordWorker: input.workerChoice } : {}),
     ...(input.dispatchedBy !== undefined ? { column: input.dispatchedBy } : {}),
+    ...(input.handover !== undefined ? { handover: input.handover } : {}),
   };
   return { ok: true, request, truncations: instruction.truncations };
 }

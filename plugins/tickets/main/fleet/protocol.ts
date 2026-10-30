@@ -140,6 +140,13 @@ export interface FleetHandoverConfig {
    */
   readonly compactAboveTokens: number;
   /**
+   * Per-provider and per-model thresholds over the base, keyed
+   * `<workerProvider>` or `<workerProvider>/<modelPin>` — the
+   * most-specific key wins at resolution. No UI: a hand-edited power
+   * knob (`fleet.compactAboveTokens.<key>` flat keys plugin-side).
+   */
+  readonly compactAboveTokensOverrides?: Readonly<Record<string, number>>;
+  /**
    * A pause shorter than this many minutes counts as warm (spike 3: a
    * resumed turn re-pays the transcript as cache reads, still ~99 %
    * cached after 6 min; measured auto-retry gaps ran 1–13 min).
@@ -155,15 +162,25 @@ export const DEFAULT_FLEET_HANDOVER: FleetHandoverConfig = {
 
 /** Resolves handover thresholds of unknown shape to valid ones, per key
  *  like the caps: every non-negative finite number wins, anything else
- *  falls back to that key's default. */
+ *  falls back to that key's default (an invalid override entry drops). */
 export function normalizeFleetHandover(value: unknown): FleetHandoverConfig {
   const raw = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
-  const num = (key: keyof FleetHandoverConfig): number => {
+  const num = (key: 'compactAboveTokens' | 'resumePauseTtlMin'): number => {
     const given = raw[key];
     return typeof given === 'number' && Number.isFinite(given) && given >= 0 ? given : DEFAULT_FLEET_HANDOVER[key];
   };
+  const overridesRaw = raw['compactAboveTokensOverrides'];
+  const overrides: Record<string, number> = {};
+  if (typeof overridesRaw === 'object' && overridesRaw !== null) {
+    for (const [key, given] of Object.entries(overridesRaw as Record<string, unknown>)) {
+      if (typeof given === 'number' && Number.isFinite(given) && given >= 0) {
+        overrides[key] = given;
+      }
+    }
+  }
   return {
     compactAboveTokens: num('compactAboveTokens'),
+    ...(Object.keys(overrides).length > 0 ? { compactAboveTokensOverrides: overrides } : {}),
     resumePauseTtlMin: num('resumePauseTtlMin'),
   };
 }

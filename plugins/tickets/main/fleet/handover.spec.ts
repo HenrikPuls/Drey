@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { COMPACT_CAPABILITY, HANDOVER_CANDIDATE_STATES, resolveHandover, type HandoverCandidate, type HandoverInput } from './handover';
-import { DEFAULT_FLEET_HANDOVER, type RunState } from './protocol';
+import { COMPACT_CAPABILITY, compactThreshold, HANDOVER_CANDIDATE_STATES, resolveHandover, type HandoverCandidate, type HandoverInput } from './handover';
+import { DEFAULT_FLEET_HANDOVER, type FleetHandoverConfig, type RunState } from './protocol';
 
 /**
  * The handover rules (T-0049) pinned one rule per case: the same pure
@@ -176,5 +176,35 @@ describe('COMPACT_CAPABILITY', () => {
   it('opencode compacts natively, claude-code not yet (spike 1 proved routing, not effect)', () => {
     expect(COMPACT_CAPABILITY['opencode']).toBe('native');
     expect(COMPACT_CAPABILITY['claude-code']).toBe('none');
+  });
+});
+
+describe('compactThreshold — the per-provider/model overrides', () => {
+  const config = {
+    compactAboveTokens: 60_000,
+    compactAboveTokensOverrides: { opencode: 40_000, 'opencode/glm-5.3': 20_000, broken: -1 },
+    resumePauseTtlMin: 15,
+  };
+
+  it('the most-specific key wins; unknown keys and a bare base never match', () => {
+    expect(compactThreshold(config, 'opencode', 'glm-5.3')).toBe(20_000);
+    expect(compactThreshold(config, 'opencode', 'glm-5.3-flash')).toBe(40_000);
+    expect(compactThreshold(config, 'claude-code', 'sonnet')).toBe(60_000);
+    expect(compactThreshold(config, 'opencode', null)).toBe(40_000);
+  });
+
+  it('an invalid override entry is ignored (the base applies)', () => {
+    expect(compactThreshold(config, 'broken', null)).toBe(60_000);
+  });
+
+  it('the auto path honours the override: a cold 30k context compacts under a 20k bar', () => {
+    const cold = resolveHandover(
+      input({
+        candidate: candidate({ endedAt: '2026-10-30T10:00:00Z', lastTurnContext: 30_000, model: 'glm-5.3' }),
+        model: 'glm-5.3',
+        config,
+      }),
+    );
+    expect(cold.mode).toBe('resume-compact');
   });
 });

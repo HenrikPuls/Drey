@@ -884,6 +884,9 @@ export class Orchestrator {
       caps: config.caps ?? DEFAULT_FLEET_CAPS,
       structuralGateAllowed: firstWorker?.id === workingPhaseId,
       dispatchedBy: workingPhaseId,
+      // The dispatcher asks the supervisor's rules to decide (T-0049):
+      // the dialog is the only place an explicit mode is chosen.
+      handover: 'auto',
     });
     if (!composed.ok) {
       this.noteSkip(card.id, `dispatch skips ${card.id}: ${composed.error}`);

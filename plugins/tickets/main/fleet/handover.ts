@@ -78,6 +78,28 @@ export interface HandoverDecision {
 export const HANDOVER_CANDIDATE_STATES: readonly RunState[] = ['done', 'stopped', 'failed'];
 
 /**
+ * The compact threshold that applies to one provider/model pair
+ * (T-0049): `<provider>/<model>` beats `<provider>` beats the base —
+ * the most-specific override wins, an unknown key never matches.
+ */
+export function compactThreshold(config: FleetHandoverConfig, provider: string, model: string | null): number {
+  const overrides = config.compactAboveTokensOverrides;
+  if (overrides !== undefined) {
+    if (model !== null) {
+      const both = overrides[`${provider}/${model}`];
+      if (typeof both === 'number' && Number.isFinite(both) && both >= 0) {
+        return both;
+      }
+    }
+    const byProvider = overrides[provider];
+    if (typeof byProvider === 'number' && Number.isFinite(byProvider) && byProvider >= 0) {
+      return byProvider;
+    }
+  }
+  return config.compactAboveTokens;
+}
+
+/**
  * Resolves the handover mode. Rules (auto path; explicit requests are
  * honoured when structurally legal, never silently switched to a
  * different resume mode):
@@ -159,6 +181,7 @@ export function resolveHandover(input: HandoverInput): HandoverDecision {
       : Number.POSITIVE_INFINITY;
   const warmMs = input.config.resumePauseTtlMin * 60_000;
   const context = candidate.lastTurnContext;
+  const threshold = compactThreshold(input.config, input.provider, input.model);
   if (pauseMs < warmMs) {
     return resume(
       candidate.sessionRef,
@@ -167,13 +190,13 @@ export function resolveHandover(input: HandoverInput): HandoverDecision {
         : `pause ${Math.max(0, Math.round(pauseMs / 60_000))} min is within the cache TTL — the transcript re-pays cached`,
     );
   }
-  if (context !== null && context < input.config.compactAboveTokens) {
+  if (context !== null && context < threshold) {
     return resume(
       candidate.sessionRef,
       `cold pause, but the context (${context}) is below the compact threshold — resumed as it is`,
     );
   }
-  if (context !== null && context >= input.config.compactAboveTokens && input.capability === 'native') {
+  if (context !== null && context >= threshold && input.capability === 'native') {
     return {
       mode: 'resume-compact',
       resumeRef: candidate.sessionRef,
