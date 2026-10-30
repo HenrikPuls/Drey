@@ -877,8 +877,9 @@ words), the worker's current activity, its context window, token usage
 and age, plus the run's telemetry chips — **ctx** (the last turn's real
 context size), **turns** (model calls) and **reads** (read/search tool
 calls) — once the worker reports them; the card carries a ▶ chip reading
-the state, the turn count, the run's own tokens and its age
-(`▶ running · 2 · 45k/1.2k · 03:41`). While workers run, the panel
+the state, the turn count, the run's own tokens and its working time
+(`▶ running · 2 · 45k/1.2k · 03:41` — waits for you and standing do not
+count). While workers run, the panel
 header sums up the whole fleet next to its buttons
 (`● 1 running · 18.9M tok · 26:22`): the worst light, the states in
 words, the tokens in flight and how long the oldest live run has been
@@ -897,7 +898,8 @@ and a pill says who is driving (**Runner driving** — your first message
 takes over — or **You have control**); below it sit the turn count, how
 full the context window is (a small bar that turns amber at 70 % and
 red at 90 %), the tokens in (with the cached share) and out, and the
-elapsed time — hover a value for its explanation. In the conversation
+working time — waits for you and standing do not tick; hover a value for
+its explanation. In the conversation
 each tool call is one quiet row: a dot (green when it settled, red when
 it failed), the tool, what it was called on — paths relative to the
 run's worktree, the full path in the tooltip — and its result. More

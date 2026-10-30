@@ -377,6 +377,21 @@ export interface RunInfo {
   /** What the worker waits on the owner for (req-64); null/absent = nothing. */
   readonly waiting?: RunWaiting | null;
   /**
+   * Working time already accumulated, in milliseconds — the busy spans
+   * the runner closed (the turn went idle or a wait began). The elapsed
+   * clocks (req-67) add the open span to it instead of running on the
+   * wall clock, so waits for the owner and standing workers do not tick.
+   * Absent on run.json records written before req-67 — readers fall back
+   * to the wall clock since the start.
+   */
+  readonly execMs?: number;
+  /**
+   * When the run's open working span began (ISO); null while it stands.
+   * Undefined (together with execMs) on pre-req-67 records; a run whose
+   * provider reports no turn never carries either.
+   */
+  readonly execSince?: string | null;
+  /**
    * The slash commands the worker accepts (names without the slash) — the
    * takeover tab's prompt box lists them. Absent until the worker reports.
    */

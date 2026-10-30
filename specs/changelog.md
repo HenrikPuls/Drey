@@ -20,6 +20,34 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-67 — The elapsed clocks count only working time
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list. The takeover tab's Elapsed metric ran on the wall clock since the
+run's start: it kept ticking while the worker waited for the owner, while a
+held run stood idle, and after the run had ended — and the card's ▶ chip
+and its tooltip showed the same wall clock. Now the runner folds the run's
+busy spans on every stream event (the same fold pattern as the token
+telemetry: a flip of `turn` or `waiting`, req-64, closes or opens a span at
+that event's stamp) and the record carries them — `RunInfo.execMs` (the
+closed spans) and `execSince` (when the open one began), persisted in
+`run.json`, restored on adopt, frozen when the run ends or is detached.
+`execClockMs` (`plugins/tickets/renderer/worker-status.ts`) adds the open
+span for display; the Elapsed metric (its tooltip says what counts now),
+the ▶ chip and the chip tooltip all read it. A record without the fields —
+pre-req-67, or a provider that never reports a turn — falls back to the
+wall clock, clamped at the run's end so an ended one stops ticking.
+Startup counts as working; a turn not yet reported presumes working; the
+fleet header's age stays wall clock.
+
+Specs: `plugins/tickets/main/fleet/runs.spec.ts` (a wait closes the span,
+the answer reopens it, standing pauses it, the end freezes it on the
+record, an adopted detached run is frozen at its last stamp, a re-attached
+busy run resumes at the next report without the unwatched gap) and
+`plugins/tickets/renderer/worker-status.spec.ts` (`execClockMs` with the
+fallbacks, the chip line). Manual: the workers strip and the takeover
+paragraph.
+
 ### req-66 — Readable board issues, one toolbar row
 
 Owner request, outside the

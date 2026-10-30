@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { RunInfo } from '../main/fleet/protocol';
 import {
   contextFill,
+  execClockMs,
   fleetSummary,
   formatTokens,
   lanesOfColumn,
@@ -120,6 +121,30 @@ describe('spanClock', () => {
   });
 });
 
+describe('execClockMs — the elapsed clock counts only working time (req-67)', () => {
+  it('falls back to the wall clock for records without exec fields', () => {
+    expect(execClockMs(run(), NOW)).toBe(3_600_000);
+  });
+
+  it('freezes that fallback at the run\'s end instead of ticking on', () => {
+    const ended = run({ state: 'done', endedAt: '2026-10-18T11:30:00Z' });
+    expect(execClockMs(ended, NOW)).toBe(1_800_000);
+    expect(execClockMs(ended, NOW + 5 * 60_000)).toBe(1_800_000);
+  });
+
+  it('adds the open span to the closed working time', () => {
+    const working = run({ execMs: 1_800_000, execSince: '2026-10-18T11:50:00Z' });
+    expect(execClockMs(working, NOW)).toBe(2_400_000);
+    expect(execClockMs(working, NOW + 60_000)).toBe(2_460_000);
+  });
+
+  it('stands still while nothing is open — a wait, standing, ended', () => {
+    const standing = run({ execMs: 1_800_000, execSince: null });
+    expect(execClockMs(standing, NOW)).toBe(1_800_000);
+    expect(execClockMs(standing, NOW + 10 * 60_000)).toBe(1_800_000);
+  });
+});
+
 describe('runChipLine', () => {
   it('shows state, turns, this run\'s own tokens and elapsed (T-0051)', () => {
     expect(runChipLine(run({ steerCount: 1, tokensIn: 45_000, tokensOut: 1_234 }), NOW)).toBe(
@@ -132,6 +157,11 @@ describe('runChipLine', () => {
     expect(runChipLine(run({ state: 'stopping', startedAt: '2026-10-18T11:59:30Z' }), NOW)).toBe(
       '▶ stopping · 1 · 00:30',
     );
+  });
+
+  it('clocks the working time, not the wall clock (req-67)', () => {
+    expect(runChipLine(run({ execMs: 221_000, execSince: null }), NOW)).toBe('▶ running · 1 · 03:41');
+    expect(runChipLine(run({ execMs: 191_000, execSince: '2026-10-18T11:59:30Z' }), NOW)).toBe('▶ running · 1 · 03:41');
   });
 });
 
