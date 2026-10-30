@@ -135,3 +135,36 @@ which enforcement exists.
 - M84 input needed from the owner: the session-manager send API shape.
 - M85 decision deferred with evidence: dispatcher, reaper cadence,
   budget defaults, semantic gate sampling rate.
+
+### Later changes (T-0047 – T-0049)
+
+The run pipeline the fleet actually grew, in three measured steps on
+top of this decision:
+
+- **T-0047 — deterministic worktree preparation.** The runner no longer
+  assumes a worktree: `prepareWorktree` reuses, creates, recreates or
+  moves aside the ticket's checkout per a state table (ADR-0080 records
+  the home rule), serialized per repo. A `recreated`/`moved-aside`
+  preparation sets `sessionInvalidated` — prior session context is
+  stale, which T-0049's handover resolution refuses to resume.
+- **T-0048 — run telemetry and the context pack (ADR-0081).** Every run
+  records per-turn usage (`lastTurnContext` is the last turn's input
+  side, never a cumulative aggregate), `tokensBeforeFirstWrite` as the
+  exploration share, and composes instructions as cache-stable context
+  packs. This is the measurement base T-0049's gate was decided on:
+  across the measured runs, re-exploration before the first write plus
+  gate-failure retries re-paying input-side tokens met the ticket's
+  start condition via the retry arm.
+- **T-0049 — session resume and native compact.** `RunRequest.handover`
+  (`fresh` | `resume` | `resume-compact` | `auto`; absent = fresh) is
+  resolved once, in the run supervisor after worktree preparation, by
+  the pure rules of `main/fleet/handover.ts`: review always fresh; the
+  candidate is the newest terminal run of the same ticket + provider +
+  model; a warm pause (configurable TTL) or a small context resumes; a
+  cold pause with a large context resumes with a native compact first
+  (opencode's `/compact` endpoint — measured; claude-code gates on a
+  verified effect). The start dialog offers the same three options with
+  disabled reasons instead of silent switches. A resume the adapter
+  cannot establish never fails the run: the supervisor respawns fresh
+  under the same run id. `handoverMode` and `resumedFrom` are recorded
+  per run.

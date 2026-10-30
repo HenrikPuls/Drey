@@ -20,6 +20,63 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### T-0049 — Fleet: session resume and native compact (measurement-gated)
+
+The remainder of the original T-0046, gated on T-0048's numbers: the
+start condition was met via the retry arm (gate-failure retries on 3 of
+5 post-pack tickets, each re-paying 0.5–1.3M input-side tokens before
+its first write; the token arm stayed under the bar at 6.6 %). Three
+spikes measured the ground first — `/compact` routes natively in both
+CLIs' command plumbing, opencode's `POST /api/session/{id}/compact`
+compacts for real (context halved, facts kept, ~0.75k tokens), and a
+resumed turn re-pays the transcript as cache reads (still ~99 % cached
+after a ≥ 6 min pause; measured auto-retry gaps ran 1–13 min).
+
+- **The handover modes** (`HandoverMode` on `RunRequest.handover`:
+  `fresh` | `resume` | `resume-compact` | `auto`, absent = fresh — wire
+  compatible). One pure resolver, `main/fleet/handover.ts`, runs inside
+  `RunSupervisor.start()` after worktree preparation: review always
+  fresh; the candidate is the newest terminal run of the same ticket +
+  provider + model (`detached` never qualifies); a recreated/moved-aside
+  worktree (T-0047's `sessionInvalidated`) or a session another
+  non-terminal run holds resolves fresh; a warm pause (TTL) or a context
+  below the threshold resumes; a cold pause with a big context resumes
+  and compacts first — natively, where the provider can (opencode:
+  measured; claude-code: `COMPACT_CAPABILITY` stays `none` until an
+  effect is verified). An unknown context (pre-T-0048 records) never
+  auto-compacts. `handoverMode` and `resumedFrom` are recorded per run.
+- **The adapters** (`ProviderStart.compactFirst`/`onResumeFailed`):
+  opencode pre-flights every resume with a session GET and settles the
+  compact's turn (its `idle` marker) before the instruction rides —
+  `lastPromptAt` only exists after, so the poll cannot kill the worker
+  on the compact's own idle; claude-code sends `/compact` as a
+  stream-json user message and awaits its `result`, and treats an exit
+  before any init as a failed resume. A failed resume never fails the
+  run: the supervisor respawns fresh under the same run id, same
+  instruction, one stream note.
+- **The start dialog** (renderer `handover-ui.ts`, pure) offers the
+  three options with the computed default preselected and the last run's
+  phase · state · ctx · age in one status line; an option is enabled
+  exactly when an explicit ask for it would be honoured (the same rules
+  asked per mode), so illegal choices are disabled with their reason —
+  never silently switched. Per-run choice, nothing persisted; the lanes
+  append a `resumed` chip. The dispatcher sends `auto`.
+- **Config**: `fleet.compactAboveTokens` (default 60000, provisional —
+  the bar guards fidelity loss, not tokens) and `fleet.resumePauseTtlMin`
+  (default 15) in Settings → Tickets → Fleet, pushed to the runner with
+  the chain config; per-provider/model override flat keys
+  (`fleet.compactAboveTokens.<provider>[/<model-pin>]`, most specific
+  wins) ride along for the providers and the board's pins — no UI.
+
+Specs: `handover.spec.ts`, `handover-ui.spec.ts` (new — one case per
+rule), `providers.spec.ts` (pre-flight, compact-first, no-init failure),
+`runs.spec.ts` (resolution, guards, fallback, stamps, resume strip),
+`request.spec.ts`/`orchestrator.spec.ts` (passthrough, `auto`),
+`worker-status.spec.ts` (resumed chip). ADR-0075 carries the
+T-0047–T-0049 later-change note; FLEET.md documents the modes, fields
+and fallback; manual §13 the dialog. **Not yet manually verified by the
+owner.**
+
 ### req-58 — Takeover tab: readable transcript + structured header
 
 Owner request, outside the list. The takeover transcript ran through
