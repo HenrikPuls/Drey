@@ -127,3 +127,52 @@ test('a revoked or unknown token lands on the pairing screen', async ({ page }) 
   await expect(page.locator('#pair-code')).toBeVisible();
   await expect(page.locator('.issue-error')).toContainText('not paired');
 });
+
+test('answers a waiting worker, follows and steers the run, and switches the fleet (R4)', async ({ page }) => {
+  const errors: string[] = [];
+  await pairedPage(page, errors);
+
+  // A one-question form answers with one tap.
+  await page.locator('.need-question .option', { hasText: 'Fold' }).click();
+  await expect(page.locator('.toast')).toContainText('Answer sent');
+  expect(calls.at(-1)).toEqual({ what: 'answer', args: [{ runId: 'run-1', answers: { q0: 'Fold' } }] });
+  await expect(page.locator('.need-question')).toHaveCount(0);
+
+  // The Runs tab lists the live run first; its view shows the transcript.
+  await page.locator('.tab', { hasText: 'Runs' }).click();
+  await expect(page.locator('.runrow').first()).toContainText('T-0052');
+  await expect(page.locator('.runrow').nth(1)).toContainText('T-0048');
+  await page.locator('.runrow', { hasText: 'T-0052' }).click();
+  await expect(page.locator('.topbar-title')).toHaveText('T-0052 · Run');
+  await expect(page.locator('.t-step', { hasText: 'phase-dirs.ts' })).toBeVisible();
+  await expect(page.locator('.t-text')).toContainText('Two directories resolve to the inbox phase.');
+
+  await page.locator('.composer-field').fill('Keep the unprefixed folder as it is.');
+  await page.locator('.composer .btn-primary', { hasText: 'Send' }).click();
+  await expect(page.locator('.toast')).toContainText('Sent to the worker');
+  expect(calls.at(-1)).toEqual({ what: 'send', args: [{ runId: 'run-1', text: 'Keep the unprefixed folder as it is.' }] });
+
+  // The master switch sits behind the header chip.
+  await page.locator('.topbar .chip-btn').click();
+  await page.locator('.sheet .seg button', { hasText: 'Halt' }).click();
+  expect(calls.at(-1)).toEqual({ what: 'master', args: ['halted'] });
+  await expect(page.locator('.topbar .chip-btn')).toHaveText('Halted');
+
+  // A column's play/hold sits behind its head chip.
+  await page.locator('.tab', { hasText: 'Board' }).click();
+  await page.locator('.pchip', { hasText: /^Review/ }).click();
+  await page.locator('.colhead .chip-btn', { hasText: 'Held' }).click();
+  await page.locator('.sheet .seg button', { hasText: 'Play' }).click();
+  expect(calls.at(-1)).toEqual({ what: 'column', args: ['review', 'playing'] });
+
+  // Stop asks for a second tap.
+  await page.goto(`http://127.0.0.1:${PORT}/#run/run-1`);
+  const stop = page.locator('.composer .btn-danger');
+  await stop.click();
+  await expect(stop).toHaveText('Stop?');
+  await stop.click();
+  expect(calls.at(-1)).toEqual({ what: 'stop', args: [{ runId: 'run-1', reason: 'stopped from a device' }] });
+  await expect(page.locator('.composer')).toHaveCount(0);
+
+  expect(errors).toEqual([]);
+});

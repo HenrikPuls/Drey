@@ -1095,7 +1095,7 @@ for good. A device paired **Read only** can look but not change
 anything. Runs that skip permission prompts cannot be started from a
 device unless you allow **Bypass runs**.
 
-On the phone, three tabs sit at the bottom:
+On the phone, four tabs sit at the bottom:
 
 - **Needs you** — what waits on you: a worker's question or permission
   request, a red gate or a failed run, and below them the tickets in
@@ -1105,11 +1105,29 @@ On the phone, three tabs sit at the bottom:
   columns and show their counts. **Swipe a card left** to move it to
   the next column (a card with a live run does not swipe — open it
   instead). Tap a card to open it.
+- **Runs** — the live runs first (what each worker is doing right
+  now), then the recent ones. Tap one to follow it.
 - **Capture** — a new ticket into the Inbox: title, priority,
   repository, description.
 
-A ticket shows its description, plan and acceptance criteria, and its
-Log on the second tab. The big button at the bottom is the step that
+**Answering a worker.** A worker's question shows its choices as
+buttons right in Needs you — a question with one choice is answered
+with one tap; or type your own words. A permission request offers
+**Once**, **Always** and **Reject**.
+
+**Following a run.** A run shows the worker's steps (each tool call on
+one line), its replies, and what it waits for. Type in **Steer the
+run…** and **Send** to tell the worker something; **Stop** ends the run
+(tap twice).
+
+**The fleet's switches.** The chip at the top right (*Running*,
+*Halted*) opens the fleet switch: **Run** / **Halt** for every column,
+and **Stop every live run** (tap twice). On the Board, the
+*Playing* / *Held* chip of an agent column plays or holds that column,
+or stops it.
+
+A ticket shows its description, plan and acceptance criteria, its
+Log on the second tab, and its latest run on the third. The big button at the bottom is the step that
 fits: **Approve → <next column>** in a checkpoint column, **Run agent**
 in an agent column, **Move to <next column>** otherwise. **Move…**
 lists every column with the commit the move makes; **⋯** claims, takes

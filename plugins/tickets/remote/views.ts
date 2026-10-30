@@ -5,19 +5,19 @@
  * rules behind the buttons live in `model.ts` and on the desk.
  */
 import type { FleetSnapshot } from '../main/fleet-client';
-import type { NeedItem, NeedKind, TicketReply } from '../shared/remote-protocol';
+import type { NeedKind } from '../shared/remote-protocol';
 import {
   ageOf,
+  parseHandover,
   TICKET_PRIORITIES,
   type BoardColumn,
   type BoardSnapshot,
   type CreateResult,
-  type MutationResult,
   type TicketCard,
   type TicketPriority,
 } from '../shared/tickets';
-import type { Api } from './api';
-import { armedButton, button, h, icon, present, sheet, toast } from './dom';
+import type { Ctx, View } from './context';
+import { armedButton, button, chip, empty, h, icon, present, sheet, toast } from './dom';
 import {
   blocksOf,
   claimActionOf,
@@ -32,62 +32,36 @@ import {
   swipeCommits,
   type Block,
 } from './model';
-
-export interface State {
-  actor: string;
-  deviceName: string;
-  readOnly: boolean;
-  board: BoardSnapshot | null;
-  fleet: FleetSnapshot | null;
-  needs: readonly NeedItem[];
-  connected: boolean;
-  /** The ticket view's file, by id. */
-  ticket: TicketReply | null;
-}
-
-export interface Ctx {
-  readonly api: Api;
-  readonly state: State;
-  go(hash: string): void;
-  /** Runs a desk call, shows its outcome; true when it went through. */
-  act(call: Promise<MutationResult | { ok: boolean; error?: string }>, success: string): Promise<boolean>;
-}
-
-export interface View {
-  readonly title: string;
-  readonly back?: string;
-  readonly body: Node[];
-  readonly actions?: Node | null;
-}
+import { columnSheet, masterSheet, waitActions } from './runs-views';
 
 const runs = (ctx: Ctx): NonNullable<FleetSnapshot['runs']> => ctx.state.fleet?.runs ?? [];
 
 // --- shared pieces ----------------------------------------------------------
 
-function chip(text: string, kind = ''): HTMLElement {
-  return h('span', { class: `chip ${kind}`.trim(), text });
-}
-
 function prioClass(priority: TicketPriority): string {
   return `prio prio-${priority}`;
 }
 
-export function fleetChip(fleet: FleetSnapshot | null, connected: boolean): HTMLElement {
+/** The header's fleet state; a tap opens the master switch. */
+export function fleetChip(ctx: Ctx): HTMLElement {
+  const { fleet, connected } = ctx.state;
+  let label: string;
+  let kind: string;
   if (!connected) {
-    return chip('Offline', 'chip-bad');
+    [label, kind] = ['Offline', 'chip-bad'];
+  } else if ((fleet?.chain ?? null) === null) {
+    [label, kind] = ['Runner off', ''];
+  } else {
+    const live = (fleet?.runs ?? []).filter((r) => ['starting', 'running', 'stopping', 'detached'].includes(r.state)).length;
+    [label, kind] = fleet!.chain!.master === 'run' ? [live > 0 ? `Running · ${live} live` : 'Running', 'chip-ok'] : ['Halted', 'chip-warn'];
   }
-  const chain = fleet?.chain ?? null;
-  if (chain === null) {
-    return chip('Runner off');
-  }
-  const live = (fleet?.runs ?? []).filter((r) => ['starting', 'running', 'stopping', 'detached'].includes(r.state)).length;
-  return chain.master === 'run'
-    ? chip(live > 0 ? `Running · ${live} live` : 'Running', 'chip-ok')
-    : chip('Halted', 'chip-warn');
-}
-
-function empty(text: string): HTMLElement {
-  return h('p', { class: 'empty', text });
+  const canSwitch = connected && (fleet?.chain ?? null) !== null && !ctx.state.readOnly;
+  return h('button', {
+    class: `chip ${kind} chip-btn`.trim(),
+    text: label,
+    attrs: { type: 'button', 'aria-label': `Fleet: ${label}`, ...(canSwitch ? {} : { disabled: '' }) },
+    on: { click: () => masterSheet(ctx) },
+  });
 }
 
 // --- Needs you --------------------------------------------------------------
@@ -114,17 +88,24 @@ export function needsView(ctx: Ctx): View {
       h('h2', { class: 'sect', text: 'Waiting on you' }),
       ...waits.map((n) =>
         h(
-          'button',
-          { class: `need need-${n.kind}`, attrs: { type: 'button' }, on: { click: () => ctx.go(`#ticket/${n.ticketId}`) } },
+          'div',
+          { class: `need need-${n.kind}` },
           h(
-            'span',
-            { class: 'row' },
-            h('span', { class: 'id', text: n.ticketId }),
-            chip(phaseTitle(n.phase)),
-            h('span', { class: 'need-kind', text: `${NEED_LABEL[n.kind]}${n.since !== null ? ` · ${ageOf(n.since)}` : ''}` }),
+            'button',
+            { class: 'need-head', attrs: { type: 'button' }, on: { click: () => ctx.go(n.runId !== null ? `#run/${n.runId}` : `#ticket/${n.ticketId}`) } },
+            h(
+              'span',
+              { class: 'row' },
+              h('span', { class: 'id', text: n.ticketId }),
+              chip(phaseTitle(n.phase)),
+              h('span', { class: 'need-kind', text: `${NEED_LABEL[n.kind]}${n.since !== null ? ` · ${ageOf(n.since)}` : ''}` }),
+            ),
+            h('span', { class: 'title', text: n.title }),
+            n.text !== '' ? h('span', { class: 'need-text', text: n.text }) : null,
           ),
-          h('span', { class: 'title', text: n.title }),
-          n.text !== '' ? h('span', { class: 'need-text', text: n.text }) : null,
+          (n.kind === 'question' || n.kind === 'permission') && n.runId !== null
+            ? waitActions(ctx, { runId: n.runId, kind: n.kind, text: n.text, ...(n.questions !== undefined ? { questions: n.questions } : {}) })
+            : null,
         ),
       ),
     );
@@ -213,8 +194,13 @@ export function boardView(ctx: Ctx, hashPhase: string | null): View {
     h('span', { text: wip !== null ? `WIP ${column.tickets.length} / ${wip}` : `${column.tickets.length} tickets` }),
     board.checkpoints.includes(column.phase.id)
       ? chip('Checkpoint')
-      : mode !== undefined
-        ? chip(mode === 'held' ? 'Held' : 'Playing', mode === 'held' ? 'chip-warn' : 'chip-ok')
+      : mode !== undefined || parseHandover(column.phase.handover).mode === 'agent'
+        ? h('button', {
+            class: `chip chip-btn ${mode === 'held' ? 'chip-warn' : 'chip-ok'}`,
+            text: mode === 'held' ? 'Held' : 'Playing',
+            attrs: { type: 'button', 'aria-label': `${column.phase.title}: ${mode === 'held' ? 'held' : 'playing'}`, ...(ctx.state.readOnly ? { disabled: '' } : {}) },
+            on: { click: () => columnSheet(ctx, column.phase.id, column.phase.title) },
+          })
         : null,
   );
   const next = nextColumnOf(board, column.phase.id);
@@ -385,6 +371,13 @@ export function ticketView(ctx: Ctx, id: string, tab: TicketTab): View {
         text: t === 'ticket' ? 'Ticket' : 'Log',
         attrs: { type: 'button', role: 'tab', 'aria-selected': String(t === tab) },
         on: { click: () => ctx.go(`#ticket/${id}${t === 'log' ? '/log' : ''}`) },
+      }),
+    ),
+    ...present([latestRunOf(card.id, runs(ctx))]).map((run) =>
+      h('button', {
+        text: 'Run',
+        attrs: { type: 'button', role: 'tab', 'aria-selected': 'false' },
+        on: { click: () => ctx.go(`#run/${run.id}`) },
       }),
     ),
   );

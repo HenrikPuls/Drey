@@ -20,6 +20,39 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-66 R4 — Tickets remote: runs on the phone
+
+**Not yet manually verified by the owner** (real Safari on iPhone/iPad
+above all). Owner request, outside the list (ADR-0084). The phone
+client now drives the fleet:
+
+- **Answer a waiting worker** in Needs you and in the run view:
+  OpenCode's question form as choice buttons (a one-question,
+  one-choice form answers with one tap; several fields or multiple
+  choice collect, then send), own words instead of a choice, a
+  `QUESTION:` turn answered as a message, and permission requests
+  with Once / Always / Reject. Read-only devices see the question only.
+- **Runs** tab (fourth tab): live runs newest first with their current
+  activity line, then the ten most recent settled ones.
+- **Run view** (`#run/<id>`, also the ticket's third tab): state, model,
+  context and token figures, the gate failure, the transcript — the
+  desk's own `watch-format.ts` view model drawn as text (tool steps one
+  line each, replies, the owner's prompts, results, errors; thinking
+  as one muted line; the last 80 blocks), following the end while you
+  are at the bottom and pulled every 3 s while the run lives; a
+  composer to steer (`/send`) and Stop with the armed second tap.
+- **Fleet switches**: the header chip opens Run / Halt and "Stop every
+  live run" (armed); an agent column's Playing / Held chip opens Play /
+  Hold and "Stop <column>" (armed).
+- Redraws: skipped when a refresh brought identical data (no flicker,
+  no lost touch target — found by the e2e round), and deferred while a
+  text field has focus, so an update never wipes what is being typed.
+
+Specs: `remote/model.spec.ts` (run lists, state labels, `answersOf`);
+`e2e/tickets-remote.spec.ts` R4 case (answer from Needs you, the Runs
+list, the transcript, steer, the master and column switches, the armed
+stop). Docs: docs/05 §5.41, manual.
+
 ### req-66 R3 — Tickets remote: the phone client
 
 **Not yet manually verified by the owner** — above all on a real

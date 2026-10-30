@@ -11,6 +11,10 @@ import {
   primaryActionOf,
   sectionsOf,
   swipeCommits,
+  answersOf,
+  runsForList,
+  runStateLabel,
+  tokensLabel,
 } from './model';
 
 /** req-66: the phone client's view logic. */
@@ -137,5 +141,40 @@ describe('swipeCommits', () => {
     expect(swipeCommits(-60, 0, 300)).toBe(false);
     expect(swipeCommits(-120, 100, 300)).toBe(false);
     expect(swipeCommits(120, 0, 300)).toBe(false);
+  });
+});
+
+describe('runs for the phone', () => {
+  it('lists live runs first, then recent settled ones, each run once', () => {
+    const list = runsForList([
+      run({ id: 'a', state: 'done', startedAt: '2026-10-30T12:00:00Z' }),
+      run({ id: 'b', startedAt: '2026-10-30T09:00:00Z' }),
+      run({ id: 'b', startedAt: '2026-10-30T09:00:00Z' }),
+      run({ id: 'c', state: 'failed', startedAt: '2026-10-30T08:00:00Z' }),
+    ]);
+    expect(list.live.map((r) => r.id)).toEqual(['b']);
+    expect(list.recent.map((r) => r.id)).toEqual(['a', 'c']);
+  });
+
+  it('names what a run waits for before its raw state', () => {
+    expect(runStateLabel(run({ waiting: { kind: 'question', text: '?', since: '' } }))).toBe('asks you');
+    expect(runStateLabel(run({ waiting: { kind: 'permission', text: 'bash', since: '' } }))).toBe('needs permission');
+    expect(runStateLabel(run({ turn: 'idle' }))).toBe('standing');
+    expect(runStateLabel(run({ state: 'done', gateResult: 'red', gateFailure: null }))).toBe('gate red');
+    expect(tokensLabel(48_213)).toBe('48k');
+    expect(tokensLabel(1_250_000)).toBe('1.3M');
+    expect(tokensLabel(undefined)).toBe('');
+  });
+});
+
+describe('answersOf', () => {
+  const qs = [
+    { key: 'q0', multiple: false },
+    { key: 'q1', multiple: true },
+  ];
+  it('takes own words over choices and waits until every field is answered', () => {
+    expect(answersOf(qs, new Map([['q0', ['Fold']]]), new Map())).toBeNull();
+    expect(answersOf(qs, new Map([['q0', ['Fold']], ['q1', ['a', 'b']]]), new Map())).toEqual({ q0: 'Fold', q1: ['a', 'b'] });
+    expect(answersOf(qs, new Map([['q0', ['Fold']]]), new Map([['q1', ' only docs ']]))).toEqual({ q0: 'Fold', q1: 'only docs' });
   });
 });

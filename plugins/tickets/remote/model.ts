@@ -184,3 +184,80 @@ export function blocksOf(lines: readonly string[]): Block[] {
 export function swipeCommits(dx: number, dy: number, width: number): boolean {
   return dx < -Math.max(80, width * 0.3) && Math.abs(dx) > Math.abs(dy) * 1.5;
 }
+
+// --- runs -------------------------------------------------------------------
+
+export function isLive(run: RunInfo): boolean {
+  return LIVE.has(run.state);
+}
+
+/** Live runs newest first, then the most recent settled ones. */
+export function runsForList(runs: readonly RunInfo[], recent = 10): { live: RunInfo[]; recent: RunInfo[] } {
+  const byStart = [...runs].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  const seen = new Set<string>();
+  const unique = byStart.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+  return { live: unique.filter(isLive), recent: unique.filter((r) => !isLive(r)).slice(0, recent) };
+}
+
+/** One word for a run's state as the phone shows it. */
+export function runStateLabel(run: RunInfo): string {
+  if (run.waiting) {
+    return run.waiting.kind === 'permission' ? 'needs permission' : 'asks you';
+  }
+  if (run.state === 'running' && run.held === true) {
+    return 'held';
+  }
+  if (run.state === 'running' && run.turn === 'idle') {
+    return 'standing';
+  }
+  if (!isLive(run) && (run.gateResult === 'red' || run.gateFailure !== null)) {
+    return 'gate red';
+  }
+  return run.state;
+}
+
+/** Compact token count: 812, 48k, 1.2M. */
+export function tokensLabel(n: number | null | undefined): string {
+  if (typeof n !== 'number' || !Number.isFinite(n)) {
+    return '';
+  }
+  if (n < 1000) {
+    return String(n);
+  }
+  if (n < 1_000_000) {
+    return `${Math.round(n / 1000)}k`;
+  }
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+// --- answering a waiting worker --------------------------------------------
+
+export interface FormQuestion {
+  readonly key: string;
+  readonly multiple: boolean;
+}
+
+/**
+ * The `answers` body for OpenCode's question form: per field the own
+ * words when given, else the picked choice(s). Null while a field has
+ * neither — the form is not complete yet.
+ */
+export function answersOf(
+  questions: readonly FormQuestion[],
+  picked: ReadonlyMap<string, readonly string[]>,
+  typed: ReadonlyMap<string, string>,
+): Record<string, string | string[]> | null {
+  const out: Record<string, string | string[]> = {};
+  for (const q of questions) {
+    const own = (typed.get(q.key) ?? '').trim();
+    const choice = picked.get(q.key) ?? [];
+    if (own !== '') {
+      out[q.key] = own;
+    } else if (choice.length > 0) {
+      out[q.key] = q.multiple ? [...choice] : choice[0]!;
+    } else {
+      return null;
+    }
+  }
+  return out;
+}

@@ -45,6 +45,7 @@ const ICONS: Readonly<Record<string, string>> = {
   inbox: 'M4 13h4l2 3h4l2-3h4M4 13V6h16v7M4 13v5h16v-5',
   board: 'M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v11h-4z',
   plus: 'M12 5v14M5 12h14',
+  pulse: 'M3 12h4l2-5 4 10 2-5h6',
   back: 'M15 5l-7 7 7 7',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
 };
@@ -132,4 +133,12 @@ export function armedButton(label: string, armedLabel: string, onConfirm: () => 
 /** The items that are there — for child lists with optional parts. */
 export function present<T>(items: readonly (T | null | undefined | false)[]): T[] {
   return items.filter((item): item is T => item !== null && item !== undefined && item !== false);
+}
+
+export function chip(text: string, kind = ''): HTMLElement {
+  return h('span', { class: `chip ${kind}`.trim(), text });
+}
+
+export function empty(text: string): HTMLElement {
+  return h('p', { class: 'empty', text });
 }

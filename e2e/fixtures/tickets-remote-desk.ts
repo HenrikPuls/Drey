@@ -98,18 +98,63 @@ export function makeDesk() {
       unknown: false,
     })),
   });
-  const runs = [
+  const runs: Record<string, unknown>[] = [
     {
       id: 'run-1',
       ticketId: 'T-0052',
       provider: 'opencode',
+      model: 'zai/glm-5.3',
       state: 'running',
+      turn: 'idle',
       startedAt: '2026-10-30T09:00:00Z',
+      endedAt: null,
       phase: 'build',
+      tokensIn: 48_213,
+      tokensOut: 6_120,
+      contextTokens: 41_000,
+      costUsd: 0,
+      activity: 'edit plugins/tickets/main/phase-dirs.ts',
       gateFailure: null,
-      waiting: { kind: 'question', text: 'Two folders of one phase exist (inbox, 10-inbox). Fold them into 10-inbox?', since: '2026-10-30T09:40:00Z' },
+      waiting: {
+        kind: 'question',
+        text: 'Two folders of one phase exist (inbox, 10-inbox). Fold them into 10-inbox?',
+        since: '2026-10-30T09:40:00Z',
+        requestId: 'que_1',
+        questions: [
+          {
+            key: 'q0',
+            question: 'Two folders of one phase exist (inbox, 10-inbox). Fold them into 10-inbox?',
+            options: [{ label: 'Fold' }, { label: 'Keep both' }],
+            multiple: false,
+          },
+        ],
+      },
+    },
+    {
+      id: 'run-0',
+      ticketId: 'T-0048',
+      provider: 'claude-code',
+      state: 'done',
+      startedAt: '2026-10-29T15:00:00Z',
+      endedAt: '2026-10-29T15:40:00Z',
+      phase: 'build',
+      tokensIn: 120_000,
+      tokensOut: 9_000,
+      gateResult: 'green',
+      gateFailure: null,
     },
   ];
+  const stream = [
+    { ts: '2026-10-30T09:00:01Z', kind: 'note', text: 'worktree reused: _worktrees/T-0052' },
+    { ts: '2026-10-30T09:00:05Z', kind: 'tool', tool: 'read', text: 'read plugins/tickets/main/phase-dirs.ts' },
+    { ts: '2026-10-30T09:00:06Z', kind: 'tool', tool: 'read', detail: 'done', text: 'result › 214 lines' },
+    { ts: '2026-10-30T09:00:09Z', kind: 'tool', tool: 'grep', text: 'grep "10-inbox" plugins/tickets' },
+    { ts: '2026-10-30T09:00:12Z', kind: 'text-delta', detail: 'end', text: 'Two directories resolve to the inbox phase. I will ask before folding them.' },
+  ]
+    .map((e) => JSON.stringify(e))
+    .join('\n');
+  const chain = { configured: true, master: 'run', columns: { build: 'playing', review: 'held' } as Record<string, string>, redStreak: {}, cooldownUntil: {} };
+  const fleetEmit = (): void => listeners.forEach((l) => l('fleet'));
   const move = (id: string, to: string): void => {
     for (const list of Object.values(tickets)) {
       const i = list.findIndex((c) => c.id === id);
@@ -122,7 +167,8 @@ export function makeDesk() {
   };
   const port = {
     board: async () => board(),
-    fleet: async () => ({ runs, chain: { configured: true, master: 'run', columns: { build: 'playing', review: 'held' }, redStreak: {}, cooldownUntil: {} } }),
+    fleet: async () => ({ runs, chain }),
+    stream: async (runId: string) => (runId === 'run-1' ? stream : ''),
     needs: async () => needsOf(board(), runs),
     ticket: async (id: string) => {
       const c = Object.values(tickets).flat().find((t) => t.id === id);
@@ -152,6 +198,41 @@ export function makeDesk() {
     startRun: async (cmd: unknown) => {
       calls.push({ what: 'run', args: [cmd] });
       return { ok: true, runId: 'run-2' };
+    },
+    answer: async (cmd: { runId: string; answers: unknown }) => {
+      calls.push({ what: 'answer', args: [cmd] });
+      const run = runs.find((r) => r['id'] === cmd.runId);
+      if (run !== undefined) {
+        run['waiting'] = null;
+        run['turn'] = 'busy';
+      }
+      fleetEmit();
+      return { ok: true };
+    },
+    send: async (cmd: unknown) => {
+      calls.push({ what: 'send', args: [cmd] });
+      return { ok: true };
+    },
+    stopRun: async (cmd: { runId: string }) => {
+      calls.push({ what: 'stop', args: [cmd] });
+      const run = runs.find((r) => r['id'] === cmd.runId);
+      if (run !== undefined) {
+        run['state'] = 'stopped';
+      }
+      fleetEmit();
+      return { ok: true };
+    },
+    chainMaster: async (mode: string) => {
+      calls.push({ what: 'master', args: [mode] });
+      chain.master = mode;
+      fleetEmit();
+      return { ok: true, status: chain };
+    },
+    chainColumn: async (phase: string, mode: string) => {
+      calls.push({ what: 'column', args: [phase, mode] });
+      chain.columns[phase] = mode;
+      fleetEmit();
+      return { ok: true, status: chain };
     },
     onChanged: (l: (what: string) => void) => {
       listeners.add(l);

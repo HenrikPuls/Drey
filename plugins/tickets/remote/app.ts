@@ -11,21 +11,12 @@ import type { NeedItem, TicketReply } from '../shared/remote-protocol';
 import type { BoardSnapshot } from '../shared/tickets';
 import { Api, ApiError } from './api';
 import { h, icon, present, toast } from './dom';
-import {
-  boardView,
-  captureView,
-  fleetChip,
-  gestureInProgress,
-  needsView,
-  pairView,
-  ticketView,
-  type Ctx,
-  type State,
-  type View,
-} from './views';
+import type { Ctx, State, View } from './context';
+import { runsView, runView } from './runs-views';
+import { boardView, captureView, fleetChip, gestureInProgress, needsView, pairView, ticketView } from './views';
 
 interface Route {
-  readonly name: 'needs' | 'board' | 'ticket' | 'capture';
+  readonly name: 'needs' | 'board' | 'ticket' | 'capture' | 'runs' | 'run';
   readonly arg: string | null;
   readonly sub: string | null;
 }
@@ -39,6 +30,10 @@ function routeOf(hash: string): Route {
       return arg !== undefined ? { name: 'ticket', arg: decodeURIComponent(arg), sub: sub ?? null } : { name: 'needs', arg: null, sub: null };
     case 'capture':
       return { name: 'capture', arg: null, sub: null };
+    case 'runs':
+      return { name: 'runs', arg: null, sub: null };
+    case 'run':
+      return arg !== undefined ? { name: 'run', arg: decodeURIComponent(arg), sub: null } : { name: 'runs', arg: null, sub: null };
     default:
       return { name: 'needs', arg: null, sub: null };
   }
@@ -55,7 +50,11 @@ class App {
     needs: [],
     connected: false,
     ticket: null,
+    stream: null,
   };
+  private pendingRender = false;
+  /** What the current page was drawn from — an identical refresh draws nothing. */
+  private paintedFrom = '';
   private stopEvents: (() => void) | null = null;
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly header = h('header', { class: 'topbar' });
@@ -93,6 +92,22 @@ class App {
   start(): void {
     document.body.append(this.header, this.main, this.footer, this.tabbar);
     window.addEventListener('hashchange', () => this.onRoute());
+    // A field being typed in is never redrawn under the cursor: the redraw waits for blur.
+    document.addEventListener('focusout', () => {
+      if (this.pendingRender) {
+        setTimeout(() => this.render(), 0);
+      }
+    });
+    // The transcript is not pushed: an open run view pulls it while the run lives.
+    setInterval(() => {
+      const route = routeOf(location.hash);
+      if (route.name === 'run' && document.visibilityState === 'visible' && !this.tabbar.hidden) {
+        const run = this.state.fleet?.runs.find((r) => r.id === route.arg);
+        if (run !== undefined && ['starting', 'running', 'stopping', 'detached'].includes(run.state)) {
+          this.scheduleRefresh(0);
+        }
+      }
+    }, 3000);
     const pair = /^#pair=([A-Za-z0-9-]+)$/.exec(location.hash);
     if (pair !== null) {
       history.replaceState(null, '', `${location.pathname}#needs`);
@@ -173,12 +188,15 @@ class App {
   private async refresh(): Promise<void> {
     try {
       const route = routeOf(location.hash);
-      const [board, fleet, needs, ticket] = await Promise.all([
+      const [board, fleet, needs, ticket, stream] = await Promise.all([
         this.api.get<BoardSnapshot>('/api/board'),
         this.api.get<FleetSnapshot>('/api/fleet'),
         this.api.get<NeedItem[]>('/api/needs'),
         route.name === 'ticket' && route.arg !== null
           ? this.api.get<TicketReply>(`/api/tickets/${encodeURIComponent(route.arg)}`)
+          : Promise.resolve(null),
+        route.name === 'run' && route.arg !== null
+          ? this.api.get<{ text: string }>(`/api/runs/${encodeURIComponent(route.arg)}/stream`)
           : Promise.resolve(null),
       ]);
       this.state.board = board;
@@ -186,6 +204,9 @@ class App {
       this.state.needs = needs;
       if (ticket !== null) {
         this.state.ticket = ticket;
+      }
+      if (stream !== null && route.arg !== null) {
+        this.state.stream = { runId: route.arg, text: stream.text };
       }
       this.render();
     } catch (error) {
@@ -195,6 +216,10 @@ class App {
 
   private onRoute(): void {
     const route = routeOf(location.hash);
+    if (route.name === 'run' && this.state.stream?.runId !== route.arg) {
+      this.state.stream = null;
+      this.scheduleRefresh(0);
+    }
     if (route.name === 'ticket') {
       const current = this.state.ticket;
       if (current === null || !current.ok || current.card.id !== route.arg) {
@@ -225,16 +250,39 @@ class App {
       case 'capture':
         view = captureView(this.ctx);
         break;
+      case 'runs':
+        view = runsView(this.ctx);
+        break;
+      case 'run':
+        view = runView(this.ctx, route.arg!);
+        break;
       default:
         view = needsView(this.ctx);
     }
     // Capture is a form: a live update must not wipe what is being typed.
     const key = `${route.name}/${route.arg ?? ''}/${route.sub ?? ''}`;
-    if (route.name === 'capture' && key === this.lastRouteKey && this.main.childElementCount > 0) {
+    const same = key === this.lastRouteKey;
+    if (route.name === 'capture' && same && this.main.childElementCount > 0) {
       this.paintHeaderOnly();
       return;
     }
-    this.paint(view, key === this.lastRouteKey);
+    const active = document.activeElement;
+    if (same && active instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName) && document.body.contains(active)) {
+      this.pendingRender = true;
+      this.paintHeaderOnly();
+      return;
+    }
+    this.pendingRender = false;
+    const from = `${key}|${this.state.connected}|${JSON.stringify([this.state.board, this.state.fleet, this.state.needs, this.state.ticket, this.state.stream])}`;
+    if (same && from === this.paintedFrom) {
+      return;
+    }
+    this.paintedFrom = from;
+    const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 40;
+    this.paint(view, same);
+    if (view.followTail === true && (!same || atEnd)) {
+      window.scrollTo(0, document.documentElement.scrollHeight);
+    }
     this.lastRouteKey = key;
     this.paintTabs(route);
   }
@@ -250,7 +298,7 @@ class App {
           )
         : null,
       h('span', { class: 'topbar-title', text: view.title }),
-      this.tabbar.hidden ? null : fleetChip(this.state.fleet, this.state.connected),
+      this.tabbar.hidden ? null : fleetChip(this.ctx),
     ]));
     this.main.replaceChildren(...view.body);
     this.footer.replaceChildren(...(view.actions ? [view.actions] : []));
@@ -262,7 +310,7 @@ class App {
   private paintHeaderOnly(): void {
     const chipNode = this.header.querySelector('.chip');
     if (chipNode !== null && !this.tabbar.hidden) {
-      chipNode.replaceWith(fleetChip(this.state.fleet, this.state.connected));
+      chipNode.replaceWith(fleetChip(this.ctx));
     }
   }
 
@@ -272,7 +320,7 @@ class App {
       h(
         'a',
         {
-          class: `tab${route.name === name || (name === 'board' && route.name === 'ticket') ? ' on' : ''}`,
+          class: `tab${route.name === name || (name === 'board' && route.name === 'ticket') || (name === 'runs' && route.name === 'run') ? ' on' : ''}`,
           attrs: { href: hash, ...(route.name === name ? { 'aria-current': 'page' } : {}) },
         },
         icon(glyph),
@@ -282,6 +330,7 @@ class App {
     this.tabbar.replaceChildren(
       tab('needs', 'Needs you', 'inbox', '#needs', needCount),
       tab('board', 'Board', 'board', '#board'),
+      tab('runs', 'Runs', 'pulse', '#runs'),
       tab('capture', 'Capture', 'plus', '#capture'),
     );
   }

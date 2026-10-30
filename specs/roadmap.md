@@ -148,10 +148,9 @@ through Tailscale Serve (HTTPS); a LAN mode is opt-in with a warning.
 Off by default; QR pairing, per-device tokens (hashes only), revoke,
 Host/Origin check, bypass runs refused remotely. Owner decisions D1–D5
 of 2026-10-30 confirmed. R1 (command layer + port), R2 (gateway, pairing,
-Settings) and R3 (the phone client) shipped — see the changelog. Remaining steps, each shipped on its own:
+Settings), R3 (the phone client) and R4 (runs on the phone) shipped —
+see the changelog. Remaining steps, each shipped on its own:
 
-- **R4 — runs on the phone**: transcript, question forms, permissions,
-  steer, stop, chain master and column play/hold.
 - **R5 — refine**: section editing with a revision guard (409 on a
   changed file); a ticket open and dirty in a Drey tab is refused
   unless the SDK reaches the open-docs bridge (milestone 78).
