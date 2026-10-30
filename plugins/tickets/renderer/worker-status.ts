@@ -93,6 +93,7 @@ export function formatTokens(n: number): string {
  * The run's telemetry as the short lane/takeover chips (T-0048): context
  * of the last turn, model calls with usage, read calls. Empty while the
  * run reports nothing (also every pre-T-0048 record) — absence is not 0.
+ * A resumed run (T-0049) appends the chip that says so.
  */
 export function telemetryParts(run: RunInfo): readonly string[] {
   const parts: string[] = [];
@@ -104,6 +105,9 @@ export function telemetryParts(run: RunInfo): readonly string[] {
   }
   if (run.readCalls !== undefined && run.readCalls > 0) {
     parts.push(`reads ${run.readCalls}`);
+  }
+  if (run.handoverMode === 'resume' || run.handoverMode === 'resume-compact') {
+    parts.push('resumed');
   }
   return parts;
 }
