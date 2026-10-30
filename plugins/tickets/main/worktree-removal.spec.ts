@@ -6,6 +6,7 @@ const meta = (over: Partial<TicketMeta> = {}): TicketMeta => ({
   id: 'T-0042',
   title: 'Files vault extension',
   repo: 'drey',
+  repos: ['drey'],
   worker: null,
   priority: 'normal',
   rank: 5000,

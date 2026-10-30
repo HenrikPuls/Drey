@@ -24,6 +24,7 @@ import {
   type BoardSnapshot,
   type CreateResult,
   type MutationResult,
+  type ProjectRef,
   type TicketCard,
 } from '../shared/tickets';
 import { cardOrderTargets } from './card-order';
@@ -141,6 +142,9 @@ const hideBlocked = createHideBlockedStore(window.localStorage);
 /** Repaints the board's view controls in every panel header (req-69). */
 const headerViewPainters = new Set<() => void>();
 
+/** Repaints the project switcher in every panel header (req-72). */
+const projectPainters = new Set<(projects: readonly ProjectRef[]) => void>();
+
 const notifyViews = (): void => {
   for (const view of views) {
     view.render();
@@ -171,6 +175,14 @@ function refreshBoard(): Promise<void> {
       }
       // The worktree note rides along (own round, never blocks the board).
       void loadWorktreesStatus();
+      // The project switcher follows its own round, too (req-72).
+      void invokeBoard('projects')
+        .then((projects) => {
+          for (const paint of projectPainters) {
+            paint(projects as readonly ProjectRef[]);
+          }
+        })
+        .catch(() => undefined);
     } catch (error) {
       setNote(messageOf(error), 'error');
       noteFromLoad = true;
@@ -413,7 +425,12 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
 
   const meta = el('div', 'tickets-card-meta');
   if (card.meta.repo !== null) {
-    meta.append(el('span', 'tickets-chip', card.meta.repo));
+    // req-72: every named repo shows; the primary first.
+    const chip = el('span', 'tickets-chip', card.meta.repos.length > 1 ? card.meta.repos.join(' + ') : card.meta.repo);
+    if (card.meta.repos.length > 1) {
+      chip.title = `Work repos (primary: ${card.meta.repo})`;
+    }
+    meta.append(chip);
   }
   if (card.meta.worker !== null) {
     const pinned = el('span', 'tickets-chip tickets-chip-worker', card.worker);
@@ -873,6 +890,31 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       return open > 0 ? `${open} open` : null;
     },
     headerActions: (host) => {
+      // The project (req-72): which tickets repository this board reads —
+      // one registered vault with a board each; the switch is one config
+      // key and the board follows on the next refresh.
+      const project = el('select', 'tickets-project-select') as HTMLSelectElement;
+      project.title = 'Project — the tickets repository this board reads';
+      project.setAttribute('aria-label', 'Project');
+      const paintProjects = (projects: readonly ProjectRef[]): void => {
+        project.replaceChildren();
+        for (const entry of projects) {
+          const option = document.createElement('option');
+          option.value = entry.id;
+          option.textContent = entry.name;
+          project.append(option);
+        }
+        const active = projects.find((entry) => entry.active);
+        if (active !== undefined) {
+          project.value = active.id;
+        }
+        project.hidden = projects.length === 0;
+      };
+      projectPainters.add(paintProjects);
+      project.addEventListener('change', () => {
+        void runMutation('Switching the project', () => invokeBoard('switchProject', { id: project.value }));
+      });
+
       const newButton = el('button', 'icon-btn');
       newButton.type = 'button';
       newButton.title = 'New ticket';
@@ -899,8 +941,9 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       // The chain's master switch — meaningful wherever a tickets board
       // exists; the runner side decides whether anything is automatic.
       host.classList.add('tickets-panel-head');
-      host.append(fleet.node, viewControls.node, actions, masterControlNode(api), headerMenuButton(api));
+      host.append(project, fleet.node, viewControls.node, actions, masterControlNode(api), headerMenuButton(api));
       return () => {
+        projectPainters.delete(paintProjects);
         fleet.dispose();
         viewControls.dispose();
       };
@@ -990,21 +1033,25 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
       }
       priority.append(option);
     }
-    const repo = el('select') as HTMLSelectElement;
-    repo.setAttribute('aria-label', 'Repository');
-    const none = el('option', undefined, '(no repo yet)') as HTMLOptionElement;
-    none.value = '';
-    none.selected = true;
-    repo.append(none);
-    for (const ref of snap.repos) {
-      const option = el('option', undefined, ref.name) as HTMLOptionElement;
-      option.value = ref.name;
-      repo.append(option);
+    // req-72: the work repos as checkboxes — one ticket may name several;
+    // the first checked one is the primary (the fleet's gate repo).
+    const repoChecks = snap.repos.map((ref, index) => {
+      const wrap = el('label', 'tickets-form-check');
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = ref.name;
+      if (index === 0 && snap.repos.length === 1) {
+        input.checked = true;
+      }
+      wrap.append(input, el('span', undefined, ref.name));
+      return input;
+    });
+    const repoGroup = el('div', 'tickets-form-checks');
+    for (const input of repoChecks) {
+      repoGroup.append(input.parentElement!);
     }
-    if (snap.repos.length === 1) {
-      repo.selectedIndex = 1;
-    }
-    row.append(priority, repo);
+    const selectedRepos = (): string[] => repoChecks.filter((input) => input.checked).map((input) => input.value);
+    row.append(priority, repoGroup);
 
     const description = el('textarea', 'tickets-form-desc') as HTMLTextAreaElement;
     description.rows = 4;
@@ -1022,12 +1069,14 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
         title.focus();
         return;
       }
+      const repos = selectedRepos();
       close();
       void runMutation('Creating', () =>
         invokeBoard('create', {
           title: text,
           priority: priority.value,
-          repo: repo.value === '' ? null : repo.value,
+          repo: repos[0] ?? null,
+          ...(repos.length > 0 ? { repos } : {}),
           description: description.value,
         }),
       ).then((result) => {
@@ -1047,7 +1096,7 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
       return wrap;
     };
     const rowFields = el('div', 'tickets-form-row');
-    rowFields.append(field('Priority', priority), field('Repository', repo));
+    rowFields.append(field('Priority', priority), field('Repositories', repoGroup));
 
     form.append(el('h3', 'tickets-form-heading', 'New ticket'));
     form.append(field('Title', title), rowFields, field('Description', description), actions);
@@ -2712,8 +2761,8 @@ function openCardMenu(
   }
   menu.append(el('div', 'tickets-menu-sep'));
   const live = runForCard(card.id);
-  // The one-click interactive dialog (req-65): plan on the plan column,
-  // refine at the checkpoints and the last agent column — only without a
+  // The one-click interactive dialog (req-65, req-72): plan on the first
+  // automatic column, refine in every manual column — only without a
   // live run (one run per ticket, the takeover tab is the dialog then).
   if (snapshot !== null && live === null) {
     const mode = interactiveModeFor(card.phase, snapshot.columns);

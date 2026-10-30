@@ -9,6 +9,7 @@ import {
   patchPipelinePhase,
   reorderPipelinePhases,
   pinsAfterDrop,
+  reposFileText,
   rewriteOrderSection,
 } from './ticket-board';
 
@@ -408,5 +409,28 @@ describe('reorderPipelinePhases - the sortable columns (req-50)', () => {
     expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'qa', 'prioritized', 'done'])).toThrow('exactly once');
     expect(() => reorderPipelinePhases(PIPELINE, ['prioritized', 'inbox', 'build', 'done'])).toThrow('keep their places');
     expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'prioritized', 'done', 'build'])).toThrow('keep their places');
+  });
+});
+
+describe('repos.md writer (req-72)', () => {
+  it('round-trips through the parser, optional keys omitted when unset', () => {
+    const repos = [
+      {
+        name: 'drey',
+        url: 'https://example.invalid/drey.git',
+        branch: 'main',
+        policy: null,
+        path: 'E:/code/drey',
+        worker: null,
+        worktrees: null,
+        link: ['.tools', 'node_modules'],
+      },
+      { name: 'bare', url: 'https://example.invalid/bare.git', branch: null, policy: null, path: null, worker: null, worktrees: null },
+    ];
+    const text = reposFileText(repos, 'Owner prose.\n');
+    expect(text).toContain('Owner prose.');
+    const { repos: parsed, error } = parseRepos(text);
+    expect(error).toBeNull();
+    expect(parsed).toEqual(repos);
   });
 });

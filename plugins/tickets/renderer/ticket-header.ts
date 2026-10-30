@@ -166,7 +166,7 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
       });
     }
 
-    const apply = async (patch: Record<string, string>): Promise<void> => {
+    const apply = async (patch: Record<string, string | readonly string[]>): Promise<void> => {
       const before = input.frontmatter;
       let reply: HeaderReply;
       try {
@@ -239,12 +239,32 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
         priority.classList.add(`tickets-head-prio-${meta.priority}`);
         chips.append(priority);
 
-        const repos = (snapshot?.repos ?? []).map((r) => [r.name, r.name] as const);
-        const repoOptions: (readonly [string, string])[] = [['', 'No repo'], ...repos];
-        if (meta.repo !== null && !repos.some(([name]) => name === meta.repo)) {
-          repoOptions.push([meta.repo, `${meta.repo} (unknown)`]);
+        // req-72: the work repos as checkboxes — one ticket may name
+        // several; the first checked one is the primary (the fleet's
+        // gate repo). Unknown names stay visible, not editable here.
+        const repoGroup = el('span', 'tickets-head-checks');
+        repoGroup.title = 'Work repositories — the first checked one is the primary';
+        repoGroup.setAttribute('aria-label', 'Repositories');
+        const current = new Set(meta.repos);
+        for (const ref of snapshot?.repos ?? []) {
+          const wrap = el('label', 'tickets-head-check');
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.value = ref.name;
+          input.checked = current.has(ref.name);
+          input.addEventListener('change', () => {
+            const checked = Array.from(repoGroup.querySelectorAll<HTMLInputElement>('input:checked')).map((i) => i.value);
+            void apply({ repos: checked });
+          });
+          wrap.append(input, el('span', undefined, ref.name));
+          repoGroup.append(wrap);
         }
-        chips.append(select('Repository', repoOptions, meta.repo ?? '', 'repo'));
+        for (const name of meta.repos) {
+          if (snapshot?.repos.some((r) => r.name === name) !== true) {
+            repoGroup.append(el('span', 'tickets-head-chip', `${name} (unknown)`));
+          }
+        }
+        chips.append(repoGroup);
 
         const workerOptions: (readonly [string, string])[] = [
           ['', `Default worker (${snapshot?.defaultWorker ?? 'board'})`],
@@ -262,9 +282,9 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
         chips.append(branch);
       }
 
-      // The one-click dialog (req-65): offered where the column offers it
-      // — plan on the plan column, refine at the checkpoints and the last
-      // agent column. A refused start (a live run, no repo) surfaces in
+      // The one-click dialog (req-65, req-72): offered where the column
+      // offers it — plan on the first automatic column, refine in every
+      // manual column. A refused start (a live run, no repo) surfaces in
       // the board's status bar like any action.
       const card = snapshot?.columns.flatMap((c) => c.tickets).find((t) => t.path === path);
       const mode = snapshot !== null && phaseId !== null ? interactiveModeFor(phaseId, snapshot.columns) : null;
@@ -274,7 +294,7 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
         dialog.title =
           mode === 'plan'
             ? 'Plan this ticket in a dialog with a fleet worker — the ticket and the dialog open side by side'
-            : 'Work this checkpoint in a dialog with a fleet worker — the ticket and the dialog open side by side';
+            : 'Refine this ticket in a dialog with a fleet worker — the ticket and the dialog open side by side';
         dialog.addEventListener('click', () => deps.startInteractive(card, mode));
         chips.append(dialog);
       }

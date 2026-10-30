@@ -1,9 +1,10 @@
 import type { DreyPluginApi, PluginSettingsPageContrib } from '../../../shared/plugin-api/renderer';
-import { parseHandover, type BoardSnapshot, type FolderStatus, type PromptListing } from '../shared/tickets';
+import { parseHandover, type BoardSnapshot, type FolderStatus, type PromptListing, type ReposListing } from '../shared/tickets';
 import { createColumnsSection, effectivePrompt } from './settings-columns';
 import { parseWorkerValue } from '../main/fleet/assignment';
 import { el, iconButton, kv, mutate, numberConfig, selectConfig, textConfig } from './settings-dom';
 import { createPromptsSection } from './settings-prompts';
+import { createReposSection } from './settings-repos';
 import { createWorkersSection } from './settings-workers';
 
 /**
@@ -36,10 +37,11 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
       let disposed = false;
       let timer: ReturnType<typeof setTimeout> | null = null;
       const load = async (): Promise<void> => {
-        const [snap, folders, listing, configured] = await Promise.all([
+        const [snap, folders, listing, reposListing, configured] = await Promise.all([
           api.backend.invoke('board') as Promise<BoardSnapshot>,
           api.backend.invoke('folders') as Promise<FolderStatus>,
           api.backend.invoke('prompts') as Promise<PromptListing>,
+          api.backend.invoke('reposListing') as Promise<ReposListing>,
           api.settings.get<string>('defaultWorker'),
         ]);
         if (disposed) {
@@ -61,6 +63,7 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
           defaultWorker: (configured ?? '') || 'opencode',
         });
         prompts.update(listing, usage);
+        repos.update(reposListing);
         if (!workersOpened) {
           workersOpened = true;
           workers.select(parseWorkerValue((configured ?? '') || 'opencode')?.provider ?? 'opencode');
@@ -70,10 +73,11 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
 
       const columns = createColumnsSection(api, reload);
       const prompts = createPromptsSection(api, reload);
+      const repos = createReposSection(api, reload);
       // Opens on the default worker's runner once the first load knows it.
       const workers = createWorkersSection(api, 'opencode');
       let workersOpened = false;
-      body.append(repo, columns.root, prompts.root, fleetSection(api), workers.root);
+      body.append(repo, columns.root, repos.root, prompts.root, fleetSection(api), workers.root);
 
       // The board's change events cover every write here and the runner's.
       const off = api.backend.on('board-changed', () => {

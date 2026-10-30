@@ -17,7 +17,7 @@
 import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
-import type { BoardColumn, BoardSnapshot, PipelinePhase } from '../../shared/tickets';
+import type { BoardColumn, BoardSnapshot, PipelinePhase, RepoRef } from '../../shared/tickets';
 import { isValidTicketFile, parseHandover, stripPhasePrefix, TICKETS_ARCHIVE_DIR } from '../../shared/tickets';
 import { assembleBoard, parseOrderFile, rewriteOrderSection, type BoardFile } from '../ticket-board';
 import { patchTicketFile } from '../ticket-files';
@@ -965,6 +965,20 @@ export class Orchestrator {
       );
       return 'skipped';
     }
+    // req-72: the ticket's further repos, resolved like the primary's —
+    // an unknown name skips the dispatch (the board badges it already).
+    const extraRepos: RepoRef[] = [];
+    for (const name of card.meta.repos) {
+      if (name === repo.name) {
+        continue;
+      }
+      const extra = snap.repos.find((r) => r.name === name) ?? null;
+      if (extra === null) {
+        this.noteSkip(card.id, `dispatch skips ${card.id}: repo "${name}" is not in repos.md`);
+        return 'skipped';
+      }
+      extraRepos.push(extra);
+    }
     const promptRef = columnPromptRef(workingPhase);
     let promptText: string | null = null;
     if (promptRef !== null) {
@@ -1029,6 +1043,7 @@ export class Orchestrator {
       pushRemote: snap.pushRemote,
       nextPhaseClaims,
       repo,
+      extraRepos,
       promptText,
       defaultWorker: config.defaultWorker,
       permissionMode: config.permissionMode,

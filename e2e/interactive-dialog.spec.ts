@@ -1,11 +1,11 @@
 import { test, expect } from './fixtures/drey';
 
 /**
- * The interactive dialog's affordances (req-65): "Plan with agent" on the
- * plan column and "Refine with agent" at the checkpoints — in the ticket
- * header and the card menu. The run itself (worker, takeover tab, end
- * moves) is the owner's live round; here the switches must simply be
- * where the roadmap puts them, and nowhere else.
+ * The interactive dialog's affordances (req-65, req-72): "Plan with agent"
+ * on the first automatic column and "Refine with agent" in every manual
+ * column — in the ticket header and the card menu. The run itself (worker,
+ * takeover tab, end moves) is the owner's live round; here the switches
+ * must simply be where the rules put them, and nowhere else.
  */
 
 const PIPELINE = [

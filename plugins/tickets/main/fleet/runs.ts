@@ -695,6 +695,20 @@ export class RunSupervisor {
     try {
       await fsp.mkdir(dir, { recursive: true });
       prepared = await this.prepareWorktree(request, worktreePath);
+      // The ticket's further repos (req-72): one worktree each, same
+      // branch, prepared like the primary's — a failure refuses the
+      // start, the primary's worktree stays for the retry.
+      for (const extra of request.extraRepos ?? []) {
+        await this.prepareWorktree(
+          {
+            ...request,
+            repoPath: extra.repoPath,
+            baseRef: extra.baseRef,
+            ...(extra.links !== undefined ? { links: extra.links } : {}),
+          },
+          extra.worktreePath,
+        );
+      }
     } catch (error) {
       return { ok: false, error: `worktree failed: ${messageOf(error)}` };
     }

@@ -722,6 +722,15 @@ the single source of truth. A ticket's phase is simply the folder its
 file sits in, and moving a ticket is a git move plus exactly one
 commit — the repo's history is the ticket's timeline.
 
+**Projects.** Every tickets repository is one **project** (req-72): its
+own board, its own pipeline and its own repositories. You can register
+several — the panel header carries a project menu listing every vault
+that holds a board; picking one switches the board (and the fleet) to
+that project. Which project is active survives restarts. A new project
+is just another vault with a board: point the empty state's
+**Initialize the tickets board** at it, or initialize in the other
+vault from its own Files panel.
+
 **Setup.** Create an empty git repository for your tickets (it can live
 on GitHub, Azure DevOps or anywhere plain git works — the board never
 talks to a host API), clone it locally and register the folder as a
@@ -738,17 +747,28 @@ creates the three configuration files under `tickets/_meta/`:
   in the board writes this file, not the tickets.
 - `repos.md` — the work repositories a ticket can name, with their clone
   URL, integration branch and a note on which branch protection exists.
+  You never have to hand-edit it (though you can): **Settings → Tickets →
+  Repositories** lists the entries as editable rows — name, URL, branch,
+  local path, policy, worker, worktrees base, linked folders — one
+  commit per save, your notes under the frontmatter kept. **Add from
+  folder…** picks a folder and registers every git repository found
+  inside (the folder itself and its subfolders) with clone URL, branch
+  and local path prefilled.
 
 **Everyday use.** Capture with the **+** in the panel header: a title,
-a priority, optionally a repository and a description land as
-`T-00xx.md` in the inbox. Click a card to open the ticket file — it is
+a priority, optionally one or more repositories and a description land
+as `T-00xx.md` in the inbox (req-72: the repositories are checkboxes —
+the first checked one is the primary, where the fleet tests; the
+others get their own worktrees on the same branch). Click a card to
+open the ticket file — it is
 an ordinary note (description, plan, executable acceptance criteria and
 an append-only log). In the editor the ticket opens with a **header**
 instead of the folded frontmatter: the title as the headline, above it
-the id, the phase, the priority, the repository, the worker and the
+the id, the phase, the priority, the repositories (checkboxes), the
+worker and the
 branch. Edit the headline in place (Enter or leaving the field applies
-it, Escape restores it) and pick priority, repository and worker from
-their menus — each change is an ordinary unsaved edit of the file, so
+it, Escape restores it) and pick priority, repositories and worker —
+each change is an ordinary unsaved edit of the file, so
 Save and Undo work as for any typing. The phase changes by moving the
 card on the board. The code button at the right edits the frontmatter as
 YAML; its header folds back to the ticket header. The **Log** section
@@ -962,14 +982,20 @@ ticket's plan in a conversation, or walking a checkpoint — the plan
 review, the review, the commit step — together. Where a column offers
 it, the card menu and the ticket header show a one-click start:
 
-- **Plan with agent** on the plan column — the worker reads the ticket
+- **Plan with agent** on the first automatic column (the plan column in
+  the default pipeline) — the worker reads the ticket
   and the repo, asks you the few things it cannot learn there, proposes
   the plan in the chat, and writes only the agreed result into the
   ticket (plan, acceptance criteria, Log).
-- **Refine with agent** at the owner's checkpoints (plan review,
-  review) and the commit column — the worker checks the branch with
+- **Refine with agent** in **every manual column** (req-72): the plan
+  review and the review as before, but also the queues before the plan
+  (inbox, prioritized) and any other manual column — wherever the
+  machine does not work the ticket, the dialog is yours. The worker
+  checks the branch with
   you, applies the fixes you approve as small commits, and records the
   verdict in the ticket's Log; at commit it also drives the push.
+  Automatic columns (agent and CI) offer no dialog — there the runner
+  works the ticket, and the takeover tab is its.
 
 The start opens **the ticket and the dialog side by side** (a split
 pane, SDK 1.35). The dialog tab is the takeover tab, in the **Interactive

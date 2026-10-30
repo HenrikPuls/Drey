@@ -66,6 +66,18 @@ export interface RunRequest {
    * otherwise hunt for. Absent on requests from before it existed.
    */
   readonly links?: readonly string[];
+  /**
+   * The ticket's further work repos (req-72), primary excluded — one
+   * worktree each, same branch, prepared like the primary's. Absent on
+   * single-repo tickets (the overwhelmingly common shape).
+   */
+  readonly extraRepos?: readonly {
+    readonly name: string;
+    readonly repoPath: string;
+    readonly worktreePath: string;
+    readonly baseRef: string | null;
+    readonly links?: readonly string[];
+  }[];
   readonly provider: WorkerProviderId;
   readonly permissionMode: PermissionMode;
   /** Provider model pin, when the assignment names one (`worker@provider/model`). */

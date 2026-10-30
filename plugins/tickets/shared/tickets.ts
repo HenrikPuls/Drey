@@ -135,7 +135,19 @@ export interface TicketRun {
 export interface TicketMeta {
   readonly id: string | null;
   readonly title: string | null;
+  /**
+   * The PRIMARY work repo — where the fleet's gate runs and whose
+   * worktree is the run's home. `repos[0]` when the ticket names more
+   * than one (req-72); null = no repo.
+   */
   readonly repo: string | null;
+  /**
+   * Every work repo the ticket touches, primary first (req-72). Read
+   * from the `repos:` list, else from legacy `repo:`; empty = no repo.
+   * The fleet prepares one worktree per repo, all on the ticket branch;
+   * the brief lists the extra ones with their absolute checkouts.
+   */
+  readonly repos: readonly string[];
   /** The ticket's worker pin (`worker: opencode`); null = not pinned. */
   readonly worker: string | null;
   readonly priority: TicketPriority;
@@ -384,6 +396,32 @@ export interface PromptListing {
   readonly entries: readonly PromptEntry[];
   /** Every prompt name Drey ships (the "Add Drey's prompts" offer). */
   readonly shipped: readonly string[];
+}
+
+/** One work repo a folder scan found (req-72): the "Add from folder" seed. */
+export interface RepoCandidate {
+  readonly name: string;
+  /** The origin remote's URL; null when the checkout has none. */
+  readonly url: string | null;
+  readonly branch: string | null;
+  /** Absolute local checkout. */
+  readonly path: string;
+}
+
+/** The settings page's repositories listing: `repos.md` as it is on disk. */
+export interface ReposListing {
+  /** Absolute path of `tickets/_meta/repos.md`; null without a tickets vault. */
+  readonly file: string | null;
+  readonly repos: readonly RepoRef[];
+  readonly error: string | null;
+}
+
+/** One tickets vault that carries a board (req-72): a project. */
+export interface ProjectRef {
+  readonly id: string;
+  readonly name: string;
+  readonly path: string;
+  readonly active: boolean;
 }
 
 /** Whether the phase folders carry their derived numbers (T-0041, req-50). */

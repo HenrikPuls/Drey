@@ -23,6 +23,7 @@ function card(over: Partial<TicketCard> = {}): TicketCard {
       id: 'T-0002',
       title: null,
       repo: null,
+      repos: [],
       worker: null,
       priority: 'normal',
       rank: 5000,

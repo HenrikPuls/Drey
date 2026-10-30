@@ -20,6 +20,56 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-72 — Projects, multi-repo tickets, the repositories settings
+
+Owner request, outside the list. **Not yet manually verified by the
+owner.** Four owner asks shipped as one round (2026-10-30):
+
+- **Refine in every manual column** (req-65's column rule, amended in
+  `end-moves.ts`): the first automatic column still plans; every manual
+  column now refines — the queues before the first automatic column
+  included, and a board without any automatic column offers the dialog
+  everywhere but the terminal. Automatic columns (`agent`, and `ci`
+  counted as one) offer no dialog: the runner works them. The last
+  automatic column therefore loses its refine offer. End moves are
+  unchanged — before the first automatic column only "On to" exists.
+- **"Add Drey's prompts" reachable when the folder is not empty**
+  (`settings-prompts.ts`): the restore offer lived only in the empty
+  state, so a vault seeded before a prompt shipped could never re-add it
+  — the interactive run's error message pointed at a button that did not
+  exist. The section header now carries the button whenever shipped
+  prompts are missing from `_meta/prompts/`, with the count and names.
+- **Repositories settings** (`settings-repos.ts`, new): Settings →
+  Tickets gains the `_meta/repos.md` registry as editable rows — name,
+  url, branch, local path, policy, worker, worktrees base, `link:`
+  folders — one commit per save, the owner's prose under the frontmatter
+  kept. "Add from folder…" picks a folder, probes it (itself and its
+  non-hidden subfolders) for git repositories over real git
+  (`repos-scan.ts`: `.git` entry, origin remote, current branch) and
+  offers the found checkouts as seeds; already-registered paths are
+  marked.
+- **Projects (req-72 naming): one tickets vault is one project.** The
+  board panel header gains a project switcher (every registered vault
+  with `tickets/_meta/pipeline.md`); switching writes the existing
+  `vaultId` plugin config and the board follows on the next refresh.
+  `listProjects`/`switchProject` are plugin IPC; the active project is
+  what `detect()` already picked — the switch makes it explicit.
+- **Multi-repo tickets**: a ticket's frontmatter may carry
+  `repos: [a, b, …]` beside the legacy `repo:` line (which stays the
+  primary); the list wins when both are set and a mismatch is a noise
+  finding. The fleet prepares one worktree per named repo — all on the
+  ticket branch, base per repo (`branch:` or HEAD, `link:` folders
+  honored) — refuses the run when an extra repo has no local `path:`,
+  names the extra checkouts in the brief, and removes them again with
+  "Remove worktree". The primary repo keeps its role: gate cwd, worker
+  pin, context pack (instructions, diff stat), the run record's
+  worktree, "Open work folder". The card chip and the header show every
+  repo; the create modal and the ticket header take checkboxes, the
+  first checked one is the primary. Tests: `repos-scan.spec.ts`, the
+  writer round-trip in `ticket-board.spec.ts`, parse/patch/create in
+  `ticket-files.spec.ts`, the multi-repo compose in `request.spec.ts`,
+  the amended column rules in `end-moves.spec.ts` (618 → 629 specs).
+
 ### req-71 — Settings → Tickets: each CLI runner's settings behind a switch
 
 Owner-verified (signed off 2026-10-30). Owner request, outside the

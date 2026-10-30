@@ -305,3 +305,72 @@ describe('patchHeaderFields (req-62)', () => {
     expect(() => patchHeaderFields('---\nid: [\n---', { priority: 'low' })).toThrow('does not parse');
   });
 });
+
+describe('multi-repo tickets (req-72)', () => {
+  const MULTI = CANONICAL.replace('repo: drey', 'repo: drey\nrepos: [drey, lariscus]');
+
+  it('reads the repos: list as the truth, the primary first', () => {
+    const parsed = parseTicketFile(MULTI, 'tickets/inbox/T-0042.md');
+    expect(parsed.issues).toEqual([]);
+    expect(parsed.meta.repo).toBe('drey');
+    expect(parsed.meta.repos).toEqual(['drey', 'lariscus']);
+  });
+
+  it('legacy repo: reads as a one-entry list', () => {
+    const parsed = parseTicketFile(CANONICAL, 'tickets/inbox/T-0042.md');
+    expect(parsed.meta.repos).toEqual(['drey']);
+  });
+
+  it('repo: differing from the list is noise, the list wins', () => {
+    const parsed = parseTicketFile(MULTI.replace('repo: drey', 'repo: other'), 'tickets/inbox/T-0042.md');
+    expect(parsed.meta.repo).toBe('drey');
+    expect(parsed.meta.repos).toEqual(['drey', 'lariscus']);
+    expect(parsed.issues).toEqual([
+      { level: 'noise', message: 'repo: "other" differs from the repos: list — repos: wins' },
+    ]);
+  });
+
+  it('the header patch writes the list beside the primary and clears it back off', () => {
+    const patched = patchHeaderFields(CANONICAL, { repos: ['drey', 'lariscus'] });
+    expect(patched).toContain('repo: drey');
+    expect(patched).toMatch(/repos:\s*\n\s*- drey\s*\n\s*- lariscus/);
+    const parsed = parseTicketFile(patched, 'tickets/inbox/T-0042.md');
+    expect(parsed.meta.repos).toEqual(['drey', 'lariscus']);
+    const back = patchHeaderFields(patched, { repos: ['drey'] });
+    expect(back).toContain('repo: drey');
+    expect(back).not.toContain('repos:');
+    const cleared = patchHeaderFields(patched, { repos: [] });
+    expect(cleared).toContain('\nrepo:\n');
+    expect(cleared).not.toContain('repos:');
+  });
+
+  it('the canonical creation write carries the list when the ticket names several', () => {
+    const text = newTicketFileText({
+      id: 'T-0042',
+      title: 'X',
+      repo: 'drey',
+      repos: ['drey', 'lariscus'],
+      priority: 'normal',
+      rank: 5000,
+      firstPhase: 'inbox',
+      now: new Date('2026-10-30T09:00:00Z'),
+      actor: 'owner@desk',
+      description: '',
+    });
+    expect(text).toContain('repo: drey');
+    expect(text).toContain('repos: [drey, lariscus]');
+    const single = newTicketFileText({
+      id: 'T-0042',
+      title: 'X',
+      repo: 'drey',
+      priority: 'normal',
+      rank: 5000,
+      firstPhase: 'inbox',
+      now: new Date('2026-10-30T09:00:00Z'),
+      actor: 'owner@desk',
+      description: '',
+    });
+    expect(single).toContain('repo: drey');
+    expect(single).not.toContain('repos:');
+  });
+});

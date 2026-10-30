@@ -20,6 +20,7 @@ function card(over: Partial<TicketCard> = {}): TicketCard {
       id: 'T-0001',
       title: 'Add the thing',
       repo: 'drey',
+    repos: ['drey'],
       worker: null,
       priority: 'normal',
       rank: 5000,
@@ -229,5 +230,43 @@ describe('composeRunRequest', () => {
     expect(result.request.instruction).toContain('src/a.ts | 2 +-');
     expect(result.request.instruction).toContain('row 80: assertion 80 failed');
     expect(result.truncations).toEqual([{ section: 'gateFailure', originalSize: Buffer.byteLength(`\`npm run verify:unit\` failed\n\n${failure}`, 'utf8') }]);
+  });
+});
+
+describe('multi-repo runs (req-72)', () => {
+  const EXTRA = {
+    name: 'lariscus',
+    url: 'https://example.invalid/lariscus.git',
+    branch: 'main',
+    path: 'E:/code/lariscus',
+    policy: null,
+    worker: null,
+    worktrees: null,
+  };
+
+  it('carries one worktree per extra repo and names them in the brief', () => {
+    const result = composeRunRequest(base({ extraRepos: [EXTRA] }));
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.extraRepos).toHaveLength(1);
+    expect(result.request.extraRepos![0]).toMatchObject({ name: 'lariscus', repoPath: 'E:/code/lariscus', baseRef: 'main' });
+    expect(result.request.extraRepos![0]!.worktreePath).toContain('T-0001');
+    expect(result.request.instruction).toContain('Further repositories this ticket names');
+    expect(result.request.instruction).toContain('lariscus');
+  });
+
+  it('skips the primary when it appears twice and omits the field on single-repo tickets', () => {
+    const twice = composeRunRequest(base({ extraRepos: [REPO] }));
+    if (!twice.ok) {
+      throw new Error(twice.error);
+    }
+    expect(twice.request.extraRepos).toBeUndefined();
+    expect(composeRunRequest(base()).ok).toBe(true);
+  });
+
+  it('refuses an extra repo without a checkout', () => {
+    const result = composeRunRequest(base({ extraRepos: [{ ...EXTRA, path: null }] }));
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('lariscus') });
   });
 });
