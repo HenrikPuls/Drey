@@ -20,7 +20,54 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
-### req-64 — A worker that needs the owner asks, waits and says so (owner request, outside the list)
+### req-62 — Ticket header in the editor
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list. A ticket opened from the board showed its frontmatter folded behind
+the `▸ Frontmatter` pill — no title, and priority / repo / worker only
+by editing YAML. Now a ticket of the board's vault opens with a header in
+the pill's place (`plugins/tickets/renderer/ticket-header.ts` +
+`ticket-header.css`): id, phase, priority, repository, worker, branch and
+the issue badge on one row, the title as an editable headline below
+(Enter / leaving the field applies, Escape restores). Priority,
+repository and worker are menus. The header reads the editor's buffer,
+not the file: main parses and rewrites the block (`header` /
+`headerEdit`, `patchHeaderFields` in `main/ticket-files.ts` — `yaml`
+document mutation, title double-quoted unless the owner chose single
+quotes, an empty repo stays `repo:`, an empty worker drops the pin) and
+the renderer applies the result as one editor change, so dirty state,
+undo, save and the conflict merge stay the editor's. A code button opens
+the base's YAML view. The `## Log` section folds the first time a ticket
+shows in a session.
+
+The phase chip is display only — a deviation from the plan, which had a
+"Move to" menu: the move renames the file, and an open tab whose file
+vanished becomes a draft that a save would recreate in the old folder (a
+duplicate id). Moving stays on the board; the header move is a roadmap
+follow-up.
+
+**SDK 1.34** (base seam): `api.editor.registerFrontmatterView({ matches,
+render })` — `frontmatter-fold.ts` asks the new `FrontmatterViewRegistry`
+(through `MarkdownSurface`) and draws the plugin's element as the folded
+block widget (`input`: view, frontmatter, path, vault id, `expandRaw`);
+a throwing render falls back to the pill; a (de)registration redraws
+open editors (`refreshFrontmatterView`), and so does a change of the
+surface's path or vault — on a tab switch the text lands before the path
+input names the new document, so the first lookup saw the old path (found
+in the live e2e run). `EditorSurfaceContext` gained `vaultId()`.
+`plugins/AUTHORING.md` documents both.
+
+Specs: `src/app/editor/frontmatter-fold.spec.ts` (the plugin view takes
+the pill's place, gets path and vault, `expandRaw`, fallback, redraw only
+on a changed block, refresh effect), `plugins/tickets/main/ticket-files.spec.ts`
+(`patchHeaderFields`), `plugins/tickets/renderer/ticket-header.spec.ts`
+(ticket paths, phase of a path, the Log fold range), and the e2e
+`e2e/ticket-header.spec.ts` in the built app (card click opens the ticket
+with the header and the folded Log; a priority pick and a title edit are
+buffer edits shown in the raw YAML; Undo reverts the title; a plain note
+keeps the pill).
+
+### req-64 - A worker that needs the owner asks, waits and says so (owner request, outside the list)
 
 **Not yet manually verified by the owner.** No worker ever got an answer:
 OpenCode 2.0.32's own `question` tool asks through a *form*
@@ -74,47 +121,6 @@ such a worker looked busy and turned red after five minutes.
   `waiting.spec.ts`, `worker-status.spec.ts`, `fleet-fields.spec.ts`,
   `src/app/plugin-host/os-notify.spec.ts`.
 
-### req-63 — Fleet: provider pools and column priority instead of per-column slots
-
-Owner-verified (signed off 2026-10-30). Owner request, outside the
-list. A column's `workers:` pool bound its slots to that column: an idle
-`plan` slot could not serve `build`, the dispatcher filled columns left
-to right (starting work before finishing it), and a ticket's priority
-only sorted inside its own column.
-
-The parallel slots now belong to the **worker providers**
-(`fleet.pool.opencode.size`, `fleet.pool.claude-code.size`, Settings →
-Tickets → Fleet; default one each). Every live run of a provider — the
-owner's on-demand runs included — takes one of its slots. `planDispatch`
-(`plugins/tickets/main/fleet/chain.ts`) builds one candidate list over
-every playing automatic column and orders it by **priority class**
-(`urgent`/`high` before `normal`/`low`), then **column rank — rightmost
-first**, then the column's own order; a candidate takes a slot of the
-pool its assignment resolves to (the same ladder as the run request) and
-waits when that pool is full. A running run is never preempted. Master,
-brakes, cooldown, breaker and the checkpoint rule are unchanged.
-
-Can the capacity be read from the provider? Only from a **llama.cpp**
-server (`/props` → `total_slots`): `fleet.pool.opencode.probe` takes its
-base URL, and the probe (every five minutes) caps the configured size.
-vLLM, LM Studio and Ollama keep their parallelism in server flags;
-hosted APIs and the CLIs' subscriptions report none. Instead a run that
-fails on a **rate limit** (`429`, "rate limit", "too many requests" in
-the worker's last error, new `RunInfo.lastError`) shrinks its provider's
-pool by one slot for five minutes (never below one).
-
-The column `workers:` key is gone (owner decision — no per-column cap or
-reservation): `PipelinePhase.workers`, the settings table's Pool column
-and the `×N` on the column chip are removed; a leftover key is ignored
-with a noise badge that points at the Fleet settings, and clearing a
-column's worker still removes it. The lane strip shows a column's busy
-runs without a slot count. Specs: `chain.spec.ts` (shared pool,
-rightmost-first, priority classes, two providers, live runs, an
-unresolvable assignment), `orchestrator.spec.ts` (shared pool, probe
-cap, rate-limit shrink, pool helpers), `ticket-board.spec.ts` (the
-retired key). Docs: `specs/ticket-schema.md`, ADR-0077 later change,
-`docs/05`, `docs/06`, the manual.
-
 ### T-0050 — Ticket dependencies: the `blocked-by` field, board display and fleet enforcement
 
 Tickets could not express "do not start before X is done" — the order
@@ -159,6 +165,47 @@ and the fleet. A first-class dependency field now exists
   (the real orchestrator over a temp vault), `renderer/blocked-view.spec.ts`;
   manual §13, `BOARD.md`, `FLEET.md`, `docs/05` §5.0/§5.41 updated.
   **Not yet manually verified by the owner.**
+
+### req-63 — Fleet: provider pools and column priority instead of per-column slots
+
+Owner-verified (signed off 2026-10-30). Owner request, outside the
+list. A column's `workers:` pool bound its slots to that column: an idle
+`plan` slot could not serve `build`, the dispatcher filled columns left
+to right (starting work before finishing it), and a ticket's priority
+only sorted inside its own column.
+
+The parallel slots now belong to the **worker providers**
+(`fleet.pool.opencode.size`, `fleet.pool.claude-code.size`, Settings →
+Tickets → Fleet; default one each). Every live run of a provider — the
+owner's on-demand runs included — takes one of its slots. `planDispatch`
+(`plugins/tickets/main/fleet/chain.ts`) builds one candidate list over
+every playing automatic column and orders it by **priority class**
+(`urgent`/`high` before `normal`/`low`), then **column rank — rightmost
+first**, then the column's own order; a candidate takes a slot of the
+pool its assignment resolves to (the same ladder as the run request) and
+waits when that pool is full. A running run is never preempted. Master,
+brakes, cooldown, breaker and the checkpoint rule are unchanged.
+
+Can the capacity be read from the provider? Only from a **llama.cpp**
+server (`/props` → `total_slots`): `fleet.pool.opencode.probe` takes its
+base URL, and the probe (every five minutes) caps the configured size.
+vLLM, LM Studio and Ollama keep their parallelism in server flags;
+hosted APIs and the CLIs' subscriptions report none. Instead a run that
+fails on a **rate limit** (`429`, "rate limit", "too many requests" in
+the worker's last error, new `RunInfo.lastError`) shrinks its provider's
+pool by one slot for five minutes (never below one).
+
+The column `workers:` key is gone (owner decision — no per-column cap or
+reservation): `PipelinePhase.workers`, the settings table's Pool column
+and the `×N` on the column chip are removed; a leftover key is ignored
+with a noise badge that points at the Fleet settings, and clearing a
+column's worker still removes it. The lane strip shows a column's busy
+runs without a slot count. Specs: `chain.spec.ts` (shared pool,
+rightmost-first, priority classes, two providers, live runs, an
+unresolvable assignment), `orchestrator.spec.ts` (shared pool, probe
+cap, rate-limit shrink, pool helpers), `ticket-board.spec.ts` (the
+retired key). Docs: `specs/ticket-schema.md`, ADR-0077 later change,
+`docs/05`, `docs/06`, the manual.
 
 ### req-61 — Tickets board: messages at the right end of the status bar
 

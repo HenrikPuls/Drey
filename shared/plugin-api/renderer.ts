@@ -65,6 +65,8 @@ export type {
   EditorExtensionSlot,
   EditorSurfaceContext,
   FileOpenerContrib,
+  FrontmatterViewContrib,
+  FrontmatterViewInput,
   FilesContextMenuItem,
   FilesContextMenuTarget,
   HighlightedSpan,

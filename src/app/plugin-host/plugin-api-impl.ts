@@ -47,6 +47,7 @@ import { ThemeService } from '../services/theme.service';
 import { WindowChromeService } from '../titlebar/window-chrome.service';
 import { EditorExtensionRegistry } from './editor-extension-registry.service';
 import { DropDecoderRegistry } from './drop-decoder-registry.service';
+import { FrontmatterViewRegistry } from './frontmatter-view-registry.service';
 import { FileOpenerRegistry } from '../services/file-opener-registry.service';
 import { DocKindRegistry } from './doc-kind-registry.service';
 import { PluginSettingsHost } from './plugin-settings-host';
@@ -90,6 +91,7 @@ export class PluginApiFactory {
   private readonly overlayGuard = inject(OverlayGuardService);
   private readonly extensions = inject(EditorExtensionRegistry);
   private readonly dropDecoders = inject(DropDecoderRegistry);
+  private readonly frontmatterViews = inject(FrontmatterViewRegistry);
   private readonly fileOpeners = inject(FileOpenerRegistry);
   private readonly docKinds = inject(DocKindRegistry);
   private readonly menuContributions = inject(MenuContributionsService);
@@ -391,6 +393,7 @@ export class PluginApiFactory {
         registerDropDecoder: (decoder) => track(this.dropDecoders.register(decoder)),
         registerContextMenuItems: (items) => track(this.contextMenuItems.register(items)),
         registerToolbarButtons: (buttons) => track(this.toolbarButtons.register(buttons)),
+        registerFrontmatterView: (view) => track(this.frontmatterViews.register(pluginId, view)),
       },
       search: {
         // Routed through the host's reserved methods so the surface reads

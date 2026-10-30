@@ -7,6 +7,6 @@
   "author": "Drey",
   "main": "main/index.js",
   "renderer": "renderer/index.js",
-  "css": ["renderer/board.css", "renderer/settings.css"],
+  "css": ["renderer/board.css", "renderer/settings.css", "renderer/ticket-header.css"],
   "permissions": ["documents", "vault", "settings", "main-process"]
 }

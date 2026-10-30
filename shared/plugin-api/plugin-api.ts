@@ -319,6 +319,37 @@ export interface EditorSurfaceContext {
   /** Active vault-relative path, or null (composer surfaces may be pathless). */
   readonly path: () => string | null;
   readonly filename: () => string | null;
+  /**
+   * The shown document's vault id (SDK 1.34) — the active vault's when the
+   * document names none; null while no vault is open.
+   */
+  readonly vaultId: () => string | null;
+}
+
+/** What a frontmatter view draws from (`editor.registerFrontmatterView`, SDK 1.34). */
+export interface FrontmatterViewInput {
+  /** The editor the view sits in: rewrite the frontmatter through its transactions. */
+  readonly view: import('@codemirror/view').EditorView;
+  /** The raw frontmatter block, both `---` fences included. */
+  readonly frontmatter: string;
+  /** The document's vault-relative path and vault, as `matches` saw them. */
+  readonly path: string | null;
+  readonly vaultId: string | null;
+  /** Shows the base's editable YAML instead (the escape hatch); its header folds back to this view. */
+  expandRaw(): void;
+}
+
+/**
+ * A plugin's presentation of a document's frontmatter (SDK 1.34): where
+ * `matches` holds, the base's folded `▸ Frontmatter` pill gives way to the
+ * element `render` returns — a block at the top of the document, drawn
+ * again whenever the frontmatter text changes. The element owns its own
+ * events (inputs and buttons work inside it). The expanded YAML stays the
+ * base's. First match wins; order = registration.
+ */
+export interface FrontmatterViewContrib {
+  matches(context: EditorSurfaceContext): boolean;
+  render(input: FrontmatterViewInput): HTMLElement;
 }
 
 /**
@@ -752,6 +783,8 @@ export interface DreyPluginApi {
      * ones (`documents.insertAtCursor`).
      */
     registerToolbarButtons(buttons: readonly ToolbarButtonContrib[]): Unsubscribe;
+    /** Present a document's frontmatter in place of the folded pill (SDK 1.34) — see `FrontmatterViewContrib`. */
+    registerFrontmatterView(view: FrontmatterViewContrib): Unsubscribe;
     /**
      * Items appended to the editor context menu, re-evaluated per open.
      * The callback receives the click target (embedded image vs image tab

@@ -743,7 +743,17 @@ creates the three configuration files under `tickets/_meta/`:
 a priority, optionally a repository and a description land as
 `T-00xx.md` in the inbox. Click a card to open the ticket file — it is
 an ordinary note (description, plan, executable acceptance criteria and
-an append-only log). Drag cards between columns to move them through
+an append-only log). In the editor the ticket opens with a **header**
+instead of the folded frontmatter: the title as the headline, above it
+the id, the phase, the priority, the repository, the worker and the
+branch. Edit the headline in place (Enter or leaving the field applies
+it, Escape restores it) and pick priority, repository and worker from
+their menus — each change is an ordinary unsaved edit of the file, so
+Save and Undo work as for any typing. The phase changes by moving the
+card on the board. The code button at the right edits the frontmatter as
+YAML; its header folds back to the ticket header. The **Log** section
+opens folded the first time a ticket shows in a session — the fold
+marker beside "Log" opens it. Drag cards between columns to move them through
 the pipeline; drag within a column to pin an order. Phase folders are
 numbered (`10-inbox` … `80-done`) — the number is cosmetics for
 sorting in a file browser; everything inside a ticket keeps the plain

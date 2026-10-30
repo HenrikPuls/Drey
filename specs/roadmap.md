@@ -60,7 +60,7 @@ manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
 highest used (latest: milestone 85; latest requirement id: req-64 (a worker that needs
-the owner asks and waits; req-62 is in progress),
+the owner asks and waits); req-65 is reserved for interactive mode),
 the update check's positive answer is inline text — req-43 and req-44
 were owner requests outside the list, shipped and owner-verified in
 the same step).
@@ -116,6 +116,25 @@ plan and build columns as agent handovers plus the three prompts
 is not yet verified against the installed CLI. Also open: a token budget per run
 (stop a worker that reads without writing), and a tickets-repo-side credit
 figure for flat plans (GLM coding plan reports cost 0).
+
+**req-65 — Interactive mode at the plan phase and every checkpoint**
+(owner request, outside the list, 2026-10-30; after req-62). The owner
+refines tickets in a dialog with the fleet worker inside Drey instead of
+by hand or with an outside LLM — so the switch must be one click, above
+all on the review checkpoints (plan-review, review, commit), not only in
+plan. "Plan with agent" / "Refine with agent" starts a run that is the
+owner's from turn one (held), with an interactive prompt that interviews
+the owner and writes the result into the ticket (plan) or the branch
+(review findings); ticket and takeover tab side by side in a split
+view (owner, 2026-10-30 — the SDK cannot open a tab in a split pane yet,
+so this needs a `documents.open` / `addDoc` split option); the dialog ends
+with a choice of where the ticket goes next (e.g. **Finish → Plan
+review** / **Approve → Build** in plan; back to the agent column or on
+to the next phase at a checkpoint — the forward move an owner move
+across the checkpoint after a green gate). An optional `plan:
+interactive` field keeps the dispatcher from pulling a ticket the owner
+wants to plan in a dialog. Open design point: which prompt and which
+end moves a checkpoint's interactive run uses.
 
 ### Next
 
@@ -236,6 +255,13 @@ rest are kept so they still match `docs/11`.
 
 ### Follow-ups of shipped milestones (none committed)
 
+- **req-62 (ticket header):** move the ticket from the header's phase
+  chip. A board move renames the file, and an open tab whose file
+  vanished turns into a draft that a save recreates at the old path (a
+  duplicate id) — the same trap a card drag has today while its ticket is
+  open. Needs the open tab to follow the move (a rename-follow on
+  `announceChanges`, or a `documents.close` for plugins) before the chip
+  can move anything.
 - **req-53 (fleet usage):** the second-opinion worker (M85 quality rungs,
   flagged off) runs in a fresh session under the same run, and its usage
   events replace the first worker's counts instead of adding to them —

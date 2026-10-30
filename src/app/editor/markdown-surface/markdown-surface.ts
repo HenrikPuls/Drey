@@ -9,6 +9,7 @@ import {
   input,
   output,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { completionStatus } from '@codemirror/autocomplete';
@@ -32,6 +33,7 @@ import { imagePaste, ImagePasteConfig, insertImageFiles } from '../image-paste';
 import {
   frontmatterExpandedOf,
   frontmatterFold,
+  refreshFrontmatterView,
   setFrontmatterExpanded,
 } from '../frontmatter-fold';
 import { livePreview } from '../live-preview';
@@ -54,7 +56,8 @@ import { SettingsService } from '../../services/settings.service';
 import { composeEntry, EMPTY_ENTRY_DRAFT } from '../../../../shared/entry-compose';
 import { TagVocabularyService } from '../../tags/tag-vocabulary.service';
 import { KeybindingService } from '../../keybindings';
-import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host';
+import { EditorExtensionRegistry, DropDecoderRegistry, FrontmatterViewRegistry } from '../../plugin-host';
+import type { EditorSurfaceContext } from '../../../../shared/plugin-api/renderer';
 
 /** How close to the bottom (px) counts as "pinned" for `setContent`'s
  * stick-to-bottom behaviour on external in-place reloads. Same idea as the
@@ -124,6 +127,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly emojiPicker = inject(EmojiPickerService);
   private readonly pluginExtensions = inject(EditorExtensionRegistry);
   private readonly dropDecoders = inject(DropDecoderRegistry);
+  private readonly frontmatterViews = inject(FrontmatterViewRegistry);
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
 
   readonly mode = input<EditorViewMode>('live');
@@ -389,6 +393,16 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         effects: this.pluginCompartment.reconfigure(this.collectPluginExtensions()),
       });
     });
+    // A plugin's frontmatter view came or went (SDK 1.34): the fold looks
+    // its view up again.
+    // So does a new document: its text can land before the path input
+    // names it, so the lookup that ran with the text saw the old path.
+    effect(() => {
+      void this.frontmatterViews.revision();
+      void this.languageFilename();
+      void this.docVaultId();
+      this._view?.dispatch({ effects: refreshFrontmatterView.of(null) });
+    });
     // Tag prefix colors changed (Settings → Tags): nudge the pill plugin to
     // re-resolve its colors now, not at the next scroll/edit.
     effect(() => {
@@ -404,13 +418,22 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * (both from `languageFilename`, which carries the tab's path-like name).
    */
   private collectPluginExtensions(): Extension {
-    const slot = this.compact() ? 'composer' : 'document';
+    return this.pluginExtensions.extensionsFor(this.surfaceSlot(), this.surfaceContext()) as Extension[];
+  }
+
+  private surfaceSlot(): 'document' | 'composer' {
+    return this.compact() ? 'composer' : 'document';
+  }
+
+  /** What plugins learn about this surface; every reader runs at call time. */
+  private surfaceContext(): EditorSurfaceContext {
     const filename = (): string | null => this.languageFilename();
-    return this.pluginExtensions.extensionsFor(slot, {
-      slot,
+    return {
+      slot: this.surfaceSlot(),
       path: filename,
       filename,
-    }) as Extension[];
+      vaultId: () => this.docVaultId() ?? this.vault.activeVaultId(),
+    };
   }
 
   /**
@@ -525,7 +548,18 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       // own pasteURLAsLink only handles the wrap-a-selection case).
       pasteUrlAsMarkdownLink(),
       this.spellcheck() ? inlineSpellcheck({ source: this.spellcheck()! }) : [],
-      this.foldFrontmatter() ? frontmatterFold() : [],
+      this.foldFrontmatter()
+        ? frontmatterFold({
+            view: () =>
+              untracked(() => {
+                const context = this.surfaceContext();
+                const contrib = this.frontmatterViews.find(context);
+                return contrib === null
+                  ? null
+                  : { contrib, path: context.path(), vaultId: context.vaultId() };
+              }),
+          })
+        : [],
     ];
   }
 
