@@ -223,6 +223,13 @@ rest are kept so they still match `docs/11`.
 
 ### Follow-ups of shipped milestones (none committed)
 
+- **req-67 (working-time clocks):** its "the clock freezes when the run
+  ends" spec is flaky — two `onEvent` calls fired back-to-back race on
+  the async event path and the last writer wins, so a red gate run shows
+  `execSince: null` where the busy stamp was expected (seen once in
+  ~3 full-suite rounds on an otherwise untouched checkout). The fold
+  wants the same serialization the rest of the supervisor's event
+  handling implies.
 - **req-65 (interactive dialog):** the fleet's MCP tool `fleet_run`
   cannot start an interactive dialog — `interactive` rides neither its
   input schema nor `fleetStart`'s MCP mirror; an assistant-driven
