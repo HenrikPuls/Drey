@@ -2,6 +2,8 @@
  * The phone client's DOM helpers (req-66). Plain DOM, text through
  * `textContent` only — nothing from a ticket ever reaches innerHTML.
  */
+import type { View } from './context';
+
 type Child = Node | string | null | undefined | false;
 
 export interface Props {
@@ -137,6 +139,21 @@ export function present<T>(items: readonly (T | null | undefined | false)[]): T[
 
 export function chip(text: string, kind = ''): HTMLElement {
   return h('span', { class: `chip ${kind}`.trim(), text });
+}
+
+/**
+ * The page's paint key: the built view serialized. The app paints only
+ * when what the user would see changed — data churn no visible part of
+ * the page renders (a run's token tick, the connection flag) paints
+ * nothing.
+ */
+export function bodyKey(view: View): string {
+  const serialized = (node: Node): string => (node instanceof Element ? node.outerHTML : node.textContent ?? '');
+  return [
+    view.title,
+    ...view.body.map(serialized),
+    view.actions === null || view.actions === undefined ? '' : serialized(view.actions),
+  ].join('\n');
 }
 
 export function empty(text: string): HTMLElement {

@@ -3443,6 +3443,11 @@ sequenceDiagram
     GW-->>PH: event: board → the phone re-fetches
 ```
 
+On that `event: board` re-fetch the phone repaints only when the built
+view's serialized output changed — data churn no visible part of the
+page renders (a run's token tick, the connection flag) paints nothing
+(T-0053).
+
 The gateway checks the `Host` header before anything else (a page whose
 DNS name was rebound to this machine names a host the allowlist does not
 hold), refuses a foreign `Origin` on writes, and limits failed pairings

@@ -150,7 +150,9 @@ Host/Origin check, bypass runs refused remotely. Owner decisions D1–D5
 of 2026-10-30 confirmed. R1 (command layer + port), R2 (gateway, pairing,
 Settings), R3 (the phone client), R4 (runs on the phone), R5
 (refine) and R6 (the iPad board) shipped — see the changelog; only
-the optional R7 remains. Follow-up of R5: an SDK seam
+the optional R7 remains. The client's display flicker (a double paint
+at startup/wake and one per live-run tick) was fixed as T-0053 — the
+paint is keyed on the built view (see the changelog). Follow-up of R5: an SDK seam
 over `OpenDocsBridge` so a plugin's main side (the remote's refine)
 edits a ticket open in a Drey tab through that tab instead of relying
 on the ADR-0060 save-conflict merge. Remaining steps, each shipped on its own:

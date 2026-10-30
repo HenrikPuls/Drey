@@ -268,6 +268,14 @@ export function makeDesk() {
     bump(id);
     emit();
   };
-  return { port, calls, editOnDesk };
+  /** A worker tick the desk reports: run-1 moves on, the board does not. */
+  const touchFleet = (patch: Record<string, unknown>): void => {
+    const live = runs.find((r) => r['id'] === 'run-1');
+    if (live !== undefined) {
+      Object.assign(live, patch);
+    }
+    fleetEmit();
+  };
+  return { port, calls, editOnDesk, touchFleet };
 }
 
