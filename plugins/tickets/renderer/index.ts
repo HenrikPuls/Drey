@@ -665,13 +665,9 @@ function buildBoardView(api: DreyPluginApi): BoardView {
       board.append(columnNode(api, column));
     }
     root.append(board);
-    const metrics = metricsNode(snap);
-    if (metrics !== null) {
-      root.append(metrics);
-    }
-    const worktreeNote = worktreesNoteNode();
-    if (worktreeNote !== null) {
-      root.append(worktreeNote);
+    const statusBar = statusBarNode(api, snap);
+    if (statusBar !== null) {
+      root.append(statusBar);
     }
     if (!snap.isGitRepo) {
       const warn = el('div', 'tickets-warn');
@@ -1012,54 +1008,52 @@ const WORKER_LABEL: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /**
- * The cycle-time line (M85): each non-empty column's average dwell,
- * read from the tickets' entered-* stamps — shown beside the fleet's
- * run stats so a stuck column is visible at a glance.
+ * The status bar under the board (req-59), one row: the cycle times on
+ * the left — each non-empty column's average dwell from the tickets'
+ * entered-* stamps (M85), so a stuck column is visible at a glance —
+ * and the worktree home's note (T-0044) as a warning pill on the right:
+ * legacy-root leftovers and orphan folders under the base, listed in
+ * its tooltip, never auto-deleted (the Clean up worktrees control
+ * collects them). Null when there is nothing to say.
  */
-function metricsNode(snap: BoardSnapshot): HTMLElement | null {
+function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot): HTMLElement | null {
+  const bar = el('div', 'tickets-statusbar');
   const now = Date.now();
-  const parts: string[] = [];
+  const dwell = el('span', 'tickets-statusbar-dwell');
+  dwell.title = "Average time the tickets in each column have been sitting there (from the entered-* stamps)";
   for (const column of snap.columns) {
     if (column.tickets.length === 0) {
       continue;
     }
     const avg = averageDwellMs(column.tickets, column.phase.id, now);
-    parts.push(`${column.phase.title} ${avg === null ? '–' : `⌀${spanWords(avg)}`}`);
+    const seg = el('span', 'tickets-statusbar-seg');
+    seg.append(el('span', 'tickets-statusbar-name', column.phase.title), el('span', 'tickets-statusbar-value', avg === null ? '–' : spanWords(avg)));
+    dwell.append(seg);
   }
-  if (parts.length === 0) {
-    return null;
+  if (dwell.childElementCount > 0) {
+    dwell.prepend(el('span', 'tickets-statusbar-label', 'Avg. time in column'));
+    bar.append(dwell);
   }
-  const line = el('div', 'tickets-metrics', parts.join(' · '));
-  line.title =
-    'Average time this column\'s tickets have been sitting there (from the entered-* stamps)';
-  return line;
-}
-
-/** The worktree home's note line (T-0044): legacy-root leftovers and
- *  orphan folders under the base — listed, never auto-deleted; the
- *  Clean up worktrees control collects them. */
-function worktreesNoteNode(): HTMLElement | null {
-  if (worktrees === null) {
-    return null;
+  const legacy = worktrees?.legacyLeftovers.length ?? 0;
+  const orphans = worktrees?.orphans.length ?? 0;
+  if (worktrees !== null && legacy + orphans > 0) {
+    const parts: string[] = [];
+    if (legacy > 0) {
+      parts.push(`${legacy} legacy worktree${legacy === 1 ? '' : 's'}`);
+    }
+    if (orphans > 0) {
+      parts.push(`${orphans} orphan${orphans === 1 ? '' : 's'}`);
+    }
+    const warn = el('span', 'tickets-statusbar-warn');
+    warn.append(api.ui.icon('triangle-alert', 12), el('span', undefined, parts.join(' · ')));
+    warn.title = [
+      'Worktree folders to clean up — the Clean up worktrees control (trash icon above) removes them',
+      ...worktrees.legacyLeftovers.map((name) => `legacy: ${name}`),
+      ...worktrees.orphans.map((p) => `orphan: ${p}`),
+    ].join('\n');
+    bar.append(warn);
   }
-  const parts: string[] = [];
-  if (worktrees.legacyLeftovers.length > 0) {
-    const n = worktrees.legacyLeftovers.length;
-    parts.push(`${n} legacy worktree folder${n === 1 ? '' : 's'} to clean up`);
-  }
-  if (worktrees.orphans.length > 0) {
-    const n = worktrees.orphans.length;
-    parts.push(`${n} orphan${n === 1 ? '' : 's'} under the worktrees base`);
-  }
-  if (parts.length === 0) {
-    return null;
-  }
-  const line = el('div', 'tickets-metrics', `Worktrees: ${parts.join(' · ')}`);
-  line.title = [
-    ...worktrees.legacyLeftovers.map((name) => `legacy: ${name}`),
-    ...worktrees.orphans.map((p) => `orphan: ${p}`),
-  ].join('\n');
-  return line;
+  return bar.childElementCount === 0 ? null : bar;
 }
 
 /** The pills above the board: lights of the whole fleet and today's spend. */

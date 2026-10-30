@@ -54,14 +54,63 @@
 }
 
 /* The cycle-time line (M85): per-column average dwell beside the run stats. */
-.tickets-metrics {
+/* The status bar under the board (req-59): one row, cycle times left, a warning pill right. */
+.tickets-statusbar {
   flex: none;
-  padding: 3px 8px;
-  font-size: 0.78rem;
-  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
   white-space: nowrap;
+}
+
+.tickets-statusbar-dwell {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.tickets-statusbar-label {
+  flex: none;
+  color: var(--text-4);
+}
+
+.tickets-statusbar-seg {
+  flex: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.tickets-statusbar-name {
+  color: var(--text-2);
+}
+
+.tickets-statusbar-value {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tickets-statusbar-warn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 10px;
+  color: var(--status-modified);
+  background: color-mix(in srgb, var(--status-modified) 14%, transparent);
+  cursor: help;
 }
 
 .tickets-chip-age {

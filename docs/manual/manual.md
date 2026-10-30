@@ -957,9 +957,12 @@ first worker column is a plain queue — the next pool drains it
 (prioritized feeds plan).
 
 The board shows the chain's pulse: each column head carries its pool
-(`opencode ×2`) and its brakes; a thin **cycle-time line** above the
-run footer shows how long each column's tickets have been sitting
-there on average. The `ci` handover works, too: a column with a `ci:`
+(`opencode ×2`) and its brakes; a one-row **status bar** under the
+columns shows how long each column's tickets have been sitting there
+on average (*Avg. time in column*), and — on its right — an amber pill
+when worktree folders are waiting to be cleaned up (legacy leftovers
+or orphans; hover it for the list, the trash icon in the panel header
+removes them). The `ci` handover works, too: a column with a `ci:`
 command moves its tickets when the check passes in the work repo.
 And the assistant can drive runs: ask it about the fleet — it sees
 `fleet_status`, and can `fleet_run`, `fleet_stop`, `fleet_steer` and
