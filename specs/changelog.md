@@ -22,8 +22,7 @@ recorded as an explicit decision. The parity checklist lives in
 
 ### req-69 — The ticket card's context menu, regrouped
 
-Owner request, outside the list (2026-10-30). **Not yet manually verified
-by the owner.** The card menu had grown to some twenty rows — up to eight
+Owner request, outside the list (2026-10-30). The card menu had grown to some twenty rows — up to eight
 "Past run — …" rows in the middle of the actions, a terminal row as wide
 as the repository path, both claim rows always listed with one greyed
 out, and no keyboard navigation.
