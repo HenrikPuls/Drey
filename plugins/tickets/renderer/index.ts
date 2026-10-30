@@ -8,6 +8,7 @@
 import { createTranscriptView } from './transcript-view';
 import { formatWatch, parseStreamEvents } from './watch-format';
 import { newWaits } from './waiting';
+import { interactiveEndMoves, interactiveModeFor, type InteractiveMode } from './end-moves';
 import { asParagraphs, chainLogStamp, visibleChainLog } from './chain-log';
 import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
 import {
@@ -440,6 +441,11 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
     const parked = el('span', 'tickets-chip tickets-chip-parked', 'parked');
     parked.title = card.meta.parkedReason;
     meta.append(parked);
+  }
+  if (card.meta.interactive) {
+    const dialog = el('span', 'tickets-chip tickets-chip-interactive', 'dialog');
+    dialog.title = 'Reserved for an interactive dialog (req-65) — the fleet keeps its hands off; a board move releases it';
+    meta.append(dialog);
   }
   const blockedLine = blockedBadge(card);
   if (blockedLine !== null) {
@@ -1691,6 +1697,51 @@ function openBlockedMoveConfirm(
 const TAKEOVER_KIND = 'tickets-takeover';
 const TAKEOVER_SCHEME = 'takeover://';
 
+/**
+ * Starts the owner's interactive dialog (req-65): one click — the
+ * column's worker by the assignment ladder, the default permission
+ * mode, no form. The ticket and the dialog tab open side by side
+ * (SDK 1.35's split option).
+ */
+async function startInteractive(api: DreyPluginApi, card: TicketCard, mode: InteractiveMode): Promise<void> {
+  const label = mode === 'plan' ? 'Starting the plan dialog' : 'Starting the refine dialog';
+  const result = await runMutation(label, () =>
+    invokeBoard('fleetStart', { id: card.id, worker: card.worker, permissionMode: 'accept-edits', interactive: mode }),
+  );
+  if (!result.ok) {
+    return;
+  }
+  // Side by side: the ticket in the focused pane, the dialog in a fresh
+  // pane beside it. A second addDoc of the same key would just focus.
+  if (snapshot?.vaultId != null) {
+    await api.documents.open(card.path, undefined, { vaultId: snapshot.vaultId });
+  }
+  const runId = (result as { runId?: string }).runId;
+  const status = (await invokeBoard('fleetStatus').catch(() => null)) as { runs?: RunInfo[] } | null;
+  const run = status?.runs?.find((r) => r.id === runId);
+  if (run !== undefined) {
+    openTakeover(api, run, 'right');
+  }
+}
+
+/**
+ * Ends an interactive dialog (req-65): the run stops (an ended run skips
+ * this), then the owner move the button named — the ordinary transition,
+ * exactly the move across the checkpoint the owner makes by hand.
+ */
+async function finishInteractiveMove(runId: string, ticketId: string, from: string, to: string): Promise<void> {
+  const run = fleetRuns.find((r) => r.id === runId);
+  if (run !== undefined && LIVE_RUN_STATES.includes(run.state)) {
+    const stopped = await runMutation('Ending the dialog', () =>
+      invokeBoard('fleetStop', { runId, reason: `the dialog ended — the owner moves the ticket to ${to}` }),
+    );
+    if (!stopped.ok) {
+      return;
+    }
+  }
+  await runMutation(`Moving ${ticketId} to ${to}`, () => invokeBoard('transition', { id: ticketId, from, to, index: null }));
+}
+
 /** The largest file the prompt box attaches (the runner enforces the same). */
 const MAX_ATTACH_BYTES = 10 * 1024 * 1024;
 
@@ -1737,8 +1788,8 @@ function announceWaits(api: DreyPluginApi): void {
   }
 }
 
-function openTakeover(api: DreyPluginApi, run: RunInfo): void {
-  api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${run.id}`, takeoverTitle(run));
+function openTakeover(api: DreyPluginApi, run: RunInfo, split?: 'right' | 'down'): void {
+  api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${run.id}`, takeoverTitle(run), split !== undefined ? { split } : undefined);
 }
 
 function takeoverTitle(run: RunInfo): string {
@@ -2119,6 +2170,45 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     shownWait = key;
   };
 
+  // The dialog's end moves (req-65): an interactive run is the owner's
+  // conversation — when it is over, these buttons perform the owner move
+  // that closes it (stop the run if it still lives, then the transition).
+  const endMoves = el('div', 'tickets-takeover-endmoves');
+  endMoves.hidden = true;
+  const paintEndMoves = (run: RunInfo | null): void => {
+    if (run === null || run.interactive === undefined || snapshot === null) {
+      endMoves.hidden = true;
+      return;
+    }
+    const mode = run.interactive;
+    // Where the ticket sits NOW — the owner may have moved it since the
+    // run started, and a ticket off the board has nowhere to go.
+    const card = snapshot.columns.flatMap((c) => c.tickets).find((t) => t.id === run.ticketId) ?? null;
+    if (card === null) {
+      endMoves.hidden = true;
+      return;
+    }
+    const phaseId = card.phase;
+    const moves = interactiveEndMoves(mode, phaseId, snapshot.columns);
+    if (moves.length === 0) {
+      endMoves.hidden = true;
+      return;
+    }
+    endMoves.replaceChildren(
+      el('span', 'tickets-takeover-endmoves-label', 'Dialog done? End it with a move:'),
+      ...moves.map((move) => {
+        const b = el('button', 'tickets-takeover-btn tickets-takeover-endmove', move.label);
+        b.type = 'button';
+        b.title = move.title;
+        b.addEventListener('click', () => {
+          void finishInteractiveMove(runId, run.ticketId, phaseId, move.toPhase);
+        });
+        return b;
+      }),
+    );
+    endMoves.hidden = false;
+  };
+
   const live = (): RunInfo | null => fleetRuns.find((r) => r.id === runId) ?? null;
   const paintBanner = (): void => {
     const run = live();
@@ -2138,9 +2228,11 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
             ? [`Run ${run.state}`, 'The run has ended — Resume session picks it up in a new worker']
             : run.waiting
               ? ['Waits for you', 'The worker asks you or wants an approval — answer in the card above the prompt box']
-              : held
-                ? ['You have control', 'The runner sends nothing of its own until you hand the run back']
-                : ['Runner driving', 'The runner is driving this worker — your first message takes over'];
+              : run.interactive !== undefined
+                ? ['Interactive dialog', 'Your dialog with the worker — the run never gates or moves; end it with a move below']
+                : held
+                  ? ['You have control', 'The runner sends nothing of its own until you hand the run back']
+                  : ['Runner driving', 'The runner is driving this worker — your first message takes over'];
     modePill.textContent = mode;
     modePill.title = modeTip;
     statusWord.textContent = status !== null && (active || detached) ? status.label : '';
@@ -2187,6 +2279,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     }
     paintWait(run);
     paintProgress();
+    paintEndMoves(run);
   };
 
   let lastStream = '\u0000';
@@ -2209,7 +2302,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   pull();
   const timer = setInterval(pull, 2_000);
   const tick = setInterval(paintBanner, 1_000);
-  wrap.append(banner, transcript.element, progress, waitCard, promptWrap);
+  wrap.append(banner, endMoves, transcript.element, progress, waitCard, promptWrap);
   host.append(wrap);
   return () => {
     alive = false;
@@ -2463,6 +2556,16 @@ function openCardMenu(
   }
   menu.append(el('div', 'tickets-menu-sep'));
   const live = runForCard(card.id);
+  // The one-click interactive dialog (req-65): plan on the plan column,
+  // refine at the checkpoints and the last agent column — only without a
+  // live run (one run per ticket, the takeover tab is the dialog then).
+  if (snapshot !== null && live === null) {
+    const mode = interactiveModeFor(card.phase, snapshot.columns);
+    if (mode !== null) {
+      const action = mode === 'plan' ? 'Plan with agent' : 'Refine with agent';
+      item(`${action} (${card.worker})`, () => void startInteractive(api, card, mode));
+    }
+  }
   if (live === null) {
     item(`Run agent (${card.worker})…`, () => openRunModal(api, card));
   } else {
@@ -2576,6 +2679,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
         setNote(message, 'error');
         notifyViews();
       },
+      startInteractive: (card, mode) => void startInteractive(api, card, mode),
     });
     let headerVault: string | null = null;
     let unregisterHeader: (() => void) | null = null;

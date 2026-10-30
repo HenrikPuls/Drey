@@ -906,6 +906,13 @@ export class Orchestrator {
         }
         if (card.meta.claimedBy !== null) {
           this.noteSkip(card.id, `dispatch holds ${card.id}: claimed by ${card.meta.claimedBy} — the pool waits`);
+        } else if (card.meta.interactive) {
+          // req-65: the owner reserved the ticket for a dialog — say so,
+          // or the column looks idle for no reason.
+          this.noteSkip(
+            card.id,
+            `dispatch holds ${card.id}: reserved for an interactive dialog — the owner plans or refines it themselves`,
+          );
         } else if (card.meta.run !== null) {
           this.noteSkip(
             card.id,

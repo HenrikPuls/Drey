@@ -195,18 +195,18 @@ export class PluginApiFactory {
         list: () => this.editor.openDocs().map(toOpenDoc),
         open: (path, line, opts) => {
           if (line === undefined) {
-            return this.editor.openFile(path, opts?.vaultId);
+            return this.editor.openFile(path, opts?.vaultId, { split: opts?.split });
           }
-          return this.editor.openFileAt(path, line, opts?.vaultId);
+          return this.editor.openFileAt(path, line, opts?.vaultId, { split: opts?.split });
         },
         openScratch: (path, content) => this.editor.openScratch(path, content),
-        addDoc: (kind, key, name) => {
+        addDoc: (kind, key, name, opts) => {
           // A clear failure at the plugin's own call site beats a tab that
           // renders the "kind not available" empty state (ADR-0044).
           if (this.docKinds.get(kind) === undefined) {
             throw new Error(`documents.addDoc: doc kind "${kind}" is not registered`);
           }
-          this.editor.addPluginDoc(kind, key, name);
+          this.editor.addPluginDoc(kind, key, name, opts?.split);
         },
         registerFileOpener: (opener) => track(this.fileOpeners.register(opener)),
         rename: (path, name) => this.editor.renameDoc(path, name),

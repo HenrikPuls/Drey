@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { ActionOutcome } from '../../../shared/ipc-api';
 import { isAutoSavePath } from '../../../shared/structural-folders';
+import type { DocSplit } from '../../../shared/plugin-api/renderer';
 import { EditorCommandsService } from '../editor/editor-commands.service';
 import { EditorPrefsService, EditorViewMode } from '../editor/editor-prefs.service';
 import { PaneService } from '../panes/pane.service';
@@ -302,6 +303,7 @@ export class EditorService {
       keepFocused?: boolean;
       prefetched?: { content: string; modifiedMs: number };
       pinned?: boolean;
+      split?: DocSplit;
     } = {},
   ): Promise<void> {
     return this.opener.openFile(relativePath, vaultId, opts);
@@ -313,8 +315,8 @@ export class EditorService {
   }
 
   /** @see DocOpenService.openFileAt */
-  openFileAt(relativePath: string, line: number, vaultId?: string): Promise<void> {
-    return this.opener.openFileAt(relativePath, line, vaultId);
+  openFileAt(relativePath: string, line: number, vaultId?: string, opts?: { split?: DocSplit }): Promise<void> {
+    return this.opener.openFileAt(relativePath, line, vaultId, opts);
   }
 
   /** id + target for `openFileAt`; `id === 0` means "nothing pending". */
@@ -341,8 +343,8 @@ export class EditorService {
   }
 
   /** @see DocOpenService.addPluginDoc */
-  addPluginDoc(kind: string, key: string, name: string): void {
-    this.opener.addPluginDoc(kind, key, name);
+  addPluginDoc(kind: string, key: string, name: string, split?: DocSplit): void {
+    this.opener.addPluginDoc(kind, key, name, split);
   }
 
   /** Updates a plugin-doc tab's display name (e.g. the browser's page title). */

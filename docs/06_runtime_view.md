@@ -1689,6 +1689,17 @@ sequenceDiagram
     P-->>D: band re-rendered with its tabs and band height
 ```
 
+Sibling flow (SDK 1.35, req-65): a plugin calls `documents.open(path, …,
+{ split: 'right' | 'down' })` or `documents.addDoc(kind, key, name, …)`
+with the option. `DocOpenService.splitLanding` splits the focused pane
+first (`'right'` = a row split, `'down'` = a column split) — the fresh
+sibling becomes the focused pane, and the tab the call then registers
+opens there (`OpenDocsStore.add` always opens into the focused pane). An
+already-open tab just reveals, a focused dock band cannot split (plain
+open there), and the focused pane's clean tab is never replaced — the
+call asked to open alongside. The resulting tree persists like any pane
+layout.
+
 ## 6.34 One chat completion through the provider router ([ADR-0047](09_architecture_decisions/0047-llm-provider-abstraction.md))
 
 The assistant plugin's Ask is the worked example; every other consumer
@@ -3412,3 +3423,42 @@ it."); the queries (branches, log, file history, diffs, stash list)
 answer, with the paths stripped back repository-relative main-side.
 Rescans run on registry changes and relocate only.
 
+
+## 6.70 The interactive dialog: start, talk, end with a move (req-65, [ADR-0084](09_architecture_decisions/0084-interactive-runs-at-plan-and-checkpoints.md))
+
+The owner's conversation with a fleet worker — "Plan with agent" on the
+plan column, "Refine with agent" at the checkpoints and the last agent
+column. One click (card menu or ticket header); the run is a normal
+record with `interactive` set, so every fleet surface shows it.
+
+```mermaid
+sequenceDiagram
+    participant U as Owner
+    participant R as Tickets renderer
+    participant B as Board (main)
+    participant F as Fleet runner
+    participant W as Worker
+
+    U->>R: card menu / header -> Plan with agent
+    R->>B: fleetStart {id, worker, permissionMode, interactive: "plan"}
+    B->>F: POST /start (RunRequest.interactive)
+    F->>W: spawn (interactive brief, held at spawn)
+    F->>F: run: stamp + interactive: true (dispatcher holds off)
+    F-->>R: run info (held, interactive)
+    R->>R: documents.open(ticket) + addDoc(takeover, split right)
+    W->>R: interview turn -> QUESTION: (the run waits)
+    U->>R: answers in the takeover prompt box
+    R->>F: POST /send (the answer, no takeover — already held)
+    W->>W: writes the agreed plan into the ticket, commits, asks on
+    U->>R: an end-move button (Finish -> plan-review)
+    R->>F: POST /stop (a living run ends)
+    R->>B: transition {from, to} — the owner move, one commit
+    B->>B: drops interactive: true; the dispatcher may take it again
+```
+
+The end moves are computed from the column the ticket sits in now
+(`end-moves.ts`, pure): a plan dialog finishes into the next column or
+approves straight past the checkpoint; a refine dialog goes on to the
+next column or back to the nearest agent column. Closing the tab
+without a move keeps the run and the reservation — "Resume session"
+continues the dialog.

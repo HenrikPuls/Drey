@@ -462,3 +462,21 @@ through its tab by every vault tool (ADR-0071).
   register the view again — a registration makes open editors look again.
 - `EditorSurfaceContext.vaultId()` (also new) is the shown document's
   vault, the active one when the document names none.
+
+## SDK 1.35 — opening a tab in a split pane
+
+- `documents.open(path, line?, { split: 'right' | 'down' })` and
+  `documents.addDoc(kind, key, name, { split: 'right' | 'down' })` land
+  the new tab in a fresh split pane beside (`right`) or below (`down`)
+  the focused pane's current content, instead of inside it. Without the
+  option nothing changes.
+- The option is a landing request, not a command. An already-open tab
+  still just reveals (a document lives in one pane at a time), a focused
+  dock band cannot split (ADR-0038) — the tab opens there plainly — and a
+  split-open never replaces the focused pane's clean tab: it asked to
+  open *alongside*. A file a plugin opener claims (or an external
+  document) ignores the option, because no base tab is added on those
+  paths.
+- Split first, then add: the pane the option splits becomes focused, and
+  the tab lands there. The resulting layout persists with the session
+  like any pane tree.

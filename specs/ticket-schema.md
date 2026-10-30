@@ -190,6 +190,7 @@ How. Filled in the plan phase; must end with the acceptance criteria.
 | `blocked-by` | list of ticket ids | Optional (T-0050). `blocked-by: [T-0048]` — the ticket waits until every referenced ticket reaches the pipeline's terminal phase. Blocked is **derived** on every board assembly, never stored. See [Dependencies](#dependencies-blocked-by). |
 | `parked-reason` | string | With `parked-at`; the ticket sits in inbox while parked (circuit breaker, budgets — ADR-0075). Any transition out of inbox clears both. The circuit breaker writes them when it parks a column's next candidate (M85); re-prioritizing revives the ticket. |
 | `parked-at` | UTC timestamp | See `parked-reason`. |
+| `interactive` | boolean | The dialog reservation (req-65): `interactive: true` — the owner works this ticket in an interactive dialog with a fleet worker, so the dispatcher keeps its hands off while the field stands. An interactive run's start stamps it; any transition (a board move) drops it — at the new column the machine may take the ticket again. Only a bare `true` reads as set. |
 
 Unknown keys are preserved on rewrite and reported as noise (not an
 error). Human edits never break the file: what parses as YAML reads;
@@ -301,6 +302,18 @@ Prose for humans. The board follows this file on refresh.
   Default off; a push failure is a warning (board) / log line
   (runner), never a failed transition. Anything but a remote-name
   string is ignored with a noise badge.
+- `interactive`: optional prompt ref (req-65) — the brief an
+  **interactive dialog run** in this column gets
+  (`interactive: plan-interview` → `tickets/_meta/prompts/plan-interview.md`).
+  Absent, the shipped defaults apply: `plan-interactive-default` on the
+  pipeline's plan column, `refine-interactive-default` at the owner's
+  checkpoints and the last agent column. An interactive run is started
+  from the board ("Plan with agent" / "Refine with agent"), not by the
+  dispatcher: the worker is the owner's from turn one (held), the run
+  never gates and never moves — the dialog's end moves (in the takeover
+  tab) are owner moves. While the run is live the ticket carries
+  `interactive: true`, which keeps the dispatcher off it; the move
+  drops the field.
 - Editing this file is the owner's; the board re-reads it on every
   refresh. Unknown keys in a phase entry are ignored.
 

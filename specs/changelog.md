@@ -20,6 +20,70 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-65 — Interactive mode at the plan phase and every checkpoint
+
+Owner request, outside the
+list (2026-10-30). Some steps the owner wants to do *with* a worker, not
+hand to one — and until now the board had no way in: "Run agent" starts
+a machine-shaped run (the worker alone, gate, auto-move), and takeover
+(ADR-0079) presupposes one that is already going. Now a run can be
+**interactive**: the owner's dialog from turn one.
+
+- **The run** (`plugins/tickets/main/fleet/`): `RunRequest.interactive:
+  'plan' | 'refine'` (ADR-0084) — held at spawn (`setHold` before the
+  first turn ends, the `reopened` mechanism's sibling), and at its end,
+  however the worker exits, neither the gate nor a move runs: the owner
+  moves the ticket. The brief's completion discipline is replaced by a
+  dialog discipline (end turns with a question, never claim a move); the
+  `QUESTION:` asking protocol (req-64) is the interview loop. The start
+  still lays the `run:` stamp plus **`interactive: true`** on the ticket
+  (new frontmatter field), which keeps the dispatcher off the ticket
+  between dialogs (`dispatchable` refuses it, the log says
+  `dispatch holds <id>: reserved for an interactive dialog`); any board
+  move drops the field. Reopening the session ("Resume session")
+  continues the dialog later.
+- **The prompts**: two shipped seeds —
+  `plan-interactive-default.md` (plan-default's output discipline,
+  interview-first: 2–4 focused questions up front, propose in the chat,
+  write only the agreed result) and `refine-interactive-default.md` (one
+  phase-aware checkpoint companion: verify together, owner-approved
+  fixes as small commits on the branch, the verdict in the Log; at
+  commit also the push). A phase's `interactive:` key in `pipeline.md`
+  overrides the default per column; the acceptance-criteria refusal
+  lifts for interactive runs.
+- **The board** (`plugins/tickets/renderer/`): **Plan with agent** on
+  the plan column and **Refine with agent** at the checkpoints and the
+  last agent column (`end-moves.ts`, pure — offered in the card menu and
+  the req-62 ticket header, one click, no form). The start opens ticket
+  and dialog side by side. The takeover tab of an interactive run shows
+  the **end moves** (stop the living run, then the ordinary transition —
+  an owner move across the checkpoint): a plan dialog *Finish → next*
+  and *Approve → past the checkpoint*; a refine dialog *On to next* /
+  *Back to the nearest agent column*. Reserved cards carry a **dialog**
+  chip; the mode pill reads "Interactive dialog".
+- **SDK 1.35** (base seam): `documents.open(path, line?, { split:
+  'right' | 'down' })` and `documents.addDoc(kind, key, name, { split })`
+  land the new tab in a fresh split pane beside or below the focused
+  pane (`DocOpenService.splitLanding`: split first, then add — the new
+  pane is focused and `OpenDocsStore.add` always opens into the focused
+  pane). A landing request, not a command: an already-open tab still
+  just reveals, a focused dock band cannot split (plain open there), and
+  a split-open never replaces the focused pane's clean tab — it asked to
+  open alongside. `plugins/AUTHORING.md` documents it.
+
+Specs: `plugins/tickets/renderer/end-moves.spec.ts` (the column rules
+and end moves), `plugins/tickets/main/fleet/runs.spec.ts` (held from
+spawn, stamp + reservation, exit without gate or move),
+`chain.spec.ts` (the dispatcher holds reserved tickets),
+`request.spec.ts` (dialog discipline replaces the completion
+discipline, no move target), `ticket-files.spec.ts` (the field parses
+only from a bare `true`; a move drops it, a claim does not),
+`default-prompts.spec.ts` (the two new shipped files), and the e2e
+`e2e/interactive-dialog.spec.ts` (the switches appear exactly where the
+columns offer them). Also repaired on the way: the manual had a
+duplicated Workers-strip paragraph (shipped in the req-64 entry), and
+req-66's final chip shape had left its e2e expecting the old text.
+
 ### req-68 — Clean up worktrees sweeps the link-only leftover folders
 
 Owner request, outside the list (the status bar kept showing "9 legacy

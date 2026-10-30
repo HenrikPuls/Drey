@@ -933,6 +933,45 @@ describe('RunSupervisor', () => {
     await expect(fsp.access(path.join(vaultDir, rel))).rejects.toBeDefined();
   });
 
+  it('an interactive dialog starts held, lays the run stamp and the reservation, and ends without gate or move (req-65)', async () => {
+    const { sup, adapter, gate } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(
+      request({
+        ticketRelPath: rel,
+        acceptance: [],
+        gate: 'structural',
+        nextPhase: null,
+        nextPhaseDir: null,
+        interactive: 'plan',
+      }),
+    );
+    expect(started.ok).toBe(true);
+    const info = (started as { run: { id: string; state: string; held?: boolean; interactive?: string } }).run;
+    // Held from turn one — before the worker says anything.
+    expect(adapter.handles[0]!.setHold).toHaveBeenCalledWith(true);
+    expect(info.held).toBe(true);
+    expect(info.interactive).toBe('plan');
+    expect(info.state).toBe('running');
+
+    // The ticket carries the live run AND the dialog reservation.
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    const meta = parseTicketFile(text, rel).meta;
+    expect(meta.run?.stream).toBe(info.id);
+    expect(meta.interactive).toBe(true);
+
+    // The worker ends its turn without a result — a dialog turn, not a
+    // claim: the run still ends done, and nothing gates or moves.
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(info.id)?.state).toBe('done'));
+    expect(gate).toEqual([]);
+    const kept = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    const keptMeta = parseTicketFile(kept, rel).meta;
+    expect(keptMeta.run).toBeNull(); // the stamp cleared with the run
+    expect(keptMeta.interactive).toBe(true); // the reservation stands until a move
+    await fsp.access(path.join(vaultDir, rel)); // the ticket never moved
+  });
+
   it('a fleet move into a non-claim phase releases a stale claim', async () => {
     const { sup, adapter } = supervisor();
     const rel = await writeTicket();

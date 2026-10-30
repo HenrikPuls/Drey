@@ -124,6 +124,17 @@ describe('parseTicketFile', () => {
     const badYaml = parseTicketFile('---\nid: [broken\n---\n', 'tickets/inbox/T-0003.md');
     expect(badYaml.issues[0]!.level).toBe('error');
   });
+
+  it('reads the interactive reservation only from a bare true (req-65)', () => {
+    const stamped = parseTicketFile(CANONICAL.replace('---\n', '---\ninteractive: true\n'), 'tickets/plan/T-0042.md');
+    expect(stamped.meta.interactive).toBe(true);
+    // Anything else reads as absent — the owner edits freely.
+    for (const value of ['false', '"true"', 'yes', '1']) {
+      const parsed = parseTicketFile(CANONICAL.replace('---\n', `---\ninteractive: ${value}\n`), 'tickets/plan/T-0042.md');
+      expect(parsed.meta.interactive, value).toBe(false);
+    }
+    expect(parseTicketFile(CANONICAL, 'tickets/plan/T-0042.md').meta.interactive).toBe(false);
+  });
 });
 
 describe('patchTicketFile', () => {
@@ -165,6 +176,24 @@ describe('patchTicketFile', () => {
     const patched = patchTicketFile(parked, { to: 'prioritized', from: 'inbox', now, actor: 'owner@desk' });
     expect(patched).not.toContain('parked-reason');
     expect(patched).not.toContain('parked-at');
+  });
+
+  it('stamps and drops the interactive reservation (req-65)', () => {
+    const stamped = patchTicketFile(CANONICAL, {
+      to: 'plan',
+      from: null,
+      now,
+      actor: 'agent@desk',
+      action: 'run R-1 started (opencode) — worktree created',
+      setInteractive: true,
+    });
+    expect(stamped).toContain('interactive: true');
+    // A move drops it — the dispatcher may take the ticket again; a claim
+    // (from === null) never does.
+    const moved = patchTicketFile(stamped, { to: 'plan-review', from: 'plan', now, actor: 'owner@desk' });
+    expect(moved).not.toContain('interactive');
+    const claimed = patchTicketFile(stamped, { to: 'plan', from: null, now, actor: 'owner@desk', claimBy: 'owner@desk' });
+    expect(claimed).toContain('interactive: true');
   });
 
   it('a claim-only patch never restamps entered-<phase>', () => {

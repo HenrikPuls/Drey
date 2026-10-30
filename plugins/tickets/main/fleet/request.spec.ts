@@ -31,6 +31,7 @@ function card(over: Partial<TicketCard> = {}): TicketCard {
       blockedBy: [],
       parkedReason: null,
       parkedAt: null,
+      interactive: false,
       entered: {},
     },
     pinned: false,
@@ -146,6 +147,37 @@ describe('composeRunRequest', () => {
     // Absent — every older caller — stays absent: the supervisor reads fresh.
     const absent = composeRunRequest(base({}));
     expect(absent.ok && absent.request.handover).toBeUndefined();
+  });
+
+  it('an interactive dialog composes without acceptance criteria, carries the mode, and moves nothing (req-65)', () => {
+    const noCriteria = TICKET.replace('- [ ] `npm run verify:unit` — exits 0\n', '');
+    const result = composeRunRequest(
+      base({
+        ticketText: noCriteria,
+        workingPhase: phase('plan', { handover: 'agent plan-default', interactive: 'plan-interactive-default' }),
+        nextPhaseId: 'plan-review',
+        nextPhaseDir: '20-plan-review',
+        interactive: 'plan',
+      }),
+    );
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.interactive).toBe('plan');
+    expect(result.request.nextPhase).toBeNull(); // the owner moves the ticket
+    expect(result.request.nextPhaseDir).toBeNull();
+    expect(result.request.claimIdentity).toBeNull();
+    expect(result.request.instruction).toContain('Dialog discipline');
+    expect(result.request.instruction).not.toContain('Completion discipline');
+    expect(result.request.instruction).toContain('QUESTION:'); // the asking protocol rides the dialog too
+
+    // A dispatched (non-interactive) compose keeps every default.
+    const normal = composeRunRequest(base({}));
+    if (!normal.ok) {
+      throw new Error(normal.error);
+    }
+    expect(normal.request.interactive).toBeUndefined();
+    expect(normal.request.instruction).toContain('Completion discipline');
   });
 
   it('the assignment ring: ticket pin over column over handover pin over repo over default', () => {

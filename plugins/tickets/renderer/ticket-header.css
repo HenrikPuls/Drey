@@ -87,6 +87,17 @@
   flex: 1;
 }
 
+/* The one-click interactive dialog (req-65): a quiet text button among
+ * the header chips — the accent says it starts something. */
+.tickets-head-dialog {
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.tickets-head-dialog:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
 .tickets-head-raw {
   color: var(--text-5);
 }

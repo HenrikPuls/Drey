@@ -777,6 +777,15 @@ export class RunSupervisor {
         : {}),
     });
     run.info = { ...run.info, state: 'running', pid: handle.pid };
+    // req-65: an interactive dialog is the owner's from turn one — held
+    // at spawn (the worker stands after its first, interviewing turn),
+    // and at its end neither the gate nor a move runs: the owner moves
+    // the ticket themselves. The `run:` stamp below is still laid.
+    const interactive = request.interactive;
+    if (interactive !== undefined) {
+      handle.setHold?.(true);
+      run.info = { ...run.info, held: true, interactive };
+    }
     if (reopened) {
       handle.setHold?.(true);
       run.info = { ...run.info, held: true };
@@ -785,6 +794,12 @@ export class RunSupervisor {
       return { ok: true, run: run.info };
     }
     await this.persist(run);
+    if (interactive !== undefined) {
+      await this.logLine(
+        run,
+        `interactive dialog (${interactive}) — the worker is yours from the first turn; the run never gates or moves`,
+      );
+    }
 
     // The ticket carries the live run (schema `run` map) — the board and
     // any fleet surface can see at most one live run per ticket.
@@ -796,6 +811,7 @@ export class RunSupervisor {
         actor: this.agentActor(),
         action: `run ${id} started (${request.provider}${request.model !== null ? `, ${request.model}` : ''}) — worktree ${prepared.outcome}${decision !== null ? `, handover ${decision.mode}` : ''}`,
         ...(request.recordWorker !== undefined && request.recordWorker !== '' ? { setWorker: request.recordWorker } : {}),
+        ...(interactive !== undefined ? { setInteractive: true } : {}),
         ...(handle.pid !== null
           ? { run: { pid: handle.pid, 'started-at': this.stamp(), stream: id } }
           : {}),
@@ -1221,7 +1237,10 @@ export class RunSupervisor {
     if (request.worktreePath.trim() === '') {
       failures.push('the worktree path is empty (a pre-T-0044 sender derived it itself)');
     }
-    if (request.acceptance.length === 0 && request.gate !== 'structural') {
+    // An interactive dialog needs no gate commands — the run never gates
+    // (req-65): the interview itself is the deliverable, the owner moves
+    // the ticket when the dialog ends.
+    if (request.acceptance.length === 0 && request.gate !== 'structural' && request.interactive === undefined) {
       failures.push('the ticket has no acceptance criteria — the machine gate would have nothing to run');
     }
     return failures;
@@ -1442,6 +1461,14 @@ export class RunSupervisor {
       return;
     }
     if (run.info.state === 'detached') {
+      return;
+    }
+    // An interactive dialog (req-65) never gates and never moves: its
+    // deliverable is the conversation, and the owner moves the ticket
+    // themselves when it ends — however the worker's process came to an end.
+    if (run.request.interactive !== undefined) {
+      await this.logLine(run, `interactive dialog ended (exit ${code ?? 'signal'}) — the owner moves the ticket`);
+      await this.finish(run, 'done');
       return;
     }
     // Agent-decided completion (ADR-0077): the gate is the safety net for

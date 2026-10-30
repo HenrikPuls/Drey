@@ -25,6 +25,15 @@ export function isWorkerProvider(value: unknown): value is WorkerProviderId {
 export type PermissionMode = 'accept-edits' | 'bypass';
 
 /**
+ * The interactive dialog modes (req-65): the owner drives the run as a
+ * conversation — held from turn one, no gate, no move at its end; the
+ * owner moves the ticket themselves when the dialog ends. `'plan'`
+ * interviews the owner and writes the plan into the ticket; `'refine'`
+ * is the checkpoint companion (plan-review / review / commit).
+ */
+export type InteractiveMode = 'plan' | 'refine';
+
+/**
  * What the runner needs to start one run. One run = one ticket = one
  * worktree on the deterministic branch (ADR-0075); the ticket-file
  * context rides along because the runner composes the instruction and
@@ -94,6 +103,14 @@ export interface RunRequest {
    * request from an older plugin — means `'fresh'`.
    */
   readonly handover?: HandoverMode | 'auto';
+  /**
+   * The owner drives this run as a dialog (req-65): the worker is held
+   * from turn one, the run never gates and never moves — the owner moves
+   * the ticket themselves when the dialog ends. The ticket's `run:` stamp
+   * is still laid (the run occupies the worktree and keeps the
+   * dispatcher off the ticket while it lives).
+   */
+  readonly interactive?: InteractiveMode;
   /**
    * The working column when the orchestrator dispatched the run (M85,
    * ADR-0077): the pool whose slot the run occupies — which can differ
@@ -367,6 +384,12 @@ export interface RunInfo {
    * alone, and the runner sends it nothing of its own until it is handed back.
    */
   readonly held?: boolean;
+  /**
+   * An interactive dialog run (req-65): started for the owner's
+   * conversation — held from turn one, no gate, no move. The takeover
+   * tab shows the dialog's end moves for such a run.
+   */
+  readonly interactive?: InteractiveMode;
   /**
    * Whether the worker is in the middle of a turn (`busy`) or standing
    * and waiting for input (`idle`) — the board's "running or standing".

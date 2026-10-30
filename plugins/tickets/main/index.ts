@@ -72,7 +72,7 @@ import {
 } from './fleet/worktree-clean';
 import { unlinkShared } from './fleet/worktrees';
 import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } from './fleet/worktree-home';
-import type { ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, PermissionMode, RunInfo } from './fleet/protocol';
+import type { ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, InteractiveMode, PermissionMode, RunInfo } from './fleet/protocol';
 import {
   normalizeFleetCaps,
   normalizeFleetHandover,
@@ -107,6 +107,10 @@ See specs/ticket-schema.md. Edit freely; the board follows on refresh.
 
 const PROMPTS_DIR = 'tickets/_meta/prompts';
 const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+/** The shipped interactive dialog prompts (req-65) and their default refs. */
+const PLAN_INTERACTIVE_PROMPT = 'plan-interactive-default';
+const REFINE_INTERACTIVE_PROMPT = 'refine-interactive-default';
 
 
 const DEFAULT_ORDER = `# Column order pins — listed ids form the top of their column
@@ -948,6 +952,12 @@ class BoardService {
     permissionMode: PermissionMode;
     /** The dialog's handover choice (T-0049); null = not asked — fresh. */
     handover: HandoverMode | 'auto' | null;
+    /**
+     * The owner drives this run as an interactive dialog (req-65):
+     * the worker is held from turn one, the run never gates or moves.
+     * null = a normal run.
+     */
+    interactive: InteractiveMode | null;
   }): Promise<{ ok: boolean; error?: string; runId?: string }> {
     return this.enqueue(async () => {
       const vault = await this.detect();
@@ -979,16 +989,31 @@ class BoardService {
       const repo =
         card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card!.meta.repo) ?? null);
       const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
-      const promptRef =
-        workingPhase === null ? null : columnPromptRef(workingPhase);
       let prompt: string | null = null;
-      if (promptRef !== null) {
-        prompt = await this.readOptional(vault.id, `tickets/_meta/prompts/${promptRef}.md`);
+      if (input.interactive !== null) {
+        // req-65: the dialog's brief — the phase's `interactive:` ref,
+        // else the shipped default for the mode. A manual checkpoint
+        // column has no prompt of its own; the dialog gets one anyway.
+        const ref =
+          workingPhase?.interactive ??
+          (input.interactive === 'plan' ? PLAN_INTERACTIVE_PROMPT : REFINE_INTERACTIVE_PROMPT);
+        prompt = await this.readOptional(vault.id, `tickets/_meta/prompts/${ref}.md`);
         if (prompt === null) {
           return {
             ok: false,
-            error: `the handover names prompt "${promptRef}", but tickets/_meta/prompts/${promptRef}.md is missing`,
+            error: `the interactive prompt "${ref}" is missing — tickets/_meta/prompts/${ref}.md ("Add Drey's prompts" in the ticket settings re-adds it)`,
           };
+        }
+      } else {
+        const promptRef = workingPhase === null ? null : columnPromptRef(workingPhase);
+        if (promptRef !== null) {
+          prompt = await this.readOptional(vault.id, `tickets/_meta/prompts/${promptRef}.md`);
+          if (prompt === null) {
+            return {
+              ok: false,
+              error: `the handover names prompt "${promptRef}", but tickets/_meta/prompts/${promptRef}.md is missing`,
+            };
+          }
         }
       }
       const nextPhaseId = nextPhaseIdOf(snap.columns, phaseId);
@@ -1034,7 +1059,8 @@ class BoardService {
         diffStat,
         gateFailure,
         caps: this.caps,
-        ...(input.handover !== null ? { handover: input.handover } : {}),
+        ...(input.handover !== null ? { handover: input.handover } : input.interactive !== null ? { handover: 'auto' } : {}),
+        ...(input.interactive !== null ? { interactive: input.interactive } : {}),
       });
       if (!composed.ok) {
         return { ok: false, error: composed.error };
@@ -1970,7 +1996,7 @@ const plugin: MainPluginModule = {
     }));
 
     ctx.ipc.handle('fleetStart', async (payload) => {
-      const p = payload as { id?: unknown; worker?: unknown; permissionMode?: unknown; handover?: unknown };
+      const p = payload as { id?: unknown; worker?: unknown; permissionMode?: unknown; handover?: unknown; interactive?: unknown };
       if (typeof p.id !== 'string') {
         return { ok: false, error: 'bad fleet start payload' };
       }
@@ -1978,11 +2004,13 @@ const plugin: MainPluginModule = {
         p.handover === 'fresh' || p.handover === 'resume' || p.handover === 'resume-compact' || p.handover === 'auto'
           ? p.handover
           : null;
+      const interactive = p.interactive === 'plan' || p.interactive === 'refine' ? p.interactive : null;
       return board.startRun({
         ticketId: p.id,
         workerChoice: typeof p.worker === 'string' && p.worker.trim() !== '' ? p.worker.trim() : null,
         permissionMode: p.permissionMode === 'bypass' ? 'bypass' : 'accept-edits',
         handover,
+        interactive,
       });
     });
 
@@ -2150,6 +2178,7 @@ const plugin: MainPluginModule = {
             permissionMode: input.permissionMode,
             // The MCP tool asks no handover — a fresh run (T-0049 wire default).
             handover: null,
+            interactive: null,
           }),
         stop: (runId) => fleet.stop(runId, null),
         steer: (runId, text) => fleet.send(runId, text),

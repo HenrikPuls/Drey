@@ -56,6 +56,7 @@ export type {
   CodeMirrorModules,
   ContextMenuItem,
   DiffRequest,
+  DocSplit,
   DocumentChangeEvent,
   FileDecoration,
   FileDecorationTone,

@@ -153,6 +153,13 @@ export interface TicketMeta {
   readonly blockedBy: readonly string[];
   readonly parkedReason: string | null;
   readonly parkedAt: string | null;
+  /**
+   * The owner reserved this ticket for an interactive dialog (req-65):
+   * `interactive: true` in the frontmatter. The dispatcher keeps its
+   * hands off (the fleet never pulls the ticket) while the field stands;
+   * a board move drops it.
+   */
+  readonly interactive: boolean;
   /** phase id -> most recent `entered-<phase>` stamp as written. */
   readonly entered: Readonly<Record<string, string>>;
 }
@@ -197,6 +204,13 @@ export interface PipelinePhase {
   /** Explicit prompt ref override (`prompt: plan-heavy`, M85); null = handover ref. */
   readonly prompt: string | null;
   /**
+   * The interactive dialog's prompt ref (`interactive: plan-interview`,
+   * req-65) — the brief an interactive run in this column gets; null =
+   * the shipped defaults (`plan-interactive-default` on the plan column,
+   * `refine-interactive-default` at the checkpoints).
+   */
+  readonly interactive: string | null;
+  /**
    * The circuit breaker's threshold (`max-red:`, M85): consecutive red
    * gates the column tolerates before it trips. Default 3.
    */
@@ -233,6 +247,7 @@ export function phaseWithoutPoolKeys(
     worker: null,
     model: null,
     prompt: null,
+    interactive: null,
     maxRed: null,
     tokenBudget: null,
     ci: null,
