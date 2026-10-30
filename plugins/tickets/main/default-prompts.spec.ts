@@ -7,7 +7,14 @@ import { loadShippedPrompts, SHIPPED_PROMPTS_DIR } from './default-prompts';
 describe('shipped prompts', () => {
   it('ships a prompt file for every agent column the default pipeline can name', async () => {
     const prompts = await loadShippedPrompts();
-    expect([...prompts.keys()]).toEqual(['build-default', 'commit-default', 'plan-default', 'review-default']);
+    expect([...prompts.keys()]).toEqual([
+      'build-default',
+      'commit-default',
+      'plan-default',
+      'plan-interactive-default',
+      'refine-interactive-default',
+      'review-default',
+    ]);
   });
 
   it('reads the files as they are: newline-terminated, the working style included', async () => {
@@ -19,6 +26,11 @@ describe('shipped prompts', () => {
       expect(await fsp.readFile(path.join(SHIPPED_PROMPTS_DIR, `${ref}.md`), 'utf8')).toBe(text);
     }
     expect(prompts.get('plan-default')).toContain('`## Plan`');
+    // The interactive defaults (req-65): interview first, never move the
+    // ticket themselves.
+    expect(prompts.get('plan-interactive-default')).toContain('QUESTION:');
+    expect(prompts.get('refine-interactive-default')).toContain('QUESTION:');
+    expect(prompts.get('refine-interactive-default')).toContain('Never move the ticket yourself');
   });
 
   it('reads a missing folder as no prompts and skips files that are not prompt names', async () => {

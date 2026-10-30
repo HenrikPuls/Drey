@@ -161,6 +161,21 @@ A "red gate" shows as `gateFailure` on the run plus `note` events in the
 stream; on daemon builds it also feeds `redStreak` and `cooldownUntil` in
 `chain.json` for the working column.
 
+### Interactive dialog runs (req-65)
+
+A run whose request carries `interactive: "plan" | "refine"` is the
+**owner's dialog from turn one**: held at spawn (the worker stands after
+its first, interviewing turn — the takeover tab is the dialog surface),
+and at its end **neither the gate nor a move runs**, however the worker
+exits — the owner moves the ticket on the board themselves (the takeover
+tab's end moves are owner moves). The brief's completion discipline is
+replaced by a dialog discipline; the asking protocol (`QUESTION:`) is
+the interview loop. The ticket still carries the `run:` stamp while the
+run lives, and the start lays `interactive: true`, which keeps the
+dispatcher off the ticket between dialogs; a board move drops the
+field. Reopening such a run's session ("Resume session") works as for
+any run — the reopened session is held and belongs to the owner.
+
 ### run.json and stream events
 
 `run.json` = `{request, info}`: the request carries `ticketId`, `repoPath`,

@@ -134,6 +134,9 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
   const blockedBy = parseBlockedBy(obj['blocked-by'], issues);
   const parkedReason = asText(obj['parked-reason']);
   const parkedAt = asText(obj['parked-at']);
+  // req-65: the dialog reservation. Only a bare `true` counts — anything
+  // else reads as absent (the owner edits freely, machine writers are strict).
+  const interactive = obj['interactive'] === true;
 
   // --- entered-<phase> stamps --------------------------------------------
   const entered: Record<string, string> = {};
@@ -171,6 +174,7 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
       blockedBy,
       parkedReason,
       parkedAt,
+      interactive,
       entered,
     },
     issues,
@@ -193,6 +197,7 @@ function emptyMeta(stem?: string): TicketMeta {
     blockedBy: [],
     parkedReason: null,
     parkedAt: null,
+    interactive: false,
     entered: {},
   };
 }
@@ -331,6 +336,10 @@ export interface TransitionPatch {
   readonly clearRun?: boolean;
   /** Pin (or with `''` clear) the ticket's worker — a fleet run start records the choice. */
   readonly setWorker?: string;
+  /** Stamp the interactive-dialog reservation (req-65): `interactive: true` —
+   *  the dispatcher keeps its hands off while the owner works the ticket
+   *  in a conversation; a later board move drops it. */
+  readonly setInteractive?: boolean;
   /** Park the ticket (`parked-reason` + `parked-at`, M85): circuit breaker, budgets. */
   readonly park?: string;
 }
@@ -383,9 +392,20 @@ export function patchTicketFile(text: string, patch: TransitionPatch): string {
     }
   }
 
+  if (patch.setInteractive === true) {
+    doc.set('interactive', true);
+  }
+
   if (patch.park !== undefined) {
     setQuoted(doc, 'parked-reason', patch.park);
     setQuoted(doc, 'parked-at', stamp);
+  }
+
+  // The reservation's job is done once the ticket moves (req-65): at the
+  // new column the dispatcher may take it again. A claim (from === null)
+  // is not a move — the field stands.
+  if (patch.from !== null) {
+    removeKey(doc, 'interactive');
   }
 
   // Leaving the inbox always clears a parked state (schema rule).

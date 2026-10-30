@@ -52,6 +52,7 @@ function card(id: string, over: Partial<TicketCard> = {}): TicketCard {
       blockedBy: [],
       parkedReason: null,
       parkedAt: null,
+      interactive: false,
       entered: {},
     },
     pinned: false,
@@ -180,6 +181,19 @@ describe('planDispatch', () => {
     expect(plan).toEqual([]);
     const playing = planDispatch(input({ columns }));
     expect(playing.map((p) => `${p.workingPhase}:${p.card.id}`)).toEqual(['plan:T-0023']);
+  });
+
+  it('never dispatches a ticket the owner reserved for an interactive dialog (req-65)', () => {
+    const columns = input().columns.map((c) =>
+      c.phase.id === 'plan'
+        ? column(PLAN, [
+            card('T-0040', { meta: { ...card('T-0040').meta, interactive: true } }),
+            card('T-0041'),
+          ])
+        : c,
+    );
+    const plan = planDispatch(input({ columns }));
+    expect(plan.map((p) => p.card.id)).toEqual(['T-0041']);
   });
 
   it('skips an automatic terminal column — a green gate would have nowhere to move', () => {

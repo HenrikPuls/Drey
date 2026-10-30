@@ -8,7 +8,7 @@
  * `opencode`, `claude-code`, `claude-code/sonnet`. An unreadable value
  * is a refusal at run start — never a guess (ADR-0076).
  */
-import { isWorkerProvider, QUESTION_MARKER, type FleetCaps, type WorkerProviderId } from './protocol';
+import { isWorkerProvider, QUESTION_MARKER, type FleetCaps, type InteractiveMode, type WorkerProviderId } from './protocol';
 import { parseHandover } from '../../shared/tickets';
 import { capHead, capTail } from './capping';
 
@@ -141,6 +141,12 @@ export interface InstructionInput {
   readonly caps: FleetCaps;
   /** The repo's `link:` folders the runner links into the worktree (req-56). */
   readonly links?: readonly string[];
+  /**
+   * An interactive dialog (req-65): the brief's completion discipline is
+   * replaced by the dialog discipline — no gate, no move, the owner moves
+   * the ticket.
+   */
+  readonly interactive?: InteractiveMode;
 }
 
 /** One capped section of the instruction — the caller logs each application. */
@@ -165,6 +171,17 @@ const COMPLETION_DISCIPLINE =
   'Declare the step done only when every command passes and you consider the work ready — your finished turn is ' +
   'that declaration. After it the runner re-runs the gate: green moves the ticket one column right; a red gate ' +
   'parks the step (the failure is logged and the ticket waits).';
+
+/**
+ * The interactive dialog's discipline (req-65): no gate, no move — the
+ * conversation is the deliverable, the owner moves the ticket.
+ */
+const INTERACTIVE_DISCIPLINE =
+  'Dialog discipline: you are in an interactive dialog with the owner — this is not a dispatched run. Your finished ' +
+  'turn does not end anything: the runner runs no gate and moves nothing. Keep working in turns; end a turn with a ' +
+  'question when the owner must decide something, and end it with a short statement of what you did and what is ' +
+  'open when the step is where you both want it. The owner moves the ticket on the board themselves when the ' +
+  'dialog is over — never claim a move happened.';
 
 /**
  * How a worker asks the owner (req-64): a turn whose last message opens
@@ -278,7 +295,7 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
         input.acceptance.map((command) => `- \`${command}\``).join('\n'),
     );
   }
-  parts.push(COMPLETION_DISCIPLINE);
+  parts.push(input.interactive !== undefined ? INTERACTIVE_DISCIPLINE : COMPLETION_DISCIPLINE);
   parts.push(ASKING);
   return { text: parts.join('\n\n'), truncations };
 }

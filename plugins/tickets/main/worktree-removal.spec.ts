@@ -17,6 +17,7 @@ const meta = (over: Partial<TicketMeta> = {}): TicketMeta => ({
   blockedBy: [],
   parkedReason: null,
   parkedAt: null,
+      interactive: false,
   entered: {},
   ...over,
 });

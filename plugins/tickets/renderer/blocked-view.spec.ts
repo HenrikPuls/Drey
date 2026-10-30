@@ -34,6 +34,7 @@ function card(over: Partial<TicketCard> = {}): TicketCard {
       blockedBy: ['T-0001'],
       parkedReason: null,
       parkedAt: null,
+      interactive: false,
       entered: {},
     },
     pinned: false,

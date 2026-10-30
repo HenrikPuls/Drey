@@ -142,6 +142,7 @@ describe('composeRunRequest carries the home rule', () => {
       blockedBy: [],
       parkedReason: null,
       parkedAt: null,
+      interactive: false,
       entered: {},
     },
     pinned: false,

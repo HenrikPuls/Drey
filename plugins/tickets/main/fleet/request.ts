@@ -16,7 +16,7 @@ import {
 } from '../../shared/tickets';
 import { acceptanceCommands, ticketSections } from '../ticket-files';
 import { composeInstruction, resolveAssignment, type Truncation } from './assignment';
-import { DEFAULT_FLEET_CAPS, type FleetCaps, type HandoverMode, type PermissionMode, type RunRequest } from './protocol';
+import { DEFAULT_FLEET_CAPS, type FleetCaps, type HandoverMode, type InteractiveMode, type PermissionMode, type RunRequest } from './protocol';
 import { worktreePathFor } from './worktree-home';
 
 export interface ComposeRunInput {
@@ -71,6 +71,13 @@ export interface ComposeRunInput {
    * 'auto' from the dispatcher — absent (an older caller) means fresh.
    */
   readonly handover?: HandoverMode | 'auto';
+  /**
+   * The owner drives this run as a dialog (req-65): the acceptance
+   * refusal is lifted, the brief's completion discipline becomes the
+   * dialog discipline, and the request carries the mode so the runner
+   * holds the worker from turn one and never gates or moves.
+   */
+  readonly interactive?: InteractiveMode;
 }
 
 export type ComposeRunResult =
@@ -91,7 +98,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     };
   }
   const acceptance = acceptanceCommands(input.ticketText);
-  if (acceptance.length === 0 && input.structuralGateAllowed !== true) {
+  if (acceptance.length === 0 && input.structuralGateAllowed !== true && input.interactive === undefined) {
     return {
       ok: false,
       error: `${input.card.id} has no acceptance criteria — the machine gate would have nothing to run`,
@@ -132,6 +139,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     diffStat: input.diffStat,
     gateFailure: input.gateFailure,
     caps: input.caps ?? DEFAULT_FLEET_CAPS,
+    ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
   });
   const request: RunRequest = {
     ticketId: input.card.id,
@@ -151,13 +159,16 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     acceptance,
     gate: acceptance.length > 0 ? 'commands' : 'structural',
     git: input.gitPath.trim() === '' ? 'git' : input.gitPath.trim(),
-    nextPhase: input.nextPhaseId,
-    nextPhaseDir: input.nextPhaseId === null ? null : input.nextPhaseDir,
+    // An interactive dialog never moves: the move target stays null even
+    // if a caller passed one — the owner moves the ticket (req-65).
+    nextPhase: input.interactive !== undefined ? null : input.nextPhaseId,
+    nextPhaseDir: input.interactive !== undefined || input.nextPhaseId === null ? null : input.nextPhaseDir,
     pushRemote: input.pushRemote,
-    claimIdentity: input.nextPhaseClaims && input.nextPhaseId !== null ? agentIdentity() : null,
+    claimIdentity: input.nextPhaseClaims && input.nextPhaseId !== null && input.interactive === undefined ? agentIdentity() : null,
     ...(input.workerChoice !== null ? { recordWorker: input.workerChoice } : {}),
     ...(input.dispatchedBy !== undefined ? { column: input.dispatchedBy } : {}),
     ...(input.handover !== undefined ? { handover: input.handover } : {}),
+    ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
   };
   return { ok: true, request, truncations: instruction.truncations };
 }

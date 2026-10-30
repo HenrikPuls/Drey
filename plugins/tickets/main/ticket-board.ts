@@ -98,6 +98,9 @@ export function parsePipeline(text: string): PipelineParse {
     }
     const promptRaw = map['prompt'];
     const prompt = typeof promptRaw === 'string' && promptRaw.trim() !== '' ? promptRaw.trim() : null;
+    const interactiveRaw = map['interactive'];
+    const interactive =
+      typeof interactiveRaw === 'string' && interactiveRaw.trim() !== '' ? interactiveRaw.trim() : null;
     const maxRedRaw = map['max-red'];
     const maxRed = typeof maxRedRaw === 'number' && Number.isInteger(maxRedRaw) && maxRedRaw > 0 ? maxRedRaw : null;
     const tokenBudgetRaw = map['token-budget'];
@@ -122,6 +125,7 @@ export function parsePipeline(text: string): PipelineParse {
       worker,
       model,
       prompt,
+      interactive,
       maxRed,
       tokenBudget,
       ci,
