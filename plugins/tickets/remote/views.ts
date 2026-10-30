@@ -5,7 +5,7 @@
  * rules behind the buttons live in `model.ts` and on the desk.
  */
 import type { FleetSnapshot } from '../main/fleet-client';
-import type { NeedKind } from '../shared/remote-protocol';
+import type { NeedKind, RunReply } from '../shared/remote-protocol';
 import {
   ageOf,
   parseHandover,
@@ -18,6 +18,7 @@ import {
 } from '../shared/tickets';
 import type { Ctx, View } from './context';
 import { armedButton, button, chip, empty, h, icon, present, sheet, toast } from './dom';
+import { markdownBlocks } from './markdown';
 import {
   blocksOf,
   claimActionOf,
@@ -31,7 +32,6 @@ import {
   refineKeyOf,
   sectionsOf,
   swipeCommits,
-  type Block,
 } from './model';
 import { columnSheet, masterSheet, waitActions } from './runs-views';
 
@@ -422,7 +422,7 @@ export function ticketView(ctx: Ctx, id: string, tab: TicketTab): View {
           ),
         );
       }
-      content.push(...blocksOf(section.lines).map((b) => blockNode(b, tab === 'log')));
+      content.push(...markdownBlocks(blocksOf(section.lines), { log: tab === 'log' }));
     }
   }
   const issues = card.issues.filter((i) => i.level !== 'noise');
@@ -440,29 +440,25 @@ export function ticketView(ctx: Ctx, id: string, tab: TicketTab): View {
   };
 }
 
-function blockNode(block: Block, log: boolean): HTMLElement {
-  switch (block.kind) {
-    case 'code':
-      return h('pre', { class: 'code', text: block.text });
-    case 'li':
-      return h(
-        'div',
-        { class: `li${log ? ' li-log' : ''}` },
-        block.checked === null ? h('span', { class: 'bullet', text: log ? '' : '•' }) : h('span', { class: `box${block.checked ? ' done' : ''}` }),
-        h('span', { text: block.text }),
-      );
-    default:
-      return h('p', { text: block.text });
-  }
-}
-
 function ticketActions(ctx: Ctx, board: BoardSnapshot, column: BoardColumn, card: TicketCard): HTMLElement {
   const primary = primaryActionOf(board, column.phase.id, card, runs(ctx));
   const bar = h('div', { class: 'actionbar' });
   if (primary !== null) {
     const run = (): void => {
       if (primary.kind === 'run') {
-        void ctx.act(ctx.api.post('/api/runs', { id: card.id }), `Run started for ${card.id}`);
+        // Jump to the run once it exists — the view switch is the feedback.
+        void ctx.api
+          .post<RunReply>('/api/runs', { id: card.id })
+          .then((result) => {
+            if (result.ok) {
+              ctx.go(result.runId !== undefined ? `#run/${result.runId}` : '#runs');
+            } else {
+              toast(result.error ?? 'The desk refused.', 'error');
+            }
+          })
+          .catch((error: unknown) => {
+            toast(error instanceof Error ? error.message : String(error), 'error');
+          });
       } else if (primary.kind === 'approve' || primary.kind === 'move') {
         void ctx.act(ctx.api.post(`/api/tickets/${card.id}/move`, { from: column.phase.id, to: primary.to }), `${card.id} moved`);
       }

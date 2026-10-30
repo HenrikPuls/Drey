@@ -199,6 +199,24 @@ h4.md-h { font-size: 14px; color: var(--text2); }
 .box { flex: none; width: 15px; height: 15px; margin-top: 3px; border: 1.5px solid var(--faint); border-radius: 4px; }
 .box.done { background: var(--ok); border-color: var(--ok); }
 .code { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--bar); font: 12px/1.5 var(--mono); overflow-x: auto; color: var(--text2); }
+/* Markdown the ticket and transcript rows render (R8). */
+.md strong { color: var(--text); font-weight: 650; }
+.md em { font-style: italic; }
+code.ic { font: 0.9em var(--mono); background: var(--field); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
+.md-sub { margin: 10px 0 0; font-size: 13.5px; color: var(--text2); }
+.md hr { margin: 4px 0; border: 0; border-top: 1px solid var(--line); }
+.tablewrap { min-width: 0; overflow-x: auto; }
+.tablewrap table { border-collapse: collapse; font-size: 14px; line-height: 1.4; }
+.tablewrap th, .tablewrap td { padding: 5px 10px 5px 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.tablewrap th { color: var(--text); font-weight: 600; }
+.tablewrap tbody tr:last-child td { border-bottom: 0; }
+.tablewrap td:not(:last-child), .tablewrap th:not(:last-child) { padding-right: 14px; border-right: 1px solid var(--line); }
+/* The rendered block container owns its whitespace (pre-wrap rows would double-space it). */
+.mdr { display: flex; flex-direction: column; gap: 6px; min-width: 0; white-space: normal; }
+.mdr p { margin: 0; overflow-wrap: anywhere; }
+.mdr strong { font-weight: 650; }
+.mdr hr { margin: 2px 0; border: 0; border-top: 1px solid var(--line); }
+.t-result .mdr strong { color: var(--text); }
 .issue { margin: 0; padding: 6px 10px; border-radius: 8px; font-size: 13px; background: rgba(224, 187, 110, 0.12); color: var(--warn); }
 .issue-error { background: rgba(238, 143, 137, 0.12); color: var(--bad); }
 
