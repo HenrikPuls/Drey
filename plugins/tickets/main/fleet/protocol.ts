@@ -88,6 +88,13 @@ export interface RunRequest {
   /** The dialog's explicit worker choice, recorded on the ticket (`worker:`). */
   readonly recordWorker?: string;
   /**
+   * How the run's context should reach the worker (T-0049): `'auto'`
+   * lets the supervisor resolve it from the ticket's run history, an
+   * explicit mode is honoured when structurally legal. Absent — every
+   * request from an older plugin — means `'fresh'`.
+   */
+  readonly handover?: HandoverMode | 'auto';
+  /**
    * The working column when the orchestrator dispatched the run (M85,
    * ADR-0077): the pool whose slot the run occupies — which can differ
    * from `phase`, because a pool tops up from the previous column (the
@@ -115,11 +122,51 @@ export interface RunUsage {
 }
 
 /**
- * How the run's context reached the worker. Only `'fresh'` exists yet —
- * the field is written from the start so later handover modes (T-0049)
- * join real data instead of backfilling.
+ * How the run's context reached the worker (T-0049): `'fresh'` — a new
+ * session with the composed instruction (the T-0048 behaviour);
+ * `'resume'` — the previous run's provider session, continued;
+ * `'resume-compact'` — the same, natively compacted before the first
+ * prompt. `'fresh'` is the default everywhere an older sender omits it.
  */
-export type HandoverMode = 'fresh';
+export type HandoverMode = 'fresh' | 'resume' | 'resume-compact';
+
+/** The handover thresholds (T-0049); configurable `fleet.*`. */
+export interface FleetHandoverConfig {
+  /**
+   * A resumed session whose last known context is at or above this many
+   * tokens is compacted first (provider capability permitting). The bar
+   * guards fidelity loss, not tokens — the compact itself is cheap
+   * (spike 2: ~0.75k tokens halving an 8k context). Provisional.
+   */
+  readonly compactAboveTokens: number;
+  /**
+   * A pause shorter than this many minutes counts as warm (spike 3: a
+   * resumed turn re-pays the transcript as cache reads, still ~99 %
+   * cached after 6 min; measured auto-retry gaps ran 1–13 min).
+   */
+  readonly resumePauseTtlMin: number;
+}
+
+/** The handover thresholds' defaults — an absent or invalid config degrades to these. */
+export const DEFAULT_FLEET_HANDOVER: FleetHandoverConfig = {
+  compactAboveTokens: 60_000,
+  resumePauseTtlMin: 15,
+};
+
+/** Resolves handover thresholds of unknown shape to valid ones, per key
+ *  like the caps: every non-negative finite number wins, anything else
+ *  falls back to that key's default. */
+export function normalizeFleetHandover(value: unknown): FleetHandoverConfig {
+  const raw = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
+  const num = (key: keyof FleetHandoverConfig): number => {
+    const given = raw[key];
+    return typeof given === 'number' && Number.isFinite(given) && given >= 0 ? given : DEFAULT_FLEET_HANDOVER[key];
+  };
+  return {
+    compactAboveTokens: num('compactAboveTokens'),
+    resumePauseTtlMin: num('resumePauseTtlMin'),
+  };
+}
 
 /** The output caps an instruction applies (T-0048); configurable `fleet.cap.*`. */
 export interface FleetCaps {
@@ -249,6 +296,12 @@ export interface RunInfo {
   readonly tokensBeforeFirstWrite?: number | null;
   /** Always 'fresh' in T-0048; the field exists for T-0049's handover modes. */
   readonly handoverMode?: HandoverMode;
+  /**
+   * The provider session this run resumed (T-0049) — taken from the
+   * candidate record, never the init event (a forked id would lose the
+   * lineage). Null on a fresh run and on a resume that fell back fresh.
+   */
+  readonly resumedFrom?: string | null;
   /** The last gate failure, when the machine gate stopped the run short. */
   readonly gateFailure: string | null;
 }
@@ -326,6 +379,8 @@ export interface ChainConfig {
   readonly permissionMode: PermissionMode;
   /** The instruction output caps (T-0048); absent = `DEFAULT_FLEET_CAPS`. */
   readonly caps?: FleetCaps;
+  /** The handover thresholds (T-0049); absent = `DEFAULT_FLEET_HANDOVER`. */
+  readonly handover?: FleetHandoverConfig;
 }
 
 /** The chain's control state as the runner reports it. */
