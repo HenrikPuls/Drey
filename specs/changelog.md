@@ -20,6 +20,27 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-60 — Tickets panel: fleet status in the panel header
+
+Owner request, outside the list. The fleet summary sat as a row of three
+pills between the panel header and the board (`● 1 running` ·
+`18.9M tokens in flight` · `running 26:22`), a whole row of board height.
+It now rides the panel header as one compact group before the New /
+Refresh / master buttons (`fleetHeaderNode` in
+`plugins/tickets/renderer/index.ts`): the worst light of all live runs,
+the non-zero states in words (`2 running · 1 stalled`), then tokens in
+flight and the oldest run's age in muted tabular mono
+(`· 18.9M tok · 26:22`); the long form is its tooltip and `aria-label`.
+It repaints on fleet updates and once a second, hides without live runs,
+and drops the numbers below a 480px panel width (a `ResizeObserver` on
+the panel — no size container around the base header). The counting is
+the pure `fleetSummary` in `worker-status.ts` (spec added). The
+"Tickets" title stays — the uniform panel head (ADR-0057/M69); hiding it
+was considered and declined with the owner (it would need an SDK option
+like the calendar's `headerReplacesTitle`). `fleetSummaryNode` and the
+`.tickets-summary` / `.tickets-pill*` styles are gone. Manual: the lane
+paragraph. **Not yet manually verified by the owner.**
+
 ### req-59 — Tickets board: one-row status bar
 
 Owner request, outside the list. The board's status area under the

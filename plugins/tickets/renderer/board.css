@@ -128,30 +128,40 @@
   align-items: stretch;
 }
 
-/* The status pills above the board: what the fleet is doing in total. */
-.tickets-summary {
-  flex: none;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px 0;
-}
-
-.tickets-pill {
+/* The fleet's status in the panel header (req-60): one compact group before the buttons. */
+.tickets-head-fleet {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 22px;
-  padding: 0 10px;
-  border-radius: 11px;
-  background: var(--bg-input);
+  margin-right: 6px;
+  padding: 0 10px 0 8px;
+  border-right: 1px solid var(--border);
+  font-size: 0.72rem;
   color: var(--text-2);
-  font-size: 0.75rem;
+  white-space: nowrap;
+  cursor: help;
 }
 
-.tickets-pill-mono {
+.tickets-head-fleet[hidden] {
+  display: none;
+}
+
+.tickets-head-fleet-numbers {
+  color: var(--text-4);
   font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tickets-head-fleet-numbers::before {
+  content: '· ';
+  font-family: inherit;
+}
+
+/* A narrow panel keeps the light and the count, the numbers stay in the tooltip. */
+.tickets-head-fleet[data-narrow] .tickets-head-fleet-numbers {
+  display: none;
 }
 
 /* ---- columns ---- */
@@ -1986,12 +1996,6 @@ details[open] > summary > .tickets-tx-think-preview {
 
 .tickets-light-red {
   box-shadow: 0 0 6px color-mix(in srgb, var(--status-deleted) 70%, transparent);
-}
-
-.tickets-pill {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-dock));
-  color: var(--text-heading);
 }
 
 /* ---- takeover: progress pulse and the stop button ---- */

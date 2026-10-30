@@ -817,8 +817,12 @@ and age, plus the run's telemetry chips — **ctx** (the last turn's real
 context size), **turns** (model calls) and **reads** (read/search tool
 calls) — once the worker reports them; the card carries a ▶ chip reading
 the state, the turn count, the run's own tokens and its age
-(`▶ running · 2 · 45k/1.2k · 03:41`), and the pills above the board add
-how long the oldest live run has been at it. A lane is folded to one
+(`▶ running · 2 · 45k/1.2k · 03:41`). While workers run, the panel
+header sums up the whole fleet next to its buttons
+(`● 1 running · 18.9M tok · 26:22`): the worst light, the states in
+words, the tokens in flight and how long the oldest live run has been
+at it — hover it for the long form; a narrow panel keeps only the light
+and the states. A lane is folded to one
 line until you unfold it (a lane that needs a look opens by itself). In
 a lane you can **Take over**, **Watch** (tail the run's output),
 **Steer** (send a message into the live run — it lands in the ticket's

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { RunInfo } from '../main/fleet/protocol';
 import {
   contextFill,
+  fleetSummary,
   formatTokens,
   lanesOfColumn,
   opensByItself,
@@ -161,5 +162,28 @@ describe('workerStatus — running or standing', () => {
 
   it('says whose turn it is when the owner holds a standing worker', () => {
     expect(workerStatus(run({ turn: 'idle', held: true }), NOW).label).toBe('Standing — you drive');
+  });
+});
+
+describe('fleetSummary', () => {
+  it('is null without live runs', () => {
+    expect(fleetSummary([], NOW)).toBeNull();
+  });
+
+  it('counts the states in words, takes the worst light, sums tokens and ages from the oldest start', () => {
+    const silent = new Date(NOW - STALL_MS).toISOString();
+    const summary = fleetSummary(
+      [
+        run({ tokensIn: 1_000, tokensOut: 200 }),
+        run({ id: 'r2', turn: 'idle', startedAt: '2026-10-18T10:30:00Z', tokensIn: 500 }),
+        run({ id: 'r3', lastActivity: silent }),
+      ],
+      NOW,
+    );
+    expect(summary).toEqual({ light: 'red', label: '1 running · 1 standing · 1 stalled', tokens: 1_700, ageMs: 90 * 60_000 });
+  });
+
+  it('is green for working runs alone', () => {
+    expect(fleetSummary([run(), run({ id: 'r2' })], NOW)).toMatchObject({ light: 'green', label: '2 running' });
   });
 });

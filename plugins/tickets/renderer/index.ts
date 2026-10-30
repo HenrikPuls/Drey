@@ -33,6 +33,7 @@ import {
   CONTEXT_WARN,
   contextFill,
   contextLabel,
+  fleetSummary,
   formatTokens,
   lanesOfColumn,
   opensByItself,
@@ -656,10 +657,6 @@ function buildBoardView(api: DreyPluginApi): BoardView {
       root.append(emptyState(api, snap, runMutation));
       return;
     }
-    const summary = fleetSummaryNode();
-    if (summary !== null) {
-      root.append(summary);
-    }
     const board = el('div', 'tickets-board');
     for (const column of snap.columns) {
       board.append(columnNode(api, column));
@@ -724,11 +721,12 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       refreshButton.append(api.ui.icon('refresh-cw', 14));
       refreshButton.addEventListener('click', () => void refreshBoard());
 
-      host.append(newButton, refreshButton);
+      const fleet = fleetHeaderNode();
+      host.append(fleet.node, newButton, refreshButton);
       // The chain's master switch — meaningful wherever a tickets board
       // exists; the runner side decides whether anything is automatic.
       host.append(masterControlNode(api));
-      return () => undefined;
+      return fleet.dispose;
     },
     mount: (panel) => {
       panel.classList.add('tickets-panel');
@@ -753,7 +751,16 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       views.add(decorated);
       panel.append(statusEl, view.root);
       decorated.render();
+      // The header group follows the panel's width (req-60).
+      const widthObserver = new ResizeObserver((entries) => {
+        panelWidth = entries[0]?.contentRect.width ?? 0;
+        for (const listener of panelWidthListeners) {
+          listener();
+        }
+      });
+      widthObserver.observe(panel);
       return () => {
+        widthObserver.disconnect();
         views.delete(decorated);
       };
     },
@@ -1056,42 +1063,56 @@ function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot): HTMLElement | n
   return bar.childElementCount === 0 ? null : bar;
 }
 
-/** The pills above the board: lights of the whole fleet and today's spend. */
-function fleetSummaryNode(): HTMLElement | null {
-  const runs = liveRuns();
-  if (runs.length === 0) {
-    return null;
-  }
-  const now = Date.now();
-  const lights = runs.map((run) => workerStatus(run, now).light);
-  const count = (light: Light): number => lights.filter((l) => l === light).length;
-  const bar = el('div', 'tickets-summary');
-  const pill = (light: Light | null, text: string, extra = ''): void => {
-    const p = el('span', `tickets-pill${extra}`);
-    if (light !== null) {
-      p.append(el('span', `tickets-light tickets-light-${light}`));
+/**
+ * The fleet's status in the panel header (req-60): the worst light, the
+ * states in words, tokens in flight and the oldest run's age — one
+ * compact group before the header buttons, the long form in its tooltip.
+ * Repaints on every fleet update and once a second for the clock.
+ */
+/** Below this panel width the header group drops its numbers (they stay in the tooltip). */
+const HEAD_FLEET_NARROW_PX = 480;
+
+/** The Tickets panel's current width (its body is as wide as its header); 0 before the first measure. */
+let panelWidth = 0;
+const panelWidthListeners = new Set<() => void>();
+
+function fleetHeaderNode(): { node: HTMLElement; dispose: () => void } {
+  const node = el('span', 'tickets-head-fleet');
+  const light = el('span', 'tickets-light');
+  const label = el('span', 'tickets-head-fleet-label');
+  const numbers = el('span', 'tickets-head-fleet-numbers');
+  node.append(light, label, numbers);
+  const paint = (): void => {
+    const summary = fleetSummary(liveRuns(), Date.now());
+    node.hidden = summary === null;
+    node.toggleAttribute('data-narrow', panelWidth > 0 && panelWidth < HEAD_FLEET_NARROW_PX);
+    if (summary === null) {
+      return;
     }
-    p.append(document.createTextNode(text));
-    bar.append(p);
+    light.className = `tickets-light tickets-light-${summary.light}`;
+    label.textContent = summary.label;
+    const age = summary.ageMs === null ? '' : spanClock(summary.ageMs);
+    numbers.textContent = `${formatTokens(summary.tokens)} tok${age === '' ? '' : ` · ${age}`}`;
+    const long = [
+      summary.label,
+      `${formatTokens(summary.tokens)} tokens in flight (in + out of all live runs)`,
+      ...(age === '' ? [] : [`the oldest run has been at it for ${age}`]),
+    ].join(' · ');
+    node.title = long;
+    node.setAttribute('aria-label', long);
   };
-  pill('green', `${count('green')} running`);
-  if (count('idle') > 0) {
-    pill('idle', `${count('idle')} standing`);
-  }
-  if (count('amber') > 0) {
-    pill('amber', `${count('amber')} need attention`);
-  }
-  if (count('red') > 0) {
-    pill('red', `${count('red')} stalled`);
-  }
-  const tokens = runs.reduce((sum, r) => sum + r.tokensIn + r.tokensOut, 0);
-  pill(null, `${formatTokens(tokens)} tokens in flight`, ' tickets-pill-mono');
-  // The oldest live run's age — how long the fleet has been at it (T-0051).
-  const oldest = Math.min(...runs.map((r) => Date.parse(r.startedAt)).filter((ts) => !Number.isNaN(ts)));
-  if (Number.isFinite(oldest)) {
-    pill(null, `running ${spanClock(now - oldest)}`, ' tickets-pill-mono');
-  }
-  return bar;
+  fleetListeners.add(paint);
+  panelWidthListeners.add(paint);
+  const tick = setInterval(paint, 1_000);
+  paint();
+  return {
+    node,
+    dispose: () => {
+      fleetListeners.delete(paint);
+      panelWidthListeners.delete(paint);
+      clearInterval(tick);
+    },
+  };
 }
 
 /** Lanes the owner folded or unfolded by hand; a lane without an entry follows its light. */
