@@ -1124,9 +1124,10 @@ with one tap; or type your own words. A permission request offers
 **Following a run.** A run shows the worker's steps (each tool call on
 one line), its replies, and what it waits for. The ticket's title and
 the run's numbers (state, model, tokens, how long it has been running)
-stay pinned under the top bar while the transcript scrolls on. Type in
-**Steer the run…** and **Send** to tell the worker something; **Stop**
-ends the run (tap twice).
+stay pinned under the top bar while the transcript scrolls on. The one
+button beside **Steer the run…** does both jobs: with something typed
+it is **Send** (tell the worker something); over an empty field it is
+**Stop**, which ends the run (tap twice).
 
 **Refining a ticket.** On a ticket, **Edit** beside Description, Plan
 or Acceptance criteria opens that part for editing (a missing part

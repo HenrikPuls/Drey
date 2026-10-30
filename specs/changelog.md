@@ -47,6 +47,10 @@ iPhone). Owner request, outside the list (ADR-0084, later change):
   run streamed. Title + meta now sit in a sticky `.runhead` under the
   top bar — CSS only, because the 3-second live repaint rebuilds the
   DOM.
+- **One composer button.** The run view's **Send** and **Stop** are one
+  button now (owner request, in-run): with something typed in **Steer
+  the run…** it is **Send**, over an empty field it is **Stop** (armed,
+  two taps) — the composer keeps one narrow row.
 - The phone does not display the images yet (an `<img>` cannot send the
   bearer token); an authed asset route plus the phone's markdown
   rendering is the recorded follow-up.
@@ -60,7 +64,10 @@ failed commit as a warning); `e2e/tickets-remote.spec.ts` (a picked PNG
 in Capture → `#cap-desc` contains the embed, the call recorded with the
 device actor; the run header still pinned after scrolling the
 transcript to its end). Docs: ticket schema "Attachments (req-66 R8)",
-manual "Images" and the run paragraph, ADR-0084 later change.
+manual "Images" and the run paragraph, ADR-0084 later change. In-run
+owner addition: the composer's combined Send/Stop button (R4 case
+extended: one button, Stop over an empty field, Send with text typed,
+back to Stop after the send).
 
 ### req-66 R6 — Tickets remote: the iPad board
 

@@ -149,10 +149,17 @@ test('answers a waiting worker, follows and steers the run, and switches the fle
   await expect(page.locator('.t-step', { hasText: 'phase-dirs.ts' })).toBeVisible();
   await expect(page.locator('.t-text')).toContainText('Two directories resolve to the inbox phase.');
 
+  // One composer button (R8): Stop over an empty field, Send once text is
+  // typed — and back to Stop after the send cleared the field.
+  const composerButton = page.locator('.composer button');
+  await expect(composerButton).toHaveCount(1);
+  await expect(composerButton).toHaveText('Stop');
   await page.locator('.composer-field').fill('Keep the unprefixed folder as it is.');
-  await page.locator('.composer .btn-primary', { hasText: 'Send' }).click();
+  await expect(composerButton).toHaveText('Send');
+  await composerButton.click();
   await expect(page.locator('.toast')).toContainText('Sent to the worker');
   expect(calls.at(-1)).toEqual({ what: 'send', args: [{ runId: 'run-1', text: 'Keep the unprefixed folder as it is.' }] });
+  await expect(composerButton).toHaveText('Stop');
 
   // The master switch sits behind the header chip.
   await page.locator('.topbar .chip-btn').click();
