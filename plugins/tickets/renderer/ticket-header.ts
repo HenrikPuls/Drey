@@ -21,10 +21,12 @@ import {
   stripPhasePrefix,
   TICKET_PRIORITIES,
   type BoardSnapshot,
+  type TicketCard,
   type TicketIssue,
   type TicketMeta,
   type TicketPriority,
 } from '../shared/tickets';
+import { interactiveModeFor, type InteractiveMode } from './end-moves';
 
 /** A ticket file of the board: `tickets/<phase dir>/T-nnnn.md` (archive included). */
 export function isTicketPath(path: string | null): boolean {
@@ -93,6 +95,11 @@ export interface TicketHeaderDeps {
   readonly invoke: (method: string, payload?: unknown) => Promise<unknown>;
   readonly workers: ReadonlyArray<readonly [string, string]>;
   readonly onError: (message: string) => void;
+  /**
+   * Starts the owner's interactive dialog for this ticket (req-65) —
+   * the board's one-click start, shared with the card menu.
+   */
+  readonly startInteractive: (card: TicketCard, mode: InteractiveMode) => void;
 }
 
 export interface TicketHeader {
@@ -253,6 +260,23 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
         const branch = el('span', 'tickets-head-chip tickets-head-branch', branchForTicket(id));
         branch.title = 'Work branch';
         chips.append(branch);
+      }
+
+      // The one-click dialog (req-65): offered where the column offers it
+      // — plan on the plan column, refine at the checkpoints and the last
+      // agent column. A refused start (a live run, no repo) surfaces in
+      // the board's status bar like any action.
+      const card = snapshot?.columns.flatMap((c) => c.tickets).find((t) => t.path === path);
+      const mode = snapshot !== null && phaseId !== null ? interactiveModeFor(phaseId, snapshot.columns) : null;
+      if (card !== undefined && mode !== null) {
+        const dialog = el('button', 'tickets-head-dialog', mode === 'plan' ? 'Plan with agent' : 'Refine with agent');
+        dialog.type = 'button';
+        dialog.title =
+          mode === 'plan'
+            ? 'Plan this ticket in a dialog with a fleet worker — the ticket and the dialog open side by side'
+            : 'Work this checkpoint in a dialog with a fleet worker — the ticket and the dialog open side by side';
+        dialog.addEventListener('click', () => deps.startInteractive(card, mode));
+        chips.append(dialog);
       }
 
       const issues = model?.issues ?? [];

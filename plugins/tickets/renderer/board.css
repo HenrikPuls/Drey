@@ -732,6 +732,13 @@
   color: var(--text-3);
 }
 
+/* The interactive-dialog reservation (req-65): the fleet keeps its
+ * hands off while the owner works the ticket in a conversation. */
+.tickets-chip-interactive {
+  border-color: var(--accent-edge);
+  color: var(--accent-text);
+}
+
 /* The dependency chips (T-0050): blocked-by carries the warning hue,
  * blocks stays quiet — it informs, it does not alarm. */
 .tickets-chip-blocked {
@@ -1360,8 +1367,29 @@
 .tickets-takeover-wait[hidden],
 .tickets-takeover-wait-text[hidden],
 .tickets-takeover-wait-questions[hidden],
-.tickets-takeover-wait-actions[hidden] {
+.tickets-takeover-wait-actions[hidden],
+.tickets-takeover-endmoves[hidden] {
   display: none;
+}
+
+/* The dialog's end moves (req-65): the owner move that closes an
+ * interactive run — stop (if it lives), then the transition. */
+.tickets-takeover-endmoves {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 8px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-dock));
+}
+
+.tickets-takeover-endmoves-label {
+  font-size: 12px;
+  color: var(--text-2);
 }
 
 .tickets-takeover-wait-questions {
