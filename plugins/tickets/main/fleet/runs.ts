@@ -167,6 +167,19 @@ interface LiveRun {
    * is set.
    */
   fallbackActive?: boolean;
+  /**
+   * The run's events fold strictly in arrival order: the async half of
+   * `onEvent` queues here, one after the other — two rapid events can
+   * never race their folds last-writer (the req-67 clock-freeze flake).
+   */
+  eventQueue: Promise<void>;
+  /**
+   * The record writes serialize the same way: `persist` snapshots at
+   * call time and queues the file write, so an older snapshot can never
+   * land after a newer one — `run.json` is what a restart's `adopt`
+   * reads.
+   */
+  writeQueue: Promise<void>;
 }
 
 /** The telemetry a persisted record carries, for restoring a fold (an adopted run). */
@@ -334,6 +347,8 @@ export class RunSupervisor {
             audited: false,
             agentDone: false,
             telemetry: new TelemetryFold(telemetryOf(stored.info)),
+            eventQueue: Promise.resolve(),
+            writeQueue: Promise.resolve(),
           });
           continue;
         }
@@ -356,6 +371,8 @@ export class RunSupervisor {
           audited: false,
           agentDone: false,
           telemetry: new TelemetryFold(telemetryOf(stored.info)),
+          eventQueue: Promise.resolve(),
+          writeQueue: Promise.resolve(),
         };
         this.runs.set(detached.id, live);
         await this.persist(live);
@@ -441,6 +458,8 @@ export class RunSupervisor {
       audited: false,
       agentDone: false,
       telemetry: new TelemetryFold(telemetryOf(stored.info)),
+      eventQueue: Promise.resolve(),
+      writeQueue: Promise.resolve(),
       ...(stored.usageBase !== undefined ? { usageBase: stored.usageBase } : {}),
     };
     this.runs.set(info.id, run);
@@ -522,6 +541,8 @@ export class RunSupervisor {
       audited: false,
       agentDone: false,
       telemetry: new TelemetryFold(telemetryOf(stored.info)),
+      eventQueue: Promise.resolve(),
+      writeQueue: Promise.resolve(),
       ...(stored.usageBase !== undefined ? { usageBase: stored.usageBase } : {}),
     };
     let handle: WorkerHandle;
@@ -750,6 +771,8 @@ export class RunSupervisor {
       audited: false,
       agentDone: false,
       telemetry: new TelemetryFold(),
+      eventQueue: Promise.resolve(),
+      writeQueue: Promise.resolve(),
       ...(reopened ? { reopened: true } : {}),
     };
     this.runs.set(id, run);
@@ -1246,13 +1269,25 @@ export class RunSupervisor {
     return failures;
   }
 
-  private async onEvent(run: LiveRun, event: NormalizedEvent): Promise<void> {
+  private onEvent(run: LiveRun, event: NormalizedEvent): void {
     // Set in the synchronous prefix: the worker's exit can race the event
     // delivery, and `agentDone` must already be true when the exit decides.
     if (event.kind === 'result') {
       run.agentDone = true;
     }
+    // The telemetry fold applies here, in arrival order. Everything after
+    // the first await queues per run instead — two rapid events must fold
+    // in arrival order, never last-writer (the req-67 clock-freeze flake:
+    // the older event's handler resumed after the newer one's and
+    // overwrote its state).
     run.telemetry.apply(event);
+    run.eventQueue = run.eventQueue
+      .then(() => this.applyEvent(run, event))
+      .catch((error) => this.deps.log(`run ${run.info.id}: folding an event failed — ${messageOf(error)}`));
+  }
+
+  /** The queued half of an event: stream append, fold, record — one at a time. */
+  private async applyEvent(run: LiveRun, event: NormalizedEvent): Promise<void> {
     await this.appendStream(run, event);
     const telemetry = run.telemetry.get();
     let next: RunInfo = {
@@ -1709,7 +1744,15 @@ export class RunSupervisor {
       ...(run.handover !== undefined ? { handover: run.handover } : {}),
       ...(run.usageBase !== undefined ? { usageBase: run.usageBase } : {}),
     };
-    await fsp.writeFile(path.join(run.dir, 'run.json'), JSON.stringify(stored, null, 2), 'utf8');
+    // The snapshot is taken here, at call time; the file write queues per
+    // run, so an older snapshot can never land after a newer one (the
+    // record's last writer would otherwise depend on fs timing — run.json
+    // is what a restart's `adopt` reads).
+    const write = run.writeQueue.then(() =>
+      fsp.writeFile(path.join(run.dir, 'run.json'), JSON.stringify(stored, null, 2), 'utf8'),
+    );
+    run.writeQueue = write.catch(() => undefined); // the queue survives a failed write
+    await write;
   }
 
   private agentActor(): string {
