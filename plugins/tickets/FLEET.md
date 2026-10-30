@@ -66,7 +66,11 @@ folder at the path would poison the next prepare.
   run; appends the ticket's Log line (one commit).
 - **Global:** "Clean up worktrees" in the panel header — removes every
   worktree whose ticket has no live run (dirty ones kept and reported),
-  then prunes every mapped repo. Liveness = the ticket's `run:` stamp ∪
+  then prunes every mapped repo; finally an unregistered folder under a
+  base that holds nothing but links (the junctions an older removal left
+  behind) loses its links and is rmdir'd — never recursively, so a folder
+  with real content stays (req-68; the boot migration does the same for
+  the legacy base). Liveness = the ticket's `run:` stamp ∪
   non-terminal fleet records — never fleet status alone.
 - **Boot sweep:** every plugin boot migrates the legacy root (clean
   leftovers removed automatically, dirty ones kept and reported; a live

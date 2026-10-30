@@ -1207,6 +1207,7 @@ class BoardService {
     });
     this.ctx.log(
       `worktree cleanup: ${report.removed.length} removed, ${report.keptDirty.length} kept dirty` +
+        `, ${report.leftovers.length} leftover folder(s) swept` +
         (report.failed.length > 0 ? `, ${report.failed.length} failed` : '') +
         `, pruned ${report.prunedRepos.length} repo(s)`,
     );
@@ -1250,11 +1251,13 @@ class BoardService {
         report.removed.length > 0 ||
         report.keptDirty.length > 0 ||
         report.failed.length > 0 ||
+        report.leftovers.length > 0 ||
         orphans.length > 0 ||
         leftovers.length > 0
       ) {
         this.ctx.log(
           `worktree boot sweep: migrated ${report.removed.length}, kept dirty ${report.keptDirty.length}` +
+            `, swept ${report.leftovers.length}` +
             `, orphans ${orphans.length}, legacy leftovers ${leftovers.length}` +
             (report.failed.length > 0 ? `, failed ${report.failed.length}` : ''),
         );
