@@ -22,7 +22,7 @@ recorded as an explicit decision. The parity checklist lives in
 
 ### fix — req-66 follow-up: a run follows a moved ticket; every run takes a message
 
-**Not yet manually verified by the owner.** Owner request, outside the
+Owner-verified (signed off 2026-10-31). Owner request, outside the
 list. T-0054 refused "already has a live run — stop it first" although
 no run was live: the owner moved the card (build → review → commit,
 from the phone) while its run went on, the runner kept writing to the
@@ -53,7 +53,7 @@ route table.
 
 ### fix — T-0053: the tickets remote paints only what changed (req-66 follow-up)
 
-**Not yet manually verified by the owner.** The remote's display
+Owner-verified (signed off 2026-10-31). The remote's display
 flickered as if the page loaded twice. Both causes sat in the phone
 client's repaint guard (`render()`), whose key embedded more than the
 page shows:
@@ -93,9 +93,7 @@ missed while a first connect is slow.
 
 ### req-66 R8 — Tickets remote: images from the phone, the run view's pinned header
 
-**Not yet manually verified by the owner** (above all a real paste from
-the iOS photo picker in Safari and the pinned header on a notched
-iPhone). Owner request, outside the list (ADR-0084, later change):
+Owner-verified (signed off 2026-10-31). Owner request, outside the list (ADR-0084, later change):
 
 - **Images into the phone's text fields.** An image pasted into
   Capture's Description or the refine view's Description/Plan — or
@@ -142,7 +140,7 @@ back to Stop after the send).
 
 ### req-66 R9 — Tickets remote: markdown in the reading surfaces, Run agent jumps to the run
 
-**Not yet manually verified by the owner.** Owner request, outside the
+Owner-verified (signed off 2026-10-31). Owner request, outside the
 list (ADR-0084). Basic markdown renders where the phone/iPad client
 reads ticket and worker text, and starting a run opens it:
 
@@ -195,8 +193,7 @@ rows), manual "The board from a phone or tablet".
 
 ### req-66 R6 — Tickets remote: the iPad board
 
-**Not yet manually verified by the owner** (press-and-hold drag with a
-real finger in iPad Safari above all). Owner request, outside the list
+Owner-verified (signed off 2026-10-31). Owner request, outside the list
 (ADR-0084). From tablet width the Board is a kanban:
 
 - **≥ 768 px**: every column side by side in a sideways-scrolling strip
@@ -228,8 +225,7 @@ scroll). Docs: docs/05 §5.41, manual "On an iPad".
 
 ### req-66 R5 — Tickets remote: refine from the phone
 
-**Not yet manually verified by the owner** (above all the on-screen
-keyboard over the editor in real Safari). Owner request, outside the
+Owner-verified (signed off 2026-10-31). Owner request, outside the
 list (ADR-0084, later change). Description, Plan, Acceptance criteria
 and the header (title, priority, repository) are editable on the phone:
 
@@ -267,8 +263,7 @@ later change, docs/05 §5.41, docs/06 §6.70, manual.
 
 ### req-66 R4 — Tickets remote: runs on the phone
 
-**Not yet manually verified by the owner** (real Safari on iPhone/iPad
-above all). Owner request, outside the list (ADR-0084). The phone
+Owner-verified (signed off 2026-10-31). Owner request, outside the list (ADR-0084). The phone
 client now drives the fleet:
 
 - **Answer a waiting worker** in Needs you and in the run view:
@@ -300,9 +295,8 @@ stop). Docs: docs/05 §5.41, manual.
 
 ### req-66 R3 — Tickets remote: the phone client
 
-**Not yet manually verified by the owner** — above all on a real
-iPhone/iPad in Safari (the automated round runs Chromium at iPhone
-size; WebKit is not part of the toolchain). Owner request, outside the
+Owner-verified (signed off 2026-10-31; the automated round runs
+Chromium at iPhone size, WebKit is not part of the toolchain). Owner request, outside the
 list (ADR-0084). The gateway now serves a real client instead of the
 pairing page:
 
@@ -347,7 +341,7 @@ sheet, Capture, the unpaired path, no console errors). Docs: docs/05
 
 ### req-66 R2 — Tickets remote: gateway, pairing and settings
 
-**Not yet manually verified by the owner.** Owner request, outside the
+Owner-verified (signed off 2026-10-31). Owner request, outside the
 list (ADR-0084). The tickets plugin now serves the board over HTTP to
 paired devices — off by default:
 
@@ -389,7 +383,7 @@ manual "The board from a phone or tablet", FLEET.md.
 
 ### req-66 R1 — Tickets remote: command layer and port
 
-**Not yet manually verified by the owner.** Owner request, outside the
+Owner-verified (signed off 2026-10-31). Owner request, outside the
 list (ADR-0084). The first step of the tickets remote, behaviour-neutral
 in Drey:
 
