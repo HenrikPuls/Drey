@@ -36,7 +36,7 @@ worktrees control. When the panel is narrow the cycle times are cut
 off, the pill stays visible; the bar is absent when neither has
 anything to say. Renderer-only. Supersedes the never-merged one-line
 variant left in `stash@{0}` (not applied, not dropped). Manual: the
-board paragraph. **Not yet manually verified by the owner.**
+board paragraph. Owner-verified (signed off 2026-10-30).
 
 ### Fix — fleet: the build column dispatches again (worktree leftovers, the walk-up misread, the silent queue)
 
