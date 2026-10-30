@@ -1095,12 +1095,15 @@ const WORKER_LABEL: ReadonlyArray<readonly [string, string]> = [
  * and the worktree home's note (T-0044) as a warning pill on the right:
  * legacy-root leftovers and orphan folders under the base, listed in
  * its tooltip, never auto-deleted (the Clean up worktrees control
- * collects them). The board's message (req-60) leads the bar: an action
- * in progress, a result that fades by itself, a warning or failure that
- * stays until closed. Null when there is nothing to say.
+ * collects them). The board's message (req-60) sits right-aligned, just
+ * before that pill (req-61): an action in progress, a result that fades
+ * by itself, a warning or failure that stays until closed — it comes and
+ * goes in the free space, so the cycle times never move. Null when there
+ * is nothing to say.
  */
 function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null): HTMLElement | null {
   const bar = el('div', 'tickets-statusbar');
+  const right = el('span', 'tickets-statusbar-right');
   if (note !== '') {
     const message = el('span', 'tickets-statusbar-note');
     message.dataset['kind'] = noteKind;
@@ -1124,10 +1127,14 @@ function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null): HTMLElem
       });
       message.append(close);
     }
-    bar.append(message);
+    right.append(message);
   }
   if (snap === null) {
-    return bar.childElementCount === 0 ? null : bar;
+    if (right.childElementCount === 0) {
+      return null;
+    }
+    bar.append(right);
+    return bar;
   }
   const now = Date.now();
   const dwell = el('span', 'tickets-statusbar-dwell');
@@ -1162,17 +1169,14 @@ function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null): HTMLElem
       ...worktrees.legacyLeftovers.map((name) => `legacy: ${name}`),
       ...worktrees.orphans.map((p) => `orphan: ${p}`),
     ].join('\n');
-    bar.append(warn);
+    right.append(warn);
+  }
+  if (right.childElementCount > 0) {
+    bar.append(right);
   }
   return bar.childElementCount === 0 ? null : bar;
 }
 
-/**
- * The fleet's status in the panel header (req-60): the worst light, the
- * states in words, tokens in flight and the oldest run's age — one
- * compact group before the header buttons, the long form in its tooltip.
- * Repaints on every fleet update and once a second for the clock.
- */
 /** Below this panel width the header group drops its numbers (they stay in the tooltip). */
 const HEAD_FLEET_NARROW_PX = 480;
 
@@ -1183,6 +1187,12 @@ const HEAD_FLEET_TINY_PX = 380;
 let panelWidth = 0;
 const panelWidthListeners = new Set<() => void>();
 
+/**
+ * The fleet's status in the panel header (req-60): the worst light, the
+ * states in words, tokens in flight and the oldest run's age — one
+ * compact group before the header buttons, the long form in its tooltip.
+ * Repaints on every fleet update and once a second for the clock.
+ */
 function fleetHeaderNode(): { node: HTMLElement; dispose: () => void } {
   const node = el('span', 'tickets-head-fleet');
   const light = el('span', 'tickets-light');
