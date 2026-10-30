@@ -1,8 +1,9 @@
 /**
  * The board's own findings (req-66): what the validator reports about
- * pipeline.md, repos.md and order.md. A chip in the board toolbar, coloured
- * by the worst level, unfolds the messages under the row — readable, not a
- * tooltip — and each message that names a meta file opens it.
+ * pipeline.md, repos.md and order.md. A bubble in the board toolbar —
+ * icon and count, coloured by the worst level, the full summary in its
+ * tooltip — unfolds the messages under the row, and each message that
+ * names a meta file opens it.
  */
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import type { TicketIssue } from '../shared/tickets';
@@ -64,11 +65,12 @@ export function boardIssuesChip(deps: BoardIssuesDeps): HTMLButtonElement | null
   }
   const chip = el('button', `tickets-issues-chip tickets-issues-chip-${summary.worst}`);
   chip.type = 'button';
-  chip.title = deps.open ? 'Hide the board issues' : 'Show the board issues';
+  chip.title = deps.open ? `${summary.text} — hide` : `${summary.text} — show`;
+  chip.setAttribute('aria-label', summary.text);
   chip.setAttribute('aria-expanded', String(deps.open));
   chip.append(
     deps.api.ui.icon(summary.worst === 'noise' ? 'info' : 'triangle-alert', 12),
-    document.createTextNode(summary.text),
+    document.createTextNode(String(deps.issues.length)),
     deps.api.ui.icon('chevron-down', 12),
   );
   if (deps.open) {

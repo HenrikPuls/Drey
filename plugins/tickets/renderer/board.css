@@ -259,15 +259,16 @@
   background: var(--hover-bg);
 }
 
-/* The board issues (req-66): a chip in the toolbar row, the same height as
-   the filter button beside it, coloured by the worst level; it unfolds the
-   messages under the row, inset like the board. */
+/* The board issues (req-66): a bubble in the toolbar row, the same height
+   as the filter button beside it — icon and count only, the summary in the
+   tooltip — coloured by the worst level; it unfolds the messages under the
+   row, inset like the board. */
 .tickets-issues-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   height: 20px;
-  padding: 0 8px;
+  padding: 0 7px;
   border: 0;
   border-radius: 10px;
   font: inherit;
