@@ -20,6 +20,21 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-69 — The board's view controls move into the Tickets header
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list. req-66 had left one toolbar row above the columns holding only the
+hide-blocked filter and the board issues chip — a whole line of panel
+height for two small controls. Both now sit in the panel header as one
+group (`boardViewControlsNode` in `plugins/tickets/renderer/index.ts`,
+between the fleet status and New / Refresh), repainted with every board
+update; the filter is an ordinary `.icon-btn` whose pressed state is
+`aria-pressed`. The unfolded issue list still opens above the columns.
+The `.tickets-toolbar` row and its CSS are gone.
+
+Specs: `e2e/board-issues.spec.ts` now finds filter and chip in the
+header and checks they share the title's line.
+
 ### req-65 — Interactive mode at the plan phase and every checkpoint
 
 Owner request, outside the

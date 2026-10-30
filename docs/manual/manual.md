@@ -776,7 +776,7 @@ a red count; validation findings (a
 hand-edited file, an unknown repo, a ticket in two phases) show as
 numbered badges — the board keeps rendering, nothing is guessed.
 Findings about the board's own files (`pipeline.md`, `repos.md`,
-`order.md`) show as a chip beside the filter above the columns
+`order.md`) show as a chip beside the filter in the panel header
 ("2 board issues", coloured by the most serious one); click it to list
 the messages, and **Open** beside a message opens the file it is about.
 
@@ -798,7 +798,7 @@ final authority: dragging a blocked card into a worker column asks
 first (**Cancel** / **Move anyway**); anywhere else it just moves. A
 blocker id that is not on the board — deleted, renamed, or archived —
 warns and keeps the ticket blocked; nothing unblocks silently. The
-filter icon above the columns hides the blocked cards when you want the
+filter icon in the panel header hides the blocked cards when you want the
 overview; they stay on the board and their order is never touched.
 
 Dependencies: a ticket that must not start before another one is done
@@ -813,7 +813,7 @@ blockers hold it), and starting a run on one refuses — but you stay in
 charge: dragging a blocked card into a worker column only asks for
 confirmation first. A blocker that was deleted, renamed or archived
 leaves the ticket blocked with a warning — never silently unblocked.
-The **filter** toggle above the columns hides all blocked cards for a
+The **filter** toggle in the panel header hides all blocked cards for a
 quieter board (view state only — nothing moves, the counts stay
 honest).
 

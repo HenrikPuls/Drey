@@ -225,44 +225,19 @@
   padding: 0 7px;
 }
 
-/* The board's small toolbar row (T-0050): sits above the columns. */
-.tickets-toolbar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 20px;
-  padding: 6px 12px 0;
+/* The board's view controls (req-69): the hide-blocked filter (T-0050) and
+   the issues chip, a group in the panel header — no row of their own. */
+.tickets-head-view {
+  gap: 4px;
 }
 
-.tickets-toolbar-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-5);
-  cursor: pointer;
+.tickets-head-view[hidden] {
+  display: none;
 }
 
-.tickets-toolbar-btn:hover {
-  background: var(--hover-bg);
-  color: var(--text-2);
-}
-
-.tickets-toolbar-on {
-  color: var(--accent-text);
-  background: var(--hover-bg);
-}
-
-/* The board issues (req-66): a bubble in the toolbar row, the same height
-   as the filter button beside it — icon and count only, the summary in the
-   tooltip — coloured by the worst level; it unfolds the messages under the
-   row, inset like the board. */
+/* The board issues (req-66): a bubble beside the filter — icon and count
+   only, the summary in the tooltip — coloured by the worst level; it
+   unfolds the messages above the columns, inset like the board. */
 .tickets-issues-chip {
   display: inline-flex;
   align-items: center;
