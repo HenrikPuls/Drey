@@ -55,6 +55,8 @@ import { blockedRefusal } from './blocked';
 import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, type DriftDetection } from './normalize';
 import { openTerminalAt } from './open-terminal';
+import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
+import { RemoteService } from './remote/service';
 import {
   chainResult,
   parseAnswer,
@@ -156,6 +158,8 @@ class BoardService {
   private queueTail: Promise<unknown> = Promise.resolve();
   private readonly gitLocations = new Map<string, RepoLocation | null>();
   private emitDebounce: ReturnType<typeof setTimeout> | null = null;
+  /** Who hears the debounced board change besides the renderer (the remote, req-66). */
+  private readonly changeListeners = new Set<() => void>();
   private lastChainConfig: string | null = null;
 
   constructor(
@@ -184,7 +188,15 @@ class BoardService {
     this.emitDebounce = setTimeout(() => {
       this.emitDebounce = null;
       this.ctx.ipc.emit('board-changed');
+      for (const listener of this.changeListeners) {
+        listener();
+      }
     }, 200);
+  }
+
+  onChanged(listener: () => void): () => void {
+    this.changeListeners.add(listener);
+    return () => this.changeListeners.delete(listener);
   }
 
   private async readOptional(vaultId: string, path: string): Promise<string | null> {
@@ -1766,18 +1778,30 @@ export function handoverOverrideKeys(snap: BoardSnapshot, defaultWorker: string)
   return [...keys];
 }
 
+/** The remote gateway's owner (req-66); stopped on deactivate. */
+let remote: RemoteService | null = null;
+
 const plugin: MainPluginModule = {
+  async deactivate() {
+    await remote?.stop();
+    remote = null;
+  },
+
   async activate(ctx: MainPluginContext) {
     const gitPath = ((await ctx.config.get<string>('gitPath')) ?? '').trim();
     const git = new TicketsGit(() => (gitPath === '' ? 'git' : gitPath));
     const defaultWorker = ((await ctx.config.get<string>('defaultWorker')) ?? '').trim() || 'opencode';
     const autoPermissionMode: PermissionMode =
       (await ctx.config.get<string>('autoPermissionMode')) === 'bypass' ? 'bypass' : 'accept-edits';
+    const remoteChanges = new ChangeHub();
     const fleet = new FleetClient({
       root: path.join(ctx.app.userRoot, 'fleet'),
       runnerScript: path.join(__dirname, 'fleet', 'runner.js'),
       log: ctx.log,
-      onFleetChanged: (fleetSnapshot) => ctx.ipc.emit('fleet-changed', fleetSnapshot),
+      onFleetChanged: (fleetSnapshot) => {
+        ctx.ipc.emit('fleet-changed', fleetSnapshot);
+        remoteChanges.emit('fleet');
+      },
     });
     fleet.startPolling();
     const fleetRoot = path.join(ctx.app.userRoot, 'fleet');
@@ -1807,6 +1831,39 @@ const plugin: MainPluginModule = {
     // every board snapshot re-reads them with the board's override keys.
     const handover = await handoverFromConfig(ctx.config.get.bind(ctx.config));
     const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet, fleetRoot, caps, pools, handover);
+
+    // The tickets remote (req-66, ADR-0084): off until Settings enables it.
+    board.onChanged(() => remoteChanges.emit('board'));
+    const remoteService: RemoteService = new RemoteService({
+      config: ctx.config,
+      port: new DreyTicketsPort(board, fleet, remoteChanges, { allowBypass: () => remoteService.allowBypass() }),
+      clientDir: path.join(__dirname, '..', 'remote'),
+      log: ctx.log,
+      onChanged: () => ctx.ipc.emit('remote-changed'),
+    });
+    remote = remoteService;
+    void remoteService.init().catch((error: unknown) => ctx.log(`remote: ${messageOf(error)}`, 'error'));
+    ctx.ipc.handle('remoteStatus', () => remoteService.status());
+    ctx.ipc.handle('remoteConfigure', async (payload) => {
+      const p = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+      return remoteService.configure({
+        ...(typeof p['enabled'] === 'boolean' ? { enabled: p['enabled'] } : {}),
+        ...(typeof p['mode'] === 'string' ? { mode: p['mode'] } : {}),
+        ...(typeof p['lanAddress'] === 'string' || p['lanAddress'] === null ? { lanAddress: p['lanAddress'] as string | null } : {}),
+        ...(typeof p['port'] === 'number' ? { port: p['port'] } : {}),
+        ...(typeof p['publicUrl'] === 'string' || p['publicUrl'] === null ? { publicUrl: p['publicUrl'] as string | null } : {}),
+        ...(typeof p['allowBypass'] === 'boolean' ? { allowBypass: p['allowBypass'] } : {}),
+      });
+    });
+    ctx.ipc.handle('remotePair', (payload) => {
+      const p = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+      return remoteService.pair(typeof p['name'] === 'string' ? p['name'] : '', p['readOnly'] === true);
+    });
+    ctx.ipc.handle('remotePairCancel', () => remoteService.cancelPairing());
+    ctx.ipc.handle('remoteRevoke', async (payload) => {
+      const id = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>)['id'] : undefined;
+      return typeof id === 'string' ? remoteService.revoke(id) : remoteService.status();
+    });
 
     ctx.ipc.handle('board', () => board.refresh());
 

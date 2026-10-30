@@ -518,3 +518,93 @@
 .tset [hidden] {
   display: none !important;
 }
+
+/* --- remote access (req-66) ----------------------------------------------- */
+
+.tset-remote-sub {
+  margin: 8px 0 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.tset-remote-pairform {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.tset-remote-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+}
+
+.tset-remote-pairing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.tset-remote-qr {
+  width: 168px;
+  height: 168px;
+  flex: none;
+  border-radius: var(--radius-xs);
+  image-rendering: pixelated;
+}
+
+.tset-remote-pairtext {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-3);
+}
+
+.tset-remote-code {
+  font-family: var(--font-mono);
+  font-size: 1.3rem;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+  user-select: all;
+}
+
+.tset-remote-url {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.tset-remote-devices {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+}
+
+.tset-remote-device {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+}
+
+.tset-remote-device + .tset-remote-device {
+  border-top: 1px solid var(--border);
+}
+
+.tset-remote-device-name {
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.tset-remote-device > button {
+  margin-left: auto;
+}

@@ -41,7 +41,7 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
 describe('DreyTicketsPort', () => {
   it('hands the actor to every board write', async () => {
     const { board, fleet } = fakes();
-    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: false });
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
     await port.move({ id: 'T-0001', from: 'build', to: 'review', index: null }, 'owner@ipad');
     await port.claim({ id: 'T-0001', mode: 'takeover' }, 'owner@ipad');
     await port.archive({ id: 'T-0001' }, 'owner@ipad');
@@ -55,19 +55,19 @@ describe('DreyTicketsPort', () => {
   it('refuses a bypass run unless the setting allows it', async () => {
     const cmd = { ticketId: 'T-0001', workerChoice: null, permissionMode: 'bypass', handover: null } as const;
     const refused = fakes();
-    const strict = new DreyTicketsPort(refused.board, refused.fleet, new ChangeHub(), { allowBypass: false });
+    const strict = new DreyTicketsPort(refused.board, refused.fleet, new ChangeHub(), { allowBypass: () => false });
     expect(await strict.startRun(cmd)).toEqual({ ok: false, error: BYPASS_REFUSAL });
     expect(refused.board.startRun).not.toHaveBeenCalled();
     expect(await strict.startRun({ ...cmd, permissionMode: 'accept-edits' })).toEqual({ ok: true, runId: 'r1' });
 
     const allowed = fakes();
-    const open = new DreyTicketsPort(allowed.board, allowed.fleet, new ChangeHub(), { allowBypass: true });
+    const open = new DreyTicketsPort(allowed.board, allowed.fleet, new ChangeHub(), { allowBypass: () => true });
     expect(await open.startRun(cmd)).toEqual({ ok: true, runId: 'r1' });
   });
 
   it('answers "not running" for chain controls and an empty stream without a runner', async () => {
     const { board, fleet } = fakes();
-    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: false });
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
     expect(await port.chainMaster('halted')).toEqual({ ok: false, error: 'the fleet runner is not running' });
     expect(await port.chainAbort()).toEqual({ ok: false, error: 'the fleet runner is not running' });
     expect(await port.stream('r1')).toBe('');
@@ -77,7 +77,7 @@ describe('DreyTicketsPort', () => {
   it('relays changes until unsubscribed', () => {
     const { board, fleet } = fakes();
     const hub = new ChangeHub();
-    const port = new DreyTicketsPort(board, fleet, hub, { allowBypass: false });
+    const port = new DreyTicketsPort(board, fleet, hub, { allowBypass: () => false });
     const seen: string[] = [];
     const off = port.onChanged((what) => seen.push(what));
     hub.emit('board');

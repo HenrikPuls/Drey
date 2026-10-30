@@ -74,8 +74,8 @@ export class ChangeHub {
 }
 
 export interface DreyPortOptions {
-  /** Settings → Tickets → Remote access: bypass runs from a device (default off). */
-  readonly allowBypass: boolean;
+  /** Settings → Tickets → Remote access: bypass runs from a device (default off); asked per run. */
+  readonly allowBypass: () => boolean;
 }
 
 export const BYPASS_REFUSAL = 'bypass runs are not allowed from a remote device';
@@ -127,7 +127,7 @@ export class DreyTicketsPort implements TicketsRemotePort {
   }
 
   async startRun(cmd: StartRunCommand): Promise<RunReply> {
-    if (cmd.permissionMode === 'bypass' && !this.options.allowBypass) {
+    if (cmd.permissionMode === 'bypass' && !this.options.allowBypass()) {
       return { ok: false, error: BYPASS_REFUSAL };
     }
     return this.boardService.startRun(cmd);

@@ -147,13 +147,9 @@ VS Code host serves the same client. Loopback by default, reached
 through Tailscale Serve (HTTPS); a LAN mode is opt-in with a warning.
 Off by default; QR pairing, per-device tokens (hashes only), revoke,
 Host/Origin check, bypass runs refused remotely. Owner decisions D1–D5
-of 2026-10-30 confirmed. R1 (command layer + port) shipped — see the
-changelog. Remaining steps, each shipped on its own:
+of 2026-10-30 confirmed. R1 (command layer + port) and R2 (gateway, pairing,
+Settings) shipped — see the changelog. Remaining steps, each shipped on its own:
 
-- **R2 — gateway + pairing + settings**: `node:http` server under
-  `plugins/tickets/main/remote/`, static client with CSP, SSE on
-  `board-changed` / `fleet-changed`, pairing QR, device list,
-  Settings → Tickets → Remote access.
 - **R3 — phone client**: Needs you, Board (one column, phase chips,
   swipe to the next phase), Ticket, Move sheet, Capture, claim/takeover,
   Run agent; home-screen web app. Usable from here on.

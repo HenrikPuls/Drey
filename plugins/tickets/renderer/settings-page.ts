@@ -3,6 +3,7 @@ import { parseHandover, type BoardSnapshot, type FolderStatus, type PromptListin
 import { createColumnsSection, effectivePrompt } from './settings-columns';
 import { el, iconButton, mutate } from './settings-dom';
 import { createPromptsSection } from './settings-prompts';
+import { createRemoteSection } from './settings-remote';
 
 /**
  * Settings — Tickets (M85, req-46, reworked in req-50 after the Claude
@@ -63,7 +64,8 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
 
       const columns = createColumnsSection(api, reload);
       const prompts = createPromptsSection(api, reload);
-      body.append(repo, columns.root, prompts.root, fleetSection(api));
+      const remote = createRemoteSection(api);
+      body.append(repo, columns.root, prompts.root, fleetSection(api), remote.root);
 
       // The board's change events cover every write here and the runner's.
       const off = api.backend.on('board-changed', () => {
@@ -83,6 +85,7 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
           clearTimeout(timer);
         }
         prompts.dispose();
+        remote.dispose();
       };
     },
   };

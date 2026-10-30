@@ -1067,6 +1067,37 @@ And the assistant can drive runs: ask it about the fleet — it sees
 `fleet_status`, and can `fleet_run`, `fleet_stop`, `fleet_steer` and
 `fleet_watch` through Drey's MCP server.
 
+
+### The board from a phone or tablet
+
+Settings → Tickets → **Remote access** offers the board to a phone or
+tablet on your network or over Tailscale. It is off until you switch
+it on, and only devices you pair get in.
+
+1. Switch **Enabled** on. **Reach** chooses how the phone gets there:
+   - *This computer only, through Tailscale Serve* (recommended): Drey
+     listens only on this computer. Run `tailscale serve --bg 47811`
+     once (the port shown), and enter the address Tailscale gives you —
+     `https://<computer>.<tailnet>.ts.net` — as **Device address**. The
+     connection is encrypted, also away from home.
+   - *Local network (plain HTTP)*: Drey listens on the network interface
+     you pick. Simpler, but anyone on the same Wi-Fi can read the
+     traffic.
+2. Under **Pair a device**, give the device a name and press **Pair**.
+   Scan the QR code with the phone's camera — or open the address and
+   type the code. The code works once and for five minutes.
+3. On the phone, add the page to the home screen.
+
+Every ticket move from a device is logged with the device's name
+(`owner@ipad`), so the Log shows where it came from. **Paired devices**
+lists each device with when it was last seen; **Revoke** locks one out
+for good. A device paired **Read only** can look but not change
+anything. Runs that skip permission prompts cannot be started from a
+device unless you allow **Bypass runs**.
+
+Until the phone app arrives, the paired page shows how many things
+wait on you.
+
 ---
 
 ## 14. Diagrams (draw.io)

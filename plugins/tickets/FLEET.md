@@ -269,6 +269,14 @@ handover thresholds) · `master` (`run` / `halted`) · `columns`
 column ISO instant) · `tokensDay` + `tokensUsed` (the per-column token
 budget) · `ciBackoff`.
 
+## The tickets remote is not the runner
+
+The phone/tablet remote (req-66, ADR-0084) is a separate server in the
+tickets plugin itself (Settings → Tickets → Remote access, default port
+47811). It reaches the runner only through the plugin's `FleetClient`;
+the runner's port and token stay on loopback and are never handed to a
+device. Its own log lines start with `remote:` in the plugin log.
+
 ## Lifecycle gotchas
 
 - **Which checkout runs it**: the runner was spawned by some Drey instance.

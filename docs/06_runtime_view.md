@@ -3412,3 +3412,39 @@ it."); the queries (branches, log, file history, diffs, stash list)
 answer, with the paths stripped back repository-relative main-side.
 Rescans run on registry changes and relocate only.
 
+
+## 6.70 Pairing a phone and moving a ticket from it (req-66, [ADR-0084](09_architecture_decisions/0084-tickets-remote-access.md))
+
+```mermaid
+sequenceDiagram
+    actor O as Owner (desk)
+    participant ST as Settings → Remote access
+    participant RS as RemoteService (tickets main)
+    participant GW as RemoteGateway (node:http)
+    participant PH as Phone (Safari)
+    participant PT as DreyTicketsPort
+    participant BS as BoardService
+    O->>ST: Enabled on, device address set
+    ST->>RS: remoteConfigure {enabled, publicUrl}
+    RS->>GW: start(127.0.0.1, 47811) — Host allowlist from the config
+    O->>ST: Pair "iPad"
+    ST->>RS: remotePair {name}
+    RS-->>ST: code + QR of <deviceUrl>/#pair=<code> (5 min, single use)
+    PH->>GW: GET / (via Tailscale Serve) — Host checked, CSP page
+    PH->>GW: POST /api/pair {code} (the fragment never reached the server)
+    GW->>RS: consume code → DeviceRegistry.add (hash stored)
+    GW-->>PH: {token} → localStorage
+    RS-->>ST: remote-changed → device list redraws
+    PH->>GW: GET /api/events (Bearer) — Server-Sent Events
+    PH->>GW: POST /api/tickets/T-0052/move {from, to} (Bearer, Origin checked)
+    GW->>PT: parseTransition → move(cmd, "owner@ipad")
+    PT->>BS: transition({…, actor}) — the board queue, one commit
+    BS-->>GW: board-changed (debounced) → ChangeHub
+    GW-->>PH: event: board → the phone re-fetches
+```
+
+The gateway checks the `Host` header before anything else (a page whose
+DNS name was rebound to this machine names a host the allowlist does not
+hold), refuses a foreign `Origin` on writes, and limits failed pairings
+and unknown tokens per client address. The fleet runner is never exposed:
+run controls go through the plugin's `FleetClient`.

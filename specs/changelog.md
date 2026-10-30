@@ -20,6 +20,48 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-66 R2 — Tickets remote: gateway, pairing and settings
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (ADR-0084). The tickets plugin now serves the board over HTTP to
+paired devices — off by default:
+
+- **Settings → Tickets → Remote access** (`renderer/settings-remote.ts`):
+  Enabled, Reach (loopback through Tailscale Serve, or one LAN
+  interface with a plain-HTTP warning), port (default 47811), device
+  address, bypass runs. Changes apply at once (the gateway restarts).
+  Pairing shows a QR code of `<device address>/#pair=<code>` plus the
+  typeable code (10 characters, Crockford base32, single use, 5
+  minutes); paired devices list with "last seen" and Revoke; a device
+  can be paired read-only.
+- `main/remote/gateway.ts` — `node:http`, strict CSP and security
+  headers on every response, JSON API, Server-Sent Events
+  (`board` / `fleet`), static client files (the built-in pairing page
+  until R3), 64 KB body cap.
+- `main/remote/router.ts` — the API as a pure function: Host allowlist
+  first (DNS rebinding), foreign Origin refused on writes, pairing,
+  bearer auth, failure limit (10 per 10 minutes per address), read-only
+  devices, the device actor (`owner@<device>`) on every write. Routes
+  as in ADR-0084; a board refusal stays a 200 with `{ ok: false }`.
+- `main/remote/auth.ts` — pairing codes, device registry storing only
+  SHA-256 token hashes (in the plugin config, `remote.devices`), the
+  failure limiter. `config.ts` — normalized `remote.*` settings, bind
+  address (never 0.0.0.0), allowed hosts, device URL.
+- `main/remote/qr.ts` — a dependency-free QR encoder (byte mode, level
+  M, versions 1–10); every version was decoded with OpenCV when it was
+  written, instead of adding a package.
+- Wiring: the board's debounced change and the fleet push feed a
+  `ChangeHub`; the plugin's new `deactivate` stops the server.
+
+Specs: `remote/qr.spec.ts`, `auth.spec.ts`, `config.spec.ts`,
+`router.spec.ts`, `gateway.spec.ts` (real loopback socket: headers,
+Host refusal, bad JSON, the event stream). Checked beyond the specs: the
+built service end to end (pair by the QR's code, `/api/me` actor,
+foreign Origin 403, no plain token stored) and the pairing page in
+Chromium at iPhone size (pairs from the link, strips the fragment,
+survives a reload, no CSP errors). Docs: docs/05 §5.41, docs/06 §6.70,
+manual "The board from a phone or tablet", FLEET.md.
+
 ### req-66 R1 — Tickets remote: command layer and port
 
 **Not yet manually verified by the owner.** Owner request, outside the
