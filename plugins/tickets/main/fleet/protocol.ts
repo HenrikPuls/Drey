@@ -156,6 +156,46 @@ export function normalizeFleetCaps(value: unknown): FleetCaps {
   };
 }
 
+/**
+ * One worker provider's pool (req-63): how many runs of that provider
+ * the machine carries at once, across every column. Configurable
+ * `fleet.pool.<provider>.size` / `.probe`.
+ */
+export interface FleetPool {
+  /** Parallel runs (≥ 1). */
+  readonly size: number;
+  /**
+   * An OpenAI-compatible llama.cpp server's base URL: its `/props`
+   * `total_slots` caps `size` (the only local server that reports its
+   * parallelism). Null = no probe.
+   */
+  readonly probeUrl: string | null;
+}
+
+export type FleetPools = Readonly<Record<WorkerProviderId, FleetPool>>;
+
+export const DEFAULT_FLEET_POOL: FleetPool = { size: 1, probeUrl: null };
+
+/** Resolves pools of unknown shape (wire body, plugin config) per
+ *  provider: a whole size ≥ 1 and an http(s) probe URL win, anything
+ *  else falls back to the default. */
+export function normalizeFleetPools(value: unknown): FleetPools {
+  const raw = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
+  const one = (provider: WorkerProviderId): FleetPool => {
+    const entry = (typeof raw[provider] === 'object' && raw[provider] !== null ? raw[provider] : {}) as Record<
+      string,
+      unknown
+    >;
+    const size = entry['size'];
+    const probe = entry['probeUrl'];
+    return {
+      size: typeof size === 'number' && Number.isInteger(size) && size >= 1 ? size : DEFAULT_FLEET_POOL.size,
+      probeUrl: typeof probe === 'string' && /^https?:\/\/\S+$/.test(probe.trim()) ? probe.trim() : null,
+    };
+  };
+  return { opencode: one('opencode'), 'claude-code': one('claude-code') };
+}
+
 /** A run as the runner reports it — and as `run.json` persists it. */
 export interface RunInfo {
   readonly id: string;
@@ -224,6 +264,8 @@ export interface RunInfo {
   readonly worktree?: WorktreeOutcome;
   /** The machine gate's verdict, once it ran (T-0048); absent when it never did. */
   readonly gateResult?: 'green' | 'red' | null;
+  /** The worker's last error event (req-63: a rate limit shrinks the pool). */
+  readonly lastError?: string | null;
   // --- token telemetry (T-0048); all optional so adopt() restores older
   // --- records — every reader treats absent as unknown.
   /** The model pin the run started with (`provider/model` or bare). */
@@ -326,6 +368,8 @@ export interface ChainConfig {
   readonly permissionMode: PermissionMode;
   /** The instruction output caps (T-0048); absent = `DEFAULT_FLEET_CAPS`. */
   readonly caps?: FleetCaps;
+  /** The per-provider pools (req-63); absent = one run per provider. */
+  readonly pools?: FleetPools;
 }
 
 /** The chain's control state as the runner reports it. */

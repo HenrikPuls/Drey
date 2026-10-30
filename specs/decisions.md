@@ -56,6 +56,12 @@ one means moving it back to the roadmap with a new justification.
 
 ## Won't do (decided against, kept for the record)
 
+- **Per-column worker slots** (`workers:` in `pipeline.md`, M85) — and
+  keeping the key as a per-column cap or a reserved minimum. Decided with
+  the owner for req-63 (2026-10-30): slots bound to columns blocked work
+  while the provider had capacity; the parallelism is the provider pool,
+  the order is priority class, then the rightmost column.
+
 - **One composer switch per external source** (search, fetch, each MCP
   server) — decided with the owner for milestone 79 (2026-10-13): one
   Web chip covers everything that leaves the machine; which sources

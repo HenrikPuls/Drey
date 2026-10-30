@@ -3261,10 +3261,10 @@ sequenceDiagram
     participant W as worker (opencode / claude-code)
 
     B->>F: POST /chain/config (every board snapshot, idempotent)
-    F->>R: configure { ticketsVaultPath, git, defaultWorker, permissionMode }
+    F->>R: configure { ticketsVaultPath, git, defaultWorker, permissionMode, pools }
     R->>V: read pipeline.md + order.md + repos.md + tickets/*
-    Note over R: dispatch pass — master run + column playing + free slot
-    R->>R: planDispatch: each playing automatic column serves its own queue only (the machine never pulls from a manual column)
+    Note over R: dispatch pass — master run + column playing + a free slot in the provider's pool
+    R->>R: planDispatch (req-63): one list over the playing automatic columns' own queues — urgent/high first, then the rightmost column, then column order; each takes a slot of its provider's pool (probe-capped, shrunk after a 429)
     R->>V: read prompt (tickets/_meta/prompts/<ref>.md)
     R->>R: composeRunRequest (the one builder — column rides as request.column)
     R->>S: start(request) — worktree + brief (the completion discipline at its end)
@@ -3273,7 +3273,7 @@ sequenceDiagram
     S->>S: machine gate re-run — the safety net
     alt agent-done AND green gate
         S->>V: move one column right (one commit, "(fleet)")
-        S-->>R: onRunSettled(done) — slot freed, next pool may pull
+        S-->>R: onRunSettled(done) — the provider's slot is freed for the next candidate
     else red gate
         S-->>R: onRunSettled(failed, gateFailure)
         R->>R: red streak + 60 s cooldown (breaker: max-red trip → column held, next candidate parked in inbox with parked-reason)

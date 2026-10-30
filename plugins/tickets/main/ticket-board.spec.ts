@@ -358,27 +358,36 @@ describe('patchPipelinePhase - the settings dialog writer', () => {
   });
 
   it('clearing the worker writes manual and takes the pool keys with it', () => {
-    const withPool = patchPipelinePhase(PIPELINE, 'build', {
+    const withPool = patchPipelinePhase(PIPELINE.replace('id: build,', 'id: build, workers: 4,'), 'build', {
       model: 'zai/glm-5.3',
-      workers: 4,
     });
+    expect(withPool).toContain('workers: 4');
     const cleared = patchPipelinePhase(withPool, 'build', { worker: null });
+    expect(cleared).not.toContain('workers:'); // the retired key goes with the pool
     const build = parsePipeline(cleared).phases.find((p) => p.id === 'build')!;
     expect(build.handover).toBe('manual');
     expect(build.worker).toBeNull();
     expect(build.model).toBeNull();
-    expect(build.workers).toBe(1);
     expect(build.claim).toBe(true); // claim and wip survive the manual flip
     expect(build.wip).toBe(2);
   });
 
-  it('model, workers and prompt patch independently; unknown phases refuse', () => {
-    const patched = patchPipelinePhase(PIPELINE, 'build', { workers: 4, model: 'zai/glm-5.3-flash' });
+  it('model and prompt patch independently; unknown phases refuse', () => {
+    const patched = patchPipelinePhase(PIPELINE, 'build', { model: 'zai/glm-5.3-flash', prompt: 'build-heavy' });
     const build = parsePipeline(patched).phases.find((p) => p.id === 'build')!;
-    expect(build.workers).toBe(4);
     expect(build.model).toBe('zai/glm-5.3-flash');
-    expect(() => patchPipelinePhase(PIPELINE, 'nope', { workers: 2 })).toThrow('no phase "nope"');
-    expect(() => patchPipelinePhase(PIPELINE, 'build', { workers: 0 })).toThrow('whole number');
+    expect(build.prompt).toBe('build-heavy');
+    expect(() => patchPipelinePhase(PIPELINE, 'nope', { model: 'x' })).toThrow('no phase "nope"');
+  });
+
+  it('a column workers: key is no longer read — the pools are the providers\' (req-63)', () => {
+    const legacy = PIPELINE.replace('id: build,', 'id: build, workers: 4,');
+    const parsed = parsePipeline(legacy);
+    expect(parsed.error).toBeNull();
+    const noise = parsed.issues.filter((issue) => issue.message.includes('workers:'));
+    expect(noise).toHaveLength(1);
+    expect(noise[0]!.level).toBe('noise');
+    expect(noise[0]!.message).toContain('Settings → Tickets → Fleet');
   });
 });
 

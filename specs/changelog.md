@@ -20,6 +20,47 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-63 — Fleet: provider pools and column priority instead of per-column slots
+
+Owner-verified (signed off 2026-10-30). Owner request, outside the
+list. A column's `workers:` pool bound its slots to that column: an idle
+`plan` slot could not serve `build`, the dispatcher filled columns left
+to right (starting work before finishing it), and a ticket's priority
+only sorted inside its own column.
+
+The parallel slots now belong to the **worker providers**
+(`fleet.pool.opencode.size`, `fleet.pool.claude-code.size`, Settings →
+Tickets → Fleet; default one each). Every live run of a provider — the
+owner's on-demand runs included — takes one of its slots. `planDispatch`
+(`plugins/tickets/main/fleet/chain.ts`) builds one candidate list over
+every playing automatic column and orders it by **priority class**
+(`urgent`/`high` before `normal`/`low`), then **column rank — rightmost
+first**, then the column's own order; a candidate takes a slot of the
+pool its assignment resolves to (the same ladder as the run request) and
+waits when that pool is full. A running run is never preempted. Master,
+brakes, cooldown, breaker and the checkpoint rule are unchanged.
+
+Can the capacity be read from the provider? Only from a **llama.cpp**
+server (`/props` → `total_slots`): `fleet.pool.opencode.probe` takes its
+base URL, and the probe (every five minutes) caps the configured size.
+vLLM, LM Studio and Ollama keep their parallelism in server flags;
+hosted APIs and the CLIs' subscriptions report none. Instead a run that
+fails on a **rate limit** (`429`, "rate limit", "too many requests" in
+the worker's last error, new `RunInfo.lastError`) shrinks its provider's
+pool by one slot for five minutes (never below one).
+
+The column `workers:` key is gone (owner decision — no per-column cap or
+reservation): `PipelinePhase.workers`, the settings table's Pool column
+and the `×N` on the column chip are removed; a leftover key is ignored
+with a noise badge that points at the Fleet settings, and clearing a
+column's worker still removes it. The lane strip shows a column's busy
+runs without a slot count. Specs: `chain.spec.ts` (shared pool,
+rightmost-first, priority classes, two providers, live runs, an
+unresolvable assignment), `orchestrator.spec.ts` (shared pool, probe
+cap, rate-limit shrink, pool helpers), `ticket-board.spec.ts` (the
+retired key). Docs: `specs/ticket-schema.md`, ADR-0077 later change,
+`docs/05`, `docs/06`, the manual.
+
 ### req-61 — Tickets board: messages at the right end of the status bar
 
 Owner request, outside the list. req-60 put the board's message at the

@@ -7,9 +7,9 @@
  * The rules, in the owner's words:
  * - A column with a worker (handover `agent …`) drains itself; a column
  *   without one is a manual step — the human moves its tickets.
- * - A pool serves its own queue first (refinement rounds the owner
- *   moved back), then tops up from the previous column's top — so the
- *   plan pool drains `prioritized` without a worker of its own.
+ * - The parallel slots belong to the provider pools, not to columns
+ *   (req-63): an idle slot serves whichever column has the most
+ *   important ticket — high priority first, then the rightmost column.
  * - A manual column that sits between automatic columns is the owner's
  *   **checkpoint** (plan-review in the live default): the machine never
  *   pulls across it — the owner's forward move is what feeds the next
@@ -25,8 +25,9 @@ import {
   type BoardColumn,
   type PipelinePhase,
   type TicketCard,
+  type TicketPriority,
 } from '../../shared/tickets';
-import type { ChainMaster, ColumnMode } from './protocol';
+import { WORKER_PROVIDERS, type ChainMaster, type ColumnMode, type WorkerProviderId } from './protocol';
 
 /** True when the column's handover hands tickets to an agent pool. */
 export function isAutoPhase(phase: PipelinePhase): boolean {
@@ -84,8 +85,15 @@ export interface PlanDispatchInput {
   readonly columns: readonly BoardColumn[];
   /** Per-column mode; a phase absent here is `playing`. */
   readonly modes: Readonly<Record<string, ColumnMode>>;
-  /** Live (starting/running/stopping) run counts per working column. */
-  readonly liveByColumn: Readonly<Record<string, number>>;
+  /** The parallel runs each provider's pool carries (req-63). */
+  readonly poolSize: Readonly<Record<WorkerProviderId, number>>;
+  /** Live (starting/running/stopping) runs per provider — every run, the
+   *  owner's on-demand ones included, takes a pool slot. */
+  readonly liveByPool: Readonly<Record<WorkerProviderId, number>>;
+  /** The provider that would run the card in that column (the assignment
+   *  ladder); null = unresolvable — planned without a slot, so the
+   *  dispatch refuses it with the reason. */
+  readonly poolOf: (card: TicketCard, phase: PipelinePhase) => WorkerProviderId | null;
   /** Ticket ids that must not be dispatched (a live or detached run
    *  somewhere, or a run stamp without a supervised run). */
   readonly busyTickets: ReadonlySet<string>;
@@ -96,11 +104,13 @@ export interface PlanDispatchInput {
 }
 
 export interface PlannedDispatch {
-  /** The pool that works the ticket (= the RunRequest's `column`). */
+  /** The column that works the ticket (= the RunRequest's `column`). */
   readonly workingPhase: string;
   /** Where the ticket file sits now (a pull leaves it there until the move). */
   readonly fromPhase: string;
   readonly card: TicketCard;
+  /** The provider pool the run takes a slot of; null = unresolvable. */
+  readonly pool: WorkerProviderId | null;
 }
 
 /** A card the machine may take: unclaimed, unblemished, not already running. */
@@ -112,18 +122,36 @@ export function dispatchable(card: TicketCard, busyTickets: ReadonlySet<string>)
 }
 
 /**
- * What to dispatch right now, in dispatch order: per automatic, playing
- * column with a free slot and a move target — the column's own queue.
- * The machine never pulls from a manual column: `prioritized` is the
- * owner's queue, and he moves tickets into worker columns himself
- * (owner ruling, 2026-10-18, amending the "drain prioritized" design).
+ * The dispatch class of a priority (req-63): `urgent` and `high` jump
+ * every column's `normal` / `low` tickets; inside a class the column
+ * rank decides.
+ */
+export function priorityClass(priority: TicketPriority): 0 | 1 {
+  return priority === 'urgent' || priority === 'high' ? 0 : 1;
+}
+
+/**
+ * What to dispatch right now, in dispatch order (req-63). The slots
+ * belong to the provider pools, not to the columns: one candidate list
+ * across every automatic, playing column with a move target, ordered by
+ * priority class (urgent/high first), then column rank — the rightmost
+ * column first, finishing work beats starting it — then column order.
+ * Each candidate takes a slot of its provider's pool while one is free;
+ * a running run is never preempted. The machine never pulls from a
+ * manual column: `prioritized` is the owner's queue, and he moves
+ * tickets into worker columns himself (owner ruling, 2026-10-18).
  */
 export function planDispatch(input: PlanDispatchInput): readonly PlannedDispatch[] {
-  const plan: PlannedDispatch[] = [];
   if (input.master !== 'run') {
-    return plan;
+    return [];
   }
-  const taken = new Set<string>();
+  interface Candidate {
+    readonly card: TicketCard;
+    readonly phase: PipelinePhase;
+    readonly columnIndex: number;
+    readonly position: number;
+  }
+  const candidates: Candidate[] = [];
   for (let i = 0; i < input.columns.length; i++) {
     const column = input.columns[i]!;
     const phase = column.phase;
@@ -137,26 +165,38 @@ export function planDispatch(input: PlanDispatchInput): readonly PlannedDispatch
     if (cooldown !== undefined && !Number.isNaN(Date.parse(cooldown)) && (input.nowMs ?? Date.now()) < Date.parse(cooldown)) {
       continue; // a red gate's breather — the column cools down before it fires again
     }
-    let capacity = phase.workers - (input.liveByColumn[phase.id] ?? 0);
-    if (capacity <= 0) {
+    column.tickets.forEach((card, position) => {
+      if (dispatchable(card, input.busyTickets)) {
+        candidates.push({ card, phase, columnIndex: i, position });
+      }
+    });
+  }
+  candidates.sort(
+    (a, b) =>
+      priorityClass(a.card.meta.priority) - priorityClass(b.card.meta.priority) ||
+      b.columnIndex - a.columnIndex ||
+      a.position - b.position,
+  );
+
+  const free: Record<WorkerProviderId, number> = { opencode: 0, 'claude-code': 0 };
+  for (const provider of WORKER_PROVIDERS) {
+    free[provider] = (input.poolSize[provider] ?? 0) - (input.liveByPool[provider] ?? 0);
+  }
+  const plan: PlannedDispatch[] = [];
+  const taken = new Set<string>();
+  for (const candidate of candidates) {
+    if (taken.has(candidate.card.id)) {
       continue;
     }
-    const consider = (card: TicketCard): boolean => {
-      if (capacity <= 0 || taken.has(card.id) || !dispatchable(card, input.busyTickets)) {
-        return false;
+    const pool = input.poolOf(candidate.card, candidate.phase);
+    if (pool !== null) {
+      if (free[pool] <= 0) {
+        continue;
       }
-      taken.add(card.id);
-      capacity -= 1;
-      plan.push({ workingPhase: phase.id, fromPhase: card.phase, card });
-      return true;
-    };
-    // The column's own queue only — refinement rounds included (owner
-    // ruling, 2026-10-18): the machine never pulls from a manual column.
-    // `prioritized` is the owner's queue; HE moves a ticket into the
-    // worker column, the pool runs it and moves it right when done.
-    for (const card of column.tickets) {
-      consider(card);
+      free[pool] -= 1;
     }
+    taken.add(candidate.card.id);
+    plan.push({ workingPhase: candidate.phase.id, fromPhase: candidate.card.phase, card: candidate.card, pool });
   }
   return plan;
 }

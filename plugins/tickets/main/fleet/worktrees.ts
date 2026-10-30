@@ -21,7 +21,7 @@
  * Every call is serialized by a module-level lock keyed by the repo
  * path: two concurrent starts for one ticket cannot race on
  * `worktree add`, and neither can two different tickets' prepares in
- * the same repo (workers: 2/4 share it — one runner process, one
+ * the same repo (parallel runs of a pool share it — one runner process, one
  * supervisor per adapter, only module scope is shared).
  */
 import { promises as fsp } from 'node:fs';

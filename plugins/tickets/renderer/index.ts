@@ -569,11 +569,11 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
   if (parseHandover(column.phase.handover).mode === 'agent') {
     const phase = column.phase;
     const worker = phase.worker ?? parseHandover(phase.handover).worker ?? 'opencode';
-    const chip = el('span', 'tickets-col-agent', `${worker}${phase.workers > 1 ? ` ×${phase.workers}` : ''}`);
+    const chip = el('span', 'tickets-col-agent', worker);
     chip.title =
-      `Worker pool — ${worker}` +
+      `Worker — ${worker}` +
       (phase.model !== null ? `, model ${phase.model}` : '') +
-      `, ${phase.workers} parallel, prompt ${columnPromptRefOf(phase)}`;
+      `, prompt ${columnPromptRefOf(phase)}; runs take slots of the ${worker} pool`;
     head.append(chip);
     head.append(columnControlsNode(api, column));
   }
@@ -1251,9 +1251,8 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
     fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state) || r.state === 'detached'),
     column.phase.id,
   );
-  const slots = column.phase.workers;
-  if (runs.length === 0 && slots <= 0) {
-    return null;
+  if (runs.length === 0) {
+    return null; // the slots are the provider pools' (req-63) — an idle column shows no lane strip
   }
   const now = Date.now();
   const strip = el('div', 'tickets-lanes');
@@ -1270,7 +1269,7 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
   head.append(
     el('span', `tickets-light tickets-light-${runs.length === 0 ? 'idle' : worst}`),
     el('span', 'tickets-lanes-title', 'Workers'),
-    el('span', 'tickets-lanes-count', `${runs.filter((r) => r.state !== 'detached').length} of ${slots} busy`),
+    el('span', 'tickets-lanes-count', `${runs.filter((r) => r.state !== 'detached').length} busy`),
   );
   strip.append(head);
 

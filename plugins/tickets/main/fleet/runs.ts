@@ -1050,6 +1050,7 @@ export class RunSupervisor {
       turns: telemetry.turns,
       readCalls: telemetry.readCalls,
       tokensBeforeFirstWrite: telemetry.tokensBeforeFirstWrite,
+      ...(event.kind === 'error' ? { lastError: event.text ?? 'error' } : {}),
     };
     if (event.kind === 'error') {
       this.deps.log(`run ${run.info.id}: ${event.text ?? 'error'}`);

@@ -23,6 +23,7 @@ import { assembleBoard, parseOrderFile, rewriteOrderSection, type BoardFile } fr
 import { patchTicketFile } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
 import { columnPromptRef, dispatchable, isAutoPhase, nextPhaseIdOf, planDispatch } from './chain';
+import { resolveAssignment } from './assignment';
 import { composeRunRequest } from './request';
 import { listTicketDirs, resolvePhaseDir } from '../phase-dirs';
 import { execShell, shortGateLine, type SupervisorRecord, type StartOutcome, type StopOutcome } from './runs';
@@ -34,11 +35,12 @@ import type {
   ChainStatus,
   ColumnMode,
   FleetCaps,
+  FleetPools,
   RunInfo,
   RunRequest,
   WorkerProviderId,
 } from './protocol';
-import { DEFAULT_FLEET_CAPS } from './protocol';
+import { DEFAULT_FLEET_CAPS, normalizeFleetPools, WORKER_PROVIDERS } from './protocol';
 
 const CHAIN_FILE = 'chain.json';
 
@@ -61,6 +63,8 @@ export interface OrchestratorDeps {
   readonly scanIntervalMs?: number;
   /** Test seam over the ci handover's shell exec (cwd = the work repo). */
   readonly execShell?: (command: string, cwd: string) => Promise<void>;
+  /** Test seam over the pool probe: a llama.cpp server's `total_slots`, or null. */
+  readonly probeSlots?: (baseUrl: string) => Promise<number | null>;
 }
 
 interface ChainFile {
@@ -86,6 +90,58 @@ export const DEFAULT_MAX_RED = 3;
 export const RED_COOLDOWN_MS = 60_000;
 /** A failed ci check backs off before its next attempt. */
 export const CI_BACKOFF_MS = 10 * 60_000;
+/** A rate-limited provider's pool runs one slot smaller for this long. */
+export const RATE_LIMIT_SHRINK_MS = 5 * 60_000;
+/** How long a pool probe's answer holds before the next pass asks again. */
+export const POOL_PROBE_INTERVAL_MS = 5 * 60_000;
+
+/** True when a worker's error reads as the provider's rate limit (429). */
+export function isRateLimitError(text: string | null | undefined): boolean {
+  return text !== null && text !== undefined && /\b429\b|rate[ _-]?limit|too many requests/i.test(text);
+}
+
+/**
+ * The pools' effective sizes (req-63): the configured size, capped by a
+ * probe's `total_slots`, minus an active rate-limit shrink — never below
+ * one, so a throttled provider still moves.
+ */
+export function effectivePoolSizes(
+  pools: FleetPools,
+  probed: Readonly<Partial<Record<WorkerProviderId, number | null>>>,
+  shrink: Readonly<Partial<Record<WorkerProviderId, { readonly count: number; readonly untilMs: number }>>>,
+  nowMs: number,
+): Record<WorkerProviderId, number> {
+  const sizes: Record<WorkerProviderId, number> = { opencode: 1, 'claude-code': 1 };
+  for (const provider of WORKER_PROVIDERS) {
+    let size = pools[provider].size;
+    const slots = probed[provider] ?? null;
+    if (slots !== null && slots >= 1) {
+      size = Math.min(size, slots);
+    }
+    const active = shrink[provider];
+    if (active !== undefined && nowMs < active.untilMs) {
+      size -= active.count;
+    }
+    sizes[provider] = Math.max(1, size);
+  }
+  return sizes;
+}
+
+/** Asks a llama.cpp server how many parallel slots it runs (`/props`). */
+async function fetchTotalSlots(baseUrl: string): Promise<number | null> {
+  try {
+    const res = await fetch(`${baseUrl.replace(/\/+$/, '')}/props`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) {
+      return null;
+    }
+    const body = (await res.json()) as { total_slots?: unknown };
+    return typeof body.total_slots === 'number' && Number.isInteger(body.total_slots) && body.total_slots >= 1
+      ? body.total_slots
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 /** The sampling audit's brief — a fresh second worker reviews the step. */
 export const AUDIT_BRIEF =
@@ -120,6 +176,10 @@ export class Orchestrator {
   private notedThisPass = new Set<string>();
   /** The last held-column line, logged on change only. */
   private heldNote = '';
+  /** Per provider: a rate limit's pool shrink (req-63; not persisted). */
+  private readonly poolShrink: Partial<Record<WorkerProviderId, { count: number; untilMs: number }>> = {};
+  /** Per provider: the last probe's slots and when it was asked. */
+  private readonly probed: Partial<Record<WorkerProviderId, { slots: number | null; atMs: number; url: string }>> = {};
 
   constructor(private readonly deps: OrchestratorDeps) {}
 
@@ -199,7 +259,8 @@ export class Orchestrator {
       this.config.ticketsVaultPath === config.ticketsVaultPath &&
       this.config.git === config.git &&
       this.config.defaultWorker === config.defaultWorker &&
-      this.config.permissionMode === config.permissionMode;
+      this.config.permissionMode === config.permissionMode &&
+      JSON.stringify(this.config.pools ?? null) === JSON.stringify(config.pools ?? null);
     this.config = config;
     if (!same) {
       await this.persist();
@@ -254,6 +315,16 @@ export class Orchestrator {
    * trips: the column holds and its next candidate parks in inbox.
    */
   async onRunSettled(info: RunInfo): Promise<void> {
+    if (info.state === 'failed' && isRateLimitError(info.lastError)) {
+      const nowMs = this.now().getTime();
+      const active = this.poolShrink[info.provider];
+      const count = active !== undefined && nowMs < active.untilMs ? active.count + 1 : 1;
+      this.poolShrink[info.provider] = { count, untilMs: nowMs + RATE_LIMIT_SHRINK_MS };
+      this.deps.log(
+        `${info.provider} hit its rate limit — its pool runs ${count} slot${count === 1 ? '' : 's'} smaller for ` +
+          `${RATE_LIMIT_SHRINK_MS / 60_000} minutes`,
+      );
+    }
     const record = this.allRecords().find((r) => r.info.id === info.id) ?? null;
     const column = record?.request.column ?? null;
     if (column !== null && record !== null) {
@@ -659,6 +730,31 @@ export class Orchestrator {
       .catch((error) => this.deps.log(`chain.json write failed: ${String(error)}`));
   }
 
+  /** Asks each probed pool's server for its slots, at most every few minutes. */
+  private async refreshProbes(pools: FleetPools): Promise<void> {
+    const nowMs = this.now().getTime();
+    for (const provider of WORKER_PROVIDERS) {
+      const url = pools[provider].probeUrl;
+      if (url === null) {
+        delete this.probed[provider];
+        continue;
+      }
+      const last = this.probed[provider];
+      if (last !== undefined && last.url === url && nowMs - last.atMs < POOL_PROBE_INTERVAL_MS) {
+        continue;
+      }
+      const slots = await (this.deps.probeSlots ?? fetchTotalSlots)(url);
+      if (last?.slots !== slots || last.url !== url) {
+        this.deps.log(
+          slots === null
+            ? `${provider} pool probe at ${url} gave no slot count — the configured size stands`
+            : `${provider} pool probe: ${url} runs ${slots} parallel slot${slots === 1 ? '' : 's'}`,
+        );
+      }
+      this.probed[provider] = { slots, atMs: nowMs, url };
+    }
+  }
+
   /** One dispatch round: read the vault, plan, start what is due. */
   private async dispatchPass(): Promise<void> {
     const config = this.config;
@@ -671,24 +767,41 @@ export class Orchestrator {
       if (snap.pipeline.length === 0) {
         return;
       }
-      const liveByColumn: Record<string, number> = {};
+      const liveByPool: Record<WorkerProviderId, number> = { opencode: 0, 'claude-code': 0 };
       const busyTickets = new Set<string>();
       for (const record of this.allRecords()) {
         if (LIVE.includes(record.info.state)) {
-          const column = record.request.column ?? null;
-          if (column !== null) {
-            liveByColumn[column] = (liveByColumn[column] ?? 0) + 1;
-          }
+          liveByPool[record.info.provider] += 1;
         }
         if (BLOCKING.includes(record.info.state)) {
           busyTickets.add(record.info.ticketId);
         }
       }
+      const pools = config.pools ?? normalizeFleetPools(undefined);
+      await this.refreshProbes(pools);
+      const probedSlots: Partial<Record<WorkerProviderId, number | null>> = {};
+      for (const provider of WORKER_PROVIDERS) {
+        probedSlots[provider] = this.probed[provider]?.slots ?? null;
+      }
+      const poolOf = (card: BoardColumn['tickets'][number], phase: PipelinePhase): WorkerProviderId | null => {
+        const repo = card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card.meta.repo) ?? null);
+        const assignment = resolveAssignment({
+          ticketWorker: card.meta.worker,
+          columnWorker: phase.worker,
+          columnModel: phase.model,
+          handover: phase.handover,
+          repoWorker: repo?.worker ?? null,
+          configuredDefault: config.defaultWorker,
+        });
+        return assignment.ok ? assignment.provider : null;
+      };
       const plan = planDispatch({
         master: this.master,
         columns: snap.columns,
         modes: this.columns,
-        liveByColumn,
+        poolSize: effectivePoolSizes(pools, probedSlots, this.poolShrink, this.now().getTime()),
+        liveByPool,
+        poolOf,
         busyTickets,
         cooldownUntil: this.cooldownUntil,
         nowMs: this.now().getTime(),
@@ -708,7 +821,7 @@ export class Orchestrator {
           .filter((record) => record.info.state === 'detached')
           .map((record) => record.info.ticketId),
       );
-      this.noteWaits(snap, busyTickets, dispatched, detachedTickets, refusedByColumn);
+      this.noteWaits(snap, busyTickets, dispatched, detachedTickets, refusedByColumn, poolOf);
       for (const ticket of [...this.notes.keys()]) {
         if (!this.notedThisPass.has(ticket)) {
           this.notes.delete(ticket);
@@ -746,6 +859,7 @@ export class Orchestrator {
     dispatched: ReadonlySet<string>,
     detached: ReadonlySet<string>,
     refusedByColumn: ReadonlyMap<string, string>,
+    poolOf: (card: BoardColumn['tickets'][number], phase: PipelinePhase) => WorkerProviderId | null,
   ): void {
     if (this.master !== 'run') {
       return; // the chain is off — silence is the honest state
@@ -793,7 +907,11 @@ export class Orchestrator {
               `dispatch waits ${card.id}: ${column.phase.id}'s dispatch of ${refused} was refused — the queue cannot advance`,
             );
           } else {
-            this.noteSkip(card.id, `dispatch waits ${card.id}: no free ${column.phase.id} worker slot yet`);
+            const pool = poolOf(card, column.phase);
+            this.noteSkip(
+              card.id,
+              `dispatch waits ${card.id}: no free ${pool ?? 'worker'} pool slot yet — more important tickets go first`,
+            );
           }
         }
       }

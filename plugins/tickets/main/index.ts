@@ -69,7 +69,7 @@ import {
 import { unlinkShared } from './fleet/worktrees';
 import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } from './fleet/worktree-home';
 import type { ChainConfig, FleetCaps, PermissionMode, RunInfo } from './fleet/protocol';
-import { normalizeFleetCaps } from './fleet/protocol';
+import { normalizeFleetCaps, normalizeFleetPools, WORKER_PROVIDERS, type FleetPools } from './fleet/protocol';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
 const ORDER_PATH = 'tickets/_meta/order.md';
@@ -142,6 +142,8 @@ class BoardService {
     private readonly fleetRoot: string,
     /** The instruction output caps (T-0048), resolved once at activation. */
     private readonly caps: FleetCaps,
+    /** The per-provider pools (req-63), resolved once at activation. */
+    private readonly pools: FleetPools,
   ) {}
 
   /** The board's emit, debounced — one push per burst of changes. */
@@ -269,6 +271,7 @@ class BoardService {
             defaultWorker: this.defaultWorker,
             permissionMode: this.autoPermissionMode,
             caps: this.caps,
+            pools: this.pools,
           }
         : null;
     const json = chain === null ? null : JSON.stringify(chain);
@@ -1303,7 +1306,6 @@ class BoardService {
     phase: string;
     worker?: string | null;
     model?: string | null;
-    workers?: number | null;
     prompt?: string | null;
   }): Promise<MutationResult> {
     return this.enqueue(async () => {
@@ -1318,7 +1320,6 @@ class BoardService {
       if (
         input.worker === undefined &&
         input.model === undefined &&
-        input.workers === undefined &&
         input.prompt === undefined
       ) {
         return { ok: true }; // nothing to change (e.g. the handover-pin display state)
@@ -1334,7 +1335,6 @@ class BoardService {
         patched = patchPipelinePhase(text, input.phase, {
           ...(input.worker !== undefined ? { worker: input.worker } : {}),
           ...(input.model !== undefined ? { model: input.model } : {}),
-          ...(input.workers !== undefined ? { workers: input.workers } : {}),
           ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
         });
       } catch (error) {
@@ -1351,9 +1351,6 @@ class BoardService {
       }
       if (input.model !== undefined) {
         what.push(`model ${input.model === null || input.model.trim() === '' ? '(none)' : input.model.trim()}`);
-      }
-      if (input.workers !== undefined) {
-        what.push(`workers ${input.workers ?? '(default)'}`);
       }
       if (input.prompt !== undefined) {
         what.push(`prompt ${input.prompt === null || input.prompt.trim() === '' ? '(default)' : input.prompt.trim()}`);
@@ -1678,7 +1675,18 @@ const plugin: MainPluginModule = {
       }
     }
     const caps = normalizeFleetCaps(capConfig);
-    const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet, fleetRoot, caps);
+    // The provider pools (req-63): `fleet.pool.<provider>.size` / `.probe`.
+    const poolConfig: Record<string, { size?: number; probeUrl?: string }> = {};
+    for (const provider of WORKER_PROVIDERS) {
+      const size = await ctx.config.get<number>(`fleet.pool.${provider}.size`);
+      const probeUrl = await ctx.config.get<string>(`fleet.pool.${provider}.probe`);
+      poolConfig[provider] = {
+        ...(size !== undefined ? { size } : {}),
+        ...(probeUrl !== undefined ? { probeUrl } : {}),
+      };
+    }
+    const pools = normalizeFleetPools(poolConfig);
+    const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet, fleetRoot, caps, pools);
 
     ctx.ipc.handle('board', () => board.refresh());
 
@@ -1739,7 +1747,6 @@ const plugin: MainPluginModule = {
         phase?: unknown;
         worker?: unknown;
         model?: unknown;
-        workers?: unknown;
         prompt?: unknown;
       };
       if (typeof p.phase !== 'string' || p.phase.trim() === '') {
@@ -1749,9 +1756,6 @@ const plugin: MainPluginModule = {
         phase: p.phase,
         ...(p.worker !== undefined ? { worker: typeof p.worker === 'string' ? p.worker : null } : {}),
         ...(p.model !== undefined ? { model: typeof p.model === 'string' ? p.model : null } : {}),
-        ...(p.workers !== undefined
-          ? { workers: typeof p.workers === 'number' ? Math.floor(p.workers) : null }
-          : {}),
         ...(p.prompt !== undefined ? { prompt: typeof p.prompt === 'string' ? p.prompt : null } : {}),
       });
     });

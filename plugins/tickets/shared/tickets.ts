@@ -180,8 +180,6 @@ export interface PipelinePhase {
   readonly worker: string | null;
   /** The column's model pin (`model: zai/glm-5.3`, M85); null = unset. */
   readonly model: string | null;
-  /** The column's pool size (`workers: 2`, M85) — parallel runs. Default 1. */
-  readonly workers: number;
   /** Explicit prompt ref override (`prompt: plan-heavy`, M85); null = handover ref. */
   readonly prompt: string | null;
   /**
@@ -220,7 +218,6 @@ export function phaseWithoutPoolKeys(
   return {
     worker: null,
     model: null,
-    workers: 1,
     prompt: null,
     maxRed: null,
     tokenBudget: null,
