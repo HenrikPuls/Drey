@@ -142,8 +142,7 @@ export function createReposSection(api: DreyPluginApi, reload: () => Promise<voi
         return;
       }
       onCommit(draft);
-    });
-    actions.append(cancel, save);
+    });    actions.append(cancel, save);
     form.append(actions);
     host.append(form);
   };

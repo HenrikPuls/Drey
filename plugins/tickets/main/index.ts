@@ -10,7 +10,7 @@
  * The renderer only ever sees BoardSnapshot payloads — parsing,
  * validation and YAML stay here.
  */
-import { BrowserWindow, dialog, shell } from 'electron';
+import { BrowserWindow, dialog, shell, type OpenDialogOptions } from 'electron';
 import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
@@ -1228,7 +1228,9 @@ class BoardService {
           links: extra.link,
         });
         if (!extraOutcome.ok) {
-          warnings.push(`${extra.name}: ${extraOutcome.error}`);
+          warnings.push(
+            `${extra.name}: ${extraOutcome.dirty === true ? 'the worktree is dirty — not removed' : extraOutcome.error}`,
+          );
         }
       }
 
@@ -1626,7 +1628,10 @@ class BoardService {
 
   /** The native directory picker behind "Add from folder" (req-72). */
   async pickFolder(): Promise<{ ok: boolean; path?: string }> {
-    const options = { title: 'Folder with repositories', properties: ['openDirectory', 'createDirectory'] as const };
+    const options: OpenDialogOptions = {
+      title: 'Folder with repositories',
+      properties: ['openDirectory', 'createDirectory'],
+    };
     const win = BrowserWindow.getFocusedWindow();
     const outcome = win !== null ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
     const chosen = outcome.canceled ? undefined : outcome.filePaths[0];
