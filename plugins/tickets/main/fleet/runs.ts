@@ -931,10 +931,26 @@ export class RunSupervisor {
     return { ok: true };
   }
 
-  async send(runId: string, text: string): Promise<StopOutcome & { rung?: SteerRung }> {
+  async send(runId: string, text: string): Promise<StopOutcome & { rung?: SteerRung; runId?: string }> {
     const run = this.runs.get(runId);
     if (run === undefined) {
       return { ok: false, error: `unknown run "${runId}"` };
+    }
+    if (TERMINAL.includes(run.info.state)) {
+      // Every run takes a prompt: an ended one reopens its session under a
+      // new run the owner holds, the prompt as its first message.
+      if (text.trim() === '') {
+        return { ok: false, error: `run ${runId} has ended — type a message to reopen it` };
+      }
+      const reopened = await this.reopen(run, text);
+      if (!reopened.ok) {
+        return reopened;
+      }
+      const fresh = this.runs.get(reopened.run.id);
+      if (fresh !== undefined) {
+        await this.appendStream(fresh, { ts: this.stamp(), kind: 'note', text: `you › ${text}` });
+      }
+      return { ok: true, rung: 'resume', runId: reopened.run.id };
     }
     if (run.info.state !== 'running' && run.info.state !== 'starting') {
       return { ok: false, error: `run ${runId} is ${run.info.state} — nothing to steer` };
@@ -1050,7 +1066,7 @@ export class RunSupervisor {
    * for the takeover tab's prompts. The ticket is left alone — no stamp,
    * no gate, no move — because it may have gone on since.
    */
-  private async reopen(old: LiveRun): Promise<StartOutcome> {
+  private async reopen(old: LiveRun, prompt: string | null = null): Promise<StartOutcome> {
     if (old.info.sessionRef === null) {
       return { ok: false, error: `run ${old.info.id} never reported a session — nothing to resume` };
     }
@@ -1061,6 +1077,7 @@ export class RunSupervisor {
       {
         ...old.request,
         instruction:
+          prompt ??
           'The owner has reopened this session to talk to you. Reply with one short line that you are ready, then wait for their instructions.',
       },
       old.info.sessionRef,
@@ -1469,6 +1486,18 @@ export class RunSupervisor {
   /** The success transition: move + entered-stamp + one commit (board semantics). */
   private async moveTicketOnSuccess(run: LiveRun, nextPhase: string): Promise<{ ok: true } | { ok: false; error: string }> {
     const request = run.request;
+    const here = await fsp
+      .access(path.join(request.ticketsVaultPath, run.currentRelPath))
+      .then(() => true)
+      .catch(() => false);
+    if (!here) {
+      await this.relocateTicket(run);
+    }
+    if (run.currentPhase !== request.phase) {
+      // The owner moved the ticket on by hand while the run went on: that
+      // move stands — the run does not move it a second time.
+      return { ok: true };
+    }
     const oldRel = run.currentRelPath;
     // The resolved (numbered) target directory (T-0041); records stored
     // before it carry no nextPhaseDir — the bare phase id is the fallback.
@@ -1589,8 +1618,19 @@ export class RunSupervisor {
   }
 
   private async patchTicket(run: LiveRun, patch: (text: string) => string): Promise<void> {
-    const abs = path.join(run.request.ticketsVaultPath, run.currentRelPath);
-    const text = await fsp.readFile(abs, 'utf8');
+    let abs = path.join(run.request.ticketsVaultPath, run.currentRelPath);
+    let text: string;
+    try {
+      text = await fsp.readFile(abs, 'utf8');
+    } catch (error) {
+      // The owner may have moved the ticket while the run went on (a
+      // board or phone move): follow it by id, or the stamp outlives the run.
+      if ((error as { code?: string }).code !== 'ENOENT' || !(await this.relocateTicket(run))) {
+        throw error;
+      }
+      abs = path.join(run.request.ticketsVaultPath, run.currentRelPath);
+      text = await fsp.readFile(abs, 'utf8');
+    }
     await fsp.writeFile(abs, patch(text), 'utf8');
     const location = await this.git.locate(run.request.ticketsVaultPath);
     if (location !== null) {
@@ -1600,6 +1640,36 @@ export class RunSupervisor {
         `tickets: ${run.request.ticketId} fleet run bookkeeping`,
       );
     }
+  }
+
+  /**
+   * Finds the run's ticket in whichever phase folder it sits now and
+   * points the run at it. False when no folder holds it (removed).
+   */
+  private async relocateTicket(run: LiveRun): Promise<boolean> {
+    const ticketsDir = path.join(run.request.ticketsVaultPath, 'tickets');
+    const dirs = await fsp.readdir(ticketsDir, { withFileTypes: true }).catch(() => []);
+    for (const dir of dirs) {
+      if (!dir.isDirectory()) {
+        continue;
+      }
+      const rel = `tickets/${dir.name}/${run.request.ticketId}.md`;
+      const parts = ticketPathParts(rel);
+      if (parts === null || rel === run.currentRelPath) {
+        continue;
+      }
+      const exists = await fsp
+        .access(path.join(run.request.ticketsVaultPath, rel))
+        .then(() => true)
+        .catch(() => false);
+      if (exists) {
+        this.deps.log(`run ${run.info.id}: ${run.request.ticketId} moved to ${parts.phaseDir} during the run — following it`);
+        run.currentRelPath = rel;
+        run.currentPhase = parts.phase;
+        return true;
+      }
+    }
+    return false;
   }
 
   private async logLine(run: LiveRun, what: string): Promise<void> {

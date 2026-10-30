@@ -1854,6 +1854,12 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
       attached.length = 0;
       paintAttached();
       prompt.focus();
+      // A message to an ended run reopened its session as a new run: follow it.
+      const reopened = (result as { runId?: string }).runId;
+      const ended = live();
+      if (reopened !== undefined && reopened !== runId && ended !== null) {
+        openTakeover(api, { ...ended, id: reopened });
+      }
     }
   };
 
@@ -2137,9 +2143,12 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
       elapsedMetric.value.textContent = spanClock(Number.isNaN(started) ? 0 : Math.max(0, Date.now() - started));
       transcript.setWorktree(run.worktreePath);
     }
+    // Every run takes a message: an ended one with a session reopens on send.
+    const reopenable = run !== null && !active && !detached && run.sessionRef !== null;
+    const typable = active || reopenable;
     resumeBtn.hidden = !(run !== null && !active && run.sessionRef !== null);
     releaseBtn.hidden = !held;
-    prompt.setReadOnly(!active);
+    prompt.setReadOnly(!typable);
     const busy = active && run.turn !== 'idle';
     wrap.dataset['state'] =
       !active && !detached
@@ -2155,8 +2164,8 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
               : 'working';
     stopBtn.hidden = !busy;
     sendBtn.hidden = busy && prompt.getContent().trim() === '' && attached.length === 0;
-    sendBtn.disabled = !active;
-    plusBtn.disabled = !active;
+    sendBtn.disabled = !typable;
+    plusBtn.disabled = !typable;
     for (const chip of chips.children) {
       (chip as HTMLButtonElement).disabled = !active;
     }

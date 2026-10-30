@@ -20,6 +20,37 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### fix — req-66 follow-up: a run follows a moved ticket; every run takes a message
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list. T-0054 refused "already has a live run — stop it first" although
+no run was live: the owner moved the card (build → review → commit,
+from the phone) while its run went on, the runner kept writing to the
+old path (`ENOENT`) and its end never cleared the `run:` stamp — a
+stamp no surface could stop.
+
+- **The runner follows the ticket.** `RunSupervisor.patchTicket` looks
+  the ticket up by id in every phase folder when its path is gone
+  (`relocateTicket`) and points the run there, so Log lines and the
+  stamp clearing land; the success move skips when the owner already
+  moved the card (that move stands, no second one).
+- **A leftover stamp heals on Run agent.** `startRun` clears a `run:`
+  stamp whose run record settled with an end time (a down runner's
+  synthetic `stopped` has none) — one Log line, one commit — instead
+  of refusing.
+- **Every run takes a message.** `POST /send` to an ended run
+  (done/stopped/failed) with a session reopens it under a new held run,
+  the message as its first prompt (`rung: resume`, the new `runId` in
+  the reply). The phone's run view shows **Message to reopen the run…**
+  on ended runs and follows to the new run; the desk's takeover tab
+  keeps its prompt box open after the run ended and opens the new
+  run's tab.
+
+Specs: `runs.spec.ts` — a prompt to an ended run reopens with the
+prompt; a ticket moved during the run is followed, its stamp cleared,
+no second move. Manual "Following a run", `plugins/tickets/FLEET.md`
+route table.
+
 ### fix — T-0053: the tickets remote paints only what changed (req-66 follow-up)
 
 **Not yet manually verified by the owner.** The remote's display

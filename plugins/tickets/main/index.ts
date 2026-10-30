@@ -1089,7 +1089,7 @@ class BoardService {
       if (card === null || phaseId === null) {
         return { ok: false, error: `${input.ticketId} is not on the board` };
       }
-      if (card.meta.run !== null) {
+      if (card.meta.run !== null && !(await this.clearEndedRunStamp(vault, card))) {
         return { ok: false, error: `${card.id} already has a live run — stop it first` };
       }
       const blocked = blockedRefusal(card);
@@ -1179,6 +1179,36 @@ class BoardService {
   /** Every fleet run record (live or historical) the client can see. */
   private async fleetRecords(): Promise<readonly RunInfo[]> {
     return this.fleet.runs();
+  }
+
+  /**
+   * A `run:` stamp whose run provably ended (its record settled with an
+   * end time — a down runner's synthetic `stopped` carries none) is a
+   * leftover, e.g. of a card moved while its run went on: cleared with a
+   * Log line and one commit. True when the ticket is free now.
+   */
+  private async clearEndedRunStamp(vault: VaultLike, card: TicketCard): Promise<boolean> {
+    const stream = card.meta.run?.stream ?? null;
+    if (stream === null) {
+      return true;
+    }
+    const record = (await this.fleetRecords()).find((r) => r.id === stream) ?? null;
+    if (record === null || !['done', 'stopped', 'failed'].includes(record.state) || record.endedAt === null) {
+      return false;
+    }
+    const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
+    const patched = patchTicketFile(text, {
+      to: card.phase,
+      from: null,
+      now: new Date(),
+      actor: OWNER,
+      clearRun: true,
+      action: `stale run stamp cleared — run ${stream} had ended (${record.state})`,
+    });
+    await this.ctx.vault.write(card.path, patched, { vaultId: vault.id });
+    await this.commit(vault, [card.path], `tickets: ${card.id} stale run stamp cleared`);
+    this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [card.path] });
+    return true;
   }
 
   /**

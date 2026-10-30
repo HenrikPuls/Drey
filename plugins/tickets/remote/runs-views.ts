@@ -9,7 +9,8 @@ import type { RunInfo, WaitQuestion } from '../main/fleet/protocol';
 import { formatWatch, parseStreamEvents, type WatchBlock } from '../renderer/watch-format';
 import { ageOf } from '../shared/tickets';
 import type { Ctx, View } from './context';
-import { armedButton, button, chip, empty, h, present, sheet } from './dom';
+import type { RunReply } from '../shared/remote-protocol';
+import { armedButton, button, chip, empty, h, present, sheet, toast } from './dom';
 import { renderMarkdown } from './markdown';
 import { answersOf, isLive, runsForList, runStateLabel, tokensLabel } from './model';
 
@@ -159,6 +160,9 @@ export function runsView(ctx: Ctx): View {
 
 // --- one run ------------------------------------------------------------------
 
+/** Settled runs whose session a message reopens (a detached one counts as live). */
+const ENDED: ReadonlySet<string> = new Set(['done', 'stopped', 'failed']);
+
 export function runView(ctx: Ctx, runId: string): View {
   const run = runsOf(ctx).find((r) => r.id === runId) ?? null;
   if (run === null) {
@@ -255,6 +259,31 @@ export function runView(ctx: Ctx, runId: string): View {
     }, 'btn btn-danger');
     input.addEventListener('input', paint);
     paint();
+    actions = h('div', { class: 'composer' }, input, node);
+  } else if (ENDED.has(run.state) && !ctx.state.readOnly) {
+    // Every run takes a message: an ended one reopens its session as a
+    // new run, and the view follows it there.
+    const input = h('textarea', { class: 'composer-field', attrs: { rows: '1', placeholder: 'Message to reopen the run…', 'aria-label': 'Message to reopen the run', enterkeyhint: 'send' } });
+    const node = button('Send', () => {
+      const text = input.value.trim();
+      if (text === '') {
+        return;
+      }
+      void ctx.api
+        .post<RunReply>(`/api/runs/${encodeURIComponent(run.id)}/send`, { text })
+        .then((result) => {
+          if (result.ok) {
+            input.value = '';
+            ctx.go(result.runId !== undefined ? `#run/${result.runId}` : '#runs');
+          } else {
+            toast(result.error ?? 'The desk refused.', 'error');
+          }
+        })
+        .catch((error: unknown) => {
+          toast(error instanceof Error ? error.message : String(error), 'error');
+        });
+    }, 'btn btn-primary');
+    node.setAttribute('aria-label', 'Reopen the run with this message');
     actions = h('div', { class: 'composer' }, input, node);
   }
   return { title: `${run.ticketId} · Run`, back: `#ticket/${run.ticketId}`, body, actions, followTail: true };

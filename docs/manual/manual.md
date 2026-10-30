@@ -1127,7 +1127,11 @@ the run's numbers (state, model, tokens, how long it has been running)
 stay pinned under the top bar while the transcript scrolls on. The one
 button beside **Steer the run…** does both jobs: with something typed
 it is **Send** (tell the worker something); over an empty field it is
-**Stop**, which ends the run (tap twice).
+**Stop**, which ends the run (tap twice). An ended run still takes a
+message: type into **Message to reopen the run…** and **Send** picks
+its session up again as a new run, which the view then shows. The same
+works in the desk's run tab — its prompt box stays open after the run
+ended.
 
 **Refining a ticket.** On a ticket, **Edit** beside Description, Plan
 or Acceptance criteria opens that part for editing (a missing part
