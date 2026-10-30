@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ConfirmDialogService } from './confirm-dialog.service';
 import { EditorService, stripFrontmatter } from './editor.service';
+import { PaneService } from '../panes/pane.service';
 import { SettingsService } from './settings.service';
 import { AppConfig, DreyApi, NoteSaveRequest, NoteSaveResult } from '../../../shared/ipc-api';
 
@@ -1169,6 +1170,94 @@ describe('EditorService', () => {
       const doc = service.docFor('browser://1')!;
       expect(doc.bufferContent).toBe('');
       expect(doc.viewMode).toBe('live');
+    });
+  });
+
+  describe('split open (SDK 1.35)', () => {
+    let panes: PaneService;
+
+    beforeEach(() => {
+      panes = TestBed.inject(PaneService);
+    });
+
+    it("split: 'right' opens the file in a fresh pane beside the focused one", async () => {
+      await service.openFile('notes/a.md');
+      await service.openFile('notes/b.md', undefined, { split: 'right' });
+
+      expect(panes.paneIds().length).toBe(2);
+      const focused = panes.focusedPane()!;
+      expect(focused.tabs).toEqual(['notes/b.md']);
+      expect(service.activePath()).toBe('notes/b.md');
+      const other = panes.paneIds().find((id) => id !== focused.id)!;
+      expect(panes.pane(other)).toEqual({ id: other, tabs: ['notes/a.md'], active: 'notes/a.md' });
+      // side by side: a row split at the root
+      expect(panes.root()).toEqual({
+        kind: 'split',
+        id: expect.any(String),
+        direction: 'row',
+        children: [{ kind: 'leaf', paneId: other }, { kind: 'leaf', paneId: focused.id }],
+        sizes: [1, 1],
+      });
+    });
+
+    it("split: 'down' opens the file in a fresh pane below (a column split)", async () => {
+      await service.openFile('notes/a.md');
+      await service.openFile('notes/b.md', undefined, { split: 'down' });
+
+      expect(panes.paneIds().length).toBe(2);
+      const focused = panes.focusedPane()!;
+      const other = panes.paneIds().find((id) => id !== focused.id)!;
+      expect(panes.root()).toEqual({
+        kind: 'split',
+        id: expect.any(String),
+        direction: 'column',
+        children: [{ kind: 'leaf', paneId: other }, { kind: 'leaf', paneId: focused.id }],
+        sizes: [1, 1],
+      });
+      expect(focused.tabs).toEqual(['notes/b.md']);
+    });
+
+    it('an already-open tab just reveals -- the split option is not applied', async () => {
+      await service.openFile('notes/a.md');
+      await service.openFile('notes/b.md', undefined, { split: 'right' });
+      const ids = panes.paneIds();
+
+      await service.openFile('notes/a.md', undefined, { split: 'right' });
+
+      expect(panes.paneIds()).toEqual(ids);
+      expect(panes.focusedPane()!.tabs).toEqual(['notes/a.md']);
+    });
+
+    it('addPluginDoc with split lands the tab in a fresh sibling pane', () => {
+      service.addPluginDoc('browser', 'browser://1', 'New tab', 'right');
+
+      expect(panes.paneIds().length).toBe(2);
+      expect(panes.focusedPane()!.tabs).toEqual(['browser://1']);
+      expect(service.activePath()).toBe('browser://1');
+    });
+
+    it('addPluginDoc of an already-open key reveals it, no split', () => {
+      service.addPluginDoc('browser', 'browser://1', 'New tab');
+      service.addPluginDoc('browser', 'browser://2', 'Second', 'right');
+      const ids = panes.paneIds();
+
+      service.addPluginDoc('browser', 'browser://1', 'New tab', 'right');
+
+      expect(panes.paneIds()).toEqual(ids);
+      expect(panes.focusedPane()!.tabs).toEqual(['browser://1']);
+    });
+
+    it('a focused dock band cannot split -- the tab opens there plainly', async () => {
+      await service.openFile('notes/a.md');
+      const p1 = panes.focusedId();
+      panes.detachToDock(p1, 'right'); // focuses the docked p1
+
+      await service.openFile('notes/b.md', undefined, { split: 'right' });
+
+      expect(panes.pane(p1)!.tabs).toEqual(['notes/a.md', 'notes/b.md']);
+      expect(panes.dockPane('right')).toBe(p1);
+      // the centre kept its single placeholder leaf -- nothing split
+      expect(panes.root().kind).toBe('leaf');
     });
   });
 

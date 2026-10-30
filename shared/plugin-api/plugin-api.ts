@@ -205,6 +205,15 @@ export interface PluginDocKindContrib {
 }
 
 /**
+ * Where a newly opened tab lands (SDK 1.35): in a fresh split pane beside
+ * (`'right'`) or below (`'down'`) the focused pane's current content.
+ * Absent, the tab opens in the focused pane as always. An already-open
+ * tab still just reveals; a focused dock band cannot split (ADR-0038) —
+ * the tab opens there plainly.
+ */
+export type DocSplit = 'right' | 'down';
+
+/**
  * Takes over the opening of vault files by name suffix (SDK 1.16,
  * ADR-0064), ahead of the base text / image / PDF routing. `open` is
  * expected to add a tab of the plugin's own doc kind
@@ -581,9 +590,10 @@ export interface DreyPluginApi {
     /**
      * Open a vault file as a tab; `line` places the caret (1-based);
      * `opts.vaultId` names the vault (ADR-0051), defaulting to the active
-     * vault.
+     * vault. `opts.split` (SDK 1.35) lands the tab in a fresh split pane
+     * beside or below the focused pane instead of inside it.
      */
-    open(path: string, line?: number, opts?: VaultOpOptions): Promise<void>;
+    open(path: string, line?: number, opts?: VaultOpOptions & { readonly split?: DocSplit }): Promise<void>;
     /** Open an unsaved, dirty-from-the-start scratch tab (Save-as on first save). */
     openScratch(path: string, content: string): void;
     /**
@@ -591,8 +601,10 @@ export interface DreyPluginApi {
      * `ui.registerDocKind`). `key` must not collide with a vault path — a
      * scheme key like `browser://1` is safe. Focuses the tab if the key is
      * already open. Throws when the kind is not registered.
+     * `opts.split` (SDK 1.35) lands the tab in a fresh split pane beside
+     * or below the focused pane instead of inside it.
      */
-    addDoc(kind: string, key: string, name: string): void;
+    addDoc(kind: string, key: string, name: string, opts?: { readonly split?: DocSplit }): void;
     /**
      * Open vault files with one of these name suffixes through this plugin
      * instead of the base routing (SDK 1.16) — see `FileOpenerContrib`.

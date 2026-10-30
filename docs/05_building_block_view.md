@@ -342,7 +342,7 @@ fills** — base knows the interfaces, not the features:
 | Shared tag chip field (colored chips + completion, milestone 33) | `ui.createTagField` | — |
 | Syntax colouring of code outside an editor (SDK 1.31): `language-data` grammar loaded on demand, Lezer parse, the active theme's `HighlightStyle` (Cyberpunk's own, else Drey's) | `ui.highlightCode` → `src/app/plugin-host/code-highlight.ts` | — |
 | Editor extensions (host CM instances), drop decoders, context-menu items (with the click target, ADR-0050), composer slot | `editor.*` | — |
-| Document read/observe/insert/confirmed rewrite/open + the live-edit input lock | `documents.*` (incl. `setEditLock`, ADR-0049) | — |
+| Document read/observe/insert/confirmed rewrite/open + the live-edit input lock (SDK 1.35: `split: 'right' \| 'down'` opens the tab in a fresh split pane) | `documents.*` (incl. `setEditLock`, ADR-0049) | — |
 | Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`; `announceChanges` after a plugin rewrote the working tree, SDK 1.17; `markManaged`/`managedBy` — the plugin-managed vault registry behind the Source-control read-only guard, SDK 1.32, ADR-0082) |
 | Files-panel operations (veto with a reason / takeover as a structured action, tabs re-keyed from the outcome path) + per-target Files context rows (SDK 1.32, ADR-0082) | `files.registerOperations` / `files.registerContextMenuItems` → `src/app/services/files-operations-registry.service.ts` + `files-commands.service.ts`, consulted by `FileOperationsService` before any dialog | — |
 | Backend methods + pushes (the plugin's own IPC) | `backend.invoke` / `backend.on` | `ctx.ipc.handle` / `ctx.ipc.emit` |
@@ -624,6 +624,13 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   (tab context menu, milestone 35) stays and the new file opens alongside; plugin doc kinds and the already-open reveal
   path are excluded, and internal flows (session restore, `saveAs`,
   multi-select open) pass `keepFocused` (ADR-0003 amendment, milestone 32).
+  Since SDK 1.35 a plugin's `documents.open`/`addDoc` may pass
+  `split: 'right' | 'down'`: the tab lands in a fresh split pane beside or
+  below the focused pane (split first, then add — the new pane is focused
+  and `OpenDocsStore.add` always opens into the focused pane); an
+  already-open tab still just reveals, a focused dock band cannot split,
+  and the split-open never replaces the focused pane's clean tab
+  (`DocOpenService.splitLanding`).
   Dragging a tab is real DnD via
   `TabDragService` + the shared `src/app/dnd/` overlay (ADR-0039): source
   stays put, ghost chip + drop-line, `no-drop` over an invalid target,

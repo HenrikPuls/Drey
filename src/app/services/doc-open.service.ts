@@ -3,6 +3,7 @@ import { imageExtension, pdfExtension } from '../../../shared/asset-name';
 import { dailyPathFor } from '../../../shared/daily';
 import { externalDocumentExtension } from '../../../shared/external-document';
 import { externalDocKey } from '../../../shared/external-open';
+import type { DocSplit } from '../../../shared/plugin-api/renderer';
 import { EditorPrefsService } from '../editor/editor-prefs.service';
 import { PaneService } from '../panes/pane.service';
 import { VaultService } from '../vault';
@@ -70,6 +71,15 @@ export class DocOpenService {
    * `pinned`: the new tab is pinned right away (the Files tree's
    * "Open in new tab") -- never the tab another open replaces, and the pin
    * rides the session snapshot. An already-open tab is revealed and pinned.
+   *
+   * `split` (SDK 1.35): the tab lands in a fresh split pane beside
+   * (`'right'`) or below (`'down'`) the focused pane's content instead of
+   * inside it. An already-open tab still just reveals (one pane per
+   * document), and a focused dock band cannot split (ADR-0038) -- the tab
+   * opens there plainly. A split-open never replaces the focused pane's
+   * clean tab (it asked to open ALONGSIDE), and a file a plugin opener
+   * claims (or an external document) ignores the option: no base tab is
+   * added on those paths.
    */
   async openFile(
     relativePath: string,
@@ -78,12 +88,16 @@ export class DocOpenService {
       keepFocused?: boolean;
       prefetched?: { content: string; modifiedMs: number };
       pinned?: boolean;
+      split?: DocSplit;
     } = {},
   ): Promise<void> {
     if (!this.api) {
       return;
     }
-    const victim = opts.keepFocused === true ? null : this.replacedTabCandidate();
+    // A split-open is an explicit "alongside" request: the focused pane's
+    // clean tab is never replaced (with it, the pre-split pane would
+    // collapse out of the layout again).
+    const victim = opts.keepFocused === true || opts.split !== undefined ? null : this.replacedTabCandidate();
     const pin = opts.pinned === true ? { pinned: true } : {};
     const resolvedVault = vaultId ?? this.vault.activeVaultId();
     const key = docKey(resolvedVault, relativePath);
@@ -118,6 +132,11 @@ export class DocOpenService {
       return;
     }
 
+    // The split lands first: everything below registers the new tab, and
+    // a new tab always opens in the FOCUSED pane (`OpenDocsStore.add`) --
+    // which `splitPane` just made the fresh sibling.
+    this.splitLanding(opts.split);
+
     // An image file opens as a viewer tab -- never read as text (that used
     // to open a mojibake buffer that Ctrl+S would write back). Same for a
     // PDF (ADR-0052): the built-in (PDFium) viewer tab.
@@ -150,9 +169,15 @@ export class DocOpenService {
    * Opens `relativePath` and asks the editor to put the caret at the start
    * of 1-based `line` (a tag-search hit lands here). The `Editor` component
    * consumes `revealRequest` once the buffer for that document is loaded.
+   * `opts.split` lands the tab in a fresh split pane (see {@link openFile}).
    */
-  async openFileAt(relativePath: string, line: number, vaultId?: string): Promise<void> {
-    await this.openFile(relativePath, vaultId);
+  async openFileAt(
+    relativePath: string,
+    line: number,
+    vaultId?: string,
+    opts?: { split?: DocSplit },
+  ): Promise<void> {
+    await this.openFile(relativePath, vaultId, opts);
     const key = docKey(vaultId ?? this.vault.activeVaultId(), relativePath);
     if (this.store.has(key)) {
       this.revealRequest.update((r) => ({ id: r.id + 1, key, line }));
@@ -305,13 +330,35 @@ export class DocOpenService {
    * for browser tabs) and owns everything behind it -- the view, the
    * chrome state, the favicon/status slots; the base only tracks the tab's
    * existence and its display name. No buffer, never dirty, never saved.
+   * `split` (SDK 1.35) lands the tab in a fresh split pane beside or below
+   * the focused pane; an already-open key still just reveals.
    */
-  addPluginDoc(kind: string, key: string, name: string): void {
+  addPluginDoc(kind: string, key: string, name: string, split?: DocSplit): void {
     if (this.store.has(key)) {
       this.panes.open(key);
       return;
     }
+    this.splitLanding(split);
     this.store.add(pluginDoc(kind, key, name));
+  }
+
+  /**
+   * Lands the next registered tab in a fresh split: splits the focused
+   * pane (the new sibling becomes focused, and `OpenDocsStore.add` always
+   * opens into the focused pane), so the tab the caller adds next opens
+   * there. `PaneService.splitPane` refuses a docked pane (ADR-0038) and a
+   * missing focus -- both fall back to the plain open, by returning before
+   * anything is split.
+   */
+  private splitLanding(split: DocSplit | undefined): void {
+    if (split === undefined) {
+      return;
+    }
+    const focused = this.panes.focusedPane();
+    if (focused === null) {
+      return;
+    }
+    this.panes.splitPane(focused.id, split === 'down' ? 'column' : 'row');
   }
 
   /** Pins / unpins a tab; a no-op for a key that is not open. */

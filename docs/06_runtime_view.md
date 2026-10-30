@@ -1689,6 +1689,17 @@ sequenceDiagram
     P-->>D: band re-rendered with its tabs and band height
 ```
 
+Sibling flow (SDK 1.35, req-65): a plugin calls `documents.open(path, …,
+{ split: 'right' | 'down' })` or `documents.addDoc(kind, key, name, …)`
+with the option. `DocOpenService.splitLanding` splits the focused pane
+first (`'right'` = a row split, `'down'` = a column split) — the fresh
+sibling becomes the focused pane, and the tab the call then registers
+opens there (`OpenDocsStore.add` always opens into the focused pane). An
+already-open tab just reveals, a focused dock band cannot split (plain
+open there), and the focused pane's clean tab is never replaced — the
+call asked to open alongside. The resulting tree persists like any pane
+layout.
+
 ## 6.34 One chat completion through the provider router ([ADR-0047](09_architecture_decisions/0047-llm-provider-abstraction.md))
 
 The assistant plugin's Ask is the worked example; every other consumer
