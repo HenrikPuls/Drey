@@ -20,6 +20,26 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-66 — Readable board issues, one toolbar row
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list. The board's own findings (pipeline / repos / order files) sat in a
+full-width bordered box ("2 board issues") whose messages were only a
+tooltip, above a second row holding just the hide-blocked filter — three
+rows of different heights over the columns. Now there is one toolbar row
+(`boardToolbar` in `plugins/tickets/renderer/index.ts`): the filter, then
+a chip with the count, coloured by the worst level
+(`plugins/tickets/renderer/board-issues.ts`), both 20px high. The chip
+unfolds the messages under the row, worst first, each with its level and
+an **Open** link when it names a meta file (`tickets/_meta/<file>.md`);
+open/closed is view state for the session. The old `.tickets-board-issues`
+box is gone.
+
+Specs: `plugins/tickets/renderer/board-issues.spec.ts` (summary and worst
+level, sort order, meta-file detection) and the e2e
+`e2e/board-issues.spec.ts` (chip and filter at one height, unfold, the
+messages, Open opens `order.md`, fold again).
+
 ### req-62 — Ticket header in the editor
 
 **Not yet manually verified by the owner.** Owner request, outside the

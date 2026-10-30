@@ -19,19 +19,6 @@
   flex-direction: column;
 }
 
-.tickets-board-issues {
-  flex: none;
-  margin: 0 8px 2px;
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  font-size: 0.75rem;
-  color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .tickets-warn {
   flex: none;
   padding: 4px 8px;
@@ -243,7 +230,8 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  min-height: 20px;
   padding: 6px 12px 0;
 }
 
@@ -251,7 +239,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
   border: 0;
   border-radius: var(--radius-xs);
   background: transparent;
@@ -266,6 +256,99 @@
 
 .tickets-toolbar-on {
   color: var(--accent-text);
+  background: var(--hover-bg);
+}
+
+/* The board issues (req-66): a chip in the toolbar row, the same height as
+   the filter button beside it, coloured by the worst level; it unfolds the
+   messages under the row, inset like the board. */
+.tickets-issues-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.tickets-issues-chip svg:last-child {
+  transition: transform 0.12s ease;
+}
+
+.tickets-issues-chip-open svg:last-child {
+  transform: rotate(180deg);
+}
+
+.tickets-issues-chip-error {
+  color: var(--status-deleted);
+  background: color-mix(in srgb, var(--status-deleted) 14%, transparent);
+}
+
+.tickets-issues-chip-warning {
+  color: var(--status-modified);
+  background: color-mix(in srgb, var(--status-modified) 14%, transparent);
+}
+
+.tickets-issues-chip-noise {
+  color: var(--text-3);
+  background: var(--hover-bg);
+}
+
+.tickets-issues-list {
+  flex: none;
+  max-height: 30vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px 12px 0;
+  list-style: none;
+  font-size: 0.75rem;
+}
+
+.tickets-issues-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  color: var(--text-2);
+}
+
+.tickets-issues-level {
+  flex: none;
+  min-width: 40px;
+  font-size: 0.68rem;
+  color: var(--text-4);
+}
+
+.tickets-issues-item-error .tickets-issues-level {
+  color: var(--status-deleted);
+}
+
+.tickets-issues-item-warning .tickets-issues-level {
+  color: var(--status-modified);
+}
+
+.tickets-issues-message {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tickets-issues-open {
+  flex: none;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--accent-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tickets-issues-open:hover {
   background: var(--hover-bg);
 }
 
