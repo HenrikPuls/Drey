@@ -22,7 +22,7 @@ describe('EditorExtensionRegistry', () => {
     registry.register('p', 'composer', () => calls.push('composer'));
     registry.register('p', 'both', () => calls.push('both'));
 
-    const ctx = { slot: 'document' as const, path: () => null, filename: () => null };
+    const ctx = { slot: 'document' as const, path: () => null, filename: () => null, vaultId: () => null };
     registry.extensionsFor('document', ctx);
     expect(calls).toEqual(['doc', 'both']);
 
@@ -40,6 +40,7 @@ describe('EditorExtensionRegistry', () => {
       slot: 'document',
       path: () => null,
       filename: () => null,
+      vaultId: () => null,
     });
     expect(out).toEqual(['ext']);
   });

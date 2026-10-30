@@ -19,6 +19,7 @@ export {
 export { PluginApiFactory, type PluginApiContext } from './plugin-api-impl';
 export { EditorExtensionRegistry } from './editor-extension-registry.service';
 export { DropDecoderRegistry } from './drop-decoder-registry.service';
+export { FrontmatterViewRegistry } from './frontmatter-view-registry.service';
 export {
   MenuContributionsService,
   EditorContextMenuRegistry,

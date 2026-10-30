@@ -20,6 +20,53 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-62 — Ticket header in the editor
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list. A ticket opened from the board showed its frontmatter folded behind
+the `▸ Frontmatter` pill — no title, and priority / repo / worker only
+by editing YAML. Now a ticket of the board's vault opens with a header in
+the pill's place (`plugins/tickets/renderer/ticket-header.ts` +
+`ticket-header.css`): id, phase, priority, repository, worker, branch and
+the issue badge on one row, the title as an editable headline below
+(Enter / leaving the field applies, Escape restores). Priority,
+repository and worker are menus. The header reads the editor's buffer,
+not the file: main parses and rewrites the block (`header` /
+`headerEdit`, `patchHeaderFields` in `main/ticket-files.ts` — `yaml`
+document mutation, title double-quoted unless the owner chose single
+quotes, an empty repo stays `repo:`, an empty worker drops the pin) and
+the renderer applies the result as one editor change, so dirty state,
+undo, save and the conflict merge stay the editor's. A code button opens
+the base's YAML view. The `## Log` section folds the first time a ticket
+shows in a session.
+
+The phase chip is display only — a deviation from the plan, which had a
+"Move to" menu: the move renames the file, and an open tab whose file
+vanished becomes a draft that a save would recreate in the old folder (a
+duplicate id). Moving stays on the board; the header move is a roadmap
+follow-up.
+
+**SDK 1.34** (base seam): `api.editor.registerFrontmatterView({ matches,
+render })` — `frontmatter-fold.ts` asks the new `FrontmatterViewRegistry`
+(through `MarkdownSurface`) and draws the plugin's element as the folded
+block widget (`input`: view, frontmatter, path, vault id, `expandRaw`);
+a throwing render falls back to the pill; a (de)registration redraws
+open editors (`refreshFrontmatterView`), and so does a change of the
+surface's path or vault — on a tab switch the text lands before the path
+input names the new document, so the first lookup saw the old path (found
+in the live e2e run). `EditorSurfaceContext` gained `vaultId()`.
+`plugins/AUTHORING.md` documents both.
+
+Specs: `src/app/editor/frontmatter-fold.spec.ts` (the plugin view takes
+the pill's place, gets path and vault, `expandRaw`, fallback, redraw only
+on a changed block, refresh effect), `plugins/tickets/main/ticket-files.spec.ts`
+(`patchHeaderFields`), `plugins/tickets/renderer/ticket-header.spec.ts`
+(ticket paths, phase of a path, the Log fold range), and the e2e
+`e2e/ticket-header.spec.ts` in the built app (card click opens the ticket
+with the header and the folded Log; a priority pick and a title edit are
+buffer edits shown in the raw YAML; Undo reverts the title; a plain note
+keeps the pill).
+
 ### req-60 — Tickets panel: fleet status in the panel header
 
 Owner request, outside the list. The fleet summary sat as a row of three

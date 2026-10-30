@@ -44,9 +44,12 @@ import {
 } from './ticket-board';
 import {
   newTicketFileText,
+  parseTicketFile,
+  patchHeaderFields,
   patchTicketFile,
   ticketPathParts,
   ticketSections,
+  type HeaderPatch,
 } from './ticket-files';
 import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from './phase-dirs';
 import { planWorktreeRemoval } from './worktree-removal';
@@ -1707,6 +1710,36 @@ const plugin: MainPluginModule = {
         to: p.to,
         index: typeof p.index === 'number' && p.index >= 0 ? Math.floor(p.index) : null,
       });
+    });
+
+    // The ticket header in the editor (req-62): it shows the buffer's
+    // frontmatter, not the file on disk, so it asks with the block itself.
+    ctx.ipc.handle('header', (payload) => {
+      const p = payload as { path?: unknown; frontmatter?: unknown };
+      if (typeof p.path !== 'string' || typeof p.frontmatter !== 'string') {
+        return { ok: false, error: 'bad header payload' };
+      }
+      return { ok: true, ...parseTicketFile(`${p.frontmatter}\n`, p.path) };
+    });
+
+    ctx.ipc.handle('headerEdit', (payload) => {
+      const p = payload as { path?: unknown; frontmatter?: unknown; patch?: unknown };
+      if (typeof p.path !== 'string' || typeof p.frontmatter !== 'string' || typeof p.patch !== 'object' || p.patch === null) {
+        return { ok: false, error: 'bad header edit payload' };
+      }
+      const raw = p.patch as Record<string, unknown>;
+      const patch: HeaderPatch = {
+        ...(typeof raw['title'] === 'string' ? { title: raw['title'] } : {}),
+        ...(typeof raw['priority'] === 'string' ? { priority: raw['priority'] as TicketPriority } : {}),
+        ...(typeof raw['repo'] === 'string' ? { repo: raw['repo'] } : {}),
+        ...(typeof raw['worker'] === 'string' ? { worker: raw['worker'] } : {}),
+      };
+      try {
+        const frontmatter = patchHeaderFields(p.frontmatter, patch);
+        return { ok: true, frontmatter, ...parseTicketFile(`${frontmatter}\n`, p.path) };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
     });
 
     ctx.ipc.handle('reorder', async (payload) => {

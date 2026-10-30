@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { formatUtcStamp } from '../shared/tickets';
-import { newTicketFileText, parseTicketFile, patchTicketFile, ticketPathParts } from './ticket-files';
+import {
+  newTicketFileText,
+  parseTicketFile,
+  patchHeaderFields,
+  patchTicketFile,
+  ticketPathParts,
+} from './ticket-files';
 
 const CANONICAL = [
   '---',
@@ -230,5 +236,43 @@ describe('newTicketFileText', () => {
     expect(text).toContain('## Description');
     expect(text).toContain('Do the thing.');
     expect(text).toContain('- \'2026-10-17T14:32:00Z\' owner@desk — created in inbox');
+  });
+});
+
+describe('patchHeaderFields (req-62)', () => {
+  const BLOCK = CANONICAL.slice(0, CANONICAL.indexOf('---\n\n') + 3);
+
+  it('rewrites only the named keys and keeps the block shape (fences, no trailing newline)', () => {
+    const out = patchHeaderFields(BLOCK, { priority: 'low' });
+    expect(out).toBe(BLOCK.replace('priority: high', 'priority: low'));
+  });
+
+  it('quotes a title with a colon and keeps the existing double-quote style', () => {
+    const out = patchHeaderFields(BLOCK, { title: 'CI: fix  the race ' });
+    expect(out).toContain('title: "CI: fix the race"');
+    expect(parseTicketFile(`${out}\n`, 'tickets/inbox/T-0042.md').meta.title).toBe('CI: fix the race');
+  });
+
+  it("keeps the owner's single quotes", () => {
+    const block = BLOCK.replace('title: "Fix the palette race in CI"', "title: 'Old'");
+    expect(patchHeaderFields(block, { title: "It's new" })).toContain("title: 'It''s new'");
+  });
+
+  it('refuses an empty title and an unknown priority', () => {
+    expect(() => patchHeaderFields(BLOCK, { title: '  ' })).toThrow('the title is empty');
+    expect(() => patchHeaderFields(BLOCK, { priority: 'asap' as never })).toThrow('unknown priority');
+  });
+
+  it('an empty repo stays as an empty key; an empty worker removes the pin', () => {
+    const cleared = patchHeaderFields(BLOCK, { repo: '' });
+    expect(cleared).toContain('\nrepo:\n');
+    const pinned = patchHeaderFields(BLOCK, { worker: 'claude-code' });
+    expect(pinned).toContain("worker: 'claude-code'");
+    expect(patchHeaderFields(pinned, { worker: '' })).not.toContain('worker:');
+  });
+
+  it('refuses a block without fences or with broken YAML', () => {
+    expect(() => patchHeaderFields('id: T-0042', { priority: 'low' })).toThrow('no frontmatter fence');
+    expect(() => patchHeaderFields('---\nid: [\n---', { priority: 'low' })).toThrow('does not parse');
   });
 });

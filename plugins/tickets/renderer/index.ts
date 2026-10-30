@@ -28,6 +28,7 @@ import { cardOrderTargets } from './card-order';
 import { createColumnCollapseStore } from './column-collapse';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
+import { createTicketHeader, ticketLogFold } from './ticket-header';
 import type { ChainStatus, RunInfo } from '../main/fleet/protocol';
 import {
   CONTEXT_WARN,
@@ -126,6 +127,9 @@ const notifyViews = (): void => {
   }
 };
 
+/** Keeps the editor's ticket headers in step with each fresh board (set in activate). */
+let afterBoardRefresh: (() => void) | null = null;
+
 function refreshBoard(): Promise<void> {
   if (inFlight !== null) {
     return inFlight;
@@ -152,6 +156,7 @@ function refreshBoard(): Promise<void> {
       inFlight = null;
     }
     notifyViews();
+    afterBoardRefresh?.();
   })();
   return inFlight;
 }
@@ -2184,6 +2189,37 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     };
     api.files.registerOperations(createFilesOperationsHandler(filesDeps));
     api.files.registerContextMenuItems(ticketsContextMenuItems(filesDeps));
+
+    // The ticket header and the folded Log in the editor (req-62, SDK 1.34).
+    // Both match on the board's vault, so they register again when that
+    // vault becomes known or changes — the registration is what makes open
+    // editors look again.
+    const header = createTicketHeader({
+      api,
+      snapshot: () => snapshot,
+      invoke: invokeBoard,
+      workers: WORKER_LABEL,
+      onError: (message) => {
+        setNote(message, 'error');
+        notifyViews();
+      },
+    });
+    let headerVault: string | null = null;
+    let unregisterHeader: (() => void) | null = null;
+    afterBoardRefresh = () => {
+      const vaultId = snapshot?.vaultId ?? null;
+      if (vaultId !== headerVault || unregisterHeader === null) {
+        headerVault = vaultId;
+        unregisterHeader?.();
+        const offView = api.editor.registerFrontmatterView(header.view);
+        const offFold = api.editor.registerExtension('document', ticketLogFold(api, () => snapshot));
+        unregisterHeader = () => {
+          offView();
+          offFold();
+        };
+      }
+      header.repaint();
+    };
 
     // The fleet daemon's chain log: a readonly, tail-following editor tab
     // (T-0007 review finding 2). Stateless — the session snapshot reopens

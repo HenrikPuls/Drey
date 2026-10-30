@@ -402,6 +402,73 @@ function appendLogLine(body: string, stamp: string, who: string, what: string): 
 }
 
 // ---------------------------------------------------------------------------
+// The ticket header's edits (req-62): the editor hands over the frontmatter
+// block it shows — both fences, no trailing newline — and puts the result
+// back as one buffer change, so save, undo and the conflict merge stay the
+// editor's.
+
+/** What the ticket header may change. An empty `repo` / `worker` clears the key. */
+export interface HeaderPatch {
+  readonly title?: string;
+  readonly priority?: TicketPriority;
+  readonly repo?: string;
+  readonly worker?: string;
+}
+
+/** Rewrites the header's keys in a frontmatter block; every other key, comment and style survives. */
+export function patchHeaderFields(block: string, patch: HeaderPatch): string {
+  const { yamlText, hadFence } = splitFrontmatter(`${block}\n`);
+  if (!hadFence || yamlText === null) {
+    throw new Error('ticket has no frontmatter fence');
+  }
+  const doc = parseDocument(yamlText);
+  if (doc.errors.length > 0) {
+    throw new Error('ticket frontmatter does not parse');
+  }
+  if (patch.title !== undefined) {
+    const title = patch.title.replace(/\s+/g, ' ').trim();
+    if (title === '') {
+      throw new Error('the title is empty');
+    }
+    // The creation writer's style (double quotes) unless the owner chose
+    // single quotes; never plain, so a `:` in the title cannot break the line.
+    const existing = doc.get('title', true);
+    const style =
+      isScalar(existing) && existing.type === Scalar.QUOTE_SINGLE
+        ? Scalar.QUOTE_SINGLE
+        : Scalar.QUOTE_DOUBLE;
+    const scalar = doc.createNode(title) as Scalar;
+    scalar.type = style;
+    doc.set('title', scalar);
+  }
+  if (patch.priority !== undefined) {
+    if (!TICKET_PRIORITIES.includes(patch.priority)) {
+      throw new Error(`unknown priority "${String(patch.priority)}"`);
+    }
+    doc.set('priority', patch.priority);
+  }
+  if (patch.repo !== undefined) {
+    // `repo:` stays present and empty when cleared — the creation shape.
+    const repo = patch.repo.trim();
+    if (repo === '') {
+      const empty = new Scalar(null);
+      empty.source = ''; // `repo:`, not `repo: null`
+      doc.set('repo', empty);
+    } else {
+      doc.set('repo', repo);
+    }
+  }
+  if (patch.worker !== undefined) {
+    if (patch.worker.trim() === '') {
+      removeKey(doc, 'worker');
+    } else {
+      setQuoted(doc, 'worker', patch.worker.trim());
+    }
+  }
+  return `---\n${yamlOf(doc)}---`;
+}
+
+// ---------------------------------------------------------------------------
 // Canonical creation write (the strict writer's shape).
 
 export interface NewTicketInput {

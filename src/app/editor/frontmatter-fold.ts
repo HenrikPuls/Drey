@@ -1,5 +1,6 @@
 import { EditorState, Extension, Range, StateEffect, StateField } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, WidgetType } from '@codemirror/view';
+import type { FrontmatterViewContrib } from '../../../shared/plugin-api/renderer';
 import { frontmatterEnd } from './markdown-frontmatter';
 
 /**
@@ -27,6 +28,21 @@ import { frontmatterEnd } from './markdown-frontmatter';
 /** Set the open editor's frontmatter fold state (`true` = expanded/editable). */
 export const setFrontmatterExpanded = StateEffect.define<boolean>();
 
+/** Asks the fold to look up its plugin view again (a view was registered or removed). */
+export const refreshFrontmatterView = StateEffect.define<null>();
+
+/** A plugin's view that matched, with the document it matched for (SDK 1.34). */
+export interface FrontmatterViewMatch {
+  readonly contrib: FrontmatterViewContrib;
+  readonly path: string | null;
+  readonly vaultId: string | null;
+}
+
+/** Where the fold finds a plugin's presentation of the folded block. */
+export interface FrontmatterFoldOptions {
+  readonly view?: () => FrontmatterViewMatch | null;
+}
+
 const expandedField = StateField.define<boolean>({
   create: () => false,
   update(value, tr) {
@@ -47,11 +63,16 @@ export function frontmatterExpandedOf(state: EditorState): boolean {
 const dimLine = Decoration.line({ class: 'cm-fm-line' });
 
 /**
- * Pure decoration builder (exported for tests): the block pill when collapsed;
- * a `⌄ Frontmatter` header + dim YAML lines + hidden `---` fences when
- * expanded; nothing when the document has no frontmatter.
+ * Pure decoration builder (exported for tests): the block pill when collapsed
+ * (a plugin's view in its place when one is given); a `⌄ Frontmatter` header
+ * + dim YAML lines + hidden `---` fences when expanded; nothing when the
+ * document has no frontmatter.
  */
-export function foldDecorations(state: EditorState, expanded: boolean): DecorationSet {
+export function foldDecorations(
+  state: EditorState,
+  expanded: boolean,
+  view: FrontmatterViewMatch | null = null,
+): DecorationSet {
   const text = state.sliceDoc();
   const fmEnd = frontmatterEnd(text);
   if (fmEnd === 0) {
@@ -67,7 +88,10 @@ export function foldDecorations(state: EditorState, expanded: boolean): Decorati
   if (!expanded) {
     return Decoration.set(
       Decoration.replace({
-        widget: new FrontmatterPillWidget(),
+        widget:
+          view === null
+            ? new FrontmatterPillWidget()
+            : new PluginFrontmatterWidget(view, state.sliceDoc(firstLine.from, lastLine.to)),
         block: true,
       }).range(firstLine.from, lastLine.to),
     );
@@ -95,24 +119,29 @@ export function foldDecorations(state: EditorState, expanded: boolean): Decorati
   return Decoration.set(deco, true);
 }
 
-const decorationsField = StateField.define<DecorationSet>({
-  create: (state) => foldDecorations(state, false),
-  update(value, tr) {
-    const expanded = tr.state.field(expandedField);
-    if (tr.docChanged || expanded !== tr.startState.field(expandedField)) {
-      return foldDecorations(tr.state, expanded);
-    }
-    return value;
-  },
-  provide: (field) => [
-    EditorView.decorations.from(field),
-    // Treat the collapsed block widget as one atom, so ArrowUp / ArrowDown
-    // step over the folded frontmatter cleanly instead of dropping the
-    // selection to offset 0 (a block `Decoration.replace` at the document
-    // start otherwise corrupts vertical cursor motion).
-    EditorView.atomicRanges.of((view) => view.state.field(field, false) ?? Decoration.none),
-  ],
-});
+const decorationsField = (lookup: () => FrontmatterViewMatch | null): StateField<DecorationSet> =>
+  StateField.define<DecorationSet>({
+    create: (state) => foldDecorations(state, false, lookup()),
+    update(value, tr) {
+      const expanded = tr.state.field(expandedField);
+      if (
+        tr.docChanged ||
+        expanded !== tr.startState.field(expandedField) ||
+        tr.effects.some((e) => e.is(refreshFrontmatterView))
+      ) {
+        return foldDecorations(tr.state, expanded, lookup());
+      }
+      return value;
+    },
+    provide: (field) => [
+      EditorView.decorations.from(field),
+      // Treat the collapsed block widget as one atom, so ArrowUp / ArrowDown
+      // step over the folded frontmatter cleanly instead of dropping the
+      // selection to offset 0 (a block `Decoration.replace` at the document
+      // start otherwise corrupts vertical cursor motion).
+      EditorView.atomicRanges.of((view) => view.state.field(field, false) ?? Decoration.none),
+    ],
+  });
 
 const CHEVRON_RIGHT =
   '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" ' +
@@ -140,6 +169,52 @@ class FrontmatterPillWidget extends WidgetType {
 
   override ignoreEvent(): boolean {
     return false;
+  }
+}
+
+/**
+ * A plugin's presentation of the folded block (SDK 1.34). Drawn again when
+ * the block's text changes; the element handles its own events. A render
+ * that throws falls back to the plain pill, so a broken plugin never hides
+ * the frontmatter.
+ */
+class PluginFrontmatterWidget extends WidgetType {
+  constructor(
+    private readonly match: FrontmatterViewMatch,
+    private readonly frontmatter: string,
+  ) {
+    super();
+  }
+
+  override eq(other: PluginFrontmatterWidget): boolean {
+    return (
+      other.match.contrib === this.match.contrib &&
+      other.match.path === this.match.path &&
+      other.match.vaultId === this.match.vaultId &&
+      other.frontmatter === this.frontmatter
+    );
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    try {
+      const element = this.match.contrib.render({
+        view,
+        frontmatter: this.frontmatter,
+        path: this.match.path,
+        vaultId: this.match.vaultId,
+        expandRaw: () => view.dispatch({ effects: setFrontmatterExpanded.of(true) }),
+      });
+      element.classList.add('cm-fm-view');
+      return element;
+    } catch {
+      return new FrontmatterPillWidget().toDOM();
+    }
+  }
+
+  override ignoreEvent(event: Event): boolean {
+    // The fallback pill keeps the base's click (expand); everything inside a
+    // plugin's view is the view's own.
+    return !(event.target instanceof Element && event.target.closest('.cm-fm-pill') !== null);
   }
 }
 
@@ -260,6 +335,7 @@ const foldTheme = EditorView.theme(
   { dark: true },
 );
 
-export function frontmatterFold(): Extension {
-  return [expandedField, decorationsField, foldClicks, foldTheme];
+export function frontmatterFold(options: FrontmatterFoldOptions = {}): Extension {
+  const lookup = options.view ?? ((): null => null);
+  return [expandedField, decorationsField(lookup), foldClicks, foldTheme];
 }

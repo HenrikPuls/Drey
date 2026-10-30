@@ -432,3 +432,29 @@ through its tab by every vault tool (ADR-0071).
   `TASKS_LIST_SPEC` from `shared/tasks-list-tool` yourself and run it
   with `runTasksList(ctx.tasks.queryProvider(), args)`.
 - A plugin tool that shares a name with a vault tool still wins.
+
+## SDK 1.34 — presenting a document's frontmatter
+
+- `api.editor.registerFrontmatterView({ matches(context), render(input) })`
+  replaces the folded `▸ Frontmatter` pill of the documents your
+  `matches` accepts with the element `render` returns — a block at the
+  top of the document (the tickets plugin's header is the reference).
+  `input` carries the editor `view`, the raw `frontmatter` block (both
+  fences, no trailing newline), the document's `path` and `vaultId`, and
+  `expandRaw()`, which shows the base's editable YAML; its header folds
+  back to your view. First match wins.
+- Change the frontmatter through `input.view.dispatch` (one change over
+  `0 … frontmatter.length`), never by writing the file: dirty state,
+  undo, save and the conflict merge then stay the editor's. The element
+  is drawn again whenever the block's text changes, so commit a text
+  field on Enter or blur, not per keystroke — the redraw would take its
+  focus.
+- The element handles its own events (inputs, selects, buttons). Space it
+  with `padding`, never `margin`: CodeMirror measures a block widget
+  without its margin, and the lines below would drift.
+- A render that throws falls back to the plain pill. `matches` runs
+  whenever the fold redraws; when what it depends on changes (the
+  tickets plugin learns its vault only after the first board load),
+  register the view again — a registration makes open editors look again.
+- `EditorSurfaceContext.vaultId()` (also new) is the shown document's
+  vault, the active one when the document names none.

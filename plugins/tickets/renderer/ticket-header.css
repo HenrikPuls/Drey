@@ -1,0 +1,113 @@
+/* The ticket header in the editor (req-62): the block widget that replaces
+   the folded frontmatter pill of a ticket file. Vertical spacing is padding,
+   never margin -- CodeMirror measures a block widget without its margin, so
+   a margin would drift the gutter and click positions below it (see
+   `.cm-fm-pill` in src/app/editor/frontmatter-fold.ts). */
+
+.tickets-head {
+  display: block;
+  /* The sides match CodeMirror's `.cm-line` padding, so the header lines
+     up with the body text. */
+  padding: 2px 2px 14px 6px;
+  font-family: var(--font-sans);
+  cursor: default;
+}
+
+.tickets-head-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.tickets-head-id {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--text-4);
+}
+
+.tickets-head-chip,
+.tickets-head-select {
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.tickets-head-select {
+  cursor: pointer;
+}
+
+.tickets-head-select:hover,
+.tickets-head-select:focus-visible {
+  border-color: var(--border-strong);
+  color: var(--text-2);
+}
+
+.tickets-head-select option {
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.tickets-head-phase {
+  color: var(--text-2);
+  border-color: var(--border-strong);
+}
+
+.tickets-head-branch {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-4);
+}
+
+.tickets-head-prio-urgent {
+  color: var(--status-deleted);
+  border-color: var(--status-deleted);
+}
+
+.tickets-head-prio-high {
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+
+.tickets-head-prio-low {
+  color: var(--text-5);
+}
+
+.tickets-head .tickets-issues {
+  margin-left: 0;
+}
+
+.tickets-head-spacer {
+  flex: 1;
+}
+
+.tickets-head-raw {
+  color: var(--text-5);
+}
+
+.tickets-head-title {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 6px 0 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-heading);
+  font-family: var(--drey-heading-font, var(--font-sans));
+  font-weight: 500;
+  font-size: 2.14em;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.tickets-head-title:focus {
+  box-shadow: inset 0 -1px 0 var(--border-strong);
+}
