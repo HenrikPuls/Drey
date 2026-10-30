@@ -69,6 +69,15 @@ automatic column ("Plan with agent"), the owner's checkpoints and the
 last automatic column ("Refine with agent"), in the card menu and the
 ticket header.
 
+> **Later change (req-72).** The offer rule moved: refine is offered in
+> **every manual column** — the queues before the first automatic column
+> included, and a board without any automatic column offers it everywhere
+> but the terminal — while the automatic columns (`agent`, and `ci`
+> counted as automatic) offer none: the runner works them, the takeover
+> tab is the machine's. The last automatic column therefore no longer
+> offers a dialog. End moves are unchanged. Rationale: the owner's
+> columns are theirs to dialog in, wherever they sit.
+
 **The base gains the split seam.** SDK 1.35: `documents.open` and
 `documents.addDoc` take `split: 'right' | 'down'`; the tab lands in a
 fresh pane beside or below the focused one. It is a landing request — an

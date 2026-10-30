@@ -122,3 +122,20 @@
 .tickets-head-title:focus {
   box-shadow: inset 0 -1px 0 var(--border-strong);
 }
+
+/* The work-repo checkboxes (req-72): compact chips in the ticket header;
+   the first checked repo is the primary. */
+.tickets-head-checks {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tickets-head-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--text-2);
+  cursor: pointer;
+}

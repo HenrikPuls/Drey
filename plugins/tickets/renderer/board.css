@@ -2491,3 +2491,41 @@ details[open] > summary > .tickets-tx-think-preview {
   opacity: 0.45;
   cursor: default;
 }
+
+/* The project switcher (req-72): which tickets repository the board reads.
+   Sized like the fleet chip beside it, quiet until used. */
+.tickets-project-select {
+  height: 22px;
+  max-width: 130px;
+  margin-right: 2px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 0.72rem;
+}
+
+.tickets-project-select:hover {
+  border-color: var(--field-border);
+  background: var(--bg-input);
+}
+
+/* The create modal's repository checkboxes (req-72): one ticket may name
+   several work repos; the first checked one is the primary. */
+.tickets-form-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  min-height: 24px;
+}
+
+.tickets-form-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8rem;
+  color: var(--text-2);
+  cursor: pointer;
+}

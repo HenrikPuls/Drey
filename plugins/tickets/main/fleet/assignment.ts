@@ -142,6 +142,17 @@ export interface InstructionInput {
   /** The repo's `link:` folders the runner links into the worktree (req-56). */
   readonly links?: readonly string[];
   /**
+   * The ticket's further repos (req-72), primary excluded: one worktree
+   * each on the same branch, prepared before the run. Named in the brief
+   * so the worker never hunts for the checkouts.
+   */
+  readonly extraRepos?: readonly {
+    readonly name: string;
+    readonly worktreePath: string;
+    /** The base the worktree branches from (repos.md `branch:`); null = HEAD. */
+    readonly base: string | null;
+  }[];
+  /**
    * An interactive dialog (req-65): the brief's completion discipline is
    * replaced by the dialog discipline — no gate, no move, the owner moves
    * the ticket.
@@ -234,6 +245,15 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
       (input.repo !== null ? `, repo ${input.repo}` : '') +
       `). Stay on that branch; it and the worktree are your only writable places.`,
   );
+  if (input.extraRepos !== undefined && input.extraRepos.length > 0) {
+    const lines = input.extraRepos.map(
+      (r) => `- ${r.name}: ${r.worktreePath}${r.base !== null ? ` (base ${r.base})` : ''}`,
+    );
+    parts.push(
+      `Further repositories this ticket names, each prepared as its own worktree on the same branch (${input.branch}) — ` +
+        `work and commit there too when the step touches them:\n${lines.join('\n')}`,
+    );
+  }
   parts.push(`The ticket sits in the "${input.phase}" phase of the owner's board.`);
   if (input.links !== undefined && input.links.length > 0) {
     // Workers used to probe for the toolchain and improvise — junctions

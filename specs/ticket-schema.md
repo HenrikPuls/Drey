@@ -177,7 +177,8 @@ How. Filled in the plan phase; must end with the acceptance criteria.
 |---|---|---|
 | `id` | `T-\d{4,}` | Required. Must equal the filename stem. Immutable. |
 | `title` | string | Required. One line, quoted when it contains `:`. |
-| `repo` | string | Name from `_meta/repos.md`. May be empty until the ticket leaves inbox for a work phase; entering one without a known repo is an issue. |
+| `repo` | string | Name from `_meta/repos.md`: the ticket's **primary** work repo (req-72) — where the fleet's gate runs and whose worktree is the run's home. May be empty until the ticket leaves inbox for a work phase; entering one without a known repo is an issue. |
+| `repos` | list of names | Optional (req-72). Every work repo the ticket touches, **primary first** — `repos: [drey, lariscus]`. When set, the list is the truth and `repo:` repeats its first entry (a mismatch is a noise finding, the list wins). One worktree per named repo, all on the ticket's branch; a run refuses while any named repo lacks a local `path:` in `_meta/repos.md`. One or zero names write no `repos:` line. |
 | `worker` | string | Optional pin for the fleet worker (M84): `opencode`, `claude-code`, or `<provider>/<model>`. Wins over the column's `worker:` key, the phase handover's `@worker` pin, the repo's `worker:` and the configured default (M85's assignment ring). An unknown value badges the card; a run start with it refuses. |
 | `priority` | `urgent \| high \| normal \| low` | Required. Default `normal`; machine writers always write it. |
 | `rank` | integer 0–999999 | Default `5000`. Fine ordering inside derived order. |
@@ -306,8 +307,10 @@ Prose for humans. The board follows this file on refresh.
   **interactive dialog run** in this column gets
   (`interactive: plan-interview` → `tickets/_meta/prompts/plan-interview.md`).
   Absent, the shipped defaults apply: `plan-interactive-default` on the
-  pipeline's plan column, `refine-interactive-default` at the owner's
-  checkpoints and the last agent column. An interactive run is started
+  pipeline's first automatic column, `refine-interactive-default` in
+  every manual column (req-72 — the queues before the first automatic
+  column included; automatic columns offer no dialog, the runner works
+  them). An interactive run is started
   from the board ("Plan with agent" / "Refine with agent"), not by the
   dispatcher: the worker is the owner's from turn one (held), the run
   never gates and never moves — the dialog's end moves (in the takeover
@@ -431,6 +434,16 @@ instead of the worker rebuilding them: the toolchain (`.tools`,
 worktree does not, and git ignores it there; the brief then tells the
 worker not to install anything. Names are unique; a ticket's `repo:`
 must name one of them once it is in a work phase.
+
+The registry is edited in Settings → Tickets, Repositories (req-72):
+the entries as editable rows, one commit per save, the prose under the
+frontmatter kept — and "Add from folder…", which probes a picked
+folder (itself plus its non-hidden subfolders) for git repositories
+and registers the found checkouts as ordinary entries (origin URL,
+current branch, absolute `path`). The file stays the single source of
+truth; the scan is a seeding step, not a live reference. A ticket may
+name several of these repos in its `repos:` list (see the frontmatter
+fields) — the fleet prepares one worktree per name.
 
 ## Validation (where it runs, what it checks)
 

@@ -33,8 +33,23 @@ export function createPromptsSection(api: DreyPluginApi, reload: () => Promise<v
   const newBtn = iconButton(api, 'plus', 'New prompt');
   const folderBtn = iconButton(api, 'folder', 'Open the prompts folder');
   const reloadBtn = iconButton(api, 'refresh-cw', 'Reload from disk');
+  // Visible when the folder holds files but lacks shipped ones (req-72):
+  // the empty state has its own button, this one covers the seeded-long-ago
+  // vault that never saw a prompt Drey later shipped.
+  const restoreBtn = textButton("Add Drey's prompts", 'primary');
+  restoreBtn.hidden = true;
+  restoreBtn.addEventListener('click', () => {
+    restoreBtn.disabled = true;
+    void mutate(api, 'promptRestore').then(async (result) => {
+      restoreBtn.disabled = false;
+      if (!result.ok) {
+        setFoot(result.error ?? 'Not added', true);
+      }
+      await reload();
+    });
+  });
   const tools = el('span', 'tset-head-tools');
-  tools.append(newBtn, folderBtn, reloadBtn);
+  tools.append(restoreBtn, newBtn, folderBtn, reloadBtn);
   head.append(title, count, tools);
 
   const hint = el('p', 'section-hint');
@@ -329,6 +344,13 @@ export function createPromptsSection(api: DreyPluginApi, reload: () => Promise<v
         `The files in ${listing.folder ?? 'tickets/_meta/prompts/'}, as they are on disk. ` +
         'Saved when you leave the editor or press Save, one commit per save. A change reaches the next run, not one already running.';
       folderBtn.disabled = listing.folder === null;
+      const missing = listing.shipped.filter((ref) => !listing.entries.some((e) => e.ref === ref));
+      restoreBtn.hidden = n === 0 || missing.length === 0;
+      restoreBtn.textContent =
+        missing.length === listing.shipped.length
+          ? "Add Drey's prompts"
+          : `Add Drey's prompts (${missing.length} missing)`;
+      restoreBtn.title = missing.length > 0 ? `Adds ${missing.map((m) => `${m}.md`).join(', ')}` : '';
       if (n === 0) {
         selected = null;
         list.replaceChildren();

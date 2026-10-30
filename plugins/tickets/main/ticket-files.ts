@@ -93,7 +93,16 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
     issues.push({ level: 'warning', message: 'title is missing' });
   }
 
-  const repo = asText(obj['repo']);
+  const legacyRepo = asText(obj['repo']);
+  // req-72: the `repos:` list is the truth when present (primary first);
+  // legacy `repo:` reads as a one-entry list. Both set and different: the
+  // list wins, visibly.
+  const listed = asStringArray(obj['repos']);
+  const repos = listed.length > 0 ? listed : legacyRepo === null ? [] : [legacyRepo];
+  const repo = repos[0] ?? null;
+  if (listed.length > 0 && legacyRepo !== null && legacyRepo !== repo) {
+    issues.push({ level: 'noise', message: `repo: "${legacyRepo}" differs from the repos: list — repos: wins` });
+  }
   const worker = asText(obj['worker']);
 
   const rawPriority = asText(obj['priority']);
@@ -162,6 +171,7 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
       id: parts.stem,
       title,
       repo,
+      repos,
       worker,
       priority,
       rank,
@@ -186,6 +196,7 @@ function emptyMeta(stem?: string): TicketMeta {
     id: stem ?? null,
     title: null,
     repo: null,
+    repos: [],
     worker: null,
     priority: 'normal',
     rank: DEFAULT_RANK,
@@ -456,6 +467,12 @@ export interface HeaderPatch {
   readonly title?: string;
   readonly priority?: TicketPriority;
   readonly repo?: string;
+  /**
+   * The full work-repo list, primary first (req-72). One name (or none)
+   * writes only `repo:`; two or more keep `repo:` on the primary and
+   * write the `repos:` list beside it.
+   */
+  readonly repos?: readonly string[];
   readonly worker?: string;
 }
 
@@ -491,7 +508,7 @@ export function patchHeaderFields(block: string, patch: HeaderPatch): string {
     }
     doc.set('priority', patch.priority);
   }
-  if (patch.repo !== undefined) {
+  if (patch.repo !== undefined && patch.repos === undefined) {
     // `repo:` stays present and empty when cleared — the creation shape.
     const repo = patch.repo.trim();
     if (repo === '') {
@@ -500,6 +517,24 @@ export function patchHeaderFields(block: string, patch: HeaderPatch): string {
       doc.set('repo', empty);
     } else {
       doc.set('repo', repo);
+    }
+  }
+  if (patch.repos !== undefined) {
+    // req-72: the primary keeps the legacy `repo:` line (empty when
+    // cleared); two or more names carry the `repos:` list beside it.
+    const names = patch.repos.map((n) => n.trim()).filter((n) => n !== '');
+    const primary = names[0] ?? '';
+    if (primary === '') {
+      const empty = new Scalar(null);
+      empty.source = '';
+      doc.set('repo', empty);
+    } else {
+      doc.set('repo', primary);
+    }
+    if (names.length > 1) {
+      doc.set('repos', names);
+    } else {
+      removeKey(doc, 'repos');
     }
   }
   if (patch.worker !== undefined) {
@@ -518,7 +553,10 @@ export function patchHeaderFields(block: string, patch: HeaderPatch): string {
 export interface NewTicketInput {
   readonly id: string;
   readonly title: string;
+  /** The primary work repo; `repos[0]` when the ticket names more (req-72). */
   readonly repo: string | null;
+  /** Every work repo, primary first (req-72); written as `repos:` beside `repo:` when longer than one. */
+  readonly repos?: readonly string[];
   readonly priority: TicketPriority;
   readonly rank: number;
   readonly firstPhase: string;
@@ -531,7 +569,8 @@ export interface NewTicketInput {
 export function newTicketFileText(input: NewTicketInput): string {
   const stamp = formatUtcStamp(input.now);
   const title = yamlQuote(input.title);
-  const repo = input.repo ?? '';
+  const repos = (input.repos ?? []).map((r) => r.trim()).filter((r) => r !== '');
+  const repo = (repos[0] ?? input.repo ?? '').trim();
   const description = input.description.trim();
   const descBlock = description === '' ? '' : `${description}\n`;
   return [
@@ -539,6 +578,7 @@ export function newTicketFileText(input: NewTicketInput): string {
     `id: ${input.id}`,
     `title: ${title}`,
     `repo: ${repo}`,
+    ...(repos.length > 1 ? [`repos: [${repos.join(', ')}]`] : []),
     `priority: ${input.priority}`,
     `rank: ${input.rank}`,
     `branch: ${branchForTicket(input.id)}`,

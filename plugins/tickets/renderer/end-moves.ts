@@ -15,46 +15,41 @@ export interface EndMove {
   readonly toPhase: string;
 }
 
-/** True when the column's handover hands tickets to an agent pool (the
- *  same rule the dispatcher applies — shared/tickets' handover grammar). */
+/**
+ * True when the column hands the ticket to a machine — an agent pool or a
+ * CI handover — so the owner never dialogs there: the runner (or the
+ * pipeline) works it, the takeover tab is the machine's (req-72).
+ */
 function isAuto(phase: BoardColumn['phase']): boolean {
-  return parseHandover(phase.handover).mode === 'agent';
+  const mode = parseHandover(phase.handover).mode;
+  return mode === 'agent' || mode === 'ci';
 }
 
 /**
  * The interactive mode a column offers, or null when none does: the
- * pipeline's first automatic column plans ("Plan with agent"), the
- * owner's checkpoints — manual columns behind an automatic one — and
- * the last automatic column refine ("Refine with agent").
+ * pipeline's first automatic column plans ("Plan with agent"), every
+ * manual column between the first automatic one and the terminal refines
+ * ("Refine with agent") — the owner's columns are theirs to dialog in,
+ * wherever they sit (req-72; before, only the checkpoints behind an
+ * automatic column and the last automatic column offered it). The
+ * terminal column is where tickets end — no dialog to have there.
  */
 export function interactiveModeFor(phaseId: string, columns: readonly BoardColumn[]): InteractiveMode | null {
-  const autoIndexes = columns.map((c, i) => (isAuto(c.phase) ? i : -1)).filter((i) => i >= 0);
-  if (autoIndexes.length === 0) {
-    return null;
-  }
   const index = columns.findIndex((c) => c.phase.id === phaseId);
   if (index < 0) {
     return null;
   }
-  const first = autoIndexes[0]!;
-  const last = autoIndexes[autoIndexes.length - 1]!;
-  if (index === first) {
-    return 'plan';
-  }
-  // The terminal column is where tickets end — no dialog to have there,
-  // even though it sits behind an automatic one (a checkpoint by the
-  // machine's definition, never by use).
   if (index === columns.length - 1) {
     return null;
   }
-  const previousIsAuto = index > 0 && isAuto(columns[index - 1]!.phase);
-  if (!isAuto(columns[index]!.phase) && previousIsAuto) {
-    return 'refine'; // an owner checkpoint: the machine never pulls across it
+  const autoIndexes = columns.map((c, i) => (isAuto(c.phase) ? i : -1)).filter((i) => i >= 0);
+  if (autoIndexes[0] === index) {
+    return 'plan';
   }
-  if (index === last && last !== first) {
-    return 'refine'; // the last agent column (e.g. commit)
+  if (isAuto(columns[index]!.phase)) {
+    return null; // an automatic column: the runner works it, no dialog
   }
-  return null;
+  return 'refine';
 }
 
 /**
@@ -62,7 +57,7 @@ export function interactiveModeFor(phaseId: string, columns: readonly BoardColum
  * dialog finishes into the next column or, when the owner treated the
  * open points themselves, approves straight past their checkpoint; a
  * refine dialog goes on to the next column or back to the nearest
- * agent column for rework. Every move is an owner move — a transition,
+ * automatic column for rework. Every move is an owner move — a transition,
  * never a gate-checked fleet move.
  */
 export function interactiveEndMoves(mode: InteractiveMode, phaseId: string, columns: readonly BoardColumn[]): readonly EndMove[] {

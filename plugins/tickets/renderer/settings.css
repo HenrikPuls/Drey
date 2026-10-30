@@ -556,3 +556,90 @@
 .tset [hidden] {
   display: none !important;
 }
+
+/* --- Repositories (req-72): the _meta/repos.md registry -------------------- */
+
+.tset-repolist {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.tset-repo-entry {
+  border-bottom: 1px solid var(--border);
+}
+
+.tset-repo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  padding: 5px 8px;
+}
+
+.tset-repo-row:hover {
+  background: var(--hover-bg);
+}
+
+.tset-repo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.tset-repo-name {
+  font-family: var(--mono, monospace);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.tset-repo-meta {
+  font-size: 0.76rem;
+  color: var(--text-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tset-repo-tools {
+  display: flex;
+  gap: 4px;
+}
+
+.tset-repo-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+  padding: 12px 8px 14px;
+  background: var(--hover-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.tset-repo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tset-scan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 420px;
+  max-width: 640px;
+}
+
+.tset-scan-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.tset-scan-row:hover {
+  background: var(--hover-bg);
+}

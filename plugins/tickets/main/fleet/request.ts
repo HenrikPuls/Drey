@@ -38,6 +38,13 @@ export interface ComposeRunInput {
   /** Whether `nextPhaseId` claims (claim: true) — stamps the agent identity. */
   readonly nextPhaseClaims: boolean;
   readonly repo: RepoRef | null;
+  /**
+   * The ticket's further work repos (req-72), already resolved and
+   * primary-excluded by the caller — one worktree each on the same
+   * branch. A repo without a local path is refused here, like the
+   * primary's.
+   */
+  readonly extraRepos?: readonly RepoRef[];
   /** The prompt file's text, when the assignment names one (read by the caller). */
   readonly promptText: string | null;
   readonly defaultWorker: string;
@@ -97,6 +104,33 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
       error: `"${input.repo.name}" has no local path: in _meta/repos.md — the worker needs a checkout`,
     };
   }
+  // req-72: every extra repo needs a checkout too — the fleet prepares
+  // one worktree per repo before the run starts.
+  const extraRepos: {
+    name: string;
+    repoPath: string;
+    worktreePath: string;
+    baseRef: string | null;
+    links?: readonly string[];
+  }[] = [];
+  for (const extra of input.extraRepos ?? []) {
+    if (extra.name === input.repo.name) {
+      continue; // the primary twice would prepare one worktree twice
+    }
+    if (extra.path === null) {
+      return {
+        ok: false,
+        error: `"${extra.name}" has no local path: in _meta/repos.md — the ticket names it beside ${input.repo.name}`,
+      };
+    }
+    extraRepos.push({
+      name: extra.name,
+      repoPath: extra.path,
+      worktreePath: worktreePathFor(input.vaultPath, extra, input.card.id),
+      baseRef: extra.branch,
+      ...(extra.link !== undefined && extra.link.length > 0 ? { links: [...extra.link] } : {}),
+    });
+  }
   const acceptance = acceptanceCommands(input.ticketText);
   if (acceptance.length === 0 && input.structuralGateAllowed !== true && input.interactive === undefined) {
     return {
@@ -135,6 +169,9 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     acceptance,
     ticketFile: path.join(input.vaultPath, input.card.path),
     ...(input.repo.link !== undefined && input.repo.link.length > 0 ? { links: input.repo.link } : {}),
+    ...(extraRepos.length > 0
+      ? { extraRepos: extraRepos.map((r) => ({ name: r.name, worktreePath: r.worktreePath, base: r.baseRef })) }
+      : {}),
     repoInstructions: input.repoInstructions,
     diffStat: input.diffStat,
     gateFailure: input.gateFailure,
@@ -151,7 +188,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     branch,
     baseRef: input.repo.branch,
     ...(input.repo.link !== undefined && input.repo.link.length > 0 ? { links: input.repo.link } : {}),
-    ...(input.repo.link !== undefined && input.repo.link.length > 0 ? { links: input.repo.link } : {}),
+    ...(extraRepos.length > 0 ? { extraRepos } : {}),
     provider: assignment.provider,
     model: assignment.model,
     permissionMode: input.permissionMode,

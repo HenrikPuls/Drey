@@ -10,7 +10,7 @@
  * The renderer only ever sees BoardSnapshot payloads — parsing,
  * validation and YAML stay here.
  */
-import { shell } from 'electron';
+import { BrowserWindow, dialog, shell, type OpenDialogOptions } from 'electron';
 import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
@@ -25,8 +25,12 @@ import {
   type BoardSnapshot,
   type FolderStatus,
   type PipelinePhase,
+  type ProjectRef,
   type PromptEntry,
   type PromptListing,
+  type RepoCandidate,
+  type RepoRef,
+  type ReposListing,
   type TicketCard,
   type TicketPriority,
   TICKET_PRIORITIES,
@@ -35,11 +39,14 @@ import {
   assembleBoard,
   orderAfterInsert,
   parseOrderFile,
+  parseRepos,
   patchPipelinePhase,
   parsePipeline,
   pinsAfterDrop,
   removeIdFromPins,
   reorderPipelinePhases,
+  reposFileText,
+  reposProse,
   rewriteOrderSection,
 } from './ticket-board';
 import {
@@ -82,6 +89,7 @@ import {
   type FleetPools,
 } from './fleet/protocol';
 import { parseWorkerValue } from './fleet/assignment';
+import { scanRepoFolder } from './repos-scan';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
 const ORDER_PATH = 'tickets/_meta/order.md';
@@ -123,7 +131,7 @@ sparse on purpose so independent additions merge cleanly.
 const DEFAULT_REPOS = `---
 repos: {}
 ---
-Work repositories a ticket's \`repo:\` field may name. Example:
+Work repositories a ticket's \`repo:\`/\`repos:\` fields may name. Example:
 
   lariscus:
     url: https://dev.azure.com/org/project/_git/lariscus
@@ -479,7 +487,10 @@ class BoardService {
   createTicket(input: {
     title: string;
     priority: TicketPriority;
+    /** The primary work repo. */
     repo: string | null;
+    /** Every work repo, primary first (req-72); absent = just the primary. */
+    repos?: readonly string[];
     description: string;
   }): Promise<MutationResult> {
     return this.enqueue(async () => {
@@ -500,6 +511,7 @@ class BoardService {
         id,
         title: input.title,
         repo: input.repo,
+        ...(input.repos !== undefined ? { repos: input.repos } : {}),
         priority: input.priority,
         rank: 5000,
         firstPhase,
@@ -988,6 +1000,16 @@ class BoardService {
       const workingPhase = snap.pipeline.find((p) => p.id === phaseId) ?? null;
       const repo =
         card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card!.meta.repo) ?? null);
+      // req-72: the ticket's further repos, resolved like the primary's —
+      // an unknown name refuses the start (the board badges it already).
+      const missingExtra = card.meta.repos.find((name) => name !== card.meta.repo && !snap.repos.some((r) => r.name === name));
+      if (missingExtra !== undefined) {
+        return { ok: false, error: `${card.id} names repo "${missingExtra}", but it is not in _meta/repos.md` };
+      }
+      const extraRepos = card.meta.repos
+        .filter((name) => name !== card.meta.repo)
+        .map((name) => snap.repos.find((r) => r.name === name)!)
+        .filter((r) => r !== undefined);
       const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
       let prompt: string | null = null;
       if (input.interactive !== null) {
@@ -1050,6 +1072,7 @@ class BoardService {
         pushRemote: snap.pushRemote,
         nextPhaseClaims,
         repo,
+        extraRepos,
         promptText: prompt,
         defaultWorker: this.defaultWorker,
         permissionMode: input.permissionMode,
@@ -1188,9 +1211,32 @@ class BoardService {
         return { ok: false, error: outcome.error };
       }
 
+      // req-72: the further repos' worktrees follow (same branch, same
+      // rules) — a dirty extra counts as force-consented with the primary,
+      // a failure is a warning, never a failed action.
+      const warnings: string[] = [];
+      for (const name of card.meta.repos) {
+        if (name === repo.name) {
+          continue;
+        }
+        const extra = snap.repos.find((r) => r.name === name);
+        if (extra === undefined || extra.path === null) {
+          continue;
+        }
+        const extraOutcome = await removeWorktree(this.git, extra.path, worktreePathFor(vault.path, extra, card.id), {
+          force: input.force,
+          links: extra.link,
+        });
+        if (!extraOutcome.ok) {
+          warnings.push(
+            `${extra.name}: ${extraOutcome.dirty === true ? 'the worktree is dirty — not removed' : extraOutcome.error}`,
+          );
+        }
+      }
+
       // The owner's button: one action-only Log line, one commit.
       const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
-      let warning: string | null = null;
+      let warning: string | null = warnings.length > 0 ? `extra worktrees: ${warnings.join('; ')}` : null;
       try {
         const patched = patchTicketFile(text, {
           to: card.phase,
@@ -1200,7 +1246,10 @@ class BoardService {
           action: `worktree removed (${worktreePath})`,
         });
         await this.ctx.vault.write(card.path, patched, { vaultId: vault.id });
-        warning = await this.commit(vault, [card.path], `tickets: ${card.id} worktree removed`);
+        const commitNote = await this.commit(vault, [card.path], `tickets: ${card.id} worktree removed`);
+        if (commitNote !== null) {
+          warning = warning === null ? commitNote : `${warning} — ${commitNote}`;
+        }
         this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [card.path] });
       } catch (error) {
         warning = `the worktree was removed, but the Log line failed: ${messageOf(error)}`;
@@ -1519,6 +1568,127 @@ class BoardService {
     });
   }
 
+  /**
+   * The repositories settings listing (req-72): `_meta/repos.md`'s
+   * entries exactly as they parse, the file's path for display.
+   */
+  async listRepos(): Promise<ReposListing> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return { file: null, repos: [], error: null };
+    }
+    const text = await this.readOptional(vault.id, REPOS_PATH);
+    const parse = parseRepos(text);
+    return {
+      file: this.ctx.vault.resolveAssetPath(REPOS_PATH, { vaultId: vault.id }),
+      repos: parse.repos,
+      error: parse.error,
+    };
+  }
+
+  /**
+   * Writes `repos.md` from the settings page's entries (req-72): the
+   * frontmatter regenerated, the owner's prose kept, one commit.
+   */
+  saveRepos(repos: readonly RepoRef[]): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const names = new Set<string>();
+      for (const repo of repos) {
+        if (repo.name.trim() === '') {
+          return { ok: false, error: 'a repository needs a name' };
+        }
+        if (names.has(repo.name)) {
+          return { ok: false, error: `two repositories named "${repo.name}"` };
+        }
+        names.add(repo.name);
+        if (repo.url.trim() === '') {
+          return { ok: false, error: `"${repo.name}" needs a url` };
+        }
+      }
+      const before = await this.readOptional(vault.id, REPOS_PATH);
+      const text = reposFileText(repos, reposProse(before));
+      if (before === text) {
+        return { ok: true };
+      }
+      try {
+        await this.ctx.vault.write(REPOS_PATH, text, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, [REPOS_PATH], 'tickets: repos.md update');
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [REPOS_PATH] });
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /** The native directory picker behind "Add from folder" (req-72). */
+  async pickFolder(): Promise<{ ok: boolean; path?: string }> {
+    const options: OpenDialogOptions = {
+      title: 'Folder with repositories',
+      properties: ['openDirectory', 'createDirectory'],
+    };
+    const win = BrowserWindow.getFocusedWindow();
+    const outcome = win !== null ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+    const chosen = outcome.canceled ? undefined : outcome.filePaths[0];
+    return chosen === undefined ? { ok: true } : { ok: true, path: chosen };
+  }
+
+  /** Probes a folder for git repositories (req-72) — the "Add from folder" seeds. */
+  async scanRepos(folder: string): Promise<{ ok: true; candidates: readonly RepoCandidate[] } | { ok: false; error: string }> {
+    try {
+      const outcome = await scanRepoFolder(folder, (cwd, args) => this.git.run(cwd, args));
+      return { ok: true, candidates: outcome.candidates };
+    } catch (error) {
+      return { ok: false, error: `the scan failed: ${messageOf(error)}` };
+    }
+  }
+
+  /**
+   * Every registered vault that carries a board (req-72): the projects —
+   * one tickets repository each. The active one is what `detect()` picks:
+   * the configured vault when it has a board, else the first that does.
+   */
+  async listProjects(): Promise<readonly ProjectRef[]> {
+    const vaults = (await this.ctx.vault.listVaults()).filter((v) => v.exists);
+    const configured = await this.ctx.config.get<string>('vaultId');
+    const ordered =
+      configured === undefined
+        ? vaults
+        : [...vaults.filter((v) => v.id === configured), ...vaults.filter((v) => v.id !== configured)];
+    const projects: ProjectRef[] = [];
+    let activeSeen = false;
+    for (const vault of ordered) {
+      if ((await this.readOptional(vault.id, PIPELINE_PATH)) === null) {
+        continue;
+      }
+      const active = !activeSeen;
+      activeSeen = true;
+      projects.push({ id: vault.id, name: vault.name, path: vault.path, active });
+    }
+    return projects;
+  }
+
+  /** Makes another project's board the active one (req-72); one config key. */
+  async switchProject(id: string): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = (await this.ctx.vault.listVaults()).find((v) => v.id === id && v.exists);
+      if (vault === undefined) {
+        return { ok: false, error: 'no such vault' };
+      }
+      if ((await this.readOptional(id, PIPELINE_PATH)) === null) {
+        return { ok: false, error: `"${vault.name}" holds no tickets board — tickets/_meta/pipeline.md is missing` };
+      }
+      await this.ctx.config.set('vaultId', id);
+      this.announceChanged();
+      return { ok: true };
+    });
+  }
+
   /** Opens `_meta/prompts/` (or the tickets folder) in the OS file manager. */
   async openTicketsFolder(which: 'tickets' | 'prompts'): Promise<MutationResult> {
     const vault = await this.detect();
@@ -1822,7 +1992,7 @@ const plugin: MainPluginModule = {
     ctx.ipc.handle('board', () => board.refresh());
 
     ctx.ipc.handle('create', async (payload) => {
-      const p = payload as { title?: unknown; priority?: unknown; repo?: unknown; description?: unknown };
+      const p = payload as { title?: unknown; priority?: unknown; repo?: unknown; repos?: unknown; description?: unknown };
       const title = typeof p.title === 'string' ? p.title.trim() : '';
       if (title === '') {
         return { ok: false, error: 'the title is empty' };
@@ -1831,8 +2001,12 @@ const plugin: MainPluginModule = {
         ? (p.priority as TicketPriority)
         : 'normal';
       const repo = typeof p.repo === 'string' && p.repo.trim() !== '' ? p.repo.trim() : null;
+      const repos =
+        Array.isArray(p.repos) && p.repos.every((r): r is string => typeof r === 'string')
+          ? p.repos
+          : undefined;
       const description = typeof p.description === 'string' ? p.description : '';
-      return board.createTicket({ title, priority, repo, description });
+      return board.createTicket({ title, priority, repo, ...(repos !== undefined ? { repos } : {}), description });
     });
 
     ctx.ipc.handle('transition', async (payload) => {
@@ -1868,6 +2042,9 @@ const plugin: MainPluginModule = {
         ...(typeof raw['title'] === 'string' ? { title: raw['title'] } : {}),
         ...(typeof raw['priority'] === 'string' ? { priority: raw['priority'] as TicketPriority } : {}),
         ...(typeof raw['repo'] === 'string' ? { repo: raw['repo'] } : {}),
+        ...(Array.isArray(raw['repos']) && raw['repos'].every((r): r is string => typeof r === 'string')
+          ? { repos: raw['repos'] }
+          : {}),
         ...(typeof raw['worker'] === 'string' ? { worker: raw['worker'] } : {}),
       };
       try {
@@ -1941,6 +2118,55 @@ const plugin: MainPluginModule = {
     ctx.ipc.handle('openFolder', async (payload) => {
       const p = payload as { which?: unknown };
       return board.openTicketsFolder(p.which === 'prompts' ? 'prompts' : 'tickets');
+    });
+
+    // The repositories registry, edited from the settings page (req-72):
+    // the listing, its structured save, the folder picker and the scan
+    // behind "Add from folder".
+    ctx.ipc.handle('reposListing', () => board.listRepos());
+    ctx.ipc.handle('reposSave', async (payload) => {
+      const p = payload as { repos?: unknown };
+      if (!Array.isArray(p.repos)) {
+        return { ok: false, error: 'bad repos payload' };
+      }
+      const repos: RepoRef[] = [];
+      for (const raw of p.repos) {
+        const r = raw as Record<string, unknown>;
+        if (typeof r['name'] !== 'string' || typeof r['url'] !== 'string') {
+          return { ok: false, error: 'bad repos payload' };
+        }
+        const str = (key: string): string | null => (typeof r[key] === 'string' && (r[key] as string).trim() !== '' ? (r[key] as string).trim() : null);
+        repos.push({
+          name: r['name'].trim(),
+          url: r['url'].trim(),
+          branch: str('branch'),
+          policy: str('policy'),
+          path: str('path'),
+          worker: str('worker'),
+          worktrees: str('worktrees'),
+          ...(Array.isArray(r['link']) && r['link'].every((l): l is string => typeof l === 'string') && r['link'].length > 0 ? { link: r['link'] as string[] } : {}),
+        });
+      }
+      return board.saveRepos(repos);
+    });
+    ctx.ipc.handle('pickFolder', () => board.pickFolder());
+    ctx.ipc.handle('scanRepos', async (payload) => {
+      const p = payload as { folder?: unknown };
+      if (typeof p.folder !== 'string' || p.folder.trim() === '') {
+        return { ok: false, error: 'bad scan payload' };
+      }
+      return board.scanRepos(p.folder);
+    });
+
+    // The projects (req-72): the tickets vaults that carry a board, and
+    // the switch between them (one config key, the board follows).
+    ctx.ipc.handle('projects', () => board.listProjects());
+    ctx.ipc.handle('switchProject', async (payload) => {
+      const p = payload as { id?: unknown };
+      if (typeof p.id !== 'string') {
+        return { ok: false, error: 'bad switch payload' };
+      }
+      return board.switchProject(p.id);
     });
 
     // Sortable columns and the folder numbering (req-50).

@@ -5,7 +5,7 @@
  * paths, the specs feed it fixtures. Everything here is deterministic:
  * the same files always produce the same board (no stored state).
  */
-import { isCollection, isMap, parseDocument, type YAMLMap, type YAMLSeq } from 'yaml';
+import { isCollection, isMap, parseDocument, stringify, type YAMLMap, type YAMLSeq } from 'yaml';
 import { splitFrontmatter } from '../../../shared/frontmatter';
 import {
   parseHandover,
@@ -448,6 +448,57 @@ export function parseRepos(text: string | null): ReposParse {
 }
 
 /**
+ * The prose under `repos.md`'s frontmatter — the notes the owner keeps
+ * there. A file without a fence reads as the shipped default prose.
+ */
+export function reposProse(text: string | null): string {
+  if (text === null) {
+    return DEFAULT_REPOS_PROSE;
+  }
+  const { body, hadFence } = splitFrontmatter(text);
+  return hadFence && body.trim() !== '' ? body : DEFAULT_REPOS_PROSE;
+}
+
+const DEFAULT_REPOS_PROSE = `Work repositories a ticket's \`repos:\` field may name. The fleet never
+calls a host API — only plain git (ADR-0075); protection on \`main\` is
+the host's branch-policy feature, recorded here when configured.
+\`path\` is the local checkout the board's "Open work folder in
+terminal" opens.`;
+
+/**
+ * Writes `repos.md` from its entries (req-72, the settings page's save):
+ * the frontmatter regenerated from the list, the owner's prose kept.
+ * Optional keys are omitted when unset, so the file stays hand-readable.
+ */
+export function reposFileText(repos: readonly RepoRef[], prose: string): string {
+  const mapping: Record<string, Record<string, unknown>> = {};
+  for (const repo of repos) {
+    const entry: Record<string, unknown> = { url: repo.url };
+    if (repo.branch !== null) {
+      entry['branch'] = repo.branch;
+    }
+    if (repo.policy !== null) {
+      entry['policy'] = repo.policy;
+    }
+    if (repo.path !== null) {
+      entry['path'] = repo.path.replaceAll('\\', '/');
+    }
+    if (repo.worker !== null) {
+      entry['worker'] = repo.worker;
+    }
+    if (repo.worktrees !== null) {
+      entry['worktrees'] = repo.worktrees;
+    }
+    if (repo.link !== undefined && repo.link.length > 0) {
+      entry['link'] = [...repo.link];
+    }
+    mapping[repo.name] = entry;
+  }
+  const front = stringify({ repos: mapping }, { lineWidth: 0 }).trimEnd();
+  return `---\n${front}\n---\n${prose.trimEnd()}\n`;
+}
+
+/**
  * `link:` (req-56) — the checkout's git-ignored folders a fleet worktree
  * borrows instead of rebuilding (`.tools`, `node_modules`): one name or a
  * list, each relative to the repo root, never leaving it. A string is
@@ -643,12 +694,23 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
       continue; // a ticket-stemmed file inside _meta: ignore, don't column it.
     }
     const parsed = parseTicketFile(file.text, file.path);
-    if (parsed.meta.repo !== null && !repoNames.has(parsed.meta.repo)) {
-      parsed.issues.push({ level: 'warning', message: `repo "${parsed.meta.repo}" is not in _meta/repos.md` });
+    // req-72: every named repo must be known — the primary and the extra
+    // ones alike (a typo in the second entry would silently lose a repo).
+    for (const name of parsed.meta.repos) {
+      if (!repoNames.has(name)) {
+        parsed.issues.push({ level: 'warning', message: `repo "${name}" is not in _meta/repos.md` });
+      }
     }
     if (parsed.meta.parkedReason !== null && parts.phase !== 'inbox') {
       parsed.issues.push({ level: 'noise', message: 'parked ticket outside inbox — the fields are ignored here' });
     }
+    // The card's display worker: the first named repo that pins one (the
+    // primary usually decides; an extra repo's pin counts when the
+    // primary leaves it open).
+    const repoWorker =
+      parsed.meta.repos
+        .map((name) => reposParse.repos.find((r) => r.name === name)?.worker ?? null)
+        .find((worker) => worker !== null) ?? null;
     const card: AssemblyCard = {
       id: parts.stem,
       path: file.path,
@@ -658,7 +720,7 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
       worker: resolveCardWorker(
         parsed.meta.worker,
         phases.find((p) => p.id === parts.phase)?.handover ?? null,
-        reposParse.repos.find((r) => r.name === parsed.meta.repo)?.worker ?? null,
+        repoWorker,
         input.defaultWorker,
       ),
       issues: [...parsed.issues],
