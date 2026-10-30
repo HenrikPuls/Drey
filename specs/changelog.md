@@ -34,7 +34,7 @@ wrap onto a hidden second line) instead of being cut mid-word; the
 right group takes at most 60 % and cuts the message text with an
 ellipsis (full text in its tooltip). Also: the `fleetHeaderNode` doc
 comment sits on its function again. Manual: the status-bar sentence.
-**Not yet manually verified by the owner.**
+Owner-verified (signed off 2026-10-30).
 
 ### req-60 — Tickets panel: fleet status in the panel header
 
