@@ -20,6 +20,27 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-67 — Clean up worktrees sweeps the link-only leftover folders
+
+Owner request, outside the list (the status bar kept showing "9 legacy
+worktrees" after every cleanup). The folders under the legacy base
+(`<userData>/plugins/fleet/worktrees/drey-T-*`) were no longer
+registered with git and held nothing but the `.tools` / `node_modules`
+junctions an older removal left behind. `cleanWorktrees`
+(`plugins/tickets/main/fleet/worktree-clean.ts`) worked only from
+`git worktree list`, so it never saw them, while the status bar counted
+every folder. Now, after the per-repo prune, a sweep walks the bases in
+scope (the legacy base on the boot sweep; home + legacy on *Clean up
+worktrees…*): a top-level folder that is not registered, not protected
+(live run) and not a `.stale-*` / dot folder, and holds only links, gets
+its links removed (never followed) and a non-recursive `rmdir`. A folder
+with any real entry is not touched and stays listed. The report gains
+`leftovers`; the board's cleanup note and both log lines count them.
+FLEET.md's cleanup paragraph says so. Specs: `worktree-clean.spec.ts`
+(link-only folders swept with the link targets intact; real content,
+protected paths and stale move-asides kept; `legacyOnly` leaves the home
+base alone). **Not yet manually verified by the owner.**
+
 ### req-66 — Readable board issues, one toolbar row
 
 Owner request, outside the

@@ -92,6 +92,9 @@ export interface CleanupReport {
   readonly failed: readonly { readonly path: string; readonly error: string }[];
   /** Repo paths where `git worktree prune` ran. */
   readonly prunedRepos: readonly string[];
+  /** Unregistered folders under the bases that held nothing but links
+   *  (what an older removal left behind, req-67) — swept. */
+  readonly leftovers: readonly string[];
 }
 
 /**
@@ -116,6 +119,9 @@ export async function cleanWorktrees(git: GitSeam, input: CleanWorktreesInput): 
   const keptDirty: string[] = [];
   const failed: { path: string; error: string }[] = [];
   const prunedRepos: string[] = [];
+  const registered = new Set<string>();
+  const sweepBases = new Set<string>([legacyWorktreeBase(input.fleetRoot)]);
+  const links = new Set<string>();
   for (const repo of input.repos) {
     if (repo.path === null) {
       continue;
@@ -125,8 +131,11 @@ export async function cleanWorktrees(git: GitSeam, input: CleanWorktreesInput): 
         worktreeBaseFor(input.vaultPath, repo),
         legacyWorktreeBase(input.fleetRoot),
       ];
+    bases.forEach((base) => sweepBases.add(base));
+    (repo.link ?? []).forEach((link) => links.add(link));
     const baseForms = (await Promise.all(bases.map(matchForms))).flat();
     const repoForms = await matchForms(repo.path);
+    repoForms.forEach((form) => registered.add(form));
     let listing: string;
     try {
       listing = await git.run(repo.path, ['worktree', 'list', '--porcelain']);
@@ -141,19 +150,24 @@ export async function cleanWorktrees(git: GitSeam, input: CleanWorktreesInput): 
         continue;
       }
       const entryForms = await matchForms(entry.path);
+      const keep = (): void => entryForms.forEach((form) => registered.add(form));
       const isRepoCheckout = entryForms.some((form) => repoForms.includes(form));
       if (isRepoCheckout || !entryForms.some((form) => isUnderAnyBase(form, baseForms))) {
+        keep();
         continue;
       }
       if (entryForms.some((form) => protectedSet.has(form))) {
+        keep();
         continue;
       }
       const outcome = await removeWorktree(git, repo.path, entry.path, { links: repo.link });
       if (outcome.ok) {
         removed.push(entry.path);
       } else if (outcome.dirty === true) {
+        keep();
         keptDirty.push(entry.path);
       } else {
+        keep();
         failed.push({ path: entry.path, error: outcome.error });
       }
     }
@@ -163,9 +177,62 @@ export async function cleanWorktrees(git: GitSeam, input: CleanWorktreesInput): 
     } catch (error) {
       failed.push({ path: repo.path, error: `prune failed: ${messageOf(error)}` });
     }
-    await fsp.rmdir(legacyWorktreeBase(input.fleetRoot)).catch(() => undefined);
   }
-  return { removed, keptDirty, failed, prunedRepos };
+  const leftovers = await sweepLeftovers([...sweepBases], registered, protectedSet, [...links]);
+  await fsp.rmdir(legacyWorktreeBase(input.fleetRoot)).catch(() => undefined);
+  return { removed, keptDirty, failed, prunedRepos, leftovers };
+}
+
+/**
+ * Folders under the bases that git no longer knows and that hold
+ * nothing but links (req-67): what a removal left behind before
+ * `removeWorktree` unlinked first. The links go (never followed), then
+ * a non-recursive rmdir. A folder with any real entry is not touched —
+ * it stays listed as an orphan / legacy leftover. Protected paths and
+ * `.stale-*` / dot folders are skipped, as in `listOrphans`.
+ */
+async function sweepLeftovers(
+  bases: readonly string[],
+  registered: ReadonlySet<string>,
+  protectedSet: ReadonlySet<string>,
+  links: readonly string[],
+): Promise<readonly string[]> {
+  const swept: string[] = [];
+  for (const base of bases) {
+    const entries = await fsp.readdir(base, { withFileTypes: true }).catch(() => [] as Dirent[]);
+    for (const dirent of entries) {
+      if (!dirent.isDirectory() || dirent.name.startsWith('.') || dirent.name.includes('.stale-')) {
+        continue;
+      }
+      const full = path.join(base, dirent.name);
+      const forms = await matchForms(full);
+      if (forms.some((form) => registered.has(form) || protectedSet.has(form))) {
+        continue;
+      }
+      if (!(await holdsOnlyLinks(full))) {
+        continue;
+      }
+      await unlinkShared(full, links);
+      if (await fsp.rmdir(full).then(() => true, () => false)) {
+        swept.push(full);
+      }
+    }
+  }
+  return swept.sort();
+}
+
+async function holdsOnlyLinks(folder: string): Promise<boolean> {
+  const names = await fsp.readdir(folder).catch(() => null);
+  if (names === null) {
+    return false;
+  }
+  for (const name of names) {
+    const stat = await fsp.lstat(path.join(folder, name)).catch(() => null);
+    if (stat?.isSymbolicLink() !== true) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**

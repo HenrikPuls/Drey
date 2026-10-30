@@ -290,6 +290,71 @@ describe('cleanWorktrees (real git)', () => {
     expect(report.failed[0]!.error).toContain('worktree list failed');
     expect(report.prunedRepos).toEqual([repo]);
   });
+
+  describe('unregistered leftovers (req-67)', () => {
+    /** An unregistered folder holding a junction into the repo — what an
+     *  older removal left behind (`junction` is a dir symlink off win32). */
+    const leftoverAt = async (folder: string): Promise<string> => {
+      await fsp.mkdir(folder, { recursive: true });
+      await fsp.symlink(repo, path.join(folder, '.tools'), 'junction');
+      return folder;
+    };
+
+    it('sweeps link-only folders, never following the links', async () => {
+      const legacy = await leftoverAt(legacyWt('T-0007'));
+      const home = await leftoverAt(homeWt('T-0008'));
+      await fsp.mkdir(legacyWt('T-0009'), { recursive: true });
+
+      const report = await cleanWorktrees(fleetGit(), {
+        repos: [repoRef],
+        vaultPath: vault,
+        fleetRoot,
+        protectedPaths: [],
+      });
+      expect(report.leftovers.map(win).sort()).toEqual([win(legacy), win(home), win(legacyWt('T-0009'))].sort());
+      expect(report.removed).toEqual([]);
+      await expect(fsp.stat(legacyWorktreeBase(fleetRoot))).rejects.toThrow();
+      await expect(fsp.stat(home)).rejects.toThrow();
+      // The junction's target is untouched.
+      await expect(fsp.readFile(path.join(repo, 'file.txt'), 'utf8')).resolves.toBe('one\n');
+    });
+
+    it('keeps folders with real content, protected paths and stale move-asides', async () => {
+      const real = await leftoverAt(legacyWt('T-0001'));
+      await fsp.writeFile(path.join(real, 'notes.txt'), 'keep\n');
+      const guarded = await leftoverAt(legacyWt('T-0002'));
+      const stale = await leftoverAt(path.join(legacyWorktreeBase(fleetRoot), 'drey-T-0003.stale-20261019T010203'));
+
+      const report = await cleanWorktrees(fleetGit(), {
+        repos: [repoRef],
+        vaultPath: vault,
+        fleetRoot,
+        protectedPaths: [guarded],
+      });
+      expect(report.leftovers).toEqual([]);
+      await expect(fsp.readFile(path.join(real, 'notes.txt'), 'utf8')).resolves.toBe('keep\n');
+      await expect(fsp.lstat(path.join(real, '.tools'))).resolves.toBeDefined();
+      await expect(fsp.stat(guarded)).resolves.toBeDefined();
+      await expect(fsp.stat(stale)).resolves.toBeDefined();
+    });
+
+    it('leaves registered trees to git and the home base alone under legacyOnly', async () => {
+      const live = await addAt(legacyWt('T-0001'), 't/T-0001');
+      await fsp.writeFile(path.join(live, 'dirty.txt'), 'x\n');
+      const home = await leftoverAt(homeWt('T-0002'));
+
+      const report = await cleanWorktrees(fleetGit(), {
+        repos: [repoRef],
+        vaultPath: vault,
+        fleetRoot,
+        protectedPaths: [],
+        legacyOnly: true,
+      });
+      expect(report.keptDirty.map(win)).toEqual([win(live)]);
+      expect(report.leftovers).toEqual([]);
+      await expect(fsp.stat(home)).resolves.toBeDefined();
+    });
+  });
 });
 
 describe('listOrphans', () => {

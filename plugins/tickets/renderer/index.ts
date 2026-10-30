@@ -1145,7 +1145,12 @@ async function runWorktreesCleanup(): Promise<void> {
   let result: {
     ok?: boolean;
     error?: string;
-    report?: { removed: readonly string[]; keptDirty: readonly string[]; failed: readonly unknown[] };
+    report?: {
+      removed: readonly string[];
+      keptDirty: readonly string[];
+      failed: readonly unknown[];
+      leftovers?: readonly string[];
+    };
   };
   try {
     result = (await invokeBoard('worktreesCleanup', {})) as typeof result;
@@ -1159,6 +1164,7 @@ async function runWorktreesCleanup(): Promise<void> {
       r === undefined
         ? ''
         : `Worktrees: ${r.removed.length} removed` +
+            ((r.leftovers?.length ?? 0) > 0 ? `, ${r.leftovers?.length} leftover folder(s) cleared` : '') +
             (r.keptDirty.length > 0 ? `, ${r.keptDirty.length} kept dirty` : '') +
             (r.failed.length > 0 ? `, ${r.failed.length} failed` : ''),
       r !== undefined && (r.keptDirty.length > 0 || r.failed.length > 0) ? 'warn' : 'ok',
