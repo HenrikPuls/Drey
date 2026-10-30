@@ -287,7 +287,13 @@ budget) · `ciBackoff`.
   master `halted`? column `held`? cooldown active? token budget exhausted
   (`tokensUsed` vs day)? ticket claimed, carries a `run` stamp, has
   validation errors, or — most common — **no backticked acceptance criteria**,
-  which the machine gate refuses to run. A candidate queued behind
+  which the machine gate refuses to run. Since T-0050 also: the ticket
+  is **blocked** — `blocked-by:` names ids that have not reached the
+  last phase, and the dispatcher skips it by design; the log says
+  `dispatch holds <id>: blocked by <ids> — the blockers must reach the
+  terminal phase first` (an id missing from the board blocks too, and
+  warns on the card). It dispatches by itself once every blocker
+  reaches the last phase. A candidate queued behind
   something says so (`dispatch waits … no free <column> worker slot yet`,
   or `… <column>'s dispatch of <id> was refused — the queue cannot
   advance` when a refused start parks the queue; the refusal itself is

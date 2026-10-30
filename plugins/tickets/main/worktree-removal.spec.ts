@@ -14,6 +14,7 @@ const meta = (over: Partial<TicketMeta> = {}): TicketMeta => ({
   claimedAt: null,
   run: null,
   references: [],
+  blockedBy: [],
   parkedReason: null,
   parkedAt: null,
   entered: {},
@@ -27,6 +28,8 @@ const card = (over: Partial<TicketMeta> = {}): TicketCard => ({
   meta: meta(over),
   pinned: false,
   worker: 'opencode',
+  blocked: [],
+  blocks: [],
   issues: [],
 });
 

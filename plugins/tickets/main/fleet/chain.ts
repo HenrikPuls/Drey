@@ -113,9 +113,14 @@ export interface PlannedDispatch {
   readonly pool: WorkerProviderId | null;
 }
 
-/** A card the machine may take: unclaimed, unblemished, not already running. */
+/** A card the machine may take: unclaimed, unblemished, not already
+ *  running, not blocked (T-0050 — a blocked ticket never enters a
+ *  worker pool until its blockers reach the terminal phase). */
 export function dispatchable(card: TicketCard, busyTickets: ReadonlySet<string>): boolean {
   if (busyTickets.has(card.id) || card.meta.run !== null || card.meta.claimedBy !== null) {
+    return false;
+  }
+  if (card.blocked.length > 0) {
     return false;
   }
   return !card.issues.some((issue) => issue.level === 'error');

@@ -139,12 +139,15 @@ describe('composeRunRequest carries the home rule', () => {
       claimedAt: null,
       run: null,
       references: [],
+      blockedBy: [],
       parkedReason: null,
       parkedAt: null,
       entered: {},
     },
     pinned: false,
     worker: 'opencode',
+    blocked: [],
+    blocks: [],
     issues: [],
   };
 

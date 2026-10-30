@@ -187,12 +187,55 @@ How. Filled in the plan phase; must end with the acceptance criteria.
 | `claimed-at` | UTC timestamp | Set with `claimed-by`. |
 | `run` | map `{pid, started-at, stream}` | The live run (ADR-0075 run control): stamped by the fleet runner at start, cleared at end — at most one live run per ticket. `stream` names the **run id**; the stream file itself lives machine-local under `<userData>/fleet/runs/<id>/stream.jsonl`, so the ticket stays portable across the machines the repo syncs to. Readers validate the shape. |
 | `references` | list of strings | Optional. Ticket ids (`t/T-0041`), URLs, vault paths. |
+| `blocked-by` | list of ticket ids | Optional (T-0050). `blocked-by: [T-0048]` — the ticket waits until every referenced ticket reaches the pipeline's terminal phase. Blocked is **derived** on every board assembly, never stored. See [Dependencies](#dependencies-blocked-by). |
 | `parked-reason` | string | With `parked-at`; the ticket sits in inbox while parked (circuit breaker, budgets — ADR-0075). Any transition out of inbox clears both. The circuit breaker writes them when it parks a column's next candidate (M85); re-prioritizing revives the ticket. |
 | `parked-at` | UTC timestamp | See `parked-reason`. |
 
 Unknown keys are preserved on rewrite and reported as noise (not an
 error). Human edits never break the file: what parses as YAML reads;
 what does not is a badge.
+
+### Dependencies (`blocked-by`)
+
+A first-class dependency field (T-0050): "do not start before X is
+done". The order it replaces used to live in prose, invisible to the
+board and the fleet.
+
+- **Canonical syntax**: flow list with comma + space —
+  `blocked-by: [T-0048]`, `blocked-by: [T-0048, T-0049]`. The parser
+  accepts every YAML list shape (block style, any spacing); a
+  hand-written no-space list (`[T-0048,T-0049]`) is normalized
+  cosmetically on the next machine rewrite, while the canonical form
+  round-trips **byte-stable** through a transition's frontmatter
+  rewrite. An empty list reads as an absent field.
+- **Satisfied phase**: one global rule — a reference is satisfied
+  exactly when the referenced ticket sits in the pipeline's terminal
+  (last) phase. No per-reference override.
+- **Derived, never stored**: every board assembly recomputes each
+  card's `blocked` (the open blockers, unknown ids included) and the
+  inverse `blocks` (the currently-blocked dependents). Both hide when
+  empty — a done blocker shows nothing. A blocker in an unknown
+  directory resolves by its stripped phase id, never terminal, so it
+  blocks. `tickets/archive/` is not read: a blocker deleted, renamed
+  or archived resolves to no board ticket — warning, and the dependent
+  stays blocked (never a silent unblock).
+- **Validation**: an id that resolves to no board ticket is a warning
+  on the dependent (`blocked-by names T-0048, which is not on the
+  board`) and stays blocking. Self-reference and cycles are one error
+  per member naming the cycle (`blocked-by cycle: T-0001 -> T-0002 ->
+  T-0001`; self = `T-0001 -> T-0001`) — cyclic members also count as
+  blocked. Duplicate blocker ids (themselves already an error) resolve
+  to the first occurrence in column order.
+- **Enforcement**: exactly the machine gates — the dispatcher never
+  picks a blocked ticket, the manual "Run agent…" start refuses with
+  the open blockers named, and the ci sweep skips it (a blocked ticket
+  does not move through a `ci` column either). Human moves stay free;
+  a drag into an agent column asks for confirmation naming the open
+  blockers (the owner is the final authority). The board shows
+  `blocked by <ids>` / `blocks <ids>` chips plus an optional
+  "hide blocked" view filter; ordering is never touched. The drift
+  pass (normalization) never enforces blocked-ness — a file move is an
+  owner move.
 
 ### Body sections
 
@@ -400,6 +443,22 @@ column; the board still renders), the fleet runner before every action
 8. `order.md` sections reference known phases and live ids.
 9. Leaving `plan-review` without acceptance criteria = issue on the
    ticket (the board shows it; the runner enforces it from M84).
+10. `blocked-by` resolution (T-0050): ids resolve against the board's
+    columns only — never `tickets/archive/` — and a satisfied reference
+    is one sitting in the terminal phase. An unknown id (deleted,
+    renamed, archived blocker) is a **warning** that keeps the dependent
+    blocked (`blocked-by names T-0048, which is not on the board` —
+    never a silent unblock). Self-reference and cycles are one
+    **error** per member naming the cycle (`blocked-by cycle: T-0001 ->
+    T-0002 -> T-0001`; self = `T-0001 -> T-0001`); the board still
+    renders, and cyclic members count as blocked. A duplicate blocker
+    id resolves to the first occurrence in column order (the duplicate
+    itself is already an error per check 1).
+10. `blocked-by` entries resolve against the board's columns (T-0050):
+   an unknown id = warning and stays blocking (never a silent
+   unblock); self-reference and cycles = errors naming the cycle; a
+   reference is satisfied only in the terminal phase — a blocker in an
+   unknown directory blocks. The archive is never consulted.
 
 A validation issue never blocks rendering and never blocks a human
 transition (a warning shows); it blocks an agent action.

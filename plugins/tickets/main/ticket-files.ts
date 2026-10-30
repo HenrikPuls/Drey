@@ -131,6 +131,7 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
 
   const run = parseRun(obj['run'], issues);
   const references = asStringArray(obj['references']);
+  const blockedBy = parseBlockedBy(obj['blocked-by'], issues);
   const parkedReason = asText(obj['parked-reason']);
   const parkedAt = asText(obj['parked-at']);
 
@@ -167,6 +168,7 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
       claimedAt,
       run,
       references,
+      blockedBy,
       parkedReason,
       parkedAt,
       entered,
@@ -188,10 +190,32 @@ function emptyMeta(stem?: string): TicketMeta {
     claimedAt: null,
     run: null,
     references: [],
+    blockedBy: [],
     parkedReason: null,
     parkedAt: null,
     entered: {},
   };
+}
+
+/**
+ * `blocked-by` (T-0050): a list of ticket ids, kept exactly as written —
+ * resolution and id findings belong to the dependency pass, not the
+ * parser. An unreadable shape warns and reads as absent (visible, so
+ * never a silent unblock); non-string entries warn and are dropped.
+ */
+function parseBlockedBy(value: unknown, issues: TicketIssue[]): string[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    issues.push({ level: 'warning', message: 'blocked-by is not a list — ignored' });
+    return [];
+  }
+  const ids = value.filter((item): item is string => typeof item === 'string' && item.trim() !== '');
+  if (ids.length !== value.length) {
+    issues.push({ level: 'warning', message: 'blocked-by has a non-string entry — dropped' });
+  }
+  return ids;
 }
 
 function parseRun(value: unknown, issues: TicketIssue[]): TicketRun | null {

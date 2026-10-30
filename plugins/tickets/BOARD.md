@@ -108,6 +108,16 @@ Discipline that keeps the repo clean:
   cleanup). Archived tickets are invisible on the board; reviving is a
   move back into a phase folder; final deletion inside `archive/` is
   the owner's manual act — and the owner's alone.
+- **A blocked ticket waits by itself** (T-0050): a ticket with
+  `blocked-by: [T-00xx]` in its frontmatter is blocked while any
+  referenced ticket has not reached the last phase — the board badges
+  it, the fleet refuses to pick or run it, and nothing needs doing to
+  keep it waiting. Moving the blocker to `done` unblocks it on the
+  next refresh. The owner may still move a blocked ticket anywhere (a
+  drag into a worker column asks for confirmation); an id that names
+  no board ticket — deleted, renamed, or in `archive/` — is a warning
+  and keeps the ticket blocked, never a silent unblock. Removing the
+  dependency is a frontmatter edit, the owner's.
 - The board picks the moves up on its next refresh; the chain
   daemon's master switch is irrelevant for manual columns.
 
