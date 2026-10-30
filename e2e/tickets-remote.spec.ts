@@ -221,7 +221,7 @@ test('refines a section, keeps the draft through a conflict, and edits the heade
   expect(errors).toEqual([]);
 });
 
-test('renders markdown in the ticket view and jumps to the run it starts (R8)', async ({ page }) => {
+test('renders markdown in the ticket view and jumps to the run it starts (R9)', async ({ page }) => {
   const errors: string[] = [];
   await pairedPage(page, errors);
   await page.goto(`http://127.0.0.1:${PORT}/#ticket/T-0055`);

@@ -20,6 +20,59 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-66 R9 — Tickets remote: markdown in the reading surfaces, Run agent jumps to the run
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (ADR-0084). Basic markdown renders where the phone/iPad client
+reads ticket and worker text, and starting a run opens it:
+
+- **One canonical inline parser** — `parseReplyInline`, `ReplySpan`
+  and `splitRow` moved verbatim from `renderer/transcript-text.ts`
+  into `plugins/tickets/shared/markdown.ts`; the desk renderer imports
+  them (behaviour unchanged), the client buys its bold/italic/`code`
+  spans from the same source (share, don't copy).
+- **Block model** (`remote/model.ts`, breaking for the client-internal
+  `Block` union): `blocksOf` additionally reads pipe tables (header
+  row + `---` rule + body rows, cells via `splitRow`), `---` rules
+  and in-section `####`+ headings; `p` keeps its space-joined
+  soft-break text. A lone table-rule line stays a paragraph.
+- **DOM builder** (`remote/markdown.ts`): `markdownBlocks` /
+  `renderMarkdown` build the blocks as nodes through `h()` and
+  `textContent` only — never `innerHTML`, ticket and worker text is
+  untrusted (pinned by a literal `<img onerror>` spec case). The
+  ticket view (and the iPad detail pane) renders through it, keeping
+  the `.box`/`.box.done`/`.li-log` chrome and the Log tab's dotless
+  look; the transcript's `text` and `result` rows render their
+  markdown (the result's `---`/`**✓ Turn finished**` included) while
+  `step`/`you`/`thinking`/`setup`/`error` stay plain — desk parity.
+  Tables sit in an `overflow-x` wrapper so they are visible on a
+  phone; the rendered container owns whitespace (the rows'
+  `pre-wrap` would double-space it).
+- **Run agent jumps to the run**: the primary button POSTs
+  `/api/runs` and, on `ok`, switches to `#run/<runId>` (`#runs` when
+  a host omits the id); a refusal or network error toasts the same
+  text `ctx.act` shows. The success toast is dropped — the view
+  switch is the feedback.
+- Found by the e2e round: the iPad drag test failed on the untouched
+  base here — the detail pane's reveal centers the selected column
+  and pushed the source card off screen, so the press landed outside
+  the viewport (verified against a pristine R6 build). The drags now
+  scroll the source card into view before anything is measured, and
+  the last scroll waits out the reorder's strip rebuild; no assertion
+  changed.
+
+Numbered R9 because T-0054 (images on the phone) built first and
+claimed R8.
+
+Specs: `plugins/tickets/shared/markdown.spec.ts` (moved cases),
+`remote/model.spec.ts` (the new block kinds),
+`remote/markdown.spec.ts` (jsdom: spans, table DOM, checkbox + inline
+mix, no-HTML), `e2e/tickets-remote.spec.ts` (rendered strong/em/code/
+table; after Run agent the hash is `#run/run-2`, the title
+`T-0050 · Run`, the transcript's bold visible, Back returns to the
+ticket). Docs: docs/05 §5.0 (takeover transcript + remote client
+rows), manual "The board from a phone or tablet".
+
 ### req-66 R6 — Tickets remote: the iPad board
 
 **Not yet manually verified by the owner** (press-and-hold drag with a
