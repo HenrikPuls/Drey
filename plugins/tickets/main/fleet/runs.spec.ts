@@ -590,6 +590,9 @@ describe('RunSupervisor', () => {
     const started = await sup.start(request({ ticketRelPath: rel }));
     const runId = (started as { run: { id: string } }).run.id;
     const fire = adapter.starts[0]!.onEvent;
+    // Rapid-fire on purpose: two events, no settling between them — the
+    // fold must serialize them in arrival order (the req-67 clock-freeze
+    // flake used to let the older idle event land last).
     fire({ ts: '2026-10-17T12:10:00Z', kind: 'usage', turn: 'idle' });
     fire({ ts: '2026-10-17T12:12:00Z', kind: 'usage', turn: 'busy' });
     await vi.waitFor(() => expect(sup.get(runId)?.execSince).toBe('2026-10-17T12:12:00Z'));

@@ -20,6 +20,35 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — fleet: run events fold in arrival order (the req-67 clock-freeze flake)
+
+Follow-up of req-67. Its "the clock freezes when the run ends" spec was
+flaky — 1 in ~3 full-suite rounds red on an otherwise untouched checkout
+(seen during the req-65 merge). `RunSupervisor.onEvent` folded the req-67
+busy spans after the event's stream append, so two events fired
+back-to-back could resume out of order and the older event's fold landed
+last-writer on the record: the newer busy stamp was lost (`execSince:
+null` where the busy stamp was expected). A real provider fires the same
+bursts (a usage event immediately followed by `turn: 'idle'` + waiting),
+so the race could regress a live run's `turn`, `waiting` and token
+counters, not just a test. Now:
+
+- **`runs.ts`**: the async half of an event — stream append, fold,
+  record write, the waiting Log line — queues per run
+  (`LiveRun.eventQueue`); events fold strictly in arrival order. The
+  synchronous prefix (`agentDone`, the telemetry fold) stays at arrival,
+  as the racing-exit comment there requires.
+- **`runs.ts`**: `persist` snapshots at call time and queues the
+  `run.json` write per run (`LiveRun.writeQueue`) — an older snapshot
+  can no longer land after a newer one on fs-timing luck (the record is
+  what a restart's `adopt` reads).
+
+The spec keeps its rapid-fire pair as the regression test (a comment now
+says why), and two events can no longer append to `stream.jsonl` out of
+order either. Specs: `plugins/tickets/main/fleet/runs.spec.ts` (the
+rapid-fire pair; the fleet suite 314 tests green, the flaky spec 20
+consecutive rounds green). Owner-verified (signed off 2026-10-30).
+
 ### req-70 — The ticket card's context menu, regrouped
 
 Owner request, outside the list (2026-10-30). The card menu had grown to some twenty rows — up to eight
