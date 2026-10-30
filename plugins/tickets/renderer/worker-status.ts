@@ -168,14 +168,34 @@ export function spanClock(ms: number): string {
 }
 
 /**
+ * The run's elapsed clock (req-67): its working time — the busy spans the
+ * runner closed plus the open one at `nowMs`. Waits for the owner (req-64),
+ * a standing held worker and the time after the run's end do not tick.
+ * A record without `execMs` (pre-req-67, or a provider that never reports
+ * a turn) falls back to the wall clock since the start, clamped at the end.
+ */
+export function execClockMs(run: RunInfo, nowMs: number): number {
+  if (run.execMs !== undefined) {
+    const from = run.execSince === undefined || run.execSince === null ? NaN : Date.parse(run.execSince);
+    return run.execMs + (Number.isNaN(from) ? 0 : Math.max(0, nowMs - from));
+  }
+  const started = Date.parse(run.startedAt);
+  if (Number.isNaN(started)) {
+    return 0;
+  }
+  const ended = run.endedAt === null || run.endedAt === undefined ? NaN : Date.parse(run.endedAt);
+  return Math.max(0, (Number.isNaN(ended) ? nowMs : Math.min(nowMs, ended)) - started);
+}
+
+/**
  * The run chip of a ticket with a live run (T-0051):
  * `▶ running · 2 · 45k/1.2k · 03:41` — state, turns (the prompt plus
- * every steer), this run's own tokens in/out, elapsed since it started.
+ * every steer), this run's own tokens in/out, the working time so far
+ * (req-67: waits for the owner and standing do not tick).
  * The token segment waits for the first usage event that reported any.
  */
 export function runChipLine(run: RunInfo, nowMs: number): string {
-  const started = Date.parse(run.startedAt);
-  const elapsed = Number.isNaN(started) ? 0 : Math.max(0, nowMs - started);
+  const elapsed = execClockMs(run, nowMs);
   const tokens =
     run.tokensIn > 0 || run.tokensOut > 0 ? ` · ${formatTokens(run.tokensIn)}/${formatTokens(run.tokensOut)}` : '';
   return `▶ ${run.state} · ${run.steerCount + 1}${tokens} · ${spanClock(elapsed)}`;

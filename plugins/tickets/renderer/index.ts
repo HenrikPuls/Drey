@@ -47,6 +47,7 @@ import {
   CONTEXT_WARN,
   contextFill,
   contextLabel,
+  execClockMs,
   fleetSummary,
   formatTokens,
   lanesOfColumn,
@@ -421,7 +422,7 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
       `tickets-chip tickets-chip-run${waiting !== null ? ' tickets-chip-waiting' : ''}`,
       waiting !== null ? '? waits for you' : runChipLine(live, Date.now()),
     );
-    runChip.title = `run ${live.id} (${live.provider}) — ${live.state}, turn ${live.steerCount + 1}, ${formatTokens(live.tokensIn)} in / ${formatTokens(live.tokensOut)} out, ${spanClock(Date.now() - (Date.parse(live.startedAt) || Date.now()))} so far; open the card menu to watch, steer or stop`;
+    runChip.title = `run ${live.id} (${live.provider}) — ${live.state}, turn ${live.steerCount + 1}, ${formatTokens(live.tokensIn)} in / ${formatTokens(live.tokensOut)} out, ${spanClock(execClockMs(live, Date.now()))} working so far; open the card menu to watch, steer or stop`;
     if (waiting !== null) {
       runChip.title = `run ${live.id} ${waiting.kind === 'question' ? 'asks' : 'needs your approval'}: ${waiting.text} — open the run to answer`;
     }
@@ -1823,7 +1824,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   contextBar.append(contextFillEl);
   contextMetric.node.insertBefore(contextBar, contextMetric.value);
   const tokensMetric = metric('Tokens', '');
-  const elapsedMetric = metric('Elapsed', 'Time since the run started');
+  const elapsedMetric = metric('Elapsed', 'Time the worker spent working — waits for you and standing do not count');
   metricsRow.append(turnMetric.node, contextMetric.node, tokensMetric.node, elapsedMetric.node);
   const controls = el('span', 'tickets-takeover-controls');
   const iconButton = (icon: string, label: string, title: string, onClick: () => void): HTMLButtonElement => {
@@ -2244,8 +2245,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
         'Tokens this run sent to the model (in, the cached share in brackets) and got back (out)',
         ...telemetryParts(run).map((part) => part.replace(/^ctx /, 'last turn context ')),
       ].join('\n');
-      const started = Date.parse(run.startedAt);
-      elapsedMetric.value.textContent = spanClock(Number.isNaN(started) ? 0 : Math.max(0, Date.now() - started));
+      elapsedMetric.value.textContent = spanClock(execClockMs(run, Date.now()));
       transcript.setWorktree(run.worktreePath);
     }
     resumeBtn.hidden = !(run !== null && !active && run.sessionRef !== null);

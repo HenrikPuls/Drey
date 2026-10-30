@@ -63,8 +63,22 @@ one means moving it back to the roadmap with a new justification.
   raised in the feature-request list with the owner's own reservation;
   works against the distraction-free goal (2026-10-12, proposal pending
   the owner's confirmation).
+- **Bookmark management and sync** (browser tab, ADR-0042) — dropped
+  with the owner (2026-10-30, ticket T-0020): scope creep for a Markdown
+  hub; the web clipper covers the real need.
+- **Routing to to-dos** ("seamless transitions between content and
+  tasks") — dropped with the owner (2026-10-30, ticket T-0021): too
+  vague to build; the assistant is already the task and navigation
+  surface (milestone 57), Jira is excluded (req-17).
 
 ## Won't do (decided against, kept for the record)
+
+- **Daily template follows `templates.dir`** — the daily note stays
+  seeded from the literal `templates/daily.md` (owner decision
+  2026-10-30, ticket T-0019): that is the documented behavior
+  (`frontmatter-schema.md`, manual); following the setting would need a
+  migration for vaults whose edited `templates/daily.md` would otherwise
+  be ignored.
 
 - **Per-column worker slots** (`workers:` in `pipeline.md`, M85) — and
   keeping the key as a per-column cap or a reserved minimum. Decided with

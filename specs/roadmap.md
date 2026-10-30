@@ -59,7 +59,7 @@ owner's verification round for 1–81 closed 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 87; latest requirement id: req-66),
+highest used (latest: milestone 87; latest requirement id: req-67),
 the update check's positive answer is inline text — req-43 and req-44
 were owner requests outside the list, shipped and owner-verified in
 the same step).
@@ -192,19 +192,6 @@ rest are kept so they still match `docs/11`.
 
 ### Needs an owner decision
 
-- **Should the daily template follow `templates.dir`?** The daily note
-  is seeded from the literal `templates/daily.md`, also when the template
-  library folder (`templates.dir`) points elsewhere. That is what
-  `frontmatter-schema.md` and the manual describe, so it is not a defect
-  (checked for A4). Following the setting would need a migration for
-  vaults whose edited `templates/daily.md` would otherwise be ignored.
-  Proposed: leave as is.
-- **Bookmark management and sync** (browser tab, ADR-0042 has none).
-  Proposed: drop — scope creep for a Markdown hub; the web clipper covers
-  the real need.
-- **Routing to to-dos** ("seamless transitions between content and
-  tasks"). Too vague to build. The assistant is already the task and
-  navigation surface (milestone 57); Jira is excluded. Specify or drop.
 - **`copilot-web`** stays excluded (fragile prototype); the req-29
   remainder below is therefore `copilot-cli` only.
 

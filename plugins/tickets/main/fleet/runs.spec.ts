@@ -551,6 +551,133 @@ describe('RunSupervisor', () => {
     expect(sup.get(runId)?.contextWindow).toBe(1_000_000);
   });
 
+  // --- the elapsed clock's busy spans (req-67) -----------------------
+
+  it('the clock presumes working from the start and closes its span when a wait begins', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    const fire = adapter.starts[0]!.onEvent;
+    fire({ ts: '2026-10-17T12:05:00Z', kind: 'usage', turn: 'busy' });
+    await vi.waitFor(() => expect(sup.get(runId)?.execSince).toBe('2026-10-17T12:00:00.000Z'));
+
+    fire({ ts: '2026-10-17T12:10:00Z', kind: 'usage', waiting: { kind: 'question', text: 'Which API?' } });
+    await vi.waitFor(() => expect(sup.get(runId)).toMatchObject({ execMs: 10 * 60_000, execSince: null }));
+
+    fire({ ts: '2026-10-17T12:15:00Z', kind: 'usage', turn: 'busy', waiting: null });
+    await vi.waitFor(() => expect(sup.get(runId)?.execSince).toBe('2026-10-17T12:15:00Z'));
+    expect(sup.get(runId)?.execMs).toBe(10 * 60_000);
+  });
+
+  it('a standing held worker pauses the clock the same way, and startup counts', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    const fire = adapter.starts[0]!.onEvent;
+    fire({ ts: '2026-10-17T12:10:00Z', kind: 'usage', turn: 'idle' });
+    await vi.waitFor(() => expect(sup.get(runId)).toMatchObject({ execMs: 10 * 60_000, execSince: null }));
+
+    fire({ ts: '2026-10-17T12:12:00Z', kind: 'usage', turn: 'busy' });
+    await vi.waitFor(() => expect(sup.get(runId)?.execSince).toBe('2026-10-17T12:12:00Z'));
+    expect(sup.get(runId)?.execMs).toBe(10 * 60_000);
+  });
+
+  it('the clock freezes when the run ends, on the record as well', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    const fire = adapter.starts[0]!.onEvent;
+    fire({ ts: '2026-10-17T12:10:00Z', kind: 'usage', turn: 'idle' });
+    fire({ ts: '2026-10-17T12:12:00Z', kind: 'usage', turn: 'busy' });
+    await vi.waitFor(() => expect(sup.get(runId)?.execSince).toBe('2026-10-17T12:12:00Z'));
+
+    await sup.stop(runId, 'enough');
+    await vi.waitFor(async () => {
+      expect(sup.get(runId)?.state).toBe('stopped');
+      const stored = JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', runId, 'run.json'), 'utf8')) as {
+        info: RunInfo;
+      };
+      expect(stored.info).toMatchObject({ execMs: 10 * 60_000, execSince: null });
+    });
+  });
+
+  it('an adopted run detached mid-busy is frozen at its last stamp', async () => {
+    const rel = await writeTicket();
+    const dir = path.join(fleetRoot, 'runs', 'R-ex');
+    await fsp.mkdir(dir, { recursive: true });
+    const info: RunInfo = {
+      id: 'R-ex',
+      ticketId: 'T-0001',
+      provider: 'opencode',
+      state: 'running',
+      pid: null,
+      startedAt: '2026-10-17T10:00:00Z',
+      endedAt: null,
+      sessionRef: 'ses_ex',
+      tokensIn: 0,
+      tokensOut: 0,
+      costUsd: null,
+      lastActivity: '2026-10-17T11:30:00Z',
+      steerCount: 0,
+      lastSteerRung: null,
+      worktreePath: 'x',
+      branch: 't/T-0001',
+      turn: 'busy',
+      execMs: 30 * 60_000,
+      execSince: '2026-10-17T11:00:00Z',
+      gateFailure: null,
+    };
+    await fsp.writeFile(path.join(dir, 'run.json'), JSON.stringify({ request: request({ ticketRelPath: rel }), info }), 'utf8');
+    const { sup } = supervisor();
+    await sup.adopt();
+    expect(sup.get('R-ex')).toMatchObject({ execMs: 60 * 60_000, execSince: null });
+  });
+
+  it('a re-attached busy run resumes its clock at the next busy report, without the unwatched gap', async () => {
+    const rel = await writeTicket();
+    const dir = path.join(fleetRoot, 'runs', 'R-busy');
+    await fsp.mkdir(dir, { recursive: true });
+    const info: RunInfo = {
+      id: 'R-busy',
+      ticketId: 'T-0001',
+      provider: 'opencode',
+      state: 'running',
+      pid: process.pid,
+      startedAt: '2026-10-17T11:00:00Z',
+      endedAt: null,
+      sessionRef: 'ses_busy',
+      tokensIn: 0,
+      tokensOut: 0,
+      costUsd: null,
+      lastActivity: '2026-10-17T11:30:00Z',
+      steerCount: 0,
+      lastSteerRung: null,
+      worktreePath: 'x',
+      branch: 't/T-0001',
+      turn: 'busy',
+      execMs: 20 * 60_000,
+      execSince: '2026-10-17T11:10:00Z',
+      gateFailure: null,
+    };
+    await fsp.writeFile(path.join(dir, 'run.json'), JSON.stringify({ request: request({ ticketRelPath: rel }), info }), 'utf8');
+    await fsp.writeFile(
+      path.join(dir, 'attach.json'),
+      JSON.stringify({ address: 'http://127.0.0.1:50003', password: 'pw', pid: process.pid, pidStartedMs: null }),
+      'utf8',
+    );
+    const { sup, adapter } = supervisor({ exec: probeExec(os.tmpdir()) });
+    await sup.adopt();
+    // The unwatched gap closed the span at the record's last stamp.
+    expect(sup.get('R-busy')).toMatchObject({ execMs: 40 * 60_000, execSince: null });
+
+    adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:05:00Z', kind: 'usage', turn: 'busy' });
+    await vi.waitFor(() => expect(sup.get('R-busy')?.execSince).toBe('2026-10-17T12:05:00Z'));
+    expect(sup.get('R-busy')?.execMs).toBe(40 * 60_000);
+  });
+
   it('resume ends a detached run and resumes its session in a new run', async () => {
     const rel = await writeTicket();
     const dir = path.join(fleetRoot, 'runs', 'R-gone');

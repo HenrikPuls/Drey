@@ -192,6 +192,29 @@ function telemetryOf(info: RunInfo): RunTelemetry | undefined {
 /** What a takeover call answers. */
 export type TakeoverOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
+/**
+ * Whether the run is mid-turn — actually working (req-67). A turn the
+ * provider has not reported yet presumes working (a run starts busy);
+ * a wait for the owner (req-64) is never working.
+ */
+function isExecuting(info: RunInfo): boolean {
+  return (info.waiting ?? null) === null && (info.turn ?? 'busy') === 'busy';
+}
+
+/**
+ * Closes the run's open working span at `at` (req-67): the elapsed clock
+ * freezes from here on. No-op while nothing is open — standing, ended,
+ * or a record that predates the exec fields.
+ */
+function closeExecSpan(info: RunInfo, at: string): RunInfo {
+  if (info.execSince === undefined || info.execSince === null) {
+    return info;
+  }
+  const from = Date.parse(info.execSince);
+  const closed = Number.isNaN(from) ? 0 : Math.max(0, Date.parse(at) - from);
+  return { ...info, execMs: (info.execMs ?? 0) + closed, execSince: null };
+}
+
 /** The largest file the takeover tab attaches. */
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const ATTACHMENT_DIR = '.drey-attachments';
@@ -315,7 +338,8 @@ export class RunSupervisor {
           continue;
         }
         const detached: RunInfo = {
-          ...stored.info,
+          // req-67: freeze the clock at the last stamp the dead runner left.
+          ...closeExecSpan(stored.info, stored.info.lastActivity),
           state: 'detached',
           endedAt: this.stamp(),
           gateFailure: 'the runner restarted while the worker lived on; watch or resume it manually',
@@ -396,8 +420,10 @@ export class RunSupervisor {
     const pidStartedMs = typeof attach.pidStartedMs === 'number' ? attach.pidStartedMs : undefined;
     const startedAtMs = Date.parse(stored.info.startedAt);
     const wasDetached = stored.info.state === 'detached';
+    // req-67: the worker was unwatched while the runner was down — the open
+    // span closes at its last stamp; the next busy report opens a new one.
     const info: RunInfo = {
-      ...stored.info,
+      ...closeExecSpan(stored.info, stored.info.lastActivity),
       state: 'running',
       pid,
       endedAt: null,
@@ -483,8 +509,9 @@ export class RunSupervisor {
       await killTreeGuarded(stored.info.pid, this.exec, handover.pidStartedMs).catch(() => undefined);
     }
     const held = stored.info.held === true;
+    // req-67: the unwatched gap does not tick — see reattach.
     const run: LiveRun = {
-      info: { ...stored.info, state: 'running', pid: null, endedAt: null, gateFailure: null },
+      info: { ...closeExecSpan(stored.info, stored.info.lastActivity), state: 'running', pid: null, endedAt: null, gateFailure: null },
       request: stored.request,
       currentRelPath: stored.request.ticketRelPath,
       currentPhase: stored.request.phase,
@@ -1228,7 +1255,7 @@ export class RunSupervisor {
     run.telemetry.apply(event);
     await this.appendStream(run, event);
     const telemetry = run.telemetry.get();
-    run.info = {
+    let next: RunInfo = {
       ...run.info,
       lastActivity: event.ts,
       ...(event.activity !== undefined && event.activity !== '' ? { activity: event.activity } : {}),
@@ -1248,6 +1275,26 @@ export class RunSupervisor {
       tokensBeforeFirstWrite: telemetry.tokensBeforeFirstWrite,
       ...(event.kind === 'error' ? { lastError: event.text ?? 'error' } : {}),
     };
+    // req-67: fold the elapsed clock's busy spans — a flip closes or opens
+    // one at this event's stamp, so waits and standing do not tick.
+    const was = isExecuting(run.info);
+    const busy = isExecuting(next);
+    if (busy) {
+      if (!was) {
+        // The turn (re)started: a new span opens here.
+        next = { ...next, execSince: event.ts };
+      } else if (run.info.execSince === undefined) {
+        // A record adopted mid-busy with no tracking yet: presumed working since the start.
+        next = { ...next, execSince: next.startedAt };
+      } else if (run.info.execSince === null) {
+        // Re-attached mid-busy after the restart closed the old span: resume here.
+        next = { ...next, execSince: event.ts };
+      }
+    } else if (was) {
+      const from = run.info.execSince === undefined ? run.info.startedAt : run.info.execSince;
+      next = closeExecSpan({ ...next, execSince: from }, event.ts);
+    }
+    run.info = next;
     if (event.kind === 'error') {
       this.deps.log(`run ${run.info.id}: ${event.text ?? 'error'}`);
     }
@@ -1570,10 +1617,15 @@ export class RunSupervisor {
   }
 
   private async finish(run: LiveRun, state: RunState): Promise<void> {
+    const stamp = this.stamp();
+    // req-67: the clock freezes at the run's end — a busy state the provider
+    // never reported counts from the run's start, an open span from its stamp.
+    const last = run.info;
+    const open = isExecuting(last) && last.execSince === undefined ? { ...last, execSince: last.startedAt } : last;
     run.info = {
-      ...run.info,
+      ...closeExecSpan(open, stamp),
       state,
-      endedAt: this.stamp(),
+      endedAt: stamp,
       pid: null,
     };
     if (TERMINAL.includes(state)) {
