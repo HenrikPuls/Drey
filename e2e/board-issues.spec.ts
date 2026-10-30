@@ -38,11 +38,11 @@ test('the board issues are a header chip that unfolds readable messages', async 
   await expect(filter).toHaveCount(1);
 
   // One line: the header's title and the controls share a row.
-  const title = page.locator('.head', { has: page.locator('.tickets-head') }).locator('.title');
+  // Centred on it, too: the editor's `.tickets-head` rule once leaked in here.
+  const title = page.locator('.head', { has: page.locator('.tickets-panel-head') }).locator('.title');
   const titleBox = (await title.boundingBox())!;
   const filterBox = (await filter.boundingBox())!;
-  expect(filterBox.y).toBeLessThan(titleBox.y + titleBox.height);
-  expect(filterBox.y + filterBox.height).toBeGreaterThan(titleBox.y);
+  expect(Math.abs(titleBox.y + titleBox.height / 2 - (filterBox.y + filterBox.height / 2))).toBeLessThan(2);
   await page.screenshot({ path: test.info().outputPath('board-issues-folded.png') });
 
   await chip.click();

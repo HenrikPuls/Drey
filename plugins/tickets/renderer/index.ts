@@ -898,7 +898,7 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       actions.append(newButton, refreshButton);
       // The chain's master switch — meaningful wherever a tickets board
       // exists; the runner side decides whether anything is automatic.
-      host.classList.add('tickets-head');
+      host.classList.add('tickets-panel-head');
       host.append(fleet.node, viewControls.node, actions, masterControlNode(api), headerMenuButton(api));
       return () => {
         fleet.dispose();

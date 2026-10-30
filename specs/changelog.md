@@ -30,10 +30,14 @@ group (`boardViewControlsNode` in `plugins/tickets/renderer/index.ts`,
 between the fleet status and New / Refresh), repainted with every board
 update; the filter is an ordinary `.icon-btn` whose pressed state is
 `aria-pressed`. The unfolded issue list still opens above the columns.
-The `.tickets-toolbar` row and its CSS are gone.
+The `.tickets-toolbar` row and its CSS are gone. Fixed on the way: the
+header's controls sat about 4px above the title since req-62, whose
+editor ticket header (`ticket-header.css`) also used the class
+`.tickets-head` — `display: block` and a 14px bottom padding leaked into
+the panel header. The panel header's host is now `.tickets-panel-head`.
 
 Specs: `e2e/board-issues.spec.ts` now finds filter and chip in the
-header and checks they share the title's line.
+header and checks they are centred on the title's line (within 2px).
 
 ### req-65 — Interactive mode at the plan phase and every checkpoint
 
