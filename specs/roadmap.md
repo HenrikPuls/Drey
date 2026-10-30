@@ -60,7 +60,8 @@ manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
 highest used (latest: milestone 85; latest requirement id: req-64 (a worker that needs
-the owner asks and waits); req-65 is reserved for interactive mode),
+the owner asks and waits); req-65 is reserved for interactive mode,
+req-66 for the tickets remote),
 the update check's positive answer is inline text — req-43 and req-44
 were owner requests outside the list, shipped and owner-verified in
 the same step).
@@ -135,6 +136,35 @@ across the checkpoint after a green gate). An optional `plan:
 interactive` field keeps the dispatcher from pulling a ticket the owner
 wants to plan in a dialog. Open design point: which prompt and which
 end moves a checkpoint's interactive run uses.
+
+**req-66 — Tickets remote: the board from a phone or tablet**
+(owner request, outside the list, 2026-10-30; ADR-0084). Move, run,
+take over, answer and refine tickets from an iPhone or iPad on the
+couch — the tickets plugin only, not Drey on the device (that stays
+excluded as req-10). An HTTP gateway in the tickets plugin's main side
+behind a host-neutral `TicketsRemotePort`, so a later standalone or
+VS Code host serves the same client. Loopback by default, reached
+through Tailscale Serve (HTTPS); a LAN mode is opt-in with a warning.
+Off by default; QR pairing, per-device tokens (hashes only), revoke,
+Host/Origin check, bypass runs refused remotely. Owner decisions D1–D5
+of 2026-10-30 confirmed. R1 (command layer + port) shipped — see the
+changelog. Remaining steps, each shipped on its own:
+
+- **R2 — gateway + pairing + settings**: `node:http` server under
+  `plugins/tickets/main/remote/`, static client with CSP, SSE on
+  `board-changed` / `fleet-changed`, pairing QR, device list,
+  Settings → Tickets → Remote access.
+- **R3 — phone client**: Needs you, Board (one column, phase chips,
+  swipe to the next phase), Ticket, Move sheet, Capture, claim/takeover,
+  Run agent; home-screen web app. Usable from here on.
+- **R4 — runs on the phone**: transcript, question forms, permissions,
+  steer, stop, chain master and column play/hold.
+- **R5 — refine**: section editing with a revision guard (409 on a
+  changed file); a ticket open and dirty in a Drey tab is refused
+  unless the SDK reaches the open-docs bridge (milestone 78).
+- **R6 — iPad layout**: kanban with long-press drag, detail split.
+- **R7 (optional, its own decision)** — Web Push: needs HTTPS and
+  Apple's push service, a further cloud exception.
 
 ### Next
 

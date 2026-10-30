@@ -29,7 +29,10 @@ one means moving it back to the roadmap with a new justification.
 - **req-9** — OCR remainder (iPad): on-device handwriting recognition.
   Desktop half shipped (`ocr` plugin, vision-capable LLM, ADR-0050).
 - **req-21** — dataview.js support.
-- **req-10** — iPad/iPhone access via Tailscale.
+- **req-10** — iPad/iPhone access via Tailscale: Drey itself running on
+  the device (the editor, the vault, the assistant). Remote *control* of
+  the tickets board from a phone, with Drey running on the desk, is a
+  different thing and is on the roadmap as req-66 (owner, 2026-10-30).
 - **req-11** — audio recording in interview mode (local Whisper; Win+H
   as likely first step).
 - **Job Queue (generic, multi-consumer)** — background processes with

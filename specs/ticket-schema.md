@@ -183,7 +183,7 @@ How. Filled in the plan phase; must end with the acceptance criteria.
 | `rank` | integer 0–999999 | Default `5000`. Fine ordering inside derived order. |
 | `branch` | `t/<id>` | Written by machine writers; validated against the rule; rule wins. |
 | `entered-<phase>` | UTC timestamp | One per phase ever entered; holds the **most recent** entry time into that phase (first entry lives in git history). `entered-inbox` exists from creation. |
-| `claimed-by` | `<who>@<host>` (agents append `:<session>`) | Set when the ticket enters a claim-flagged phase (default: build); `owner@<host>` for the human. Takeover overwrites and logs the old value. |
+| `claimed-by` | `<who>@<host>` (agents append `:<session>`) | Set when the ticket enters a claim-flagged phase (default: build); `owner@<host>` for the human — `owner@<device>` (e.g. `owner@ipad`) when the action came from a paired remote device (req-66: the device name lowercased, reduced to `[a-z0-9-]`, `remote` when empty). Takeover overwrites and logs the old value. |
 | `claimed-at` | UTC timestamp | Set with `claimed-by`. |
 | `run` | map `{pid, started-at, stream}` | The live run (ADR-0075 run control): stamped by the fleet runner at start, cleared at end — at most one live run per ticket. `stream` names the **run id**; the stream file itself lives machine-local under `<userData>/fleet/runs/<id>/stream.jsonl`, so the ticket stays portable across the machines the repo syncs to. Readers validate the shape. |
 | `references` | list of strings | Optional. Ticket ids (`t/T-0041`), URLs, vault paths. |

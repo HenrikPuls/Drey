@@ -29,7 +29,6 @@ import {
   type PromptListing,
   type TicketCard,
   type TicketPriority,
-  TICKET_PRIORITIES,
 } from '../shared/tickets';
 import {
   assembleBoard,
@@ -56,6 +55,23 @@ import { blockedRefusal } from './blocked';
 import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, type DriftDetection } from './normalize';
 import { openTerminalAt } from './open-terminal';
+import {
+  chainResult,
+  parseAnswer,
+  parseChainColumn,
+  parseChainColumnStop,
+  parseChainMaster,
+  parseClaim,
+  parseCreate,
+  parsePermission,
+  parseReorder,
+  parseSend,
+  parseStartRun,
+  parseStopRun,
+  parseTicketId,
+  parseTransition,
+  parseUnarchive,
+} from './commands';
 import { TicketsGit, type RepoLocation } from './tickets-git';
 import { createFleetMcpTools } from './mcp-tools';
 import { loadShippedPrompts } from './default-prompts';
@@ -77,7 +93,6 @@ import {
   normalizeFleetCaps,
   normalizeFleetHandover,
   normalizeFleetPools,
-  questionAnswersOf,
   WORKER_PROVIDERS,
   type FleetPools,
 } from './fleet/protocol';
@@ -474,6 +489,8 @@ class BoardService {
 
   createTicket(input: {
     title: string;
+    /** Who acts (req-66): `owner@<device>` from the remote; default the desk owner. */
+    actor?: string;
     priority: TicketPriority;
     repo: string | null;
     description: string;
@@ -500,7 +517,7 @@ class BoardService {
         rank: 5000,
         firstPhase,
         now: new Date(),
-        actor: OWNER,
+        actor: input.actor ?? OWNER,
         description: input.description,
       });
       try {
@@ -516,6 +533,7 @@ class BoardService {
 
   transition(input: {
     id: string;
+    actor?: string;
     from: string;
     to: string;
     index: number | null;
@@ -556,7 +574,7 @@ class BoardService {
           to: input.to,
           from: input.from,
           now: new Date(),
-          actor: OWNER,
+          actor: input.actor ?? OWNER,
         });
       } catch (error) {
         return { ok: false, error: messageOf(error) };
@@ -637,7 +655,7 @@ class BoardService {
    * it as `archive -> <phase>`. Final deletion is the owner's manual
    * act inside `archive/`.
    */
-  archive(input: { id: string }): Promise<MutationResult> {
+  archive(input: { id: string; actor?: string }): Promise<MutationResult> {
     return this.enqueue(async () => {
       const vault = await this.detect();
       if (vault === null) {
@@ -662,7 +680,7 @@ class BoardService {
           to: 'archive',
           from: null,
           now: new Date(),
-          actor: OWNER,
+          actor: input.actor ?? OWNER,
           action: 'archived',
         });
       } catch (error) {
@@ -717,7 +735,7 @@ class BoardService {
    * move (decision 7). The board itself shows nothing in archive/; the
    * file is read directly.
    */
-  unarchive(input: { id: string; to: string }): Promise<MutationResult> {
+  unarchive(input: { id: string; to: string; actor?: string }): Promise<MutationResult> {
     return this.enqueue(async () => {
       const vault = await this.detect();
       if (vault === null) {
@@ -741,7 +759,7 @@ class BoardService {
           to: input.to,
           from: 'archive',
           now: new Date(),
-          actor: OWNER,
+          actor: input.actor ?? OWNER,
         });
       } catch (error) {
         return { ok: false, error: messageOf(error) };
@@ -892,7 +910,7 @@ class BoardService {
     });
   }
 
-  setClaim(input: { id: string; mode: 'takeover' | 'release' }): Promise<MutationResult> {
+  setClaim(input: { id: string; mode: 'takeover' | 'release'; actor?: string }): Promise<MutationResult> {
     return this.enqueue(async () => {
       const found = await this.findCard(input.id);
       if (found === null) {
@@ -900,7 +918,7 @@ class BoardService {
       }
       const { vault, card, text } = found;
       const previous = card.meta.claimedBy;
-      if (input.mode === 'takeover' && previous === OWNER) {
+      if (input.mode === 'takeover' && previous === (input.actor ?? OWNER)) {
         return { ok: false, error: 'you already hold this claim' };
       }
       if (input.mode === 'release' && previous === null) {
@@ -912,12 +930,12 @@ class BoardService {
           to: card.phase,
           from: null,
           now: new Date(),
-          actor: OWNER,
+          actor: input.actor ?? OWNER,
           action:
             input.mode === 'takeover'
               ? `claim takeover${previous !== null ? ` (was ${previous})` : ''}`
               : 'claim release',
-          ...(input.mode === 'takeover' ? { claimBy: OWNER } : { releaseClaim: true }),
+          ...(input.mode === 'takeover' ? { claimBy: input.actor ?? OWNER } : { releaseClaim: true }),
         });
       } catch (error) {
         return { ok: false, error: messageOf(error) };
@@ -1793,30 +1811,13 @@ const plugin: MainPluginModule = {
     ctx.ipc.handle('board', () => board.refresh());
 
     ctx.ipc.handle('create', async (payload) => {
-      const p = payload as { title?: unknown; priority?: unknown; repo?: unknown; description?: unknown };
-      const title = typeof p.title === 'string' ? p.title.trim() : '';
-      if (title === '') {
-        return { ok: false, error: 'the title is empty' };
-      }
-      const priority = TICKET_PRIORITIES.includes(p.priority as TicketPriority)
-        ? (p.priority as TicketPriority)
-        : 'normal';
-      const repo = typeof p.repo === 'string' && p.repo.trim() !== '' ? p.repo.trim() : null;
-      const description = typeof p.description === 'string' ? p.description : '';
-      return board.createTicket({ title, priority, repo, description });
+      const cmd = parseCreate(payload);
+      return cmd.ok ? board.createTicket(cmd.value) : cmd;
     });
 
     ctx.ipc.handle('transition', async (payload) => {
-      const p = payload as { id?: unknown; from?: unknown; to?: unknown; index?: unknown };
-      if (typeof p.id !== 'string' || typeof p.from !== 'string' || typeof p.to !== 'string') {
-        return { ok: false, error: 'bad transition payload' };
-      }
-      return board.transition({
-        id: p.id,
-        from: p.from,
-        to: p.to,
-        index: typeof p.index === 'number' && p.index >= 0 ? Math.floor(p.index) : null,
-      });
+      const cmd = parseTransition(payload);
+      return cmd.ok ? board.transition(cmd.value) : cmd;
     });
 
     // The ticket header in the editor (req-62): it shows the buffer's
@@ -1850,27 +1851,18 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('reorder', async (payload) => {
-      const p = payload as { phase?: unknown; id?: unknown; index?: unknown };
-      if (typeof p.phase !== 'string' || typeof p.id !== 'string' || typeof p.index !== 'number') {
-        return { ok: false, error: 'bad reorder payload' };
-      }
-      return board.reorder({ phase: p.phase, id: p.id, index: Math.floor(p.index) });
+      const cmd = parseReorder(payload);
+      return cmd.ok ? board.reorder(cmd.value) : cmd;
     });
 
     ctx.ipc.handle('unpin', async (payload) => {
-      const p = payload as { id?: unknown };
-      if (typeof p.id !== 'string') {
-        return { ok: false, error: 'bad unpin payload' };
-      }
-      return board.unpin({ id: p.id });
+      const cmd = parseTicketId(payload, 'unpin');
+      return cmd.ok ? board.unpin(cmd.value) : cmd;
     });
 
     ctx.ipc.handle('claim', async (payload) => {
-      const p = payload as { id?: unknown; mode?: unknown };
-      if (typeof p.id !== 'string' || (p.mode !== 'takeover' && p.mode !== 'release')) {
-        return { ok: false, error: 'bad claim payload' };
-      }
-      return board.setClaim({ id: p.id, mode: p.mode });
+      const cmd = parseClaim(payload);
+      return cmd.ok ? board.setClaim(cmd.value) : cmd;
     });
 
     // The settings dialog's writer: one phase's pool keys, one commit (M85).
@@ -1932,21 +1924,15 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('archive', async (payload) => {
-      const p = payload as { id?: unknown };
-      if (typeof p.id !== 'string') {
-        return { ok: false, error: 'bad archive payload' };
-      }
-      return board.archive({ id: p.id });
+      const cmd = parseTicketId(payload, 'archive');
+      return cmd.ok ? board.archive(cmd.value) : cmd;
     });
 
     // T-0042: a move out of tickets/archive/ performed as the board
     // treatment (archive -> <phase> stamp, Log, one commit).
     ctx.ipc.handle('unarchive', async (payload) => {
-      const p = payload as { id?: unknown; to?: unknown };
-      if (typeof p.id !== 'string' || typeof p.to !== 'string') {
-        return { ok: false, error: 'bad unarchive payload' };
-      }
-      return board.unarchive({ id: p.id, to: p.to });
+      const cmd = parseUnarchive(payload);
+      return cmd.ok ? board.unarchive(cmd.value) : cmd;
     });
 
     // T-0042: "Remove worktree" on _worktrees/<id> (dormant until T-0044
@@ -1967,39 +1953,18 @@ const plugin: MainPluginModule = {
     }));
 
     ctx.ipc.handle('fleetStart', async (payload) => {
-      const p = payload as { id?: unknown; worker?: unknown; permissionMode?: unknown; handover?: unknown };
-      if (typeof p.id !== 'string') {
-        return { ok: false, error: 'bad fleet start payload' };
-      }
-      const handover =
-        p.handover === 'fresh' || p.handover === 'resume' || p.handover === 'resume-compact' || p.handover === 'auto'
-          ? p.handover
-          : null;
-      return board.startRun({
-        ticketId: p.id,
-        workerChoice: typeof p.worker === 'string' && p.worker.trim() !== '' ? p.worker.trim() : null,
-        permissionMode: p.permissionMode === 'bypass' ? 'bypass' : 'accept-edits',
-        handover,
-      });
+      const cmd = parseStartRun(payload);
+      return cmd.ok ? board.startRun(cmd.value) : cmd;
     });
 
     ctx.ipc.handle('fleetStop', async (payload) => {
-      const p = payload as { runId?: unknown; reason?: unknown };
-      if (typeof p.runId !== 'string') {
-        return { ok: false, error: 'bad fleet stop payload' };
-      }
-      return fleet.stop(
-        p.runId,
-        typeof p.reason === 'string' && p.reason.trim() !== '' ? p.reason.trim() : null,
-      );
+      const cmd = parseStopRun(payload);
+      return cmd.ok ? fleet.stop(cmd.value.runId, cmd.value.reason) : cmd;
     });
 
     ctx.ipc.handle('fleetSend', async (payload) => {
-      const p = payload as { runId?: unknown; text?: unknown };
-      if (typeof p.runId !== 'string' || typeof p.text !== 'string' || p.text.trim() === '') {
-        return { ok: false, error: 'bad fleet send payload' };
-      }
-      return fleet.send(p.runId, p.text.trim());
+      const cmd = parseSend(payload);
+      return cmd.ok ? fleet.send(cmd.value.runId, cmd.value.text) : cmd;
     });
 
     ctx.ipc.handle('fleetAttach', async (payload) => {
@@ -2022,20 +1987,13 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('fleetPermission', async (payload) => {
-      const p = payload as { runId?: unknown; decision?: unknown };
-      if (typeof p.runId !== 'string' || (p.decision !== 'once' && p.decision !== 'always' && p.decision !== 'reject')) {
-        return { ok: false, error: 'bad fleet permission payload' };
-      }
-      return fleet.answerPermission(p.runId, p.decision);
+      const cmd = parsePermission(payload);
+      return cmd.ok ? fleet.answerPermission(cmd.value.runId, cmd.value.decision) : cmd;
     });
 
     ctx.ipc.handle('fleetAnswer', async (payload) => {
-      const p = payload as { runId?: unknown; answers?: unknown };
-      const answers = questionAnswersOf(p.answers);
-      if (typeof p.runId !== 'string' || answers === null) {
-        return { ok: false, error: 'bad fleet answer payload' };
-      }
-      return fleet.answerQuestion(p.runId, answers);
+      const cmd = parseAnswer(payload);
+      return cmd.ok ? fleet.answerQuestion(cmd.value.runId, cmd.value.answers) : cmd;
     });
 
     ctx.ipc.handle('fleetStream', async (payload) => {
@@ -2070,36 +2028,21 @@ const plugin: MainPluginModule = {
     ctx.ipc.handle('chainStatus', async () => fleet.chainStatus());
 
     ctx.ipc.handle('chainMaster', async (payload) => {
-      const p = payload as { mode?: unknown };
-      if (p.mode !== 'run' && p.mode !== 'halted') {
-        return { ok: false, error: 'the master mode is "run" or "halted"' };
-      }
-      const status = await fleet.setMaster(p.mode);
-      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
+      const cmd = parseChainMaster(payload);
+      return cmd.ok ? chainResult(await fleet.setMaster(cmd.value.mode)) : cmd;
     });
 
     ctx.ipc.handle('chainColumn', async (payload) => {
-      const p = payload as { phase?: unknown; mode?: unknown };
-      if (typeof p.phase !== 'string' || (p.mode !== 'playing' && p.mode !== 'held')) {
-        return { ok: false, error: 'bad chain column payload' };
-      }
-      const status = await fleet.setColumn(p.phase, p.mode);
-      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
+      const cmd = parseChainColumn(payload);
+      return cmd.ok ? chainResult(await fleet.setColumn(cmd.value.phase, cmd.value.mode)) : cmd;
     });
 
     ctx.ipc.handle('chainColumnStop', async (payload) => {
-      const p = payload as { phase?: unknown };
-      if (typeof p.phase !== 'string') {
-        return { ok: false, error: 'bad chain column payload' };
-      }
-      const status = await fleet.stopColumn(p.phase);
-      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
+      const cmd = parseChainColumnStop(payload);
+      return cmd.ok ? chainResult(await fleet.stopColumn(cmd.value.phase)) : cmd;
     });
 
-    ctx.ipc.handle('chainAbort', async () => {
-      const status = await fleet.abortAll();
-      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
-    });
+    ctx.ipc.handle('chainAbort', async () => chainResult(await fleet.abortAll()));
 
     // T-0004: open the ticket's work checkout in the OS terminal — the
     // directory where `.\dev.ps1` (or the repo's own build) runs.

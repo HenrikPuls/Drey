@@ -20,6 +20,35 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-66 R1 — Tickets remote: command layer and port
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (ADR-0084). The first step of the tickets remote, behaviour-neutral
+in Drey:
+
+- `plugins/tickets/main/commands.ts` — one parser per board command
+  (create, transition, reorder, unpin, claim, archive, unarchive, run
+  start/stop/send/answer/permission, chain master/column/stop) and
+  `chainResult`. The IPC handlers now call them; refusal texts are
+  unchanged. The gateway (R2) will call the same parsers.
+- The board writes (create, transition, archive, unarchive, claim)
+  take an optional actor; Drey keeps `owner@<host>`, a remote device
+  will write `owner@<device>` (`remoteActorOf`, `specs/ticket-schema.md`).
+- `plugins/tickets/shared/remote-protocol.ts` — `TicketsRemotePort`,
+  the host-neutral surface a gateway talks to, and the "Needs you"
+  item shape.
+- `plugins/tickets/main/remote/needs.ts` — the pure `needsOf`: waiting
+  questions and permissions, red gates and failed runs whose ticket
+  still sits in the run's phase (latest run only), checkpoint tickets
+  without a live run, in that order, oldest first.
+- `plugins/tickets/main/remote/drey-port.ts` — `DreyTicketsPort` over
+  the board service and the fleet client, plus `ChangeHub`; a bypass
+  run is refused unless the (R2) setting allows it. Not wired to a
+  server yet.
+
+Specs: `commands.spec.ts`, `remote/needs.spec.ts`,
+`remote/drey-port.spec.ts` (16 cases). Docs: ADR-0084, docs/05 §5.41.
+
 ### req-62 — Ticket header in the editor
 
 **Not yet manually verified by the owner.** Owner request, outside the
