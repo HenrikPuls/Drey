@@ -2,11 +2,14 @@
  * A worker reply as DOM (req-58): the small Markdown subset worker
  * replies use — paragraphs, headings, `-`/`1.` lists, quotes, rules, tables,
  * fenced code (coloured by the host's `ui.highlightCode`) and inline
- * `code` / **bold** / *italic*. Built as nodes, never `innerHTML`:
- * worker output is untrusted text. The shape follows the assistant's
- * rich-text renderer; a plugin cannot import another plugin's folder.
+ * `code` / **bold** / *italic* (the inline parser and row splitter live in
+ * `shared/markdown.ts`, shared with the remote client). Built as nodes,
+ * never `innerHTML`: worker output is untrusted text. The shape follows
+ * the assistant's rich-text renderer; a plugin cannot import another
+ * plugin's folder.
  */
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
+import { parseReplyInline, splitRow } from '../shared/markdown';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -32,37 +35,6 @@ const TABLE_ROW = /^\s*\|.*\|\s*$/;
 const TABLE_RULE = /^\s*\|?(?:\s*:?-{2,}:?\s*\|)+(?:\s*:?-{2,}:?\s*)?\|?\s*$/;
 const BULLET = /^[ \t]*[-*+][ \t]+(.*)$/;
 const ORDERED = /^[ \t]*\d+[.)][ \t]+(.*)$/;
-const INLINE = /`([^`\n]+)`|\*\*([^*\n]+)\*\*|\*([^*\n]+)\*|(?<![\w])_([^_\n]+)_(?![\w])/g;
-
-/** One inline span of a reply line. */
-export type ReplySpan =
-  | { readonly kind: 'text'; readonly text: string }
-  | { readonly kind: 'code'; readonly text: string }
-  | { readonly kind: 'bold'; readonly text: string }
-  | { readonly kind: 'italic'; readonly text: string };
-
-/** Splits a line into plain, code, bold and italic spans (one non-nested pass). */
-export function parseReplyInline(text: string): ReplySpan[] {
-  const spans: ReplySpan[] = [];
-  let cursor = 0;
-  for (const match of text.matchAll(INLINE)) {
-    if (match.index > cursor) {
-      spans.push({ kind: 'text', text: text.slice(cursor, match.index) });
-    }
-    if (match[1] !== undefined) {
-      spans.push({ kind: 'code', text: match[1] });
-    } else if (match[2] !== undefined) {
-      spans.push({ kind: 'bold', text: match[2] });
-    } else {
-      spans.push({ kind: 'italic', text: match[3] ?? match[4] ?? '' });
-    }
-    cursor = match.index + match[0].length;
-  }
-  if (cursor < text.length) {
-    spans.push({ kind: 'text', text: text.slice(cursor) });
-  }
-  return spans;
-}
 
 function inlineInto(parent: HTMLElement, text: string): void {
   for (const span of parseReplyInline(text)) {
@@ -142,14 +114,6 @@ function codeBlock(api: DreyPluginApi, code: string, lang: string): HTMLElement 
   }
   return block;
 }
-
-/** `| a | b |` as its trimmed cells. */
-const splitRow = (line: string): string[] =>
-  line
-    .trim()
-    .replace(/^\||\|$/g, '')
-    .split('|')
-    .map((cell) => cell.trim());
 
 /** A table from parsed rows, the first row its header; scrolls sideways when wider than the column. */
 function tableNode(rows: readonly string[][]): HTMLElement {
