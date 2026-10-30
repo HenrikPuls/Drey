@@ -178,8 +178,14 @@ export function runView(ctx: Ctx, runId: string): View {
   const blocks = stream === null ? null : formatWatch(parseStreamEvents(stream)).blocks;
 
   const body: Node[] = present<Node>([
-    h('h1', { class: 'ticket-title', text: titleOf(ctx, run.ticketId) }),
-    meta,
+    // Sticky (R8): what the run is about and how long it has been going
+    // stays under the top bar while followTail scrolls the transcript on.
+    h(
+      'div',
+      { class: 'runhead' },
+      h('h1', { class: 'ticket-title', text: titleOf(ctx, run.ticketId) }),
+      meta,
+    ),
     run.gateFailure !== null ? h('p', { class: 'issue issue-error', text: run.gateFailure }) : null,
     h(
       'div',

@@ -25,6 +25,7 @@ function port(): TicketsRemotePort {
     claim: vi.fn(ok),
     archive: vi.fn(ok),
     refine: vi.fn(ok),
+    saveAttachment: vi.fn(async () => ({ ok: true, file: 'tickets/attachments/img-test.png' })),
     startRun: vi.fn(ok),
     stopRun: vi.fn(ok),
     send: vi.fn(ok),
@@ -143,5 +144,25 @@ describe('route', () => {
     expect((await route(req({ path: '/api/nope', authorization: auth }), deps)).status).toBe(404);
     expect((await route(req({ path: '/api/tickets/notes.md', authorization: auth }), deps)).status).toBe(404);
     expect((await route(req({ path: '/api/tickets/T-0007', authorization: auth }), deps)).body).toMatchObject({ ok: true, card: { id: 'T-0007' } });
+  });
+
+  it('uploads an attachment with the device actor, refuses bad bytes, and stays behind auth', async () => {
+    const { deps, devices, remote } = setup();
+    const { token } = await devices.add('iPhone', false, new Date());
+    const auth = `Bearer ${token}`;
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const uploaded = await route(
+      req({ method: 'POST', path: '/api/attachments', origin: `http://${HOST}`, authorization: auth, body: { dataBase64: png.toString('base64') } }),
+      deps,
+    );
+    expect(uploaded).toEqual({ status: 200, body: { ok: true, file: 'tickets/attachments/img-test.png' } });
+    expect(remote.saveAttachment).toHaveBeenCalledWith({ bytes: png, ext: 'png' }, 'owner@iphone');
+
+    const refused = await route(
+      req({ method: 'POST', path: '/api/attachments', origin: `http://${HOST}`, authorization: auth, body: { dataBase64: Buffer.from('text').toString('base64') } }),
+      deps,
+    );
+    expect(refused).toEqual({ status: 200, body: { ok: false, error: 'the file is not a PNG, JPEG, GIF or WebP image' } });
+    expect((await route(req({ method: 'POST', path: '/api/attachments', origin: `http://${HOST}` }), deps)).status).toBe(401);
   });
 });

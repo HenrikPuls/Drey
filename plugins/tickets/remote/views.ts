@@ -17,6 +17,7 @@ import {
   type TicketPriority,
 } from '../shared/tickets';
 import type { Ctx, View } from './context';
+import { bindImagePaste, imageControls } from './attachments';
 import { armedButton, button, chip, empty, h, icon, present, sheet, toast } from './dom';
 import {
   blocksOf,
@@ -584,6 +585,10 @@ export function captureView(ctx: Ctx): View {
     ...(board?.repos ?? []).map((r) => h('option', { text: r.name, attrs: { value: r.name } })),
   );
   const description = h('textarea', { attrs: { id: 'cap-desc', rows: '6', 'aria-label': 'Description' } });
+  if (!ctx.state.readOnly) {
+    bindImagePaste(ctx, description);
+  }
+  const descriptionControls = imageControls(ctx, description);
   const create = button(
     'Create in Inbox',
     () => {
@@ -623,6 +628,7 @@ export function captureView(ctx: Ctx): View {
         repo,
         h('label', { text: 'Description', attrs: { for: 'cap-desc' } }),
         description,
+        descriptionControls,
       ),
     ],
     actions: ctx.state.readOnly ? h('div', { class: 'actionbar' }, h('p', { class: 'hint', text: 'This device is paired read only.' })) : h('div', { class: 'actionbar' }, create),

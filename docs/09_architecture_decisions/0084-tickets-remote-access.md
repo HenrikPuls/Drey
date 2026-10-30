@@ -84,3 +84,9 @@ but no board logic. The owner plans to split the tickets plugin later
   the file changed since; it is refused while a run owns the ticket.
   Editing through the tab (an SDK seam over `OpenDocsBridge`) is a
   roadmap follow-up.
+- **Later change (R8, 2026-10-30):** the API also takes image uploads
+  (`POST /api/attachments`, base64 in JSON): the desk sniffs the type
+  from the bytes, saves the file under the reserved
+  `tickets/attachments/` folder and commits it — the one route whose
+  body may exceed the gateway's usual 64 KB cap (12 MB there instead,
+  6 MB of image after decoding).

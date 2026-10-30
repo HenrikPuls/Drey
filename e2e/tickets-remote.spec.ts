@@ -221,6 +221,37 @@ test('refines a section, keeps the draft through a conflict, and edits the heade
   expect(errors).toEqual([]);
 });
 
+test('inserts a picked image in Capture, uploaded and embedded (R8)', async ({ page }) => {
+  const errors: string[] = [];
+  await pairedPage(page, errors);
+
+  await page.locator('.tab', { hasText: 'Capture' }).click();
+  await page.locator('#cap-desc').click();
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await page.locator('.attach-row input[type="file"]').setInputFiles({ name: 'shot.png', mimeType: 'image/png', buffer: png });
+  await expect(page.locator('#cap-desc')).toHaveValue('![](../attachments/img-test.png)');
+  await expect(page.locator('.toast')).toContainText('Image inserted');
+  expect(calls.at(-1)).toEqual({ what: 'attachment', args: [{ bytes: png, ext: 'png' }, 'owner@iphone'] });
+
+  expect(errors).toEqual([]);
+});
+
+test('keeps the run view header pinned while the transcript scrolls (R8)', async ({ page }) => {
+  const errors: string[] = [];
+  await pairedPage(page, errors);
+
+  await page.goto(`http://127.0.0.1:${PORT}/#run/run-1`);
+  await expect(page.locator('.runhead .ticket-title')).toHaveText('Fold duplicate phase folders');
+  await expect(page.locator('.runhead')).toContainText('started');
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect.poll(() => page.evaluate(() => Math.round(window.scrollY))).toBeGreaterThan(0);
+  const head = (await page.locator('.runhead').boundingBox())!;
+  const bar = (await page.locator('.topbar').boundingBox())!;
+  expect(Math.abs(head.y - (bar.y + bar.height))).toBeLessThanOrEqual(1);
+
+  expect(errors).toEqual([]);
+});
+
 test.describe('on an iPad in landscape (R6)', () => {
   const PAD_PORT = 47866;
   const { defaultBrowserType: _padEngine, ...ipad } = devices['iPad Pro 11 landscape'];

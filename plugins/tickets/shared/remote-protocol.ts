@@ -7,6 +7,7 @@
  */
 import type {
   AnswerCommand,
+  AttachmentCommand,
   ClaimCommand,
   CreateCommand,
   RefineCommand,
@@ -57,6 +58,13 @@ export interface RefineReply {
 export type TicketReply =
   | { readonly ok: true; readonly card: TicketCard; readonly text: string; readonly revision: string }
   | { readonly ok: false; readonly error: string };
+/** An image upload's outcome: the vault-relative file it saved, or why not. */
+export interface AttachmentReply {
+  readonly ok: boolean;
+  readonly file?: string;
+  readonly error?: string;
+  readonly warning?: string;
+}
 
 /**
  * The host's remote surface. Every writing call carries the actor the
@@ -76,6 +84,8 @@ export interface TicketsRemotePort {
   claim(cmd: ClaimCommand, actor: string): Promise<MutationResult>;
   archive(cmd: TicketIdCommand, actor: string): Promise<MutationResult>;
   refine(cmd: RefineCommand, actor: string): Promise<RefineReply>;
+  /** Saves a device's image upload under `tickets/attachments/` (req-66 R8). */
+  saveAttachment(cmd: AttachmentCommand, actor: string): Promise<AttachmentReply>;
 
   startRun(cmd: StartRunCommand): Promise<RunReply>;
   stopRun(cmd: StopRunCommand): Promise<RunReply>;

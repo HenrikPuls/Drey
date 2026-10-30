@@ -229,6 +229,48 @@ export function parseChainColumnStop(payload: unknown): Parsed<{ readonly phase:
   return ok({ phase: p['phase'] });
 }
 
+/** An image a paired device uploads (req-66 R8): the decoded bytes and
+ * the extension derived from what the bytes are — never from a name
+ * the client sent. */
+export interface AttachmentCommand {
+  readonly bytes: Buffer;
+  readonly ext: 'png' | 'jpeg' | 'gif' | 'webp';
+}
+
+/** The longest image the desk accepts (the gateway's body cap sits above it). */
+export const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024;
+
+const BASE64_STRICT = /^[A-Za-z0-9+/]+={0,2}$/;
+
+function sniffImage(bytes: Buffer): AttachmentCommand['ext'] | null {
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a) {
+    return 'png';
+  }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'jpeg';
+  }
+  if (bytes.length >= 4 && bytes.subarray(0, 4).toString('latin1') === 'GIF8') {
+    return 'gif';
+  }
+  if (bytes.length >= 12 && bytes.subarray(0, 4).toString('latin1') === 'RIFF' && bytes.subarray(8, 12).toString('latin1') === 'WEBP') {
+    return 'webp';
+  }
+  return null;
+}
+
+export function parseAttachment(payload: unknown): Parsed<AttachmentCommand> {
+  const data = record(payload)['dataBase64'];
+  if (typeof data !== 'string' || data === '' || data.length % 4 === 1 || !BASE64_STRICT.test(data)) {
+    return refuse('the image data is missing or not base64');
+  }
+  const bytes = Buffer.from(data, 'base64');
+  if (bytes.length > MAX_ATTACHMENT_BYTES) {
+    return refuse('the image is larger than 6 MB');
+  }
+  const ext = sniffImage(bytes);
+  return ext === null ? refuse('the file is not a PNG, JPEG, GIF or WebP image') : ok({ bytes, ext });
+}
+
 /** The chain controls' one reply shape: the new status, or "not running". */
 export function chainResult<S>(
   status: S | null,

@@ -7,6 +7,7 @@
  */
 import type {
   AnswerCommand,
+  AttachmentCommand,
   ClaimCommand,
   CreateCommand,
   PermissionCommand,
@@ -22,6 +23,7 @@ import { chainResult } from '../commands';
 import type { FleetSnapshot } from '../fleet-client';
 import type { ChainMaster, ChainStatus, ColumnMode, PermissionDecision, QuestionAnswers, RunInfo } from '../fleet/protocol';
 import type {
+  AttachmentReply,
   ChainReply,
   NeedItem,
   RemoteChange,
@@ -38,6 +40,7 @@ export interface RemoteBoard {
   refresh(): Promise<BoardSnapshot>;
   readTicket(id: string): Promise<TicketReply>;
   refineTicket(input: RefineCommand & { actor?: string }): Promise<RefineReply>;
+  saveAttachment(input: AttachmentCommand & { actor?: string }): Promise<AttachmentReply>;
   createTicket(input: CreateCommand & { actor?: string }): Promise<CreateResult>;
   transition(input: TransitionCommand & { actor?: string }): Promise<MutationResult>;
   reorder(input: ReorderCommand): Promise<MutationResult>;
@@ -137,6 +140,10 @@ export class DreyTicketsPort implements TicketsRemotePort {
 
   refine(cmd: RefineCommand, actor: string): Promise<RefineReply> {
     return this.boardService.refineTicket({ ...cmd, actor });
+  }
+
+  saveAttachment(cmd: AttachmentCommand, actor: string): Promise<AttachmentReply> {
+    return this.boardService.saveAttachment({ ...cmd, actor });
   }
 
   async startRun(cmd: StartRunCommand): Promise<RunReply> {
