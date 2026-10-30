@@ -743,7 +743,17 @@ creates the three configuration files under `tickets/_meta/`:
 a priority, optionally a repository and a description land as
 `T-00xx.md` in the inbox. Click a card to open the ticket file — it is
 an ordinary note (description, plan, executable acceptance criteria and
-an append-only log). Drag cards between columns to move them through
+an append-only log). In the editor the ticket opens with a **header**
+instead of the folded frontmatter: the title as the headline, above it
+the id, the phase, the priority, the repository, the worker and the
+branch. Edit the headline in place (Enter or leaving the field applies
+it, Escape restores it) and pick priority, repository and worker from
+their menus — each change is an ordinary unsaved edit of the file, so
+Save and Undo work as for any typing. The phase changes by moving the
+card on the board. The code button at the right edits the frontmatter as
+YAML; its header folds back to the ticket header. The **Log** section
+opens folded the first time a ticket shows in a session — the fold
+marker beside "Log" opens it. Drag cards between columns to move them through
 the pipeline; drag within a column to pin an order. Phase folders are
 numbered (`10-inbox` … `80-done`) — the number is cosmetics for
 sorting in a file browser; everything inside a ticket keeps the plain
@@ -769,6 +779,39 @@ numbered badges — the board keeps rendering, nothing is guessed.
 Claims: moving a ticket into a claim-flagged phase (Build by default)
 stamps who works on it and when. A stale claim is visible by its age;
 taking over replaces it and logs the previous holder.
+
+**Dependencies (`blocked-by`).** A ticket that must not start before
+another one is done carries `blocked-by: [T-0048]` in its frontmatter —
+write the ids by hand, a list, and save like any edit. The blocked
+state is derived from the board, never stored: the card shows a
+**blocked by T-0048** chip naming the open blockers for exactly as long
+as one of them has not reached the last phase, and the blocking card
+shows **blocks T-0049**. Both chips hide once satisfied — no manual
+unblock edit exists. The fleet never picks a blocked ticket (no
+dispatch, no manual run start, no `ci` move); the chain log names it
+and its blockers, so an idle column explains itself. You stay the
+final authority: dragging a blocked card into a worker column asks
+first (**Cancel** / **Move anyway**); anywhere else it just moves. A
+blocker id that is not on the board — deleted, renamed, or archived —
+warns and keeps the ticket blocked; nothing unblocks silently. The
+filter icon above the columns hides the blocked cards when you want the
+overview; they stay on the board and their order is never touched.
+
+Dependencies: a ticket that must not start before another one is done
+carries a `blocked-by: [T-00xx]` list in its frontmatter (comma and
+space between several ids). The blocked state is derived — while any
+referenced ticket has not reached the pipeline's last phase, the card
+shows a **blocked by …** chip naming the open blockers, and the
+blocking card shows **blocks …** listing what waits on it; both chips
+disappear the moment every blocker is done, no manual unblock needed.
+The fleet never picks up a blocked ticket (the chain log says which
+blockers hold it), and starting a run on one refuses — but you stay in
+charge: dragging a blocked card into a worker column only asks for
+confirmation first. A blocker that was deleted, renamed or archived
+leaves the ticket blocked with a warning — never silently unblocked.
+The **filter** toggle above the columns hides all blocked cards for a
+quieter board (view state only — nothing moves, the counts stay
+honest).
 
 The context menu also opens the ticket's **work folder in a terminal**
 ("Open work folder in terminal") — the local checkout configured as
@@ -990,7 +1033,9 @@ column without a worker between two worker columns is your
 never pulls across it; you review, edit, and move the ticket back to
 plan, forward to build, or back to Inbox. A manual column *before* the
 first worker column is a plain queue — the next pool drains it
-(prioritized feeds plan).
+(prioritized feeds plan). And a ticket held by `blocked-by` never
+enters a pool while a blocker is open — the chain log line names it
+and its blockers.
 
 **How many runs go at once** is set per worker, not per column:
 Settings → *Tickets* → *Fleet* has an **OpenCode pool** and a **Claude
