@@ -2,9 +2,17 @@ import { promises as fsp } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Orchestrator, RED_COOLDOWN_MS, type OrchestratorDeps, type SupervisorPort } from './orchestrator';
+import {
+  effectivePoolSizes,
+  isRateLimitError,
+  Orchestrator,
+  RATE_LIMIT_SHRINK_MS,
+  RED_COOLDOWN_MS,
+  type OrchestratorDeps,
+  type SupervisorPort,
+} from './orchestrator';
 import type { StartOutcome, StopOutcome, SupervisorRecord } from './runs';
-import type { RunInfo, RunRequest } from './protocol';
+import { normalizeFleetPools, type FleetPools, type RunInfo, type RunRequest } from './protocol';
 import { newTicketFileText } from '../ticket-files';
 import { listTicketDirs } from '../phase-dirs';
 import { stripPhasePrefix } from '../../shared/tickets';
@@ -23,9 +31,9 @@ const PIPELINE = [
   'phases:',
   '  - { id: inbox, title: Inbox, handover: manual }',
   '  - { id: prioritized, title: Prioritized, handover: manual }',
-  '  - { id: plan, title: Plan, handover: agent plan-default, worker: opencode, model: zai/glm-5.3, workers: 2 }',
+  '  - { id: plan, title: Plan, handover: agent plan-default, worker: opencode, model: zai/glm-5.3 }',
   '  - { id: plan-review, title: Plan review, handover: manual }',
-  '  - { id: build, title: Build, handover: agent build-default, workers: 1, claim: true }',
+  '  - { id: build, title: Build, handover: agent build-default, claim: true }',
   '  - { id: done, title: Done, handover: none }',
   '---',
   'Prose.',
@@ -141,11 +149,16 @@ function orchestrator(over: Partial<OrchestratorDeps> = {}): { orch: Orchestrato
   return { orch, fleet };
 }
 
+/** Two OpenCode slots shared by every column (req-61). */
+const TWO: FleetPools = normalizeFleetPools({ opencode: { size: 2 } });
+const ONE: FleetPools = normalizeFleetPools({});
+
 const CONFIG = {
   ticketsVaultPath: '', // set in beforeEach
   git: 'git',
   defaultWorker: 'opencode',
   permissionMode: 'accept-edits' as const,
+  pools: TWO,
 };
 
 /** A failed run of `ticket` whose gate failed with `failure` (T-0048's retry context). */
@@ -255,7 +268,7 @@ describe('Orchestrator', () => {
 
   it('a refused start parks the column queue behind it — the chain log says so', async () => {
     await writeMeta();
-    // build has workers: 1 — the plan takes one ticket, and its refused
+    // one OpenCode slot — the plan takes one ticket, and its refused
     // start must not leave the queued one silently waiting (the outage
     // shape: one poisoned worktree parked a whole column).
     await writeTicket('T-0001', 'build');
@@ -275,7 +288,7 @@ describe('Orchestrator', () => {
       supervisorOf: () => refusing,
       scanIntervalMs: 60_000,
     });
-    await orch.configure(CONFIG);
+    await orch.configure({ ...CONFIG, pools: ONE });
     await orch.setMaster('run');
     await orch.setMaster('halted');
     await orch.setMaster('run'); // second pass — the notes must stay silent
@@ -296,13 +309,58 @@ describe('Orchestrator', () => {
     await writeTicket('T-0002', 'build');
     const logs: string[] = [];
     const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
-    await orch.configure(CONFIG);
+    await orch.configure({ ...CONFIG, pools: ONE });
     await orch.setMaster('run');
 
-    expect(fleet.records).toHaveLength(1); // workers: 1 — one runs, one queues
+    expect(fleet.records).toHaveLength(1); // one OpenCode slot — one runs, one queues
     const waits = logs.filter((line) => line.startsWith('dispatch waits'));
     expect(waits).toHaveLength(1);
-    expect(waits[0]).toContain('no free build worker slot yet');
+    expect(waits[0]).toContain('no free opencode pool slot yet');
+  });
+
+  it('the provider pool is shared: an idle slot serves the rightmost column first (req-61)', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    await writeTicket('T-0002', 'build');
+    const { orch, fleet } = orchestrator();
+    await orch.configure({ ...CONFIG, pools: ONE });
+    await orch.setMaster('run');
+    expect(fleet.records.map((r) => r.info.ticketId)).toEqual(['T-0002']);
+  });
+
+  it('a probed llama.cpp server caps the pool (req-61)', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    await writeTicket('T-0002', 'plan');
+    const logs: string[] = [];
+    const probeSlots = vi.fn(async (): Promise<number | null> => 1);
+    const { orch, fleet } = orchestrator({ log: (message) => logs.push(message), probeSlots });
+    await orch.configure({
+      ...CONFIG,
+      pools: normalizeFleetPools({ opencode: { size: 4, probeUrl: 'http://127.0.0.1:8080' } }),
+    });
+    await orch.setMaster('run');
+    expect(probeSlots).toHaveBeenCalledWith('http://127.0.0.1:8080');
+    expect(fleet.records).toHaveLength(1);
+    expect(logs.some((line) => line.includes('runs 1 parallel slot'))).toBe(true);
+  });
+
+  it('a rate-limited run shrinks its provider pool for a while (req-61)', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    await writeTicket('T-0002', 'plan');
+    await writeTicket('T-0003', 'plan');
+    const logs: string[] = [];
+    const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    expect(fleet.records).toHaveLength(2);
+    const first = fleet.records[0]!;
+    fleet.records[0] = { ...first, info: { ...first.info, state: 'failed', lastError: 'prompt failed: 429' } };
+    await orch.onRunSettled(fleet.records[0].info);
+    expect(logs.some((line) => line.includes('opencode hit its rate limit'))).toBe(true);
+    // two slots minus the shrink = one, and one run is still live — nothing new starts
+    expect(fleet.records.filter((r) => r.info.state === 'running')).toHaveLength(1);
   });
 
   it('respects capacity, held columns and busy tickets', async () => {
@@ -313,7 +371,7 @@ describe('Orchestrator', () => {
     const { orch, fleet } = orchestrator();
     await orch.configure(CONFIG);
     await orch.setMaster('run');
-    // workers: 2 on plan — exactly two runs, no pull happened (none available).
+    // two OpenCode slots — exactly two runs, no pull happened (none available).
     expect(fleet.records).toHaveLength(2);
 
     // A settled run frees the slot; the moved ticket leaves the plan
@@ -585,5 +643,41 @@ describe('Orchestrator', () => {
       const text = await fsp.readFile(path.join(vaultDir, 'tickets', 'plan-review', 'T-0009.md'), 'utf8');
       expect(text).toContain('retry in 10 min');
     });
+  });
+});
+
+describe('provider pools (req-61)', () => {
+  const pools = normalizeFleetPools({ opencode: { size: 4 }, 'claude-code': { size: 2 } });
+
+  it('normalizes sizes and probe URLs per provider', () => {
+    expect(normalizeFleetPools(undefined)).toEqual({
+      opencode: { size: 1, probeUrl: null },
+      'claude-code': { size: 1, probeUrl: null },
+    });
+    expect(normalizeFleetPools({ opencode: { size: 0, probeUrl: 'ftp://x' } }).opencode).toEqual({
+      size: 1,
+      probeUrl: null,
+    });
+    expect(normalizeFleetPools({ opencode: { size: 3, probeUrl: ' http://h:8080 ' } }).opencode).toEqual({
+      size: 3,
+      probeUrl: 'http://h:8080',
+    });
+  });
+
+  it('the effective size is capped by a probe and shrunk by a rate limit, never below one', () => {
+    expect(effectivePoolSizes(pools, {}, {}, 0)).toEqual({ opencode: 4, 'claude-code': 2 });
+    expect(effectivePoolSizes(pools, { opencode: 2 }, {}, 0).opencode).toBe(2);
+    expect(effectivePoolSizes(pools, { opencode: 8 }, {}, 0).opencode).toBe(4);
+    const shrink = { 'claude-code': { count: 5, untilMs: RATE_LIMIT_SHRINK_MS } };
+    expect(effectivePoolSizes(pools, {}, shrink, 0)['claude-code']).toBe(1);
+    expect(effectivePoolSizes(pools, {}, shrink, RATE_LIMIT_SHRINK_MS)['claude-code']).toBe(2);
+  });
+
+  it('reads 429 and rate-limit errors', () => {
+    expect(isRateLimitError('prompt failed: 429')).toBe(true);
+    expect(isRateLimitError('Error: rate_limit_error')).toBe(true);
+    expect(isRateLimitError('Too Many Requests')).toBe(true);
+    expect(isRateLimitError('prompt failed: 500')).toBe(false);
+    expect(isRateLimitError(null)).toBe(false);
   });
 });

@@ -95,7 +95,7 @@ describe('composeRunRequest', () => {
   it('builds a dispatched run: the pull stays in its phase, the move follows the working column', () => {
     const result = composeRunRequest(
       base({
-        workingPhase: phase('plan', { handover: 'agent plan-default', worker: 'opencode', model: 'zai/glm-5.3', workers: 2 }),
+        workingPhase: phase('plan', { handover: 'agent plan-default', worker: 'opencode', model: 'zai/glm-5.3' }),
         nextPhaseId: 'plan-review',
         dispatchedBy: 'plan',
       }),

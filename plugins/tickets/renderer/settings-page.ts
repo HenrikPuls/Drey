@@ -124,6 +124,24 @@ function fleetSection(api: DreyPluginApi): HTMLElement {
     ),
     ...kv('tset-git', 'Git executable', textConfig(api, 'gitPath'), 'Empty uses git from PATH.'),
     ...kv(
+      'tset-pool-opencode',
+      'OpenCode pool',
+      numberConfig(api, 'fleet.pool.opencode.size'),
+      'How many OpenCode runs go at once, across every column. Empty is one.',
+    ),
+    ...kv(
+      'tset-pool-opencode-probe',
+      'OpenCode pool probe',
+      textConfig(api, 'fleet.pool.opencode.probe'),
+      'A llama.cpp server URL: its parallel slots cap the pool. Other servers do not report theirs.',
+    ),
+    ...kv(
+      'tset-pool-claude-code',
+      'Claude Code pool',
+      numberConfig(api, 'fleet.pool.claude-code.size'),
+      'How many Claude Code runs go at once, across every column. Empty is one.',
+    ),
+    ...kv(
       'tset-cap-gate-lines',
       'Gate failure cap — lines',
       numberConfig(api, 'fleet.cap.gateFailureLines'),

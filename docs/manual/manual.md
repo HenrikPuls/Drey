@@ -900,9 +900,8 @@ tickets repository's folder at the top (the folder button opens it) and
 the **Pipeline** as one table, a row per column in pipeline order: its
 folder number (`10`, `20`, …), name, a *Runs itself* or *Checkpoint*
 chip with the folder, then the **worker** (OpenCode or Claude Code;
-*Manual* means a column only you move tickets through), the **model**,
-the **pool size** (how many tickets the column works in parallel) and
-the **prompt**. A manual column shows dashes there. The model field is a
+*Manual* means a column only you move tickets through), the **model**
+and the **prompt**. A manual column shows dashes there. The model field is a
 picker: click it to see what the worker offers (OpenCode lists its own
 `provider/model` ids, Claude Code its aliases), type to filter, or type
 an id the list does not know. The prompt is chosen from the files in
@@ -962,8 +961,20 @@ plan, forward to build, or back to Inbox. A manual column *before* the
 first worker column is a plain queue — the next pool drains it
 (prioritized feeds plan).
 
-The board shows the chain's pulse: each column head carries its pool
-(`opencode ×2`) and its brakes; a one-row **status bar** under the
+**How many runs go at once** is set per worker, not per column:
+Settings → *Tickets* → *Fleet* has an **OpenCode pool** and a **Claude
+Code pool** (one each when empty). Every run of that worker takes a
+slot, wherever its column is. When a slot frees up, the next ticket is
+chosen like this: tickets marked **urgent** or **high** first, then the
+column furthest to the right (finishing work beats starting new work),
+then the column's own order. A running ticket is never interrupted for
+a more important one. If OpenCode talks to a llama.cpp server, put its
+address into **OpenCode pool probe** — the server's own parallel slots
+then cap the pool. A run that fails on the provider's rate limit makes
+that pool one slot smaller for five minutes.
+
+The board shows the chain's pulse: each column head carries its worker
+(`opencode`) and its brakes; a one-row **status bar** under the
 columns shows how long each column's tickets have been sitting there
 on average (*Avg. time in column*), and — on its right — an amber pill
 when worktree folders are waiting to be cleaned up (legacy leftovers

@@ -10,8 +10,8 @@ import { canMove, dropIndex, folderNumber, moveItem } from './settings-order';
  * on a focused row; the first (capture) and last (terminal) phase are
  * pinned. A move rewrites pipeline.md and renumbers the phase folders in
  * one commit (main's `reorderPhases`); Undo is the reverse move. A
- * column with a worker runs itself — its model, pool and prompt are
- * edited in place; a manual column is the owner's checkpoint and shows
+ * column with a worker runs itself — its model and prompt are edited
+ * in place (the parallel slots are the provider pools, Fleet, req-61); a manual column is the owner's checkpoint and shows
  * dashes there.
  */
 
@@ -70,7 +70,7 @@ export function createColumnsSection(api: DreyPluginApi, reload: () => Promise<v
   const foot = el(
     'p',
     'section-hint',
-    'Model lists come from the worker CLI; an id it does not list can always be typed. Pool is how many tickets the column works on at once.',
+    'Model lists come from the worker CLI; an id it does not list can always be typed. How many runs go at once is the provider pool, under Fleet.',
   );
   root.append(head, banner, hint, table, status, foot);
 
@@ -167,7 +167,7 @@ export function createColumnsSection(api: DreyPluginApi, reload: () => Promise<v
     table.replaceChildren();
     const header = el('div', 'tset-row tset-row-head');
     header.setAttribute('role', 'row');
-    for (const label of ['', 'No.', 'Column', 'Worker', 'Model', 'Pool', 'Prompt', '']) {
+    for (const label of ['', 'No.', 'Column', 'Worker', 'Model', 'Prompt', '']) {
       const cell = el('span', 'tset-th', label);
       cell.setAttribute('role', 'columnheader');
       header.append(cell);
@@ -348,18 +348,6 @@ function phaseRow(
     const workerOf = (): string => phase.worker ?? handover.worker ?? state.defaultWorker;
     const model = modelPicker(api, phase.title, phase.model ?? '', workerOf, (value) => change({ model: value }));
 
-    const pool = el('input');
-    pool.type = 'number';
-    pool.min = '1';
-    pool.max = '16';
-    pool.step = '1';
-    pool.value = String(phase.workers);
-    pool.setAttribute('aria-label', `Pool size for ${phase.title}`);
-    pool.addEventListener('change', () => {
-      const parsed = Number(pool.value);
-      change({ workers: Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : null });
-    });
-
     const prompt = el('select', 'mono-input');
     prompt.setAttribute('aria-label', `Prompt for ${phase.title}`);
     const ref = effectivePrompt(phase) ?? '';
@@ -381,9 +369,9 @@ function phaseRow(
     }
     prompt.title = ref;
     prompt.addEventListener('change', () => change({ prompt: prompt.value }));
-    cells.push(cell(model.root), cell(pool), cell(prompt));
+    cells.push(cell(model.root), cell(prompt));
   } else {
-    for (const label of ['No model', 'No pool', 'No prompt']) {
+    for (const label of ['No model', 'No prompt']) {
       const dash = el('span', 'tset-dash', '—');
       dash.setAttribute('aria-label', label);
       cells.push(dash);

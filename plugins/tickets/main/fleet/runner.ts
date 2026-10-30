@@ -29,6 +29,7 @@ import { tokenReport, type ReportRun } from './report';
 import {
   isWorkerProvider,
   normalizeFleetCaps,
+  normalizeFleetPools,
   type ChainConfig,
   type ChainMaster,
   type ColumnMode,
@@ -285,6 +286,7 @@ async function main(): Promise<void> {
           // Absent or invalid keys degrade to the defaults per key (T-0048):
           // an older plugin keeps a newer runner working.
           caps: normalizeFleetCaps(body.caps),
+          pools: normalizeFleetPools(body.pools),
         });
         respond(200, status);
         return;
