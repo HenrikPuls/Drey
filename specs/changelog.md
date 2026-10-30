@@ -20,6 +20,46 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### fix — T-0053: the tickets remote paints only what changed (req-66 follow-up)
+
+**Not yet manually verified by the owner.** The remote's display
+flickered as if the page loaded twice. Both causes sat in the phone
+client's repaint guard (`render()`), whose key embedded more than the
+page shows:
+
+- **Startup / wake double paint.** The key embedded the connection
+  flag; the first paint happened while `/api/events` was still
+  connecting, and the connect — with `Api.listen`'s catch-up refresh
+  250 ms later — tore the identical page down and rebuilt it. The same
+  strike after every phone wake (reconnect → catch-up).
+- **Live-run ticks.** The key embedded the raw board/fleet/needs JSON,
+  so a running worker's tick (`activity`, token counts — nothing the
+  Needs or Board page renders) repainted the whole page every few
+  seconds although nothing on it changed.
+
+`dom.ts` gains `bodyKey(view)` — the built view serialized (title,
+body nodes, actions); `render()` repaints only when that key moves,
+and the skip path still refreshes the header chip and the tab bar
+(connection state, needs badge — node swaps outside the key). Visible
+changes paint exactly as before, and a visible age bucket flipping
+("13 h" → "14 h") repaints, as intended. `Api.listen`'s connect-time
+catch-up stays as it is: it is free now, and still covers changes
+missed while a first connect is slow.
+
+- `plugins/tickets/remote/dom.spec.ts` (new) — the key's contract:
+  stable across rebuilds, blind to `connected` and a live run's
+  activity/token tick while the run is on the page, moved by a
+  card-title or needs-list change.
+- `e2e/tickets-remote-repaint.spec.ts` (new, own service on 47862) —
+  startup paints exactly once (the event stream held back 600 ms so
+  the first paint is deterministically offline), a desk-side run tick
+  the page does not render paints nothing, a desk-side board move
+  still paints. Paints are counted by a MutationObserver on `main`;
+  on req-66's guard the legs measure red (2 startup paints, +1 per
+  tick). The desk fixture gains `touchFleet(patch)`.
+- docs/06 §6.70 — one sentence: the `event: board` re-fetch repaints
+  only when the built view's serialized output changed.
+
 ### req-66 R6 — Tickets remote: the iPad board
 
 **Not yet manually verified by the owner** (press-and-hold drag with a
