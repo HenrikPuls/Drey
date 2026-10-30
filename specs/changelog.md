@@ -20,6 +20,36 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-70 — The ticket card's context menu, regrouped
+
+Owner request, outside the list (2026-10-30). The card menu had grown to some twenty rows — up to eight
+"Past run — …" rows in the middle of the actions, a terminal row as wide
+as the repository path, both claim rows always listed with one greyed
+out, and no keyboard navigation.
+
+- **Past runs ›** (`plugins/tickets/renderer/index.ts`, `appendSubmenu`):
+  one row with the count opens the finished runs beside the menu —
+  phase · how it ended (failed in red, stopped muted) · `MM-DD HH:MM`,
+  newest first, up to 15 (was 8), scrolling past 60 % of the window
+  height; a row opens the run's transcript read-only, as before. Hover,
+  click, Enter or ArrowRight opens it, ArrowLeft / Escape goes back; it
+  flips to the menu's left side when the window has no room on the
+  right. No row when the ticket has no finished runs.
+- **Groups**: file and branch · work folder and worktree · order ·
+  agent · claim · Archive, separated. "Open work folder in terminal"
+  names the path in its tooltip instead of its label.
+- **Claim rows that apply only**: a free ticket offers **Claim**, one
+  you hold **Release claim**, somebody else's **Take over claim** and
+  **Release claim** — the same `claim` calls as before.
+- **Keyboard**: ArrowUp / ArrowDown move through the enabled rows (the
+  header `⋯` menu shares the helper, `cycleMenuFocus`); every row is a
+  `menuitem`.
+
+Renderer only, no SDK, IPC or format change. Manual: the board section's
+context-menu paragraph. e2e: `e2e/ticket-card-menu.spec.ts` (finished
+runs pushed as a `fleet-changed` snapshot — the submenu, its keyboard
+round trip, the claim rows for a free, an own and a foreign claim).
+
 ### req-69 — The board's view controls move into the Tickets header
 
 Owner request, outside the

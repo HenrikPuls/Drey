@@ -767,8 +767,11 @@ card onto it, to unfold it again. Which columns stay folded is
 remembered across restarts (it is view state, never written to the
 repo). The context menu
 (right-click a card) opens the file, copies the deterministic branch
-name `t/T-00xx` for the work repository, takes over or releases a
-claim, and offers **Archive…** (armed: the first click only relabels
+name `t/T-00xx` for the work repository, claims, takes over or releases
+a claim (only the rows that apply to the ticket's claim are listed),
+lists the ticket's finished agent runs under **Past runs ›** — a
+submenu, newest first; a row opens that run's transcript read-only —
+and offers **Archive…** (armed: the first click only relabels
 the item, the second moves the ticket to `tickets/archive/` — out of
 the board, kept in git; delete files there yourself when you are sure;
 moving one back into a phase folder revives it). Over-WIP columns show

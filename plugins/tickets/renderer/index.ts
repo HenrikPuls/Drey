@@ -1156,11 +1156,8 @@ function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
     menu.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         close();
-      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        const items = [...menu.querySelectorAll<HTMLButtonElement>('.tickets-menu-item')];
-        const at = items.indexOf(document.activeElement as HTMLButtonElement);
-        items[(at + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus();
+      } else {
+        cycleMenuFocus(menu, e);
       }
     });
   });
@@ -2417,6 +2414,132 @@ function mountChainLog(api: DreyPluginApi, host: HTMLElement): () => void {
 
 // --- the card context menu ----------------------------------------------------
 
+/** ArrowUp / ArrowDown move the focus through a `.tickets-menu`'s enabled rows. */
+function cycleMenuFocus(menu: HTMLElement, e: KeyboardEvent): void {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') {
+    return;
+  }
+  e.preventDefault();
+  const items = [...menu.querySelectorAll<HTMLButtonElement>('.tickets-menu-item:not(:disabled)')];
+  const at = items.indexOf(document.activeElement as HTMLButtonElement);
+  const step = e.key === 'ArrowDown' ? 1 : items.length - 1;
+  items[(at === -1 ? (step === 1 ? 0 : step) : at + step) % items.length]?.focus();
+}
+
+interface SubmenuRow {
+  readonly content: HTMLElement;
+  readonly title: string;
+  readonly onClick: () => void;
+}
+
+interface Submenu {
+  close(): void;
+  contains(node: Node): boolean;
+}
+
+/**
+ * A row that opens further rows beside the menu (req-70): hover, click,
+ * Enter or ArrowRight opens them, ArrowLeft / Escape goes back to the row.
+ * `closeAll` closes the whole menu once a row was chosen.
+ */
+function appendSubmenu(
+  menu: HTMLElement,
+  label: string,
+  rows: readonly SubmenuRow[],
+  closeAll: () => void,
+): Submenu {
+  const trigger = el('button', 'tickets-menu-item has-sub');
+  trigger.type = 'button';
+  trigger.setAttribute('role', 'menuitem');
+  trigger.setAttribute('aria-haspopup', 'menu');
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.append(el('span', 'tickets-menu-label', label), el('span', 'tickets-menu-chevron', '›'));
+  let sub: HTMLElement | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const close = (): void => {
+    clearTimeout(timer);
+    sub?.remove();
+    sub = null;
+    trigger.setAttribute('aria-expanded', 'false');
+  };
+  // A short grace period, so a diagonal move from the row into the
+  // submenu does not cross a neighbouring row and close it on the way.
+  const closeSoon = (): void => {
+    clearTimeout(timer);
+    timer = setTimeout(close, 250);
+  };
+  const open = (focusFirst: boolean): void => {
+    clearTimeout(timer);
+    if (sub === null) {
+      const panel = el('div', 'tickets-menu tickets-submenu');
+      panel.setAttribute('role', 'menu');
+      for (const row of rows) {
+        const button = el('button', 'tickets-menu-item');
+        button.type = 'button';
+        button.setAttribute('role', 'menuitem');
+        button.title = row.title;
+        button.append(row.content);
+        button.addEventListener('click', () => {
+          closeAll();
+          row.onClick();
+        });
+        panel.append(button);
+      }
+      panel.addEventListener('mouseenter', () => clearTimeout(timer));
+      panel.addEventListener('mouseleave', closeSoon);
+      panel.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'Escape') {
+          e.preventDefault();
+          close();
+          trigger.focus();
+        } else {
+          cycleMenuFocus(panel, e);
+        }
+      });
+      document.body.append(panel);
+      const anchor = trigger.getBoundingClientRect();
+      const rect = panel.getBoundingClientRect();
+      const right = anchor.right + 2;
+      const left = right + rect.width > window.innerWidth - 8 ? anchor.left - rect.width - 2 : right;
+      panel.style.left = `${Math.max(0, left)}px`;
+      panel.style.top = `${Math.max(0, Math.min(anchor.top - 4, window.innerHeight - rect.height - 8))}px`;
+      trigger.setAttribute('aria-expanded', 'true');
+      sub = panel;
+    }
+    if (focusFirst) {
+      sub.querySelector<HTMLButtonElement>('.tickets-menu-item')?.focus();
+    }
+  };
+  trigger.addEventListener('mouseenter', () => open(false));
+  trigger.addEventListener('mouseleave', closeSoon);
+  trigger.addEventListener('click', () => open(true));
+  trigger.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      open(true);
+    }
+  });
+  // Any other row of the menu takes over from the submenu.
+  menu.addEventListener('mouseover', (e) => {
+    if (sub !== null && !trigger.contains(e.target as Node)) {
+      closeSoon();
+    }
+  });
+  menu.append(trigger);
+  return { close, contains: (node) => sub?.contains(node) ?? false };
+}
+
+/** One finished run as a Past runs row: phase · how it ended · when. */
+function pastRunRow(run: RunInfo): HTMLElement {
+  const row = el('span', 'tickets-menu-run');
+  row.append(
+    el('span', 'tickets-menu-run-phase', run.column ?? run.provider),
+    el('span', `tickets-menu-run-state is-${run.state}`, run.state),
+    el('span', 'tickets-menu-run-when', run.startedAt.replace('T', ' ').slice(5, 16)),
+  );
+  return row;
+}
+
 function openCardMenu(
   api: DreyPluginApi,
   card: TicketCard,
@@ -2429,12 +2552,24 @@ function openCardMenu(
     other.remove();
   }
   const menu = el('div', 'tickets-menu');
+  let pastRuns: Submenu | null = null;
+  const outside = (e: Event): void => {
+    const target = e.target as Node;
+    if (!menu.contains(target) && !(pastRuns?.contains(target) ?? false)) {
+      close();
+    }
+  };
+  const close = (): void => {
+    pastRuns?.close();
+    menu.remove();
+    window.removeEventListener('mousedown', outside, true);
+  };
   const item = (label: string, onClick: () => void, disabled = false): void => {
     const button = el('button', 'tickets-menu-item', label);
     button.type = 'button';
     button.disabled = disabled;
     button.addEventListener('click', () => {
-      menu.remove();
+      close();
       onClick();
     });
     menu.append(button);
@@ -2444,6 +2579,7 @@ function openCardMenu(
   item(`Copy branch (${branchForTicket(card.id)})`, () => {
     void navigator.clipboard.writeText(branchForTicket(card.id));
   });
+  menu.append(el('div', 'tickets-menu-sep'));
   {
     // T-0004: jump to the work checkout to test the ticket. Needs the
     // ticket's repo AND a local `path:` for it in _meta/repos.md.
@@ -2457,16 +2593,12 @@ function openCardMenu(
         : repoPath === null
           ? `No local "path:" for "${card.meta.repo}" in _meta/repos.md`
           : null;
-    const button = el(
-      'button',
-      'tickets-menu-item',
-      reason === null ? `Open work folder in terminal (${repoPath})` : 'Open work folder in terminal',
-    );
+    const button = el('button', 'tickets-menu-item', 'Open work folder in terminal');
     button.type = 'button';
     button.disabled = reason !== null;
     button.title = reason ?? `Opens a terminal at ${repoPath}`;
     button.addEventListener('click', () => {
-      menu.remove();
+      close();
       if (card.meta.repo !== null) {
         void runMutation('Opening terminal', () =>
           invokeBoard('openRepoFolder', { repo: card.meta.repo }),
@@ -2494,7 +2626,7 @@ function openCardMenu(
         return;
       }
       if (armed) {
-        menu.remove();
+        close();
         void run('Removing the worktree', () => invokeBoard('worktreeRemove', { id: card.id, force: true }));
         return;
       }
@@ -2504,7 +2636,7 @@ function openCardMenu(
         .then((raw) => {
           const res = raw as { ok: boolean; error?: string; dirty?: boolean; status?: string };
           if (res.ok) {
-            menu.remove(); // the Log line's announce refreshes the board
+            close(); // the Log line's announce refreshes the board
             return;
           }
           if (res.dirty === true) {
@@ -2514,18 +2646,19 @@ function openCardMenu(
             button.title = `Uncommitted changes:\n${res.status ?? ''}`;
             return;
           }
-          menu.remove();
+          close();
           setNote(res.error ?? 'the worktree could not be removed', 'error');
           notifyViews();
         })
         .catch((error: unknown) => {
-          menu.remove();
+          close();
           setNote(messageOf(error), 'error');
           notifyViews();
         });
     });
     menu.append(button);
   }
+  menu.append(el('div', 'tickets-menu-sep'));
   {
     // T-0053: move to a column end — the same `reorder` a drag performs
     // (drop index 0 / the column's end), so a menu move cannot drift
@@ -2564,7 +2697,7 @@ function openCardMenu(
         if (move.index === null) {
           return;
         }
-        menu.remove();
+        close();
         void run(move.busy, () =>
           invokeBoard('reorder', { phase: column.phase.id, id: card.id, index: move.index }),
         );
@@ -2599,31 +2732,41 @@ function openCardMenu(
   }
   // Earlier runs of this ticket (other columns, finished or stopped): their
   // transcripts stay on disk, and the takeover tab shows them read-only.
+  // One submenu row, so they never crowd the actions (req-70).
   const past = fleetRuns
     .filter((r) => r.ticketId === card.id && !LIVE_RUN_STATES.includes(r.state))
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
-    .slice(0, 8);
-  for (const earlier of past) {
-    const when = earlier.startedAt.replace('T', ' ').slice(0, 16);
-    item(`Past run — ${earlier.column ?? earlier.provider} · ${earlier.state} · ${when}`, () =>
-      openTakeover(api, earlier),
+    .slice(0, 15);
+  if (past.length > 0) {
+    pastRuns = appendSubmenu(
+      menu,
+      `Past runs (${past.length})`,
+      past.map((earlier) => ({
+        content: pastRunRow(earlier),
+        title: `${earlier.provider} · started ${earlier.startedAt.replace('T', ' ').slice(0, 16)} — opens the transcript read-only`,
+        onClick: () => openTakeover(api, earlier),
+      })),
+      close,
     );
   }
   menu.append(el('div', 'tickets-menu-sep'));
-  item(
-    'Take over claim',
-    () => {
+  // Only the claim rows that apply (req-70): claim a free ticket, take
+  // over somebody else's claim, release any claim.
+  const claimedBy = card.meta.claimedBy;
+  const takeover = (label: string): void =>
+    item(label, () => {
       void run('Taking over', () => invokeBoard('claim', { id: card.id, mode: 'takeover' }));
-    },
-    card.meta.claimedBy !== null && card.meta.claimedBy.startsWith('owner@'),
-  );
-  item(
-    'Release claim',
-    () => {
+    });
+  if (claimedBy === null) {
+    takeover('Claim');
+  } else {
+    if (!claimedBy.startsWith('owner@')) {
+      takeover('Take over claim');
+    }
+    item('Release claim', () => {
       void run('Releasing', () => invokeBoard('claim', { id: card.id, mode: 'release' }));
-    },
-    card.meta.claimedBy === null,
-  );
+    });
+  }
   menu.append(el('div', 'tickets-menu-sep'));
   {
     // T-0041: archive instead of delete — armed two-step, so a single
@@ -2639,30 +2782,28 @@ function openCardMenu(
         button.textContent = 'Archive — click again';
         return;
       }
-      menu.remove();
+      close();
       void run('Archiving', () => invokeBoard('archive', { id: card.id }));
     });
     menu.append(button);
   }
 
   menu.setAttribute('role', 'menu');
+  for (const row of menu.querySelectorAll('.tickets-menu-item')) {
+    row.setAttribute('role', 'menuitem');
+  }
   document.body.append(menu);
   menu.querySelector<HTMLButtonElement>('.tickets-menu-item:not(:disabled)')?.focus();
   const rect = menu.getBoundingClientRect();
   menu.style.left = `${Math.max(0, Math.min(event.clientX, window.innerWidth - rect.width - 8))}px`;
   menu.style.top = `${Math.max(0, Math.min(event.clientY, window.innerHeight - rect.height - 8))}px`;
 
-  const closeMenu = (e: Event): void => {
-    if (!menu.contains(e.target as Node)) {
-      menu.remove();
-      window.removeEventListener('mousedown', closeMenu, true);
-    }
-  };
-  window.addEventListener('mousedown', closeMenu, true);
+  window.addEventListener('mousedown', outside, true);
   menu.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      menu.remove();
-      window.removeEventListener('mousedown', closeMenu, true);
+      close();
+    } else {
+      cycleMenuFocus(menu, e);
     }
   });
 }
