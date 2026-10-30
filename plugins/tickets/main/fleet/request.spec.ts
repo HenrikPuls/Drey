@@ -135,6 +135,16 @@ describe('composeRunRequest', () => {
     expect(result.request.column).toBeUndefined();
   });
 
+  it('threads the handover ask through — explicit from the dialog, auto from the dispatcher (T-0049)', () => {
+    const explicit = composeRunRequest(base({ handover: 'resume-compact' }));
+    expect(explicit.ok && explicit.request.handover).toBe('resume-compact');
+    const auto = composeRunRequest(base({ dispatchedBy: 'build', handover: 'auto' }));
+    expect(auto.ok && auto.request.handover).toBe('auto');
+    // Absent — every older caller — stays absent: the supervisor reads fresh.
+    const absent = composeRunRequest(base({}));
+    expect(absent.ok && absent.request.handover).toBeUndefined();
+  });
+
   it('the assignment ring: ticket pin over column over handover pin over repo over default', () => {
     const pinned = card({ meta: { ...card().meta, worker: 'claude-code' } });
     const ticketWins = composeRunRequest(

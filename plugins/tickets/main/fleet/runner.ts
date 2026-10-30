@@ -29,6 +29,7 @@ import { tokenReport, type ReportRun } from './report';
 import {
   isWorkerProvider,
   normalizeFleetCaps,
+  normalizeFleetHandover,
   normalizeFleetPools,
   type ChainConfig,
   type ChainMaster,
@@ -287,7 +288,13 @@ async function main(): Promise<void> {
           // an older plugin keeps a newer runner working.
           caps: normalizeFleetCaps(body.caps),
           pools: normalizeFleetPools(body.pools),
+          // The handover thresholds (T-0049) reach the supervisors the
+          // same way — their start-time resolution reads them.
+          handover: normalizeFleetHandover(body.handover),
         });
+        for (const one of supervisors.values()) {
+          one.setHandoverConfig(normalizeFleetHandover(body.handover));
+        }
         respond(200, status);
         return;
       }

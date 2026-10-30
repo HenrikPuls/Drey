@@ -102,6 +102,13 @@ describe('telemetryParts — the run\'s telemetry as short chips', () => {
   it('never invents a zero out of an absent counter', () => {
     expect(telemetryParts(run({ turns: 0, readCalls: 0 }))).toEqual([]);
   });
+
+  it('appends the resumed chip for a resumed run — fresh and absent stay silent (T-0049)', () => {
+    expect(telemetryParts(run({ handoverMode: 'resume', lastTurnContext: 131_000 }))).toEqual(['ctx 131k', 'resumed']);
+    expect(telemetryParts(run({ handoverMode: 'resume-compact' }))).toEqual(['resumed']);
+    expect(telemetryParts(run({ handoverMode: 'fresh' }))).toEqual([]);
+    expect(telemetryParts(run({ handoverMode: undefined }))).toEqual([]);
+  });
 });
 
 describe('spanClock', () => {

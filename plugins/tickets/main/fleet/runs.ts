@@ -20,8 +20,9 @@ import { parseOrderFile, rewriteOrderSection } from '../ticket-board';
 import { acceptanceCommands, patchTicketFile, ticketPathParts } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
 import { ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
+import { COMPACT_CAPABILITY, HANDOVER_CANDIDATE_STATES, resolveHandover, type HandoverCandidate, type HandoverDecision } from './handover';
 import { killTreeGuarded, processAlive, processStartMs, type ExecFn } from './procs';
-import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
+import { DEFAULT_FLEET_HANDOVER, type FleetHandoverConfig, type RunInfo, type RunRequest, type RunState, type SteerRung } from './protocol';
 import {
   normalizeForMatch,
   prepareWorktree as defaultPrepareWorktree,
@@ -151,6 +152,12 @@ interface LiveRun {
   handover?: RunHandover;
   /** The resumed session's spend before this run, once the adapter read it (req-53). */
   usageBase?: UsageTotals;
+  /**
+   * A failed resume is being replaced by a fresh worker under the same
+   * run id (T-0049): the dying worker's exit decides nothing while this
+   * is set.
+   */
+  fallbackActive?: boolean;
 }
 
 /** The telemetry a persisted record carries, for restoring a fold (an adopted run). */
@@ -219,6 +226,11 @@ export class RunSupervisor {
   private readonly runs = new Map<string, LiveRun>();
   /** Set by `handOver`: this runner is going, it starts nothing new. */
   private retiring = false;
+  /**
+   * The handover thresholds (T-0049), pushed by the runner whenever the
+   * plugin's chain config names them; the defaults until then.
+   */
+  private handoverConfig: FleetHandoverConfig = DEFAULT_FLEET_HANDOVER;
   private readonly git: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths' | 'push'>;
   private readonly now: () => Date;
   private readonly exec: ExecFn;
@@ -232,6 +244,11 @@ export class RunSupervisor {
       deps.prepareWorktree ??
       ((request, worktreePath) =>
         defaultPrepareWorktree(this.git, request, worktreePath, this.now, (p) => this.isWorktreeLive(p)));
+  }
+
+  /** The handover thresholds the plugin configured (T-0049) — idempotent, applied to the next start. */
+  setHandoverConfig(config: FleetHandoverConfig): void {
+    this.handoverConfig = config;
   }
 
   /**
@@ -625,6 +642,31 @@ export class RunSupervisor {
       return { ok: false, error: `worktree failed: ${messageOf(error)}` };
     }
 
+    // T-0049: the handover resolution. Only the supervisor holds every
+    // record (boot-adopted terminal ones included), and only the
+    // preparation above tells whether the worktree invalidated prior
+    // sessions — so this is the one place the rules run. The pre-T-0049
+    // explicit-session paths (reattach, resumeInPlace, reopen, a detached
+    // run's resume) pass their own session and skip resolution entirely.
+    let decision: HandoverDecision | null = null;
+    if (resumeRef === null && !reopened && request.handover !== undefined) {
+      const candidate = this.handoverCandidate(request);
+      decision = resolveHandover({
+        requested: request.handover,
+        phase: request.phase,
+        candidate,
+        provider: this.deps.adapter.id,
+        model: request.model,
+        sessionInvalidated: prepared.sessionInvalidated,
+        sessionInUse: this.sessionInUse(candidate?.sessionRef ?? null),
+        capability: COMPACT_CAPABILITY[this.deps.adapter.id],
+        config: this.handoverConfig,
+        nowMs: this.now().getTime(),
+      });
+      resumeRef = decision.resumeRef;
+      this.deps.log(`run ${id} (${request.ticketId}): handover ${decision.mode} — ${decision.why}`);
+    }
+
     const info: RunInfo = {
       id,
       ticketId: request.ticketId,
@@ -654,7 +696,10 @@ export class RunSupervisor {
       turns: 0,
       readCalls: 0,
       tokensBeforeFirstWrite: null,
-      handoverMode: 'fresh',
+      handoverMode: decision?.mode ?? 'fresh',
+      // The candidate's session, never the init event — a forked id
+      // would lose the lineage (T-0049).
+      resumedFrom: decision !== null && decision.mode !== 'fresh' ? decision.resumeRef : null,
       gateFailure: null,
     };
     const run: LiveRun = {
@@ -681,36 +726,26 @@ export class RunSupervisor {
               `stale dirty worktree moved aside to ${prepared.movedTo} — kept, not deleted; earlier session context is invalid`,
             )
           : '') +
-        (prepared.links !== undefined ? openNote(linkNote(prepared.links)) : ''),
+        (prepared.links !== undefined ? openNote(linkNote(prepared.links)) : '') +
+        (decision !== null ? openNote(`handover: ${decision.mode} — ${decision.why}`) : ''),
       'utf8',
     );
 
-    const handle = this.deps.adapter.spawn({
-      cwd: worktreePath,
-      instruction: request.instruction,
-      model: request.model,
-      permissionMode: request.permissionMode,
+    const handle = this.spawnWorker(run, {
       resumeRef,
-      ticketId: request.ticketId,
-      onEvent: (event) => void this.onEvent(run, event),
-      onSessionRef: (ref) => {
-        run.info = { ...run.info, sessionRef: ref };
-        void this.persist(run);
-      },
-      onAttachInfo: (info) => void this.recordAttach(run, info),
-      onUsageBase: (base) => {
-        run.usageBase = base;
-        void this.persist(run);
-      },
+      ...(decision?.compactFirst === true ? { compactFirst: true } : {}),
+      // A resume the adapter cannot establish respawns fresh under the
+      // same run id (T-0049) — only the resolution path asks for that.
+      ...(decision !== null && resumeRef !== null
+        ? { onResumeFailed: (reason: string) => void this.freshFallback(run, reason) }
+        : {}),
     });
-    run.handle = handle;
     run.info = { ...run.info, state: 'running', pid: handle.pid };
     if (reopened) {
       handle.setHold?.(true);
       run.info = { ...run.info, held: true };
       await this.persist(run);
       await this.logLine(run, 'session reopened by the owner — the worker stands until you prompt it');
-      void handle.exited.then((code) => void this.onWorkerExit(run, code));
       return { ok: true, run: run.info };
     }
     await this.persist(run);
@@ -723,7 +758,7 @@ export class RunSupervisor {
         from: null,
         now: this.now(),
         actor: this.agentActor(),
-        action: `run ${id} started (${request.provider}${request.model !== null ? `, ${request.model}` : ''}) — worktree ${prepared.outcome}`,
+        action: `run ${id} started (${request.provider}${request.model !== null ? `, ${request.model}` : ''}) — worktree ${prepared.outcome}${decision !== null ? `, handover ${decision.mode}` : ''}`,
         ...(request.recordWorker !== undefined && request.recordWorker !== '' ? { setWorker: request.recordWorker } : {}),
         ...(handle.pid !== null
           ? { run: { pid: handle.pid, 'started-at': this.stamp(), stream: id } }
@@ -731,8 +766,125 @@ export class RunSupervisor {
       }),
     );
 
-    void handle.exited.then((code) => void this.onWorkerExit(run, code));
     return { ok: true, run: run.info };
+  }
+
+  /**
+   * Spawns the run's worker and wires its events — the one spawn path
+   * for the first worker and the fresh fallback's replacement alike
+   * (T-0049). The handle the run currently owns decides its exit; a
+   * worker a fallback replaced decides nothing.
+   */
+  private spawnWorker(
+    run: LiveRun,
+    resume: {
+      readonly resumeRef: string | null;
+      readonly compactFirst?: boolean;
+      readonly onResumeFailed?: (reason: string) => void;
+    },
+  ): WorkerHandle {
+    const request = run.request;
+    const handle = this.deps.adapter.spawn({
+      cwd: run.info.worktreePath,
+      instruction: request.instruction,
+      model: request.model,
+      permissionMode: request.permissionMode,
+      resumeRef: resume.resumeRef,
+      ...(resume.compactFirst === true ? { compactFirst: true } : {}),
+      ticketId: request.ticketId,
+      onEvent: (event) => void this.onEvent(run, event),
+      onSessionRef: (ref) => {
+        run.info = { ...run.info, sessionRef: ref };
+        void this.persist(run);
+      },
+      onAttachInfo: (info) => void this.recordAttach(run, info),
+      onUsageBase: (base) => {
+        run.usageBase = base;
+        void this.persist(run);
+      },
+      ...(resume.onResumeFailed !== undefined ? { onResumeFailed: resume.onResumeFailed } : {}),
+    });
+    run.handle = handle;
+    void handle.exited.then((code) => {
+      if (run.handle === handle) {
+        void this.onWorkerExit(run, code);
+      }
+    });
+    return handle;
+  }
+
+  /**
+   * The newest terminal record of this ticket and model in this
+   * supervisor (T-0049): its provider is the supervisor's own (adopt
+   * filters by it), `detached` never qualifies — its worker may still
+   * live — and the resolution judges phase, session and staleness.
+   */
+  private handoverCandidate(request: RunRequest): HandoverCandidate | null {
+    const newest = [...this.runs.values()]
+      .filter(
+        (r) =>
+          r.request.ticketId === request.ticketId &&
+          (r.info.model ?? r.request.model) === request.model &&
+          HANDOVER_CANDIDATE_STATES.includes(r.info.state),
+      )
+      .sort((a, b) => b.info.startedAt.localeCompare(a.info.startedAt))[0];
+    if (newest === undefined) {
+      return null;
+    }
+    return {
+      phase: newest.info.phase ?? newest.request.phase,
+      provider: newest.info.provider,
+      model: newest.info.model ?? null,
+      state: newest.info.state,
+      sessionRef: newest.info.sessionRef,
+      lastTurnContext: newest.info.lastTurnContext ?? null,
+      endedAt: newest.info.endedAt,
+    };
+  }
+
+  /** Whether any non-terminal run of this supervisor holds the session
+   *  (T-0049) — a detached one counts, its worker may still live. */
+  private sessionInUse(sessionRef: string | null): boolean {
+    if (sessionRef === null) {
+      return false;
+    }
+    return [...this.runs.values()].some(
+      (r) => !TERMINAL.includes(r.info.state) && r.info.sessionRef === sessionRef,
+    );
+  }
+
+  /**
+   * The resume the adapter reported unestablishable (T-0049): the dying
+   * worker is stopped and a FRESH one takes the run over — same id,
+   * record, stream, ticket stamp and instruction — so a broken session
+   * never fails the run. A failure after a successful resume never lands
+   * here (the adapters report only before their first prompt).
+   */
+  private async freshFallback(run: LiveRun, reason: string): Promise<void> {
+    if (run.fallbackActive === true || TERMINAL.includes(run.info.state) || run.handle === null) {
+      return;
+    }
+    run.fallbackActive = true;
+    this.deps.log(`run ${run.info.id}: the resume failed — ${reason}; starting fresh under the same run id`);
+    await run.handle.stop().catch(() => undefined);
+    run.handle = null;
+    run.info = {
+      ...run.info,
+      state: 'starting',
+      pid: null,
+      handoverMode: 'fresh',
+      resumedFrom: null,
+      sessionRef: null,
+    };
+    const handle = this.spawnWorker(run, { resumeRef: null });
+    run.fallbackActive = false;
+    run.info = { ...run.info, state: 'running', pid: handle.pid };
+    await this.appendStream(run, {
+      ts: this.stamp(),
+      kind: 'note',
+      text: `the resume failed (${reason}) — the run starts fresh with the same instruction`,
+    });
+    await this.persist(run);
   }
 
   async stop(runId: string, reason: string | null): Promise<StopOutcome> {
@@ -857,9 +1009,13 @@ export class RunSupervisor {
       await killTreeGuarded(old.info.pid, this.exec, old.startedAtMs);
     }
     await this.finish(old, 'stopped');
+    // The stored request's handover ask is stripped (T-0049): this start
+    // carries its own session explicitly, and a stored 'auto' must not
+    // double-resolve against the record being replaced.
+    const { handover: _storedAsk, ...restored } = old.request;
     return this.start(
       {
-        ...old.request,
+        ...restored,
         instruction:
           'The runner restarted and this session was resumed. Continue the step where you left off; ' +
           'your original brief is earlier in this conversation. Do not search the disk for files already named in it.',
@@ -1151,6 +1307,9 @@ export class RunSupervisor {
     }
     if (run.handover !== undefined) {
       return; // handed over: the successor decides how this run goes on
+    }
+    if (run.fallbackActive === true) {
+      return; // a failed resume being replaced (T-0049): the replacement decides
     }
     if (run.info.state === 'stopping') {
       await this.finish(run, 'stopped');

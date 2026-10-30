@@ -165,6 +165,18 @@ function fleetSection(api: DreyPluginApi): HTMLElement {
       numberConfig(api, 'fleet.cap.diffStatBytes'),
       'The same cap as a byte bound.',
     ),
+    ...kv(
+      'tset-handover-compact',
+      'Resume compact threshold — tokens',
+      numberConfig(api, 'fleet.compactAboveTokens'),
+      'A resumed session whose last context is at or above this many tokens is natively compacted first (T-0049).',
+    ),
+    ...kv(
+      'tset-handover-ttl',
+      'Resume pause TTL — minutes',
+      numberConfig(api, 'fleet.resumePauseTtlMin'),
+      'A pause within this window counts as warm: the previous session resumes and re-pays its transcript as cache reads.',
+    ),
   );
   section.append(head, rows);
   return section;

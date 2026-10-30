@@ -182,10 +182,53 @@ treats absent as unknown):
   tokens over the turns before the first write/edit — the exploration
   cost; the full input side when no write came);
 - `gateResult` (`green`/`red` once the gate ran), `model`, `phase`,
-  `handoverMode` (`fresh` — the field exists for T-0049's modes).
+  `handoverMode` (`fresh` | `resume` | `resume-compact` — T-0049) and
+  `resumedFrom` (the candidate's session a resumed run continued; null
+  on fresh and on a resume that fell back fresh).
 
 `GET /report` groups these by ticket, phase and model (see the route
-table); the board's lanes show `ctx`/`turns`/`reads` chips per run.
+table); the board's lanes show `ctx`/`turns`/`reads` chips per run (a
+resumed run appends `resumed`).
+
+### Session handover (T-0049)
+
+How a run's context reaches its worker. `RunRequest.handover` rides the
+start: the dialog sends the owner's explicit choice, the dispatcher
+sends `auto`, an older sender's absence means `fresh`. One resolver —
+`main/fleet/handover.ts`, pure — decides:
+
+- The **review phase always resolves fresh** (an independent worker
+  judges the step).
+- The candidate is the **newest terminal run** (`done`/`stopped`/
+  `failed`) of the same ticket, provider and model in that supervisor —
+  `detached` never qualifies (its worker may still live). No candidate,
+  no session, another phase's session, a recreated/moved-aside worktree
+  (T-0047's `sessionInvalidated`) or a session another non-terminal run
+  holds → fresh.
+- A **warm pause** (within the TTL) or a **known context below the
+  compact threshold** → `resume`; a cold pause with a context at/above
+  the threshold → `resume-compact` when the provider compacts natively
+  (opencode: measured; claude-code: not yet), else fresh. An unknown
+  context (pre-T-0048 records) never auto-compacts.
+- An explicit dialog choice is honoured when structurally legal; the
+  dialog disables the options that are not (same rules, client-side).
+
+The decision lands on the record (`handoverMode`, `resumedFrom`), the
+stream (`handover: <mode> — <why>`) and the ticket's start line.
+
+**Fallback:** a resume the adapter cannot establish — opencode pre-flights
+the session with a GET before prompting; claude-code treats an exit
+before any init event as one — never fails the run. The supervisor stops
+that worker and respawns **fresh under the same run id** with the same
+instruction (`handoverMode: 'fresh'`, `resumedFrom: null`, one stream
+note). A failure after a successful resume fails the run normally.
+
+**Config** (`Settings → Tickets → Fleet`): `fleet.compactAboveTokens`
+(default 60000, provisional) and `fleet.resumePauseTtlMin` (default 15).
+Per-provider/model overrides are flat keys the plugin reads and pushes
+with the chain config — `fleet.compactAboveTokens.opencode`,
+`fleet.compactAboveTokens.opencode/<model-pin>` — most specific wins; no
+UI writes them.
 
 ### The instruction (T-0048: the context pack)
 
@@ -207,10 +250,11 @@ tail and 50/4096 head). Each application is logged:
 
 ### chain.json fields (daemon builds)
 
-`config` (tickets vault path, git, defaultWorker, permissionMode, caps)
-· `master` (`run` / `halted`) · `columns` (per-phase `playing` / `held`)
-· `redStreak` · `cooldownUntil` (per column ISO instant) · `tokensDay` +
-`tokensUsed` (the per-column token budget) · `ciBackoff`.
+`config` (tickets vault path, git, defaultWorker, permissionMode, caps,
+handover thresholds) · `master` (`run` / `halted`) · `columns`
+(per-phase `playing` / `held`) · `redStreak` · `cooldownUntil` (per
+column ISO instant) · `tokensDay` + `tokensUsed` (the per-column token
+budget) · `ciBackoff`.
 
 ## Lifecycle gotchas
 

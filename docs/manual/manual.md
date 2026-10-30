@@ -797,7 +797,21 @@ choose **Run agent**: the dialog lets you pick the worker (the card
 shows the one your pins resolve to: the ticket's `worker:` field wins,
 then the phase's `@worker` pin in `pipeline.md`, then the repo's
 `worker:` in `repos.md`, then the configured default) and how freely
-it may act. The worker gets a checkout of the ticket's repo on its own
+it may act. The **Handover** choice says how the run's context reaches
+the worker: **Fresh session** (the default the rules compute), **Resume
+last session** (continue the previous run's conversation of the same
+ticket, worker and model — worthwhile on a warm pause or a small
+context) or **Resume + compact first** (the same, natively compacted
+before the brief rides — offered only where the worker can). The line
+under it shows the run these options would continue — its phase, how it
+ended, its last context size and its age — and options that make no
+sense are disabled with the reason instead of silently switched: a
+review always starts fresh, another worker's session is never resumed,
+and a worktree that was rebuilt invalidates the old session. The choice
+applies to this run only; dispatched runs decide by the same rules
+themselves, and a resume that cannot be established falls back to a
+fresh run under the same ticket. The worker gets a checkout of the
+ticket's repo on its own
 branch (`t/<id>`), the ticket's description, plan and the phase's
 prompt as its brief. Folders the checkout has but git ignores — its
 toolchain, say `.tools` and `node_modules` — can be shared with every
