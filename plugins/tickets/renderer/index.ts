@@ -417,7 +417,7 @@ function workPanelDeps(api: DreyPluginApi): WorkPanelDeps {
       void runMutation('Setting the priority', () => invokeBoard('setPriority', { id: card.id, priority })),
     setTrack: (card, track) => void runMutation('Setting the track', () => invokeBoard('setTrack', { id: card.id, track })),
     // The row menu shares the panel's seams (Track › / Priority ›).
-    openMenu: (card, at) => openCardMenu(api, card, at, runMutation, (path) => openTicketFile(api, path), deps),
+    openMenu: (card, at) => openCardMenu(api, card, at, runMutation, deps),
     alerts: currentChainAlerts(),
     onAlertAction: (action) =>
       void (action.kind === 'play-column'
@@ -1389,6 +1389,8 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   const transcript = createTranscriptView(api, fleetRuns.find((r) => r.id === runId)?.worktreePath ?? '');
   transcript.element.classList.add('tickets-takeover-transcript');
 
+  // Before the composer: it paints once while it is built, through `target`.
+  const live = (): RunInfo | null => fleetRuns.find((r) => r.id === runId) ?? null;
   const composer = createRunComposer({
     api,
     invoke: invokeBoard,
@@ -1405,7 +1407,6 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   });
   const endMoves = createEndMoves();
 
-  const live = (): RunInfo | null => fleetRuns.find((r) => r.id === runId) ?? null;
   const paintBanner = (): void => {
     const run = live();
     const active = run !== null && LIVE_RUN_STATES.includes(run.state);
@@ -1572,22 +1573,34 @@ function threadRun(ticketId: string): RunInfo | null {
 /** The ticket file the page opened last: the next ticket lands in its pane. */
 let pageFilePath: string | null = null;
 
+/** The tab the page put beside the file last (the thread or a run tab): the next one lands in its pane. */
+let pageSide: { readonly kind: string; readonly key: string } | null = null;
+
 /**
- * The ticket page (ADR-0087 decision 3): the ticket file in one pane, its
- * thread in the pane beside it. The thread is one fixed key, and the next
- * ticket reactivates the previous ticket's tab and opens there (a clean
- * tab is replaced), so the page never splits again — whichever pane, the
- * thread included, had the focus.
+ * The ticket page (ADR-0087 decision 3): the ticket file in one pane and
+ * beside it the ticket's **run tab** while a run is live (owner,
+ * 2026-10-31: the runner beside the ticket, as before M89), else the
+ * thread — where an ended run's decisions (Ready card, approve, accept,
+ * send back) and its next message live. The next ticket reactivates the
+ * previous ticket's tabs and opens in their panes (a clean tab is
+ * replaced), so the page never splits again — whichever pane had the
+ * focus.
  */
 async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<void> {
   if (snapshot?.vaultId == null) {
     return;
   }
   const vaultId = snapshot.vaultId;
-  const threadOpen = api.documents.get(THREAD_KEY) !== null;
+  const run = runForCard(card.id);
+  const side =
+    run !== null
+      ? { kind: TAKEOVER_KIND, key: `${TAKEOVER_SCHEME}${run.id}`, title: takeoverTitle(run) }
+      : { kind: THREAD_KIND, key: THREAD_KEY, title: threadTitle(card.id) };
+  const previousSide = pageSide !== null && api.documents.get(pageSide.key) !== null ? pageSide : null;
+  const sideOpen = api.documents.get(side.key) !== null || previousSide !== null;
   const previous = pageFilePath;
   if (
-    threadOpen &&
+    sideOpen &&
     previous !== null &&
     previous !== card.path &&
     api.documents.list().some((d) => d.path === previous && d.vaultId === vaultId)
@@ -1595,23 +1608,33 @@ async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<voi
     // Revealing an open tab focuses its pane: the new file lands there.
     await api.documents.open(previous, undefined, { vaultId });
   }
-  // With the thread still focused (the previous file was closed), the file
+  // With a side tab still focused (the previous file was closed), the file
   // would land behind it in its own pane: the one split left.
-  const threadFocused = api.documents.active()?.kind === THREAD_KIND;
-  await api.documents.open(card.path, undefined, threadFocused ? { vaultId, split: 'right' } : { vaultId });
+  const activeKind = api.documents.active()?.kind;
+  const sideFocused = activeKind === THREAD_KIND || activeKind === TAKEOVER_KIND;
+  await api.documents.open(card.path, undefined, sideFocused ? { vaultId, split: 'right' } : { vaultId });
   pageFilePath = card.path;
   threadTicketId = card.id;
   for (const listener of threadListeners) {
     listener();
   }
-  if (threadOpen) {
-    api.documents.rename(THREAD_KEY, threadTitle(card.id));
-  } else {
-    api.documents.addDoc(THREAD_KIND, THREAD_KEY, threadTitle(card.id), { split: 'right' });
-    // The new pane took the focus: hand it back to the file, so the next
-    // ticket opens there and not beside the thread.
-    await api.documents.open(card.path, undefined, { vaultId });
+  if (side.kind === THREAD_KIND && api.documents.get(THREAD_KEY) !== null) {
+    api.documents.rename(THREAD_KEY, side.title);
   }
+  if (api.documents.get(side.key) !== null) {
+    // Already open: adding it again focuses it where it is.
+    api.documents.addDoc(side.kind, side.key, side.title);
+  } else if (previousSide !== null) {
+    // Focus the previous side tab's pane, then the new tab joins it.
+    api.documents.addDoc(previousSide.kind, previousSide.key, previousSide.key);
+    api.documents.addDoc(side.kind, side.key, side.title);
+  } else {
+    api.documents.addDoc(side.kind, side.key, side.title, { split: 'right' });
+  }
+  pageSide = { kind: side.kind, key: side.key };
+  // The side tab took the focus: hand it back to the file, so the next
+  // ticket opens there and not beside the side tab.
+  await api.documents.open(card.path, undefined, { vaultId });
   markOpenCard(api);
 }
 
@@ -2182,7 +2205,6 @@ function openCardMenu(
   card: TicketCard,
   at: { readonly x: number; readonly y: number },
   run: (label: string, invoke: () => Promise<unknown>) => Promise<MutationResult>,
-  openFile: (path: string) => void,
   actions: { setPriority(card: TicketCard, priority: TicketPriority): void; setTrack(card: TicketCard, track: TicketTrack | null): void },
 ): void {
   for (const other of document.querySelectorAll('.tickets-menu')) {
@@ -2217,8 +2239,7 @@ function openCardMenu(
   };
   const textRow = (label: string): HTMLElement => el('span', 'tickets-menu-label', label);
 
-  item('Open ticket', () => void openTicketPage(api, card), 'The ticket file with its thread beside it');
-  item('Open ticket file', () => openFile(card.path));
+  item('Open ticket', () => void openTicketPage(api, card), 'The ticket file with its run beside it — the thread while it has no run');
   menu.append(el('div', 'tickets-menu-sep'));
 
   const live = runForCard(card.id);

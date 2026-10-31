@@ -774,16 +774,20 @@ its heading (remembered across restarts):
   a plan to approve (*Plan to approve*), a review (*Review*), and a
   finished ticket (*Ready to try*). The buttons for the last three live
   in the ticket's thread, not on the row.
+- **Running** — everything on its way through the pipeline. The
+  tickets a worker is on right now come first; then the queue in the
+  order the fleet should take it: **dependencies before priority** — a
+  ticket never sorts above an open blocker, and a blocker moves up with
+  the most urgent ticket it holds up — then closest to done. Each row:
+  a dot (accent while a worker is on it), the step — Planning,
+  Building, Merging or the phase — and the worker's current action in
+  one short line. Without a worker it is queued and says what it waits
+  for.
 - **Shaping** — the tickets you reserved for a dialog with a worker
   (interactive); the row says whether the dialog runs, pauses or has
   not started, and how many turns it has.
-- **Running** — everything on its way through the pipeline, closest to
-  done first: a dot (accent while a worker is on it), the step —
-  Planning, Building, Merging or the phase — and the worker's current
-  action in one short line. Without a worker it is queued and says what
-  it waits for.
 - **Ideas** — the backlog before the machine, highest priority first
-  (a small *Urgent*/*High* chip marks the ones that matter), newest
+  (a blocker before what it blocks, as in Running; a small *Urgent*/*High* chip marks the ones that matter), newest
   first within a priority. An idea in the queue the fleet pulls from
   carries a **Queued** chip; the chip on the right is its track —
   **Auto** (runs on its own), **Shape** (a plan-mode dialog with you)
@@ -796,11 +800,15 @@ its heading (remembered across restarts):
 Every ticket sits in exactly one group — Needs you wins. A row is the
 title, an age and one line; the open ticket's row is marked with an
 accent bar. Click a row to open the **ticket page**: the ticket file in
-the editor and its **thread** in the pane beside it — the thread's
+the editor and beside it, while a worker is on the ticket, its **run
+tab** — the transcript, the metrics (turn, context, tokens, elapsed),
+the prompt box, hand back and resume. Without a live run the pane
+beside the file shows the ticket's **thread** instead — the thread's
 header shows the run's light and who is working, and above its composer
 sits the **decision bar** (Approve → next phase, Refine with agent, or
 Accept). The thread follows whichever ticket you open last — one tab,
-not one per ticket. The panel's footer carries the workers: the worst
+not one per ticket — and the next ticket's run tab or thread opens in
+the same pane, never a new split. The panel's footer carries the workers: the worst
 light and who is out there; the header's **+** captures a new idea.
 
 **Ready to try** (req-75 W3). When a ticket's work is built — a
@@ -849,7 +857,7 @@ header. The **Log** section opens folded the first time a ticket shows
 in a session — the fold marker beside "Log" opens it.
 
 A row's **⋯** button (or a right-click) opens its menu: **Open ticket**
-and **Open ticket file**; **Queue for the fleet** on an idea and **Back
+(the ticket page); **Queue for the fleet** on an idea and **Back
 to ideas** on a queued one; **Move to ›** with every other phase by
 name; the agent rows (see below) and, under **Past runs ›**, the
 ticket's finished runs, newest first — a row opens that run's

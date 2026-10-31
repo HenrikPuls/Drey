@@ -128,7 +128,7 @@ describe('workListNode', () => {
 
   it('an interactive ticket shapes: the group shows, with the dialog not started', () => {
     const list = workListNode(deps(), board({ inbox: [card('T-0005', 'inbox', { interactive: true })] }), [], createGroupFoldStore(null), () => undefined);
-    expect(titles(list)).toEqual(['Shaping', 'Running', 'Ideas']);
+    expect(titles(list)).toEqual(['Running', 'Shaping', 'Ideas']);
     expect(list.querySelector('.work-group-shaping .work-row-sub')?.textContent).toBe('Dialog not started');
   });
 

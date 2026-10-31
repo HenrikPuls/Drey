@@ -139,5 +139,11 @@ phone. Watch any worker and step in when needed.
   notifies on a trip or a quota pause; the header's fleet status chip
   is back. A held column is still not a per-column control — only its
   undo is drawn.
+- Later change (owner, 2026-10-31): the ticket page puts the ticket's
+  **run tab** beside the file while a run is live — the runner beside
+  the ticket, as before M89 — and the thread only otherwise; the side
+  pane is reused either way. Running moves above Shaping, live runs
+  first, then the queue by dependency (a blocker first, carrying the
+  priority of what it holds up), then priority and progress.
 - Design reference: the owner's canvas "Drey Tickets — Workflow
   redesign" (2026-10-31).
