@@ -20,6 +20,44 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 90 — req-75 W2: Questions carry their context
+
+**Not yet manually verified by the owner.** Ticket T-0059 (roadmap
+req-75 W2; [ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md)
+decision 4). A worker asks in a fixed shape — the question, what the
+ticket is about, where it stands, why it asks, two to four options with
+their consequences, a recommendation — and every surface that answers
+shows the shape and answers it with one tap, so a question can be
+answered cold after a context switch. A question in another form still
+shows as plain text with a free answer (req-64 unchanged).
+
+- **The shape** (`ASKING`, `plugins/tickets/main/fleet/assignment.ts`):
+  every dispatched run's instruction now tells the worker the exact
+  lines and carries an example; `docs/agents/fleet-worker.md` says the
+  same.
+- **The parser** (`shared/question-shape.ts`, pure): both providers run
+  `parseShapedQuestion` on the text after `QUESTION:` when they build
+  the wait; the result rides it as `RunWaiting.shaped`. Total and
+  tolerant: never throws, caps every field at 500 chars, case-insensitive
+  labels, `- ` prefixes, ` — `/` - `/`: ` separators, unmatched lines
+  ignored, a recommendation naming no option dropped; no 2–4 numbered
+  options → no shape at all.
+- **Answering in one tap**: the Needs-you row in the Work panel shows
+  the option buttons (label only, the consequence as the tooltip, the
+  recommended one marked) under an `Asks: <question>` status line; the
+  ticket thread's wait card and the phone (Needs you and the run view)
+  render the full shape with one button per option. A tap sends
+  `<n>. <label>` (`answerText`) through the ordinary `send` path and
+  disables the buttons; the free-answer field stays beside it
+  everywhere. `NeedItem.shaped` carries the shape to the phone.
+- Specs: `shared/question-shape.spec.ts` (the example parses, tolerances,
+  caps, never throws), one shaped case per provider in
+  `main/fleet/providers.spec.ts`, the ASKING shape pinned in
+  `main/fleet-fields.spec.ts`, the row's option buttons in
+  `renderer/work-panel.spec.ts`, the phone's one-tap answer in
+  `remote/dom.spec.ts`. Docs: `specs/classifier-spec.md` (the new
+  question-shape section), the manual's Tickets chapter, docs/06 §6.73.
+
 ### Milestone 89 — req-75 W1: the Work panel replaces the kanban board
 
 **Not yet manually verified by the owner.** Ticket T-0058; owner request,

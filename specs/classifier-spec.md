@@ -201,6 +201,58 @@ rewrite; image-tab results open as a scratch tab.
 
 ---
 
+## The worker's question shape (req-75 W2)
+
+A fleet worker asks the owner in a fixed shape so a question can be
+answered cold after a context switch. The instruction every dispatched
+run carries (`ASKING` in `plugins/tickets/main/fleet/assignment.ts`,
+verbatim):
+
+> Asking the owner: if you cannot go on without a decision only the
+> owner can make, end your turn with a message that starts with
+> `QUESTION:` and follows this shape, one item per line: the question;
+> "Ticket:" what the ticket is about in one line; "Where:" where you
+> stand; "Why:" why you ask; "Options:" two to four numbered options,
+> each "<n>. <option> — <its consequence>"; "Recommendation: <n> — <why>".
+> The run then waits, the owner is notified, and their answer arrives
+> here in this session (a picked option arrives as "<n>. <option>");
+> continue the step from it. Ask only what blocks the step — what the
+> plan, the ticket or the repo already answers, decide yourself; open
+> points that can wait go into the ticket's Log.
+>
+> Example:
+> QUESTION: Should dragging a heading also move the text below it?
+> Ticket: Outline — drag headings to reorder the note.
+> Where: step 2 of 4, the drop handler; step 1 is green.
+> Why: the plan says "reorder headings" but not whether the section body moves.
+> Options:
+> 1. Move the whole section — one undo step, what other editors do
+> 2. Only the heading line — the text stays, structure usually breaks
+> Recommendation: 1 — it keeps the note's structure intact.
+
+**Parsing** (`parseShapedQuestion`,
+`plugins/tickets/shared/question-shape.ts`): both providers run it on
+the text after the `QUESTION:` marker when they build the run's wait;
+the result rides the wait as `RunWaiting.shaped`, so the Work panel,
+the ticket thread and the phone render the same structure without
+parsing twice. The parser is total and tolerant — worker output is
+untrusted text: it never throws, caps every field at 500 characters,
+takes the first line as the question (null when it is empty), accepts
+the labels case-insensitively and an optional `- ` list prefix, splits
+an option at the first ` — `, ` - ` or `: ` (no separator → a null
+consequence), ignores lines that match nothing, and drops a
+recommendation that names no option. A text without two to four
+numbered options is not a shape: `shaped` stays absent and the
+question renders as the plain text of req-64 with a free answer.
+
+**Answering**: an option tap sends `<n>. <label>`
+(`answerText`) through the run's ordinary `send` — one tap, the same
+path a typed answer takes; the free-answer field stays beside it
+everywhere. OpenCode's `question`-tool forms (`waiting.questions`) are
+a different path and keep their own rendering.
+
+---
+
 ## The assistant's system prompt (milestones 76–78, ADR-0071)
 
 `buildSystemPrompt` (`plugins/assistant/main/system-prompt.ts`) builds it

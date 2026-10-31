@@ -723,16 +723,15 @@ tones in the Files panel. The `git.path` is configurable in Settings â†’
 
 ## 13. Tickets
 
-The Tickets panel is a kanban board over a **tickets repository** — its
-own git repo, registered in Drey like any vault, holding one Markdown
-file per ticket. The board is not stored anywhere: columns, order and
-claims are derived from the files on every refresh, and the files are
-the single source of truth. A ticket's phase is simply the folder its
-file sits in, and moving a ticket is a git move plus exactly one
-commit — the repo's history is the ticket's timeline.
+The **Work** panel lists your tickets over a **tickets repository** —
+its own git repo, registered in Drey like any vault, holding one
+Markdown file per ticket. Nothing is stored besides the files: what the
+panel shows is derived from them on every refresh. A ticket's phase is
+simply the folder its file sits in, and moving a ticket is a git move
+plus exactly one commit — the repo's history is the ticket's timeline.
 
 **Projects.** Every tickets repository is one **project** (req-72): its
-own board, its own pipeline and its own repositories. You can register
+own tickets, its own pipeline and its own repositories. You can register
 several — the panel header carries a project menu listing every vault
 that holds a board; picking one switches the board (and the fleet) to
 that project. Which project is active survives restarts. A new project
@@ -743,17 +742,14 @@ vault from its own Files panel.
 **Setup.** Create an empty git repository for your tickets (it can live
 on GitHub, Azure DevOps or anywhere plain git works — the board never
 talks to a host API), clone it locally and register the folder as a
-vault (see [Vaults and files](#3-vaults-and-files)). Open the Tickets
+vault (see [Vaults and files](#3-vaults-and-files)). Open the Work
 panel; the empty state offers **Initialize the tickets board**, which
-creates the three configuration files under `tickets/_meta/`:
+creates the configuration files under `tickets/_meta/`:
 
-- `pipeline.md` — the phases (columns) in order, each with a title, an
+- `pipeline.md` — the phases in order, each with a title, an
   optional WIP limit, a claim flag and what must happen for a ticket to
   leave (a manual move, an agent run, a check). Edit it like any note;
   the board follows on refresh.
-- `order.md` — sparse order pins. The listed tickets form the top of
-  their column; everything else follows priority, rank and age. Dragging
-  in the board writes this file, not the tickets.
 - `repos.md` — the work repositories a ticket can name, with their clone
   URL, integration branch and a note on which branch protection exists.
   You never have to hand-edit it (though you can): **Settings → Tickets →
@@ -764,12 +760,33 @@ creates the three configuration files under `tickets/_meta/`:
   inside (the folder itself and its subfolders) with clone URL, branch
   and local path prefilled.
 
+**The Work panel** (req-75) shows three groups, each folded or opened
+by its heading (remembered across restarts):
+
+- **Needs you** — only there when something waits on you: a worker's
+  question (*Asks: …*, with **Answer**; in the fixed shape its options
+  sit in the row as buttons — one tap answers), an approval it wants
+  (**Review**), a red gate or a failed run (**Open**, **Run again…**), a
+  checkpoint (**Approve → *next phase***, plus **Refine with agent**),
+  and a finished ticket (**Accept** — it goes to the archive).
+- **Ideas** — the backlog before the machine, highest priority first,
+  newest first within a priority. An idea in the queue the fleet pulls
+  from carries a **Queued** chip.
+- **In progress** — everything the machine is working on or that waits
+  further down the pipeline, closest to done first. A ticket with a live
+  run shows the run's light in front of its id.
+
+Every ticket sits in exactly one group. A row is the priority (click it
+to change it), the title, and one line saying why it waits or where it
+stands. Click a row to open the **ticket page**: the ticket file in the
+editor and its **thread** in the pane beside it. The thread follows
+whichever ticket you open last — one tab, not one per ticket.
+
 **Everyday use.** Capture with the **+** in the panel header: a title,
 a priority, optionally one or more repositories and a description land
 as `T-00xx.md` in the inbox (req-72: the repositories are checkboxes —
 the first checked one is the primary, where the fleet tests; the
-others get their own worktrees on the same branch). Click a card to
-open the ticket file — it is
+others get their own worktrees on the same branch). The ticket file is
 an ordinary note (description, plan, executable acceptance criteria and
 an append-only log). In the editor the ticket opens with a **header**
 instead of the folded frontmatter: the title as the headline, above it
@@ -778,39 +795,36 @@ worker and the
 branch. Edit the headline in place (Enter or leaving the field applies
 it, Escape restores it) and pick priority, repositories and worker —
 each change is an ordinary unsaved edit of the file, so
-Save and Undo work as for any typing. The phase changes by moving the
-card on the board. The code button at the right edits the frontmatter as
-YAML; its header folds back to the ticket header. The **Log** section
-opens folded the first time a ticket shows in a session — the fold
-marker beside "Log" opens it. Drag cards between columns to move them through
-the pipeline; drag within a column to pin an order. Phase folders are
-numbered (`10-inbox` … `80-done`) — the number is cosmetics for
-sorting in a file browser; everything inside a ticket keeps the plain
-phase name. **Moving the file yourself counts as a board move**: drag
-or `git mv` a ticket into another phase folder and the next board
-refresh completes the transition exactly like a drag in the panel —
-stamp, log line, one commit. **Fold a column**
-with the chevron in its head: it shrinks to a narrow strip carrying
-the count and the title rotated sideways — click the strip, or drag a
-card onto it, to unfold it again. Which columns stay folded is
-remembered across restarts (it is view state, never written to the
-repo). The context menu
-(right-click a card) opens the file, copies the deterministic branch
-name `t/T-00xx` for the work repository, claims, takes over or releases
-a claim (only the rows that apply to the ticket's claim are listed),
-lists the ticket's finished agent runs under **Past runs ›** — a
-submenu, newest first; a row opens that run's transcript read-only —
-and offers **Archive…** (armed: the first click only relabels
+Save and Undo work as for any typing. The code button at the right
+edits the frontmatter as YAML; its header folds back to the ticket
+header. The **Log** section opens folded the first time a ticket shows
+in a session — the fold marker beside "Log" opens it.
+
+A row's **⋯** button (or a right-click) opens its menu: **Open ticket**
+and **Open ticket file**; **Queue for the fleet** on an idea and **Back
+to ideas** on a queued one; **Move to ›** with every other phase by
+name; the agent rows (see below) and, under **Past runs ›**, the
+ticket's finished runs, newest first — a row opens that run's
+transcript read-only. **More ›** holds the branch name to copy
+(`t/T-00xx`), the claim rows that apply to the ticket's claim, and the
+ticket's work folder in a terminal (below). **Remove worktree…** and
+**Archive…** close the menu (armed: the first click only relabels
 the item, the second moves the ticket to `tickets/archive/` — out of
-the board, kept in git; delete files there yourself when you are sure;
-moving one back into a phase folder revives it). Over-WIP columns show
-a red count; validation findings (a
-hand-edited file, an unknown repo, a ticket in two phases) show as
-numbered badges — the board keeps rendering, nothing is guessed.
-Findings about the board's own files (`pipeline.md`, `repos.md`,
-`order.md`) show as a chip beside the filter in the panel header
-("2 board issues", coloured by the most serious one); click it to list
-the messages, and **Open** beside a message opens the file it is about.
+the list, kept in git; delete files there yourself when you are sure;
+moving one back into a phase folder revives it).
+
+Phase folders are numbered (`10-inbox` … `80-done`) — the number is
+cosmetics for sorting in a file browser; everything inside a ticket
+keeps the plain phase name. **Moving the file yourself counts as a
+move**: drag or `git mv` a ticket into another phase folder and the
+next refresh completes the transition exactly like a move from the
+menu — stamp, log line, one commit. Validation findings (a hand-edited
+file, an unknown repo, a ticket in two phases) show as a numbered badge
+on the row — the panel keeps rendering, nothing is guessed. Findings
+about the tickets repository's own files (`pipeline.md`, `repos.md`)
+show as a chip in the panel header (coloured by the most serious one);
+click it to list the messages, and **Open** beside a message opens the
+file it is about.
 
 Claims: moving a ticket into a claim-flagged phase (Build by default)
 stamps who works on it and when. A stale claim is visible by its age;
@@ -819,47 +833,26 @@ taking over replaces it and logs the previous holder.
 **Dependencies (`blocked-by`).** A ticket that must not start before
 another one is done carries `blocked-by: [T-0048]` in its frontmatter —
 write the ids by hand, a list, and save like any edit. The blocked
-state is derived from the board, never stored: the card shows a
-**blocked by T-0048** chip naming the open blockers for exactly as long
-as one of them has not reached the last phase, and the blocking card
-shows **blocks T-0049**. Both chips hide once satisfied — no manual
-unblock edit exists. The fleet never picks a blocked ticket (no
-dispatch, no manual run start, no `ci` move); the chain log names it
-and its blockers, so an idle column explains itself. You stay the
-final authority: dragging a blocked card into a worker column asks
-first (**Cancel** / **Move anyway**); anywhere else it just moves. A
-blocker id that is not on the board — deleted, renamed, or archived —
-warns and keeps the ticket blocked; nothing unblocks silently. The
-filter icon in the panel header hides the blocked cards when you want the
-overview; they stay on the board and their order is never touched.
+state is derived, never stored: the row says **Blocked by T-0048** for
+exactly as long as one of the blockers has not reached the last phase;
+no manual unblock edit exists. The fleet never picks a blocked ticket
+(no dispatch, no manual run start, no `ci` move); the chain log names
+it and its blockers, so an idle phase explains itself. You stay the
+final authority: moving a blocked ticket into a worker phase asks first
+(**Cancel** / **Move anyway**); anywhere else it just moves. A blocker
+id that is not in the repository — deleted, renamed, or archived —
+warns and keeps the ticket blocked; nothing unblocks silently.
 
-Dependencies: a ticket that must not start before another one is done
-carries a `blocked-by: [T-00xx]` list in its frontmatter (comma and
-space between several ids). The blocked state is derived — while any
-referenced ticket has not reached the pipeline's last phase, the card
-shows a **blocked by …** chip naming the open blockers, and the
-blocking card shows **blocks …** listing what waits on it; both chips
-disappear the moment every blocker is done, no manual unblock needed.
-The fleet never picks up a blocked ticket (the chain log says which
-blockers hold it), and starting a run on one refuses — but you stay in
-charge: dragging a blocked card into a worker column only asks for
-confirmation first. A blocker that was deleted, renamed or archived
-leaves the ticket blocked with a warning — never silently unblocked.
-The **filter** toggle in the panel header hides all blocked cards for a
-quieter board (view state only — nothing moves, the counts stay
-honest).
-
-The context menu also opens the ticket's **work folder in a terminal**
-("Open work folder in terminal") — the local checkout configured as
-`path:` for the ticket's repository in `repos.md`, so testing is one
-click: `.\dev.ps1` for Drey, whatever the repo uses elsewhere. The
-entry explains itself when the ticket names no repository or the
-repository has no `path:` yet.
+**More › Open work folder in terminal** opens the ticket's work folder
+— the local checkout configured as `path:` for the ticket's repository
+in `repos.md`, so testing is one click: `.\dev.ps1` for Drey,
+whatever the repo uses elsewhere. The row is there once the ticket names
+a repository with a `path:`.
 
 Pushing and pulling the tickets repo is ordinary git — use the
 [Source control](#12-git-source-control) panel like for any other
 vault. With a remote, two machines racing for the same ticket are
-decided by the first push; the loser re-reads the board and picks the
+decided by the first push; the loser re-reads the tickets and picks the
 next ticket. Pipelines that want it can add a `push: <remote>` key to
 `pipeline.md`: every transition Drey or the fleet runner commits is
 then pushed to that remote automatically (a failed push warns, it
@@ -871,8 +864,8 @@ specified in the repo's `specs/ticket-schema.md`.
 ### Running agents on tickets (the fleet)
 
 A ticket can be worked by an **external agent CLI** — OpenCode or
-Claude Code — while you watch from the board. Right-click a card and
-choose **Run agent**: the dialog lets you pick the worker (the card
+Claude Code — while you watch from the Work panel. Open a row's menu
+and choose **Run agent**: the dialog lets you pick the worker (the menu
 shows the one your pins resolve to: the ticket's `worker:` field wins,
 then the phase's `@worker` pin in `pipeline.md`, then the repo's
 `worker:` in `repos.md`, then the configured default) and how freely
@@ -898,24 +891,20 @@ such checkout instead of rebuilt: list them as `link: [.tools,
 node_modules]` under the repository in `repos.md`, and the worker is
 told to use them and install nothing.
 
-While the run is live, its column shows a **Workers** strip with one
-lane per run: a traffic light (green working, amber context nearly full
-or stopping, red stalled for five minutes — always with the state in
-words), the worker's current activity, its context window, token
-usage, plus the run's telemetry chips — **ctx** (the last turn's real
-context size), **turns** (model calls) and **reads** (read/search tool
-calls) — once the worker reports them; the card carries a ▶ chip reading
-the state, the turn count and the run's own tokens
-(`▶ running · 2 · 45k/1.2k`). While workers run, the panel
-header sums up the whole fleet next to its buttons
-(`● 1 running · 18.9M tok · 26:22`): the worst light, the states in
-words, the tokens in flight and how long the oldest live run has been
-at it — hover it for the long form; a narrow panel keeps only the light
-and the states. A lane is folded to one
-line until you unfold it (a lane that needs a look opens by itself). In
-a lane you can **Take over**, **Watch** (tail the run's output),
-**Steer** (send a message into the live run — it lands in the ticket's
-Log) or **Stop** it. **Take over** opens a tab with the worker's
+While the run is live, its row carries a traffic light (green working,
+amber context nearly full or stopping, red stalled for five minutes)
+and says what the worker does. The ticket's **thread** shows the
+worker's conversation as it happens, with a prompt box below: send a
+message and it lands in the running turn; **Stop** interrupts the turn
+(the session and its context stay). The thread's header names the
+ticket, the phase and the worker's state, with **Open run** and **Stop
+run**. While workers run, the panel header sums up the whole fleet
+next to its buttons (`● 1 running · 18.9M tok · 26:22`): the worst
+light, the states in words, the tokens in flight and how long the
+oldest live run has been at it — hover it for the long form; a narrow
+panel keeps only the light and the states.
+
+**Open run** opens the run's own tab with the worker's
 conversation and a prompt box: you can **Interrupt** the running turn
 (the session and its context stay), drive the worker with your own
 prompts and **Hand back** the run — a worker that is idle by then ends
@@ -970,15 +959,23 @@ run's input was spent before its first write — the exploration cost.
 decision of yours asks: its run stops at the question instead of ending,
 and keeps its session. The same happens when an OpenCode worker wants to
 run a tool that needs approval. Drey then shows a Windows notification
-(*T-0042 asks you*); clicking it opens the run's tab. The lane turns
-amber and says what the worker asks, the card's chip reads *? waits for
-you*, and the question also lands in the ticket's Log. In the tab the
-question sits above the prompt box — type your answer and send it; the
+(*T-0042 asks you*); clicking it opens the ticket page. The ticket moves
+to **Needs you** with *Asks: …* and an **Answer** button, and the
+question also lands in the ticket's Log. In the thread the question
+sits above the prompt box — type your answer and send it; the
 worker goes on with its step and the run ends normally when it is done.
-When the worker offers choices, they appear as buttons: with one
+
+A question asked in the fixed shape (req-75 W2) carries its context:
+what the ticket is about, where the worker stands, why it asks, two to
+four options with their consequences, and the worker's recommendation.
+Its options sit as buttons in the Needs-you row of the Work panel, in
+the thread's wait card and on the phone — **one tap on an option is the
+answer** (the recommended one is marked); the free-answer field stays
+beside them wherever you are. When the worker offers choices through
+OpenCode's question forms, they appear as buttons instead: with one
 question a click is the answer; with several, pick one per question and
-press **Send answer**. You can always type your own answer instead — for
-several questions one line each, a choice by its number or its name.
+press **Send answer**. You can always type your own answer instead —
+for several questions one line each, a choice by its number or its name.
 An approval has three buttons instead: **Allow once**, **Always allow**
 and **Deny**. A waiting run never counts as stalled, however long it
 waits.
@@ -988,7 +985,7 @@ waits.
 Some steps you want to do *with* a worker, not hand to one: shaping a
 ticket's plan in a conversation, or walking a checkpoint — the plan
 review, the review, the commit step — together. Where a column offers
-it, the card menu and the ticket header show a one-click start:
+it, the row menu and the ticket header show a one-click start:
 
 - **Plan with agent** on the first automatic column (the plan column in
   the default pipeline) — the worker reads the ticket
@@ -1003,21 +1000,21 @@ it, the card menu and the ticket header show a one-click start:
   you, applies the fixes you approve as small commits, and records the
   verdict in the ticket's Log; at commit it also drives the push.
   Automatic columns (agent and CI) offer no dialog — there the runner
-  works the ticket, and the takeover tab is its.
+  works the ticket, and its thread shows the run.
 
-The start opens **the ticket and the dialog side by side** (a split
-pane, SDK 1.35). The dialog tab is the takeover tab, in the **Interactive
-dialog** mode: the worker is yours from the first turn, the runner runs
-no gate and moves nothing — you keep talking until you are both done.
-Ending the dialog is a move, right in the tab: a plan dialog offers
-**Finish → Plan review** and **Approve → Build** (when you settled the
-open points yourself, your own checkpoint can be skipped); a refine
-dialog offers **On to** the next column or **Back to** the nearest agent
-column for rework. A click stops the run and makes the move — the same
-one-commit move as dragging the card. Closing the tab without a move
-keeps everything: the reservation stays on the ticket (the small
-**dialog** chip on its card — the fleet will not pick it up), and
-**Resume session** in the tab continues the conversation later.
+The start opens **the ticket page**: the ticket file with its thread
+beside it, and the thread is the dialog — the worker is yours from the
+first turn, the runner runs no gate and moves nothing; you keep talking
+until you are both done. Where no run is live yet, writing your first
+message in the thread starts the phase's dialog too. Ending the dialog
+is a move, right in the thread: a plan dialog offers **Finish → Plan
+review** and **Approve → Build** (when you settled the open points
+yourself, your own checkpoint can be skipped); a refine dialog offers
+**On to** the next phase or **Back to** the nearest agent phase for
+rework. A click stops the run and makes the move — the same one-commit
+move as from the menu. Closing the tab without a move keeps everything:
+the reservation stays on the ticket (the fleet will not pick it up), and
+**Open run → Resume session** continues the conversation later.
 
 Each column's dialog prompt is a prompt file like any other: a phase's
 `interactive:` key in `pipeline.md` names one, otherwise the shipped
@@ -1028,7 +1025,7 @@ by "Add Drey's prompts").
 Runs survive closing Drey — the runner is its own small process — and,
 for OpenCode workers, even a restart of the runner: the new runner takes the
 still-running worker back. (A Claude Code worker cannot be taken back; its run
-shows as **Detached** and can be stopped from its lane.)
+shows as **Detached** and can be stopped from its ticket's thread.)
 
 Rebuilding Drey doesn't interrupt the fleet either, so you can work on Drey
 tickets from the Drey you're changing. A rebuild that leaves the runner's code
@@ -1054,7 +1051,7 @@ and the **prompt**. A manual column shows dashes there. The model field is a
 picker: click it to see what the worker offers (OpenCode lists its own
 `provider/model` ids, Claude Code its aliases), type to filter, or type
 an id the list does not know. The prompt is chosen from the files in
-`tickets/_meta/prompts/`. Every change is one commit; the board follows.
+`tickets/_meta/prompts/`. Every change is one commit; the Work panel follows.
 
 **Reordering columns.** Drag a row by its grip, or focus a row and press
 Alt+↑ / Alt+↓. Inbox (where new tickets land) and Done stay first and
@@ -1082,15 +1079,15 @@ offers **Load from disk**. An empty folder offers **Add Drey's
 prompts**. A changed prompt reaches the next run, not one that is
 already running.
 
-The **master switch** sits in the board's header as one switch with
+The **master switch** sits in the Work panel's header as one switch with
 two halves, the active one filled: **▷ run** runs the chain — every
 playing automatic column drains its queue; **❙❙ halt** halts gently
 (running work finishes, nothing new starts). The **■ emergency stop**
 next to it aborts every live run and halts — it turns red when you
-point at it, one click. Each automatic
-column carries its own **brakes** next to the fold chevron: pause (no
-new dispatch), stop (abort this column's runs and hold it — the rest
-keeps going), play again. All of it survives restarts.
+point at it, one click. It survives restarts. (A single phase can
+still be held from a terminal — `POST /chain/column` on the runner,
+see `plugins/tickets/FLEET.md`; the panel no longer draws per-column
+brakes.)
 
 The machine asks the agent to decide its own step's completion — the
 brief ends with the completion discipline: run the acceptance commands
@@ -1120,7 +1117,7 @@ default worker and shows only the settings of the selected worker:
   setting in *Fleet*. Leave it empty to use the shared value.
 - **Pool probe** (OpenCode only).
 - **Dispatched-run permissions** (Claude Code only). OpenCode takes its
-  permissions from its own configuration and asks on the card.
+  permissions from its own configuration and asks in the ticket's thread.
 
 **How many runs go at once** is set per worker, not per column: the
 **Pool size** of each worker (one when empty). Every run of that worker takes a
@@ -1133,20 +1130,17 @@ address into OpenCode's **Pool probe** — the server's own parallel slots
 then cap the pool. A run that fails on the provider's rate limit makes
 that pool one slot smaller for five minutes.
 
-The board shows the chain's pulse: each column head carries its worker
-(`opencode`) and its brakes; a one-row **status bar** under the
-columns shows how long each column's tickets have been sitting there
-on average (*Avg. time in column*), and — on its right — an amber pill
+A one-row **status bar** under the Work list carries an amber pill
 when worktree folders are waiting to be cleaned up (legacy leftovers
 or orphans; hover it for the list, **Clean up worktrees…** in the
-header's **⋯** menu removes them). The board's messages show at the
-right end of that bar, just before the pill, so the cycle times never
-move: an action in progress pulses there (*Cleaning up worktrees…*), a
-result shows with a green tick and fades after a few seconds
-(*Worktrees: 2 removed*), and a warning (amber) or failure (red) stays
-until you close it with **×** — hover a cut-off message for its full
-text. The `ci` handover works, too: a column with a `ci:`
-command moves its tickets when the check passes in the work repo.
+header's **⋯** menu removes them). The panel's messages show at the
+right end of that bar, just before the pill: an action in progress
+pulses there (*Cleaning up worktrees…*), a result shows with a green
+tick and fades after a few seconds (*Worktrees: 2 removed*), and a
+warning (amber) or failure (red) stays until you close it with **×** —
+hover a cut-off message for its full text. The `ci` handover works,
+too: a phase with a `ci:` command moves its tickets when the check
+passes in the work repo.
 And the assistant can drive runs: ask it about the fleet — it sees
 `fleet_status`, and can `fleet_run`, `fleet_stop`, `fleet_steer` and
 `fleet_watch` through Drey's MCP server.
@@ -1202,7 +1196,10 @@ On the phone, four tabs sit at the bottom:
 
 **Answering a worker.** A worker's question shows its choices as
 buttons right in Needs you — a question with one choice is answered
-with one tap; or type your own words. A permission request offers
+with one tap; or type your own words. A question in the fixed shape
+shows its context (ticket, where, why) and one button per option with
+the recommendation marked — one tap is the answer, here and on the
+run's page alike. A permission request offers
 **Once**, **Always** and **Reject**.
 
 **Following a run.** A run shows the worker's steps (each tool call on

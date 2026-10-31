@@ -764,7 +764,8 @@ creates the configuration files under `tickets/_meta/`:
 by its heading (remembered across restarts):
 
 - **Needs you** — only there when something waits on you: a worker's
-  question (*Asks: …*, with **Answer**), an approval it wants
+  question (*Asks: …*, with **Answer**; in the fixed shape its options
+  sit in the row as buttons — one tap answers), an approval it wants
   (**Review**), a red gate or a failed run (**Open**, **Run again…**), a
   checkpoint (**Approve → *next phase***, plus **Refine with agent**),
   and a finished ticket (**Accept** — it goes to the archive).
@@ -963,10 +964,18 @@ to **Needs you** with *Asks: …* and an **Answer** button, and the
 question also lands in the ticket's Log. In the thread the question
 sits above the prompt box — type your answer and send it; the
 worker goes on with its step and the run ends normally when it is done.
-When the worker offers choices, they appear as buttons: with one
+
+A question asked in the fixed shape (req-75 W2) carries its context:
+what the ticket is about, where the worker stands, why it asks, two to
+four options with their consequences, and the worker's recommendation.
+Its options sit as buttons in the Needs-you row of the Work panel, in
+the thread's wait card and on the phone — **one tap on an option is the
+answer** (the recommended one is marked); the free-answer field stays
+beside them wherever you are. When the worker offers choices through
+OpenCode's question forms, they appear as buttons instead: with one
 question a click is the answer; with several, pick one per question and
-press **Send answer**. You can always type your own answer instead — for
-several questions one line each, a choice by its number or its name.
+press **Send answer**. You can always type your own answer instead —
+for several questions one line each, a choice by its number or its name.
 An approval has three buttons instead: **Allow once**, **Always allow**
 and **Deny**. A waiting run never counts as stalled, however long it
 waits.
@@ -1187,7 +1196,10 @@ On the phone, four tabs sit at the bottom:
 
 **Answering a worker.** A worker's question shows its choices as
 buttons right in Needs you — a question with one choice is answered
-with one tap; or type your own words. A permission request offers
+with one tap; or type your own words. A question in the fixed shape
+shows its context (ticket, where, why) and one button per option with
+the recommendation marked — one tap is the answer, here and on the
+run's page alike. A permission request offers
 **Once**, **Always** and **Reject**.
 
 **Following a run.** A run shows the worker's steps (each tool call on

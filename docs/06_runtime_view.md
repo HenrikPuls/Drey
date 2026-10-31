@@ -3563,7 +3563,7 @@ overdue only pluralized under the "Overdue tasks" title). The
 notification's `tag` makes a later digest replace the earlier toast
 instead of stacking.
 
-## 6.73 The Work panel: a ticket opens with its thread, a question is answered there (req-75 W1, [ADR-0087](09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md))
+## 6.73 The Work panel: a ticket opens with its thread, a question is answered there (req-75 W1/W2, [ADR-0087](09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md))
 
 ```mermaid
 sequenceDiagram
@@ -3573,26 +3573,46 @@ sequenceDiagram
     participant B as BoardService (plugin main)
     participant R as Fleet runner
 
-    R-->>B: fleet-changed {runs} (T-0104 waits: question)
+    R-->>B: fleet-changed {runs} (T-0104 waits: question, shaped)
     B-->>W: fleet-changed
-    W->>W: workGroups(snapshot, runs): T-0104 to Needs you, "Asks: ..."
-    Note over W: the owner clicks the row (or Answer)
-    W->>E: documents.open(tickets/50-build/T-0104.md)
-    alt no thread tab open yet
-        W->>T: addDoc(thread://ticket, split right)
-        W->>E: documents.open(T-0104.md) - focus back to the file
-    else the thread is open
-        W->>T: rename + re-point to T-0104 (one tab, follows the last ticket)
+    W->>W: workGroups(snapshot, runs): T-0104 to Needs you, "Asks: <question>" + option buttons
+    Note over W: the owner clicks the row (or taps an option)
+    alt a shaped option is tapped (req-75 W2)
+        W->>B: invoke("fleetSend", {runId, text: "<n>. <option>"}) - one tap
+    else the row is clicked
+        W->>E: documents.open(tickets/50-build/T-0104.md)
+        alt no thread tab open yet
+            W->>T: addDoc(thread://ticket, split right)
+            W->>E: documents.open(T-0104.md) - focus back to the file
+        else the thread is open
+            W->>T: rename + re-point to T-0104 (one tab, follows the last ticket)
+        end
+        T->>B: invoke("fleetStream", {runId}) every 2 s
+        B->>R: GET stream
+        T->>T: transcript + wait card (the shape above the prompt box)
+        Note over T: the owner taps an option or types the answer
+        T->>B: invoke("fleetSend", {runId, text})
     end
-    T->>B: invoke("fleetStream", {runId}) every 2 s
-    B->>R: GET stream
-    T->>T: transcript + wait card (the question above the prompt box)
-    Note over T: the owner types the answer
-    T->>B: invoke("fleetSend", {runId, text})
     B->>R: POST /send - the worker goes on with its step
     R-->>B: fleet-changed (waiting cleared)
     B-->>W: the row leaves Needs you
 ```
+
+The worker's question carries its context (req-75 W2): the asking
+discipline in every dispatched run's instruction (`ASKING`) names a
+fixed shape — question, `Ticket:`, `Where:`, `Why:`, two to four
+numbered options with their consequences, a `Recommendation:` — and the
+provider parses the text after `QUESTION:` with
+`parseShapedQuestion` (`shared/question-shape.ts`, total and tolerant)
+when it builds the wait, so `RunWaiting.shaped` (and `NeedItem.shaped`
+for the phone) reaches every answering surface already parsed: the row
+line becomes the question itself with one option button per option (a
+tap sends `answerText` — `<n>. <label>` — through the same
+`fleetSend`), the thread's wait card and the phone render the shape
+with its context lines and the recommendation. A `QUESTION:` turn that
+does not follow the shape stays the plain req-64 question with a free
+answer, as does the free-answer field beside the options; OpenCode's
+`question`-tool forms remain their own path.
 
 The thread talks to the ticket's live run, else to its newest run.
 Without a live run, in a phase that offers the interactive dialog, the

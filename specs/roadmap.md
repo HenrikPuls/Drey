@@ -60,7 +60,7 @@ their changelog markers. The owner's verification round for 1–81 closed
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 89 = req-75 W1; latest requirement id: req-78
+highest used (latest: milestone 90 = req-75 W2; latest requirement id: req-78
 (req-75–78 added 2026-10-31: the Work panel, STRIDE, TARA, the red-gate
 back-move; req-74 = due-date reminders, T-0012; req-73 is readable board
 issues, renumbered from req-66 — the tickets remote holds req-66)),
@@ -95,12 +95,8 @@ routes phase tickets, and the phone as a chat client. Design reference:
 the owner's canvas "Drey Tickets — Workflow redesign" (11 screens).
 Usability findings that motivate it: ADR-0087 "Context". Stages, each
 shipped and confirmed on its own, in this order (W1 shipped as
-milestone 89 — changelog):
+milestone 89, W2 as milestone 90 — changelog):
 
-- **W2 — Questions with context.** A fixed question shape in the worker
-  prompts (ticket, where the worker stands, why it asks, options with
-  consequences, a recommendation); answered from the Needs-you card,
-  the ticket page and the phone in one tap.
 - **W3 — Ready to try.** A `## Changes` section written by the worker
   (what changed for the owner, which files, which checks); **Launch
   this version** (a second Drey from the ticket's worktree,
