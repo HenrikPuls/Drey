@@ -1618,7 +1618,7 @@ history store is deliberately outside it).
 
 ---
 
-*Manual for Drey 0.8.0; manual content last changed
+*Manual for Drey 0.8.1; manual content last changed
 2026-10-31. Screenshots were captured automatically from
 the built app (Anthrazit theme, 1600Ã—1000) by
 `e2e/manual-screenshots.spec.ts` — run
