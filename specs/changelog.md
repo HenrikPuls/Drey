@@ -20,6 +20,78 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-75 W3 — Ready to try
+
+**Not yet manually verified by the owner.** Ticket T-0060 (roadmap
+req-75 W3; [ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md)
+decision 3, design reference `docs/design/work-panel/Ready.dc.html`,
+artboard "3c · Ready to try — launch and accept"). When a ticket's
+work is built, its thread says in plain words what changed for the
+owner, where, which checks passed and how to try it — with **Launch
+this version**, **Accept and merge** and **Send back…**, and beside it
+"How it got here", the ticket's story from capture to now. Folds in
+T-0057 (the owner's "start the program from the ticket" button): a
+launch command per repository.
+
+- **The `## Changes` section** (`plugins/tickets/shared/changes.ts`,
+  pure + spec): the build worker writes it into the ticket before it
+  ends (format below, in `specs/ticket-schema.md`); the page parses it
+  tolerantly — labels case-insensitive, `-`/`*` bullets, missing parts
+  left out — and never from a diff on the desk. `storyOf` reads the
+  story from the Log lines alone (created → `Captured`, the phase moves
+  → `Planning`/`Planned`/`Building`/`Merging`/`Ready to try`, a green
+  build run → `Built and tested`, `sent back:` → `Sent back`,
+  `archived` → `Accepted`; `you` for owner lines, else the worker the
+  run named; totals: first-to-last stamp in minutes, tokens summed
+  from the run-usage lines).
+- **Launch this version** (`launchVersion` IPC): resolves the ticket's
+  worktree (`worktreePathFor`), refuses `T-00xx has no worktree yet —
+  nothing to launch`, picks the repo's new `launch:` key from
+  repos.md — `runInNewConsole` (`open-terminal.ts`) runs it in a fresh
+  console at the worktree: Windows `cmd /c start "<id>" cmd /k <one
+  argument>`, detached and unref'd, no shell string ever built from
+  ticket content — else the fixed default `powershell -NoProfile
+  -ExecutionPolicy Bypass -File dev.ps1 -Built -Multi` when the
+  worktree has a `dev.ps1`, else refuses with a hint at
+  Settings → Tickets → Repositories, where the per-repo **Launch
+  command** field now lives (`RepoRef.launch`, parse + write + warning
+  on a non-string).
+- **Accept and merge** (`acceptTicket`): follows the pipeline — the
+  terminal phase gets the archive treatment, then the worktree is
+  removed when it is clean (a dirty one stays with the warning `The
+  worktree has uncommitted changes and was kept`; a live run keeps it
+  too); any earlier phase gets the ordinary transition to the next
+  configured phase (with an agent `commit` phase next, that step
+  merges). Built on the transition/archive cores extracted into
+  `moveCard`/`archiveCard` (one queue, one commit each — no second
+  implementation).
+- **Send back…** (`sendBack`): a modal (heading `Send <id> back`, a
+  note labelled `What should change?`, `Send back` disabled while
+  empty) moves the ticket to the nearest earlier agent phase (the
+  build column in the default pipeline) with two Log lines —
+  `<from> -> <to>` and `sent back: <note>` (trimmed, max 500 chars) —
+  in one commit.
+- **The Ready page** (`renderer/ready-view.ts` + spec, the thread
+  wiring in `renderer/index.ts`, `board.css`): for a ticket in Needs
+  you as `Ready to try` or `Review` — and any ticket whose file has a
+  `## Changes` section — the card sits above the transcript (kicker,
+  title, track/repo/`Ready to try` chips, the sections, the buttons,
+  the muted hint) and the story beside it as a right column from
+  900 px pane width, below when narrower (a container query on the
+  thread). The decision bar's Accept becomes the card's buttons while
+  the card shows; a ticket without the section still gets the story
+  and the buttons.
+- The shipped `build-default.md` prompt now makes the worker write or
+  update the section before it ends (exact format in the prompt and
+  `specs/ticket-schema.md`); `default-prompts.spec.ts` pins it.
+- Specs: `changes.spec.ts` (8), `open-terminal.spec.ts` (2, the
+  argument list over an injected spawn), `ticket-board.spec.ts`
+  (launch parse/write), `commands.spec.ts` (the send-back note),
+  `ready-view.spec.ts` (5, sections render / missing sections left
+  out / buttons call deps). docs/05 §5.41 gains the "Ready to try"
+  row; docs/06 §6.60 the Accept sequence; the manual §13 describes
+  the page and the launch command.
+
 ### req-75 W2b — The question reads like the canvas
 
 **Not yet manually verified by the owner.** Owner request, outside the

@@ -754,8 +754,12 @@ creates the configuration files under `tickets/_meta/`:
   URL, integration branch and a note on which branch protection exists.
   You never have to hand-edit it (though you can): **Settings → Tickets →
   Repositories** lists the entries as editable rows — name, URL, branch,
-  local path, policy, worker, worktrees base, linked folders — one
-  commit per save, your notes under the frontmatter kept. **Add from
+  local path, policy, worker, worktrees base, **launch command**, linked
+  folders — one
+  commit per save, your notes under the frontmatter kept. The launch
+  command is what **Launch this version** (below) runs in a ticket's
+  worktree; empty means `dev.ps1 -Built -Multi` when the worktree has a
+  `dev.ps1`. **Add from
   folder…** picks a folder and registers every git repository found
   inside (the folder itself and its subfolders) with clone URL, branch
   and local path prefilled.
@@ -798,6 +802,33 @@ sits the **decision bar** (Approve → next phase, Refine with agent, or
 Accept). The thread follows whichever ticket you open last — one tab,
 not one per ticket. The panel's footer carries the workers: the worst
 light and who is out there; the header's **+** captures a new idea.
+
+**Ready to try** (req-75 W3). When a ticket's work is built — a
+*Ready to try* or *Review* row in Needs you, or any ticket whose file
+carries a `## Changes` section — the thread shows the **Ready card**
+above the transcript: what changed for you, where (which files, and
+why), which checks passed, and how to try it, all as the build worker
+wrote it into the ticket's `## Changes` section. Under it, three
+buttons:
+
+- **Launch this version** opens the ticket's worktree in a new console
+  and starts the repository's program there (the launch command from
+  Settings → Tickets → Repositories; without one, `dev.ps1 -Built
+  -Multi` when the worktree has it) — a second instance beside the
+  one you are using, yours untouched.
+- **Accept and merge** follows the pipeline: in Done the ticket goes
+  to the archive and its worktree is removed (a dirty worktree stays
+  and says so); in an earlier phase the ticket moves on — with a
+  *Commit* column next, that step merges the branch.
+- **Send back…** asks for one note ("What should change?") and moves
+  the ticket back to the nearest agent phase (Build in the default
+  pipeline) with the note in its log.
+
+Beside the card sits **How it got here** — the ticket's story from
+capture to now, read from its log, with the total time and tokens. On
+a pane narrower than 900 px the story sits below the card. A ticket
+without a `## Changes` section still shows the story and the buttons;
+only the missing sections are left out.
 
 **Everyday use.** Capture with the **+** in the panel header: a title,
 a priority, optionally one or more repositories and a description land

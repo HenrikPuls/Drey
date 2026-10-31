@@ -35,6 +35,28 @@ Out of scope were written so you do not have to rediscover them.
   what you built, what deviates from the plan, and anything the review
   step should look at first.
 
+Before you end, write or update the ticket's `## Changes` section — the
+owner's Ready page reads it as written (replace an earlier section of
+the same name, never a second one). The exact format:
+
+```
+## Changes
+
+**What changed for you:** one or two plain sentences — what the owner gets; end with the line `Nothing else you can see has changed.` when that is true
+
+**Where:**
+- M `path/that/changed.ts` — why this file
+- A `path/that/was/added.ts` — why it was added
+
+**Checks:**
+- the gate commands that passed, in the owner's words
+
+**How to try it:** 1. first step · 2. second step · 3. what to see
+```
+
+Status letters are M, A, D, R; keep every label line exactly as shown.
+A section you cannot fill honestly stays empty rather than invented.
+
 How to work:
 - Batch independent reads and searches into one step instead of one at a
   time. Use the dedicated read, search and edit tools over shell

@@ -3617,5 +3617,60 @@ answer, as does the free-answer field beside the options; OpenCode's
 The thread talks to the ticket's live run, else to its newest run.
 Without a live run, in a phase that offers the interactive dialog, the
 first message starts it (`startInteractive(..., open = false)`) and is
-sent into the new run. An Accept on a finished ticket is the ordinary
-`archive` command; Approve is the ordinary `transition`.
+sent into the new run. The Ready card's Accept and Send back are their
+own commands (§6.74); the decision bar's Approve remains the ordinary
+`transition`.
+
+## 6.74 The Ready card: read the Changes section, launch the worktree, accept or send back (req-75 W3, [ADR-0087](09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md))
+
+```mermaid
+sequenceDiagram
+    actor U as Owner
+    participant T as Ticket thread (renderer)
+    participant B as BoardService (plugin main)
+    participant C as New console (runInNewConsole)
+    participant G as git (tickets repo / repo checkout)
+
+    Note over T: paint: Needs you as Ready to try / Review,<br/>or the file has a ## Changes section
+    T->>B: invoke("changes", {id}) - once per ticket path
+    B-->>T: {changes, story, totals} (parsed from the file)
+    T->>T: the card above the transcript, the story beside it;<br/>the decision bar stands back
+
+    U->>T: Launch this version
+    T->>B: invoke("launchVersion", {id})
+    B->>B: worktreePathFor - exists? else refuse "no worktree yet"
+    B->>B: repo.launch ?? dev.ps1 default (worktree has one?)
+    B->>C: runInNewConsole(worktree, command) - detached, unref'd
+    C-->>U: the program runs in its own console
+
+    U->>T: Accept and merge (Accept in the terminal phase)
+    T->>B: invoke("acceptTicket", {id})
+    alt ticket in the terminal phase
+        B->>G: archive treatment: move to tickets/archive/,<br/>Log "archived", one commit (+ optional push)
+        B->>G: git worktree remove (force off)
+        alt dirty worktree
+            B-->>T: ok, warning "uncommitted changes - kept"
+        else clean
+            G-->>B: worktree removed
+        end
+    else an earlier phase
+        B->>G: moveCard: the ordinary transition to the next<br/>configured phase (an agent commit phase merges),<br/>one commit
+    end
+    B-->>T: ok (+path) - board-changed, the page repaints
+
+    U->>T: Send back… - modal: "What should change?"
+    T->>B: invoke("sendBack", {id, note})
+    B->>B: nearest earlier agent phase (build in the default)
+    B->>G: moveCard: "<from> -> <to>" + "sent back: <note>",<br/>one commit
+```
+
+The `## Changes` section is the worker's writing (the build prompt
+makes it write or update the section before it ends); the desk never
+parses a diff. `parseChanges` and `storyOf` (`shared/changes.ts`) are
+pure and tolerant, so a hand-edited or missing section degrades to
+empty parts, never an error. Accept follows the pipeline — there is no
+second merge implementation on the desk: the terminal phase archives
+(and removes a clean worktree, a dirty one stays with a warning), any
+earlier phase moves one column right, where an agent `commit` column
+does the merge as its own step.
+
