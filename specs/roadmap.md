@@ -98,7 +98,8 @@ shipped and confirmed on its own, in this order:
 - **W1 — Work panel.** Groups Needs you / Ideas / In progress replace
   the columns (works from ~240 px); accept → archive; the kanban
   renderer, lanes, column controls and pins in the UI are removed. The
-  ticket tab becomes the one detail page.
+  ticket tab becomes the one detail page: the conversation thread
+  beside the ticket file (desktop as chat, like the phone).
 - **W2 — Questions with context.** A fixed question shape in the worker
   prompts (ticket, where the worker stands, why it asks, options with
   consequences, a recommendation); answered from the Needs-you card,
@@ -121,9 +122,14 @@ shipped and confirmed on its own, in this order:
   and suggests the track.
 - **W6 — Shape track.** The plan-mode dialog with the project context
   assembled automatically and shown as chips (CLAUDE.md, specs, ADRs,
-  related tickets — over the existing context pack); read-only; the
-  plan grows beside the dialog and is written into the ticket; "split
-  into phase tickets".
+  related tickets — over the existing context pack); read-only on the
+  work repo; the plan grows beside the dialog in the ticket file;
+  "split into phase tickets". **Both edit the plan** (owner request
+  2026-10-31): the owner changes text or the Mermaid architecture
+  diagram in the editor, and the next message carries the delta since
+  the model's last turn (diff + per-block summary, shown in the thread
+  and as a removable composer chip) for discussion; gutter marks show
+  who changed which block (ADR-0087 decision 8).
 - **W7 — Orchestrator.** Phase tickets with gates between phases;
   routing by a rules file in the tickets repository (first match wins:
   worker, model, review); `touches:` paths per ticket and an overlap

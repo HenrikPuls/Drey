@@ -50,12 +50,16 @@ phone. Watch any worker and step in when needed.
    **Shape** (a plan-mode dialog with the owner, the project context
    loaded automatically and shown; it ends in a plan, optionally split
    into phase tickets).
-3. **One page per ticket.** The ticket tab is the only detail view:
-   description, plan, the live worker (current action, recent actions,
-   pause / tell / take over / stop), the changes and — once ready — the
-   change summary with **Launch this version** (a second Drey from the
-   ticket's worktree), **Accept and merge** and **Send back**. The
-   separate takeover tab goes away.
+3. **One page per ticket: the conversation beside the document.** The
+   ticket tab is the only detail view, split in two: the **thread**
+   (the owner's messages, the worker's or the model's replies, its
+   steps as collapsible groups, the live action, a composer) and the
+   **ticket file** in the ordinary editor (description, plan, changes).
+   The worker's controls (pause / take over / stop) sit in the thread's
+   header. Once ready the thread carries the change summary with
+   **Launch this version** (a second Drey from the ticket's worktree),
+   **Accept and merge** and **Send back**. The separate takeover tab
+   goes away. The desktop and the phone show the same thread.
 4. **A question carries its context.** The worker asks in a fixed shape
    (what the ticket is, where the worker stands, why it asks, options
    with consequences, a recommendation); the Needs-you card and the
@@ -70,6 +74,18 @@ phone. Watch any worker and step in when needed.
    flagged as stuck with "nudge / hand to another worker / stop".
 7. **The phone is a chat client.** Every ticket is a conversation; one
    composer captures, answers and shapes; options are compact chips.
+8. **The plan is edited by both, and the model gets the owner's delta.**
+   The ticket file is the shared document: the model writes it through
+   the open tab (milestone 78, `OpenDocsBridge`), the owner edits it in
+   the same editor — text, acceptance criteria, a Mermaid architecture
+   diagram. Every model turn records the version of the file it last
+   saw. When the owner sends the next message, the edits made since
+   then go along as a **delta**: a unified diff of the file plus a
+   one-line-per-block summary, shown in the thread ("You edited the
+   plan — 3 changes") and as a removable chip in the composer before
+   sending. The model is told to discuss the changes, not silently
+   accept them. Gutter marks in the editor show which blocks the owner
+   and which the model changed since the last turn.
 
 ## Consequences
 
@@ -83,6 +99,15 @@ phone. Watch any worker and step in when needed.
   the track field.
 - The remote client (req-66) is rebuilt as a chat UI on the same
   gateway and command layer.
+- The delta needs a stored baseline per ticket conversation (the file
+  text the model last saw — kept in the run record, not in the tickets
+  repo) and a prompt contract for it (`specs/classifier-spec.md`).
+  Diagrams are diffable only as text: **Mermaid** is the plan's diagram
+  format; a draw.io diagram (ADR-0064) changes as XML, so its delta is
+  "diagram changed" plus a re-read, not a readable diff. ⚠️ Simultaneous
+  typing by the owner while the model edits the same block makes the
+  model's exact-match edit fail (`shared/text-edit.ts`); it then
+  re-reads — acceptable, but visible.
 - Built and shipped in stages W1–W9 (`specs/roadmap.md`, req-74); this
   ADR moves to accepted with W1.
 - Design reference: the owner's canvas "Drey Tickets — Workflow
