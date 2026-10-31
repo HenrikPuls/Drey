@@ -314,7 +314,7 @@ instructions (verbatim: the file `repos.md`'s `instructions:` names,
 req-79 — Drey's is `docs/agents/fleet-worker.md`; unset, missing or
 blank falls back to `CLAUDE.md`, then `AGENTS.md`) → phase
 template → the ticket's `## Plan` verbatim → the variable parts
-(who/where, description, the worktree's `git diff --stat` head-capped,
+(who/where, description, the worktree's diff stat (commits since the branch left the base — `base...HEAD`, then `git status --short`) head-capped, the earlier step's `## Handover` section,
 and on a retry the previous run's gate failure tail-capped). The prefix
 up to the plan is byte-identical across runs of the same repo and
 phase, so a warm prompt cache survives. A red-gate retry is a fresh run

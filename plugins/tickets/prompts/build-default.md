@@ -32,10 +32,17 @@ Out of scope were written so you do not have to rediscover them.
   consistent. Do not stub, fake or skip to get green.
 - Before you end: every acceptance command passes, the worktree is
   clean, and no debug code or stray files remain. Append a Log line with
-  what you built, what deviates from the plan, and anything the review
-  step should look at first.
+  what you built, what deviates from the plan, and anything the owner
+  should look at first — one line, under 200 characters; the detail
+  goes into `## Handover` below.
 
-Before you end, write or update the ticket's `## Changes` section — the
+Before you end, replace the ticket's `## Handover` section: State
+(`done` or `blocked`, one line), Decisions (up to three bullets), Open
+(what the next step must check first), Files (the main ones), Verified
+(the commands you ran and what they said). Under 15 lines; the commit
+step and any resumed session read it instead of the Log.
+
+Also write or update the ticket's `## Changes` section — the
 owner's Ready page reads it as written (replace an earlier section of
 the same name, never a second one). The exact format:
 

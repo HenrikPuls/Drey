@@ -265,14 +265,39 @@ describe('composeInstruction — the context pack (T-0048)', () => {
   it('the diff stat is injected head-capped and reported; nothing leaks when there is none', () => {
     const stat = [...Array(80).keys()].map((i) => ` src/file${i + 1}.ts | ${i + 1} ++++`).join('\n');
     const withStat = composeInstruction(baseInput({ diffStat: stat }));
-    expect(withStat.text).toContain('git diff --stat');
+    expect(withStat.text).toContain('The branch so far');
     expect(withStat.text).toContain('src/file1.ts');
     expect(withStat.text).not.toContain('src/file80.ts');
     expect(withStat.truncations).toEqual([{ section: 'diffStat', originalSize: Buffer.byteLength(stat, 'utf8') }]);
 
     const without = composeInstruction(baseInput({ diffStat: null }));
-    expect(without.text).not.toContain('git diff --stat');
+    expect(without.text).not.toContain('The branch so far');
     expect(without.truncations).toEqual([]);
+  });
+
+  it('an earlier handover rides in the changing part and in the resume, never the stable prefix', () => {
+    const handover = 'State: done\nOpen: check the empty-board case first';
+    const ticket = `${newTicket()}
+## Handover
+
+${handover}
+
+## Log
+
+- long line
+`;
+    expect(ticketSections(ticket).handover).toBe(handover);
+    expect(ticketSections(ticket).plan).not.toContain('empty-board');
+    const withHandover = composeInstruction(baseInput({ handover }));
+    expect(withHandover.text).toContain('check the empty-board case first');
+    expect(withHandover.continuation).toContain('check the empty-board case first');
+    expect(withHandover.continuation).toContain('Continue where you stopped');
+    expect(withHandover.stable).toBe(composeInstruction(baseInput()).stable);
+  });
+
+  it('a worker is told to leave a handover, a dialog is not', () => {
+    expect(composeInstruction(baseInput()).text).toContain('replace the ticket file');
+    expect(composeInstruction(baseInput({ interactive: 'plan' })).text).not.toContain('Handover: before you end');
   });
 
   it('custom caps replace the defaults', () => {

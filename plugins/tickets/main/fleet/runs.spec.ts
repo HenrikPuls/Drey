@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AttachInfo, ProviderAdapter, ProviderStart, WorkerHandle } from './providers';
-import { execShell, HANDOVER_CONTINUE, limitExceeded, probeExec, RunSupervisor, STUCK_FAIL_MS, STUCK_FLAG_MS, usageSummary, type RunSupervisorDeps } from './runs';
+import { execShell, HANDBACK_CONTINUE, HANDOVER_CONTINUE, limitExceeded, probeExec, RunSupervisor, STUCK_FAIL_MS, STUCK_FLAG_MS, usageSummary, type RunSupervisorDeps } from './runs';
 import { processAlive } from './procs';
 import type { RunInfo, RunRequest, RunState } from './protocol';
 import { newTicketFileText, patchTicketFile, parseTicketFile } from '../ticket-files';
@@ -513,6 +513,37 @@ describe('RunSupervisor', () => {
     expect((await sup.release(runId)).ok).toBe(true);
     expect(handle.setHold).toHaveBeenLastCalledWith(false);
     expect(sup.get(runId)?.held).toBe(false);
+  });
+
+  it('handing back a paused worker continues the step instead of ending it for the gate', async () => {
+    const { sup, adapter, gate } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    const handle = adapter.handles[0]!;
+
+    expect((await sup.interrupt(runId)).ok).toBe(true);
+    handle.result(); // the interrupted turn's own result — not a completion
+    expect((await sup.release(runId)).ok).toBe(true);
+    expect(handle.steer).toHaveBeenCalledWith(HANDBACK_CONTINUE);
+    expect(sup.get(runId)?.state).toBe('running');
+
+    // The worker exits without a result of its own after the hand-back:
+    // no agent-done was ever declared, so the step fails instead of gating.
+    handle.fail(0);
+    await vi.waitFor(() => expect(sup.get(runId)?.state).toBe('failed'));
+    expect(gate).toEqual([]);
+  });
+
+  it('a plain release without a pause does not prompt the worker', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    const handle = adapter.handles[0]!;
+    expect((await sup.takeover(runId)).ok).toBe(true);
+    expect((await sup.release(runId)).ok).toBe(true);
+    expect(handle.steer).not.toHaveBeenCalled();
   });
 
   it('the first prompt takes the run over by itself; opening and watching never do', async () => {

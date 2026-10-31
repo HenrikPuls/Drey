@@ -305,6 +305,15 @@ the runner rely on:
   (renamed); a path without a why is fine. The page also reads the
   ticket's story ("How it got here") from the Log section alone — no
   frontmatter is added for any of this.
+- `## Handover` — what a step leaves for the next one and for its own
+  resume (milestone 94). The worker **replaces** the section (never a
+  second one, before `## Log`) at the end of every step: `State` (`done`
+  or `blocked`, one line), `Decisions` (up to three bullets), `Open`
+  (what the next step must check first), `Files` (the main ones),
+  `Verified` (commands run and their result), under 15 lines. The next
+  step's brief and a resume carry it (capped at 2 KB) instead of the Log
+  tail; `ticketSections` reads it. A Log line stays one short line under
+  200 characters — detail belongs here.
 - `## Log` — append-only. Machine-appended entries use the exact line
   shape `- '<UTC timestamp>' <who> — <text>`; humans may append in any
   readable shape. Every transition, claim, takeover, injection, stop

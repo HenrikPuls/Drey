@@ -270,11 +270,12 @@ function parseRun(value: unknown, issues: TicketIssue[]): TicketRun | null {
 // The machine gate's input: the ticket's acceptance commands.
 
 /** A ticket body's H2 sections, trimmed (frontmatter and fences off). */
-export function ticketSections(text: string): { description: string; plan: string } {
+export function ticketSections(text: string): { description: string; plan: string; handover: string } {
   const body = text.replace(/^---\n[\s\S]*?\n---\n?/, '');
-  let current: 'description' | 'plan' | null = null;
+  let current: 'description' | 'plan' | 'handover' | null = null;
   const description: string[] = [];
   const plan: string[] = [];
+  const handover: string[] = [];
   for (const line of body.split('\n')) {
     if (/^##\s+Description\s*$/.test(line)) {
       current = 'description';
@@ -282,6 +283,10 @@ export function ticketSections(text: string): { description: string; plan: strin
     }
     if (/^##\s+Plan\s*$/.test(line)) {
       current = 'plan';
+      continue;
+    }
+    if (/^##\s+Handover\s*$/.test(line)) {
+      current = 'handover';
       continue;
     }
     if (/^##\s/.test(line)) {
@@ -292,11 +297,14 @@ export function ticketSections(text: string): { description: string; plan: strin
       description.push(line);
     } else if (current === 'plan') {
       plan.push(line);
+    } else if (current === 'handover') {
+      handover.push(line);
     }
   }
   return {
     description: description.join('\n').trim(),
     plan: plan.join('\n').trim(),
+    handover: handover.join('\n').trim(),
   };
 }
 

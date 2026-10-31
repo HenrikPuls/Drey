@@ -33,14 +33,23 @@ write down is paid for again by the build step.
   command per check, exactly what the machine gate will run in your
   checkout. Each command must run non-interactively, exit non-zero when
   the work is missing, and cover the ticket's behaviour, not only
-  compilation. Run each one where you can and note in the Log which
-  fail before the work, which is expected. No placeholders and no prose
-  checks. A ticket without acceptance commands cannot leave plan-review.
+  compilation. Check that every command CAN pass before you write it
+  down: the test file, folder or scope it names exists (a runner that
+  takes a plugin id or a path fragment does not take a spec file path)
+  and it exits 0 once the work is done. A command no finished build can
+  satisfy fails every run and trips the breaker. Run each one where you
+  can and note in the Log which fail before the work, which is
+  expected. No placeholders and no prose checks. A ticket without acceptance commands cannot leave plan-review.
 - If the ticket names other tickets it depends on, check their state and
   write down what the plan assumes from them.
 - Append a Log line: what you decided to include or leave out, and any
   open question the owner must answer at plan-review.
-- Commit the ticket-file change on the branch.
+- The ticket file lives in the tickets repo, outside your worktree: the
+  runner commits it. Do not commit it yourself, and touch no other file.
+- Before you end, write the ticket's `## Handover` section (replace an
+  earlier one): State (one line), Decisions (up to three bullets),
+  Open (what the build must check first), Files (the main ones). Under
+  15 lines — the build step reads it before the plan.
 
 How to work:
 - Batch independent reads and searches into one step instead of one at a

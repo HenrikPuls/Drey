@@ -28,10 +28,14 @@ export async function readRepoInstructions(repoPath: string, configured: string 
 }
 
 /**
- * The worktree's diff stat against the base ref (`repos.md` `branch:`) —
- * the committed-on-branch AND uncommitted changes in one stat, what a
- * retry's worker continues from. Null when the base is unset or the
- * worktree does not exist yet (a first run has nothing to show).
+ * What the branch holds beyond the base ref (`repos.md` `branch:`), the
+ * state a retry's worker continues from: the stat of the commits made
+ * since the branch left the base (`base...HEAD`, the merge-base form),
+ * then the uncommitted paths. The old `git diff --stat <base>` compared
+ * against the base's CURRENT tip, so once the base moved on every
+ * upstream change read as the worker's own deletions. Null when the
+ * base is unset, the worktree does not exist yet (a first run has
+ * nothing to show) or nothing differs.
  */
 export async function worktreeDiffStat(
   git: Pick<TicketsGit, 'run'>,
@@ -41,11 +45,18 @@ export async function worktreeDiffStat(
   if (baseRef === null || baseRef.trim() === '') {
     return null;
   }
+  const sections: string[] = [];
   try {
-    const out = await git.run(worktreePath, ['diff', '--stat', baseRef]);
-    const stat = out.trim();
-    return stat === '' ? null : stat;
+    const committed = (await git.run(worktreePath, ['diff', '--stat', `${baseRef}...HEAD`])).trim();
+    if (committed !== '') {
+      sections.push(`Committed on the branch:\n${committed}`);
+    }
+    const uncommitted = (await git.run(worktreePath, ['status', '--short'])).trim();
+    if (uncommitted !== '') {
+      sections.push(`Uncommitted:\n${uncommitted}`);
+    }
   } catch {
     return null;
   }
+  return sections.length === 0 ? null : sections.join('\n\n');
 }

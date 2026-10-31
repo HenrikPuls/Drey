@@ -166,6 +166,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     phase: input.card.phase,
     description: sections.description,
     plan: sections.plan,
+    handover: sections.handover,
     prompt: input.promptText,
     acceptance,
     ticketFile: path.join(input.vaultPath, input.card.path),
