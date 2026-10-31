@@ -4,6 +4,7 @@
  * shows. No DOM — the board draws it (index.ts), the spec pins it.
  */
 import type { RunInfo } from '../main/fleet/protocol';
+import type { ChainAlert } from './chain-alerts';
 
 /**
  * The window the context bar falls back to when the worker reported
@@ -132,6 +133,74 @@ export function formatTokens(n: number): string {
     return n >= 100_000 ? `${Math.round(n / 1_000)}k` : `${(n / 1_000).toFixed(1)}k`;
   }
   return String(n);
+}
+
+/** The fleet's worker providers as people read them (the run modal lists the same). */
+export const WORKER_LABEL: ReadonlyArray<readonly [string, string]> = [
+  ['opencode', 'OpenCode'],
+  ['claude-code', 'Claude Code'],
+];
+
+/** A provider id as its label (`opencode` → `OpenCode`); unknown ids stay as they are. */
+export function workerLabelOf(provider: string): string {
+  for (const [value, label] of WORKER_LABEL) {
+    if (value === provider) {
+      return label;
+    }
+  }
+  return provider;
+}
+
+/**
+ * The footer's fleet line (T-0086): the one place the fleet's status
+ * lives, at every width — the summary's states in words plus who is out
+ * there, tokens in flight and the oldest run's age as a mono suffix,
+ * the long form for the tooltip. A standing chain alert turns the light
+ * amber at least; with nothing running the alert itself is the line.
+ */
+export interface FleetLine {
+  /** The worst light of the live runs; a standing alert turns it amber at least. */
+  readonly light: Light;
+  /** The visible line: `2 running · OpenCode 2`, `No workers running`, or the alert's title. */
+  readonly text: string;
+  /** The mono suffix `1.2M tok · 12:34`; '' when nothing runs. */
+  readonly numbers: string;
+  /** Tooltip and aria-label: the parts below, joined with newlines, each only when it applies. */
+  readonly long: string;
+}
+
+export function fleetLine(runs: readonly RunInfo[], alerts: readonly ChainAlert[], nowMs: number): FleetLine {
+  const summary = fleetSummary(runs, nowMs);
+  const alertLines = alerts.map((alert) => `${alert.title}: ${alert.text}`);
+  if (summary === null) {
+    if (alerts.length === 0) {
+      return { light: 'idle', text: 'No workers running', numbers: '', long: '' };
+    }
+    return {
+      light: 'amber',
+      text: alerts.length === 1 ? alerts[0]!.title : `${alerts.length} fleet alerts`,
+      numbers: '',
+      long: alertLines.join('\n'),
+    };
+  }
+  const byProvider = new Map<string, number>();
+  for (const run of runs) {
+    byProvider.set(run.provider, (byProvider.get(run.provider) ?? 0) + 1);
+  }
+  const workers = [...byProvider].map(([provider, n]) => `${workerLabelOf(provider)} ${n}`).join(' · ');
+  const age = summary.ageMs === null ? '' : spanClock(summary.ageMs);
+  const dimmedByAlert = alerts.length > 0 && (summary.light === 'green' || summary.light === 'idle');
+  return {
+    light: dimmedByAlert ? 'amber' : summary.light,
+    text: `${summary.label} · ${workers}`,
+    numbers: `${formatTokens(summary.tokens)} tok${age === '' ? '' : ` · ${age}`}`,
+    long: [
+      summary.label,
+      `${formatTokens(summary.tokens)} tokens in flight (in + out of all live runs)`,
+      ...(age === '' ? [] : [`the oldest run has been at it for ${age}`]),
+      ...alertLines,
+    ].join('\n'),
+  };
 }
 
 /**

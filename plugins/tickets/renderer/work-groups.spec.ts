@@ -20,6 +20,7 @@ import {
   runningStepOf,
   statusLineOf,
   workGroups,
+  workListSignature,
 } from './work-groups';
 
 /**
@@ -283,6 +284,54 @@ describe('rowStatusOf (T-0084)', () => {
     expect(statusOf(groups, 'T-0004')).toBe('queued');
     expect(statusOf(groups, 'T-0005')).toBe('idle');
     expect(statusOf(groups, 'T-0006')).toBe('parked');
+  });
+});
+
+describe('workListSignature — what re-renders the Work list (T-0086)', () => {
+  it('ignores activity, tokens and clocks — text the live paint refreshes in place', () => {
+    const base = workListSignature([run({ ticketId: 'T-0001' })], []);
+    const moving = workListSignature(
+      [
+        run({
+          ticketId: 'T-0001',
+          activity: 'Reading board.ts',
+          tokensIn: 12_000,
+          tokensOut: 3_000,
+          lastActivity: '2026-10-30T11:00:00Z',
+          startedAt: '2026-10-30T09:30:00Z',
+          execMs: 4_500,
+        }),
+      ],
+      [],
+    );
+    expect(moving).toBe(base);
+  });
+
+  it('moves on state, column, waiting kind, turn, interactive and held', () => {
+    const base = workListSignature([run({ ticketId: 'T-0001' })], []);
+    const patches: readonly Partial<RunInfo>[] = [
+      { state: 'stopping' },
+      { phase: 'review' },
+      { waiting: { kind: 'question', text: 'Q', since: '2026-10-30T10:05:00Z' } },
+      { turn: 'idle' },
+      { interactive: 'plan' },
+      { held: true },
+    ];
+    for (const patch of patches) {
+      expect(workListSignature([run({ ticketId: 'T-0001', ...patch })], [])).not.toBe(base);
+    }
+  });
+
+  it('sorts by run id, so the fleet snapshot\'s order does not matter', () => {
+    const a = run({ id: 'a', ticketId: 'T-0001' });
+    const b = run({ id: 'b', ticketId: 'T-0002', state: 'stopping' });
+    expect(workListSignature([a, b], [])).toBe(workListSignature([b, a], []));
+  });
+
+  it('follows the alert keys', () => {
+    const base = workListSignature([], ['halted']);
+    expect(workListSignature([], ['halted', 'quota:opencode:2026-11-01T00:00:00Z'])).not.toBe(base);
+    expect(workListSignature([], [])).not.toBe(base);
   });
 });
 

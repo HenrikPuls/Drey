@@ -20,6 +20,48 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix - the Work panel holds still, the fleet status moves into the footer
+
+**Not yet manually verified by the owner.** Ticket T-0086 (owner request,
+2026-10-31, after req-75 W1b). Four findings from the owner's screen:
+
+- **The fleet controls fell out of the panel head at narrow width.**
+  `.head` had a fixed 32 px height with `overflow: hidden`, and
+  `.head-actions` could neither shrink nor wrap — the header's right end
+  (the fleet chip, run/halt, abort, ⋯) was clipped away and the buttons
+  rendered displaced. The head now grows (`min-height`) and its action
+  strip shrinks and wraps (`panel-frame.css`, `#pluginActions` gets
+  `min-width: 0`), so the controls flow onto a second row instead of out
+  of view — every dock panel's header may wrap now, an additive change
+  under space pressure only.
+- **The fleet status lives in the footer, at every width.** The owner's
+  own proposal, taken literally: the header chip (`fleetHeaderNode` and
+  its two width thresholds) is gone; the footer's line is the one fleet
+  display — a live node (own paint, 1 s tick, fleet and panel-width
+  listeners) over the pure `fleetLine` (`worker-status.ts`): the worst
+  light, the states in words plus who is out there
+  (`2 running · OpenCode 2`), tokens and the oldest run's age as a mono
+  suffix (hidden under 360 px, kept in the tooltip), amber at least
+  while a chain alert stands, and the alert itself when nothing runs.
+- **The whole Work view is no longer rebuilt on every fleet update.**
+  The daemon polls every 2.5 s and pushes whenever the JSON differs —
+  tokens, `lastActivity`, `activity`, `execMs` move on every poll while
+  a run is live, and each push cleared and rebuilt the whole list (the
+  context menu survived in `document.body`, but the list under it was
+  destroyed — hover lost, visible flicker, the 1 s clock made it read as
+  "rebuilt every tick"). Now `applyChainStatus` re-renders only when the
+  Work list's *structure* signature moves (`workListSignature`:
+  per run id, state, column, waiting kind, turn, interactive, held, plus
+  the alert keys); anything else paints in place (`workListLivePaint`:
+  ages, run step/line/dot, shaped lines — never a node added or
+  removed). The master buttons stay outside the gate; a run *state*
+  change still re-pulls the board.
+- **Submenus no longer linger.** Hovering another row of the open menu
+  closes the submenu at once (the 250 ms grace stays only on leaving
+  the trigger/panel — the diagonal move into the submenu needs it), so
+  the panel and the trigger's gray background follow the pointer
+  without a lag beat.
+
 ### Milestone 91 — ticket T-0084: the Work panel's phase colours, filter and running marks
 
 **Not yet manually verified by the owner.** Ticket T-0084 (owner request

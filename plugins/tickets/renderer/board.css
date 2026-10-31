@@ -112,11 +112,15 @@
  * every control icon-only (ADR-0057).
  */
 /* Not `.tickets-head`: that is the editor's ticket header (req-62), whose
-   block display and bottom padding pushed these controls off the title line. */
+   block display and bottom padding pushed these controls off the title line.
+   Wraps (T-0086): a narrow dock flows the controls onto a second row
+   instead of clipping them out of view. */
 .tickets-panel-head {
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
 
 .tickets-head-group {
@@ -125,54 +129,6 @@
   gap: 2px;
   padding-left: 6px;
   border-left: 1px solid var(--border);
-}
-
-/* The fleet's status: a quiet chip, the long form in its tooltip. */
-.tickets-head-fleet {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 22px;
-  margin-right: 2px;
-  padding: 0 10px 0 8px;
-  border-radius: 11px;
-  background: var(--bg-input);
-  font-size: 0.72rem;
-  color: var(--text-2);
-  white-space: nowrap;
-  cursor: help;
-}
-
-.tickets-head-fleet .tickets-light {
-  width: 7px;
-  height: 7px;
-  box-shadow: none;
-}
-
-.tickets-head-fleet[hidden] {
-  display: none;
-}
-
-.tickets-head-fleet-numbers {
-  color: var(--text-4);
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.tickets-head-fleet-numbers::before {
-  content: '· ';
-  font-family: inherit;
-}
-
-/* A narrow panel keeps the light and the count, the numbers stay in the tooltip. */
-.tickets-head-fleet[data-narrow] .tickets-head-fleet-numbers,
-.tickets-head-fleet[data-tiny] .tickets-head-fleet-label {
-  display: none;
-}
-
-.tickets-head-fleet[data-tiny] {
-  padding: 0 7px;
 }
 
 /* The board's view controls (req-69): the issues chip, a group in the
@@ -2968,7 +2924,9 @@ details[open] > summary > .tickets-tx-think-preview {
   flex: 1;
 }
 
-/* The footer's fleet line (req-75 W1b): worst light + who is out there. */
+/* The footer's fleet line (T-0086): the fleet status's one home — worst
+   light, the states in words, who is out there; a live node, so it never
+   flickers. Ellipsized; the long form lives in its tooltip. */
 .tickets-statusbar-fleet {
   display: flex;
   align-items: center;
@@ -2980,6 +2938,17 @@ details[open] > summary > .tickets-tx-think-preview {
   white-space: nowrap;
   color: var(--text-4);
   font-size: 0.72rem;
+}
+
+.tickets-statusbar-fleet-numbers {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A narrow panel drops the numbers; they stay in the tooltip. */
+.tickets-statusbar-fleet[data-narrow] .tickets-statusbar-fleet-numbers {
+  display: none;
 }
 
 /* The settings submenus' radio rows (Track ›, Priority ›). */

@@ -26,11 +26,11 @@ import {
   type TicketTrack,
 } from '../shared/tickets';
 import { needsBlockedConfirm } from './blocked-view';
-import { PRIORITY_LABEL, createGroupFoldStore, workListNode, type WorkPanelDeps } from './work-panel';
+import { PRIORITY_LABEL, createGroupFoldStore, workListLivePaint, workListNode, type WorkPanelDeps } from './work-panel';
 import { createRunComposer } from './run-composer';
 import { THREAD_KEY, ticketPagePlan } from './ticket-page';
 import { PENDING_HINT, dialogStarter } from './dialog-starters';
-import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups } from './work-groups';
+import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups, workListSignature } from './work-groups';
 import { readyCardNode, storyNode } from './ready-view';
 import type { ChangesReply } from '../shared/changes';
 import { headerControls, liveStateWord, threadSteps, durationWords, type ThreadStep } from './thread-steps';
@@ -49,11 +49,13 @@ import {
   contextFill,
   contextLabel,
   execClockMs,
-  fleetSummary,
+  fleetLine,
   formatTokens,
   spanClock,
   telemetryParts,
   workerStatus,
+  WORKER_LABEL,
+  workerLabelOf,
 } from './worker-status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -116,6 +118,8 @@ function setNote(text: string, kind: NoteKind): void {
 interface BoardView {
   readonly root: HTMLElement;
   render(): void;
+  /** The cheap repaint between structure changes (fleet updates, the 1 s tick). */
+  paintLive?(): void;
   dispose(): void;
 }
 
@@ -294,6 +298,16 @@ const liveRuns = (): readonly RunInfo[] =>
 /** Keeps the header's master switch in step (the buttons live outside the board). */
 const masterButtons: { run: HTMLButtonElement; halt: HTMLButtonElement; abort: HTMLButtonElement }[] = [];
 
+/** The Work list's structure as of the last full render (T-0086): an
+ *  equal signature needs no rebuild — the live paint covers the text. */
+let lastListSignature: string | null = null;
+
+/** The Work list's structure over the current fleet: the runs'
+ *  structural fields plus the standing alert keys. Alerts are read
+ *  fresh every time (quota windows expire on the clock, without an
+ *  event), never cached across the gate. */
+const listSignature = (): string => workListSignature(fleetRuns, currentChainAlerts().map((alert) => alert.key));
+
 const applyChainStatus = (status: ChainStatus | null): void => {
   chain = status;
   const master = status?.master ?? 'halted';
@@ -301,6 +315,13 @@ const applyChainStatus = (status: ChainStatus | null): void => {
     buttons.run.classList.toggle('tickets-master-on', master === 'run');
     buttons.halt.classList.toggle('tickets-master-on', master === 'halted');
   }
+  // A null signature (before the first render) counts as changed — one
+  // harmless extra render; the master buttons above stay outside the gate.
+  const signature = listSignature();
+  if (signature === lastListSignature) {
+    return;
+  }
+  lastListSignature = signature;
   notifyViews();
 };
 
@@ -439,6 +460,9 @@ function boardViewControlsNode(api: DreyPluginApi): { node: HTMLElement; dispose
 
 function buildBoardView(api: DreyPluginApi): BoardView {
   const root = el('div', 'tickets-view');
+  // The footer's fleet line is a live node: created once per mount,
+  // moved between renders by `append` (append moves, never clones).
+  const fleet = fleetFooterNode();
   /** The list's scroll survives every re-render (the DOM is rebuilt). */
   const restoreScroll = (): (() => void) => {
     const top = root.querySelector<HTMLElement>('.work-list')?.scrollTop ?? 0;
@@ -464,7 +488,7 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     if (snap === null || snap.vaultId === null) {
       root.append(snap === null ? el('div', 'tickets-empty', 'Loading the board…') : emptyState(api, snap, runMutation));
       // A failed load or setup action still reports where every message does.
-      const bar = statusBarNode(api, null);
+      const bar = statusBarNode(api, null, fleet.node);
       if (bar !== null) {
         root.append(bar);
       }
@@ -475,7 +499,7 @@ function buildBoardView(api: DreyPluginApi): BoardView {
       root.append(issues);
     }
     root.append(workListNode(workPanelDeps(api), snap, fleetRuns, folds, notifyViews, workFilter.get()));
-    const statusBar = statusBarNode(api, snap);
+    const statusBar = statusBarNode(api, snap, fleet.node);
     if (statusBar !== null) {
       root.append(statusBar);
     }
@@ -486,7 +510,37 @@ function buildBoardView(api: DreyPluginApi): BoardView {
       root.append(warn);
     }
   };
-  const view: BoardView = { root, render, dispose: () => undefined };
+  // The live half (T-0086): a structure change rebuilds the list, every
+  // other fleet update (and the 1 s tick) paints the moving text in
+  // place — the picture holds still while a run is live.
+  const paintLive = (): void => {
+    const snap = snapshot;
+    if (snap === null || snap.vaultId === null) {
+      return;
+    }
+    const signature = listSignature();
+    if (signature !== lastListSignature) {
+      lastListSignature = signature;
+      render();
+      return;
+    }
+    const list = root.querySelector<HTMLElement>('.work-list');
+    if (list !== null) {
+      workListLivePaint(list, workPanelDeps(api), snap, fleetRuns);
+    }
+  };
+  fleetListeners.add(paintLive);
+  const tick = setInterval(paintLive, 1_000);
+  const view: BoardView = {
+    root,
+    render,
+    paintLive,
+    dispose: () => {
+      fleetListeners.delete(paintLive);
+      clearInterval(tick);
+      fleet.dispose();
+    },
+  };
   render();
   return view;
 }
@@ -613,17 +667,16 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       refreshButton.append(api.ui.icon('refresh-cw', 14));
       refreshButton.addEventListener('click', () => void refreshBoard());
 
-      // req-75 W1b: project · fleet status · spacer · + · refresh · master · ⋯
-      // (the fleet status came back with the chain alerts fix).
-      const fleet = fleetHeaderNode();
+      // req-75 W1b, T-0086: project · board issues · spacer · + · refresh ·
+      // master · ⋯ — the fleet status lives in the footer now, at every
+      // width, and the head wraps instead of clipping when narrow.
       const viewControls = boardViewControlsNode(api);
       const actions = el('span', 'tickets-head-group');
       actions.append(newButton, refreshButton);
       host.classList.add('tickets-panel-head');
-      host.append(project, fleet.node, viewControls.node, el('span', 'tickets-head-spacer'), actions, masterControlNode(api), headerMenuButton(api));
+      host.append(project, viewControls.node, el('span', 'tickets-head-spacer'), actions, masterControlNode(api), headerMenuButton(api));
       return () => {
         projectPainters.delete(paintProjects);
-        fleet.dispose();
         viewControls.dispose();
       };
     },
@@ -634,7 +687,7 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       views.add(view);
       panel.append(view.root);
       view.render();
-      // The header's fleet status follows the panel's width (req-60).
+      // The footer's fleet line follows the panel's width (req-60).
       const widthObserver = new ResizeObserver((entries) => {
         panelWidth = entries[0]?.contentRect.width ?? 0;
         for (const listener of panelWidthListeners) {
@@ -645,6 +698,7 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       return () => {
         widthObserver.disconnect();
         views.delete(view);
+        view.dispose();
       };
     },
   };
@@ -952,16 +1006,11 @@ async function runChainAction(method: string, payload: unknown): Promise<void> {
 
 // --- the fleet run controls (M84, ADR-0075) --------------------------------
 
-const WORKER_LABEL: ReadonlyArray<readonly [string, string]> = [
-  ['opencode', 'OpenCode'],
-  ['claude-code', 'Claude Code'],
-];
-
 /**
- * The status bar under the board (req-59), one row: the cycle times on
- * the left — each non-empty column's average dwell from the tickets'
- * entered-* stamps (M85), so a stuck column is visible at a glance —
- * and the worktree home's note (T-0044) as a warning pill on the right:
+ * The status bar under the board (req-59), one row: the fleet on the
+ * left — the footer is the fleet status's one home (T-0086), a live
+ * node the view moves between renders — then the cycle times on the
+ * right and the worktree home's note (T-0044) as a warning pill:
  * legacy-root leftovers and orphan folders under the base, listed in
  * its tooltip, never auto-deleted (the Clean up worktrees control
  * collects them). The board's message (req-60) sits right-aligned, just
@@ -970,7 +1019,7 @@ const WORKER_LABEL: ReadonlyArray<readonly [string, string]> = [
  * goes in the free space, so the cycle times never move. Null when there
  * is nothing to say.
  */
-function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null): HTMLElement | null {
+function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null, fleet: HTMLElement | null): HTMLElement | null {
   const bar = el('div', 'tickets-statusbar');
   const right = el('span', 'tickets-statusbar-right');
   if (note !== '') {
@@ -1024,62 +1073,49 @@ function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null): HTMLElem
     ].join('\n');
     right.append(warn);
   }
-  bar.append(fleetFooterNode(), right);
+  if (fleet !== null) {
+    bar.append(fleet);
+  }
+  bar.append(right);
   return bar;
 }
-
-/** Below this panel width the header's fleet status drops its numbers (they stay in the tooltip). */
-const HEAD_FLEET_NARROW_PX = 480;
-
-/** Below this one it is its light alone. */
-const HEAD_FLEET_TINY_PX = 380;
 
 /** The Work panel's current width (its body is as wide as its header); 0 before the first measure. */
 let panelWidth = 0;
 const panelWidthListeners = new Set<() => void>();
 
+/** Below this panel width the footer's fleet line drops its numbers (they stay in the tooltip). */
+const FOOTER_FLEET_NARROW_PX = 360;
+
 /**
- * The fleet's status in the panel header (req-60, back with the chain
- * alerts fix): the worst light, the states in words, tokens in flight
- * and the oldest run's age — the long form in its tooltip. A standing
- * chain alert (breaker, hold, halt, quota) turns the light amber at
- * least and counts in the words, so a stopped fleet shows even with no
- * run alive. Repaints on every fleet update and once a second.
+ * The footer's fleet line (T-0086): the one live fleet display at every
+ * width — the header chip is gone. The worst light, the states in
+ * words, who is out there, tokens in flight and the oldest run's age
+ * (`fleetLine`); the long form in the tooltip. A live node with its own
+ * paint (every fleet update, once a second, the panel's width) — built
+ * once per mounted view, moved between renders by `append`, so the text
+ * updates in place and no rebuild can flicker it.
  */
-function fleetHeaderNode(): { node: HTMLElement; dispose: () => void } {
-  const node = el('span', 'tickets-head-fleet');
+function fleetFooterNode(): { readonly node: HTMLElement; readonly dispose: () => void } {
+  const node = el('span', 'tickets-statusbar-fleet');
   const light = el('span', 'tickets-light');
-  const label = el('span', 'tickets-head-fleet-label');
-  const numbers = el('span', 'tickets-head-fleet-numbers');
-  node.append(light, label, numbers);
+  const text = el('span');
+  const numbers = el('span', 'tickets-statusbar-fleet-numbers');
+  node.append(light, text, numbers);
   const paint = (): void => {
-    const summary = fleetSummary(liveRuns(), Date.now());
-    const alerts = currentChainAlerts();
-    node.hidden = summary === null && alerts.length === 0;
-    node.toggleAttribute('data-narrow', panelWidth > 0 && panelWidth < HEAD_FLEET_NARROW_PX);
-    node.toggleAttribute('data-tiny', panelWidth > 0 && panelWidth < HEAD_FLEET_TINY_PX);
-    if (node.hidden) {
-      return;
+    const line = fleetLine(liveRuns(), currentChainAlerts(), Date.now());
+    node.toggleAttribute('data-narrow', panelWidth > 0 && panelWidth < FOOTER_FLEET_NARROW_PX);
+    light.className = `tickets-light tickets-light-${line.light}`;
+    text.textContent = line.text;
+    numbers.textContent = line.numbers;
+    numbers.hidden = line.numbers === '';
+    if (line.long === '') {
+      node.removeAttribute('title');
+      node.removeAttribute('aria-label');
+    } else {
+      node.title = line.long;
+      node.setAttribute('aria-label', line.long);
     }
-    const lit = summary?.light ?? 'idle';
-    light.className = `tickets-light tickets-light-${alerts.length > 0 && (lit === 'idle' || lit === 'green') ? 'amber' : lit}`;
-    const alertWords = alerts.length === 0 ? '' : alerts.length === 1 ? alerts[0]!.title : `${alerts.length} fleet alerts`;
-    label.textContent = [summary?.label ?? '', alertWords].filter((part) => part !== '').join(' · ');
-    const age = summary === null || summary.ageMs === null ? '' : spanClock(summary.ageMs);
-    numbers.hidden = summary === null;
-    numbers.textContent = summary === null ? '' : `${formatTokens(summary.tokens)} tok${age === '' ? '' : ` · ${age}`}`;
-    const long = [
-      ...(summary === null
-        ? []
-        : [
-            summary.label,
-            `${formatTokens(summary.tokens)} tokens in flight (in + out of all live runs)`,
-            ...(age === '' ? [] : [`the oldest run has been at it for ${age}`]),
-          ]),
-      ...alerts.map((alert) => `${alert.title}: ${alert.text}`),
-    ].join('\n');
-    node.title = long;
-    node.setAttribute('aria-label', long);
   };
   fleetListeners.add(paint);
   panelWidthListeners.add(paint);
@@ -1093,45 +1129,6 @@ function fleetHeaderNode(): { node: HTMLElement; dispose: () => void } {
       clearInterval(tick);
     },
   };
-}
-
-/**
- * The footer's left half (req-75 W1b): the worst light of the live runs
- * and who is out there — one line per provider with a live run. Null
- * when nothing runs and no light is worth a dot.
- */
-function fleetFooterNode(): HTMLElement {
-  const runs = liveRuns();
-  const left = el('span', 'tickets-statusbar-fleet');
-  if (runs.length === 0) {
-    left.append(el('span', 'tickets-light tickets-light-idle'), el('span', undefined, 'No workers running'));
-    return left;
-  }
-  const summary = fleetSummary(runs, Date.now());
-  left.append(el('span', `tickets-light tickets-light-${summary === null ? 'idle' : summary.light}`));
-  const byProvider = new Map<string, number>();
-  for (const run of runs) {
-    byProvider.set(run.provider, (byProvider.get(run.provider) ?? 0) + 1);
-  }
-  const text = [
-    `${runs.length} worker${runs.length === 1 ? '' : 's'}`,
-    ...[...byProvider].map(([provider, n]) => `${workerLabelOf(provider)} ${n}`),
-  ].join(' · ');
-  left.append(el('span', undefined, text));
-  const long = [text, summary === null ? '' : summary.label].filter((part) => part !== '').join(' · ');
-  left.title = long;
-  left.setAttribute('aria-label', long);
-  return left;
-}
-
-/** A provider id as the footer names it (`opencode` → `OpenCode`). */
-function workerLabelOf(provider: string): string {
-  for (const [value, label] of WORKER_LABEL) {
-    if (value === provider) {
-      return label;
-    }
-  }
-  return provider;
 }
 
 function openRunModal(api: DreyPluginApi, card: TicketCard): void {
@@ -2331,10 +2328,13 @@ function appendSubmenu(
       open(true);
     }
   });
-  // Any other row of the menu takes over from the submenu.
+  // Any other row of the menu takes over at once (T-0086): the submenu
+  // and the trigger's gray background vanish immediately, no lag beat.
+  // The 250 ms grace stays on leaving the trigger or the panel — the
+  // diagonal move into the submenu needs it.
   menu.addEventListener('mouseover', (e) => {
     if (sub !== null && !trigger.contains(e.target as Node)) {
-      closeSoon();
+      close();
     }
   });
   menu.append(trigger);
