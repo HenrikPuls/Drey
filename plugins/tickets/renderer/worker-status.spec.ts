@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunInfo } from '../main/fleet/protocol';
-import { contextFill, formatTokens, lanesOfColumn, opensByItself, runChipLine, spanClock, STALL_MS, workerStatus } from './worker-status';
+import { contextFill, formatTokens, lanesOfColumn, opensByItself, runChipLine, STALL_MS, workerStatus } from './worker-status';
 
 const NOW = Date.parse('2026-10-18T12:00:00Z');
 
@@ -73,27 +73,14 @@ describe('formatTokens', () => {
   });
 });
 
-describe('spanClock', () => {
-  it('is mm:ss and rolls hours into h:mm:ss', () => {
-    expect(spanClock(0)).toBe('00:00');
-    expect(spanClock(221_000)).toBe('03:41');
-    expect(spanClock(3_723_000)).toBe('1:02:03');
-    expect(spanClock(-5_000)).toBe('00:00');
-  });
-});
-
-describe('runChipLine', () => {
-  it('shows state, turns, this run\'s own tokens and elapsed (T-0051)', () => {
-    expect(runChipLine(run({ steerCount: 1, tokensIn: 45_000, tokensOut: 1_234 }), NOW)).toBe(
-      '▶ running · 2 · 45.0k/1.2k · 1:00:00',
-    );
+describe('runChipLine — duration-free', () => {
+  it('shows state, turns and this run\'s own tokens (T-0051)', () => {
+    expect(runChipLine(run({ steerCount: 1, tokensIn: 45_000, tokensOut: 1_234 }))).toBe('▶ running · 2 · 45.0k/1.2k');
   });
 
   it('waits for the first usage that reported tokens', () => {
-    expect(runChipLine(run(), NOW)).toBe('▶ running · 1 · 1:00:00');
-    expect(runChipLine(run({ state: 'stopping', startedAt: '2026-10-18T11:59:30Z' }), NOW)).toBe(
-      '▶ stopping · 1 · 00:30',
-    );
+    expect(runChipLine(run())).toBe('▶ running · 1');
+    expect(runChipLine(run({ state: 'stopping' }))).toBe('▶ stopping · 1');
   });
 });
 

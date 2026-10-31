@@ -34,7 +34,6 @@ import {
   lanesOfColumn,
   opensByItself,
   runChipLine,
-  spanClock,
   workerStatus,
   type Light,
 } from './worker-status';
@@ -321,8 +320,8 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
   }
   const live = runForCard(card.id);
   if (live !== null) {
-    const runChip = el('span', 'tickets-chip tickets-chip-run', runChipLine(live, Date.now()));
-    runChip.title = `run ${live.id} (${live.provider}) — ${live.state}, turn ${live.steerCount + 1}, ${formatTokens(live.tokensIn)} in / ${formatTokens(live.tokensOut)} out, ${spanClock(Date.now() - (Date.parse(live.startedAt) || Date.now()))} so far; open the card menu to watch, steer or stop`;
+    const runChip = el('span', 'tickets-chip tickets-chip-run', runChipLine(live));
+    runChip.title = `run ${live.id} (${live.provider}) — ${live.state}, turn ${live.steerCount + 1}, ${formatTokens(live.tokensIn)} in / ${formatTokens(live.tokensOut)} out; open the card menu to watch, steer or stop`;
     meta.append(runChip);
   }
   const dwell = dwellMs(card, column.phase.id);
@@ -994,11 +993,6 @@ function fleetSummaryNode(): HTMLElement | null {
   }
   const tokens = runs.reduce((sum, r) => sum + r.tokensIn + r.tokensOut, 0);
   pill(null, `${formatTokens(tokens)} tokens in flight`, ' tickets-pill-mono');
-  // The oldest live run's age — how long the fleet has been at it (T-0051).
-  const oldest = Math.min(...runs.map((r) => Date.parse(r.startedAt)).filter((ts) => !Number.isNaN(ts)));
-  if (Number.isFinite(oldest)) {
-    pill(null, `running ${spanClock(now - oldest)}`, ' tickets-pill-mono');
-  }
   return bar;
 }
 
@@ -1117,10 +1111,6 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
       }
       if (run.costUsd !== null && run.costUsd > 0) {
         tokens.append(el('span', undefined, `$${run.costUsd.toFixed(2)}`));
-      }
-      const age = ageOf(run.startedAt);
-      if (age !== '') {
-        tokens.append(el('span', undefined, age));
       }
       body.append(tokens);
 
@@ -1524,8 +1514,6 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
               ? `${run.ticketId} · ${run.provider} — you have control`
               : `${run.ticketId} · ${run.provider} — the runner is driving; your first command takes over`;
     const fill = run === null ? null : contextFill(run);
-    const started = run === null ? NaN : Date.parse(run.startedAt);
-    const elapsed = Number.isNaN(started) ? 0 : Math.max(0, Date.now() - started);
     stats.textContent =
       run === null
         ? ''
@@ -1534,7 +1522,6 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
             `turn ${run.steerCount + 1}`,
             fill === null ? '' : `context ${Math.round(fill * 100)}%`,
             `in ${formatTokens(run.tokensIn)}${(run.cacheReadTokens ?? 0) > 0 ? ` (${formatTokens(run.cacheReadTokens ?? 0)} cached)` : ''} · out ${formatTokens(run.tokensOut)}`,
-            `⏱ ${spanClock(elapsed)}`,
           ]
             .filter((part) => part !== '')
             .join(' · ');
