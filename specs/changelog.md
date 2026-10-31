@@ -20,6 +20,19 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — a transition commit survives the runner's bookkeeping commit
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (2026-10-31). Moving T-0052 plan-review → build stopped its run;
+the runner's settle committed "fleet run bookkeeping", which already
+recorded the old path's removal, so the board's own transition commit
+(`git add -- <old> <new>`) failed with "pathspec … did not match any
+files" and the move stayed uncommitted. `TicketsGit.commitPaths` now
+drops a path git reports as unmatched (gone from disk and index) and
+commits the rest; any other `add` failure still throws. The missed
+commit was made by hand in the tickets repo. Specs in
+`tickets-git.spec.ts`.
+
 ### req-79 — Fleet: the brief opens with a short worker file, not the whole CLAUDE.md (owner request, outside the list)
 
 **Not yet manually verified by the owner.** The token audit of

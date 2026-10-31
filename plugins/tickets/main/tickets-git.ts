@@ -54,6 +54,12 @@ async function defaultExec(exe: string, args: readonly string[], cwd: string): P
   }
 }
 
+/** The paths of git's "pathspec '<p>' did not match any files" lines in a failed command. */
+function unmatchedPathspecs(error: unknown): Set<string> {
+  const text = error instanceof Error ? error.message : String(error);
+  return new Set([...text.matchAll(/pathspec '([^']+)' did not match any files/g)].map((m) => m[1]!));
+}
+
 export class TicketsGit {
   private readonly queues = new Map<string, Promise<unknown>>();
 
@@ -100,15 +106,30 @@ export class TicketsGit {
    * Stages exactly `repoRelPaths` and commits exactly them
    * (`git commit -- paths` leaves anything else staged untouched), as
    * one transition commit. A "nothing to commit" outcome resolves
-   * quietly — the move is still correct on disk.
+   * quietly — the move is still correct on disk. A path gone from both
+   * the disk and the index (another commit — the runner's bookkeeping —
+   * already recorded its removal) is dropped rather than failing the
+   * whole transition.
    */
   async commitPaths(
     root: string,
     repoRelPaths: readonly string[],
     message: string,
   ): Promise<void> {
-    const unique = [...new Set(repoRelPaths)];
-    await this.run(root, ['add', '--', ...unique]);
+    let unique = [...new Set(repoRelPaths)];
+    try {
+      await this.run(root, ['add', '--', ...unique]);
+    } catch (error) {
+      const gone = unmatchedPathspecs(error);
+      if (gone.size === 0) {
+        throw error;
+      }
+      unique = unique.filter((p) => !gone.has(p));
+      if (unique.length === 0) {
+        return;
+      }
+      await this.run(root, ['add', '--', ...unique]);
+    }
     try {
       await this.run(root, ['commit', '-m', message, '--', ...unique]);
     } catch (error) {
