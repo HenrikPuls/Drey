@@ -20,6 +20,48 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-75 W2b — The question reads like the canvas
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (2026-10-31, review of the req-75 chain). Ticket T-0082 (roadmap
+req-75 W2b; [ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md),
+design reference `docs/design/work-panel/Home.dc.html`). W2 built the
+question's data and the one-tap answer, but its wait card read like a
+yellow form and its option buttons broke their text into two columns.
+In the thread a question is now part of the conversation, drawn like
+the canvas's centre column.
+
+- **The ask view** (`plugins/tickets/renderer/wait-view.ts`,
+  `questionNode`): the lead-in `One decision before I go on: ` with the
+  question in bold, the why as a muted paragraph (left out when the
+  shape names none), one pill per option with its consequence after a
+  ` — ` in muted text, the recommended one accent-bordered and ending
+  in `recommended` (the recommendation's reason rides its `title`), and
+  a muted meta line — `<age> ago · the worker waits, nothing else is
+  blocked`, or `; <n> other worker(s) keep going` while other runs are
+  live (`1 min` / `4 min` / `2 h`, from `waiting.since`). A plain
+  question (no shape) still renders: `The worker asks: ` and its text,
+  not bold. On the desk the ticket and step lines are left out — the
+  page already carries them; the phone keeps them.
+- **In the composer** (`run-composer.ts`): a `question` wait (shaped or
+  plain, no OpenCode form) is drawn with `questionNode` **instead of**
+  the wait card — no label sentence, no card background or border, no
+  `Ticket:` / `Recommendation:` lines; the prompt box below stays the
+  free answer, an option tap sends `answerText(option)` through the
+  ordinary `send` path and stands the pills by until the worker asks
+  anew. Permission requests and question forms keep the card. The new
+  `othersLive` dep feeds the meta line (both call sites in `index.ts`
+  count the other live runs).
+- **The pills fixed** (`board.css`, W1b's classes): the button is
+  `inline-flex; align-items: baseline; flex-wrap: wrap; text-align:
+  left; max-width: 100%` — label and consequence are inline spans of
+  one wrapping text, never two flex columns; height grows from 30 px,
+  radius 15, 1 px `--border` (the recommended one `--accent`).
+- Specs: `wait-view.spec.ts` (the shaped DOM, the plain question, the
+  meta line's ages and other-worker variants, the pick),
+  `e2e/work-panel.spec.ts` expects the question in
+  `.tickets-ask-question` with the wait card hidden.
+
 ### req-75 W1b — The Work panel looks like the canvas
 
 **Not yet manually verified by the owner.** Ticket T-0075 (roadmap
