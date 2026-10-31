@@ -18,6 +18,7 @@ import {
   runningStepOf,
   statusLineOf,
   workGroups,
+  workListSignature,
 } from './work-groups';
 
 /**
@@ -214,6 +215,53 @@ describe('workGroups', () => {
     const limbo: BoardColumn = { phase: phase('limbo', 'manual'), unknown: true, tickets: [card('T-0007', 'limbo')] };
     const groups = workGroups(board({ build: [card('T-0001', 'build')] }, [limbo]), []);
     expect(ids(groups.running)).toEqual(['T-0001', 'T-0007']);
+  });
+});
+
+describe('workListSignature — what re-renders the Work list (T-0086)', () => {
+  it('ignores activity, tokens and clocks — text the live paint refreshes in place', () => {
+    const base = workListSignature([run({ ticketId: 'T-0001' })], []);
+    const moving = workListSignature(
+      [
+        run({
+          ticketId: 'T-0001',
+          activity: 'Reading board.ts',
+          tokensIn: 12_000,
+          tokensOut: 3_000,
+          lastActivity: '2026-10-30T11:00:00Z',
+          startedAt: '2026-10-30T09:30:00Z',
+          execMs: 4_500,
+        }),
+      ],
+      [],
+    );
+    expect(moving).toBe(base);
+  });
+
+  it('moves on state, column, waiting kind, turn, interactive and held', () => {
+    const base = workListSignature([run({ ticketId: 'T-0001' })], []);
+    for (const patch of [
+      { state: 'stopping' as const },
+      { phase: 'review' },
+      { waiting: { kind: 'question', text: 'Q', since: '2026-10-30T10:05:00Z' } },
+      { turn: 'idle' as const },
+      { interactive: 'plan' as const },
+      { held: true },
+    ]) {
+      expect(workListSignature([run({ ticketId: 'T-0001', ...patch })], [])).not.toBe(base);
+    }
+  });
+
+  it('sorts by run id, so the fleet snapshot\'s order does not matter', () => {
+    const a = run({ id: 'a', ticketId: 'T-0001' });
+    const b = run({ id: 'b', ticketId: 'T-0002', state: 'stopping' });
+    expect(workListSignature([a, b], [])).toBe(workListSignature([b, a], []));
+  });
+
+  it('follows the alert keys', () => {
+    const base = workListSignature([], ['halted']);
+    expect(workListSignature([], ['halted', 'quota:opencode:2026-11-01T00:00:00Z'])).not.toBe(base);
+    expect(workListSignature([], [])).not.toBe(base);
   });
 });
 
