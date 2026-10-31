@@ -1460,6 +1460,7 @@ details[open] > summary > .tickets-tx-think-preview {
 .tickets-composer-under {
   flex: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin: 0 16px 12px;
@@ -1490,6 +1491,7 @@ details[open] > summary > .tickets-tx-think-preview {
   color: var(--text-primary);
   font: inherit;
   font-size: 0.7rem;
+  white-space: nowrap;
   cursor: pointer;
 }
 
