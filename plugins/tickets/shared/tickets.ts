@@ -79,6 +79,12 @@ export function ticketOfBranch(branch: string): string | null {
 
 export type TicketPriority = 'urgent' | 'high' | 'normal' | 'low';
 
+/**
+ * The ticket's track (req-75 W1b, ADR-0087 decision 2): `auto` runs on
+ * its own, `shape` goes through the plan-mode dialog with the owner.
+ */
+export type TicketTrack = 'auto' | 'shape';
+
 export const TICKET_PRIORITIES: readonly TicketPriority[] = [
   'urgent',
   'high',
@@ -150,6 +156,8 @@ export interface TicketMeta {
   readonly repos: readonly string[];
   /** The ticket's worker pin (`worker: opencode`); null = not pinned. */
   readonly worker: string | null;
+  /** The ticket's track, ADR-0087 decision 2 — null = not triaged yet. */
+  readonly track: TicketTrack | null;
   readonly priority: TicketPriority;
   readonly rank: number;
   readonly branch: string | null;

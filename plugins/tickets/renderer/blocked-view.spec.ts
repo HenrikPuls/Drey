@@ -15,6 +15,7 @@ function card(over: Partial<TicketCard> = {}): TicketCard {
       repo: null,
       repos: [],
       worker: null,
+      track: null,
       priority: 'normal',
       rank: 5000,
       branch: null,
