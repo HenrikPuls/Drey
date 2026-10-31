@@ -40,7 +40,7 @@ export interface WatchStep {
 
 /** One rendered block of the transcript. */
 export interface WatchBlock {
-  readonly kind: 'text' | 'step' | 'thinking' | 'you' | 'setup' | 'result' | 'error';
+  readonly kind: 'text' | 'step' | 'thinking' | 'you' | 'setup' | 'system' | 'diagnostic' | 'result' | 'error';
   /** The block's Markdown; step blocks are `● **Read** \`src/a.ts\`` lines. */
   readonly markdown: string;
   /** A step block's call as data. */
@@ -57,6 +57,12 @@ export interface WatchBlock {
   readonly tool?: string;
   /** A step that already carries its outcome. */
   readonly settled?: boolean;
+  /** The event's own timestamp (ISO) — steps and system notes show it as a clock time. */
+  readonly at?: string;
+  /** A system note's weight: plain information, a warning, or a failure. */
+  readonly tone?: 'info' | 'warn' | 'error';
+  /** A result that only closes an interrupted turn: the run is paused, not finished. */
+  readonly paused?: boolean;
 }
 
 /** The run's own usage as the last usage event reported it. */
@@ -96,6 +102,33 @@ export function parseStreamEvents(ndjson: string): NormalizedEvent[] {
 
 /** Run lifecycle notes the runner and worker adapters write: setup, gate checks, the end (not a tool call). */
 const SETUP_NOTE = /^(run R-|run finished|gate: |opencode serve|re-attached|worktree links:)/i;
+
+/**
+ * The runner's own lines in streams written before they carried
+ * `detail: 'runner'` — the owner's controls, the reaper, the gate, the
+ * watchdog. Newer streams mark them; this keeps old runs readable.
+ */
+const RUNNER_NOTE =
+  /^(turn interrupted|taken over|handed back|steer \(|answered by|approved |rejected by|lease reaper|worker ended|machine gate|the gate passed|second opinion|interactive dialog|reopened session|session reopened|looks stuck|run limit|hung:|the resume failed|handover |context window|context cap|stopped by)/i;
+
+/** The runner lines that report a failure. */
+const RUNNER_ERROR = /^(lease reaper|worker ended|machine gate failed|the gate passed but|run limit|hung:|the resume failed)/i;
+
+/** The runner lines that report something unusual but not a failure. */
+const RUNNER_WARN = /^(looks stuck|turn interrupted|taken over|stopped by)/i;
+
+/** The runner line that says the owner paused the turn. */
+const INTERRUPT_NOTE = /^turn interrupted/i;
+
+/** A clock time (`HH:MM`, local) from an event's ISO stamp, or '' when unstamped. */
+export function clockTime(ts: string | undefined): string {
+  const ms = ts === undefined ? Number.NaN : Date.parse(ts);
+  if (Number.isNaN(ms)) {
+    return '';
+  }
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
 
 /** How much of a thought its folded title previews. */
 const THINK_PREVIEW = 100;
@@ -158,6 +191,8 @@ export function formatWatch(events: readonly NormalizedEvent[]): WatchView {
   const blocks: WatchBlock[] = [];
   let lastUsage: WatchUsage | undefined;
   let lastText = '';
+  /** The owner paused the turn: the result that follows closes the pause, not the step. */
+  let interrupted = false;
   let firstTs: number | null = null;
   let lastTs = 0;
 
@@ -314,12 +349,30 @@ export function formatWatch(events: readonly NormalizedEvent[]): WatchView {
           }
         } else if (text.startsWith(YOU_PREFIX)) {
           const said = text.slice(YOU_PREFIX.length);
+          interrupted = false;
           blocks.push({ kind: 'you', markdown: `> **›** ${said.replace(/\n/g, '\n> ')}`, text: said });
         } else if (SETUP_NOTE.test(text)) {
           blocks.push({ kind: 'setup', markdown: `<sub>${flat(text)}</sub>`, text: flat(text) });
+        } else if (event.detail === 'runner' || RUNNER_NOTE.test(text)) {
+          // The runner talking (owner controls, reaper, gate, watchdog) — a
+          // system line, never a fake tool call.
+          const line = flat(text);
+          if (INTERRUPT_NOTE.test(line)) {
+            interrupted = true;
+          }
+          blocks.push({
+            kind: 'system',
+            markdown: `_${line}_`,
+            text: line,
+            tone: RUNNER_ERROR.test(line) ? 'error' : RUNNER_WARN.test(line) ? 'warn' : 'info',
+            at: event.ts,
+          });
+        } else if (event.detail === 'stderr') {
+          // The provider's own stderr or an unparseable line: kept, folded.
+          blocks.push({ kind: 'diagnostic', markdown: flat(text), text: flat(text), at: event.ts });
         } else {
           const step = toolParts(text);
-          blocks.push({ kind: 'step', markdown: toolLine(step), step, tool: text.split(' ')[0] });
+          blocks.push({ kind: 'step', markdown: toolLine(step), step, tool: text.split(' ')[0], at: event.ts });
         }
         break;
       }
@@ -329,7 +382,7 @@ export function formatWatch(events: readonly NormalizedEvent[]): WatchView {
         sealLive();
         if (event.detail === 'running') {
           const step = toolParts(tool);
-          blocks.push({ kind: 'step', markdown: `${toolLine(step)}${RUNNING_SUFFIX}`, step, live: true, tool });
+          blocks.push({ kind: 'step', markdown: `${toolLine(step)}${RUNNING_SUFFIX}`, step, live: true, tool, at: event.ts });
         } else if (text.startsWith(RESULT_PREFIX)) {
           // The call settling: the outcome hangs under its own step (matched
           // by tool name — the stream carries no call ids).
@@ -344,9 +397,9 @@ export function formatWatch(events: readonly NormalizedEvent[]): WatchView {
           const step = toolParts(text);
           const at = firstInTailRun(tool, isPlaceholder);
           if (at >= 0) {
-            blocks[at] = { kind: 'step', markdown: toolLine(step), step, tool };
+            blocks[at] = { kind: 'step', markdown: toolLine(step), step, tool, at: blocks[at]!.at ?? event.ts };
           } else {
-            blocks.push({ kind: 'step', markdown: toolLine(step), step, tool });
+            blocks.push({ kind: 'step', markdown: toolLine(step), step, tool, at: event.ts });
           }
         }
         break;
@@ -366,10 +419,17 @@ export function formatWatch(events: readonly NormalizedEvent[]): WatchView {
             }
           }
         }
+        if (interrupted) {
+          // The interrupt's own result: the worker stands, the run is paused.
+          interrupted = false;
+          blocks.push({ kind: 'result', markdown: '---\n\n**⏸ Paused**', paused: true, at: event.ts });
+          break;
+        }
         blocks.push({
           kind: 'result',
           markdown: text === '' || text === lastText ? '---\n\n**✓ Turn finished**' : `---\n\n**✓ Turn finished**\n\n${text}`,
           ...(text === '' || text === lastText ? {} : { text }),
+          at: event.ts,
         });
         break;
       }

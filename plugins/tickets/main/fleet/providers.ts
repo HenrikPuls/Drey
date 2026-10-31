@@ -451,7 +451,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
           try {
             event = JSON.parse(line);
           } catch {
-            start.onEvent({ ts: nowIso(now), kind: 'note', text: line.slice(0, 400) });
+            start.onEvent({ ts: nowIso(now), kind: 'note', detail: 'stderr', text: line.slice(0, 400) });
             continue;
           }
           if (event.type === 'system' && event.subtype === 'init' && typeof event.session_id === 'string') {
@@ -591,7 +591,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
       proc.onStderr((chunk) => {
         for (const line of chunk.split('\n')) {
           if (line.trim() !== '') {
-            start.onEvent({ ts: nowIso(now), kind: 'note', text: line.slice(0, 400) });
+            start.onEvent({ ts: nowIso(now), kind: 'note', detail: 'stderr', text: line.slice(0, 400) });
           }
         }
       });
@@ -987,7 +987,7 @@ export function opencodeAdapter(
      */
     const reportContextWindow = async (): Promise<void> => {
       const note = (why: string): void => {
-        start.onEvent({ ts: nowIso(now), kind: 'note', text: `context window not reported — ${why}` });
+        start.onEvent({ ts: nowIso(now), kind: 'note', detail: 'runner', text: `context window not reported — ${why}` });
       };
       try {
         let info: OcModel | undefined;
@@ -1803,6 +1803,7 @@ export function opencodeAdapter(
         start.onEvent({
           ts: nowIso(now),
           kind: 'note',
+          detail: 'runner',
           text: `context cap: ${Math.floor(start.contextCap!)} tokens — OpenCode compacts the session there`,
         });
       }

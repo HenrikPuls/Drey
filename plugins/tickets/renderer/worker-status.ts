@@ -62,6 +62,14 @@ export function workerStatus(run: RunInfo, nowMs: number): WorkerStatus {
   if ((run.state === 'running' || run.state === 'starting') && run.waiting) {
     return { light: 'amber', label: run.waiting.kind === 'question' ? 'Waits for your answer' : 'Waits for your approval' };
   }
+  // The owner paused the turn: it waits for Continue, never reads as stalled.
+  if ((run.state === 'running' || run.state === 'starting') && run.paused === true) {
+    return { light: 'amber', label: 'Paused' };
+  }
+  // The runner's watchdog saw no output for a long while (milestone 93).
+  if (run.state === 'running' && run.stuck === true && run.held !== true) {
+    return { light: 'red', label: 'Looks stuck' };
+  }
   // A worker that stands (no turn in progress) is neither working nor stalled.
   if (run.state === 'running' && run.turn === 'idle') {
     return { light: 'idle', label: run.held === true ? 'Standing — you drive' : 'Standing' };

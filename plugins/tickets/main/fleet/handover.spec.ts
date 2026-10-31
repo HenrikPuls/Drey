@@ -112,6 +112,15 @@ describe('resolveHandover — the auto path (the measured rules)', () => {
     expect(bigButWarm.mode).toBe('resume');
   });
 
+  it('a warm pause over the context cap compacts natively, else starts fresh', () => {
+    const over = candidate({ endedAt: '2026-10-30T11:57:00Z', lastTurnContext: 170_000 });
+    const native = resolveHandover(input({ candidate: over }));
+    expect(native.mode).toBe('resume-compact');
+    expect(native.why).toContain('over the 160000 cap');
+    const none = resolveHandover(input({ candidate: over, capability: 'none' }));
+    expect(none.mode).toBe('fresh');
+  });
+
   it('a cold pause with a context below the threshold resumes as it is', () => {
     const cold = resolveHandover(input({ candidate: candidate({ endedAt: '2026-10-30T10:00:00Z', lastTurnContext: 40_000 }) }));
     expect(cold.mode).toBe('resume');

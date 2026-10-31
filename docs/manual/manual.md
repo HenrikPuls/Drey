@@ -985,15 +985,27 @@ light, the states in words, the tokens in flight and how long the
 oldest live run has been at it — hover it for the long form; a narrow
 panel keeps only the light and the states.
 
+**Workers.** While workers run, a *Workers* section tops the Work panel:
+one card per worker with its state in words (*Building*, *Paused*,
+*Looks stuck*, *Waits for your answer*), the ticket, what it is doing
+now, its working time, context and tokens, and Pause / Continue and
+Stop on the card. A worker silent for ten minutes is flagged *Looks
+stuck*; after forty it is stopped and the step retries with a growing
+wait.
+
 **The worker on the ticket.** The thread's conversation is the
 ticket's story in steps: each earlier run of the ticket is one folded
 line — a mark (✓ done with a green gate, ✕ failed, ■ stopped, ●
 live), what it did and how long it took; click it to read that run's
 transcript. The current run sits open at the bottom, streaming; your
 own messages are bubbles on the right. **Pause** interrupts the
-running turn (the session and its context stay). **Take over** holds
+running turn (the session and its context stay); the header then reads
+*Paused* and offers **Continue**, which lets the worker pick the step up
+where it stopped. A worker standing idle has no turn to interrupt, so
+it shows no Pause. **Take over** holds
 the run — the runner sends nothing of its own until you **Hand back**
-(a worker that is idle by then ends the run and the gate decides);
+(a worker that is idle by then ends the run and the gate decides —
+after a Pause, Hand back continues the step instead);
 your first message alone takes over too. **Stop** ends the run. The
 header always offers exactly one way on: Stop while the run lives
 (also for a worker that lost its runner — it reads *Running* with a

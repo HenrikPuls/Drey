@@ -16,7 +16,7 @@
  */
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import { renderReply } from './transcript-text';
-import type { WatchBlock, WatchStep, WatchView } from './watch-format';
+import { clockTime, type WatchBlock, type WatchStep, type WatchView } from './watch-format';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -74,8 +74,26 @@ export function transcriptItems(blocks: readonly WatchBlock[]): TranscriptItem[]
 /** What makes an item look different — equal signatures keep the drawn node. */
 const signature = (item: TranscriptItem): string =>
   item.kind === 'block'
-    ? `${item.block.kind}|${item.block.live === true ? 1 : 0}|${item.block.markdown}`
-    : `${item.tail ? 1 : 0}|${item.steps.map((s) => `${s.live === true ? 1 : 0}${s.markdown}`).join('\n')}`;
+    ? `${item.block.kind}|${item.block.live === true ? 1 : 0}|${item.block.at ?? ''}|${item.block.markdown}`
+    : `${item.tail ? 1 : 0}|${item.steps.map((s) => `${s.live === true ? 1 : 0}${s.at ?? ''}${s.markdown}`).join('\n')}`;
+
+/** The glyph a tool's name carries: a command runs, an edit writes. */
+export function toolGlyph(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower === 'bash' || lower === 'shell' || lower === 'run') {
+    return '▶';
+  }
+  if (lower === 'edit' || lower === 'write' || lower === 'multiedit' || lower === 'patch') {
+    return '✎';
+  }
+  return '';
+}
+
+/** `0:42` — an elapsed span as the running pill shows it. */
+export function elapsedClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
 
 /**
  * A target with the run's worktree prefix taken out (either slash, any
@@ -113,6 +131,20 @@ export function createTranscriptView(api: DreyPluginApi, worktreePath: string): 
 
   let root = worktreePath;
   let following = true;
+  // The running pills tick on their own: the 2 s pull redraws only changed items.
+  let attached = false;
+  const ticker = setInterval(() => {
+    if (!frame.isConnected) {
+      if (attached) {
+        clearInterval(ticker); // mounted once and gone since: the view was dropped
+      }
+      return;
+    }
+    attached = true;
+    for (const pill of column.querySelectorAll<HTMLElement>('[data-since]')) {
+      pill.textContent = `running · ${elapsedClock(Date.now() - Number(pill.dataset['since']))}`;
+    }
+  }, 1000);
   let drawn: { key: string; sig: string; node: HTMLElement }[] = [];
   /** Folds the reader opened or closed by hand, by item key — they win over the defaults. */
   const userOpen = new Map<string, boolean>();
@@ -148,7 +180,15 @@ export function createTranscriptView(api: DreyPluginApi, worktreePath: string): 
     const state = block.live === true ? 'running' : step.failed === true ? 'failed' : step.outcome !== undefined ? 'done' : 'called';
     const row = el('div', 'tickets-tx-step');
     row.dataset['state'] = state;
-    row.append(el('span', 'tickets-tx-dot'), el('span', 'tickets-tx-tool', step.name));
+    const when = clockTime(block.at);
+    if (when !== '') {
+      row.append(el('span', 'tickets-tx-time', when));
+    }
+    const glyph = toolGlyph(step.name);
+    row.append(el('span', 'tickets-tx-dot'), el('span', 'tickets-tx-tool', glyph === '' ? step.name : `${glyph} ${step.name}`));
+    if (glyph === '✎') {
+      row.classList.add('tickets-tx-step-edit');
+    }
     if (step.target !== '') {
       const target = el('span', 'tickets-tx-target', shortenTarget(step.target, root));
       target.title = step.target;
@@ -160,7 +200,13 @@ export function createTranscriptView(api: DreyPluginApi, worktreePath: string): 
       outcome.title = said;
       row.append(outcome);
     } else if (state === 'running') {
-      row.append(el('span', 'tickets-tx-outcome', 'running…'));
+      const since = block.at !== undefined ? Date.parse(block.at) : Number.NaN;
+      const pill = el('span', 'tickets-tx-outcome tickets-tx-running', 'running…');
+      if (!Number.isNaN(since)) {
+        pill.dataset['since'] = String(since);
+        pill.textContent = `running · ${elapsedClock(Date.now() - since)}`;
+      }
+      row.append(pill);
     }
     return row;
   };
@@ -211,10 +257,30 @@ export function createTranscriptView(api: DreyPluginApi, worktreePath: string): 
       }
       case 'setup':
         return el('div', 'tickets-tx-setup', block.text ?? block.markdown);
+      case 'system': {
+        const node = el('div', 'tickets-tx-system');
+        node.dataset['tone'] = block.tone ?? 'info';
+        const when = clockTime(block.at);
+        if (when !== '') {
+          node.append(el('span', 'tickets-tx-time', when));
+        }
+        node.append(el('span', 'tickets-tx-system-text', block.text ?? block.markdown));
+        return node;
+      }
+      case 'diagnostic': {
+        const summary = el('summary', 'tickets-tx-diag-head');
+        summary.append(el('span', 'tickets-tx-chevron', '›'), el('span', undefined, 'Diagnostics'));
+        const body = el('div', 'tickets-tx-diag-body', block.text ?? block.markdown);
+        return fold(key, false, summary, body, 'tickets-tx-diag');
+      }
       case 'result': {
         const node = el('div', 'tickets-tx-result');
         const rule = el('div', 'tickets-tx-result-rule');
-        rule.append(el('span', 'tickets-tx-result-chip', '✓ Turn finished'));
+        const chip = el('span', 'tickets-tx-result-chip', block.paused === true ? '⏸ Paused' : '✓ Turn finished');
+        if (block.paused === true) {
+          chip.classList.add('tickets-tx-result-paused');
+        }
+        rule.append(chip);
         node.append(rule);
         if (block.text !== undefined) {
           node.append(renderReply(api, block.text));

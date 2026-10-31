@@ -62,6 +62,9 @@ const liveLabel = (run: RunInfo): string => {
   if (run.waiting != null) {
     return 'Waiting for you';
   }
+  if (run.paused === true) {
+    return 'Paused';
+  }
   if (run.turn === 'idle') {
     return 'Idle';
   }
@@ -154,7 +157,7 @@ export function liveStateWord(run: RunInfo | null): string | null {
 }
 
 /** The header's buttons, in the order the header shows them. */
-export type HeaderControl = 'pause' | 'takeover' | 'handback' | 'stop' | 'resume' | 'start';
+export type HeaderControl = 'pause' | 'continue' | 'takeover' | 'handback' | 'stop' | 'resume' | 'start';
 
 /**
  * The header's controls for the ticket's newest run (owner request
@@ -172,9 +175,21 @@ export function headerControls(run: RunInfo | null): readonly HeaderControl[] {
   if (run.state === 'detached') {
     return run.sessionRef !== null ? ['stop', 'resume'] : ['stop'];
   }
+  if (run.state === 'stopping') {
+    return []; // already on its way out: every control would only be refused
+  }
   if (LIVE_STATES.includes(run.state)) {
-    const controls: HeaderControl[] = ['pause', 'takeover', 'stop'];
-    if (run.held === true) {
+    // Pause interrupts a turn in progress: a paused run offers Continue
+    // instead, and a worker standing idle (or waiting on the owner) has no
+    // turn to interrupt — the refusal used to surface only in a closed panel.
+    const controls: HeaderControl[] = [];
+    if (run.paused === true) {
+      controls.push('continue');
+    } else if (run.turn !== 'idle') {
+      controls.push('pause');
+    }
+    controls.push('takeover', 'stop');
+    if (run.held === true && run.paused !== true) {
       controls.push('handback');
     }
     return controls;

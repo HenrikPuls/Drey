@@ -24,6 +24,50 @@ its pane without a split. The split beside the thread remains only for
 the first ticket after the pair was closed. Specs: two new rows in
 `plugins/tickets/renderer/ticket-page.spec.ts`.
 
+### Milestone 95 — fleet stability, part 4: the run view tells the truth
+
+**Not yet manually verified by the owner.** Owner request, 2026-10-31
+(the stability analysis's last open part but the column model, which
+the owner postponed — roadmap M3). Matches
+`docs/design/work-panel/Ticket.dc.html` / `Workers.dc.html` where noted.
+
+- **The runner talks as a system line.** Runner notes carry
+  `detail: 'runner'` in the stream (older streams are recognised by their
+  wording); provider stderr and unparseable lines carry `detail:
+  'stderr'`. `formatWatch` draws the first as a muted/amber/red *system*
+  block with its clock time, the second as a folded *Diagnostics* line —
+  none of them is a fake "Turn" tool step any more.
+- **A paused turn says so.** The result that closes an interrupted turn
+  draws as **⏸ Paused**, not "✓ Turn finished"; `RunInfo.paused` (set by
+  `interrupt`, cleared by the owner's next prompt or Continue) turns the
+  header word into *Paused*, swaps Pause for **Continue** (the
+  milestone-94 hand-back-that-continues), and the Workers card and the
+  fleet light read *Paused* (amber).
+- **Controls only where they work.** No Pause on a standing or waiting
+  worker (no turn to interrupt), none on a stopping run (`headerControls`).
+  A refused or failed control now shows **in the thread** (an alert under
+  the header) — the note used to live only in the closed Work panel.
+- **The event list.** Every tool row carries its clock time; commands
+  read `▶ Bash`, edits `✎ Edit` (amber); a running call is a pill
+  `running · 0:42` that ticks each second.
+- **A *Workers* section** tops the Work panel while workers live
+  (`workers-view.ts`): a card per worker — state word and light, ticket,
+  the "Now" line (activity, question or pause hint), working time,
+  context and tokens — with Pause / Continue, Stop and Open; the ones
+  that need a look first. Paused / *Looks stuck* (the milestone-93
+  watchdog flag) have their own lights. A detached run counts as live in
+  the footer and the cards.
+- **Resume under the cap.** A warm-pause resume over `contextCap`
+  compacts natively when the worker can, else starts fresh (it used to
+  resume at any size).
+
+Specs: `watch-format.spec.ts` (system/diagnostic blocks, paused result,
+clock), `transcript-view.spec.ts` (system line, Paused chip, running
+pill), `thread-steps.spec.ts` (Continue, no Pause where none works),
+`worker-status.spec.ts`, `workers-view.spec.ts`, `handover.spec.ts`
+(over-cap warm resume). Not done: per-edit `+n −m` counts, a soft
+pause flag, Tell… / Nudge — roadmap "Fleet stability" M4b.
+
 ### Milestone 94 — fleet stability, part 2: clean hand-overs, pause that resumes
 
 **Not yet manually verified by the owner.** Owner request, 2026-10-31
