@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { NormalizedEvent } from '../main/fleet/providers';
-import { formatWatch, parseStreamEvents, renderWatchMarkdown } from './watch-format';
+import { clockTime, formatWatch, parseStreamEvents, renderWatchMarkdown } from './watch-format';
 
 const ev = (event: Partial<NormalizedEvent> & { kind: NormalizedEvent['kind'] }): NormalizedEvent => ({
   ts: '2026-10-19T22:00:00Z',
@@ -172,5 +172,48 @@ describe('renderWatchMarkdown', () => {
       ]),
     );
     expect(md).toBe('● **Read** `src/a.ts`  \n● **Shell** `git status`\n\nNow I know the layout.');
+  });
+});
+
+describe('formatWatch — the runner speaks as a system line, never as a tool call', () => {
+  it('draws marked runner notes and legacy ones as system blocks with a tone', () => {
+    const view = formatWatch([
+      ev({ kind: 'note', detail: 'runner', text: 'taken over by the owner' }),
+      ev({ kind: 'note', text: 'lease reaper: the worker process is gone — run reaped, ticket freed' }),
+      ev({ kind: 'note', detail: 'runner', text: 'looks stuck: no output for 12 min' }),
+    ]);
+    expect(view.blocks.map((b) => b.kind)).toEqual(['system', 'system', 'system']);
+    expect(view.blocks.map((b) => b.tone)).toEqual(['warn', 'error', 'warn']);
+    expect(view.blocks[0]!.at).toBe('2026-10-19T22:00:00Z');
+  });
+
+  it('folds provider stderr into a diagnostic block', () => {
+    const view = formatWatch([ev({ kind: 'note', detail: 'stderr', text: 'WARN something odd' })]);
+    expect(view.blocks).toMatchObject([{ kind: 'diagnostic', text: 'WARN something odd' }]);
+  });
+
+  it('a result right after an interrupt closes the pause, not the step', () => {
+    const view = formatWatch([
+      ev({ kind: 'note', detail: 'runner', text: 'turn interrupted by the owner — the session is kept' }),
+      ev({ kind: 'result', text: 'interrupted' }),
+      ev({ kind: 'note', text: 'you › go on' }),
+      ev({ kind: 'result', text: 'done' }),
+    ]);
+    const results = view.blocks.filter((b) => b.kind === 'result');
+    expect(results[0]).toMatchObject({ paused: true });
+    expect(results[1]!.paused).toBeUndefined();
+  });
+
+  it('a tool step keeps its event time', () => {
+    const view = formatWatch([ev({ kind: 'note', text: 'bash npm test' })]);
+    expect(view.blocks[0]).toMatchObject({ kind: 'step', at: '2026-10-19T22:00:00Z' });
+  });
+});
+
+describe('clockTime', () => {
+  it('is HH:MM in local time, empty without a stamp', () => {
+    expect(clockTime('2026-10-19T22:00:00Z')).toMatch(/^\d\d:\d\d$/);
+    expect(clockTime(undefined)).toBe('');
+    expect(clockTime('nope')).toBe('');
   });
 });

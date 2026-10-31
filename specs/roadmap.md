@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-31):** version 0.8.1, milestones 1–94 built — 1–83
+**Status (2026-10-31):** version 0.8.1, milestones 1–95 built — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -60,7 +60,7 @@ their changelog markers. The owner's verification round for 1–81 closed
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 94 = fleet stability part 2; milestone 93 = fleet stability part 1b; milestone 92 = fleet stability part 1; milestone 91 = ticket T-0084; latest requirement id: req-80
+highest used (latest: milestone 95 = fleet stability part 4 (the run view); milestone 94 = fleet stability part 2; milestone 93 = fleet stability part 1b; milestone 92 = fleet stability part 1; milestone 91 = ticket T-0084; latest requirement id: req-80
 (req-80 = fleet token economy; req-75–78 added 2026-10-31: the Work panel, STRIDE, TARA, the red-gate
 back-move; req-79 = the fleet brief's short instructions file; req-74 = due-date reminders, T-0012; req-73 is readable board
 issues, renumbered from req-66 — the tickets remote holds req-66)),
@@ -85,12 +85,12 @@ owner-verified (verification round closed 2026-10-17), the bug-11 fix
 included.
 
 **Fleet stability, parts 2–4** (owner request, outside the list,
-2026-10-31; parts 1, 1b and 2 shipped as milestones 92, 93 and 94). The
+2026-10-31; parts 1, 1b, 2 and 4 shipped as milestones 92, 93, 94 and 95). The
 analysis of the stuck, token-hungry runs leaves, in order: **(M1c)**
-`contextCap` for claude-code and a warm resume only under the cap, a
-TTL for runs waiting on the owner (the slot frees, the run stays
-waiting), per-phase `max-turns` / `max-work` keys in `pipeline.md`
-(milestone 93 ships fixed defaults), the hang flag in the Work panel;
+`contextCap` enforced mid-run for claude-code (milestone 95 only keeps
+a warm resume under the cap), a TTL for runs waiting on the owner (the
+slot frees, the run stays waiting), per-phase `max-turns` / `max-work`
+keys in `pipeline.md` (milestone 93 ships fixed defaults);
 **(M2b)** a version marker on the vault prompt copies so the runner
 flags (or replaces) a copy older than the shipped default, the plan
 step's acceptance commands checked by the runner as well, a cap on the
@@ -99,10 +99,11 @@ writing the ticket file at all (the runner writes the handover from the
 worker's answer — today the worker edits it, the runner commits); **(M3)** the column as a `phase:` frontmatter field — one atomic
 write instead of rename + write, a revision check between runner and
 Drey, CRLF tolerance (alternative if the migration is too big: journal
-the move and add the live-run check to `moveCard`); **(M4)** run notes
-as typed events, the event list and "running" pill of
-`docs/design/work-panel/Ticket.dc.html`, a visible Paused state with a
-Continue button, errors inline in the thread, the Workers view.
+the move and add the live-run check to `moveCard`); **(M4b)** the
+rest of `docs/design/work-panel/Ticket.dc.html`: `+n −m` counts per
+edit line, a soft "pause after this step" flag (milestone 95's Pause
+still interrupts the turn at once), the Workers page's Tell… / Nudge /
+Hand to Claude Code actions. M3 stays last, by the owner's order.
 
 **req-75 — The Work panel replaces the kanban board** (owner request,
 outside the list, 2026-10-31; [ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md),

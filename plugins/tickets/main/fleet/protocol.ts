@@ -503,6 +503,12 @@ export interface RunInfo {
    * records written before the watchdog existed.
    */
   readonly stuck?: boolean;
+  /**
+   * The owner interrupted the worker's turn and has not continued it yet:
+   * the board reads "Paused" with a Continue button instead of "Idle".
+   * Cleared by the owner's next prompt or by handing the run back.
+   */
+  readonly paused?: boolean;
   /** Read/grep/glob tool calls — the exploration counter. */
   readonly readCalls?: number;
   /**

@@ -278,3 +278,18 @@ describe('fleetLine — the footer\'s one fleet line (T-0086)', () => {
     });
   });
 });
+
+describe('workerStatus — the owner and watchdog states (milestones 93/95)', () => {
+  it('a paused run reads Paused (amber), never stalled or standing', () => {
+    expect(
+      workerStatus(run({ paused: true, turn: 'idle', held: true, lastActivity: '2026-10-18T09:00:00Z' }), NOW),
+    ).toEqual({ light: 'amber', label: 'Paused' });
+  });
+
+  it('a run the watchdog flagged reads Looks stuck (red)', () => {
+    expect(workerStatus(run({ stuck: true, turn: 'busy', lastActivity: '2026-10-18T11:40:00Z' }), NOW)).toEqual({
+      light: 'red',
+      label: 'Looks stuck',
+    });
+  });
+});

@@ -126,6 +126,16 @@ describe('headerControls', () => {
     expect(headerControls(run({ state: 'running', phase: 'build', held: true }))).toEqual(['pause', 'takeover', 'stop', 'handback']);
   });
 
+  it('a paused run offers Continue instead of Pause', () => {
+    expect(headerControls(run({ state: 'running', phase: 'build', held: true, paused: true, turn: 'idle' }))).toEqual(['continue', 'takeover', 'stop']);
+    expect(liveStateWord(run({ state: 'running', phase: 'build', paused: true, turn: 'idle' }))).toBe('Paused');
+  });
+
+  it('offers no Pause where there is no turn to interrupt, and nothing while stopping', () => {
+    expect(headerControls(run({ state: 'running', phase: 'build', turn: 'idle' }))).toEqual(['takeover', 'stop']);
+    expect(headerControls(run({ state: 'stopping', phase: 'build' }))).toEqual([]);
+  });
+
   it('gives a detached run Stop and Resume session, never Pause', () => {
     const detached = headerControls(run({ state: 'detached', sessionRef: 'ses-1' }));
     expect(detached).toEqual(['stop', 'resume']);

@@ -1223,6 +1223,9 @@ export class RunSupervisor {
     if (!answersQuestion) {
       await this.holdForOwner(run, 'first prompt');
       run.paused = false; // the owner's own message starts a turn whose result counts
+      if (run.info.paused === true) {
+        run.info = { ...run.info, paused: false };
+      }
     }
     // A quiet start (req-75) delivered no brief at spawn: the composed
     // instruction rides the owner's FIRST message, once. Guarded on
@@ -1402,6 +1405,8 @@ export class RunSupervisor {
       return { ok: false, error: `the ${run.info.provider} worker took no interrupt — it may be idle already` };
     }
     run.agentDone = false;
+    run.info = { ...run.info, paused: true };
+    await this.persist(run);
     await this.logLine(run, 'turn interrupted by the owner — the session is kept');
     return { ok: true };
   }
@@ -1422,7 +1427,7 @@ export class RunSupervisor {
       // instead of ending the run and letting the gate judge half a step.
       run.paused = false;
       run.agentDone = false;
-      run.info = { ...run.info, held: false };
+      run.info = { ...run.info, held: false, paused: false };
       await this.persist(run);
       const rung = await run.handle!.steer(HANDBACK_CONTINUE);
       run.handle!.setHold!(false);
@@ -2069,7 +2074,9 @@ export class RunSupervisor {
     } catch (error) {
       this.deps.log(`run ${run.info.id}: log line failed — ${messageOf(error)}`);
     }
-    await this.appendStream(run, { ts: this.stamp(), kind: 'note', text: what });
+    // `detail: 'runner'` marks the runner's own line — the transcript draws it
+    // as a system note, never as a tool call.
+    await this.appendStream(run, { ts: this.stamp(), kind: 'note', detail: 'runner', text: what });
   }
 
   private async appendStream(run: LiveRun, event: NormalizedEvent): Promise<void> {

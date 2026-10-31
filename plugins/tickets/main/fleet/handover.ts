@@ -195,6 +195,21 @@ export function resolveHandover(input: HandoverInput): HandoverDecision {
   const warmMs = input.config.resumePauseTtlMin * 60_000;
   const context = candidate.lastTurnContext;
   const threshold = compactThreshold(input.config, input.provider, input.model);
+  const cap = contextCap(input.config, input.provider, input.model);
+  if (pauseMs < warmMs && cap > 0 && context !== null && context >= cap) {
+    // A warm pause used to resume at any size (a retry came back at 148 k
+    // against a 120 k cap and grew to 184 k): an over-cap transcript is
+    // compacted when the worker can, else the step starts fresh.
+    if (input.capability === 'native') {
+      return {
+        mode: 'resume-compact',
+        resumeRef: candidate.sessionRef,
+        compactFirst: true,
+        why: `warm pause, but the ${context}-token context is over the ${cap} cap — resumed and natively compacted first`,
+      };
+    }
+    return fresh(`warm pause, but the ${context}-token context is over the ${cap} cap and the worker cannot compact — fresh is cheaper`);
+  }
   if (pauseMs < warmMs) {
     return resume(
       candidate.sessionRef,

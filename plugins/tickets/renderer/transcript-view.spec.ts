@@ -84,3 +84,21 @@ describe('createTranscriptView', () => {
     expect(view.element.querySelector('.tickets-tx-empty')).toBeNull();
   });
 });
+
+describe('createTranscriptView — system lines and the pause', () => {
+  it('draws runner notes as system lines, the paused result as a Paused chip, and a running pill with its clock', () => {
+    const view = createTranscriptView(api, 'W:/wt');
+    view.update(
+      formatWatch([
+        ev({ kind: 'note', detail: 'runner', text: 'turn interrupted by the owner — the session is kept' }),
+        ev({ kind: 'result', text: 'interrupted' }),
+        ev({ kind: 'tool', tool: 'bash', detail: 'running' }),
+      ]),
+    );
+    const html = view.element;
+    expect(html.querySelector('.tickets-tx-system')?.getAttribute('data-tone')).toBe('warn');
+    expect(html.querySelector('.tickets-tx-result-chip')?.textContent).toBe('⏸ Paused');
+    expect(html.querySelectorAll('.tickets-tx-step')).toHaveLength(1); // only the real tool call — no fake "Turn" step for the note
+    expect(html.querySelector('.tickets-tx-running')?.textContent).toMatch(/^running · \d+:\d\d$/);
+  });
+});

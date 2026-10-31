@@ -57,6 +57,7 @@ import {
   WORKER_LABEL,
   workerLabelOf,
 } from './worker-status';
+import { workersNode, type WorkerCardAction } from './workers-view';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -254,7 +255,7 @@ function markOpenCard(api: DreyPluginApi): void {
 
 // --- the fleet's live runs and the chain (M84/M85, ADR-0075/0077) ----------
 
-const LIVE_RUN_STATES: readonly string[] = ['starting', 'running', 'stopping'];
+const LIVE_RUN_STATES: readonly string[] = ['starting', 'running', 'stopping', 'detached'];
 let fleetRuns: RunInfo[] = [];
 let chain: ChainStatus | null = null;
 
@@ -509,6 +510,10 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     if (issues !== null) {
       root.append(issues);
     }
+    const workers = workersSection(api);
+    if (workers !== null) {
+      root.append(workers);
+    }
     root.append(workListNode(workPanelDeps(api), snap, fleetRuns, folds, notifyViews, workFilter.get()));
     const statusBar = statusBarNode(api, snap, fleet.node);
     if (statusBar !== null) {
@@ -539,6 +544,13 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     if (list !== null) {
       workListLivePaint(list, workPanelDeps(api), snap, fleetRuns);
     }
+    // The Workers cards carry moving text too (activity, clocks): swap the
+    // section in place — it is small, and nothing in it holds focus.
+    const old = root.querySelector<HTMLElement>('.tickets-workers');
+    const fresh = workersSection(api);
+    if (old !== null && fresh !== null) {
+      old.replaceWith(fresh);
+    }
   };
   fleetListeners.add(paintLive);
   const tick = setInterval(paintLive, 1_000);
@@ -554,6 +566,33 @@ function buildBoardView(api: DreyPluginApi): BoardView {
   };
   render();
   return view;
+}
+
+/** The Workers section over the live runs (null while none lives). */
+function workersSection(api: DreyPluginApi): HTMLElement | null {
+  return workersNode(
+    {
+      api,
+      open: (ticketId) => {
+        const card = boardCard(ticketId);
+        if (card !== null) {
+          void openTicketPage(api, card);
+        }
+      },
+      act: (runId: string, action: WorkerCardAction) => {
+        if (action === 'stop') {
+          void runMutation('Stopping the worker', () => invokeBoard('fleetStop', { runId, reason: null }));
+          return;
+        }
+        const control = action === 'pause' ? 'interrupt' : 'release';
+        void runMutation(action === 'pause' ? 'Pausing' : 'Continuing', () =>
+          invokeBoard('fleetControl', { action: control, runId }),
+        );
+      },
+    },
+    liveRuns(),
+    Date.now(),
+  );
 }
 
 /** What the Work list may do — the store's actions, behind one seam. */
@@ -1640,6 +1679,9 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     }
   });
   stopRun.classList.add('tickets-thread-stop');
+  const continueRun = iconButton('play', 'Continue — the worker picks the step up where it stopped', 'Continue', () =>
+    control('release', 'Continuing'),
+  );
   const handBackRun = iconButton('arrow-left', 'Hand the run back to the runner', 'Hand back', () =>
     control('release', 'Handing back'),
   );
@@ -1700,7 +1742,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     readyOpen = !readyOpen;
     paintReady();
   });
-  controls.append(pauseRun, takeOverRun, stopRun, handBackRun, resumeRun, startRun, checkpoints);
+  controls.append(pauseRun, continueRun, takeOverRun, stopRun, handBackRun, resumeRun, startRun, checkpoints);
   head.append(light, stateWord, titleNode, metaNode, readyChip, el('span', 'tickets-takeover-spacer'), fileLink, controls);
 
   const endMoves = createEndMoves();
@@ -1826,6 +1868,12 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   // a live run stands quiet — nothing happens until the first message.
   const pendingHint = el('div', 'tickets-thread-pending', PENDING_HINT);
   pendingHint.hidden = true;
+  // A refused or failed control (Pause, Continue, Stop …) says so here, in
+  // the thread — the note used to live only in the Work panel's status bar,
+  // closed by default, so a refusal looked like nothing happened.
+  const actionNotice = el('div', 'tickets-thread-notice');
+  actionNotice.hidden = true;
+  actionNotice.setAttribute('role', 'alert');
   // The decision bar (req-75 W1b): the buttons W1 drew on a Needs-you
   // row, now above the composer where the ticket is read.
   const decisionBar = el('div', 'tickets-thread-decisions');
@@ -2163,6 +2211,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     // the composer's gate — only a dialog phase can start one by hand.
     const show = new Set(headerControls(run));
     pauseRun.hidden = !show.has('pause');
+    continueRun.hidden = !show.has('continue');
     takeOverRun.hidden = !show.has('takeover');
     stopRun.hidden = !show.has('stop');
     handBackRun.hidden = !show.has('handback');
@@ -2187,6 +2236,11 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     }
     // The quiet start's hint (req-75): the run waits for the first send.
     pendingHint.hidden = !(live && run !== null && run.quietStart === true);
+    const showNotice = noteKind === 'error' && note !== '';
+    actionNotice.hidden = !showNotice;
+    if (showNotice && actionNotice.textContent !== note) {
+      actionNotice.textContent = note;
+    }
     transcript.element.hidden = run === null;
     empty.hidden = run !== null;
     const mode = dialogMode();
@@ -2235,7 +2289,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       pullChanges();
     }
   }, 30_000);
-  wrap.append(head, readyWrap, pendingHint, stepsBox, endMoves.element, decisionBar, composer.element);
+  wrap.append(head, actionNotice, readyWrap, pendingHint, stepsBox, endMoves.element, decisionBar, composer.element);
   host.append(wrap);
   return () => {
     alive = false;
