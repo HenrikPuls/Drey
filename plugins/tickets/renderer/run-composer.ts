@@ -98,13 +98,17 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     return b;
   };
   const runId = (): string | null => deps.target()?.id ?? null;
+  // An ended run with a session takes the message: it is reopened as a
+  // new run that carries on the conversation (the thread and the takeover
+  // alike); only without one does the thread start a dialog.
+  const isReopenable = (run: RunInfo | null): boolean =>
+    run !== null && !LIVE_RUN_STATES.includes(run.state) && run.state !== 'detached' && run.sessionRef !== null;
 
-  // The composer box (req-75 W1b): one rounded box — the prompt with a
-  // round send button inside; the attachments, commands and quick
-  // prompts live around it.
+  // The composer box (Claude Code's shape): one rounded box — the prompt
+  // on top, a toolbar inside it below: attach and the quick prompts on
+  // the left, stop and send on the right.
   const box = el('div', 'tickets-composer-box');
-  const underRow = el('div', 'tickets-composer-under');
-  const inputRow = el('div', 'tickets-composer-inputrow');
+  const toolbar = el('div', 'tickets-composer-toolbar');
   const promptWrap = box;
   // Files and pictures for the worker: stored in its worktree, named in the message.
   const attached: { name: string; path: string }[] = [];
@@ -160,8 +164,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     }
     let target = deps.target();
     const active = target !== null && LIVE_RUN_STATES.includes(target.state);
-    const reopenable = target !== null && !active && target.state !== 'detached' && target.sessionRef !== null && deps.startFor === undefined;
-    let id: string | null = active || reopenable ? (target?.id ?? null) : null;
+    let id: string | null = active || isReopenable(target) ? (target?.id ?? null) : null;
     if (id === null && deps.startFor !== undefined && (deps.canStart?.() ?? true)) {
       id = await deps.startFor();
       target = deps.target();
@@ -279,7 +282,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     }
   });
   stopBtn.classList.add('tickets-composer-stop');
-  // The round send button inside the box (req-75 W1b).
+  // The send button closes the toolbar inside the box.
   const sendBtn = el('button', 'tickets-composer-send');
   sendBtn.type = 'button';
   sendBtn.title = 'Send the message — a working worker takes it into its turn';
@@ -288,8 +291,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
   sendBtn.addEventListener('click', () => {
     void send(prompt.getContent());
   });
-  inputRow.append(prompt.element, sendBtn);
-  underRow.append(plusBtn, fileInput, stopBtn, chips);
+  toolbar.append(plusBtn, fileInput, chips, el('span', 'tickets-takeover-spacer'), stopBtn, sendBtn);
 
   // The worker's pulse while a turn runs: what it does now and for how long.
   const progress = el('div', 'tickets-takeover-progress');
@@ -317,7 +319,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     progressText.textContent = `${verb}… ${seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`} · ↓ ${formatTokens(run.tokensOut)} tokens`;
     progress.hidden = false;
   };
-  box.append(commandMenu, attachRow, inputRow);
+  box.append(commandMenu, attachRow, prompt.element, toolbar);
 
   // What the worker waits on (req-64): a tool call to approve with one
   // of the buttons, or a question asked as OpenCode's `question` form —
@@ -466,8 +468,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     const run = deps.target();
     const active = run !== null && LIVE_RUN_STATES.includes(run.state);
     const detached = run !== null && run.state === 'detached';
-    // The takeover reopens an ended session on send; the thread starts a dialog instead.
-    const reopenable = deps.startFor === undefined && run !== null && !active && !detached && run.sessionRef !== null;
+    const reopenable = !detached && isReopenable(run);
     const startable = deps.startFor !== undefined && !active && (deps.canStart?.() ?? true);
     const typable = active || reopenable || startable;
     prompt.setReadOnly(!typable);
@@ -477,13 +478,13 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     sendBtn.disabled = !typable;
     plusBtn.disabled = !(active || reopenable);
     for (const chip of chips.children) {
-      (chip as HTMLButtonElement).disabled = !active;
+      (chip as HTMLButtonElement).disabled = !typable;
     }
     paintWait(run);
     paintProgress(run);
   };
 
-  wrap.append(progress, askSlot, waitCard, box, underRow);
+  wrap.append(progress, askSlot, waitCard, box);
   paint();
   return {
     element: wrap,

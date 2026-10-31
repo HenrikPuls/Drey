@@ -1558,7 +1558,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       openTicketFile(api, card.path);
     }
   });
-  const controls = el('span', 'tickets-takeover-controls');
+  const controls = el('span', 'tickets-thread-controls');
   const iconButton = (icon: string, title: string, onClick: () => void): HTMLButtonElement => {
     const b = el('button', 'tickets-takeover-btn tickets-thread-iconbtn');
     b.type = 'button';
@@ -1568,19 +1568,15 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     b.addEventListener('click', onClick);
     return b;
   };
-  const openRun = iconButton('external-link', 'Open the run in its own tab — metrics, hand back and resume', () => {
-    const run = threadRun(ticketId);
-    if (run !== null) {
-      openTakeover(api, run);
-    }
-  });
+  // No resume button here: a message in the box carries an ended run on;
+  // the run's own tab stays on the card menu ("Open run").
   const stopRun = iconButton('square', 'Stop the run — the ticket stays where it is', () => {
     const run = threadRun(ticketId);
     if (run !== null) {
       void runMutation('Stopping the run', () => invokeBoard('fleetStop', { runId: run.id, reason: null }));
     }
   });
-  controls.append(openRun, stopRun);
+  controls.append(stopRun);
   head.append(light, titleNode, metaNode, el('span', 'tickets-takeover-spacer'), fileLink, controls);
 
   const endMoves = createEndMoves();
@@ -1821,7 +1817,6 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       .filter((part): part is string => part !== null && part !== '')
       .join(' · ');
     fileLink.hidden = card === null;
-    openRun.hidden = run === null;
     stopRun.hidden = !live;
     transcript.element.hidden = run === null;
     empty.hidden = run !== null;

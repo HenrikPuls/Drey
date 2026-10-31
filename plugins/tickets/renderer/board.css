@@ -890,7 +890,8 @@
   flex: 1;
 }
 
-.tickets-takeover-controls {
+.tickets-takeover-controls,
+.tickets-thread-controls {
   display: inline-flex;
   gap: 6px;
 }
@@ -1401,29 +1402,37 @@ details[open] > summary > .tickets-tx-think-preview {
   }
 }
 
-/* The composer box (req-75 W1b): one rounded box — the prompt with the
-   round send button inside; attachments and quick prompts live under it. */
+/* The composer box (Claude Code's shape): one rounded box — the prompt on
+   top, a toolbar inside it below (attach + quick prompts left, stop +
+   send right). */
 .tickets-composer-box {
   flex: none;
   max-height: 40%;
   display: flex;
   flex-direction: column;
-  margin: 0 16px 4px;
+  margin: 0 16px 14px;
   border: 1px solid var(--field-border);
-  border-radius: 20px;
+  border-radius: 14px;
   background: var(--bg-sidebar);
   overflow: auto;
 }
 
-.tickets-composer-inputrow {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  padding: 6px 8px 8px 14px;
+.tickets-composer-box:focus-within {
+  border-color: var(--accent);
 }
 
 .tickets-takeover-prompt-input {
-  min-height: 56px;
+  flex: none;
+  min-height: 44px;
+  padding: 8px 0 0;
+}
+
+.tickets-composer-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 8px;
 }
 
 .tickets-composer-send {
@@ -1433,20 +1442,24 @@ details[open] > summary > .tickets-tx-think-preview {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--field-border);
-  border-radius: 50%;
-  background: var(--bg-input);
-  color: var(--text-2);
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-contrast);
   padding: 0;
   cursor: pointer;
 }
 
 .tickets-composer-send:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent-fg);
+  filter: brightness(1.1);
 }
 
-.tickets-composer-send:disabled,
+.tickets-composer-send:disabled {
+  background: var(--hover-bg);
+  color: var(--text-4);
+  cursor: default;
+}
+
 .tickets-composer-plus:disabled {
   opacity: 0.45;
   cursor: default;
@@ -1456,30 +1469,23 @@ details[open] > summary > .tickets-tx-think-preview {
   display: none;
 }
 
-/* The muted row under the box: attach, stop, the quick prompts. */
-.tickets-composer-under {
-  flex: none;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin: 0 16px 12px;
-  font-size: 0.75rem;
-  color: var(--text-4);
-}
-
 .tickets-composer-stop {
-  height: 24px;
-  padding: 0 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
 }
 
-/* In a narrow pane the quick prompts wrap; the rest keeps its place. */
+/* The quick prompts sit in the toolbar; in a narrow pane they scroll
+   sideways instead of pushing stop and send out of place. */
 .tickets-takeover-chips {
-  display: inline-flex;
-  flex-wrap: wrap;
+  display: flex;
+  flex-wrap: nowrap;
   gap: 4px;
   flex: 0 1 auto;
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .tickets-takeover-chip {

@@ -20,6 +20,25 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — the thread's composer looks like Claude Code's, an ended run takes the next message
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (2026-10-31). The thread header carried a green "Open the run in
+its own tab" button the owner read as a restart, while the prompt box of
+an ended run outside a dialog phase stayed read-only; the quick prompts
+sat in a row under the box, offset by the attach button. Now the header
+keeps only **Stop run** (live runs); the run's tab stays on the row's
+menu (Open run / Past runs). A message to an ended run with a session
+reopens it as a new run in the thread too (`run-composer.ts`
+`isReopenable`; before, only the takeover tab did, and the thread could
+only start a dialog — it still does when there is no session). The
+composer is one box in Claude Code's shape: the prompt on top, a toolbar
+inside it below — attach and the quick prompts left (scrolling sideways
+when narrow), stop and a filled send button right. e2e
+`work-panel.spec.ts` ("an ended run keeps the box free") checks the
+header, the enabled box and the toolbar's place; manual §Work panel and
+§dialogs updated.
+
 ### Fix — the ticket page no longer splits again per ticket
 
 **Not yet manually verified by the owner.** Owner request, outside the
