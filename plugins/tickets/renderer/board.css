@@ -776,116 +776,8 @@
   background: var(--bg-main);
 }
 
-.tickets-takeover-banner {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 16px 8px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-dock);
-  font-size: 0.8rem;
-}
-
-.tickets-takeover-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.tickets-takeover-ticket {
-  flex: none;
-  font-weight: 600;
-  font-size: 0.92rem;
-  color: var(--text-heading);
-}
-
-.tickets-takeover-provider {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-2);
-}
-
-.tickets-takeover-mode {
-  flex: none;
-  padding: 1px 8px;
-  border-radius: 10px;
-  font-size: 0.72rem;
-  font-weight: 500;
-  cursor: help;
-  color: color-mix(in srgb, var(--tk-tone, var(--accent)) 70%, var(--text-heading));
-  background: color-mix(in srgb, var(--tk-tone, var(--accent)) 16%, transparent);
-}
-
-.tickets-takeover-status {
-  flex: none;
-  color: var(--text-2);
-  font-size: 0.75rem;
-}
-
-.tickets-takeover-status:empty {
-  display: none;
-}
-
-.tickets-takeover-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 20px;
-  padding-left: 20px;
-  font-size: 0.75rem;
-}
-
-.tickets-takeover-metrics[hidden],
-.tickets-takeover-metric[hidden] {
-  display: none;
-}
-
-.tickets-takeover-metric {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: default;
-}
-
-.tickets-takeover-metric-label {
-  color: var(--text-4);
-}
-
-.tickets-takeover-metric-value {
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.tickets-takeover-meter {
-  position: relative;
-  width: 48px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border);
-  overflow: hidden;
-}
-
-.tickets-takeover-meter-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 2px;
-  background: var(--status-added);
-}
-
-.tickets-takeover-metric[data-level='mid'] .tickets-takeover-meter-fill {
-  background: var(--status-modified);
-}
-
-.tickets-takeover-metric[data-level='high'] .tickets-takeover-meter-fill {
-  background: var(--status-deleted);
-}
-
+/* The tab itself is gone (req-75 W4a) — the classes below serve the
+   ticket thread and the composer. */
 .tickets-takeover-spacer {
   flex: 1;
 }
@@ -1313,11 +1205,12 @@ details[open] > summary > .tickets-tx-think-preview {
 }
 
 .tickets-tx-you-bubble {
-  max-width: 75%;
-  padding: 6px 12px;
-  border-radius: 12px 12px 4px 12px;
-  background: var(--accent-surface);
+  max-width: min(460px, 75%);
+  padding: 8px 14px;
+  border-radius: 18px 18px 4px 18px;
+  background: color-mix(in srgb, var(--bg-sidebar) 92%, var(--text-heading) 8%);
   color: var(--text-heading);
+  font-size: 14px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -1552,10 +1445,6 @@ details[open] > summary > .tickets-tx-think-preview {
   --tk-tone: var(--text-faint);
 }
 
-.tickets-takeover-banner {
-  border-bottom: 2px solid var(--tk-tone);
-}
-
 .tickets-takeover-btn {
   color: var(--text-heading);
 }
@@ -1565,19 +1454,9 @@ details[open] > summary > .tickets-tx-think-preview {
   border-color: var(--accent);
 }
 
-.tickets-takeover-controls .tickets-takeover-btn:nth-child(2) {
-  border-color: var(--status-modified);
-  color: var(--status-modified);
-}
-
-.tickets-takeover-controls .tickets-takeover-btn:nth-child(3) {
-  border-color: #5aa9ff;
-  color: #5aa9ff;
-}
-
-.tickets-takeover-controls .tickets-takeover-btn:nth-child(1) {
-  border-color: var(--status-added);
-  color: var(--status-added);
+/* The thread's Stop carries the canvas's warning colour (W4a). */
+.tickets-thread-iconbtn.tickets-thread-stop {
+  color: var(--status-deleted);
 }
 
 .tickets-composer-box {
@@ -1586,9 +1465,9 @@ details[open] > summary > .tickets-tx-think-preview {
 }
 
 .tickets-takeover-chip {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--field-border));
-  color: var(--accent-fg);
-  background: var(--accent-surface);
+  border-color: var(--field-border);
+  color: var(--text-2);
+  background: transparent;
 }
 
 .tickets-takeover-chip:hover:not(:disabled) {
@@ -2299,8 +2178,9 @@ details[open] > summary > .tickets-tx-think-preview {
   display: contents;
 }
 
-/* The header (the canvas): the run's dot, the bold title, one muted
-   line, then the Ticket file link and the run's icon buttons. */
+/* The header (req-75 W4a, canvas "3a"): the run's 8 px dot, the bold
+   state word, the ticket title, one muted meta line (the telemetry in
+   its tooltip), then the Ticket file link and the worker's controls. */
 .tickets-thread-head {
   flex: none;
   display: flex;
@@ -2311,14 +2191,27 @@ details[open] > summary > .tickets-tx-think-preview {
   border-bottom: 1px solid var(--border);
 }
 
-.tickets-thread-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.tickets-thread-head .tickets-light {
+  width: 8px;
+  height: 8px;
+}
+
+.tickets-thread-state {
+  flex: none;
   color: var(--text-heading);
   font-size: 15px;
   font-weight: 700;
+}
+
+.tickets-thread-title {
+  flex: 1;
+  min-width: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .tickets-thread-meta {
@@ -2327,6 +2220,7 @@ details[open] > summary > .tickets-tx-think-preview {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: default;
   color: var(--text-4);
   font-size: 12px;
 }
@@ -2380,6 +2274,212 @@ details[open] > summary > .tickets-tx-think-preview {
 .tickets-ready[hidden] {
   display: none;
 }
+
+/* ---- the steps and the branch's files (req-75 W4a, canvas "3a") ---- */
+
+/* The conversation column scrolls as one: the shaped line, the Changes
+   box, one folded line per finished run (its transcript indented under
+   it), then the open run's step head with the live transcript. */
+.tickets-thread-steps {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.tickets-thread-shaped {
+  align-self: center;
+  color: var(--text-4);
+  font-size: 12px;
+}
+
+.tickets-thread-steplist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* The transcript is part of the column here: no scroller of its own. */
+.tickets-thread-steps .tickets-takeover-transcript {
+  flex: none;
+}
+
+.tickets-thread-steps .tickets-tx,
+.tickets-step-body .tickets-tx {
+  overflow: visible;
+}
+
+/* One step: the folded line, its transcript below when unfolded. */
+.tickets-step {
+  display: flex;
+  flex-direction: column;
+}
+
+.tickets-step[hidden] {
+  display: none;
+}
+
+.tickets-step-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tickets-step-open {
+  color: var(--text-heading);
+  cursor: default;
+}
+
+.tickets-step-mark {
+  flex: none;
+  width: 1em;
+  font-weight: 600;
+}
+
+.tickets-step-line[data-mark='✓'] .tickets-step-mark {
+  color: var(--status-added);
+}
+
+.tickets-step-line[data-mark='✕'] .tickets-step-mark {
+  color: var(--status-deleted);
+}
+
+.tickets-step-line[data-mark='■'] .tickets-step-mark {
+  color: var(--text-4);
+}
+
+.tickets-step-line[data-mark='●'] .tickets-step-mark {
+  color: var(--accent-fg);
+}
+
+.tickets-step-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tickets-step-chevron {
+  flex: none;
+  color: var(--text-4);
+}
+
+.tickets-step-body {
+  margin: 2px 0 6px 20px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.tickets-step-body[hidden] {
+  display: none;
+}
+
+/* An unfolded run's transcript: read-only, part of the column. */
+.tickets-step-body .tickets-tx {
+  padding: 4px 0 8px;
+}
+
+/* The Changes-so-far box: what the branch carries against its base. */
+.tickets-thread-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.tickets-thread-changes[hidden] {
+  display: none;
+}
+
+.tickets-changes-head {
+  color: var(--text-heading);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.tickets-changes-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tickets-changes-status {
+  flex: none;
+  width: 12px;
+  font-weight: 700;
+}
+
+.tickets-changes-status-A {
+  color: var(--status-added);
+}
+
+.tickets-changes-status-M {
+  color: var(--status-modified);
+}
+
+.tickets-changes-status-D {
+  color: var(--status-deleted);
+}
+
+.tickets-changes-status-R {
+  color: var(--accent-fg);
+}
+
+.tickets-changes-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.tickets-changes-diff {
+  flex: none;
+  color: var(--text-4);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tickets-changes-safe {
+  color: var(--text-2);
+}
+
+.tickets-changes-tick {
+  color: var(--status-added);
+}
+
+/* The quick prompts sit above the box now (req-75 W4a): muted pills. */
+.tickets-composer-chips {
+  flex: none;
+  display: flex;
+  padding: 0 4px 6px;
+}
+
+.tickets-composer-chips .tickets-takeover-chip {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
 
 /* ---- the Ready card and its story (req-75 W3, canvas "3c · Ready to try") ---- */
 

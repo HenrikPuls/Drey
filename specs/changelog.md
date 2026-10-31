@@ -206,6 +206,51 @@ and its pair-programming rules sending workers into whole-spec reads
   Docs: `specs/ticket-schema.md`, ADR-0081 later change, `FLEET.md`,
   manual §13.
 
+### req-75 W4a — The worker on the ticket
+
+**Not yet manually verified by the owner.** The worker lives on the
+ticket thread (`docs/design/work-panel/Ticket.dc.html`, artboard
+"3a · A ticket with its worker live"): the thread's header says what
+the worker does now — a bold state word (`liveStateWord` in the new
+pure `plugins/tickets/renderer/thread-steps.ts`: `Waiting for you`,
+`Planning`, `Building`, `Merging`, `Idle`; `No run yet` without a run)
+beside the run's dot, one muted meta line (provider · model · run time
+· context fill) that carries the takeover tab's telemetry as its
+tooltip, and the worker's controls — **Pause** (interrupt), **Take
+over** (`fleetControl takeover`) and **Stop**, plus **Hand back**
+while held and **Resume session** when a run ended with a session (the
+takeover's two controls, same handlers). The pure choice is
+`headerControls` (`thread-steps.ts`, owner request 2026-10-31: one
+ticket, one session, the same controls in every state — exactly one
+way on): Stop for any run not ended with Pause/Take over only while
+the worker is connected (a detached run gets Stop and Resume session,
+never Pause), Resume session for an ended run with a session, Start
+(the existing manual start) otherwise; a detached run's state word is
+`Running`, its meta line `not connected`. The transcript area becomes
+the step list (`threadSteps`): each finished run of the ticket one
+folded line (mark ✓/✕/■/●, label, duration; click unfolds that run's
+transcript read-only — its stream is pulled once, never polled), the
+live (or newest) run open at the bottom; the owner's own messages are
+right-aligned bubbles. Above the steps: `Shaped with you · plan
+approved <age>` when the ticket's Log has an owner `plan-review ->
+build` line (`planApprovedOf` in `shared/changes.ts`, on the `changes`
+IPC), and a **Changes so far** box (the new `worktreeChanges` IPC —
+`git diff --numstat`/`--name-status` of the ticket's worktree against
+its base ref, committed (`<base>...HEAD`) and uncommitted, parsed by
+the new pure `plugins/tickets/main/worktree-changes.ts`; refreshed
+when a run's state changes and every 30 s while one is live) with
+`Safe beside others · ✓ own worktree · t/<id>`. The composer's quick
+prompts become the design's two chips above the box (**What are you
+doing and why?**, **Stop after this step**). The separate takeover tab
+is gone (ADR-0087 decision 3): `openTakeover`/`mountTakeover` removed,
+its doc kind restores old sessions onto the ticket page (an unknown
+run does nothing; a leftover mount says the tab moved), the row menu's
+`Open run` becomes `Open ticket`, and `Past runs` opens the thread
+with that run unfolded. Specs: `thread-steps.spec.ts` (12),
+`worktree-changes.spec.ts` (9), `planApprovedOf` in `changes.spec.ts`;
+e2e expects the state word and no `Open run`. Part 1 of req-75 W4
+(part 2: the Workers view, T-0081).
+
 ### Fix — a spent provider quota no longer reads as a finished run
 
 **Not yet manually verified by the owner.** Owner request, outside the

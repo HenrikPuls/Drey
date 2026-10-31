@@ -102,7 +102,8 @@ as owner-requested additions, see the changelog).
   pause / tell / take over / stop on the ticket page (the takeover tab
   goes); a Workers view with one card per live worker; a stuck worker
   (no edit for N minutes, repeated reads) is flagged with nudge /
-  hand over / stop.
+  hand over / stop. W4a shipped: the worker on the ticket; the
+  takeover tab is gone.
 - **W5 — Capture by hotkey and voice.** A second global chord "New
   ticket" (ADR-0073) opens a small capture window that starts Windows
   dictation (Win+H) — no own speech recognition (req-11 stays excluded;

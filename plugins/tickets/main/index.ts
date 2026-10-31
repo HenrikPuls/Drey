@@ -12,7 +12,7 @@
  */
 import { BrowserWindow, dialog, shell, type OpenDialogOptions } from 'electron';
 import { randomBytes } from 'node:crypto';
-import { promises as fsp } from 'node:fs';
+import { promises as fsp, existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import type {
@@ -62,7 +62,7 @@ import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhase
 import { blockedRefusal } from './blocked';
 import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, recentDoneOf, type DriftDetection } from './normalize';
-import { parseChanges, storyOf, type ChangesReply } from '../shared/changes';
+import { parseChanges, planApprovedOf, storyOf, type ChangesReply } from '../shared/changes';
 import { openTerminalAt, runInNewConsole } from './open-terminal';
 import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
 import type { AttachmentReply, RefineReply, TicketReply } from '../shared/remote-protocol';
@@ -103,6 +103,7 @@ import {
 } from './fleet/worktree-clean';
 import { unlinkShared } from './fleet/worktrees';
 import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } from './fleet/worktree-home';
+import { mergeWorktreeChanges, type WorktreeFile } from './worktree-changes';
 import type { ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, InteractiveMode, PermissionMode, RunInfo } from './fleet/protocol';
 import {
   normalizeFleetCaps,
@@ -1052,10 +1053,15 @@ class BoardService {
   async changesOf(id: string): Promise<ChangesReply> {
     const found = await this.findCard(id);
     if (found === null) {
-      return { changes: null, story: [], totals: { minutes: null, tokens: null } };
+      return { changes: null, story: [], totals: { minutes: null, tokens: null }, planApproved: null };
     }
     const story = storyOf(found.text);
-    return { changes: parseChanges(found.text), story: story.items, totals: story.totals };
+    return {
+      changes: parseChanges(found.text),
+      story: story.items,
+      totals: story.totals,
+      planApproved: planApprovedOf(found.text),
+    };
   }
 
   /**
@@ -1412,6 +1418,56 @@ class BoardService {
       .filter((r) => r.ticketId === ticketId && r.worktreePath.trim() !== '')
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
     return found[0] ?? null;
+  }
+
+  /**
+   * The Changes-so-far box (req-75 W4a): the ticket's worktree diffed
+   * against its base ref — committed (`<base>...HEAD`) and uncommitted
+   * (the working tree vs `HEAD`) — as one file list, capped by the pure
+   * half. Empty when there is no worktree to diff (no repo, no checkout,
+   * nothing prepared yet).
+   */
+  async worktreeChangesOf(id: string): Promise<readonly WorktreeFile[]> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return [];
+    }
+    const snap = await this.snapshot();
+    let card: TicketCard | null = null;
+    for (const column of snap.columns) {
+      const found = column.tickets.find((t) => t.id === id);
+      if (found !== undefined) {
+        card = found;
+        break;
+      }
+    }
+    const repoName = card !== null && card.meta.repo !== null ? card.meta.repo : null;
+    const repo = repoName === null ? null : snap.repos.find((r) => r.name === repoName) ?? null;
+    if (card === null || repo === null || repo.path === null) {
+      return [];
+    }
+    const record = this.newestRecordFor(await this.fleetRecords(), card.id);
+    const worktreePath = record !== null ? record.worktreePath : worktreePathFor(vault.path, repo, card.id);
+    if (!existsSync(worktreePath)) {
+      return [];
+    }
+    const base = repo.branch ?? 'main';
+    try {
+      const committed = await Promise.all([
+        this.git.run(worktreePath, ['diff', '--numstat', `${base}...HEAD`]),
+        this.git.run(worktreePath, ['diff', '--name-status', `${base}...HEAD`]),
+      ]);
+      const working = await Promise.all([
+        this.git.run(worktreePath, ['diff', '--numstat', 'HEAD']),
+        this.git.run(worktreePath, ['diff', '--name-status', 'HEAD']),
+      ]);
+      return mergeWorktreeChanges([
+        { numstat: committed[0]!, nameStatus: committed[1]! },
+        { numstat: working[0]!, nameStatus: working[1]! },
+      ]);
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -2632,6 +2688,16 @@ const plugin: MainPluginModule = {
         return { ok: false, error: 'bad worktree remove payload' };
       }
       return board.removeWorktreeForTicket({ id: p.id, force: p.force === true });
+    });
+
+    // The thread's Changes-so-far box (req-75 W4a): the ticket's worktree
+    // against its base ref, committed and uncommitted, as one file list.
+    ctx.ipc.handle('worktreeChanges', async (payload) => {
+      const p = payload as { id?: unknown };
+      if (typeof p.id !== 'string') {
+        return { files: [] };
+      }
+      return { files: await board.worktreeChangesOf(p.id) };
     });
 
     ctx.ipc.handle('worktreesCleanup', async () => board.worktreeCleanup());

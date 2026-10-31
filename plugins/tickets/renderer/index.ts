@@ -31,6 +31,8 @@ import { createRunComposer } from './run-composer';
 import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups } from './work-groups';
 import { readyCardNode, storyNode } from './ready-view';
 import type { ChangesReply } from '../shared/changes';
+import { headerControls, liveStateWord, threadSteps, durationWords, type ThreadStep } from './thread-steps';
+import type { WorktreeFile } from '../main/worktree-changes';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import { createTicketHeader, ticketLogFold } from './ticket-header';
@@ -42,6 +44,7 @@ import type { HandoverCandidate } from '../main/fleet/handover';
 import { parseWorkerValue } from '../main/fleet/assignment';
 import {
   contextFill,
+  contextLabel,
   execClockMs,
   fleetSummary,
   formatTokens,
@@ -1299,207 +1302,22 @@ function announceWaits(api: DreyPluginApi): void {
       body: notice.body,
       tag: notice.run.id,
       onClick: () => {
+        // A run without a card on the board has no page to open — the
+        // takeover tab it once fell back to is gone (W4a).
         const card = boardCard(notice.run.ticketId);
         if (card !== null) {
           void openTicketPage(api, card);
-        } else {
-          openTakeover(api, notice.run);
         }
       },
     });
   }
 }
-
-/** Opens (or focuses) the takeover tab of one run. */
-function openTakeover(api: DreyPluginApi, run: RunInfo, split?: 'right' | 'down'): void {
-  api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${run.id}`, takeoverTitle(run), split !== undefined ? { split } : undefined);
-}
-
-function takeoverTitle(run: RunInfo): string {
-  return `${run.ticketId} · ${run.provider}`;
-}
-
 /**
- * The tab body: the worker's transcript as the plugin's own DOM
- * (`transcript-view.ts`, drawn from the run's normalized stream, so the
- * same for every worker), a prompt box in the compact view below it, and the controls —
- * interrupt the running turn (the session stays), hand the run back.
+ * The takeover tab is gone (req-75 W4a, ADR-0087 decision 3): the
+ * worker lives on the ticket thread, which carries its controls. The
+ * `tickets-takeover` doc kind stays registered below only so an old
+ * session restores onto the ticket page instead of a dead tab.
  */
-function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): () => void {
-  const wrap = el('div', 'tickets-takeover');
-
-  // The header (req-58): who and in which mode on top, the numbers as
-  // labelled metrics below.
-  const banner = el('div', 'tickets-takeover-banner');
-  const titleRow = el('div', 'tickets-takeover-title-row');
-  const light = el('span', 'tickets-light');
-  const ticketName = el('span', 'tickets-takeover-ticket');
-  const providerName = el('span', 'tickets-takeover-provider');
-  const modePill = el('span', 'tickets-takeover-mode');
-  const statusWord = el('span', 'tickets-takeover-status');
-  const spacer = el('span', 'tickets-takeover-spacer');
-  const metricsRow = el('div', 'tickets-takeover-metrics');
-  const metric = (label: string, title: string): { node: HTMLElement; value: HTMLElement } => {
-    const node = el('span', 'tickets-takeover-metric');
-    node.title = title;
-    const value = el('span', 'tickets-takeover-metric-value');
-    node.append(el('span', 'tickets-takeover-metric-label', label), value);
-    return { node, value };
-  };
-  const turnMetric = metric('Turn', 'Turns of this run: the first prompt plus every message sent since');
-  const contextMetric = metric('Context', "How full the worker's context window is");
-  const contextBar = el('span', 'tickets-takeover-meter');
-  const contextFillEl = el('span', 'tickets-takeover-meter-fill');
-  contextBar.append(contextFillEl);
-  contextMetric.node.insertBefore(contextBar, contextMetric.value);
-  const tokensMetric = metric('Tokens', '');
-  const elapsedMetric = metric('Elapsed', 'Time the worker spent working — waits for you and standing do not count');
-  metricsRow.append(turnMetric.node, contextMetric.node, tokensMetric.node, elapsedMetric.node);
-  const controls = el('span', 'tickets-takeover-controls');
-  const iconButton = (icon: string, label: string, title: string, onClick: () => void): HTMLButtonElement => {
-    const b = el('button', 'tickets-takeover-btn');
-    b.type = 'button';
-    b.title = title;
-    b.setAttribute('aria-label', title);
-    b.append(api.ui.icon(icon, 13), document.createTextNode(label));
-    b.addEventListener('click', onClick);
-    return b;
-  };
-  const control = (action: 'interrupt' | 'release' | 'resume'): void => {
-    void runMutation(
-      action === 'interrupt' ? 'Interrupting' : action === 'resume' ? 'Resuming' : 'Handing back',
-      () => invokeBoard('fleetControl', { action, runId }),
-    );
-  };
-  const resumeBtn = iconButton('rotate-ccw', 'Resume session', 'Pick this session up again in a new worker — it answers, then waits for your prompts', () => {
-    void runMutation('Resuming', () => invokeBoard('fleetControl', { action: 'resume', runId })).then((result) => {
-      const resumed = (result as { run?: RunInfo }).run;
-      if (result.ok && resumed !== undefined) {
-        openTakeover(api, resumed);
-      }
-    });
-  });
-  const releaseBtn = iconButton('arrow-left', 'Hand back', 'Hand the run back to the runner — an idle worker ends the run and the gate decides', () =>
-    control('release'),
-  );
-  controls.append(resumeBtn, releaseBtn);
-  titleRow.append(light, ticketName, providerName, modePill, statusWord, spacer, controls);
-  banner.append(titleRow, metricsRow);
-
-  const transcript = createTranscriptView(api, fleetRuns.find((r) => r.id === runId)?.worktreePath ?? '');
-  transcript.element.classList.add('tickets-takeover-transcript');
-
-  // Before the composer: it paints once while it is built, through `target`.
-  const live = (): RunInfo | null => fleetRuns.find((r) => r.id === runId) ?? null;
-  const composer = createRunComposer({
-    api,
-    invoke: invokeBoard,
-    mutate: runMutation,
-    error: (message) => {
-      setNote(message, 'error');
-      notifyViews();
-    },
-    target: () => live(),
-    // A message to an ended run reopened its session as a new run: follow it.
-    onReopened: (run, newRunId) => openTakeover(api, { ...run, id: newRunId }),
-    othersLive: () => fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state) && r.id !== runId).length,
-    placeholder: 'Message the worker — type / for commands',
-  });
-  const endMoves = createEndMoves();
-
-  const paintBanner = (): void => {
-    const run = live();
-    const active = run !== null && LIVE_RUN_STATES.includes(run.state);
-    const held = active && run.held === true;
-    const detached = run !== null && run.state === 'detached';
-    const status = run === null ? null : workerStatus(run, Date.now());
-    light.className = `tickets-light tickets-light-${(active || detached) && status !== null ? status.light : 'idle'}`;
-    ticketName.textContent = run === null ? 'Unknown run' : run.ticketId;
-    providerName.textContent = run === null ? '' : run.model !== undefined && run.model !== null && run.model !== '' ? `${run.provider} · ${run.model}` : run.provider;
-    const [mode, modeTip] =
-      run === null
-        ? ['Gone', 'This run is no longer known to the runner']
-        : detached
-          ? ['Detached', 'The runner lost its worker']
-          : !active
-            ? [`Run ${run.state}`, 'The run has ended — Resume session picks it up in a new worker']
-            : run.waiting
-              ? ['Waits for you', 'The worker asks you or wants an approval — answer in the card above the prompt box']
-              : run.interactive !== undefined
-                ? ['Interactive dialog', 'Your dialog with the worker — the run never gates or moves; end it with a move below']
-                : held
-                  ? ['You have control', 'The runner sends nothing of its own until you hand the run back']
-                  : ['Runner driving', 'The runner is driving this worker — your first message takes over'];
-    modePill.textContent = mode;
-    modePill.title = modeTip;
-    statusWord.textContent = status !== null && (active || detached) ? status.label : '';
-    metricsRow.hidden = run === null;
-    if (run !== null) {
-      turnMetric.value.textContent = String(run.steerCount + 1);
-      const fill = contextFill(run);
-      contextMetric.node.hidden = fill === null;
-      const percent = fill === null ? 0 : Math.round(fill * 100);
-      contextMetric.value.textContent = `${percent}%`;
-      contextFillEl.style.width = `${Math.min(100, percent)}%`;
-      contextMetric.node.dataset['level'] = percent >= 90 ? 'high' : percent >= 70 ? 'mid' : 'low';
-      const cached = run.cacheReadTokens ?? 0;
-      tokensMetric.value.textContent = `${formatTokens(run.tokensIn)} in${cached > 0 ? ` (${formatTokens(cached)} cached)` : ''} · ${formatTokens(run.tokensOut)} out`;
-      tokensMetric.node.title = [
-        'Tokens this run sent to the model (in, the cached share in brackets) and got back (out)',
-        ...telemetryParts(run).map((part) => part.replace(/^ctx /, 'last turn context ')),
-      ].join('\n');
-      elapsedMetric.value.textContent = spanClock(execClockMs(run, Date.now()));
-      transcript.setWorktree(run.worktreePath);
-    }
-    resumeBtn.hidden = !(run !== null && !active && run.sessionRef !== null);
-    releaseBtn.hidden = !held;
-    const busy = active && run.turn !== 'idle';
-    wrap.dataset['state'] =
-      !active && !detached
-        ? 'ended'
-        : detached || status?.light === 'red'
-          ? 'alert'
-          : status?.light === 'amber'
-            ? 'warn'
-            : held
-              ? busy
-                ? 'driving'
-                : 'waiting'
-              : 'working';
-    composer.paint();
-    endMoves.paint(run);
-  };
-
-  let lastStream = '\u0000';
-  let alive = true;
-  const pull = (): void => {
-    void invokeBoard('fleetStream', { runId }).then((result) => {
-      if (!alive) {
-        return;
-      }
-      const text = (result as { text?: string }).text ?? '';
-      if (text !== lastStream) {
-        lastStream = text;
-        transcript.update(formatWatch(parseStreamEvents(text)));
-      }
-    });
-  };
-
-  fleetListeners.add(paintBanner);
-  paintBanner();
-  pull();
-  const timer = setInterval(pull, 2_000);
-  const tick = setInterval(paintBanner, 1_000);
-  wrap.append(banner, endMoves.element, transcript.element, composer.element);
-  host.append(wrap);
-  return () => {
-    alive = false;
-    clearInterval(timer);
-    clearInterval(tick);
-    fleetListeners.delete(paintBanner);
-    composer.dispose();
-  };
-}
 
 /**
  * The dialog's end moves (req-65): an interactive run is the owner's
@@ -1546,6 +1364,12 @@ const THREAD_KIND = 'tickets-thread';
 const THREAD_KEY = 'thread://ticket';
 let threadTicketId: string | null = null;
 const threadListeners = new Set<() => void>();
+/**
+ * A run to unfold when its ticket's thread shows (req-75 W4a): set by a
+ * `Past runs` menu row before it opens the ticket page, consumed by the
+ * next paint of that ticket's thread.
+ */
+let threadFocusRun: string | null = null;
 
 function threadTitle(ticketId: string): string {
   const title = boardCard(ticketId)?.meta.title ?? null;
@@ -1578,24 +1402,19 @@ let pageSide: { readonly kind: string; readonly key: string } | null = null;
 
 /**
  * The ticket page (ADR-0087 decision 3): the ticket file in one pane and
- * beside it the ticket's **run tab** while a run is live (owner,
- * 2026-10-31: the runner beside the ticket, as before M89), else the
- * thread — where an ended run's decisions (Ready card, approve, accept,
- * send back) and its next message live. The next ticket reactivates the
- * previous ticket's tabs and opens in their panes (a clean tab is
- * replaced), so the page never splits again — whichever pane had the
- * focus.
+ * its thread beside it — since W4a the worker lives there in every state
+ * (a live run's doings, an ended run's decisions: Ready card, approve,
+ * accept, send back — and its next message; the run tab is gone). The
+ * next ticket reactivates the previous ticket's tabs and opens in their
+ * panes (a clean tab is replaced), so the page never splits again —
+ * whichever pane had the focus.
  */
 async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<void> {
   if (snapshot?.vaultId == null) {
     return;
   }
   const vaultId = snapshot.vaultId;
-  const run = runForCard(card.id);
-  const side =
-    run !== null
-      ? { kind: TAKEOVER_KIND, key: `${TAKEOVER_SCHEME}${run.id}`, title: takeoverTitle(run) }
-      : { kind: THREAD_KIND, key: THREAD_KEY, title: threadTitle(card.id) };
+  const side = { kind: THREAD_KIND, key: THREAD_KEY, title: threadTitle(card.id) };
   const previousSide = pageSide !== null && api.documents.get(pageSide.key) !== null ? pageSide : null;
   const sideOpen = api.documents.get(side.key) !== null || previousSide !== null;
   const previous = pageFilePath;
@@ -1618,7 +1437,7 @@ async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<voi
   for (const listener of threadListeners) {
     listener();
   }
-  if (side.kind === THREAD_KIND && api.documents.get(THREAD_KEY) !== null) {
+  if (api.documents.get(THREAD_KEY) !== null) {
     api.documents.rename(THREAD_KEY, side.title);
   }
   if (api.documents.get(side.key) !== null) {
@@ -1666,10 +1485,14 @@ function mountThread(api: DreyPluginApi, host: HTMLElement): () => void {
 
 function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string): () => void {
   const wrap = el('div', 'tickets-takeover tickets-thread');
-  // The header (req-75 W1b): the run's dot, the title, the run in one
-  // muted line, then the Ticket file link and the run controls.
+  // The header (req-75 W4a, canvas "3a · A ticket with its worker live"):
+  // the run's dot, the bold state word, one muted meta line (the takeover
+  // tab's telemetry in its tooltip), then the Ticket file link and the
+  // worker's controls — pause, take over, stop; hand back and resume as
+  // the run allows.
   const head = el('div', 'tickets-thread-head');
   const light = el('span', 'tickets-light');
+  const stateWord = el('span', 'tickets-thread-state');
   const titleNode = el('span', 'tickets-thread-title');
   const metaNode = el('span', 'tickets-thread-meta');
   const fileLink = el('button', 'tickets-thread-filelink', 'Ticket file');
@@ -1681,26 +1504,70 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       openTicketFile(api, card.path);
     }
   });
-  const controls = el('span', 'tickets-thread-controls');
-  const iconButton = (icon: string, title: string, onClick: () => void): HTMLButtonElement => {
+  const controls = el('span', 'tickets-takeover-controls');
+  const iconButton = (icon: string, title: string, ariaLabel: string, onClick: () => void): HTMLButtonElement => {
     const b = el('button', 'tickets-takeover-btn tickets-thread-iconbtn');
     b.type = 'button';
     b.title = title;
-    b.setAttribute('aria-label', title);
+    b.setAttribute('aria-label', ariaLabel);
     b.append(api.ui.icon(icon, 13));
     b.addEventListener('click', onClick);
     return b;
   };
-  // No resume button here: a message in the box carries an ended run on;
-  // the run's own tab stays on the card menu ("Open run").
-  const stopRun = iconButton('square', 'Stop the run — the ticket stays where it is', () => {
-    const run = threadRun(ticketId);
+  const target = (): RunInfo | null => threadRun(ticketId);
+  const control = (action: 'interrupt' | 'takeover' | 'release', label: string): void => {
+    const run = target();
     if (run !== null) {
-      void runMutation('Stopping the run', () => invokeBoard('fleetStop', { runId: run.id, reason: null }));
+      void runMutation(label, () => invokeBoard('fleetControl', { action, runId: run.id }));
+    }
+  };
+  const pauseRun = iconButton('pause', 'Pause after the current action', 'Pause', () => control('interrupt', 'Pausing'));
+  const takeOverRun = iconButton('hand', 'Take over — the worker waits for your messages', 'Take over', () =>
+    control('takeover', 'Taking over'),
+  );
+  const stopRun = iconButton('square', 'Stop the worker', 'Stop', () => {
+    const run = target();
+    if (run !== null) {
+      void runMutation('Stopping the worker', () => invokeBoard('fleetStop', { runId: run.id, reason: null }));
     }
   });
-  controls.append(stopRun);
-  head.append(light, titleNode, metaNode, el('span', 'tickets-takeover-spacer'), fileLink, controls);
+  stopRun.classList.add('tickets-thread-stop');
+  const handBackRun = iconButton('arrow-left', 'Hand the run back to the runner', 'Hand back', () =>
+    control('release', 'Handing back'),
+  );
+  const resumeRun = iconButton(
+    'rotate-ccw',
+    'Pick this session up again in a new worker — it answers, then waits for your prompts',
+    'Resume session',
+    () => {
+      const run = target();
+      if (run === null) {
+        return;
+      }
+      const runId = run.id;
+      void runMutation('Resuming', () => invokeBoard('fleetControl', { action: 'resume', runId })).then((result) => {
+        if (!result.ok) {
+          return;
+        }
+        // The thread follows the ticket's newest run — pull the fleet so
+        // the resumed run shows now (the takeover tab used to open it).
+        void invokeBoard('fleetStatus')
+          .then((status) => applyFleetSnapshot((status ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }))
+          .catch(() => undefined);
+      });
+    },
+  );
+  // Start (W4a): the existing manual start — the phase's dialog (plan or
+  // refine) in a worker, the same first-message path the composer takes.
+  const startRun = iconButton('play', 'Start a worker on this ticket', 'Start', () => {
+    const card = boardCard(ticketId);
+    const mode = dialogMode();
+    if (card !== null && mode !== null) {
+      void startInteractive(api, card, mode, false);
+    }
+  });
+  controls.append(pauseRun, takeOverRun, stopRun, handBackRun, resumeRun, startRun);
+  head.append(light, stateWord, titleNode, metaNode, el('span', 'tickets-takeover-spacer'), fileLink, controls);
 
   const endMoves = createEndMoves();
   // --- the Ready card (req-75 W3) ---------------------------------------
@@ -1864,9 +1731,171 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     }
     decisionBar.hidden = false;
   };
+  // --- the steps (req-75 W4a, canvas "3a"): one line per run of the
+  // ticket, the live (or newest) one open at the bottom with the live
+  // transcript. A finished run unfolds in place — its stream is pulled
+  // once, never polled.
+  const stepsBox = el('div', 'tickets-thread-steps');
+  const shapedLine = el('div', 'tickets-thread-shaped');
+  const stepsHost = el('div', 'tickets-thread-steplist');
+  const openHead = el('div', 'tickets-step-line tickets-step-open');
+  const openMark = el('span', 'tickets-step-mark', '●');
+  const openLabel = el('span', 'tickets-step-text');
+  openHead.append(openMark, openLabel, el('span', 'tickets-step-chevron', '⌄'));
   const transcript = createTranscriptView(api, '');
   transcript.element.classList.add('tickets-takeover-transcript');
   const empty = el('div', 'tickets-thread-empty');
+  stepsBox.append(shapedLine, stepsHost, openHead, transcript.element, empty);
+  // The column scrolls as one: the transcript's own scroller is neutral
+  // here (CSS), and this follow keeps the live tail in view.
+  let stepsFollow = true;
+  stepsBox.addEventListener('scroll', () => {
+    stepsFollow = stepsBox.scrollHeight - stepsBox.scrollTop - stepsBox.clientHeight <= 40;
+  });
+  const followSteps = (): void => {
+    if (stepsFollow) {
+      stepsBox.scrollTop = stepsBox.scrollHeight;
+    }
+  };
+  const worktreeOf = (runId: string): string => fleetRuns.find((r) => r.id === runId)?.worktreePath ?? '';
+  const stepText = (step: ThreadStep, actions: number | null): string =>
+    `${step.label} · ${actions !== null ? `${actions} ${actions === 1 ? 'action' : 'actions'} · ` : ''}${step.duration}`;
+  interface StepNode {
+    wrap: HTMLElement;
+    line: HTMLButtonElement;
+    text: HTMLElement;
+    body: HTMLElement;
+    open: boolean;
+    pulled: boolean;
+    actions: number | null;
+    view: { element: HTMLElement; update(v: unknown): void } | null;
+  }
+  const stepNodes = new Map<string, StepNode>();
+  const stepNode = (step: ThreadStep): HTMLElement => {
+    const known = stepNodes.get(step.runId);
+    if (known !== undefined) {
+      known.wrap.hidden = false;
+      return known.wrap;
+    }
+    const node: StepNode = { wrap: el('div', 'tickets-step'), line: el('button', 'tickets-step-line'), text: el('span', 'tickets-step-text'), body: el('div', 'tickets-step-body'), open: false, pulled: false, actions: null, view: null };
+    node.line.type = 'button';
+    node.line.append(el('span', 'tickets-step-mark', step.mark), node.text, el('span', 'tickets-step-chevron', '›'));
+    node.wrap.append(node.line, node.body);
+    node.body.hidden = true;
+    node.line.addEventListener('click', () => {
+      node.open = !node.open;
+      node.body.hidden = !node.open;
+      node.line.querySelector('.tickets-step-chevron')!.textContent = node.open ? '⌄' : '›';
+      if (node.open && !node.pulled) {
+        node.pulled = true;
+        void invokeBoard('fleetStream', { runId: step.runId })
+          .then((result) => {
+            const text = (result as { text?: string }).text ?? '';
+            const view = formatWatch(parseStreamEvents(text));
+            const tx = createTranscriptView(api, worktreeOf(step.runId));
+            tx.element.classList.add('tickets-step-transcript');
+            tx.update(view);
+            node.view = tx;
+            node.body.append(tx.element);
+            node.actions = view.blocks.filter((block) => block.kind === 'step').length;
+            node.text.textContent = stepText(step, node.actions);
+          })
+          .catch(() => undefined);
+      }
+    });
+    stepNodes.set(step.runId, node);
+    return node.wrap;
+  };
+  let foldedSig = '';
+  const paintSteps = (): void => {
+    const steps = threadSteps(ticketId, fleetRuns, Date.now());
+    const openId = threadRun(ticketId)?.id ?? null;
+    const folded = steps.filter((s) => s.runId !== openId);
+    const sig = `${openId ?? ''}#${folded.map((s) => `${s.runId}:${s.mark}:${s.label}:${s.duration}`).join('|')}`;
+    if (sig !== foldedSig) {
+      foldedSig = sig;
+      for (const node of stepNodes.values()) {
+        node.wrap.hidden = true;
+      }
+      stepsHost.replaceChildren(...folded.map((step) => stepNode(step)));
+    }
+    for (const [id, node] of stepNodes) {
+      const step = folded.find((s) => s.runId === id);
+      if (step === undefined) {
+        continue;
+      }
+      node.line.dataset['mark'] = step.mark;
+      node.line.querySelector('.tickets-step-mark')!.textContent = step.mark;
+      node.text.textContent = stepText(step, node.actions);
+      if (step.detail !== null) {
+        node.line.title = step.detail;
+      }
+    }
+    const openStep = steps.find((s) => s.runId === openId) ?? null;
+    openHead.hidden = openStep === null;
+    if (openStep !== null) {
+      openMark.textContent = openStep.mark;
+      openHead.dataset['mark'] = openStep.mark;
+      openLabel.textContent = `${openStep.label} · ${openStep.duration}`;
+    }
+    // A Past runs row asked for one run: unfold it and bring it into view.
+    if (threadFocusRun !== null) {
+      const node = stepNodes.get(threadFocusRun);
+      if (node !== undefined) {
+        if (!node.open) {
+          node.line.click();
+        }
+        node.wrap.scrollIntoView({ block: 'nearest' });
+        threadFocusRun = null;
+      }
+    }
+  };
+
+  // --- the Changes-so-far box (req-75 W4a): what the branch carries
+  // against its base ref, committed and uncommitted.
+  const changesBox = el('div', 'tickets-thread-changes');
+  changesBox.hidden = true;
+  let changesJson = '[]';
+  const diffText = (file: WorktreeFile): string =>
+    [file.added === null ? null : `+${file.added}`, file.removed === null ? null : `−${file.removed}`]
+      .filter((part): part is string => part !== null)
+      .join(' ');
+  const paintChanges = (files: readonly WorktreeFile[]): void => {
+    const card = boardCard(ticketId);
+    const safe = el('div', 'tickets-changes-safe');
+    safe.append(el('span', 'tickets-changes-tick', '✓'), document.createTextNode(` own worktree · ${card?.meta.branch ?? branchForTicket(ticketId)}`));
+    changesBox.replaceChildren(
+      el('div', 'tickets-changes-head', 'Changes so far'),
+      ...files.map((file) => {
+        const row = el('div', 'tickets-changes-file');
+        const path = el('span', 'tickets-changes-path', file.path);
+        path.title = file.path;
+        row.append(el('span', `tickets-changes-status tickets-changes-status-${file.status}`, file.status), path, el('span', 'tickets-changes-diff', diffText(file)));
+        return row;
+      }),
+      el('div', 'tickets-changes-head', 'Safe beside others'),
+      safe,
+    );
+    changesBox.hidden = false;
+  };
+  const pullChanges = (): void => {
+    void invokeBoard('worktreeChanges', { id: ticketId })
+      .then((reply) => {
+        const files = ((reply as { files?: unknown }).files ?? []) as WorktreeFile[];
+        const json = JSON.stringify(files);
+        if (json === changesJson) {
+          return;
+        }
+        changesJson = json;
+        if (files.length === 0) {
+          changesBox.hidden = true;
+          return;
+        }
+        paintChanges(files);
+      })
+      .catch(() => undefined);
+  };
+  stepsBox.prepend(changesBox);
 
   const dialogMode = (): InteractiveMode | null => {
     const card = boardCard(ticketId);
@@ -1897,6 +1926,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   let pulledFor: string | null = null;
   let lastStream = '\u0000';
   let alive = true;
+  let runStateSig = '';
   const pull = (): void => {
     const run = threadRun(ticketId);
     if (run === null) {
@@ -1916,8 +1946,21 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       if (text !== lastStream) {
         lastStream = text;
         transcript.update(formatWatch(parseStreamEvents(text)));
+        followSteps();
       }
     }).catch(() => undefined);
+  };
+
+  /** The takeover tab's telemetry lines, as the meta line's tooltip (W4a). */
+  const telemetryTooltip = (run: RunInfo): string => {
+    const cached = run.cacheReadTokens ?? 0;
+    return [
+      `Turn ${run.steerCount + 1} — the first prompt plus every message sent since`,
+      contextLabel(run),
+      `Tokens ${formatTokens(run.tokensIn)} in${cached > 0 ? ` (${formatTokens(cached)} cached)` : ''} · ${formatTokens(run.tokensOut)} out`,
+      `Elapsed ${spanClock(execClockMs(run, Date.now()))} — waits for you and standing do not tick`,
+      ...telemetryParts(run).map((part) => part.replace(/^ctx /, 'last turn context ')),
+    ].join('\n');
   };
 
   const paint = (): void => {
@@ -1929,18 +1972,33 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     // The dot: the run's light, amber the moment it waits on the owner.
     const waiting = live && run !== null && run.waiting != null;
     light.className = `tickets-light tickets-light-${waiting ? 'waiting' : live && status !== null ? status.light : 'idle'}`;
-    // One muted line: state · provider · model · age (parts without data stay out).
-    const state = run === null ? null : waiting ? 'waiting for you' : !live ? 'ended' : run.turn === 'busy' ? 'working' : 'idle';
+    light.hidden = run === null;
+    // The state word (W4a): what the worker does now — without a live
+    // run the word says so, and without any run there is no dot.
+    stateWord.textContent = liveStateWord(run) ?? (run !== null ? 'Ended' : 'No run yet');
+    // One muted line: provider · model · run time · context (parts without data stay out).
+    const fill = run === null ? null : contextFill(run);
     metaNode.textContent = [
-      state,
       run === null ? null : workerLabelOf(run.provider),
       run === null ? null : run.model ?? null,
-      run === null ? null : ageWords(run.startedAt, Date.now()),
+      run === null ? null : durationWords(execClockMs(run, Date.now())),
+      fill === null ? null : `context ${Math.round(fill * 100)}%`,
+      run !== null && run.state === 'detached' ? 'not connected' : null,
     ]
       .filter((part): part is string => part !== null && part !== '')
       .join(' · ');
+    metaNode.title = run === null ? '' : telemetryTooltip(run);
     fileLink.hidden = card === null;
-    stopRun.hidden = !live;
+    // The header's buttons come from the tested pure choice (W4a): the
+    // same controls in every state, exactly one way on. Start shares
+    // the composer's gate — only a dialog phase can start one by hand.
+    const show = new Set(headerControls(run));
+    pauseRun.hidden = !show.has('pause');
+    takeOverRun.hidden = !show.has('takeover');
+    stopRun.hidden = !show.has('stop');
+    handBackRun.hidden = !show.has('handback');
+    resumeRun.hidden = !show.has('resume');
+    startRun.hidden = !show.has('start') || dialogMode() === null;
     transcript.element.hidden = run === null;
     empty.hidden = run !== null;
     const mode = dialogMode();
@@ -1950,6 +2008,22 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
         : mode === 'plan'
           ? 'No run yet — write below to plan this ticket with a worker.'
           : 'No run yet — write below to refine this ticket with a worker.';
+    // The shaped-with-you line: the owner approved this ticket's plan.
+    const approved = readyReply?.planApproved ?? null;
+    shapedLine.hidden = approved === null;
+    if (approved !== null) {
+      shapedLine.textContent = `Shaped with you · plan approved ${ageWords(approved, Date.now())}`;
+    }
+    paintSteps();
+    // The box follows the runs: a state change re-pulls, a live run every 30 s.
+    const stateSig = fleetRuns
+      .filter((r) => r.ticketId === ticketId)
+      .map((r) => `${r.id}:${r.state}`)
+      .join('|');
+    if (stateSig !== runStateSig) {
+      runStateSig = stateSig;
+      pullChanges();
+    }
     if (run !== null && run.id !== pulledFor) {
       pull();
     }
@@ -1967,12 +2041,19 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   paint();
   const timer = setInterval(pull, 2_000);
   const tick = setInterval(paint, 1_000);
-  wrap.append(head, readyWrap, empty, transcript.element, endMoves.element, decisionBar, composer.element);
+  // While a run is live the branch keeps moving: a slow look every 30 s.
+  const changesTimer = setInterval(() => {
+    if (isLive(threadRun(ticketId))) {
+      pullChanges();
+    }
+  }, 30_000);
+  wrap.append(head, readyWrap, stepsBox, endMoves.element, decisionBar, composer.element);
   host.append(wrap);
   return () => {
     alive = false;
     clearInterval(timer);
     clearInterval(tick);
+    clearInterval(changesTimer);
     fleetListeners.delete(paint);
     views.delete(view);
     composer.dispose();
@@ -2239,7 +2320,7 @@ function openCardMenu(
   };
   const textRow = (label: string): HTMLElement => el('span', 'tickets-menu-label', label);
 
-  item('Open ticket', () => void openTicketPage(api, card), 'The ticket file with its run beside it — the thread while it has no run');
+  item('Open ticket', () => void openTicketPage(api, card), 'The ticket file with its thread beside it');
   menu.append(el('div', 'tickets-menu-sep'));
 
   const live = runForCard(card.id);
@@ -2316,13 +2397,13 @@ function openCardMenu(
   if (live === null) {
     item(`Run agent (${card.worker})…`, () => openRunModal(api, card));
   } else {
-    item(`Open run — ${live.state}`, () => openTakeover(api, live));
+    item('Open ticket', () => void openTicketPage(api, card));
     item('Stop run', () => {
       void run('Stopping the run', () => invokeBoard('fleetStop', { runId: live.id, reason: null }));
     });
   }
-  // Earlier runs of this ticket: their transcripts stay on disk, and the
-  // takeover tab shows them read-only (req-70).
+  // Earlier runs of this ticket: their transcripts stay on disk; the
+  // thread shows them as steps, read-only (req-70, W4a).
   const past = fleetRuns
     .filter((r) => r.ticketId === card.id && !LIVE_RUN_STATES.includes(r.state))
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
@@ -2334,8 +2415,11 @@ function openCardMenu(
         `Past runs (${past.length})`,
         past.map((earlier) => ({
           content: pastRunRow(earlier),
-          title: `${earlier.provider} · started ${earlier.startedAt.replace('T', ' ').slice(0, 16)} — opens the transcript read-only`,
-          onClick: () => openTakeover(api, earlier),
+          title: `${earlier.provider} · started ${earlier.startedAt.replace('T', ' ').slice(0, 16)} — opens the thread with that run unfolded`,
+          onClick: () => {
+            threadFocusRun = earlier.id;
+            void openTicketPage(api, card);
+          },
         })),
         close,
       ),
@@ -2556,27 +2640,25 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     api.ui.registerDocKind({
       kind: TAKEOVER_KIND,
       icon: 'message-circle',
-      // The title rides in the session (req-51): a restore runs before the
-      // first fleet snapshot arrives, and the tab used to be dropped for
-      // want of its run. The banner fills in once the runner answers.
-      serialize: (path) => {
-        const run = fleetRuns.find((r) => r.id === path.slice(TAKEOVER_SCHEME.length));
-        return run === undefined ? null : { title: takeoverTitle(run) };
-      },
-      restore: (path, data) => {
+      // The tab is gone (req-75 W4a): the kind stays registered only so
+      // an old session restores onto the ticket page instead of a dead
+      // tab. It is never written again, and a restore whose run is
+      // unknown (the fleet snapshot may not have arrived yet) does
+      // nothing — never a throw.
+      serialize: () => null,
+      restore: (path) => {
         const runId = path.startsWith(TAKEOVER_SCHEME) ? path.slice(TAKEOVER_SCHEME.length) : '';
         const run = fleetRuns.find((r) => r.id === runId);
-        const saved = (data as { title?: unknown } | null)?.title;
-        const title = run !== undefined ? takeoverTitle(run) : typeof saved === 'string' ? saved : null;
-        if (runId !== '' && title !== null) {
-          api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${runId}`, title);
+        const card = run === undefined ? null : boardCard(run.ticketId);
+        if (card !== null) {
+          void openTicketPage(api, card);
         }
       },
-      mount: (el, path) => mountTakeover(api, el, path.slice(TAKEOVER_SCHEME.length)),
-      statusText: (path) => {
-        const run = fleetRuns.find((r) => r.id === path.slice(TAKEOVER_SCHEME.length));
-        return run === undefined ? null : run.held === true ? 'you have control' : 'runner driving';
+      mount: (mountHost) => {
+        mountHost.append(el('div', 'tickets-thread-empty', 'This tab moved into the ticket\'s thread.'));
+        return () => undefined;
       },
+      statusText: () => null,
     });
 
     api.documents.onChange((event) => {

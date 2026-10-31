@@ -211,6 +211,31 @@ export interface ChangesReply {
   readonly changes: ParsedChanges | null;
   readonly story: readonly StoryItem[];
   readonly totals: StoryTotals;
+  /**
+   * The ISO stamp of the owner's newest `plan-review -> build` Log line
+   * (req-75 W4a): the plan was shaped with the owner and approved by
+   * them. Null without such a line.
+   */
+  readonly planApproved: string | null;
+}
+
+/**
+ * The ISO stamp of the owner's newest `plan-review -> build` Log line —
+ * the thread's "plan approved" moment (req-75 W4a). Only the owner's
+ * move counts: the fleet's own moves carry another actor.
+ */
+export function planApprovedOf(ticketText: string): string | null {
+  let stamp: string | null = null;
+  for (const line of ticketText.split('\n')) {
+    const match = LOG_LINE.exec(line);
+    if (match === null) {
+      continue;
+    }
+    if (match[2]!.startsWith('owner@') && match[3]!.trim() === 'plan-review -> build') {
+      stamp = match[1]!;
+    }
+  }
+  return stamp;
 }
 
 export function storyOf(ticketText: string): { readonly items: readonly StoryItem[]; readonly totals: StoryTotals } {  const items: StoryItem[] = [];

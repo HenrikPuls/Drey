@@ -153,14 +153,30 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     expect(box.width).toBeLessThan(420);
     await panel.screenshot({ path: testInfo.outputPath('work-panel-narrow.png') });
 
-    // The ticket page: a live run opens beside the file — its run tab with
-    // the metrics and the question to answer (owner, 2026-10-31).
+    // The ticket page: the thread opens beside the file — since W4a the
+    // worker lives there in every state (the run tab is gone), and the
+    // page still never splits again (main's fix, 2026-10-31).
     await panel.locator('.work-row[data-id="T-0104"]').click();
     await expect(page.locator('app-editor .tickets-head')).toBeVisible({ timeout: 15_000 });
-    const runTab = page.locator('.tickets-takeover:not(.tickets-thread)').filter({ visible: true });
-    await expect(runTab.locator('.tickets-takeover-ticket')).toHaveText('T-0104');
-    await expect(runTab.locator('.tickets-takeover-metrics')).toBeVisible();
-    await expect(runTab).toContainText('Should dragging a heading also move the text below it?');
+    const thread = page.locator('.tickets-thread').filter({ visible: true });
+    await expect(thread).toBeVisible();
+    await expect(thread.locator('.tickets-thread-title')).toHaveText('Drag headings in the outline');
+    // The worker lives on the ticket (req-75 W4a): the header's bold state
+    // word says what it does, the meta line names it — and the takeover
+    // tab's Open run is gone, its controls live here now.
+    await expect(thread.locator('.tickets-thread-state')).toHaveText('Waiting for you');
+    await expect(thread.locator('.tickets-thread-meta')).toHaveText(/OpenCode · glm-5.3-flash/);
+    await expect(thread.getByTitle('Open the run in its own tab', { exact: false })).toHaveCount(0);
+    await expect(thread.getByRole('button', { name: 'Pause' })).toBeVisible();
+    await expect(thread.getByRole('button', { name: 'Take over' })).toBeVisible();
+    await expect(thread.getByRole('button', { name: 'Stop' })).toBeVisible();
+    // The question is part of the conversation now (req-75 W2b): no card.
+    await expect(thread.locator('.tickets-takeover-wait')).toBeHidden();
+    await expect(thread.locator('.tickets-ask-question')).toHaveText(
+      'Should dragging a heading also move the text below it?',
+    );
+    // A question carries no decision bar — that is the checkpoints'.
+    await expect(thread.locator('.tickets-thread-decisions')).toBeHidden();
     await expect(page.locator('app-pane-leaf')).toHaveCount(2);
     await expect(panel.locator('.work-row[data-id="T-0104"]')).toHaveClass(/work-row-open/);
     await page.screenshot({ path: testInfo.outputPath('work-panel-wide.png') });

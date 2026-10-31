@@ -30,10 +30,8 @@ const COMMAND_HINTS: Readonly<Record<string, string>> = {
 
 /** One-click starters for the prompt box: a label and the text it fills in. */
 const QUICK_PROMPTS: ReadonlyArray<readonly [string, string]> = [
-  ['Continue', 'Continue where you left off.'],
-  ['Status', 'Briefly summarise what you have done so far and what is left.'],
-  ['Run checks', "Run the ticket's acceptance checks now and report the result."],
-  ['Wrap up', 'Wrap up: finish the current step, update the ticket Log, and stop.'],
+  ['What are you doing and why?', 'What are you doing and why?'],
+  ['Stop after this step', 'Finish the current step, update the ticket Log, then stop and wait for me.'],
 ];
 
 export interface RunComposerDeps {
@@ -99,16 +97,17 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
   };
   const runId = (): string | null => deps.target()?.id ?? null;
   // An ended run with a session takes the message: it is reopened as a
-  // new run that carries on the conversation (the thread and the takeover
-  // alike); only without one does the thread start a dialog.
+  // new run that carries on the conversation (main's fix 2026-10-31);
+  // only without one does the thread start a dialog.
   const isReopenable = (run: RunInfo | null): boolean =>
     run !== null && !LIVE_RUN_STATES.includes(run.state) && run.state !== 'detached' && run.sessionRef !== null;
 
-  // The composer box (Claude Code's shape): one rounded box — the prompt
-  // on top, a toolbar inside it below: attach and the quick prompts on
-  // the left, stop and send on the right.
+  // The composer box (req-75 W1b/W4a): one rounded box — the prompt with
+  // a round send button inside; the two quick-prompt chips sit above it,
+  // the attachments and commands live around it, stop below it.
   const box = el('div', 'tickets-composer-box');
-  const toolbar = el('div', 'tickets-composer-toolbar');
+  const underRow = el('div', 'tickets-composer-under');
+  const inputRow = el('div', 'tickets-composer-inputrow');
   const promptWrap = box;
   // Files and pictures for the worker: stored in its worktree, named in the message.
   const attached: { name: string; path: string }[] = [];
@@ -275,6 +274,9 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     });
     chips.append(chip);
   }
+  // The design's quick prompts: pills in a row of their own above the box.
+  const chipsRow = el('div', 'tickets-composer-chips');
+  chipsRow.append(chips);
   const stopBtn = iconButton('square', 'Stop the running turn — the session and its context stay, you can prompt it again', () => {
     const id = runId();
     if (id !== null) {
@@ -282,7 +284,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     }
   });
   stopBtn.classList.add('tickets-composer-stop');
-  // The send button closes the toolbar inside the box.
+  // The round send button inside the box (req-75 W1b).
   const sendBtn = el('button', 'tickets-composer-send');
   sendBtn.type = 'button';
   sendBtn.title = 'Send the message — a working worker takes it into its turn';
@@ -291,7 +293,8 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
   sendBtn.addEventListener('click', () => {
     void send(prompt.getContent());
   });
-  toolbar.append(plusBtn, fileInput, chips, el('span', 'tickets-takeover-spacer'), stopBtn, sendBtn);
+  inputRow.append(prompt.element, sendBtn);
+  underRow.append(plusBtn, fileInput, stopBtn);
 
   // The worker's pulse while a turn runs: what it does now and for how long.
   const progress = el('div', 'tickets-takeover-progress');
@@ -319,7 +322,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     progressText.textContent = `${verb}… ${seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`} · ↓ ${formatTokens(run.tokensOut)} tokens`;
     progress.hidden = false;
   };
-  box.append(commandMenu, attachRow, prompt.element, toolbar);
+  box.append(commandMenu, attachRow, inputRow);
 
   // What the worker waits on (req-64): a tool call to approve with one
   // of the buttons, or a question asked as OpenCode's `question` form —
@@ -484,7 +487,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     paintProgress(run);
   };
 
-  wrap.append(progress, askSlot, waitCard, box);
+  wrap.append(progress, askSlot, waitCard, chipsRow, box, underRow);
   paint();
   return {
     element: wrap,
