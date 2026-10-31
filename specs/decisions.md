@@ -8,6 +8,16 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **req-74 alternatives — app-internal toast chrome; OS-scheduled
+  reminders while Drey is closed** (2026-10-31). The due-date digest
+  notifies through `ui.notify` (SDK 1.34) — the app's one established
+  "needs the owner while they may look elsewhere" mechanism (req-64),
+  with click-to-focus and tag-replacement already built. New in-app
+  toast chrome would be a base UI surface no other feature shares, and
+  invisible when the window is behind others or minimized. Scheduling
+  OS toasts for the closed app would need a Windows startup task,
+  protocol activation and app-identity plumbing — rejected for scope;
+  the next start reports the backlog in one digest instead.
 - **Req-3/req-15** — `copilot-web` provider (Playwright + system Edge
   driving M365 Copilot's website). Prototyped, never merged — fragile
   PoC (ADR-0040). The code now lives in the private

@@ -25,6 +25,8 @@ import {
 } from './filter.js';
 import { taskToggleExtension, toggleInFocusedSurface } from './task-toggle.js';
 import { openDuePicker, openPriorityPicker, taskMetaExtension } from './task-meta.js';
+import { startReminders } from './reminders.js';
+import { createTasksSettingsPage, REMINDERS_ENABLED_KEY } from './settings.js';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -43,6 +45,9 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 /** Files under here are kept out of the vault list (mirrors the main-side index). */
 const TEMPLATES_PREFIX = 'templates/';
+
+/** The due-date digest controller (req-65) — stopped in `deactivate`. */
+let reminders: ReturnType<typeof startReminders> | null = null;
 
 /**
  * Open tabs with UNSAVED edits replace their own on-disk hits with what
@@ -88,7 +93,8 @@ function withOpenBufferHits(
  * The Tasks plugin's renderer (ADR-0033, converted in ADR-0044 stage 6):
  * the Tasks dock panel (document / vault / all-vaults scope, hide-done and
  * kind filters, tag+text filter) and the `Mod+Enter` checkbox toggle as
- * editor extensions — ported from `src/app/tasks/` to plain DOM.
+ * editor extensions — ported from `src/app/tasks/` to plain DOM. Plus the
+ * daily due-date reminder digest (req-65) and the plugin's Settings page.
  */
 const plugin: PluginRendererModule = {
   activate(api: DreyPluginApi) {
@@ -128,6 +134,23 @@ const plugin: PluginRendererModule = {
         listener();
       }
     };
+
+    // -- due-date reminders (req-65) -----------------------------------------
+    // One digest per local day over the DISK index (`state.vaultTasks` — a
+    // task in an unsaved buffer counts after its save, never before), set
+    // in `reminders.ts`. The day gate and the switch live in the plugin
+    // config, not the panel's localStorage view prefs.
+    reminders = startReminders({
+      getTasks: () => state.vaultTasks,
+      now: () => new Date(),
+      isEnabled: () =>
+        api.settings.get<boolean>(REMINDERS_ENABLED_KEY).then((value) => value !== false),
+      lastDay: () => api.settings.get<string>('remindersLastDay'),
+      setLastDay: (day) => api.settings.set('remindersLastDay', day),
+      notify: (request) => void api.ui.notify(request),
+      onClick: () => api.ui.revealWidget('tasks'),
+    });
+    api.ui.registerSettingsPage(createTasksSettingsPage(api));
 
     // -- document scope: the focused pane's live buffer ----------------------
     const pullActive = (): void => {
@@ -169,6 +192,8 @@ const plugin: PluginRendererModule = {
         state.vaultTasks = [];
       }
       notify();
+      // The index settled — re-evaluate the daily due-date digest (req-65).
+      void reminders?.check();
     };
     void refreshVault();
     // MCP writes / raw writes / manual refresh (no file watcher, ADR-0018).
@@ -559,6 +584,13 @@ const plugin: PluginRendererModule = {
         };
       },
     });
+  },
+
+  deactivate() {
+    // The reminder interval must not outlive the plugin (a leaking timer);
+    // every registration's unsubscribe the host already runs.
+    reminders?.stop();
+    reminders = null;
   },
 };
 

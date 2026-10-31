@@ -800,7 +800,12 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   vault badge). A row's checkbox rewrites the buffer line through
   `documents.setBuffer` + save (closed files through
   `vault.writeFile { vaultId }`); a row click opens the file at the line,
-  in its vault
+  in its vault. Since req-74 the panel also owns the **due-date reminder
+  digest** (`renderer/reminders.ts`): one `ui.notify` system
+  notification per local day when open tasks with `due <= today` exist
+  in any vault, re-evaluated when the index settles and once a minute,
+  gated on `remindersLastDay` in the plugin config (written only when a
+  notification fired) with the Settings → Tasks switch `remindersEnabled`
 - Source control panel — `plugins/git/` (ADR-0065):
   the repository of the focused document's vault — branch button (→
   branch picker: switch, track a remote branch, create), commit message

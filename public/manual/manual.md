@@ -339,6 +339,15 @@ same pickers in place.
 - Clicking a row opens the file at that line, in its vault.
 - `Mod+Enter` toggles the task under the cursor done/undone.
 
+### Reminders
+
+Once a day, a system notification counts the open tasks that are due
+today or overdue — across every vault (for example "2 due today, 4
+overdue"). Clicking it brings Drey to the front and opens the Tasks
+panel. Nothing is scheduled while Drey is closed: the next start
+reports what piled up in one notification. Turn it off in
+Settings → Tasks.
+
 ---
 
 ## 7. Tags and search

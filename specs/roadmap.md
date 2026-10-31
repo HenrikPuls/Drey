@@ -60,9 +60,9 @@ their changelog markers. The owner's verification round for 1–81 closed
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 88; latest requirement id: req-73
-(readable board issues, renumbered from req-66 — the tickets remote
-holds req-66)),
+highest used (latest: milestone 88; latest requirement id: req-74
+(due-date reminders, T-0012; req-73 = readable board issues,
+renumbered from req-66 — the tickets remote holds req-66)),
 the update check's positive answer is inline text — req-43 and req-44
 were owner requests outside the list, shipped and owner-verified in
 the same step).
@@ -185,8 +185,6 @@ phone's markdown rendering. Remaining steps, each shipped on its own:
 - **Text completion (autocomplete).** ⚠️ Latency with a local model is the
   open question — run a spike (time to first suggestion on the target
   model) before any design. Today only `#tag` and `:emoji:` completion exist.
-- **Due-date reminders.** The `📅` date is parsed and sortable, but nothing
-  notifies.
 - **Web clipper.** Save the in-editor browser tab's page as a Markdown note.
 - **Tasks inside the document.** First define what the Tasks panel
   (filters, due dates, priorities, completion dates — ADR-0033) and the
