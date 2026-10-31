@@ -1229,7 +1229,7 @@ describe('EditorService', () => {
     });
 
     it('addPluginDoc with split lands the tab in a fresh sibling pane', () => {
-      service.addPluginDoc('browser', 'browser://1', 'New tab', 'right');
+      service.addPluginDoc('browser', 'browser://1', 'New tab', { split: 'right' });
 
       expect(panes.paneIds().length).toBe(2);
       expect(panes.focusedPane()!.tabs).toEqual(['browser://1']);
@@ -1238,10 +1238,10 @@ describe('EditorService', () => {
 
     it('addPluginDoc of an already-open key reveals it, no split', () => {
       service.addPluginDoc('browser', 'browser://1', 'New tab');
-      service.addPluginDoc('browser', 'browser://2', 'Second', 'right');
+      service.addPluginDoc('browser', 'browser://2', 'Second', { split: 'right' });
       const ids = panes.paneIds();
 
-      service.addPluginDoc('browser', 'browser://1', 'New tab', 'right');
+      service.addPluginDoc('browser', 'browser://1', 'New tab', { split: 'right' });
 
       expect(panes.paneIds()).toEqual(ids);
       expect(panes.focusedPane()!.tabs).toEqual(['browser://1']);
@@ -1258,6 +1258,99 @@ describe('EditorService', () => {
       expect(panes.dockPane('right')).toBe(p1);
       // the centre kept its single placeholder leaf -- nothing split
       expect(panes.root().kind).toBe('leaf');
+    });
+  });
+
+  describe('beside anchor (SDK 1.37)', () => {
+    let panes: PaneService;
+
+    beforeEach(() => {
+      panes = TestBed.inject(PaneService);
+    });
+
+    it('a plain open lands in the anchor pane, replacing its clean active tab', async () => {
+      await service.openFile('notes/a.md');
+      const anchor = panes.focusedId();
+      await service.openFile('notes/b.md', undefined, { split: 'right' }); // focus: the fresh pane
+
+      await service.openFile('notes/c.md', undefined, { beside: 'notes/a.md' });
+
+      // The victim came from the ANCHOR pane: c.md replaced a.md there,
+      // and the pane that happened to be focused kept its tab.
+      expect(panes.pane(anchor)!.tabs).toEqual(['notes/c.md']);
+      expect(panes.focusedPane()!.active).toBe('notes/c.md');
+      const other = panes.paneIds().find((id) => id !== anchor)!;
+      expect(panes.pane(other)!.tabs).toEqual(['notes/b.md']);
+    });
+
+    it('an anchor that is not open is a no-op -- the focused pane decides, as before', async () => {
+      await service.openFile('notes/a.md');
+      await service.openFile('notes/b.md', undefined, { split: 'right' }); // focus: the fresh pane
+      const focused = panes.focusedId();
+
+      await service.openFile('notes/c.md', undefined, { beside: 'notes/gone.md' });
+
+      // Today's behaviour unchanged: the focused pane's clean tab (b.md) is replaced.
+      expect(panes.paneIds().length).toBe(2);
+      expect(panes.pane(focused)!.tabs).toEqual(['notes/c.md']);
+    });
+
+    it('an already-open key reveals exactly as today -- the anchor option is moot', async () => {
+      await service.openFile('notes/a.md');
+      const anchor = panes.focusedId();
+      await service.openFile('notes/b.md', undefined, { split: 'right' });
+      const ids = panes.paneIds();
+
+      await service.openFile('notes/a.md', undefined, { beside: 'notes/b.md' });
+
+      expect(panes.paneIds()).toEqual(ids);
+      expect(panes.focusedId()).toBe(anchor);
+      expect(panes.focusedPane()!.active).toBe('notes/a.md');
+    });
+
+    it('beside + split opens the fresh pane off the anchor pane, never replacing in it', async () => {
+      await service.openFile('notes/a.md');
+      const anchor = panes.focusedId();
+      await service.openFile('notes/b.md', undefined, { split: 'right' });
+      const bPane = panes.focusedId();
+
+      await service.openFile('notes/c.md', undefined, { beside: 'notes/a.md', split: 'right' });
+
+      expect(panes.paneIds().length).toBe(3);
+      const fresh = panes.paneIds().find((id) => id !== anchor && id !== bPane)!;
+      // The split happened at the anchor pane: a.md and c.md are siblings.
+      expect(panes.root()).toEqual({
+        kind: 'split',
+        id: expect.any(String),
+        direction: 'row',
+        children: [
+          {
+            kind: 'split',
+            id: expect.any(String),
+            direction: 'row',
+            children: [
+              { kind: 'leaf', paneId: anchor },
+              { kind: 'leaf', paneId: fresh },
+            ],
+            sizes: [1, 1],
+          },
+          { kind: 'leaf', paneId: bPane },
+        ],
+        sizes: [1, 1],
+      });
+      expect(panes.pane(anchor)!.tabs).toEqual(['notes/a.md']);
+      expect(panes.pane(fresh)!.tabs).toEqual(['notes/c.md']);
+    });
+
+    it('addPluginDoc lands the tab in the anchor pane named by a contributed key', () => {
+      service.addPluginDoc('browser', 'browser://1', 'New tab');
+      const anchor = panes.focusedId();
+      service.addPluginDoc('browser', 'browser://2', 'Second', { split: 'right' }); // focus: the fresh pane
+
+      service.addPluginDoc('tickets', 'thread://ticket', 'Ticket thread', { beside: 'browser://1' });
+
+      expect(panes.pane(anchor)!.tabs).toEqual(['browser://1', 'thread://ticket']);
+      expect(panes.focusedPane()!.active).toBe('thread://ticket');
     });
   });
 

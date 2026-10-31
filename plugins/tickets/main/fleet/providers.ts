@@ -81,13 +81,27 @@ export interface NormalizedEvent {
   readonly turnUsage?: RunUsage;
 }
 
-/** The question a turn's last message asks the owner, or null when it asks none. */
+/**
+ * The question a turn's last message asks the owner, or null when it asks
+ * none: the text from the LAST line-start `QUESTION:` marker (the
+ * message's start or any line start) to the message's end, trimmed. A
+ * marker buried mid-message — a worker asking outside the W2 shape —
+ * still sets the wait (evidence R-20261031T02050-wewb); one in running
+ * prose (`Done. QUESTION: none`) does not. The W2 ASKING shape rides
+ * every brief and stays the primary path; this is only the fallback.
+ */
 export function questionOf(text: string): string | null {
-  const trimmed = text.trimStart();
-  if (!trimmed.toUpperCase().startsWith(QUESTION_MARKER)) {
+  const lines = text.split('\n');
+  let at = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.trimStart().toUpperCase().startsWith(QUESTION_MARKER)) {
+      at = i;
+    }
+  }
+  if (at === -1) {
     return null;
   }
-  const question = trimmed.slice(QUESTION_MARKER.length).trim();
+  const question = `${lines[at]!.trimStart().slice(QUESTION_MARKER.length)}\n${lines.slice(at + 1).join('\n')}`.trim();
   return question === '' ? null : question;
 }
 
@@ -223,6 +237,14 @@ export interface ProviderStart {
    * successful resume fails the run normally).
    */
   readonly onResumeFailed?: (reason: string) => void;
+  /**
+   * Deliver NO first prompt — a quiet start (req-75): the session is
+   * created or resumed, the subscription and the poll start, and the
+   * worker stands until steered (the supervisor wraps the brief into
+   * the owner's first message). Honored by opencode; claude-code
+   * ignores it.
+   */
+  readonly holdAtSpawn?: boolean;
   readonly ticketId: string;
   /** Events land here; the run store writes them to the stream file. */
   readonly onEvent: (event: NormalizedEvent) => void;
@@ -1882,9 +1904,13 @@ export function opencodeAdapter(
       void reportContextWindow();
 
       // The prompt POST queues the turn and returns at once; the poll
-      // loop watches the message list for the `idle` end marker. An
-      // empty instruction is a resumed session that only stands (req-80).
-      if (start.instruction !== '') {
+      // The prompt POST queues the turn and returns at once; the poll
+      // loop watches the message list for the `idle` end marker. A quiet
+      // start (req-75) posts nothing — the worker stands until the
+      // owner's first message opens the dialog; an empty instruction is
+      // a resumed session that only stands (req-80) — holdAtSpawn now
+      // covers it, the check stays as the invariant's guard.
+      if (start.holdAtSpawn !== true && start.instruction !== '') {
         await postPrompt(start.instruction);
       }
     })().catch(async (error: unknown) => {

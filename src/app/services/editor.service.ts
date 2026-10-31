@@ -304,6 +304,7 @@ export class EditorService {
       prefetched?: { content: string; modifiedMs: number };
       pinned?: boolean;
       split?: DocSplit;
+      beside?: string;
     } = {},
   ): Promise<void> {
     return this.opener.openFile(relativePath, vaultId, opts);
@@ -315,7 +316,12 @@ export class EditorService {
   }
 
   /** @see DocOpenService.openFileAt */
-  openFileAt(relativePath: string, line: number, vaultId?: string, opts?: { split?: DocSplit }): Promise<void> {
+  openFileAt(
+    relativePath: string,
+    line: number,
+    vaultId?: string,
+    opts?: { split?: DocSplit; beside?: string },
+  ): Promise<void> {
     return this.opener.openFileAt(relativePath, line, vaultId, opts);
   }
 
@@ -343,8 +349,8 @@ export class EditorService {
   }
 
   /** @see DocOpenService.addPluginDoc */
-  addPluginDoc(kind: string, key: string, name: string, split?: DocSplit): void {
-    this.opener.addPluginDoc(kind, key, name, split);
+  addPluginDoc(kind: string, key: string, name: string, opts: { split?: DocSplit; beside?: string } = {}): void {
+    this.opener.addPluginDoc(kind, key, name, opts);
   }
 
   /** Updates a plugin-doc tab's display name (e.g. the browser's page title). */

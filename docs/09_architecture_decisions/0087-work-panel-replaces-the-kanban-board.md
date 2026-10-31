@@ -147,3 +147,12 @@ phone. Watch any worker and step in when needed.
   priority of what it holds up), then priority and progress.
 - Design reference: the owner's canvas "Drey Tickets — Workflow
   redesign" (2026-10-31).
+
+> **Later change (req-75, ticket T-0052).** The "cannot place a tab
+> into a given pane" limitation above is lifted: SDK 1.37's `beside`
+> open option (`documents.open`/`addDoc`) names an open tab's identity,
+> and its pane is focused before the landing decision. The ticket page
+> anchors on the pair itself — the thread opens beside the file, the
+> file beside the thread, whatever pane is focused or whatever else is
+> open, never a third pane — and every ticket switch re-activates both
+> tabs, the focus back on the file.

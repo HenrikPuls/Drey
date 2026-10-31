@@ -592,8 +592,18 @@ export interface DreyPluginApi {
      * `opts.vaultId` names the vault (ADR-0051), defaulting to the active
      * vault. `opts.split` (SDK 1.35) lands the tab in a fresh split pane
      * beside or below the focused pane instead of inside it.
+     * `opts.beside` (SDK 1.37) names an open tab's path identity (a
+     * vault-relative path or a contributed key like `thread://ticket`,
+     * resolved like `get`): its pane takes focus before the landing
+     * decision, so a plain open lands (or replaces) inside that pane and
+     * `split` opens the fresh pane off it. An anchor that is not open is
+     * a no-op -- the focused pane decides, as before the option existed.
      */
-    open(path: string, line?: number, opts?: VaultOpOptions & { readonly split?: DocSplit }): Promise<void>;
+    open(
+      path: string,
+      line?: number,
+      opts?: VaultOpOptions & { readonly split?: DocSplit; readonly beside?: string },
+    ): Promise<void>;
     /** Open an unsaved, dirty-from-the-start scratch tab (Save-as on first save). */
     openScratch(path: string, content: string): void;
     /**
@@ -603,8 +613,18 @@ export interface DreyPluginApi {
      * already open. Throws when the kind is not registered.
      * `opts.split` (SDK 1.35) lands the tab in a fresh split pane beside
      * or below the focused pane instead of inside it.
+     * `opts.beside` (SDK 1.37) names an open tab's path identity (a
+     * vault-relative path or a contributed key like `thread://ticket`,
+     * resolved like `get`): its pane takes focus before the landing
+     * decision, so a plain add lands inside that pane and `split` opens
+     * the fresh pane off it. An anchor that is not open is a no-op.
      */
-    addDoc(kind: string, key: string, name: string, opts?: { readonly split?: DocSplit }): void;
+    addDoc(
+      kind: string,
+      key: string,
+      name: string,
+      opts?: { readonly split?: DocSplit; readonly beside?: string },
+    ): void;
     /**
      * Open vault files with one of these name suffixes through this plugin
      * instead of the base routing (SDK 1.16) — see `FileOpenerContrib`.

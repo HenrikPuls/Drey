@@ -28,6 +28,8 @@ import {
 import { needsBlockedConfirm } from './blocked-view';
 import { PRIORITY_LABEL, createGroupFoldStore, workListNode, type WorkPanelDeps } from './work-panel';
 import { createRunComposer } from './run-composer';
+import { THREAD_KEY, ticketPagePlan } from './ticket-page';
+import { PENDING_HINT, dialogStarter } from './dialog-starters';
 import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups } from './work-groups';
 import { readyCardNode, storyNode } from './ready-view';
 import type { ChangesReply } from '../shared/changes';
@@ -1542,8 +1544,6 @@ function createEndMoves(): { element: HTMLElement; paint(run: RunInfo | null): v
 // --- the ticket thread (req-75 W1, ADR-0087 decision 3) ----------------------
 
 const THREAD_KIND = 'tickets-thread';
-/** One thread tab beside the file; it follows the ticket opened last. */
-const THREAD_KEY = 'thread://ticket';
 let threadTicketId: string | null = null;
 const threadListeners = new Set<() => void>();
 
@@ -1570,71 +1570,57 @@ function threadRun(ticketId: string): RunInfo | null {
   return live ?? newest;
 }
 
-/** The ticket file the page opened last: the next ticket lands in its pane. */
-let pageFilePath: string | null = null;
-
-/** The tab the page put beside the file last (the thread or a run tab): the next one lands in its pane. */
-let pageSide: { readonly kind: string; readonly key: string } | null = null;
-
 /**
  * The ticket page (ADR-0087 decision 3): the ticket file in one pane and
  * beside it the ticket's **run tab** while a run is live (owner,
  * 2026-10-31: the runner beside the ticket, as before M89), else the
  * thread — where an ended run's decisions (Ready card, approve, accept,
- * send back) and its next message live. The next ticket reactivates the
- * previous ticket's tabs and opens in their panes (a clean tab is
- * replaced), so the page never splits again — whichever pane had the
- * focus.
+ * send back) and its next message live. Whichever tab is the side, the
+ * pair anchors on itself (the pure landing matrix: `ticketPagePlan`,
+ * req-75): whatever pane is focused and whatever else is open, the two
+ * tabs land in their own two panes, both re-activate on every ticket
+ * switch and a third pane never appears; the focus ends on the file, so
+ * the next ticket opens there.
  */
 async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<void> {
   if (snapshot?.vaultId == null) {
     return;
   }
-  const vaultId = snapshot.vaultId;
   const run = runForCard(card.id);
   const side =
     run !== null
       ? { kind: TAKEOVER_KIND, key: `${TAKEOVER_SCHEME}${run.id}`, title: takeoverTitle(run) }
       : { kind: THREAD_KIND, key: THREAD_KEY, title: threadTitle(card.id) };
-  const previousSide = pageSide !== null && api.documents.get(pageSide.key) !== null ? pageSide : null;
-  const sideOpen = api.documents.get(side.key) !== null || previousSide !== null;
-  const previous = pageFilePath;
-  if (
-    sideOpen &&
-    previous !== null &&
-    previous !== card.path &&
-    api.documents.list().some((d) => d.path === previous && d.vaultId === vaultId)
-  ) {
-    // Revealing an open tab focuses its pane: the new file lands there.
-    await api.documents.open(previous, undefined, { vaultId });
-  }
-  // With a side tab still focused (the previous file was closed), the file
-  // would land behind it in its own pane: the one split left.
-  const activeKind = api.documents.active()?.kind;
-  const sideFocused = activeKind === THREAD_KIND || activeKind === TAKEOVER_KIND;
-  await api.documents.open(card.path, undefined, sideFocused ? { vaultId, split: 'right' } : { vaultId });
-  pageFilePath = card.path;
+  const plan = ticketPagePlan({
+    fileOpen: api.documents.get(card.path) !== null,
+    threadOpen: api.documents.get(side.key) !== null,
+    ...(side.key !== THREAD_KEY ? { anchor: side.key } : {}),
+  });
+  await api.documents.open(card.path, undefined, { vaultId: snapshot.vaultId, ...plan.fileOpts });
   threadTicketId = card.id;
   for (const listener of threadListeners) {
     listener();
   }
-  if (side.kind === THREAD_KIND && api.documents.get(THREAD_KEY) !== null) {
-    api.documents.rename(THREAD_KEY, side.title);
-  }
-  if (api.documents.get(side.key) !== null) {
-    // Already open: adding it again focuses it where it is.
-    api.documents.addDoc(side.kind, side.key, side.title);
-  } else if (previousSide !== null) {
-    // Focus the previous side tab's pane, then the new tab joins it.
-    api.documents.addDoc(previousSide.kind, previousSide.key, previousSide.key);
+  if (plan.threadCall === 'reactivate') {
+    if (side.kind === THREAD_KIND) {
+      // One thread tab follows the ticket opened last (req-75 W1):
+      // the rename keeps its title true.
+      api.documents.rename(THREAD_KEY, side.title);
+    }
+    // addDoc on the open key reveals it -- a rename alone would leave the
+    // side backgrounded in its pane; the pair re-activates as a whole.
     api.documents.addDoc(side.kind, side.key, side.title);
   } else {
-    api.documents.addDoc(side.kind, side.key, side.title, { split: 'right' });
+    api.documents.addDoc(side.kind, side.key, side.title, {
+      beside: card.path,
+      split: 'right',
+    });
   }
-  pageSide = { kind: side.kind, key: side.key };
-  // The side tab took the focus: hand it back to the file, so the next
-  // ticket opens there and not beside the side tab.
-  await api.documents.open(card.path, undefined, { vaultId });
+  if (plan.refocusFile) {
+    // The side tab's landing or re-activation took the focus: hand it back
+    // to the file, so the next ticket opens there and not beside the side.
+    await api.documents.open(card.path, undefined, { vaultId: snapshot.vaultId });
+  }
   markOpenCard(api);
 }
 
@@ -1811,6 +1797,10 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       storyNode({ story: reply?.story ?? [], totals: reply?.totals ?? { minutes: null, tokens: null } }),
     );
   };
+  // The quiet start's pending hint (req-75): under the status line while
+  // a live run stands quiet — nothing happens until the first message.
+  const pendingHint = el('div', 'tickets-thread-pending', PENDING_HINT);
+  pendingHint.hidden = true;
   // The decision bar (req-75 W1b): the buttons W1 drew on a Needs-you
   // row, now above the composer where the ticket is read.
   const decisionBar = el('div', 'tickets-thread-decisions');
@@ -1892,6 +1882,18 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     },
     canStart: () => dialogMode() !== null && !isLive(threadRun(ticketId)),
     placeholder: 'Message the worker — type / for commands',
+    // The quiet start's pre-fill (req-75): while the dialog has seen no
+    // owner message — no live run and one may start (the first message
+    // starts it, quiet by the same wrap), or a live quiet run — the box
+    // opens carrying the step and its meaning.
+    prefill: () => {
+      const mode = dialogMode();
+      if (mode === null) {
+        return null;
+      }
+      const run = threadRun(ticketId);
+      return !isLive(run) || run?.quietStart === true ? dialogStarter(mode) : null;
+    },
   });
 
   let pulledFor: string | null = null;
@@ -1941,6 +1943,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       .join(' · ');
     fileLink.hidden = card === null;
     stopRun.hidden = !live;
+    pendingHint.hidden = !(live && run !== null && run.quietStart === true);
     transcript.element.hidden = run === null;
     empty.hidden = run !== null;
     const mode = dialogMode();
@@ -1967,7 +1970,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   paint();
   const timer = setInterval(pull, 2_000);
   const tick = setInterval(paint, 1_000);
-  wrap.append(head, readyWrap, empty, transcript.element, endMoves.element, decisionBar, composer.element);
+  wrap.append(head, readyWrap, pendingHint, empty, transcript.element, endMoves.element, decisionBar, composer.element);
   host.append(wrap);
   return () => {
     alive = false;

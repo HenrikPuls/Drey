@@ -808,7 +808,8 @@ header shows the run's light and who is working, and above its composer
 sits the **decision bar** (Approve → next phase, Refine with agent, or
 Accept). The thread follows whichever ticket you open last — one tab,
 not one per ticket — and the next ticket's run tab or thread opens in
-the same pane, never a new split. The panel's footer carries the workers: the worst
+the same pair of panes: both tabs re-activate, the file ends up
+focused, and the pair never opens a third pane, whatever else is open. The panel's footer carries the workers: the worst
 light and who is out there; the header's **+** captures a new idea.
 
 **Ready to try** (req-75 W3). When a ticket's work is built — a
@@ -1074,10 +1075,17 @@ it, the row menu and the ticket header show a one-click start:
   works the ticket, and its thread shows the run.
 
 The start opens **the ticket page**: the ticket file with its thread
-beside it, and the thread is the dialog — the worker is yours from the
-first turn, the runner runs no gate and moves nothing; you keep talking
+beside it, and the thread is the dialog. Nothing runs until you ask:
+the worker starts quiet (it stands, no first turn of its own) and the
+prompt box comes **pre-filled with the step and its meaning** — add
+your question and send; that first message carries the dialog's brief
+to the worker, and until it arrives the thread says it "waits for your
+first message — the worker starts when you send". From there the
+runner runs no gate and moves nothing; you keep talking
 until you are both done. Where no run is live yet, writing your first
-message in the thread starts the phase's dialog too. Ending the dialog
+message in the thread starts the phase's dialog too, quiet the same
+way. (A Claude Code worker starts as today, running its first turn.)
+Ending the dialog
 is a move, right in the thread: a plan dialog offers **Finish → Plan
 review** and **Approve → Build** (when you settled the open points
 yourself, your own checkpoint can be skipped); a refine dialog offers
