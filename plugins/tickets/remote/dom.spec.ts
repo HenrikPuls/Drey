@@ -2,6 +2,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { RunInfo } from '../main/fleet/protocol';
 import type { NeedItem } from '../shared/remote-protocol';
+import type { ShapedQuestion } from '../shared/question-shape';
 import type { BoardColumn, BoardSnapshot, PipelinePhase, TicketCard } from '../shared/tickets';
 import type { Ctx, State } from './context';
 import { bodyKey } from './dom';
@@ -88,5 +89,41 @@ describe('bodyKey', () => {
 
   it('moves when the needs list changes', () => {
     expect(bodyKey(needsView(ctxOf(stateOf())))).not.toBe(bodyKey(needsView(ctxOf(stateOf({ needs: [] })))));
+  });
+
+  it('a shaped need answers with one tap on an option (req-75 W2)', () => {
+    const shaped: ShapedQuestion = {
+      question: 'Which database?',
+      context: 'the store',
+      where: null,
+      why: null,
+      options: [
+        { n: 1, label: 'SQLite', consequence: 'no server' },
+        { n: 2, label: 'Postgres', consequence: 'one server' },
+      ],
+      recommended: 1,
+      recommendationWhy: 'local first',
+    };
+    const posted: Array<[string, unknown]> = [];
+    const ctx: Ctx = {
+      ...ctxOf(stateOf({ needs: [{ ...question, text: 'Which database?\nOptions:\n1. …\n2. …', shaped }] })),
+      api: {
+        post: async (url: string, body: unknown) => {
+          posted.push([url, body]);
+          return { ok: true };
+        },
+      } as unknown as Ctx['api'],
+    };
+    const view = needsView(ctx);
+    const need = view.body.find((node): node is HTMLElement => node instanceof HTMLElement && node.classList.contains('need'))!;
+    // The raw turn text is gone; the shape and its options render instead.
+    expect(need.querySelector('.need-text')).toBeNull();
+    expect(need.querySelector('.q-shaped .q-text')?.textContent).toBe('Which database?');
+    expect(need.querySelector('.q-rec')?.textContent).toBe('Recommendation: 1 — local first');
+    const options = [...need.querySelectorAll<HTMLButtonElement>('button.option')];
+    expect(options).toHaveLength(2);
+    options[1]!.click();
+    expect(posted).toEqual([['/api/runs/run-1/send', { text: '2. Postgres' }]]);
+    expect(options.every((b) => b.disabled)).toBe(true);
   });
 });

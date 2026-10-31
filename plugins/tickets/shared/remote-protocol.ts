@@ -20,6 +20,7 @@ import type {
 } from '../main/commands';
 import type { FleetSnapshot } from '../main/fleet-client';
 import type { ChainMaster, ChainStatus, ColumnMode, WaitQuestion } from '../main/fleet/protocol';
+import type { ShapedQuestion } from './question-shape';
 import type { BoardSnapshot, CreateResult, MutationResult, TicketCard } from './tickets';
 
 /** What the "Needs you" list holds, in the order it shows them. */
@@ -40,6 +41,8 @@ export interface NeedItem {
   readonly since: string | null;
   /** A question form's fields (OpenCode's `question` tool); absent otherwise. */
   readonly questions?: readonly WaitQuestion[];
+  /** A `QUESTION:` turn's parsed fixed shape (req-75 W2); absent when the text does not follow it. */
+  readonly shaped?: ShapedQuestion;
 }
 
 export type RunReply = { readonly ok: boolean; readonly error?: string; readonly runId?: string };

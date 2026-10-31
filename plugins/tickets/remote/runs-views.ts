@@ -8,6 +8,8 @@
 import type { RunInfo, WaitQuestion } from '../main/fleet/protocol';
 import { formatWatch, parseStreamEvents, type WatchBlock } from '../renderer/watch-format';
 import { ageOf } from '../shared/tickets';
+import type { ShapedQuestion } from '../shared/question-shape';
+import { answerText } from '../shared/question-shape';
 import type { Ctx, View } from './context';
 import type { RunReply } from '../shared/remote-protocol';
 import { armedButton, button, chip, empty, h, present, sheet, toast } from './dom';
@@ -20,6 +22,7 @@ export interface Wait {
   readonly kind: 'question' | 'permission';
   readonly text: string;
   readonly questions?: readonly WaitQuestion[];
+  readonly shaped?: ShapedQuestion;
 }
 
 const runsOf = (ctx: Ctx): readonly RunInfo[] => ctx.state.fleet?.runs ?? [];
@@ -51,13 +54,51 @@ export function waitActions(ctx: Ctx, wait: Wait): HTMLElement | null {
   const questions = wait.questions ?? [];
   if (questions.length === 0) {
     // A `QUESTION:` turn: the answer is the next message to the worker.
+    // One in the fixed shape (req-75 W2) shows its parts and answers
+    // with one tap on an option — the field below stays the free answer.
+    const shapedText = (shaped: ShapedQuestion): HTMLElement =>
+      h(
+        'div',
+        { class: 'q-shaped' },
+        h('span', { class: 'q-text', text: shaped.question }),
+        shaped.context !== null ? h('span', { class: 'q-line', text: `Ticket: ${shaped.context}` }) : null,
+        shaped.where !== null ? h('span', { class: 'q-line', text: `Where: ${shaped.where}` }) : null,
+        shaped.why !== null ? h('span', { class: 'q-line', text: `Why: ${shaped.why}` }) : null,
+        ...shaped.options.map((option) => {
+          const node = h(
+            'button',
+            {
+              class: `btn option${shaped.recommended === option.n ? ' option-rec' : ''}`,
+              attrs: { type: 'button' },
+              on: {
+                click: () => {
+                  for (const sibling of Array.from(node.parentElement?.children ?? [])) {
+                    (sibling as HTMLButtonElement).disabled = true;
+                  }
+                  void ctx.act(ctx.api.post(`${base}/send`, { text: answerText(option) }), 'Answer sent');
+                },
+              },
+            },
+            option.label,
+            option.consequence !== null ? h('small', { class: 'why', text: ` — ${option.consequence}` }) : null,
+            shaped.recommended === option.n ? h('small', { class: 'rec', text: 'recommended' }) : null,
+          );
+          return node;
+        }),
+        shaped.recommended !== null
+          ? h('span', {
+              class: 'q-rec',
+              text: `Recommendation: ${shaped.recommended}${shaped.recommendationWhy !== null ? ` — ${shaped.recommendationWhy}` : ''}`,
+            })
+          : null,
+      );
     const input = h('textarea', { attrs: { rows: '2', placeholder: 'Your answer', 'aria-label': 'Your answer' } });
     const send = button('Answer', () => {
       if (input.value.trim() !== '') {
         void ctx.act(ctx.api.post(`${base}/send`, { text: input.value }), 'Answer sent');
       }
     }, 'btn btn-primary');
-    return h('div', { class: 'answer' }, input, send);
+    return h('div', { class: 'answer' }, wait.shaped !== undefined ? shapedText(wait.shaped) : null, input, send);
   }
 
   const picked = new Map<string, string[]>();
@@ -206,9 +247,15 @@ export function runView(ctx: Ctx, runId: string): View {
             'div',
             { class: 'need-head' },
             h('span', { class: 'need-kind left', text: wait.kind === 'permission' ? 'Wants permission' : 'Asks you' }),
-            h('span', { class: 'need-text full', text: wait.text }),
+            wait.shaped === undefined ? h('span', { class: 'need-text full', text: wait.text }) : null,
           ),
-          waitActions(ctx, { runId: run.id, kind: wait.kind, text: wait.text, ...(wait.questions ? { questions: wait.questions } : {}) }),
+          waitActions(ctx, {
+            runId: run.id,
+            kind: wait.kind,
+            text: wait.text,
+            ...(wait.questions ? { questions: wait.questions } : {}),
+            ...(wait.shaped ? { shaped: wait.shaped } : {}),
+          }),
         )
       : null,
   ]);

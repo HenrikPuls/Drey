@@ -52,6 +52,7 @@ export function needsOf(board: BoardSnapshot, runs: readonly RunInfo[]): readonl
           text: waiting.text,
           since: waiting.since,
           ...(waiting.questions !== undefined ? { questions: waiting.questions } : {}),
+          ...(waiting.shaped !== undefined ? { shaped: waiting.shaped } : {}),
         });
       }
       continue;

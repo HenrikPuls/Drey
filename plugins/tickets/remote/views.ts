@@ -103,10 +103,16 @@ export function needsView(ctx: Ctx): View {
               h('span', { class: 'need-kind', text: `${NEED_LABEL[n.kind]}${n.since !== null ? ` · ${ageOf(n.since)}` : ''}` }),
             ),
             h('span', { class: 'title', text: n.title }),
-            n.text !== '' ? h('span', { class: 'need-text', text: n.text }) : null,
+            n.text !== '' && n.shaped === undefined ? h('span', { class: 'need-text', text: n.text }) : null,
           ),
           (n.kind === 'question' || n.kind === 'permission') && n.runId !== null
-            ? waitActions(ctx, { runId: n.runId, kind: n.kind, text: n.text, ...(n.questions !== undefined ? { questions: n.questions } : {}) })
+            ? waitActions(ctx, {
+                runId: n.runId,
+                kind: n.kind,
+                text: n.text,
+                ...(n.questions !== undefined ? { questions: n.questions } : {}),
+                ...(n.shaped !== undefined ? { shaped: n.shaped } : {}),
+              })
             : null,
         ),
       ),
