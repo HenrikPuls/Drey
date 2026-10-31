@@ -33,6 +33,7 @@ import type {
   ChainConfig,
   ChainMaster,
   ChainStatus,
+  ChainTrip,
   ColumnMode,
   FleetCaps,
   FleetPools,
@@ -79,6 +80,8 @@ interface ChainFile {
   readonly tokensUsed: Record<string, number>;
   /** Per ticket: the ci check's next attempt (a failed check backs off). */
   readonly ciBackoff: Record<string, string>;
+  /** Per column: the breaker's trip while it holds (absent in older files). */
+  readonly tripped?: Record<string, ChainTrip>;
 }
 
 const LIVE: readonly string[] = ['starting', 'running', 'stopping'];
@@ -173,6 +176,7 @@ export class Orchestrator {
   private readonly cooldownUntil: Record<string, string> = {};
   private readonly tokensDay: Record<string, string> = {};
   private readonly tokensUsed: Record<string, number> = {};
+  private readonly tripped: Record<string, ChainTrip> = {};
   private passing = false;
   private ciSweeping = false;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -245,6 +249,11 @@ export class Orchestrator {
           this.ciBackoff[ticket] = until;
         }
       }
+      for (const [phase, trip] of Object.entries(parsed.tripped ?? {})) {
+        if (typeof trip?.reason === 'string' && typeof trip.at === 'string' && this.columns[phase] === 'held') {
+          this.tripped[phase] = { reason: trip.reason, at: trip.at };
+        }
+      }
     } catch {
       // a torn chain.json is noise; the plugin re-configures on the next board round
     }
@@ -261,7 +270,21 @@ export class Orchestrator {
       columns: { ...this.columns },
       redStreak: { ...this.redStreak },
       cooldownUntil: { ...this.cooldownUntil },
+      tripped: { ...this.tripped },
+      quotaPausedUntil: this.quotaPausedUntil(),
     };
+  }
+
+  /** The quota pauses still running, as ISO instants. */
+  private quotaPausedUntil(): Record<string, string> {
+    const nowMs = this.now().getTime();
+    const out: Record<string, string> = {};
+    for (const [provider, untilMs] of Object.entries(this.quotaPause)) {
+      if (untilMs !== undefined && untilMs > nowMs) {
+        out[provider] = new Date(untilMs).toISOString();
+      }
+    }
+    return out;
   }
 
   /** Points the chain at a tickets vault (idempotent) and scans. */
@@ -293,6 +316,12 @@ export class Orchestrator {
 
   async setColumn(phaseId: string, mode: ColumnMode): Promise<ChainStatus> {
     this.columns[phaseId] = mode;
+    if (mode === 'playing') {
+      // The owner's play is a fresh start: the old streak would trip the
+      // breaker again on the very next red gate.
+      delete this.tripped[phaseId];
+      this.redStreak[phaseId] = 0;
+    }
     await this.persist();
     if (mode === 'playing') {
       await this.dispatchPass();
@@ -385,6 +414,7 @@ export class Orchestrator {
   /** The breaker trips: the column holds, its next candidate parks. */
   private async trip(column: string, reason: string, gateFailure: string): Promise<void> {
     this.columns[column] = 'held';
+    this.tripped[column] = { reason, at: this.now().toISOString() };
     this.deps.log(`circuit breaker tripped on ${column} — ${reason}; the column holds`);
     await this.persist();
     await this.parkNextCandidate(column, `${reason}; last gate: ${shortGateLine(gateFailure).slice(0, 200)}`);
@@ -722,6 +752,7 @@ export class Orchestrator {
       tokensDay: { ...this.tokensDay },
       tokensUsed: { ...this.tokensUsed },
       ciBackoff: { ...this.ciBackoff },
+      tripped: { ...this.tripped },
     };
     await fsp
       .writeFile(path.join(this.deps.root, CHAIN_FILE), `${JSON.stringify(file, null, 2)}\n`, 'utf8')

@@ -289,7 +289,15 @@ tail and 50/4096 head). Each application is logged:
 handover thresholds) · `master` (`run` / `halted`) · `columns`
 (per-phase `playing` / `held`) · `redStreak` · `cooldownUntil` (per
 column ISO instant) · `tokensDay` + `tokensUsed` (the per-column token
-budget) · `ciBackoff`.
+budget) · `ciBackoff` · `tripped` (per column `{reason, at}` while the
+breaker holds it; playing the column clears it and resets the
+column's `redStreak`).
+
+`GET /chain` reports the same plus `quotaPausedUntil` (per provider,
+the ISO instant its quota pause ends — not persisted). The Work panel
+draws both as alerts with a Resume button (chain alerts fix); a runner
+that predates them omits the fields and the panel reads a hold with a
+full red streak as a trip.
 
 ## The tickets remote is not the runner
 

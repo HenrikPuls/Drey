@@ -366,6 +366,8 @@ describe('Orchestrator', () => {
     expect(logs.some((line) => line.includes('opencode is out of quota'))).toBe(true);
     expect(logs.some((line) => line.includes('red gate'))).toBe(false);
     expect(fleet.records).toHaveLength(2);
+    // The board reads the pause off the status (chain alerts fix).
+    expect(Object.keys(orch.status().quotaPausedUntil ?? {})).toEqual(['opencode']);
   });
 
   it('a rate-limited run shrinks its provider pool for a while (req-63)', async () => {
@@ -532,11 +534,17 @@ describe('Orchestrator', () => {
 
     expect(orch.status().columns['plan']).toBe('held');
     expect(orch.status().redStreak['plan']).toBe(3);
+    expect(orch.status().tripped?.['plan']?.reason).toBe('3 red gates in a row');
     // The candidate moved to inbox, parked with the reason (file semantics).
     const parked = await fsp.readFile(await phasePath('inbox', 'T-0001'), 'utf8');
     expect(parked).toContain('parked-reason');
     expect(parked).toContain('circuit breaker');
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).rejects.toBeDefined();
+
+    // The owner's play is a fresh start: trip and streak are gone.
+    await orch.setColumn('plan', 'playing');
+    expect(orch.status().tripped?.['plan']).toBeUndefined();
+    expect(orch.status().redStreak['plan']).toBe(0);
   });
 
   it('a green gate resets the streak; the cooldown only breathes between reds', async () => {

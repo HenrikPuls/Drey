@@ -1815,6 +1815,75 @@ details[open] > summary > .tickets-tx-think-preview {
   padding: 4px 0 8px;
 }
 
+/* The fleet's alerts (chain alerts fix): what stops the machine, above every group. */
+.work-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 2px 4px 6px;
+}
+
+.work-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--status-modified);
+  border-radius: var(--radius-sm, 6px);
+  background: color-mix(in srgb, var(--status-modified) 12%, transparent);
+}
+
+.work-alert[data-kind='breaker'] {
+  border-left-color: var(--status-deleted);
+  background: color-mix(in srgb, var(--status-deleted) 12%, transparent);
+}
+
+.work-alert-icon {
+  flex: none;
+  display: inline-flex;
+  margin-top: 1px;
+  color: var(--status-modified);
+}
+
+.work-alert[data-kind='breaker'] .work-alert-icon {
+  color: var(--status-deleted);
+}
+
+.work-alert-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.work-alert-title {
+  color: var(--text-heading);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.work-alert-text {
+  color: var(--text-2);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.work-alert-action {
+  flex: none;
+  align-self: center;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs, 4px);
+  background: var(--bg-input);
+  color: var(--text-heading);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.work-alert-action:hover {
+  background: var(--hover-bg);
+}
+
 .work-group + .work-group {
   margin-top: 4px;
 }

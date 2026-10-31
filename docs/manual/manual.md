@@ -1142,13 +1142,29 @@ still be held from a terminal — `POST /chain/column` on the runner,
 see `plugins/tickets/FLEET.md`; the panel no longer draws per-column
 brakes.)
 
+**When the fleet stops by itself, the panel says so.** Above every
+group the Work panel shows an alert row for what keeps the machine
+from working: a column **stopped by the circuit breaker** (why, since
+when, which tickets wait), a machine column **on hold** while tickets
+wait in it, a **halted chain** with work waiting, and a worker **out of
+quota** (no new run until the time it names; the chain retries by
+itself). The breaker, hold and halt rows carry one button — **Resume**
+plays the column again (its red streak starts from zero), **Run** runs
+the chain. A breaker trip and a quota pause also raise a Windows
+notification, and the panel header's status chip turns amber and
+names the alert. The chip otherwise shows what the fleet does: the
+worst light, the states in words (`2 running · 1 standing`), the
+tokens in flight and the oldest run's age — the long form in its
+tooltip.
+
 The machine asks the agent to decide its own step's completion — the
 brief ends with the completion discipline: run the acceptance commands
 yourself, end the turn only when they pass. The runner still re-runs
 the gate: green moves the ticket one column right, red parks it (the
 failure lands in the Log, the ticket waits). A column that goes red
 too often trips its **circuit breaker**: it holds, and its next ticket
-parks in Inbox with a reason — re-prioritize it when you're ready.
+parks in Inbox with a reason — re-prioritize it when you're ready, and
+press **Resume** on the panel's alert once the cause is fixed.
 After a red gate the column cools down for a minute before it fires
 again.
 

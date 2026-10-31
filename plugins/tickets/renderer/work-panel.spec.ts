@@ -80,6 +80,28 @@ const titles = (list: HTMLElement): string[] =>
   [...list.querySelectorAll('.work-group-title')].map((n) => n.textContent ?? '');
 
 describe('workListNode', () => {
+  it('draws the fleet alerts above every group; Resume plays the column', () => {
+    const onAlertAction = vi.fn();
+    const action = { kind: 'play-column' as const, phase: 'build', label: 'Resume' };
+    const list = workListNode(
+      {
+        ...deps(),
+        alerts: [{ kind: 'breaker', key: 'breaker:build:', title: 'Build stopped by the circuit breaker', text: '3 red gates in a row', action }],
+        onAlertAction,
+      },
+      board({ build: [card('T-0002', 'build')] }),
+      [],
+      createGroupFoldStore(null),
+      () => undefined,
+    );
+    expect(list.firstElementChild?.classList.contains('work-alerts')).toBe(true);
+    const alert = list.querySelector<HTMLElement>('.work-alert')!;
+    expect(alert.dataset['kind']).toBe('breaker');
+    expect(alert.querySelector('.work-alert-title')?.textContent).toBe('Build stopped by the circuit breaker');
+    alert.querySelector<HTMLButtonElement>('.work-alert-action')!.click();
+    expect(onAlertAction).toHaveBeenCalledWith(action);
+  });
+
   it('shows Running before Ideas, hides Needs you and Shaping while empty', () => {
     const list = workListNode(deps(), board({ inbox: [card('T-0001', 'inbox')], build: [card('T-0002', 'build')] }), [], createGroupFoldStore(null), () => undefined);
     expect(titles(list)).toEqual(['Running', 'Ideas']);
