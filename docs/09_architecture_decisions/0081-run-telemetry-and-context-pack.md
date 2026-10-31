@@ -59,3 +59,13 @@ adapters' aggregate usage (`result.usage` on Claude Code, the session
 - Adopted runs (a runner restart mid-run) restore their fold from the
   persisted record â€” telemetry survives the restart; the
   before-first-write split is derived from it exactly.
+- **Later change (req-79, 2026-10-31):** the data came in. The run
+  audit of 52 runs found the 49 KB `CLAUDE.md` carried by every one of
+  3,236 model calls (about 12.5k tokens each, ~11 % of all input), and
+  its pair-programming rules ("read the first four files", the
+  definition of done) sending workers into whole-spec reads. A repo's
+  `instructions:` key in `repos.md` now names the file the pack opens
+  with (Drey: `docs/agents/fleet-worker.md`, about 1k tokens); unset
+  keeps `CLAUDE.md`, then `AGENTS.md`, and a configured file that is
+  missing or blank falls back to them. The prefix stays byte-stable per
+  repo and phase.

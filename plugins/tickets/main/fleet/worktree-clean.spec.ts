@@ -164,6 +164,7 @@ describe('cleanWorktrees (real git)', () => {
       worker: null,
       worktrees: null,
       launch: null,
+      instructions: null,
     };
   });
 

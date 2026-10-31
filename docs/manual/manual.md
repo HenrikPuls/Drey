@@ -754,8 +754,8 @@ creates the configuration files under `tickets/_meta/`:
   URL, integration branch and a note on which branch protection exists.
   You never have to hand-edit it (though you can): **Settings → Tickets →
   Repositories** lists the entries as editable rows — name, URL, branch,
-  local path, policy, worker, worktrees base, **launch command**, linked
-  folders — one
+  local path, policy, worker, worktrees base, **launch command**,
+  **agent instructions**, linked folders — one
   commit per save, your notes under the frontmatter kept. The launch
   command is what **Launch this version** (below) runs in a ticket's
   worktree; empty means `dev.ps1 -Built -Multi` when the worktree has a
@@ -992,8 +992,9 @@ worker fixes it first and continues the branch instead of starting
 over.
 
 Every run's instruction is a **context pack**, assembled in a fixed
-order: the repo's own agent instructions (its `CLAUDE.md` or
-`AGENTS.md`), the phase's prompt, the ticket's plan verbatim, then the
+order: the repo's own agent instructions (the file its **Agent
+instructions** field names — keep it short, every model call of the
+run carries it — else its `CLAUDE.md` or `AGENTS.md`), the phase's prompt, the ticket's plan verbatim, then the
 run-specific parts (the worktree's diff so far, and on a retry the gate
 failure). Long parts are capped — the gate failure keeps its tail, the
 diff stat its head (40 lines / 4 KB and 50 lines / 4 KB by default; the

@@ -111,6 +111,18 @@ describe('parseRepos', () => {
     expect(bad.repos[0]?.launch).toBeNull();
     expect(bad.warnings).toEqual(['repos.md: repo "drey" launch must be a command string']);
   });
+
+  it('reads instructions: as a repo-relative file; anything else warns and reads null (req-79)', () => {
+    const entry = (value: string): string => `---\nrepos:\n  drey:\n    url: x\n    instructions: ${value}\n---\n`;
+    expect(parseRepos(entry('docs\\agents\\fleet-worker.md')).repos[0]?.instructions).toBe('docs/agents/fleet-worker.md');
+    expect(parseRepos('---\nrepos:\n  drey:\n    url: x\n---\n').repos[0]?.instructions).toBeNull();
+    for (const bad of ['../outside.md', 'C:/abs.md', '[a, b]']) {
+      const parsed = parseRepos(entry(bad));
+      expect(parsed.error).toBeNull();
+      expect(parsed.repos[0]?.instructions).toBeNull();
+      expect(parsed.warnings).toEqual(['repos.md: repo "drey" instructions must be a file path inside the repo']);
+    }
+  });
 });
 
 describe('ordering', () => {
@@ -364,14 +376,17 @@ describe('repos.md writer (req-72)', () => {
         worker: null,
         worktrees: null,
         launch: 'npm run dev',
+        instructions: 'docs/agents/fleet-worker.md',
         link: ['.tools', 'node_modules'],
       },
-      { name: 'bare', url: 'https://example.invalid/bare.git', branch: null, policy: null, path: null, worker: null, worktrees: null, launch: null },
+      { name: 'bare', url: 'https://example.invalid/bare.git', branch: null, policy: null, path: null, worker: null, worktrees: null, launch: null, instructions: null },
     ];
     const text = reposFileText(repos, 'Owner prose.\n');
     expect(text).toContain('Owner prose.');
     expect(text).toContain('launch: npm run dev');
     expect(text).not.toContain('launch: null');
+    expect(text).toContain('instructions: docs/agents/fleet-worker.md');
+    expect(text).not.toContain('instructions: null');
     const { repos: parsed, error } = parseRepos(text);
     expect(error).toBeNull();
     expect(parsed).toEqual(repos);

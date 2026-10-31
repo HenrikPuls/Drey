@@ -321,6 +321,12 @@ export interface RepoRef {
    * -Multi` when the worktree has a `dev.ps1`, else no launch.
    */
   readonly launch: string | null;
+  /**
+   * The file inlined as a fleet run's agent instructions (`instructions:`,
+   * req-79), relative to the checkout at `path`; null = `CLAUDE.md`, else
+   * `AGENTS.md` (the context pack, T-0048).
+   */
+  readonly instructions: string | null;
   /** Git-ignored folders a fleet worktree links from the checkout (`link:`, req-56); absent = none. */
   readonly link?: readonly string[];
 }

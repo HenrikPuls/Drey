@@ -440,6 +440,7 @@ repos:
     url: https://github.com/HenrikPuls/Drey.git
     branch: main
     path: E:/projects/Drey-m83
+    instructions: docs/agents/fleet-worker.md
     link: [.tools, node_modules]
   lariscus:
     url: https://dev.azure.com/org/project/_git/lariscus
@@ -466,7 +467,13 @@ ticket's worktree — "Launch this version" runs it there in a new
 console; a non-string value warns and reads as unset. Unset means the
 default `powershell -NoProfile -ExecutionPolicy Bypass -File dev.ps1
 -Built -Multi` when the worktree has a `dev.ps1`, else no launch (the
-button refuses with a hint at this file). `link` (req-56) names
+button refuses with a hint at this file). `instructions` (req-79)
+names the file, relative to the checkout at `path`, that every fleet
+run's brief opens with verbatim (the context pack, ADR-0081) — a short
+brief for unattended runs, since every model call of the run carries
+it. Unset, or a configured file that is missing or blank, falls back
+to `CLAUDE.md`, then `AGENTS.md`; an absolute path, one leaving the
+repo or a non-string value warns and reads as unset. `link` (req-56) names
 git-ignored folders of the checkout at `path` — one name or a list,
 relative, never leaving the repo — that the runner links into every
 fleet worktree (a junction on Windows, a directory symlink elsewhere)

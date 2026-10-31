@@ -20,6 +20,35 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-79 — Fleet: the brief opens with a short worker file, not the whole CLAUDE.md (owner request, outside the list)
+
+**Not yet manually verified by the owner.** The token audit of
+2026-10-31 (52 runs since 2026-10-30, 3,236 model calls, ~372M input
+tokens, nearly all cache reads) found the context pack (T-0048,
+ADR-0081) inlining the 49 KB `CLAUDE.md` at the head of every brief —
+about 12.5k tokens carried by every model call, ~11 % of the total —
+and its pair-programming rules sending workers into whole-spec reads
+(`changelog.md` read in 20 runs, `manual.md` in 18, `roadmap.md` in 16).
+
+- **`instructions:` in `repos.md`**: the file, relative to the repo's
+  checkout, the pack opens with verbatim (`RepoRef.instructions`,
+  `parseRepos` / `reposFileText`, `readRepoInstructions`). Unset — or a
+  configured file that is missing or blank — falls back to `CLAUDE.md`,
+  then `AGENTS.md`, as before; an absolute path, one leaving the repo or
+  a non-string warns and reads as unset. Settings → Tickets →
+  Repositories gains the **Agent instructions** field.
+- **`docs/agents/fleet-worker.md`** is written to be that file: it says
+  it replaces `CLAUDE.md` in the brief and names the large files a
+  worker reads only by line range.
+- The board's `repos.md` needs `instructions: docs/agents/fleet-worker.md`
+  under `drey` (owner's data; not set by this change).
+- The other levers the audit found are under "Follow-ups" in the
+  roadmap.
+- Specs: `context-pack.spec.ts` (new: configured file first, the
+  fallbacks), `ticket-board.spec.ts` (parsing, warnings, round trip).
+  Docs: `specs/ticket-schema.md`, ADR-0081 later change, `FLEET.md`,
+  manual §13.
+
 ### Fix — a spent provider quota no longer reads as a finished run
 
 **Not yet manually verified by the owner.** Owner request, outside the

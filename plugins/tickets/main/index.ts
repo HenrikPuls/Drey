@@ -1311,7 +1311,7 @@ class BoardService {
       let repoInstructions: string | null = null;
       let diffStat: string | null = null;
       if (repo !== null && repo.path !== null) {
-        repoInstructions = await readRepoInstructions(repo.path);
+        repoInstructions = await readRepoInstructions(repo.path, repo.instructions);
         diffStat = await worktreeDiffStat(
           this.git,
           worktreePathFor(vault.path, repo, card.id),
@@ -2459,6 +2459,7 @@ const plugin: MainPluginModule = {
           worker: str('worker'),
           worktrees: str('worktrees'),
           launch: str('launch'),
+          instructions: str('instructions'),
           ...(Array.isArray(r['link']) && r['link'].every((l): l is string => typeof l === 'string') && r['link'].length > 0 ? { link: r['link'] as string[] } : {}),
         });
       }

@@ -1002,7 +1002,7 @@ export class Orchestrator {
     // worktree's diff stat are read here, outside the pure composer; a
     // retry also carries the ticket's most recent gate failure. A repo
     // without a checkout lets the request builder refuse below.
-    const repoInstructions = repo.path === null ? null : await readRepoInstructions(repo.path);
+    const repoInstructions = repo.path === null ? null : await readRepoInstructions(repo.path, repo.instructions);
     const gateFailure = this.lastGateFailure(card.id);
     const diffStat =
       repo.path === null

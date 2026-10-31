@@ -28,6 +28,7 @@ const repo = (over: Partial<RepoRef> = {}): RepoRef => ({
   worker: null,
   worktrees: null,
   launch: null,
+  instructions: null,
   ...over,
 });
 
