@@ -115,8 +115,8 @@ Discipline that keeps the repo clean:
   keep it waiting. Moving the blocker to `done` unblocks it on the
   next refresh. The owner may still move a blocked ticket anywhere (a
   move into a worker phase asks for confirmation); an id that names
-  no board ticket — deleted, renamed, or in `archive/` — is a warning
-  and keeps the ticket blocked, never a silent unblock. Removing the
+  no board ticket — deleted, renamed, or in `archive/` — no longer
+  blocks. Removing the
   dependency is a frontmatter edit, the owner's.
 - The board picks the moves up on its next refresh; the chain
   daemon's master switch is irrelevant for manual columns.

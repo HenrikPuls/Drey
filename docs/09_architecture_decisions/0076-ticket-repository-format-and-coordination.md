@@ -260,3 +260,14 @@ rules):
   state (`drey.tickets.hideBlocked`, the column-collapse pattern);
   ordering is never touched. Cross-repo dependencies, soft links and
   scheduling views are out of scope by the owner's list.
+
+## Later change — an archived blocker no longer blocks (2026-10-31)
+
+"Never a silent unblock" (both T-0050 sections above) is withdrawn.
+The owner archives finished tickets, and the req-75 chain stalled the
+first time: T-0075 sat green in commit, blocked by an archived T-0059
+that was long merged. A blocker id that resolves to no board ticket —
+archived, deleted or renamed — now **does not block** and gives no
+finding. Reading `tickets/archive/` to tell an archived id from a
+typo was weighed and left out: the board stays archive-blind, and a
+mistyped id unblocking is the accepted price (owner, 2026-10-31).

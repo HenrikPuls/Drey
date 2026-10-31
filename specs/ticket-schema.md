@@ -246,11 +246,11 @@ board and the fleet.
   empty — a done blocker shows nothing. A blocker in an unknown
   directory resolves by its stripped phase id, never terminal, so it
   blocks. `tickets/archive/` is not read: a blocker deleted, renamed
-  or archived resolves to no board ticket — warning, and the dependent
-  stays blocked (never a silent unblock).
-- **Validation**: an id that resolves to no board ticket is a warning
-  on the dependent (`blocked-by names T-0048, which is not on the
-  board`) and stays blocking. Self-reference and cycles are one error
+  or archived resolves to no board ticket and no longer blocks (owner
+  decision 2026-10-31: archiving a finished blocker must not stall a
+  chain).
+- **Validation**: an id that resolves to no board ticket gives no
+  finding and does not block. Self-reference and cycles are one error
   per member naming the cycle (`blocked-by cycle: T-0001 -> T-0002 ->
   T-0001`; self = `T-0001 -> T-0001`) — cyclic members also count as
   blocked. Duplicate blocker ids (themselves already an error) resolve
@@ -479,20 +479,20 @@ column; the board still renders), the fleet runner before every action
    ticket (the board shows it; the runner enforces it from M84).
 10. `blocked-by` resolution (T-0050): ids resolve against the board's
     columns only — never `tickets/archive/` — and a satisfied reference
-    is one sitting in the terminal phase. An unknown id (deleted,
-    renamed, archived blocker) is a **warning** that keeps the dependent
-    blocked (`blocked-by names T-0048, which is not on the board` —
-    never a silent unblock). Self-reference and cycles are one
+    is one sitting in the terminal phase **or no longer on the board**:
+    an archived, deleted or renamed blocker does not block (owner
+    decision 2026-10-31 — archiving a finished blocker stalled the
+    chain; a mistyped id unblocks too, the accepted price). Self-reference and cycles are one
     **error** per member naming the cycle (`blocked-by cycle: T-0001 ->
     T-0002 -> T-0001`; self = `T-0001 -> T-0001`); the board still
     renders, and cyclic members count as blocked. A duplicate blocker
     id resolves to the first occurrence in column order (the duplicate
     itself is already an error per check 1).
 10. `blocked-by` entries resolve against the board's columns (T-0050):
-   an unknown id = warning and stays blocking (never a silent
-   unblock); self-reference and cycles = errors naming the cycle; a
-   reference is satisfied only in the terminal phase — a blocker in an
-   unknown directory blocks. The archive is never consulted.
+   an id off the board (archived, deleted) no longer blocks;
+   self-reference and cycles = errors naming the cycle; a
+   reference on the board is satisfied only in the terminal phase — a
+   blocker in an unknown directory blocks. The archive is never consulted.
 
 A validation issue never blocks rendering and never blocks a human
 transition (a warning shows); it blocks an agent action.

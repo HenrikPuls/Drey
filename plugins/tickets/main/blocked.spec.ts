@@ -137,12 +137,10 @@ describe('runDependencyPass', () => {
     expect(all.blocked.get('T-0003')).toEqual([]);
   });
 
-  it('an unknown id warns and keeps the dependent blocked', () => {
+  it('an id off the board (archived or deleted) no longer blocks', () => {
     const pass = runDependencyPass([card('T-0002', 'plan', ['T-0048'])], TERMINAL);
-    expect(pass.blocked.get('T-0002')).toEqual(['T-0048']);
-    expect(findingsOf(pass, 'T-0002')).toEqual([
-      { level: 'warning', message: 'blocked-by names T-0048, which is not on the board' },
-    ]);
+    expect(pass.blocked.get('T-0002')).toEqual([]);
+    expect(findingsOf(pass, 'T-0002')).toEqual([]);
   });
 
   it('self-reference is an error naming the id, and the card counts as blocked', () => {
@@ -260,7 +258,7 @@ describe('assembleBoard derives the blocked state', () => {
     expect(cardOf(snap, 'T-0001').blocks).toEqual([]);
   });
 
-  it('an unknown reference surfaces the warning on the dependent card', () => {
+  it('a reference to an archived ticket leaves the dependent unblocked, without a finding', () => {
     const snap = boardOf([
       {
         path: 'tickets/30-build/T-0002.md',
@@ -268,10 +266,8 @@ describe('assembleBoard derives the blocked state', () => {
       },
     ]);
     const found = cardOf(snap, 'T-0002');
-    expect(found.blocked).toEqual(['T-0048']);
-    expect(found.issues).toEqual([
-      { level: 'warning', message: 'blocked-by names T-0048, which is not on the board' },
-    ]);
+    expect(found.blocked).toEqual([]);
+    expect(found.issues).toEqual([]);
   });
 });
 

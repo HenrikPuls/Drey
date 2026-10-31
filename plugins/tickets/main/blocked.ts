@@ -7,9 +7,11 @@
  * The rules (the ticket's Decisions):
  * - Blocked is DERIVED, never stored: a reference is satisfied exactly
  *   when the referenced ticket sits in the pipeline's terminal phase.
- * - A blocker id that resolves to no board ticket (deleted, renamed,
- *   archived) is a visible warning and keeps the dependent blocked —
- *   never a silent unblock. The board never reads `tickets/archive/`.
+ * - A blocker id that resolves to no board ticket (archived, deleted,
+ *   renamed) no longer blocks — the owner archives finished tickets,
+ *   and a chain must not stall on that (owner decision 2026-10-31; a
+ *   mistyped id unblocks too, the accepted price). The board never
+ *   reads `tickets/archive/`.
  * - Self-reference and cycles are one error finding per member, the
  *   message naming the cycle; cyclic members also count as blocked
  *   (a cyclic dependency can never be satisfied, phases aside).
@@ -23,7 +25,7 @@
 import type { TicketCard, TicketIssue } from '../shared/tickets';
 
 export interface DependencyPass {
-  /** card id -> open blocker ids (unknown ids included; [] = unblocked). */
+  /** card id -> open blocker ids ([] = unblocked). */
   readonly blocked: ReadonlyMap<string, readonly string[]>;
   /** card id -> ids currently blocked by this card (open edges only). */
   readonly blocks: ReadonlyMap<string, readonly string[]>;
@@ -60,10 +62,7 @@ export function runDependencyPass(cards: readonly TicketCard[], terminalPhase: s
     const open: string[] = [];
     for (const ref of card.meta.blockedBy) {
       const blocker = byId.get(ref);
-      if (blocker === undefined) {
-        push(card.id, { level: 'warning', message: `blocked-by names ${ref}, which is not on the board` });
-        open.push(ref);
-      } else if (blocker.phase !== terminalPhase) {
+      if (blocker !== undefined && blocker.phase !== terminalPhase) {
         open.push(ref);
       }
     }

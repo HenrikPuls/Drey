@@ -20,6 +20,17 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — an archived blocker no longer blocks
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (2026-10-31). A `blocked-by` id that names no board ticket —
+archived, deleted or renamed — used to warn and keep the dependent
+blocked; archiving T-0059 after it merged left T-0075 stuck in commit
+(no commit run, run start refused). Such an id now does not block and
+gives no finding (`plugins/tickets/main/blocked.ts`; specs in
+`blocked.spec.ts`). `specs/ticket-schema.md`, `plugins/tickets/BOARD.md`,
+docs/05 and an ADR-0076 later change say so; a mistyped id unblocks
+too — the accepted price.
 ### req-75 W2b — The question reads like the canvas
 
 **Not yet manually verified by the owner.** Owner request, outside the
