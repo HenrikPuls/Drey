@@ -2490,6 +2490,7 @@ details[open] > summary > .tickets-tx-think-preview {
 
 .tickets-ready-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   padding-top: 4px;

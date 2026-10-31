@@ -188,6 +188,33 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(page.locator('.tickets-thread')).toHaveCount(1);
   });
 
+  test('the next ticket lands in the last ticket pane, not a new split', async ({ page }, testInfo) => {
+    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    const panel = page.locator('.tickets-panel').filter({ visible: true });
+    await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
+
+    await panel.locator('.work-row[data-id="T-0101"]').click();
+    const thread = page.locator('.tickets-thread').filter({ visible: true });
+    await expect(thread.locator('.tickets-thread-title')).toHaveText('Dark mode for the calendar');
+    await expect(page.locator('app-pane-leaf')).toHaveCount(2);
+
+    // A click into the thread focuses its pane: the case that used to split.
+    for (const [id, title] of [
+      ['T-0102', 'Export tags as CSV'],
+      ['T-0103', 'Faster vault search'],
+      ['T-0105', 'Spellcheck inside tables'],
+    ] as const) {
+      await thread.locator('.tickets-thread-head').click();
+      await panel.locator(`.work-row[data-id="${id}"]`).click();
+      await expect(thread.locator('.tickets-thread-title')).toHaveText(title);
+      await expect(page.locator('app-pane-leaf')).toHaveCount(2);
+      await expect(page.locator('app-tab-bar .tab', { hasText: `${id}.md` })).toHaveCount(1);
+    }
+    // The clean ticket tabs were replaced, not stacked.
+    await expect(page.locator('app-tab-bar .tab', { hasText: /T-0\d+\.md/ })).toHaveCount(1);
+    await page.screenshot({ path: testInfo.outputPath('ticket-page-no-split.png') });
+  });
+
   test('folds a group and keeps it folded', async ({ page }) => {
     await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
     const panel = page.locator('.tickets-panel').filter({ visible: true });

@@ -32,8 +32,10 @@ last and reactivates that tab first, so the next ticket opens in its
 pane and replaces it when it is clean — no new pane, no new tab; only
 when that file was closed and the thread is focused does the page still
 split once. The composer's row under the box wraps and a chip keeps its
-label on one line. No new spec: the change is in the plugin's wiring
-(`index.ts`), which no unit spec reaches.
+label on one line, and the Ready card's buttons wrap instead of running
+out of a narrow thread. e2e `work-panel.spec.ts` ("the next ticket lands
+in the last ticket pane") opens four tickets with the thread focused and
+expects two panes and one ticket tab throughout.
 
 ### Fix — a spent provider quota no longer reads as a finished run
 
