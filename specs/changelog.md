@@ -1,4 +1,16 @@
 
+### req-83 — a ticket opened from the Files panel brings its thread
+
+**Not yet manually verified by the owner.** Owner request, 2026-10-31
+(outside the list). The ticket page (file + thread) opened only from the
+Work panel; a ticket file picked in the Files panel (or any other route)
+was a plain tab. The tickets plugin now watches the active tab
+(`documents.onChange` `active-changed`): when it is a ticket file of the
+board's vault and the thread is closed or shows another ticket, it runs
+`openTicketPage` for it. The pure rule is `pageFollowsActive`
+(`ticket-page.ts`); a `pageOpening` flag keeps the page's own tab changes
+from re-entering. Specs: `pageFollowsActive` rows in `ticket-page.spec.ts`.
+
 ### req-82 — the ticket page reuses its ticket pane
 
 **Not yet manually verified by the owner.** Owner request, 2026-10-31
