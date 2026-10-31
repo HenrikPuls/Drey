@@ -1557,6 +1557,13 @@ export class RunSupervisor {
         continue;
       }
       if (!(await processAlive(pid, this.exec))) {
+        if (run.agentDone) {
+          // The worker finished its turn and left: the exit handler owns the
+          // gate. A lost exit event is replayed, never reaped as a failure
+          // (the reaper used to fail runs whose last message was "done").
+          void this.onWorkerExit(run, null);
+          continue;
+        }
         run.info = { ...run.info, gateFailure: 'lease lost — the worker process is gone; reaped' };
         await this.logLine(run, 'lease reaper: the worker process is gone — run reaped, ticket freed');
         if (run.handle !== null) {
@@ -1616,6 +1623,9 @@ export class RunSupervisor {
     }
     if (run.fallbackActive === true) {
       return; // a failed resume being replaced (T-0049): the replacement decides
+    }
+    if (run.gating) {
+      return; // the gate is already running for this exit
     }
     if (run.info.state === 'stopping') {
       await this.finish(run, 'stopped');

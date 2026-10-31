@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   effectivePoolSizes,
   isQuotaError,
+  failureBackoffMs,
   isRateLimitError,
   Orchestrator,
   QUOTA_PAUSE_MS,
@@ -185,7 +186,7 @@ function failedRecord(ticket: string, failure: string): SupervisorRecord {
       branch: `t/${ticket}`,
       gateFailure: failure,
     },
-    request: { ticketId: ticket } as RunRequest,
+    request: { ticketId: ticket, column: 'plan' } as RunRequest,
   };
 }
 
@@ -547,7 +548,7 @@ describe('Orchestrator', () => {
       await orch.onRunSettled(failed);
       // Past the cooldown the next pass fires again (in production the
       // safety-net timer; here the master flip that always triggers one).
-      current = new Date(current.getTime() + RED_COOLDOWN_MS + 1_000);
+      current = new Date(current.getTime() + Math.max(RED_COOLDOWN_MS, failureBackoffMs(i + 1)) + 1_000);
       if (i < 2) {
         await orch.setMaster('halted');
         await orch.setMaster('run');
@@ -581,6 +582,72 @@ describe('Orchestrator', () => {
     await orch.onRunSettled({ ...record.info, state: 'done' });
     expect(orch.status().redStreak['plan'] ?? 0).toBe(0);
     expect(orch.status().columns['plan'] ?? 'playing').toBe('playing');
+  });
+
+  it('a run that fails without a gate verdict backs off per ticket instead of re-dispatching at once', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    let current = new Date('2026-10-18T12:00:00Z');
+    const { orch, fleet } = orchestrator({ now: () => current });
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    expect(fleet.records).toHaveLength(1);
+
+    const record = fleet.records[0]!;
+    const failed = { ...record.info, state: 'failed' as const, lastError: 'spawn failed' };
+    fleet.records[0] = { ...record, info: failed };
+    await orch.onRunSettled(failed);
+    expect(fleet.records).toHaveLength(1); // still backing off — no hot loop
+
+    current = new Date(current.getTime() + failureBackoffMs(1) + 1_000);
+    await orch.setMaster('halted');
+    await orch.setMaster('run');
+    expect(fleet.records).toHaveLength(2);
+  });
+
+  it('repeated non-gate failures park the failing ticket, not the first one in the column', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    await writeTicket('T-0002', 'plan');
+    let current = new Date('2026-10-18T12:00:00Z');
+    const { orch, fleet } = orchestrator({ now: () => current });
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    expect(fleet.records.map((r) => r.info.ticketId).sort()).toEqual(['T-0001', 'T-0002']);
+
+    for (let i = 0; i < 3; i++) {
+      const record = fleet.records.find((r) => r.info.ticketId === 'T-0002' && r.info.state === 'running')!;
+      const failed = { ...record.info, state: 'failed' as const, lastError: 'provider crashed' };
+      fleet.records[fleet.records.indexOf(record)] = { ...record, info: failed };
+      await orch.onRunSettled(failed);
+      current = new Date(current.getTime() + failureBackoffMs(i + 1) + 1_000);
+      if (i < 2) {
+        await orch.setMaster('halted');
+        await orch.setMaster('run');
+      }
+    }
+
+    const parked = await fsp.readFile(await phasePath('inbox', 'T-0002'), 'utf8');
+    expect(parked).toContain('parked-reason');
+    await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).resolves.toBeUndefined();
+  });
+
+  it('a run the owner stopped is not re-dispatched while the ticket stays where it is', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    const current = new Date('2026-10-18T12:00:00Z');
+    const { orch, fleet } = orchestrator({ now: () => current });
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    expect(fleet.records).toHaveLength(1);
+
+    const record = fleet.records[0]!;
+    const stopped = { ...record.info, state: 'stopped' as const };
+    fleet.records[0] = { ...record, info: stopped };
+    await orch.onRunSettled(stopped);
+    await orch.setMaster('halted');
+    await orch.setMaster('run');
+    expect(fleet.records).toHaveLength(1);
   });
 
   it('a failed-then-requeued ticket dispatches with the gate failure section (T-0048 retry)', async () => {

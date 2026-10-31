@@ -84,6 +84,30 @@ interface ChainFile {
   readonly tripped?: Record<string, ChainTrip>;
   /** Set by a runner retiring for a newer build: its successor keeps the master. */
   readonly handoverAt?: string;
+  /** Per ticket: consecutive failed runs and the instant the next attempt may start. */
+  readonly ticketFailures?: Record<string, TicketFailure>;
+  /** Per ticket: the owner stopped its run — no auto-dispatch until it moves or the owner starts it again. */
+  readonly ownerHold?: Record<string, OwnerHold>;
+}
+
+interface TicketFailure {
+  readonly count: number;
+  readonly until: string;
+}
+
+interface OwnerHold {
+  readonly phase: string;
+  readonly at: string;
+}
+
+/** The first retry waits this long; every further failure doubles it. */
+export const FAILURE_BACKOFF_MS = 60_000;
+/** A failing ticket never waits longer than this between attempts. */
+export const FAILURE_BACKOFF_MAX_MS = 30 * 60_000;
+
+/** The wait before the next attempt after `count` consecutive failures. */
+export function failureBackoffMs(count: number): number {
+  return Math.min(FAILURE_BACKOFF_MS * 2 ** Math.max(0, count - 1), FAILURE_BACKOFF_MAX_MS);
 }
 
 /** How fresh a retiring runner's handover stamp must be for its successor to keep the master. */
@@ -182,6 +206,11 @@ export class Orchestrator {
   private readonly tokensDay: Record<string, string> = {};
   private readonly tokensUsed: Record<string, number> = {};
   private readonly tripped: Record<string, ChainTrip> = {};
+  private readonly ticketFailures: Record<string, TicketFailure> = {};
+  private readonly ownerHold: Record<string, OwnerHold> = {};
+  /** Run ids the chain itself stopped (column brake, Notaus) — only an
+   *  owner's own stop of a single run holds its ticket. */
+  private readonly machineStopped = new Set<string>();
   private passing = false;
   private ciSweeping = false;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -195,6 +224,8 @@ export class Orchestrator {
   private notedThisPass = new Set<string>();
   /** The last held-column line, logged on change only. */
   private heldNote = '';
+  /** The last budget-held line, logged on change only. */
+  private budgetNote = '';
   /** Per provider: a rate limit's pool shrink (req-63; not persisted). */
   private readonly poolShrink: Partial<Record<WorkerProviderId, { count: number; untilMs: number }>> = {};
   /** Per provider: no new run before this time — its quota is spent (not persisted). */
@@ -264,6 +295,16 @@ export class Orchestrator {
       for (const [phase, trip] of Object.entries(parsed.tripped ?? {})) {
         if (typeof trip?.reason === 'string' && typeof trip.at === 'string' && this.columns[phase] === 'held') {
           this.tripped[phase] = { reason: trip.reason, at: trip.at };
+        }
+      }
+      for (const [ticket, failure] of Object.entries(parsed.ticketFailures ?? {})) {
+        if (typeof failure?.count === 'number' && typeof failure.until === 'string') {
+          this.ticketFailures[ticket] = { count: failure.count, until: failure.until };
+        }
+      }
+      for (const [ticket, hold] of Object.entries(parsed.ownerHold ?? {})) {
+        if (typeof hold?.phase === 'string' && typeof hold.at === 'string') {
+          this.ownerHold[ticket] = { phase: hold.phase, at: hold.at };
         }
       }
     } catch {
@@ -404,19 +445,53 @@ export class Orchestrator {
       }
       if (info.state === 'done') {
         this.redStreak[column] = 0;
+        delete this.ticketFailures[info.ticketId];
+        delete this.ownerHold[info.ticketId];
       }
-      if (info.state === 'failed' && info.gateFailure !== null) {
+      if (info.state === 'stopped' && !this.machineStopped.has(info.id)) {
+        // The owner stopped this run: the ticket stays put until they move
+        // or start it — a stopped run must not be re-dispatched (and its
+        // session resumed) the moment the slot frees.
+        this.ownerHold[info.ticketId] = { phase: record.request.phase, at: this.now().toISOString() };
+      }
+      this.machineStopped.delete(info.id);
+      let ticketFailures = 0;
+      if (info.state === 'failed' && !isQuotaError(info.lastError)) {
+        // Every failure counts per ticket — a provider error or a run that
+        // ended without a result used to re-dispatch at once, forever.
+        ticketFailures = (this.ticketFailures[info.ticketId]?.count ?? 0) + 1;
+        this.ticketFailures[info.ticketId] = {
+          count: ticketFailures,
+          until: new Date(this.now().getTime() + failureBackoffMs(ticketFailures)).toISOString(),
+        };
+      }
+      if (info.state === 'failed' && info.gateFailure === null && ticketFailures > 0) {
+        await this.persist();
+        const maxRed = this.lastPhases.find((p) => p.id === column)?.maxRed ?? DEFAULT_MAX_RED;
+        if (ticketFailures >= maxRed) {
+          await this.parkNextCandidate(
+            column,
+            `${ticketFailures} failed runs in a row — ${(info.lastError ?? 'the worker ended without a result').slice(0, 200)}`,
+            info.ticketId,
+          );
+        } else {
+          this.deps.log(
+            `${info.ticketId} failed without a gate verdict (${ticketFailures}/${maxRed}) — it waits ` +
+              `${Math.round(failureBackoffMs(ticketFailures) / 1000)} s before the next attempt`,
+          );
+        }
+      } else if (info.state === 'failed' && info.gateFailure !== null) {
         const streak = (this.redStreak[column] ?? 0) + 1;
         this.redStreak[column] = streak;
         this.cooldownUntil[column] = new Date(this.now().getTime() + RED_COOLDOWN_MS).toISOString();
         await this.persist();
         const maxRed = this.lastPhases.find((p) => p.id === column)?.maxRed ?? DEFAULT_MAX_RED;
         if (streak >= maxRed) {
-          await this.trip(column, `${streak} red gates in a row`, info.gateFailure);
+          await this.trip(column, `${streak} red gates in a row`, info.gateFailure, info.ticketId);
         } else {
           const budget = this.lastPhases.find((p) => p.id === column)?.tokenBudget ?? 0;
           if (budget > 0 && (this.tokensUsed[column] ?? 0) > budget) {
-            await this.trip(column, 'daily token budget spent', info.gateFailure);
+            await this.trip(column, 'daily token budget spent', info.gateFailure, info.ticketId);
           } else {
             this.deps.log(`red gate on ${column} (${streak}/${maxRed}) — the column cools down`);
           }
@@ -429,12 +504,16 @@ export class Orchestrator {
   }
 
   /** The breaker trips: the column holds, its next candidate parks. */
-  private async trip(column: string, reason: string, gateFailure: string): Promise<void> {
+  private async trip(column: string, reason: string, gateFailure: string, ticketId: string): Promise<void> {
     this.columns[column] = 'held';
     this.tripped[column] = { reason, at: this.now().toISOString() };
     this.deps.log(`circuit breaker tripped on ${column} — ${reason}; the column holds`);
     await this.persist();
-    await this.parkNextCandidate(column, `${reason}; last gate: ${shortGateLine(gateFailure).slice(0, 200)}`);
+    await this.parkNextCandidate(
+      column,
+      `${reason}; last gate: ${shortGateLine(gateFailure).slice(0, 200)}`,
+      ticketId,
+    );
   }
 
   /**
@@ -442,7 +521,7 @@ export class Orchestrator {
    * `parked-at`): the breaker's backward move is the machine's, with the
    * same one-commit semantics as every transition.
    */
-  private async parkNextCandidate(column: string, reason: string): Promise<void> {
+  private async parkNextCandidate(column: string, reason: string, failedTicketId: string | null = null): Promise<void> {
     const config = this.config;
     if (config === null) {
       return;
@@ -450,8 +529,13 @@ export class Orchestrator {
     try {
       const snap = await readVaultBoard(config.ticketsVaultPath, config.defaultWorker);
       const col = snap.columns.find((c) => c.phase.id === column) ?? null;
+      // The ticket that failed is the one to park — not whichever sits first
+      // in the column (that one may only be waiting behind it).
+      const free = (t: { meta: { run: unknown; claimedBy: unknown } }): boolean =>
+        t.meta.run === null && t.meta.claimedBy === null;
       const candidate =
-        col?.tickets.find((t) => t.meta.run === null && t.meta.claimedBy === null) ?? null;
+        (failedTicketId !== null ? col?.tickets.find((t) => t.id === failedTicketId && free(t)) : undefined) ??
+        (failedTicketId !== null ? null : (col?.tickets.find(free) ?? null));
       if (candidate === null) {
         this.deps.log(`the breaker found no candidate to park on ${column}`);
         return;
@@ -481,6 +565,8 @@ export class Orchestrator {
           `tickets: ${candidate.id} ${candidate.phase} -> inbox (circuit breaker)`,
         );
       }
+      delete this.ticketFailures[candidate.id];
+      await this.persist();
       this.deps.log(`parked ${candidate.id} in inbox (${column} breaker) — re-prioritizing revives it`);
     } catch (error) {
       this.deps.log(`parking the breaker's candidate failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -736,12 +822,13 @@ export class Orchestrator {
   ): Promise<void> {
     const stops = this.allRecords()
       .filter(matches)
-      .map((record) =>
-        this.deps
+      .map((record) => {
+        this.machineStopped.add(record.info.id);
+        return this.deps
           .supervisorOf(record.info.provider)
           .stop(record.info.id, reason)
-          .catch(() => undefined),
-      );
+          .catch(() => undefined);
+      });
     await Promise.all(stops);
   }
 
@@ -751,11 +838,17 @@ export class Orchestrator {
    * first and continues from the branch instead of starting over. No new
    * state — the supervisors' records are the truth.
    */
-  private lastGateFailure(ticketId: string): string | null {
-    const failed = this.allRecords()
-      .filter((r) => r.info.ticketId === ticketId && r.info.state === 'failed' && r.info.gateFailure !== null)
-      .sort((a, b) => b.info.startedAt.localeCompare(a.info.startedAt))[0];
-    return failed?.info.gateFailure ?? null;
+  private lastGateFailure(ticketId: string, column: string): string | null {
+    // Only the same column's failures count, and a later successful run of
+    // the ticket there clears the slate — an older plan-phase or reaper
+    // message must not ride into an unrelated run's brief.
+    const mine = this.allRecords()
+      .filter((r) => r.info.ticketId === ticketId && (r.request.column ?? null) === column)
+      .sort((a, b) => b.info.startedAt.localeCompare(a.info.startedAt));
+    const latestFinished = mine.find((r) => r.info.state === 'failed' || r.info.state === 'done');
+    return latestFinished !== undefined && latestFinished.info.state === 'failed'
+      ? (latestFinished.info.gateFailure ?? null)
+      : null;
   }
 
   private async persist(handoverAt?: string): Promise<void> {
@@ -770,10 +863,16 @@ export class Orchestrator {
       tokensUsed: { ...this.tokensUsed },
       ciBackoff: { ...this.ciBackoff },
       tripped: { ...this.tripped },
+      ticketFailures: { ...this.ticketFailures },
+      ownerHold: { ...this.ownerHold },
       ...(handoverAt !== undefined ? { handoverAt } : {}),
     };
+    // Temp file + rename: a torn chain.json would lose all control state.
+    const target = path.join(this.deps.root, CHAIN_FILE);
+    const temp = `${target}.${process.pid}.tmp`;
     await fsp
-      .writeFile(path.join(this.deps.root, CHAIN_FILE), `${JSON.stringify(file, null, 2)}\n`, 'utf8')
+      .writeFile(temp, `${JSON.stringify(file, null, 2)}\n`, 'utf8')
+      .then(() => fsp.rename(temp, target))
       .catch((error) => this.deps.log(`chain.json write failed: ${String(error)}`));
   }
 
@@ -824,6 +923,8 @@ export class Orchestrator {
           busyTickets.add(record.info.ticketId);
         }
       }
+      this.holdFailingAndStoppedTickets(snap.columns, busyTickets);
+      const modes = this.modesWithBudget(snap.pipeline);
       const pools = config.pools ?? normalizeFleetPools(undefined);
       await this.refreshProbes(pools);
       const probedSlots: Partial<Record<WorkerProviderId, number | null>> = {};
@@ -845,7 +946,7 @@ export class Orchestrator {
       const plan = planDispatch({
         master: this.master,
         columns: snap.columns,
-        modes: this.columns,
+        modes,
         poolSize: effectivePoolSizes(pools, probedSlots, this.poolShrink, this.now().getTime(), this.quotaPause),
         liveByPool,
         poolOf,
@@ -879,6 +980,63 @@ export class Orchestrator {
     } finally {
       this.passing = false;
     }
+  }
+
+  /**
+   * Tickets the dispatcher must leave alone this pass: one still backing
+   * off after failed runs, and one whose run the owner stopped (released
+   * when the ticket moves or a newer run of it started).
+   */
+  private holdFailingAndStoppedTickets(columns: readonly BoardColumn[], busy: Set<string>): void {
+    const nowMs = this.now().getTime();
+    const cards = new Map<string, string>();
+    for (const column of columns) {
+      for (const card of column.tickets) {
+        cards.set(card.id, card.phase);
+      }
+    }
+    for (const [ticket, failure] of Object.entries(this.ticketFailures)) {
+      if (nowMs < Date.parse(failure.until)) {
+        busy.add(ticket);
+      }
+    }
+    let released = false;
+    for (const [ticket, hold] of Object.entries(this.ownerHold)) {
+      const phase = cards.get(ticket);
+      const restarted = this.allRecords().some(
+        (r) => r.info.ticketId === ticket && Date.parse(r.info.startedAt) > Date.parse(hold.at),
+      );
+      if (phase === undefined || phase !== hold.phase || restarted) {
+        delete this.ownerHold[ticket];
+        released = true;
+        continue;
+      }
+      busy.add(ticket);
+    }
+    if (released) {
+      void this.persist();
+    }
+  }
+
+  /** The column modes with a spent daily token budget read as held — the
+   *  budget used to be checked only after a red gate, never at dispatch. */
+  private modesWithBudget(pipeline: readonly PipelinePhase[]): Record<string, ColumnMode> {
+    const modes: Record<string, ColumnMode> = { ...this.columns };
+    const day = this.stamp().slice(0, 10);
+    for (const phase of pipeline) {
+      const budget = phase.tokenBudget ?? 0;
+      if (budget > 0 && this.tokensDay[phase.id] === day && (this.tokensUsed[phase.id] ?? 0) > budget) {
+        if ((modes[phase.id] ?? 'playing') === 'playing') {
+          const line = `${phase.id} holds: the daily token budget is spent (${this.tokensUsed[phase.id]} of ${budget})`;
+          if (this.budgetNote !== line) {
+            this.budgetNote = line;
+            this.deps.log(line);
+          }
+        }
+        modes[phase.id] = 'held';
+      }
+    }
+    return modes;
   }
 
   /** Logs a per-ticket note once — a later pass with the same reason is
@@ -1052,7 +1210,7 @@ export class Orchestrator {
     // retry also carries the ticket's most recent gate failure. A repo
     // without a checkout lets the request builder refuse below.
     const repoInstructions = repo.path === null ? null : await readRepoInstructions(repo.path, repo.instructions);
-    const gateFailure = this.lastGateFailure(card.id);
+    const gateFailure = this.lastGateFailure(card.id, workingPhaseId);
     const diffStat =
       repo.path === null
         ? null

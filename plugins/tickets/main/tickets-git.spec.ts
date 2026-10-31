@@ -54,6 +54,20 @@ describe('TicketsGit', () => {
     }
   });
 
+  it('retries a command that lost the race for index.lock', async () => {
+    let adds = 0;
+    const { exec } = recorder((args) => {
+      if (args.includes('add')) {
+        adds++;
+        return adds < 3 ? new Error("fatal: Unable to create 'E:/repo/.git/index.lock': File exists.") : '';
+      }
+      return '';
+    });
+    const git = new TicketsGit(() => 'git', exec);
+    await expect(git.commitPaths('E:/repo', ['a.md'], 'msg')).resolves.toBeUndefined();
+    expect(adds).toBe(3);
+  });
+
   it('tolerates a nothing-to-commit outcome', async () => {
     let commitCount = 0;
     const { exec } = recorder((args) => {
