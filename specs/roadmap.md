@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-31):** version 0.8.1, milestones 1–91 built — 1–83
+**Status (2026-10-31):** version 0.8.1, milestones 1–92 built — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -60,7 +60,7 @@ their changelog markers. The owner's verification round for 1–81 closed
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 91 = ticket T-0084; latest requirement id: req-80
+highest used (latest: milestone 92 = fleet stability part 1; milestone 91 = ticket T-0084; latest requirement id: req-80
 (req-80 = fleet token economy; req-75–78 added 2026-10-31: the Work panel, STRIDE, TARA, the red-gate
 back-move; req-79 = the fleet brief's short instructions file; req-74 = due-date reminders, T-0012; req-73 is readable board
 issues, renumbered from req-66 — the tickets remote holds req-66)),
@@ -83,6 +83,27 @@ configurable shortcuts as milestone 75 (ADR-0073) and zen mode (the
 former "Next" item 6) as milestone 81 — see the changelog. All of it is
 owner-verified (verification round closed 2026-10-17), the bug-11 fix
 included.
+
+**Fleet stability, parts 2–4** (owner request, outside the list,
+2026-10-31; part 1 shipped as milestone 92). The analysis of the stuck,
+token-hungry runs leaves, in order: **(M1b)** per-run turn and
+wall-clock limits (claude-code `--max-turns`, `contextCap` for it too,
+warm resume only under the cap), a hang watchdog on `lastActivity` with
+a "looks stuck" flag and a TTL for waiting runs, the gate shell's
+`maxBuffer` and process-tree kill, runner `/shutdown` setting `retiring`;
+**(M2)** a structured `## Handover` block per phase (the next phase and a
+resume read it instead of the Log tail), a resume prompt, the merge-base
+diff stat (`base...HEAD`, not `git diff --stat main`), vault prompts
+versioned against the shipped defaults and the `review` leftovers
+removed, the plan prompt checking that acceptance commands can pass, the
+commit prompt's conflict rule, the agent no longer writing the ticket
+file; **(M3)** the column as a `phase:` frontmatter field — one atomic
+write instead of rename + write, a revision check between runner and
+Drey, CRLF tolerance (alternative if the migration is too big: journal
+the move and add the live-run check to `moveCard`); **(M4)** run notes
+as typed events, the event list and "running" pill of
+`docs/design/work-panel/Ticket.dc.html`, a visible Paused state with a
+Continue button, errors inline in the thread, the Workers view.
 
 **req-75 — The Work panel replaces the kanban board** (owner request,
 outside the list, 2026-10-31; [ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md),

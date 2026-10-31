@@ -446,6 +446,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             usage?: ClaudeUsage;
             total_cost_usd?: number;
             result?: string;
+            is_error?: boolean;
           };
           try {
             event = JSON.parse(line);
@@ -534,6 +535,22 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             const cost = typeof event.total_cost_usd === 'number' ? { costUsd: event.total_cost_usd } : {};
             const question = questionOf(event.result ?? '');
             busy = false;
+            if (event.is_error === true || (typeof event.subtype === 'string' && event.subtype.startsWith('error'))) {
+              // A failed turn (usage limit, auth, max turns, execution error)
+              // is no completion declaration — it used to count as "done" and
+              // a green gate then moved the ticket on.
+              start.onEvent({ ts: nowIso(now), kind: 'usage', tokensIn, tokensOut, cacheReadTokens, ...cost });
+              start.onEvent({
+                ts: nowIso(now),
+                kind: 'error',
+                text: `${event.subtype ?? 'error'}: ${(event.result ?? 'the turn failed').slice(0, 300)}`,
+              });
+              start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'idle' });
+              if (!held) {
+                closeInput();
+              }
+              continue;
+            }
             if (question !== null) {
               // A question to the owner (req-64): the turn is not the
               // step's end — the input stays open for the answer.

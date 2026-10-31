@@ -1,4 +1,46 @@
 
+### Milestone 92 — fleet stability, part 1: the runner stops looping
+
+**Not yet manually verified by the owner.** Owner request, 2026-10-31
+(analysis of stuck tickets, runaway token use, pause/resume).
+Evidence from the live fleet root: runs of 28–87 M input tokens, a
+ticket's failed run re-dispatched at once with its broken session
+resumed, the breaker parking the wrong ticket, the reaper failing runs
+whose last message was "done". Changes (all in `plugins/tickets/main`):
+
+- **Retry discipline per ticket.** Every failed run — a provider error,
+  a run that ended without a result, a reaper kill, not only a red
+  gate — raises a per-ticket counter and an exponential back-off
+  (`failureBackoffMs`: 1, 2, 4 … 30 min, persisted in `chain.json`).
+  At the column's `max-red` the failing ticket is parked in inbox.
+  Quota failures stay the provider's pause, not the ticket's fault.
+- **The breaker parks the ticket that failed**, not the first free
+  ticket of the column (`parkNextCandidate(…, failedTicketId)`).
+- **A stop by the owner is sticky.** The ticket is held (persisted
+  `ownerHold`) until it moves or a newer run of it starts; stops made
+  by the chain itself (column brake, Notaus) do not hold.
+- **The daily token budget gates the dispatch** (a spent column reads
+  as held, logged once), it used to be looked at only after a red gate.
+- **The retry brief carries only the same column's gate failure**, and
+  none once a later run of the ticket there succeeded.
+- **claude-code `result` with `is_error` / `error_*` subtype is an
+  error**, not a completion (usage limit, auth, max turns no longer
+  count as done and no longer let a green gate move the ticket).
+- **The lease reaper replays a lost exit** for a worker that already
+  finished its turn instead of failing the run; the exit handler
+  ignores a second call while its gate runs.
+- **Git:** every ticket-repo command has a timeout (2 min, network verbs
+  10 min) and retries on `index.lock`; `chain.json` is written through a
+  temp file + rename.
+
+Specs: `orchestrator.spec.ts` (back-off, parking the right ticket,
+sticky stop; the retry fixtures now carry their column),
+`providers.spec.ts` (error result), `tickets-git.spec.ts` (lock retry).
+Still open from the analysis — roadmap "Fleet stability": per-run turn /
+wall-clock limits, the hang watchdog, handover blocks and prompt sync
+(part 2), the phase-in-frontmatter column model (part 3), the run
+messages and Workers view as in `docs/design/work-panel/` (part 4).
+
 ### req-81 — the checkpoint actions live in the thread's status row, the Ready card folds
 
 **Not yet manually verified by the owner.** Owner request, 2026-10-31.

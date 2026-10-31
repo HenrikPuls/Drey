@@ -159,6 +159,16 @@ describe('the claude-code adapter', () => {
     expect(events.at(-1)).toMatchObject({ kind: 'usage', turn: 'idle' });
   });
 
+  it('a result that reports an error is an error event, not a completion', () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.stdout(JSON.stringify({ type: 'result', subtype: 'error_max_turns', is_error: true, usage: {}, result: 'Reached max turns' }));
+    expect(events.some((e) => e.kind === 'result')).toBe(false);
+    expect(events.find((e) => e.kind === 'error')?.text).toContain('error_max_turns');
+    expect(proc.stdinWrites.at(-1)).toBe('<<end>>');
+  });
+
   it('a held worker stays open, takes another prompt and ends on release', async () => {
     const proc = fakeProcess();
     const { events, start } = collect();

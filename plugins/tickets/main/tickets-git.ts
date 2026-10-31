@@ -3,7 +3,8 @@
  *
  * A deliberately minimal sibling of the git plugin's runner (plugins
  * cannot import each other): `execFile` on the installed git, no
- * shell, no timeout (ADR-0014 stance), one promise-chain queue per
+ * shell, a generous timeout (a hung git must not wedge the ticket
+ * write queue) and an `index.lock` retry, one promise-chain queue per
  * working directory so a transition's `add` + `commit` never
  * interleaves with the next. The queue key is the vault path — there
  * is exactly one tickets repo, but locate() may probe other folders on
@@ -14,6 +15,11 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const MAX_BUFFER = 16 * 1024 * 1024;
+const LOCAL_TIMEOUT_MS = 2 * 60_000;
+const NETWORK_TIMEOUT_MS = 10 * 60_000;
+/** Another git (an agent's own commit, the owner's UI) holds `index.lock` for a moment. */
+const LOCK_RETRIES = 4;
+const LOCK_RETRY_MS = 250;
 
 export type GitExecutable = () => string;
 
@@ -37,6 +43,9 @@ async function defaultExec(exe: string, args: readonly string[], cwd: string): P
       cwd,
       windowsHide: true,
       maxBuffer: MAX_BUFFER,
+      // A hung git (credential prompt, dead remote) must not hold the ticket
+      // write queue forever; network verbs get longer than local ones.
+      timeout: /^(push|fetch|pull|clone)$/.test(args[0] ?? '') ? NETWORK_TIMEOUT_MS : LOCAL_TIMEOUT_MS,
       encoding: 'utf8',
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' },
     });
@@ -73,7 +82,7 @@ export class TicketsGit {
    *  leaves an unhandled rejection behind and never blocks the next. */
   run(cwd: string, args: readonly string[]): Promise<string> {
     const prev = this.queues.get(cwd) ?? Promise.resolve();
-    const result = prev.then(() => this.exec(this.executable(), args, cwd));
+    const result = prev.then(() => this.execRetryingLock(args, cwd));
     const settled = result.catch(() => undefined);
     this.queues.set(cwd, settled);
     void settled.then(() => {
@@ -82,6 +91,20 @@ export class TicketsGit {
       }
     });
     return result;
+  }
+
+  private async execRetryingLock(args: readonly string[], cwd: string): Promise<string> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.exec(this.executable(), args, cwd);
+      } catch (error) {
+        const text = error instanceof Error ? error.message : String(error);
+        if (attempt >= LOCK_RETRIES || !/index\.lock|Unable to create .*\.lock/i.test(text)) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS * (attempt + 1)));
+      }
+    }
   }
 
   /**
