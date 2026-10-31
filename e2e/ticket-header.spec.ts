@@ -69,7 +69,8 @@ test.describe('Ticket header in the editor (req-62)', () => {
     await expect(head.locator('.tickets-head-id')).toHaveText('T-0042');
     await expect(head.locator('.tickets-head-phase')).toHaveText('Plan');
     await expect(head.locator('select[aria-label="Priority"]')).toHaveValue('high');
-    await expect(head.locator('select[aria-label="Repository"]')).toHaveValue('drey');
+    // req-72: the work repos are checkboxes, the first checked one the primary.
+    await expect(head.locator('[aria-label="Repositories"] input[value="drey"]')).toBeChecked();
     await expect(page.locator('app-editor .cm-fm-pill')).toHaveCount(0);
 
     // The Log folds on first show: its lines are gone, the heading stays.

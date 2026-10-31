@@ -160,7 +160,7 @@ export function runsView(ctx: Ctx): View {
 
 // --- one run ------------------------------------------------------------------
 
-/** Settled runs whose session a message reopens (a detached one counts as live). */
+/** Settled runs whose session a message reopens (a detached one counts as live; one without a session has nothing to reopen). */
 const ENDED: ReadonlySet<string> = new Set(['done', 'stopped', 'failed']);
 
 export function runView(ctx: Ctx, runId: string): View {
@@ -260,7 +260,7 @@ export function runView(ctx: Ctx, runId: string): View {
     input.addEventListener('input', paint);
     paint();
     actions = h('div', { class: 'composer' }, input, node);
-  } else if (ENDED.has(run.state) && !ctx.state.readOnly) {
+  } else if (ENDED.has(run.state) && run.sessionRef !== null && run.sessionRef !== undefined && !ctx.state.readOnly) {
     // Every run takes a message: an ended one reopens its session as a
     // new run, and the view follows it there.
     const input = h('textarea', { class: 'composer-field', attrs: { rows: '1', placeholder: 'Message to reopen the run…', 'aria-label': 'Message to reopen the run', enterkeyhint: 'send' } });

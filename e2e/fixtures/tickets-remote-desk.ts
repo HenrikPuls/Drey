@@ -260,15 +260,18 @@ export function makeDesk() {
       fleetEmit();
       return { ok: true };
     },
-    send: async (cmd: unknown) => {
+    send: async (cmd: { runId: string }) => {
       calls.push({ what: 'send', args: [cmd] });
-      return { ok: true };
+      // A message to an ended run reopens it as a new run (the runner's rule).
+      const ended = runs.find((r) => r['id'] === cmd.runId)?.['state'] === 'stopped';
+      return ended ? { ok: true, rung: 'resume', runId: 'run-2' } : { ok: true };
     },
     stopRun: async (cmd: { runId: string }) => {
       calls.push({ what: 'stop', args: [cmd] });
       const run = runs.find((r) => r['id'] === cmd.runId);
       if (run !== undefined) {
         run['state'] = 'stopped';
+        run['sessionRef'] = 'ses_run-1';
       }
       fleetEmit();
       return { ok: true };

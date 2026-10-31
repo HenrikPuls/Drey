@@ -181,7 +181,15 @@ test('answers a waiting worker, follows and steers the run, and switches the fle
   await expect(stop).toHaveText('Stop?');
   await stop.click();
   expect(calls.at(-1)).toEqual({ what: 'stop', args: [{ runId: 'run-1', reason: 'stopped from a device' }] });
-  await expect(page.locator('.composer')).toHaveCount(0);
+
+  // An ended run still takes a message: it reopens the session as a new run, and the view follows.
+  const reopen = page.locator('.composer-field[placeholder="Message to reopen the run…"]');
+  await expect(reopen).toBeVisible();
+  await expect(page.locator('.composer .btn-danger')).toHaveCount(0);
+  await reopen.fill('Also fold the archive folder.');
+  await page.locator('.composer .btn-primary', { hasText: 'Send' }).click();
+  await expect.poll(() => calls.at(-1)).toEqual({ what: 'send', args: [{ runId: 'run-1', text: 'Also fold the archive folder.' }] });
+  await expect.poll(() => new URL(page.url()).hash).toBe('#run/run-2');
 
   expect(errors).toEqual([]);
 });
