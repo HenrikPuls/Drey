@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ready to try</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#8ecbef}a:hover{color:#f4f5f6}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; display: flex; flex-direction: column; background: #18191b; color: #f4f5f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 18px; overflow: hidden">
+  <div style="height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; background: #222326; border-bottom: 1px solid #3b3d42; color: #b3b7bc">
+    <div style="width: 14px; height: 14px; border-radius: 3px; background: #8ecbef"></div>
+    <span style="color: #f4f5f6">File</span><span>Edit</span><span>Selection</span><span>View</span><span>Help</span>
+    <span style="flex-grow: 1"></span><span>— ▢ ✕</span>
+  </div>
+  <div style="height: 32px; flex-shrink: 0; display: flex; background: #222326; border-bottom: 1px solid #3b3d42">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #18191b; border-right: 1px solid #3b3d42"><span style="width: 8px; height: 8px; border-radius: 4px; background: #bfe3cd"></span>T-0126 · Palette opens twice on slow CI</div>
+  </div>
+  <div style="flex-grow: 1; min-height: 0; display: flex">
+    <div style="flex-grow: 1; min-width: 0; display: flex; justify-content: center; padding: 24px 40px; overflow: hidden">
+      <div style="width: 820px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span style="color: #b3b7bc; font-family: ui-monospace, Consolas, monospace; font-size: 12px">T-0126</span>
+          <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600">Palette opens twice on slow CI</h1>
+          <div style="display: flex; gap: 8px; align-items: center">
+            <span style="border: 1px solid #8ecbef; color: #8ecbef; border-radius: 4px; padding: 0 8px">Auto track</span>
+            <span style="border: 1px solid #3b3d42; border-radius: 4px; padding: 0 8px; color: #b3b7bc">drey</span>
+            <span style="background: #bfe3cd; color: #101113; border-radius: 4px; padding: 1px 8px">Ready to try</span>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 18px; padding: 24px; background: #222326; border: 1px solid #bfe3cd; border-radius: 16px">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <b style="font-size: 15px">What changed for you</b>
+            <span style="font-size: 15px; line-height: 22px">The command palette opens once, even when Ctrl+P is pressed twice in quick succession.</span>
+            <span style="color: #b3b7bc">Nothing else you can see has changed.</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <b style="font-size: 15px">Where</b>
+            <sc-for list="{{files}}" as="f" hint-placeholder-count="3">
+              <div style="display: grid; grid-template-columns: 14px minmax(0, 300px) minmax(0, 1fr); gap: 10px"><span style="color: {{f.fg}}; font-weight: 600">{{f.s}}</span><span style="font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: {{f.fg}}">{{f.path}}</span><span style="color: #b3b7bc">{{f.why}}</span></div>
+            </sc-for>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <b style="font-size: 15px">Checks</b>
+            <sc-for list="{{checks}}" as="c" hint-placeholder-count="4"><span><span style="color: #93c47f">✓</span> {{c}}</span></sc-for>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <b style="font-size: 15px">How to try it</b>
+            <span>1. Launch this version  ·  2. Press Ctrl+P twice, fast  ·  3. One palette opens</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 4px">
+            <div style="display: flex; gap: 8px; align-items: center">
+              <button type="button" style="height: 40px; padding: 0 18px; display: flex; align-items: center; gap: 8px; background: #8ecbef; color: #101113; border: 0; border-radius: 8px; font: inherit; font-size: 15px; font-weight: 600"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4v16l13-8z"></path></svg>Launch this version</button>
+              <button type="button" style="height: 40px; padding: 0 18px; background: transparent; color: #f4f5f6; border: 1px solid #747980; border-radius: 8px; font: inherit; font-size: 15px">Accept and merge</button>
+              <span style="flex-grow: 1"></span>
+              <button type="button" style="height: 40px; padding: 0 14px; background: transparent; color: #b3b7bc; border: 0; font: inherit; font-size: 15px">Send back…</button>
+            </div>
+            <span style="color: #b3b7bc">Launch opens a second Drey from this ticket's worktree, beside the one you are using. Accept merges t/T-0126 into main, pushes, moves the ticket to Done and removes the worktree.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="width: 340px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; padding: 20px; background: #222326; border-left: 1px solid #3b3d42; overflow: hidden">
+      <b style="font-size: 15px">How it got here</b>
+      <sc-for list="{{story}}" as="s" hint-placeholder-count="6">
+        <div style="display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 10px"><span style="color: #b3b7bc">{{s.t}}</span><span style="display: flex; flex-direction: column"><span>{{s.what}}</span><span style="color: #b3b7bc">{{s.who}}</span></span></div>
+      </sc-for>
+      <span style="flex-grow: 1"></span>
+      <span style="color: #b3b7bc; font-size: 12px">You were not asked anything: a one-file bug fix runs on the Auto track. Total 14 min · 96k tokens, all local.</span>
+    </div>
+  </div>
+  <div style="height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; background: #222326; border-top: 1px solid #3b3d42; color: #b3b7bc"><span>Ready to try</span><span style="flex-grow: 1"></span><span style="color: #f2cfae">● 3 need you</span><span>Settings</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      files: [
+        { s: 'M', fg: '#e0bb6e', path: 'src/app/palette/palette.service.ts', why: 'a second open while one is opening is ignored' },
+        { s: 'M', fg: '#e0bb6e', path: 'src/app/palette/palette.service.spec.ts', why: 'two new tests for the double press' },
+        { s: 'M', fg: '#e0bb6e', path: 'specs/changelog.md', why: 'fix entry, marked not yet verified by you' }
+      ],
+      checks: ['412 tests passed, lint, the four typechecks, import cycles', 'rebased on main 2 min ago, no conflicts', 'a second worker reviewed the diff: no findings', 'no overlap with the 3 running tickets'],
+      story: [
+        { t: '09:02', what: 'Captured by voice', who: 'you, from the phone' },
+        { t: '09:02', what: 'Triage: Auto track', who: 'bug, one file, no IPC' },
+        { t: '09:05', what: 'Planned', who: 'Local · qwen3-coder · 2 min' },
+        { t: '09:07', what: 'Built and tested', who: 'Local · qwen3-coder · 9 min' },
+        { t: '09:16', what: 'Reviewed', who: 'Claude Code · haiku · 1 min' },
+        { t: '09:17', what: 'Ready to try', who: 'you were notified' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

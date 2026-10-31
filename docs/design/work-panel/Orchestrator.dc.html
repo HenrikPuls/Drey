@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Orchestrator</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#8ecbef}a:hover{color:#f4f5f6}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; display: flex; flex-direction: column; background: #18191b; color: #f4f5f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 18px; overflow: hidden">
+  <div style="height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; background: #222326; border-bottom: 1px solid #3b3d42; color: #b3b7bc">
+    <div style="width: 14px; height: 14px; border-radius: 3px; background: #8ecbef"></div>
+    <span style="color: #f4f5f6">File</span><span>Edit</span><span>Selection</span><span>View</span><span>Help</span>
+    <span style="flex-grow: 1"></span><span>— ▢ ✕</span>
+  </div>
+  <div style="height: 32px; flex-shrink: 0; display: flex; background: #222326; border-bottom: 1px solid #3b3d42">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #18191b; border-right: 1px solid #3b3d42"><span style="width: 8px; height: 8px; border-radius: 4px; background: #f2cfae"></span>Plan to approve · Voice capture for tickets</div>
+  </div>
+  <div style="flex-grow: 1; min-height: 0; display: flex">
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 24px 32px; overflow: hidden">
+      <div style="display: flex; align-items: flex-end; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <span style="color: #b3b7bc">E-07 · from the Shape dialog · 3 tickets in 3 phases</span>
+          <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600">Voice capture for tickets</h1>
+        </div>
+        <span style="flex-grow: 1"></span>
+        <button type="button" style="height: 32px; padding: 0 14px; background: transparent; color: #f4f5f6; border: 1px solid #747980; border-radius: 8px; font: inherit">Run phase 1 only</button>
+        <button type="button" style="height: 32px; padding: 0 14px; background: #8ecbef; color: #101113; border: 0; border-radius: 8px; font: inherit; font-weight: 600">Approve and run</button>
+      </div>
+      <div style="display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.8fr) minmax(0, 1.6fr); gap: 0 16px; padding: 0 16px; color: #b3b7bc; font-size: 12px">
+        <span>Ticket</span><span>Worker</span><span>Why this route</span><span>Touches</span><span>Runs when</span>
+      </div>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; align-items: center; gap: 8px; color: #b3b7bc"><b style="color: #f4f5f6">Phase {{r.n}}</b><span style="flex-grow: 1; height: 1px; background: #3b3d42"></span></div>
+          <div style="display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.5fr) minmax(0, 2fr) minmax(0, 1.8fr) minmax(0, 1.6fr); gap: 0 16px; align-items: start; padding: 14px 16px; background: #222326; border: 1px solid #3b3d42; border-radius: 8px">
+            <span style="display: flex; flex-direction: column"><b>{{r.title}}</b><span style="color: #b3b7bc">{{r.id}} · drey · main</span></span>
+            <span style="display: flex"><span style="border: 1px solid {{r.fg}}; color: {{r.fg}}; border-radius: 8px; padding: 3px 10px">{{r.worker}} ▾</span></span>
+            <span style="color: #b3b7bc">{{r.why}}</span>
+            <span style="font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: #b3b7bc; white-space: pre-line">{{r.touches}}</span>
+            <span style="display: flex; flex-direction: column; gap: 2px"><span>{{r.when}}</span><span style="color: {{r.okFg}}">{{r.ok}}</span></span>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; padding-left: 16px; color: #b3b7bc"><span style="color: #f4f5f6">Gate</span><span>{{r.gate}}</span></div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="width: 380px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px; padding: 20px; background: #222326; border-left: 1px solid #3b3d42; overflow: hidden">
+      <div style="display: flex; align-items: center; gap: 8px"><b style="font-size: 15px">Routing rules</b><span style="flex-grow: 1"></span><a href="#">Edit</a></div>
+      <sc-for list="{{rules}}" as="u" hint-placeholder-count="5">
+        <div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid #3b3d42"><span>{{u.when}}</span><span style="color: #8ecbef">→ {{u.to}}</span></div>
+      </sc-for>
+      <span style="color: #b3b7bc; font-size: 12px">First match wins. The rules are a file in the tickets repo, so you can read and edit them.</span>
+      <b style="font-size: 15px; margin-top: 8px">Capacity</b>
+      <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px">
+        <span>Local · qwen3-coder</span><span style="color: #b3b7bc">1 of 2 free</span>
+        <span>Claude Code</span><span style="color: #b3b7bc">2 of 3 free</span>
+      </div>
+      <b style="font-size: 15px; margin-top: 8px">Running in drey now</b>
+      <div style="display: flex; flex-direction: column; gap: 2px"><span>Git panel: stage single hunks</span><span style="font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: #b3b7bc">plugins/git/**</span><span style="color: #93c47f">✓ no overlap with this plan</span></div>
+    </div>
+  </div>
+  <div style="height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; background: #222326; border-top: 1px solid #3b3d42; color: #b3b7bc"><span>Plan from the Shape dialog</span><span style="flex-grow: 1"></span><span style="color: #f2cfae">● 3 need you</span><span>Settings</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      rows: [
+        { n: 1, id: 'T-0130', title: 'Ticket hotkey and capture window', worker: 'Local · qwen3-coder', fg: '#8ecbef', why: 'Small and isolated: one main-process file and a new window. Matches “small change”.', touches: 'electron/capture-hotkey.ts\nsrc/app/capture/**', when: 'Now', ok: '✓ no overlap', okFg: '#93c47f', gate: 'tests green, rebased on main → phase 2 starts by itself' },
+        { n: 2, id: 'T-0131', title: 'Dictation hand-off', worker: 'Local · qwen3-coder', fg: '#8ecbef', why: 'Small, but builds on the window from phase 1.', touches: 'src/app/capture/**', when: 'After T-0130', ok: '⚠ shares src/app/capture with T-0130 — waits', okFg: '#e0bb6e', gate: 'tests green, rebased on main → phase 3 starts by itself' },
+        { n: 3, id: 'T-0132', title: 'Tidy up the dictated text', worker: 'Claude Code · opus', fg: '#f2d3e2', why: 'Adds a model prompt: needs the spec update and a second worker’s review.', touches: 'plugins/tickets/main/capture-tidy.ts\nspecs/classifier-spec.md', when: 'After T-0131', ok: '✓ no overlap', okFg: '#93c47f', gate: 'ask me — the whole epic comes to Ready to try' }
+      ],
+      rules: [
+        { when: 'Bug or small change, ≤ 3 files, no IPC', to: 'Local · qwen3-coder, Auto track' },
+        { when: 'Touches electron/ or shared/ipc', to: 'Claude Code · sonnet, plus review' },
+        { when: 'Adds or changes a model prompt', to: 'Claude Code · opus, plus review' },
+        { when: 'Security finding', to: 'Claude Code, plus a second worker’s review' },
+        { when: 'Docs only', to: 'Local · qwen3-coder' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

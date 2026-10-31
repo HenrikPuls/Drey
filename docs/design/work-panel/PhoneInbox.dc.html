@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone: home</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#8ecbef}a:hover{color:#f4f5f6}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: #18191b; color: #f4f5f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 22px; overflow: hidden">
+  <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 8px 8px 0">
+    <button type="button" aria-label="All tickets" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; color: #f4f5f6; padding: 0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h16"></path></svg></button>
+    <span style="flex-grow: 1; display: flex; align-items: center; justify-content: center; gap: 6px"><b>Drey</b><span style="width: 6px; height: 6px; border-radius: 3px; background: #93c47f"></span><span style="color: #b3b7bc; font-size: 12px">desk</span></span>
+    <button type="button" aria-label="Workers" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; color: #f4f5f6; padding: 0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg></button>
+  </div>
+  <div style="flex-grow: 1; overflow: hidden; display: flex; flex-direction: column; padding: 8px 0">
+    <span style="padding: 8px 16px 4px; color: #b3b7bc; font-size: 12px; line-height: 16px">Needs you</span>
+    <sc-for list="{{needs}}" as="t" hint-placeholder-count="3">
+      <a href="{{t.href}}" style="display: flex; gap: 10px; align-items: flex-start; padding: 8px 16px; color: #f4f5f6; text-decoration: none">
+        <span style="width: 8px; height: 8px; border-radius: 4px; background: {{t.dot}}; margin-top: 7px; flex-shrink: 0"></span>
+        <span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{t.title}}</span><span style="color: #b3b7bc; font-size: 13px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{t.line}}</span></span>
+        <span style="color: #b3b7bc; font-size: 12px">{{t.age}}</span>
+      </a>
+    </sc-for>
+    <span style="padding: 14px 16px 4px; color: #b3b7bc; font-size: 12px; line-height: 16px">Running</span>
+    <sc-for list="{{running}}" as="t" hint-placeholder-count="2">
+      <div style="display: flex; gap: 10px; align-items: flex-start; padding: 8px 16px">
+        <span style="width: 8px; height: 8px; border-radius: 4px; background: #8ecbef; margin-top: 7px; flex-shrink: 0"></span>
+        <span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{t.title}}</span><span style="color: #b3b7bc; font-size: 13px; line-height: 18px; font-family: ui-monospace, Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{t.line}}</span></span>
+        <span style="color: #b3b7bc; font-size: 12px">{{t.age}}</span>
+      </div>
+    </sc-for>
+    <span style="padding: 14px 16px 4px; color: #b3b7bc; font-size: 12px; line-height: 16px">Shaping</span>
+    <a href="PhoneShape.dc.html" style="display: flex; gap: 10px; align-items: flex-start; padding: 8px 16px; color: #f4f5f6; text-decoration: none">
+      <span style="width: 8px; height: 8px; border-radius: 4px; background: #f2d3e2; margin-top: 7px; flex-shrink: 0"></span>
+      <span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column"><span>Weekly security audit run</span><span style="color: #b3b7bc; font-size: 13px; line-height: 18px">Paused · one question left</span></span>
+      <span style="color: #b3b7bc; font-size: 12px">1d</span>
+    </a>
+  </div>
+  <div style="padding: 8px 12px 20px">
+    <div style="display: flex; flex-direction: column; gap: 4px; padding: 10px 10px 8px 14px; background: #222326; border: 1px solid #3b3d42; border-radius: 22px">
+      <textarea rows="1" aria-label="Capture an idea" placeholder="Capture an idea…" style="background: transparent; border: 0; color: #f4f5f6; font: inherit; resize: none; padding: 0"></textarea>
+      <div style="display: flex; align-items: center; gap: 6px">
+        <button type="button" aria-label="Attach" style="width: 32px; height: 32px; border-radius: 16px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #3b3d42; color: #b3b7bc; padding: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+        <span style="height: 28px; display: flex; align-items: center; padding: 0 10px; border-radius: 14px; background: #2c2d31; color: #b3b7bc; font-size: 13px">Ideas · drey ▾</span>
+        <span style="flex-grow: 1"></span>
+        <a href="PhoneCapture.dc.html" aria-label="Dictate" style="width: 32px; height: 32px; border-radius: 16px; display: flex; align-items: center; justify-content: center; color: #f4f5f6"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v4"></path></svg></a>
+        <button type="button" aria-label="Send" style="width: 32px; height: 32px; border-radius: 16px; display: flex; align-items: center; justify-content: center; background: #3b3d42; color: #b3b7bc; border: 0; padding: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      needs: [
+        { title: 'Outline: drag headings to reorder', line: 'Asks: move the text below the heading too?', age: '4m', dot: '#f2cfae', href: 'PhoneQuestion.dc.html' },
+        { title: 'Voice capture for tickets', line: 'Plan ready · 3 phases to approve', age: '12m', dot: '#f2cfae', href: 'PhoneQuestion.dc.html' },
+        { title: 'Palette opens twice on slow CI', line: 'Ready to try · checks green', age: '20m', dot: '#bfe3cd', href: 'PhoneQuestion.dc.html' }
+      ],
+      running: [
+        { title: 'Git panel: stage single hunks', line: 'testing · npm run test:plugin -- git', age: '18m' },
+        { title: 'Capture hotkey and window', line: 'building · edit capture-hotkey.ts', age: '6m' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

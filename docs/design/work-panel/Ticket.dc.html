@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ticket thread with live worker</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#8ecbef}a:hover{color:#f4f5f6}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; display: flex; flex-direction: column; background: #18191b; color: #f4f5f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 21px; overflow: hidden">
+  <div style="height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; background: #222326; border-bottom: 1px solid #3b3d42; color: #b3b7bc; font-size: 13px">
+    <div style="width: 14px; height: 14px; border-radius: 3px; background: #8ecbef"></div>
+    <span style="color: #f4f5f6">File</span><span>Edit</span><span>Selection</span><span>View</span><span>Help</span>
+    <span style="flex-grow: 1"></span><span>— ▢ ✕</span>
+  </div>
+  <div style="height: 32px; flex-shrink: 0; display: flex; background: #222326; border-bottom: 1px solid #3b3d42; font-size: 13px">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #18191b; border-right: 1px solid #3b3d42"><span style="width: 8px; height: 8px; border-radius: 4px; background: #8ecbef"></span>Git panel: stage single hunks</div>
+  </div>
+  <div style="flex-grow: 1; min-height: 0; display: flex">
+    <div style="width: 620px; flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid #3b3d42">
+      <div style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 16px; border-bottom: 1px solid #3b3d42">
+        <span style="width: 8px; height: 8px; border-radius: 4px; background: #8ecbef"></span>
+        <b style="font-size: 15px">Testing</b>
+        <span style="color: #b3b7bc; font-size: 12px">Claude Code · sonnet · 18 min · context 44%</span>
+        <span style="flex-grow: 1"></span>
+        <button type="button" title="Pause after the current action" aria-label="Pause" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; color: #f4f5f6; padding: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 5v14M15 5v14"></path></svg></button>
+        <button type="button" title="Take over in a terminal dialog" aria-label="Take over" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; color: #f4f5f6; padding: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-5-6-5M12 19h8"></path></svg></button>
+        <button type="button" title="Stop the worker" aria-label="Stop" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; color: #f08080; padding: 0"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg></button>
+      </div>
+      <div style="flex-grow: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 12px; padding: 16px 20px">
+        <span style="align-self: center; color: #b3b7bc; font-size: 12px">Shaped with you · plan approved yesterday 18:20</span>
+        <div style="display: flex; align-items: center; gap: 8px; color: #b3b7bc; font-size: 13px"><span style="color: #93c47f">✓</span><span>Planned · 4 actions · 6 min</span><span>›</span></div>
+        <div style="display: flex; align-items: center; gap: 8px; color: #b3b7bc; font-size: 13px"><span style="color: #93c47f">✓</span><span>Built · 9 actions · 11 min · 4 files</span><span>›</span></div>
+        <div style="display: flex; flex-direction: column; gap: 2px; font-size: 13px">
+          <div style="display: flex; align-items: center; gap: 8px; color: #f4f5f6"><span style="color: #8ecbef">●</span><span>Testing</span><span style="color: #b3b7bc">⌄</span></div>
+          <div style="display: flex; flex-direction: column; padding-left: 20px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; line-height: 20px; color: #b3b7bc">
+            <span>14:04  ▶ npm run test:plugin -- git  <span style="color: #f08080">41 passed, 1 failed</span></span>
+            <span>14:05  … staging a hunk at the end of a file loses the last newline</span>
+            <span>14:05  <span style="color: #e0bb6e">✎</span> plugins/git/main/apply-patch.ts  +4 −1</span>
+          </div>
+        </div>
+        <div style="align-self: flex-end; max-width: 420px; background: #2c2d31; border-radius: 18px; padding: 8px 14px">Also check a file without any trailing newline.</div>
+        <div>Good point — that case had no test. I added one to <span style="font-family: ui-monospace, Consolas, monospace; font-size: 12px">hunks.spec.ts</span> and I'm running the git suite again.</div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #222326; border-radius: 8px; font-family: ui-monospace, Consolas, monospace; font-size: 12px"><span style="color: #8ecbef">●</span><span style="flex-grow: 1">npm run test:plugin -- git</span><span style="color: #b3b7bc">running · 0:42</span></div>
+      </div>
+      <div style="padding: 8px 16px 16px">
+        <div style="display: flex; gap: 6px; margin-bottom: 8px">
+          <span style="height: 24px; display: flex; align-items: center; padding: 0 10px; border: 1px solid #3b3d42; border-radius: 12px; color: #b3b7bc; font-size: 12px">What are you doing and why?</span>
+          <span style="height: 24px; display: flex; align-items: center; padding: 0 10px; border: 1px solid #3b3d42; border-radius: 12px; color: #b3b7bc; font-size: 12px">Stop after this step</span>
+        </div>
+        <div style="display: flex; align-items: flex-end; gap: 6px; padding: 10px 10px 8px 14px; background: #222326; border: 1px solid #3b3d42; border-radius: 20px">
+          <textarea rows="1" aria-label="Tell the worker" style="flex-grow: 1; background: transparent; border: 0; color: #f4f5f6; font: inherit; resize: none; padding: 4px 0"></textarea>
+          <button type="button" aria-label="Dictate" style="width: 28px; height: 28px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; color: #f4f5f6; padding: 0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v4"></path></svg></button>
+          <button type="button" aria-label="Send" style="width: 28px; height: 28px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: #3b3d42; color: #b3b7bc; border: 0; padding: 0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></button>
+        </div>
+      </div>
+    </div>
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column">
+      <div style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 20px; border-bottom: 1px solid #3b3d42; font-size: 13px">
+        <span style="font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: #b3b7bc">tickets/50-build/T-0124.md</span>
+        <span style="flex-grow: 1"></span>
+        <span style="color: #b3b7bc">you and the worker both edit this file</span>
+      </div>
+      <div style="flex-grow: 1; overflow: hidden; display: flex; gap: 32px; padding: 20px 32px">
+        <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 15px; line-height: 24px">
+          <span style="font-size: 20px; line-height: 30px; font-weight: 600">Description</span>
+          <span>Stage or unstage a single hunk of a changed file from the Source control panel, not only the whole file.</span>
+          <span style="font-size: 20px; line-height: 30px; font-weight: 600; margin-top: 10px">Plan</span>
+          <sc-for list="{{plan}}" as="p" hint-placeholder-count="4">
+            <div style="display: flex; gap: 10px"><span style="color: {{p.fg}}; width: 14px; flex-shrink: 0">{{p.k}}</span><span style="color: {{p.tx}}">{{p.text}}</span></div>
+          </sc-for>
+          <span style="font-size: 20px; line-height: 30px; font-weight: 600; margin-top: 10px">Acceptance criteria</span>
+          <span style="color: #b3b7bc">☑ unit tests for hunk splitting · ☐ e2e with a two-hunk file · ☐ manual entry</span>
+        </div>
+        <div style="width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 19px">
+          <b style="font-size: 14px">Changes so far</b>
+          <sc-for list="{{files}}" as="c" hint-placeholder-count="4">
+            <div style="display: flex; gap: 8px; align-items: center"><span style="color: {{c.fg}}; font-weight: 600; width: 12px">{{c.s}}</span><span style="flex-grow: 1; min-width: 0; font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: {{c.fg}}">{{c.path}}</span><span style="color: #b3b7bc; font-size: 12px">{{c.d}}</span></div>
+          </sc-for>
+          <b style="font-size: 14px; margin-top: 10px">Safe beside others</b>
+          <span style="color: #b3b7bc"><span style="color: #93c47f">✓</span> own worktree · t/T-0124</span>
+          <span style="color: #b3b7bc"><span style="color: #93c47f">✓</span> no overlap with running tickets</span>
+          <span style="color: #b3b7bc"><span style="color: #93c47f">✓</span> rebased on main 9 min ago</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; background: #222326; border-top: 1px solid #3b3d42; color: #b3b7bc; font-size: 13px"><span>Worker driving · you can step in any time</span><span style="flex-grow: 1"></span><span style="color: #f2cfae">● 3 need you</span><span>Settings</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const ink = '#f4f5f6', dim = '#b3b7bc';
+    return {
+      plan: [
+        { k: '✓', fg: '#93c47f', tx: dim, text: 'Split a file diff into hunks in main (pure, tested)' },
+        { k: '✓', fg: '#93c47f', tx: dim, text: 'Hunk rows with Stage / Unstage in the Source control panel' },
+        { k: '●', fg: '#8ecbef', tx: ink, text: 'Apply one hunk through git apply --cached' },
+        { k: '○', fg: dim, tx: dim, text: 'Manual entry, changelog, e2e test with a two-hunk file' }
+      ],
+      files: [
+        { s: 'A', fg: '#93c47f', path: 'plugins/git/main/hunks.ts', d: '+86' },
+        { s: 'M', fg: '#e0bb6e', path: 'plugins/git/main/apply-patch.ts', d: '+4 −1' },
+        { s: 'M', fg: '#e0bb6e', path: 'plugins/git/renderer/hunk-view.ts', d: '+40' },
+        { s: 'A', fg: '#93c47f', path: 'plugins/git/main/hunks.spec.ts', d: '+138' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

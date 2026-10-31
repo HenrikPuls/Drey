@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>All workers</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#8ecbef}a:hover{color:#f4f5f6}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; display: flex; flex-direction: column; background: #18191b; color: #f4f5f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif; font-size: 13px; line-height: 18px; overflow: hidden">
+  <div style="height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; background: #222326; border-bottom: 1px solid #3b3d42; color: #b3b7bc">
+    <div style="width: 14px; height: 14px; border-radius: 3px; background: #8ecbef"></div>
+    <span style="color: #f4f5f6">File</span><span>Edit</span><span>Selection</span><span>View</span><span>Help</span>
+    <span style="flex-grow: 1"></span><span>— ▢ ✕</span>
+  </div>
+  <div style="height: 32px; flex-shrink: 0; display: flex; background: #222326; border-bottom: 1px solid #3b3d42">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 0 14px; background: #18191b; border-right: 1px solid #3b3d42">Workers</div>
+  </div>
+  <div style="flex-grow: 1; min-height: 0; display: flex; flex-direction: column; gap: 16px; padding: 24px 32px; overflow: hidden">
+    <div style="display: flex; align-items: center; gap: 16px">
+      <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600">Workers</h1>
+      <span style="border: 1px solid #3b3d42; border-radius: 8px; padding: 4px 10px">Local · qwen3-coder <b>2/2</b></span>
+      <span style="border: 1px solid #3b3d42; border-radius: 8px; padding: 4px 10px">Claude Code <b>2/3</b></span>
+      <span style="color: #b3b7bc">1 queued · Win+H hand-off waits for T-0130</span>
+      <span style="flex-grow: 1"></span>
+      <button type="button" style="height: 32px; padding: 0 14px; background: transparent; color: #f4f5f6; border: 1px solid #747980; border-radius: 8px; font: inherit">Pause all after this step</button>
+      <button type="button" style="height: 32px; padding: 0 14px; background: transparent; color: #f08080; border: 1px solid #747980; border-radius: 8px; font: inherit">Stop all</button>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+      <sc-for list="{{workers}}" as="w" hint-placeholder-count="4">
+        <div style="display: flex; flex-direction: column; gap: 10px; padding: 16px; background: #222326; border: 1px solid {{w.edge}}; border-radius: 16px; min-height: 300px; box-sizing: border-box">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span style="width: 10px; height: 10px; border-radius: 5px; background: {{w.light}}"></span>
+            <b style="font-size: 15px; flex-grow: 1; min-width: 0">{{w.title}}</b>
+            <span style="color: #b3b7bc">{{w.time}}</span>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; color: #b3b7bc"><span style="color: {{w.light}}; font-weight: 600">{{w.state}}</span><span>·</span><span>{{w.worker}}</span><span>·</span><span>context {{w.ctx}}</span></div>
+          <div style="padding: 10px 12px; background: #18191b; border-radius: 8px; display: flex; flex-direction: column; gap: 2px">
+            <span style="color: #b3b7bc; font-size: 12px">Now</span>
+            <span style="font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: #f4f5f6">{{w.now}}</span>
+            <span style="font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: #b3b7bc; white-space: pre-line">{{w.before}}</span>
+          </div>
+          <sc-if value="{{w.hint}}" hint-placeholder-val="{{true}}"><div style="color: {{w.light}}">{{w.hintText}}</div></sc-if>
+          <sc-if value="{{w.steer}}" hint-placeholder-val="{{false}}">
+            <div style="display: flex; gap: 8px"><input type="text" aria-label="Tell the worker" value="Use the chord grammar from shared/keybindings.ts, don’t write a new parser" style="flex-grow: 1; height: 32px; box-sizing: border-box; background: #2c2d31; border: 1px solid #8ecbef; border-radius: 8px; color: #f4f5f6; font: inherit; padding: 0 10px"><button type="button" style="height: 32px; padding: 0 14px; background: #8ecbef; color: #101113; border: 0; border-radius: 8px; font: inherit; font-weight: 600">Send</button></div>
+          </sc-if>
+          <span style="flex-grow: 1"></span>
+          <div style="display: flex; gap: 8px; align-items: center">
+            <sc-for list="{{w.actions}}" as="a"><button type="button" style="height: 28px; padding: 0 10px; background: {{a.bg}}; color: {{a.fg}}; border: 1px solid {{a.bd}}; border-radius: 8px; font: inherit">{{a.label}}</button></sc-for>
+            <span style="flex-grow: 1"></span>
+            <a href="Ticket.dc.html">Open ticket</a>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  <div style="height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 16px; padding: 0 12px; background: #222326; border-top: 1px solid #3b3d42; color: #b3b7bc"><span>4 workers · today 1.9M tokens</span><span style="flex-grow: 1"></span><span style="color: #f2cfae">● 3 need you</span><span>Settings</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const btn = (label) => ({ label, bg: 'transparent', fg: '#f4f5f6', bd: '#747980' });
+    const stop = { label: 'Stop', bg: 'transparent', fg: '#f08080', bd: '#747980' };
+    const primary = (label) => ({ label, bg: '#8ecbef', fg: '#101113', bd: '#8ecbef' });
+    return {
+      workers: [
+        { title: 'Git panel: stage single hunks', state: 'Testing', worker: 'Claude Code · sonnet', ctx: '44%', time: '18 min', light: '#8ecbef', edge: '#3b3d42',
+          now: 'npm run test:plugin -- git   running…', before: 'edit plugins/git/main/apply-patch.ts   +4 −1\nnpm run test:plugin -- git   41 passed, 1 failed',
+          hint: false, hintText: '', steer: false, actions: [btn('Pause'), btn('Tell…'), btn('Take over'), stop] },
+        { title: 'Capture hotkey and window', state: 'Building', worker: 'Local · qwen3-coder', ctx: '22%', time: '6 min', light: '#8ecbef', edge: '#8ecbef',
+          now: 'edit electron/capture-hotkey.ts', before: 'read shared/keybindings.ts\nread electron/main.ts',
+          hint: false, hintText: '', steer: true, actions: [btn('Pause'), btn('Take over'), stop] },
+        { title: 'Outline: drag headings to reorder', state: 'Waiting for you', worker: 'Local · qwen3-coder', ctx: '31%', time: '20 min', light: '#f2cfae', edge: '#f2cfae',
+          now: 'asks: Should dragging a heading also move the text below it?', before: 'plan step 2 of 4 · outline tests green',
+          hint: false, hintText: '', steer: false, actions: [primary('Answer'), btn('Take over'), stop] },
+        { title: 'Settings search field', state: 'Looks stuck', worker: 'Local · qwen3-coder', ctx: '78%', time: '27 min', light: '#e0bb6e', edge: '#e0bb6e',
+          now: 'read src/app/settings/settings-shell.ts', before: 'read the same 4 files 6 times\nno edit for 9 min',
+          hint: true, hintText: 'No progress for 9 minutes and the context is filling up.', steer: false, actions: [btn('Nudge'), btn('Hand to Claude Code'), stop] }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
