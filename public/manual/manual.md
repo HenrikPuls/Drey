@@ -1109,6 +1109,12 @@ On the phone, four tabs sit at the bottom:
   now), then the recent ones. Tap one to follow it.
 - **Capture** — a new ticket into the Inbox: title, priority,
   repository, description.
+- **Images.** Wherever a Description or Plan text is edited on the
+  phone, an image can go straight in: paste it into the field, or tap
+  **Image** and pick one. It is uploaded to the desk, saved in the
+  tickets vault under `tickets/attachments/` and embedded where the
+  cursor sits — PNG, JPEG, GIF or WebP, up to 6 MB. The desk shows it
+  like any embedded image.
 
 **Answering a worker.** A worker's question shows its choices as
 buttons right in Needs you — a question with one choice is answered
@@ -1116,14 +1122,23 @@ with one tap; or type your own words. A permission request offers
 **Once**, **Always** and **Reject**.
 
 **Following a run.** A run shows the worker's steps (each tool call on
-one line), its replies, and what it waits for. Type in **Steer the
-run…** and **Send** to tell the worker something; **Stop** ends the run
-(tap twice).
+one line), its replies, and what it waits for. The ticket's title and
+the run's numbers (state, model, tokens, how long it has been running)
+stay pinned under the top bar while the transcript scrolls on. The one
+button beside **Steer the run…** does both jobs: with something typed
+it is **Send** (tell the worker something); over an empty field it is
+**Stop**, which ends the run (tap twice). An ended run still takes a
+message: type into **Message to reopen the run…** and **Send** picks
+its session up again as a new run, which the view then shows. The same
+works in the desk's run tab — its prompt box stays open after the run
+ended.
 
 **Refining a ticket.** On a ticket, **Edit** beside Description, Plan
 or Acceptance criteria opens that part for editing (a missing part
 shows as **+ Plan** and the like); **⋯ → Refine title, priority,
-repository** edits the header. **Save** makes one commit and a Log line
+repository** edits the header. Description and Plan take pasted or
+picked images (see **Images** above); Acceptance criteria do not —
+they are the gate's commands. **Save** makes one commit and a Log line
 naming your device. What you type is kept on the device until it is
 saved, so leaving the screen loses nothing. If the ticket changed on the
 desk in the meantime, the save is refused and your text stays: tap
@@ -1134,11 +1149,13 @@ save there.
 
 **On an iPad.** From tablet width the Board shows every column side by
 side, scrolling sideways; in landscape the ticket you tap opens in a
-pane beside the board, with the same buttons as on the phone. To move a
-card, **press and hold it** until it lifts, then drag it — into another
-column to move it there, or up and down in its column to change the
-order (a blue line shows where it lands). Moving your finger before the
-card lifts scrolls instead. **Move…** works here too.
+pane beside the board, with the same buttons as on the phone. While the
+board redraws live — a card moves, the desk saves a ticket — the pane
+and each column keep their scroll position. To move a card, **press and
+hold it** until it lifts, then drag it — into another column to move it
+there, or up and down in its column to change the order (a blue line
+shows where it lands). Moving your finger before the card lifts scrolls
+instead. **Move…** works here too.
 
 **The fleet's switches.** The chip at the top right (*Running*,
 *Halted*) opens the fleet switch: **Run** / **Halt** for every column,
@@ -1528,7 +1545,7 @@ history store is deliberately outside it).
 ---
 
 *Manual for Drey 0.7.1; manual content last changed
-2026-10-30. Screenshots were captured automatically from
+2026-10-31. Screenshots were captured automatically from
 the built app (Anthrazit theme, 1600Ã—1000) by
 `e2e/manual-screenshots.spec.ts` — run
 `$env:DREY_MANUAL_SHOTS='1'; npm run e2e:run -- manual-screenshots`
