@@ -11,7 +11,7 @@
  * patch helpers Drey's board service uses, so the semantics cannot
  * drift.
  */
-import { exec as nodeExec, execFile as nodeExecFile } from 'node:child_process';
+import { execFile as nodeExecFile, spawn as nodeSpawn } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
@@ -40,7 +40,6 @@ import {
 import { capTail, SANITY_CAP } from './capping';
 import { TelemetryFold, type RunTelemetry } from './telemetry';
 
-const execAsync = promisify(nodeExec);
 const execFileAsync = promisify(nodeExecFile);
 
 /**
@@ -63,7 +62,53 @@ export const probeExec =
  * same semantics.
  */
 export const execShell = (command: string, cwd: string): Promise<void> =>
-  execAsync(command, { cwd, windowsHide: true, timeout: 30 * 60_000 }).then(() => undefined);
+  new Promise<void>((resolve, reject) => {
+    // `exec` capped its buffer at 1 MB (a chatty passing command failed the
+    // gate) and its timeout killed only the shell on Windows, leaving the
+    // command tree running. A spawn keeps just the output's tail and kills
+    // the whole tree on the timeout.
+    const child = nodeSpawn(command, { cwd, shell: true, windowsHide: true });
+    let output = '';
+    const keep = (chunk: Buffer): void => {
+      output += chunk.toString('utf8');
+      if (output.length > 2 * SHELL_OUTPUT_KEEP) {
+        output = output.slice(-SHELL_OUTPUT_KEEP);
+      }
+    };
+    child.stdout?.on('data', keep);
+    child.stderr?.on('data', keep);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      if (process.platform === 'win32' && child.pid !== undefined) {
+        nodeExecFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], () => undefined);
+      } else {
+        child.kill('SIGKILL');
+      }
+    }, SHELL_TIMEOUT_MS);
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0 && !timedOut) {
+        resolve();
+        return;
+      }
+      const why = timedOut ? `timed out after ${SHELL_TIMEOUT_MS / 60_000} minutes` : `exited with code ${code ?? 'signal'}`;
+      reject(Object.assign(new Error(`Command failed: ${command} — ${why}`), { stdout: output.trim(), code }));
+    });
+  });
+
+/** A working run silent this long is flagged "looks stuck"... */
+export const STUCK_FLAG_MS = 10 * 60_000;
+/** ...and failed (back-off retry) after this much silence. */
+export const STUCK_FAIL_MS = 40 * 60_000;
+
+const SHELL_TIMEOUT_MS = 30 * 60_000;
+/** The output tail a failed gate command keeps for its failure text. */
+const SHELL_OUTPUT_KEEP = 256 * 1024;
 
 export interface StoredRun {
   readonly request: RunRequest;
@@ -130,6 +175,37 @@ export interface RunSupervisorDeps {
    * run; the audit round never samples again.
    */
   readonly secondOpinion?: (request: RunRequest) => Promise<string | null>;
+  /** Per-run ceilings (0 = unlimited); a run that passes one is failed, never retried at once. */
+  readonly limits?: Partial<RunLimits>;
+}
+
+/** What one run may spend before the reaper stops it. */
+export interface RunLimits {
+  /** Model turns (the telemetry's count — an upper estimate). */
+  readonly maxTurns: number;
+  /** Working time in ms: busy spans only, a wait for the owner does not tick. */
+  readonly maxWorkMs: number;
+}
+
+/**
+ * Observed on the live fleet: ordinary runs end within 20 turns / 20 minutes,
+ * the heavy legitimate ones within ~170 turns / 76 minutes; the runaways
+ * (400 turns, 128 min, 87 M tokens in) are what these stop.
+ */
+export const DEFAULT_RUN_LIMITS: RunLimits = { maxTurns: 250, maxWorkMs: 90 * 60_000 };
+
+/** The reason a run passed its ceiling, or null while it stays inside. */
+export function limitExceeded(info: RunInfo, limits: RunLimits, nowMs: number): string | null {
+  const turns = info.turns ?? 0;
+  if (limits.maxTurns > 0 && turns > limits.maxTurns) {
+    return `${turns} turns, over the limit of ${limits.maxTurns}`;
+  }
+  const open = info.execSince !== undefined && info.execSince !== null ? nowMs - (Date.parse(info.execSince) || nowMs) : 0;
+  const worked = (info.execMs ?? 0) + Math.max(0, open);
+  if (limits.maxWorkMs > 0 && worked > limits.maxWorkMs) {
+    return `${Math.round(worked / 60_000)} min of work, over the limit of ${Math.round(limits.maxWorkMs / 60_000)} min`;
+  }
+  return null;
 }
 
 interface LiveRun {
@@ -1419,6 +1495,7 @@ export class RunSupervisor {
     let next: RunInfo = {
       ...run.info,
       lastActivity: event.ts,
+      ...(run.info.stuck === true ? { stuck: false } : {}),
       ...(event.activity !== undefined && event.activity !== '' ? { activity: event.activity } : {}),
       ...(event.contextTokens !== undefined ? { contextTokens: event.contextTokens } : {}),
       ...(event.contextWindow !== undefined ? { contextWindow: event.contextWindow } : {}),
@@ -1533,6 +1610,30 @@ export class RunSupervisor {
       if (TERMINAL.includes(state) || state === 'detached' || state === 'stopping' || run.gating || run.handover !== undefined) {
         continue;
       }
+      if (run.info.held !== true && run.request.interactive === undefined && !run.agentDone) {
+        const over = limitExceeded(run.info, { ...DEFAULT_RUN_LIMITS, ...this.deps.limits }, this.now().getTime());
+        if (over !== null) {
+          const message = `run limit: ${over}`;
+          run.info = { ...run.info, lastError: message };
+          await this.logLine(run, `${message} — the run is stopped; the step fails and backs off`);
+          if (run.handle !== null) {
+            await run.handle.stop().catch(() => undefined);
+          }
+          await this.finish(run, 'failed');
+          continue;
+        }
+      }
+      if (this.watchSilence(run)) {
+        const quietMin = Math.round(this.silenceMs(run) / 60_000);
+        const message = `hung: no output for ${quietMin} min`;
+        run.info = { ...run.info, lastError: message };
+        await this.logLine(run, `${message} — the run is stopped; the step fails and backs off`);
+        if (run.handle !== null) {
+          await run.handle.stop().catch(() => undefined);
+        }
+        await this.finish(run, 'failed');
+        continue;
+      }
       // The opencode handle reports its pid only once the server has
       // booted — re-read it before judging "never started" (T-0007
       // review: the reaper killed runs whose agents were mid-flight).
@@ -1572,6 +1673,41 @@ export class RunSupervisor {
         await this.finish(run, 'failed');
       }
     }
+  }
+
+  private silenceMs(run: LiveRun): number {
+    const last = Math.max(run.startedAtMs, Date.parse(run.info.lastActivity) || 0);
+    return this.now().getTime() - last;
+  }
+
+  /**
+   * The hang watchdog (M1b): a working run (not held, not waiting on the
+   * owner, not standing idle, not gating) that has produced nothing for
+   * STUCK_FLAG_MS is flagged `stuck` once; past STUCK_FAIL_MS it is
+   * reported so the caller fails it. A local model may think for minutes
+   * (ADR-0014) — hence the long fuses.
+   */
+  private watchSilence(run: LiveRun): boolean {
+    const working =
+      run.info.state === 'running' &&
+      run.info.held !== true &&
+      run.request.interactive === undefined &&
+      (run.info.waiting === undefined || run.info.waiting === null) &&
+      run.info.turn !== 'idle' &&
+      !run.gating &&
+      !run.agentDone;
+    if (!working) {
+      return false;
+    }
+    const silence = this.silenceMs(run);
+    if (silence > STUCK_FAIL_MS) {
+      return true;
+    }
+    if (silence > STUCK_FLAG_MS && run.info.stuck !== true) {
+      run.info = { ...run.info, stuck: true };
+      void this.logLine(run, `looks stuck: no output for ${Math.round(silence / 60_000)} min`).then(() => this.persist(run));
+    }
+    return false;
   }
 
   /** The run's last sign of life is older than two minutes. */

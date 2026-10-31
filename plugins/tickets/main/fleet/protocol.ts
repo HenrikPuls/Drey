@@ -497,6 +497,12 @@ export interface RunInfo {
   readonly lastTurnContext?: number | null;
   /** How many model calls reported usage. */
   readonly turns?: number;
+  /**
+   * The worker has been silent for a long while (the hang watchdog, M1b):
+   * the board shows "looks stuck". Cleared by the next event; absent on
+   * records written before the watchdog existed.
+   */
+  readonly stuck?: boolean;
   /** Read/grep/glob tool calls — the exploration counter. */
   readonly readCalls?: number;
   /**
