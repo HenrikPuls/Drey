@@ -22,6 +22,7 @@ import type {
 } from '../../../shared/plugin-api';
 import {
   nextTicketId,
+  TICKET_PRIORITIES,
   TICKETS_ARCHIVE_DIR,
   type BoardSnapshot,
   type FolderStatus,
@@ -395,6 +396,40 @@ class BoardService {
       this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [card.path] });
       this.announceChanged();
       return { ok: true, revision: revisionOf(refined), ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The Work panel's priority chip (req-74 W1): the refine rewrite of the
+   * one header key, so the commit and the Log line are a refine's
+   * (`tickets: <id> refined`, `refined (priority)`). No revision check —
+   * the owner clicked on what the board shows; a live run refuses like
+   * every refine.
+   */
+  setPriority(input: { id: string; priority: TicketPriority; actor?: string }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const found = await this.findCard(input.id);
+      if (found === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const { vault, card, text } = found;
+      if (card.meta.priority === input.priority) {
+        return { ok: true };
+      }
+      if (card.meta.run !== null) {
+        return { ok: false, error: 'A run is live on this ticket. Change the priority when the run has ended.' };
+      }
+      let refined: string;
+      try {
+        refined = refineTicket(text, { sections: {}, header: { priority: input.priority } }, input.actor ?? OWNER, new Date());
+        await this.ctx.vault.write(card.path, refined, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const warning = await this.commit(vault, [card.path], `tickets: ${input.id} refined`);
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [card.path] });
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
     });
   }
 
@@ -2105,6 +2140,14 @@ const plugin: MainPluginModule = {
     ctx.ipc.handle('claim', async (payload) => {
       const cmd = parseClaim(payload);
       return cmd.ok ? board.setClaim(cmd.value) : cmd;
+    });
+
+    ctx.ipc.handle('setPriority', async (payload) => {
+      const p = (payload ?? {}) as { id?: unknown; priority?: unknown };
+      if (typeof p.id !== 'string' || !TICKET_PRIORITIES.includes(p.priority as TicketPriority)) {
+        return { ok: false, error: 'bad priority payload' };
+      }
+      return board.setPriority({ id: p.id, priority: p.priority as TicketPriority });
     });
 
     // The settings dialog's writer: one phase's pool keys, one commit (M85).
