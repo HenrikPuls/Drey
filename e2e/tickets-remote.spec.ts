@@ -181,7 +181,11 @@ test('answers a waiting worker, follows and steers the run, and switches the fle
   await expect(stop).toHaveText('Stop?');
   await stop.click();
   expect(calls.at(-1)).toEqual({ what: 'stop', args: [{ runId: 'run-1', reason: 'stopped from a device' }] });
-  await expect(page.locator('.composer')).toHaveCount(0);
+  // An ended run keeps its composer — it reopens the run with a message
+  // (the req-66 follow-up); only the Stop button is gone. This assertion
+  // was stale from before that change: the composer itself stays.
+  await expect(page.locator('.composer .btn-danger')).toHaveCount(0);
+  await expect(page.locator('.composer textarea')).toHaveAttribute('aria-label', 'Message to reopen the run');
 
   expect(errors).toEqual([]);
 });
