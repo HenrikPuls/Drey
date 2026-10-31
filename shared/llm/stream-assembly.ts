@@ -157,29 +157,31 @@ export function createAnthropicEventSink(): StreamSink {
       content_block?: { type?: unknown; text?: unknown; id?: unknown; name?: unknown };
       delta?: { type?: unknown; text?: unknown; partial_json?: unknown; stop_reason?: unknown };
     };
-    if (event.type === 'content_block_start' && typeof event.index === 'number') {
+    if (event.type === 'content_block_start' && (event.index === undefined || typeof event.index === 'number')) {
+      const index = typeof event.index === 'number' ? event.index : 0;
       const started = event.content_block;
       if (started?.type === 'tool_use') {
-        blocks.set(event.index, {
+        blocks.set(index, {
           kind: 'tool_use',
           ...(typeof started.id === 'string' && started.id !== '' ? { id: started.id } : {}),
           ...(typeof started.name === 'string' && started.name !== '' ? { name: started.name } : {}),
           json: '',
         });
       } else {
-        blocks.set(event.index, { kind: 'text', text: typeof started?.text === 'string' ? started.text : '' });
+        blocks.set(index, { kind: 'text', text: typeof started?.text === 'string' ? started.text : '' });
       }
-      if (!order.includes(event.index)) {
-        order.push(event.index);
+      if (!order.includes(index)) {
+        order.push(index);
       }
       if (started?.type === 'text' && typeof started.text === 'string' && started.text.length > 0) {
         return started.text;
       }
       return null;
     }
-    if (event.type === 'content_block_delta' && typeof event.index === 'number') {
+    if (event.type === 'content_block_delta' && (event.index === undefined || typeof event.index === 'number')) {
+      const index = typeof event.index === 'number' ? event.index : 0;
       if (event.delta?.type === 'text_delta' && typeof event.delta.text === 'string') {
-        const target = lazy(event.index, (): TextBlock => ({ kind: 'text', text: '' }));
+        const target = lazy(index, (): TextBlock => ({ kind: 'text', text: '' }));
         if (target.kind !== 'text') {
           return null;
         }
@@ -190,7 +192,7 @@ export function createAnthropicEventSink(): StreamSink {
         event.delta?.type === 'input_json_delta' &&
         typeof event.delta.partial_json === 'string'
       ) {
-        const target = lazy(event.index, (): ToolBlock => ({ kind: 'tool_use', json: '' }));
+        const target = lazy(index, (): ToolBlock => ({ kind: 'tool_use', json: '' }));
         if (target.kind !== 'tool_use') {
           return null;
         }

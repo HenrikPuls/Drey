@@ -238,8 +238,68 @@ describe('OpenAiCompatProvider.chat', () => {
 });
 
 describe('OpenAiCompatProvider tool loop', () => {
-  it('runs the requested tool, feeds the result back and returns the trace', async () => {
+  const sse = (payload: unknown): string => `data: ${JSON.stringify(payload)}\n\n`;
+  const content = (text: string): unknown => ({ choices: [{ delta: { content: text } }] });
+  const toolFragment = (fragment: Record<string, unknown>): unknown => ({
+    choices: [{ delta: { tool_calls: [fragment] } }],
+  });
+  const finish = (reason: string): unknown => ({ choices: [{ delta: {}, finish_reason: reason }] });
+  const DONE = 'data: [DONE]\n\n';
+
+  it('streams a tool round: interim text, the call, then the streamed answer', async () => {
     const { requests } = script(
+      streamReply([
+        sse(content('Let me look.')),
+        sse(toolFragment({ index: 0, id: 'call-1', function: { name: 'vault_read', arguments: '' } })),
+        sse(toolFragment({ index: 0, function: { arguments: '{"path":"a.md"}' } })),
+        sse(finish('tool_calls')),
+        DONE,
+      ]),
+      streamReply([sse(content('The note says hi.')), DONE]),
+    );
+    const onToolCall = vi.fn(async () => 'note body');
+    const deltas: string[] = [];
+
+    const result = await provider().client.chat(USER, {
+      tools: [READ_TOOL],
+      onToolCall,
+      onDelta: (delta) => deltas.push(delta),
+    });
+
+    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}');
+    expect(result.text).toBe('The note says hi.');
+    expect(result.toolTrace?.map((turn) => turn.role)).toEqual(['assistant', 'tool']);
+
+    expect(requests).toHaveLength(2);
+    expect(requests[0].body?.['tool_choice']).toBe('auto');
+    expect(requests[0].body?.['stream']).toBe(true);
+    expect(requests[1].body?.['stream']).toBe(true);
+    const second = requests[1].body?.['messages'] as ChatMessage[];
+    expect(second.map((turn) => turn.role)).toEqual(['user', 'assistant', 'tool']);
+    expect(second[2]).toEqual({ role: 'tool', tool_call_id: 'call-1', content: 'note body' });
+
+    // Every round streamed: interim text, answer text — and no full-text repeat.
+    expect(deltas).toEqual(['Let me look.', 'The note says hi.']);
+  });
+
+  it('runs the loop non-streamed when the caller cannot stream', async () => {
+    const { requests } = script(
+      toolCallReply('call-1', 'vault_read', '{"path":"a.md"}'),
+      completion('The note says hi.'),
+    );
+    const onToolCall = vi.fn(async () => 'note body');
+
+    const result = await provider().client.chat(USER, { tools: [READ_TOOL], onToolCall });
+
+    expect(result.text).toBe('The note says hi.');
+    expect(requests[0].body?.['stream']).toBe(false);
+    expect(requests[1].body?.['stream']).toBe(false);
+    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}');
+  });
+
+  it('retries a refused streamed round non-streamed, and stops streaming the call', async () => {
+    const { requests } = script(
+      textReply('stream not supported with tools', 400),
       toolCallReply('call-1', 'vault_read', '{"path":"a.md"}'),
       completion('The note says hi.'),
     );
@@ -248,19 +308,37 @@ describe('OpenAiCompatProvider tool loop', () => {
 
     const result = await provider().client.chat(USER, { tools: [READ_TOOL], onToolCall, onDelta });
 
-    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}');
     expect(result.text).toBe('The note says hi.');
-    expect(result.toolTrace?.map((turn) => turn.role)).toEqual(['assistant', 'tool']);
-
-    expect(requests).toHaveLength(2);
-    expect(requests[0].body?.['tool_choice']).toBe('auto');
-    expect(requests[0].body?.['stream']).toBe(false);
-    const second = requests[1].body?.['messages'] as ChatMessage[];
-    expect(second.map((turn) => turn.role)).toEqual(['user', 'assistant', 'tool']);
-    expect(second[2]).toEqual({ role: 'tool', tool_call_id: 'call-1', content: 'note body' });
-
-    // The loop is not streamed; the caller still gets its one delta.
+    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}');
+    // The streamed attempt, its non-streamed retry, and the answer round
+    // (which goes non-streamed directly — the call stopped streaming).
+    expect(requests).toHaveLength(3);
+    expect(requests[0].body?.['stream']).toBe(true);
+    expect(requests[1].body?.['stream']).toBe(false);
+    expect(requests[1].body?.['tools']).toBeDefined();
+    expect(requests[2].body?.['stream']).toBe(false);
+    // Nothing streamed: the final text arrives as exactly one call.
     expect(onDelta).toHaveBeenCalledExactlyOnceWith('The note says hi.');
+  });
+
+  it('concludes tools-rejected only when the non-streamed retry refuses the tools too', async () => {
+    const { requests } = script(
+      textReply('stream not supported', 400),
+      textReply('unknown field tools', 400),
+      completion('plain answer'),
+    );
+    const onToolCall = vi.fn(async () => '');
+    const onDelta = vi.fn();
+
+    const result = await provider().client.chat(USER, { tools: [READ_TOOL], onToolCall, onDelta });
+
+    expect(result).toEqual({ text: 'plain answer', toolsDropped: true });
+    expect(requests[0].body?.['stream']).toBe(true);
+    expect(requests[0].body).toHaveProperty('tools');
+    expect(requests[1].body?.['stream']).toBe(false);
+    expect(requests[1].body).toHaveProperty('tools');
+    expect(requests[2].body).not.toHaveProperty('tools');
+    expect(onToolCall).not.toHaveBeenCalled();
   });
 
   it('retries once without tools when the server rejects the parameter', async () => {

@@ -150,15 +150,14 @@ describe('createAnthropicEventSink', () => {
     expect(sink.result().truncated).toBe(true);
   });
 
-  it('defaults id, name and empty json, and skips unknown events', () => {
+  it('defaults id, name, empty json and a missing index, and skips unknown events', () => {
     const sink = createAnthropicEventSink();
     expect(sink.push('junk')).toBeNull();
     expect(sink.push({ type: 'ping' })).toBeNull();
-    expect(sink.push({ type: 'content_block_start', content_block: { type: 'tool_use' } })).toBeNull();
     // A tool_use start that never carried id or name defaults both.
     expect(sink.push({ type: 'content_block_start', index: 1, content_block: { type: 'tool_use', input: {} } })).toBeNull();
-    // A text delta without its start creates the block on demand.
-    expect(sink.push(textDelta(0, 'hi'))).toBe('hi');
+    // A text delta without index (and without its start) lands in block 0.
+    expect(sink.push({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'hi' } })).toBe('hi');
 
     expect(sink.result()).toEqual({
       text: 'hi',
