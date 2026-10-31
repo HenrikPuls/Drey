@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunInfo } from '../main/fleet/protocol';
-import { durationWords, liveStateWord, threadSteps } from './thread-steps';
+import { durationWords, headerControls, liveStateWord, threadSteps } from './thread-steps';
 
 function run(over: Partial<RunInfo> = {}): RunInfo {
   return {
@@ -79,6 +79,10 @@ describe('threadSteps', () => {
     expect(liveStateWord(null)).toBeNull();
   });
 
+  it('calls a detached run Running — never the word detached', () => {
+    expect(liveStateWord(run({ state: 'detached', phase: 'build', turn: 'busy' }))).toBe('Running');
+  });
+
   it('marks done green, failed and red gates crossed, stopped muted, live accent', () => {
     expect(threadSteps('T-0061', [run({ gateResult: 'green' })], NOW)[0]!.mark).toBe('✓');
     expect(threadSteps('T-0061', [run({ gateResult: 'red' })], NOW)[0]!.mark).toBe('✕');
@@ -107,5 +111,31 @@ describe('durationWords', () => {
     expect(durationWords(42_000)).toBe('42 s');
     expect(durationWords(6 * 60_000)).toBe('6 min');
     expect(durationWords(3 * 3_600_000)).toBe('3 h');
+  });
+});
+
+describe('headerControls', () => {
+  it('gives a connected run Pause, Take over and Stop, plus Hand back when held', () => {
+    expect(headerControls(run({ state: 'running', phase: 'build', turn: 'busy' }))).toEqual(['pause', 'takeover', 'stop']);
+    expect(headerControls(run({ state: 'running', phase: 'build', waiting: { kind: 'question', text: 'Go on?', since: '2026-10-31T11:00:00Z' } }))).toEqual([
+      'pause',
+      'takeover',
+      'stop',
+    ]);
+    expect(headerControls(run({ state: 'running', phase: 'build', held: true }))).toEqual(['pause', 'takeover', 'stop', 'handback']);
+  });
+
+  it('gives a detached run Stop and Resume session, never Pause', () => {
+    const detached = headerControls(run({ state: 'detached', sessionRef: 'ses-1' }));
+    expect(detached).toEqual(['stop', 'resume']);
+    expect(detached).not.toContain('pause');
+    expect(headerControls(run({ state: 'detached', sessionRef: null }))).toEqual(['stop']);
+  });
+
+  it('resumes an ended run with a session, stopped ones too; Start otherwise', () => {
+    expect(headerControls(run({ state: 'done', sessionRef: 'ses-1' }))).toEqual(['resume']);
+    expect(headerControls(run({ state: 'stopped', sessionRef: 'ses-1' }))).toEqual(['resume']);
+    expect(headerControls(run({ state: 'failed', sessionRef: null }))).toEqual(['start']);
+    expect(headerControls(null)).toEqual(['start']);
   });
 });

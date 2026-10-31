@@ -142,11 +142,41 @@ export function threadSteps(ticketId: string, runs: readonly RunInfo[], nowMs: n
 /**
  * The header's state word for the live run: `Waiting for you` (waiting),
  * `Planning`/`Building`/`Merging` by phase id, `Idle` when turn idle;
- * null without a live run.
+ * null without a live run. A detached run reads as `Running` — never
+ * the word "detached"; the meta line says why (`not connected`).
  */
 export function liveStateWord(run: RunInfo | null): string | null {
   if (run === null || !LIVE_STATES.includes(run.state)) {
     return null;
   }
-  return liveLabel(run);
+  return run.state === 'detached' ? 'Running' : liveLabel(run);
+}
+
+/** The header's buttons, in the order the header shows them. */
+export type HeaderControl = 'pause' | 'takeover' | 'handback' | 'stop' | 'resume' | 'start';
+
+/**
+ * The header's controls for the ticket's newest run (owner request
+ * 2026-10-31: one ticket, one session, the same controls in every
+ * state — exactly one way on): Stop for any run not ended, with
+ * Pause/Take over beside it only while the worker is connected (a
+ * detached run gets Resume session instead, its session is all that
+ * is left to talk to); an ended run with a session shows Resume
+ * session; no run, or an ended run without one, shows Start.
+ */
+export function headerControls(run: RunInfo | null): readonly HeaderControl[] {
+  if (run === null) {
+    return ['start'];
+  }
+  if (run.state === 'detached') {
+    return run.sessionRef !== null ? ['stop', 'resume'] : ['stop'];
+  }
+  if (LIVE_STATES.includes(run.state)) {
+    const controls: HeaderControl[] = ['pause', 'takeover', 'stop'];
+    if (run.held === true) {
+      controls.push('handback');
+    }
+    return controls;
+  }
+  return run.sessionRef !== null ? ['resume'] : ['start'];
 }

@@ -30,7 +30,7 @@ import { createRunComposer } from './run-composer';
 import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups } from './work-groups';
 import { readyCardNode, storyNode } from './ready-view';
 import type { ChangesReply } from '../shared/changes';
-import { liveStateWord, threadSteps, durationWords, type ThreadStep } from './thread-steps';
+import { headerControls, liveStateWord, threadSteps, durationWords, type ThreadStep } from './thread-steps';
 import type { WorktreeFile } from '../main/worktree-changes';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
@@ -1426,7 +1426,16 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       });
     },
   );
-  controls.append(pauseRun, takeOverRun, stopRun, handBackRun, resumeRun);
+  // Start (W4a): the existing manual start — the phase's dialog (plan or
+  // refine) in a worker, the same first-message path the composer takes.
+  const startRun = iconButton('play', 'Start a worker on this ticket', 'Start', () => {
+    const card = boardCard(ticketId);
+    const mode = dialogMode();
+    if (card !== null && mode !== null) {
+      void startInteractive(api, card, mode, false);
+    }
+  });
+  controls.append(pauseRun, takeOverRun, stopRun, handBackRun, resumeRun, startRun);
   head.append(light, stateWord, titleNode, metaNode, el('span', 'tickets-takeover-spacer'), fileLink, controls);
 
   const endMoves = createEndMoves();
@@ -1843,16 +1852,22 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       run === null ? null : run.model ?? null,
       run === null ? null : durationWords(execClockMs(run, Date.now())),
       fill === null ? null : `context ${Math.round(fill * 100)}%`,
+      run !== null && run.state === 'detached' ? 'not connected' : null,
     ]
       .filter((part): part is string => part !== null && part !== '')
       .join(' · ');
     metaNode.title = run === null ? '' : telemetryTooltip(run);
     fileLink.hidden = card === null;
-    pauseRun.hidden = !live;
-    takeOverRun.hidden = !live;
-    stopRun.hidden = !live;
-    handBackRun.hidden = !(run !== null && live && run.held === true);
-    resumeRun.hidden = !(run !== null && !LIVE_RUN_STATES.includes(run.state) && run.sessionRef !== null);
+    // The header's buttons come from the tested pure choice (W4a): the
+    // same controls in every state, exactly one way on. Start shares
+    // the composer's gate — only a dialog phase can start one by hand.
+    const show = new Set(headerControls(run));
+    pauseRun.hidden = !show.has('pause');
+    takeOverRun.hidden = !show.has('takeover');
+    stopRun.hidden = !show.has('stop');
+    handBackRun.hidden = !show.has('handback');
+    resumeRun.hidden = !show.has('resume');
+    startRun.hidden = !show.has('start') || dialogMode() === null;
     transcript.element.hidden = run === null;
     empty.hidden = run !== null;
     const mode = dialogMode();
