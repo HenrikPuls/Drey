@@ -773,14 +773,25 @@ by its heading (remembered across restarts):
   newest first within a priority. An idea in the queue the fleet pulls
   from carries a **Queued** chip.
 - **In progress** — everything the machine is working on or that waits
-  further down the pipeline, closest to done first. A ticket with a live
-  run shows the run's light in front of its id.
+  further down the pipeline, live runs first, then closest to done. A
+  ticket with a live run shows the run's light in front of its id and an
+  accent bar on the row; the heading counts how many are running.
 
-Every ticket sits in exactly one group. A row is the priority (click it
+Every ticket sits in exactly one group. Every row carries a **phase
+chip** — a dot in the phase's colour plus its name. The colours are set
+per column in Settings → Tickets → Pipeline (color: in pipeline.md;
+without one a curated default palette applies). Rows also follow their
+dependencies: a ticket blocked by another sorts below its blocker, in
+every group. A row is the priority (click it
 to change it), the title, and one line saying why it waits or where it
 stands. Click a row to open the **ticket page**: the ticket file in the
 editor and its **thread** in the pane beside it. The thread follows
 whichever ticket you open last — one tab, not one per ticket.
+
+The funnel icon in the panel header filters the list by **phases** and
+**statuses**. The chips toggle at once and the choice survives
+restarts; the icon stays marked while a filter is on, and **Clear**
+shows everything again.
 
 **Everyday use.** Capture with the **+** in the panel header: a title,
 a priority, optionally one or more repositories and a description land
@@ -968,7 +979,8 @@ worker goes on with its step and the run ends normally when it is done.
 A question asked in the fixed shape (req-75 W2) carries its context:
 what the ticket is about, where the worker stands, why it asks, two to
 four options with their consequences, and the worker's recommendation.
-Its options sit as buttons in the Needs-you row of the Work panel, in
+Its options sit as one-tap dot rows in the Needs-you row of the Work
+panel, in
 the thread's wait card and on the phone — **one tap on an option is the
 answer** (the recommended one is marked); the free-answer field stays
 beside them wherever you are. When the worker offers choices through

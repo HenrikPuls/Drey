@@ -47,20 +47,20 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-31):** version 0.8.1, milestones 1–89 built — 1–83
+**Status (2026-10-31):** version 0.8.1, milestones 1–91 built — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
 through the live board rounds T-0001 – T-0006 in the owner's tickets
 repo). **Milestones 84 (the fleet runner) and 85 (continuous
 orchestration, ticket T-0007, ADR-0077) — like the later owner requests
-86–89 — are built and suite-green but await the owner's rounds** — see
+86–91 — are built and suite-green but await the owner's rounds** — see
 their changelog markers. The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 90 = req-75 W2; latest requirement id: req-78
+highest used (latest: milestone 91 = ticket T-0084; latest requirement id: req-78
 (req-75–78 added 2026-10-31: the Work panel, STRIDE, TARA, the red-gate
 back-move; req-74 = due-date reminders, T-0012; req-73 is readable board
 issues, renumbered from req-66 — the tickets remote holds req-66)),

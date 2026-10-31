@@ -122,6 +122,12 @@ phone. Watch any worker and step in when needed.
   the owner's too.
 - Built and shipped in stages W1–W9 (`specs/roadmap.md`, req-75); W1
   shipped 2026-10-31 and made this ADR accepted.
+- Later change (T-0084, 2026-10-31): the groups re-order to Needs
+  you → In progress → Ideas with live runs first, each row carries a
+  coloured phase chip (color: per phase in pipeline.md), the list
+  filters by phase and status, and the in-group order respects open
+  blocked-by edges (blockers first). The phases still are not drawn
+  as columns.
 - W1 as built: the thread is **one** tab beside the file that follows
   the ticket opened last (fixed key `thread://ticket`) — the plugin SDK
   cannot place a tab into a given pane, so one tab per ticket would

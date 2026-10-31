@@ -20,6 +20,32 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 91 — ticket T-0084: the Work panel's ordering, phase colours, filter and dependency rank
+
+**Not yet manually verified by the owner.** Ticket T-0084 (owner request
+outside the list, 2026-10-31; [ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md)
+later change). The Work panel reads in the owner's order: **Needs you →
+In progress → Ideas**, live runs first inside In progress and the
+heading counting them; running rows carry an accent bar (`data-running`).
+Every row carries a **phase chip** — a dot plus the phase name — whose
+colour is `color:` per phase in pipeline.md (`#rrggbb`, edited in
+Settings → Tickets → Pipeline, one commit per change; an invalid value
+degrades to a noise badge and the curated default palette, keyed on the
+column's board position). The funnel button in the panel header filters
+all three groups by **phases** and **statuses** at once (per-viewer
+localStorage; `Hidden by the filter — clear` brings rows back). Within
+every group a ticket now sorts **below its open blockers** (Kahn's
+algorithm with today's order as tiebreak, cycles keep today's order;
+[`work-groups.ts` `dependencyRank`](../plugins/tickets/renderer/work-groups.ts)).
+Shaped options are one compact dot row per option on every surface (Work
+row, thread, phone — the recommended option's dot fills and rings).
+`statusLineOf` drops the phase prefix (`Waits for your review`,
+`opencode working`); the phone's Needs-you contract (`needsOf`) is
+untouched. Specs: `work-groups.spec.ts`, `work-panel.spec.ts`,
+`phase-colors.spec.ts`, `work-filter.spec.ts`, `ticket-board.spec.ts`,
+`remote/dom.spec.ts`; `specs/ticket-schema.md`, the manual §The Work
+panel, ADR-0087's later-change note.
+
 ### Fix — the gate typechecks what the build compiles
 
 **Not yet manually verified by the owner.** Owner request, outside the

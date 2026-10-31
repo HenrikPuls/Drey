@@ -292,7 +292,7 @@ phases:
   - { id: prioritized, title: Prioritized, handover: manual }
   - { id: plan, title: Plan, wip: 1, handover: manual }
   - { id: plan-review, title: Plan review, handover: manual }
-  - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default }
+  - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default, color: '#c96442' }
   - { id: review, title: Review, handover: manual }
   - { id: commit, title: Commit, handover: manual }
   - { id: done, title: Done, handover: none }
@@ -375,6 +375,8 @@ commit per change; hand edits win on refresh):
   worker reviews it before the move. Default off.
 - `semantic: true` — every green step in the column gets a second
   worker's review before it moves. Default off.
+- `color:` — optional `#rrggbb`. The Work panel's phase chip uses it;
+  without it a curated default palette colours by position.
 
 **Agent lane rules** (enforced by the runner, not the board — the
 board serves the human): an agent works the tickets the dispatcher
