@@ -19,6 +19,7 @@ import {
 } from '../shared/tickets';
 import type { RunInfo, RunState } from '../main/fleet/protocol';
 import { needsOf } from '../main/remote/needs';
+import { phaseColorOf } from './phase-colors';
 
 const LIVE: ReadonlySet<RunState> = new Set(['starting', 'running', 'stopping', 'detached']);
 
@@ -28,6 +29,8 @@ export interface WorkRow {
   readonly card: TicketCard;
   /** The phase the ticket sits in (an unknown directory carries its own). */
   readonly phase: PipelinePhase;
+  /** The phase chip's colour — explicit `color:` or the default palette (T-0084). */
+  readonly phaseColor: string;
   /** Why the owner is needed; null outside Needs you. */
   readonly need: NeedItem | null;
   /** An idea already in a queue the fleet pulls from (Ideas only). */
@@ -115,6 +118,17 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
   const ideaIds = new Set(ideaPhaseIds(pipeline));
   const terminal = pipeline.length > 0 ? pipeline[pipeline.length - 1]!.id : null;
 
+  // Chip colours keyed on the board position (T-0084): the configured
+  // columns in pipeline order, unknown directories after them.
+  const positionOf = new Map<string, number>();
+  configured.forEach((column, index) => positionOf.set(column.phase.id, index));
+  let afterConfigured = configured.length;
+  for (const column of board.columns) {
+    if (column.unknown && !positionOf.has(column.phase.id)) {
+      positionOf.set(column.phase.id, afterConfigured++);
+    }
+  }
+
   const placed = new Map<string, { card: TicketCard; column: BoardColumn; index: number }>();
   board.columns.forEach((column) => {
     column.tickets.forEach((card, index) => {
@@ -127,6 +141,7 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
   const row = (card: TicketCard, column: BoardColumn, need: NeedItem | null): WorkRow => ({
     card,
     phase: column.phase,
+    phaseColor: phaseColorOf(column.phase, positionOf.get(column.phase.id) ?? 0),
     need,
     queued: need === null && ideaIds.has(column.phase.id) && column.phase.id !== firstPhaseId,
     run: liveRunOf(card.id, runs),
@@ -181,11 +196,119 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
     progress.push({ row: row(card, column, null), position, index });
   }
   ideas.sort(ideaOrder(firstPhaseId));
-  // In progress: closest to done first (finishing beats starting), then
-  // the column's own derived order.
-  progress.sort((a, b) => (a.position !== b.position ? b.position - a.position : a.index - b.index));
+  // In progress: live runs first, then closest to done (finishing beats
+  // starting), then the column's own derived order.
+  progress.sort((a, b) => {
+    const live = Number(b.row.run !== null) - Number(a.row.run !== null);
+    if (live !== 0) {
+      return live;
+    }
+    return a.position !== b.position ? b.position - a.position : a.index - b.index;
+  });
 
-  return { needs, ideas, progress: progress.map((entry) => entry.row) };
+  // A ticket sorts below its in-list open blocker, in every group (T-0084).
+  const blockersOf = (r: WorkRow): readonly string[] => r.card.blocked;
+  const idOf = (r: WorkRow): string => r.card.id;
+  return {
+    needs: dependencyRank(needs, idOf, blockersOf),
+    ideas: dependencyRank(ideas, idOf, blockersOf),
+    progress: dependencyRank(progress.map((entry) => entry.row), idOf, blockersOf),
+  };
+}
+
+/** A row's derived status (T-0084): the filter's vocabulary and the head
+ *  counts read it. Precedence mirrors `statusLineOf` — a need wins, then
+ *  blocked beats running beats queued beats parked. The phone's own
+ *  Needs-you list keeps its kind order (`needsOf` is its contract). */
+export type WorkStatus = 'waiting' | 'failed' | 'running' | 'queued' | 'blocked' | 'parked' | 'review' | 'idle';
+
+export function rowStatusOf(row: WorkRow): WorkStatus {
+  const need = row.need;
+  if (need !== null) {
+    if (need.kind === 'question' || need.kind === 'permission') {
+      return 'waiting';
+    }
+    if (need.kind === 'red-gate' || need.kind === 'failed') {
+      return 'failed';
+    }
+    return 'review';
+  }
+  if (row.card.blocked.length > 0) {
+    return 'blocked';
+  }
+  if (row.run !== null) {
+    return 'running';
+  }
+  if (row.queued) {
+    return 'queued';
+  }
+  if (row.card.meta.parkedReason !== null) {
+    return 'parked';
+  }
+  return 'idle';
+}
+
+/**
+ * Kahn's algorithm over the in-list open blockers (T-0084): a ticket
+ * blocked by another ticket of the same list sorts below its blocker,
+ * today's order deciding among simultaneously ready ones (owner,
+ * 2026-10-31). Blockers outside the list (another group, an unknown id)
+ * are ignored — they only show in the status line. A stall (a cycle
+ * among the remaining rows) emits the earliest remaining row and
+ * continues, so a cycle keeps today's relative order. Pure and
+ * deterministic.
+ */
+export function dependencyRank<T>(
+  items: readonly T[],
+  idOf: (item: T) => string,
+  blockersOf: (item: T) => readonly string[],
+): T[] {
+  const indexOf = new Map<string, number>();
+  items.forEach((item, index) => indexOf.set(idOf(item), index));
+  const blockersOfAt: number[][] = items.map((item, index) => {
+    const at = new Set<number>();
+    for (const id of blockersOf(item)) {
+      const blocker = indexOf.get(id);
+      if (blocker !== undefined && blocker !== index) {
+        at.add(blocker);
+      }
+    }
+    return [...at];
+  });
+  // blocker index → the rows still waiting on it.
+  const waiters: number[][] = items.map(() => []);
+  const unresolved = blockersOfAt.map((list, index) => {
+    for (const blocker of list) {
+      waiters[blocker]!.push(index);
+    }
+    return list.length;
+  });
+  const done = new Set<number>();
+  const out: T[] = [];
+  while (out.length < items.length) {
+    let next = -1;
+    for (let i = 0; i < items.length; i++) {
+      if (!done.has(i) && unresolved[i] === 0) {
+        next = i;
+        break;
+      }
+    }
+    if (next === -1) {
+      // A stall (a cycle): the earliest remaining row goes first.
+      for (let i = 0; i < items.length; i++) {
+        if (!done.has(i)) {
+          next = i;
+          break;
+        }
+      }
+    }
+    done.add(next);
+    out.push(items[next]!);
+    for (const waiter of waiters[next]!) {
+      unresolved[waiter] = Math.max(0, unresolved[waiter]! - 1);
+    }
+  }
+  return out;
 }
 
 /** What a checkpoint asks of the owner: approve into the next phase, or accept into the archive. */
@@ -203,7 +326,8 @@ export function checkpointActionOf(board: BoardSnapshot, phaseId: string): Check
   return { kind: 'approve', to: next.phase.id, label: `Approve → ${next.phase.title}` };
 }
 
-/** The one line under a row's title: why it waits, or where it stands. */
+/** The one line under a row's title: why it waits, or where it stands.
+ *  The phase chip owns the phase (T-0084), so no line carries its title. */
 export function statusLineOf(row: WorkRow, board: BoardSnapshot): string {
   const need = row.need;
   if (need !== null) {
@@ -221,7 +345,7 @@ export function statusLineOf(row: WorkRow, board: BoardSnapshot): string {
         return `Run failed: ${need.text}`;
       default: {
         const action = checkpointActionOf(board, need.phase);
-        return action.kind === 'accept' ? 'Done — accept it into the archive' : `${row.phase.title} — waits for your review`;
+        return action.kind === 'accept' ? 'Done — accept it into the archive' : 'Waits for your review';
       }
     }
   }
@@ -229,7 +353,7 @@ export function statusLineOf(row: WorkRow, board: BoardSnapshot): string {
     return `Blocked by ${row.card.blocked.join(', ')}`;
   }
   if (row.run !== null) {
-    return `${row.phase.title} — ${row.run.provider} ${row.run.state === 'detached' ? 'detached' : 'working'}`;
+    return `${row.run.provider} ${row.run.state === 'detached' ? 'detached' : 'working'}`;
   }
   if (row.queued) {
     return 'Queued for the fleet';
@@ -237,5 +361,5 @@ export function statusLineOf(row: WorkRow, board: BoardSnapshot): string {
   if (row.card.meta.parkedReason !== null) {
     return `Parked: ${row.card.meta.parkedReason}`;
   }
-  return row.phase.title;
+  return '';
 }
