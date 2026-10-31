@@ -1469,23 +1469,37 @@ function threadRun(ticketId: string): RunInfo | null {
   return live ?? newest;
 }
 
+/** The ticket file the page opened last: the next ticket lands in its pane. */
+let pageFilePath: string | null = null;
+
 /**
- * The ticket page (ADR-0087 decision 3): the ticket file in the focused
- * pane, its thread in the pane beside it. The thread is one fixed key,
- * so the next ticket reuses its tab instead of splitting again.
+ * The ticket page (ADR-0087 decision 3): the ticket file in one pane, its
+ * thread in the pane beside it. The thread is one fixed key, and the next
+ * ticket reactivates the previous ticket's tab and opens there (a clean
+ * tab is replaced), so the page never splits again — whichever pane, the
+ * thread included, had the focus.
  */
 async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<void> {
   if (snapshot?.vaultId == null) {
     return;
   }
+  const vaultId = snapshot.vaultId;
   const threadOpen = api.documents.get(THREAD_KEY) !== null;
-  // With the thread focused, the file would land behind it in its own pane.
+  const previous = pageFilePath;
+  if (
+    threadOpen &&
+    previous !== null &&
+    previous !== card.path &&
+    api.documents.list().some((d) => d.path === previous && d.vaultId === vaultId)
+  ) {
+    // Revealing an open tab focuses its pane: the new file lands there.
+    await api.documents.open(previous, undefined, { vaultId });
+  }
+  // With the thread still focused (the previous file was closed), the file
+  // would land behind it in its own pane: the one split left.
   const threadFocused = api.documents.active()?.kind === THREAD_KIND;
-  await api.documents.open(
-    card.path,
-    undefined,
-    threadFocused ? { vaultId: snapshot.vaultId, split: 'right' } : { vaultId: snapshot.vaultId },
-  );
+  await api.documents.open(card.path, undefined, threadFocused ? { vaultId, split: 'right' } : { vaultId });
+  pageFilePath = card.path;
   threadTicketId = card.id;
   for (const listener of threadListeners) {
     listener();
@@ -1496,7 +1510,7 @@ async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<voi
     api.documents.addDoc(THREAD_KIND, THREAD_KEY, threadTitle(card.id), { split: 'right' });
     // The new pane took the focus: hand it back to the file, so the next
     // ticket opens there and not beside the thread.
-    await api.documents.open(card.path, undefined, { vaultId: snapshot.vaultId });
+    await api.documents.open(card.path, undefined, { vaultId });
   }
   markOpenCard(api);
 }

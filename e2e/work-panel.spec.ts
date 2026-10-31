@@ -170,22 +170,49 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(panel.locator('.work-row[data-id="T-0104"]')).toHaveClass(/work-row-open/);
     await page.screenshot({ path: testInfo.outputPath('work-panel-wide.png') });
 
-    // The decisions live in the thread now (req-75 W1b): the review
-    // checkpoint offers the move, the finished ticket the Accept.
+    // The decisions live in the thread (req-75 W1b); for a Review or
+    // Ready-to-try checkpoint the Ready card's buttons replace the bar
+    // (req-75 W3): Accept and merge before the last phase, Accept in it.
+    const readyButtons = thread.locator('.tickets-ready-card .tickets-takeover-btn');
     await panel.locator('.work-row[data-id="T-0105"]').click();
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Spellcheck inside tables');
-    await expect(thread.locator('.tickets-thread-decisions')).toBeVisible();
-    await expect(thread.locator('.tickets-thread-decisions .tickets-takeover-btn')).toHaveText([
-      'Approve → Commit',
-      'Refine with agent',
-    ]);
+    await expect(thread.locator('.tickets-thread-decisions')).toBeHidden();
+    await expect(readyButtons).toHaveText(['Launch this version', 'Accept and merge', 'Send back…']);
     await panel.locator('.work-row[data-id="T-0106"]').click();
-    await expect(thread.locator('.tickets-thread-decisions .tickets-takeover-btn')).toHaveText(['Accept']);
+    await expect(thread.locator('.tickets-thread-title')).toHaveText('Fix the palette race in CI');
+    await expect(readyButtons).toHaveText(['Launch this version', 'Accept', 'Send back…']);
 
     // A second ticket reuses the one thread tab.
     await panel.locator('.work-row[data-id="T-0107"]').click();
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Daily note templates per weekday');
     await expect(page.locator('.tickets-thread')).toHaveCount(1);
+  });
+
+  test('the next ticket lands in the last ticket pane, not a new split', async ({ page }, testInfo) => {
+    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    const panel = page.locator('.tickets-panel').filter({ visible: true });
+    await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
+
+    await panel.locator('.work-row[data-id="T-0101"]').click();
+    const thread = page.locator('.tickets-thread').filter({ visible: true });
+    await expect(thread.locator('.tickets-thread-title')).toHaveText('Dark mode for the calendar');
+    await expect(page.locator('app-pane-leaf')).toHaveCount(2);
+
+    // A click into the thread focuses its pane: the case that used to split.
+    for (const [id, title] of [
+      ['T-0102', 'Export tags as CSV'],
+      ['T-0103', 'Faster vault search'],
+      ['T-0105', 'Spellcheck inside tables'],
+    ] as const) {
+      await thread.locator('.tickets-thread-head').click();
+      await panel.locator(`.work-row[data-id="${id}"]`).click();
+      await expect(thread.locator('.tickets-thread-title')).toHaveText(title);
+      await expect(page.locator('app-pane-leaf')).toHaveCount(2);
+      await expect(page.locator('app-tab-bar .tab', { hasText: `${id}.md` })).toHaveCount(1);
+    }
+    // The clean ticket tabs were replaced, not stacked.
+    await expect(page.locator('app-tab-bar .tab', { hasText: /T-0\d+\.md/ })).toHaveCount(1);
+    await page.screenshot({ path: testInfo.outputPath('ticket-page-no-split.png') });
   });
 
   test('folds a group and keeps it folded', async ({ page }) => {

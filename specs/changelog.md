@@ -20,6 +20,23 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — the ticket page no longer splits again per ticket
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (2026-10-31). Opening one ticket after another from the Work panel
+split the editor again each time the thread pane had the focus (after a
+click into the thread), so the page fell into ever narrower panes and
+the thread's composer squeezed its quick-prompt chips into broken
+two-line pills. `openTicketPage` now remembers the ticket file it opened
+last and reactivates that tab first, so the next ticket opens in its
+pane and replaces it when it is clean — no new pane, no new tab; only
+when that file was closed and the thread is focused does the page still
+split once. The composer's row under the box wraps and a chip keeps its
+label on one line, and the Ready card's buttons wrap instead of running
+out of a narrow thread. e2e `work-panel.spec.ts` ("the next ticket lands
+in the last ticket pane") opens four tickets with the thread focused and
+expects two panes and one ticket tab throughout.
+
 ### Fix — a transition commit survives the runner's bookkeeping commit
 
 **Not yet manually verified by the owner.** Owner request, outside the
