@@ -170,17 +170,17 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(panel.locator('.work-row[data-id="T-0104"]')).toHaveClass(/work-row-open/);
     await page.screenshot({ path: testInfo.outputPath('work-panel-wide.png') });
 
-    // The decisions live in the thread now (req-75 W1b): the review
-    // checkpoint offers the move, the finished ticket the Accept.
+    // The decisions live in the thread (req-75 W1b); for a Review or
+    // Ready-to-try checkpoint the Ready card's buttons replace the bar
+    // (req-75 W3): Accept and merge before the last phase, Accept in it.
+    const readyButtons = thread.locator('.tickets-ready-card .tickets-takeover-btn');
     await panel.locator('.work-row[data-id="T-0105"]').click();
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Spellcheck inside tables');
-    await expect(thread.locator('.tickets-thread-decisions')).toBeVisible();
-    await expect(thread.locator('.tickets-thread-decisions .tickets-takeover-btn')).toHaveText([
-      'Approve → Commit',
-      'Refine with agent',
-    ]);
+    await expect(thread.locator('.tickets-thread-decisions')).toBeHidden();
+    await expect(readyButtons).toHaveText(['Launch this version', 'Accept and merge', 'Send back…']);
     await panel.locator('.work-row[data-id="T-0106"]').click();
-    await expect(thread.locator('.tickets-thread-decisions .tickets-takeover-btn')).toHaveText(['Accept']);
+    await expect(thread.locator('.tickets-thread-title')).toHaveText('Fix the palette race in CI');
+    await expect(readyButtons).toHaveText(['Launch this version', 'Accept', 'Send back…']);
 
     // A second ticket reuses the one thread tab.
     await panel.locator('.work-row[data-id="T-0107"]').click();
