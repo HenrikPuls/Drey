@@ -10,6 +10,7 @@
  */
 import { spawn } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
+import * as path from 'node:path';
 
 function launchTerminal(cmd: string, args: string[], cwd?: string): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
@@ -58,4 +59,49 @@ export async function openTerminalAt(dir: string): Promise<void> {
   throw new Error(
     `no terminal found (tried ${candidates.map((c) => c.label).join(', ')}).`,
   );
+}
+
+/**
+ * Runs one command line in a fresh OS console at `cwd` (req-75 W3 /
+ * T-0057): "Launch this version" — the repo's `launch:` command from
+ * repos.md, or the dev.ps1 default — so the started program outlives
+ * Drey in its own window. The command line is handed to the terminal
+ * as ONE argument (no `shell: true`, no string built from ticket
+ * content — it comes from repos.md or the fixed default); `cwd` is the
+ * spawn option, never interpolated. `spawnFn` exists for the spec.
+ */
+export function runInNewConsole(
+  cwd: string,
+  commandLine: string,
+  spawnFn: typeof spawn = spawn,
+): void {
+  const child =
+    process.platform === 'win32'
+      ? // `start "<title>" cmd /k <line>`: start opens the new console
+        // window (the title placeholder keeps `cmd` from being read as
+        // it), `/k` keeps it open after the command ends.
+        spawnFn(process.env['ComSpec'] ?? 'cmd.exe', ['/c', 'start', path.basename(cwd), 'cmd.exe', '/k', commandLine], {
+          cwd,
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: false,
+        })
+      : process.platform === 'darwin'
+        ? spawnFn('open', ['-a', 'Terminal', cwd], {
+            cwd,
+            detached: true,
+            stdio: 'ignore',
+            windowsHide: false,
+          })
+        : spawnFn('x-terminal-emulator', ['-e', 'sh', '-c', commandLine], {
+            cwd,
+            detached: true,
+            stdio: 'ignore',
+            windowsHide: false,
+          });
+  // Fire and forget: the only failure a spawn can report asynchronously
+  // is an unfound binary — swallowed here so a launch never crashes the
+  // app; the console window either opens or it does not.
+  child.once('error', () => undefined);
+  child.unref();
 }

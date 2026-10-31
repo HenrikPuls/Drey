@@ -102,6 +102,15 @@ describe('parseRepos', () => {
     expect(parseRepos(repo('C:/abs')).error).toContain('must be a path inside the repo');
     expect(parseRepos(repo('3')).error).toContain('folder name or a list');
   });
+
+  it('reads launch: as the worktree start command; anything else warns and reads null (req-75 W3)', () => {
+    const withLaunch = '---\nrepos:\n  drey:\n    url: x\n    launch: npm run dev\n---\n';
+    expect(parseRepos(withLaunch).repos[0]).toMatchObject({ launch: 'npm run dev' });
+    expect(parseRepos('---\nrepos:\n  drey:\n    url: x\n---\n').repos[0]?.launch).toBeNull();
+    const bad = parseRepos('---\nrepos:\n  drey:\n    url: x\n    launch: [a, b]\n---\n');
+    expect(bad.repos[0]?.launch).toBeNull();
+    expect(bad.warnings).toEqual(['repos.md: repo "drey" launch must be a command string']);
+  });
 });
 
 describe('ordering', () => {
@@ -354,12 +363,15 @@ describe('repos.md writer (req-72)', () => {
         path: 'E:/code/drey',
         worker: null,
         worktrees: null,
+        launch: 'npm run dev',
         link: ['.tools', 'node_modules'],
       },
-      { name: 'bare', url: 'https://example.invalid/bare.git', branch: null, policy: null, path: null, worker: null, worktrees: null },
+      { name: 'bare', url: 'https://example.invalid/bare.git', branch: null, policy: null, path: null, worker: null, worktrees: null, launch: null },
     ];
     const text = reposFileText(repos, 'Owner prose.\n');
     expect(text).toContain('Owner prose.');
+    expect(text).toContain('launch: npm run dev');
+    expect(text).not.toContain('launch: null');
     const { repos: parsed, error } = parseRepos(text);
     expect(error).toBeNull();
     expect(parsed).toEqual(repos);

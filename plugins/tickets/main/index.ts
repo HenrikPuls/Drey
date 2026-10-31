@@ -2266,6 +2266,7 @@ const plugin: MainPluginModule = {
           path: str('path'),
           worker: str('worker'),
           worktrees: str('worktrees'),
+          launch: str('launch'),
           ...(Array.isArray(r['link']) && r['link'].every((l): l is string => typeof l === 'string') && r['link'].length > 0 ? { link: r['link'] as string[] } : {}),
         });
       }

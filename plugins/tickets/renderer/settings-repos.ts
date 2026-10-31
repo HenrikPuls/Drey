@@ -25,6 +25,7 @@ interface RepoDraft {
   policy: string;
   worker: string;
   worktrees: string;
+  launch: string;
   link: string; // comma-separated folder names
 }
 
@@ -37,6 +38,7 @@ function draftOf(repo: RepoRef): RepoDraft {
     policy: repo.policy ?? '',
     worker: repo.worker ?? '',
     worktrees: repo.worktrees ?? '',
+    launch: repo.launch ?? '',
     link: (repo.link ?? []).join(', '),
   };
 }
@@ -58,6 +60,7 @@ function refOf(draft: RepoDraft): RepoRef {
     path: one(draft.path),
     worker: one(draft.worker),
     worktrees: one(draft.worktrees),
+    launch: one(draft.launch),
     ...(links.length > 0 ? { link: links } : {}),
   };
 }
@@ -128,6 +131,7 @@ export function createReposSection(api: DreyPluginApi, reload: () => Promise<voi
     field('Policy', 'policy', 'Branch protection a push must respect, as a note for the worker.');
     field('Worker', 'worker', 'This repo\'s default fleet worker. Empty = the board\'s.');
     field('Worktrees base', 'worktrees', 'Where the fleet\'s checkouts live. Empty = the tickets repo\'s _worktrees.');
+    field('Launch command', 'launch', 'Runs in the ticket\'s worktree in a new console. Empty: dev.ps1 -Built -Multi when the worktree has one.');
     field('Link folders', 'link', 'Git-ignored folders a worktree borrows, comma-separated (node_modules, .tools).');
     const actions = el('div', 'tset-actions');
     const cancel = textButton('Cancel');
@@ -151,7 +155,7 @@ export function createReposSection(api: DreyPluginApi, reload: () => Promise<voi
     list.replaceChildren();
     if (editing === '') {
       const host = el('div', 'tset-repo-entry');
-      renderForm(host, { name: '', url: '', branch: '', path: '', policy: '', worker: '', worktrees: '', link: '' }, (draft) => {
+      renderForm(host, { name: '', url: '', branch: '', path: '', policy: '', worker: '', worktrees: '', launch: '', link: '' }, (draft) => {
         void saveAll([...listing.repos, refOf(draft)]).then(() => {
           editing = null;
         });
@@ -282,6 +286,7 @@ export function createReposSection(api: DreyPluginApi, reload: () => Promise<voi
             path: candidate.path,
             worker: null,
             worktrees: null,
+            launch: null,
           };
           if (at >= 0) {
             merged[at] = ref;
