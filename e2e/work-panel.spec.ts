@@ -160,7 +160,9 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(thread).toBeVisible();
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Drag headings in the outline');
     await expect(thread.locator('.tickets-thread-meta')).toHaveText(/waiting for you · OpenCode · glm-5.3-flash/);
-    await expect(thread.locator('.tickets-takeover-wait-text')).toHaveText(
+    // The question is part of the conversation now (req-75 W2b): no card.
+    await expect(thread.locator('.tickets-takeover-wait')).toBeHidden();
+    await expect(thread.locator('.tickets-ask-question')).toHaveText(
       'Should dragging a heading also move the text below it?',
     );
     // A question carries no decision bar — that is the checkpoints'.
