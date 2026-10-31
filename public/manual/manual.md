@@ -768,11 +768,11 @@ told to use them and install nothing.
 While the run is live, its column shows a **Workers** strip with one
 lane per run: a traffic light (green working, amber context nearly full
 or stopping, red stalled for five minutes — always with the state in
-words), the worker's current activity, its context window, token usage
-and age; the card carries a ▶ chip reading the state, the turn count,
-the run's own tokens and its age (`▶ running · 2 · 45k/1.2k · 03:41`),
-and the pills above the board add how long the oldest live run has
-been at it. A lane is folded to one line until
+words), the worker's current activity, its context window and token
+usage; the card carries a ▶ chip reading the state, the turn count and
+the run's own tokens (`▶ running · 2 · 45k/1.2k`), and the pills above
+the board count the fleet's tokens in flight. A lane is folded to one
+line until
 you unfold it (a lane that needs a look opens by itself). In a lane you
 can **Take over**, **Watch** (tail the run's output), **Steer** (send a
 message into the live run — it lands in the ticket's Log) or **Stop**
