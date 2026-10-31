@@ -145,23 +145,14 @@ describe('execClockMs — the elapsed clock counts only working time (req-67)', 
   });
 });
 
-describe('runChipLine', () => {
-  it('shows state, turns, this run\'s own tokens and elapsed (T-0051)', () => {
-    expect(runChipLine(run({ steerCount: 1, tokensIn: 45_000, tokensOut: 1_234 }), NOW)).toBe(
-      '▶ running · 2 · 45.0k/1.2k · 1:00:00',
-    );
+describe('runChipLine — duration-free', () => {
+  it('shows state, turns and this run\'s own tokens (T-0051)', () => {
+    expect(runChipLine(run({ steerCount: 1, tokensIn: 45_000, tokensOut: 1_234 }))).toBe('▶ running · 2 · 45.0k/1.2k');
   });
 
   it('waits for the first usage that reported tokens', () => {
-    expect(runChipLine(run(), NOW)).toBe('▶ running · 1 · 1:00:00');
-    expect(runChipLine(run({ state: 'stopping', startedAt: '2026-10-18T11:59:30Z' }), NOW)).toBe(
-      '▶ stopping · 1 · 00:30',
-    );
-  });
-
-  it('clocks the working time, not the wall clock (req-67)', () => {
-    expect(runChipLine(run({ execMs: 221_000, execSince: null }), NOW)).toBe('▶ running · 1 · 03:41');
-    expect(runChipLine(run({ execMs: 191_000, execSince: '2026-10-18T11:59:30Z' }), NOW)).toBe('▶ running · 1 · 03:41');
+    expect(runChipLine(run())).toBe('▶ running · 1');
+    expect(runChipLine(run({ state: 'stopping' }))).toBe('▶ stopping · 1');
   });
 });
 

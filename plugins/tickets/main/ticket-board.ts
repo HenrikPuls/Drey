@@ -1,7 +1,7 @@
 /**
  * Pure board assembly (ADR-0076): parses the `_meta` configuration,
  * orders columns (derived order — the order.md pins went with the kanban
- * board, req-74), and folds parsed
+ * board, req-75), and folds parsed
  * tickets into a snapshot shape. No IO — `index.ts` feeds it files and
  * paths, the specs feed it fixtures. Everything here is deterministic:
  * the same files always produce the same board (no stored state).
@@ -447,7 +447,7 @@ export function derivedOrder(keys: readonly OrderKey[]): OrderKey[] {
   });
 }
 
-/** Final column order: the derived order (the order.md pins went with req-74). */
+/** Final column order: the derived order (the order.md pins went with req-75). */
 export function orderColumn<T extends { readonly id: string }>(
   tickets: readonly T[],
   keyOf: (ticket: T) => OrderKey,

@@ -1,6 +1,6 @@
 /**
  * The conversation's lower half, shared by the takeover tab and the
- * ticket thread (req-74 W1): what the worker waits on (its question, a
+ * ticket thread (req-75 W1): what the worker waits on (its question, a
  * tool call to approve), its pulse while a turn runs, and the prompt box
  * with attachments, "/" commands and quick prompts. The run it talks to
  * is looked up anew on every paint, so the thread can follow the

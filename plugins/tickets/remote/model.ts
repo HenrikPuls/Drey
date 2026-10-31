@@ -333,7 +333,7 @@ export interface DropAction {
 /**
  * The desk call a drop makes: a move across columns. A drop inside the
  * card's own column does nothing — the column order is derived, there
- * are no pins (req-74).
+ * are no pins (req-75).
  */
 export function dropActionOf(from: string, to: string): DropAction | null {
   return from === to ? null : { from, to };

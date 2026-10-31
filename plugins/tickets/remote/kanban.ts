@@ -3,7 +3,7 @@
  * sideways, and — on a landscape-wide screen — the selected ticket in a
  * detail pane beside it. A card is moved by pressing and holding it,
  * then dragging across columns — a transition (the order inside a
- * column is derived, req-74 dropped the pins). A tap selects. The Move… sheet stays for anyone who would rather not drag.
+ * column is derived, req-75 dropped the pins). A tap selects. The Move… sheet stays for anyone who would rather not drag.
  */
 import { ageOf, parseHandover, type BoardColumn, type TicketCard } from '../shared/tickets';
 import type { Ctx, View } from './context';
@@ -18,8 +18,14 @@ const EDGE_PX = 60;
 
 /** The board's sideways scroll survives redraws. */
 let rememberedScroll = 0;
+/** Each column's own vertical scroll survives redraws (keyed by phase id). */
+const rememberedColumnTops = new Map<string, number>();
+/** The detail pane's scroll survives redraws; another ticket or tab starts at the top. */
+let rememberedDetailTop = 0;
 /** A newly selected ticket is scrolled into view once, not on every redraw. */
 let lastSelected: string | null = null;
+/** What the pane last showed — another ticket or tab starts at the top. */
+let lastTab: TicketTab = 'ticket';
 
 export function kanbanView(ctx: Ctx, selected: string | null, tab: TicketTab, withDetail: boolean): View {
   const board = ctx.state.board;
@@ -33,19 +39,25 @@ export function kanbanView(ctx: Ctx, selected: string | null, tab: TicketTab, wi
   strip.addEventListener('scroll', () => {
     rememberedScroll = strip.scrollLeft;
   });
-  const reveal = selected !== null && selected !== lastSelected;
-  lastSelected = selected;
-  requestAnimationFrame(() => {
-    strip.scrollLeft = rememberedScroll;
-    if (reveal) {
-      strip.querySelector('.kcard.selected')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  for (const list of Array.from(strip.querySelectorAll<HTMLElement>('.kcol-list'))) {
+    const phase = list.dataset['phase'];
+    if (phase !== undefined) {
+      list.addEventListener('scroll', () => rememberedColumnTops.set(phase, list.scrollTop));
     }
-  });
+  }
+  const reveal = selected !== null && selected !== lastSelected;
+  if (selected !== null && (selected !== lastSelected || tab !== lastTab)) {
+    // Fresh content — another ticket or tab starts at the top, not at the old offset.
+    rememberedDetailTop = 0;
+  }
+  lastSelected = selected;
+  lastTab = tab;
   if (!ctx.state.readOnly) {
     attachDrag(ctx, strip);
   }
 
   if (!withDetail) {
+    restoreScrolls(strip, null, reveal);
     return { title: 'Board', body: [strip], wide: true };
   }
   const detail = selected === null ? null : ticketView(ctx, selected, tab);
@@ -54,7 +66,34 @@ export function kanbanView(ctx: Ctx, selected: string | null, tab: TicketTab, wi
     { class: 'detail', attrs: { 'aria-label': 'Ticket' } },
     ...(detail === null ? [empty('Select a ticket.')] : [...detail.body, ...present([detail.actions ?? null])]),
   );
+  pane.addEventListener('scroll', () => {
+    rememberedDetailTop = pane.scrollTop;
+  });
+  restoreScrolls(strip, pane, reveal);
   return { title: 'Board', body: [h('div', { class: 'split' }, strip, pane)], wide: true };
+}
+
+/**
+ * One frame after the build restores what each scroller had: the strip's
+ * sideways scroll, each column's top, the pane's top — the selected
+ * card's reveal last, so it wins where they overlap.
+ */
+function restoreScrolls(strip: HTMLElement, pane: HTMLElement | null, reveal: boolean): void {
+  requestAnimationFrame(() => {
+    strip.scrollLeft = rememberedScroll;
+    for (const list of Array.from(strip.querySelectorAll<HTMLElement>('.kcol-list'))) {
+      const top = rememberedColumnTops.get(list.dataset['phase'] ?? '');
+      if (top !== undefined) {
+        list.scrollTop = top;
+      }
+    }
+    if (pane !== null) {
+      pane.scrollTop = rememberedDetailTop;
+    }
+    if (reveal) {
+      strip.querySelector('.kcard.selected')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+    }
+  });
 }
 
 function kanbanColumn(ctx: Ctx, column: BoardColumn, selected: string | null): HTMLElement {

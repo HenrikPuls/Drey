@@ -68,7 +68,7 @@ export interface TransitionCommand {
 }
 
 /** A move between phases. An `index` in the payload (an older remote
- *  client's drop position) is ignored — there are no pins (req-74). */
+ *  client's drop position) is ignored — there are no pins (req-75). */
 export function parseTransition(payload: unknown): Parsed<TransitionCommand> {
   const p = record(payload);
   if (typeof p['id'] !== 'string' || typeof p['from'] !== 'string' || typeof p['to'] !== 'string') {

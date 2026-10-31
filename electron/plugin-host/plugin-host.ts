@@ -418,8 +418,14 @@ export class PluginHost {
             ...(withTools
               ? {
                   tools: this.deps.vaultTools.toolSpecs(vaultOptions),
-                  onToolCall: (name, argsJson) =>
-                    runVaultTool(this.deps.vaultTools, name, argsJson, vaultOptions),
+                  // The signal rides along (SDK 1.36): a confirm dialog the
+                  // cancel closes in spirit still settles, but the call
+                  // rejects as aborted instead of writing.
+                  onToolCall: (name: string, argsJson: string, signal?: AbortSignal) =>
+                    runVaultTool(this.deps.vaultTools, name, argsJson, {
+                      ...vaultOptions,
+                      ...(signal !== undefined ? { signal } : {}),
+                    }),
                   maxToolRounds: this.deps.appConfig.get().tools.maxRounds,
                 }
               : {}),

@@ -1,6 +1,6 @@
 # 0087 — The Work panel replaces the kanban board
 
-- Status: proposed (2026-10-31, req-74; owner direction given, the
+- Status: proposed (2026-10-31, req-75; owner direction given, the
   stages W1–W9 are confirmed one by one as they start)
 - Amends: [ADR-0076](0076-ticket-repository-format-and-coordination.md)
   (the board is no longer the tickets UI; the repository format stays),
@@ -120,7 +120,7 @@ phone. Watch any worker and step in when needed.
   tagged there, everything else typed in the tab counts as the owner's;
   an edit the owner makes in another program (watcher reload) counts as
   the owner's too.
-- Built and shipped in stages W1–W9 (`specs/roadmap.md`, req-74); this
+- Built and shipped in stages W1–W9 (`specs/roadmap.md`, req-75); this
   ADR moves to accepted with W1.
 - Design reference: the owner's canvas "Drey Tickets — Workflow
   redesign" (2026-10-31).

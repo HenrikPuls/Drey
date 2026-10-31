@@ -1,5 +1,5 @@
 /**
- * The Work panel's list (req-74 W1, ADR-0087): Needs you, Ideas and In
+ * The Work panel's list (req-75 W1, ADR-0087): Needs you, Ideas and In
  * progress as collapsible groups of one-line rows in place of the
  * kanban columns, so it reads in a ~240 px side dock. Plain DOM over
  * `work-groups.ts`; every action goes back through the deps — this file

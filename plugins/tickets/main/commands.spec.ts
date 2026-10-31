@@ -37,7 +37,7 @@ describe('command parsers', () => {
     });
   });
 
-  it('ignores a transition index from an older client — there are no pins (req-74)', () => {
+  it('ignores a transition index from an older client — there are no pins (req-75)', () => {
     const base = { id: 'T-0001', from: 'build', to: 'review' };
     expect(parseTransition({ ...base, index: 2.7 })).toEqual({ ok: true, value: base });
     expect(parseTransition(base)).toEqual({ ok: true, value: base });

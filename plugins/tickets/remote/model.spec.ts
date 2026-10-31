@@ -230,7 +230,7 @@ describe('kanban drops', () => {
     expect(dropIndexOf([], 999)).toBe(0);
   });
 
-  it('moves across columns and does nothing inside one — the order is derived (req-74)', () => {
+  it('moves across columns and does nothing inside one — the order is derived (req-75)', () => {
     expect(dropActionOf('build', 'review')).toEqual({ from: 'build', to: 'review' });
     expect(dropActionOf('build', 'build')).toBeNull();
   });

@@ -2890,7 +2890,7 @@ while the model answers. The document itself is still sent in full when
 the note chip is on; with the chip off, the selection is the only
 document text in the call.
 
-## 6.59 Ask → tool loop → answer (milestone 76, [ADR-0071](09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md))
+## 6.59 Ask → tool loop → answer (milestone 76, streamed rounds and abort since milestone 88, [ADR-0071](09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md))
 
 ```mermaid
 sequenceDiagram
@@ -2899,7 +2899,7 @@ sequenceDiagram
     participant CE as ChatEngine (plugin)
     participant Host as PluginHost (ctx.llm.chat)
     participant Loop as runToolLoop (tool-loop.ts)
-    participant Prov as Provider (one request)
+    participant Prov as Provider (one request per round)
     participant Tool as Tool (plugin / vault / external)
 
     User->>Panel: question
@@ -2909,8 +2909,13 @@ sequenceDiagram
     Host->>Host: merge the tool sets, remember where each name came from
     Host->>Loop: chat with the merged set, maxToolRounds = tools.maxRounds
     loop until the model answers in text
-        Loop->>Prov: request (mode: tools)
-        Prov-->>Loop: text, tool calls, truncated?
+        Loop->>Prov: request (mode: tools) — streamed when the caller passed onDelta
+        opt streamed round
+            Prov-->>Loop: text deltas as they arrive (emit)
+            Loop-->>CE: onDelta — interim text included
+            CE-->>Panel: chat:delta — the streaming card grows
+        end
+        Prov-->>Loop: the round's reply: text, tool calls, truncated?
         opt no native call, but one written into the text
             Loop->>Loop: parseTextToolCalls
         end
@@ -2919,15 +2924,18 @@ sequenceDiagram
             Prov-->>Loop: text
         else calls to run
             loop each call
-                alt not offered / arguments wrong / reply was cut off
-                    Loop->>Loop: result = "Error: …" (nothing runs)
+                alt not offered / arguments wrong / reply was cut off / ask already cancelled
+                    Loop->>Loop: result = "Error: …" (nothing runs; a cancel throws instead)
                 else
                     Loop-->>CE: onToolEvent start
                     CE-->>Panel: chat:toolEvent — chip "tool · name(args) …"
-                    Loop->>Host: onToolCall(name, checked args)
-                    Host->>Tool: run where the name was offered from
+                    Loop->>Host: onToolCall(name, checked args, signal)
+                    Host->>Tool: run where the name was offered from, signal attached
+                    opt the tool waits on the user (diff confirm, approval)
+                        Tool->>Tool: the wait races the signal — an abort wins, nothing is written
+                    end
                     Tool-->>Host: result, or it throws
-                    Host-->>Loop: result (a throw becomes "Error: … failed")
+                    Host-->>Loop: result (a throw becomes "Error: … failed"; an abort is rethrown)
                     Loop->>Loop: cap at 16 000 characters
                     Loop-->>CE: onToolEvent end (ok?)
                     CE-->>Panel: chat:toolEvent — chip settles
@@ -2949,9 +2957,16 @@ The first request is the only one that may be answered "this endpoint
 takes no tools" (HTTP 400 with tools attached): the loop goes on in
 `plain` mode and the engine, seeing `toolsDropped`, repeats the question
 with a prompt that fits, then skips the tools for that model until the
-app restarts. When tools ran and even the closing round brings no text,
-the turn is persisted with its trace under a fixed line — never dropped
-while a write it made is on disk.
+app restarts. A streamed round that answers HTTP 400 is retried
+non-streamed once (some local servers take tools only unstreamed) and
+the call's rounds go non-streamed from there — only a non-streamed first
+round that still 400s concludes "no tool support". When tools ran and
+even the closing round brings no text, the turn is persisted with its
+trace under a fixed line — never dropped while a write it made is on
+disk. A cancel no longer waits for the tool call in flight: the signal
+travels with every call, the user-dialog waits race against it (an
+already-open dialog stays until answered — no dismiss seam; its late
+answer is discarded), and a queued call of a cancelled ask never starts.
 
 ## 6.60 The assistant changes a note with `vault_edit` (milestone 77, [ADR-0071](09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md))
 
@@ -3512,3 +3527,40 @@ service compares it inside its queue — a changed file answers
 keeps its draft and reloads. A Drey tab showing the ticket is not asked
 (no plugin seam reaches open tabs yet): a clean tab reloads on the
 announce, a dirty one meets the ADR-0060 merge when it is saved.
+
+## 6.72 The due-date reminder digest: index settles → check → notify → click reveals the panel (req-74)
+
+```mermaid
+sequenceDiagram
+    actor U as Owner
+    participant S as task index (plugin main)
+    participant P as Tasks panel (plugin renderer)
+    participant R as startReminders (renderer/reminders.ts)
+    participant C as plugin config (api.settings)
+    participant N as ui.notify (OS toast)
+
+    Note over S,R: boot sweep finished, or a save / write / refresh re-pulled
+    S-->>P: index-updated push
+    P->>P: refreshVault — state.vaultTasks = list (disk index, all vaults)
+    P->>R: check()
+    R->>C: get remindersEnabled (absent = on)
+    R->>C: get remindersLastDay
+    alt disabled, or lastDay = today, or digest empty
+        R-->>P: return — the day gate is NOT written (a boot check before<br/>the index settled must not silence the day)
+    else open tasks with due <= today exist
+        R->>N: notify (title/body by the counts, tag 'tasks-due',<br/>onClick = revealWidget('tasks'))
+        R->>C: set remindersLastDay = today — also when the system<br/>shows nothing; later checks this day return early
+        U->>N: click the toast
+        N->>U: Drey's window comes to the front
+        N->>P: onClick — reveal the Tasks panel
+    end
+    Note over R: a one-minute interval re-checks (the midnight rollover);<br/>stop() from deactivate clears it. Nothing runs while Drey is closed —<br/>the next start's digest covers every open overdue task once.
+```
+
+The digest itself is pure (`reminderDigest` over `dueState`): open
+tasks with `due <= today` split into due-today and overdue; the wording
+covers the three shapes (both counts, due-today only pluralized,
+overdue only pluralized under the "Overdue tasks" title). The
+notification's `tag` makes a later digest replace the earlier toast
+instead of stacking.
+

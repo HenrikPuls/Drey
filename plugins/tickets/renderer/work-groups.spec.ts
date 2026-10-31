@@ -11,7 +11,7 @@ import {
 import { checkpointActionOf, ideaPhaseIds, queueTargetOf, statusLineOf, workGroups } from './work-groups';
 
 /**
- * req-74 W1: the Work panel's three groups over the default eight-phase
+ * req-75 W1: the Work panel's three groups over the default eight-phase
  * pipeline — inbox/prioritized are ideas, plan and build are the
  * machine's, plan-review/review/done are the owner's checkpoints.
  */

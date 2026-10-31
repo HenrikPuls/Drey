@@ -20,6 +20,147 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-66 R10 — Tickets remote: the detail pane and the columns keep their scroll
+
+Not yet manually verified by the owner. T-0056 (owner-reported defect,
+outside the list). On the iPad a desk-side change repaints the whole
+client view, and with the fleet chain pushing events every couple of
+seconds the ticket detail pane — and every column list — snapped back
+to the top while being read. The strip's scroll memory
+(`kanban.ts`) now covers all three scrollers:
+
+- **Per-scroller memory.** A `scroll` listener on each `.kcol-list`
+  (keyed by its `data-phase`) and on the `.detail` pane records the
+  tops; one `requestAnimationFrame` after the build restores them —
+  remembered tops first, the selected card's `scrollIntoView` reveal
+  last, so the reveal still wins where they overlap. Parity with the
+  desk board's `restoreScroll`, which keeps the board's and its
+  columns' scroll the same way.
+- **Fresh content starts at the top.** A different selected ticket or
+  a different tab resets the remembered pane top — the phone's
+  route-change repaint-at-0 behaviour, mirrored.
+- Complementary to T-0053's view-keyed repaint guard (merged into the
+  base meanwhile): rarer repaints, and the ones that remain keep their
+  position.
+- e2e: the fixture's T-0053 grows a twelve-paragraph Description (the
+  pane genuinely overflows at iPad-landscape height; every string other
+  tests assert stays byte-identical), and the iPad spec scrolls the
+  pane, lets a desk-side move repaint, and asserts the new pane is back
+  where the reader was. The move — not a revision bump — is the
+  trigger: the guard skips a repaint when nothing visible changed.
+- Repaired on the way: R4's stop assertion in `e2e/tickets-remote.spec.ts`
+  was stale against the req-66 follow-up's ended-run reopen composer
+  (the suite failed on the untouched base); it now pins the Stop button
+  gone and the reopen field there. Manual: the "On an iPad" paragraph
+  says the pane and the columns keep their scroll while the board
+  redraws live.
+
+### req-74 — Due-date reminders
+
+**Not yet manually verified by the owner.** The `📅` date was parsed and
+sortable, but nothing notified. The Tasks plugin now shows **one system
+notification per local day** — a counts-only digest, never one toast per
+task — when open tasks with `due <= today` exist across every registered
+vault (the main-side all-vaults index; the panel's All scope shows the
+same set). Done and future tasks never notify.
+
+- **When it evaluates:** whenever the task index settles — the boot
+  sweep's `index-updated` push and every save / write / refresh re-pull
+  (the end of the panel's `refreshVault`) — and once a minute while Drey
+  runs, so the midnight day rollover is caught. The day is stored as
+  `remindersLastDay` in the plugin config **only when a notification
+  actually fired**: a disabled switch, an already-reminded day and an
+  empty digest (the boot check before the index settled) never burn the
+  day — and a fired digest counts even when the system shows nothing
+  (`ui.notify` resolves false on denied permission, so it cannot
+  re-fire on the next save's push). The notification carries
+  `tag: 'tasks-due'`, so a later digest replaces the earlier toast; a
+  click brings Drey to the front and reveals the Tasks panel.
+- **While Drey is closed** nothing fires (no background process, no
+  OS-scheduled toast): the next start's digest covers due-today and
+  every open overdue task, so a missed reminder arrives once, late —
+  not once per missed day.
+- **Wording:** "Tasks due today — 2 due today, 4 overdue" when both,
+  "1 task due today" / "3 tasks due today" when only due today,
+  "Overdue tasks — 1 task is overdue" / "4 tasks are overdue" when only
+  overdue.
+- The digest reads the **disk index**, never open buffers — a task due
+  today in an unsaved buffer counts after its save. Reminder state
+  lives in the plugin config, never the panel's localStorage view
+  prefs.
+- Settings → Tasks ("Due-date reminders", default on) turns it off.
+  Rejected alternatives: app-internal toast chrome, OS-scheduled
+  reminders for the closed app (`decisions.md`).
+- Implementation: `plugins/tasks/renderer/reminders.ts` (pure digest +
+  `startReminders` controller with injectable seams — clock, tasks,
+  settings, notify) + `reminders.spec.ts` (20 DOM-free cases), and
+  `settings.ts` — the plugin's first Settings page (manifest 1.2.0,
+  permissions + `settings`; `ui.notify` needs no permission). Manual
+  §6, `docs/05` §5.0, `docs/06` §6.70 updated.
+
+
+Renumbered from req-65 at merge: while T-0012 was in review, main
+shipped its own req-65 (interactive runs, ADR-0084) and req-66 (the
+tickets remote, ADR-0086), so the merged record takes the next free id,
+req-74. The branch and the ticket file keep the review round's req-65
+wording.
+
+### Milestone 88 — the M76 tool-loop follow-ups: streamed answers, abort, the web_fetch guard, post-hoc replay
+
+**Not yet manually verified by the owner.** The four milestone-76
+follow-ups the roadmap carried ([ADR-0071 later
+change](../docs/09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md)).
+
+- **A tool-carrying answer streams.** Both HTTP providers now send every
+  round of the tool loop with `stream: true` when the caller asked for
+  streaming: text arrives as deltas — interim text before a tool call
+  included — and the loop, not the provider, owns the forwarding, so a
+  final round that did not stream still arrives as exactly one call
+  with the full text. Pure SSE sinks
+  (`shared/llm/stream-assembly.ts`) merge the frames of both dialects
+  into the canonical reply. A streamed round the endpoint answers with
+  HTTP 400 is retried non-streamed once and the call's rounds go
+  non-streamed from there (some local servers take tools only
+  unstreamed); streamed rounds report no usage.
+- **The cancel reaches the tools.** A cancel no longer waits for the
+  tool call in flight: `onToolCall` gains the ask's abort signal as an
+  optional third parameter (SDK `PLUGIN_API_VERSION` minor 1.35 →
+  1.36), the loop hands it to every call and stops queued calls of an
+  already-cancelled ask, `VaultTools` refuses a cancelled call and lets
+  aborts through instead of flattening them into `Error:` text, and
+  every wait on the user — the diff confirm, a move or delete
+  approval, a template confirm — races the signal: a cancel during the
+  dialog writes nothing. An already-open dialog stays until answered
+  (the ADR-0011 dialog has no dismiss seam; the raced answer is
+  discarded — the residual gap stays on the roadmap's M78 line).
+- **`web_fetch` guards the local network.** Every hop of a fetch is
+  address-checked before anything is fetched: literal private/special
+  IP ranges (v4 and v6, IPv4-mapped included),
+  `localhost` / `*.localhost` / `*.local` / `*.internal` without a
+  lookup, every other name through a DNS lookup refused when ANY
+  address is private, and redirects are followed manually (≤ 5 hops, a
+  relative `Location` resolved per hop) so each hop is guarded — a
+  refusal is `Error:` text for the model; the SearXNG instance address
+  stays unguarded (the M79 follow-up, out of scope here).
+- **The post-hoc task block replays as a text note.** The synthetic
+  `tasks_list` pair the app appends when an answer talks about tasks
+  (57b/57c) no longer replays to the model as a call it never made: the
+  pair is dropped from the tool replay and its records ride after the
+  turn's answer as a bracketed note through the usual 2 000-character
+  cap. A real `tasks_list` call still replays as a call; the persisted
+  note format is unchanged.
+
+Specs: `shared/llm/stream-assembly.spec.ts`,
+`electron/llm/tool-loop-streaming.spec.ts`,
+`electron/llm/tool-loop-abort.spec.ts` (the real chain through
+`buildLlmContext` and `runToolLoop`),
+`electron/mcp/vault-tools-abort.spec.ts`,
+`electron/mcp-client/web-fetch-guard.spec.ts`,
+`plugins/assistant/shared/chat-replay-posthoc.spec.ts`; both provider
+specs cover the streamed tool round, the 400 fallback and the unchanged
+non-streaming path; the post-hoc note text is in
+`specs/classifier-spec.md`.
+
 ### fix — the assistant button at a selection shows on a freshly opened note
 
 **Not yet manually verified by the owner.** Owner request, outside the
@@ -1407,9 +1548,8 @@ run surfaced two defects; both are fixed on the branch `t/T-0051`:
   turn end; the takeover transcript (now formatted by the pure
   `watch-format.ts` view model, which `transcript.ts` delegates to)
   shows tool steps and growing replies while the turn runs. The card
-  chip reads `▶ running · <turns> · <kIn>/<kOut> · <mm:ss>`, the
-  summary pills add the oldest live run's age, and the takeover stats
-  line carries the turn count and a clock.
+  chip reads `▶ running · <turns> · <kIn>/<kOut>` (duration-free, see
+  the round-2 bullet below).
 - **Editor syntax colors are complete.** `dreyHighlightStyle` gains the
   three tags that fell through (`escape`, `literal`, `name`), pinned by
   a coverage-guard spec over the mandatory tag set of the common
@@ -1429,6 +1569,20 @@ run surfaced two defects; both are fixed on the branch `t/T-0051`:
   `@vitest/browser-*` provider. The suite itself is untouched — it
   runs headless in jsdom as it did, and the exit code is the real
   suite's.
+- **Run duration displays removed again (round 2, owner call).** The
+  elapsed-since-`startedAt` number "does not really mean anything",
+  and the card chip's tooltip closed and reopened whenever the clock
+  tick rewrote its `mm:ss` — so every run-elapsed surface goes: the
+  chip text, its tooltip's "so far" phrase, the "running mm:ss"
+  summary pill, the takeover stats clock and the lane age span.
+  `runChipLine` is clock-free. Column-dwell
+  ages, `⌀` column averages and claim ages stay: workflow aging from
+  `entered-*` stamps, word-granular, no ticking clock. (Merged into
+  `main`, the chip text, the tooltip and the lane age are duration-free
+  as planned; the summary pills and the old takeover stats line no
+  longer existed there — req-60's panel-header fleet summary and the
+  req-58/67 takeover metrics had replaced them and stay as shipped,
+  clocks included, so `spanClock` remains exported for those.)
 
 ### req-56 — Fleet workers start oriented: a ready toolchain, a clean environment, a short map (owner request, outside the list)
 

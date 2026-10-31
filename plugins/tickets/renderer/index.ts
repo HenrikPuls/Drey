@@ -443,9 +443,9 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
     const runChip = el(
       'span',
       `tickets-chip tickets-chip-run${waiting !== null ? ' tickets-chip-waiting' : ''}`,
-      waiting !== null ? '? waits for you' : runChipLine(live, Date.now()),
+      waiting !== null ? '? waits for you' : runChipLine(live),
     );
-    runChip.title = `run ${live.id} (${live.provider}) — ${live.state}, turn ${live.steerCount + 1}, ${formatTokens(live.tokensIn)} in / ${formatTokens(live.tokensOut)} out, ${spanClock(execClockMs(live, Date.now()))} working so far; open the card menu to watch, steer or stop`;
+    runChip.title = `run ${live.id} (${live.provider}) — ${live.state}, turn ${live.steerCount + 1}, ${formatTokens(live.tokensIn)} in / ${formatTokens(live.tokensOut)} out; open the card menu to watch, steer or stop`;
     if (waiting !== null) {
       runChip.title = `run ${live.id} ${waiting.kind === 'question' ? 'asks' : 'needs your approval'}: ${waiting.text} — open the run to answer`;
     }
@@ -1536,10 +1536,6 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
       }
       if (run.costUsd !== null && run.costUsd > 0) {
         tokens.append(el('span', undefined, `$${run.costUsd.toFixed(2)}`));
-      }
-      const age = ageOf(run.startedAt);
-      if (age !== '') {
-        tokens.append(el('span', undefined, age));
       }
       body.append(tokens);
 

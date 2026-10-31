@@ -1,5 +1,5 @@
 /**
- * The Work panel's groups (req-74 W1, ADR-0087): the board snapshot and
+ * The Work panel's groups (req-75 W1, ADR-0087): the board snapshot and
  * the fleet's runs folded into three lists — **Needs you** (everything
  * that waits on the owner), **Ideas** (the backlog before the machine)
  * and **In progress** (the rest up to the terminal phase). Pure, so the

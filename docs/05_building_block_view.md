@@ -800,7 +800,12 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   vault badge). A row's checkbox rewrites the buffer line through
   `documents.setBuffer` + save (closed files through
   `vault.writeFile { vaultId }`); a row click opens the file at the line,
-  in its vault
+  in its vault. Since req-74 the panel also owns the **due-date reminder
+  digest** (`renderer/reminders.ts`): one `ui.notify` system
+  notification per local day when open tasks with `due <= today` exist
+  in any vault, re-evaluated when the index settles and once a minute,
+  gated on `remindersLastDay` in the plugin config (written only when a
+  notification fired) with the Settings → Tasks switch `remindersEnabled`
 - Source control panel — `plugins/git/` (ADR-0065):
   the repository of the focused document's vault — branch button (→
   branch picker: switch, track a remote branch, create), commit message
@@ -920,7 +925,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Autotag / "Suggest tags" | `electron/llm/tag-suggest.ts`, the editor `⋯` menu | Base | `specs/classifier-spec.md`, M45 |
 | Tasks panel + inline due/priority metadata | `plugins/tasks/` | Plugin tasks | ADR-0033 |
 | Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
-| Tool loop (offered-only, argument check, error results, round budget, closing round, text-written calls, progress events) | `electron/llm/tool-loop.ts`, `shared/llm/tool-args.ts`, `shared/llm/text-tool-calls.ts`; dispatch in `electron/plugin-host/plugin-context.ts` (`buildLlmContext`) | Base (`llm/`, `plugin-host/`) | ADR-0071, M76 |
+| Tool loop (offered-only, argument check, error results, round budget, closing round, text-written calls, progress events; streamed rounds with loop-owned delta forwarding and the abort signal into every call — M88) | `electron/llm/tool-loop.ts`, `shared/llm/tool-args.ts`, `shared/llm/text-tool-calls.ts`, `shared/llm/stream-assembly.ts`; dispatch in `electron/plugin-host/plugin-context.ts` (`buildLlmContext`) | Base (`llm/`, `plugin-host/`) | ADR-0071, M76 |
 | Vault tools for the model — `vault_list`, `vault_search`, `vault_read`, `vault_edit`, `vault_write`, `vault_move`, `vault_delete` | `electron/mcp/tools/` (`defs.ts` descriptions, `scope.ts` the vaults and paths a call may touch, `list.ts`, `search.ts`, `read.ts`, `write.ts`), `electron/mcp/vault-tools.ts` (`VaultTools`: what a caller is offered, routing, `VaultCallOptions`); edit core `shared/text-edit.ts`; `tasks_list` in `shared/tasks-list-tool.ts`; wired in `electron/app-services.ts`; scope and write rule applied for plugin calls in `electron/plugin-host/plugin-context.ts` (`assistantVaultOptions`) | Base (`mcp/`) — one set for the MCP server and the assistant | ADR-0021, ADR-0071, M77 |
 | Assistant system prompt | `plugins/assistant/main/system-prompt.ts` (`buildSystemPrompt`), role texts in `ask-prompts.ts` (`ASK_SYSTEM`, `askToolsSystem`, `liveEditSystem`) | Plugin assistant | ADR-0071, M76, M78 |
 | Vault tools on open tabs — reading the buffer, changing a file in its tab, tab follows a move / closes on delete | `electron/ipc/open-docs-bridge.ts` (`OpenDocsBridge`), `shared/ipc/mcp.ts` (`OpenDocsRequest` / `OpenDocsReply`), `src/app/services/open-docs-bridge.service.ts`; used in `electron/mcp/tools/current-text.ts`, `write.ts`; the attached note as a file of the call: `VaultCallOptions.files`, `ToolScope.file` / `locate` | Base (`ipc/`, `mcp/`, renderer `services/`) | ADR-0071, M78 |
@@ -3123,9 +3128,12 @@ sits behind them.
   `LlmError('unsupported')` rather than falling back.
 - **`providers/`** (barrel) — one client per backend family:
   `openai-compat.ts` serves `lmstudio` / `openai-compat` / `openrouter`
-  (SSE streaming when `onDelta` is passed and no tool loop is in play;
-  with tools each provider only supplies the single-request function of
-  `tool-loop.ts`'s `runToolLoop` — the loop itself is shared, ADR-0071;
+  (SSE streaming whenever `onDelta` is passed — a tool loop's rounds
+  streamed the same way over the pure sinks of
+  `shared/llm/stream-assembly.ts`, a refused streamed round retried
+  non-streamed; with tools each provider only supplies the
+  single-request function of `tool-loop.ts`'s `runToolLoop` — the loop
+  itself is shared and owns the delta forwarding, ADR-0071;
   OpenRouter's 200-with-error-body mapped onto `LlmError('http')`),
   `anthropic-messages.ts` serves `anthropic` / `zai-glm` (top-level
   `system`, required `max_tokens`, `tool_use`/`tool_result` adapters,

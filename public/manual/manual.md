@@ -339,6 +339,15 @@ same pickers in place.
 - Clicking a row opens the file at that line, in its vault.
 - `Mod+Enter` toggles the task under the cursor done/undone.
 
+### Reminders
+
+Once a day, a system notification counts the open tasks that are due
+today or overdue — across every vault (for example "2 due today, 4
+overdue"). Clicking it brings Drey to the front and opens the Tasks
+panel. Nothing is scheduled while Drey is closed: the next start
+reports what piled up in one notification. Turn it off in
+Settings → Tasks.
+
 ---
 
 ## 7. Tags and search
@@ -892,13 +901,12 @@ told to use them and install nothing.
 While the run is live, its column shows a **Workers** strip with one
 lane per run: a traffic light (green working, amber context nearly full
 or stopping, red stalled for five minutes — always with the state in
-words), the worker's current activity, its context window, token usage
-and age, plus the run's telemetry chips — **ctx** (the last turn's real
+words), the worker's current activity, its context window, token
+usage, plus the run's telemetry chips — **ctx** (the last turn's real
 context size), **turns** (model calls) and **reads** (read/search tool
 calls) — once the worker reports them; the card carries a ▶ chip reading
-the state, the turn count, the run's own tokens and its working time
-(`▶ running · 2 · 45k/1.2k · 03:41` — waits for you and standing do not
-count). While workers run, the panel
+the state, the turn count and the run's own tokens
+(`▶ running · 2 · 45k/1.2k`). While workers run, the panel
 header sums up the whole fleet next to its buttons
 (`● 1 running · 18.9M tok · 26:22`): the worst light, the states in
 words, the tokens in flight and how long the oldest live run has been
@@ -1225,11 +1233,13 @@ save there.
 
 **On an iPad.** From tablet width the Board shows every column side by
 side, scrolling sideways; in landscape the ticket you tap opens in a
-pane beside the board, with the same buttons as on the phone. To move a
-card, **press and hold it** until it lifts, then drag it — into another
-column to move it there, or up and down in its column to change the
-order (a blue line shows where it lands). Moving your finger before the
-card lifts scrolls instead. **Move…** works here too.
+pane beside the board, with the same buttons as on the phone. While the
+board redraws live — a card moves, the desk saves a ticket — the pane
+and each column keep their scroll position. To move a card, **press and
+hold it** until it lifts, then drag it — into another column to move it
+there, or up and down in its column to change the order (a blue line
+shows where it lands). Moving your finger before the card lifts scrolls
+instead. **Move…** works here too.
 
 **The fleet's switches.** The chip at the top right (*Running*,
 *Halted*) opens the fleet switch: **Run** / **Halt** for every column,

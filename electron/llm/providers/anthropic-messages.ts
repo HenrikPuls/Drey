@@ -9,13 +9,16 @@
  * 4096, overridable per call); roles alternate strictly (the adapter
  * merges); tools are `{name, description, input_schema}` with `tool_use`
  * / `tool_result` content blocks. Streaming is SSE
- * (`content_block_delta`). No generation timeout (ADR-0014).
+ * (`content_block_delta`) for a request without tools and for every
+ * round of the tool loop alike (a refused streamed round falls back to
+ * non-streamed). No generation timeout (ADR-0014).
  */
 import { LlmEndpoint } from '../../../shared/app-config';
 import {
   LlmChatResult,
   ChatMessage,
   AnthropicBlock,
+  createAnthropicEventSink,
   maskAuthorizationHeader,
   toAnthropicMessages,
   toAnthropicTools,
@@ -55,22 +58,6 @@ function stamp(date: Date): string {
 function sseData(chunk: string): string | null {
   const line = chunk.trim();
   return line.startsWith('data:') ? line.slice(5).trim() : null;
-}
-
-/** The text payload of a `content_block_delta` frame, when it has one. */
-function deltaText(frame: string): string | null {
-  try {
-    const json = JSON.parse(frame) as {
-      type?: unknown;
-      delta?: { type?: unknown; text?: unknown };
-    };
-    if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
-      return typeof json.delta.text === 'string' ? json.delta.text : null;
-    }
-  } catch {
-    // Not JSON -- a keep-alive or a frame we don't understand.
-  }
-  return null;
 }
 
 export class AnthropicMessagesProvider implements LlmClient {
@@ -300,7 +287,9 @@ export class AnthropicMessagesProvider implements LlmClient {
   /**
    * One `/v1/messages` exchange (or tool loop). The canonical transcript
    * is adapted (`system` lifted out, tool turns as blocks); streaming is
-   * SSE when the caller passed `onDelta` and no tool loop is in play.
+   * SSE whenever the caller passed `onDelta` — a plain request in one
+   * streamed call, every round of a tool loop the same way (a refused
+   * streamed round falls back to non-streamed).
    */
   async chat(messages: ChatMessage[], options: LlmChatOptions = {}): Promise<LlmChatResult> {
     const { llm } = this.config.get();
@@ -355,7 +344,14 @@ export class AnthropicMessagesProvider implements LlmClient {
     options: LlmChatOptions,
   ): Promise<LlmChatResult> {
     const body = this.requestBody(messages, options, true, null);
-    const { status, text } = await this.sendSse('/v1/messages', JSON.stringify(body), options);
+    const sink = createAnthropicEventSink();
+    const { status, text } = await this.sendSse(
+      '/v1/messages',
+      JSON.stringify(body),
+      options,
+      sink.push,
+      options.onDelta!,
+    );
     if (status < 200 || status >= 300) {
       throw this.httpError(status, text);
     }
@@ -365,7 +361,13 @@ export class AnthropicMessagesProvider implements LlmClient {
     return { text };
   }
 
-  /** The non-streamed path: one request per round of the shared tool loop. */
+  /**
+   * The tool loop path: one request per round of the shared loop, every
+   * round streamed when the caller passed `onDelta` (deltas through the
+   * loop's `emit`, tool-use blocks assembled by the shared sink). A
+   * streamed round the endpoint answers with HTTP 400 is retried
+   * non-streamed once, and the call's rounds go non-streamed from there.
+   */
   private chatWithLoop(
     messages: ChatMessage[],
     options: LlmChatOptions,
@@ -373,8 +375,36 @@ export class AnthropicMessagesProvider implements LlmClient {
   ): Promise<LlmChatResult> {
     const toolWire = useTools ? toAnthropicTools(options.tools ?? []) : null;
     const loopOptions: LlmChatOptions = useTools ? options : { ...options, tools: [] };
+    let streaming = options.onDelta !== undefined;
 
-    const request: RequestRound = async (convo, mode) => {
+    const request: RequestRound = async (convo, mode, _first, emit) => {
+      if (streaming) {
+        const streamedBody = this.requestBody(
+          [...convo],
+          options,
+          true,
+          mode === 'plain' ? null : toolWire,
+          mode === 'closing',
+        );
+        const sink = createAnthropicEventSink();
+        const { status, text } = await this.sendSse(
+          '/v1/messages',
+          JSON.stringify(streamedBody),
+          options,
+          sink.push,
+          emit,
+        );
+        if (status === 400) {
+          // The endpoint takes this request only unstreamed: retry the
+          // round, and stop streaming this call's rounds.
+          streaming = false;
+        } else if (status < 200 || status >= 300) {
+          throw this.httpError(status, text);
+        } else {
+          return sink.result();
+        }
+      }
+
       const body = this.requestBody(
         [...convo],
         options,
@@ -444,13 +474,18 @@ export class AnthropicMessagesProvider implements LlmClient {
   }
 
   /**
-   * SSE variant: same debug entry (assembled text instead of raw frames),
-   * `content_block_delta` frames forwarded to `onDelta`.
+   * SSE variant: same debug entry (assembled text instead of raw
+   * frames). `frameDelta` turns one parsed event payload into the text
+   * delta it carries (the shared sink for both the plain and the tool
+   * round); every non-empty delta is forwarded to `onDelta` as it
+   * arrives and assembled for the log and the return.
    */
   private async sendSse(
     path: string,
     body: string,
     options: LlmChatOptions,
+    frameDelta: (payload: unknown) => string | null,
+    onDelta: (delta: string) => void,
   ): Promise<{ status: number; text: string }> {
     const url = `${this.endpoint().baseUrl}${path}`;
     const headers = this.headers(this.endpoint(), { accept: 'text/event-stream' });
@@ -506,11 +541,15 @@ export class AnthropicMessagesProvider implements LlmClient {
           buffer = buffer.slice(newlineAt + 1);
           const data = sseData(frame);
           if (data !== null && data !== '[DONE]') {
-            const delta = deltaText(data);
-            if (delta !== null) {
-              chunks++;
-              assembled += delta;
-              options.onDelta?.(delta);
+            try {
+              const delta = frameDelta(JSON.parse(data));
+              if (delta !== null && delta.length > 0) {
+                chunks++;
+                assembled += delta;
+                onDelta(delta);
+              }
+            } catch {
+              // A keep-alive or an event we don't understand -- skip it.
             }
           }
           newlineAt = buffer.indexOf('\n');

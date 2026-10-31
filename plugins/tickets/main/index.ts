@@ -400,7 +400,7 @@ class BoardService {
   }
 
   /**
-   * The Work panel's priority chip (req-74 W1): the refine rewrite of the
+   * The Work panel's priority chip (req-75 W1): the refine rewrite of the
    * one header key, so the commit and the Log line are a refine's
    * (`tickets: <id> refined`, `refined (priority)`). No revision check —
    * the owner clicked on what the board shows; a live run refuses like
