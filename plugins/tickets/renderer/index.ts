@@ -11,6 +11,7 @@ import { formatWatch, parseStreamEvents } from './watch-format';
 import { newWaits } from './waiting';
 import { interactiveEndMoves, interactiveModeFor, type InteractiveMode } from './end-moves';
 import { asParagraphs, chainLogStamp, visibleChainLog } from './chain-log';
+import { chainAlertsOf, newChainAlerts, type ChainAlert } from './chain-alerts';
 import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
 import {
   branchForTicket,
@@ -417,8 +418,28 @@ function workPanelDeps(api: DreyPluginApi): WorkPanelDeps {
     setTrack: (card, track) => void runMutation('Setting the track', () => invokeBoard('setTrack', { id: card.id, track })),
     // The row menu shares the panel's seams (Track › / Priority ›).
     openMenu: (card, at) => openCardMenu(api, card, at, runMutation, (path) => openTicketFile(api, path), deps),
+    alerts: currentChainAlerts(),
+    onAlertAction: (action) =>
+      void (action.kind === 'play-column'
+        ? runChainAction('chainColumn', { phase: action.phase, mode: 'playing' })
+        : runChainAction('chainMaster', { mode: 'run' })),
   };
   return deps;
+}
+
+/** What stops the fleet right now, over the current snapshot and chain. */
+function currentChainAlerts(): readonly ChainAlert[] {
+  return snapshot === null || snapshot.vaultId === null ? [] : chainAlertsOf(chain, snapshot, fleetRuns, Date.now());
+}
+
+/** The breaker trips and quota pauses this window already announced. */
+const announcedAlerts = new Set<string>();
+
+/** One OS notification per new breaker trip or quota pause; a click shows the Work panel's alert. */
+function announceChainAlerts(api: DreyPluginApi): void {
+  for (const alert of newChainAlerts(currentChainAlerts(), announcedAlerts)) {
+    void api.ui.notify({ title: alert.title, body: alert.text, tag: alert.key });
+  }
 }
 
 /**
@@ -451,8 +472,9 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       if (snapshot === null || snapshot.vaultId === null) {
         return null;
       }
-      // Needs you beats open: what waits on the owner is the panel's point.
-      const needs = workGroups(snapshot, liveRuns()).needs.length;
+      // Needs you beats open: what waits on the owner is the panel's point,
+      // and a stopped fleet is part of it.
+      const needs = workGroups(snapshot, liveRuns()).needs.length + currentChainAlerts().length;
       if (needs > 0) {
         return `${needs} need you`;
       }
@@ -503,15 +525,17 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       refreshButton.append(api.ui.icon('refresh-cw', 14));
       refreshButton.addEventListener('click', () => void refreshBoard());
 
-      // req-75 W1b: project · spacer · + · refresh · master · ⋯ — the
-      // fleet summary lives in the panel footer now, with the workers.
+      // req-75 W1b: project · fleet status · spacer · + · refresh · master · ⋯
+      // (the fleet status came back with the chain alerts fix).
+      const fleet = fleetHeaderNode();
       const viewControls = boardViewControlsNode(api);
       const actions = el('span', 'tickets-head-group');
       actions.append(newButton, refreshButton);
       host.classList.add('tickets-panel-head');
-      host.append(project, viewControls.node, el('span', 'tickets-head-spacer'), actions, masterControlNode(api), headerMenuButton(api));
+      host.append(project, fleet.node, viewControls.node, el('span', 'tickets-head-spacer'), actions, masterControlNode(api), headerMenuButton(api));
       return () => {
         projectPainters.delete(paintProjects);
+        fleet.dispose();
         viewControls.dispose();
       };
     },
@@ -522,7 +546,16 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       views.add(view);
       panel.append(view.root);
       view.render();
+      // The header's fleet status follows the panel's width (req-60).
+      const widthObserver = new ResizeObserver((entries) => {
+        panelWidth = entries[0]?.contentRect.width ?? 0;
+        for (const listener of panelWidthListeners) {
+          listener();
+        }
+      });
+      widthObserver.observe(panel);
       return () => {
+        widthObserver.disconnect();
         views.delete(view);
       };
     },
@@ -905,6 +938,73 @@ function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null): HTMLElem
   }
   bar.append(fleetFooterNode(), right);
   return bar;
+}
+
+/** Below this panel width the header's fleet status drops its numbers (they stay in the tooltip). */
+const HEAD_FLEET_NARROW_PX = 480;
+
+/** Below this one it is its light alone. */
+const HEAD_FLEET_TINY_PX = 380;
+
+/** The Work panel's current width (its body is as wide as its header); 0 before the first measure. */
+let panelWidth = 0;
+const panelWidthListeners = new Set<() => void>();
+
+/**
+ * The fleet's status in the panel header (req-60, back with the chain
+ * alerts fix): the worst light, the states in words, tokens in flight
+ * and the oldest run's age — the long form in its tooltip. A standing
+ * chain alert (breaker, hold, halt, quota) turns the light amber at
+ * least and counts in the words, so a stopped fleet shows even with no
+ * run alive. Repaints on every fleet update and once a second.
+ */
+function fleetHeaderNode(): { node: HTMLElement; dispose: () => void } {
+  const node = el('span', 'tickets-head-fleet');
+  const light = el('span', 'tickets-light');
+  const label = el('span', 'tickets-head-fleet-label');
+  const numbers = el('span', 'tickets-head-fleet-numbers');
+  node.append(light, label, numbers);
+  const paint = (): void => {
+    const summary = fleetSummary(liveRuns(), Date.now());
+    const alerts = currentChainAlerts();
+    node.hidden = summary === null && alerts.length === 0;
+    node.toggleAttribute('data-narrow', panelWidth > 0 && panelWidth < HEAD_FLEET_NARROW_PX);
+    node.toggleAttribute('data-tiny', panelWidth > 0 && panelWidth < HEAD_FLEET_TINY_PX);
+    if (node.hidden) {
+      return;
+    }
+    const lit = summary?.light ?? 'idle';
+    light.className = `tickets-light tickets-light-${alerts.length > 0 && (lit === 'idle' || lit === 'green') ? 'amber' : lit}`;
+    const alertWords = alerts.length === 0 ? '' : alerts.length === 1 ? alerts[0]!.title : `${alerts.length} fleet alerts`;
+    label.textContent = [summary?.label ?? '', alertWords].filter((part) => part !== '').join(' · ');
+    const age = summary === null || summary.ageMs === null ? '' : spanClock(summary.ageMs);
+    numbers.hidden = summary === null;
+    numbers.textContent = summary === null ? '' : `${formatTokens(summary.tokens)} tok${age === '' ? '' : ` · ${age}`}`;
+    const long = [
+      ...(summary === null
+        ? []
+        : [
+            summary.label,
+            `${formatTokens(summary.tokens)} tokens in flight (in + out of all live runs)`,
+            ...(age === '' ? [] : [`the oldest run has been at it for ${age}`]),
+          ]),
+      ...alerts.map((alert) => `${alert.title}: ${alert.text}`),
+    ].join('\n');
+    node.title = long;
+    node.setAttribute('aria-label', long);
+  };
+  fleetListeners.add(paint);
+  panelWidthListeners.add(paint);
+  const tick = setInterval(paint, 1_000);
+  paint();
+  return {
+    node,
+    dispose: () => {
+      fleetListeners.delete(paint);
+      panelWidthListeners.delete(paint);
+      clearInterval(tick);
+    },
+  };
 }
 
 /**
@@ -2353,6 +2453,8 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     backend = api.backend;
     // A worker that waits on the owner says so outside the board too (req-64).
     fleetListeners.add(() => announceWaits(api));
+    // So does a fleet that stopped by itself: a tripped breaker, a spent quota.
+    fleetListeners.add(() => announceChainAlerts(api));
     api.ui.registerWidget(createTicketsWidget(api));
     api.ui.registerSettingsPage(createTicketsSettingsPage(api));
 

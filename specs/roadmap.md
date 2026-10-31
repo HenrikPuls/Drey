@@ -349,6 +349,13 @@ rest are kept so they still match `docs/11`.
 
 ### Follow-ups of shipped milestones (none committed)
 
+- **Chain alerts fix (owner request, 2026-10-31):** the run's usage
+  in the thread as a menu, like Claude Code's context indicator — a
+  small context gauge in the composer toolbar whose click lists context
+  used / window, tokens in (cached) / out, cost, turns, reads and the
+  elapsed time. Waits for T-0061 (W4a), which rewrites the thread and
+  only carries these numbers as the meta line's tooltip.
+
 - **req-79 (fleet token audit, 2026-10-31):** the other levers the audit
   of 52 runs / ~372M input tokens found, by size. (1) A run has no
   context ceiling: four build runs of 174–264 model calls, their context

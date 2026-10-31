@@ -17,6 +17,7 @@ import {
   type TicketTrack,
 } from '../shared/tickets';
 import type { RunInfo } from '../main/fleet/protocol';
+import type { ChainAlert, ChainAlertAction } from './chain-alerts';
 import { ageWords, needKindLabel, runningStepOf, statusLineOf, workGroups, type WorkGroupId, type WorkRow } from './work-groups';
 
 export const PRIORITY_LABEL: Readonly<Record<TicketPriority, string>> = {
@@ -47,6 +48,10 @@ export interface WorkPanelDeps {
   setPriority(card: TicketCard, priority: TicketPriority): void;
   setTrack(card: TicketCard, track: TicketTrack | null): void;
   openMenu(card: TicketCard, at: { x: number; y: number }): void;
+  /** What stops the fleet (a tripped breaker, a held column, …), drawn on top; absent = none. */
+  readonly alerts?: readonly ChainAlert[];
+  /** An alert's button: resume a column, run the chain. */
+  onAlertAction?(action: ChainAlertAction): void;
 }
 
 /** Which groups the owner folded — per viewer, never in the repo. */
@@ -114,6 +119,10 @@ export function workListNode(
 ): HTMLElement {
   const groups = workGroups(snap, runs);
   const list = el('div', 'work-list');
+  const alerts = deps.alerts ?? [];
+  if (alerts.length > 0) {
+    list.append(alertsNode(deps, alerts));
+  }
   const order: readonly WorkGroupId[] = ['needs', 'shaping', 'running', 'ideas', 'done'];
   for (const id of order) {
     if (id === 'done') {
@@ -135,6 +144,35 @@ export function workListNode(
     list.append(el('div', 'work-empty', 'No tickets yet — capture one with +'));
   }
   return list;
+}
+
+/**
+ * The fleet's alerts above every group: what keeps the machine from
+ * working the board. Each row says what and why; its one button undoes
+ * the stop where the owner can.
+ */
+function alertsNode(deps: WorkPanelDeps, alerts: readonly ChainAlert[]): HTMLElement {
+  const box = el('section', 'work-alerts');
+  box.setAttribute('role', 'alert');
+  for (const alert of alerts) {
+    const row = el('div', 'work-alert');
+    row.dataset['kind'] = alert.kind;
+    const icon = el('span', 'work-alert-icon');
+    icon.append(deps.api.ui.icon(alert.kind === 'quota' ? 'pause' : 'triangle-alert', 13));
+    const body = el('div', 'work-alert-body');
+    body.append(el('div', 'work-alert-title', alert.title), el('div', 'work-alert-text', alert.text));
+    row.append(icon, body);
+    const action = alert.action;
+    if (action !== null && deps.onAlertAction !== undefined) {
+      const button = el('button', 'work-alert-action', action.label);
+      button.type = 'button';
+      button.title = action.kind === 'play-column' ? 'Play the column again — the runner dispatches into it' : 'Run the chain — columns with a worker drain themselves';
+      button.addEventListener('click', () => deps.onAlertAction?.(action));
+      row.append(button);
+    }
+    box.append(row);
+  }
+  return box;
 }
 
 function groupNode(

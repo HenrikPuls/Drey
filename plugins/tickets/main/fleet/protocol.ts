@@ -572,4 +572,21 @@ export interface ChainStatus {
   readonly redStreak: Readonly<Record<string, number>>;
   /** Columns in cooldown — the ISO instant dispatching resumes after a red gate. */
   readonly cooldownUntil: Readonly<Record<string, string>>;
+  /**
+   * Columns the circuit breaker holds: why and since when. Cleared when
+   * the owner plays the column again. Absent on runners before the
+   * chain alerts fix — the board then reads a hold with a full red
+   * streak as a trip.
+   */
+  readonly tripped?: Readonly<Record<string, ChainTrip>>;
+  /** Per provider: its quota is spent, no new run before this ISO instant (absent on older runners). */
+  readonly quotaPausedUntil?: Readonly<Record<string, string>>;
+}
+
+/** One circuit-breaker trip (the chain alerts fix). */
+export interface ChainTrip {
+  /** `3 red gates in a row`, `daily token budget spent`. */
+  readonly reason: string;
+  /** ISO instant of the trip. */
+  readonly at: string;
 }

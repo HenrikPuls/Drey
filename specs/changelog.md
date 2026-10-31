@@ -20,6 +20,33 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — the Work panel shows when the fleet stops, and resumes it
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (2026-10-31). Three quota failures of T-0061 tripped the build
+breaker at 12:48; the board kept quiet for three hours, because the
+Work panel (ADR-0087) had dropped the kanban's per-column brakes with
+nothing in their place, "Needs you" lists only runs (and T-0061's
+failures left it once a new run started), notifications came only for
+questions and approvals, and the header's fleet status had moved into
+a footer count. Now `chainAlertsOf` (`renderer/chain-alerts.ts`) folds
+the chain status into alert rows on top of the Work panel — a column
+**stopped by the circuit breaker**, a machine column **on hold** while
+tickets wait in it, a **halted chain** with work waiting, a provider
+**out of quota** — with **Resume** (`chainColumn` playing) or **Run**
+(`chainMaster`). A breaker trip and a quota pause raise one OS
+notification each (`newChainAlerts`); the alerts count in the panel's
+status; the header's fleet status chip is back (worst light, states,
+tokens in flight, oldest age), amber while an alert stands. The runner
+reports `tripped` (per column, persisted in `chain.json`) and
+`quotaPausedUntil` (per provider) in `ChainStatus`; playing a column
+clears its trip **and resets its red streak** — before, one more red
+gate tripped the breaker again at once. Older runners omit both fields:
+a hold with a full red streak still reads as a trip. Specs in
+`chain-alerts.spec.ts`, `work-panel.spec.ts` and `orchestrator.spec.ts`;
+manual §Work panel and `FLEET.md` updated. Running rows first (T-0084)
+and a usage menu in the thread (roadmap follow-up) are separate.
+
 ### Fix — OpenCode servers no longer outlive their runs
 
 **Not yet manually verified by the owner.** Owner request, outside the

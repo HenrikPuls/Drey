@@ -131,5 +131,13 @@ phone. Watch any worker and step in when needed.
   the panel header; a single phase is still held over the runner's
   `/chain/column`). The iPad kanban of the remote client stays until W8,
   without pin reordering (owner, 2026-10-31).
+- Later change (chain alerts fix, 2026-10-31): dropping the brakes also
+  dropped every sign of a stopped column — a tripped breaker went
+  unseen for hours. The panel now draws the chain's stops as alert rows
+  above its groups (breaker, held machine column with waiting tickets,
+  halted chain, provider out of quota) with **Resume** / **Run**, and
+  notifies on a trip or a quota pause; the header's fleet status chip
+  is back. A held column is still not a per-column control — only its
+  undo is drawn.
 - Design reference: the owner's canvas "Drey Tickets — Workflow
   redesign" (2026-10-31).
