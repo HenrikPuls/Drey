@@ -30,10 +30,8 @@ const COMMAND_HINTS: Readonly<Record<string, string>> = {
 
 /** One-click starters for the prompt box: a label and the text it fills in. */
 const QUICK_PROMPTS: ReadonlyArray<readonly [string, string]> = [
-  ['Continue', 'Continue where you left off.'],
-  ['Status', 'Briefly summarise what you have done so far and what is left.'],
-  ['Run checks', "Run the ticket's acceptance checks now and report the result."],
-  ['Wrap up', 'Wrap up: finish the current step, update the ticket Log, and stop.'],
+  ['What are you doing and why?', 'What are you doing and why?'],
+  ['Stop after this step', 'Finish the current step, update the ticket Log, then stop and wait for me.'],
 ];
 
 export interface RunComposerDeps {
@@ -272,6 +270,9 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     });
     chips.append(chip);
   }
+  // The design's quick prompts: pills in a row of their own above the box.
+  const chipsRow = el('div', 'tickets-composer-chips');
+  chipsRow.append(chips);
   const stopBtn = iconButton('square', 'Stop the running turn — the session and its context stay, you can prompt it again', () => {
     const id = runId();
     if (id !== null) {
@@ -289,7 +290,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     void send(prompt.getContent());
   });
   inputRow.append(prompt.element, sendBtn);
-  underRow.append(plusBtn, fileInput, stopBtn, chips);
+  underRow.append(plusBtn, fileInput, stopBtn);
 
   // The worker's pulse while a turn runs: what it does now and for how long.
   const progress = el('div', 'tickets-takeover-progress');
@@ -483,7 +484,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     paintProgress(run);
   };
 
-  wrap.append(progress, askSlot, waitCard, box, underRow);
+  wrap.append(progress, askSlot, waitCard, chipsRow, box, underRow);
   paint();
   return {
     element: wrap,

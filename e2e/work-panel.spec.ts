@@ -159,7 +159,15 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     const thread = page.locator('.tickets-thread').filter({ visible: true });
     await expect(thread).toBeVisible();
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Drag headings in the outline');
-    await expect(thread.locator('.tickets-thread-meta')).toHaveText(/waiting for you · OpenCode · glm-5.3-flash/);
+    // The worker lives on the ticket (req-75 W4a): the header's bold state
+    // word says what it does, the meta line names it — and the takeover
+    // tab's Open run is gone, its controls live here now.
+    await expect(thread.locator('.tickets-thread-state')).toHaveText('Waiting for you');
+    await expect(thread.locator('.tickets-thread-meta')).toHaveText(/OpenCode · glm-5.3-flash/);
+    await expect(thread.getByTitle('Open the run in its own tab', { exact: false })).toHaveCount(0);
+    await expect(thread.getByRole('button', { name: 'Pause' })).toBeVisible();
+    await expect(thread.getByRole('button', { name: 'Take over' })).toBeVisible();
+    await expect(thread.getByRole('button', { name: 'Stop' })).toBeVisible();
     // The question is part of the conversation now (req-75 W2b): no card.
     await expect(thread.locator('.tickets-takeover-wait')).toBeHidden();
     await expect(thread.locator('.tickets-ask-question')).toHaveText(

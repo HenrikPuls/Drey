@@ -62,7 +62,7 @@ import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhase
 import { blockedRefusal } from './blocked';
 import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, recentDoneOf, type DriftDetection } from './normalize';
-import { parseChanges, storyOf, type ChangesReply } from '../shared/changes';
+import { parseChanges, planApprovedOf, storyOf, type ChangesReply } from '../shared/changes';
 import { openTerminalAt, runInNewConsole } from './open-terminal';
 import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
 import type { AttachmentReply, RefineReply, TicketReply } from '../shared/remote-protocol';
@@ -1053,10 +1053,15 @@ class BoardService {
   async changesOf(id: string): Promise<ChangesReply> {
     const found = await this.findCard(id);
     if (found === null) {
-      return { changes: null, story: [], totals: { minutes: null, tokens: null } };
+      return { changes: null, story: [], totals: { minutes: null, tokens: null }, planApproved: null };
     }
     const story = storyOf(found.text);
-    return { changes: parseChanges(found.text), story: story.items, totals: story.totals };
+    return {
+      changes: parseChanges(found.text),
+      story: story.items,
+      totals: story.totals,
+      planApproved: planApprovedOf(found.text),
+    };
   }
 
   /**

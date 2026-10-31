@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseChanges, storyOf } from './changes';
+import { parseChanges, planApprovedOf, storyOf } from './changes';
 
 const TICKET = (changes: string): string => `---
 id: T-0126
@@ -152,5 +152,26 @@ describe('storyOf', () => {
     const story = storyOf("## Log\n\nlooked at it again today");
     expect(story.items).toEqual([]);
     expect(story.totals).toEqual({ minutes: null, tokens: null });
+  });
+});
+
+describe('planApprovedOf', () => {
+  const STORY = `## Log
+
+- '2026-10-31T09:02:00Z' owner@legion — created in inbox
+- '2026-10-31T09:05:30Z' agent@legion — run R-1 done — gate green, moving to plan-review
+- '2026-10-31T09:07:00Z' owner@legion — plan-review -> build
+`;
+
+  it('is the owner\'s plan-review -> build stamp', () => {
+    expect(planApprovedOf(STORY)).toBe('2026-10-31T09:07:00Z');
+  });
+
+  it('takes the newest one and ignores other actors and moves', () => {
+    const twice = `${STORY}- '2026-10-31T10:07:00Z' owner@legion — plan-review -> build\n`;
+    expect(planApprovedOf(twice)).toBe('2026-10-31T10:07:00Z');
+    expect(planApprovedOf("- '2026-10-31T09:07:00Z' agent@legion — plan-review -> build\n")).toBeNull();
+    expect(planApprovedOf("- '2026-10-31T09:07:00Z' owner@legion — review -> done\n")).toBeNull();
+    expect(planApprovedOf('no log at all')).toBeNull();
   });
 });
