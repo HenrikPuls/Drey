@@ -4,8 +4,10 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   effectivePoolSizes,
+  isQuotaError,
   isRateLimitError,
   Orchestrator,
+  QUOTA_PAUSE_MS,
   RATE_LIMIT_SHRINK_MS,
   RED_COOLDOWN_MS,
   type OrchestratorDeps,
@@ -345,6 +347,27 @@ describe('Orchestrator', () => {
     expect(logs.some((line) => line.includes('runs 1 parallel slot'))).toBe(true);
   });
 
+  it('a run out of quota pauses its provider pool — no new run, no red gate', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    await writeTicket('T-0002', 'plan');
+    await writeTicket('T-0003', 'plan');
+    const logs: string[] = [];
+    const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    expect(fleet.records).toHaveLength(2);
+    const first = fleet.records[0]!;
+    fleet.records[0] = {
+      ...first,
+      info: { ...first.info, state: 'failed', lastError: 'provider.quota 429: Usage limit reached for 5 hour.' },
+    };
+    await orch.onRunSettled(fleet.records[0].info);
+    expect(logs.some((line) => line.includes('opencode is out of quota'))).toBe(true);
+    expect(logs.some((line) => line.includes('red gate'))).toBe(false);
+    expect(fleet.records).toHaveLength(2);
+  });
+
   it('a rate-limited run shrinks its provider pool for a while (req-63)', async () => {
     await writeMeta();
     await writeTicket('T-0001', 'plan');
@@ -673,6 +696,20 @@ describe('provider pools (req-63)', () => {
     const shrink = { 'claude-code': { count: 5, untilMs: RATE_LIMIT_SHRINK_MS } };
     expect(effectivePoolSizes(pools, {}, shrink, 0)['claude-code']).toBe(1);
     expect(effectivePoolSizes(pools, {}, shrink, RATE_LIMIT_SHRINK_MS)['claude-code']).toBe(2);
+  });
+
+  it('a provider paused for its quota has no slot until the pause ends', () => {
+    const paused = { opencode: QUOTA_PAUSE_MS };
+    expect(effectivePoolSizes(pools, {}, {}, 0, paused).opencode).toBe(0);
+    expect(effectivePoolSizes(pools, {}, {}, 0, paused)['claude-code']).toBe(2);
+    expect(effectivePoolSizes(pools, {}, {}, QUOTA_PAUSE_MS, paused).opencode).toBe(4);
+  });
+
+  it('reads a spent usage quota', () => {
+    expect(isQuotaError('provider.quota 429: Usage limit reached for 5 hour.')).toBe(true);
+    expect(isQuotaError('insufficient_quota')).toBe(true);
+    expect(isQuotaError('prompt failed: 429')).toBe(false);
+    expect(isQuotaError(null)).toBe(false);
   });
 
   it('reads 429 and rate-limit errors', () => {

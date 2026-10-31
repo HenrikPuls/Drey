@@ -20,6 +20,21 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — a spent provider quota no longer reads as a finished run
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (2026-10-31). When the z.ai plan's five-hour quota ran out,
+opencode ended every turn at once with `outcome: failed`
+(`provider.quota`, 429). The adapter ignored the outcome and reported
+an ordinary end, so the runner gated untouched code: T-0061's build
+went red three times and tripped the breaker (parking T-0081), and
+T-0060's commit run moved it to done without merging. Now the adapter
+reports the refusal as the run's error and no result
+(`providerErrorText`), the run fails without a gate (the Log line names
+the error) and the orchestrator pauses that provider's pool for thirty
+minutes (`isQuotaError`, `QUOTA_PAUSE_MS`). Specs in
+`providers.spec.ts` and `orchestrator.spec.ts`; ADR-0077 says so.
+
 ### Fix — an archived blocker no longer blocks
 
 **Not yet manually verified by the owner.** Owner request, outside the
@@ -31,6 +46,7 @@ gives no finding (`plugins/tickets/main/blocked.ts`; specs in
 `blocked.spec.ts`). `specs/ticket-schema.md`, `plugins/tickets/BOARD.md`,
 docs/05 and an ADR-0076 later change say so; a mistyped id unblocks
 too — the accepted price.
+
 ### req-75 W2b — The question reads like the canvas
 
 **Not yet manually verified by the owner.** Owner request, outside the

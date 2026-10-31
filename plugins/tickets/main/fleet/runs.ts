@@ -1541,9 +1541,12 @@ export class RunSupervisor {
     // a spawn that never came up, a crash — has claimed nothing, so the
     // step fails red no matter how trivial the gate would be.
     if (!run.agentDone) {
+      await run.eventQueue;
+      const why = run.info.lastError ?? null;
       await this.logLine(
         run,
-        `worker ended without finishing its turn (exit ${code ?? 'signal'}) — no agent-done, the step fails`,
+        `worker ended without finishing its turn (exit ${code ?? 'signal'}) — no agent-done, the step fails` +
+          (why !== null ? ` — ${why}` : ''),
       );
       await this.finish(run, 'failed');
       return;

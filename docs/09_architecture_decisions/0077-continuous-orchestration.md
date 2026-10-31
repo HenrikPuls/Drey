@@ -87,7 +87,15 @@ never preempts a running run. The owner decided against keeping
 The capacity cannot generally be read from the provider: only llama.cpp
 reports it (`/props` → `total_slots`, an optional probe URL that caps the
 pool); hosted APIs report rate limits, not concurrency. A run that fails
-on a rate limit shrinks its pool by one slot for five minutes.
+on a rate limit shrinks its pool by one slot for five minutes. A run
+whose turn the provider refuses for a spent **usage quota** (opencode's
+idle marker `outcome: failed`, `provider.quota`) ends failed with the
+provider's error and **no gate** — it claimed nothing, so it neither
+raises the red streak nor moves the ticket — and the provider's pool
+takes no new run for thirty minutes (2026-10-31: the z.ai plan's
+five-hour quota ran out mid-chain; empty turns read as agent-done, a
+build column tripped its breaker on untouched code and a commit run
+moved T-0060 to done without a merge).
 
 ## Consequences
 

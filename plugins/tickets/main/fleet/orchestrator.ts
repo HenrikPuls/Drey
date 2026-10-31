@@ -95,6 +95,14 @@ export const RATE_LIMIT_SHRINK_MS = 5 * 60_000;
 /** How long a pool probe's answer holds before the next pass asks again. */
 export const POOL_PROBE_INTERVAL_MS = 5 * 60_000;
 
+/** A provider out of quota takes no new run for this long, then tries again. */
+export const QUOTA_PAUSE_MS = 30 * 60_000;
+
+/** True when a worker's error reads as the provider's usage quota being spent. */
+export function isQuotaError(text: string | null | undefined): boolean {
+  return text !== null && text !== undefined && /provider.quota|usage limit|quota exceeded|insufficient[ _]quota/i.test(text);
+}
+
 /** True when a worker's error reads as the provider's rate limit (429). */
 export function isRateLimitError(text: string | null | undefined): boolean {
   return text !== null && text !== undefined && /\b429\b|rate[ _-]?limit|too many requests/i.test(text);
@@ -103,13 +111,15 @@ export function isRateLimitError(text: string | null | undefined): boolean {
 /**
  * The pools' effective sizes (req-63): the configured size, capped by a
  * probe's `total_slots`, minus an active rate-limit shrink — never below
- * one, so a throttled provider still moves.
+ * one, so a throttled provider still moves. A provider paused for its
+ * quota has none until the pause ends.
  */
 export function effectivePoolSizes(
   pools: FleetPools,
   probed: Readonly<Partial<Record<WorkerProviderId, number | null>>>,
   shrink: Readonly<Partial<Record<WorkerProviderId, { readonly count: number; readonly untilMs: number }>>>,
   nowMs: number,
+  pausedUntil: Readonly<Partial<Record<WorkerProviderId, number>>> = {},
 ): Record<WorkerProviderId, number> {
   const sizes: Record<WorkerProviderId, number> = { opencode: 1, 'claude-code': 1 };
   for (const provider of WORKER_PROVIDERS) {
@@ -122,7 +132,7 @@ export function effectivePoolSizes(
     if (active !== undefined && nowMs < active.untilMs) {
       size -= active.count;
     }
-    sizes[provider] = Math.max(1, size);
+    sizes[provider] = nowMs < (pausedUntil[provider] ?? 0) ? 0 : Math.max(1, size);
   }
   return sizes;
 }
@@ -178,6 +188,8 @@ export class Orchestrator {
   private heldNote = '';
   /** Per provider: a rate limit's pool shrink (req-63; not persisted). */
   private readonly poolShrink: Partial<Record<WorkerProviderId, { count: number; untilMs: number }>> = {};
+  /** Per provider: no new run before this time — its quota is spent (not persisted). */
+  private readonly quotaPause: Partial<Record<WorkerProviderId, number>> = {};
   /** Per provider: the last probe's slots and when it was asked. */
   private readonly probed: Partial<Record<WorkerProviderId, { slots: number | null; atMs: number; url: string }>> = {};
 
@@ -315,7 +327,14 @@ export class Orchestrator {
    * trips: the column holds and its next candidate parks in inbox.
    */
   async onRunSettled(info: RunInfo): Promise<void> {
-    if (info.state === 'failed' && isRateLimitError(info.lastError)) {
+    if (info.state === 'failed' && isQuotaError(info.lastError)) {
+      const untilMs = this.now().getTime() + QUOTA_PAUSE_MS;
+      this.quotaPause[info.provider] = untilMs;
+      this.deps.log(
+        `${info.provider} is out of quota (${(info.lastError ?? '').slice(0, 160)}) — no new ${info.provider} run until ` +
+          `${new Date(untilMs).toISOString()}, then it tries again`,
+      );
+    } else if (info.state === 'failed' && isRateLimitError(info.lastError)) {
       const nowMs = this.now().getTime();
       const active = this.poolShrink[info.provider];
       const count = active !== undefined && nowMs < active.untilMs ? active.count + 1 : 1;
@@ -778,7 +797,7 @@ export class Orchestrator {
         master: this.master,
         columns: snap.columns,
         modes: this.columns,
-        poolSize: effectivePoolSizes(pools, probedSlots, this.poolShrink, this.now().getTime()),
+        poolSize: effectivePoolSizes(pools, probedSlots, this.poolShrink, this.now().getTime(), this.quotaPause),
         liveByPool,
         poolOf,
         busyTickets,

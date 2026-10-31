@@ -647,6 +647,18 @@ interface OcMessage {
   readonly tokens?: OcUsage;
   readonly cost?: number;
   readonly time?: { readonly created?: number; readonly completed?: number };
+  /** The idle marker's verdict on the turn: `succeeded`, `interrupted`, `failed`. */
+  readonly outcome?: string;
+  /** Why a turn failed — the provider's refusal (`provider.quota`, 429, …). */
+  readonly error?: { readonly type?: string; readonly message?: string; readonly status?: number };
+}
+
+/** The error line of a turn the provider refused: type, status, message. */
+export function providerErrorText(error: OcMessage['error']): string {
+  const head = [error?.type ?? 'provider error', error?.status !== undefined ? String(error.status) : null]
+    .filter((part) => part !== null)
+    .join(' ');
+  return `${head}: ${error?.message ?? 'the turn failed'}`.slice(0, 400);
 }
 
 /**
@@ -1443,7 +1455,16 @@ export function opencodeAdapter(
               }
             }
             // The server writes the turn's end into the list itself.
-            if (m.type === 'idle' && (m.time?.created ?? 0) >= state.lastPromptAt) {
+            if (m.type === 'idle' && (m.time?.created ?? 0) >= state.lastPromptAt && m.outcome === 'failed') {
+              // The provider refused the turn (quota, rate limit, auth): the
+              // worker did nothing, so there is no agent-done — the run fails
+              // without a gate, never a red gate or a move on untouched code.
+              if (!state.ended) {
+                state.ended = true;
+                start.onEvent({ ts: nowIso(now), kind: 'error', text: providerErrorText(m.error) });
+                void killWorker();
+              }
+            } else if (m.type === 'idle' && (m.time?.created ?? 0) >= state.lastPromptAt) {
               // A turn that ends asking the owner (req-64) stands instead —
               // reported once, held or not, so the owner hears of it.
               const question = questionOf(state.lastText);

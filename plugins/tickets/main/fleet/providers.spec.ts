@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { answersFromText, answersText, claudeCodeAdapter, formText, modelBody, OPENCODE_API, opencodeAdapter, permissionText, questionOf, type FetchFn, type NormalizedEvent, type ProviderStart, INTERRUPT_WAIT_MS, toolActivity } from './providers';
+import { answersFromText, answersText, claudeCodeAdapter, formText, modelBody, OPENCODE_API, opencodeAdapter, permissionText, providerErrorText, questionOf, type FetchFn, type NormalizedEvent, type ProviderStart, INTERRUPT_WAIT_MS, toolActivity } from './providers';
 import { telemetryFromEvents } from './telemetry';
 import type { RunnerProcess, SpawnFn } from './procs';
 
@@ -543,6 +543,41 @@ describe('the opencode adapter', () => {
 
     proc.exit(null);
     vi.useRealTimers();
+  });
+
+  it('a turn the provider refuses (quota) ends with an error and no result — nothing to gate', async () => {
+    vi.useFakeTimers();
+    const at = Date.now();
+    const error = { type: 'provider.quota', message: 'Usage limit reached for 5 hour.', status: 429 };
+    const { fetch } = scriptedFetch({
+      sessionCreated: () => undefined,
+      prompts: [],
+      interrupts: [],
+      messages: () => [
+        { id: 'msg_i', type: 'idle', time: { created: at + 5_000 }, outcome: 'failed', error },
+        { id: 'msg_a', type: 'assistant', time: { created: at + 1, completed: at + 2 }, content: [], finish: 'error', error },
+        { id: 'msg_q', type: 'user', time: { created: at }, text: 'Do the ticket.' },
+      ],
+    });
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(2_500);
+
+    expect(events.find((e) => e.kind === 'result')).toBeUndefined();
+    expect(events.filter((e) => e.kind === 'error').map((e) => e.text)).toEqual([
+      'provider.quota 429: Usage limit reached for 5 hour.',
+    ]);
+    expect(proc.killTree).toHaveBeenCalled();
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
+  it('names a refused turn by type, status and message', () => {
+    expect(providerErrorText({ type: 'provider.auth', message: 'bad key' })).toBe('provider.auth: bad key');
+    expect(providerErrorText(undefined)).toBe('provider error: the turn failed');
   });
 
   it('a turn that ends with QUESTION: waits instead of ending; the answer lets the next turn end the run (req-64)', async () => {
