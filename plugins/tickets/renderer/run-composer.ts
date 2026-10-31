@@ -429,7 +429,8 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
   // A question asked in the fixed shape (req-75 W2) — or plain — is part
   // of the conversation (req-75 W2b): drawn with `questionNode` instead
   // of the card, the canvas look above the prompt box, which stays the
-  // free answer; an option tap sends through the same path.
+  // free answer; an option tap sends through the same path. Each option
+  // pill carries a leading dot (T-0084); the recommended one's fills.
   const askSlot = el('div');
   askSlot.hidden = true;
   let askAnswered = false;

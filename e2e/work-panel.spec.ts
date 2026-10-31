@@ -277,4 +277,25 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await panel.locator('.work-group-ideas .work-group-head').click();
     await expect(panel.locator('.work-group-ideas .work-row')).toHaveCount(3);
   });
+
+  test('orders the groups and filters by status (T-0084)', async ({ page }) => {
+    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    const panel = page.locator('.tickets-panel').filter({ visible: true });
+    await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
+
+    // Running precedes Ideas (the canvas order, W1b).
+    await expect(panel.locator('.work-group-title')).toHaveText(['Running', 'Ideas']);
+
+    // The filter popover: one status chip hides the idle ideas.
+    const head = page.locator('.tickets-panel-head').filter({ visible: true });
+    await head.locator('.work-filter-btn').click();
+    const pop = page.locator('.work-filter-pop');
+    await expect(pop).toBeVisible();
+    await pop.getByRole('button', { name: 'Idle', exact: true }).click();
+    await expect(panel.locator('.work-group-ideas .work-row')).toHaveCount(1);
+    await expect(panel.locator('.work-group-ideas .work-group-count')).toHaveText('1/3');
+    await pop.getByRole('button', { name: 'Clear', exact: true }).click();
+    await expect(panel.locator('.work-group-ideas .work-row')).toHaveCount(3);
+    await expect(panel.locator('.work-group-ideas .work-group-count')).toHaveText('3');
+  });
 });

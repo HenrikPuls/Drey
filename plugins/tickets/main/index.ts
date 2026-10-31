@@ -1767,6 +1767,7 @@ class BoardService {
     worker?: string | null;
     model?: string | null;
     prompt?: string | null;
+    color?: string | null;
   }): Promise<MutationResult> {
     return this.enqueue(async () => {
       const vault = await this.detect();
@@ -1780,7 +1781,8 @@ class BoardService {
       if (
         input.worker === undefined &&
         input.model === undefined &&
-        input.prompt === undefined
+        input.prompt === undefined &&
+        input.color === undefined
       ) {
         return { ok: true }; // nothing to change (e.g. the handover-pin display state)
       }
@@ -1790,12 +1792,19 @@ class BoardService {
           return { ok: false, error: 'the worker is "opencode" or "claude-code"' };
         }
       }
+      if (input.color !== undefined) {
+        const color = input.color?.trim() ?? '';
+        if (color !== '' && !/^#[0-9a-f]{6}$/i.test(color)) {
+          return { ok: false, error: 'the color is a #rrggbb hex value' };
+        }
+      }
       let patched: string;
       try {
         patched = patchPipelinePhase(text, input.phase, {
           ...(input.worker !== undefined ? { worker: input.worker } : {}),
           ...(input.model !== undefined ? { model: input.model } : {}),
           ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
+          ...(input.color !== undefined ? { color: input.color } : {}),
         });
       } catch (error) {
         return { ok: false, error: messageOf(error) };
@@ -1814,6 +1823,9 @@ class BoardService {
       }
       if (input.prompt !== undefined) {
         what.push(`prompt ${input.prompt === null || input.prompt.trim() === '' ? '(default)' : input.prompt.trim()}`);
+      }
+      if (input.color !== undefined) {
+        what.push(`color ${input.color === null || input.color.trim() === '' ? 'default' : input.color.trim()}`);
       }
       const warning = await this.commit(vault, [PIPELINE_PATH], `tickets: columns ${input.phase} ${what.join(', ')}`);
       this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [PIPELINE_PATH] });

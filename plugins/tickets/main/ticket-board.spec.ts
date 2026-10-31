@@ -58,6 +58,24 @@ describe('parsePipeline', () => {
     expect(parsePipeline('no fence').error).toContain('fence');
     expect(parsePipeline('---\nphases: [\n---\n').error).toContain('parse');
   });
+
+  it('reads an explicit color: hex (T-0084); absence means the default palette', () => {
+    const colored = PIPELINE.replace('id: build,', 'id: build, color: "#c96442",');
+    const parsed = parsePipeline(colored);
+    expect(parsed.error).toBeNull();
+    expect(parsed.phases.find((p) => p.id === 'build')!.color).toBe('#c96442');
+    expect(parsePipeline(PIPELINE).phases.every((p) => p.color === null)).toBe(true);
+  });
+
+  it('a present-but-invalid color degrades to null with a noise finding, never an error', () => {
+    const parsed = parsePipeline(PIPELINE.replace('id: build,', 'id: build, color: orange,'));
+    expect(parsed.error).toBeNull();
+    expect(parsed.phases.find((p) => p.id === 'build')!.color).toBeNull();
+    const noise = parsed.issues.filter((issue) => issue.message.includes('color'));
+    expect(noise).toHaveLength(1);
+    expect(noise[0]!.level).toBe('noise');
+    expect(noise[0]!.message).toBe("pipeline.md: build's color must be #rrggbb — ignored");
+  });
 });
 
 describe('parseRepos', () => {
@@ -331,6 +349,19 @@ describe('patchPipelinePhase - the settings dialog writer', () => {
     expect(build.model).toBe('zai/glm-5.3-flash');
     expect(build.prompt).toBe('build-heavy');
     expect(() => patchPipelinePhase(PIPELINE, 'nope', { model: 'x' })).toThrow('no phase "nope"');
+  });
+
+  it('color patches on and off (T-0084); a worker clear keeps it', () => {
+    const set = patchPipelinePhase(PIPELINE, 'build', { color: '#c96442' });
+    expect(set).toContain('color: "#c96442"');
+    expect(parsePipeline(set).phases.find((p) => p.id === 'build')!.color).toBe('#c96442');
+    const cleared = patchPipelinePhase(set, 'build', { color: null });
+    expect(cleared).not.toContain('color:');
+    expect(parsePipeline(cleared).phases.find((p) => p.id === 'build')!.color).toBeNull();
+    // Clearing the worker takes the pool keys but never the colour.
+    const manual = patchPipelinePhase(set, 'build', { worker: null });
+    expect(parsePipeline(manual).phases.find((p) => p.id === 'build')!.color).toBe('#c96442');
+    expect(parsePipeline(manual).phases.find((p) => p.id === 'build')!.handover).toBe('manual');
   });
 
   it('a column workers: key is no longer read — the pools are the providers\' (req-63)', () => {

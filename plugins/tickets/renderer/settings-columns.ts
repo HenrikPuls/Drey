@@ -3,6 +3,7 @@ import { parseHandover, stripPhasePrefix, type FolderStatus, type PipelinePhase 
 import { el, iconButton, mutate, textButton } from './settings-dom';
 import { modelPicker } from './settings-model-picker';
 import { canMove, dropIndex, folderNumber, moveItem } from './settings-order';
+import { phaseColorOf } from './phase-colors';
 
 /**
  * Settings → Tickets, the pipeline (req-50): one sortable table, a row
@@ -167,7 +168,7 @@ export function createColumnsSection(api: DreyPluginApi, reload: () => Promise<v
     table.replaceChildren();
     const header = el('div', 'tset-row tset-row-head');
     header.setAttribute('role', 'row');
-    for (const label of ['', 'No.', 'Column', 'Worker', 'Model', 'Prompt', '']) {
+    for (const label of ['', 'No.', 'Column', 'Color', 'Worker', 'Model', 'Prompt', '']) {
       const cell = el('span', 'tset-th', label);
       cell.setAttribute('role', 'columnheader');
       header.append(cell);
@@ -323,6 +324,21 @@ function phaseRow(
   name.append(el('span', 'tset-name-title', phase.title), meta);
   name.title = `${phase.title} — tickets/${dir}`;
 
+  // The colour cell (T-0084): the phase chip's colour. The swatch shows
+  // the effective colour — the explicit key or the palette default — and
+  // the reset returns to the palette (one commit per change).
+  const color = el('input');
+  color.type = 'color';
+  color.value = phaseColorOf(phase, index);
+  color.setAttribute('aria-label', `Color for ${phase.title}`);
+  color.title = "The phase chip's colour — the palette applies without one";
+  color.addEventListener('change', () => change({ color: color.value }));
+  const colorReset = iconButton(api, 'rotate-ccw', 'Use the default color');
+  colorReset.disabled = phase.color === null;
+  colorReset.addEventListener('click', () => change({ color: null }));
+  const colorCell = el('span', 'tset-cell tset-color');
+  colorCell.append(color, colorReset);
+
   const worker = el('select');
   worker.setAttribute('aria-label', `Worker for ${phase.title}`);
   for (const [value, label] of WORKER_CHOICES) {
@@ -343,7 +359,7 @@ function phaseRow(
     }
   });
 
-  const cells: HTMLElement[] = [grip, number, name, cell(worker)];
+  const cells: HTMLElement[] = [grip, number, name, colorCell, cell(worker)];
   if (auto) {
     const workerOf = (): string => phase.worker ?? handover.worker ?? state.defaultWorker;
     const model = modelPicker(api, phase.title, phase.model ?? '', workerOf, (value) => change({ model: value }));

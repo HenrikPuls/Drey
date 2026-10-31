@@ -28,6 +28,8 @@ import { runDependencyPass } from './blocked';
 import { parseTicketFile, ticketPathParts } from './ticket-files';
 
 const PHASE_ID = /^[a-z][a-z0-9-]*$/;
+/** `color:` in pipeline.md — a `#rrggbb` hex value (T-0084). */
+const COLOR_HEX = /^#[0-9a-f]{6}$/i;
 
 // --- pipeline.md -----------------------------------------------------------
 
@@ -118,6 +120,17 @@ export function parsePipeline(text: string): PipelineParse {
         ? auditRaw
         : null;
     const semantic = map['semantic'] === true;
+    const colorRaw = map['color'];
+    let color: string | null = null;
+    if (typeof colorRaw === 'string' && colorRaw.trim() !== '') {
+      if (COLOR_HEX.test(colorRaw.trim())) {
+        color = colorRaw.trim();
+      } else {
+        // A present-but-invalid colour degrades to the palette, visibly —
+        // never a board error (asymmetric tolerance, like `push:`).
+        issues.push({ level: 'noise', message: `pipeline.md: ${id}'s color must be #rrggbb — ignored` });
+      }
+    }
     phases.push({
       id,
       title: typeof map['title'] === 'string' && map['title'].trim() !== '' ? map['title'] : id,
@@ -133,6 +146,7 @@ export function parsePipeline(text: string): PipelineParse {
       ci,
       audit,
       semantic,
+      color,
     });
   }
   return { phases, pushRemote, error: null, issues };
@@ -148,6 +162,10 @@ export interface PhasePoolPatch {
   readonly model?: string | null;
   /** The prompt ref override; an empty string or null clears it. */
   readonly prompt?: string | null;
+  /** The phase chip colour (`color:`, T-0084) — `#rrggbb`; an empty string
+   *  or null removes the key (the default palette applies). Never removed
+   *  by a worker clear. */
+  readonly color?: string | null;
 }
 
 /**
@@ -228,6 +246,14 @@ export function patchPipelinePhase(text: string, phaseId: string, patch: PhasePo
       removeKey('prompt');
     } else {
       entry.set('prompt', prompt);
+    }
+  }
+  if (patch.color !== undefined) {
+    const color = patch.color?.trim() ?? '';
+    if (color === '') {
+      removeKey('color');
+    } else {
+      entry.set('color', color);
     }
   }
 

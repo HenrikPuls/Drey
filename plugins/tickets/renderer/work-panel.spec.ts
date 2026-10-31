@@ -10,6 +10,7 @@ import {
   type TicketCard,
 } from '../shared/tickets';
 import { createGroupFoldStore, workListNode } from './work-panel';
+import { TAG_AUTO_PALETTE } from '../../../shared/tag-style';
 
 /** req-75 W1b: the Work list's DOM over the default eight-phase pipeline —
  *  the canvas's five groups, the rows' chips and the fold store. */
@@ -66,6 +67,7 @@ const deps = () => ({
   setPriority: vi.fn(),
   setTrack: vi.fn(),
   openMenu: vi.fn(),
+  clearFilter: vi.fn(),
 });
 
 const memoryStorage = (): Storage => {
@@ -108,6 +110,65 @@ describe('workListNode', () => {
     expect(list.querySelectorAll('.work-row')).toHaveLength(2);
   });
 
+  it('marks running rows and counts them in the Running head (T-0084)', () => {
+    const runA = {
+      id: 'r1',
+      ticketId: 'T-0002',
+      provider: 'opencode',
+      state: 'running',
+      startedAt: '2026-10-30T10:00:00Z',
+      endedAt: null,
+      gateFailure: null,
+    } as unknown as RunInfo;
+    const list = workListNode(
+      deps(),
+      board({ inbox: [card('T-0001', 'inbox')], build: [card('T-0002', 'build'), card('T-0003', 'build')] }),
+      [runA],
+      createGroupFoldStore(null),
+      () => undefined,
+    );
+    expect(list.querySelector('.work-group-running .work-group-count')?.textContent).toBe('2 · 1 running');
+    expect(list.querySelector<HTMLElement>('.work-row[data-id="T-0002"]')!.dataset['running']).toBe('true');
+    expect(list.querySelector<HTMLElement>('.work-row[data-id="T-0003"]')!.hasAttribute('data-running')).toBe(false);
+  });
+
+  it('renders the phase chip with the phase colour and title (T-0084)', () => {
+    const list = workListNode(deps(), board({ build: [card('T-0002', 'build')] }), [], createGroupFoldStore(null), () => undefined);
+    const chip = list.querySelector<HTMLElement>('.work-row .work-phase-chip')!;
+    expect(chip.title).toBe('Build');
+    expect(chip.style.getPropertyValue('--phase-color')).toBe(TAG_AUTO_PALETTE[4]);
+    expect(chip.querySelector('.work-phase-dot')).not.toBeNull();
+    expect(chip.querySelector('.work-phase-name')?.textContent).toBe('Build');
+  });
+
+  it('a filter hides rows, shows visible/total, and the marker clears it (T-0084)', () => {
+    const d = deps();
+    const list = workListNode(
+      d,
+      board({ inbox: [card('T-0001', 'inbox')], prioritized: [card('T-0002', 'prioritized')] }),
+      [],
+      createGroupFoldStore(null),
+      () => undefined,
+      { phases: ['prioritized'], statuses: [] },
+    );
+    expect(list.querySelector('.work-group-ideas .work-group-count')?.textContent).toBe('1/2');
+    expect(list.querySelectorAll('.work-group-ideas .work-row')).toHaveLength(1);
+    expect(list.querySelector('.work-group-running .work-group-empty')?.textContent).toBe('Nothing running');
+    const hidden = workListNode(
+      d,
+      board({ inbox: [card('T-0001', 'inbox')] }),
+      [],
+      createGroupFoldStore(null),
+      () => undefined,
+      { phases: ['build'], statuses: [] },
+    );
+    const marker = hidden.querySelector<HTMLButtonElement>('.work-group-ideas .work-hidden-by-filter')!;
+    expect(marker.textContent).toBe('Hidden by the filter — clear');
+    expect(marker.title).toBe('Show everything again');
+    marker.click();
+    expect(d.clearFilter).toHaveBeenCalledOnce();
+  });
+
   it('a finished ticket sits under Needs you with its kind chip — the buttons live in the thread now', () => {
     const d = deps();
     const list = workListNode(d, board({ done: [card('T-0003', 'done')] }), [], createGroupFoldStore(null), () => undefined);
@@ -129,7 +190,10 @@ describe('workListNode', () => {
   it('an interactive ticket shapes: the group shows, with the dialog not started', () => {
     const list = workListNode(deps(), board({ inbox: [card('T-0005', 'inbox', { interactive: true })] }), [], createGroupFoldStore(null), () => undefined);
     expect(titles(list)).toEqual(['Running', 'Shaping', 'Ideas']);
-    expect(list.querySelector('.work-group-shaping .work-row-sub')?.textContent).toBe('Dialog not started');
+    // The sub line leads with the phase chip (T-0084), the dialog text follows.
+    const sub = list.querySelector('.work-group-shaping .work-row-sub')!;
+    expect(sub.querySelector('.work-phase-name')?.textContent).toBe('Inbox');
+    expect(sub.querySelector('.work-row-line')?.textContent).toBe('Dialog not started');
   });
 
   it('marks a prioritized idea as queued and gives ideas their track chip', () => {

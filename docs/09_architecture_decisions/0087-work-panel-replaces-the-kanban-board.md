@@ -126,6 +126,16 @@ phone. Watch any worker and step in when needed.
   the owner's too.
 - Built and shipped in stages W1–W9 (`specs/roadmap.md`, req-75); W1
   shipped 2026-10-31 and made this ADR accepted.
+- Later change (T-0084, 2026-10-31): every Needs-you, Shaping and
+  Running row carries a coloured phase chip (color: per phase in
+  pipeline.md, else a default palette by column position), the list
+  filters by phase and status through the header's funnel, and the
+  Running head counts its live runs. The graft kept the canvas groups
+  (Needs you → Running → Shaping → Ideas → Done this week) — the
+  ticket's "In progress" vocabulary had been superseded by W1b's
+  Running group hours after the ticket was cut; the in-group order
+  already respected open blocked-by edges (dependencyOrder). The phases
+  still are not drawn as columns.
 - W1 as built: the thread is **one** tab beside the file that follows
   the ticket opened last (fixed key `thread://ticket`) — the plugin SDK
   cannot place a tab into a given pane, so one tab per ticket would

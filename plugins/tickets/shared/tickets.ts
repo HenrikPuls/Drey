@@ -255,6 +255,11 @@ export interface PipelinePhase {
    * step in the column gets a second worker's review before it moves.
    */
   readonly semantic: boolean;
+  /**
+   * The Work panel's phase chip colour (`color:`, T-0084) — `#rrggbb`;
+   * null = the curated default palette colours by board position.
+   */
+  readonly color: string | null;
 }
 
 /** The default for a phase entry that omits the M85 pool keys —
@@ -272,6 +277,7 @@ export function phaseWithoutPoolKeys(
     ci: null,
     audit: null,
     semantic: false,
+    color: null,
     ...phase,
   };
 }

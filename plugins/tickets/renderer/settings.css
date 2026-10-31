@@ -247,6 +247,23 @@
   color: var(--text-4);
 }
 
+/* The phase colour cell (T-0084): the swatch and its reset, compact. */
+.tset-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tset-color input[type='color'] {
+  width: 28px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-xs, 4px);
+  background: transparent;
+  cursor: pointer;
+}
+
 .tset-cell-status {
   display: flex;
   justify-content: center;

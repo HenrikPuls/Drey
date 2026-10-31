@@ -769,7 +769,8 @@ its heading (remembered across restarts):
 
 - **Needs you** — only there when something waits on you: a worker's
   question (kind chip *Question*, the question as its line — in the
-  thread its options are one-tap pills), an approval it wants
+  thread its options are one-tap pills, each with a leading dot and the
+  recommended one's filled), an approval it wants
   (*Approval*), a red gate or a failed run (*Gate red*, *Run failed*),
   a plan to approve (*Plan to approve*), a review (*Review*), and a
   finished ticket (*Ready to try*). The buttons for the last three live
@@ -782,7 +783,7 @@ its heading (remembered across restarts):
   a dot (accent while a worker is on it), the step — Planning,
   Building, Merging or the phase — and the worker's current action in
   one short line. Without a worker it is queued and says what it waits
-  for.
+  for. The heading counts how many are running.
 - **Shaping** — the tickets you reserved for a dialog with a worker
   (interactive); the row says whether the dialog runs, pauses or has
   not started, and how many turns it has.
@@ -797,7 +798,11 @@ its heading (remembered across restarts):
 - **Done this week** — what you accepted into the archive in the last
   seven days, folded away by default.
 
-Every ticket sits in exactly one group — Needs you wins. A row is the
+Every ticket sits in exactly one group — Needs you wins. Every
+Needs-you, Shaping and Running row carries a **phase chip** — a dot in
+the phase's colour plus its name; the colours are set per column in
+Settings → Tickets → Pipeline (`color:` in pipeline.md, and without one
+a curated default palette applies). A row is the
 title, an age and one line; the open ticket's row is marked with an
 accent bar. Click a row to open the **ticket page**: the ticket file in
 the editor and beside it, while a worker is on the ticket, its **run
@@ -838,6 +843,11 @@ capture to now, read from its log, with the total time and tokens. On
 a pane narrower than 900 px the story sits below the card. A ticket
 without a `## Changes` section still shows the story and the buttons;
 only the missing sections are left out.
+
+The funnel icon in the panel header filters the list by **phases** and
+**statuses**. The chips toggle at once and the choice survives
+restarts; the icon stays marked while a filter is on, and **Clear**
+shows everything again.
 
 **Everyday use.** Capture with the **+** in the panel header: a title,
 a priority, optionally one or more repositories and a description land
@@ -1049,10 +1059,10 @@ worker goes on with its step and the run ends normally when it is done.
 A question asked in the fixed shape (req-75 W2) carries its context:
 what the ticket is about, where the worker stands, why it asks, two to
 four options with their consequences, and the worker's recommendation.
-Its options sit as pills in the thread's wait card and on the phone —
-**one tap on an option is the answer** (the recommended one is marked);
-the free-answer field stays beside them wherever you are. When the
-worker offers choices through
+Its options sit as pills with a leading dot in the thread's wait card
+and on the phone — **one tap on an option is the answer** (the
+recommended one's dot is filled and rings); the free-answer field stays
+beside them wherever you are. When the worker offers choices through
 OpenCode's question forms, they appear as buttons instead: with one
 question a click is the answer; with several, pick one per question and
 press **Send answer**. You can always type your own answer instead —

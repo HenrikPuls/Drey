@@ -9,6 +9,10 @@
  * Every ticket lands in exactly one group: Needs you wins, then Shaping.
  * The Done-this-week group is not built here — it comes from the
  * snapshot's `recentDone` (archived tickets), which the panel draws.
+ *
+ * Every row carries its phase's colour (T-0084): `phaseColor`, from the
+ * phase's `color:` in pipeline.md or the default palette by position —
+ * the panel draws it as the row's phase chip.
  */
 import type { NeedItem } from '../shared/remote-protocol';
 import {
@@ -21,6 +25,7 @@ import {
 } from '../shared/tickets';
 import type { RunInfo, RunState } from '../main/fleet/protocol';
 import { needsOf } from '../main/remote/needs';
+import { phaseColorOf } from './phase-colors';
 
 const LIVE: ReadonlySet<RunState> = new Set(['starting', 'running', 'stopping', 'detached']);
 
@@ -30,6 +35,8 @@ export interface WorkRow {
   readonly card: TicketCard;
   /** The phase the ticket sits in (an unknown directory carries its own). */
   readonly phase: PipelinePhase;
+  /** The phase chip's colour — explicit `color:` or the default palette (T-0084). */
+  readonly phaseColor: string;
   /** Why the owner is needed; null outside Needs you. */
   readonly need: NeedItem | null;
   /** An idea already in a queue the fleet pulls from (Ideas only). */
@@ -165,6 +172,17 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
   const ideaIds = new Set(ideaPhaseIds(pipeline));
   const terminal = pipeline.length > 0 ? pipeline[pipeline.length - 1]!.id : null;
 
+  // Chip colours keyed on the board position (T-0084): the configured
+  // columns in pipeline order, unknown directories after them.
+  const positionOf = new Map<string, number>();
+  configured.forEach((column, index) => positionOf.set(column.phase.id, index));
+  let afterConfigured = configured.length;
+  for (const column of board.columns) {
+    if (column.unknown && !positionOf.has(column.phase.id)) {
+      positionOf.set(column.phase.id, afterConfigured++);
+    }
+  }
+
   const placed = new Map<string, { card: TicketCard; column: BoardColumn; index: number }>();
   board.columns.forEach((column) => {
     column.tickets.forEach((card, index) => {
@@ -177,6 +195,7 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
   const row = (card: TicketCard, column: BoardColumn, need: NeedItem | null): WorkRow => ({
     card,
     phase: column.phase,
+    phaseColor: phaseColorOf(column.phase, positionOf.get(column.phase.id) ?? 0),
     need,
     queued: need === null && ideaIds.has(column.phase.id) && column.phase.id !== firstPhaseId,
     run: liveRunOf(card.id, runs),
@@ -261,6 +280,41 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
     running: [...live, ...queued].map((entry) => entry.row),
     ideas: dependencyOrder(ideas, ideaRecency(firstPhaseId)),
   };
+}
+
+/** A row's derived status (T-0084, grafted onto the canvas groups): the
+ *  filter's vocabulary and the head counts read it. A need decides first
+ *  — waiting, failed or review; then a live run means running; an open
+ *  blocked-by edge means blocked; what the fleet will take (the ideas'
+ *  queue, a machine phase without a run) is queued; a parked one is
+ *  parked; everything else is idle. The phone's own Needs-you list
+ *  keeps its kind order (`needsOf` is its contract). */
+export type WorkStatus = 'waiting' | 'failed' | 'running' | 'queued' | 'blocked' | 'parked' | 'review' | 'idle';
+
+export function rowStatusOf(row: WorkRow): WorkStatus {
+  const need = row.need;
+  if (need !== null) {
+    if (need.kind === 'question' || need.kind === 'permission') {
+      return 'waiting';
+    }
+    if (need.kind === 'red-gate' || need.kind === 'failed') {
+      return 'failed';
+    }
+    return 'review';
+  }
+  if (row.run !== null) {
+    return 'running';
+  }
+  if (row.card.blocked.length > 0) {
+    return 'blocked';
+  }
+  if (row.queued || isMachinePhase(row.phase)) {
+    return 'queued';
+  }
+  if (row.card.meta.parkedReason !== null) {
+    return 'parked';
+  }
+  return 'idle';
 }
 
 /** What a checkpoint asks of the owner: approve into the next phase, or accept into the archive. */

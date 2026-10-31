@@ -72,7 +72,9 @@ export function questionNode(deps: QuestionViewDeps, waiting: RunWaiting, nowMs:
       b.title = recommended
         ? (shaped.recommendationWhy ?? option.consequence ?? option.label)
         : (option.consequence ?? option.label);
-      b.append(el('span', 'tickets-pill-label', option.label));
+      // A leading dot marks the option row (T-0084); the recommended
+      // one's dot fills and takes an accent ring.
+      b.append(el('span', 'work-option-dot'), el('span', 'tickets-pill-label', option.label));
       if (option.consequence !== null) {
         b.append(el('span', 'tickets-pill-why', ` — ${option.consequence}`));
       }

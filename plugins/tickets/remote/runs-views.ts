@@ -79,6 +79,8 @@ export function waitActions(ctx: Ctx, wait: Wait): HTMLElement | null {
                 },
               },
             },
+            // A leading dot marks the option row (T-0084); the rest is unchanged.
+            h('span', { class: 'option-dot' }),
             option.label,
             option.consequence !== null ? h('small', { class: 'why', text: ` — ${option.consequence}` }) : null,
             shaped.recommended === option.n ? h('small', { class: 'rec', text: 'recommended' }) : null,

@@ -122,6 +122,10 @@ describe('bodyKey', () => {
     expect(need.querySelector('.q-rec')?.textContent).toBe('Recommendation: 1 — local first');
     const options = [...need.querySelectorAll<HTMLButtonElement>('button.option')];
     expect(options).toHaveLength(2);
+    // The dot row (T-0084): a leading dot per option, the rest unchanged.
+    expect(options[0]!.querySelector('.option-dot')).not.toBeNull();
+    expect(options[0]!.querySelector('.option-dot')?.nextSibling?.textContent).toBe('SQLite');
+    expect(options[0]!.className).toContain('option-rec');
     options[1]!.click();
     expect(posted).toEqual([['/api/runs/run-1/send', { text: '2. Postgres' }]]);
     expect(options.every((b) => b.disabled)).toBe(true);

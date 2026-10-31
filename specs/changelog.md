@@ -20,6 +20,47 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 91 — ticket T-0084: the Work panel's phase colours, filter and running marks
+
+**Not yet manually verified by the owner.** Ticket T-0084 (owner request
+outside the list, 2026-10-31; [ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md)
+later change). The ticket was built on the morning base; by its merge
+the canvas panel (req-75 W1b) had landed on main, so with the owner's
+pick (this merge, option 1 of the commit step's question) the features
+were **grafted onto the five canvas groups** — Needs you, Running,
+Shaping, Ideas, Done this week keep W1b's order, and the ticket's
+"In progress" vocabulary becomes Running. Landed:
+
+- **Phase colours**: `color:` per phase in pipeline.md (`#rrggbb`,
+  `PipelinePhase.color`; an invalid value degrades to a noise issue and
+  the curated default palette — `TAG_AUTO_PALETTE` keyed on the column's
+  board position, `renderer/phase-colors.ts`), edited in Settings →
+  Tickets → Pipeline's new Color column (one commit per change, the
+  worker-clear keeps it). Every Needs-you, Shaping and Running row
+  carries a **phase chip** — a dot in the phase's colour plus its name.
+- **The filter**: the funnel button in the panel header opens a popover
+  of toggle chips — phases and statuses, positive selection, both axes
+  at once, per-viewer localStorage beside the folds (`work-filter.ts`).
+  `rowStatusOf` derives the eight statuses (Waiting for you, Needs
+  review, Failed, Running, Queued, Blocked, Parked, Idle); heads show
+  `<visible>/<total>` while active, and a group the filter emptied
+  offers `Hidden by the filter — clear`.
+- **Running emphasis**: the Running head counts its live runs
+  (`2 · 1 running`) and live rows carry `data-running`. No extra accent
+  bar — the open row already owns that visual and the run dot fills.
+  The dependency order itself was already owner-locked earlier the same
+  day (`dependencyOrder`, the runner-beside-ticket fix): a blocker
+  before what it blocks, in Ideas as in the Running queue.
+- **Option dots**: the thread's question pills (W2b) and the phone's
+  option rows carry a leading dot; the recommended option's dot fills
+  and rings.
+
+Specs: `phase-colors.spec.ts`, `work-filter.spec.ts` (new),
+`work-groups.spec.ts` and `work-panel.spec.ts` (adapted to the canvas
+groups), `ticket-board.spec.ts`, `remote/dom.spec.ts`;
+`specs/ticket-schema.md`, the manual §The Work panel, ADR-0087's
+later-change note, the roadmap Status line.
+
 ### req-75 — Runner and ticket side by side, dialogs start quiet
 
 **Not yet manually verified by the owner.** Ticket T-0052 (req-75's

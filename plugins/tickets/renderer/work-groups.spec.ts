@@ -9,12 +9,14 @@ import {
   type TicketPriority,
 } from '../shared/tickets';
 import type { NeedItem } from '../shared/remote-protocol';
+import { TAG_AUTO_PALETTE } from '../../../shared/tag-style';
 import {
   ageWords,
   checkpointActionOf,
   ideaPhaseIds,
   needKindLabel,
   queueTargetOf,
+  rowStatusOf,
   runningStepOf,
   statusLineOf,
   workGroups,
@@ -214,6 +216,73 @@ describe('workGroups', () => {
     const limbo: BoardColumn = { phase: phase('limbo', 'manual'), unknown: true, tickets: [card('T-0007', 'limbo')] };
     const groups = workGroups(board({ build: [card('T-0001', 'build')] }, [limbo]), []);
     expect(ids(groups.running)).toEqual(['T-0001', 'T-0007']);
+  });
+
+  it('Running shows live runs first, then the queue closest to done (T-0084)', () => {
+    const snap = board({
+      plan: [card('T-0001', 'plan')],
+      commit: [card('T-0002', 'commit')],
+      build: [card('T-0003', 'build')],
+    });
+    expect(ids(workGroups(snap, []).running)).toEqual(['T-0002', 'T-0003', 'T-0001']);
+    const groups = workGroups(snap, [run({ id: 'r', ticketId: 'T-0001' })]);
+    expect(ids(groups.running)).toEqual(['T-0001', 'T-0002', 'T-0003']);
+  });
+
+  it('rows carry a phase colour: explicit, palette by position, unknown after the configured (T-0084)', () => {
+    const colored = phaseWithoutPoolKeys({
+      id: 'build',
+      title: 'Build',
+      wip: null,
+      claim: false,
+      handover: 'agent build-default',
+      color: '#c96442',
+    });
+    const base = board({ plan: [card('T-0002', 'plan')], build: [card('T-0001', 'build')] });
+    const snap: BoardSnapshot = {
+      ...base,
+      columns: base.columns.map((c) => (c.phase.id === 'build' ? { ...c, phase: colored } : c)),
+    };
+    const groups = workGroups(snap, []);
+    const colorOf = (id: string): string => [...groups.running].find((r) => r.card.id === id)!.phaseColor;
+    expect(colorOf('T-0001')).toBe('#c96442'); // the explicit key wins
+    expect(colorOf('T-0002')).toBe(TAG_AUTO_PALETTE[2]); // plan sits at position 2
+    const limbo: BoardColumn = { phase: phase('limbo', 'manual'), unknown: true, tickets: [card('T-0007', 'limbo')] };
+    const withUnknown = workGroups(board({ build: [card('T-0001', 'build')] }, [limbo]), []);
+    expect(withUnknown.running.find((r) => r.card.id === 'T-0007')!.phaseColor).toBe(TAG_AUTO_PALETTE[8]);
+  });
+});
+
+describe('rowStatusOf (T-0084)', () => {
+  const statusOf = (groups: ReturnType<typeof workGroups>, id: string): string =>
+    rowStatusOf([...groups.needs, ...groups.shaping, ...groups.running, ...groups.ideas].find((r) => r.card.id === id)!);
+
+  it('a need decides first: waiting, failed, review', () => {
+    const snap = board({ build: [card('T-0001', 'build'), card('T-0002', 'build'), card('T-0003', 'build')] });
+    const groups = workGroups(snap, [
+      run({ id: 'q', ticketId: 'T-0001', waiting: { kind: 'permission', text: 'rm -rf', since: '2026-10-30T10:05:00Z' } }),
+      run({ id: 'g', ticketId: 'T-0002', state: 'done', phase: 'build', gateResult: 'red', gateFailure: 'tests' }),
+    ]);
+    expect(statusOf(groups, 'T-0001')).toBe('waiting');
+    expect(statusOf(groups, 'T-0002')).toBe('failed');
+  });
+
+  it('a live run wins over a blocker; then blocked, queued, parked, idle', () => {
+    const parked = { ...card('T-0006', 'inbox'), meta: { ...card('T-0006', 'inbox').meta, parkedReason: 'later' } } as TicketCard;
+    const snap = board({
+      'plan-review': [card('T-0001', 'plan-review')],
+      build: [card('T-0002', 'build', { blocked: ['T-0001'] }), card('T-0003', 'build'), card('T-0007', 'build', { blocked: ['T-0001'] })],
+      prioritized: [card('T-0004', 'prioritized')],
+      inbox: [parked, card('T-0005', 'inbox')],
+    });
+    const groups = workGroups(snap, [run({ id: 'r', ticketId: 'T-0002' }), run({ id: 'r3', ticketId: 'T-0003' })]);
+    expect(statusOf(groups, 'T-0001')).toBe('review');
+    expect(statusOf(groups, 'T-0002')).toBe('running'); // the live run works it, the blocker waits
+    expect(statusOf(groups, 'T-0003')).toBe('running');
+    expect(statusOf(groups, 'T-0007')).toBe('blocked'); // no run, an open blocker
+    expect(statusOf(groups, 'T-0004')).toBe('queued');
+    expect(statusOf(groups, 'T-0005')).toBe('idle');
+    expect(statusOf(groups, 'T-0006')).toBe('parked');
   });
 });
 
