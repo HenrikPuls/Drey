@@ -59,8 +59,9 @@ owner's verification round for 1–81 closed 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 87; latest requirement id: req-73
-(readable board issues, renumbered from req-66 — the tickets remote
+highest used (latest: milestone 87; latest requirement id: req-76
+(req-74–76 added 2026-10-31: the Work panel, STRIDE, TARA; req-73 is
+readable board issues, renumbered from req-66 — the tickets remote
 holds req-66)),
 the update check's positive answer is inline text — req-43 and req-44
 were owner requests outside the list, shipped and owner-verified in
@@ -81,6 +82,65 @@ configurable shortcuts as milestone 75 (ADR-0073) and zen mode (the
 former "Next" item 6) as milestone 81 — see the changelog. All of it is
 owner-verified (verification round closed 2026-10-17), the bug-11 fix
 included.
+
+**req-74 — The Work panel replaces the kanban board** (owner request,
+outside the list, 2026-10-31; [ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md),
+proposed). The board goes; the owner sees **Ideas** and what is **in
+progress**, plus **Needs you** for decisions; an accepted ticket goes to
+the archive. Two tracks chosen at triage (**Auto** for bugs and small
+changes, **Shape** for a plan-mode dialog), one page per ticket with the
+live worker, questions that carry their context, an orchestrator that
+routes phase tickets, and the phone as a chat client. Design reference:
+the owner's canvas "Drey Tickets — Workflow redesign" (11 screens).
+Usability findings that motivate it: ADR-0087 "Context". Stages, each
+shipped and confirmed on its own, in this order:
+
+- **W1 — Work panel.** Groups Needs you / Ideas / In progress replace
+  the columns (works from ~240 px); accept → archive; the kanban
+  renderer, lanes, column controls and pins in the UI are removed. The
+  ticket tab becomes the one detail page.
+- **W2 — Questions with context.** A fixed question shape in the worker
+  prompts (ticket, where the worker stands, why it asks, options with
+  consequences, a recommendation); answered from the Needs-you card,
+  the ticket page and the phone in one tap.
+- **W3 — Ready to try.** A `## Changes` section written by the worker
+  (what changed for the owner, which files, which checks); **Launch
+  this version** (a second Drey from the ticket's worktree,
+  `dev.ps1 -Multi -Built`), **Accept and merge** (merge, push, archive,
+  remove the worktree), **Send back** with a note.
+- **W4 — The worker on the ticket.** Current action, recent actions,
+  pause / tell / take over / stop on the ticket page (the takeover tab
+  goes); a Workers view with one card per live worker; a stuck worker
+  (no edit for N minutes, repeated reads) is flagged with nudge /
+  hand over / stop.
+- **W5 — Capture by hotkey and voice.** A second global chord "New
+  ticket" (ADR-0073) opens a small capture window that starts Windows
+  dictation (Win+H) — no own speech recognition (req-11 stays excluded;
+  local Whisper may be reopened later). One model call tidies the
+  dictated text into title and description (raw text kept in the Log)
+  and suggests the track.
+- **W6 — Shape track.** The plan-mode dialog with the project context
+  assembled automatically and shown as chips (CLAUDE.md, specs, ADRs,
+  related tickets — over the existing context pack); read-only; the
+  plan grows beside the dialog and is written into the ticket; "split
+  into phase tickets".
+- **W7 — Orchestrator.** Phase tickets with gates between phases;
+  routing by a rules file in the tickets repository (first match wins:
+  worker, model, review); `touches:` paths per ticket and an overlap
+  guard that holds a ticket while a running one touches the same
+  paths; rebase on the integration branch and re-test before Ready.
+- **W8 — The phone as a chat client.** The req-66 client rebuilt: each
+  ticket a conversation, one composer for capture, answers and
+  shaping, compact chips for options, the Needs-you list as home.
+  Push notifications stay R7's own decision.
+- **W9 — Audit runs (own decision before it starts).** Read-only
+  architecture and security reviews (incl. a check against pinned OWASP
+  cheat sheets) that write a report into the work repo's `docs/` with
+  stable finding ids and propose tickets into Ideas. STRIDE and TARA
+  are separate items (req-75, req-76).
+
+⚠️ Open before W1: whether `order.md` pins survive as the Ideas order or
+go with the board.
 
 **Fresh worktrees check out CRLF; the tickets prompt specs require raw
 LF.** The repo-local git config has `core.autocrlf=true`, so a fresh
@@ -234,6 +294,25 @@ rest are kept so they still match `docs/11`.
   (Req-17).
 - **Req-27** — review internal prompts (partial: ask protocol reworked in
   milestone 31, ADR-0053).
+- **req-75 — STRIDE threat analysis from docs and code** (owner
+  request, 2026-10-31; not planned for implementation yet — to be
+  detailed first). A read-only run that derives a STRIDE pass (spoofing,
+  tampering, repudiation, information disclosure, denial of service,
+  elevation of privilege) per trust boundary from the architecture docs
+  and the code (IPC boundary, CSP, MCP server and client, remote
+  gateway, fleet runner) and proposes tickets for findings. Open:
+  scope per run, report location and format, how findings are kept
+  stable across runs, relation to W9 of req-74.
+- **req-76 — TARA per ISO/SAE 21434 from docs and code** (owner
+  request, 2026-10-31; not planned for implementation yet — to be
+  detailed first). Threat analysis and risk assessment: assets, damage
+  scenarios, threat scenarios, attack paths, attack feasibility, risk
+  value, treatment. ⚠️ A model is good at assets and attack paths but
+  unreliable at feasibility and impact ratings — those stay drafts
+  until the owner confirms them; tickets only after confirmation.
+  Open: which parts of 21434 clause 15 apply to a desktop app,
+  feasibility method (attack potential vs. attack vector), report
+  format, relation to req-75.
 - **Req-29 remainder** — `copilot-cli` (GitHub Copilot CLI, `-p`) not on
   main; id unrouted in `electron/llm/providers/presets.ts`.
 - **Req-22 remainder** — context-menu "add meeting log" + per-day

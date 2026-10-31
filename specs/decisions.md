@@ -34,7 +34,13 @@ one means moving it back to the roadmap with a new justification.
   the tickets board from a phone, with Drey running on the desk, is a
   different thing and is on the roadmap as req-66 (owner, 2026-10-30).
 - **req-11** — audio recording in interview mode (local Whisper; Win+H
-  as likely first step).
+  as likely first step). Owner, 2026-10-31: ticket capture uses Win+H
+  first (req-74 W5); local Whisper may be reopened later.
+- **The kanban board as the tickets UI** (2026-10-31, owner). Eight
+  phase columns side by side need ~2000 px, repeat worker state in four
+  places and do not show whose turn it is; the owner does not use it in
+  that form. Replaced by the Work panel (req-74, ADR-0087); the phase
+  folders stay the storage format.
 - **Job Queue (generic, multi-consumer)** — background processes with
   status/progress, crash persistence, auto-pause on interactive use,
   meant to cover both re-indexing and export. No second consumer exists
