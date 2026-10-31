@@ -79,7 +79,7 @@ then, in the moved file:
 
 Shortcut that stays schema-exact: `git mv` the file and commit only
 that — the board's next refresh completes the treatment
-(`entered-done` stamp + Log line + pin cleanup, T-0041's
+(`entered-done` stamp + Log line, T-0041's
 normalization) in its own commit. Writing the stamp by hand is still
 fine; both paths converge.
 
@@ -102,19 +102,19 @@ Discipline that keeps the repo clean:
   terminal pushes when the owner pushes (never sweep unrelated commits
   into a manual push to "help").
 - **Archiving is not deleting** (T-0041): a ticket that will never be
-  worked goes to `tickets/archive/` (card menu → Archive…, armed
-  two-step, or a plain file move — normalization finishes it: `—
-  archived` Log line, one commit `tickets: <id> archived`, pin
-  cleanup). Archived tickets are invisible on the board; reviving is a
+  worked goes to `tickets/archive/` (the Work row's menu → Archive…,
+  armed two-step; Accept on a finished ticket; or a plain file move —
+  normalization finishes it: `— archived` Log line, one commit
+  `tickets: <id> archived`). Archived tickets are invisible on the board; reviving is a
   move back into a phase folder; final deletion inside `archive/` is
   the owner's manual act — and the owner's alone.
 - **A blocked ticket waits by itself** (T-0050): a ticket with
   `blocked-by: [T-00xx]` in its frontmatter is blocked while any
-  referenced ticket has not reached the last phase — the board badges
-  it, the fleet refuses to pick or run it, and nothing needs doing to
+  referenced ticket has not reached the last phase — the Work panel
+  says so in the row, the fleet refuses to pick or run it, and nothing needs doing to
   keep it waiting. Moving the blocker to `done` unblocks it on the
   next refresh. The owner may still move a blocked ticket anywhere (a
-  drag into a worker column asks for confirmation); an id that names
+  move into a worker phase asks for confirmation); an id that names
   no board ticket — deleted, renamed, or in `archive/` — is a warning
   and keeps the ticket blocked, never a silent unblock. Removing the
   dependency is a frontmatter edit, the owner's.

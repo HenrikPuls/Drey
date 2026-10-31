@@ -86,7 +86,6 @@ export function createFilesOperationsHandler(deps: FilesBridgeDeps): VaultFileOp
             id: target.id,
             from: target.from,
             to: target.to,
-            index: null,
           });
       }
     },

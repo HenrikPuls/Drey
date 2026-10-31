@@ -47,20 +47,20 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-31):** version 0.8.1, milestones 1–88 built — 1–83
+**Status (2026-10-31):** version 0.8.1, milestones 1–89 built — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
 through the live board rounds T-0001 – T-0006 in the owner's tickets
 repo). **Milestones 84 (the fleet runner) and 85 (continuous
 orchestration, ticket T-0007, ADR-0077) — like the later owner requests
-86–88 — are built and suite-green but await the owner's rounds** — see
+86–89 — are built and suite-green but await the owner's rounds** — see
 their changelog markers. The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 88; latest requirement id: req-78
+highest used (latest: milestone 89 = req-75 W1; latest requirement id: req-78
 (req-75–78 added 2026-10-31: the Work panel, STRIDE, TARA, the red-gate
 back-move; req-74 = due-date reminders, T-0012; req-73 is readable board
 issues, renumbered from req-66 — the tickets remote holds req-66)),
@@ -86,7 +86,7 @@ included.
 
 **req-75 — The Work panel replaces the kanban board** (owner request,
 outside the list, 2026-10-31; [ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md),
-proposed). The board goes; the owner sees **Ideas** and what is **in
+accepted with W1). The board goes; the owner sees **Ideas** and what is **in
 progress**, plus **Needs you** for decisions; an accepted ticket goes to
 the archive. Two tracks chosen at triage (**Auto** for bugs and small
 changes, **Shape** for a plan-mode dialog), one page per ticket with the
@@ -94,13 +94,9 @@ live worker, questions that carry their context, an orchestrator that
 routes phase tickets, and the phone as a chat client. Design reference:
 the owner's canvas "Drey Tickets — Workflow redesign" (11 screens).
 Usability findings that motivate it: ADR-0087 "Context". Stages, each
-shipped and confirmed on its own, in this order:
+shipped and confirmed on its own, in this order (W1 shipped as
+milestone 89 — changelog):
 
-- **W1 — Work panel.** Groups Needs you / Ideas / In progress replace
-  the columns (works from ~240 px); accept → archive; the kanban
-  renderer, lanes, column controls and pins in the UI are removed. The
-  ticket tab becomes the one detail page: the conversation thread
-  beside the ticket file (desktop as chat, like the phone).
 - **W2 — Questions with context.** A fixed question shape in the worker
   prompts (ticket, where the worker stands, why it asks, options with
   consequences, a recommendation); answered from the Needs-you card,
@@ -361,6 +357,14 @@ rest are kept so they still match `docs/11`.
 
 ### Follow-ups of shipped milestones (none committed)
 
+- **req-75 W1 (Work panel):** the per-phase brakes (pause / stop / play
+  one automatic phase) are no longer drawn — only the master switch is;
+  a single phase is held over the runner's `POST /chain/column`. Decide
+  in W4 (Workers view) whether they come back there. The thread is one
+  tab that follows the ticket opened last; one thread per ticket needs a
+  plugin SDK way to put a tab into a given pane. The remote client's
+  iPad drag still sends a drop index, which the desk now ignores — it
+  goes with W8.
 - **req-65 (interactive dialog):** the fleet's MCP tool `fleet_run`
   cannot start an interactive dialog — `interactive` rides neither its
   input schema nor `fleetStart`'s MCP mirror; an assistant-driven

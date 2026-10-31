@@ -1,10 +1,12 @@
 import { test, expect } from './fixtures/drey';
 
 /**
- * The card context menu, regrouped (req-70): finished runs behind one
- * "Past runs ›" submenu, only the claim rows that apply, arrow keys
- * through the rows. The fleet runner does not run under e2e, so the
- * finished runs arrive as a pushed `fleet-changed` snapshot.
+ * The Work row's menu (req-70, req-75 W1): the moves first — queue an
+ * idea or take it back, any phase by name — then the runs (finished ones
+ * behind one "Past runs ›" submenu), the maintenance rows behind "More ›"
+ * with only the claim rows that apply, arrow keys through the rows. The
+ * fleet runner does not run under e2e, so the finished runs arrive as a
+ * pushed `fleet-changed` snapshot.
  */
 
 const PIPELINE = [
@@ -28,7 +30,6 @@ function ticket(id: string, title: string, phase: string, claimedBy: string | nu
     `title: "${title}"`,
     'repo: drey',
     'priority: normal',
-    'rank: 5000',
     `branch: t/${id}`,
     `entered-inbox: '2026-10-17T14:32:00Z'`,
     `entered-${phase}: '2026-10-18T09:00:00Z'`,
@@ -66,18 +67,20 @@ test.use({
   seedVault: {
     'tickets/_meta/pipeline.md': PIPELINE,
     'tickets/_meta/repos.md': REPOS,
-    'tickets/_meta/order.md': '# Column order pins\n',
+    'tickets/10-inbox/T-0050.md': ticket('T-0050', 'An idea', 'inbox', null),
     'tickets/20-plan/T-0051.md': ticket('T-0051', 'With history', 'plan', null),
     'tickets/30-build/T-0052.md': ticket('T-0052', 'Mine', 'build', 'owner@desk'),
     'tickets/30-build/T-0053.md': ticket('T-0053', 'Theirs', 'build', 'opencode@desk'),
   },
 });
 
-test.describe('Ticket card menu (req-70)', () => {
+const menu = '.tickets-menu:not(.tickets-submenu)';
+
+test.describe('Work row menu (req-70, req-75 W1)', () => {
   test('past runs sit behind one submenu row', async ({ page, electronApp }, testInfo) => {
-    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
-    const card = page.locator('.tickets-card[data-id="T-0051"]').filter({ visible: true });
-    await expect(card).toBeVisible({ timeout: 15_000 });
+    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    const row = page.locator('.work-row[data-id="T-0051"]').filter({ visible: true });
+    await expect(row).toBeVisible({ timeout: 15_000 });
 
     await electronApp.evaluate(
       ({ BrowserWindow }, data) => {
@@ -99,18 +102,10 @@ test.describe('Ticket card menu (req-70)', () => {
       },
     );
 
-    await card.click({ button: 'right' });
-    const menu = page.locator('.tickets-menu:not(.tickets-submenu)');
-    await expect(menu).toBeVisible();
-    await expect(menu.locator('.tickets-menu-item', { hasText: /^Past run —/ })).toHaveCount(0);
-    const trigger = menu.locator('.tickets-menu-item.has-sub');
+    await row.click({ button: 'right' });
+    await expect(page.locator(menu)).toBeVisible();
+    const trigger = page.locator(`${menu} .tickets-menu-item.has-sub`, { hasText: 'Past runs' });
     await expect(trigger).toHaveText(/Past runs \(3\)/);
-    await expect(menu.locator('.tickets-menu-item', { hasText: 'Open work folder in terminal' })).toHaveText(
-      'Open work folder in terminal',
-    );
-    // Unclaimed: the one claim row is "Claim".
-    await expect(menu.locator('.tickets-menu-item', { hasText: /^Claim$/ })).toHaveCount(1);
-    await expect(menu.locator('.tickets-menu-item', { hasText: 'Release claim' })).toHaveCount(0);
 
     await trigger.hover();
     const sub = page.locator('.tickets-submenu');
@@ -118,7 +113,7 @@ test.describe('Ticket card menu (req-70)', () => {
     await expect(sub.locator('.tickets-menu-item')).toHaveCount(3);
     await expect(sub.locator('.tickets-menu-item').first()).toContainText('plan');
     await expect(sub.locator('.tickets-menu-item').first()).toContainText('10-30 04:52');
-    await page.screenshot({ path: testInfo.outputPath('card-menu-submenu.png') });
+    await page.screenshot({ path: testInfo.outputPath('row-menu-submenu.png') });
 
     // Keyboard: ArrowLeft goes back to the row, Escape closes everything.
     await sub.locator('.tickets-menu-item').first().focus();
@@ -134,22 +129,48 @@ test.describe('Ticket card menu (req-70)', () => {
     await expect(page.locator('.tickets-menu')).toHaveCount(0);
   });
 
-  test('only the claim rows that apply', async ({ page }) => {
-    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
-    const rows = page.locator('.tickets-menu .tickets-menu-item');
+  test('an idea is queued for the fleet, a waiting one goes back', async ({ page }) => {
+    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    const rows = page.locator(`${menu} .tickets-menu-item`);
 
-    const mine = page.locator('.tickets-card[data-id="T-0052"]').filter({ visible: true });
-    await expect(mine).toBeVisible({ timeout: 15_000 });
-    await mine.click({ button: 'right' });
-    await expect(rows.filter({ hasText: 'Release claim' })).toHaveCount(1);
-    await expect(rows.filter({ hasText: 'Take over claim' })).toHaveCount(0);
-    await expect(rows.filter({ hasText: /^Claim$/ })).toHaveCount(0);
-    await expect(rows.filter({ hasText: 'Past runs' })).toHaveCount(0);
+    const idea = page.locator('.work-row[data-id="T-0050"]').filter({ visible: true });
+    await expect(idea).toBeVisible({ timeout: 15_000 });
+    await idea.click({ button: 'right' });
+    await expect(rows.filter({ hasText: 'Queue for the fleet' })).toHaveCount(1);
+    await expect(rows.filter({ hasText: 'Back to ideas' })).toHaveCount(0);
+    // Move to › lists every other phase by name.
+    await rows.filter({ hasText: 'Move to' }).hover();
+    await expect(page.locator('.tickets-submenu .tickets-menu-item')).toHaveText(['Plan', 'Build', 'Done']);
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
 
-    const theirs = page.locator('.tickets-card[data-id="T-0053"]').filter({ visible: true });
+    // Plan pulls from the inbox here, so a planned ticket without a run can go back.
+    const planned = page.locator('.work-row[data-id="T-0051"]').filter({ visible: true });
+    await planned.click({ button: 'right' });
+    await expect(rows.filter({ hasText: 'Back to ideas' })).toHaveCount(1);
+    await expect(rows.filter({ hasText: 'Queue for the fleet' })).toHaveCount(0);
+  });
+
+  test('only the claim rows that apply, behind More', async ({ page }) => {
+    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    const more = page.locator(`${menu} .tickets-menu-item.has-sub`, { hasText: 'More' });
+    const sub = page.locator('.tickets-submenu .tickets-menu-item');
+
+    const mine = page.locator('.work-row[data-id="T-0052"]').filter({ visible: true });
+    await expect(mine).toBeVisible({ timeout: 15_000 });
+    await mine.click({ button: 'right' });
+    await more.hover();
+    await expect(sub.filter({ hasText: 'Release claim' })).toHaveCount(1);
+    await expect(sub.filter({ hasText: 'Take over claim' })).toHaveCount(0);
+    await expect(sub.filter({ hasText: /^Claim$/ })).toHaveCount(0);
+    await expect(page.locator(`${menu} .tickets-menu-item`, { hasText: 'Past runs' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+
+    const theirs = page.locator('.work-row[data-id="T-0053"]').filter({ visible: true });
     await theirs.click({ button: 'right' });
-    await expect(rows.filter({ hasText: 'Take over claim' })).toHaveCount(1);
-    await expect(rows.filter({ hasText: 'Release claim' })).toHaveCount(1);
+    await more.hover();
+    await expect(sub.filter({ hasText: 'Take over claim' })).toHaveCount(1);
+    await expect(sub.filter({ hasText: 'Release claim' })).toHaveCount(1);
   });
 });

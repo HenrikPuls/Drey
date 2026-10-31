@@ -20,6 +20,60 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 89 — req-75 W1: the Work panel replaces the kanban board
+
+**Not yet manually verified by the owner.** Ticket T-0058; owner request,
+outside the list (2026-10-31); [ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md)
+is now accepted. The Tickets panel is the **Work** panel: no columns,
+lanes, column brakes, drag and drop or order pins — one list in three
+foldable groups that reads in a side dock (~240–340 px):
+
+- **Needs you** (shown only when not empty): a worker's question
+  (*Asks: …* + **Answer**), an approval (**Review**), a red gate or a
+  failed run (**Open**, **Run again…**), a checkpoint (**Approve →
+  *next phase*** + **Refine with agent**), and every ticket in the
+  terminal phase with **Accept** — the ticket goes to the archive. A
+  ticket sits in one group only; Needs you wins (owner, 2026-10-31).
+- **Ideas**: the first phase plus the manual phases before the first
+  machine phase, by priority, newest first within one; an idea in the
+  fleet's queue carries a **Queued** chip.
+- **In progress**: everything else up to the terminal phase, closest
+  to done first, with the live run's light.
+
+A row is the priority chip (a click changes it — the new `setPriority`
+command, one commit), the title and one status line. A click opens the
+**ticket page**: the file in the editor and its **thread** beside it —
+one tab (`tickets-thread`, key `thread://ticket`) that follows the
+ticket opened last, showing the ticket's live run (else its newest):
+header with **Open run** / **Stop run**, the dialog's end moves, the
+transcript and the prompt box with the wait card. Without a live run
+the first message starts the phase's interactive dialog. The row menu:
+Open ticket / file, **Queue for the fleet** / **Back to ideas**, **Move
+to ›** every phase, the run rows, Past runs ›, **More ›** (copy branch,
+claim rows, work folder in a terminal), Remove worktree…, Archive…. The
+takeover tab stays (Open run) until W4 and shares the composer with the
+thread (`run-composer.ts`). Notifications open the ticket page.
+
+- Removed: `card-order.ts`, `column-collapse.ts`, the hide-blocked
+  store and the blocked/blocks badges (a blocked ticket says *Blocked
+  by …* in its row), the lanes and run-chip helpers in
+  `worker-status.ts`, the dwell metrics in `shared/tickets.ts` and the
+  status bar's *Avg. time in column*, 119 dead CSS rules; `order.md` is
+  no longer read or written (validator check 8 retired), a transition
+  carries no drop index. The iPad kanban of the remote stays until W8,
+  without pin reordering.
+- Specs: `renderer/work-groups.spec.ts`, `renderer/work-panel.spec.ts`
+  (jsdom: groups, Accept, Queued, row click vs menu, folding, the
+  question row, empty state); the removed helpers' specs went with them.
+  e2e: `e2e/work-panel.spec.ts` (English demo vault, screenshots at the
+  dock's ~340 px and the full window with the thread open), and
+  `ticket-card-menu`, `board-issues`, `interactive-dialog`,
+  `ticket-header` moved to the Work rows.
+- Docs: `specs/ticket-schema.md` (order.md retired, check 8), the
+  manual's Tickets chapter, `plugins/tickets/BOARD.md`, docs/05 §5.41
+  (Panel — the Work list, Ticket thread), docs/06 §6.64/§6.70 and the
+  new §6.73.
+
 ### req-66 R10 — Tickets remote: the detail pane and the columns keep their scroll
 
 Not yet manually verified by the owner. T-0056 (owner-reported defect,

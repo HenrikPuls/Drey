@@ -173,6 +173,11 @@ function rowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLEl
 
   const top = el('div', 'work-row-top');
   top.append(priorityChip(deps, card), el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
+  if (row.queued) {
+    const queued = el('span', 'work-row-queued', 'Queued');
+    queued.title = 'Queued for the fleet — the next free worker takes it';
+    top.append(queued);
+  }
   if (card.issues.length > 0) {
     const worst = card.issues.some((i) => i.level === 'error') ? 'error' : card.issues.some((i) => i.level === 'warning') ? 'warning' : 'noise';
     const badge = el('span', `work-row-issues work-row-issues-${worst}`, String(card.issues.length));

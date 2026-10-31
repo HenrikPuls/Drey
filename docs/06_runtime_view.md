@@ -3161,7 +3161,7 @@ The renderer never touches the network: it triggers (`update:check`,
 portable exe never construct the updater at all � they report
 `unsupported` and offer the releases page instead.
 
-## 6.64 A ticket moves: board snapshot, drag & drop, the one-commit transition (milestone 83, [ADR-0075](09_architecture_decisions/0075-agent-fleet-architecture-governance-and-run-control.md), [ADR-0076](09_architecture_decisions/0076-ticket-repository-format-and-coordination.md))
+## 6.64 A ticket moves: board snapshot, an owner move, the one-commit transition (milestone 83, [ADR-0075](09_architecture_decisions/0075-agent-fleet-architecture-governance-and-run-control.md), [ADR-0076](09_architecture_decisions/0076-ticket-repository-format-and-coordination.md))
 
 ```mermaid
 sequenceDiagram
@@ -3173,19 +3173,18 @@ sequenceDiagram
     Note over P,B: mount / vault round / ticket save � all three end in the same pull
     P->>B: invoke("board")
     B->>V: listVaults() � find the vault with tickets/_meta/pipeline.md
-    B->>V: read pipeline.md, order.md, repos.md, listMarkdownFiles()
+    B->>V: read pipeline.md, repos.md, listMarkdownFiles()
     B->>V: read every tickets/<phase>/<id>.md
     B-->>P: BoardSnapshot (columns, order, issues � derived, nothing stored)
 
-    Note over P,G: drag T-0042 from inbox onto build (drop index 1)
-    P->>B: invoke("transition", {id, from: inbox, to: build, index: 1})
+    Note over P,G: the Work row menu: Move to > Build on T-0042
+    P->>B: invoke("transition", {id, from: inbox, to: build})
     B->>B: queue � re-resolve: T-0042 still in inbox?
     B->>V: read the ticket file
     B->>B: patch � stamp entered-build, claim owner@host, Log line, clear parked
     B->>V: fs.rename old → new (tickets/build/), write patched content
-    B->>B: rewrite order.md � id leaves every section, pins above the drop
     B->>V: announceChanges (changed + deleted paths � tree, indexes, tabs reload)
-    B->>G: add -- <old> <new> <order.md> � commit -m "tickets: T-0042 inbox -> build" -- <paths>
+    B->>G: add -- <old> <new> � commit -m "tickets: T-0042 inbox -> build" -- <paths>
     B-->>P: { ok } � board-changed (debounced) � the panel re-pulls
 ```
 
@@ -3193,9 +3192,8 @@ The claim fields and the WIP count are consequences of the same file
 move: entering a `claim: true` phase stamps `claimed-by`/`claimed-at`
 (the push compare-and-swap of ADR-0076 is plain git once the tickets
 repo has a remote � the losing pusher re-reads and picks the next
-ticket). A drag within one column is the same dance minus the move:
-only `order.md`'s section is rewritten (pins = the cards above and
-including the drop). No git repository → the move still happens, the
+ticket). The order inside a phase is derived (priority, rank, age) —
+the `order.md` pins went with req-75 W1. No git repository → the move still happens, the
 board warns "not versioned", and the commit step is skipped.
 
 ## 6.65 A fleet run: start, steer, gate, and the ticket moves itself (milestone 84, [ADR-0075](09_architecture_decisions/0075-agent-fleet-architecture-governance-and-run-control.md))
@@ -3288,7 +3286,7 @@ sequenceDiagram
 
     B->>F: POST /chain/config (every board snapshot, idempotent)
     F->>R: configure { ticketsVaultPath, git, defaultWorker, permissionMode, pools }
-    R->>V: read pipeline.md + order.md + repos.md + tickets/*
+    R->>V: read pipeline.md + repos.md + tickets/*
     Note over R: dispatch pass — master run + column playing + a free slot in the provider's pool
     R->>R: planDispatch (req-63): one list over the playing automatic columns' own queues — urgent/high first, then the rightmost column, then column order; each takes a slot of its provider's pool (probe-capped, shrunk after a 429)
     R->>V: read prompt (tickets/_meta/prompts/<ref>.md)
@@ -3443,7 +3441,7 @@ Rescans run on registry changes and relocate only.
 
 The owner's conversation with a fleet worker — "Plan with agent" on the
 plan column, "Refine with agent" at the checkpoints and the last agent
-column. One click (card menu or ticket header); the run is a normal
+column. One click (Work row menu or ticket header); the run is a normal
 record with `interactive` set, so every fleet surface shows it.
 
 ```mermaid
@@ -3454,15 +3452,15 @@ sequenceDiagram
     participant F as Fleet runner
     participant W as Worker
 
-    U->>R: card menu / header -> Plan with agent
+    U->>R: row menu / header -> Plan with agent
     R->>B: fleetStart {id, worker, permissionMode, interactive: "plan"}
     B->>F: POST /start (RunRequest.interactive)
     F->>W: spawn (interactive brief, held at spawn)
     F->>F: run: stamp + interactive: true (dispatcher holds off)
     F-->>R: run info (held, interactive)
-    R->>R: documents.open(ticket) + addDoc(takeover, split right)
+    R->>R: openTicketPage: documents.open(ticket) + the thread beside it (req-75 W1)
     W->>R: interview turn -> QUESTION: (the run waits)
-    U->>R: answers in the takeover prompt box
+    U->>R: answers in the thread's prompt box
     R->>F: POST /send (the answer, no takeover — already held)
     W->>W: writes the agreed plan into the ticket, commits, asks on
     U->>R: an end-move button (Finish -> plan-review)
@@ -3474,9 +3472,10 @@ sequenceDiagram
 The end moves are computed from the column the ticket sits in now
 (`end-moves.ts`, pure): a plan dialog finishes into the next column or
 approves straight past the checkpoint; a refine dialog goes on to the
-next column or back to the nearest agent column. Closing the tab
+next column or back to the nearest agent column; the thread and the
+takeover tab draw the same row (`createEndMoves`). Closing the tab
 without a move keeps the run and the reservation — "Resume session"
-continues the dialog.
+(Open run) continues the dialog.
 
 ## 6.71 Pairing a phone and moving a ticket from it (req-66, [ADR-0086](09_architecture_decisions/0086-tickets-remote-access.md))
 
@@ -3564,3 +3563,39 @@ overdue only pluralized under the "Overdue tasks" title). The
 notification's `tag` makes a later digest replace the earlier toast
 instead of stacking.
 
+## 6.73 The Work panel: a ticket opens with its thread, a question is answered there (req-75 W1, [ADR-0087](09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md))
+
+```mermaid
+sequenceDiagram
+    participant W as Work panel (renderer)
+    participant E as Editor (base)
+    participant T as Ticket thread (doc kind tickets-thread)
+    participant B as BoardService (plugin main)
+    participant R as Fleet runner
+
+    R-->>B: fleet-changed {runs} (T-0104 waits: question)
+    B-->>W: fleet-changed
+    W->>W: workGroups(snapshot, runs): T-0104 to Needs you, "Asks: ..."
+    Note over W: the owner clicks the row (or Answer)
+    W->>E: documents.open(tickets/50-build/T-0104.md)
+    alt no thread tab open yet
+        W->>T: addDoc(thread://ticket, split right)
+        W->>E: documents.open(T-0104.md) - focus back to the file
+    else the thread is open
+        W->>T: rename + re-point to T-0104 (one tab, follows the last ticket)
+    end
+    T->>B: invoke("fleetStream", {runId}) every 2 s
+    B->>R: GET stream
+    T->>T: transcript + wait card (the question above the prompt box)
+    Note over T: the owner types the answer
+    T->>B: invoke("fleetSend", {runId, text})
+    B->>R: POST /send - the worker goes on with its step
+    R-->>B: fleet-changed (waiting cleared)
+    B-->>W: the row leaves Needs you
+```
+
+The thread talks to the ticket's live run, else to its newest run.
+Without a live run, in a phase that offers the interactive dialog, the
+first message starts it (`startInteractive(..., open = false)`) and is
+sent into the new run. An Accept on a finished ticket is the ordinary
+`archive` command; Approve is the ordinary `transition`.

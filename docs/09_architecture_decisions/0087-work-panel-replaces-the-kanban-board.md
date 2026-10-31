@@ -1,7 +1,7 @@
 # 0087 — The Work panel replaces the kanban board
 
-- Status: proposed (2026-10-31, req-75; owner direction given, the
-  stages W1–W9 are confirmed one by one as they start)
+- Status: accepted (2026-10-31, with req-75 W1; the stages W2–W9 are
+  confirmed one by one as they start)
 - Amends: [ADR-0076](0076-ticket-repository-format-and-coordination.md)
   (the board is no longer the tickets UI; the repository format stays),
   [ADR-0077](0077-continuous-orchestration.md) (the phases become
@@ -120,7 +120,16 @@ phone. Watch any worker and step in when needed.
   tagged there, everything else typed in the tab counts as the owner's;
   an edit the owner makes in another program (watcher reload) counts as
   the owner's too.
-- Built and shipped in stages W1–W9 (`specs/roadmap.md`, req-75); this
-  ADR moves to accepted with W1.
+- Built and shipped in stages W1–W9 (`specs/roadmap.md`, req-75); W1
+  shipped 2026-10-31 and made this ADR accepted.
+- W1 as built: the thread is **one** tab beside the file that follows
+  the ticket opened last (fixed key `thread://ticket`) — the plugin SDK
+  cannot place a tab into a given pane, so one tab per ticket would
+  split again on every open. The takeover tab stays, reached by the
+  thread's **Open run**, until W4 folds its controls into the thread.
+  The per-column brakes are no longer drawn (the master switch stays in
+  the panel header; a single phase is still held over the runner's
+  `/chain/column`). The iPad kanban of the remote client stays until W8,
+  without pin reordering (owner, 2026-10-31).
 - Design reference: the owner's canvas "Drey Tickets — Workflow
   redesign" (2026-10-31).

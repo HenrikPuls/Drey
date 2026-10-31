@@ -94,6 +94,17 @@ one means moving it back to the roadmap with a new justification.
 
 ## Won't do (decided against, kept for the record)
 
+- **The kanban board as the tickets UI** — columns, worker lanes and
+  per-column brakes, drag and drop between and within columns, the
+  `order.md` order pins (with Move to top / bottom), folded columns, the
+  hide-blocked filter and the per-column dwell metrics (owner,
+  2026-10-31, req-75 W1, [ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md)).
+  Built through milestones 83–88 and replaced by the Work panel: the
+  owner did not use the board in its kanban form, eight columns need
+  ~2000 px, and worker state showed in four places. Ideas sort by
+  priority, newest first — no hand-kept order. Not to be re-proposed as
+  a desk view; the remote client's iPad strip stays until W8.
+
 - **Daily template follows `templates.dir`** — the daily note stays
   seeded from the literal `templates/daily.md` (owner decision
   2026-10-30, ticket T-0019): that is the documented behavior

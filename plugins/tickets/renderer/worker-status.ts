@@ -186,25 +186,3 @@ export function execClockMs(run: RunInfo, nowMs: number): number {
   const ended = run.endedAt === null || run.endedAt === undefined ? NaN : Date.parse(run.endedAt);
   return Math.max(0, (Number.isNaN(ended) ? nowMs : Math.min(nowMs, ended)) - started);
 }
-
-/**
- * The run chip of a ticket with a live run — clock-free (T-0051 follow-up):
- * `▶ running · 2 · 45k/1.2k` — state, turns (the prompt plus every
- * steer), this run's own tokens in/out. The token segment waits for
- * the first usage event that reported any.
- */
-export function runChipLine(run: RunInfo): string {
-  const tokens =
-    run.tokensIn > 0 || run.tokensOut > 0 ? ` · ${formatTokens(run.tokensIn)}/${formatTokens(run.tokensOut)}` : '';
-  return `▶ ${run.state} · ${run.steerCount + 1}${tokens}`;
-}
-
-/** Lanes that need a look open by themselves; a quiet one stays folded. */
-export const opensByItself = (status: WorkerStatus): boolean => status.light === 'amber' || status.light === 'red';
-
-/** The runs of one working column, oldest first (a stable lane order). */
-export function lanesOfColumn(runs: readonly RunInfo[], phaseId: string): RunInfo[] {
-  return runs
-    .filter((r) => (r.column ?? null) === phaseId)
-    .sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id));
-}

@@ -51,7 +51,6 @@ test.use({
   seedVault: {
     'tickets/_meta/pipeline.md': PIPELINE,
     'tickets/_meta/repos.md': REPOS,
-    'tickets/_meta/order.md': '# Column order pins\n',
     'tickets/20-plan/T-0042.md': TICKET,
     'plain.md': '---\ntitle: "A plain note"\n---\n\n# Plain\n',
   },
@@ -59,9 +58,9 @@ test.use({
 
 test.describe('Ticket header in the editor (req-62)', () => {
   test('shows title and fields, edits them as buffer changes, folds the Log', async ({ page }) => {
-    // The board's card opens the ticket — the owner's path.
-    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
-    await page.locator('.tickets-card[data-id="T-0042"]').filter({ visible: true }).click();
+    // The Work row opens the ticket — the owner's path.
+    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    await page.locator('.work-row[data-id="T-0042"]').filter({ visible: true }).click();
 
     const head = page.locator('app-editor .tickets-head');
     await expect(head).toBeVisible({ timeout: 15_000 });

@@ -3,7 +3,7 @@ import { test, expect } from './fixtures/drey';
 /**
  * The interactive dialog's affordances (req-65, req-72): "Plan with agent"
  * on the first automatic column and "Refine with agent" in every manual
- * column — in the ticket header and the card menu. The run itself (worker,
+ * column — in the ticket header and the Work row's menu. The run itself (worker,
  * takeover tab, end moves) is the owner's live round; here the switches
  * must simply be where the rules put them, and nowhere else.
  */
@@ -51,7 +51,6 @@ test.use({
   seedVault: {
     'tickets/_meta/pipeline.md': PIPELINE,
     'tickets/_meta/repos.md': REPOS,
-    'tickets/_meta/order.md': '# Column order pins\n',
     'tickets/20-plan/T-0042.md': ticket('T-0042', 'Plan me', 'plan'),
     'tickets/30-plan-review/T-0043.md': ticket('T-0043', 'Review me', 'plan-review'),
     'tickets/40-build/T-0044.md': ticket('T-0044', 'Build me', 'build'),
@@ -60,36 +59,36 @@ test.use({
 });
 test.describe('Interactive dialog affordances (req-65)', () => {
   test('the header offers the dialog exactly where the column does', async ({ page }) => {
-    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
 
     // Plan column: the plan dialog.
-    await page.locator('.tickets-card[data-id="T-0042"]').filter({ visible: true }).click();
+    await page.locator('.work-row[data-id="T-0042"]').filter({ visible: true }).click();
     const head = page.locator('app-editor .tickets-head');
     await expect(head).toBeVisible({ timeout: 15_000 });
     await expect(head.locator('.tickets-head-dialog')).toHaveText('Plan with agent');
 
     // The checkpoint: the refine dialog.
-    await page.locator('.tickets-card[data-id="T-0043"]').filter({ visible: true }).click();
+    await page.locator('.work-row[data-id="T-0043"]').filter({ visible: true }).click();
     await expect(page.locator('app-editor .tickets-head')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('app-editor .tickets-head .tickets-head-dialog')).toHaveText('Refine with agent');
 
     // A middle agent column (build) offers none — and neither does a plain note.
-    await page.locator('.tickets-card[data-id="T-0044"]').filter({ visible: true }).click();
+    await page.locator('.work-row[data-id="T-0044"]').filter({ visible: true }).click();
     await expect(page.locator('app-editor .tickets-head')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('app-editor .tickets-head .tickets-head-dialog')).toHaveCount(0);
   });
 
-  test('the card menu carries the one-click entries, gated by the column', async ({ page }) => {
-    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
+  test('the row menu carries the one-click entries, gated by the column', async ({ page }) => {
+    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
 
-    const planCard = page.locator('.tickets-card[data-id="T-0042"]').filter({ visible: true });
-    await planCard.click({ button: 'right' });
+    const planRow = page.locator('.work-row[data-id="T-0042"]').filter({ visible: true });
+    await planRow.click({ button: 'right' });
     await expect(page.locator('.tickets-menu-item', { hasText: 'Plan with agent' })).toBeVisible();
     await page.keyboard.press('Escape');
     await page.locator('app-editor .cm-content').click({ position: { x: 10, y: 10 } });
 
-    const buildCard = page.locator('.tickets-card[data-id="T-0044"]').filter({ visible: true });
-    await buildCard.click({ button: 'right' });
+    const buildRow = page.locator('.work-row[data-id="T-0044"]').filter({ visible: true });
+    await buildRow.click({ button: 'right' });
     await expect(page.locator('.tickets-menu-item', { hasText: 'Refine with agent' })).toHaveCount(0);
     await expect(page.locator('.tickets-menu-item', { hasText: 'Run agent' })).toBeVisible();
   });

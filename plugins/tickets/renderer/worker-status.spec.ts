@@ -5,9 +5,6 @@ import {
   execClockMs,
   fleetSummary,
   formatTokens,
-  lanesOfColumn,
-  opensByItself,
-  runChipLine,
   spanClock,
   STALL_MS,
   telemetryParts,
@@ -142,33 +139,6 @@ describe('execClockMs — the elapsed clock counts only working time (req-67)', 
     const standing = run({ execMs: 1_800_000, execSince: null });
     expect(execClockMs(standing, NOW)).toBe(1_800_000);
     expect(execClockMs(standing, NOW + 10 * 60_000)).toBe(1_800_000);
-  });
-});
-
-describe('runChipLine — duration-free', () => {
-  it('shows state, turns and this run\'s own tokens (T-0051)', () => {
-    expect(runChipLine(run({ steerCount: 1, tokensIn: 45_000, tokensOut: 1_234 }))).toBe('▶ running · 2 · 45.0k/1.2k');
-  });
-
-  it('waits for the first usage that reported tokens', () => {
-    expect(runChipLine(run())).toBe('▶ running · 1');
-    expect(runChipLine(run({ state: 'stopping' }))).toBe('▶ stopping · 1');
-  });
-});
-
-describe('lanes', () => {
-  it('opens only the lanes that are not green', () => {
-    expect(opensByItself({ light: 'green', label: 'Working' })).toBe(false);
-    expect(opensByItself({ light: 'red', label: 'Stalled 6m' })).toBe(true);
-  });
-
-  it('collects the runs of one column, oldest first', () => {
-    const runs = [
-      run({ id: 'b', column: 'build', startedAt: '2026-10-18T11:30:00Z' }),
-      run({ id: 'a', column: 'build', startedAt: '2026-10-18T11:00:00Z' }),
-      run({ id: 'c', column: 'plan' }),
-    ];
-    expect(lanesOfColumn(runs, 'build').map((r) => r.id)).toEqual(['a', 'b']);
   });
 });
 

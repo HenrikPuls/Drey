@@ -15,7 +15,7 @@ Top-level rules, once, up front:
 - **Phase directories are numbered** (T-0041): `NN-<id>` with `NN` the
   phase's 1-based pipeline position × 10 — `10-inbox`, `20-prioritized`,
   … `80-done`. The number lives ONLY in the directory name: `entered-*`
-  keys, `order.md` sections and branch names keep the clean id.
+  keys and branch names keep the clean id.
 - **Every phase transition is one git commit** (`git mv` semantics +
   the frontmatter stamp), message format
   `tickets: <id> <from> -> <to>` (ASCII arrow).
@@ -24,7 +24,7 @@ Top-level rules, once, up front:
   effect of a board transition: on the next board refresh, stateless
   normalization detects the ticket sitting in phase B with an
   inconsistent `entered-<B>` stamp and completes the treatment — stamp,
-  Log line, pin cleanup, one commit `tickets: <id> <from> -> <to>`,
+  Log line, one commit `tickets: <id> <from> -> <to>`,
   actor `owner@<host>`. Works after restarts (derived from the files,
   no extra state); lane rules are never enforced on human moves —
   logged, not blocked.
@@ -54,7 +54,7 @@ Top-level rules, once, up front:
   tickets/
     _meta/
       pipeline.md     # the phases + handover config (config, never data)
-      order.md        # sparse per-column order pins (data, never config)
+      order.md        # ignored since req-75 W1 (the former order pins), may be absent
       repos.md        # work-repo name -> clone URL/path mapping
       prompts/        # the handover prompts (`agent <prompt-ref>` names one file)
     10-inbox/
@@ -100,7 +100,7 @@ existing directory whose stripped id matches, else the derived name
 (created on first use). Inserting a column by hand takes a **gap
 number** (`35-qa`) — no move ever renumbers existing directories, so
 there is no rename cascade. Directory names are never written into
-ticket files, order.md or branches.
+ticket files or branches.
 
 **Renumbering is an explicit owner action** (req-50, Settings →
 Tickets): reordering the columns there rewrites `pipeline.md` and
@@ -119,11 +119,11 @@ in one folder.
 
 `tickets/archive/` is a reserved folder beside `_meta`: **not a board
 column, invisible on the board, no counter display**. Archiving goes
-through the card menu (two-step armed) or by moving the file into
+through the Work row menu (two-step armed), the Accept of a finished
+ticket (req-75 W1), or by moving the file into
 `archive/` — both yield the Log line `archived` (a machine-shaped
 `— archived` marker, NO `entered-archive` stamp; claim fields ride
-along) and exactly one commit `tickets: <id> archived` with pin
-cleanup. Reviving is a move back into a phase folder — normalization
+along) and exactly one commit `tickets: <id> archived`. Reviving is a move back into a phase folder — normalization
 treats it as `archive -> <phase>`. Body edits after archiving never
 re-fire normalization. Final deletion is the owner's manual act inside
 `archive/`.
@@ -258,10 +258,10 @@ board and the fleet.
   picks a blocked ticket, the manual "Run agent…" start refuses with
   the open blockers named, and the ci sweep skips it (a blocked ticket
   does not move through a `ci` column either). Human moves stay free;
-  a drag into an agent column asks for confirmation naming the open
-  blockers (the owner is the final authority). The board shows
-  `blocked by <ids>` / `blocks <ids>` chips plus an optional
-  "hide blocked" view filter; ordering is never touched. The drift
+  an owner move into an agent phase asks for confirmation naming the
+  open blockers (the owner is the final authority). The Work panel
+  (req-75 W1) shows `Blocked by <ids>` as the row's status line;
+  ordering is never touched. The drift
   pass (normalization) never enforces blocked-ness — a file move is an
   owner move.
 
@@ -390,37 +390,18 @@ is the circuit breaker's park into inbox, always logged.
 **Dispatch order** (req-63): one candidate list over every playing
 automatic column, ordered by priority class (`urgent` / `high` before
 `normal` / `low`), then column rank — the rightmost column first, so
-finishing beats starting — then the column's own order (pins, then
-derived). Each candidate takes a slot of the provider pool its
+finishing beats starting — then the column's derived order. Each candidate takes a slot of the provider pool its
 assignment resolves to; a full pool makes it wait, a running run is
 never preempted.
 
-## `_meta/order.md` — sparse order pins
+## `_meta/order.md` — retired (req-75 W1)
 
-```markdown
-# Column order pins — listed ids form the top of their column
-
-## prioritized
-
-- T-0042
-- T-0019
-
-## build
-
-- T-0007
-```
-
-A section per phase (only phases that have pins; only pinned ids —
-that is the sparseness). Column order = pinned ids in listed order
-first, then unpinned ids in derived order. A drag within a column pins
-everything above and including the drop position. Unknown ids in a
-section are ignored with a noise badge. Two branches adding different
-pins union on merge; a text conflict is resolved by hand, union
-semantics. Rank collisions in derived order fall back to
-`entered-<phase>`, then id. The card context menu's "Move to top" /
-"Move to bottom" is the same reorder operation with drop index 0 / the
-column's end — a menu move and the equivalent drag write identical
-pins.
+The sparse per-column order pins went with the kanban board
+([ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md)).
+Nothing reads or writes `order.md` any more: a column's order is the
+derived order (priority, then `rank`, then `entered-<phase>`, then
+id), and the Work panel sorts Ideas by priority, newest first within one.
+An existing file is left alone — delete it by hand when convenient.
 
 ## `_meta/repos.md` — work repositories
 
@@ -492,7 +473,7 @@ column; the board still renders), the fleet runner before every action
    noise badge).
 6. `claimed-by` grammar; `claimed-at` present with `claimed-by`.
 7. `repo` (when present) resolves in `repos.md`.
-8. `order.md` sections reference known phases and live ids.
+8. (Removed with req-75 W1: `order.md` is no longer read.)
 9. Leaving `plan-review` without acceptance criteria = issue on the
    ticket (the board shows it; the runner enforces it from M84).
 10. `blocked-by` resolution (T-0050): ids resolve against the board's
@@ -527,8 +508,7 @@ and re-runs safely because the treatment is idempotent):
   treatment stamps `entered-<B>`, appends the Log line
   `<from> -> <B>` (`from` = the holder of the newest event;
   `archive` when the archived marker dominates; `unknown` when no
-  stamp exists at all), drops the id from every order.md pin section
-  and commits exactly once, `tickets: <id> <from> -> <to>`, actor
+  stamp exists at all) and commits exactly once, `tickets: <id> <from> -> <to>`, actor
   `owner@<host>`.
 - In `tickets/archive/`: treatment ⟺ no `— archived` Log marker newer
   than every `entered-*` stamp; the treatment appends the marker and

@@ -26,8 +26,7 @@
   color: var(--text-3);
 }
 
-/* The cycle-time line (M85): per-column average dwell beside the run stats. */
-/* The status bar under the board (req-59): one row, cycle times left, a warning pill right. */
+/* The status bar under the Work list (req-59): one row, the message and the warning pill right. */
 .tickets-statusbar {
   flex: none;
   display: flex;
@@ -44,7 +43,7 @@
 /*
  * The right end of the bar (req-61): the board's message, then the
  * worktree pill. The message comes and goes in the free space on the
- * left of the pill, so neither the cycle times nor the pill move.
+ * left of the pill, so the pill never moves.
  */
 .tickets-statusbar-right {
   display: flex;
@@ -95,42 +94,6 @@
   color: inherit;
 }
 
-/* Segments that do not fit wrap onto a hidden second line: a column drops whole, never mid-word. */
-.tickets-statusbar-dwell {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  column-gap: 12px;
-  height: 26px;
-  min-width: 0;
-  line-height: 26px;
-  overflow: hidden;
-  cursor: default;
-}
-
-.tickets-statusbar-label {
-  flex: none;
-  color: var(--text-4);
-}
-
-.tickets-statusbar-seg {
-  flex: none;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.tickets-statusbar-name {
-  color: var(--text-2);
-}
-
-.tickets-statusbar-value {
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-}
-
 .tickets-statusbar-warn {
   flex: none;
   display: inline-flex;
@@ -141,21 +104,6 @@
   color: var(--status-modified);
   background: color-mix(in srgb, var(--status-modified) 14%, transparent);
   cursor: help;
-}
-
-.tickets-chip-age {
-  color: var(--text-4);
-}
-
-.tickets-board {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  gap: 8px;
-  padding: 12px 12px 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  align-items: stretch;
 }
 
 /*
@@ -227,8 +175,8 @@
   padding: 0 7px;
 }
 
-/* The board's view controls (req-69): the hide-blocked filter (T-0050) and
-   the issues chip, a group in the panel header — no row of their own. */
+/* The board's view controls (req-69): the issues chip, a group in the
+   panel header — no row of their own. */
 .tickets-head-view {
   gap: 4px;
 }
@@ -237,9 +185,9 @@
   display: none;
 }
 
-/* The board issues (req-73): a bubble beside the filter — icon and count
+/* The board issues (req-73): a bubble in the header — icon and count
    only, the summary in the tooltip — coloured by the worst level; it
-   unfolds the messages above the columns, inset like the board. */
+   unfolds the messages above the Work list. */
 .tickets-issues-chip {
   display: inline-flex;
   align-items: center;
@@ -330,149 +278,6 @@
   background: var(--hover-bg);
 }
 
-/* ---- columns ---- */
-
-.tickets-col {
-  flex: 0 0 264px;
-  width: 264px;
-  min-width: 264px;
-  max-width: 264px;
-  box-sizing: border-box;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-dock);
-}
-
-/* A column with a worker pool carries the lanes: it gets more room. */
-.tickets-col.tickets-col-pool {
-  flex-basis: 320px;
-  width: 320px;
-  min-width: 320px;
-  max-width: 320px;
-}
-
-.tickets-col-head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px 8px;
-}
-
-.tickets-col-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-heading);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tickets-col-count {
-  flex: none;
-  min-width: 22px;
-  height: 18px;
-  padding: 0 6px;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
-  background: var(--bg-input);
-  font-size: 0.72rem;
-  font-family: var(--font-mono);
-  color: var(--text-2);
-}
-
-.tickets-col-over {
-  color: var(--status-modified);
-  font-weight: 600;
-}
-
-.tickets-col-unknown {
-  flex: none;
-  font-size: 0.62rem;
-  padding: 0 4px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-xs);
-  color: var(--text-3);
-}
-
-.tickets-col-agent {
-  flex: none;
-  max-width: 120px;
-  height: 18px;
-  padding: 0 6px;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-xs);
-  font-size: 0.68rem;
-  font-family: var(--font-mono);
-  color: var(--text-4);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* The owner's checkpoint mark (M85): a manual column between automatic
- * ones — the machine never pulls across it. */
-.tickets-col-checkpoint {
-  flex: none;
-  font-size: 0.68rem;
-  height: 18px;
-  padding: 0 6px;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-xs);
-  color: var(--text-4);
-}
-
-/* A held column (paused or stopped): its head dims so the brake reads
- * at a glance across the whole board. */
-.tickets-col.tickets-col-held {
-  border-style: dashed;
-}
-
-.tickets-col.tickets-col-held > .tickets-col-head {
-  opacity: 0.72;
-}
-
-/* The per-column brakes, next to the fold chevron (M85). */
-.tickets-col-controls {
-  flex: none;
-  display: inline-flex;
-  gap: 1px;
-}
-
-.tickets-col-controls-held {
-  color: var(--text-3);
-}
-
-.tickets-col-btn {
-  display: inline-flex;
-  padding: 1px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-5);
-  cursor: pointer;
-}
-
-.tickets-col-btn:hover {
-  background: var(--hover-bg);
-  color: var(--text-2);
-}
-
 /* The chain's master switch in the panel header (M85): An / Aus /
  * Notaus. The active state is marked; Notaus is the red button. */
 /* Run | halt: one segmented switch, the active half filled. */
@@ -494,154 +299,7 @@
   color: #d64545;
 }
 
-.tickets-col-list {
-  flex: 1;
-  min-height: 24px;
-  overflow-y: auto;
-  padding: 0 8px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.tickets-col-empty {
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  color: var(--text-6);
-  font-size: 0.78rem;
-  text-align: center;
-  padding: 18px 8px;
-}
-
-/* A folded column (T-0005): a narrow strip carrying the count and the
- * title rotated 90°, so folded phases cost a sliver of width. One
- * click — or a dragged card hovering it — unfolds the column. */
-
-.tickets-col.tickets-collapsed {
-  flex: 0 0 40px;
-  width: 40px;
-  min-width: 40px;
-  max-width: 40px;
-  padding: 10px 0;
-}
-
-.tickets-col-strip {
-  flex: 1;
-  min-height: 0;
-  writing-mode: vertical-rl;
-  border: 0;
-  background: transparent;
-  color: var(--text-3);
-  font: inherit;
-  font-size: 0.72rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-align: center;
-  cursor: pointer;
-}
-
-.tickets-col-strip:hover {
-  color: var(--text-2);
-}
-
-/* The collapse affordance in the expanded column head. */
-
-.tickets-col-fold {
-  flex: none;
-  display: inline-flex;
-  padding: 1px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-5);
-  cursor: pointer;
-}
-
-.tickets-col-fold:hover {
-  background: var(--hover-bg);
-  color: var(--text-2);
-}
-
-/* Drop markers: a line above the insertion card, or at the list end. */
-
-.tickets-insert-above {
-  box-shadow: 0 -2px 0 0 var(--accent);
-}
-
-.tickets-col-list.tickets-insert-end {
-  box-shadow: inset 0 2px 0 0 var(--accent);
-}
-
-/* ---- cards ---- */
-
-.tickets-card {
-  position: relative;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-input);
-  cursor: pointer;
-  user-select: none;
-}
-
-.tickets-card:hover {
-  border-color: var(--accent-ring);
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg-input));
-}
-
-.tickets-card.tickets-card-open {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
-}
-
-.tickets-card:active {
-  opacity: 0.7;
-}
-
-.tickets-card-top {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.tickets-id {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  color: var(--text-5);
-}
-
-.tickets-prio {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex: none;
-  border: 1px solid var(--border-strong);
-}
-
-.tickets-prio-urgent {
-  background: var(--status-deleted);
-  border-color: var(--status-deleted);
-}
-
-.tickets-prio-high {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.tickets-prio-normal {
-  background: transparent;
-}
-
-.tickets-prio-low {
-  background: transparent;
-  opacity: 0.45;
-}
-
-.tickets-mark {
-  margin-left: auto;
-  font-size: 0.62rem;
-  color: var(--text-6);
-}
+/* ---- issue counts (the Work rows, the ticket header) ---- */
 
 .tickets-issues {
   margin-left: auto;
@@ -666,74 +324,6 @@
 .tickets-issues-noise {
   border: 1px solid var(--border-strong);
   color: var(--text-5);
-}
-
-.tickets-title {
-  margin-top: 4px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.3;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.tickets-card-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 3px;
-}
-
-.tickets-chip {
-  font-size: 0.72rem;
-  padding: 0 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  color: var(--text-3);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tickets-chip-claim {
-  border-color: var(--accent-edge);
-  color: var(--accent-text);
-}
-
-.tickets-chip-parked {
-  border-color: var(--status-modified);
-  color: var(--text-3);
-}
-
-/* The interactive-dialog reservation (req-65): the fleet keeps its
- * hands off while the owner works the ticket in a conversation. */
-.tickets-chip-interactive {
-  border-color: var(--accent-edge);
-  color: var(--accent-text);
-}
-
-/* The dependency chips (T-0050): blocked-by carries the warning hue,
- * blocks stays quiet — it informs, it does not alarm. */
-.tickets-chip-blocked {
-  border-color: var(--status-modified);
-  color: var(--status-modified);
-}
-
-.tickets-chip-blocks {
-  color: var(--text-3);
-}
-
-.tickets-age {
-  margin-left: 4px;
-  color: var(--text-5);
-}
-
-.tickets-pinned .tickets-id {
-  color: var(--accent-text);
 }
 
 /* ---- empty state ---- */
@@ -854,7 +444,7 @@
   background: var(--hover-bg);
 }
 
-/* ---- card context menu ---- */
+/* ---- the row menu ---- */
 
 .tickets-menu {
   position: fixed;
@@ -891,110 +481,6 @@
 }
 
 /* ---- refinement pass ---- */
-
-.tickets-col {
-  transition: border-color 0.12s, background 0.12s;
-}
-
-.tickets-col.tickets-drop-target {
-  border-color: var(--accent-edge);
-  background: var(--hover-bg);
-}
-
-.tickets-col-head {
-  padding: 6px 8px;
-}
-
-.tickets-col-title {
-  font-weight: 600;
-}
-
-.tickets-col-head > .tickets-col-count {
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--hover-bg-strong);
-}
-
-.tickets-col-head > .tickets-col-count.tickets-col-over {
-  background: transparent;
-  border: 1px solid var(--status-modified);
-}
-
-.tickets-col-fold {
-  opacity: 0.85;
-}
-
-.tickets-col:hover .tickets-col-fold,
-.tickets-col-fold:focus-visible {
-  opacity: 1;
-}
-
-.tickets-col-empty {
-  padding: 10px 0;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-xs);
-}
-
-.tickets-col-strip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tickets-col.tickets-collapsed:hover {
-  background: var(--hover-bg);
-}
-
-/* Cards: priority edge, calmer hover, focus ring, drag feedback. */
-
-.tickets-card {
-  border-left-width: 3px;
-  transition: border-color 0.12s, background 0.12s;
-}
-
-.tickets-card:has(.tickets-prio-urgent) {
-  border-left-color: var(--status-deleted);
-}
-
-.tickets-card:has(.tickets-prio-high) {
-  border-left-color: var(--accent);
-}
-
-.tickets-card:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.tickets-card.tickets-dragging {
-  opacity: 0.45;
-}
-
-.tickets-card-top .tickets-prio {
-  margin-left: auto;
-}
-
-.tickets-card-top .tickets-mark,
-.tickets-card-top .tickets-issues {
-  margin-left: 0;
-}
-
-.tickets-mark {
-  display: inline-flex;
-  color: var(--accent-text);
-}
-
-.tickets-title {
-  margin-top: 3px;
-  font-weight: 500;
-}
-
-.tickets-card-meta:empty {
-  display: none;
-}
-
-.tickets-chip-claim .tickets-age {
-  margin-left: 4px;
-}
 
 .tickets-statusbar-note[data-kind='busy'] .tickets-statusbar-note-text {
   animation: tickets-pulse 1.2s ease-in-out infinite;
@@ -1095,11 +581,6 @@
   gap: 8px;
 }
 
-.tickets-menu-run-state.is-failed {
-  color: var(--status-deleted);
-}
-
-.tickets-menu-run-state.is-stopped,
 .tickets-menu-run-when {
   color: var(--text-4);
 }
@@ -1108,43 +589,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.tickets-mark-btn {
-  cursor: pointer;
-  border-radius: var(--radius-xs);
-}
-
-.tickets-mark-btn:hover {
-  background: var(--hover-bg-strong);
-}
-
-/* --- the fleet (M84): worker lanes in the working columns, watch view --- */
-
-.tickets-lanes {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 0 8px 8px;
-  padding: 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-editor);
-  max-height: 55%;
-  overflow-y: auto;
-}
-
-.tickets-lanes-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.72rem;
-  color: var(--text-3);
-}
-
-.tickets-lanes-title {
-  font-weight: 600;
-  color: var(--text-2);
-}
+/* ---- the fleet (M84): worker lights, the wait card ---- */
 
 /* The light is a dot with the state in words beside it: never colour alone. */
 .tickets-light {
@@ -1187,172 +632,6 @@
   .tickets-light-green {
     animation: none;
   }
-}
-
-.tickets-lane {
-  border: 1px solid var(--border);
-  border-left-width: 3px;
-  border-radius: var(--radius-xs);
-  background: var(--bg-dock);
-}
-
-.tickets-lane-green {
-  border-left-color: var(--status-added);
-}
-
-.tickets-lane-amber {
-  border-left-color: var(--status-modified);
-}
-
-.tickets-lane-red {
-  border-left-color: var(--status-deleted);
-}
-
-.tickets-lane-idle {
-  border-left-color: var(--text-faint);
-}
-
-.tickets-lane-summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  min-width: 0;
-  padding: 4px 6px;
-  border: none;
-  background: transparent;
-  color: var(--text-2);
-  font: inherit;
-  font-size: 0.72rem;
-  text-align: left;
-  cursor: pointer;
-}
-
-.tickets-lane-summary:hover {
-  background: var(--hover-bg);
-}
-
-.tickets-lane-chevron {
-  flex: none;
-  display: inline-flex;
-  color: var(--text-4);
-}
-
-.tickets-lane-state {
-  flex: none;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.tickets-lane-state-green {
-  color: var(--status-added);
-}
-
-.tickets-lane-state-amber {
-  color: var(--status-modified);
-}
-
-.tickets-lane-state-red {
-  color: var(--status-deleted);
-}
-
-.tickets-lane-state-idle {
-  color: var(--text-3);
-}
-
-.tickets-lane-ticket {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-mono);
-  color: var(--text-4);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tickets-lane-mini {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--text-3);
-  font-family: var(--font-mono);
-}
-
-.tickets-lane-mini .tickets-meter {
-  width: 40px;
-}
-
-.tickets-lane-body {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 2px 8px 8px 22px;
-  font-size: 0.72rem;
-  color: var(--text-3);
-}
-
-.tickets-lane-activity {
-  color: var(--text-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tickets-lane-context-row {
-  font-family: var(--font-mono);
-}
-
-.tickets-meter {
-  position: relative;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--bg-input);
-  overflow: hidden;
-}
-
-.tickets-meter-fill {
-  display: block;
-  height: 100%;
-  border-radius: 3px;
-}
-
-.tickets-meter-green {
-  background: var(--status-added);
-}
-
-.tickets-meter-amber {
-  background: var(--status-modified);
-}
-
-.tickets-lane-tokens {
-  display: flex;
-  gap: 10px;
-  font-family: var(--font-mono);
-}
-
-.tickets-lane-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.tickets-chip-worker {
-  font-style: italic;
-}
-
-.tickets-chip-run {
-  background: var(--hover-bg-strong);
-}
-
-/* A worker that waits on the owner (req-64). */
-.tickets-chip-waiting {
-  background: color-mix(in srgb, var(--status-modified) 28%, transparent);
-  color: var(--text-heading);
-}
-
-.tickets-lane-waiting {
-  color: var(--text-heading);
-  white-space: normal;
 }
 
 .tickets-takeover-wait {
@@ -1446,24 +725,6 @@
 
 .tickets-takeover-wait-questions > .tickets-takeover-btn {
   align-self: flex-start;
-}
-
-.tickets-watch {
-  width: min(720px, 80vw);
-}
-
-.tickets-watch-out {
-  margin: 0;
-  max-height: 50vh;
-  overflow: auto;
-  font-family: var(--font-mono, monospace);
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: var(--hover-bg);
-  border-radius: var(--radius-xs);
-  padding: 8px;
 }
 
 .tickets-form-hint {
@@ -1636,8 +897,10 @@
 
 .tickets-takeover-btn {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
   height: 26px;
   padding: 0 10px;
   border: 1px solid var(--field-border);
@@ -2164,18 +1427,13 @@ details[open] > summary > .tickets-tx-think-preview {
   font-size: 0.75rem;
 }
 
-.tickets-takeover-hint {
-  color: var(--text-4);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+/* In a narrow pane the quick prompts wrap; Stop and Send keep their place. */
 .tickets-takeover-chips {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 4px;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .tickets-takeover-chip {
@@ -2278,11 +1536,6 @@ details[open] > summary > .tickets-tx-think-preview {
   background: color-mix(in srgb, var(--tk-tone) 10%, var(--bg-input));
 }
 
-.tickets-takeover-hint {
-  color: color-mix(in srgb, var(--tk-tone) 60%, var(--text-2));
-  font-weight: 500;
-}
-
 .tickets-takeover-chip {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--field-border));
   color: var(--accent-fg);
@@ -2291,27 +1544,6 @@ details[open] > summary > .tickets-tx-think-preview {
 
 .tickets-takeover-chip:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
-}
-
-/* Lanes: a tinted body and a louder state word */
-.tickets-lane-green {
-  background: color-mix(in srgb, var(--status-added) 12%, var(--bg-dock));
-}
-
-.tickets-lane-amber {
-  background: color-mix(in srgb, var(--status-modified) 16%, var(--bg-dock));
-}
-
-.tickets-lane-red {
-  background: color-mix(in srgb, var(--status-deleted) 18%, var(--bg-dock));
-}
-
-.tickets-lane {
-  border-left-width: 4px;
-}
-
-.tickets-lane-state {
-  font-size: 0.74rem;
 }
 
 .tickets-light {
@@ -2528,4 +1760,283 @@ details[open] > summary > .tickets-tx-think-preview {
   font-size: 0.8rem;
   color: var(--text-2);
   cursor: pointer;
+}
+
+/* ---- the Work panel (req-75 W1, ADR-0087): groups of one-line rows ---- */
+
+.work-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0 8px;
+}
+
+.work-group + .work-group {
+  margin-top: 4px;
+}
+
+.work-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: var(--row-h, 26px);
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.work-group-head:hover {
+  background: var(--hover-bg);
+}
+
+.work-group-chevron {
+  display: inline-flex;
+  color: var(--text-5);
+}
+
+.work-group-count {
+  margin-left: auto;
+  color: var(--text-5);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Needs you is the one group that asks for attention. */
+.work-group-needs .work-group-title {
+  color: var(--accent-text, var(--accent));
+}
+
+.work-group-empty,
+.work-empty {
+  padding: 6px 12px 8px 26px;
+  font-size: 0.75rem;
+  color: var(--text-5);
+}
+
+.work-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 4px;
+  padding: 5px 8px 6px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+}
+
+.work-row:hover {
+  background: var(--hover-bg);
+}
+
+.work-row:focus-visible {
+  outline: 2px solid var(--accent-ring, var(--accent));
+  outline-offset: -2px;
+}
+
+.work-row.work-row-open {
+  background: var(--active-bg, var(--hover-bg-strong));
+}
+
+.work-row-top,
+.work-row-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.work-row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  color: var(--text-heading);
+}
+
+.work-row-status {
+  padding-left: 2px;
+  font-size: 0.72rem;
+  color: var(--text-4);
+}
+
+.work-row-id {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-num, 0.7rem);
+  color: var(--text-5);
+}
+
+.work-row-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-row[data-need='question'] .work-row-line,
+.work-row[data-need='permission'] .work-row-line {
+  color: var(--text-2);
+}
+
+.work-row[data-need='red-gate'] .work-row-line,
+.work-row[data-need='failed'] .work-row-line {
+  color: var(--status-deleted);
+}
+
+.work-row-more {
+  flex: none;
+  opacity: 0;
+}
+
+.work-row:hover .work-row-more,
+.work-row:focus-within .work-row-more,
+.work-row-more:focus-visible {
+  opacity: 1;
+}
+
+/* The priority chip: a quiet label, coloured only when it matters. */
+.work-prio {
+  flex: none;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs, 4px);
+  background: transparent;
+  color: var(--text-4);
+  font: inherit;
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.work-prio:hover {
+  border-color: var(--border-strong);
+  color: var(--text-2);
+}
+
+.work-prio-urgent {
+  border-color: var(--status-deleted);
+  color: var(--status-deleted);
+}
+
+.work-prio-high {
+  border-color: var(--status-modified);
+  color: var(--status-modified);
+}
+
+.work-prio-low {
+  color: var(--text-6);
+}
+
+.work-row-queued {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--radius-xs, 4px);
+  background: var(--accent-surface);
+  color: var(--accent-text, var(--accent));
+  font-size: 0.68rem;
+  line-height: 18px;
+}
+
+.work-row-issues {
+  flex: none;
+  min-width: 14px;
+  padding: 0 3px;
+  border-radius: var(--radius-xs, 4px);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  text-align: center;
+}
+
+.work-row-issues-error {
+  background: var(--status-deleted);
+  color: var(--accent-contrast);
+}
+
+.work-row-issues-warning {
+  background: var(--status-modified);
+  color: var(--accent-contrast);
+}
+
+.work-row-issues-noise {
+  border: 1px solid var(--border-strong);
+  color: var(--text-5);
+}
+
+.work-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.work-action {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text-heading);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.work-action:hover {
+  background: var(--hover-bg);
+}
+
+.work-action-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent, var(--accent-contrast));
+}
+
+.work-action-primary:hover {
+  background: var(--accent-hover, var(--accent));
+}
+
+/* ---- the ticket thread (req-75 W1, ADR-0087 decision 3) ---- */
+
+/* The shared composer is a wrapper only: its parts lay out in the tab's column. */
+.tickets-composer {
+  display: contents;
+}
+
+.tickets-thread-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-heading);
+}
+
+.tickets-thread-status {
+  font-size: 0.72rem;
+  color: var(--text-4);
+}
+
+.tickets-thread-status:empty {
+  display: none;
+}
+
+.tickets-thread-empty {
+  flex: 1;
+  min-height: 0;
+  padding: 24px 16px;
+  font-size: 0.8125rem;
+  color: var(--text-4);
+  text-align: center;
+}
+
+.tickets-thread-empty[hidden],
+.tickets-takeover-transcript[hidden] {
+  display: none;
 }
