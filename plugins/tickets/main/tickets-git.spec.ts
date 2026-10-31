@@ -76,6 +76,29 @@ describe('TicketsGit', () => {
     await expect(git.commitPaths('E:/repo', ['a.md'], 'msg')).resolves.toBeUndefined();
   });
 
+  it('drops a path another commit already removed and commits the rest', async () => {
+    const { calls, exec } = recorder((args) =>
+      args.includes('add') && args.includes('old/T-1.md')
+        ? new Error("Command failed: git add\nfatal: pathspec 'old/T-1.md' did not match any files")
+        : '',
+    );
+    const git = new TicketsGit(() => 'git', exec);
+    await git.commitPaths('E:/repo', ['old/T-1.md', 'new/T-1.md'], 'tickets: T-1 old -> new');
+    expect(calls.map((c) => c.args[0])).toEqual(['add', 'add', 'commit']);
+    expect(calls[1]!.args).toEqual(['add', '--', 'new/T-1.md']);
+    expect(calls[2]!.args.slice(-2)).toEqual(['--', 'new/T-1.md']);
+  });
+
+  it('resolves quietly when every path is already gone, and rethrows other add failures', async () => {
+    const gone = recorder((args) =>
+      args.includes('add') ? new Error("fatal: pathspec 'a.md' did not match any files") : '',
+    );
+    await expect(new TicketsGit(() => 'git', gone.exec).commitPaths('E:/repo', ['a.md'], 'msg')).resolves.toBeUndefined();
+    expect(gone.calls.some((c) => c.args.includes('commit'))).toBe(false);
+    const locked = recorder((args) => (args.includes('add') ? new Error('fatal: Unable to create index.lock') : ''));
+    await expect(new TicketsGit(() => 'git', locked.exec).commitPaths('E:/repo', ['a.md'], 'msg')).rejects.toThrow('index.lock');
+  });
+
   it('pushes HEAD to the named remote from the repo root (T-0041)', async () => {
     const { calls, exec } = recorder();
     const git = new TicketsGit(() => 'git', exec);
