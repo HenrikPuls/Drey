@@ -330,12 +330,22 @@ rest are kept so they still match `docs/11`.
   2026-10-31). An optional `on-red: <phase>` key per phase in
   `pipeline.md`: a red gate moves the ticket back to that phase with
   the gate's failure log in the ticket (Log line + the next run's
-  brief), instead of only backing off. The loop is bounded by the
-  phase's `max-red:` — past it the circuit breaker parks as today. The
-  pipeline stays linear apart from this one rule; a visual workflow
-  designer (branches, parallel paths) is not planned. Open: whether the
-  back-move counts as a machine move across a manual checkpoint, and
-  how it interacts with W7's gates and routing (req-74).
+  brief), instead of only backing off. The target is configured, so
+  the back-move may cross a manual checkpoint — the checkpoint only
+  stops the machine because nothing told it otherwise (owner,
+  2026-10-31). Flow the owner expects (e.g. `test` red, `on-red:
+  plan`): the plan worker revises the plan with the failure as
+  feedback and tells the owner what failed; when that needs decisions,
+  the ticket waits in Needs you until the owner has made them; then it
+  goes straight back into the phase whose gate went red (the phase it
+  had started), not through the queue again. The loop is bounded by
+  the phase's `max-red:` — past it the circuit breaker parks as today.
+  The pipeline stays linear apart from this one rule; a visual workflow
+  designer (branches, parallel paths) is not planned. Open: where the
+  "return to" phase is recorded (a frontmatter key vs. derived from the
+  Log), whether a checkpoint between the two (plan-review) is skipped
+  on the way back, and how it interacts with W7's gates and routing
+  (req-74).
 - **Req-29 remainder** — `copilot-cli` (GitHub Copilot CLI, `-p`) not on
   main; id unrouted in `electron/llm/providers/presets.ts`.
 - **Req-22 remainder** — context-menu "add meeting log" + per-day
