@@ -20,6 +20,51 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-75 — Runner and ticket side by side, dialogs start quiet
+
+**Not yet manually verified by the owner.** Ticket T-0052 (req-75's
+remaining gap after W1/W1b/W2/W2b;
+[ADR-0084](../docs/09_architecture_decisions/0084-interactive-runs-at-plan-and-checkpoints.md),
+[ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md)).
+The ticket page opened a third pane whenever focus sat elsewhere, an
+interactive dialog ran its first interviewing turn before the owner
+said anything, held resumes posted an internal continuation prompt
+that caused no-op turns, and a question buried in a worker message set
+no wait.
+
+- **`beside` (SDK 1.37)** (`shared/plugin-api/`, `doc-open.service.ts`):
+  `documents.open`/`addDoc` take `beside: <open tab's path or key>` —
+  the anchor tab's pane is focused **before** the landing decision, so
+  a plain open replaces inside that pane and `split` opens off it. An
+  anchor that is not open makes `beside` a no-op; an already-open key
+  reveals as today. Lint-clean cases in `editor.service.spec.ts`.
+- **The ticket page anchors on the pair** (new pure
+  `plugins/tickets/renderer/ticket-page.ts`, spec beside it): thread
+  closed → beside the file; file closed → beside the thread; both open
+  → reveal both, focus back on the file (W1's rule). Whatever pane is
+  focused, whatever else is open — never a third pane; every ticket
+  switch re-activates both tabs. The old `threadFocused` special case
+  is gone.
+- **Dialogs start quiet** (`providers.ts` `holdAtSpawn`, `runs.ts`,
+  `protocol.ts` `RunInfo.quietStart`): an interactive run spawns with
+  no first prompt delivered — the composed brief wraps the owner's
+  first send (exact wording pinned in `runs.spec.ts`), then plain
+  steers; `quietStart` on the record until then. Claude Code has no
+  hold at spawn and keeps today's first posted turn. The thread's
+  composer pre-fills the step and its meaning (new
+  `dialog-starters.ts`, spec beside it) and shows the pending hint
+  `waits for your first message — the worker starts when you send`
+  while the run waits.
+- **Held handover resumes go silent**: the internal `HANDOVER_HELD`
+  prompt (six observed no-op "I'm back" turns) is deleted — a held
+  run taken over by a runner restart spawns held, no prompt;
+  `HANDOVER_CONTINUE` still rides non-held resumes, and the fresh
+  fallback re-holds a held run.
+- **`questionOf` accepts a buried marker** (`providers.ts`): the text
+  from the **last** line-start `QUESTION:` marker anywhere in the
+  message (message start included); a marker in prose still sets no
+  wait (`'Done. QUESTION: none'` stays null, pinned).
+
 ### req-75 W2b — The question reads like the canvas
 
 **Not yet manually verified by the owner.** Owner request, outside the
