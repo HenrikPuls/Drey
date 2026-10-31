@@ -178,17 +178,58 @@ describe('AnthropicMessagesProvider.chat', () => {
 });
 
 describe('AnthropicMessagesProvider tool loop', () => {
-  it('runs each requested tool and sends the results back as blocks', async () => {
+  const sse = (payload: unknown): string => `data: ${JSON.stringify(payload)}\n\n`;
+  const startText = (index: number): unknown => ({
+    type: 'content_block_start',
+    index,
+    content_block: { type: 'text', text: '' },
+  });
+  const startTool = (index: number, id: string): unknown => ({
+    type: 'content_block_start',
+    index,
+    content_block: { type: 'tool_use', id, name: 'vault_read', input: {} },
+  });
+  const textDelta = (index: number, text: string): unknown => ({
+    type: 'content_block_delta',
+    index,
+    delta: { type: 'text_delta', text },
+  });
+  const jsonDelta = (index: number, partialJson: string): unknown => ({
+    type: 'content_block_delta',
+    index,
+    delta: { type: 'input_json_delta', partial_json: partialJson },
+  });
+  const blockStop = (index: number): unknown => ({ type: 'content_block_stop', index });
+  const messageStop = (stopReason: string): unknown => ({
+    type: 'message_delta',
+    delta: { stop_reason: stopReason },
+  });
+
+  it('streams a tool round: text, the tool_use block, then the streamed answer', async () => {
     const { requests } = script(
-      jsonReply({ content: [textBlock('Let me look.'), toolUse('tu-1', { path: 'a.md' })] }),
-      jsonReply({ content: [textBlock('It says hi.')] }),
+      streamReply([
+        sse({ type: 'message_start', message: {} }),
+        sse(startText(0)),
+        sse(textDelta(0, 'Let me look.')),
+        sse(blockStop(0)),
+        sse(startTool(1, 'tu-1')),
+        sse(jsonDelta(1, '{"path":"a.md"}')),
+        sse(blockStop(1)),
+        sse(messageStop('tool_use')),
+        sse({ type: 'message_stop' }),
+      ]),
+      streamReply([sse(startText(0)), sse(textDelta(0, 'It says hi.')), sse(blockStop(0)), sse({ type: 'message_stop' })]),
     );
     const onToolCall = vi.fn(async () => 'note body');
-    const onDelta = vi.fn();
+    const deltas: string[] = [];
 
-    const result = await provider().client.chat(TURNS, { tools: [READ_TOOL], onToolCall, onDelta });
+    const result = await provider().client.chat(TURNS, {
+      tools: [READ_TOOL],
+      onToolCall,
+      onDelta: (text) => deltas.push(text),
+    });
 
-    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}');
+    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}', undefined);
     expect(result.text).toBe('It says hi.');
     // The trace is in the app's own (OpenAI-shaped) transcript form.
     expect(result.toolTrace).toEqual([
@@ -202,6 +243,7 @@ describe('AnthropicMessagesProvider tool loop', () => {
       { role: 'tool', tool_call_id: 'tu-1', content: 'note body' },
     ]);
 
+    expect(requests[0].body?.['stream']).toBe(true);
     expect(requests[0].body?.['tools']).toEqual([
       { name: 'vault_read', description: 'Reads a note', input_schema: READ_TOOL.parameters },
     ]);
@@ -209,7 +251,45 @@ describe('AnthropicMessagesProvider tool loop', () => {
     expect(replay).toContain('"type":"tool_use"');
     expect(replay).toContain('"type":"tool_result"');
     expect(replay).toContain('note body');
+    expect(deltas).toEqual(['Let me look.', 'It says hi.']);
+  });
+
+  it('retries a refused streamed round non-streamed, and stops streaming the call', async () => {
+    const { requests } = script(
+      textReply('stream not supported with tools', 400),
+      jsonReply({ content: [toolUse('tu-1', { path: 'a.md' })] }),
+      jsonReply({ content: [textBlock('It says hi.')] }),
+    );
+    const onToolCall = vi.fn(async () => 'note body');
+    const onDelta = vi.fn();
+
+    const result = await provider().client.chat(TURNS, { tools: [READ_TOOL], onToolCall, onDelta });
+
+    expect(result.text).toBe('It says hi.');
+    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}', undefined);
+    // The streamed attempt, its non-streamed retry, and the answer round
+    // (which goes non-streamed directly — the call stopped streaming).
+    expect(requests).toHaveLength(3);
+    expect(requests[0].body?.['stream']).toBe(true);
+    expect(requests[1].body?.['stream']).toBe(false);
+    expect(requests[2].body?.['stream']).toBe(false);
+    // Nothing streamed: the final text arrives as exactly one call.
     expect(onDelta).toHaveBeenCalledExactlyOnceWith('It says hi.');
+  });
+
+  it('runs the loop non-streamed when the caller cannot stream', async () => {
+    const { requests } = script(
+      jsonReply({ content: [textBlock('Let me look.'), toolUse('tu-1', { path: 'a.md' })] }),
+      jsonReply({ content: [textBlock('It says hi.')] }),
+    );
+    const onToolCall = vi.fn(async () => 'note body');
+
+    const result = await provider().client.chat(TURNS, { tools: [READ_TOOL], onToolCall });
+
+    expect(result.text).toBe('It says hi.');
+    expect(result.toolTrace?.map((turn) => turn.role)).toEqual(['assistant', 'tool']);
+    expect(requests[0].body?.['stream']).toBe(false);
+    expect(requests[1].body?.['stream']).toBe(false);
   });
 
   it('asks for the answer without tools once the round budget is used up', async () => {

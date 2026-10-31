@@ -564,6 +564,7 @@ convention for "this did not work".
 | A result over 16 000 characters | the first 16 000, then `[… cut after 16000 of <n> characters — narrow the call (a smaller range, a more specific query) to see the rest]` |
 | The round budget is used up, or tools ran and the model said nothing (a user message, once) | `The tool budget for this question is used up. Do not call any more tools. Answer now from what you have found so far, and say plainly what you could not check.` |
 | A tool result of an earlier turn over 2 000 characters, in the replay | the first 2 000, then `[… shortened in the history: <n> more characters — call the tool again if you need them]` |
+| A turn carried the post-hoc task block (the app showed the user a task list the model never asked a tool for), in the replay | appended after the turn's answer: `[After your answer, the app showed the user this task list — you did not call a tool for it: <the records, through the same 2 000-character cap>]` — never replayed as a `tool_calls`/`tool` pair |
 
 **Calls written as text** (`parseTextToolCalls`) — read only when tools
 were offered and the reply carries no native call:

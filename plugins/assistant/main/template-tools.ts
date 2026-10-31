@@ -19,7 +19,8 @@
  * daily-note seed) can be overwritten but never deleted.
  *
  * Handlers never throw — errors return as text so the model can
- * self-correct (the live-edit convention).
+ * self-correct (the live-edit convention); a cancellation of the ask is
+ * the one exception and rejects as an abort.
  */
 import type { ToolSpec } from '../../../shared/llm';
 
@@ -105,7 +106,13 @@ export interface TemplateToolsPort {
 export interface TemplateTools {
   specs: readonly ToolSpec[];
   names: ReadonlySet<string>;
-  run(name: string, argsJson: string): Promise<string>;
+  /**
+   * Runs one tool. The `signal` is the ask's cancellation (SDK 1.36):
+   * the confirm dialogs race against it and reject with an
+   * `AbortError`-shaped error; the quick library queries do not wait on
+   * anything and need no race.
+   */
+  run(name: string, argsJson: string, signal?: AbortSignal): Promise<string>;
 }
 
 function parseArgs(argsJson: string): Record<string, unknown> {
@@ -118,6 +125,41 @@ function parseArgs(argsJson: string): Record<string, unknown> {
     // Falls through to the shared malformed-args error.
   }
   throw new Error(`Could not parse arguments: ${argsJson}`);
+}
+
+/**
+ * Races one confirm wait against the ask's cancellation signal: an abort
+ * rejects with the `AbortError` shape (the dialog itself stays open
+ * until answered — it has no dismiss seam; the raced answer is
+ * discarded). Mirrors `raceSignal` in the base write tools.
+ */
+function raceSignal<T>(wait: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (signal === undefined) {
+    return wait;
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void =>
+      reject(Object.assign(new Error('Generation cancelled.'), { name: 'AbortError' }));
+    const detach = (): void => signal.removeEventListener('abort', onAbort);
+    if (signal.aborted) {
+      onAbort();
+      // The raced wait's eventual outcome is discarded; swallow it so it
+      // does not surface as an unhandled rejection.
+      void wait.catch(() => undefined);
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+    void wait.then(
+      (value) => {
+        detach();
+        resolve(value);
+      },
+      (err) => {
+        detach();
+        reject(err);
+      },
+    );
+  });
 }
 
 function nameArg(args: Record<string, unknown>): string {
@@ -230,7 +272,7 @@ export function createTemplateTools(port: TemplateToolsPort): TemplateTools {
     return body;
   };
 
-  const write = async (argsJson: string): Promise<string> => {
+  const write = async (argsJson: string, signal: AbortSignal | undefined): Promise<string> => {
     const args = parseArgs(argsJson);
     const content = typeof args['content'] === 'string' ? args['content'] : '';
     if (content.trim() === '') {
@@ -247,7 +289,7 @@ export function createTemplateTools(port: TemplateToolsPort): TemplateTools {
     }
     if (port.confirm) {
       const before = exists ? await port.read(resolved.path) : '';
-      if (!(await port.confirm({ path: resolved.path, before, after: content }))) {
+      if (!(await raceSignal(port.confirm({ path: resolved.path, before, after: content }), signal))) {
         return 'The user declined the change.';
       }
     }
@@ -257,7 +299,7 @@ export function createTemplateTools(port: TemplateToolsPort): TemplateTools {
       : `Created the template ${resolved.path}. It is available in the Templates panel, the slash menu and Mod+T immediately.`;
   };
 
-  const remove = async (argsJson: string): Promise<string> => {
+  const remove = async (argsJson: string, signal: AbortSignal | undefined): Promise<string> => {
     const resolved = resolveTemplate(dir, nameArg(parseArgs(argsJson)));
     if ('refused' in resolved) {
       return resolved.refused;
@@ -270,7 +312,7 @@ export function createTemplateTools(port: TemplateToolsPort): TemplateTools {
     }
     if (port.confirm) {
       const before = await port.read(resolved.path);
-      if (!(await port.confirm({ path: resolved.path, before, after: '' }))) {
+      if (!(await raceSignal(port.confirm({ path: resolved.path, before, after: '' }), signal))) {
         return 'The user declined the deletion.';
       }
     }
@@ -280,7 +322,7 @@ export function createTemplateTools(port: TemplateToolsPort): TemplateTools {
       : `Deleted the template ${resolved.path} (removed permanently — this volume has no recycle bin).`;
   };
 
-  const run = async (name: string, argsJson: string): Promise<string> => {
+  const run = async (name: string, argsJson: string, signal?: AbortSignal): Promise<string> => {
     try {
       switch (name) {
         case 'template_list':
@@ -288,13 +330,17 @@ export function createTemplateTools(port: TemplateToolsPort): TemplateTools {
         case 'template_read':
           return await read(argsJson);
         case 'template_write':
-          return await write(argsJson);
+          return await write(argsJson, signal);
         case 'template_delete':
-          return await remove(argsJson);
+          return await remove(argsJson, signal);
         default:
           return `Unknown tool: ${name}`;
       }
     } catch (err) {
+      // A cancellation goes back to the loop as the abort it is.
+      if (signal?.aborted === true && err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       return `Error: ${err instanceof Error ? err.message : String(err)}`;
     }
   };

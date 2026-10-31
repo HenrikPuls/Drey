@@ -15,7 +15,11 @@
  * - when the round budget is used up the model gets one closing round
  *   that asks for the answer without tools, instead of an empty reply;
  * - an endpoint that refuses the very first request with tools attached
- *   is retried without them, and the result says so.
+ *   is retried without them, and the result says so;
+ * - the loop owns delta forwarding: a provider that streams a round
+ *   forwards its text through the `emit` it was handed, and the loop
+ *   delivers a non-streamed final round's text as exactly one `onDelta`
+ *   call — no provider can double-deliver.
  */
 import {
   ChatMessage,
@@ -28,7 +32,7 @@ import {
 } from '../../shared/llm';
 import type { LlmChatOptions } from './llm-client';
 import { LlmError } from './llm-errors';
-import { isAbortError } from './llm-tasks';
+import { cancelledError, isAbortError, isSignalAborted } from './llm-tasks';
 
 /** Round budget when the caller names none. */
 export const DEFAULT_TOOL_ROUNDS = 12;
@@ -56,11 +60,15 @@ export interface ModelReply {
  * One request in the provider's dialect. `first` is true until a tool has
  * run: only then may the provider answer `'tools-rejected'` (the endpoint
  * refused the request because of the tools) instead of throwing.
+ * `emit` forwards one text delta of this round as it streams in; a
+ * non-streamed round never calls it, and the loop — not the provider —
+ * decides what still reaches the caller's `onDelta`.
  */
 export type RequestRound = (
   convo: readonly ChatMessage[],
   mode: ToolMode,
   first: boolean,
+  emit: (delta: string) => void,
 ) => Promise<ModelReply | 'tools-rejected'>;
 
 const CLOSING_NOTE =
@@ -121,6 +129,11 @@ async function runCall(
   specs: ReadonlyMap<string, ToolSpec>,
   options: LlmChatOptions,
 ): Promise<string> {
+  // A cancel that arrived while another call of the round ran: this
+  // queued call never starts, and the ask rejects like the one before it.
+  if (isSignalAborted(options.signal)) {
+    throw cancelledError();
+  }
   const name = call.function.name;
   const spec = specs.get(name);
   if (spec === undefined) {
@@ -134,9 +147,9 @@ async function runCall(
   options.onToolEvent?.({ phase: 'start', id: call.id, name, argsJson });
   let result: string;
   try {
-    result = capResult(await options.onToolCall!(name, argsJson));
+    result = capResult(await options.onToolCall!(name, argsJson, options.signal));
   } catch (err) {
-    if (isAbortError(err) || options.signal?.aborted === true) {
+    if (isAbortError(err) || isSignalAborted(options.signal)) {
       throw err;
     }
     result = `Error: ${name} failed — ${err instanceof Error ? err.message : String(err)}`;
@@ -166,10 +179,22 @@ export async function runToolLoop(
   let toolsDropped = false;
   let budgetExhausted = false;
   let rounds = 0;
+  // Whether the round in flight has already streamed its text through
+  // `emit` — the final round decides what `finish` forwards.
+  let roundEmitted = false;
+  const emit = (delta: string): void => {
+    if (delta === '') {
+      return;
+    }
+    roundEmitted = true;
+    options.onDelta?.(delta);
+  };
 
   const finish = (text: string): LlmChatResult => {
-    if (text !== '') {
-      // The loop is not streamed: an onDelta caller gets exactly one call.
+    // A final round that streamed has already delivered its text delta
+    // by delta; a non-streamed one forwards the whole text exactly once,
+    // so a caller never branches on capability to render the reply.
+    if (text !== '' && !roundEmitted) {
       options.onDelta?.(text);
     }
     return {
@@ -186,7 +211,8 @@ export async function runToolLoop(
   };
 
   for (;;) {
-    const reply = await request(convo, mode, toolTrace.length === 0);
+    roundEmitted = false;
+    const reply = await request(convo, mode, toolTrace.length === 0, emit);
     if (reply === 'tools-rejected') {
       mode = 'plain';
       toolsDropped = true;

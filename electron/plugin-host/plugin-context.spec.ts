@@ -132,7 +132,13 @@ describe('buildLlmContext — the tool set of a plugin call', () => {
     await h.llm.chat([], { vaultTools: true, vaultToolsScope: ['docs'] });
     await h.sent[0]!.onToolCall!('vault_read', '{"path":"a.md"}');
 
-    const expected = { scope: ['docs'], write: 'auto', origin: 'assistant', protectAppFolders: true };
+    const expected = {
+      scope: ['docs'],
+      write: 'auto',
+      origin: 'assistant',
+      protectAppFolders: true,
+      signal: expect.any(AbortSignal),
+    };
     expect(h.offered[0]).toEqual(expected);
     expect(h.vaultCall).toHaveBeenCalledWith('vault_read', { path: 'a.md' }, expected);
   });
@@ -158,6 +164,7 @@ describe('buildLlmContext — the tool set of a plugin call', () => {
         { vaultId: 'docs', path: 'b.md' },
       ],
       onChange: onVaultChange,
+      signal: expect.any(AbortSignal),
     });
   });
 

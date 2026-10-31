@@ -7,7 +7,10 @@ prompt (milestone 76, **done**), the vault toolset (milestone 77,
 **done**), the open note through the same tools (milestone 78, **done**).
 Changes ADR-0021 (the vault tools), ADR-0049 (live edit), ADR-0063 (the
 tool groups) and ADR-0069 (the explore tools); each gets its later-change
-note with the milestone that changes it.
+note with the milestone that changes it. A later change of milestone 88
+streams the tool rounds, carries the abort signal into the tools, guards
+`web_fetch` against private addresses and replays the post-hoc task
+block as a text note (see the last section).
 
 ## Context
 
@@ -255,9 +258,6 @@ As built (milestone 77):
   only moves the point at which the turn is lost.
 - **Leaving the reply to a prompt that named dropped tools.** One
   generation saved, an answer that announces lookups it could not make.
-- **Streaming the tool-carrying request.** Wanted, but a separate change
-  to both providers' wire handling; progress events cover the "is it
-  doing anything" question for now. Follow-up on the roadmap.
 
 ## Consequences
 
@@ -296,10 +296,8 @@ As built (milestone 77):
   disk. Live edit and the confirmed edit both work on it.
 - The semantic service keeps four methods only the removed explore
   tools used; removing them is a follow-up.
-- Not done in milestone 76: the abort signal still reaches only the
-  external tools; plugin and vault tools finish the call they are in.
-  The renderer-side `api.llm.chat` with `vaultTools` still attaches the
-  whole base set (no plugin uses it); it follows in milestone 77.
+  (The abort signal and the streaming of tool-carrying requests, both
+  left open here, shipped as the milestone-88 later change below.)
 
 ## Later change — `vault_retrieve` is gone (milestone 80, ADR-0072)
 
@@ -308,3 +306,48 @@ The toolset is `vault_list`, `vault_search`, `vault_read`,
 retrieval behind `vault_retrieve` was removed
 ([ADR-0072](0072-vault-context-by-text-search.md)); the system prompt no
 longer has a variant that names it.
+
+## Later change — streamed rounds, the abort signal, the `web_fetch` guard, the post-hoc replay (milestone 88)
+
+Four follow-ups of this ADR shipped together (ticket T-0029):
+
+- **The tool rounds stream.** A caller that passed `onDelta` gets every
+  round of the loop streamed, not only a final one-piece text: the loop
+  hands each round an `emit` callback and owns the forwarding itself —
+  a final round that did not stream still arrives as exactly one
+  full-text call, so no provider can double-deliver — and interim text
+  before a tool call ("Let me check…") streams too, while the persisted
+  turn keeps the final text only. Both HTTP providers feed their SSE
+  frames through pure sinks
+  (`shared/llm/stream-assembly.ts`); a streamed round the endpoint
+  answers with HTTP 400 is retried non-streamed once and the call's
+  rounds go non-streamed from there — some local servers take tools
+  only unstreamed, and that must not degrade the call to no tools —
+  before the `tools-rejected` conclusion applies. Streamed rounds
+  report no usage; the plain streamed path already reported none.
+- **The abort signal reaches plugin and vault tools.** `onToolCall`
+  gains the call's signal as a third parameter (SDK 1.36, additive);
+  the loop hands it to every call and pre-checks it before a queued
+  call of an already-cancelled ask starts; `VaultCallOptions` carries
+  it, `VaultTools` refuses an already-cancelled call and rethrows
+  aborts instead of flattening them into `Error:` results that would
+  keep the loop running; the diff confirm and the move / delete
+  approvals race the signal (a cancel during the wait writes nothing),
+  as do the template tools' confirms and the external tools (those had
+  it already). An already-open dialog stays until answered — the
+  ADR-0011 dialog has no dismiss seam; the raced answer is discarded.
+  That residual gap stays on the roadmap.
+- **`web_fetch` guards private addresses** (an ADR-0063 concern landed
+  with these follow-ups): literal private / special IP ranges (v4
+  0/8, 10/8, 127/8, 169.254/16, 172.16/12, 192.168/16, 100.64/10 and
+  the broadcast address; v6 `::`, `::1`, fc00::/7, fe80::/10,
+  IPv4-mapped addresses, 2002::/16, 64:ff9b::/96),
+  `localhost` / `*.localhost` / `*.local` / `*.internal` without a
+  lookup, every other name through `dns.lookup(…, { all: true })`
+  refused when ANY resolved address is private, and a manual redirect
+  loop (≤ 5 hops, each Location guarded) — `redirect: 'follow'` could
+  have led the fetch into the intranet by itself.
+- **The synthetic post-hoc `tasks_list` pair replays as a text note**
+  (ADR-0058's block): the model never made that call, so a follow-up
+  must not replay one — the pair is dropped from the tool replay and
+  its records ride after the turn's answer as a bracketed note.

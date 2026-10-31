@@ -9,6 +9,7 @@
  * the buffer and is saved from there. Only a file that is not open is
  * written through the vault manager (history, own-write ledger).
  */
+import { cancelledError } from '../../llm/llm-tasks';
 import { applyTextEdits, TextEdit } from '../../../shared/text-edit';
 import { currentText } from './current-text';
 import { cleanPath, ScopedVault, ToolScope } from './scope';
@@ -29,6 +30,42 @@ interface WriteContext {
   rule: VaultWriteRule;
   origin: NonNullable<VaultCallOptions['origin']>;
   onChange?: VaultCallOptions['onChange'];
+  /** The call's cancellation signal: the user-dialog waits race against it. */
+  signal?: AbortSignal;
+}
+
+/**
+ * Races one wait on the user against the call's cancellation signal: an
+ * abort rejects with the `AbortError` shape (the dialog itself stays
+ * open until answered — it has no dismiss seam; the raced answer is
+ * discarded).
+ */
+function raceSignal<T>(wait: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (signal === undefined) {
+    return wait;
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(cancelledError());
+    const detach = (): void => signal.removeEventListener('abort', onAbort);
+    if (signal.aborted) {
+      onAbort();
+      // The raced wait's eventual outcome is discarded; swallow it so it
+      // does not surface as an unhandled rejection.
+      void wait.catch(() => undefined);
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+    void wait.then(
+      (value) => {
+        detach();
+        resolve(value);
+      },
+      (err) => {
+        detach();
+        reject(err);
+      },
+    );
+  });
 }
 
 const WRITES_OFF =
@@ -69,15 +106,18 @@ async function commit(
     return fail(WRITES_OFF);
   }
   if (rule === 'confirm') {
-    const approved = await ctx.deps.confirmWrite({
-      path,
-      before,
-      after,
-      mode,
-      vaultId: vault.id,
-      vaultName: vault.name,
-      ...(ctx.origin === 'assistant' ? { origin: 'assistant' as const } : {}),
-    });
+    const approved = await raceSignal(
+      ctx.deps.confirmWrite({
+        path,
+        before,
+        after,
+        mode,
+        vaultId: vault.id,
+        vaultName: vault.name,
+        ...(ctx.origin === 'assistant' ? { origin: 'assistant' as const } : {}),
+      }),
+      ctx.signal,
+    );
     if (!approved) {
       return fail(
         'Error: the user declined this change — nothing was written. Do not try again unless they ask.',
@@ -255,7 +295,10 @@ export async function vaultMove(
     return refuseProtected(ctx.scope.isProtected(from) ? from : to);
   }
   if (ctx.rule === 'confirm') {
-    const approved = await ctx.deps.approve({ tool: 'vault_move', args: { from, to, vault: vault.name } });
+    const approved = await raceSignal(
+      ctx.deps.approve({ tool: 'vault_move', args: { from, to, vault: vault.name } }),
+      ctx.signal,
+    );
     if (!approved) {
       return fail(
         'Error: the user declined the move — nothing was changed. Do not try again unless they ask.',
@@ -336,7 +379,10 @@ export async function vaultDelete(
     );
   }
   // Asked every time, whatever the write rule: a diff cannot show it.
-  const approved = await ctx.deps.approve({ tool: 'vault_delete', args: { path, vault: vault.name } });
+  const approved = await raceSignal(
+    ctx.deps.approve({ tool: 'vault_delete', args: { path, vault: vault.name } }),
+    ctx.signal,
+  );
   if (!approved) {
     return fail(
       'Error: the user declined the deletion — nothing was changed. Do not try again unless they ask.',

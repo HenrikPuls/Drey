@@ -20,13 +20,13 @@ export type TrackDisposable = <T>(unsubscribe: T) => T;
  * the caller named are the scope of reading AND writing, the vault
  * group's rule decides whether it may write and whether it asks, and the
  * app's own folders stay out. `extra` carries the files that are in scope
- * by themselves (the attached note) and the caller's change listener.
- * Pure, spec-covered.
+ * by themselves (the attached note), the caller's change listener, and
+ * the call's cancellation signal. Pure, spec-covered.
  */
 export function assistantVaultOptions(
   scope: readonly string[] | undefined,
   write: VaultWriteRule,
-  extra: Pick<VaultCallOptions, 'files' | 'onChange'> = {},
+  extra: Pick<VaultCallOptions, 'files' | 'onChange' | 'signal'> = {},
 ): VaultCallOptions {
   return {
     ...(scope !== undefined ? { scope } : {}),
@@ -35,6 +35,7 @@ export function assistantVaultOptions(
     protectAppFolders: true,
     ...(extra.files !== undefined && extra.files.length > 0 ? { files: extra.files } : {}),
     ...(extra.onChange !== undefined ? { onChange: extra.onChange } : {}),
+    ...(extra.signal !== undefined ? { signal: extra.signal } : {}),
   };
 }
 
@@ -200,6 +201,7 @@ export function buildLlmContext(
                 ...(options?.onVaultChange !== undefined
                   ? { onChange: options.onVaultChange }
                   : {}),
+                signal,
               },
             );
             const vaultSpecs =
@@ -224,9 +226,9 @@ export function buildLlmContext(
                   // that was not offered runs nowhere (ADR-0071): a vault
                   // tool the scope or the group switch left out must not
                   // execute because the model asked for it anyway.
-                  onToolCall: (name: string, argsJson: string): Promise<string> => {
+                  onToolCall: (name: string, argsJson: string, signal?: AbortSignal): Promise<string> => {
                     if (pluginNames.has(name) && options?.onToolCall !== undefined) {
-                      return options.onToolCall(name, argsJson);
+                      return options.onToolCall(name, argsJson, signal);
                     }
                     if (externalNames.has(name) && toolbox !== undefined) {
                       return toolbox.run(name, argsJson, signal);

@@ -169,6 +169,14 @@ export interface VaultCallOptions {
   files?: readonly ScopeFile[];
   /** Told about every change this call made, after it was applied. */
   onChange?: (change: VaultFileChange) => void;
+  /**
+   * The call's cancellation signal (SDK 1.36, ADR-0071 later change): an
+   * already-aborted call refuses to run (rejecting with an
+   * `AbortError`-shaped error), and every wait on the user — the diff
+   * confirm, a move or delete approval — races against it. Absent for
+   * programs on the MCP server: they have their own cancellation.
+   */
+  signal?: AbortSignal;
 }
 
 export function ok(text: string): McpToolResult {

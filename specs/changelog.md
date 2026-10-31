@@ -20,6 +20,62 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 88 — the M76 tool-loop follow-ups: streamed answers, abort, the web_fetch guard, post-hoc replay
+
+**Not yet manually verified by the owner.** The four milestone-76
+follow-ups the roadmap carried ([ADR-0071 later
+change](../docs/09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md)).
+
+- **A tool-carrying answer streams.** Both HTTP providers now send every
+  round of the tool loop with `stream: true` when the caller asked for
+  streaming: text arrives as deltas — interim text before a tool call
+  included — and the loop, not the provider, owns the forwarding, so a
+  final round that did not stream still arrives as exactly one call
+  with the full text. Pure SSE sinks
+  (`shared/llm/stream-assembly.ts`) merge the frames of both dialects
+  into the canonical reply. A streamed round the endpoint answers with
+  HTTP 400 is retried non-streamed once and the call's rounds go
+  non-streamed from there (some local servers take tools only
+  unstreamed); streamed rounds report no usage.
+- **The cancel reaches the tools.** A cancel no longer waits for the
+  tool call in flight: `onToolCall` gains the ask's abort signal as an
+  optional third parameter (SDK `PLUGIN_API_VERSION` minor 1.35 →
+  1.36), the loop hands it to every call and stops queued calls of an
+  already-cancelled ask, `VaultTools` refuses a cancelled call and lets
+  aborts through instead of flattening them into `Error:` text, and
+  every wait on the user — the diff confirm, a move or delete
+  approval, a template confirm — races the signal: a cancel during the
+  dialog writes nothing. An already-open dialog stays until answered
+  (the ADR-0011 dialog has no dismiss seam; the raced answer is
+  discarded — the residual gap stays on the roadmap's M78 line).
+- **`web_fetch` guards the local network.** Every hop of a fetch is
+  address-checked before anything is fetched: literal private/special
+  IP ranges (v4 and v6, IPv4-mapped included),
+  `localhost` / `*.localhost` / `*.local` / `*.internal` without a
+  lookup, every other name through a DNS lookup refused when ANY
+  address is private, and redirects are followed manually (≤ 5 hops, a
+  relative `Location` resolved per hop) so each hop is guarded — a
+  refusal is `Error:` text for the model; the SearXNG instance address
+  stays unguarded (the M79 follow-up, out of scope here).
+- **The post-hoc task block replays as a text note.** The synthetic
+  `tasks_list` pair the app appends when an answer talks about tasks
+  (57b/57c) no longer replays to the model as a call it never made: the
+  pair is dropped from the tool replay and its records ride after the
+  turn's answer as a bracketed note through the usual 2 000-character
+  cap. A real `tasks_list` call still replays as a call; the persisted
+  note format is unchanged.
+
+Specs: `shared/llm/stream-assembly.spec.ts`,
+`electron/llm/tool-loop-streaming.spec.ts`,
+`electron/llm/tool-loop-abort.spec.ts` (the real chain through
+`buildLlmContext` and `runToolLoop`),
+`electron/mcp/vault-tools-abort.spec.ts`,
+`electron/mcp-client/web-fetch-guard.spec.ts`,
+`plugins/assistant/shared/chat-replay-posthoc.spec.ts`; both provider
+specs cover the streamed tool round, the 400 fallback and the unchanged
+non-streaming path; the post-hoc note text is in
+`specs/classifier-spec.md`.
+
 ### fix — the assistant button at a selection shows on a freshly opened note
 
 **Not yet manually verified by the owner.** Owner request, outside the

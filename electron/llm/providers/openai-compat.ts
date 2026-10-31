@@ -6,9 +6,13 @@
  * required, vendor-prefixed model slugs) -- same two endpoints, same
  * `Authorization: Bearer` convention.
  *
- * Streaming is SSE when the caller passed `onDelta` and no tool loop is
- * in play; a tool loop stays non-streamed round-by-round (the deltas then
- * arrive as one final call). `GET /models` keeps its 8 s reachability
+ * Streaming is SSE whenever the caller passed `onDelta`: a request
+ * without tools in one streamed call, and every round of a tool loop
+ * streamed the same way (text deltas forwarded through the loop's
+ * `emit`, tool calls assembled by the shared sink). A streamed round the
+ * endpoint refuses with HTTP 400 is retried non-streamed — some local
+ * servers take tools only unstreamed — and the call's rounds go
+ * non-streamed from there. `GET /models` keeps its 8 s reachability
  * deadline; generation has none (ADR-0014) -- the user cancels.
  *
  * `electron/`-only; the request/reply shaping lives in `shared/llm.ts`
@@ -20,6 +24,7 @@ import {
   LlmChatResult,
   ChatMessage,
   buildOpenAiUserContent,
+  createOpenAiChunkSink,
   maskAuthorizationHeader,
   toOpenAiTools,
   truncate,
@@ -29,7 +34,7 @@ import { AppConfigStore } from '../../app-config';
 import { LlmClient, LlmChatOptions } from '../llm-client';
 import { LlmError } from '../llm-errors';
 import { LlmDebugLog } from '../llm-debug-log';
-import { RequestRound, runToolLoop, toChatToolCall } from '../tool-loop';
+import { ModelReply, RequestRound, ToolMode, runToolLoop, toChatToolCall } from '../tool-loop';
 
 type OpenAiToolWire = ReturnType<typeof toOpenAiTools>[number];
 
@@ -203,12 +208,16 @@ export class OpenAiCompatProvider implements LlmClient {
   /**
    * The streamed variant: same entry in the debug log (request body with
    * `stream: true`; the response side logs the assembled text rather than
-   * the raw SSE frames), deltas forwarded to `onDelta` as they arrive.
+   * the raw SSE frames). `frameDelta` turns one parsed SSE payload into
+   * the text delta it carries (the shared sinks do that for both the
+   * plain and the tool round); every non-empty delta is forwarded to
+   * `onDelta` as it arrives and assembled for the log and the return.
    */
   private async sendStream(
     endpoint: LlmEndpoint,
     path: string,
     init: { method: 'POST'; body: string; signal?: AbortSignal },
+    frameDelta: (payload: unknown) => string | null,
     onDelta: (delta: string) => void,
   ): Promise<{ status: number; text: string }> {
     const url = `${endpoint.baseUrl}${path}`;
@@ -268,11 +277,8 @@ export class OpenAiCompatProvider implements LlmClient {
           const data = sseData(frame);
           if (data !== null && data !== '[DONE]') {
             try {
-              const json = JSON.parse(data) as {
-                choices?: Array<{ delta?: { content?: unknown } }>;
-              };
-              const delta = json.choices?.[0]?.delta?.content;
-              if (typeof delta === 'string' && delta.length > 0) {
+              const delta = frameDelta(JSON.parse(data));
+              if (delta !== null && delta.length > 0) {
                 chunks++;
                 assembled += delta;
                 onDelta(delta);
@@ -362,12 +368,12 @@ export class OpenAiCompatProvider implements LlmClient {
    *
    * With `options.tools`, the reply may be one or more `tool_calls`
    * instead of prose: each is run through `options.onToolCall` and the
-   * result fed back, looping up to `maxToolRounds` (default 5) until the
-   * model returns text. A server that rejects the `tools` parameter
-   * outright is retried once without it (capability fallback). The loop
-   * runs non-streamed; when the caller passed `onDelta` the final text is
-   * delivered through exactly one call. Without tools, a caller-passed
-   * `onDelta` upgrades the request to SSE streaming.
+   * result fed back, looping up to `maxToolRounds` until the model
+   * returns text. A server that rejects the `tools` parameter outright
+   * is retried once without it (capability fallback). With `onDelta`
+   * every round is streamed (a refused streamed round falls back to
+   * non-streamed); without it the loop runs non-streamed and the final
+   * text reaches `onDelta` as exactly one call.
    */
   async chat(messages: ChatMessage[], options: LlmChatOptions = {}): Promise<LlmChatResult> {
     const { llm } = this.config.get();
@@ -405,10 +411,12 @@ export class OpenAiCompatProvider implements LlmClient {
       temperature: options.temperature ?? 0.2,
       stream: true,
     };
+    const sink = createOpenAiChunkSink();
     const { status, text } = await this.sendStream(
       endpoint,
       '/chat/completions',
       { method: 'POST', body: JSON.stringify(body), signal: options.signal },
+      sink.push,
       options.onDelta!,
     );
     if (status < 200 || status >= 300) {
@@ -420,7 +428,15 @@ export class OpenAiCompatProvider implements LlmClient {
     return { text };
   }
 
-  /** The non-streamed path: one request per round of the shared tool loop. */
+  /**
+   * The tool loop path: one request per round of the shared loop. A
+   * caller that passed `onDelta` gets every round streamed (deltas
+   * through the loop's `emit`, tool calls assembled by the shared
+   * sink); a streamed round the endpoint answers with HTTP 400 is
+   * retried non-streamed once, and the call's rounds go non-streamed
+   * from there — some local servers take tools only unstreamed, and
+   * that must not degrade the call to no tools.
+   */
   private chatWithLoop(
     messages: ChatMessage[],
     options: LlmChatOptions,
@@ -430,24 +446,32 @@ export class OpenAiCompatProvider implements LlmClient {
     const { llm } = this.config.get();
     const toolWire: OpenAiToolWire[] | null = useTools ? toOpenAiTools(options.tools ?? []) : null;
     const loopOptions: LlmChatOptions = useTools ? options : { ...options, tools: [] };
+    let streaming = options.onDelta !== undefined;
 
-    const request: RequestRound = async (convo, mode, first) => {
+    const roundBody = (convo: readonly ChatMessage[], mode: ToolMode, stream: boolean): Record<string, unknown> => {
       const body: Record<string, unknown> = {
         model: llm.model,
         // The wire array may carry vision content parts on the last user
         // turn -- wider than the canonical `ChatMessage`, JSON either way.
         messages: this.withAttachmentContent([...convo], options),
         temperature: options.temperature ?? 0.2,
-        stream: false,
+        stream,
       };
       if (mode !== 'plain' && toolWire) {
         body['tools'] = toolWire;
         body['tool_choice'] = mode === 'closing' ? 'none' : 'auto';
       }
+      return body;
+    };
 
+    const nonStreamedRound = async (
+      convo: readonly ChatMessage[],
+      mode: ToolMode,
+      first: boolean,
+    ): Promise<ModelReply | 'tools-rejected'> => {
       const { status, text } = await this.send(endpoint, '/chat/completions', {
         method: 'POST',
-        body: JSON.stringify(body),
+        body: JSON.stringify(roundBody(convo, mode, false)),
         signal: options.signal,
       });
 
@@ -502,6 +526,29 @@ export class OpenAiCompatProvider implements LlmClient {
         truncated: choice?.finish_reason === 'length',
         ...(Object.keys(usage).length > 0 ? { usage } : {}),
       };
+    };
+
+    const request: RequestRound = async (convo, mode, first, emit) => {
+      if (streaming) {
+        const sink = createOpenAiChunkSink();
+        const { status, text } = await this.sendStream(
+          endpoint,
+          '/chat/completions',
+          { method: 'POST', body: JSON.stringify(roundBody(convo, mode, true)), signal: options.signal },
+          sink.push,
+          emit,
+        );
+        if (status === 400) {
+          // The endpoint takes this request only unstreamed: retry the
+          // round, and stop streaming this call's rounds.
+          streaming = false;
+        } else if (status < 200 || status >= 300) {
+          throw this.httpError(status, text, endpoint);
+        } else {
+          return sink.result();
+        }
+      }
+      return nonStreamedRound(convo, mode, first);
     };
 
     return runToolLoop(messages, loopOptions, request);

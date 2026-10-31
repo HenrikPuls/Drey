@@ -68,7 +68,7 @@ describe('runToolLoop', () => {
       request,
     );
 
-    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}');
+    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}', undefined);
     expect(result.text).toBe('It says hi.');
     expect(result.toolTrace?.map((turn) => turn.role)).toEqual(['assistant', 'tool']);
     expect(convos[1]?.at(-1)).toEqual({ role: 'tool', tool_call_id: 'c1', content: 'note body' });
@@ -116,7 +116,7 @@ describe('runToolLoop', () => {
 
     await runToolLoop(USER, { tools: [READ], onToolCall }, request);
 
-    expect(onToolCall).toHaveBeenCalledWith('vault_read', '{"path":"a.md","start_line":12}');
+    expect(onToolCall).toHaveBeenCalledWith('vault_read', '{"path":"a.md","start_line":12}', undefined);
   });
 
   it('turns a throwing tool into an error result', async () => {
@@ -183,7 +183,7 @@ describe('runToolLoop', () => {
 
     const result = await runToolLoop(USER, { tools: [READ], onToolCall }, request);
 
-    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}');
+    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}', undefined);
     expect(result.text).toBe('It says hi.');
   });
 

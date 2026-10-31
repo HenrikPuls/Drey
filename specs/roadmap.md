@@ -47,19 +47,20 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-18):** version 0.8.1, milestones 1–85 built — 1–83
+**Status (2026-10-31):** version 0.8.1, milestones 1–88 built — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
 through the live board rounds T-0001 – T-0006 in the owner's tickets
 repo). **Milestones 84 (the fleet runner) and 85 (continuous
-orchestration, ticket T-0007, ADR-0077) are built and suite-green but
-await the owner's live rounds** — see their changelog markers. The
-owner's verification round for 1–81 closed 2026-10-17: every "not yet
+orchestration, ticket T-0007, ADR-0077) — like the later owner requests
+86–88 — are built and suite-green but await the owner's rounds** — see
+their changelog markers. The owner's verification round for 1–81 closed
+2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 87; latest requirement id: req-73
+highest used (latest: milestone 88; latest requirement id: req-73
 (readable board issues, renumbered from req-66 — the tickets remote
 holds req-66)),
 the update check's positive answer is inline text — req-43 and req-44
@@ -277,12 +278,6 @@ rest are kept so they still match `docs/11`.
   Ctrl+S).
 - **Milestone 63 (MCP, ADR-0063):** OAuth-protected servers, handing
   servers to the Claude Code CLI provider, MCP resources / prompts.
-- **Milestone 76 (tool loop, ADR-0071):** streaming the answer of a
-  request that carries tools (today it arrives in one piece; the panel
-  shows the tool calls meanwhile); the abort signal for plugin and vault
-  tools (a cancel waits for the tool call in flight); private-address
-  guard for `web_fetch`; the synthetic `tasks_list` call of the post-hoc
-  task block is replayed to the model as a call it made.
 - **Milestone 77 (vault toolset, ADR-0071):** moving a note across
   vaults; deleting a folder; a per-call cache of file contents when one
   search reads a large vault; `tasks_list` and the template tools for a
@@ -303,11 +298,12 @@ rest are kept so they still match `docs/11`.
   (switching the provider clears the one key); a config-change event for
   plugins, so the Web chip follows Settings at once instead of when the
   pointer or the focus returns to the composer; the private-address
-  guard of milestone 76 for `web_search`'s SearXNG address too; the
+  guard of milestone 88 for `web_search`'s SearXNG address too; the
   DuckDuckGo page reader breaks when that page changes — watch it.
-- **Milestone 78 (open note through the tools, ADR-0071):** the
-  confirmation of a tool change still opens while the ask is cancelled
-  (the abort signal does not reach the vault tools, see milestone 76);
+- **Milestone 78 (open note through the tools, ADR-0071):** a
+  confirmation dialog that opened before the ask was cancelled stays
+  open until the user answers it (the cancel discards the raced answer
+  and nothing is written — the ADR-0011 dialog has no dismiss seam);
   an edit of a chat note or of a file opened from outside the vaults
   keeps the whole-document reply form (and such a file cannot be
   live-edited); the tag filter of `vault_search` reads the

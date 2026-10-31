@@ -294,10 +294,14 @@ export interface MainChatOptions {
    * the tool result. The arguments were checked against the tool's
    * `parameters` before this runs (SDK 1.23). Report a failure as text
    * starting with `Error:` and say how to correct the call; a throw is
-   * turned into such a text and no longer fails the chat call. In-process
-   * only (same boundary as `onDelta`).
+   * turned into such a text and no longer fails the chat call. The third
+   * parameter is the call's cancellation signal (SDK 1.36): a tool that
+   * waits on the user races its waits against it and rejects with an
+   * `AbortError`-shaped error, which the loop lets through instead of
+   * flattening into an `Error:` result. In-process only (same boundary
+   * as `onDelta`).
    */
-  readonly onToolCall?: (name: string, argsJson: string) => Promise<string>;
+  readonly onToolCall?: (name: string, argsJson: string, signal?: AbortSignal) => Promise<string>;
   /**
    * How many rounds of tool calls this call may take. Absent: the user's
    * setting (`tools.maxRounds`, SDK 1.23). When the budget is used up the

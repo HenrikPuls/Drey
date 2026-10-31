@@ -82,8 +82,13 @@ export type ChatFn = (
     onDelta?: (text: string) => void;
     /** The plugin's own tool specs (ADR-0049), merged into the call's tool set. */
     tools?: readonly ToolSpec[];
-    /** Runs one plugin tool call; resolved text is the tool result. */
-    onToolCall?: (name: string, argsJson: string) => Promise<string>;
+    /**
+     * Runs one plugin tool call; resolved text is the tool result. The
+     * signal is the ask's cancellation (SDK 1.36): a tool that waits on
+     * the user races its waits against it and rejects with an
+     * `AbortError`-shaped error the loop lets through.
+     */
+    onToolCall?: (name: string, argsJson: string, signal?: AbortSignal) => Promise<string>;
     /** Round budget override (absent: the user's `tools.maxRounds`). */
     maxToolRounds?: number;
     /** Progress of the tool loop, one `start` and one `end` per call. */
@@ -498,9 +503,9 @@ export class ChatEngine {
                   ...(templateTools !== null ? templateTools.specs : []),
                   ...(tasksTool !== null ? [tasksTool.spec] : []),
                 ],
-                onToolCall: (name: string, argsJson: string) => {
+                onToolCall: (name: string, argsJson: string, signal?: AbortSignal) => {
                   if (templateTools !== null && templateTools.names.has(name)) {
-                    return templateTools.run(name, argsJson);
+                    return templateTools.run(name, argsJson, signal);
                   }
                   return tasksTool !== null && name === tasksTool.spec.name
                     ? tasksTool.run(argsJson)

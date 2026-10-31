@@ -17,6 +17,7 @@
  * vault-escape guard applies unchanged.
  */
 import type { ToolSpec } from '../../shared/llm';
+import { cancelledError, isAbortError, isSignalAborted } from '../llm/llm-tasks';
 import { runTasksList } from '../../shared/tasks-list-tool';
 import {
   READ_TOOLS,
@@ -100,6 +101,11 @@ export class VaultTools {
     args: Record<string, unknown>,
     options?: VaultCallOptions,
   ): Promise<McpToolResult> {
+    // An ask that was cancelled before this call ran never starts it:
+    // rejecting (not `Error:` text) so the loop lets the cancel through.
+    if (isSignalAborted(options?.signal)) {
+      throw cancelledError();
+    }
     const { deps } = this;
     const scope = new ToolScope(deps.vault, options ?? {});
     // Whether a change is allowed is decided per file, where it is made:
@@ -110,6 +116,7 @@ export class VaultTools {
       rule: this.rule(options),
       origin: options?.origin ?? 'mcp',
       ...(options?.onChange !== undefined ? { onChange: options.onChange } : {}),
+      ...(options?.signal !== undefined ? { signal: options.signal } : {}),
     };
     try {
       switch (name) {
@@ -137,6 +144,11 @@ export class VaultTools {
           return fail(`Error: there is no tool "${name}".`);
       }
     } catch (err) {
+      // A cancellation is the user's, not the model's, and must not
+      // become an `Error:` result that keeps the loop running.
+      if (isAbortError(err) || isSignalAborted(options?.signal)) {
+        throw err;
+      }
       return fail(`Error: ${name} failed — ${err instanceof Error ? err.message : String(err)}`);
     }
   }
