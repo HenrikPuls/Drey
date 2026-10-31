@@ -28,6 +28,7 @@ import { needsBlockedConfirm } from './blocked-view';
 import { PRIORITY_LABEL, createGroupFoldStore, workListNode, type WorkPanelDeps } from './work-panel';
 import { createRunComposer } from './run-composer';
 import { THREAD_KEY, ticketPagePlan } from './ticket-page';
+import { PENDING_HINT, dialogStarter } from './dialog-starters';
 import { ageWords, checkpointActionOf, ideaPhaseIds, queueTargetOf, workGroups } from './work-groups';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
@@ -1573,6 +1574,10 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   head.append(light, titleNode, metaNode, el('span', 'tickets-takeover-spacer'), fileLink, controls);
 
   const endMoves = createEndMoves();
+  // The quiet start's pending hint (req-75): under the status line while
+  // a live run stands quiet — nothing happens until the first message.
+  const pendingHint = el('div', 'tickets-thread-pending', PENDING_HINT);
+  pendingHint.hidden = true;
   // The decision bar (req-75 W1b): the buttons W1 drew on a Needs-you
   // row, now above the composer where the ticket is read.
   const decisionBar = el('div', 'tickets-thread-decisions');
@@ -1649,6 +1654,18 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     },
     canStart: () => dialogMode() !== null && !isLive(threadRun(ticketId)),
     placeholder: 'Message the worker — type / for commands',
+    // The quiet start's pre-fill (req-75): while the dialog has seen no
+    // owner message — no live run and one may start (the first message
+    // starts it, quiet by the same wrap), or a live quiet run — the box
+    // opens carrying the step and its meaning.
+    prefill: () => {
+      const mode = dialogMode();
+      if (mode === null) {
+        return null;
+      }
+      const run = threadRun(ticketId);
+      return !isLive(run) || run?.quietStart === true ? dialogStarter(mode) : null;
+    },
   });
 
   let pulledFor: string | null = null;
@@ -1699,6 +1716,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     fileLink.hidden = card === null;
     openRun.hidden = run === null;
     stopRun.hidden = !live;
+    pendingHint.hidden = !(live && run !== null && run.quietStart === true);
     transcript.element.hidden = run === null;
     empty.hidden = run !== null;
     const mode = dialogMode();
@@ -1723,7 +1741,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   paint();
   const timer = setInterval(pull, 2_000);
   const tick = setInterval(paint, 1_000);
-  wrap.append(head, empty, transcript.element, endMoves.element, decisionBar, composer.element);
+  wrap.append(head, pendingHint, empty, transcript.element, endMoves.element, decisionBar, composer.element);
   host.append(wrap);
   return () => {
     alive = false;
