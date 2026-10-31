@@ -777,12 +777,12 @@ by its heading (remembered across restarts):
   ticket with a live run shows the run's light in front of its id and an
   accent bar on the row; the heading counts how many are running.
 
-Every ticket sits in exactly one group. Every row carries a **phase
-chip** — a dot in the phase's colour plus its name. The colours are set
-per column in Settings → Tickets → Pipeline (color: in pipeline.md;
-without one a curated default palette applies). Rows also follow their
-dependencies: a ticket blocked by another sorts below its blocker, in
-every group. A row is the priority (click it
+Every ticket sits in exactly one group. Every row carries a
+**phase chip** — a dot in the phase's colour plus its name. The colours
+are set per column in Settings → Tickets → Pipeline (color: in
+pipeline.md; without one a curated default palette applies). Rows also
+follow their dependencies: a ticket blocked by another sorts below its
+blocker, in every group. A row is the priority (click it
 to change it), the title, and one line saying why it waits or where it
 stands. Click a row to open the **ticket page**: the ticket file in the
 editor and its **thread** in the pane beside it. The thread follows
