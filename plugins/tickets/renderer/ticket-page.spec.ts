@@ -30,6 +30,22 @@ describe('ticketPagePlan', () => {
     });
   });
 
+  it('file closed, thread open, previous ticket tab open: the new ticket reuses its pane -- no split', () => {
+    expect(ticketPagePlan({ fileOpen: false, threadOpen: true, previousFile: 'tickets/T-1.md' })).toEqual({
+      fileOpts: { beside: 'tickets/T-1.md' },
+      threadCall: 'reactivate',
+      refocusFile: true,
+    });
+  });
+
+  it('file closed, thread closed, previous ticket tab open: reuses its pane, thread adds beside the file', () => {
+    expect(ticketPagePlan({ fileOpen: false, threadOpen: false, previousFile: 'tickets/T-1.md' })).toEqual({
+      fileOpts: { beside: 'tickets/T-1.md' },
+      threadCall: 'add-beside-file',
+      refocusFile: true,
+    });
+  });
+
   it('both open: both reveal -- the thread re-activates in its pane, not just a rename', () => {
     expect(ticketPagePlan({ fileOpen: true, threadOpen: true })).toEqual({
       fileOpts: {},

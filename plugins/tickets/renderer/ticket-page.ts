@@ -54,16 +54,33 @@ export interface TicketPagePlan {
  *   the pair's own anchor, and the thread adds beside it.
  * - file open, thread closed: the file reveals, the thread adds beside
  *   it (not beside whatever pane is focused).
- * - file closed, thread open: the file lands beside the thread's pane.
+ * - file closed, thread open: the previous ticket's pane is reused when
+ *   its tab is still open, else the file lands beside the thread's pane.
  * - both open: both reveal; the thread via `addDoc` on the open key.
  */
-export function ticketPagePlan(open: { fileOpen: boolean; threadOpen: boolean; anchor?: string }): TicketPagePlan {
+export function ticketPagePlan(open: {
+  fileOpen: boolean;
+  threadOpen: boolean;
+  anchor?: string;
+  /** The pair's previous ticket file, when its tab is still open. */
+  previousFile?: string;
+}): TicketPagePlan {
   // The pair's side anchor: the thread key by default; the caller may
   // name the live run's tab instead (the runner beside the ticket,
   // owner 2026-10-31) — the matrix is the same either way.
   const anchor = open.anchor ?? THREAD_KEY;
+  let fileOpts: LandingOpts = {};
+  if (!open.fileOpen) {
+    if (open.previousFile !== undefined) {
+      // The ticket pane is reused: open in the previous ticket's pane,
+      // no split -- a split here added one column per ticket.
+      fileOpts = { beside: open.previousFile };
+    } else if (open.threadOpen) {
+      fileOpts = { beside: anchor, split: 'right' };
+    }
+  }
   return {
-    fileOpts: open.threadOpen && !open.fileOpen ? { beside: anchor, split: 'right' } : {},
+    fileOpts,
     threadCall: open.threadOpen ? 'reactivate' : 'add-beside-file',
     refocusFile: true,
   };
