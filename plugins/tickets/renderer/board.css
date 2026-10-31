@@ -666,6 +666,7 @@
 /* The card and its parts set display themselves, so [hidden] must win. */
 .tickets-takeover-wait[hidden],
 .tickets-takeover-wait-text[hidden],
+.tickets-question[hidden],
 .tickets-takeover-wait-questions[hidden],
 .tickets-takeover-wait-actions[hidden],
 .tickets-takeover-endmoves[hidden] {
@@ -2001,6 +2002,79 @@ details[open] > summary > .tickets-tx-think-preview {
 
 .work-action-primary:hover {
   background: var(--accent-hover, var(--accent));
+}
+
+/* The options of a shaped question (req-75 W2): one tap answers. Small
+ * buttons in a Work row, full-width rows in the thread's wait card. */
+.work-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.work-option {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 9px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text-heading);
+  font: inherit;
+  font-size: 0.72rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.work-option:hover {
+  background: var(--hover-bg);
+}
+
+.work-option:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.work-option-why {
+  color: var(--text-3);
+}
+
+.work-option-recommended {
+  border-color: var(--accent);
+}
+
+.work-option-flag {
+  color: var(--accent);
+  font-size: 10px;
+}
+
+/* The shaped question card in the thread's wait card (req-75 W2). */
+.tickets-question {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tickets-question-text {
+  color: var(--text-heading);
+  font-weight: 600;
+}
+
+.tickets-question-line {
+  color: var(--text-2);
+}
+
+.tickets-question-rec {
+  color: var(--text-3);
+}
+
+.tickets-question-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
 }
 
 /* ---- the ticket thread (req-75 W1, ADR-0087 decision 3) ---- */

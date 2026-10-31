@@ -56,6 +56,7 @@ const deps = () => ({
   startDialog: vi.fn(),
   openRunModal: vi.fn(),
   openMenu: vi.fn(),
+  answer: vi.fn(),
 });
 
 const memoryStorage = (): Storage => {
@@ -135,6 +136,53 @@ describe('workListNode', () => {
     expect(row.querySelector('.work-row-line')?.textContent).toBe('Asks: Which file?');
     row.querySelector<HTMLButtonElement>('.work-action')!.click();
     expect(d.openTicket).toHaveBeenCalledOnce();
+  });
+
+  it('a shaped question answers from the row: options, one tap sends (req-75 W2)', () => {
+    const d = deps();
+    const run = {
+      id: 'r2',
+      ticketId: 'T-0009',
+      provider: 'opencode',
+      state: 'running',
+      startedAt: '2026-10-30T10:00:00Z',
+      endedAt: null,
+      gateFailure: null,
+      steerCount: 0,
+      tokensIn: 0,
+      tokensOut: 0,
+      waiting: {
+        kind: 'question',
+        text: 'Which database?\nTicket: the store\nOptions:\n1. SQLite — no server\n2. Postgres — one server',
+        since: '2026-10-30T10:05:00Z',
+        shaped: {
+          question: 'Which database?',
+          context: 'the store',
+          where: null,
+          why: null,
+          options: [
+            { n: 1, label: 'SQLite', consequence: 'no server' },
+            { n: 2, label: 'Postgres', consequence: 'one server' },
+          ],
+          recommended: 1,
+          recommendationWhy: null,
+        },
+      },
+    } as unknown as RunInfo;
+    const list = workListNode(d, board({ build: [card('T-0009', 'build')] }), [run], createGroupFoldStore(null), () => undefined);
+    const row = list.querySelector<HTMLElement>('.work-group-needs .work-row')!;
+    // The status line is the question itself, not the raw turn text.
+    expect(row.querySelector('.work-row-line')?.textContent).toBe('Asks: Which database?');
+    const options = [...row.querySelectorAll<HTMLButtonElement>('.work-option')];
+    expect(options.map((b) => b.textContent)).toEqual(['SQLiterecommended', 'Postgres']);
+    expect(options[0]!.title).toBe('no server');
+    expect(options[0]!.className).toContain('work-option-recommended');
+    options[1]!.click();
+    expect(d.answer).toHaveBeenCalledOnce();
+    expect(d.answer).toHaveBeenCalledWith(expect.objectContaining({ id: 'T-0009' }), run, '2. Postgres');
+    // A tap disables the row's buttons until the send settles.
+    expect(options[0]!.disabled).toBe(true);
+    expect([...row.querySelectorAll<HTMLButtonElement>('.work-action')].every((b) => b.disabled)).toBe(true);
   });
 
   it('says how to start when the board is empty', () => {

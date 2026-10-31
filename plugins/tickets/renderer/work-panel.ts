@@ -8,6 +8,7 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import { TICKET_PRIORITIES, type BoardSnapshot, type TicketCard, type TicketPriority } from '../shared/tickets';
 import type { RunInfo } from '../main/fleet/protocol';
+import { answerText, type ShapedOption, type ShapedQuestion } from '../shared/question-shape';
 import type { InteractiveMode } from './end-moves';
 import { interactiveModeFor } from './end-moves';
 import {
@@ -44,6 +45,8 @@ export interface WorkPanelDeps {
   startDialog(card: TicketCard, mode: InteractiveMode): void;
   openRunModal(card: TicketCard): void;
   openMenu(card: TicketCard, at: { x: number; y: number }): void;
+  /** Answers a waiting worker's shaped question with one tap (req-75 W2) — the composer's send path. */
+  answer(card: TicketCard, run: RunInfo, text: string): void;
 }
 
 /** Which groups the owner folded — per viewer, never in the repo. */
@@ -275,6 +278,28 @@ function priorityChip(deps: WorkPanelDeps, card: TicketCard): HTMLElement {
   return chip;
 }
 
+/** The option buttons of a shaped question (req-75 W2): one tap answers. */
+function shapedOptionButtons(box: HTMLElement, shaped: ShapedQuestion, onPick: (option: ShapedOption) => void): HTMLElement {
+  const options = el('div', 'work-options');
+  for (const option of shaped.options) {
+    const b = el('button', `work-option${shaped.recommended === option.n ? ' work-option-recommended' : ''}`, option.label);
+    b.type = 'button';
+    b.title = option.consequence ?? option.label;
+    if (shaped.recommended === option.n) {
+      b.append(el('span', 'work-option-flag', 'recommended'));
+    }
+    b.addEventListener('click', (event) => {
+      event.stopPropagation();
+      for (const sibling of box.querySelectorAll('button')) {
+        (sibling as HTMLButtonElement).disabled = true;
+      }
+      onPick(option);
+    });
+    options.append(b);
+  }
+  return options;
+}
+
 /** The buttons of a Needs-you row: answer, approve, accept, refine, run again. */
 function needActions(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLElement | null {
   const need = row.need;
@@ -293,9 +318,16 @@ function needActions(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HT
     box.append(b);
   };
   switch (need.kind) {
-    case 'question':
+    case 'question': {
+      // A shaped question answers from the row itself (req-75 W2).
+      const run = row.run;
+      const shaped = run?.waiting?.shaped ?? null;
+      if (shaped !== null && run !== null) {
+        box.append(shapedOptionButtons(box, shaped, (option) => deps.answer(row.card, run, answerText(option))));
+      }
       button('Answer', 'Open the ticket and answer the worker', true, () => deps.openTicket(row.card));
       break;
+    }
     case 'permission':
       button('Review', 'Open the ticket and allow or deny what the worker wants to do', true, () => deps.openTicket(row.card));
       break;

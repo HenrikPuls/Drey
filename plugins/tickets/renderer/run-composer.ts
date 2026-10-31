@@ -9,6 +9,7 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import type { MutationResult } from '../shared/tickets';
 import type { RunInfo, WaitQuestion } from '../main/fleet/protocol';
+import { answerText, type ShapedQuestion } from '../shared/question-shape';
 import { formatTokens } from './worker-status';
 
 const LIVE_RUN_STATES: readonly string[] = ['starting', 'running', 'stopping'];
@@ -394,7 +395,48 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
       waitQuestions.append(sendPicks);
     }
   };
-  waitCard.append(waitLabel, waitText, waitQuestions, waitActions);
+  // A question asked in the fixed shape (req-75 W2) renders as its parts
+  // with one button per option — the prompt box below stays the free
+  // answer, and an option tap sends through the same path.
+  const waitShaped = el('div', 'tickets-question');
+  waitShaped.hidden = true;
+  const paintShaped = (shaped: ShapedQuestion): void => {
+    waitShaped.replaceChildren(el('div', 'tickets-question-text', shaped.question));
+    const lines: readonly (readonly [string, string])[] = [
+      ['Ticket', shaped.context],
+      ['Where', shaped.where],
+      ['Why', shaped.why],
+    ];
+    for (const [label, value] of lines) {
+      if (value !== null) {
+        waitShaped.append(el('div', 'tickets-question-line', `${label}: ${value}`));
+      }
+    }
+    const options = el('div', 'tickets-question-options');
+    for (const option of shaped.options) {
+      const b = el('button', `work-option${shaped.recommended === option.n ? ' work-option-recommended' : ''}`, option.label);
+      b.type = 'button';
+      if (option.consequence !== null) {
+        b.append(document.createTextNode(' — '), el('span', 'work-option-why', option.consequence));
+      }
+      if (shaped.recommended === option.n) {
+        b.append(el('span', 'work-option-flag', 'recommended'));
+      }
+      b.addEventListener('click', () => {
+        for (const sibling of options.querySelectorAll('button')) {
+          (sibling as HTMLButtonElement).disabled = true;
+        }
+        void send(answerText(option));
+      });
+      options.append(b);
+    }
+    waitShaped.append(options);
+    if (shaped.recommended !== null) {
+      const why = shaped.recommendationWhy !== null ? ` — ${shaped.recommendationWhy}` : '';
+      waitShaped.append(el('div', 'tickets-question-rec', `Recommendation: ${shaped.recommended}${why}`));
+    }
+  };
+  waitCard.append(waitLabel, waitText, waitShaped, waitQuestions, waitActions);
   let shownWait = '';
   const paintWait = (run: RunInfo | null): void => {
     const waiting = run !== null && LIVE_RUN_STATES.includes(run.state) ? (run.waiting ?? null) : null;
@@ -404,6 +446,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
       return;
     }
     const questions = waiting.questions ?? null;
+    const shaped = questions === null && waiting.kind === 'question' ? (waiting.shaped ?? null) : null;
     waitLabel.textContent =
       waiting.kind === 'permission'
         ? 'The worker wants to do this — allow it?'
@@ -413,13 +456,17 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
             ? 'The worker asks you — pick the answers, or type your own below, one line per question'
             : 'The worker asks you — pick an answer, or type your own below';
     waitText.textContent = waiting.text;
-    waitText.hidden = questions !== null;
+    waitText.hidden = questions !== null || shaped !== null;
+    waitShaped.hidden = shaped === null;
     waitQuestions.hidden = questions === null;
     waitActions.hidden = waiting.kind !== 'permission';
     const key = `${run?.id ?? ''}:${waiting.kind}@${waiting.since}`;
     if (key !== shownWait) {
       if (questions !== null) {
         paintQuestions(questions);
+      }
+      if (shaped !== null) {
+        paintShaped(shaped);
       }
       if (waiting.kind === 'question') {
         prompt.focus();

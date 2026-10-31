@@ -414,6 +414,10 @@ function workPanelDeps(api: DreyPluginApi): WorkPanelDeps {
     startDialog: (card, mode) => void startInteractive(api, card, mode),
     openRunModal: (card) => openRunModal(api, card),
     openMenu: (card, at) => openCardMenu(api, card, at, runMutation, (path) => openTicketFile(api, path)),
+    // The composer's send path (req-75 W2): an option tap is the answer.
+    answer: (_card, run, text) => {
+      void runMutation('Sending', () => invokeBoard('fleetSend', { runId: run.id, text }));
+    },
   };
 }
 

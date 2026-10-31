@@ -208,8 +208,11 @@ export function statusLineOf(row: WorkRow, board: BoardSnapshot): string {
   const need = row.need;
   if (need !== null) {
     switch (need.kind) {
-      case 'question':
-        return `Asks: ${need.text}`;
+      case 'question': {
+        // A shaped question (req-75 W2) reads as its question, not the blob.
+        const shaped = row.run?.waiting?.shaped ?? null;
+        return shaped === null ? `Asks: ${need.text}` : `Asks: ${shaped.question}`;
+      }
       case 'permission':
         return `Wants to: ${need.text}`;
       case 'red-gate':
