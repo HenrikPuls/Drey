@@ -941,29 +941,38 @@ told to use them and install nothing.
 
 While the run is live, its row carries a traffic light (green working,
 amber context nearly full or stopping, red stalled for five minutes)
-and says what the worker does. The ticket's **thread** shows the
-worker's conversation as it happens, with a prompt box below: send a
-message and it lands in the running turn; **Stop** interrupts the turn
-(the session and its context stay). The thread's header names the
-ticket, the phase and the worker's state, with **Open run** and **Stop
-run**. While workers run, the panel header sums up the whole fleet
+and says what the worker does. The ticket's **thread** is the worker's
+home (the separate run tab is gone): its header says what the worker
+does now — a bold state word (*Planning*, *Building*, *Merging*,
+*Waiting for you*, *Idle*) beside the run's dot, one muted line with
+the worker, its model, how long it has been at it and how full its
+context is (hover it for the numbers: turns, tokens, working time),
+and the controls — **Pause**, **Take over** and **Stop**. While
+workers run, the panel header sums up the whole fleet
 next to its buttons (`● 1 running · 18.9M tok · 26:22`): the worst
 light, the states in words, the tokens in flight and how long the
 oldest live run has been at it — hover it for the long form; a narrow
 panel keeps only the light and the states.
 
-**Open run** opens the run's own tab with the worker's
-conversation and a prompt box: you can **Interrupt** the running turn
-(the session and its context stay), drive the worker with your own
-prompts and **Hand back** the run — a worker that is idle by then ends
-the run and the gate decides. While you hold a run the runner does not
-end it. The tab's header names the ticket, the worker and its model,
-and a pill says who is driving (**Runner driving** — your first message
-takes over — or **You have control**); below it sit the turn count, how
-full the context window is (a small bar that turns amber at 70 % and
-red at 90 %), the tokens in (with the cached share) and out, and the
-working time — waits for you and standing do not tick; hover a value for
-its explanation. In the conversation
+**The worker on the ticket.** The thread's conversation is the
+ticket's story in steps: each earlier run of the ticket is one folded
+line — a mark (✓ done with a green gate, ✕ failed, ■ stopped, ●
+live), what it did and how long it took; click it to read that run's
+transcript. The current run sits open at the bottom, streaming; your
+own messages are bubbles on the right. **Pause** interrupts the
+running turn (the session and its context stay). **Take over** holds
+the run — the runner sends nothing of its own until you **Hand back**
+(a worker that is idle by then ends the run and the gate decides);
+your first message alone takes over too. **Stop** ends the run. When a
+run ended with a session, **Resume session** continues the
+conversation later in a new worker that answers and then waits for
+your prompts. Above the steps, the thread says **Shaped with you**
+when you approved this ticket's plan, and a **Changes so far** box
+lists what the branch carries against its base — each file, its
+status, the lines added and removed — beside **Safe beside others**
+(✓ own worktree). Two quick prompts sit above the prompt box: **What
+are you doing and why?** and **Stop after this step** — a click fills
+the box, you send. In the conversation
 each tool call is one quiet row: a dot (green when it settled, red when
 it failed), the tool, what it was called on — paths relative to the
 run's worktree, the full path in the tooltip — and its result. More
@@ -1062,7 +1071,7 @@ yourself, your own checkpoint can be skipped); a refine dialog offers
 rework. A click stops the run and makes the move — the same one-commit
 move as from the menu. Closing the tab without a move keeps everything:
 the reservation stays on the ticket (the fleet will not pick it up), and
-**Open run → Resume session** continues the conversation later.
+the thread's **Resume session** continues the conversation later.
 
 Each column's dialog prompt is a prompt file like any other: a phase's
 `interactive:` key in `pipeline.md` names one, otherwise the shipped
@@ -1081,7 +1090,8 @@ unchanged keeps the runner as it is. When that code did change, the old runner
 hands its runs over to the new one instead of stopping them: OpenCode workers are
 taken back, and a Claude Code worker's session continues in a fresh worker under
 the same run. Its last turn may be cut short, but the work in its folder stays.
-Open run tabs come back after the restart and pick their run up again. A run
+Open ticket threads come back after the restart and pick their run up
+again. A run
 that is checking its acceptance criteria finishes first; the handover waits for
 it. You
 can reach it from a terminal, too: its address and token live in
