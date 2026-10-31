@@ -2364,9 +2364,10 @@ details[open] > summary > .tickets-tx-think-preview {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
-  padding: 4px 16px;
+  height: var(--meta-h);
+  padding: 0 8px 0 16px;
   border-bottom: 1px solid var(--border);
+  overflow: hidden;
 }
 
 .tickets-thread-head .tickets-light {
@@ -2661,7 +2662,7 @@ details[open] > summary > .tickets-tx-think-preview {
 .tickets-composer-chips {
   flex: none;
   display: flex;
-  padding: 0 4px 6px;
+  padding: 8px 16px 6px;
 }
 
 .tickets-composer-chips .tickets-takeover-chip {

@@ -108,12 +108,11 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
   const isReopenable = (run: RunInfo | null): boolean =>
     run !== null && !LIVE_RUN_STATES.includes(run.state) && run.state !== 'detached' && run.sessionRef !== null;
 
-  // The composer box (req-75 W1b/W4a): one rounded box — the prompt with
-  // a round send button inside; the two quick-prompt chips sit above it,
-  // the attachments and commands live around it, stop below it.
+  // The composer box (Claude Code's shape, req-75 W4a): one rounded box —
+  // the prompt on top, a toolbar inside it below (attach left, stop and
+  // send right); the two quick-prompt chips sit above it.
   const box = el('div', 'tickets-composer-box');
-  const underRow = el('div', 'tickets-composer-under');
-  const inputRow = el('div', 'tickets-composer-inputrow');
+  const toolbar = el('div', 'tickets-composer-toolbar');
   const promptWrap = box;
   // Files and pictures for the worker: stored in its worktree, named in the message.
   const attached: { name: string; path: string }[] = [];
@@ -297,7 +296,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     }
   });
   stopBtn.classList.add('tickets-composer-stop');
-  // The round send button inside the box (req-75 W1b).
+  // The send button closes the toolbar inside the box.
   const sendBtn = el('button', 'tickets-composer-send');
   sendBtn.type = 'button';
   sendBtn.title = 'Send the message — a working worker takes it into its turn';
@@ -306,8 +305,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
   sendBtn.addEventListener('click', () => {
     void send(prompt.getContent());
   });
-  inputRow.append(prompt.element, sendBtn);
-  underRow.append(plusBtn, fileInput, stopBtn);
+  toolbar.append(plusBtn, fileInput, el('span', 'tickets-takeover-spacer'), stopBtn, sendBtn);
 
   // The worker's pulse while a turn runs: what it does now and for how long.
   const progress = el('div', 'tickets-takeover-progress');
@@ -335,7 +333,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     progressText.textContent = `${verb}… ${seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`} · ↓ ${formatTokens(run.tokensOut)} tokens`;
     progress.hidden = false;
   };
-  box.append(commandMenu, attachRow, inputRow);
+  box.append(commandMenu, attachRow, prompt.element, toolbar);
 
   // What the worker waits on (req-64): a tool call to approve with one
   // of the buttons, or a question asked as OpenCode's `question` form —
@@ -501,7 +499,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     paintProgress(run);
   };
 
-  wrap.append(progress, askSlot, waitCard, chipsRow, box, underRow);
+  wrap.append(progress, askSlot, waitCard, chipsRow, box);
   paint();
   return {
     element: wrap,

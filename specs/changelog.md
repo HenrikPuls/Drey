@@ -20,6 +20,20 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — the thread composer's toolbar back in its box, the thread header on the meta-bar line
+
+**Not yet manually verified by the owner.** Owner report, 2026-10-31.
+The W4a merge (591be22) kept the branch's composer rows (input row with
+send, a row under the box for attach and stop) while main's CSS for
+them had already been replaced by the toolbar shape — so the rows were
+unstyled: the send button fell under the prompt, the attach button out
+of the box. The composer is the toolbar shape again: the prompt on top,
+a toolbar inside the box (attach left, stop and send right), the two
+quick-prompt chips above it, indented like the decision bar
+(`run-composer.ts`, `board.css`). The thread header is now exactly the
+editor meta bar's height (`--meta-h`, same padding), so its bottom line
+runs level with the line of a note open beside it.
+
 ### Milestone 91 — ticket T-0084: the Work panel's phase colours, filter and running marks
 
 **Not yet manually verified by the owner.** Ticket T-0084 (owner request
