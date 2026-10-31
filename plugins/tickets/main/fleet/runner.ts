@@ -148,6 +148,24 @@ async function main(): Promise<void> {
   }
   await orchestrator.load();
 
+  // A graceful exit halts the chain FIRST: each stopped run settles and
+  // triggers a dispatch pass, which used to start fresh workers inside the
+  // wait window — orphans once the process left. The wait is bounded so a
+  // hung adapter cannot hold the daemon hostage.
+  const stopLiveRunsForExit = async (): Promise<void> => {
+    await orchestrator?.setMaster('halted').catch((error) => log(`halting the chain failed: ${String(error)}`));
+    const stops = [...supervisors.values()].flatMap((sup) =>
+      sup
+        .list()
+        .filter((info) => info.state === 'starting' || info.state === 'running')
+        .map((info) => sup.stop(info.id, 'the runner was shut down')),
+    );
+    if (stops.length > 0) {
+      log(`stopping ${stops.length} live run${stops.length === 1 ? '' : 's'} before exit`);
+    }
+    await Promise.race([Promise.allSettled(stops), new Promise((resolve) => setTimeout(resolve, 10_000))]);
+  };
+
   const port = await freePort();
   const token = crypto.randomBytes(24).toString('hex');
   const descriptor: RunnerDescriptor = {
@@ -248,19 +266,7 @@ async function main(): Promise<void> {
         // an unsupervised agent on a parked ticket (T-0007 review). The
         // stop path is the owner's own button; the wait is bounded so a
         // hung adapter cannot hold the daemon hostage.
-        const stops = [...supervisors.values()].flatMap((sup) =>
-          sup
-            .list()
-            .filter((info) => info.state === 'starting' || info.state === 'running')
-            .map((info) => sup.stop(info.id, 'the runner was shut down')),
-        );
-        if (stops.length > 0) {
-          log(`stopping ${stops.length} live run${stops.length === 1 ? '' : 's'} before exit`);
-        }
-        await Promise.race([
-          Promise.allSettled(stops),
-          new Promise((resolve) => setTimeout(resolve, 10_000)),
-        ]);
+        await stopLiveRunsForExit();
         setTimeout(() => process.exit(0), 100);
         return;
       }
@@ -540,8 +546,11 @@ async function main(): Promise<void> {
     server.close(() => process.exit(code));
     setTimeout(() => process.exit(code), 2_000).unref();
   };
-  process.once('SIGINT', () => shutdown(0));
-  process.once('SIGTERM', () => shutdown(0));
+  const onSignal = (): void => {
+    void stopLiveRunsForExit().finally(() => shutdown(0));
+  };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
   process.once('exit', () => {
     fsSync.rmSync(descriptorPath, { force: true });
   });

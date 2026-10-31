@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AttachInfo, ProviderAdapter, ProviderStart, WorkerHandle } from './providers';
-import { HANDOVER_CONTINUE, probeExec, RunSupervisor, usageSummary, type RunSupervisorDeps } from './runs';
+import { execShell, HANDOVER_CONTINUE, limitExceeded, probeExec, RunSupervisor, STUCK_FAIL_MS, STUCK_FLAG_MS, usageSummary, type RunSupervisorDeps } from './runs';
 import { processAlive } from './procs';
 import type { RunInfo, RunRequest, RunState } from './protocol';
 import { newTicketFileText, patchTicketFile, parseTicketFile } from '../ticket-files';
@@ -230,6 +230,37 @@ describe('RunSupervisor', () => {
       'utf8',
     );
   }
+
+  it('the watchdog flags a silent worker, then fails it so the ticket backs off (M1b)', async () => {
+    const rel = await writeTicket();
+    let current = new Date('2026-10-17T12:00:00Z');
+    const alive = async (_cmd: string, args: readonly string[]): Promise<string> => `"${args.join(' ').match(/\d+/)?.[0] ?? ''}"`;
+    const { sup } = supervisor({ now: () => current, exec: alive });
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+
+    current = new Date(current.getTime() + STUCK_FLAG_MS + 60_000);
+    await sup.reap();
+    expect(sup.get(id)!.stuck).toBe(true);
+    expect(sup.get(id)!.state).toBe('running');
+
+    current = new Date(current.getTime() + STUCK_FAIL_MS);
+    await sup.reap();
+    expect(sup.get(id)!.state).toBe('failed');
+    expect(sup.get(id)!.lastError).toContain('hung');
+  });
+
+  it('the reaper stops a run past its turn limit', async () => {
+    const rel = await writeTicket();
+    const { sup } = supervisor({ limits: { maxTurns: 5 } });
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+    const live = (sup as unknown as { runs: Map<string, { info: RunInfo }> }).runs.get(id)!;
+    live.info = { ...live.info, turns: 6 };
+    await sup.reap();
+    expect(sup.get(id)!.state).toBe('failed');
+    expect(sup.get(id)!.lastError).toContain('run limit');
+  });
 
   it('an auto handover resumes a warm same-phase retry and stamps mode and lineage (T-0049)', async () => {
     const rel = await writeTicket();
@@ -1741,5 +1772,39 @@ describe('RunSupervisor handover', () => {
     await opencode.sup.adopt();
     expect(opencode.sup.get(id)).toBeNull();
     expect(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')).toBe(before);
+  });
+});
+
+describe('limitExceeded — the per-run ceilings', () => {
+  const info = (over: Partial<RunInfo>): RunInfo => ({ ...({} as RunInfo), ...over });
+  const limits = { maxTurns: 100, maxWorkMs: 60 * 60_000 };
+
+  it('lets a run inside both ceilings go on', () => {
+    expect(limitExceeded(info({ turns: 40, execMs: 10 * 60_000 }), limits, Date.now())).toBeNull();
+  });
+
+  it('stops a run past its turn ceiling', () => {
+    expect(limitExceeded(info({ turns: 101 }), limits, Date.now())).toContain('101 turns');
+  });
+
+  it('counts closed busy spans plus the open one, not the waits', () => {
+    const now = Date.parse('2026-10-31T12:00:00Z');
+    const open = info({ execMs: 50 * 60_000, execSince: '2026-10-31T11:45:00Z' });
+    expect(limitExceeded(open, limits, now)).toContain('65 min');
+    const idle = info({ execMs: 50 * 60_000, execSince: null });
+    expect(limitExceeded(idle, limits, now)).toBeNull();
+  });
+
+  it('0 means unlimited', () => {
+    expect(limitExceeded(info({ turns: 9999, execMs: 9e9 }), { maxTurns: 0, maxWorkMs: 0 }, Date.now())).toBeNull();
+  });
+});
+
+describe('execShell — the gate shell', () => {
+  it('resolves on exit 0 and rejects with the output on a failure', async () => {
+    await expect(execShell('exit 0', os.tmpdir())).resolves.toBeUndefined();
+    await expect(execShell('echo boom && exit 3', os.tmpdir())).rejects.toMatchObject({
+      stdout: expect.stringContaining('boom'),
+    });
   });
 });

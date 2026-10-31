@@ -1,4 +1,37 @@
 
+### Milestone 93 — fleet stability, part 1b: limits, watchdog, clean exits
+
+**Not yet manually verified by the owner.** Owner request, 2026-10-31,
+the rest of the runner part of the stability analysis (milestone 92).
+
+- **Per-run ceilings.** The lease reaper stops a run past 250 model
+  turns or 90 minutes of *working* time (closed busy spans plus the open
+  one — waits for the owner do not tick; `limitExceeded`,
+  `DEFAULT_RUN_LIMITS`, overridable through `RunSupervisorDeps.limits`,
+  0 = unlimited). The run fails with `run limit: …`, so the milestone-92
+  back-off applies instead of a burn-on. Held and interactive runs are
+  exempt. The defaults come from the live fleet root: ordinary runs end
+  within 20 turns, the heavy legitimate ones within ~170 / 76 min, the
+  runaways were 400 turns / 128 min / 87 M tokens in.
+- **Hang watchdog.** A working run (not held, not waiting, not idle, not
+  gating) silent for 10 minutes gets `stuck: true` on its record and a
+  Log line "looks stuck"; the next event clears it. After 40 silent
+  minutes it fails with `hung: …` (back-off retry). The long fuses keep
+  ADR-0014's "a local model may think for minutes".
+- **The gate shell** is a spawn that keeps only the output's tail (the
+  old `exec` failed a chatty passing command at 1 MB) and kills the whole
+  process tree on its 30-minute timeout (`taskkill /T`; `exec` killed
+  only the shell on Windows).
+- **A graceful runner exit halts the chain first** (`/shutdown`,
+  SIGINT, SIGTERM), then stops the live runs — each stopped run used to
+  trigger a dispatch pass that started fresh workers inside the wait
+  window, and SIGINT/SIGTERM left workers running.
+
+Specs: `runs.spec.ts` (ceilings, watchdog flag then fail, turn limit,
+`execShell` exit codes and output). Remaining runner items — roadmap
+"Fleet stability": `contextCap` for claude-code, the TTL for waiting
+runs, per-phase limit keys.
+
 ### Milestone 92 — fleet stability, part 1: the runner stops looping
 
 **Not yet manually verified by the owner.** Owner request, 2026-10-31
