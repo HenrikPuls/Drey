@@ -901,13 +901,12 @@ told to use them and install nothing.
 While the run is live, its column shows a **Workers** strip with one
 lane per run: a traffic light (green working, amber context nearly full
 or stopping, red stalled for five minutes — always with the state in
-words), the worker's current activity, its context window, token usage
-and age, plus the run's telemetry chips — **ctx** (the last turn's real
+words), the worker's current activity, its context window, token
+usage, plus the run's telemetry chips — **ctx** (the last turn's real
 context size), **turns** (model calls) and **reads** (read/search tool
 calls) — once the worker reports them; the card carries a ▶ chip reading
-the state, the turn count, the run's own tokens and its working time
-(`▶ running · 2 · 45k/1.2k · 03:41` — waits for you and standing do not
-count). While workers run, the panel
+the state, the turn count and the run's own tokens
+(`▶ running · 2 · 45k/1.2k`). While workers run, the panel
 header sums up the whole fleet next to its buttons
 (`● 1 running · 18.9M tok · 26:22`): the worst light, the states in
 words, the tokens in flight and how long the oldest live run has been

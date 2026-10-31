@@ -188,17 +188,15 @@ export function execClockMs(run: RunInfo, nowMs: number): number {
 }
 
 /**
- * The run chip of a ticket with a live run (T-0051):
- * `▶ running · 2 · 45k/1.2k · 03:41` — state, turns (the prompt plus
- * every steer), this run's own tokens in/out, the working time so far
- * (req-67: waits for the owner and standing do not tick).
- * The token segment waits for the first usage event that reported any.
+ * The run chip of a ticket with a live run — clock-free (T-0051 follow-up):
+ * `▶ running · 2 · 45k/1.2k` — state, turns (the prompt plus every
+ * steer), this run's own tokens in/out. The token segment waits for
+ * the first usage event that reported any.
  */
-export function runChipLine(run: RunInfo, nowMs: number): string {
-  const elapsed = execClockMs(run, nowMs);
+export function runChipLine(run: RunInfo): string {
   const tokens =
     run.tokensIn > 0 || run.tokensOut > 0 ? ` · ${formatTokens(run.tokensIn)}/${formatTokens(run.tokensOut)}` : '';
-  return `▶ ${run.state} · ${run.steerCount + 1}${tokens} · ${spanClock(elapsed)}`;
+  return `▶ ${run.state} · ${run.steerCount + 1}${tokens}`;
 }
 
 /** Lanes that need a look open by themselves; a quiet one stays folded. */

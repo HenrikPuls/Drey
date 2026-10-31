@@ -1513,9 +1513,8 @@ run surfaced two defects; both are fixed on the branch `t/T-0051`:
   turn end; the takeover transcript (now formatted by the pure
   `watch-format.ts` view model, which `transcript.ts` delegates to)
   shows tool steps and growing replies while the turn runs. The card
-  chip reads `▶ running · <turns> · <kIn>/<kOut> · <mm:ss>`, the
-  summary pills add the oldest live run's age, and the takeover stats
-  line carries the turn count and a clock.
+  chip reads `▶ running · <turns> · <kIn>/<kOut>` (duration-free, see
+  the round-2 bullet below).
 - **Editor syntax colors are complete.** `dreyHighlightStyle` gains the
   three tags that fell through (`escape`, `literal`, `name`), pinned by
   a coverage-guard spec over the mandatory tag set of the common
@@ -1535,6 +1534,20 @@ run surfaced two defects; both are fixed on the branch `t/T-0051`:
   `@vitest/browser-*` provider. The suite itself is untouched — it
   runs headless in jsdom as it did, and the exit code is the real
   suite's.
+- **Run duration displays removed again (round 2, owner call).** The
+  elapsed-since-`startedAt` number "does not really mean anything",
+  and the card chip's tooltip closed and reopened whenever the clock
+  tick rewrote its `mm:ss` — so every run-elapsed surface goes: the
+  chip text, its tooltip's "so far" phrase, the "running mm:ss"
+  summary pill, the takeover stats clock and the lane age span.
+  `runChipLine` is clock-free. Column-dwell
+  ages, `⌀` column averages and claim ages stay: workflow aging from
+  `entered-*` stamps, word-granular, no ticking clock. (Merged into
+  `main`, the chip text, the tooltip and the lane age are duration-free
+  as planned; the summary pills and the old takeover stats line no
+  longer existed there — req-60's panel-header fleet summary and the
+  req-58/67 takeover metrics had replaced them and stay as shipped,
+  clocks included, so `spanClock` remains exported for those.)
 
 ### req-56 — Fleet workers start oriented: a ready toolchain, a clean environment, a short map (owner request, outside the list)
 
