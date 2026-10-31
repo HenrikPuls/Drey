@@ -33,7 +33,7 @@ import { PENDING_HINT, dialogStarter } from './dialog-starters';
 import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups } from './work-groups';
 import { readyCardNode, storyNode } from './ready-view';
 import type { ChangesReply } from '../shared/changes';
-import { headerControls, liveStateWord, threadSteps, durationWords, type ThreadStep } from './thread-steps';
+import { checkpointControls, headerControls, liveStateWord, threadSteps, durationWords, type ThreadStep } from './thread-steps';
 import type { WorktreeFile } from '../main/worktree-changes';
 import { createWorkFilterStore, filterPopover, isFilterActive, NO_WORK_FILTER, type WorkFilterState } from './work-filter';
 import { createTicketsSettingsPage } from './settings-page';
@@ -1632,8 +1632,34 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       void startInteractive(api, card, mode, false);
     }
   });
-  controls.append(pauseRun, takeOverRun, stopRun, handBackRun, resumeRun, startRun);
-  head.append(light, stateWord, titleNode, metaNode, el('span', 'tickets-takeover-spacer'), fileLink, controls);
+  // The checkpoint actions (req-81): a ticket waiting on the owner
+  // carries Launch, Accept and Send back in the status row beside the
+  // run controls — always there, whatever the Ready card does.
+  const launchCp = iconButton(
+    'rocket',
+    'Open the ticket worktree in a new console and start it there',
+    'Launch this version',
+    () => void runMutation(`Launching ${ticketId}`, () => invokeBoard('launchVersion', { id: ticketId })),
+  );
+  const acceptCp = iconButton('check', 'Accept — the ticket goes to the archive', 'Accept', () =>
+    void runMutation(`Accepting ${ticketId}`, () => invokeBoard('acceptTicket', { id: ticketId })),
+  );
+  const sendBackCp = iconButton('corner-down-left', 'Send the ticket back to the agent with a note', 'Send back', () =>
+    sendBackModal(),
+  );
+  const checkpoints = el('span', 'tickets-thread-checkpoints');
+  checkpoints.append(launchCp, acceptCp, sendBackCp);
+  // The Ready chip (req-81): the header's persistent toggle for the
+  // result card — it opens again any time, however the run ended.
+  const readyChip = el('button', 'tickets-thread-chip');
+  readyChip.type = 'button';
+  readyChip.title = 'Show or hide the result card';
+  readyChip.addEventListener('click', () => {
+    readyOpen = !readyOpen;
+    paintReady();
+  });
+  controls.append(pauseRun, takeOverRun, stopRun, handBackRun, resumeRun, startRun, checkpoints);
+  head.append(light, stateWord, titleNode, metaNode, readyChip, el('span', 'tickets-takeover-spacer'), fileLink, controls);
 
   const endMoves = createEndMoves();
   // --- the Ready card (req-75 W3) ---------------------------------------
@@ -1647,6 +1673,8 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   let readyPulledFor: string | null = null;
   let readyReply: ChangesReply | null = null;
   let readyKey = '';
+  /** The card's fold (req-81): open by default, the header chip toggles it. */
+  let readyOpen = true;
   /** The section + story of the ticket file, once per path (a move re-pulls). */
   const pullReady = (): void => {
     const card = boardCard(ticketId);
@@ -1695,13 +1723,16 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   /**
    * Shows the card for a Needs-you `Ready to try` / `Review` ticket and
    * for any ticket whose file carries a `## Changes` section; the
-   * decision bar's Accept becomes the card's buttons.
+   * decision bar's Accept becomes the card's buttons. The header's
+   * Ready chip (req-81) toggles the fold — the card comes back any
+   * time; closed, the decision bar takes over again.
    */
   const paintReady = (): void => {
     const card = boardCard(ticketId);
     const snap = snapshot;
     if (card === null || snap === null || snap.pipeline.length === 0) {
       readyWrap.hidden = true;
+      readyChip.hidden = true;
       readyKey = '';
       return;
     }
@@ -1710,39 +1741,44 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     const reply = readyReply;
     if (kind !== 'Ready to try' && kind !== 'Review' && (reply?.changes ?? null) === null) {
       readyWrap.hidden = true;
+      readyChip.hidden = true;
       readyKey = '';
       return;
     }
+    const chipText = `${kind ?? 'Result card'} ${readyOpen ? '⌄' : '›'}`;
+    if (readyChip.textContent !== chipText) {
+      readyChip.textContent = chipText;
+    }
+    readyChip.hidden = false;
     const terminal = snap.pipeline[snap.pipeline.length - 1]!.id === card.phase;
     const key = JSON.stringify([card.id, card.meta.title, card.meta.track, card.meta.repo, terminal, reply]);
-    if (!readyWrap.hidden && readyKey === key) {
-      return;
+    if (readyKey !== key) {
+      readyKey = key;
+      readyMain.replaceChildren(
+        readyCardNode(
+          {
+            onLaunch: () =>
+              void runMutation(`Launching ${ticketId}`, () => invokeBoard('launchVersion', { id: ticketId })),
+            onAccept: () =>
+              void runMutation(`Accepting ${ticketId}`, () => invokeBoard('acceptTicket', { id: ticketId })),
+            onSendBack: () => sendBackModal(),
+            icon: (name, size) => api.ui.icon(name, size),
+          },
+          {
+            id: card.id,
+            title: card.meta.title,
+            track: card.meta.track,
+            repo: card.meta.repo,
+            terminal,
+            changes: reply?.changes ?? null,
+          },
+        ),
+      );
+      readyStoryHost.replaceChildren(
+        storyNode({ story: reply?.story ?? [], totals: reply?.totals ?? { minutes: null, tokens: null } }),
+      );
     }
-    readyKey = key;
-    readyWrap.hidden = false;
-    readyMain.replaceChildren(
-      readyCardNode(
-        {
-          onLaunch: () =>
-            void runMutation(`Launching ${ticketId}`, () => invokeBoard('launchVersion', { id: ticketId })),
-          onAccept: () =>
-            void runMutation(`Accepting ${ticketId}`, () => invokeBoard('acceptTicket', { id: ticketId })),
-          onSendBack: () => sendBackModal(),
-          icon: (name, size) => api.ui.icon(name, size),
-        },
-        {
-          id: card.id,
-          title: card.meta.title,
-          track: card.meta.track,
-          repo: card.meta.repo,
-          terminal,
-          changes: reply?.changes ?? null,
-        },
-      ),
-    );
-    readyStoryHost.replaceChildren(
-      storyNode({ story: reply?.story ?? [], totals: reply?.totals ?? { minutes: null, tokens: null } }),
-    );
+    readyWrap.hidden = !readyOpen;
   };
   // The quiet start's pending hint (req-75): under the status line while
   // a live run stands quiet — nothing happens until the first message.
@@ -2090,6 +2126,23 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     handBackRun.hidden = !show.has('handback');
     resumeRun.hidden = !show.has('resume');
     startRun.hidden = !show.has('start') || dialogMode() === null;
+    // The checkpoint actions (req-81): in the status row whenever the
+    // ticket waits on the owner — independent of the Ready card's fold.
+    const need =
+      snapshot !== null
+        ? (workGroups(snapshot, fleetRuns).needs.find((row) => row.card.id === ticketId)?.need ?? null)
+        : null;
+    const checkpoint = need !== null && need.kind === 'checkpoint' ? need : null;
+    const cpShow = new Set(checkpointControls(checkpoint, card?.meta.repo != null));
+    launchCp.hidden = !cpShow.has('launch');
+    acceptCp.hidden = !cpShow.has('accept');
+    sendBackCp.hidden = !cpShow.has('sendback');
+    if (checkpoint !== null && snapshot !== null) {
+      const action = checkpointActionOf(snapshot, checkpoint.phase);
+      const accepting = action.kind === 'accept';
+      acceptCp.title = accepting ? 'Accept — the ticket goes to the archive' : `${action.label} — move the ticket on`;
+      acceptCp.setAttribute('aria-label', accepting ? 'Accept' : action.label);
+    }
     // The quiet start's hint (req-75): the run waits for the first send.
     pendingHint.hidden = !(live && run !== null && run.quietStart === true);
     transcript.element.hidden = run === null;

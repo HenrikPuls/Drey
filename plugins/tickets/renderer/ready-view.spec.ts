@@ -66,9 +66,9 @@ describe('readyCardNode (req-75 W3)', () => {
     expect(d.onSendBack).toHaveBeenCalledTimes(1);
   });
 
-  it('labels the button just Accept in the terminal phase', () => {
+  it('labels the terminal button Accept and archive — the merge already happened', () => {
     const card = readyCardNode(deps(), { id: 'T-0001', title: null, track: null, repo: null, terminal: true, changes: CHANGES });
-    expect(card.textContent).toContain('Accept');
+    expect(card.textContent).toContain('Accept and archive');
     expect(card.textContent).not.toContain('Accept and merge');
     expect([...card.querySelectorAll('.tickets-ready-chip')].map((n) => n.textContent)).toEqual(['Ready to try']);
     expect(card.querySelector('.tickets-ready-title')!.textContent).toBe('(untitled)');

@@ -822,18 +822,24 @@ light and who is out there; the header's **+** captures a new idea.
 carries a `## Changes` section — the thread shows the **Ready card**
 above the transcript: what changed for you, where (which files, and
 why), which checks passed, and how to try it, all as the build worker
-wrote it into the ticket's `## Changes` section. Under it, three
-buttons:
+wrote it into the ticket's `## Changes` section. The card folds: the
+header's **Ready chip** (its label says which checkpoint waits) hides
+the card and brings it back any time (req-81); while it is folded the
+decision bar above the composer carries the actions again. The same
+three actions sit in the thread header's status row whenever the
+ticket waits on you — Launch, Accept, Send back, beside the run
+controls — whatever the card does. Under it, three buttons:
 
 - **Launch this version** opens the ticket's worktree in a new console
   and starts the repository's program there (the launch command from
   Settings → Tickets → Repositories; without one, `dev.ps1 -Built
   -Multi` when the worktree has it) — a second instance beside the
   one you are using, yours untouched.
-- **Accept and merge** follows the pipeline: in Done the ticket goes
-  to the archive and its worktree is removed (a dirty worktree stays
-  and says so); in an earlier phase the ticket moves on — with a
-  *Commit* column next, that step merges the branch.
+- **Accept and merge** follows the pipeline: in Done — where the
+  button reads **Accept and archive**, the merge has already happened —
+  the ticket goes to the archive and its worktree is removed (a dirty
+  worktree stays and says so); in an earlier phase the ticket moves
+  on — with a *Commit* column next, that step merges the branch.
 - **Send back…** asks for one note ("What should change?") and moves
   the ticket back to the nearest agent phase (Build in the default
   pipeline) with the note in its log.

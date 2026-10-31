@@ -2443,6 +2443,43 @@ details[open] > summary > .tickets-tx-think-preview {
   justify-content: center;
 }
 
+/* The checkpoint actions (req-81), separated from the run controls by
+   a hairline: they answer the ticket, not the run. */
+.tickets-thread-checkpoints {
+  flex: none;
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 2px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+
+/* The Ready chip (req-81): the header's persistent toggle for the
+   result card — its label says which checkpoint waits, the chevron
+   which way it folds. */
+.tickets-thread-chip {
+  flex: none;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tickets-thread-chip:hover {
+  border-color: var(--field-border);
+  color: var(--text-primary);
+}
+
+.tickets-thread-chip[hidden] {
+  display: none;
+}
+
 /* The decision bar above the composer: the buttons W1 drew on a row. */
 .tickets-thread-decisions {
   flex: none;
