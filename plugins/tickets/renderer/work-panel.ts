@@ -146,6 +146,84 @@ export function workListNode(
   return list;
 }
 
+/** One mounted row's age text, whatever group it belongs to. */
+function setAge(node: HTMLElement, text: string): void {
+  const age = node.querySelector<HTMLElement>('.work-row-age');
+  if (age !== null) {
+    age.textContent = text;
+  }
+}
+
+/**
+ * Updates a mounted Work list in place (T-0086): the rows' ages, the
+ * run rows' step/line/dot, the needs rows' shaped line and the shaping
+ * rows' dialog pulse — text and toggles only, never a node added or
+ * removed. A row whose card is gone from the snapshot is skipped: a
+ * structure change (`workListSignature`) re-rendered the list before
+ * this could run on stale DOM.
+ */
+export function workListLivePaint(
+  list: HTMLElement,
+  deps: WorkPanelDeps,
+  snap: BoardSnapshot,
+  runs: readonly RunInfo[],
+): void {
+  const nowMs = Date.now();
+  const groups = workGroups(snap, runs);
+  const rows = new Map<string, WorkRow>();
+  for (const row of [...groups.needs, ...groups.shaping, ...groups.running, ...groups.ideas]) {
+    rows.set(row.card.id, row);
+  }
+  const doneAt = new Map(snap.recentDone.map((entry) => [entry.id, entry.at]));
+  for (const node of list.querySelectorAll<HTMLElement>('[data-id]')) {
+    const id = node.dataset['id'] ?? '';
+    const row = rows.get(id);
+    if (row !== undefined) {
+      if (row.need !== null) {
+        // Needs you: the age follows the need, the line may turn shaped.
+        setAge(node, ageWords(row.need.since, nowMs));
+        const line = node.querySelector<HTMLElement>('.work-row-line');
+        if (line !== null) {
+          line.textContent = statusLineOf(row, snap);
+        }
+        continue;
+      }
+      // Shaping and Running share the top line; the sub line differs.
+      const group = node.closest('.work-group');
+      if (group?.classList.contains('work-group-shaping') === true) {
+        setAge(node, ageWords(row.run?.startedAt ?? row.card.meta.entered[row.phase.id] ?? null, nowMs));
+        const sub = node.querySelector<HTMLElement>('.work-row-sub');
+        if (sub !== null) {
+          sub.textContent = shapingDialogLine(row);
+        }
+        continue;
+      }
+      const step = runningStepOf(row, snap);
+      setAge(node, step.live ? ageWords(row.run?.startedAt ?? null, nowMs) : '');
+      const dot = node.querySelector<HTMLElement>('.work-run-dot');
+      if (dot !== null) {
+        dot.className = `work-run-dot${step.live ? '' : ' work-run-dot-queued'}`;
+      }
+      const stepWord = node.querySelector<HTMLElement>('.work-run-step');
+      if (stepWord !== null) {
+        stepWord.textContent = step.step;
+      }
+      const line = node.querySelector<HTMLElement>('.work-run-line');
+      if (line !== null) {
+        line.textContent = step.line;
+        line.hidden = step.line === '';
+      }
+      continue;
+    }
+    const at = doneAt.get(id);
+    if (at !== undefined) {
+      // Done this week: only the age still moves.
+      setAge(node, ageWords(at, nowMs));
+    }
+    // A row whose card is gone: skipped — the re-render lands next.
+  }
+}
+
 /**
  * The fleet's alerts above every group: what keeps the machine from
  * working the board. Each row says what and why; its one button undoes
@@ -332,6 +410,12 @@ function rowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLEl
   return node;
 }
 
+/** A Shaping row's pulse: whether the dialog runs, pauses or never started, and its turns. */
+function shapingDialogLine(row: WorkRow): string {
+  const turns = (row.run?.steerCount ?? -1) + 1;
+  return row.run === null ? 'Dialog not started' : `${row.run.turn === 'busy' ? 'Dialog running' : 'Dialog paused'} · ${turns} turns`;
+}
+
 /** A Shaping row: title + age, then the dialog's pulse. */
 function shapingRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
   const { card } = row;
@@ -344,10 +428,7 @@ function shapingRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
   }
   top.append(el('span', 'work-row-age', ageWords(row.run?.startedAt ?? card.meta.entered[row.phase.id] ?? null, Date.now())), more);
   node.append(top);
-  const turns = (row.run?.steerCount ?? -1) + 1;
-  const dialog =
-    row.run === null ? 'Dialog not started' : `${row.run.turn === 'busy' ? 'Dialog running' : 'Dialog paused'} · ${turns} turns`;
-  node.append(el('div', 'work-row-sub', dialog));
+  node.append(el('div', 'work-row-sub', shapingDialogLine(row)));
   return node;
 }
 
@@ -365,10 +446,11 @@ function runningRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow):
   top.append(el('span', 'work-row-age', step.live ? ageWords(row.run?.startedAt ?? null, Date.now()) : ''), more);
   node.append(top);
   const sub = el('div', 'work-row-sub work-run');
-  sub.append(el('span', `work-run-dot${step.live ? '' : ' work-run-dot-queued'}`), el('span', 'work-run-step', step.step));
-  if (step.line !== '') {
-    sub.append(el('span', 'work-run-line', step.line));
-  }
+  // The line span is always there (hidden while empty), so the live
+  // paint can fill it without touching the row's bones (T-0086).
+  const line = el('span', 'work-run-line', step.line);
+  line.hidden = step.line === '';
+  sub.append(el('span', `work-run-dot${step.live ? '' : ' work-run-dot-queued'}`), el('span', 'work-run-step', step.step), line);
   node.append(sub);
   return node;
 }
