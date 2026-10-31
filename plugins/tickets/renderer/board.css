@@ -784,6 +784,7 @@
 
 .tickets-takeover-controls,
 .tickets-thread-controls {
+  flex: none;
   display: inline-flex;
   gap: 6px;
 }
@@ -2384,7 +2385,7 @@ details[open] > summary > .tickets-tx-think-preview {
 
 .tickets-thread-title {
   flex: 1;
-  min-width: 40px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2393,8 +2394,11 @@ details[open] > summary > .tickets-tx-think-preview {
   font-weight: 500;
 }
 
+/* The middle gives way first: the title and the meta line shrink to
+   nothing before the Ticket file link and the controls lose a pixel. */
 .tickets-thread-meta {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 46%;
   overflow: hidden;
   text-overflow: ellipsis;

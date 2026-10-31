@@ -32,7 +32,12 @@ a toolbar inside the box (attach left, stop and send right), the two
 quick-prompt chips above it, indented like the decision bar
 (`run-composer.ts`, `board.css`). The thread header is now exactly the
 editor meta bar's height (`--meta-h`, same padding), so its bottom line
-runs level with the line of a note open beside it.
+runs level with the line of a note open beside it. In a narrow pane
+the title and the meta line shrink to nothing first; the Ticket file
+link and the controls always stay whole. The meta line's tooltip no
+longer carries a ticking clock (a title rewritten every second closed
+the open tooltip — it flickered while a worker ran); the line and its
+tooltip are written only when their text changes.
 
 ### Milestone 91 — ticket T-0084: the Work panel's phase colours, filter and running marks
 

@@ -2040,7 +2040,9 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       `Turn ${run.steerCount + 1} — the first prompt plus every message sent since`,
       contextLabel(run),
       `Tokens ${formatTokens(run.tokensIn)} in${cached > 0 ? ` (${formatTokens(cached)} cached)` : ''} · ${formatTokens(run.tokensOut)} out`,
-      `Elapsed ${spanClock(execClockMs(run, Date.now()))} — waits for you and standing do not tick`,
+      // No ticking clock here: a title that changes every second closes the
+      // open tooltip. The line itself shows the run time.
+      'Run time counts working time only — waits for you and standing do not tick',
       ...telemetryParts(run).map((part) => part.replace(/^ctx /, 'last turn context ')),
     ].join('\n');
   };
@@ -2060,7 +2062,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     stateWord.textContent = liveStateWord(run) ?? (run !== null ? 'Ended' : 'No run yet');
     // One muted line: provider · model · run time · context (parts without data stay out).
     const fill = run === null ? null : contextFill(run);
-    metaNode.textContent = [
+    const metaText = [
       run === null ? null : workerLabelOf(run.provider),
       run === null ? null : run.model ?? null,
       run === null ? null : durationWords(execClockMs(run, Date.now())),
@@ -2069,7 +2071,14 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     ]
       .filter((part): part is string => part !== null && part !== '')
       .join(' · ');
-    metaNode.title = run === null ? '' : telemetryTooltip(run);
+    // Written only on a change: every write resets an open tooltip.
+    if (metaNode.textContent !== metaText) {
+      metaNode.textContent = metaText;
+    }
+    const metaTitle = run === null ? '' : telemetryTooltip(run);
+    if (metaNode.title !== metaTitle) {
+      metaNode.title = metaTitle;
+    }
     fileLink.hidden = card === null;
     // The header's buttons come from the tested pure choice (W4a): the
     // same controls in every state, exactly one way on. Start shares
