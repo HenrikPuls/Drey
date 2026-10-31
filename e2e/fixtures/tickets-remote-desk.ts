@@ -82,6 +82,25 @@ export function makeDesk() {
   const textOf = (id: string): string =>
     texts.get(id) ??
     `---\nid: ${id}\n---\n\n## Description\n\nThe phase chip is **display only**: a tap opens the move menu, it never *moves* the ticket itself. The chip's target comes from \`chip → menu\`.\n\n| Surface | Formatting |\n|---|---|\n| Ticket view | bold, italic, code |\n| Transcript | tables and rules |\n\n## Plan\n\nReuse the board's move list.\n\n### Acceptance criteria\n\n- [x] The chip opens the move menu\n- [ ] One commit per move\n\n## Log\n\n- '2026-10-30T08:00:00Z' owner@desk — created in inbox\n`;
+  // The iPad detail pane has to genuinely overflow for the scroll-keeping
+  // e2e (R10): T-0053's Description carries twelve extra paragraphs. A
+  // replacer function keeps the text free of $-pattern surprises, and
+  // everything outside Description stays byte-identical to the default.
+  const longDescription = [
+    'The chip is the only entry point on the phone, so it has to open the same move list the desk board menu shows.',
+    'A tap must never move the ticket by itself: choosing a target is a second, deliberate step.',
+    'The list opens as a bottom sheet on the phone and as a popover on the iPad; both are built from one column list.',
+    'Every entry names its column and, where the pipeline defines one, the handover that takes over after the move.',
+    'The current column is marked and disabled, so a move to where the ticket already sits cannot be sent.',
+    'Blocked tickets keep their blocked-by chips; the move list reads them the same way the cards do.',
+    'A move is one POST with the ticket, the source phase and the target phase; the desk commits it.',
+    'While the request is in flight the sheet stays open and its buttons go quiet, so a double tap cannot double-move.',
+    'The toast names the ticket and its new column, matching the wording the desk board uses.',
+    'If the desk refuses the move, the sheet closes and the refusal text is shown verbatim.',
+    'The chip label never changes with the phase of the ticket; it is a button, not a status.',
+    'Keyboard focus lands on the first entry when the list opens, and Escape closes it without moving anything.',
+  ].join('\n\n');
+  texts.set('T-0053', textOf('T-0053').replace('## Plan', () => `${longDescription}\n\n## Plan`));
   const revisionOf = (id: string): string => (revisions.get(id) ?? 1).toString(16).padStart(16, '0');
   const bump = (id: string): void => void revisions.set(id, (revisions.get(id) ?? 1) + 1);
   const listeners = new Set<(what: string) => void>();
