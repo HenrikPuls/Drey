@@ -1,4 +1,45 @@
 
+### Milestone 94 — fleet stability, part 2: clean hand-overs, pause that resumes
+
+**Not yet manually verified by the owner.** Owner request, 2026-10-31
+(stability analysis, parts 1/1b = milestones 92/93).
+
+- **A `## Handover` section per step.** Every worker brief now ends with
+  the handover discipline: replace the ticket's `## Handover` (State,
+  Decisions, Open, Files, Verified; under 15 lines) before ending, keep
+  Log lines to one short line. The next step's brief and a resumed
+  session carry that section (capped at 2 KB, in the *changing* part —
+  the cache-stable prefix and `briefDigest` are untouched) instead of
+  the Log tail. `ticketSections` returns it; `specs/ticket-schema.md`
+  documents it.
+- **A paused run is not a finished one.** `interrupt` marks the run
+  paused: the `result` the interrupt produces no longer counts as
+  agent-done. **Hand back** after a pause prompts the idle worker with
+  `HANDBACK_CONTINUE` ("continue where you stopped, do not start over")
+  and lets it work on, instead of ending the run so the gate judged half
+  a step (the owner's T-0081 report). The owner's own next prompt clears
+  the pause as well. A plain takeover → release is unchanged.
+- **The diff stat reads the branch, not the base's tip.** `git diff
+  --stat <base>` compared against the base's *current* commit, so once
+  main moved on every upstream change looked like the worker's own
+  deletions (bdml: a worker spent its first turns reconciling it). Now:
+  `<base>...HEAD` (commits since the branch left the base), then
+  `git status --short` for the uncommitted paths.
+- **Shipped prompts** (`plugins/tickets/prompts/`): plan — every acceptance
+  command must be able to pass (existing scope/path), the ticket file is
+  committed by the runner, not the worker, plus the handover; build —
+  handover, one-line Log, "owner", not a review step; commit — no
+  "owner-reviewed", work only in own worktrees and never git in the
+  owner's checkout, a merge conflict aborts and ends the step.
+- The resume continuation says "continue where you stopped".
+
+**Not in the repo's reach:** the *vault* copies of the prompts
+(`tickets/_meta/prompts/` in the tickets repo) are snapshots and keep
+the old text until they are refreshed — "Add Drey's prompts" or by hand.
+Specs: `fleet-fields.spec.ts` (handover in brief and resume, none for a
+dialog), `context-pack.spec.ts` (merge-base stat), `runs.spec.ts`
+(pause → hand back continues, no pause → no prompt).
+
 ### Milestone 93 — fleet stability, part 1b: limits, watchdog, clean exits
 
 **Not yet manually verified by the owner.** Owner request, 2026-10-31,

@@ -101,6 +101,11 @@ export const execShell = (command: string, cwd: string): Promise<void> =>
     });
   });
 
+/** What a paused worker is told when the owner hands the run back. */
+export const HANDBACK_CONTINUE =
+  'The owner hands the run back after a pause. Continue the step from where you stopped — do not start over; ' +
+  'what is committed or written down stands. Finish it as usual: gate commands green, the handover written.';
+
 /** A working run silent this long is flagged "looks stuck"... */
 export const STUCK_FLAG_MS = 10 * 60_000;
 /** ...and failed (back-off retry) after this much silence. */
@@ -223,6 +228,12 @@ interface LiveRun {
   audited: boolean;
   /** The worker finished its turn — the adapter's `result` event, the agent-done signal. */
   agentDone: boolean;
+  /**
+   * The owner interrupted the turn: the `result` that follows is the
+   * interrupt's own, not a completion declaration. Cleared by the owner's
+   * next prompt or by handing the run back.
+   */
+  paused?: boolean;
   /** Folds the run's token telemetry (T-0048) out of every stream event. */
   telemetry: TelemetryFold;
   /** Why the owner stopped the run — becomes the ticket Log line when the run ends. */
@@ -1211,6 +1222,7 @@ export class RunSupervisor {
     }
     if (!answersQuestion) {
       await this.holdForOwner(run, 'first prompt');
+      run.paused = false; // the owner's own message starts a turn whose result counts
     }
     // A quiet start (req-75) delivered no brief at spawn: the composed
     // instruction rides the owner's FIRST message, once. Guarded on
@@ -1383,10 +1395,13 @@ export class RunSupervisor {
       return { ok: false, error: run };
     }
     await this.holdForOwner(run, 'interrupt');
+    run.paused = true; // before the interrupt: its result must not read as "done"
     const done = (await run.handle!.interrupt?.()) ?? false;
     if (!done) {
+      run.paused = false;
       return { ok: false, error: `the ${run.info.provider} worker took no interrupt — it may be idle already` };
     }
+    run.agentDone = false;
     await this.logLine(run, 'turn interrupted by the owner — the session is kept');
     return { ok: true };
   }
@@ -1400,6 +1415,24 @@ export class RunSupervisor {
     const run = this.liveRunWithHold(runId);
     if (typeof run === 'string') {
       return { ok: false, error: run };
+    }
+    if (run.paused === true && run.info.turn !== 'busy') {
+      // A paused worker is idle only because the owner stopped its turn, not
+      // because it finished the step: handing back carries on with the work
+      // instead of ending the run and letting the gate judge half a step.
+      run.paused = false;
+      run.agentDone = false;
+      run.info = { ...run.info, held: false };
+      await this.persist(run);
+      const rung = await run.handle!.steer(HANDBACK_CONTINUE);
+      run.handle!.setHold!(false);
+      await this.logLine(
+        run,
+        rung === 'refused'
+          ? 'handed back to the runner — the worker took no message, the run ends'
+          : 'handed back after a pause — the worker continues the step',
+      );
+      return { ok: true };
     }
     run.handle!.setHold!(false);
     run.info = { ...run.info, held: false };
@@ -1474,7 +1507,7 @@ export class RunSupervisor {
   private onEvent(run: LiveRun, event: NormalizedEvent): void {
     // Set in the synchronous prefix: the worker's exit can race the event
     // delivery, and `agentDone` must already be true when the exit decides.
-    if (event.kind === 'result') {
+    if (event.kind === 'result' && run.paused !== true) {
       run.agentDone = true;
     }
     // The telemetry fold applies here, in arrival order. Everything after

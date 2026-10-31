@@ -133,7 +133,14 @@ export interface InstructionInput {
    * anchor.
    */
   readonly repoInstructions: string | null;
-  /** The worktree's raw `git diff --stat` vs the base; capped here (head). */
+  /**
+   * The earlier step's `## Handover` section of the ticket (State,
+   * Decisions, Open, Files, Verified) — what a next step or a resumed
+   * run reads first instead of the Log tail. Empty/absent on a ticket
+   * no step has handed over yet.
+   */
+  readonly handover?: string;
+  /** The worktree's raw diff stat vs the base (`worktreeDiffStat`); capped here (head). */
   readonly diffStat: string | null;
   /** The previous run's raw gate failure; capped here (tail). */
   readonly gateFailure: string | null;
@@ -190,6 +197,20 @@ const COMPLETION_DISCIPLINE =
   'Declare the step done only when every command passes and you consider the work ready — your finished turn is ' +
   'that declaration. After it the runner re-runs the gate: green moves the ticket one column right; a red gate ' +
   'parks the step (the failure is logged and the ticket waits).';
+
+/** The most of an earlier handover the brief carries. */
+const HANDOVER_CAP = 2_000;
+
+/**
+ * What a step leaves for the next one and for its own resume: a short
+ * structured section instead of long Log lines that every later reader
+ * pays for again.
+ */
+const HANDOVER_DISCIPLINE =
+  "Handover: before you end, replace the ticket file's `## Handover` section (add it before `## Log` if it is " +
+  'missing; never a second one) with: State (`done` or `blocked`, one line), Decisions (up to three bullets), Open ' +
+  '(what the next step must check first), Files (the main ones), Verified (the commands you ran and their result). ' +
+  'Under 15 lines. Log lines stay one short line (under 200 characters) — detail belongs in the handover.';
 
 /**
  * The interactive dialog's discipline (req-65): no gate, no move — the
@@ -309,6 +330,12 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
   // The parts that change between runs of one step — the tail of the full
   // brief and the whole of a resume's continuation (req-80).
   const changing: string[] = [];
+  const handover = input.handover?.trim();
+  if (handover != null && handover !== '') {
+    changing.push(
+      `The earlier step's handover (written by the worker before you — trust it, check only what it marks Open):\n\n${handover.slice(0, HANDOVER_CAP)}`,
+    );
+  }
   const diffStat = input.diffStat?.trim();
   if (diffStat != null && diffStat !== '') {
     const capped = capHead(input.diffStat!, { lines: input.caps.diffStatLines, bytes: input.caps.diffStatBytes });
@@ -316,7 +343,7 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
       truncations.push({ section: 'diffStat', originalSize: capped.originalSize });
     }
     changing.push(
-      `The branch so far — \`git diff --stat\` against the base (committed and uncommitted):\n\n${capped.text}`,
+      `The branch so far (committed since it left the base, then uncommitted):\n\n${capped.text}`,
     );
   }
   const gateFailure = input.gateFailure?.trim();
@@ -344,15 +371,20 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
     parts.push(gate);
   }
   parts.push(discipline);
+  if (input.interactive === undefined) {
+    parts.push(HANDOVER_DISCIPLINE);
+  }
   parts.push(ASKING);
 
   const continuation = [
     `You are resuming ticket ${input.ticketId} — ${input.title}, the "${input.phase}" step, in this same session. ` +
       `Your full brief for this step is earlier in this conversation and still holds — do not re-read what it ` +
-      `already told you. Work checkout: ${input.worktreePath} (branch ${input.branch}).`,
+      `already told you. Work checkout: ${input.worktreePath} (branch ${input.branch}). Continue where you stopped — ` +
+      `do not start the step over; what is already committed or written down stands.`,
     ...changing,
     ...(gate !== null ? [gate] : []),
     discipline,
+    ...(input.interactive === undefined ? [HANDOVER_DISCIPLINE] : []),
   ].join('\n\n');
   const stable = JSON.stringify([
     repoInstructions ?? '',

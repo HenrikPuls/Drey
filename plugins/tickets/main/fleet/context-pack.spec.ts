@@ -2,7 +2,7 @@ import { promises as fsp } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readRepoInstructions } from './context-pack';
+import { readRepoInstructions, worktreeDiffStat } from './context-pack';
 
 /**
  * Which file opens a run's brief (T-0048, req-79): the repo's
@@ -45,5 +45,35 @@ describe('readRepoInstructions', () => {
     expect(await readRepoInstructions(repoDir, null)).toBe('# Agents');
     await put('CLAUDE.md', '# Claude');
     expect(await readRepoInstructions(repoDir, null)).toBe('# Claude');
+  });
+});
+
+describe('worktreeDiffStat — what the branch holds beyond the base', () => {
+  const git = (answers: Record<string, string | Error>) => ({
+    run: async (_cwd: string, args: readonly string[]): Promise<string> => {
+      const answer = answers[args.join(' ')];
+      if (answer === undefined) {
+        throw new Error(`unexpected git ${args.join(' ')}`);
+      }
+      if (answer instanceof Error) {
+        throw answer;
+      }
+      return answer;
+    },
+  });
+
+  it('diffs against the merge-base (three dots), then lists the uncommitted paths', async () => {
+    const out = await worktreeDiffStat(
+      git({ 'diff --stat main...HEAD': ' a.ts | 2 +-\n', 'status --short': ' M b.ts\n' }),
+      'W:/wt',
+      'main',
+    );
+    expect(out).toBe('Committed on the branch:\na.ts | 2 +-\n\nUncommitted:\nM b.ts');
+  });
+
+  it('is null without a base, without differences or when git fails', async () => {
+    expect(await worktreeDiffStat(git({}), 'W:/wt', null)).toBeNull();
+    expect(await worktreeDiffStat(git({ 'diff --stat main...HEAD': '', 'status --short': '' }), 'W:/wt', 'main')).toBeNull();
+    expect(await worktreeDiffStat(git({ 'diff --stat main...HEAD': new Error('no worktree') }), 'W:/wt', 'main')).toBeNull();
   });
 });
