@@ -86,18 +86,24 @@ const bytesToBase64 = (bytes: Uint8Array): string => {
 export function createRunComposer(deps: RunComposerDeps): RunComposer {
   const { api } = deps;
   const wrap = el('div', 'tickets-composer');
-  const iconButton = (icon: string, label: string, title: string, onClick: () => void): HTMLButtonElement => {
+  const iconButton = (icon: string, title: string, onClick: () => void): HTMLButtonElement => {
     const b = el('button', 'tickets-takeover-btn');
     b.type = 'button';
     b.title = title;
     b.setAttribute('aria-label', title);
-    b.append(api.ui.icon(icon, 13), document.createTextNode(label));
+    b.append(api.ui.icon(icon, 13));
     b.addEventListener('click', onClick);
     return b;
   };
   const runId = (): string | null => deps.target()?.id ?? null;
 
-  const promptWrap = el('div', 'tickets-takeover-prompt');
+  // The composer box (req-75 W1b): one rounded box — the prompt with a
+  // round send button inside; the attachments, commands and quick
+  // prompts live around it.
+  const box = el('div', 'tickets-composer-box');
+  const underRow = el('div', 'tickets-composer-under');
+  const inputRow = el('div', 'tickets-composer-inputrow');
+  const promptWrap = box;
   // Files and pictures for the worker: stored in its worktree, named in the message.
   const attached: { name: string; path: string }[] = [];
   const attachRow = el('div', 'tickets-takeover-attached');
@@ -215,7 +221,6 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
   });
   prompt.element.classList.add('tickets-takeover-prompt-input');
 
-  const composerBar = el('div', 'tickets-takeover-composer');
   const fileInput = el('input');
   fileInput.type = 'file';
   fileInput.multiple = true;
@@ -225,25 +230,25 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     fileInput.value = '';
     void addFiles(picked);
   });
-  const plusBtn = el('button', 'tickets-takeover-plus');
+  const plusBtn = el('button', 'tickets-composer-plus');
   plusBtn.type = 'button';
   plusBtn.title = 'Attach files or pictures — the worker reads them from its worktree';
   plusBtn.setAttribute('aria-label', 'Attach files');
   plusBtn.append(api.ui.icon('plus', 15));
   plusBtn.addEventListener('click', () => fileInput.click());
-  promptWrap.addEventListener('dragover', (event) => {
+  box.addEventListener('dragover', (event) => {
     if (event.dataTransfer?.types.includes('Files') === true) {
       event.preventDefault();
     }
   });
-  promptWrap.addEventListener('drop', (event) => {
+  box.addEventListener('drop', (event) => {
     const dropped = [...(event.dataTransfer?.files ?? [])];
     if (dropped.length > 0) {
       event.preventDefault();
       void addFiles(dropped);
     }
   });
-  promptWrap.addEventListener(
+  box.addEventListener(
     'paste',
     (event) => {
       const pasted = [...(event.clipboardData?.files ?? [])];
@@ -265,19 +270,24 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     });
     chips.append(chip);
   }
-  const composerSpacer = el('span', 'tickets-takeover-spacer');
-  const stopBtn = iconButton('square', 'Stop', 'Stop the running turn — the session and its context stay, you can prompt it again', () => {
+  const stopBtn = iconButton('square', 'Stop the running turn — the session and its context stay, you can prompt it again', () => {
     const id = runId();
     if (id !== null) {
       void deps.mutate('Interrupting', () => deps.invoke('fleetControl', { action: 'interrupt', runId: id }));
     }
   });
-  stopBtn.classList.add('tickets-takeover-btn-stop');
-  const sendBtn = iconButton('corner-down-left', 'Send', 'Send the message — a working worker takes it into its turn', () => {
+  stopBtn.classList.add('tickets-composer-stop');
+  // The round send button inside the box (req-75 W1b).
+  const sendBtn = el('button', 'tickets-composer-send');
+  sendBtn.type = 'button';
+  sendBtn.title = 'Send the message — a working worker takes it into its turn';
+  sendBtn.setAttribute('aria-label', 'Send');
+  sendBtn.append(api.ui.icon('arrow-up', 14));
+  sendBtn.addEventListener('click', () => {
     void send(prompt.getContent());
   });
-  sendBtn.classList.add('tickets-takeover-btn-primary');
-  composerBar.append(plusBtn, fileInput, chips, composerSpacer, stopBtn, sendBtn);
+  inputRow.append(prompt.element, sendBtn);
+  underRow.append(plusBtn, fileInput, stopBtn, chips);
 
   // The worker's pulse while a turn runs: what it does now and for how long.
   const progress = el('div', 'tickets-takeover-progress');
@@ -305,7 +315,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     progressText.textContent = `${verb}… ${seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`} · ↓ ${formatTokens(run.tokensOut)} tokens`;
     progress.hidden = false;
   };
-  promptWrap.append(commandMenu, attachRow, prompt.element, composerBar);
+  box.append(commandMenu, attachRow, inputRow);
 
   // What the worker waits on (req-64): its question — answered in the
   // prompt box below — or a tool call to approve with one of the buttons.
@@ -414,13 +424,14 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     }
     const options = el('div', 'tickets-question-options');
     for (const option of shaped.options) {
-      const b = el('button', `work-option${shaped.recommended === option.n ? ' work-option-recommended' : ''}`, option.label);
+      const b = el('button', `tickets-pill${shaped.recommended === option.n ? ' tickets-pill-recommended' : ''}`, option.label);
       b.type = 'button';
+      b.title = option.consequence ?? option.label;
       if (option.consequence !== null) {
-        b.append(document.createTextNode(' — '), el('span', 'work-option-why', option.consequence));
+        b.append(document.createTextNode(' — '), el('span', 'tickets-pill-why', option.consequence));
       }
       if (shaped.recommended === option.n) {
-        b.append(el('span', 'work-option-flag', 'recommended'));
+        b.append(el('span', 'tickets-pill-flag', 'recommended'));
       }
       b.addEventListener('click', () => {
         for (const sibling of options.querySelectorAll('button')) {
@@ -496,7 +507,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     paintProgress(run);
   };
 
-  wrap.append(progress, waitCard, promptWrap);
+  wrap.append(progress, waitCard, box, underRow);
   paint();
   return {
     element: wrap,

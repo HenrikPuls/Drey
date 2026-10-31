@@ -1,24 +1,23 @@
 /**
- * The Work panel's list (req-75 W1, ADR-0087): Needs you, Ideas and In
- * progress as collapsible groups of one-line rows in place of the
- * kanban columns, so it reads in a ~240 px side dock. Plain DOM over
- * `work-groups.ts`; every action goes back through the deps — this file
- * holds no board state of its own beyond which groups are folded.
+ * The Work panel's list (req-75 W1/W1b, ADR-0087): Needs you, Shaping,
+ * Running, Ideas and Done this week as collapsible groups of the
+ * canvas's two-line rows, so it reads in a ~240 px side dock. Plain DOM
+ * over `work-groups.ts`; a row is information plus one click — it opens
+ * the ticket where the decision is made. Every action goes back through
+ * the deps; this file holds no board state of its own beyond which
+ * groups are folded.
  */
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
-import { TICKET_PRIORITIES, type BoardSnapshot, type TicketCard, type TicketPriority } from '../shared/tickets';
-import type { RunInfo } from '../main/fleet/protocol';
-import { answerText, type ShapedOption, type ShapedQuestion } from '../shared/question-shape';
-import type { InteractiveMode } from './end-moves';
-import { interactiveModeFor } from './end-moves';
 import {
-  checkpointActionOf,
-  statusLineOf,
-  workGroups,
-  type WorkGroupId,
-  type WorkRow,
-} from './work-groups';
-import { workerStatus } from './worker-status';
+  TICKETS_ARCHIVE_DIR,
+  type BoardSnapshot,
+  type RecentDone,
+  type TicketCard,
+  type TicketPriority,
+  type TicketTrack,
+} from '../shared/tickets';
+import type { RunInfo } from '../main/fleet/protocol';
+import { ageWords, needKindLabel, runningStepOf, statusLineOf, workGroups, type WorkGroupId, type WorkRow } from './work-groups';
 
 export const PRIORITY_LABEL: Readonly<Record<TicketPriority, string>> = {
   urgent: 'Urgent',
@@ -29,45 +28,50 @@ export const PRIORITY_LABEL: Readonly<Record<TicketPriority, string>> = {
 
 const GROUP_TITLE: Readonly<Record<WorkGroupId, string>> = {
   needs: 'Needs you',
+  shaping: 'Shaping',
+  running: 'Running',
   ideas: 'Ideas',
-  progress: 'In progress',
+  done: 'Done this week',
 };
+
+/** The fold key of the ideas' "<n> more" tail. */
+const IDEAS_ALL = 'ideas-all';
+
+/** How many ideas show before the "<n> more" row. */
+const IDEAS_SHOWN = 5;
 
 export interface WorkPanelDeps {
   readonly api: DreyPluginApi;
   /** Opens the ticket page: the ticket file with its thread beside it. */
   openTicket(card: TicketCard): void;
-  /** An owner move (blocked tickets into a machine phase ask first). */
-  move(card: TicketCard, to: string): void;
-  /** Accept: the ticket goes to the archive. */
-  accept(card: TicketCard): void;
   setPriority(card: TicketCard, priority: TicketPriority): void;
-  startDialog(card: TicketCard, mode: InteractiveMode): void;
-  openRunModal(card: TicketCard): void;
+  setTrack(card: TicketCard, track: TicketTrack | null): void;
   openMenu(card: TicketCard, at: { x: number; y: number }): void;
-  /** Answers a waiting worker's shaped question with one tap (req-75 W2) — the composer's send path. */
-  answer(card: TicketCard, run: RunInfo, text: string): void;
 }
 
 /** Which groups the owner folded — per viewer, never in the repo. */
 export interface GroupFoldStore {
-  isFolded(id: WorkGroupId): boolean;
-  setFolded(id: WorkGroupId, folded: boolean): void;
+  isFolded(id: string): boolean;
+  setFolded(id: string, folded: boolean): void;
 }
 
 const FOLD_KEY = 'drey.tickets.work.folded';
 
 export function createGroupFoldStore(storage: Storage | null): GroupFoldStore {
-  const read = (): Set<string> => {
+  const read = (): Set<string> | null => {
     try {
       const raw = storage?.getItem(FOLD_KEY) ?? null;
-      const parsed: unknown = raw === null ? [] : JSON.parse(raw);
+      if (raw === null) {
+        return null;
+      }
+      const parsed: unknown = JSON.parse(raw);
       return new Set(Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : []);
     } catch {
-      return new Set();
+      return new Set<string>();
     }
   };
-  let folded = read();
+  // Nothing saved yet: Done this week and the ideas' tail start folded.
+  let folded = read() ?? new Set<string>(['done', IDEAS_ALL]);
   return {
     isFolded: (id) => folded.has(id),
     setFolded: (id, value) => {
@@ -110,16 +114,24 @@ export function workListNode(
 ): HTMLElement {
   const groups = workGroups(snap, runs);
   const list = el('div', 'work-list');
-  const order: readonly WorkGroupId[] = ['needs', 'ideas', 'progress'];
+  const order: readonly WorkGroupId[] = ['needs', 'shaping', 'running', 'ideas', 'done'];
   for (const id of order) {
+    if (id === 'done') {
+      if (snap.recentDone.length > 0) {
+        list.append(doneGroupNode(snap, folds, rerender));
+      }
+      continue;
+    }
     const rows = groups[id];
-    // Needs you shows only when something waits on the owner.
-    if (id === 'needs' && rows.length === 0) {
+    // Needs you and Shaping show only when something waits / runs.
+    if ((id === 'needs' || id === 'shaping') && rows.length === 0) {
       continue;
     }
     list.append(groupNode(deps, snap, id, rows, folds, rerender));
   }
-  if (groups.needs.length + groups.ideas.length + groups.progress.length === 0) {
+  const total =
+    groups.needs.length + groups.shaping.length + groups.running.length + groups.ideas.length + snap.recentDone.length;
+  if (total === 0) {
     list.append(el('div', 'work-empty', 'No tickets yet — capture one with +'));
   }
   return list;
@@ -136,57 +148,89 @@ function groupNode(
   const folded = folds.isFolded(id);
   const section = el('section', `work-group work-group-${id}`);
   section.dataset['group'] = id;
-  const head = el('button', 'work-group-head');
-  head.type = 'button';
-  head.setAttribute('aria-expanded', String(!folded));
-  head.title = folded ? `Show ${GROUP_TITLE[id]}` : `Fold ${GROUP_TITLE[id]}`;
-  const chevron = el('span', 'work-group-chevron');
-  chevron.append(deps.api.ui.icon(folded ? 'chevron-right' : 'chevron-down', 12));
-  head.append(chevron, el('span', 'work-group-title', GROUP_TITLE[id]), el('span', 'work-group-count', String(rows.length)));
-  head.addEventListener('click', () => {
-    folds.setFolded(id, !folded);
-    rerender();
-  });
-  section.append(head);
+  section.append(groupHead(id, rows.length, folded, folds, rerender));
   if (!folded) {
     const body = el('div', 'work-group-rows');
-    for (const row of rows) {
-      body.append(rowNode(deps, snap, row));
-    }
-    if (rows.length === 0) {
-      body.append(el('div', 'work-group-empty', id === 'ideas' ? 'No ideas waiting' : 'Nothing running'));
+    if (id === 'ideas') {
+      appendIdeas(deps, body, rows, folds, rerender);
+    } else {
+      for (const row of rows) {
+        body.append(id === 'shaping' ? shapingRowNode(deps, row) : id === 'running' ? runningRowNode(deps, snap, row) : rowNode(deps, snap, row));
+      }
+      if (rows.length === 0) {
+        body.append(el('div', 'work-group-empty', 'Nothing running'));
+      }
     }
     section.append(body);
   }
   return section;
 }
 
-function rowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLElement {
-  const { card } = row;
+/** The head every group shares: chevron, bold title, count as a badge. */
+function groupHead(
+  id: WorkGroupId,
+  count: number,
+  folded: boolean,
+  folds: GroupFoldStore,
+  rerender: () => void,
+): HTMLElement {
+  const head = el('button', 'work-group-head');
+  head.type = 'button';
+  head.setAttribute('aria-expanded', String(!folded));
+  head.title = folded ? `Show ${GROUP_TITLE[id]}` : `Fold ${GROUP_TITLE[id]}`;
+  const chevron = el('span', 'work-group-chevron');
+  chevron.append(folded ? '▸' : '▾');
+  const title = el('span', 'work-group-title', GROUP_TITLE[id]);
+  const badge = el('span', `work-group-count${['needs', 'shaping', 'running'].includes(id) ? ' work-group-badge' : ''}`, String(count));
+  head.append(chevron, title, badge);
+  head.addEventListener('click', () => {
+    folds.setFolded(id, !folded);
+    rerender();
+  });
+  return head;
+}
+
+/** Ideas: the first five rows, then "<n> more" unfolds the rest (remembered). */
+function appendIdeas(
+  deps: WorkPanelDeps,
+  body: HTMLElement,
+  rows: readonly WorkRow[],
+  folds: GroupFoldStore,
+  rerender: () => void,
+): void {
+  if (rows.length === 0) {
+    body.append(el('div', 'work-group-empty', 'No ideas yet — capture one with +'));
+    return;
+  }
+  const allOpen = !folds.isFolded(IDEAS_ALL);
+  const shown = allOpen ? rows : rows.slice(0, IDEAS_SHOWN);
+  for (const row of shown) {
+    body.append(ideaRowNode(deps, row));
+  }
+  if (rows.length > IDEAS_SHOWN) {
+    const more = el('button', 'work-ideas-more');
+    more.type = 'button';
+    const rest = rows.length - shown.length;
+    more.textContent = allOpen ? 'Show fewer' : `${rows.length - IDEAS_SHOWN} more`;
+    more.title = allOpen ? `Fold the ideas back to the first ${IDEAS_SHOWN}` : `Show ${rest} more idea${rest === 1 ? '' : 's'}`;
+    more.addEventListener('click', () => {
+      folds.setFolded(IDEAS_ALL, allOpen);
+      rerender();
+    });
+    body.append(more);
+  }
+}
+
+/** A row's shared bones: identity, tooltip, the open/menu affordances. */
+function baseRow(deps: WorkPanelDeps, card: TicketCard): { node: HTMLElement; more: HTMLButtonElement } {
   const node = el('article', 'work-row');
   node.dataset['id'] = card.id;
   node.dataset['path'] = card.path;
-  if (row.need !== null) {
-    node.dataset['need'] = row.need.kind;
-  }
   node.tabIndex = 0;
   node.setAttribute('role', 'button');
   node.setAttribute('aria-label', `${card.id} ${card.meta.title ?? '(untitled)'}`);
   node.title = `${card.id} — ${card.meta.title ?? ''}\n${card.path}`;
 
-  const top = el('div', 'work-row-top');
-  top.append(priorityChip(deps, card), el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
-  if (row.queued) {
-    const queued = el('span', 'work-row-queued', 'Queued');
-    queued.title = 'Queued for the fleet — the next free worker takes it';
-    top.append(queued);
-  }
-  if (card.issues.length > 0) {
-    const worst = card.issues.some((i) => i.level === 'error') ? 'error' : card.issues.some((i) => i.level === 'warning') ? 'warning' : 'noise';
-    const badge = el('span', `work-row-issues work-row-issues-${worst}`, String(card.issues.length));
-    badge.title = card.issues.map((i) => `[${i.level}] ${i.message}`).join('\n');
-    top.append(badge);
-  }
   const more = el('button', 'icon-btn work-row-more');
   more.type = 'button';
   more.title = 'More actions';
@@ -198,21 +242,6 @@ function rowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLEl
     const rect = more.getBoundingClientRect();
     deps.openMenu(card, { x: rect.left, y: rect.bottom + 2 });
   });
-  top.append(more);
-  node.append(top);
-
-  const status = el('div', 'work-row-status');
-  if (row.run !== null) {
-    status.append(el('span', `tickets-light tickets-light-${workerStatus(row.run, Date.now()).light}`));
-  }
-  status.append(el('span', 'work-row-id', card.id), el('span', 'work-row-line', statusLineOf(row, snap)));
-  node.append(status);
-
-  const actions = needActions(deps, snap, row);
-  if (actions !== null) {
-    node.append(actions);
-  }
-
   node.addEventListener('click', () => deps.openTicket(card));
   node.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && event.target === node) {
@@ -224,132 +253,132 @@ function rowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLEl
     event.preventDefault();
     deps.openMenu(card, { x: event.clientX, y: event.clientY });
   });
+  return { node, more };
+}
+
+/** The issue badge a row with findings carries beside its age. */
+function issuesBadge(card: TicketCard): HTMLElement | null {
+  if (card.issues.length === 0) {
+    return null;
+  }
+  const worst = card.issues.some((i) => i.level === 'error')
+    ? 'error'
+    : card.issues.some((i) => i.level === 'warning')
+      ? 'warning'
+      : 'noise';
+  const badge = el('span', `work-row-issues work-row-issues-${worst}`, String(card.issues.length));
+  badge.title = card.issues.map((i) => `[${i.level}] ${i.message}`).join('\n');
+  return badge;
+}
+
+/** A Needs-you row: title + age, then the kind chip and why it waits. */
+function rowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLElement {
+  const { card, need } = row;
+  const { node, more } = baseRow(deps, card);
+  if (need !== null) {
+    node.dataset['need'] = need.kind;
+  }
+  const top = el('div', 'work-row-top');
+  top.append(el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
+  const issues = issuesBadge(card);
+  if (issues !== null) {
+    top.append(issues);
+  }
+  top.append(el('span', 'work-row-age', ageWords(need?.since ?? null, Date.now())), more);
+  node.append(top);
+  if (need !== null) {
+    const line = el('div', 'work-row-sub');
+    line.append(el('span', 'work-kind', needKindLabel(need, snap)), el('span', 'work-row-line', statusLineOf(row, snap)));
+    node.append(line);
+  }
   return node;
 }
 
-/** The priority chip: the label, a click lists the four to pick from. */
-function priorityChip(deps: WorkPanelDeps, card: TicketCard): HTMLElement {
-  const chip = el('button', `work-prio work-prio-${card.meta.priority}`, PRIORITY_LABEL[card.meta.priority]);
-  chip.type = 'button';
-  chip.title = `Priority ${PRIORITY_LABEL[card.meta.priority]} — click to change`;
-  chip.setAttribute('aria-label', chip.title);
-  chip.setAttribute('aria-haspopup', 'menu');
-  chip.addEventListener('click', (event) => {
-    event.stopPropagation();
-    for (const other of document.querySelectorAll('.tickets-menu')) {
-      other.remove();
-    }
-    const menu = el('div', 'tickets-menu');
-    menu.setAttribute('role', 'menu');
-    const close = (): void => {
-      menu.remove();
-      window.removeEventListener('mousedown', outside, true);
-    };
-    const outside = (e: Event): void => {
-      if (!menu.contains(e.target as Node)) {
-        close();
-      }
-    };
-    for (const priority of TICKET_PRIORITIES) {
-      const item = el('button', 'tickets-menu-item', PRIORITY_LABEL[priority]);
-      item.type = 'button';
-      item.setAttribute('role', 'menuitemradio');
-      item.setAttribute('aria-checked', String(priority === card.meta.priority));
-      item.addEventListener('click', () => {
-        close();
-        deps.setPriority(card, priority);
-      });
-      menu.append(item);
-    }
-    document.body.append(menu);
-    const anchor = chip.getBoundingClientRect();
-    const rect = menu.getBoundingClientRect();
-    menu.style.left = `${Math.max(8, Math.min(anchor.left, window.innerWidth - rect.width - 8))}px`;
-    menu.style.top = `${Math.min(anchor.bottom + 2, window.innerHeight - rect.height - 8)}px`;
-    menu.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
-    window.addEventListener('mousedown', outside, true);
-    menu.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        close();
-        chip.focus();
-      }
-    });
-  });
-  return chip;
+/** A Shaping row: title + age, then the dialog's pulse. */
+function shapingRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
+  const { card } = row;
+  const { node, more } = baseRow(deps, card);
+  const top = el('div', 'work-row-top');
+  top.append(el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
+  const issues = issuesBadge(card);
+  if (issues !== null) {
+    top.append(issues);
+  }
+  top.append(el('span', 'work-row-age', ageWords(row.run?.startedAt ?? card.meta.entered[row.phase.id] ?? null, Date.now())), more);
+  node.append(top);
+  const turns = (row.run?.steerCount ?? -1) + 1;
+  const dialog =
+    row.run === null ? 'Dialog not started' : `${row.run.turn === 'busy' ? 'Dialog running' : 'Dialog paused'} · ${turns} turns`;
+  node.append(el('div', 'work-row-sub', dialog));
+  return node;
 }
 
-/** The option buttons of a shaped question (req-75 W2): one tap answers. */
-function shapedOptionButtons(box: HTMLElement, shaped: ShapedQuestion, onPick: (option: ShapedOption) => void): HTMLElement {
-  const options = el('div', 'work-options');
-  for (const option of shaped.options) {
-    const b = el('button', `work-option${shaped.recommended === option.n ? ' work-option-recommended' : ''}`, option.label);
-    b.type = 'button';
-    b.title = option.consequence ?? option.label;
-    if (shaped.recommended === option.n) {
-      b.append(el('span', 'work-option-flag', 'recommended'));
-    }
-    b.addEventListener('click', (event) => {
-      event.stopPropagation();
-      for (const sibling of box.querySelectorAll('button')) {
-        (sibling as HTMLButtonElement).disabled = true;
-      }
-      onPick(option);
-    });
-    options.append(b);
+/** A Running row: title + the run's age, then dot, step and the worker's line. */
+function runningRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLElement {
+  const { card } = row;
+  const { node, more } = baseRow(deps, card);
+  const step = runningStepOf(row, snap);
+  const top = el('div', 'work-row-top');
+  top.append(el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
+  const issues = issuesBadge(card);
+  if (issues !== null) {
+    top.append(issues);
   }
-  return options;
+  top.append(el('span', 'work-row-age', step.live ? ageWords(row.run?.startedAt ?? null, Date.now()) : ''), more);
+  node.append(top);
+  const sub = el('div', 'work-row-sub work-run');
+  sub.append(el('span', `work-run-dot${step.live ? '' : ' work-run-dot-queued'}`), el('span', 'work-run-step', step.step));
+  if (step.line !== '') {
+    sub.append(el('span', 'work-run-line', step.line));
+  }
+  node.append(sub);
+  return node;
 }
 
-/** The buttons of a Needs-you row: answer, approve, accept, refine, run again. */
-function needActions(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLElement | null {
-  const need = row.need;
-  if (need === null) {
-    return null;
+/** An Idea row: one line — priority chip when it matters, title, track chip. */
+function ideaRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
+  const { card } = row;
+  const { node, more } = baseRow(deps, card);
+  node.classList.add('work-row-idea');
+  if (card.meta.priority === 'urgent' || card.meta.priority === 'high') {
+    node.append(el('span', `work-prio-mini work-prio-mini-${card.meta.priority}`, PRIORITY_LABEL[card.meta.priority]));
   }
-  const box = el('div', 'work-row-actions');
-  const button = (label: string, title: string, primary: boolean, onClick: () => void): void => {
-    const b = el('button', `work-action${primary ? ' work-action-primary' : ''}`, label);
-    b.type = 'button';
-    b.title = title;
-    b.addEventListener('click', (event) => {
-      event.stopPropagation();
-      onClick();
-    });
-    box.append(b);
-  };
-  switch (need.kind) {
-    case 'question': {
-      // A shaped question answers from the row itself (req-75 W2).
-      const run = row.run;
-      const shaped = run?.waiting?.shaped ?? null;
-      if (shaped !== null && run !== null) {
-        box.append(shapedOptionButtons(box, shaped, (option) => deps.answer(row.card, run, answerText(option))));
-      }
-      button('Answer', 'Open the ticket and answer the worker', true, () => deps.openTicket(row.card));
-      break;
-    }
-    case 'permission':
-      button('Review', 'Open the ticket and allow or deny what the worker wants to do', true, () => deps.openTicket(row.card));
-      break;
-    case 'red-gate':
-    case 'failed':
-      button('Open', 'Open the ticket and read what went wrong', true, () => deps.openTicket(row.card));
-      button('Run again…', 'Start a new run on this ticket', false, () => deps.openRunModal(row.card));
-      break;
-    default: {
-      const action = checkpointActionOf(snap, need.phase);
-      if (action.kind === 'accept') {
-        button(action.label, 'Accept the result — the ticket goes to the archive', true, () => deps.accept(row.card));
-      } else {
-        button(action.label, `Your review is done — move the ticket on to ${action.label.replace('Approve → ', '')}`, true, () =>
-          deps.move(row.card, action.to),
-        );
-        const mode = interactiveModeFor(need.phase, snap.columns);
-        if (mode === 'refine' && row.run === null) {
-          button('Refine with agent', 'Talk it through with a worker first', false, () => deps.startDialog(row.card, 'refine'));
-        }
-      }
-    }
+  node.append(el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
+  if (row.queued) {
+    const queued = el('span', 'work-row-queued', 'Queued');
+    queued.title = 'Queued for the fleet — the next free worker takes it';
+    node.append(queued);
   }
-  return box;
+  const track = card.meta.track;
+  const chip = el('span', `work-track work-track-${track ?? 'triage'}`, track === 'auto' ? 'Auto' : track === 'shape' ? 'Shape' : 'Triage');
+  chip.title =
+    track === null
+      ? 'Not triaged yet — pick a track from the menu'
+      : `Track: ${track === 'auto' ? 'Auto — runs on its own' : 'Shape — a plan-mode dialog with you'}`;
+  node.append(chip, more);
+  return node;
+}
+
+/** Done this week: the archived tickets of the last 7 days, folded by default. */
+function doneGroupNode(snap: BoardSnapshot, folds: GroupFoldStore, rerender: () => void): HTMLElement {
+  const section = el('section', 'work-group work-group-done');
+  section.dataset['group'] = 'done';
+  section.append(groupHead('done', snap.recentDone.length, folds.isFolded('done'), folds, rerender));
+  if (!folds.isFolded('done')) {
+    const body = el('div', 'work-group-rows');
+    for (const done of snap.recentDone) {
+      body.append(doneRowNode(done));
+    }
+    section.append(body);
+  }
+  return section;
+}
+
+/** A Done row is a memento, not a button: muted title and when it closed. */
+function doneRowNode(done: RecentDone): HTMLElement {
+  const node = el('div', 'work-done-row');
+  node.dataset['id'] = done.id;
+  node.title = `${TICKETS_ARCHIVE_DIR}/${done.id}.md`;
+  node.append(el('span', 'work-done-title', done.title ?? done.id), el('span', 'work-row-age', ageWords(done.at, Date.now())));
+  return node;
 }

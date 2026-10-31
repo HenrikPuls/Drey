@@ -15,16 +15,19 @@ import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-
 import {
   branchForTicket,
   openTicketCount,
+  TICKET_PRIORITIES,
   type BoardSnapshot,
   type CreateResult,
   type MutationResult,
   type ProjectRef,
   type TicketCard,
+  type TicketPriority,
+  type TicketTrack,
 } from '../shared/tickets';
 import { needsBlockedConfirm } from './blocked-view';
 import { PRIORITY_LABEL, createGroupFoldStore, workListNode, type WorkPanelDeps } from './work-panel';
 import { createRunComposer } from './run-composer';
-import { ideaPhaseIds, queueTargetOf } from './work-groups';
+import { ageWords, checkpointActionOf, ideaPhaseIds, queueTargetOf, workGroups } from './work-groups';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import { createTicketHeader, ticketLogFold } from './ticket-header';
@@ -404,21 +407,16 @@ function buildBoardView(api: DreyPluginApi): BoardView {
 
 /** What the Work list may do — the store's actions, behind one seam. */
 function workPanelDeps(api: DreyPluginApi): WorkPanelDeps {
-  return {
+  const deps: WorkPanelDeps = {
     api,
     openTicket: (card) => void openTicketPage(api, card),
-    move: (card, to) => moveTicket(api, card, to),
-    accept: (card) => void runMutation(`Accepting ${card.id}`, () => invokeBoard('archive', { id: card.id })),
     setPriority: (card, priority) =>
       void runMutation('Setting the priority', () => invokeBoard('setPriority', { id: card.id, priority })),
-    startDialog: (card, mode) => void startInteractive(api, card, mode),
-    openRunModal: (card) => openRunModal(api, card),
-    openMenu: (card, at) => openCardMenu(api, card, at, runMutation, (path) => openTicketFile(api, path)),
-    // The composer's send path (req-75 W2): an option tap is the answer.
-    answer: (_card, run, text) => {
-      void runMutation('Sending', () => invokeBoard('fleetSend', { runId: run.id, text }));
-    },
+    setTrack: (card, track) => void runMutation('Setting the track', () => invokeBoard('setTrack', { id: card.id, track })),
+    // The row menu shares the panel's seams (Track › / Priority ›).
+    openMenu: (card, at) => openCardMenu(api, card, at, runMutation, (path) => openTicketFile(api, path), deps),
   };
+  return deps;
 }
 
 /**
@@ -451,6 +449,11 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       if (snapshot === null || snapshot.vaultId === null) {
         return null;
       }
+      // Needs you beats open: what waits on the owner is the panel's point.
+      const needs = workGroups(snapshot, liveRuns()).needs.length;
+      if (needs > 0) {
+        return `${needs} need you`;
+      }
       const open = openTicketCount(snapshot);
       return open > 0 ? `${open} open` : null;
     },
@@ -482,8 +485,8 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
 
       const newButton = el('button', 'icon-btn');
       newButton.type = 'button';
-      newButton.title = 'New ticket';
-      newButton.setAttribute('aria-label', 'New ticket');
+      newButton.title = 'New idea';
+      newButton.setAttribute('aria-label', 'New idea');
       newButton.append(api.ui.icon('plus', 14));
       newButton.addEventListener('click', () => {
         if (snapshot?.vaultId != null) {
@@ -498,18 +501,15 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       refreshButton.append(api.ui.icon('refresh-cw', 14));
       refreshButton.addEventListener('click', () => void refreshBoard());
 
-      // req-60: status chip │ view controls (req-69) │ board actions │ chain controls │ overflow.
-      const fleet = fleetHeaderNode();
+      // req-75 W1b: project · spacer · + · refresh · master · ⋯ — the
+      // fleet summary lives in the panel footer now, with the workers.
       const viewControls = boardViewControlsNode(api);
       const actions = el('span', 'tickets-head-group');
       actions.append(newButton, refreshButton);
-      // The chain's master switch — meaningful wherever a tickets board
-      // exists; the runner side decides whether anything is automatic.
       host.classList.add('tickets-panel-head');
-      host.append(project, fleet.node, viewControls.node, actions, masterControlNode(api), headerMenuButton(api));
+      host.append(project, viewControls.node, el('span', 'tickets-head-spacer'), actions, masterControlNode(api), headerMenuButton(api));
       return () => {
         projectPainters.delete(paintProjects);
-        fleet.dispose();
         viewControls.dispose();
       };
     },
@@ -520,16 +520,7 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       views.add(view);
       panel.append(view.root);
       view.render();
-      // The header group follows the panel's width (req-60).
-      const widthObserver = new ResizeObserver((entries) => {
-        panelWidth = entries[0]?.contentRect.width ?? 0;
-        for (const listener of panelWidthListeners) {
-          listener();
-        }
-      });
-      widthObserver.observe(panel);
       return () => {
-        widthObserver.disconnect();
         views.delete(view);
       };
     },
@@ -910,66 +901,47 @@ function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null): HTMLElem
     ].join('\n');
     right.append(warn);
   }
-  if (right.childElementCount > 0) {
-    bar.append(right);
-  }
-  return bar.childElementCount === 0 ? null : bar;
+  bar.append(fleetFooterNode(), right);
+  return bar;
 }
 
-/** Below this panel width the header group drops its numbers (they stay in the tooltip). */
-const HEAD_FLEET_NARROW_PX = 480;
-
-/** Below this one the group is its light alone. */
-const HEAD_FLEET_TINY_PX = 380;
-
-/** The Tickets panel's current width (its body is as wide as its header); 0 before the first measure. */
-let panelWidth = 0;
-const panelWidthListeners = new Set<() => void>();
-
 /**
- * The fleet's status in the panel header (req-60): the worst light, the
- * states in words, tokens in flight and the oldest run's age — one
- * compact group before the header buttons, the long form in its tooltip.
- * Repaints on every fleet update and once a second for the clock.
+ * The footer's left half (req-75 W1b): the worst light of the live runs
+ * and who is out there — one line per provider with a live run. Null
+ * when nothing runs and no light is worth a dot.
  */
-function fleetHeaderNode(): { node: HTMLElement; dispose: () => void } {
-  const node = el('span', 'tickets-head-fleet');
-  const light = el('span', 'tickets-light');
-  const label = el('span', 'tickets-head-fleet-label');
-  const numbers = el('span', 'tickets-head-fleet-numbers');
-  node.append(light, label, numbers);
-  const paint = (): void => {
-    const summary = fleetSummary(liveRuns(), Date.now());
-    node.hidden = summary === null;
-    node.toggleAttribute('data-narrow', panelWidth > 0 && panelWidth < HEAD_FLEET_NARROW_PX);
-    node.toggleAttribute('data-tiny', panelWidth > 0 && panelWidth < HEAD_FLEET_TINY_PX);
-    if (summary === null) {
-      return;
+function fleetFooterNode(): HTMLElement {
+  const runs = liveRuns();
+  const left = el('span', 'tickets-statusbar-fleet');
+  if (runs.length === 0) {
+    left.append(el('span', 'tickets-light tickets-light-idle'), el('span', undefined, 'No workers running'));
+    return left;
+  }
+  const summary = fleetSummary(runs, Date.now());
+  left.append(el('span', `tickets-light tickets-light-${summary === null ? 'idle' : summary.light}`));
+  const byProvider = new Map<string, number>();
+  for (const run of runs) {
+    byProvider.set(run.provider, (byProvider.get(run.provider) ?? 0) + 1);
+  }
+  const text = [
+    `${runs.length} worker${runs.length === 1 ? '' : 's'}`,
+    ...[...byProvider].map(([provider, n]) => `${workerLabelOf(provider)} ${n}`),
+  ].join(' · ');
+  left.append(el('span', undefined, text));
+  const long = [text, summary === null ? '' : summary.label].filter((part) => part !== '').join(' · ');
+  left.title = long;
+  left.setAttribute('aria-label', long);
+  return left;
+}
+
+/** A provider id as the footer names it (`opencode` → `OpenCode`). */
+function workerLabelOf(provider: string): string {
+  for (const [value, label] of WORKER_LABEL) {
+    if (value === provider) {
+      return label;
     }
-    light.className = `tickets-light tickets-light-${summary.light}`;
-    label.textContent = summary.label;
-    const age = summary.ageMs === null ? '' : spanClock(summary.ageMs);
-    numbers.textContent = `${formatTokens(summary.tokens)} tok${age === '' ? '' : ` · ${age}`}`;
-    const long = [
-      summary.label,
-      `${formatTokens(summary.tokens)} tokens in flight (in + out of all live runs)`,
-      ...(age === '' ? [] : [`the oldest run has been at it for ${age}`]),
-    ].join(' · ');
-    node.title = long;
-    node.setAttribute('aria-label', long);
-  };
-  fleetListeners.add(paint);
-  panelWidthListeners.add(paint);
-  const tick = setInterval(paint, 1_000);
-  paint();
-  return {
-    node,
-    dispose: () => {
-      fleetListeners.delete(paint);
-      panelWidthListeners.delete(paint);
-      clearInterval(tick);
-    },
-  };
+  }
+  return provider;
 }
 
 function openRunModal(api: DreyPluginApi, card: TicketCard): void {
@@ -1554,38 +1526,95 @@ function mountThread(api: DreyPluginApi, host: HTMLElement): () => void {
 
 function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string): () => void {
   const wrap = el('div', 'tickets-takeover tickets-thread');
-  const banner = el('div', 'tickets-takeover-banner');
-  const titleRow = el('div', 'tickets-takeover-title-row');
+  // The header (req-75 W1b): the run's dot, the title, the run in one
+  // muted line, then the Ticket file link and the run controls.
+  const head = el('div', 'tickets-thread-head');
   const light = el('span', 'tickets-light');
   const titleNode = el('span', 'tickets-thread-title');
-  const statusNode = el('div', 'tickets-thread-status');
+  const metaNode = el('span', 'tickets-thread-meta');
+  const fileLink = el('button', 'tickets-thread-filelink', 'Ticket file');
+  fileLink.type = 'button';
+  fileLink.title = 'Open the ticket file in the editor';
+  fileLink.addEventListener('click', () => {
+    const card = boardCard(ticketId);
+    if (card !== null) {
+      openTicketFile(api, card.path);
+    }
+  });
   const controls = el('span', 'tickets-takeover-controls');
-  const button = (icon: string, label: string, title: string, onClick: () => void): HTMLButtonElement => {
-    const b = el('button', 'tickets-takeover-btn');
+  const iconButton = (icon: string, title: string, onClick: () => void): HTMLButtonElement => {
+    const b = el('button', 'tickets-takeover-btn tickets-thread-iconbtn');
     b.type = 'button';
     b.title = title;
     b.setAttribute('aria-label', title);
-    b.append(api.ui.icon(icon, 13), document.createTextNode(label));
+    b.append(api.ui.icon(icon, 13));
     b.addEventListener('click', onClick);
     return b;
   };
-  const openRun = button('external-link', 'Open run', 'Open the run in its own tab — metrics, hand back and resume', () => {
+  const openRun = iconButton('external-link', 'Open the run in its own tab — metrics, hand back and resume', () => {
     const run = threadRun(ticketId);
     if (run !== null) {
       openTakeover(api, run);
     }
   });
-  const stopRun = button('square', 'Stop run', 'Stop the run — the ticket stays where it is', () => {
+  const stopRun = iconButton('square', 'Stop the run — the ticket stays where it is', () => {
     const run = threadRun(ticketId);
     if (run !== null) {
       void runMutation('Stopping the run', () => invokeBoard('fleetStop', { runId: run.id, reason: null }));
     }
   });
   controls.append(openRun, stopRun);
-  titleRow.append(light, el('span', 'tickets-takeover-ticket', ticketId), titleNode, el('span', 'tickets-takeover-spacer'), controls);
-  banner.append(titleRow, statusNode);
+  head.append(light, titleNode, metaNode, el('span', 'tickets-takeover-spacer'), fileLink, controls);
 
   const endMoves = createEndMoves();
+  // The decision bar (req-75 W1b): the buttons W1 drew on a Needs-you
+  // row, now above the composer where the ticket is read.
+  const decisionBar = el('div', 'tickets-thread-decisions');
+  decisionBar.hidden = true;
+  const decisionButton = (label: string, title: string, primary: boolean, onClick: () => void): HTMLButtonElement => {
+    const b = el('button', `tickets-takeover-btn${primary ? ' tickets-takeover-btn-primary' : ''}`, label);
+    b.type = 'button';
+    b.title = title;
+    b.addEventListener('click', onClick);
+    return b;
+  };
+  const paintDecisions = (): void => {
+    const card = boardCard(ticketId);
+    if (card === null || snapshot === null) {
+      decisionBar.hidden = true;
+      return;
+    }
+    const need = workGroups(snapshot, fleetRuns)
+      .needs.find((row) => row.card.id === ticketId)?.need ?? null;
+    if (need === null || need.kind !== 'checkpoint') {
+      decisionBar.hidden = true;
+      return;
+    }
+    const action = checkpointActionOf(snapshot, need.phase);
+    const live = runForCard(ticketId);
+    decisionBar.replaceChildren();
+    if (action.kind === 'accept') {
+      decisionBar.append(
+        decisionButton(action.label, 'Accept the result — the ticket goes to the archive', true, () =>
+          void runMutation(`Accepting ${ticketId}`, () => invokeBoard('archive', { id: ticketId })),
+        ),
+      );
+    } else {
+      decisionBar.append(
+        decisionButton(action.label, `Your review is done — move the ticket on to ${action.label.replace('Approve → ', '')}`, true, () =>
+          moveTicket(api, card, action.to),
+        ),
+      );
+      if (interactiveModeFor(need.phase, snapshot.columns) === 'refine' && live === null) {
+        decisionBar.append(
+          decisionButton('Refine with agent', 'Talk it through with a worker first', false, () =>
+            void startInteractive(api, card, 'refine'),
+          ),
+        );
+      }
+    }
+    decisionBar.hidden = false;
+  };
   const transcript = createTranscriptView(api, '');
   transcript.element.classList.add('tickets-takeover-transcript');
   const empty = el('div', 'tickets-thread-empty');
@@ -1647,14 +1676,20 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     const live = isLive(run);
     titleNode.textContent = card?.meta.title ?? '(not on the board)';
     const status = run === null ? null : workerStatus(run, Date.now());
-    light.className = `tickets-light tickets-light-${live && status !== null ? status.light : 'idle'}`;
-    const phase = card === null ? null : (snapshot?.columns.find((c) => c.phase.id === card.phase)?.phase.title ?? card.phase);
-    statusNode.textContent = [
-      phase,
-      run === null ? null : live ? `${run.provider} · ${status?.label ?? run.state}` : `last run ${run.state}`,
+    // The dot: the run's light, amber the moment it waits on the owner.
+    const waiting = live && run !== null && run.waiting != null;
+    light.className = `tickets-light tickets-light-${waiting ? 'waiting' : live && status !== null ? status.light : 'idle'}`;
+    // One muted line: state · provider · model · age (parts without data stay out).
+    const state = run === null ? null : waiting ? 'waiting for you' : !live ? 'ended' : run.turn === 'busy' ? 'working' : 'idle';
+    metaNode.textContent = [
+      state,
+      run === null ? null : workerLabelOf(run.provider),
+      run.model ?? null,
+      run === null ? null : ageWords(run.startedAt, Date.now()),
     ]
       .filter((part): part is string => part !== null && part !== '')
       .join(' · ');
+    fileLink.hidden = card === null;
     openRun.hidden = run === null;
     stopRun.hidden = !live;
     transcript.element.hidden = run === null;
@@ -1669,6 +1704,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     if (run !== null && run.id !== pulledFor) {
       pull();
     }
+    paintDecisions();
     composer.paint();
     endMoves.paint(run);
   };
@@ -1680,7 +1716,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   paint();
   const timer = setInterval(pull, 2_000);
   const tick = setInterval(paint, 1_000);
-  wrap.append(banner, endMoves.element, empty, transcript.element, composer.element);
+  wrap.append(head, empty, transcript.element, endMoves.element, decisionBar, composer.element);
   host.append(wrap);
   return () => {
     alive = false;
@@ -1900,10 +1936,18 @@ function pastRunRow(run: RunInfo): HTMLElement {
   return row;
 }
 
+/** A settings row (Track ›, Priority ›): the tick marks the current one. */
+function menuRadioRow(label: string, checked: boolean): HTMLElement {
+  const row = el('span', 'tickets-menu-radio');
+  row.append(el('span', 'tickets-menu-check', checked ? '✓' : ''), el('span', 'tickets-menu-label', label));
+  return row;
+}
+
 /**
- * A Work row's menu (req-75 W1): the moves first — queue an idea for the
- * fleet or take it back, any phase by name — then the runs, then the
- * maintenance rows behind "More", and Archive last.
+ * A Work row's menu (req-75 W1/W1b): the moves first — queue an idea for
+ * the fleet or take it back, any phase by name — then the ticket's own
+ * settings (track, priority), then the runs, then the maintenance rows
+ * behind "More", and Archive last.
  */
 function openCardMenu(
   api: DreyPluginApi,
@@ -1911,6 +1955,7 @@ function openCardMenu(
   at: { readonly x: number; readonly y: number },
   run: (label: string, invoke: () => Promise<unknown>) => Promise<MutationResult>,
   openFile: (path: string) => void,
+  actions: { setPriority(card: TicketCard, priority: TicketPriority): void; setTrack(card: TicketCard, track: TicketTrack | null): void },
 ): void {
   for (const other of document.querySelectorAll('.tickets-menu')) {
     other.remove();
@@ -1976,6 +2021,38 @@ function openCardMenu(
       ),
     );
   }
+  menu.append(el('div', 'tickets-menu-sep'));
+
+  // The ticket's own settings (req-75 W1b): the track from triage and
+  // the priority — radio rows over the one-commit writers.
+  submenus.push(
+    appendSubmenu(
+      menu,
+      'Track',
+      (
+        [
+          ['Auto', 'auto', 'Runs on its own — planned, built, tested and reviewed'],
+          ['Shape', 'shape', 'A plan-mode dialog with you before anything runs'],
+          ['Not triaged', null, 'No track yet — decide later'],
+        ] as const
+      ).map(([label, value, title]) => ({
+        content: menuRadioRow(label, value === card.meta.track),
+        title,
+        onClick: () => actions.setTrack(card, value),
+      })),
+      close,
+    ),
+    appendSubmenu(
+      menu,
+      'Priority',
+      TICKET_PRIORITIES.map((priority) => ({
+        content: menuRadioRow(PRIORITY_LABEL[priority], priority === card.meta.priority),
+        title: `Priority ${PRIORITY_LABEL[priority]}`,
+        onClick: () => actions.setPriority(card, priority),
+      })),
+      close,
+    ),
+  );
   menu.append(el('div', 'tickets-menu-sep'));
 
   // The one-click interactive dialog (req-65, req-72): plan on the first

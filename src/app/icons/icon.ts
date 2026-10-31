@@ -94,7 +94,13 @@ export type IconName =
   | 'triangle-alert'
   | 'brain'
   | 'play'
-  | 'pause';
+  | 'pause'
+  | 'external-link'
+  | 'messages-square'
+  | 'mic'
+  | 'rocket'
+  | 'hand'
+  | 'users';
 
 const ICONS: Record<IconName, readonly IconShape[]> = {
   // Lucide "play" / "pause" -- the tickets board's chain master and
@@ -513,6 +519,42 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
     { kind: 'path', d: 'M3 6h18' },
     { kind: 'path', d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6' },
     { kind: 'path', d: 'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' },
+  ],
+  // Lucide "external-link" / "messages-square" -- the tickets thread's
+  // open-run button and its tab icon (req-75 W1).
+  'external-link': [
+    { kind: 'path', d: 'M15 3h6v6' },
+    { kind: 'path', d: 'M10 14 21 3' },
+    { kind: 'path', d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' },
+  ],
+  'messages-square': [
+    { kind: 'path', d: 'M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z' },
+    { kind: 'path', d: 'M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1' },
+  ],
+  // Lucide "mic" / "rocket" / "hand" / "users" -- req-75's later stages
+  // (voice capture, Ready to try, the Workers view's hand-over, W4).
+  mic: [
+    { kind: 'path', d: 'M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z' },
+    { kind: 'path', d: 'M19 10v2a7 7 0 0 1-14 0v-2' },
+    { kind: 'path', d: 'M12 19v3' },
+  ],
+  rocket: [
+    { kind: 'path', d: 'M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z' },
+    { kind: 'path', d: 'm12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z' },
+    { kind: 'path', d: 'M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0' },
+    { kind: 'path', d: 'M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5' },
+  ],
+  hand: [
+    { kind: 'path', d: 'M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0' },
+    { kind: 'path', d: 'M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2' },
+    { kind: 'path', d: 'M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8' },
+    { kind: 'path', d: 'M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15' },
+  ],
+  users: [
+    { kind: 'path', d: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2' },
+    { kind: 'circle', cx: 9, cy: 7, r: 4 },
+    { kind: 'path', d: 'M22 21v-2a4 4 0 0 0-3-3.87' },
+    { kind: 'path', d: 'M16 3.13a4 4 0 0 1 0 7.75' },
   ],
 };
 
