@@ -69,6 +69,11 @@ thread (`run-composer.ts`). Notifications open the ticket page.
   dock's ~340 px and the full window with the thread open), and
   `ticket-card-menu`, `board-issues`, `interactive-dialog`,
   `ticket-header` moved to the Work rows.
+- Fixed on the way: a new ticket id is minted over the archive too
+  (`archivedTicketIds`) — ids of archived tickets were handed out
+  again (T-0051, T-0052 and T-0053 each exist twice in the owner's
+  repo, once archived). The design canvas is in the repo as
+  `docs/design/work-panel/` (the reference for the next stages).
 - Docs: `specs/ticket-schema.md` (order.md retired, check 8), the
   manual's Tickets chapter, `plugins/tickets/BOARD.md`, docs/05 §5.41
   (Panel — the Work list, Ticket thread), docs/06 §6.64/§6.70 and the

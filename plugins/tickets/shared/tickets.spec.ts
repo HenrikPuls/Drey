@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ageOf,
   branchForTicket,
+  archivedTicketIds,
   nextTicketId,
   openTicketCount,
   phaseDirectoryName,
@@ -51,6 +52,12 @@ describe('nextTicketId', () => {
 
   it('ignores non-id strings', () => {
     expect(nextTicketId(['readme', 'T-0001'])).toBe('T-0002');
+  });
+
+  it('counts archived ids, so an archived id is never minted again', () => {
+    const archived = archivedTicketIds(['tickets/archive/T-0053.md', 'tickets/10-inbox/T-0050.md', 'tickets/archive/x/T-0099.md', 'notes/T-0060.md']);
+    expect(archived).toEqual(['T-0053']);
+    expect(nextTicketId(['T-0050', ...archived])).toBe('T-0054');
   });
 });
 

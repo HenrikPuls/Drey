@@ -21,6 +21,7 @@ import type {
   VaultChangeEvent,
 } from '../../../shared/plugin-api';
 import {
+  archivedTicketIds,
   nextTicketId,
   TICKET_PRIORITIES,
   TICKETS_ARCHIVE_DIR,
@@ -633,8 +634,12 @@ class BoardService {
       if (snap.pipeline.length === 0) {
         return { ok: false, error: snap.pipelineError ?? 'the pipeline is empty' };
       }
-      const ids = snap.columns.flatMap((c) => c.tickets.map((t) => t.id));
-      const id = nextTicketId(ids);
+      // Archived ids count too: an id is never reused, even after the
+      // ticket with the highest one was archived.
+      const id = nextTicketId([
+        ...snap.columns.flatMap((c) => c.tickets.map((t) => t.id)),
+        ...archivedTicketIds(await this.ctx.vault.listMarkdownFiles({ vaultId: vault.id })),
+      ]);
       const firstPhase = snap.pipeline[0]!.id;
       const firstDir = resolvePhaseDir(await this.ticketDirs(vault), 1, firstPhase);
       const path = `tickets/${firstDir}/${id}.md`;

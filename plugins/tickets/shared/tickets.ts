@@ -363,6 +363,15 @@ export function nextTicketId(existing: readonly string[]): string {
   return `T-${String(max + 1).padStart(4, '0')}`;
 }
 
+/** The ids of the archived tickets among vault-relative paths — minting
+ *  counts them, so an archived id is never handed out again. */
+export function archivedTicketIds(paths: readonly string[]): string[] {
+  const prefix = `${TICKETS_ARCHIVE_DIR}/`;
+  return paths
+    .filter((p) => p.startsWith(prefix) && p.endsWith('.md') && !p.slice(prefix.length).includes('/'))
+    .map((p) => p.slice(prefix.length, -'.md'.length));
+}
+
 /** Result of every mutation IPC call (`create` / `transition` / `reorder` /
  *  `claim` / `initialize`): `ok` with an optional warning line the panel
  *  shows, or a refusal with the reason. */
