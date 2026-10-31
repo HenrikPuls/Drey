@@ -278,6 +278,33 @@ the runner rely on:
   starts with a backticked command; the machine gate runs exactly
   these, locally, in the worker's checkout (ADR-0076: validator, not
   CI).
+- `## Changes` — what the Ready page shows (req-75 W3, ADR-0087
+  decision 3). The **build worker** writes or updates it before it
+  ends — the section is the contract, no diff parsing on the desk —
+  and the page (`plugins/tickets/shared/changes.ts`) reads it
+  tolerantly: labels case-insensitive, `-`/`*` bullets, missing parts
+  simply left out. The exact format the worker keeps:
+
+  ```markdown
+  ## Changes
+
+  **What changed for you:** The command palette opens once, even when Ctrl+P is pressed twice quickly.
+  Nothing else you can see has changed.
+
+  **Where:**
+  - M `src/app/palette/palette.service.ts` — a second open while one is opening is ignored
+  - A `src/app/palette/palette.service.spec.ts` — two new tests for the double press
+
+  **Checks:**
+  - 412 tests passed, lint, the four typechecks, import cycles
+
+  **How to try it:** 1. Launch this version · 2. Press Ctrl+P twice, fast · 3. One palette opens
+  ```
+
+  Status letters are `A` (added), `M` (modified), `D` (deleted), `R`
+  (renamed); a path without a why is fine. The page also reads the
+  ticket's story ("How it got here") from the Log section alone — no
+  frontmatter is added for any of this.
 - `## Log` — append-only. Machine-appended entries use the exact line
   shape `- '<UTC timestamp>' <who> — <text>`; humans may append in any
   readable shape. Every transition, claim, takeover, injection, stop
@@ -433,7 +460,13 @@ menu opens a terminal there ("Open work folder in terminal": run
 repo. `worktrees` (T-0044, ADR-0080) overrides where the fleet's
 worktrees for this repo live — an absolute folder, or one relative to
 the tickets repo root; the worktree is `<base>/<ticket-id>`. Unset (the
-default) is `<ticketsRepo>/_worktrees`. `link` (req-56) names
+default) is `<ticketsRepo>/_worktrees`. `launch` (req-75 W3,
+T-0057) is the command that starts the repository's program in a
+ticket's worktree — "Launch this version" runs it there in a new
+console; a non-string value warns and reads as unset. Unset means the
+default `powershell -NoProfile -ExecutionPolicy Bypass -File dev.ps1
+-Built -Multi` when the worktree has a `dev.ps1`, else no launch (the
+button refuses with a hint at this file). `link` (req-56) names
 git-ignored folders of the checkout at `path` — one name or a list,
 relative, never leaving the repo — that the runner links into every
 fleet worktree (a junction on Windows, a directory symlink elsewhere)

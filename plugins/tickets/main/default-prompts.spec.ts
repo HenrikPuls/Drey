@@ -26,6 +26,9 @@ describe('shipped prompts', () => {
       expect(await fsp.readFile(path.join(SHIPPED_PROMPTS_DIR, `${ref}.md`), 'utf8')).toBe(text);
     }
     expect(prompts.get('plan-default')).toContain('`## Plan`');
+    // The build step ends on the Changes section the Ready page reads (req-75 W3).
+    expect(prompts.get('build-default')).toContain('## Changes');
+    expect(prompts.get('build-default')).toContain('**What changed for you:**');
     // The interactive defaults (req-65): interview first, never move the
     // ticket themselves.
     expect(prompts.get('plan-interactive-default')).toContain('QUESTION:');

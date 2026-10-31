@@ -163,6 +163,7 @@ describe('cleanWorktrees (real git)', () => {
       path: repo,
       worker: null,
       worktrees: null,
+      launch: null,
     };
   });
 

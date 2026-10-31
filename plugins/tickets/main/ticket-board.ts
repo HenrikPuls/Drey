@@ -286,19 +286,21 @@ export function reorderPipelinePhases(text: string, order: readonly string[]): s
 export interface ReposParse {
   readonly repos: readonly RepoRef[];
   readonly error: string | null;
+  /** Tolerated entries (a non-string `launch:`), one message each. */
+  readonly warnings: readonly string[];
 }
 
 export function parseRepos(text: string | null): ReposParse {
   if (text === null) {
-    return { repos: [], error: null };
+    return { repos: [], error: null, warnings: [] };
   }
   const { yamlText, hadFence } = splitFrontmatter(text);
   if (!hadFence || yamlText === null) {
-    return { repos: [], error: 'repos.md has no frontmatter fence' };
+    return { repos: [], error: 'repos.md has no frontmatter fence', warnings: [] };
   }
   const doc = parseDocument(yamlText);
   if (doc.errors.length > 0) {
-    return { repos: [], error: `repos.md does not parse: ${doc.errors[0]!.message}` };
+    return { repos: [], error: `repos.md does not parse: ${doc.errors[0]!.message}`, warnings: [] };
   }
   const parsed = doc.toJS() as unknown;
   const root = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
@@ -306,20 +308,29 @@ export function parseRepos(text: string | null): ReposParse {
     : {};
   const rawRepos = root['repos'];
   if (rawRepos === undefined || rawRepos === null) {
-    return { repos: [], error: 'repos.md needs a repos mapping' };
+    return { repos: [], error: 'repos.md needs a repos mapping', warnings: [] };
   }
   if (typeof rawRepos !== 'object' || Array.isArray(rawRepos)) {
-    return { repos: [], error: 'repos.md: repos must be a mapping of name -> {url, branch, policy}' };
+    return { repos: [], error: 'repos.md: repos must be a mapping of name -> {url, branch, policy}', warnings: [] };
   }
   const repos: RepoRef[] = [];
+  const warnings: string[] = [];
   for (const [name, entry] of Object.entries(rawRepos as Record<string, unknown>)) {
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-      return { repos: [], error: `repos.md: repo "${name}" must be a mapping` };
+      return { repos: [], error: `repos.md: repo "${name}" must be a mapping`, warnings };
     }
     const map = entry as Record<string, unknown>;
     const url = typeof map['url'] === 'string' ? map['url'].trim() : '';
     if (url === '') {
-      return { repos: [], error: `repos.md: repo "${name}" needs a url` };
+      return { repos: [], error: `repos.md: repo "${name}" needs a url`, warnings };
+    }
+    let launch: string | null = null;
+    if (map['launch'] !== undefined && map['launch'] !== null) {
+      if (typeof map['launch'] === 'string' && map['launch'].trim() !== '') {
+        launch = map['launch'].trim();
+      } else {
+        warnings.push(`repos.md: repo "${name}" launch must be a command string`);
+      }
     }
     repos.push({
       name,
@@ -329,16 +340,17 @@ export function parseRepos(text: string | null): ReposParse {
       path: typeof map['path'] === 'string' && map['path'].trim() !== '' ? map['path'].trim() : null,
       worker: typeof map['worker'] === 'string' && map['worker'].trim() !== '' ? map['worker'].trim() : null,
       worktrees: typeof map['worktrees'] === 'string' && map['worktrees'].trim() !== '' ? map['worktrees'].trim() : null,
+      launch,
     });
     const links = parseRepoLinks(map['link']);
     if (typeof links === 'string') {
-      return { repos: [], error: `repos.md: repo "${name}" ${links}` };
+      return { repos: [], error: `repos.md: repo "${name}" ${links}`, warnings };
     }
     if (links.length > 0) {
       repos[repos.length - 1] = { ...repos[repos.length - 1]!, link: links };
     }
   }
-  return { repos, error: null };
+  return { repos, error: null, warnings };
 }
 
 /**
@@ -382,6 +394,9 @@ export function reposFileText(repos: readonly RepoRef[], prose: string): string 
     }
     if (repo.worktrees !== null) {
       entry['worktrees'] = repo.worktrees;
+    }
+    if (repo.launch !== null) {
+      entry['launch'] = repo.launch;
     }
     if (repo.link !== undefined && repo.link.length > 0) {
       entry['link'] = [...repo.link];
@@ -508,6 +523,9 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
   const reposParse = parseRepos(input.reposText);
   if (reposParse.error !== null) {
     issues.push({ level: 'error', message: reposParse.error });
+  }
+  for (const warning of reposParse.warnings) {
+    issues.push({ level: 'warning', message: warning });
   }
   const repoNames = new Set(reposParse.repos.map((r) => r.name));
 

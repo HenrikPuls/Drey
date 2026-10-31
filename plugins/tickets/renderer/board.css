@@ -2299,9 +2299,294 @@ details[open] > summary > .tickets-tx-think-preview {
 }
 
 .tickets-thread-empty[hidden],
-.tickets-takeover-transcript[hidden] {
+.tickets-takeover-transcript[hidden],
+.tickets-ready[hidden] {
   display: none;
 }
+
+/* ---- the Ready card and its story (req-75 W3, canvas "3c · Ready to try") ---- */
+
+/* The thread pane is the layout container: from 900 px the story is a
+   right column beside the card, narrower it sits below. */
+.tickets-thread {
+  container-type: inline-size;
+}
+
+.tickets-ready {
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  overflow: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+@container (min-width: 900px) {
+  .tickets-ready {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .tickets-ready-story {
+    border-left: 1px solid var(--border);
+    border-top: 0;
+  }
+}
+
+.tickets-ready-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 20px 24px;
+}
+
+/* The card: the canvas header (kicker, title, chips) over a bordered
+   body of sections and the three buttons. */
+.tickets-ready-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tickets-ready-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.tickets-ready-kicker {
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.tickets-ready-title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.tickets-ready-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tickets-ready-chip {
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 0 8px;
+  color: var(--text-4);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tickets-ready-chip-track {
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.tickets-ready-chip-ready {
+  border: 0;
+  background: var(--status-added);
+  color: var(--accent-contrast);
+  padding: 1px 8px;
+}
+
+.tickets-ready-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 24px;
+  background: var(--bg-dock);
+  border: 1px solid var(--status-added);
+  border-radius: 16px;
+}
+
+.tickets-ready-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tickets-ready-section > b {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.tickets-ready-for-you {
+  margin: 0;
+  font-size: 15px;
+  line-height: 22px;
+  white-space: pre-wrap;
+}
+
+.tickets-ready-muted {
+  margin: 0;
+  color: var(--text-4);
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.tickets-ready-file {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 45%) minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+
+.tickets-ready-status {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.tickets-ready-status-A {
+  color: var(--status-added);
+}
+
+.tickets-ready-status-M {
+  color: var(--status-modified);
+}
+
+.tickets-ready-status-D {
+  color: var(--status-deleted);
+}
+
+.tickets-ready-status-R {
+  color: var(--accent-fg);
+}
+
+.tickets-ready-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.tickets-ready-why {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-4);
+}
+
+.tickets-ready-check {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.tickets-ready-tick {
+  color: var(--status-added);
+  font-weight: 700;
+}
+
+.tickets-ready-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 4px;
+}
+
+.tickets-ready-launch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  font-weight: 600;
+}
+
+.tickets-ready-sendback {
+  color: var(--text-4);
+}
+
+.tickets-ready-hint {
+  margin: 0;
+  color: var(--text-4);
+  font-size: 12px;
+}
+
+/* The story column beside the card. */
+.tickets-ready-story {
+  flex: 0 0 320px;
+  min-width: 0;
+  padding: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.tickets-story {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tickets-story-head {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.tickets-story-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.tickets-story-at {
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.tickets-story-what {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tickets-story-who {
+  color: var(--text-4);
+}
+
+.tickets-story-total {
+  color: var(--text-4);
+  font-size: 12px;
+}
+
+/* The Send back… modal (canvas): one heading, one labelled note. */
+.tickets-sendback {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 380px;
+}
+
+.tickets-sendback h3 {
+  margin: 0;
+}
+
+.tickets-sendback-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tickets-sendback-note {
+  resize: vertical;
+}
+
+.tickets-sendback-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 
 /* A dot that waits on the owner is the modified hue, whatever the run's
    own light says. */

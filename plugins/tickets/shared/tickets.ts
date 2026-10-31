@@ -315,6 +315,12 @@ export interface RepoRef {
    * `<ticketsRepo>/_worktrees` (ADR-0080).
    */
   readonly worktrees: string | null;
+  /**
+   * The command that starts the repository's program in a worktree, run
+   * there in a new console — req-75 W3 / T-0057; null = `dev.ps1 -Built
+   * -Multi` when the worktree has a `dev.ps1`, else no launch.
+   */
+  readonly launch: string | null;
   /** Git-ignored folders a fleet worktree links from the checkout (`link:`, req-56); absent = none. */
   readonly link?: readonly string[];
 }

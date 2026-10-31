@@ -27,6 +27,7 @@ const repo = (over: Partial<RepoRef> = {}): RepoRef => ({
   path: 'W:/drey',
   worker: null,
   worktrees: null,
+  launch: null,
   ...over,
 });
 

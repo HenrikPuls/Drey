@@ -27,7 +27,9 @@ import {
 import { needsBlockedConfirm } from './blocked-view';
 import { PRIORITY_LABEL, createGroupFoldStore, workListNode, type WorkPanelDeps } from './work-panel';
 import { createRunComposer } from './run-composer';
-import { ageWords, checkpointActionOf, ideaPhaseIds, queueTargetOf, workGroups } from './work-groups';
+import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups } from './work-groups';
+import { readyCardNode, storyNode } from './ready-view';
+import type { ChangesReply } from '../shared/changes';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import { createTicketHeader, ticketLogFold } from './ticket-header';
@@ -1568,6 +1570,114 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   head.append(light, titleNode, metaNode, el('span', 'tickets-takeover-spacer'), fileLink, controls);
 
   const endMoves = createEndMoves();
+  // --- the Ready card (req-75 W3) ---------------------------------------
+  // The canvas's bordered card above the transcript, its story beside
+  // it (a right column from 900 px pane width, below when narrower).
+  const readyWrap = el('div', 'tickets-ready');
+  readyWrap.hidden = true;
+  const readyMain = el('div', 'tickets-ready-main');
+  const readyStoryHost = el('aside', 'tickets-ready-story');
+  readyWrap.append(readyMain, readyStoryHost);
+  let readyPulledFor: string | null = null;
+  let readyReply: ChangesReply | null = null;
+  let readyKey = '';
+  /** The section + story of the ticket file, once per path (a move re-pulls). */
+  const pullReady = (): void => {
+    const card = boardCard(ticketId);
+    if (card === null || card.path === readyPulledFor) {
+      return;
+    }
+    readyPulledFor = card.path;
+    void invokeBoard('changes', { id: ticketId })
+      .then((reply) => {
+        readyReply = reply as ChangesReply;
+        paintReady();
+      })
+      .catch(() => undefined);
+  };
+  /** The Send back… modal (canvas): one note, one move back to the agent. */
+  const sendBackModal = (): void => {
+    const close = api.ui.showModal((host) => {
+      const box = el('div', 'tickets-sendback');
+      const head = el('h3', undefined, `Send ${ticketId} back`);
+      const field = el('label', 'tickets-sendback-field');
+      field.append(el('span', undefined, 'What should change?'));
+      const note = el('textarea', 'tickets-sendback-note');
+      note.rows = 4;
+      const actions = el('div', 'tickets-sendback-actions');
+      const cancel = el('button', 'tickets-takeover-btn', 'Cancel');
+      cancel.type = 'button';
+      const send = el('button', 'tickets-takeover-btn tickets-takeover-btn-primary', 'Send back');
+      send.type = 'button';
+      send.disabled = true;
+      note.addEventListener('input', () => {
+        send.disabled = note.value.trim() === '';
+      });
+      cancel.addEventListener('click', close);
+      send.addEventListener('click', () => {
+        const text = note.value;
+        close();
+        void runMutation(`Sending ${ticketId} back`, () => invokeBoard('sendBack', { id: ticketId, note: text }));
+      });
+      actions.append(el('span', 'tickets-takeover-spacer'), cancel, send);
+      field.append(note);
+      box.append(head, field, actions);
+      host.append(box);
+      note.focus();
+    });
+  };
+  /**
+   * Shows the card for a Needs-you `Ready to try` / `Review` ticket and
+   * for any ticket whose file carries a `## Changes` section; the
+   * decision bar's Accept becomes the card's buttons.
+   */
+  const paintReady = (): void => {
+    const card = boardCard(ticketId);
+    const snap = snapshot;
+    if (card === null || snap === null || snap.pipeline.length === 0) {
+      readyWrap.hidden = true;
+      readyKey = '';
+      return;
+    }
+    const need = workGroups(snap, fleetRuns).needs.find((row) => row.card.id === ticketId)?.need ?? null;
+    const kind = need !== null && need.kind === 'checkpoint' ? needKindLabel(need, snap) : null;
+    const reply = readyReply;
+    if (kind !== 'Ready to try' && kind !== 'Review' && (reply?.changes ?? null) === null) {
+      readyWrap.hidden = true;
+      readyKey = '';
+      return;
+    }
+    const terminal = snap.pipeline[snap.pipeline.length - 1]!.id === card.phase;
+    const key = JSON.stringify([card.id, card.meta.title, card.meta.track, card.meta.repo, terminal, reply]);
+    if (!readyWrap.hidden && readyKey === key) {
+      return;
+    }
+    readyKey = key;
+    readyWrap.hidden = false;
+    readyMain.replaceChildren(
+      readyCardNode(
+        {
+          onLaunch: () =>
+            void runMutation(`Launching ${ticketId}`, () => invokeBoard('launchVersion', { id: ticketId })),
+          onAccept: () =>
+            void runMutation(`Accepting ${ticketId}`, () => invokeBoard('acceptTicket', { id: ticketId })),
+          onSendBack: () => sendBackModal(),
+          icon: (name, size) => api.ui.icon(name, size),
+        },
+        {
+          id: card.id,
+          title: card.meta.title,
+          track: card.meta.track,
+          repo: card.meta.repo,
+          terminal,
+          changes: reply?.changes ?? null,
+        },
+      ),
+    );
+    readyStoryHost.replaceChildren(
+      storyNode({ story: reply?.story ?? [], totals: reply?.totals ?? { minutes: null, tokens: null } }),
+    );
+  };
   // The decision bar (req-75 W1b): the buttons W1 drew on a Needs-you
   // row, now above the composer where the ticket is read.
   const decisionBar = el('div', 'tickets-thread-decisions');
@@ -1588,6 +1698,11 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     const need = workGroups(snapshot, fleetRuns)
       .needs.find((row) => row.card.id === ticketId)?.need ?? null;
     if (need === null || need.kind !== 'checkpoint') {
+      decisionBar.hidden = true;
+      return;
+    }
+    // The Ready card's buttons replace the bar while it shows (req-75 W3).
+    if (!readyWrap.hidden) {
       decisionBar.hidden = true;
       return;
     }
@@ -1706,6 +1821,8 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     if (run !== null && run.id !== pulledFor) {
       pull();
     }
+    pullReady();
+    paintReady();
     paintDecisions();
     composer.paint();
     endMoves.paint(run);
@@ -1718,7 +1835,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   paint();
   const timer = setInterval(pull, 2_000);
   const tick = setInterval(paint, 1_000);
-  wrap.append(head, empty, transcript.element, endMoves.element, decisionBar, composer.element);
+  wrap.append(head, readyWrap, empty, transcript.element, endMoves.element, decisionBar, composer.element);
   host.append(wrap);
   return () => {
     alive = false;
