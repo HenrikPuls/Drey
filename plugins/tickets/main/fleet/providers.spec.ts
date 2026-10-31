@@ -206,6 +206,40 @@ describe('the claude-code adapter', () => {
     expect(proc.stdinWrites.at(-1)).toBe('<<end>>');
   });
 
+  it('a QUESTION: turn in the fixed shape carries it parsed (req-75 W2)', async () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    const shaped = [
+      'QUESTION: Which database?',
+      'Ticket: the store',
+      'Where: step 1',
+      'Why: undecided',
+      'Options:',
+      '1. SQLite — no server, fine locally',
+      '2. Postgres — one server for all',
+      'Recommendation: 1 — local first',
+    ].join('\n');
+    proc.stdout(JSON.stringify({ type: 'result', usage: {}, result: shaped }));
+    const waiting = events.find((e) => e.waiting !== undefined)?.waiting;
+    expect(waiting).toMatchObject({
+      kind: 'question',
+      text: 'Which database?\nTicket: the store\nWhere: step 1\nWhy: undecided\nOptions:\n1. SQLite — no server, fine locally\n2. Postgres — one server for all\nRecommendation: 1 — local first',
+      shaped: {
+        question: 'Which database?',
+        context: 'the store',
+        where: 'step 1',
+        why: 'undecided',
+        options: [
+          { n: 1, label: 'SQLite', consequence: 'no server, fine locally' },
+          { n: 2, label: 'Postgres', consequence: 'one server for all' },
+        ],
+        recommended: 1,
+        recommendationWhy: 'local first',
+      },
+    });
+  });
+
   it('a resume run carries --resume with the session ref', () => {
     const seen: string[][] = [];
     const spawnFn: SpawnFn = (_cmd, args) => {
@@ -553,6 +587,47 @@ describe('the opencode adapter', () => {
     await vi.advanceTimersByTimeAsync(2_500);
     expect(events.find((e) => e.kind === 'result')?.text).toBe('Done with v2.');
     expect(proc.killTree).toHaveBeenCalled();
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
+  it('a QUESTION: turn in the fixed shape carries it parsed (req-75 W2)', async () => {
+    vi.useFakeTimers();
+    const shaped = [
+      'QUESTION: Should dragging a heading also move the text below it?',
+      'Ticket: Outline — drag headings to reorder the note.',
+      'Where: step 2 of 4, the drop handler; step 1 is green.',
+      'Why: the plan says "reorder headings" but not whether the section body moves.',
+      'Options:',
+      '1. Move the whole section — one undo step, what other editors do',
+      '2. Only the heading line — the text stays, structure usually breaks',
+      'Recommendation: 1 — it keeps the note\'s structure intact.',
+    ].join('\n');
+    const at = Date.now();
+    const messages: unknown[] = [
+      { id: 'msg_i', type: 'idle', time: { created: at + 5_000 }, outcome: 'succeeded' },
+      { id: 'msg_a', type: 'assistant', time: { created: at + 1, completed: at + 2 }, content: [{ type: 'text', text: shaped }] },
+    ];
+    const { fetch } = scriptedFetch({ sessionCreated: () => undefined, prompts: [], interrupts: [], messages: () => messages });
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(12_500);
+
+    const waiting = events.find((e) => e.waiting !== undefined)?.waiting;
+    expect(waiting).toMatchObject({
+      kind: 'question',
+      shaped: {
+        question: 'Should dragging a heading also move the text below it?',
+        recommended: 1,
+        options: [
+          { n: 1, label: 'Move the whole section' },
+          { n: 2, label: 'Only the heading line' },
+        ],
+      },
+    });
     proc.exit(null);
     vi.useRealTimers();
   });

@@ -10,12 +10,30 @@ repo's rules apply to you. Read it instead of `CLAUDE.md` in full; open
 ## How to behave
 
 - You can ask the owner, but only what blocks the step: end your turn
-  with a message that starts with `QUESTION:`, the question and the
-  options you see. The run waits, the owner is notified, and the answer
-  comes back in this session — then go on. Where `CLAUDE.md` says to
-  ask, pause or wait for confirmation on something that does *not* block
-  you (a choice the plan or the repo settles, a point for the review),
-  decide within the plan and write it into the ticket's Log instead.
+  with a message that starts with `QUESTION:` and follows this shape,
+  one item per line: the question; "Ticket:" what the ticket is about
+  in one line; "Where:" where you stand; "Why:" why you ask; "Options:"
+  two to four numbered options, each
+  "<n>. <option> — <its consequence>"; "Recommendation: <n> — <why>".
+  The run waits, the owner is notified, and the answer comes back in
+  this session (a picked option arrives as "<n>. <option>") — then go
+  on. For example:
+
+  ```
+  QUESTION: Should dragging a heading also move the text below it?
+  Ticket: Outline — drag headings to reorder the note.
+  Where: step 2 of 4, the drop handler; step 1 is green.
+  Why: the plan says "reorder headings" but not whether the section body moves.
+  Options:
+  1. Move the whole section — one undo step, what other editors do
+  2. Only the heading line — the text stays, structure usually breaks
+  Recommendation: 1 — it keeps the note's structure intact.
+  ```
+
+  Where `CLAUDE.md` says to ask, pause or wait for confirmation on
+  something that does *not* block you (a choice the plan or the repo
+  settles, a point for the review), decide within the plan and write it
+  into the ticket's Log instead.
 - Stay inside the plan's scope. No worktree of your own; no merge into
   `main` and no push unless your phase prompt asks for it (the commit
   step does) — otherwise the runner and the owner handle that.

@@ -11,6 +11,7 @@
  * vault is where prompts and ticket context live); the runner owns the
  * worker process, its pipes, the worktree and the machine gate.
  */
+import type { ShapedQuestion } from '../../shared/question-shape';
 
 /** The workers of milestone 84, in fleet order (the assignment default). */
 export type WorkerProviderId = 'opencode' | 'claude-code';
@@ -339,6 +340,8 @@ export interface RunWaiting {
   readonly requestId?: string;
   /** The questions of a question form, with their choices (absent for a `QUESTION:` turn). */
   readonly questions?: readonly WaitQuestion[];
+  /** The parsed fixed shape of a `QUESTION:` turn, req-75 W2; absent when the text does not follow it. */
+  readonly shaped?: ShapedQuestion;
 }
 
 /**

@@ -244,6 +244,8 @@ describe('composeInstruction — the context pack (T-0048)', () => {
     expect(text).toContain('It should work.');
     expect(text).toContain('- `npm run verify:unit`');
     expect(text).toContain('Completion discipline');
+    // The asking discipline names the fixed question shape (req-75 W2).
+    expect(text).toContain('"Recommendation: <n> — <why>"');
   });
 
   it('a retry carries the previous run\'s gate failure as its tail; a first run has no such section', () => {
@@ -364,6 +366,8 @@ Do it in two steps.
       caps: DEFAULT_FLEET_CAPS,
     });
     expect(text).toContain('starts with `QUESTION:`');
-    expect(text.trimEnd().endsWith("go into the ticket's Log.")).toBe(true);
+    // The fixed shape's example is the instruction's last part (req-75 W2).
+    expect(text).toContain('"Recommendation: <n> — <why>"');
+    expect(text.trimEnd().endsWith("Recommendation: 1 — it keeps the note's structure intact.")).toBe(true);
   });
 });

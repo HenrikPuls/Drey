@@ -23,6 +23,7 @@
  * live spike rounds pin the exact CLI/API shapes.
  */
 import { freePort, type RunnerProcess, type SpawnFn } from './procs';
+import { parseShapedQuestion } from '../../shared/question-shape';
 import {
   QUESTION_MARKER,
   type PermissionDecision,
@@ -504,8 +505,14 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
               // A question to the owner (req-64): the turn is not the
               // step's end — the input stays open for the answer.
               questionHold = true;
+              const shaped = parseShapedQuestion(question);
               start.onEvent({ ts: nowIso(now), kind: 'usage', tokensIn, tokensOut, cacheReadTokens, ...cost });
-              start.onEvent({ ts: nowIso(now), kind: 'usage', turn: 'idle', waiting: { kind: 'question', text: question } });
+              start.onEvent({
+                ts: nowIso(now),
+                kind: 'usage',
+                turn: 'idle',
+                waiting: { kind: 'question', text: question, ...(shaped !== null ? { shaped } : {}) },
+              });
               continue;
             }
             start.onEvent({
@@ -1443,7 +1450,12 @@ export function opencodeAdapter(
               if (question !== null && state.questionReportedFor !== state.lastPromptAt) {
                 state.questionReportedFor = state.lastPromptAt;
                 state.questionHold = true;
-                start.onEvent({ ts: nowIso(now), kind: 'usage', waiting: { kind: 'question', text: question } });
+                const shaped = parseShapedQuestion(question);
+                start.onEvent({
+                  ts: nowIso(now),
+                  kind: 'usage',
+                  waiting: { kind: 'question', text: question, ...(shaped !== null ? { shaped } : {}) },
+                });
               }
               if (!state.held && !state.questionHold) {
                 state.turnDone = true;
