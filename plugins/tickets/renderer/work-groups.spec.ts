@@ -240,14 +240,15 @@ describe('workListSignature — what re-renders the Work list (T-0086)', () => {
 
   it('moves on state, column, waiting kind, turn, interactive and held', () => {
     const base = workListSignature([run({ ticketId: 'T-0001' })], []);
-    for (const patch of [
-      { state: 'stopping' as const },
+    const patches: readonly Partial<RunInfo>[] = [
+      { state: 'stopping' },
       { phase: 'review' },
       { waiting: { kind: 'question', text: 'Q', since: '2026-10-30T10:05:00Z' } },
-      { turn: 'idle' as const },
-      { interactive: 'plan' as const },
+      { turn: 'idle' },
+      { interactive: 'plan' },
       { held: true },
-    ]) {
+    ];
+    for (const patch of patches) {
       expect(workListSignature([run({ ticketId: 'T-0001', ...patch })], [])).not.toBe(base);
     }
   });

@@ -809,8 +809,14 @@ sits the **decision bar** (Approve → next phase, Refine with agent, or
 Accept). The thread follows whichever ticket you open last — one tab,
 not one per ticket — and the next ticket's run tab or thread opens in
 the same pair of panes: both tabs re-activate, the file ends up
-focused, and the pair never opens a third pane, whatever else is open. The panel's footer carries the workers: the worst
-light and who is out there; the header's **+** captures a new idea.
+focused, and the pair never opens a third pane, whatever else is open. The panel's footer carries the whole fleet: the worst light, the
+states in words and who is out there — `2 running · OpenCode 2` — with
+tokens in flight and the oldest run's age in its tooltip; when nothing
+runs but an alert stands (a halted chain, a held column, a tripped
+breaker, a provider out of quota) the line shows the alert itself. The
+header keeps the project menu, **+**, refresh, run/halt, abort and
+**⋯**, wrapping onto a second row at narrow widths instead of out of
+view; the header's **+** captures a new idea.
 
 **Ready to try** (req-75 W3). When a ticket's work is built — a
 *Ready to try* or *Review* row in Needs you, or any ticket whose file
