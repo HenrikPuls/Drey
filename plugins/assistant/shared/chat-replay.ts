@@ -4,9 +4,12 @@
  * bug-10(b) resolution. Tool calls/results stored as `drey-tool` entries
  * replay as real `assistant(tool_calls)` / `tool` message pairs, and an
  * applied edit replays with its document so the model knows what it
- * changed. Providers with `sessions` capability (claude-code `--resume`)
- * skip all of this and send only the new turn — that decision lives in
- * `main/chat-engine.ts`; this module is the pure full-replay half.
+ * changed. The one exception is the synthetic post-hoc task pair (57b/57c):
+ * the model never made that call, so it replays as a text note after the
+ * answer instead of a `tool_calls`/`tool` pair. Providers with `sessions`
+ * capability (claude-code `--resume`) skip all of this and send only the
+ * new turn — that decision lives in `main/chat-engine.ts`; this module is
+ * the pure full-replay half.
  *
  * Attachment BODIES are never persisted in the note (paths are): the
  * injected reader re-reads them fresh at send time, and a vanished file
@@ -21,6 +24,49 @@ import {
   ChatToolEntry,
 } from './chat-note.js';
 import { compactContextLine } from './vault-context.js';
+
+/** The assistant's task lookup tool (`TASKS_LIST_TOOL_NAME` in `main/tasks-tool.ts`). */
+const TASKS_LIST_NAME = 'tasks_list';
+
+/** The id prefix the engine gives a synthetic post-hoc pair (`main/chat-engine.ts`). */
+const POSTHOC_ID_PREFIX = 'tasks-posthoc-';
+
+/**
+ * Whether a persisted `call` entry is the synthetic post-hoc task block
+ * (57b/57c): the app showed the user a task list the MODEL never asked a
+ * tool for. Replaying it as a call would teach the model it made a call
+ * it did not make — so the pair replays as a text note instead. Both
+ * markers the engine writes count (the id prefix, `posthoc: true` in the
+ * arguments), whichever survived the note round-trip.
+ */
+function isPosthocTasksCall(entry: Extract<ChatToolEntry, { kind: 'call' }>): boolean {
+  if (entry.name !== TASKS_LIST_NAME) {
+    return false;
+  }
+  if (entry.id.startsWith(POSTHOC_ID_PREFIX)) {
+    return true;
+  }
+  const args: unknown =
+    typeof entry.arguments === 'string' ? safelyParseJson(entry.arguments) : entry.arguments;
+  return args !== null && typeof args === 'object' && (args as { posthoc?: unknown }).posthoc === true;
+}
+
+function safelyParseJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The text note a post-hoc pair replays as: what the user was shown,
+ * after the answer it followed, through the same 2 000-character cap as
+ * a replayed tool result.
+ */
+function posthocNote(records: string): string {
+  return `[After your answer, the app showed the user this task list — you did not call a tool for it: ${replayedResult(records)}]`;
+}
 
 export interface ReplayResult {
   messages: ChatMessage[];
@@ -93,9 +139,21 @@ function replayAssistantTurn(turn: ChatNoteTurn, out: ChatMessage[]): void {
     }
   };
 
+  // The synthetic post-hoc task pair (57b/57c): its call never happened,
+  // so it must not replay as one — the result becomes a text note after
+  // the answer instead. The pair is dropped from the tool replay
+  // TOGETHER: a `tool` message whose `tool_call_id` has no call is a
+  // 400 on strict endpoints.
+  const posthocResults: string[] = [];
+  let pendingPosthocId: string | null = null;
+
   for (const entry of turn.tool) {
     switch (entry.kind) {
       case 'call':
+        if (isPosthocTasksCall(entry)) {
+          pendingPosthocId = entry.id;
+          continue;
+        }
         pendingCalls.push({
           id: entry.id,
           type: 'function',
@@ -103,6 +161,11 @@ function replayAssistantTurn(turn: ChatNoteTurn, out: ChatMessage[]): void {
         });
         break;
       case 'result':
+        if (pendingPosthocId !== null && entry.id === pendingPosthocId) {
+          posthocResults.push(entry.content);
+          pendingPosthocId = null;
+          continue;
+        }
         flushCalls();
         out.push({ role: 'tool', tool_call_id: entry.id, content: replayedResult(entry.content) });
         break;
@@ -114,14 +177,21 @@ function replayAssistantTurn(turn: ChatNoteTurn, out: ChatMessage[]): void {
   }
   flushCalls();
 
+  const posthoc =
+    posthocResults.length > 0 ? posthocResults.map(posthocNote).join('\n\n') : null;
+
   // The turn's text after the tool sequence is the model's answer — unless
   // it is the edit-proposal stand-in, which the edit entries already carry.
   if (turn.text !== '' && !turn.text.startsWith(EDIT_PROPOSAL_MARKER)) {
-    out.push({ role: 'assistant', content: withContextLine(turn.text, turn) });
+    const answer = withContextLine(turn.text, turn);
+    out.push({ role: 'assistant', content: posthoc !== null ? appendLine(answer, posthoc) : answer });
   } else if (turn.text === '' && turn.context.length > 0) {
     // A retrieval-only turn (no answer text survived): the citation line
     // still tells the model what it saw.
-    out.push({ role: 'assistant', content: compactContextLine(turn.context) });
+    const line = compactContextLine(turn.context);
+    out.push({ role: 'assistant', content: posthoc !== null ? appendLine(line, posthoc) : line });
+  } else if (posthoc !== null) {
+    out.push({ role: 'assistant', content: posthoc });
   }
 }
 
