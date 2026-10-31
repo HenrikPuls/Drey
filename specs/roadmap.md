@@ -95,7 +95,8 @@ routes phase tickets, and the phone as a chat client. Design reference:
 the owner's canvas "Drey Tickets — Workflow redesign" (11 screens).
 Usability findings that motivate it: ADR-0087 "Context". Stages, each
 shipped and confirmed on its own, in this order (W1 shipped as
-milestone 89, W2 as milestone 90 — changelog):
+milestone 89, W2 as milestone 90 — changelog). W1b shipped: the canvas
+look.
 
 - **W3 — Ready to try.** A `## Changes` section written by the worker
   (what changed for the owner, which files, which checks); **Launch

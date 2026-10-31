@@ -1,10 +1,10 @@
 /**
- * The Work panel (ADR-0087, req-75 W1; the kanban board of ADR-0076 before
- * it): Needs you, Ideas and In progress as one list in the dock panel, and
- * each ticket's thread beside its file. Plain DOM (ADR-0044 rule 2); all
- * data comes from `backend.invoke('board')` snapshots — the renderer never
- * parses a ticket file. One module-level store serves every view; a view
- * is just a DOM root plus a render call.
+ * The Work panel (ADR-0087, req-75 W1/W1b; the kanban board of ADR-0076
+ * before it): Needs you, Shaping, Running, Ideas and Done this week as
+ * one list in the dock panel, and each ticket's thread beside its file.
+ * Plain DOM (ADR-0044 rule 2); all data comes from `backend.invoke('board')`
+ * snapshots — the renderer never parses a ticket file. One module-level
+ * store serves every view; a view is just a DOM root plus a render call.
  */
 import { createTranscriptView } from './transcript-view';
 import { formatWatch, parseStreamEvents } from './watch-format';
