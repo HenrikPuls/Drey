@@ -1684,7 +1684,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     metaNode.textContent = [
       state,
       run === null ? null : workerLabelOf(run.provider),
-      run.model ?? null,
+      run === null ? null : run.model ?? null,
       run === null ? null : ageWords(run.startedAt, Date.now()),
     ]
       .filter((part): part is string => part !== null && part !== '')
