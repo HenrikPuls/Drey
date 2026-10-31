@@ -1298,6 +1298,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     target: () => live(),
     // A message to an ended run reopened its session as a new run: follow it.
     onReopened: (run, newRunId) => openTakeover(api, { ...run, id: newRunId }),
+    othersLive: () => fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state) && r.id !== runId).length,
     placeholder: 'Message the worker — type / for commands',
   });
   const endMoves = createEndMoves();
@@ -1634,6 +1635,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     },
     target: () => threadRun(ticketId),
     onReopened: () => undefined,
+    othersLive: () => fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state) && r.id !== threadRun(ticketId)?.id).length,
     // No live run: the first message starts the phase's dialog (plan or refine).
     startFor: async () => {
       const card = boardCard(ticketId);

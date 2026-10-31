@@ -9,7 +9,7 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import type { MutationResult } from '../shared/tickets';
 import type { RunInfo, WaitQuestion } from '../main/fleet/protocol';
-import { answerText, type ShapedQuestion } from '../shared/question-shape';
+import { questionNode } from './wait-view';
 import { formatTokens } from './worker-status';
 
 const LIVE_RUN_STATES: readonly string[] = ['starting', 'running', 'stopping'];
@@ -53,6 +53,8 @@ export interface RunComposerDeps {
   startFor?: () => Promise<string | null>;
   /** Whether `startFor` may start a run now (a dialog phase, no live run). */
   canStart?: () => boolean;
+  /** How many other runs are live right now — the question's meta line. */
+  othersLive?: () => number;
   readonly placeholder: string;
 }
 
@@ -317,8 +319,9 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
   };
   box.append(commandMenu, attachRow, inputRow);
 
-  // What the worker waits on (req-64): its question — answered in the
-  // prompt box below — or a tool call to approve with one of the buttons.
+  // What the worker waits on (req-64): a tool call to approve with one
+  // of the buttons, or a question asked as OpenCode's `question` form —
+  // a `QUESTION:` turn is the conversation's, not the card's (W2b).
   const waitCard = el('div', 'tickets-takeover-wait');
   waitCard.hidden = true;
   const waitLabel = el('div', 'tickets-takeover-wait-label');
@@ -405,85 +408,58 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
       waitQuestions.append(sendPicks);
     }
   };
-  // A question asked in the fixed shape (req-75 W2) renders as its parts
-  // with one button per option — the prompt box below stays the free
-  // answer, and an option tap sends through the same path.
-  const waitShaped = el('div', 'tickets-question');
-  waitShaped.hidden = true;
-  const paintShaped = (shaped: ShapedQuestion): void => {
-    waitShaped.replaceChildren(el('div', 'tickets-question-text', shaped.question));
-    const lines: readonly (readonly [string, string | null])[] = [
-      ['Ticket', shaped.context],
-      ['Where', shaped.where],
-      ['Why', shaped.why],
-    ];
-    for (const [label, value] of lines) {
-      if (value !== null) {
-        waitShaped.append(el('div', 'tickets-question-line', `${label}: ${value}`));
-      }
-    }
-    const options = el('div', 'tickets-question-options');
-    for (const option of shaped.options) {
-      const b = el('button', `tickets-pill${shaped.recommended === option.n ? ' tickets-pill-recommended' : ''}`, option.label);
-      b.type = 'button';
-      b.title = option.consequence ?? option.label;
-      if (option.consequence !== null) {
-        b.append(document.createTextNode(' — '), el('span', 'tickets-pill-why', option.consequence));
-      }
-      if (shaped.recommended === option.n) {
-        b.append(el('span', 'tickets-pill-flag', 'recommended'));
-      }
-      b.addEventListener('click', () => {
-        for (const sibling of options.querySelectorAll('button')) {
-          (sibling as HTMLButtonElement).disabled = true;
-        }
-        void send(answerText(option));
-      });
-      options.append(b);
-    }
-    waitShaped.append(options);
-    if (shaped.recommended !== null) {
-      const why = shaped.recommendationWhy !== null ? ` — ${shaped.recommendationWhy}` : '';
-      waitShaped.append(el('div', 'tickets-question-rec', `Recommendation: ${shaped.recommended}${why}`));
-    }
+  // A question asked in the fixed shape (req-75 W2) — or plain — is part
+  // of the conversation (req-75 W2b): drawn with `questionNode` instead
+  // of the card, the canvas look above the prompt box, which stays the
+  // free answer; an option tap sends through the same path.
+  const askSlot = el('div');
+  askSlot.hidden = true;
+  let askAnswered = false;
+  const pickAnswer = (text: string): void => {
+    askAnswered = true;
+    void send(text);
   };
-  waitCard.append(waitLabel, waitText, waitShaped, waitQuestions, waitActions);
+  waitCard.append(waitLabel, waitText, waitQuestions, waitActions);
   let shownWait = '';
   const paintWait = (run: RunInfo | null): void => {
     const waiting = run !== null && LIVE_RUN_STATES.includes(run.state) ? (run.waiting ?? null) : null;
-    waitCard.hidden = waiting === null;
-    if (waiting === null) {
-      shownWait = '';
-      return;
-    }
-    const questions = waiting.questions ?? null;
-    const shaped = questions === null && waiting.kind === 'question' ? (waiting.shaped ?? null) : null;
-    waitLabel.textContent =
-      waiting.kind === 'permission'
-        ? 'The worker wants to do this — allow it?'
-        : questions === null
-          ? 'The worker asks you — answer below, it then goes on with its step'
-          : questions.length > 1
-            ? 'The worker asks you — pick the answers, or type your own below, one line per question'
-            : 'The worker asks you — pick an answer, or type your own below';
-    waitText.textContent = waiting.text;
-    waitText.hidden = questions !== null || shaped !== null;
-    waitShaped.hidden = shaped === null;
-    waitQuestions.hidden = questions === null;
-    waitActions.hidden = waiting.kind !== 'permission';
-    const key = `${run?.id ?? ''}:${waiting.kind}@${waiting.since}`;
-    if (key !== shownWait) {
-      if (questions !== null) {
-        paintQuestions(questions);
-      }
-      if (shaped !== null) {
-        paintShaped(shaped);
-      }
-      if (waiting.kind === 'question') {
+    const questions = waiting?.questions ?? null;
+    // A `QUESTION:` turn (shaped or plain) is the conversation's, not a
+    // form; permission requests and OpenCode question forms keep the card.
+    const ask = waiting !== null && waiting.kind === 'question' && questions === null ? waiting : null;
+    const key = `${run?.id ?? ''}:${waiting?.kind ?? ''}@${waiting?.since ?? ''}`;
+    const fresh = key !== shownWait;
+    if (fresh) {
+      askAnswered = false;
+      if (waiting?.kind === 'question') {
         prompt.focus();
       }
     }
     shownWait = key;
+    if (ask !== null) {
+      askSlot.replaceChildren(questionNode({ onPick: pickAnswer, disabled: askAnswered }, ask, Date.now(), deps.othersLive?.() ?? 0));
+      askSlot.hidden = false;
+    } else {
+      askSlot.replaceChildren();
+      askSlot.hidden = true;
+    }
+    waitCard.hidden = ask !== null || waiting === null;
+    if (waiting === null || ask !== null) {
+      return;
+    }
+    waitLabel.textContent =
+      waiting.kind === 'permission'
+        ? 'The worker wants to do this — allow it?'
+        : questions!.length > 1
+          ? 'The worker asks you — pick the answers, or type your own below, one line per question'
+          : 'The worker asks you — pick an answer, or type your own below';
+    waitText.textContent = waiting.text;
+    waitText.hidden = questions !== null;
+    waitQuestions.hidden = questions === null;
+    waitActions.hidden = waiting.kind !== 'permission';
+    if (fresh && questions !== null) {
+      paintQuestions(questions);
+    }
   };
 
   const paint = (): void => {
@@ -507,7 +483,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     paintProgress(run);
   };
 
-  wrap.append(progress, waitCard, box, underRow);
+  wrap.append(progress, askSlot, waitCard, box, underRow);
   paint();
   return {
     element: wrap,

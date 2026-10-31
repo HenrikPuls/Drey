@@ -666,7 +666,6 @@
 /* The card and its parts set display themselves, so [hidden] must win. */
 .tickets-takeover-wait[hidden],
 .tickets-takeover-wait-text[hidden],
-.tickets-question[hidden],
 .tickets-takeover-wait-questions[hidden],
 .tickets-takeover-wait-actions[hidden],
 .tickets-takeover-endmoves[hidden] {
@@ -2136,22 +2135,26 @@ details[open] > summary > .tickets-tx-think-preview {
   color: var(--text-5);
 }
 
-/* The shaped question's option pills (req-75 W2/W1b): radius 15, 30 px
- * high, the recommended one accent-bordered with a trailing note. */
+/* The shaped question's option pills (req-75 W2b): radius 15, at least
+ * 30 px high, the recommended one accent-bordered with a trailing note.
+ * The label and its consequence are inline spans of one wrapping text —
+ * never two flex columns (W1b's classes, fixed). */
 .tickets-pill {
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 0;
   align-self: flex-start;
   max-width: 100%;
-  height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--field-border);
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
   border-radius: 15px;
   background: transparent;
-  color: var(--text-heading);
+  color: var(--text-primary);
   font: inherit;
   font-size: 0.8125rem;
+  line-height: 21px;
   text-align: left;
   cursor: pointer;
 }
@@ -2166,7 +2169,7 @@ details[open] > summary > .tickets-tx-think-preview {
 }
 
 .tickets-pill-why {
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 .tickets-pill-recommended {
@@ -2174,35 +2177,42 @@ details[open] > summary > .tickets-tx-think-preview {
 }
 
 .tickets-pill-flag {
+  margin-left: 8px;
   color: var(--accent);
   font-size: 12px;
 }
 
-/* The shaped question card in the thread's wait card (req-75 W2). */
-.tickets-question {
+/* The waiting question as part of the conversation (req-75 W2b): no
+ * card — the canvas's lead-in, why, option pills and meta line above
+ * the prompt box. */
+.tickets-ask {
+  flex: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 12px;
+  margin: 0 16px 8px;
+  font-size: 14px;
+  line-height: 21px;
 }
 
-.tickets-question-text {
-  color: var(--text-heading);
-  font-weight: 600;
+.tickets-ask-lead {
+  margin: 0;
 }
 
-.tickets-question-line {
-  color: var(--text-2);
-}
-
-.tickets-question-rec {
+.tickets-ask-why {
+  margin: 0;
   color: var(--text-3);
 }
 
-.tickets-question-options {
+.tickets-ask-options {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: 2px;
+}
+
+.tickets-ask-meta {
+  color: var(--text-3);
+  font-size: 12px;
 }
 
 /* ---- the ticket thread (req-75 W1/W1b, ADR-0087 decision 3) ---- */
