@@ -134,6 +134,25 @@ export function parseUnarchive(payload: unknown): Parsed<UnarchiveCommand> {
   return ok({ id: p['id'], to: p['to'] });
 }
 
+/** The Ready card's "Send back…" (req-75 W3): one ticket, one note. */
+export interface SendBackCommand {
+  readonly id: string;
+  /** Trimmed, at most 500 characters — the Log line's budget. */
+  readonly note: string;
+}
+
+export function parseSendBack(payload: unknown): Parsed<SendBackCommand> {
+  const p = record(payload);
+  if (typeof p['id'] !== 'string') {
+    return refuse('bad send back payload');
+  }
+  const note = typeof p['note'] === 'string' ? p['note'].trim() : '';
+  if (note === '') {
+    return refuse('the send-back note is empty');
+  }
+  return ok({ id: p['id'], note: note.slice(0, 500) });
+}
+
 export interface StartRunCommand {
   readonly ticketId: string;
   readonly workerChoice: string | null;

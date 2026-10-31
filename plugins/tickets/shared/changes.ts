@@ -205,8 +205,15 @@ function modelShort(model: string): string {
   return parts[parts.length - 1]!.trim();
 }
 
-export function storyOf(ticketText: string): { readonly items: readonly StoryItem[]; readonly totals: StoryTotals } {
-  const items: StoryItem[] = [];
+/** What the Ready page's `changes` IPC returns: the section and the story. */
+export interface ChangesReply {
+  /** The parsed `## Changes` section; null when the ticket has none. */
+  readonly changes: ParsedChanges | null;
+  readonly story: readonly StoryItem[];
+  readonly totals: StoryTotals;
+}
+
+export function storyOf(ticketText: string): { readonly items: readonly StoryItem[]; readonly totals: StoryTotals } {  const items: StoryItem[] = [];
   let first: number | null = null;
   let last: number | null = null;
   let tokens: number | null = null;

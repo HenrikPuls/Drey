@@ -55,13 +55,15 @@ import {
   patchTrack,
   ticketPathParts,
   ticketSections,
+  withLogLine,
   type HeaderPatch,
 } from './ticket-files';
 import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from './phase-dirs';
 import { blockedRefusal } from './blocked';
 import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, recentDoneOf, type DriftDetection } from './normalize';
-import { openTerminalAt } from './open-terminal';
+import { parseChanges, storyOf, type ChangesReply } from '../shared/changes';
+import { openTerminalAt, runInNewConsole } from './open-terminal';
 import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
 import type { AttachmentReply, RefineReply, TicketReply } from '../shared/remote-protocol';
 import type { AttachmentCommand, RefineCommand } from './commands';
@@ -77,6 +79,7 @@ import {
   parseCreate,
   parsePermission,
   parseSend,
+  parseSendBack,
   parseSetTrack,
   parseStartRun,
   parseStopRun,
@@ -153,13 +156,24 @@ Work repositories a ticket's \`repo:\`/\`repos:\` fields may name. Example:
 `;
 
 type MutationResult =
-  | { readonly ok: true; readonly warning?: string; readonly moved?: number }
+  | { readonly ok: true; readonly warning?: string; readonly moved?: number; readonly path?: string }
   | { readonly ok: false; readonly error: string };
 
 interface VaultLike {
   readonly id: string;
   readonly name: string;
   readonly path: string;
+}
+
+/** The card of one ticket id, wherever it sits on the board; null when absent. */
+function findOnBoard(snap: BoardSnapshot, id: string): TicketCard | null {
+  for (const column of snap.columns) {
+    const found = column.tickets.find((t) => t.id === id);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return null;
 }
 
 class BoardService {
@@ -724,74 +738,90 @@ class BoardService {
           error: `${input.id} is not in "${input.from}" — it may have moved; refresh the board`,
         };
       }
-      const toPhase = snap.pipeline.find((p) => p.id === input.to) ?? null;
-      if (toPhase === null) {
-        return { ok: false, error: `"${input.to}" is not a phase in the pipeline` };
-      }
-      // Prefix-aware path guard (T-0041): the card may sit in `10-inbox`
-      // or `inbox` — the stripped phase id is the identity.
-      const parts = ticketPathParts(card.path);
-      if (parts === null || parts.phase !== input.from || parts.stem !== input.id) {
-        return { ok: false, error: `${input.id} sits in an unexpected path (${card.path})` };
-      }
-
-      const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
-      // A hand-move never touches the claim (owner ruling, 2026-10-18): a
-      // stamp here would block the target column's pool, since the
-      // dispatcher never takes claimed cards. Claims belong to the
-      // takeover/release menu and to the fleet's own moves.
-      let patched: string;
-      try {
-        patched = patchTicketFile(text, {
-          to: input.to,
-          from: input.from,
-          now: new Date(),
-          actor: input.actor ?? OWNER,
-        });
-      } catch (error) {
-        return { ok: false, error: messageOf(error) };
-      }
-
-      const toDir = resolvePhaseDir(
-        await this.ticketDirs(vault),
-        snap.pipeline.findIndex((p) => p.id === input.to) + 1,
-        input.to,
-      );
-      const newPath = `tickets/${toDir}/${input.id}.md`;
-      try {
-        const oldAbs = this.ctx.vault.resolveAssetPath(card.path, { vaultId: vault.id });
-        const dirAbs = this.ctx.vault.resolveAssetPath(`tickets/${toDir}`, { vaultId: vault.id });
-        const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
-        if (oldAbs === null || dirAbs === null || newAbs === null) {
-          return { ok: false, error: 'ticket path escapes the vault' };
-        }
-        await fsp.mkdir(dirAbs, { recursive: true });
-        await fsp.rename(oldAbs, newAbs);
-        await this.ctx.vault.write(newPath, patched, { vaultId: vault.id });
-      } catch (error) {
-        return { ok: false, error: `move failed: ${messageOf(error)}` };
-      }
-
-      const warning = await this.commit(
-        vault,
-        [card.path, newPath],
-        `tickets: ${input.id} ${input.from} -> ${input.to}`,
-      );
-      // The optional auto-push (T-0041): warning-level, never a failed move.
-      const pushWarning = await this.pushTransition(vault, snap.pushRemote);
-      const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
-      this.ctx.vault.announceChanges({
-        vaultId: vault.id,
-        changedPaths: [newPath],
-        deletedPaths: [card.path],
-      });
-      this.announceChanged();
-      return {
-        ok: true,
-        path: newPath,
-        ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }),
-      };
+      return this.moveCard(vault, snap, card, input.to, input.actor ?? OWNER);
     });
+  }
+
+  /**
+   * The one transition core, already inside the queue (shared by the
+   * board's own `transition`, the Ready card's Accept and its Send
+   * back, req-75 W3): validate the target, patch (plus an optional
+   * second Log line — the send-back note), move the file into the
+   * resolved numbered directory, one commit, the optional push. The
+   * ordinary Log line is always `<from> -> <to>`, so the commit and
+   * the Log agree for every caller.
+   */
+  private async moveCard(
+    vault: VaultLike,
+    snap: BoardSnapshot,
+    card: TicketCard,
+    to: string,
+    actor: string,
+    extraLog?: string,
+  ): Promise<MutationResult> {
+    const from = card.phase;
+    const toPhase = snap.pipeline.find((p) => p.id === to) ?? null;
+    if (toPhase === null) {
+      return { ok: false, error: `"${to}" is not a phase in the pipeline` };
+    }
+    // Prefix-aware path guard (T-0041): the card may sit in `10-inbox`
+    // or `inbox` — the stripped phase id is the identity.
+    const parts = ticketPathParts(card.path);
+    if (parts === null || parts.phase !== from || parts.stem !== card.id) {
+      return { ok: false, error: `${card.id} sits in an unexpected path (${card.path})` };
+    }
+
+    const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
+    // A hand-move never touches the claim (owner ruling, 2026-10-18): a
+    // stamp here would block the target column's pool, since the
+    // dispatcher never takes claimed cards. Claims belong to the
+    // takeover/release menu and to the fleet's own moves.
+    const now = new Date();
+    let patched: string;
+    try {
+      patched = patchTicketFile(text, { to, from, now, actor });
+      if (extraLog !== undefined) {
+        patched = withLogLine(patched, now, actor, extraLog);
+      }
+    } catch (error) {
+      return { ok: false, error: messageOf(error) };
+    }
+
+    const toDir = resolvePhaseDir(
+      await this.ticketDirs(vault),
+      snap.pipeline.findIndex((p) => p.id === to) + 1,
+      to,
+    );
+    const newPath = `tickets/${toDir}/${card.id}.md`;
+    try {
+      const oldAbs = this.ctx.vault.resolveAssetPath(card.path, { vaultId: vault.id });
+      const dirAbs = this.ctx.vault.resolveAssetPath(`tickets/${toDir}`, { vaultId: vault.id });
+      const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
+      if (oldAbs === null || dirAbs === null || newAbs === null) {
+        return { ok: false, error: 'ticket path escapes the vault' };
+      }
+      await fsp.mkdir(dirAbs, { recursive: true });
+      await fsp.rename(oldAbs, newAbs);
+      await this.ctx.vault.write(newPath, patched, { vaultId: vault.id });
+    } catch (error) {
+      return { ok: false, error: `move failed: ${messageOf(error)}` };
+    }
+
+    const warning = await this.commit(vault, [card.path, newPath], `tickets: ${card.id} ${from} -> ${to}`);
+    // The optional auto-push (T-0041): warning-level, never a failed move.
+    const pushWarning = await this.pushTransition(vault, snap.pushRemote);
+    const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
+    this.ctx.vault.announceChanges({
+      vaultId: vault.id,
+      changedPaths: [newPath],
+      deletedPaths: [card.path],
+    });
+    this.announceChanged();
+    return {
+      ok: true,
+      path: newPath,
+      ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }),
+    };
   }
 
   /**
@@ -811,59 +841,221 @@ class BoardService {
         return { ok: false, error: 'no tickets vault detected' };
       }
       const snap = await this.snapshot();
-      let card: TicketCard | null = null;
-      for (const column of snap.columns) {
-        const found = column.tickets.find((t) => t.id === input.id);
-        if (found !== undefined) {
-          card = found;
-          break;
-        }
-      }
+      const card = findOnBoard(snap, input.id);
       if (card === null) {
         return { ok: false, error: `${input.id} is not on the board` };
       }
-      const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
-      let patched: string;
-      try {
-        patched = patchTicketFile(text, {
-          to: 'archive',
-          from: null,
-          now: new Date(),
-          actor: input.actor ?? OWNER,
-          action: 'archived',
-        });
-      } catch (error) {
-        return { ok: false, error: messageOf(error) };
-      }
-      const newPath = `${TICKETS_ARCHIVE_DIR}/${card.id}.md`;
-      try {
-        const oldAbs = this.ctx.vault.resolveAssetPath(card.path, { vaultId: vault.id });
-        const dirAbs = this.ctx.vault.resolveAssetPath(TICKETS_ARCHIVE_DIR, { vaultId: vault.id });
-        const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
-        if (oldAbs === null || dirAbs === null || newAbs === null) {
-          return { ok: false, error: 'ticket path escapes the vault' };
-        }
-        await fsp.mkdir(dirAbs, { recursive: true });
-        await fsp.rename(oldAbs, newAbs);
-        await this.ctx.vault.write(newPath, patched, { vaultId: vault.id });
-      } catch (error) {
-        return { ok: false, error: `move failed: ${messageOf(error)}` };
-      }
-      const warning = await this.commit(vault, [card.path, newPath], `tickets: ${card.id} archived`);
-      const pushWarning = await this.pushTransition(vault, snap.pushRemote);
-      const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
-      this.ctx.vault.announceChanges({
-        vaultId: vault.id,
-        changedPaths: [newPath],
-        deletedPaths: [card.path],
-      });
-      this.announceChanged();
-      return {
-        ok: true,
-        path: newPath,
-        ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }),
-      };
+      return this.archiveCard(vault, snap, card, input.actor ?? OWNER);
     });
+  }
+
+  /**
+   * The archive treatment itself, already inside the queue (the Ready
+   * card's terminal Accept reuses it, req-75 W3).
+   */
+  private async archiveCard(vault: VaultLike, snap: BoardSnapshot, card: TicketCard, actor: string): Promise<MutationResult> {
+    const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
+    let patched: string;
+    try {
+      patched = patchTicketFile(text, {
+        to: 'archive',
+        from: null,
+        now: new Date(),
+        actor,
+        action: 'archived',
+      });
+    } catch (error) {
+      return { ok: false, error: messageOf(error) };
+    }
+    const newPath = `${TICKETS_ARCHIVE_DIR}/${card.id}.md`;
+    try {
+      const oldAbs = this.ctx.vault.resolveAssetPath(card.path, { vaultId: vault.id });
+      const dirAbs = this.ctx.vault.resolveAssetPath(TICKETS_ARCHIVE_DIR, { vaultId: vault.id });
+      const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
+      if (oldAbs === null || dirAbs === null || newAbs === null) {
+        return { ok: false, error: 'ticket path escapes the vault' };
+      }
+      await fsp.mkdir(dirAbs, { recursive: true });
+      await fsp.rename(oldAbs, newAbs);
+      await this.ctx.vault.write(newPath, patched, { vaultId: vault.id });
+    } catch (error) {
+      return { ok: false, error: `move failed: ${messageOf(error)}` };
+    }
+    const warning = await this.commit(vault, [card.path, newPath], `tickets: ${card.id} archived`);
+    const pushWarning = await this.pushTransition(vault, snap.pushRemote);
+    const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
+    this.ctx.vault.announceChanges({
+      vaultId: vault.id,
+      changedPaths: [newPath],
+      deletedPaths: [card.path],
+    });
+    this.announceChanged();
+    return {
+      ok: true,
+      path: newPath,
+      ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }),
+    };
+  }
+
+  /**
+   * "Launch this version" (req-75 W3, T-0057): start the repository's
+   * program in the ticket's worktree, in a new console that outlives
+   * Drey. The command is the repo's `launch:` from repos.md (owner
+   * data) or the fixed dev.ps1 default — never anything from ticket
+   * content.
+   */
+  launchVersion(input: { id: string }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const snap = await this.snapshot();
+      const card = findOnBoard(snap, input.id);
+      if (card === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const notThere = `${input.id} has no worktree yet — nothing to launch`;
+      const repo = card.meta.repo === null ? null : snap.repos.find((r) => r.name === card.meta.repo) ?? null;
+      if (repo === null) {
+        return { ok: false, error: notThere };
+      }
+      const worktreePath = worktreePathFor(vault.path, repo, card.id);
+      if (!(await fsp.stat(worktreePath).then((s) => s.isDirectory()).catch(() => false))) {
+        return { ok: false, error: notThere };
+      }
+      let command: string | null = repo.launch;
+      if (command === null) {
+        // The default a Drey checkout carries (req-75 W3): the packaged
+        // app from a second, lock-free instance beside the one running.
+        if (await fsp.stat(`${worktreePath}${path.sep}dev.ps1`).then((s) => s.isFile()).catch(() => false)) {
+          command = 'powershell -NoProfile -ExecutionPolicy Bypass -File dev.ps1 -Built -Multi';
+        }
+      }
+      if (command === null) {
+        return {
+          ok: false,
+          error: `No launch command for "${repo.name}" — add launch: to repos.md (Settings → Tickets → Repositories)`,
+        };
+      }
+      try {
+        runInNewConsole(worktreePath, command);
+      } catch (error) {
+        return { ok: false, error: `launch failed: ${messageOf(error)}` };
+      }
+      return { ok: true };
+    });
+  }
+
+  /**
+   * The Ready card's "Accept and merge" (req-75 W3): accept follows the
+   * pipeline — in the terminal phase the archive treatment, then the
+   * worktree goes when it is clean (a dirty one stays, visibly); in any
+   * other phase the ordinary transition to the next configured phase
+   * (with an agent `commit` phase next, that step merges). No second
+   * merge implementation here.
+   */
+  acceptTicket(input: { id: string; actor?: string }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const snap = await this.snapshot();
+      const card = findOnBoard(snap, input.id);
+      if (card === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const actor = input.actor ?? OWNER;
+      const next = nextPhaseIdOf(snap.columns, card.phase);
+      if (next !== null) {
+        return this.moveCard(vault, snap, card, next, actor);
+      }
+      const archived = await this.archiveCard(vault, snap, card, actor);
+      if (!archived.ok) {
+        return archived;
+      }
+      const warnings = [archived.warning];
+      const worktreeWarning = await this.removeWorktreeAfterAccept(vault, snap, card);
+      if (worktreeWarning !== null) {
+        warnings.push(worktreeWarning);
+      }
+      const kept = warnings.filter((w): w is string => w !== undefined);
+      return { ok: true, ...(kept.length === 0 ? {} : { warning: kept.join('; ') }) };
+    });
+  }
+
+  /**
+   * The clean-worktree removal of a terminal Accept (req-75 W3): the
+   * T-0044 `worktree remove` path with `force: false` — a dirty tree
+   * stays and says so; a live run keeps it untouched. Never a failed
+   * accept: the ticket is already archived.
+   */
+  private async removeWorktreeAfterAccept(vault: VaultLike, snap: BoardSnapshot, card: TicketCard): Promise<string | null> {
+    if (card.meta.repo === null) {
+      return null;
+    }
+    const repo = snap.repos.find((r) => r.name === card.meta.repo) ?? null;
+    if (repo === null || repo.path === null) {
+      return null;
+    }
+    const runs = await this.fleetRecords();
+    if (runs.some((r) => r.ticketId === card.id && !['done', 'stopped', 'failed'].includes(r.state))) {
+      return 'A run is live on the ticket — the worktree was kept';
+    }
+    const outcome = await removeWorktree(this.git, repo.path, worktreePathFor(vault.path, repo, card.id), {
+      force: false,
+      links: repo.link,
+    });
+    if (outcome.ok) {
+      return null;
+    }
+    return outcome.dirty === true ? 'The worktree has uncommitted changes and was kept' : outcome.error;
+  }
+
+  /**
+   * The Ready card's "Send back…" (req-75 W3): the ordinary transition
+   * to the nearest earlier agent phase (the build column in the default
+   * pipeline), the Log line `<from> -> <to>` followed by `sent back:
+   * <note>`, one commit.
+   */
+  sendBack(input: { id: string; note: string; actor?: string }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const snap = await this.snapshot();
+      const card = findOnBoard(snap, input.id);
+      if (card === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const at = snap.pipeline.findIndex((p) => p.id === card.phase);
+      let to: string | null = null;
+      for (let i = at - 1; i >= 0; i--) {
+        if (isAutoPhase(snap.pipeline[i]!)) {
+          to = snap.pipeline[i]!.id;
+          break;
+        }
+      }
+      if (to === null) {
+        return { ok: false, error: `there is no agent phase before "${card.phase}" to send ${input.id} back to` };
+      }
+      return this.moveCard(vault, snap, card, to, input.actor ?? OWNER, `sent back: ${input.note.trim().slice(0, 500)}`);
+    });
+  }
+
+  /**
+   * The Ready page's data (req-75 W3): the parsed `## Changes` section
+   * and the story, read from the ticket file — no new frontmatter.
+   */
+  async changesOf(id: string): Promise<ChangesReply> {
+    const found = await this.findCard(id);
+    if (found === null) {
+      return { changes: null, story: [], totals: { minutes: null, tokens: null } };
+    }
+    const story = storyOf(found.text);
+    return { changes: parseChanges(found.text), story: story.items, totals: story.totals };
   }
 
   /**
@@ -2312,6 +2504,31 @@ const plugin: MainPluginModule = {
     ctx.ipc.handle('archive', async (payload) => {
       const cmd = parseTicketId(payload, 'archive');
       return cmd.ok ? board.archive(cmd.value) : cmd;
+    });
+
+    // --- the Ready card (req-75 W3) -------------------------------------
+    // Launch this version / Accept and merge / Send back…, and the
+    // `## Changes` + story data its page reads from the ticket file.
+    ctx.ipc.handle('launchVersion', async (payload) => {
+      const cmd = parseTicketId(payload, 'launch');
+      return cmd.ok ? board.launchVersion(cmd.value) : cmd;
+    });
+
+    ctx.ipc.handle('acceptTicket', async (payload) => {
+      const cmd = parseTicketId(payload, 'accept');
+      return cmd.ok ? board.acceptTicket(cmd.value) : cmd;
+    });
+
+    ctx.ipc.handle('sendBack', async (payload) => {
+      const cmd = parseSendBack(payload);
+      return cmd.ok ? board.sendBack(cmd.value) : cmd;
+    });
+
+    ctx.ipc.handle('changes', async (payload) => {
+      const cmd = parseTicketId(payload, 'changes');
+      return cmd.ok
+        ? board.changesOf(cmd.value.id)
+        : { changes: null, story: [], totals: { minutes: null, tokens: null } };
     });
 
     // T-0042: a move out of tickets/archive/ performed as the board

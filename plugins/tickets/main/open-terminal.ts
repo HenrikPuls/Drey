@@ -62,18 +62,28 @@ export async function openTerminalAt(dir: string): Promise<void> {
 }
 
 /**
+ * The console a started program runs in: what `runInNewConsole` needs
+ * from a spawn (the spec injects a recorder). The real `spawn` fits.
+ */
+export type ConsoleSpawnFn = (
+  command: string,
+  args: readonly string[],
+  options: { cwd: string; detached: true; stdio: 'ignore'; windowsHide: boolean },
+) => { once(event: 'error', listener: () => void): unknown; unref(): unknown };
+
+/**
  * Runs one command line in a fresh OS console at `cwd` (req-75 W3 /
  * T-0057): "Launch this version" — the repo's `launch:` command from
  * repos.md, or the dev.ps1 default — so the started program outlives
  * Drey in its own window. The command line is handed to the terminal
  * as ONE argument (no `shell: true`, no string built from ticket
  * content — it comes from repos.md or the fixed default); `cwd` is the
- * spawn option, never interpolated. `spawnFn` exists for the spec.
+ * spawn option, never interpolated.
  */
 export function runInNewConsole(
   cwd: string,
   commandLine: string,
-  spawnFn: typeof spawn = spawn,
+  spawnFn: ConsoleSpawnFn = spawn,
 ): void {
   const child =
     process.platform === 'win32'

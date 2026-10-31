@@ -10,6 +10,7 @@ import {
   parsePermission,
   parseRefine,
   parseSend,
+  parseSendBack,
   parseSetTrack,
   parseStartRun,
   parseStopRun,
@@ -82,6 +83,28 @@ describe('command parsers', () => {
   it('chainResult maps a missing status to "not running"', () => {
     expect(chainResult(null)).toEqual({ ok: false, error: 'the fleet runner is not running' });
     expect(chainResult({ master: 'run' })).toEqual({ ok: true, status: { master: 'run' } });
+  });
+
+  it('names one ticket for the Ready card: launch, accept, changes (req-75 W3)', () => {
+    expect(parseTicketId({ id: 'T-0126' }, 'launch')).toEqual({ ok: true, value: { id: 'T-0126' } });
+    expect(parseTicketId({ id: 'T-0126' }, 'accept')).toEqual({ ok: true, value: { id: 'T-0126' } });
+    expect(parseTicketId({}, 'launch')).toEqual({ ok: false, error: 'bad launch payload' });
+    expect(parseTicketId('x', 'changes')).toEqual({ ok: false, error: 'bad changes payload' });
+  });
+
+  it('send back: one trimmed note of at most 500 characters (req-75 W3)', () => {
+    expect(parseSendBack({ id: 'T-0126', note: '  the palette still doubles  ' })).toEqual({
+      ok: true,
+      value: { id: 'T-0126', note: 'the palette still doubles' },
+    });
+    expect(parseSendBack({ id: 'T-0126', note: '   ' })).toEqual({ ok: false, error: 'the send-back note is empty' });
+    expect(parseSendBack({ note: 'x' })).toEqual({ ok: false, error: 'bad send back payload' });
+    expect(parseSendBack({ id: 'T-0126', note: 'x'.repeat(600) })).toMatchObject({
+      ok: true,
+      value: { note: expect.anything() },
+    });
+    const long = parseSendBack({ id: 'T-0126', note: 'x'.repeat(600) });
+    expect(long.ok && long.value.note.length).toBe(500);
   });
 });
 
