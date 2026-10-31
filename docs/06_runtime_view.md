@@ -3412,3 +3412,39 @@ it."); the queries (branches, log, file history, diffs, stash list)
 answer, with the paths stripped back repository-relative main-side.
 Rescans run on registry changes and relocate only.
 
+## 6.70 The due-date reminder digest: index settles → check → notify → click reveals the panel (req-65)
+
+```mermaid
+sequenceDiagram
+    actor U as Owner
+    participant S as task index (plugin main)
+    participant P as Tasks panel (plugin renderer)
+    participant R as startReminders (renderer/reminders.ts)
+    participant C as plugin config (api.settings)
+    participant N as ui.notify (OS toast)
+
+    Note over S,R: boot sweep finished, or a save / write / refresh re-pulled
+    S-->>P: index-updated push
+    P->>P: refreshVault — state.vaultTasks = list (disk index, all vaults)
+    P->>R: check()
+    R->>C: get remindersEnabled (absent = on)
+    R->>C: get remindersLastDay
+    alt disabled, or lastDay = today, or digest empty
+        R-->>P: return — the day gate is NOT written (a boot check before<br/>the index settled must not silence the day)
+    else open tasks with due <= today exist
+        R->>N: notify (title/body by the counts, tag 'tasks-due',<br/>onClick = revealWidget('tasks'))
+        R->>C: set remindersLastDay = today — also when the system<br/>shows nothing; later checks this day return early
+        U->>N: click the toast
+        N->>U: Drey's window comes to the front
+        N->>P: onClick — reveal the Tasks panel
+    end
+    Note over R: a one-minute interval re-checks (the midnight rollover);<br/>stop() from deactivate clears it. Nothing runs while Drey is closed —<br/>the next start's digest covers every open overdue task once.
+```
+
+The digest itself is pure (`reminderDigest` over `dueState`): open
+tasks with `due <= today` split into due-today and overdue; the wording
+covers the three shapes (both counts, due-today only pluralized,
+overdue only pluralized under the "Overdue tasks" title). The
+notification's `tag` makes a later digest replace the earlier toast
+instead of stacking.
+

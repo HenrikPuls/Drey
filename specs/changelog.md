@@ -20,6 +20,49 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-65 — Due-date reminders
+
+**Not yet manually verified by the owner.** The `📅` date was parsed and
+sortable, but nothing notified. The Tasks plugin now shows **one system
+notification per local day** — a counts-only digest, never one toast per
+task — when open tasks with `due <= today` exist across every registered
+vault (the main-side all-vaults index; the panel's All scope shows the
+same set). Done and future tasks never notify.
+
+- **When it evaluates:** whenever the task index settles — the boot
+  sweep's `index-updated` push and every save / write / refresh re-pull
+  (the end of the panel's `refreshVault`) — and once a minute while Drey
+  runs, so the midnight day rollover is caught. The day is stored as
+  `remindersLastDay` in the plugin config **only when a notification
+  actually fired**: a disabled switch, an already-reminded day and an
+  empty digest (the boot check before the index settled) never burn the
+  day — and a fired digest counts even when the system shows nothing
+  (`ui.notify` resolves false on denied permission, so it cannot
+  re-fire on the next save's push). The notification carries
+  `tag: 'tasks-due'`, so a later digest replaces the earlier toast; a
+  click brings Drey to the front and reveals the Tasks panel.
+- **While Drey is closed** nothing fires (no background process, no
+  OS-scheduled toast): the next start's digest covers due-today and
+  every open overdue task, so a missed reminder arrives once, late —
+  not once per missed day.
+- **Wording:** "Tasks due today — 2 due today, 4 overdue" when both,
+  "1 task due today" / "3 tasks due today" when only due today,
+  "Overdue tasks — 1 task is overdue" / "4 tasks are overdue" when only
+  overdue.
+- The digest reads the **disk index**, never open buffers — a task due
+  today in an unsaved buffer counts after its save. Reminder state
+  lives in the plugin config, never the panel's localStorage view
+  prefs.
+- Settings → Tasks ("Due-date reminders", default on) turns it off.
+  Rejected alternatives: app-internal toast chrome, OS-scheduled
+  reminders for the closed app (`decisions.md`).
+- Implementation: `plugins/tasks/renderer/reminders.ts` (pure digest +
+  `startReminders` controller with injectable seams — clock, tasks,
+  settings, notify) + `reminders.spec.ts` (20 DOM-free cases), and
+  `settings.ts` — the plugin's first Settings page (manifest 1.2.0,
+  permissions + `settings`; `ui.notify` needs no permission). Manual
+  §6, `docs/05` §5.0, `docs/06` §6.70 updated.
+
 ### req-62 — Ticket header in the editor
 
 **Not yet manually verified by the owner.** Owner request, outside the

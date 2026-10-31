@@ -59,8 +59,8 @@ owner's verification round for 1–81 closed 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 85; latest requirement id: req-64 (a worker that needs
-the owner asks and waits); req-65 is reserved for interactive mode),
+highest used (latest: milestone 85; latest requirement id: req-65 (due-date
+reminders, T-0012); req-66 is reserved for interactive mode),
 the update check's positive answer is inline text — req-43 and req-44
 were owner requests outside the list, shipped and owner-verified in
 the same step).
@@ -117,8 +117,10 @@ is not yet verified against the installed CLI. Also open: a token budget per run
 (stop a worker that reads without writing), and a tickets-repo-side credit
 figure for flat plans (GLM coding plan reports cost 0).
 
-**req-65 — Interactive mode at the plan phase and every checkpoint**
-(owner request, outside the list, 2026-10-30; after req-62). The owner
+**req-66 — Interactive mode at the plan phase and every checkpoint**
+(owner request, outside the list, 2026-10-30; after req-62. Renumbered
+from req-65 on 2026-10-31: req-65 shipped first, as the due-date
+reminders, T-0012). The owner
 refines tickets in a dialog with the fleet worker inside Drey instead of
 by hand or with an outside LLM — so the switch must be one click, above
 all on the review checkpoints (plan-review, review, commit), not only in
@@ -175,8 +177,6 @@ end moves a checkpoint's interactive run uses.
 - **Text completion (autocomplete).** ⚠️ Latency with a local model is the
   open question — run a spike (time to first suggestion on the target
   model) before any design. Today only `#tag` and `:emoji:` completion exist.
-- **Due-date reminders.** The `📅` date is parsed and sortable, but nothing
-  notifies.
 - **Web clipper.** Save the in-editor browser tab's page as a Markdown note.
 - **Tasks inside the document.** First define what the Tasks panel
   (filters, due dates, priorities, completion dates — ADR-0033) and the
