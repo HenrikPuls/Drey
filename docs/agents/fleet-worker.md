@@ -83,6 +83,13 @@ A spec sits beside the file it tests. The dependency rules between
 
 ## Finding things without reading everything
 
+- Delegate broad exploration to the `explore` subagent (the task tool):
+  when more than a few files must be examined, or the answer spans the
+  repo (where a symbol lives, what a feature touches), let it do the
+  reading in its own throwaway context and work from its summary — it
+  cites `file:line` for every claim. Read yourself only the files you
+  will edit, at line ranges. Every turn of yours re-sends your whole
+  context; a lean context is the cheapest token saving there is.
 - Start from the plan's file list and line ranges. Otherwise search for
   the symbol or the UI string, then read the lines around the hits.
 - Every model call of your run carries everything read so far, so a
