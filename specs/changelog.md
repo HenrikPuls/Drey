@@ -20,6 +20,41 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-66 R10 — Tickets remote: the detail pane and the columns keep their scroll
+
+Not yet manually verified by the owner. T-0056 (owner-reported defect,
+outside the list). On the iPad a desk-side change repaints the whole
+client view, and with the fleet chain pushing events every couple of
+seconds the ticket detail pane — and every column list — snapped back
+to the top while being read. The strip's scroll memory
+(`kanban.ts`) now covers all three scrollers:
+
+- **Per-scroller memory.** A `scroll` listener on each `.kcol-list`
+  (keyed by its `data-phase`) and on the `.detail` pane records the
+  tops; one `requestAnimationFrame` after the build restores them —
+  remembered tops first, the selected card's `scrollIntoView` reveal
+  last, so the reveal still wins where they overlap. Parity with the
+  desk board's `restoreScroll`, which keeps the board's and its
+  columns' scroll the same way.
+- **Fresh content starts at the top.** A different selected ticket or
+  a different tab resets the remembered pane top — the phone's
+  route-change repaint-at-0 behaviour, mirrored.
+- Complementary to T-0053's view-keyed repaint guard (merged into the
+  base meanwhile): rarer repaints, and the ones that remain keep their
+  position.
+- e2e: the fixture's T-0053 grows a twelve-paragraph Description (the
+  pane genuinely overflows at iPad-landscape height; every string other
+  tests assert stays byte-identical), and the iPad spec scrolls the
+  pane, lets a desk-side move repaint, and asserts the new pane is back
+  where the reader was. The move — not a revision bump — is the
+  trigger: the guard skips a repaint when nothing visible changed.
+- Repaired on the way: R4's stop assertion in `e2e/tickets-remote.spec.ts`
+  was stale against the req-66 follow-up's ended-run reopen composer
+  (the suite failed on the untouched base); it now pins the Stop button
+  gone and the reopen field there. Manual: the "On an iPad" paragraph
+  says the pane and the columns keep their scroll while the board
+  redraws live.
+
 ### fix — req-66 follow-up: a run follows a moved ticket; every run takes a message
 
 Owner-verified (signed off 2026-10-31). Owner request, outside the
