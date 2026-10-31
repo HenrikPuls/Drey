@@ -473,6 +473,35 @@ describe('the opencode adapter', () => {
     vi.useRealTimers();
   });
 
+  it('holdAtSpawn boots, creates the session and starts the poll — but posts no prompt (req-75)', async () => {
+    vi.useFakeTimers();
+    const prompts: string[] = [];
+    const interrupts: string[] = [];
+    const { fetch } = scriptedFetch({ sessionCreated: () => undefined, prompts, interrupts, messages: () => [] });
+    const proc = fakeProcess();
+    const { events, sessions, start } = collect({ holdAtSpawn: true });
+    const handle = opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+
+    await vi.advanceTimersByTimeAsync(100);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(1_000);
+    // The worker is up, its session exists and is reported — the quiet
+    // start delivers nothing: the worker stands until steered.
+    expect(sessions).toEqual(['ses_oc']);
+    expect(prompts).toEqual([]);
+
+    // The poll runs as usual (usage lands), and the owner's first steer
+    // is the session's first prompt.
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(events.find((e) => e.kind === 'usage' && e.tokensIn !== undefined)?.tokensIn).toBe(14);
+    await handle.steer('The owner starts the dialog');
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('The owner starts the dialog');
+
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
   it('lists its slash commands and runs a known one as a command, not as text', async () => {
     vi.useFakeTimers();
     const prompts: string[] = [];
@@ -1324,6 +1353,17 @@ describe('questionOf / permissionText — what a worker waits on (req-64)', () =
     expect(questionOf('  question:\nA or B?\n')).toBe('A or B?');
     expect(questionOf('Done. QUESTION: none')).toBeNull();
     expect(questionOf('QUESTION:   ')).toBeNull();
+  });
+
+  it('accepts a marker on any line start — the last one wins (req-75)', () => {
+    // A worker asking outside the W2 shape buries its marker mid-message
+    // (evidence R-20261031T02050-wewb): the wait still sets. A marker in
+    // running prose stays prose.
+    expect(questionOf('All tests pass.\nQUESTION: Which API do you prefer?')).toBe('Which API do you prefer?');
+    expect(questionOf('QUESTION: first\nsome detail\nQUESTION: second')).toBe('second');
+    expect(questionOf('noise\nDone. QUESTION: none\nnoise')).toBeNull();
+    // Text from the marker to the message's end, trimmed.
+    expect(questionOf('QUESTION:\nA or B?\nplease advise')).toBe('A or B?\nplease advise');
   });
 
   it('names the action and its resources, plus a message that says more', () => {

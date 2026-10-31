@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AttachInfo, ProviderAdapter, ProviderStart, WorkerHandle } from './providers';
-import { HANDOVER_CONTINUE, HANDOVER_HELD, probeExec, RunSupervisor, usageSummary, type RunSupervisorDeps } from './runs';
+import { HANDOVER_CONTINUE, probeExec, RunSupervisor, usageSummary, type RunSupervisorDeps } from './runs';
 import { processAlive } from './procs';
 import type { RunInfo, RunRequest, RunState } from './protocol';
 import { newTicketFileText, patchTicketFile, parseTicketFile } from '../ticket-files';
@@ -975,6 +975,58 @@ describe('RunSupervisor', () => {
     await fsp.access(path.join(vaultDir, rel)); // the ticket never moved
   });
 
+  it('an interactive dialog spawns quiet — no brief delivered, the worker stands held (req-75)', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(
+      request({
+        ticketRelPath: rel,
+        acceptance: [],
+        gate: 'structural',
+        nextPhase: null,
+        nextPhaseDir: null,
+        interactive: 'plan',
+      }),
+    );
+    expect(started.ok).toBe(true);
+    const info = (started as { run: { id: string } }).run;
+    // Nothing runs until the owner asks: the adapter delivers no first
+    // prompt, and the record says the brief still rides ahead.
+    expect(adapter.starts[0]!.holdAtSpawn).toBe(true);
+    expect(adapter.handles[0]!.setHold).toHaveBeenCalledWith(true);
+    expect(sup.get(info.id)?.quietStart).toBe(true);
+    expect(sup.get(info.id)?.held).toBe(true);
+  });
+
+  it("the owner's first message wraps the quiet brief once; every later send goes bare (req-75)", async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(
+      request({
+        ticketRelPath: rel,
+        acceptance: [],
+        gate: 'structural',
+        nextPhase: null,
+        nextPhaseDir: null,
+        interactive: 'refine',
+      }),
+    );
+    const id = (started as { run: { id: string } }).run.id;
+
+    expect((await sup.send(id, 'Where does the parser live?')).ok).toBe(true);
+    expect(adapter.handles[0]!.steer).toHaveBeenCalledWith(
+      'Do the ticket.\n\n---\n\nThe owner starts the dialog:\nWhere does the parser live?',
+    );
+    // Once, and persisted: quietStart is cleared with the send.
+    expect(sup.get(id)?.quietStart).toBeUndefined();
+    await vi.waitFor(async () =>
+      expect(JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')).info.quietStart).toBeUndefined(),
+    );
+
+    expect((await sup.send(id, 'Start with the lexer')).ok).toBe(true);
+    expect(adapter.handles[0]!.steer).toHaveBeenLastCalledWith('Start with the lexer');
+  });
+
   it('a fleet move into a non-claim phase releases a stale claim', async () => {
     const { sup, adapter } = supervisor();
     const rel = await writeTicket();
@@ -1211,6 +1263,8 @@ describe('RunSupervisor', () => {
     const rel = await writeTicket();
     const started = await sup.start(request({ ticketRelPath: rel }));
     const id = (started as { run: { id: string } }).run.id;
+    // A dispatched run posts its brief at spawn, as before (req-75).
+    expect(adapter.starts[0]!.holdAtSpawn).not.toBe(true);
 
     const sent = await sup.send(id, 'Focus on the parser first');
     expect(sent.ok).toBe(true);
@@ -1540,7 +1594,7 @@ describe('RunSupervisor handover', () => {
     expect(second.adapter.starts[0]!.usageBase).toEqual({ tokensIn: 0, tokensOut: 0, cacheReadTokens: 0, costUsd: null });
   });
 
-  it('a held run comes back held, its worker told to wait for the owner', async () => {
+  it('a held run comes back held and fully silent — no resume prompt at all', async () => {
     const first = claudeSupervisor();
     const id = await startedClaudeRun(first.sup, first.adapter);
     expect((await first.sup.takeover(id)).ok).toBe(true);
@@ -1549,7 +1603,11 @@ describe('RunSupervisor handover', () => {
     const second = claudeSupervisor();
     await second.sup.adopt();
     expect(second.sup.get(id)?.held).toBe(true);
-    expect(second.adapter.starts[0]!.instruction).toBe(HANDOVER_HELD);
+    // The resume prompt itself caused the "I'm back" no-op turns
+    // (R-20261030T20203-wpsd): a held resume delivers nothing — the
+    // worker stands, held, until the owner sends.
+    expect(second.adapter.starts[0]!.instruction).toBe(HANDOVER_CONTINUE);
+    expect(second.adapter.starts[0]!.holdAtSpawn).toBe(true);
     expect(second.adapter.handles[0]!.setHold).toHaveBeenCalledWith(true);
   });
 

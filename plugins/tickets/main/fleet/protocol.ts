@@ -406,6 +406,13 @@ export interface RunInfo {
    */
   readonly interactive?: InteractiveMode;
   /**
+   * A quiet interactive start (req-75): the worker was spawned WITHOUT
+   * its composed brief — nothing runs until the owner's first message,
+   * which wraps the brief once. Set at spawn, cleared on that first
+   * send; absent on records written before it existed.
+   */
+  readonly quietStart?: true;
+  /**
    * Whether the worker is in the middle of a turn (`busy`) or standing
    * and waiting for input (`idle`) — the board's "running or standing".
    * Absent while the provider has not said (and for providers that
