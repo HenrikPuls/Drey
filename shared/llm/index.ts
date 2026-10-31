@@ -69,3 +69,6 @@ export {
   toCurl,
   truncate,
 } from './llm-debug';
+
+export type { AssembledReply, StreamSink } from './stream-assembly';
+export { createAnthropicEventSink, createOpenAiChunkSink } from './stream-assembly';
