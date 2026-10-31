@@ -43,9 +43,12 @@ export interface LlmChatOptions {
   /** Progress of the tool loop: one `start` and one `end` per tool call. */
   onToolEvent?: (event: ToolCallEvent) => void;
   /**
-   * Incremental text. A provider that cannot stream MUST still call this
-   * exactly once with the full text when a callback was passed, so callers
-   * never branch on capability to render the reply.
+   * Incremental text. Without a tool loop the provider streams it — one
+   * that cannot stream MUST still call this exactly once with the full
+   * text when a callback was passed, so callers never branch on
+   * capability to render the reply. With a tool loop the LOOP forwards:
+   * every streamed round's deltas as they arrive, and exactly one call
+   * with the full text when the final round did not stream.
    */
   onDelta?: (delta: string) => void;
   /** Continue a provider-side session (Claude Code `--resume`) instead of replaying history. */
