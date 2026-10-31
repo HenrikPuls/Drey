@@ -192,7 +192,18 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(readyButtons).toHaveText(['Launch this version', 'Accept and merge', 'Send back…']);
     await panel.locator('.work-row[data-id="T-0106"]').click();
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Fix the palette race in CI');
-    await expect(readyButtons).toHaveText(['Launch this version', 'Accept', 'Send back…']);
+    await expect(readyButtons).toHaveText(['Launch this version', 'Accept and archive', 'Send back…']);
+
+    // The checkpoint actions live in the status row too (req-81) — always
+    // there — and the Ready chip folds the card away and brings it back.
+    await expect(thread.locator('.tickets-thread-checkpoints button')).toHaveCount(3);
+    await expect(thread.locator('.tickets-thread-chip')).toHaveText('Ready to try ⌄');
+    await thread.locator('.tickets-thread-chip').click();
+    await expect(thread.locator('.tickets-ready')).toBeHidden();
+    await expect(thread.locator('.tickets-thread-decisions')).toBeVisible();
+    await thread.locator('.tickets-thread-chip').click();
+    await expect(thread.locator('.tickets-ready')).toBeVisible();
+    await expect(readyButtons).toHaveText(['Launch this version', 'Accept and archive', 'Send back…']);
 
     // A ticket with a live run brings its run tab back into the same pane.
     await panel.locator('.work-row[data-id="T-0107"]').click();

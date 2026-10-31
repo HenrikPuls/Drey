@@ -20,6 +20,28 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-81 — the checkpoint actions live in the thread's status row, the Ready card folds
+
+**Not yet manually verified by the owner.** Owner request, 2026-10-31.
+The Ready card popped exactly when a run had ended — for a ticket the
+chain had already merged into main (the unattended pipeline's first
+owner checkpoint is the one *after* the merge), its "Accept" arrived
+too late to mean anything, and once gone the view could not be opened
+again. Now the actions sit where the owner reads the state: the thread
+header's control row carries **Launch**, **Accept** (titled with the
+real move: archive in the terminal phase, `Approve → …` earlier) and
+**Send back** whenever the ticket waits on the owner — beside the run
+controls, separated by a hairline, always there and reopening with the
+thread, whatever the card does (`checkpointControls` pure beside
+`headerControls`; Launch only on a repo ticket — a removed worktree
+refuses with a mutation hint). The Ready card itself folds: a **Ready
+chip** in the header (its label is the waiting checkpoint, Ready to
+try / Review) hides the card and brings it back any time; while it is
+folded the decision bar above the composer returns. The terminal
+button no longer reads a bare `Accept` but **Accept and archive** —
+truthful about a phase whose merge already happened (`Accept and
+merge` keeps meaning the earlier checkpoints).
+
 ### Fix — the thread composer's toolbar back in its box, the thread header on the meta-bar line
 
 **Not yet manually verified by the owner.** Owner report, 2026-10-31.

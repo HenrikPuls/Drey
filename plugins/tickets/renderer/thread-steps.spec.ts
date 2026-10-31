@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RunInfo } from '../main/fleet/protocol';
-import { durationWords, headerControls, liveStateWord, threadSteps } from './thread-steps';
+import type { NeedItem } from '../shared/remote-protocol';
+import { checkpointControls, durationWords, headerControls, liveStateWord, threadSteps } from './thread-steps';
 
 function run(over: Partial<RunInfo> = {}): RunInfo {
   return {
@@ -137,5 +138,29 @@ describe('headerControls', () => {
     expect(headerControls(run({ state: 'stopped', sessionRef: 'ses-1' }))).toEqual(['resume']);
     expect(headerControls(run({ state: 'failed', sessionRef: null }))).toEqual(['start']);
     expect(headerControls(null)).toEqual(['start']);
+  });
+});
+
+describe('checkpointControls (req-81)', () => {
+  const need = (kind: NeedItem['kind']): NeedItem => ({
+    kind,
+    ticketId: 'T-0086',
+    title: 'The fleet status in the footer',
+    phase: 'done',
+    runId: null,
+    text: '',
+    since: '2026-10-31T18:00:00Z',
+  });
+
+  it('is empty without a checkpoint — questions, approvals, red gates, no need at all', () => {
+    expect(checkpointControls(null, true)).toEqual([]);
+    expect(checkpointControls(need('question'), true)).toEqual([]);
+    expect(checkpointControls(need('permission'), true)).toEqual([]);
+    expect(checkpointControls(need('red-gate'), false)).toEqual([]);
+  });
+
+  it('accepts and sends back without a repo; Launch joins when the ticket carries one', () => {
+    expect(checkpointControls(need('checkpoint'), false)).toEqual(['accept', 'sendback']);
+    expect(checkpointControls(need('checkpoint'), true)).toEqual(['launch', 'accept', 'sendback']);
   });
 });

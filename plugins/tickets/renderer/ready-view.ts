@@ -26,7 +26,7 @@ export interface ReadyData {
   readonly title: string | null;
   readonly track: TicketTrack | null;
   readonly repo: string | null;
-  /** In the terminal phase the Accept button reads just `Accept`. */
+  /** In the terminal phase the Accept button reads `Accept and archive` (req-81). */
   readonly terminal: boolean;
   readonly changes: ParsedChanges | null;
 }
@@ -124,7 +124,7 @@ export function readyCardNode(deps: ReadyViewDeps, data: ReadyData): HTMLElement
   launch.title = 'Open the ticket worktree in a new console and start it there';
   launch.append(deps.icon('rocket', 14), el('span', undefined, 'Launch this version'));
   launch.addEventListener('click', deps.onLaunch);
-  const accept = el('button', 'tickets-takeover-btn', data.terminal ? 'Accept' : 'Accept and merge');
+  const accept = el('button', 'tickets-takeover-btn', data.terminal ? 'Accept and archive' : 'Accept and merge');
   accept.type = 'button';
   accept.addEventListener('click', deps.onAccept);
   const sendBack = el('button', 'tickets-takeover-btn tickets-ready-sendback', 'Send back…');

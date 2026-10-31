@@ -5,6 +5,7 @@
  * (or newest) run open at the bottom. Pure: `mountThreadOf` draws it.
  */
 import type { RunInfo } from '../main/fleet/protocol';
+import type { NeedItem } from '../shared/remote-protocol';
 import { execClockMs } from './worker-status';
 
 /** The states a run can be watched in; `detached` is unwatchable but alive. */
@@ -179,4 +180,23 @@ export function headerControls(run: RunInfo | null): readonly HeaderControl[] {
     return controls;
   }
   return run.sessionRef !== null ? ['resume'] : ['start'];
+}
+
+/** The header's checkpoint actions (req-81): what an ended run leaves for the owner. */
+export type CheckpointControl = 'launch' | 'accept' | 'sendback';
+
+/**
+ * The thread header's checkpoint actions (req-81, owner request
+ * 2026-10-31): a ticket waiting on the owner (a checkpoint need —
+ * Ready to try, Review, Plan to approve) carries its actions in the
+ * status row beside the run controls, whatever the Ready card shows —
+ * they are always there, in every state of the card. Launch only for a
+ * repo ticket (a removed worktree says so on click, as a mutation
+ * error); accept and send back always apply.
+ */
+export function checkpointControls(need: NeedItem | null, repo: boolean): readonly CheckpointControl[] {
+  if (need === null || need.kind !== 'checkpoint') {
+    return [];
+  }
+  return repo ? ['launch', 'accept', 'sendback'] : ['accept', 'sendback'];
 }
