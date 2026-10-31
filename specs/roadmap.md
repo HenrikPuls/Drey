@@ -148,8 +148,11 @@ shipped and confirmed on its own, in this order:
   stable finding ids and propose tickets into Ideas. STRIDE and TARA
   are separate items (req-75, req-76).
 
-⚠️ Open before W1: whether `order.md` pins survive as the Ideas order or
-go with the board.
+Ideas order (owner, 2026-10-31): by the existing `priority:` field
+(urgent / high / normal / low), newest first within a priority — no
+exact hand order; the `order.md` pins go with the board (the file is
+left in place and ignored, the validator stops reading it). Priority
+is set from a chip on the row and in the capture window.
 
 **Fresh worktrees check out CRLF; the tickets prompt specs require raw
 LF.** The repo-local git config has `core.autocrlf=true`, so a fresh

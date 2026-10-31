@@ -40,7 +40,9 @@ one means moving it back to the roadmap with a new justification.
   phase columns side by side need ~2000 px, repeat worker state in four
   places and do not show whose turn it is; the owner does not use it in
   that form. Replaced by the Work panel (req-74, ADR-0087); the phase
-  folders stay the storage format.
+  folders stay the storage format. With it go the exact hand order
+  (`_meta/order.md` pins): Ideas are ordered by `priority:`, newest
+  first within one (owner, 2026-10-31 — a rating is enough).
 - **Job Queue (generic, multi-consumer)** — background processes with
   status/progress, crash persistence, auto-pause on interactive use,
   meant to cover both re-indexing and export. No second consumer exists

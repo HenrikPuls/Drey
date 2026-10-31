@@ -97,7 +97,8 @@ phone. Watch any worker and step in when needed.
 
 - Removes most of the board renderer (columns, lanes, column controls,
   drag between columns, collapsed columns, card order pins in the UI);
-  `order.md` and the WIP display lose their reader. The runner, the
+  `order.md` and the WIP display lose their reader — Ideas sort by
+  `priority:`, newest first within a priority (owner, 2026-10-31). The runner, the
   repository format, normalization and the validator stay.
 - New contracts: the question shape (worker prompts +
   `specs/classifier-spec.md`), the `## Changes` section and the
