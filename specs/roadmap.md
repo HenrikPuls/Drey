@@ -126,10 +126,13 @@ shipped and confirmed on its own, in this order:
   work repo; the plan grows beside the dialog in the ticket file;
   "split into phase tickets". **Both edit the plan** (owner request
   2026-10-31): the owner changes text or the Mermaid architecture
-  diagram in the editor, and the next message carries the delta since
-  the model's last turn (diff + per-block summary, shown in the thread
-  and as a removable composer chip) for discussion; gutter marks show
-  who changed which block (ADR-0087 decision 8).
+  diagram in the editor (Mermaid only to start), and the next message
+  carries **only the owner's edits** since the model's last turn —
+  never the model's own (a shadow text that receives the model's edits
+  but not the owner's; delta = shadow → file) — as diff + per-block
+  summary, shown in the thread and as a removable composer chip, for
+  discussion; gutter marks show who changed which block (ADR-0087
+  decision 8).
 - **W7 — Orchestrator.** Phase tickets with gates between phases;
   routing by a rules file in the tickets repository (first match wins:
   worker, model, review); `touches:` paths per ticket and an overlap

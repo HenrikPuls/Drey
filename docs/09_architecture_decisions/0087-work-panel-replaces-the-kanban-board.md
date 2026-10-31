@@ -78,14 +78,20 @@ phone. Watch any worker and step in when needed.
    The ticket file is the shared document: the model writes it through
    the open tab (milestone 78, `OpenDocsBridge`), the owner edits it in
    the same editor — text, acceptance criteria, a Mermaid architecture
-   diagram. Every model turn records the version of the file it last
-   saw. When the owner sends the next message, the edits made since
-   then go along as a **delta**: a unified diff of the file plus a
-   one-line-per-block summary, shown in the thread ("You edited the
-   plan — 3 changes") and as a removable chip in the composer before
-   sending. The model is told to discuss the changes, not silently
-   accept them. Gutter marks in the editor show which blocks the owner
-   and which the model changed since the last turn.
+   diagram. When the owner sends the next message, **only the owner's
+   edits** since the model's last turn go along as a **delta** — the
+   model's own edits are never summarized back to it (owner, 2026-10-31).
+   Mechanism: a per-conversation **shadow text** starts as the file the
+   model last saw; every edit the model makes is applied to the file
+   *and* to the shadow, the owner's edits only to the file; on send the
+   delta is the diff shadow → file (a unified diff plus a
+   one-line-per-block summary), then the shadow becomes the file. The
+   delta shows in the thread ("You edited the plan — 3 changes") and as
+   a removable chip in the composer before sending; with no owner edit
+   there is no chip and nothing is sent. The model is told to discuss
+   the changes, not silently accept them. Gutter marks in the editor
+   show which blocks the owner and which the model changed since the
+   last turn (the model's marks are display only).
 
 ## Consequences
 
@@ -103,11 +109,16 @@ phone. Watch any worker and step in when needed.
   text the model last saw — kept in the run record, not in the tickets
   repo) and a prompt contract for it (`specs/classifier-spec.md`).
   Diagrams are diffable only as text: **Mermaid** is the plan's diagram
-  format; a draw.io diagram (ADR-0064) changes as XML, so its delta is
-  "diagram changed" plus a re-read, not a readable diff. ⚠️ Simultaneous
+  format (owner, 2026-10-31: Mermaid only to start); draw.io diagrams
+  (ADR-0064) in a plan are a later, separate decision — their XML
+  would need a semantic summary, not a diff. ⚠️ Simultaneous
   typing by the owner while the model edits the same block makes the
   model's exact-match edit fail (`shared/text-edit.ts`); it then
-  re-reads — acceptable, but visible.
+  re-reads — acceptable, but visible. Attributing an edit needs its
+  origin: the model's writes arrive through `OpenDocsBridge` and are
+  tagged there, everything else typed in the tab counts as the owner's;
+  an edit the owner makes in another program (watcher reload) counts as
+  the owner's too.
 - Built and shipped in stages W1–W9 (`specs/roadmap.md`, req-74); this
   ADR moves to accepted with W1.
 - Design reference: the owner's canvas "Drey Tickets — Workflow
