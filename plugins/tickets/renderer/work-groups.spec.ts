@@ -8,12 +8,23 @@ import {
   type TicketCard,
   type TicketPriority,
 } from '../shared/tickets';
-import { checkpointActionOf, ideaPhaseIds, queueTargetOf, statusLineOf, workGroups } from './work-groups';
+import type { NeedItem } from '../shared/remote-protocol';
+import {
+  ageWords,
+  checkpointActionOf,
+  ideaPhaseIds,
+  needKindLabel,
+  queueTargetOf,
+  runningStepOf,
+  statusLineOf,
+  workGroups,
+} from './work-groups';
 
 /**
- * req-75 W1: the Work panel's three groups over the default eight-phase
+ * req-75 W1b: the Work panel's four groups over the default eight-phase
  * pipeline — inbox/prioritized are ideas, plan and build are the
- * machine's, plan-review/review/done are the owner's checkpoints.
+ * machine's, plan-review/review/done are the owner's checkpoints. The
+ * Done-this-week group is the snapshot's recentDone, not built here.
  */
 
 const phase = (id: string, handover: string): PipelinePhase =>
@@ -33,7 +44,7 @@ const PIPELINE: readonly PipelinePhase[] = [
 const card = (
   id: string,
   at: string,
-  opts: { priority?: TicketPriority; created?: string; blocked?: readonly string[] } = {},
+  opts: { priority?: TicketPriority; created?: string; blocked?: readonly string[]; interactive?: boolean } = {},
 ): TicketCard =>
   ({
     id,
@@ -43,6 +54,7 @@ const card = (
       title: `Ticket ${id}`,
       priority: opts.priority ?? 'normal',
       parkedReason: null,
+      interactive: opts.interactive ?? false,
       entered: { inbox: opts.created ?? '2026-10-30T10:00:00Z' },
     },
     blocked: opts.blocked ?? [],
@@ -57,6 +69,7 @@ const board = (placed: Record<string, readonly TicketCard[]>, extra: readonly Bo
       ...extra,
     ],
     checkpoints: ['plan-review', 'review', 'done'],
+    recentDone: [],
   }) as unknown as BoardSnapshot;
 
 const run = (patch: Partial<RunInfo>): RunInfo =>
@@ -103,7 +116,20 @@ describe('workGroups', () => {
     const groups = workGroups(snap, []);
     expect(ids(groups.needs)).toEqual(['T-0004', 'T-0006']);
     expect(ids(groups.ideas).sort()).toEqual(['T-0001', 'T-0002']);
-    expect(ids(groups.progress)).toEqual(['T-0005', 'T-0003']);
+    expect(ids(groups.shaping)).toEqual([]);
+    expect(ids(groups.running)).toEqual(['T-0005', 'T-0003']);
+  });
+
+  it('the interactive reservation and a live dialog run both shape the ticket', () => {
+    const snap = board({
+      inbox: [card('T-0001', 'inbox', { interactive: true })],
+      build: [card('T-0002', 'build'), card('T-0003', 'build')],
+    });
+    const groups = workGroups(snap, [run({ id: 'a', ticketId: 'T-0002', interactive: 'plan' })]);
+    // Closest to done first, like Running.
+    expect(ids(groups.shaping)).toEqual(['T-0002', 'T-0001']);
+    expect(ids(groups.running)).toEqual(['T-0003']);
+    expect(ids(groups.ideas)).toEqual([]);
   });
 
   it('orders ideas by priority, newest first within a priority', () => {
@@ -120,7 +146,7 @@ describe('workGroups', () => {
     expect(groups.ideas.map((r) => r.queued)).toEqual([true, false, false, false]);
   });
 
-  it('a waiting run puts its ticket into Needs you; a working one stays in progress with its run', () => {
+  it('a waiting run puts its ticket into Needs you; a working one stays in Running with its run', () => {
     const snap = board({ build: [card('T-0001', 'build'), card('T-0002', 'build')] });
     const groups = workGroups(snap, [
       run({ id: 'a', ticketId: 'T-0001', waiting: { kind: 'question', text: 'Fold?', since: '2026-10-30T10:05:00Z' } }),
@@ -128,8 +154,8 @@ describe('workGroups', () => {
     ]);
     expect(ids(groups.needs)).toEqual(['T-0001']);
     expect(groups.needs[0]!.need?.kind).toBe('question');
-    expect(ids(groups.progress)).toEqual(['T-0002']);
-    expect(groups.progress[0]!.run?.id).toBe('b');
+    expect(ids(groups.running)).toEqual(['T-0002']);
+    expect(groups.running[0]!.run?.id).toBe('b');
   });
 
   it('a red gate in the phase it ran needs you; one whose ticket moved on does not', () => {
@@ -151,31 +177,145 @@ describe('workGroups', () => {
     expect(checkpointActionOf(snap, 'done')).toEqual({ kind: 'accept', label: 'Accept' });
   });
 
-  it('keeps tickets of an unknown directory in progress, after the configured phases', () => {
+  it('keeps tickets of an unknown directory in Running, after the configured phases', () => {
     const limbo: BoardColumn = { phase: phase('limbo', 'manual'), unknown: true, tickets: [card('T-0007', 'limbo')] };
     const groups = workGroups(board({ build: [card('T-0001', 'build')] }, [limbo]), []);
-    expect(ids(groups.progress)).toEqual(['T-0001', 'T-0007']);
+    expect(ids(groups.running)).toEqual(['T-0001', 'T-0007']);
   });
 });
 
-describe('checkpointActionOf / statusLineOf', () => {
+describe('checkpointActionOf', () => {
   it('approves into the next phase', () => {
     expect(checkpointActionOf(board({}), 'plan-review')).toEqual({ kind: 'approve', to: 'build', label: 'Approve → Build' });
   });
+});
 
-  it('says why a row waits, or where it stands', () => {
+describe('needKindLabel', () => {
+  const need = (kind: NeedItem['kind'], phase: string): NeedItem =>
+    ({ kind, ticketId: 'T-0001', title: 'T', phase, runId: null, text: '', since: null }) as NeedItem;
+
+  it('names the four run-driven kinds', () => {
+    const snap = board({});
+    expect(needKindLabel(need('question', 'build'), snap)).toBe('Question');
+    expect(needKindLabel(need('permission', 'build'), snap)).toBe('Approval');
+    expect(needKindLabel(need('red-gate', 'build'), snap)).toBe('Gate red');
+    expect(needKindLabel(need('failed', 'build'), snap)).toBe('Run failed');
+  });
+
+  it('a checkpoint after the plan column is a plan; the terminal phase is ready; the rest review', () => {
+    const snap = board({});
+    expect(needKindLabel(need('checkpoint', 'plan-review'), snap)).toBe('Plan to approve');
+    expect(needKindLabel(need('checkpoint', 'review'), snap)).toBe('Review');
+    expect(needKindLabel(need('checkpoint', 'done'), snap)).toBe('Ready to try');
+  });
+});
+
+describe('runningStepOf', () => {
+  const stepOf = (id: string, snap: BoardSnapshot, runs: readonly RunInfo[] = []): ReturnType<typeof runningStepOf> => {
+    const row = workGroups(snap, runs).running.find((r) => r.card.id === id);
+    if (row === undefined) {
+      throw new Error(`${id} is not in Running`);
+    }
+    return runningStepOf(row, snap);
+  };
+
+  it('names the step by the phase id, with the run’s activity as the line', () => {
+    const limbo: BoardColumn = { phase: phase('limbo', 'manual'), unknown: true, tickets: [card('T-0005', 'limbo')] };
+    const snap = board(
+      {
+        plan: [card('T-0001', 'plan')],
+        build: [card('T-0002', 'build')],
+        commit: [card('T-0003', 'commit')],
+      },
+      [limbo],
+    );
+    expect(stepOf('T-0001', snap, [run({ ticketId: 'T-0001', activity: 'Reading daily-note.ts' })])).toEqual({
+      step: 'Planning',
+      line: 'Reading daily-note.ts',
+      live: true,
+    });
+    expect(stepOf('T-0002', snap, [run({ ticketId: 'T-0002', activity: '  ' })])).toEqual({
+      step: 'Building',
+      line: '',
+      live: true,
+    });
+    expect(stepOf('T-0003', snap, [run({ ticketId: 'T-0003' })])).toEqual({ step: 'Merging', line: '', live: true });
+    // A phase without its own step word keeps its title.
+    expect(stepOf('T-0005', snap, [run({ ticketId: 'T-0005' })]).step).toBe('Limbo');
+  });
+
+  it('without a run it is queued — behind the first blocker by title, else a free worker', () => {
     const snap = board({
-      inbox: [card('T-0001', 'inbox', { blocked: ['T-0009'] })],
-      prioritized: [card('T-0002', 'prioritized')],
+      build: [card('T-0001', 'build', { blocked: ['T-0002'] }), card('T-0003', 'build')],
+      review: [card('T-0002', 'review')],
+    });
+    expect(stepOf('T-0001', snap)).toEqual({ step: 'Queued', line: 'waits for “Ticket T-0002”', live: false });
+    expect(stepOf('T-0003', snap)).toEqual({ step: 'Queued', line: 'waits for a free worker', live: false });
+    // An unknown blocker falls back to its id.
+    const orphan = board({ build: [card('T-0004', 'build', { blocked: ['T-0099'] })] });
+    expect(stepOf('T-0004', orphan).line).toBe('waits for “T-0099”');
+  });
+});
+
+describe('ageWords', () => {
+  const NOW = Date.parse('2026-10-31T12:00:00Z');
+
+  it('steps through now, minutes, hours, yesterday and days', () => {
+    expect(ageWords(null, NOW)).toBe('');
+    expect(ageWords('not a stamp', NOW)).toBe('');
+    expect(ageWords('2026-10-31T11:59:30Z', NOW)).toBe('now');
+    expect(ageWords('2026-10-31T11:56:00Z', NOW)).toBe('4 min');
+    expect(ageWords('2026-10-31T09:00:00Z', NOW)).toBe('3 h');
+    expect(ageWords('2026-10-30T09:00:00Z', NOW)).toBe('yesterday');
+    expect(ageWords('2026-10-27T00:00:00Z', NOW)).toBe('4 d');
+  });
+});
+
+describe('statusLineOf (Needs-you lines)', () => {
+  it('says why it waits, after the kind chip', () => {
+    const snap = board({
+      build: [card('T-0001', 'build')],
       'plan-review': [card('T-0003', 'plan-review')],
+      review: [card('T-0005', 'review')],
       done: [card('T-0004', 'done')],
     });
-    const groups = workGroups(snap, []);
-    const line = (id: string): string =>
-      statusLineOf([...groups.needs, ...groups.ideas, ...groups.progress].find((r) => r.card.id === id)!, snap);
-    expect(line('T-0001')).toBe('Blocked by T-0009');
-    expect(line('T-0002')).toBe('Queued for the fleet');
-    expect(line('T-0003')).toBe('Plan-review — waits for your review');
-    expect(line('T-0004')).toBe('Done — accept it into the archive');
+    const groups = workGroups(snap, [
+      run({ ticketId: 'T-0001', waiting: { kind: 'question', text: 'Which file?', since: '2026-10-30T10:05:00Z' } }),
+    ]);
+    const line = (id: string): string => {
+      const row = groups.needs.find((r) => r.card.id === id);
+      if (row === undefined) {
+        throw new Error(`${id} is not in Needs you`);
+      }
+      return statusLineOf(row, snap);
+    };
+    expect(line('T-0001')).toBe('Which file?');
+    expect(line('T-0003')).toBe('plan ready');
+    expect(line('T-0005')).toBe('waits for your review');
+    expect(line('T-0004')).toBe('checks green');
+  });
+
+  it('a shaped question reads as its question (req-75 W2)', () => {
+    const snap = board({ build: [card('T-0001', 'build')] });
+    const groups = workGroups(snap, [
+      run({
+        ticketId: 'T-0001',
+        waiting: {
+          kind: 'question',
+          text: 'Which database?\nTicket: the store\nOptions:\n1. SQLite — no server',
+          since: '2026-10-30T10:05:00Z',
+          shaped: {
+            question: 'Which database?',
+            context: 'the store',
+            where: null,
+            why: null,
+            options: [{ n: 1, label: 'SQLite', consequence: 'no server' }],
+            recommended: null,
+            recommendationWhy: null,
+          },
+        },
+      }),
+    ]);
+    expect(statusLineOf(groups.needs[0]!, snap)).toBe('Which database?');
   });
 });
