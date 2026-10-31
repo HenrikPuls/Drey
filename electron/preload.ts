@@ -9,6 +9,8 @@ import {
   ExitConfirmRequest,
   ExitDecision,
   ExternalFileContent,
+  GlobalChord,
+  GlobalShortcutStatus,
   IPC_CHANNELS,
   LlmCapabilities,
   LlmConnectionTest,
@@ -214,6 +216,8 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.configSetTriggerConfirm, triggerId, confirm),
   getCaptureHotkeyStatus: (): Promise<CaptureHotkeyStatus> =>
     ipcRenderer.invoke(IPC_CHANNELS.captureHotkeyStatus),
+  syncGlobalShortcuts: (chords: readonly GlobalChord[]): Promise<GlobalShortcutStatus[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.globalShortcutsSync, chords),
   listLlmModels: (override?: LlmEndpoint): Promise<string[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.llmListModels, override),
   testLlmConnection: (override?: LlmEndpoint): Promise<LlmConnectionTest> =>
@@ -259,6 +263,13 @@ const dreyApi: DreyApi = {
       listener(relativePath);
     ipcRenderer.on(IPC_CHANNELS.dailyOpen, wrapped);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.dailyOpen, wrapped);
+  },
+  onGlobalShortcut: (listener: (id: string) => void): (() => void) => {
+    // Same rule as onOpenDailyNote: forward only the command id, never
+    // the IpcRendererEvent or ipcRenderer itself (ADR-0001).
+    const wrapped = (_event: IpcRendererEvent, id: string): void => listener(id);
+    ipcRenderer.on(IPC_CHANNELS.globalShortcutPress, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.globalShortcutPress, wrapped);
   },
   takePendingOpenRequests: (): Promise<OpenRequest[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.externalTakePending),

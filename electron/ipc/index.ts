@@ -7,6 +7,7 @@
 import { BrowserWindow } from 'electron';
 import { AppConfigStore } from '../app-config';
 import { CaptureHotkey } from '../capture-hotkey';
+import { GlobalShortcuts } from '../global-shortcuts';
 import { DailyNoteManager } from '../daily-note';
 import { ExternalFileGate } from '../external-open';
 import { NoteHistoryStore } from '../history/note-history-store';
@@ -69,6 +70,8 @@ export interface IpcHandlerDeps {
   syncVaultWatcher: () => Promise<void>;
   syncWindowIcon: () => void;
   captureHotkey: CaptureHotkey;
+  /** The system-wide chords of global plugin commands (SDK 1.37, req-75 W5a). */
+  globalShortcuts: GlobalShortcuts;
   fullVaultRefresh: () => void;
   announceVaultChange: (changes: ExternalVaultChanges) => void;
   pluginHost: PluginHost;

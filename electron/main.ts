@@ -13,6 +13,7 @@ import {
 import { registerPrivilegedSchemes, registerProtocolHandlers } from './app-protocols';
 import { buildAppServices, syncMcpHttpTransport, type AppServices } from './app-services';
 import { CaptureHotkey } from './capture-hotkey';
+import { GlobalShortcuts } from './global-shortcuts';
 import type { DailyNoteManager } from './daily-note';
 import { ExternalFileGate, extractOpenPaths } from './external-open';
 import { installMainProcessLogging, logLine } from './logger';
@@ -286,6 +287,18 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
     const captureHotkey = new CaptureHotkey(() => {
       void openTodayDailyNote(dailyNotes);
     });
+    // The system-wide chords of GLOBAL plugin commands (SDK 1.37,
+    // req-75 W5a): the renderer pushes the list — it owns the command
+    // registry — and a press raises the window (the same owner call as
+    // quick capture, ADR-0002) and sends the id back, where the command
+    // runs. It has no in-window binding, so it fires exactly once.
+    const globalShortcuts = new GlobalShortcuts((id) => {
+      const window = mainWindow.current;
+      if (!window || !mainWindow.raise()) {
+        return;
+      }
+      window.webContents.send(IPC_CHANNELS.globalShortcutPress, id);
+    });
     registerIpcHandlers({
       getMainWindow: () => mainWindow.current,
       sessionBackups: built.sessionBackups,
@@ -318,6 +331,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
         }
       },
       captureHotkey,
+      globalShortcuts,
       fullVaultRefresh: () => vaultAnnouncer.announceFullRefresh(),
       announceVaultChange: (changes) => vaultAnnouncer.announceExternal(changes),
       pluginHost,
