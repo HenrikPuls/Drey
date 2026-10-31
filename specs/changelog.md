@@ -20,6 +20,23 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — OpenCode servers no longer outlive their runs
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (2026-10-31). Nineteen `opencode serve` processes (~3.7 GB) were
+found running with no run behind them, every one with a dead parent.
+On Windows the server runs under a `cmd` shell (the npm shim needs
+one), and `attach.json` recorded the shell's pid: the shell died with
+a retiring runner while the server lived on, so the successor read the
+worker as dead, resumed the session in a second server and never ended
+the first. Now `recordAttach` records the process listening on the
+server's address (`listenerPid`, Windows; the shell pid elsewhere), so
+a successor re-attaches instead, and a resume in place ends the
+recorded server first (`killRecordedServer`, guarded by its creation
+time). A boot that fails after the server came up (not ready in time,
+a refused prompt) now ends that server too. Specs in `procs.spec.ts`
+and `runs.spec.ts`.
+
 ### Fix — the thread's composer looks like Claude Code's, an ended run takes the next message
 
 **Not yet manually verified by the owner.** Owner request, outside the

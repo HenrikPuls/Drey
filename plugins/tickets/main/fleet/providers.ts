@@ -1815,11 +1815,14 @@ export function opencodeAdapter(
       // The prompt POST queues the turn and returns at once; the poll
       // loop watches the message list for the `idle` end marker.
       await postPrompt(start.instruction);
-    })().catch((error: unknown) => {
+    })().catch(async (error: unknown) => {
       if (state.alive) {
         start.onEvent({ ts: nowIso(now), kind: 'error', text: String(error).slice(0, 400) });
       }
       finish(-1);
+      // A server that came up before the boot failed (not ready in time,
+      // a refused prompt) is ours to end — finish() alone left it running.
+      await server?.killTree().catch(() => undefined);
     });
 
     return handle;

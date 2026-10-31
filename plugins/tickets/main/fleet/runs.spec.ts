@@ -1472,6 +1472,49 @@ describe('RunSupervisor handover', () => {
     expect((await storedOf(id)).handover?.mode).toBe('reattach');
   });
 
+  it('records the server listening on the address as the attach pid, not the shell around it', async () => {
+    const exec = async (cmd: string, args: readonly string[]): Promise<string> => {
+      const line = [cmd, ...args].join(' ');
+      if (line.includes('Get-NetTCPConnection')) {
+        return '777';
+      }
+      return line.includes('StartTime') ? '1700000000000' : '';
+    };
+    const { sup, adapter } = supervisor({ exec });
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+    adapter.starts[0]!.onAttachInfo?.({ address: 'http://127.0.0.1:50918', password: 'pw', pid: 4242 });
+    const attachPath = path.join(fleetRoot, 'runs', id, 'attach.json');
+    await vi.waitFor(async () => expect(await fsp.readFile(attachPath, 'utf8').catch(() => '')).toContain('pidStartedMs'));
+    const attach = JSON.parse(await fsp.readFile(attachPath, 'utf8')) as { pid: number; pidStartedMs: number };
+    expect(attach.pid).toBe(process.platform === 'win32' ? 777 : 4242);
+    expect(attach.pidStartedMs).toBe(1700000000000);
+  });
+
+  it('a resume in place ends the server the attach file records before the fresh worker starts', async () => {
+    const probed: string[] = [];
+    const exec = async (cmd: string, args: readonly string[]): Promise<string> => {
+      probed.push([cmd, ...args].join(' '));
+      return '';
+    };
+    const first = claudeSupervisor();
+    const id = await startedClaudeRun(first.sup, first.adapter);
+    await first.sup.handOver();
+    // a server pid nothing runs under: the guarded kill only probes it
+    await fsp.writeFile(
+      path.join(fleetRoot, 'runs', id, 'attach.json'),
+      JSON.stringify({ address: 'http://127.0.0.1:50919', password: 'pw', pid: 2_147_483_000, pidStartedMs: 1700000000000 }),
+      'utf8',
+    );
+
+    const fake = fakeAdapter();
+    const second = supervisor({ adapter: { ...fake.adapter, id: 'claude-code', attach: undefined }, exec });
+    await second.sup.adopt();
+    expect(second.sup.get(id)?.state).toBe('running');
+    expect(probed.some((line) => line.includes('2147483000'))).toBe(true);
+  });
+
   it('defers while a run is in its machine gate', async () => {
     let releaseGate: () => void = () => undefined;
     const { sup, adapter } = supervisor({

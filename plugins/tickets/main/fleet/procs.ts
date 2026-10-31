@@ -207,6 +207,30 @@ export async function processAlive(pid: number, exec: ExecFn): Promise<boolean> 
   }
 }
 
+/**
+ * The pid of the process listening on a loopback port, or null. On
+ * Windows a worker server runs under a `cmd` shell (the npm shim needs
+ * one, see `nodeSpawnFn`); the shell can die with its runner while the
+ * server lives on, so a later runner must know the server's own pid to
+ * take it back or end it. POSIX keeps the process group: null there.
+ */
+export async function listenerPid(port: number, exec: ExecFn): Promise<number | null> {
+  if (!isWindows || !Number.isInteger(port) || port <= 0) {
+    return null;
+  }
+  try {
+    const out = await exec('powershell.exe', [
+      '-NoProfile',
+      '-Command',
+      `(Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction Stop | Select-Object -First 1).OwningProcess`,
+    ]);
+    const pid = Number(out.trim());
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
 /** A free loopback port (bind, read, close — racy but standard). */
 export function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {

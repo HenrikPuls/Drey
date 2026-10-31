@@ -20,7 +20,7 @@ import { acceptanceCommands, patchTicketFile, ticketPathParts } from '../ticket-
 import { TicketsGit } from '../tickets-git';
 import { answersFromText, answersText, ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
 import { COMPACT_CAPABILITY, HANDOVER_CANDIDATE_STATES, resolveHandover, type HandoverCandidate, type HandoverDecision } from './handover';
-import { killTreeGuarded, processAlive, processStartMs, type ExecFn } from './procs';
+import { killTreeGuarded, listenerPid, processAlive, processStartMs, type ExecFn } from './procs';
 import {
   DEFAULT_FLEET_HANDOVER,
   type FleetHandoverConfig,
@@ -387,17 +387,22 @@ export class RunSupervisor {
    * address, its per-boot credential, the process and its creation time (the
    * pid-reuse guard of a later kill). A file of the run's own, readable by the
    * owner only where the platform honours it: the credential must never ride
-   * in `run.json`, which the board reads.
+   * in `run.json`, which the board reads. The pid is the server's own — the
+   * process listening on the address — not the `cmd` shell around it: the
+   * shell dies with its runner while the server lives on, and a recorded
+   * shell pid then read as a dead worker, so the successor started a second
+   * server and the first one was never ended.
    */
   private async recordAttach(
     run: LiveRun,
     info: { readonly address: string; readonly password: string; readonly pid: number | null },
   ): Promise<void> {
     try {
-      const pidStartedMs = info.pid === null ? null : await processStartMs(info.pid, this.exec);
+      const serverPid = (await listenerPid(Number(new URL(info.address).port), this.exec)) ?? info.pid;
+      const pidStartedMs = serverPid === null ? null : await processStartMs(serverPid, this.exec);
       await fsp.writeFile(
         path.join(run.dir, 'attach.json'),
-        JSON.stringify({ address: info.address, password: info.password, pid: info.pid, pidStartedMs }),
+        JSON.stringify({ address: info.address, password: info.password, pid: serverPid, pidStartedMs }),
         { encoding: 'utf8', mode: 0o600 },
       );
     } catch (error) {
@@ -510,6 +515,27 @@ export class RunSupervisor {
   }
 
   /**
+   * Ends the server `attach.json` records (guarded by its creation time)
+   * before a fresh worker takes the session over: the recorded server may
+   * outlive the process the run record names, and two servers on one
+   * session is one unsupervised worker too many.
+   */
+  private async killRecordedServer(dir: string): Promise<void> {
+    const raw = await fsp.readFile(path.join(dir, 'attach.json'), 'utf8').catch(() => null);
+    if (raw === null) {
+      return;
+    }
+    try {
+      const attach = JSON.parse(raw) as { pid?: unknown; pidStartedMs?: unknown };
+      if (typeof attach.pid === 'number' && typeof attach.pidStartedMs === 'number') {
+        await killTreeGuarded(attach.pid, this.exec, attach.pidStartedMs);
+      }
+    } catch {
+      // an unreadable record names nothing to end
+    }
+  }
+
+  /**
    * A run a retiring runner handed over whose worker cannot be bound to
    * (req-51): a fresh worker resumes the provider session under the same
    * run — id, record, stream, ticket stamp — so the board and an open
@@ -526,6 +552,7 @@ export class RunSupervisor {
     if (stored.info.pid !== null && handover.pidStartedMs !== null) {
       await killTreeGuarded(stored.info.pid, this.exec, handover.pidStartedMs).catch(() => undefined);
     }
+    await this.killRecordedServer(dir);
     const held = stored.info.held === true;
     // req-67: the unwatched gap does not tick — see reattach.
     const run: LiveRun = {
