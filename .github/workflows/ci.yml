@@ -116,6 +116,12 @@ jobs:
       - name: Build (renderer + main + plugins)
         run: npm run build
 
+      # The tickets remote specs (req-66) drive the phone client in a plain
+      # headless Chromium beside the Electron app -- Playwright's own browser,
+      # which npm ci does not download.
+      - name: Install Playwright's headless Chromium (tickets remote e2e)
+        run: node node_modules/@playwright/test/cli.js install --only-shell chromium
+
       - name: E2E (Playwright drives the built Electron app)
         env:
           # ADR-0068: the sample plugin is an e2e fixture, NOT part of the
