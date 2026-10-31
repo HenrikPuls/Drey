@@ -294,10 +294,12 @@ test.describe('on an iPad in landscape (R6)', () => {
   test.use(ipad);
   let pad: typeof service;
   let padCalls: { what: string; args: unknown[] }[];
+  let padMove: (id: string, from: string, to: string) => Promise<{ ok: boolean }>;
 
   test.beforeAll(async () => {
     const desk = makeDesk();
     padCalls = desk.calls;
+    padMove = (id, from, to) => desk.port.move({ id, from, to }, 'owner@desk');
     const padStore = new Map<string, unknown>();
     pad = new RemoteService({
       config: { get: async (k: string) => padStore.get(k), set: async (k: string, v: unknown) => void padStore.set(k, v) },
@@ -368,6 +370,38 @@ test.describe('on an iPad in landscape (R6)', () => {
     await page.mouse.up();
     expect(padCalls.length).toBe(count);
     await expect(page.locator('.ghost')).toHaveCount(0);
+
+    expect(errors).toEqual([]);
+  });
+
+  test('keeps the ticket detail scroll across live redraws', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (m) => {
+      if (m.type() === 'error') {
+        errors.push(m.text());
+      }
+    });
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(pad.pair('iPad', false).pairing.url);
+    await page.locator('.tab', { hasText: 'Board' }).click();
+    await page.locator('.kcard[data-id="T-0053"]').click();
+    await expect(page.locator('.detail .ticket-title')).toHaveText('Phase chip moves the ticket');
+
+    // The pane genuinely overflows (the fixture's long Description); a
+    // programmatic scrollTop set fires the scroll the memory listens for.
+    const pane = page.locator('.detail');
+    await pane.evaluate((el) => {
+      el.scrollTop = 300;
+    });
+    const old = await pane.elementHandle();
+
+    // A desk-side change — the fleet chain moving another card — pushes an
+    // event and repaints the whole view. T-0053's guard skips the repaint
+    // when nothing visible changed, so a move (not a mere revision bump)
+    // is the honest trigger here.
+    await padMove('T-0052', 'build', 'review');
+    await expect.poll(() => page.evaluate((node) => node.isConnected, old)).toBe(false);
+    await expect.poll(() => page.locator('.detail').evaluate((el) => el.scrollTop)).toBeGreaterThanOrEqual(280);
 
     expect(errors).toEqual([]);
   });
