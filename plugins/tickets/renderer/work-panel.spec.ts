@@ -9,7 +9,7 @@ import {
   type PipelinePhase,
   type TicketCard,
 } from '../shared/tickets';
-import { createGroupFoldStore, workListNode } from './work-panel';
+import { createGroupFoldStore, workListLivePaint, workListNode } from './work-panel';
 import { TAG_AUTO_PALETTE } from '../../../shared/tag-style';
 
 /** req-75 W1b: the Work list's DOM over the default eight-phase pipeline —
@@ -248,6 +248,25 @@ describe('workListNode', () => {
     expect(row.querySelector('.work-run-dot-queued')).toBeNull();
   });
 
+  it('always mounts the run line span, hidden while the worker says nothing', () => {
+    const run = {
+      id: 'r4',
+      ticketId: 'T-0020',
+      provider: 'opencode',
+      state: 'running',
+      startedAt: '2026-10-31T11:00:00Z',
+      endedAt: null,
+      gateFailure: null,
+    } as unknown as RunInfo;
+    const snap = board({ build: [card('T-0020', 'build')] });
+    const list = workListNode(deps(), snap, [run], createGroupFoldStore(null), () => undefined);
+    const line = list.querySelector<HTMLElement>('.work-group-running .work-run-line')!;
+    expect(line.hidden).toBe(true);
+    workListLivePaint(list, deps(), snap, [{ ...run, activity: 'reading board.ts' } as RunInfo]);
+    expect(line.hidden).toBe(false);
+    expect(line.textContent).toBe('reading board.ts');
+  });
+
   it('opens the ticket on a row click and the menu on the ⋯ button', () => {
     const d = deps();
     const list = workListNode(d, board({ inbox: [card('T-0010', 'inbox')] }), [], createGroupFoldStore(null), () => undefined);
@@ -349,5 +368,51 @@ describe('workListNode', () => {
   it('says how to start when the board is empty', () => {
     const list = workListNode(deps(), board({}), [], createGroupFoldStore(null), () => undefined);
     expect(list.querySelector('.work-empty')?.textContent).toBe('No tickets yet — capture one with +');
+  });
+});
+
+describe('workListLivePaint — text in place, the bones untouched (T-0086)', () => {
+  const liveRun = (patch: Partial<RunInfo> = {}): RunInfo =>
+    ({
+      id: 'a',
+      ticketId: 'T-0021',
+      provider: 'opencode',
+      state: 'running',
+      startedAt: '2026-10-31T11:59:30Z',
+      endedAt: null,
+      gateFailure: null,
+      activity: 'reading a.ts',
+      ...patch,
+    }) as unknown as RunInfo;
+
+  it('changes a run\'s line and an age in place — same elements, new text', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse('2026-10-31T12:00:00Z'));
+    try {
+      const snap = board({ build: [card('T-0021', 'build')] });
+      const list = workListNode(deps(), snap, [liveRun()], createGroupFoldStore(null), () => undefined);
+      const row = list.querySelector<HTMLElement>('[data-id="T-0021"]')!;
+      const line = row.querySelector<HTMLElement>('.work-run-line')!;
+      const age = row.querySelector<HTMLElement>('.work-row-age')!;
+      expect(age.textContent).toBe('now');
+      vi.setSystemTime(Date.parse('2026-10-31T12:02:00Z'));
+      workListLivePaint(list, deps(), snap, [liveRun({ activity: 'editing b.ts' })]);
+      expect(list.querySelector('[data-id="T-0021"]')).toBe(row);
+      expect(row.querySelector('.work-run-line')).toBe(line);
+      expect(line.textContent).toBe('editing b.ts');
+      expect(age.textContent).toBe('2 min');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('skips a row whose card is gone from the snapshot — stale bones wait for the re-render', () => {
+    const snap = board({ build: [card('T-0022', 'build')] });
+    const list = workListNode(deps(), snap, [liveRun({ id: 'b', ticketId: 'T-0022' })], createGroupFoldStore(null), () => undefined);
+    const row = list.querySelector<HTMLElement>('[data-id="T-0022"]')!;
+    const line = row.querySelector<HTMLElement>('.work-run-line')!;
+    workListLivePaint(list, deps(), board({}), [liveRun({ id: 'b', ticketId: 'T-0022', activity: 'gone dark' })]);
+    expect(list.querySelector('[data-id="T-0022"]')).toBe(row);
+    expect(line.textContent).toBe('reading a.ts');
   });
 });

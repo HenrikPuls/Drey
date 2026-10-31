@@ -99,6 +99,31 @@ export function liveRunOf(ticketId: string, runs: readonly RunInfo[]): RunInfo |
 }
 
 /**
+ * What the Work list's DOM *structure* depends on (T-0086): per run,
+ * sorted by id, the fields that move a ticket between groups or change
+ * a row's bones — id, state, column, waiting kind, turn, interactive,
+ * held — then the alert keys. `activity`, tokens and clocks change only
+ * the *text* of nodes that already exist and stay out, so a fleet
+ * update that moves nothing re-renders nothing.
+ */
+export function workListSignature(runs: readonly RunInfo[], alertKeys: readonly string[]): string {
+  const perRun = [...runs]
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .map((run) =>
+      [
+        run.id,
+        run.state,
+        run.phase ?? '',
+        run.waiting?.kind ?? '',
+        run.turn ?? '',
+        run.interactive ?? '',
+        run.held === true ? 'held' : '',
+      ].join(':'),
+    );
+  return [...perRun, ...alertKeys].join('|');
+}
+
+/**
  * Ideas: priority first (through `dependencyOrder`, which also puts a
  * blocker first), newest first within one (owner, 2026-10-31). "New" is
  * the capture stamp — `entered-<first phase>`, the ticket's creation (a

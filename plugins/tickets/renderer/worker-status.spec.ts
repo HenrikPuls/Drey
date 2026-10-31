@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { RunInfo } from '../main/fleet/protocol';
+import type { ChainAlert } from './chain-alerts';
 import {
   contextFill,
   execClockMs,
+  fleetLine,
   fleetSummary,
   formatTokens,
   spanClock,
   STALL_MS,
   telemetryParts,
+  workerLabelOf,
   workerStatus,
 } from './worker-status';
 
@@ -195,5 +198,83 @@ describe('fleetSummary', () => {
 
   it('is green for working runs alone', () => {
     expect(fleetSummary([run(), run({ id: 'r2' })], NOW)).toMatchObject({ light: 'green', label: '2 running' });
+  });
+});
+
+describe('workerLabelOf', () => {
+  it('names the known providers, keeps unknown ids as they are', () => {
+    expect(workerLabelOf('opencode')).toBe('OpenCode');
+    expect(workerLabelOf('claude-code')).toBe('Claude Code');
+    expect(workerLabelOf('cursor')).toBe('cursor');
+  });
+});
+
+describe('fleetLine — the footer\'s one fleet line (T-0086)', () => {
+  const alert = (patch: Partial<ChainAlert> = {}): ChainAlert =>
+    ({
+      kind: 'breaker',
+      key: 'breaker:build:',
+      title: 'Build stopped by the circuit breaker',
+      text: '3 red gates in a row',
+      action: null,
+      ...patch,
+    }) as ChainAlert;
+
+  it('is a hollow gray "No workers running" with nothing live and no alert', () => {
+    expect(fleetLine([], [], NOW)).toEqual({ light: 'idle', text: 'No workers running', numbers: '', long: '' });
+  });
+
+  it('states the states in words plus who is out there; tokens and age as the mono suffix', () => {
+    const line = fleetLine(
+      [run({ turn: 'busy', tokensIn: 1_150_000, tokensOut: 50_000 }), run({ id: 'r2', turn: 'busy', provider: 'claude-code' })],
+      [],
+      NOW,
+    );
+    expect(line.light).toBe('green');
+    expect(line.text).toBe('2 running · OpenCode 1 · Claude Code 1');
+    expect(line.numbers).toBe('1.2M tok · 1:00:00');
+    expect(line.long).toBe(
+      [
+        '2 running',
+        '1.2M tokens in flight (in + out of all live runs)',
+        'the oldest run has been at it for 1:00:00',
+      ].join('\n'),
+    );
+  });
+
+  it('mixed states read per state, mixed providers per provider', () => {
+    const waiting = new Date(NOW - 60_000).toISOString();
+    const line = fleetLine(
+      [run({ turn: 'busy' }), run({ id: 'r2', provider: 'claude-code', waiting: { kind: 'question', text: 'Q', since: waiting } })],
+      [],
+      NOW,
+    );
+    expect(line.light).toBe('amber');
+    expect(line.text).toBe('1 running · 1 need attention · OpenCode 1 · Claude Code 1');
+  });
+
+  it('standing workers read as standing', () => {
+    expect(fleetLine([run({ turn: 'idle' }), run({ id: 'r2', turn: 'idle' })], [], NOW).text).toBe('2 standing · OpenCode 2');
+  });
+
+  it('drops the clock when no start parses', () => {
+    const line = fleetLine([run({ startedAt: 'not a stamp', tokensIn: 900 })], [], NOW);
+    expect(line.numbers).toBe('900 tok');
+    expect(line.long).not.toContain('at it for');
+  });
+
+  it('turns the light amber at least while an alert stands; the alert itself stays in the tooltip', () => {
+    const line = fleetLine([run({ turn: 'busy' })], [alert()], NOW);
+    expect(line.light).toBe('amber');
+    expect(line.text).toBe('1 running · OpenCode 1');
+    expect(line.long.endsWith('Build stopped by the circuit breaker: 3 red gates in a row')).toBe(true);
+  });
+
+  it('shows the alert itself when nothing runs — one by title, several by count', () => {
+    expect(fleetLine([], [alert()], NOW)).toMatchObject({ light: 'amber', text: 'Build stopped by the circuit breaker' });
+    expect(fleetLine([], [alert(), alert({ kind: 'held', key: 'held:build', title: 'Build is on hold' })], NOW)).toMatchObject({
+      light: 'amber',
+      text: '2 fleet alerts',
+    });
   });
 });

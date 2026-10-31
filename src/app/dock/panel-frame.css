@@ -11,7 +11,10 @@
   align-items: center;
   gap: 7px;
   flex: none;
-  height: var(--panel-head-h);
+  /* Wraps instead of clipping (T-0086): a panel with many header
+     controls grows a second row at narrow widths — the controls stay
+     reachable, the drag surface grows with them. */
+  min-height: var(--panel-head-h);
   padding: 0 8px 0 16px;
   color: var(--text-4);
   cursor: grab;
@@ -54,10 +57,15 @@
    free space so the controls + grip sit together against the edge. The
    controls themselves are styled by the panel that contributes them (its
    emulated-encapsulation styles reach the projected template); this only
-   lays them out inside the 32px header. */
+   lays them out inside the head. May shrink and wrap (T-0086): under
+   space pressure the controls flow onto a second row instead of out of
+   view. */
 .head-actions {
   margin-left: auto;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 2px;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -73,6 +81,12 @@
   margin-left: 0;
   align-self: stretch;
   cursor: inherit;
+}
+
+/* The plugin actions' mount point (T-0086): can shrink, so a plugin's
+   wide header row wraps inside .head-actions rather than overflowing. */
+.plugin-actions {
+  min-width: 0;
 }
 
 .grip {
