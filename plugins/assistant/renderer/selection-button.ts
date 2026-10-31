@@ -112,13 +112,34 @@ export function createSelectionButton(
       document.addEventListener('mouseup', onUp, true);
     };
     view.dom.addEventListener('mousedown', onDown);
+    // CodeMirror drops its focus-change transaction when another one lands
+    // first (opening a note focuses the editor and dispatches right after),
+    // so the gate is checked against the view on every update as well.
+    let syncQueued = false;
+    const syncFocus = (): void => {
+      if (syncQueued) {
+        return;
+      }
+      syncQueued = true;
+      queueMicrotask(() => {
+        syncQueued = false;
+        const focused = view.state.field(gate, false)?.focused;
+        if (focused !== undefined && focused !== view.hasFocus) {
+          view.dispatch({ effects: setFocused.of(view.hasFocus) });
+        }
+      });
+    };
     if (view.hasFocus) {
       last = view;
     }
+    syncFocus();
     return {
       update(update) {
-        if (update.focusChanged && update.view.hasFocus) {
+        if (update.view.hasFocus) {
           last = update.view;
+        }
+        if (update.view.hasFocus !== update.state.field(gate, false)?.focused) {
+          syncFocus();
         }
       },
       destroy() {

@@ -20,6 +20,21 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### fix — the assistant button at a selection shows on a freshly opened note
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (found by the e2e run before the req-66 push). Selecting text in a
+note that had just been opened showed no assistant button (milestone
+74) until the editor lost and regained focus: opening a note focuses
+the editor and dispatches right after, and CodeMirror drops its
+focus-change transaction when another transaction lands first, so the
+button's gate never learned the editor had focus. The gate is now
+checked against `view.hasFocus` on every editor update and corrected
+in a microtask (`plugins/assistant/renderer/selection-button.ts`).
+
+Specs: the existing e2e `assistant.spec.ts` "a selection shows the
+button…" is green again.
+
 ### fix — req-66 follow-up: a run follows a moved ticket; every run takes a message
 
 Owner-verified (signed off 2026-10-31). Owner request, outside the
