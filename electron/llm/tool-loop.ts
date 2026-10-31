@@ -32,7 +32,7 @@ import {
 } from '../../shared/llm';
 import type { LlmChatOptions } from './llm-client';
 import { LlmError } from './llm-errors';
-import { isAbortError } from './llm-tasks';
+import { cancelledError, isAbortError, isSignalAborted } from './llm-tasks';
 
 /** Round budget when the caller names none. */
 export const DEFAULT_TOOL_ROUNDS = 12;
@@ -129,6 +129,11 @@ async function runCall(
   specs: ReadonlyMap<string, ToolSpec>,
   options: LlmChatOptions,
 ): Promise<string> {
+  // A cancel that arrived while another call of the round ran: this
+  // queued call never starts, and the ask rejects like the one before it.
+  if (isSignalAborted(options.signal)) {
+    throw cancelledError();
+  }
   const name = call.function.name;
   const spec = specs.get(name);
   if (spec === undefined) {
@@ -142,9 +147,9 @@ async function runCall(
   options.onToolEvent?.({ phase: 'start', id: call.id, name, argsJson });
   let result: string;
   try {
-    result = capResult(await options.onToolCall!(name, argsJson));
+    result = capResult(await options.onToolCall!(name, argsJson, options.signal));
   } catch (err) {
-    if (isAbortError(err) || options.signal?.aborted === true) {
+    if (isAbortError(err) || isSignalAborted(options.signal)) {
       throw err;
     }
     result = `Error: ${name} failed — ${err instanceof Error ? err.message : String(err)}`;

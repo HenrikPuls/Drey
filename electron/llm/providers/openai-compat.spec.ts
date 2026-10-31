@@ -266,7 +266,7 @@ describe('OpenAiCompatProvider tool loop', () => {
       onDelta: (delta) => deltas.push(delta),
     });
 
-    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}');
+    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}', undefined);
     expect(result.text).toBe('The note says hi.');
     expect(result.toolTrace?.map((turn) => turn.role)).toEqual(['assistant', 'tool']);
 
@@ -294,7 +294,7 @@ describe('OpenAiCompatProvider tool loop', () => {
     expect(result.text).toBe('The note says hi.');
     expect(requests[0].body?.['stream']).toBe(false);
     expect(requests[1].body?.['stream']).toBe(false);
-    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}');
+    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}', undefined);
   });
 
   it('retries a refused streamed round non-streamed, and stops streaming the call', async () => {
@@ -309,7 +309,7 @@ describe('OpenAiCompatProvider tool loop', () => {
     const result = await provider().client.chat(USER, { tools: [READ_TOOL], onToolCall, onDelta });
 
     expect(result.text).toBe('The note says hi.');
-    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}');
+    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}', undefined);
     // The streamed attempt, its non-streamed retry, and the answer round
     // (which goes non-streamed directly — the call stopped streaming).
     expect(requests).toHaveLength(3);

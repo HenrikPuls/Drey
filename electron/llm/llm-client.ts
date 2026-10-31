@@ -36,8 +36,14 @@ export interface LlmChatOptions {
   signal?: AbortSignal;
   /** Canonical tool descriptions; ignored by providers with `tools: false`. */
   tools?: ToolSpec[];
-  /** Runs one tool call; the resolved text goes back to the model as the tool result. */
-  onToolCall?: (name: string, argsJson: string) => Promise<string>;
+  /**
+   * Runs one tool call; the resolved text goes back to the model as the
+   * tool result. The third parameter is the call's cancellation signal
+   * (SDK 1.36): a tool that waits on the user races its waits against
+   * it and rejects with an `AbortError`-shaped error, which the loop
+   * lets through instead of flattening into an `Error:` result.
+   */
+  onToolCall?: (name: string, argsJson: string, signal?: AbortSignal) => Promise<string>;
   /** Round budget of the tool loop (`DEFAULT_TOOL_ROUNDS` when absent); see `tool-loop.ts`. */
   maxToolRounds?: number;
   /** Progress of the tool loop: one `start` and one `end` per tool call. */

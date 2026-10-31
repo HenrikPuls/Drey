@@ -229,7 +229,7 @@ describe('AnthropicMessagesProvider tool loop', () => {
       onDelta: (text) => deltas.push(text),
     });
 
-    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}');
+    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}', undefined);
     expect(result.text).toBe('It says hi.');
     // The trace is in the app's own (OpenAI-shaped) transcript form.
     expect(result.toolTrace).toEqual([
@@ -266,7 +266,7 @@ describe('AnthropicMessagesProvider tool loop', () => {
     const result = await provider().client.chat(TURNS, { tools: [READ_TOOL], onToolCall, onDelta });
 
     expect(result.text).toBe('It says hi.');
-    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}');
+    expect(onToolCall).toHaveBeenCalledExactlyOnceWith('vault_read', '{"path":"a.md"}', undefined);
     // The streamed attempt, its non-streamed retry, and the answer round
     // (which goes non-streamed directly — the call stopped streaming).
     expect(requests).toHaveLength(3);
