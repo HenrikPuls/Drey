@@ -27,6 +27,7 @@ import {
 import { needsBlockedConfirm } from './blocked-view';
 import { PRIORITY_LABEL, createGroupFoldStore, workListNode, type WorkPanelDeps } from './work-panel';
 import { createRunComposer } from './run-composer';
+import { THREAD_KEY, ticketPagePlan } from './ticket-page';
 import { ageWords, checkpointActionOf, ideaPhaseIds, queueTargetOf, workGroups } from './work-groups';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
@@ -1439,8 +1440,6 @@ function createEndMoves(): { element: HTMLElement; paint(run: RunInfo | null): v
 // --- the ticket thread (req-75 W1, ADR-0087 decision 3) ----------------------
 
 const THREAD_KIND = 'tickets-thread';
-/** One thread tab beside the file; it follows the ticket opened last. */
-const THREAD_KEY = 'thread://ticket';
 let threadTicketId: string | null = null;
 const threadListeners = new Set<() => void>();
 
@@ -1468,32 +1467,38 @@ function threadRun(ticketId: string): RunInfo | null {
 }
 
 /**
- * The ticket page (ADR-0087 decision 3): the ticket file in the focused
- * pane, its thread in the pane beside it. The thread is one fixed key,
- * so the next ticket reuses its tab instead of splitting again.
+ * The ticket page (ADR-0087 decision 3): the ticket file and its thread
+ * side by side, whatever pane is focused -- the pair anchors on itself
+ * (the pure landing matrix: `ticketPagePlan`). The thread is one fixed
+ * key, so the next ticket reuses its tab instead of splitting again.
  */
 async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<void> {
   if (snapshot?.vaultId == null) {
     return;
   }
-  const threadOpen = api.documents.get(THREAD_KEY) !== null;
-  // With the thread focused, the file would land behind it in its own pane.
-  const threadFocused = api.documents.active()?.kind === THREAD_KIND;
-  await api.documents.open(
-    card.path,
-    undefined,
-    threadFocused ? { vaultId: snapshot.vaultId, split: 'right' } : { vaultId: snapshot.vaultId },
-  );
+  const plan = ticketPagePlan({
+    fileOpen: api.documents.get(card.path) !== null,
+    threadOpen: api.documents.get(THREAD_KEY) !== null,
+  });
+  await api.documents.open(card.path, undefined, { vaultId: snapshot.vaultId, ...plan.fileOpts });
   threadTicketId = card.id;
   for (const listener of threadListeners) {
     listener();
   }
-  if (threadOpen) {
+  if (plan.threadCall === 'reactivate') {
     api.documents.rename(THREAD_KEY, threadTitle(card.id));
+    // addDoc on the open key reveals it -- a rename alone would leave the
+    // thread backgrounded in its pane; the pair re-activates as a whole.
+    api.documents.addDoc(THREAD_KIND, THREAD_KEY, threadTitle(card.id));
   } else {
-    api.documents.addDoc(THREAD_KIND, THREAD_KEY, threadTitle(card.id), { split: 'right' });
-    // The new pane took the focus: hand it back to the file, so the next
-    // ticket opens there and not beside the thread.
+    api.documents.addDoc(THREAD_KIND, THREAD_KEY, threadTitle(card.id), {
+      beside: card.path,
+      split: 'right',
+    });
+  }
+  if (plan.refocusFile) {
+    // The thread's landing or re-activation took the focus: hand it back
+    // to the file, so the next ticket opens there and not beside the thread.
     await api.documents.open(card.path, undefined, { vaultId: snapshot.vaultId });
   }
   markOpenCard(api);
