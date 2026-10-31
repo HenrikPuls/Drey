@@ -69,3 +69,15 @@ adapters' aggregate usage (`result.usage` on Claude Code, the session
   keeps `CLAUDE.md`, then `AGENTS.md`, and a configured file that is
   missing or blank falls back to them. The prefix stays byte-stable per
   repo and phase.
+- **Later change (req-80, 2026-10-31):** T-0061's build run (87M
+  input) showed that the context pack holds only while the session
+  stays small. Three changes follow. A **mid-run context cap**
+  (`fleet.contextCapTokens`, default 160k) points OpenCode's own
+  auto-compaction at a fixed window instead of the model's 1M. Every
+  model call re-reads the whole context, and the cap trades some
+  transcript fidelity for that quadratic cost. A **continuation brief**
+  is sent instead of the full pack when a resumed session already holds
+  it: a `briefDigest` over the stable parts decides, and a changed plan
+  or gate sends the full pack again. **Telemetry counts each turn once:**
+  a session resumed in a fresh adapter no longer replays its history
+  into `turnUsage`.

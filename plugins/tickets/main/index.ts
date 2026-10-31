@@ -2192,15 +2192,27 @@ export async function handoverFromConfig(
   if (ttl !== undefined) {
     raw.resumePauseTtlMin = ttl;
   }
+  const cap = await get<number>('fleet.contextCapTokens');
+  if (cap !== undefined) {
+    raw.contextCapTokens = cap;
+  }
   const overrides: Record<string, number> = {};
+  const capOverrides: Record<string, number> = {};
   for (const key of [...WORKER_PROVIDERS, ...overrideKeys]) {
     const value = await get<number>(`fleet.compactAboveTokens.${key}`);
     if (value !== undefined) {
       overrides[key] = value;
     }
+    const capValue = await get<number>(`fleet.contextCapTokens.${key}`);
+    if (capValue !== undefined) {
+      capOverrides[key] = capValue;
+    }
   }
   if (Object.keys(overrides).length > 0) {
     raw.compactAboveTokensOverrides = overrides;
+  }
+  if (Object.keys(capOverrides).length > 0) {
+    raw.contextCapTokensOverrides = capOverrides;
   }
   return normalizeFleetHandover(raw);
 }

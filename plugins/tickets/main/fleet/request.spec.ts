@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { phaseWithoutPoolKeys, type PipelinePhase, type TicketCard } from '../../shared/tickets';
 import { composeRunRequest } from './request';
+import type { RunRequest } from './protocol';
 
 /**
  * The one RunRequest builder both call sites share (M85): the board
@@ -230,6 +231,26 @@ describe('composeRunRequest', () => {
     expect(result.request.instruction).toContain('src/a.ts | 2 +-');
     expect(result.request.instruction).toContain('row 80: assertion 80 failed');
     expect(result.truncations).toEqual([{ section: 'gateFailure', originalSize: Buffer.byteLength(`\`npm run verify:unit\` failed\n\n${failure}`, 'utf8') }]);
+  });
+
+  it('carries a resume continuation without the stable brief, and a digest only the stable parts move (req-80)', () => {
+    const compose = (over: Parameters<typeof base>[0]): RunRequest => {
+      const result = composeRunRequest(base({ repoInstructions: '# Repo rules', ...over }));
+      if (!result.ok) {
+        throw new Error(result.error);
+      }
+      return result.request;
+    };
+    const first = compose({ diffStat: ' src/a.ts | 2 +-', gateFailure: 'gate red: x failed' });
+    expect(first.continuationInstruction).toContain('src/a.ts | 2 +-');
+    expect(first.continuationInstruction).toContain('gate red: x failed');
+    expect(first.continuationInstruction).not.toContain('# Repo rules');
+    expect(first.continuationInstruction!.length).toBeLessThan(first.instruction.length);
+
+    const retry = compose({ diffStat: ' src/b.ts | 9 +++', gateFailure: 'other failure' });
+    expect(retry.briefDigest).toBe(first.briefDigest);
+    const newRules = compose({ repoInstructions: '# Other rules' });
+    expect(newRules.briefDigest).not.toBe(first.briefDigest);
   });
 });
 

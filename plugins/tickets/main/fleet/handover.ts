@@ -83,7 +83,20 @@ export const HANDOVER_CANDIDATE_STATES: readonly RunState[] = ['done', 'stopped'
  * the most-specific override wins, an unknown key never matches.
  */
 export function compactThreshold(config: FleetHandoverConfig, provider: string, model: string | null): number {
-  const overrides = config.compactAboveTokensOverrides;
+  return mostSpecific(config.compactAboveTokens, config.compactAboveTokensOverrides, provider, model);
+}
+
+/** The mid-run context cap for one provider/model pair (req-80) — the same precedence; 0 = none. */
+export function contextCap(config: FleetHandoverConfig, provider: string, model: string | null): number {
+  return mostSpecific(config.contextCapTokens, config.contextCapTokensOverrides, provider, model);
+}
+
+function mostSpecific(
+  base: number,
+  overrides: Readonly<Record<string, number>> | undefined,
+  provider: string,
+  model: string | null,
+): number {
   if (overrides !== undefined) {
     if (model !== null) {
       const both = overrides[`${provider}/${model}`];
@@ -96,7 +109,7 @@ export function compactThreshold(config: FleetHandoverConfig, provider: string, 
       return byProvider;
     }
   }
-  return config.compactAboveTokens;
+  return base;
 }
 
 /**

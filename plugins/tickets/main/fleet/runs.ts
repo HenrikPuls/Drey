@@ -19,7 +19,7 @@ import { promisify } from 'node:util';
 import { acceptanceCommands, patchTicketFile, ticketPathParts } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
 import { answersFromText, answersText, ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
-import { COMPACT_CAPABILITY, HANDOVER_CANDIDATE_STATES, resolveHandover, type HandoverCandidate, type HandoverDecision } from './handover';
+import { COMPACT_CAPABILITY, contextCap, HANDOVER_CANDIDATE_STATES, resolveHandover, type HandoverCandidate, type HandoverDecision } from './handover';
 import { killTreeGuarded, listenerPid, processAlive, processStartMs, type ExecFn } from './procs';
 import {
   DEFAULT_FLEET_HANDOVER,
@@ -86,6 +86,8 @@ export interface RunHandover {
   readonly mode: 'reattach' | 'resume';
   readonly at: string;
   readonly pidStartedMs: number | null;
+  /** The worker stood idle at the handover — nothing was cut short (req-80; absent on older records). */
+  readonly turnIdle?: boolean;
 }
 
 /** The opening line of a session resumed after a runner handover. */
@@ -575,9 +577,17 @@ export class RunSupervisor {
     try {
       handle = this.deps.adapter.spawn({
         cwd: stored.info.worktreePath,
-        instruction: held ? HANDOVER_HELD : HANDOVER_CONTINUE,
+        // A held worker that stood idle waits for its owner: re-prompting
+        // it re-read the whole transcript for one "I'm back" line (req-80).
+        instruction:
+          held && handover.turnIdle === true && this.deps.adapter.promptless === true
+            ? ''
+            : held
+              ? HANDOVER_HELD
+              : HANDOVER_CONTINUE,
         model: stored.request.model,
         permissionMode: stored.request.permissionMode,
+        contextCap: this.contextCapFor(stored.request.model),
         resumeRef: sessionRef,
         ticketId: stored.request.ticketId,
         // The same run goes on: its own earlier spend stays counted.
@@ -662,7 +672,7 @@ export class RunSupervisor {
         (await fsp.stat(path.join(run.dir, 'attach.json')).then(() => true, () => false));
       const pid = run.info.pid ?? (run.handle?.pid !== undefined && run.handle.pid !== null && run.handle.pid > 0 ? run.handle.pid : null);
       const pidStartedMs = pid === null ? null : await processStartMs(pid, this.exec).catch(() => null);
-      run.handover = { mode: attachable ? 'reattach' : 'resume', at: this.stamp(), pidStartedMs };
+      run.handover = { mode: attachable ? 'reattach' : 'resume', at: this.stamp(), pidStartedMs, turnIdle: run.info.turn === 'idle' };
       run.info = { ...run.info, pid };
       await this.persist(run);
       if (!attachable && run.handle !== null) {
@@ -830,8 +840,17 @@ export class RunSupervisor {
       'utf8',
     );
 
+    const continuation = decision !== null && resumeRef !== null ? this.continuationFor(id, request, resumeRef) : null;
+    if (continuation !== null) {
+      await this.appendStream(run, {
+        ts: this.stamp(),
+        kind: 'note',
+        text: 'brief: continuation — the resumed session already holds the full brief, only what changed rides',
+      });
+    }
     const handle = this.spawnWorker(run, {
       resumeRef,
+      ...(continuation !== null ? { instruction: continuation } : {}),
       ...(decision?.compactFirst === true ? { compactFirst: true } : {}),
       // A resume the adapter cannot establish respawns fresh under the
       // same run id (T-0049) — only the resolution path asks for that.
@@ -894,6 +913,8 @@ export class RunSupervisor {
     run: LiveRun,
     resume: {
       readonly resumeRef: string | null;
+      /** The prompt instead of the request's full brief (a resume's continuation, req-80). */
+      readonly instruction?: string;
       readonly compactFirst?: boolean;
       readonly onResumeFailed?: (reason: string) => void;
     },
@@ -901,9 +922,10 @@ export class RunSupervisor {
     const request = run.request;
     const handle = this.deps.adapter.spawn({
       cwd: run.info.worktreePath,
-      instruction: request.instruction,
+      instruction: resume.instruction ?? request.instruction,
       model: request.model,
       permissionMode: request.permissionMode,
+      contextCap: this.contextCapFor(request.model),
       resumeRef: resume.resumeRef,
       ...(resume.compactFirst === true ? { compactFirst: true } : {}),
       ticketId: request.ticketId,
@@ -955,6 +977,27 @@ export class RunSupervisor {
       lastTurnContext: newest.info.lastTurnContext ?? null,
       endedAt: newest.info.endedAt,
     };
+  }
+
+  /**
+   * The short continuation a resumed session is prompted with (req-80),
+   * or null for the full brief: only when the run whose session resumes
+   * carried the same brief — a changed plan, description or gate since
+   * must reach the worker whole.
+   */
+  private continuationFor(runId: string, request: RunRequest, sessionRef: string): string | null {
+    if (request.continuationInstruction === undefined || request.briefDigest === undefined) {
+      return null;
+    }
+    const resumed = [...this.runs.values()]
+      .filter((r) => r.info.id !== runId && r.info.sessionRef === sessionRef && r.request.ticketId === request.ticketId)
+      .sort((a, b) => b.info.startedAt.localeCompare(a.info.startedAt))[0];
+    return resumed !== undefined && resumed.request.briefDigest === request.briefDigest ? request.continuationInstruction : null;
+  }
+
+  /** The mid-run context cap for this supervisor's provider and a model pin (req-80). */
+  private contextCapFor(model: string | null): number {
+    return contextCap(this.handoverConfig, this.deps.adapter.id, model);
   }
 
   /** Whether any non-terminal run of this supervisor holds the session
@@ -1606,6 +1649,7 @@ export class RunSupervisor {
           instruction: brief,
           model: run.request.model,
           permissionMode: run.request.permissionMode,
+          contextCap: this.contextCapFor(run.request.model),
           resumeRef: null,
           ticketId: run.request.ticketId,
           onEvent: (event) => void this.onEvent(run, event),

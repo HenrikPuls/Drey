@@ -85,6 +85,15 @@ export interface RunRequest {
   readonly model: string | null;
   /** The composed instruction (prompt template + ticket context, plugin-side). */
   readonly instruction: string;
+  /**
+   * What a resumed session is prompted with instead (req-80): the session
+   * already holds the full brief, so only what changed since — diff stat,
+   * gate failure, the gate. Used only while `briefDigest` still matches the
+   * resumed run's; absent from older senders (the full instruction rides).
+   */
+  readonly continuationInstruction?: string;
+  /** A hash of the brief's stable parts (instructions, phase template, plan, description, gate). */
+  readonly briefDigest?: string;
   /** The machine gate: the ticket's backticked acceptance commands, in order. */
   readonly acceptance: readonly string[];
   /**
@@ -182,12 +191,23 @@ export interface FleetHandoverConfig {
    * cached after 6 min; measured auto-retry gaps ran 1–13 min).
    */
   readonly resumePauseTtlMin: number;
+  /**
+   * The context a worker may grow to before the provider compacts it
+   * mid-run (req-80) — OpenCode's own auto-compaction, pointed at this
+   * window instead of the model's (1M for GLM: never). Every model call
+   * re-reads the whole context, so a run's cost grows with its square.
+   * 0 = the model's own window.
+   */
+  readonly contextCapTokens: number;
+  /** Per-provider and per-model caps over the base, keyed like `compactAboveTokensOverrides`. */
+  readonly contextCapTokensOverrides?: Readonly<Record<string, number>>;
 }
 
 /** The handover thresholds' defaults — an absent or invalid config degrades to these. */
 export const DEFAULT_FLEET_HANDOVER: FleetHandoverConfig = {
   compactAboveTokens: 60_000,
   resumePauseTtlMin: 15,
+  contextCapTokens: 160_000,
 };
 
 /** Resolves handover thresholds of unknown shape to valid ones, per key
@@ -195,23 +215,30 @@ export const DEFAULT_FLEET_HANDOVER: FleetHandoverConfig = {
  *  falls back to that key's default (an invalid override entry drops). */
 export function normalizeFleetHandover(value: unknown): FleetHandoverConfig {
   const raw = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
-  const num = (key: 'compactAboveTokens' | 'resumePauseTtlMin'): number => {
+  const num = (key: 'compactAboveTokens' | 'resumePauseTtlMin' | 'contextCapTokens'): number => {
     const given = raw[key];
     return typeof given === 'number' && Number.isFinite(given) && given >= 0 ? given : DEFAULT_FLEET_HANDOVER[key];
   };
-  const overridesRaw = raw['compactAboveTokensOverrides'];
-  const overrides: Record<string, number> = {};
-  if (typeof overridesRaw === 'object' && overridesRaw !== null) {
-    for (const [key, given] of Object.entries(overridesRaw as Record<string, unknown>)) {
-      if (typeof given === 'number' && Number.isFinite(given) && given >= 0) {
-        overrides[key] = given;
+  const overridesOf = (key: string): Record<string, number> => {
+    const overridesRaw = raw[key];
+    const overrides: Record<string, number> = {};
+    if (typeof overridesRaw === 'object' && overridesRaw !== null) {
+      for (const [name, given] of Object.entries(overridesRaw as Record<string, unknown>)) {
+        if (typeof given === 'number' && Number.isFinite(given) && given >= 0) {
+          overrides[name] = given;
+        }
       }
     }
-  }
+    return overrides;
+  };
+  const overrides = overridesOf('compactAboveTokensOverrides');
+  const capOverrides = overridesOf('contextCapTokensOverrides');
   return {
     compactAboveTokens: num('compactAboveTokens'),
     ...(Object.keys(overrides).length > 0 ? { compactAboveTokensOverrides: overrides } : {}),
     resumePauseTtlMin: num('resumePauseTtlMin'),
+    contextCapTokens: num('contextCapTokens'),
+    ...(Object.keys(capOverrides).length > 0 ? { contextCapTokensOverrides: capOverrides } : {}),
   };
 }
 

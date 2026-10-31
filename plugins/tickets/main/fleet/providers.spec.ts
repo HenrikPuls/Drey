@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { answersFromText, answersText, claudeCodeAdapter, formText, modelBody, OPENCODE_API, opencodeAdapter, permissionText, providerErrorText, questionOf, type FetchFn, type NormalizedEvent, type ProviderStart, INTERRUPT_WAIT_MS, toolActivity } from './providers';
+import { answersFromText, answersText, claudeCodeAdapter, formText, modelBody, OPENCODE_API, opencodeAdapter, opencodeCapConfig, permissionText, providerErrorText, questionOf, type FetchFn, type NormalizedEvent, type ProviderStart, INTERRUPT_WAIT_MS, toolActivity } from './providers';
 import { telemetryFromEvents } from './telemetry';
 import type { RunnerProcess, SpawnFn } from './procs';
 
@@ -575,6 +575,34 @@ describe('the opencode adapter', () => {
     vi.useRealTimers();
   });
 
+  it('a turn that ends without one model message fails like a refusal — never gated (req-80)', async () => {
+    vi.useFakeTimers();
+    const at = Date.now();
+    const { fetch } = scriptedFetch({
+      sessionCreated: () => undefined,
+      prompts: [],
+      interrupts: [],
+      messages: () => [
+        { id: 'msg_i', type: 'idle', time: { created: at + 5_000 }, outcome: 'succeeded' },
+        { id: 'msg_q', type: 'user', time: { created: at }, text: 'Do the ticket.' },
+      ],
+    });
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(2_500);
+
+    expect(events.find((e) => e.kind === 'result')).toBeUndefined();
+    expect(events.filter((e) => e.kind === 'error').map((e) => e.text)).toEqual([
+      'the provider answered the prompt with nothing — no model message, no tokens',
+    ]);
+    expect(proc.killTree).toHaveBeenCalled();
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
   it('names a refused turn by type, status and message', () => {
     expect(providerErrorText({ type: 'provider.auth', message: 'bad key' })).toBe('provider.auth: bad key');
     expect(providerErrorText(undefined)).toBe('provider error: the turn failed');
@@ -1115,6 +1143,38 @@ describe('the opencode adapter', () => {
     vi.useRealTimers();
   });
 
+  it('a resumed session never replays its old messages — text, tools or turn usage (req-80)', async () => {
+    vi.useFakeTimers();
+    const at = Date.now();
+    const old = {
+      ...(assistant(at - 100_000) as object),
+      id: 'msg_old',
+      content: [
+        { type: 'text', text: 'old answer' },
+        { type: 'tool', id: 'tool_old', name: 'read', state: { input: { filePath: 'a.ts' } } },
+      ],
+      tokens: { input: 100, cache: { read: 300_000 }, output: 40 },
+    };
+    const messages: unknown[] = [old];
+    const { fetch } = scriptedFetch({ sessionCreated: () => undefined, prompts: [], interrupts: [], messages: () => messages });
+    const proc = fakeProcess();
+    const { events, start } = collect({ resumeRef: 'ses_oc' });
+    opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(100);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(1_000);
+    messages.unshift({ ...(assistant(Date.now()) as object), id: 'msg_new' });
+    await vi.advanceTimersByTimeAsync(2_500);
+
+    expect(events.filter((e) => e.kind === 'text').map((e) => e.text)).toEqual(['Done.']);
+    expect(events.some((e) => e.tool === 'read')).toBe(false);
+    expect(events.filter((e) => e.turnUsage !== undefined).map((e) => e.turnUsage)).toEqual([
+      { input: 8, cacheRead: null, cacheCreation: null, output: 5 },
+    ]);
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
   it('a resume pre-flights the session — a missing one is reported, never prompted (T-0049)', async () => {
     vi.useFakeTimers();
     const prompts: string[] = [];
@@ -1380,6 +1440,40 @@ describe('modelBody — the OpenCode model pin (v2 shape)', () => {
   it('a pin without a slash rides as the modelID; no pin sends text only', () => {
     expect(modelBody('glm-5.3', 'go')).toEqual({ text: 'go', model: { providerID: '', modelID: 'glm-5.3' } });
     expect(modelBody(null, 'go')).toEqual({ text: 'go' });
+  });
+});
+
+describe('opencodeCapConfig — the mid-run context cap (req-80)', () => {
+  it('caps the pinned model with context and output together; a variant suffix drops', () => {
+    expect(JSON.parse(opencodeCapConfig('zai-coding-plan/glm-5.3-flash#fast', 160_000)!)).toEqual({
+      provider: { 'zai-coding-plan': { models: { 'glm-5.3-flash': { limit: { context: 160_000, output: 32_000 } } } } },
+    });
+    expect(JSON.parse(opencodeCapConfig('local/small', 40_000)!)).toEqual({
+      provider: { local: { models: { small: { limit: { context: 40_000, output: 10_000 } } } } },
+    });
+  });
+
+  it('no cap, no pin or a pin without a provider caps nothing', () => {
+    expect(opencodeCapConfig('zai-coding-plan/glm-5.3-flash', 0)).toBeNull();
+    expect(opencodeCapConfig(null, 160_000)).toBeNull();
+    expect(opencodeCapConfig('glm-5.3', 160_000)).toBeNull();
+  });
+
+  it('the server starts with the cap in its environment and the stream says so', async () => {
+    vi.useFakeTimers();
+    const proc = fakeProcess();
+    const spawned: Array<{ env?: Readonly<Record<string, string>> }> = [];
+    const spawn: SpawnFn = (_cmd, _args, opts) => {
+      spawned.push(opts);
+      return proc;
+    };
+    const { events, start } = collect({ model: 'zai-coding-plan/glm-5.3-flash', contextCap: 160_000 });
+    opencodeAdapter(spawn, async () => ({ ok: false, status: 503 }) as Response, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(spawned[0]?.env?.['OPENCODE_CONFIG_CONTENT']).toBe(opencodeCapConfig('zai-coding-plan/glm-5.3-flash', 160_000));
+    expect(events.some((e) => e.kind === 'note' && (e.text ?? '').startsWith('context cap: 160000'))).toBe(true);
+    proc.exit(null);
+    vi.useRealTimers();
   });
 });
 

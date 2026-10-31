@@ -263,6 +263,35 @@ with the chain config — `fleet.compactAboveTokens.opencode`,
 per-provider key is written by Settings → Tickets → Workers (req-71); the
 per-model keys have no UI.
 
+### Token economy (req-80)
+
+- **Context cap.** `fleet.contextCapTokens` (default 160000, 0 = off;
+  per provider/model `fleet.contextCapTokens.<key>` like the compact
+  threshold) rides the chain config. An OpenCode worker's server starts
+  with `OPENCODE_CONFIG_CONTENT` setting the pinned model's
+  `limit.context` (and `output`, since an override naming `context` alone
+  is dropped), so OpenCode's own auto-compaction fires there. The stream
+  opens with `context cap: <n> tokens`, and the run's `contextWindow`
+  reports the cap. A pin without `provider/` is not capped.
+- **Continuation brief.** A `resume`/`resume-compact` start prompts with
+  `RunRequest.continuationInstruction` (who/where, diff stat, gate
+  failure, gate, discipline) instead of the full pack, but only while
+  `briefDigest` (sha256 of the stable parts) equals the digest of the run
+  whose session resumes. The stream says `brief: continuation …`. The
+  fresh fallback still sends the full instruction.
+- **No replay on resume.** A session resumed in a fresh adapter marks every
+  message settled before its first prompt as seen, as re-attach does.
+  Its old turns no longer land in this run's `turnUsage`, so `/report`
+  and the chips stay honest. Before req-80, T-0061 showed 400 turns
+  where 240 were real.
+- **Held and idle handover.** A held worker that stood idle when the
+  runner retired is resumed without a prompt (`handover.turnIdle`, on
+  adapters with `promptless`: OpenCode). Without this, an "I'm back" turn
+  re-read the whole context.
+- **Empty answer = refusal.** An idle marker after the newest prompt with
+  no assistant message in between fails the run with an `error` and no
+  gate, the same as `outcome: 'failed'`.
+
 ### The instruction (T-0048: the context pack)
 
 Every phase's instruction is composed in one stable order — repo agent

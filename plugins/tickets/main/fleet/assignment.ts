@@ -169,6 +169,14 @@ export interface Truncation {
 export interface ComposedInstruction {
   readonly text: string;
   readonly truncations: readonly Truncation[];
+  /**
+   * What a resumed session that already holds this brief is prompted
+   * with (req-80): who/where, the diff stat, the gate failure, the gate
+   * and the discipline — never the instructions, template or plan again.
+   */
+  readonly continuation: string;
+  /** The stable parts serialized — the caller hashes them into `RunRequest.briefDigest` (this module also runs in the renderer). */
+  readonly stable: string;
 }
 
 /**
@@ -298,13 +306,16 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
   if (description !== '') {
     parts.push(`What and why:\n${description}`);
   }
+  // The parts that change between runs of one step — the tail of the full
+  // brief and the whole of a resume's continuation (req-80).
+  const changing: string[] = [];
   const diffStat = input.diffStat?.trim();
   if (diffStat != null && diffStat !== '') {
     const capped = capHead(input.diffStat!, { lines: input.caps.diffStatLines, bytes: input.caps.diffStatBytes });
     if (capped.truncated) {
       truncations.push({ section: 'diffStat', originalSize: capped.originalSize });
     }
-    parts.push(
+    changing.push(
       `The branch so far — \`git diff --stat\` against the base (committed and uncommitted):\n\n${capped.text}`,
     );
   }
@@ -317,18 +328,41 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
     if (capped.truncated) {
       truncations.push({ section: 'gateFailure', originalSize: capped.originalSize });
     }
-    parts.push(
+    changing.push(
       `The previous run failed the machine gate — fix this first. The branch already holds the earlier work, ` +
         `so continue from the existing diff instead of starting over. The failure's tail:\n\n${capped.text}`,
     );
   }
-  if (input.acceptance.length > 0) {
-    parts.push(
-      'The machine gate runs exactly these after you finish — keep them green, and commit your work on the branch before you end:\n' +
-        input.acceptance.map((command) => `- \`${command}\``).join('\n'),
-    );
+  const gate =
+    input.acceptance.length > 0
+      ? 'The machine gate runs exactly these after you finish — keep them green, and commit your work on the branch before you end:\n' +
+        input.acceptance.map((command) => `- \`${command}\``).join('\n')
+      : null;
+  const discipline = input.interactive !== undefined ? INTERACTIVE_DISCIPLINE : COMPLETION_DISCIPLINE;
+  parts.push(...changing);
+  if (gate !== null) {
+    parts.push(gate);
   }
-  parts.push(input.interactive !== undefined ? INTERACTIVE_DISCIPLINE : COMPLETION_DISCIPLINE);
+  parts.push(discipline);
   parts.push(ASKING);
-  return { text: parts.join('\n\n'), truncations };
+
+  const continuation = [
+    `You are resuming ticket ${input.ticketId} — ${input.title}, the "${input.phase}" step, in this same session. ` +
+      `Your full brief for this step is earlier in this conversation and still holds — do not re-read what it ` +
+      `already told you. Work checkout: ${input.worktreePath} (branch ${input.branch}).`,
+    ...changing,
+    ...(gate !== null ? [gate] : []),
+    discipline,
+  ].join('\n\n');
+  const stable = JSON.stringify([
+    repoInstructions ?? '',
+    prompt ?? '',
+    plan ?? '',
+    description,
+    input.acceptance,
+    input.interactive ?? null,
+    input.worktreePath,
+    input.branch,
+  ]);
+  return { text: parts.join('\n\n'), truncations, continuation, stable };
 }
