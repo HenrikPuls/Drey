@@ -160,7 +160,9 @@ describe('filterPopover', () => {
     expect(applied.at(-1)).toEqual({ phases: ['build'], statuses: [] });
     expect(chips[4]!.getAttribute('aria-pressed')).toBe('false'); // the pre-toggle node
     expect([...pop.querySelectorAll('.work-filter-chip')][4]!.getAttribute('aria-pressed')).toBe('true');
-    const running = [...pop.querySelectorAll('.work-filter-chip')].find((c) => c.textContent === 'Running')!;
+    const running = [...pop.querySelectorAll<HTMLButtonElement>('.work-filter-chip')].find(
+      (c) => c.textContent === 'Running',
+    )!;
     running.click();
     expect(applied.at(-1)).toEqual({ phases: ['build'], statuses: ['running'] });
     const clear = pop.querySelector('.work-filter-clear') as HTMLButtonElement;
@@ -178,7 +180,7 @@ describe('filterPopover', () => {
       state: { phases: ['build'], statuses: [] },
       onApply: (next) => applied.push(next),
     });
-    const build = [...pop.querySelectorAll('.work-filter-chip')][4]!;
+    const build = [...pop.querySelectorAll<HTMLButtonElement>('.work-filter-chip')][4]!;
     expect(build.getAttribute('aria-pressed')).toBe('true');
     build.click();
     expect(applied.at(-1)).toEqual(NO_WORK_FILTER);

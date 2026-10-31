@@ -1844,6 +1844,11 @@ details[open] > summary > .tickets-tx-think-preview {
   background: var(--active-bg, var(--hover-bg-strong));
 }
 
+/* A live run marks its row (T-0084): a 2px accent bar on the left edge. */
+.work-row[data-running='true'] {
+  box-shadow: inset 2px 0 0 0 var(--accent);
+}
+
 .work-row-top,
 .work-row-status {
   display: flex;
@@ -1873,6 +1878,32 @@ details[open] > summary > .tickets-tx-think-preview {
   font-family: var(--font-mono);
   font-size: var(--fs-mono-num, 0.7rem);
   color: var(--text-5);
+}
+
+/* The phase chip (T-0084): a dot in the phase's colour plus its name.
+ *  The name carries the meaning (colour-blind safe), the colour anchors
+ *  it; the text keeps the theme's own colour. */
+.work-phase-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.work-phase-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--phase-color, var(--text-5));
+}
+
+.work-phase-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .work-row-line {
@@ -2004,20 +2035,22 @@ details[open] > summary > .tickets-tx-think-preview {
   background: var(--accent-hover, var(--accent));
 }
 
-/* The options of a shaped question (req-75 W2): one tap answers. Small
- * buttons in a Work row, full-width rows in the thread's wait card. */
+/* The options of a shaped question (req-75 W2): one tap answers. Compact
+ * dot rows (T-0084) — one full-width row per option; the Work row carries
+ * dot + label (the consequence rides the tooltip, the dot's ring marks
+ * the recommendation), the thread adds the consequence and the tag. */
 .work-options {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .work-option {
-  display: inline-flex;
-  align-items: baseline;
+  display: flex;
+  align-items: center;
   gap: 6px;
-  max-width: 100%;
-  padding: 2px 9px;
+  width: 100%;
+  padding: 3px 9px;
   border: 1px solid var(--field-border);
   border-radius: var(--radius-sm, 6px);
   background: transparent;
@@ -2037,7 +2070,35 @@ details[open] > summary > .tickets-tx-think-preview {
   opacity: 0.6;
 }
 
-.work-option-why {
+.work-option-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--text-5);
+}
+
+/* The recommended option: the dot fills and takes an accent ring. */
+.work-option-recommended .work-option-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.work-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The thread's row adds the muted consequence, ellipsised, and the tag. */
+.tickets-question-options .work-option-why {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-3);
 }
 
@@ -2046,8 +2107,147 @@ details[open] > summary > .tickets-tx-think-preview {
 }
 
 .work-option-flag {
+  flex: none;
   color: var(--accent);
   font-size: 10px;
+}
+
+/* The hidden-by-filter marker (T-0084): a quiet way back to everything. */
+.work-hidden-by-filter {
+  margin: 2px 0 4px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: var(--radius-xs, 4px);
+  background: transparent;
+  color: var(--text-5);
+  font: inherit;
+  font-size: 0.72rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.work-hidden-by-filter:hover {
+  background: var(--hover-bg);
+  color: var(--text-2);
+}
+
+/* The Work filter (T-0084): the header's funnel stays marked while a
+ * filter is on; its popover lists the phases and statuses as toggle
+ * chips that apply at once. */
+.work-filter-btn.work-filter-on {
+  color: var(--accent-text, var(--accent));
+}
+
+.work-filter-pop {
+  position: fixed;
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 280px;
+  max-width: calc(100vw - 16px);
+  max-height: min(420px, calc(100vh - 16px));
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-editor);
+  box-shadow: var(--popover-shadow);
+}
+
+.work-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.work-filter-title {
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.work-filter-clear {
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs, 4px);
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.work-filter-clear:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text-heading);
+}
+
+.work-filter-clear:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.work-filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.work-filter-label {
+  font-size: 0.7rem;
+  color: var(--text-5);
+}
+
+.work-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.work-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.work-filter-chip:hover {
+  border-color: var(--border-strong);
+}
+
+.work-filter-chip-on {
+  border-color: var(--accent);
+  color: var(--text-heading);
+}
+
+.work-filter-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+/* A phase dot keeps its phase colour; a status dot fills with the
+ * accent when pressed. */
+.work-filter-chip-phase .work-filter-dot {
+  background: var(--chip-color, var(--text-5));
+}
+
+.work-filter-chip-status .work-filter-dot {
+  background: var(--text-6);
+}
+
+.work-filter-chip-status.work-filter-chip-on .work-filter-dot {
+  background: var(--accent);
 }
 
 /* The shaped question card in the thread's wait card (req-75 W2). */

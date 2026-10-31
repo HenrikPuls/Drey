@@ -10,6 +10,7 @@ import {
   type TicketCard,
 } from '../shared/tickets';
 import { createGroupFoldStore, workListNode } from './work-panel';
+import { TAG_AUTO_PALETTE } from '../../../shared/tag-style';
 
 /** req-75 W1: the Work list's DOM over the default eight-phase pipeline. */
 
@@ -57,6 +58,7 @@ const deps = () => ({
   openRunModal: vi.fn(),
   openMenu: vi.fn(),
   answer: vi.fn(),
+  clearFilter: vi.fn(),
 });
 
 const memoryStorage = (): Storage => {
@@ -71,10 +73,76 @@ const titles = (list: HTMLElement): string[] =>
   [...list.querySelectorAll('.work-group-title')].map((n) => n.textContent ?? '');
 
 describe('workListNode', () => {
-  it('hides Needs you while nothing waits, and shows the ideas and the work in progress', () => {
+  it('hides Needs you while nothing waits, and shows the work in progress before the ideas', () => {
     const list = workListNode(deps(), board({ inbox: [card('T-0001', 'inbox')], build: [card('T-0002', 'build')] }), [], createGroupFoldStore(null), () => undefined);
-    expect(titles(list)).toEqual(['Ideas', 'In progress']);
+    expect(titles(list)).toEqual(['In progress', 'Ideas']);
     expect(list.querySelectorAll('.work-row')).toHaveLength(2);
+  });
+
+  it('marks running rows and counts them in the In-progress head (T-0084)', () => {
+    const runA = {
+      id: 'r1',
+      ticketId: 'T-0002',
+      provider: 'opencode',
+      state: 'running',
+      startedAt: '2026-10-30T10:00:00Z',
+      endedAt: null,
+      gateFailure: null,
+    } as unknown as RunInfo;
+    const list = workListNode(
+      deps(),
+      board({ inbox: [card('T-0001', 'inbox')], build: [card('T-0002', 'build'), card('T-0003', 'build')] }),
+      [runA],
+      createGroupFoldStore(null),
+      () => undefined,
+    );
+    expect(list.querySelector('.work-group-progress .work-group-count')?.textContent).toBe('2 · 1 running');
+    expect(list.querySelector<HTMLElement>('.work-row[data-id="T-0002"]')!.dataset['running']).toBe('true');
+    expect(list.querySelector<HTMLElement>('.work-row[data-id="T-0003"]')!.hasAttribute('data-running')).toBe(false);
+  });
+
+  it('renders the phase chip with the phase colour and title (T-0084)', () => {
+    const list = workListNode(deps(), board({ build: [card('T-0002', 'build')] }), [], createGroupFoldStore(null), () => undefined);
+    const chip = list.querySelector<HTMLElement>('.work-row .work-phase-chip')!;
+    expect(chip.title).toBe('Build');
+    expect(chip.style.getPropertyValue('--phase-color')).toBe(TAG_AUTO_PALETTE[4]);
+    expect(chip.querySelector('.work-phase-dot')).not.toBeNull();
+    expect(chip.querySelector('.work-phase-name')?.textContent).toBe('Build');
+  });
+
+  it('hides an empty status line — the chip owns the phase', () => {
+    const list = workListNode(deps(), board({ inbox: [card('T-0001', 'inbox')] }), [], createGroupFoldStore(null), () => undefined);
+    const line = list.querySelector<HTMLElement>('.work-row[data-id="T-0001"] .work-row-line')!;
+    expect(line.textContent).toBe('');
+    expect(line.hidden).toBe(true);
+  });
+
+  it('a filter hides rows, shows visible/total, and the marker clears it (T-0084)', () => {
+    const d = deps();
+    const list = workListNode(
+      d,
+      board({ inbox: [card('T-0001', 'inbox')], prioritized: [card('T-0002', 'prioritized')] }),
+      [],
+      createGroupFoldStore(null),
+      () => undefined,
+      { phases: ['prioritized'], statuses: [] },
+    );
+    expect(list.querySelector('.work-group-ideas .work-group-count')?.textContent).toBe('1/2');
+    expect(list.querySelectorAll('.work-group-ideas .work-row')).toHaveLength(1);
+    expect(list.querySelector('.work-group-progress .work-group-empty')?.textContent).toBe('Nothing running');
+    const hidden = workListNode(
+      d,
+      board({ inbox: [card('T-0001', 'inbox')] }),
+      [],
+      createGroupFoldStore(null),
+      () => undefined,
+      { phases: ['build'], statuses: [] },
+    );
+    const marker = hidden.querySelector<HTMLButtonElement>('.work-group-ideas .work-hidden-by-filter')!;
+    expect(marker.textContent).toBe('Hidden by the filter — clear');
+    expect(marker.title).toBe('Show everything again');
+    marker.click();
+    expect(d.clearFilter).toHaveBeenCalledOnce();
   });
 
   it('puts a finished ticket under Needs you with Accept', () => {
@@ -174,8 +242,8 @@ describe('workListNode', () => {
     // The status line is the question itself, not the raw turn text.
     expect(row.querySelector('.work-row-line')?.textContent).toBe('Asks: Which database?');
     const options = [...row.querySelectorAll<HTMLButtonElement>('.work-option')];
-    expect(options.map((b) => b.textContent)).toEqual(['SQLiterecommended', 'Postgres']);
-    expect(options[0]!.title).toBe('no server');
+    expect(options.map((b) => b.textContent)).toEqual(['SQLite', 'Postgres']);
+    expect(options[0]!.title).toBe('SQLite — no server (recommended)');
     expect(options[0]!.className).toContain('work-option-recommended');
     options[1]!.click();
     expect(d.answer).toHaveBeenCalledOnce();

@@ -18,6 +18,7 @@ import {
   type WorkGroupId,
   type WorkRow,
 } from './work-groups';
+import { applyWorkFilter, isFilterActive, NO_WORK_FILTER, type FilteredGroup, type WorkFilterState } from './work-filter';
 import { workerStatus } from './worker-status';
 
 export const PRIORITY_LABEL: Readonly<Record<TicketPriority, string>> = {
@@ -33,6 +34,9 @@ const GROUP_TITLE: Readonly<Record<WorkGroupId, string>> = {
   progress: 'In progress',
 };
 
+/** The groups in display order (T-0084): the owner reads what runs first. */
+export const WORK_GROUP_ORDER: readonly WorkGroupId[] = ['needs', 'progress', 'ideas'];
+
 export interface WorkPanelDeps {
   readonly api: DreyPluginApi;
   /** Opens the ticket page: the ticket file with its thread beside it. */
@@ -47,6 +51,8 @@ export interface WorkPanelDeps {
   openMenu(card: TicketCard, at: { x: number; y: number }): void;
   /** Answers a waiting worker's shaped question with one tap (req-75 W2) — the composer's send path. */
   answer(card: TicketCard, run: RunInfo, text: string): void;
+  /** Clears the Work filter (the hidden-by-filter marker's button, T-0084). */
+  clearFilter(): void;
 }
 
 /** Which groups the owner folded — per viewer, never in the repo. */
@@ -99,7 +105,9 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
 
 /**
  * The whole list for one snapshot. `rerender` repaints after a fold, so
- * every mounted view stays in step.
+ * every mounted view stays in step. The filter (T-0084) hides rows in
+ * every group; its state lives in the caller (the store beside the
+ * folds).
  */
 export function workListNode(
   deps: WorkPanelDeps,
@@ -107,31 +115,46 @@ export function workListNode(
   runs: readonly RunInfo[],
   folds: GroupFoldStore,
   rerender: () => void,
+  filter: WorkFilterState = NO_WORK_FILTER,
 ): HTMLElement {
   const groups = workGroups(snap, runs);
+  const filtered = applyWorkFilter(groups, filter);
   const list = el('div', 'work-list');
-  const order: readonly WorkGroupId[] = ['needs', 'ideas', 'progress'];
-  for (const id of order) {
-    const rows = groups[id];
+  for (const id of WORK_GROUP_ORDER) {
+    const group = filtered[id];
     // Needs you shows only when something waits on the owner.
-    if (id === 'needs' && rows.length === 0) {
+    if (id === 'needs' && group.total === 0) {
       continue;
     }
-    list.append(groupNode(deps, snap, id, rows, folds, rerender));
+    list.append(groupNode(deps, snap, id, group, folds, rerender, isFilterActive(filter)));
   }
-  if (groups.needs.length + groups.ideas.length + groups.progress.length === 0) {
+  if (filtered.needs.total + filtered.ideas.total + filtered.progress.total === 0) {
     list.append(el('div', 'work-empty', 'No tickets yet — capture one with +'));
   }
   return list;
+}
+
+/** The head's count: the visible rows, `<visible>/<total>` while a
+ *  filter is active; In progress adds its live runs (T-0084). */
+function groupHeadCount(id: WorkGroupId, group: FilteredGroup, filterActive: boolean): string {
+  let text = filterActive ? `${group.rows.length}/${group.total}` : `${group.rows.length}`;
+  if (id === 'progress') {
+    const running = group.rows.filter((row) => row.run !== null).length;
+    if (running > 0) {
+      text += ` · ${running} running`;
+    }
+  }
+  return text;
 }
 
 function groupNode(
   deps: WorkPanelDeps,
   snap: BoardSnapshot,
   id: WorkGroupId,
-  rows: readonly WorkRow[],
+  group: FilteredGroup,
   folds: GroupFoldStore,
   rerender: () => void,
+  filterActive: boolean,
 ): HTMLElement {
   const folded = folds.isFolded(id);
   const section = el('section', `work-group work-group-${id}`);
@@ -142,7 +165,11 @@ function groupNode(
   head.title = folded ? `Show ${GROUP_TITLE[id]}` : `Fold ${GROUP_TITLE[id]}`;
   const chevron = el('span', 'work-group-chevron');
   chevron.append(deps.api.ui.icon(folded ? 'chevron-right' : 'chevron-down', 12));
-  head.append(chevron, el('span', 'work-group-title', GROUP_TITLE[id]), el('span', 'work-group-count', String(rows.length)));
+  head.append(
+    chevron,
+    el('span', 'work-group-title', GROUP_TITLE[id]),
+    el('span', 'work-group-count', groupHeadCount(id, group, filterActive)),
+  );
   head.addEventListener('click', () => {
     folds.setFolded(id, !folded);
     rerender();
@@ -150,11 +177,22 @@ function groupNode(
   section.append(head);
   if (!folded) {
     const body = el('div', 'work-group-rows');
-    for (const row of rows) {
+    for (const row of group.rows) {
       body.append(rowNode(deps, snap, row));
     }
-    if (rows.length === 0) {
-      body.append(el('div', 'work-group-empty', id === 'ideas' ? 'No ideas waiting' : 'Nothing running'));
+    if (group.rows.length === 0) {
+      if (group.total > 0) {
+        const clear = el('button', 'work-hidden-by-filter', 'Hidden by the filter — clear');
+        clear.type = 'button';
+        clear.title = 'Show everything again';
+        clear.addEventListener('click', (event) => {
+          event.stopPropagation();
+          deps.clearFilter();
+        });
+        body.append(clear);
+      } else {
+        body.append(el('div', 'work-group-empty', id === 'ideas' ? 'No ideas waiting' : 'Nothing running'));
+      }
     }
     section.append(body);
   }
@@ -168,6 +206,9 @@ function rowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLEl
   node.dataset['path'] = card.path;
   if (row.need !== null) {
     node.dataset['need'] = row.need.kind;
+  }
+  if (row.run !== null) {
+    node.dataset['running'] = 'true';
   }
   node.tabIndex = 0;
   node.setAttribute('role', 'button');
@@ -205,7 +246,15 @@ function rowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLEl
   if (row.run !== null) {
     status.append(el('span', `tickets-light tickets-light-${workerStatus(row.run, Date.now()).light}`));
   }
-  status.append(el('span', 'work-row-id', card.id), el('span', 'work-row-line', statusLineOf(row, snap)));
+  const chip = el('span', 'work-phase-chip');
+  chip.style.setProperty('--phase-color', row.phaseColor);
+  chip.title = row.phase.title;
+  chip.append(el('span', 'work-phase-dot'), el('span', 'work-phase-name', row.phase.title));
+  const line = el('span', 'work-row-line', statusLineOf(row, snap));
+  if (line.textContent === '') {
+    line.hidden = true;
+  }
+  status.append(chip, el('span', 'work-row-id', card.id), line);
   node.append(status);
 
   const actions = needActions(deps, snap, row);
@@ -278,16 +327,20 @@ function priorityChip(deps: WorkPanelDeps, card: TicketCard): HTMLElement {
   return chip;
 }
 
-/** The option buttons of a shaped question (req-75 W2): one tap answers. */
+/** The option rows of a shaped question (req-75 W2): one tap answers.
+ *  Compact dot rows (T-0084) — the consequence rides the tooltip, the
+ *  dot's ring marks the recommendation. */
 function shapedOptionButtons(box: HTMLElement, shaped: ShapedQuestion, onPick: (option: ShapedOption) => void): HTMLElement {
   const options = el('div', 'work-options');
   for (const option of shaped.options) {
-    const b = el('button', `work-option${shaped.recommended === option.n ? ' work-option-recommended' : ''}`, option.label);
+    const recommended = shaped.recommended === option.n;
+    const b = el('button', `work-option${recommended ? ' work-option-recommended' : ''}`);
     b.type = 'button';
-    b.title = option.consequence ?? option.label;
-    if (shaped.recommended === option.n) {
-      b.append(el('span', 'work-option-flag', 'recommended'));
-    }
+    b.title =
+      option.consequence !== null
+        ? `${option.label} — ${option.consequence}${recommended ? ' (recommended)' : ''}`
+        : `${option.label}${recommended ? ' (recommended)' : ''}`;
+    b.append(el('span', 'work-option-dot'), el('span', 'work-option-label', option.label));
     b.addEventListener('click', (event) => {
       event.stopPropagation();
       for (const sibling of box.querySelectorAll('button')) {

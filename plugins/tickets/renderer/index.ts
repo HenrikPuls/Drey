@@ -25,6 +25,7 @@ import { needsBlockedConfirm } from './blocked-view';
 import { PRIORITY_LABEL, createGroupFoldStore, workListNode, type WorkPanelDeps } from './work-panel';
 import { createRunComposer } from './run-composer';
 import { ideaPhaseIds, queueTargetOf } from './work-groups';
+import { createWorkFilterStore, filterPopover, isFilterActive, NO_WORK_FILTER, type WorkFilterState } from './work-filter';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import { createTicketHeader, ticketLogFold } from './ticket-header';
@@ -112,6 +113,10 @@ const views = new Set<BoardView>();
 /** Which Work groups are folded — one state for every view, persisted
  *  as pure view state (never in the repo). */
 const folds = createGroupFoldStore(window.localStorage);
+
+/** The Work list's filter (T-0084) — view state like the folds, applied
+ *  to all three groups; one state for every view. */
+const workFilter = createWorkFilterStore(window.localStorage);
 
 /** Repaints the board's view controls in every panel header (req-69). */
 const headerViewPainters = new Set<() => void>();
@@ -327,10 +332,62 @@ function boardIssuesDeps(api: DreyPluginApi, issues: BoardSnapshot['issues']): B
   };
 }
 
-/** The board's view controls in the panel header (req-69): the board
- *  issues chip (req-73), whose messages unfold above the Work list. */
+/** The board's view controls in the panel header (req-69): the Work
+ *  filter (T-0084), then the board issues chip (req-73), whose messages
+ *  unfold above the Work list. */
 function boardViewControlsNode(api: DreyPluginApi): { node: HTMLElement; dispose: () => void } {
   const node = el('span', 'tickets-head-group tickets-head-view');
+  let filterButton: HTMLElement | null = null;
+  let popover: HTMLElement | null = null;
+  let closePopover: (() => void) | null = null;
+
+  const openFilter = (): void => {
+    const snap = snapshot;
+    if (snap === null || filterButton === null) {
+      return;
+    }
+    const anchor = filterButton;
+    const pop = filterPopover({
+      api,
+      columns: snap.columns,
+      state: workFilter.get(),
+      onApply: (next: WorkFilterState) => {
+        workFilter.set(next);
+        notifyViews(); // the rows re-render behind the open popover
+      },
+    });
+    document.body.append(pop);
+    popover = pop;
+    const close = (): void => {
+      pop.remove();
+      window.removeEventListener('mousedown', outside, true);
+      popover = null;
+      closePopover = null;
+      paint(); // the button's aria-expanded folds back
+    };
+    const outside = (event: Event): void => {
+      const target = event.target as Node;
+      if (!pop.contains(target) && !(filterButton?.contains(target) ?? false)) {
+        close();
+      }
+    };
+    pop.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        close();
+        filterButton?.focus();
+      }
+    });
+    window.addEventListener('mousedown', outside, true);
+    closePopover = close;
+    // Anchored under the button (the priorityChip menu positioning).
+    const rect = pop.getBoundingClientRect();
+    const box = anchor.getBoundingClientRect();
+    pop.style.left = `${Math.max(8, Math.min(box.left, window.innerWidth - rect.width - 8))}px`;
+    pop.style.top = `${Math.min(box.bottom + 2, window.innerHeight - rect.height - 8)}px`;
+    pop.querySelector<HTMLButtonElement>('.work-filter-chip')?.focus();
+  };
+
   const paint = (): void => {
     node.textContent = '';
     const snap = snapshot;
@@ -338,6 +395,27 @@ function boardViewControlsNode(api: DreyPluginApi): { node: HTMLElement; dispose
     if (snap === null || snap.vaultId === null) {
       return;
     }
+    const state = workFilter.get();
+    const active = isFilterActive(state);
+    const filter = el('button', `icon-btn work-filter-btn${active ? ' work-filter-on' : ''}`);
+    filter.type = 'button';
+    const label = active
+      ? `Filter by phase and status — ${state.phases.length + state.statuses.length} active`
+      : 'Filter by phase and status';
+    filter.title = label;
+    filter.setAttribute('aria-label', label);
+    filter.setAttribute('aria-haspopup', 'dialog');
+    filter.setAttribute('aria-expanded', String(popover !== null));
+    filter.append(api.ui.icon('filter', 14));
+    filter.addEventListener('click', () => {
+      if (popover !== null) {
+        closePopover?.();
+      } else {
+        openFilter();
+      }
+    });
+    filterButton = filter;
+    node.append(filter);
     const chip = boardIssuesChip(boardIssuesDeps(api, snap.issues));
     if (chip !== null) {
       node.append(chip);
@@ -385,7 +463,7 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     if (issues !== null) {
       root.append(issues);
     }
-    root.append(workListNode(workPanelDeps(api), snap, fleetRuns, folds, notifyViews));
+    root.append(workListNode(workPanelDeps(api), snap, fleetRuns, folds, notifyViews, workFilter.get()));
     const statusBar = statusBarNode(api, snap);
     if (statusBar !== null) {
       root.append(statusBar);
@@ -417,6 +495,11 @@ function workPanelDeps(api: DreyPluginApi): WorkPanelDeps {
     // The composer's send path (req-75 W2): an option tap is the answer.
     answer: (_card, run, text) => {
       void runMutation('Sending', () => invokeBoard('fleetSend', { runId: run.id, text }));
+    },
+    // The hidden-by-filter marker's button (T-0084): both axes go empty.
+    clearFilter: () => {
+      workFilter.set(NO_WORK_FILTER);
+      notifyViews();
     },
   };
 }

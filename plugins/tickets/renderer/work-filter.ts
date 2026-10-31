@@ -173,8 +173,8 @@ export function filterPopover(deps: {
     clear.addEventListener('click', () => apply(NO_WORK_FILTER));
     head.append(clear);
 
-    const chip = (label: string, pressed: boolean, color: string | null, onToggle: () => void): HTMLElement => {
-      const b = el('button', `work-filter-chip${pressed ? ' work-filter-chip-on' : ''}`);
+    const chip = (label: string, pressed: boolean, kind: 'phase' | 'status', color: string | null, onToggle: () => void): HTMLElement => {
+      const b = el('button', `work-filter-chip work-filter-chip-${kind}${pressed ? ' work-filter-chip-on' : ''}`);
       b.type = 'button';
       b.setAttribute('aria-pressed', String(pressed));
       const dot = el('span', 'work-filter-dot');
@@ -182,7 +182,13 @@ export function filterPopover(deps: {
         b.style.setProperty('--chip-color', color);
       }
       b.append(dot, el('span', 'work-filter-chip-label', label));
-      b.addEventListener('click', onToggle);
+      b.addEventListener('click', () => {
+        onToggle();
+        // The repaint replaced this node — hand focus to its successor.
+        [...pop.querySelectorAll<HTMLButtonElement>('.work-filter-chip')]
+          .find((x) => x.textContent === label)
+          ?.focus();
+      });
       return b;
     };
 
@@ -191,7 +197,7 @@ export function filterPopover(deps: {
     const phaseChips = el('div', 'work-filter-chips');
     for (const phase of phaseChipsOf(deps.columns)) {
       phaseChips.append(
-        chip(phase.title, current.phases.includes(phase.id), phase.color, () => toggle('phases', phase.id)),
+        chip(phase.title, current.phases.includes(phase.id), 'phase', phase.color, () => toggle('phases', phase.id)),
       );
     }
     phaseSection.append(phaseChips);
@@ -201,7 +207,7 @@ export function filterPopover(deps: {
     const statusChips = el('div', 'work-filter-chips');
     for (const status of STATUS_ORDER) {
       statusChips.append(
-        chip(WORK_STATUS_LABEL[status], current.statuses.includes(status), null, () => toggle('statuses', status)),
+        chip(WORK_STATUS_LABEL[status], current.statuses.includes(status), 'status', null, () => toggle('statuses', status)),
       );
     }
     statusSection.append(statusChips);
