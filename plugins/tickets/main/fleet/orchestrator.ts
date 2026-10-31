@@ -82,7 +82,12 @@ interface ChainFile {
   readonly ciBackoff: Record<string, string>;
   /** Per column: the breaker's trip while it holds (absent in older files). */
   readonly tripped?: Record<string, ChainTrip>;
+  /** Set by a runner retiring for a newer build: its successor keeps the master. */
+  readonly handoverAt?: string;
 }
+
+/** How fresh a retiring runner's handover stamp must be for its successor to keep the master. */
+export const HANDOVER_MASTER_MS = 5 * 60_000;
 
 const LIVE: readonly string[] = ['starting', 'running', 'stopping'];
 const BLOCKING: readonly string[] = ['starting', 'running', 'stopping', 'detached'];
@@ -204,6 +209,8 @@ export class Orchestrator {
    * runner restart, but the master never does: every boot starts halted,
    * "An" is a per-session decision (ADR-0077). A persisted "run" is
    * written back as halted so the disk matches what the board shows.
+   * A handover is no new session: when the predecessor retired for a
+   * newer build moments ago (`handoverAt`), the master stays as it was.
    */
   async load(): Promise<void> {
     const raw = await fsp.readFile(path.join(this.deps.root, CHAIN_FILE), 'utf8').catch(() => null);
@@ -218,7 +225,12 @@ export class Orchestrator {
       }
       this.config = parsed.config;
       persistedRun = parsed.master === 'run';
-      this.master = 'halted';
+      const handoverMs = typeof parsed.handoverAt === 'string' ? Date.parse(parsed.handoverAt) : Number.NaN;
+      const handedOver = !Number.isNaN(handoverMs) && Math.abs(this.now().getTime() - handoverMs) <= HANDOVER_MASTER_MS;
+      this.master = persistedRun && handedOver ? 'run' : 'halted';
+      if (persistedRun && handedOver) {
+        this.deps.log('the chain keeps running across the handover from the previous build');
+      }
       for (const [phase, mode] of Object.entries(parsed.columns ?? {})) {
         if (mode === 'playing' || mode === 'held') {
           this.columns[phase] = mode;
@@ -327,6 +339,11 @@ export class Orchestrator {
       await this.dispatchPass();
     }
     return this.status();
+  }
+
+  /** A runner retiring for a newer build: the successor's load keeps the master (see `load`). */
+  async markHandover(): Promise<void> {
+    await this.persist(this.now().toISOString());
   }
 
   /** Notaus: halt the chain, then abort every live run through the stop ladder. */
@@ -741,7 +758,7 @@ export class Orchestrator {
     return failed?.info.gateFailure ?? null;
   }
 
-  private async persist(): Promise<void> {
+  private async persist(handoverAt?: string): Promise<void> {
     const file: ChainFile = {
       version: 1,
       config: this.config,
@@ -753,6 +770,7 @@ export class Orchestrator {
       tokensUsed: { ...this.tokensUsed },
       ciBackoff: { ...this.ciBackoff },
       tripped: { ...this.tripped },
+      ...(handoverAt !== undefined ? { handoverAt } : {}),
     };
     await fsp
       .writeFile(path.join(this.deps.root, CHAIN_FILE), `${JSON.stringify(file, null, 2)}\n`, 'utf8')

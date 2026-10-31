@@ -476,6 +476,28 @@ describe('Orchestrator', () => {
     second.orch.dispose();
   });
 
+  it('a handover to a newer build is no new session: the successor keeps the master running', async () => {
+    await writeMeta();
+    let current = new Date('2026-10-31T15:04:18Z');
+    const first = orchestrator({ now: () => current });
+    await first.orch.configure(CONFIG);
+    await first.orch.setMaster('run');
+    await first.orch.markHandover();
+    first.orch.dispose();
+
+    const second = orchestrator({ now: () => current });
+    await second.orch.load();
+    expect(second.orch.status().master).toBe('run');
+    second.orch.dispose();
+
+    // The stamp is spent: a later cold boot starts halted again.
+    current = new Date(current.getTime() + 60_000);
+    const third = orchestrator({ now: () => current });
+    await third.orch.load();
+    expect(third.orch.status().master).toBe('halted');
+    third.orch.dispose();
+  });
+
   it('a run-settled hook triggers a fresh pass (the slot feeds the next ticket)', async () => {
     await writeMeta();
     await writeTicket('T-0001', 'plan');

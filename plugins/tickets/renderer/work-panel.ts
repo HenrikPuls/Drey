@@ -123,7 +123,7 @@ export function workListNode(
   if (alerts.length > 0) {
     list.append(alertsNode(deps, alerts));
   }
-  const order: readonly WorkGroupId[] = ['needs', 'shaping', 'running', 'ideas', 'done'];
+  const order: readonly WorkGroupId[] = ['needs', 'running', 'shaping', 'ideas', 'done'];
   for (const id of order) {
     if (id === 'done') {
       if (snap.recentDone.length > 0) {

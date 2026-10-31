@@ -20,6 +20,32 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — the runner beside the ticket again, running tickets first, one Open row, the chain survives a rebuild
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (2026-10-31). Since the Work panel (M89) the run tab itself stayed
+empty: its composer paints once while it is built and read the run
+through `live`, declared after it — a ReferenceError the doc host
+swallowed, so every *Open run* showed a blank tab. A ticket also opened with its
+file and the thread only — the run tab with its metrics was reachable
+from the row menu alone (and from 15:31 no longer from the thread); the
+menu offered *Open ticket* and *Open ticket file*; Running sat below
+Shaping, sorted by phase; and a runner retiring for a newer build left
+its successor halted, so the queue stopped after every rebuild. Now
+`openTicketPage` puts the ticket's **run tab** beside the file while a
+run is live (the thread otherwise — an ended run's decisions live
+there), reusing the side pane like the thread did (`pageSide`); the
+menu has one **Open ticket**; the groups run **Needs you → Running →
+Shaping → Ideas**, Running with the live runs on top and the queue in
+`dependencyOrder` — a blocker before what it blocks, carrying the most
+urgent priority it holds up, then closest to done (Ideas: then newest);
+a retiring runner stamps `handoverAt` in `chain.json`
+(`Orchestrator.markHandover`) and a successor booting within five
+minutes keeps the master (`HANDOVER_MASTER_MS`) — a cold boot still
+starts halted. Specs in `work-groups.spec.ts`, `work-panel.spec.ts`,
+`orchestrator.spec.ts`; e2e `work-panel.spec.ts` opens a waiting and a
+planning ticket into their run tabs; manual §Work panel updated.
+
 ### Fix — the Work panel shows when the fleet stops, and resumes it
 
 **Not yet manually verified by the owner.** Owner request, outside the

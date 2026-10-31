@@ -44,7 +44,13 @@ const PIPELINE: readonly PipelinePhase[] = [
 const card = (
   id: string,
   at: string,
-  opts: { priority?: TicketPriority; created?: string; blocked?: readonly string[]; interactive?: boolean } = {},
+  opts: {
+    priority?: TicketPriority;
+    created?: string;
+    blocked?: readonly string[];
+    blocks?: readonly string[];
+    interactive?: boolean;
+  } = {},
 ): TicketCard =>
   ({
     id,
@@ -58,7 +64,7 @@ const card = (
       entered: { inbox: opts.created ?? '2026-10-30T10:00:00Z' },
     },
     blocked: opts.blocked ?? [],
-    blocks: [],
+    blocks: opts.blocks ?? [],
     issues: [],
   }) as unknown as TicketCard;
 
@@ -144,6 +150,33 @@ describe('workGroups', () => {
     const groups = workGroups(snap, []);
     expect(ids(groups.ideas)).toEqual(['T-0004', 'T-0002', 'T-0001', 'T-0003']);
     expect(groups.ideas.map((r) => r.queued)).toEqual([true, false, false, false]);
+  });
+
+  it('Running: live runs on top, then the queue — dependencies before priority', () => {
+    const snap = board({
+      plan: [card('T-0010', 'plan', { priority: 'urgent' })],
+      build: [
+        card('T-0011', 'build', { priority: 'urgent', blocked: ['T-0012'] }),
+        card('T-0012', 'build', { priority: 'low', blocks: ['T-0011'] }),
+        card('T-0013', 'build', { priority: 'high' }),
+        card('T-0014', 'build', { priority: 'low' }),
+      ],
+    });
+    const groups = workGroups(snap, [run({ ticketId: 'T-0014' })]);
+    // T-0014 runs; T-0012 blocks the urgent T-0011 and goes before it
+    // with its urgency; T-0010 (urgent, plan) before T-0013 (high).
+    expect(ids(groups.running)).toEqual(['T-0014', 'T-0012', 'T-0011', 'T-0010', 'T-0013']);
+  });
+
+  it('ideas put a blocker before what it blocks, whatever the priority', () => {
+    const snap = board({
+      inbox: [
+        card('T-0020', 'inbox', { priority: 'urgent', blocked: ['T-0021'] }),
+        card('T-0021', 'inbox', { priority: 'low', blocks: ['T-0020'] }),
+        card('T-0022', 'inbox', { priority: 'high' }),
+      ],
+    });
+    expect(ids(workGroups(snap, []).ideas)).toEqual(['T-0021', 'T-0020', 'T-0022']);
   });
 
   it('a waiting run puts its ticket into Needs you; a working one stays in Running with its run', () => {

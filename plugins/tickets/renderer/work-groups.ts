@@ -92,16 +92,13 @@ export function liveRunOf(ticketId: string, runs: readonly RunInfo[]): RunInfo |
 }
 
 /**
- * Ideas: priority first, newest first within one (owner, 2026-10-31).
- * "New" is the capture stamp — `entered-<first phase>`, the ticket's
- * creation (a revived one carries its revival there).
+ * Ideas: priority first (through `dependencyOrder`, which also puts a
+ * blocker first), newest first within one (owner, 2026-10-31). "New" is
+ * the capture stamp — `entered-<first phase>`, the ticket's creation (a
+ * revived one carries its revival there).
  */
-function ideaOrder(firstPhaseId: string): (a: WorkRow, b: WorkRow) => number {
+function ideaRecency(firstPhaseId: string): (a: WorkRow, b: WorkRow) => number {
   return (a, b) => {
-    const byPriority = priorityWeight(a.card.meta.priority) - priorityWeight(b.card.meta.priority);
-    if (byPriority !== 0) {
-      return byPriority;
-    }
     const at = a.card.meta.entered[firstPhaseId] ?? '';
     const bt = b.card.meta.entered[firstPhaseId] ?? '';
     if (at !== bt) {
@@ -109,6 +106,56 @@ function ideaOrder(firstPhaseId: string): (a: WorkRow, b: WorkRow) => number {
     }
     return a.card.id < b.card.id ? 1 : a.card.id > b.card.id ? -1 : 0;
   };
+}
+
+/**
+ * Dependencies before priority (owner, 2026-10-31): a ticket never sorts
+ * above an open blocker in the same list, and a blocker carries the most
+ * urgent priority of everything it holds up, so a low ticket that blocks
+ * an urgent one moves up with it — its own lower priority no longer
+ * counts. Within one effective priority, `tieBreak` decides. A
+ * dependency cycle cannot be ordered; its rows fall back to the key.
+ */
+export function dependencyOrder<T extends { readonly card: TicketCard }>(
+  rows: readonly T[],
+  tieBreak: (a: T, b: T) => number,
+): T[] {
+  const byId = new Map(rows.map((row) => [row.card.id, row]));
+  const blockersOf = (row: T): string[] => row.card.blocked.filter((id) => id !== row.card.id && byId.has(id));
+  // The most urgent weight among the row and everything it (transitively) blocks.
+  const weight = new Map<string, number>();
+  const effective = (id: string, seen: Set<string>): number => {
+    const known = weight.get(id);
+    if (known !== undefined) {
+      return known;
+    }
+    const row = byId.get(id)!;
+    let best = priorityWeight(row.card.meta.priority);
+    seen.add(id);
+    for (const dependent of row.card.blocks) {
+      if (byId.has(dependent) && !seen.has(dependent)) {
+        best = Math.min(best, effective(dependent, seen));
+      }
+    }
+    seen.delete(id);
+    weight.set(id, best);
+    return best;
+  };
+  const key = (a: T, b: T): number => effective(a.card.id, new Set()) - effective(b.card.id, new Set()) || tieBreak(a, b);
+
+  const remaining = new Map(rows.map((row) => [row.card.id, new Set(blockersOf(row))]));
+  const out: T[] = [];
+  while (remaining.size > 0) {
+    const ready = [...remaining.entries()].filter(([, blockers]) => blockers.size === 0).map(([id]) => byId.get(id)!);
+    const pool = ready.length > 0 ? ready : [...remaining.keys()].map((id) => byId.get(id)!);
+    const next = [...pool].sort(key)[0]!;
+    out.push(next);
+    remaining.delete(next.card.id);
+    for (const blockers of remaining.values()) {
+      blockers.delete(next.card.id);
+    }
+  }
+  return out;
 }
 
 export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): WorkGroups {
@@ -191,19 +238,28 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
     const position = column.unknown ? -1 : pipeline.findIndex((phase) => phase.id === column.phase.id);
     running.push({ row: row(card, column, null), position, index });
   }
-  ideas.sort(ideaOrder(firstPhaseId));
-  // Shaping and Running: closest to done first (finishing beats
-  // starting), then the column's own derived order.
+  // Shaping: closest to done first (finishing beats starting), then the
+  // column's own derived order.
   const byProgress = (a: { position: number; index: number }, b: { position: number; index: number }): number =>
     a.position !== b.position ? b.position - a.position : a.index - b.index;
   shaping.sort(byProgress);
-  running.sort(byProgress);
+  // Running (owner, 2026-10-31): the tickets with a live run on top, then
+  // the queue — dependencies first, then priority, then closest to done.
+  type Placed = { row: WorkRow; card: TicketCard; position: number; index: number };
+  const placedRunning: Placed[] = running.map((entry) => ({ ...entry, card: entry.row.card }));
+  const live = placedRunning
+    .filter((entry) => entry.row.run !== null)
+    .sort((a, b) => priorityWeight(a.card.meta.priority) - priorityWeight(b.card.meta.priority) || byProgress(a, b));
+  const queued = dependencyOrder(
+    placedRunning.filter((entry) => entry.row.run === null),
+    byProgress,
+  );
 
   return {
     needs,
     shaping: shaping.map((entry) => entry.row),
-    running: running.map((entry) => entry.row),
-    ideas,
+    running: [...live, ...queued].map((entry) => entry.row),
+    ideas: dependencyOrder(ideas, ideaRecency(firstPhaseId)),
   };
 }
 

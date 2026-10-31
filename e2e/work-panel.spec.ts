@@ -153,22 +153,18 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     expect(box.width).toBeLessThan(420);
     await panel.screenshot({ path: testInfo.outputPath('work-panel-narrow.png') });
 
-    // The ticket page: the file in the editor, the thread beside it with the question.
+    // The ticket page: a live run opens beside the file — its run tab with
+    // the metrics and the question to answer (owner, 2026-10-31).
     await panel.locator('.work-row[data-id="T-0104"]').click();
     await expect(page.locator('app-editor .tickets-head')).toBeVisible({ timeout: 15_000 });
-    const thread = page.locator('.tickets-thread').filter({ visible: true });
-    await expect(thread).toBeVisible();
-    await expect(thread.locator('.tickets-thread-title')).toHaveText('Drag headings in the outline');
-    await expect(thread.locator('.tickets-thread-meta')).toHaveText(/waiting for you · OpenCode · glm-5.3-flash/);
-    // The question is part of the conversation now (req-75 W2b): no card.
-    await expect(thread.locator('.tickets-takeover-wait')).toBeHidden();
-    await expect(thread.locator('.tickets-ask-question')).toHaveText(
-      'Should dragging a heading also move the text below it?',
-    );
-    // A question carries no decision bar — that is the checkpoints'.
-    await expect(thread.locator('.tickets-thread-decisions')).toBeHidden();
+    const runTab = page.locator('.tickets-takeover:not(.tickets-thread)').filter({ visible: true });
+    await expect(runTab.locator('.tickets-takeover-ticket')).toHaveText('T-0104');
+    await expect(runTab.locator('.tickets-takeover-metrics')).toBeVisible();
+    await expect(runTab).toContainText('Should dragging a heading also move the text below it?');
+    await expect(page.locator('app-pane-leaf')).toHaveCount(2);
     await expect(panel.locator('.work-row[data-id="T-0104"]')).toHaveClass(/work-row-open/);
     await page.screenshot({ path: testInfo.outputPath('work-panel-wide.png') });
+    const thread = page.locator('.tickets-thread').filter({ visible: true });
 
     // The decisions live in the thread (req-75 W1b); for a Review or
     // Ready-to-try checkpoint the Ready card's buttons replace the bar
@@ -182,10 +178,12 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Fix the palette race in CI');
     await expect(readyButtons).toHaveText(['Launch this version', 'Accept', 'Send back…']);
 
-    // A second ticket reuses the one thread tab.
+    // A ticket with a live run brings its run tab back into the same pane.
     await panel.locator('.work-row[data-id="T-0107"]').click();
-    await expect(thread.locator('.tickets-thread-title')).toHaveText('Daily note templates per weekday');
-    await expect(page.locator('.tickets-thread')).toHaveCount(1);
+    await expect(runTab.locator('.tickets-takeover-ticket')).toHaveText('T-0107');
+    await expect(page.locator('app-pane-leaf')).toHaveCount(2);
+    // The thread stays one tab, behind the run tab in that pane.
+    await expect(page.locator('app-tab-bar .tab[title="thread://ticket"]')).toHaveCount(1);
   });
 
   test('the next ticket lands in the last ticket pane, not a new split', async ({ page }, testInfo) => {

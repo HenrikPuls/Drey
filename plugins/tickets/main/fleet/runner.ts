@@ -232,6 +232,8 @@ async function main(): Promise<void> {
             });
           }
           log(`handed over ${count} live run${count === 1 ? '' : 's'} — exiting`);
+          // The successor keeps the master switch as it stands.
+          await orchestrator?.markHandover().catch((error) => log(`handover stamp failed: ${String(error)}`));
           // runner.log is written behind a promise chain: flush it, or the
           // handover's lines are lost with the process.
           await logChain;
