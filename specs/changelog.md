@@ -20,6 +20,18 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — the gate typechecks what the build compiles
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (2026-10-31, review of the req-75 chain). Milestone 90 (W2) passed
+`npm run test:all` but broke the app build: `run-composer.ts` handed
+`string | null` where the renderer bundle's typecheck wants `string`.
+`npm run typecheck` never compiled the plugins' own build configs, so
+no gate could see it. Fixed the type (`[string, string | null]`) and
+added `plugins/tsconfig.main.json` and `plugins/tsconfig.renderer.json`
+to `npm run typecheck` (six configs now; CLAUDE.md and
+`docs/agents/fleet-worker.md` say so) — every ticket's gate runs it.
+
 ### Milestone 90 — req-75 W2: Questions carry their context
 
 **Not yet manually verified by the owner.** Ticket T-0059 (roadmap

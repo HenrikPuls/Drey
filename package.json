@@ -15,7 +15,7 @@
     "test:app": "ng test --watch=false",
     "test:all": "npm run lint && npm run typecheck && npm run cycles && npm run test:app && npm run test:plugins",
     "lint": "eslint \"electron/**/*.ts\" \"shared/**/*.ts\" \"src/**/*.ts\" \"plugins/**/*.ts\"",
-    "typecheck": "tsc -p electron/tsconfig.json --noEmit && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.plugins.json --noEmit && tsc -p electron/tsconfig.spec.json",
+    "typecheck": "tsc -p electron/tsconfig.json --noEmit && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.plugins.json --noEmit && tsc -p plugins/tsconfig.main.json --noEmit && tsc -p plugins/tsconfig.renderer.json && tsc -p electron/tsconfig.spec.json",
     "cycles": "node scripts/check-cycles.mjs",
     "verify:pack": "node scripts/verify-pack.mjs",
     "build:renderer": "ng build",

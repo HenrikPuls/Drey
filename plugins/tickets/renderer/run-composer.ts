@@ -402,7 +402,7 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
   waitShaped.hidden = true;
   const paintShaped = (shaped: ShapedQuestion): void => {
     waitShaped.replaceChildren(el('div', 'tickets-question-text', shaped.question));
-    const lines: readonly (readonly [string, string])[] = [
+    const lines: readonly (readonly [string, string | null])[] = [
       ['Ticket', shaped.context],
       ['Where', shaped.where],
       ['Why', shaped.why],

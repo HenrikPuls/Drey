@@ -54,7 +54,7 @@ repo's rules apply to you. Read it instead of `CLAUDE.md` in full; open
 - One plugin's specs: `npm run test:plugin -- <id>` (a path fragment
   scopes outside `plugins/`: `shared`, `electron/ipc`).
 - Renderer specs: `npm run test:app -- --include "src/app/…/x.spec.ts"`.
-- Typecheck, all four configs: `npm run typecheck`. Import cycles:
+- Typecheck, all six configs (the plugins' build configs included): `npm run typecheck`. Import cycles:
   `node scripts/check-cycles.mjs`.
 - Lint the files you touched:
   `node node_modules/eslint/bin/eslint.js <files>`.
