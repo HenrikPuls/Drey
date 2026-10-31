@@ -59,8 +59,9 @@ owner's verification round for 1–81 closed 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 87; latest requirement id: req-76
-(req-74–76 added 2026-10-31: the Work panel, STRIDE, TARA; req-73 is
+highest used (latest: milestone 87; latest requirement id: req-77
+(req-74–77 added 2026-10-31: the Work panel, STRIDE, TARA, the red-gate
+back-move; req-73 is
 readable board issues, renumbered from req-66 — the tickets remote
 holds req-66)),
 the update check's positive answer is inline text — req-43 and req-44
@@ -325,6 +326,16 @@ rest are kept so they still match `docs/11`.
   Open: which parts of 21434 clause 15 apply to a desktop app,
   feasibility method (attack potential vs. attack vector), report
   format, relation to req-75.
+- **req-77 — A red gate sends the ticket back** (owner request,
+  2026-10-31). An optional `on-red: <phase>` key per phase in
+  `pipeline.md`: a red gate moves the ticket back to that phase with
+  the gate's failure log in the ticket (Log line + the next run's
+  brief), instead of only backing off. The loop is bounded by the
+  phase's `max-red:` — past it the circuit breaker parks as today. The
+  pipeline stays linear apart from this one rule; a visual workflow
+  designer (branches, parallel paths) is not planned. Open: whether the
+  back-move counts as a machine move across a manual checkpoint, and
+  how it interacts with W7's gates and routing (req-74).
 - **Req-29 remainder** — `copilot-cli` (GitHub Copilot CLI, `-p`) not on
   main; id unrouted in `electron/llm/providers/presets.ts`.
 - **Req-22 remainder** — context-menu "add meeting log" + per-day
