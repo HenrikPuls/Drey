@@ -1443,6 +1443,8 @@ function createEndMoves(): { element: HTMLElement; paint(run: RunInfo | null): v
 
 const THREAD_KIND = 'tickets-thread';
 let threadTicketId: string | null = null;
+/** The ticket file the pair's file pane last showed (reused by the next ticket). */
+let pairFilePath: string | null = null;
 const threadListeners = new Set<() => void>();
 /**
  * A run to unfold when its ticket's thread shows (req-75 W4a): set by a
@@ -1490,11 +1492,14 @@ async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<voi
     return;
   }
   const side = { kind: THREAD_KIND, key: THREAD_KEY, title: threadTitle(card.id) };
+  const previous = pairFilePath !== null && api.documents.get(pairFilePath) !== null ? pairFilePath : undefined;
   const plan = ticketPagePlan({
     fileOpen: api.documents.get(card.path) !== null,
     threadOpen: api.documents.get(side.key) !== null,
+    previousFile: previous !== card.path ? previous : undefined,
   });
   await api.documents.open(card.path, undefined, { vaultId: snapshot.vaultId, ...plan.fileOpts });
+  pairFilePath = card.path;
   threadTicketId = card.id;
   for (const listener of threadListeners) {
     listener();

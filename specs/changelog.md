@@ -1,4 +1,17 @@
 
+### req-82 — the ticket page reuses its ticket pane
+
+**Not yet manually verified by the owner.** Owner request, 2026-10-31
+(outside the list). Picking a new ticket in the Work panel while the
+thread was open split a new column beside the thread every time (the new
+file was closed, the thread open → `beside: thread, split: right`), so
+the editor filled with narrow ticket panes. `ticketPagePlan` now takes
+the pair's previous ticket file (`previousFile`, tracked in
+`openTicketPage`): while that tab is still open the new ticket opens in
+its pane without a split. The split beside the thread remains only for
+the first ticket after the pair was closed. Specs: two new rows in
+`plugins/tickets/renderer/ticket-page.spec.ts`.
+
 ### Milestone 94 — fleet stability, part 2: clean hand-overs, pause that resumes
 
 **Not yet manually verified by the owner.** Owner request, 2026-10-31
