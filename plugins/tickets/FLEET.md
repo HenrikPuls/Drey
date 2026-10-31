@@ -266,7 +266,9 @@ per-model keys have no UI.
 ### The instruction (T-0048: the context pack)
 
 Every phase's instruction is composed in one stable order — repo agent
-instructions (`CLAUDE.md`, fallback `AGENTS.md`, verbatim) → phase
+instructions (verbatim: the file `repos.md`'s `instructions:` names,
+req-79 — Drey's is `docs/agents/fleet-worker.md`; unset, missing or
+blank falls back to `CLAUDE.md`, then `AGENTS.md`) → phase
 template → the ticket's `## Plan` verbatim → the variable parts
 (who/where, description, the worktree's `git diff --stat` head-capped,
 and on a retry the previous run's gate failure tail-capped). The prefix

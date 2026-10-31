@@ -332,6 +332,15 @@ export function parseRepos(text: string | null): ReposParse {
         warnings.push(`repos.md: repo "${name}" launch must be a command string`);
       }
     }
+    let instructions: string | null = null;
+    if (map['instructions'] !== undefined && map['instructions'] !== null) {
+      const rel = typeof map['instructions'] === 'string' ? repoRelativePath(map['instructions']) : null;
+      if (rel !== null && rel !== '') {
+        instructions = rel;
+      } else {
+        warnings.push(`repos.md: repo "${name}" instructions must be a file path inside the repo`);
+      }
+    }
     repos.push({
       name,
       url,
@@ -341,6 +350,7 @@ export function parseRepos(text: string | null): ReposParse {
       worker: typeof map['worker'] === 'string' && map['worker'].trim() !== '' ? map['worker'].trim() : null,
       worktrees: typeof map['worktrees'] === 'string' && map['worktrees'].trim() !== '' ? map['worktrees'].trim() : null,
       launch,
+      instructions,
     });
     const links = parseRepoLinks(map['link']);
     if (typeof links === 'string') {
@@ -398,6 +408,9 @@ export function reposFileText(repos: readonly RepoRef[], prose: string): string 
     if (repo.launch !== null) {
       entry['launch'] = repo.launch;
     }
+    if (repo.instructions !== null) {
+      entry['instructions'] = repo.instructions;
+    }
     if (repo.link !== undefined && repo.link.length > 0) {
       entry['link'] = [...repo.link];
     }
@@ -423,16 +436,31 @@ function parseRepoLinks(raw: unknown): readonly string[] | string {
   }
   const links: string[] = [];
   for (const item of items as string[]) {
-    const rel = item.trim().replaceAll('\\', '/').replace(/\/+$/, '');
-    if (rel === '') {
-      continue;
-    }
-    if (rel.startsWith('/') || /^[a-zA-Z]:/.test(rel) || rel.split('/').some((part) => part === '..' || part === '.')) {
+    const rel = repoRelativePath(item);
+    if (rel === null) {
       return `link: "${item}" must be a path inside the repo (no absolute path, no ..)`;
     }
-    links.push(rel);
+    if (rel !== '') {
+      links.push(rel);
+    }
   }
   return links;
+}
+
+/**
+ * A repo-relative path from `repos.md`, forward slashes, no trailing
+ * slash; '' for a blank value, null when it is absolute or leaves the
+ * repo (`..`, `.`).
+ */
+function repoRelativePath(raw: string): string | null {
+  const rel = raw.trim().replaceAll('\\', '/').replace(/\/+$/, '');
+  if (rel === '') {
+    return '';
+  }
+  if (rel.startsWith('/') || /^[a-zA-Z]:/.test(rel) || rel.split('/').some((part) => part === '..' || part === '.')) {
+    return null;
+  }
+  return rel;
 }
 
 // --- ordering ----------------------------------------------------------------

@@ -10,12 +10,15 @@ import type { TicketsGit } from '../tickets-git';
 
 /**
  * The work repo's agent instructions, verbatim and never capped — the
- * stable in-repo prefix every phase instruction opens with. `CLAUDE.md`
- * preferred, `AGENTS.md` as the fallback, null when the repo carries
- * neither (or the checkout is unreachable).
+ * stable in-repo prefix every phase instruction opens with. The repo's
+ * `instructions:` file (req-79) first — a short brief for unattended
+ * runs instead of the pair-programming rules every model call would
+ * otherwise carry — then `CLAUDE.md`, then `AGENTS.md`; null when the
+ * repo carries none of them (or the checkout is unreachable).
  */
-export async function readRepoInstructions(repoPath: string): Promise<string | null> {
-  for (const name of ['CLAUDE.md', 'AGENTS.md']) {
+export async function readRepoInstructions(repoPath: string, configured: string | null = null): Promise<string | null> {
+  const names = configured !== null ? [configured, 'CLAUDE.md', 'AGENTS.md'] : ['CLAUDE.md', 'AGENTS.md'];
+  for (const name of names) {
     const text = await fsp.readFile(path.join(repoPath, name), 'utf8').catch(() => null);
     if (text !== null && text.trim() !== '') {
       return text;

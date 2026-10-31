@@ -71,7 +71,7 @@ const TICKET = [
   '',
 ].join('\n');
 
-const REPO = { name: 'drey', url: 'https://example.test/drey.git', branch: 'main', policy: null, path: 'W:/drey', worker: null, worktrees: null, launch: null };
+const REPO = { name: 'drey', url: 'https://example.test/drey.git', branch: 'main', policy: null, path: 'W:/drey', worker: null, worktrees: null, launch: null, instructions: null };
 
 function base(over: Partial<Parameters<typeof composeRunRequest>[0]> = {}): Parameters<typeof composeRunRequest>[0] {
   return {
@@ -243,6 +243,7 @@ describe('multi-repo runs (req-72)', () => {
     worker: null,
     worktrees: null,
     launch: null,
+    instructions: null,
   };
 
   it('carries one worktree per extra repo and names them in the brief', () => {

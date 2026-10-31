@@ -3,9 +3,11 @@
 You run unattended on one ticket of the owner's board, in a worktree of
 this repo on the ticket's branch `t/<id>`. Your brief names the ticket
 file, quotes its description and plan, and carries the phase prompt —
-that is your task. This page tells you where things are and which of the
-repo's rules apply to you. Read it instead of `CLAUDE.md` in full; open
-`CLAUDE.md` only at the section a step needs (search its headings).
+that is your task. This page opens your brief in place of `CLAUDE.md`
+(`instructions:` in the board's `repos.md`): it tells you where things
+are and which of the repo's rules apply to you. Never read `CLAUDE.md`
+or `AGENTS.md` whole; open `CLAUDE.md` only at the section a step needs
+(search its headings).
 
 ## How to behave
 
@@ -83,6 +85,12 @@ A spec sits beside the file it tests. The dependency rules between
 
 - Start from the plan's file list and line ranges. Otherwise search for
   the symbol or the UI string, then read the lines around the hits.
+- Every model call of your run carries everything read so far, so a
+  file read twice is paid twice on every later call. Never read these
+  whole, only line ranges around search hits: `specs/changelog.md`
+  (a new entry goes at the top: its first 40 lines show the format),
+  `specs/roadmap.md`, `docs/manual/manual.md`, `docs/05_building_block_view.md`,
+  `plugins/tickets/main/index.ts`, `plugins/tickets/renderer/index.ts`.
 - "Which file owns X": `CLAUDE.md` § "Ownership Map", then `docs/05`
   § "Feature → files index".
 - Why something is the way it is: the ADR the code comment or the
