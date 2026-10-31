@@ -942,11 +942,15 @@ told to use them and install nothing.
 While the run is live, its row carries a traffic light (green working,
 amber context nearly full or stopping, red stalled for five minutes)
 and says what the worker does. The ticket's **thread** shows the
-worker's conversation as it happens, with a prompt box below: send a
-message and it lands in the running turn; **Stop** interrupts the turn
-(the session and its context stay). The thread's header names the
-ticket, the phase and the worker's state, with **Open run** and **Stop
-run**. While workers run, the panel header sums up the whole fleet
+worker's conversation as it happens, with a prompt box below — the
+prompt on top, attach and the quick prompts on its left edge, stop and
+send on its right: send a message and it lands in the running turn;
+**Stop** interrupts the turn (the session and its context stay). Once
+the run has ended, a message carries its session on as a new run — no
+separate resume. The thread's header names the ticket, the phase and
+the worker's state, with **Stop run** while the run is live; the run's
+own tab is **Open run** (an ended one under **Past runs**) on the row's
+menu. While workers run, the panel header sums up the whole fleet
 next to its buttons (`● 1 running · 18.9M tok · 26:22`): the worst
 light, the states in words, the tokens in flight and how long the
 oldest live run has been at it — hover it for the long form; a narrow
@@ -1063,7 +1067,7 @@ yourself, your own checkpoint can be skipped); a refine dialog offers
 rework. A click stops the run and makes the move — the same one-commit
 move as from the menu. Closing the tab without a move keeps everything:
 the reservation stays on the ticket (the fleet will not pick it up), and
-**Open run → Resume session** continues the conversation later.
+a message in the thread continues the conversation later.
 
 Each column's dialog prompt is a prompt file like any other: a phase's
 `interactive:` key in `pipeline.md` names one, otherwise the shipped

@@ -215,6 +215,44 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await page.screenshot({ path: testInfo.outputPath('ticket-page-no-split.png') });
   });
 
+  test('an ended run keeps the box free: no resume in the header, the toolbar inside the box', async ({
+    page,
+    electronApp,
+  }, testInfo) => {
+    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    const panel = page.locator('.tickets-panel').filter({ visible: true });
+    await expect(panel.locator('.work-row[data-id="T-0107"]')).toBeVisible({ timeout: 15_000 });
+    await electronApp.evaluate(
+      ({ BrowserWindow }, data) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send('plugin:event', data);
+        }
+      },
+      {
+        pluginId: 'tickets',
+        event: 'fleet-changed',
+        data: {
+          runs: [liveRun('r-ended', 'T-0107', 'plan', { state: 'done', endedAt: '2026-10-31T07:00:00Z', exitCode: 1 })],
+          chain: null,
+        },
+      },
+    );
+    await panel.locator('.work-row[data-id="T-0107"]').click();
+    const thread = page.locator('.tickets-thread').filter({ visible: true });
+    await expect(thread.locator('.tickets-thread-meta')).toHaveText(/^ended · OpenCode/);
+    await expect(thread.locator('.tickets-thread-head button[aria-label^="Open the run"]')).toHaveCount(0);
+    const box = thread.locator('.tickets-composer-box');
+    await expect(box.locator('.tickets-composer-toolbar .tickets-composer-send')).toBeEnabled();
+    await expect(box.locator('.tickets-composer-toolbar .tickets-takeover-chip').first()).toBeEnabled();
+    // Send sits at the toolbar's right end, under the prompt, inside the box.
+    const sendBox = (await box.locator('.tickets-composer-send').boundingBox())!;
+    const promptBox = (await box.locator('.tickets-takeover-prompt-input').boundingBox())!;
+    const outer = (await box.boundingBox())!;
+    expect(sendBox.y).toBeGreaterThanOrEqual(promptBox.y + promptBox.height - 1);
+    expect(outer.x + outer.width - (sendBox.x + sendBox.width)).toBeLessThan(16);
+    await thread.screenshot({ path: testInfo.outputPath('thread-ended-run.png') });
+  });
+
   test('folds a group and keeps it folded', async ({ page }) => {
     await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
     const panel = page.locator('.tickets-panel').filter({ visible: true });
