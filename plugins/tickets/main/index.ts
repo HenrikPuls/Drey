@@ -60,7 +60,7 @@ import {
 import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from './phase-dirs';
 import { blockedRefusal } from './blocked';
 import { planWorktreeRemoval } from './worktree-removal';
-import { detectDrift, type DriftDetection } from './normalize';
+import { detectDrift, recentDoneOf, type DriftDetection } from './normalize';
 import { openTerminalAt } from './open-terminal';
 import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
 import type { AttachmentReply, RefineReply, TicketReply } from '../shared/remote-protocol';
@@ -297,6 +297,8 @@ class BoardService {
       pipelineText,
       reposText,
       files,
+      // The same file list already carries the archive — no extra reads.
+      recentDone: recentDoneOf(files, Date.now()),
     });
     // The chain follows the pipeline: an automatic column anywhere
     // points the runner at this vault (M85). Cheap and idempotent —
@@ -2046,7 +2048,9 @@ export function handoverOverrideKeys(snap: BoardSnapshot, defaultWorker: string)
   return [...keys];
 }
 
-/** The remote gateway's owner (req-66); stopped on deactivate. */
+/**
+ * The remote gateway's owner (req-66); stopped on deactivate.
+ */
 let remote: RemoteService | null = null;
 
 const plugin: MainPluginModule = {

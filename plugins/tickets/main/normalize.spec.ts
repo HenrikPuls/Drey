@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { phaseWithoutPoolKeys, type PipelinePhase } from '../shared/tickets';
-import { detectDrift, parseArchivedStamp, type DriftFile } from './normalize';
+import { detectDrift, parseArchivedStamp, recentDoneOf, type DriftFile } from './normalize';
 
 const PIPELINE: readonly PipelinePhase[] = [
   { id: 'inbox', title: 'Inbox', wip: null, claim: false, handover: 'manual' },
@@ -246,5 +246,68 @@ describe('detectDrift', () => {
       PIPELINE,
     );
     expect(drifts).toEqual([]);
+  });
+});
+
+describe('recentDoneOf (req-75 W1b)', () => {
+  const NOW = Date.parse('2026-10-31T12:00:00Z');
+
+  const archived = (id: string, stamp: string, title = `Ticket ${id}`): DriftFile => ({
+    path: `tickets/archive/${id}.md`,
+    text: [
+      '---',
+      `id: ${id}`,
+      `title: "${title}"`,
+      'priority: normal',
+      '---',
+      '## Log',
+      '',
+      `- '${stamp}' owner@desk — archived`,
+      '',
+    ].join('\n'),
+  });
+
+  it('keeps the last 7 days, newest first, with title and stamp', () => {
+    const files = [
+      archived('T-0001', '2026-10-25T12:00:01Z'), // exactly 6 days — in
+      archived('T-0002', '2026-10-29T08:00:00Z', 'Newer'),
+      archived('T-0003', '2026-10-24T11:59:59Z'), // 7 days and a second — out
+      { path: 'tickets/10-inbox/T-0004.md', text: '' },
+    ];
+    expect(recentDoneOf(files, NOW)).toEqual([
+      { id: 'T-0002', title: 'Newer', at: '2026-10-29T08:00:00Z' },
+      { id: 'T-0001', title: 'Ticket T-0001', at: '2026-10-25T12:00:01Z' },
+    ]);
+  });
+
+  it('takes the NEWEST archived stamp, so a revived ticket counts from its re-archival', () => {
+    const revived: DriftFile = {
+      path: 'tickets/archive/T-0005.md',
+      text: [
+        "- '2026-10-01T00:00:00Z' owner@desk — archived",
+        "- '2026-10-30T00:00:00Z' owner@desk — archived",
+      ].join('\n'),
+    };
+    expect(recentDoneOf([archived('T-0006', '2026-10-02T00:00:00Z'), revived], NOW).map((d) => d.id)).toEqual([
+      'T-0005',
+    ]);
+  });
+
+  it('caps at 20 and breaks stamp ties by id', () => {
+    const files = Array.from({ length: 25 }, (_, i) =>
+      archived(`T-${String(i + 1).padStart(4, '0')}`, '2026-10-30T00:00:00Z'));
+    const done = recentDoneOf(files, NOW);
+    expect(done).toHaveLength(20);
+    expect(done[0]!.id).toBe('T-0001');
+    expect(done[19]!.id).toBe('T-0020');
+  });
+
+  it('ignores files without an archived marker and folders deeper in the archive', () => {
+    const files = [
+      { path: 'tickets/archive/T-0007.md', text: "## Log\n\n- '2026-10-30T00:00:00Z' owner@desk — created in inbox" },
+      { path: 'tickets/archive/notes/T-0008.md', text: "## Log\n\n- '2026-10-30T00:00:00Z' owner@desk — archived" },
+      { path: 'tickets/archive/readme.md', text: '' },
+    ];
+    expect(recentDoneOf(files, NOW)).toEqual([]);
   });
 });

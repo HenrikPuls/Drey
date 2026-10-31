@@ -327,6 +327,15 @@ export interface BoardColumn {
   readonly unknown: boolean;
 }
 
+/** One ticket archived within the last seven days (req-75 W1b): the
+ *  Done-this-week group of the Work panel. */
+export interface RecentDone {
+  readonly id: string;
+  readonly title: string | null;
+  /** The newest `— archived` Log stamp, as written. */
+  readonly at: string;
+}
+
 /** The whole board, rebuilt from files on every fetch — no stored state. */
 export interface BoardSnapshot {
   readonly vaultId: string | null;
@@ -352,6 +361,8 @@ export interface BoardSnapshot {
    * moves feed the next pool.
    */
   readonly checkpoints: readonly string[];
+  /** Tickets archived within the last 7 days, newest first (req-75 W1b). */
+  readonly recentDone: readonly RecentDone[];
 }
 
 /** `true` when the id parses AND matches the file stem it came from. */

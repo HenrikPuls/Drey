@@ -17,6 +17,7 @@ import {
   type BoardColumn,
   type BoardSnapshot,
   type PipelinePhase,
+  type RecentDone,
   type RepoRef,
   type TicketCard,
   type TicketIssue,
@@ -476,6 +477,12 @@ export interface AssembleInput {
   /** The plugin's configured default worker (M84) — what cards show when
    *  nothing above them pins one. */
   readonly defaultWorker: string;
+  /**
+   * The archived tickets of the last 7 days (req-75 W1b), already
+   * computed by the caller from the same file list — the pure assembly
+   * stays time-free. Default: none.
+   */
+  readonly recentDone?: readonly RecentDone[];
 }
 
 /** Files under `tickets/` that are neither `_meta` nor ticket-shaped. */
@@ -652,5 +659,6 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     columns,
     issues,
     checkpoints: [...checkpointPhaseIds(columns)],
+    recentDone: [...(input.recentDone ?? [])],
   };
 }
