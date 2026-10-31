@@ -325,18 +325,16 @@ export function dropIndexOf(otherMidpoints: readonly number[], y: number): numbe
   return otherMidpoints.filter((mid) => mid < y).length;
 }
 
-export type DropAction =
-  | { readonly kind: 'move'; readonly from: string; readonly to: string; readonly index: number }
-  | { readonly kind: 'reorder'; readonly phase: string; readonly index: number };
+export interface DropAction {
+  readonly from: string;
+  readonly to: string;
+}
 
 /**
- * The desk call a drop makes — the index counts the target column
- * WITHOUT the dragged card, as `transition` and `reorder` read it; null
- * when the card lands where it was.
+ * The desk call a drop makes: a move across columns. A drop inside the
+ * card's own column does nothing — the column order is derived, there
+ * are no pins (req-74).
  */
-export function dropActionOf(from: string, fromIndex: number, to: string, index: number): DropAction | null {
-  if (from !== to) {
-    return { kind: 'move', from, to, index };
-  }
-  return index === fromIndex ? null : { kind: 'reorder', phase: to, index };
+export function dropActionOf(from: string, to: string): DropAction | null {
+  return from === to ? null : { from, to };
 }

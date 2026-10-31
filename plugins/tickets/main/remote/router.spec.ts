@@ -20,8 +20,6 @@ function port(): TicketsRemotePort {
     ticket: vi.fn(async (id: string) => ({ ok: true, card: { id }, text: '# x' })),
     create: vi.fn(ok),
     move: vi.fn(ok),
-    reorder: vi.fn(ok),
-    unpin: vi.fn(ok),
     claim: vi.fn(ok),
     archive: vi.fn(ok),
     refine: vi.fn(ok),
@@ -117,7 +115,7 @@ describe('route', () => {
       deps,
     );
     expect(moved).toEqual({ status: 200, body: { ok: true } });
-    expect(remote.move).toHaveBeenCalledWith({ id: 'T-0052', from: 'build', to: 'review', index: null }, 'owner@iphone-15');
+    expect(remote.move).toHaveBeenCalledWith({ id: 'T-0052', from: 'build', to: 'review' }, 'owner@iphone-15');
 
     await route(req({ method: 'POST', path: '/api/runs/r-1/answer', authorization: auth, body: { answers: { q0: 'Yes' } } }), deps);
 

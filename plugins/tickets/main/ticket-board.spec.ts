@@ -1,16 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   assembleBoard,
-  orderAfterInsert,
   orderColumn,
-  parseOrderFile,
   parsePipeline,
   parseRepos,
   patchPipelinePhase,
   reorderPipelinePhases,
-  pinsAfterDrop,
   reposFileText,
-  rewriteOrderSection,
 } from './ticket-board';
 
 const PIPELINE = `---
@@ -61,34 +57,6 @@ describe('parsePipeline', () => {
   it('refuses broken YAML and missing fences', () => {
     expect(parsePipeline('no fence').error).toContain('fence');
     expect(parsePipeline('---\nphases: [\n---\n').error).toContain('parse');
-  });
-});
-
-describe('order files', () => {
-  it('parses sparse sections and flags noise', () => {
-    const text = '# pins\n\n## prioritized\n\n- T-0002\n- T-0001\n\n## Not A Phase\n\n- T-0003\n';
-    const { pins, issues } = parseOrderFile(text);
-    expect(pins['prioritized']).toEqual(['T-0002', 'T-0001']);
-    expect(issues.length).toBe(1);
-    expect(issues[0]!.level).toBe('noise');
-  });
-
-  it('rewrites one section in place and preserves the rest', () => {
-    const text = '# pins\n\n## prioritized\n\n- T-0002\n- T-0001\n\n## build\n\n- T-0005\n';
-    const next = rewriteOrderSection(text, 'prioritized', ['T-0001', 'T-0009']);
-    expect(next).toContain('## prioritized');
-    const { pins } = parseOrderFile(next);
-    expect(pins['prioritized']).toEqual(['T-0001', 'T-0009']);
-    expect(pins['build']).toEqual(['T-0005']);
-  });
-
-  it('appends a missing section and trims trailing blanks', () => {
-    const next = rewriteOrderSection('# pins\n', 'build', ['T-0002']);
-    expect(parseOrderFile(next).pins['build']).toEqual(['T-0002']);
-  });
-
-  it('null reads parse to no pins', () => {
-    expect(parseOrderFile(null).pins).toEqual({});
   });
 });
 
@@ -158,30 +126,10 @@ describe('ordering', () => {
       ticket('T-0004', 'normal', 5000, '2026-10-16T09:00:00Z'),
       ticket('T-0005', 'normal', 5000, ''),
     ];
-    const ordered = orderColumn(tickets, undefined, (t) => t.key);
+    const ordered = orderColumn(tickets, (t) => t.key);
     expect(ordered.map((t) => t.id)).toEqual(['T-0002', 'T-0001', 'T-0004', 'T-0003', 'T-0005']);
   });
 
-  it('pins first in listed order, then derived ??? unknown pins ignored', () => {
-    const tickets = [
-      ticket('T-0001', 'urgent', 5000, ''),
-      ticket('T-0002', 'normal', 5000, ''),
-      ticket('T-0003', 'normal', 5000, ''),
-    ];
-    const ordered = orderColumn(tickets, ['T-0009', 'T-0002'], (t) => t.key);
-    expect(ordered.map((t) => t.id)).toEqual(['T-0002', 'T-0001', 'T-0003']);
-  });
-
-  it('a drag pins everything above and including the drop', () => {
-    expect(pinsAfterDrop(['a', 'b', 'c', 'd'], 0)).toEqual(['a']);
-    expect(pinsAfterDrop(['a', 'b', 'c', 'd'], 2)).toEqual(['a', 'b', 'c']);
-    expect(pinsAfterDrop(['a', 'b', 'c', 'd'], 9)).toEqual(['a', 'b', 'c', 'd']);
-  });
-
-  it('insertion removes a prior position and clamps', () => {
-    expect(orderAfterInsert(['a', 'b', 'c'], 'a', 2)).toEqual(['b', 'c', 'a']);
-    expect(orderAfterInsert(['a', 'b'], 'x', 9)).toEqual(['a', 'b', 'x']);
-  });
 });
 
 describe('assembleBoard', () => {
@@ -208,14 +156,13 @@ describe('assembleBoard', () => {
       '',
     ].join('\n');
 
-  const baseInput = (files: { path: string; text: string }[], orderText: string | null = null) => ({
+  const baseInput = (files: { path: string; text: string }[]) => ({
     vaultId: 'v1',
     vaultName: 'tickets',
     activeVaultName: 'tickets',
     isGitRepo: true,
     defaultWorker: 'opencode',
     pipelineText: PIPELINE,
-    orderText,
     reposText: '---\nrepos:\n  drey:\n    url: https://example/drey.git\n---\n',
     files,
   });
@@ -305,22 +252,6 @@ describe('assembleBoard', () => {
     expect(snap.issues.some((i) => i.message.includes('archive'))).toBe(false);
     // A pipeline phase named "archive" is not fed from the reserved folder.
     expect(snap.columns.some((c) => c.phase.id === 'archive')).toBe(false);
-  });
-
-  it('applies pins as the column top and marks cards pinned', () => {
-    const snap = assembleBoard(
-      baseInput(
-        [
-          { path: 'tickets/inbox/T-0001.md', text: ticketText('T-0001', 'One', "entered-inbox: '2026-10-17T08:00:00Z'") },
-          { path: 'tickets/inbox/T-0002.md', text: ticketText('T-0002', 'Two') },
-        ],
-        '# pins\n\n## inbox\n\n- T-0002\n- T-0001\n',
-      ),
-    );
-    const inbox = snap.columns[0]!;
-    expect(inbox.tickets.map((t) => t.id)).toEqual(['T-0002', 'T-0001']);
-    expect(inbox.tickets[0]!.pinned).toBe(true);
-    expect(inbox.tickets[1]!.pinned).toBe(true);
   });
 
   it('warns when a ticket names an unknown repo', () => {

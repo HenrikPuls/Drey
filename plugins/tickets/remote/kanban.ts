@@ -2,9 +2,8 @@
  * The iPad board (req-66 R6): every column side by side, scrolling
  * sideways, and — on a landscape-wide screen — the selected ticket in a
  * detail pane beside it. A card is moved by pressing and holding it,
- * then dragging: across columns it is a transition, within one a
- * reorder pin, both with the index the desk's board uses. A tap
- * selects. The Move… sheet stays for anyone who would rather not drag.
+ * then dragging across columns — a transition (the order inside a
+ * column is derived, req-74 dropped the pins). A tap selects. The Move… sheet stays for anyone who would rather not drag.
  */
 import { ageOf, parseHandover, type BoardColumn, type TicketCard } from '../shared/tickets';
 import type { Ctx, View } from './context';
@@ -260,23 +259,17 @@ function attachDrag(ctx: Ctx, strip: HTMLElement): void {
     }
     const from = card!.dataset['phase']!;
     const id = card!.dataset['id']!;
-    const list = card!.parentElement;
-    const fromIndex = list === null ? 0 : Array.from(list.querySelectorAll('.kcard')).indexOf(card!);
     const landing = target;
     reset();
     if (landing === null) {
       return;
     }
-    const action = dropActionOf(from, fromIndex, landing.phase, landing.index);
+    const action = dropActionOf(from, landing.phase);
     if (action === null) {
       return;
     }
     const title = ctx.state.board?.columns.find((c) => c.phase.id === landing.phase)?.phase.title ?? landing.phase;
-    if (action.kind === 'move') {
-      void ctx.act(ctx.api.post(`/api/tickets/${id}/move`, { from: action.from, to: action.to, index: action.index }), `${id} → ${title}`);
-    } else {
-      void ctx.act(ctx.api.post(`/api/tickets/${id}/reorder`, { phase: action.phase, index: action.index }), `${id} reordered`);
-    }
+    void ctx.act(ctx.api.post(`/api/tickets/${id}/move`, { from: action.from, to: action.to }), `${id} → ${title}`);
   });
 
   strip.addEventListener('pointercancel', () => reset());

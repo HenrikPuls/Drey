@@ -28,7 +28,6 @@ const card = (over: Partial<TicketMeta> = {}): TicketCard => ({
   path: 'tickets/50-build/T-0042.md',
   phase: 'build',
   meta: meta(over),
-  pinned: false,
   worker: 'opencode',
   blocked: [],
   blocks: [],

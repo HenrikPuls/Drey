@@ -12,7 +12,6 @@ import type {
   CreateCommand,
   PermissionCommand,
   RefineCommand,
-  ReorderCommand,
   SendCommand,
   StartRunCommand,
   StopRunCommand,
@@ -43,8 +42,6 @@ export interface RemoteBoard {
   saveAttachment(input: AttachmentCommand & { actor?: string }): Promise<AttachmentReply>;
   createTicket(input: CreateCommand & { actor?: string }): Promise<CreateResult>;
   transition(input: TransitionCommand & { actor?: string }): Promise<MutationResult>;
-  reorder(input: ReorderCommand): Promise<MutationResult>;
-  unpin(input: TicketIdCommand): Promise<MutationResult>;
   setClaim(input: ClaimCommand & { actor?: string }): Promise<MutationResult>;
   archive(input: TicketIdCommand & { actor?: string }): Promise<MutationResult>;
   startRun(input: StartRunCommand): Promise<RunReply>;
@@ -120,14 +117,6 @@ export class DreyTicketsPort implements TicketsRemotePort {
 
   move(cmd: TransitionCommand, actor: string): Promise<MutationResult> {
     return this.boardService.transition({ ...cmd, actor });
-  }
-
-  reorder(cmd: ReorderCommand): Promise<MutationResult> {
-    return this.boardService.reorder(cmd);
-  }
-
-  unpin(cmd: TicketIdCommand): Promise<MutationResult> {
-    return this.boardService.unpin(cmd);
   }
 
   claim(cmd: ClaimCommand, actor: string): Promise<MutationResult> {

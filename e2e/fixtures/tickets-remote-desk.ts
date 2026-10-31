@@ -15,7 +15,6 @@ interface Card {
   path: string;
   phase: string;
   meta: Record<string, unknown>;
-  pinned: boolean;
   worker: string;
   blocked: string[];
   blocks: string[];
@@ -44,7 +43,6 @@ const card = (id: string, phase: string, title: string, extra: Record<string, un
     entered: { [phase]: '2026-10-30T08:00:00Z' },
     ...extra,
   },
-  pinned: false,
   worker: 'opencode',
   blocked,
   blocks: [],
@@ -215,17 +213,6 @@ export function makeDesk() {
     move: async (cmd: { id: string; from: string; to: string }, actor: string) => {
       calls.push({ what: 'move', args: [cmd, actor] });
       move(cmd.id, cmd.to);
-      return { ok: true };
-    },
-    reorder: async (cmd: { phase: string; id: string; index: number }) => {
-      calls.push({ what: 'reorder', args: [cmd] });
-      const list = tickets[cmd.phase]!;
-      const at = list.findIndex((c) => c.id === cmd.id);
-      if (at >= 0) {
-        const [c] = list.splice(at, 1);
-        list.splice(cmd.index, 0, c!);
-      }
-      emit();
       return { ok: true };
     },
     claim: async (cmd: unknown, actor: string) => {

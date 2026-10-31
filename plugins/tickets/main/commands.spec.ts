@@ -37,10 +37,10 @@ describe('command parsers', () => {
     });
   });
 
-  it('floors a transition index and drops a negative one', () => {
+  it('ignores a transition index from an older client — there are no pins (req-74)', () => {
     const base = { id: 'T-0001', from: 'build', to: 'review' };
-    expect(parseTransition({ ...base, index: 2.7 })).toEqual({ ok: true, value: { ...base, index: 2 } });
-    expect(parseTransition({ ...base, index: -1 })).toEqual({ ok: true, value: { ...base, index: null } });
+    expect(parseTransition({ ...base, index: 2.7 })).toEqual({ ok: true, value: base });
+    expect(parseTransition(base)).toEqual({ ok: true, value: base });
   });
 
   it('defaults a run start to accept-edits and a fresh handover', () => {

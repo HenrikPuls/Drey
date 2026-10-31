@@ -16,7 +16,6 @@ import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
-import { parseOrderFile, rewriteOrderSection } from '../ticket-board';
 import { acceptanceCommands, patchTicketFile, ticketPathParts } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
 import { answersFromText, answersText, ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
@@ -1645,7 +1644,6 @@ export class RunSupervisor {
       await fsp.mkdir(path.dirname(abs(newRel)), { recursive: true });
       await fsp.rename(abs(oldRel), abs(newRel));
       await fsp.writeFile(abs(newRel), patched, 'utf8');
-      await this.dropPin(request.ticketsVaultPath, request.ticketId);
       const location = await this.git.locate(request.ticketsVaultPath);
       if (location !== null) {
         const repoRel = [oldRel, newRel].map((p) => `${location.prefix}${p}`);
@@ -1669,28 +1667,6 @@ export class RunSupervisor {
       return { ok: true };
     } catch (error) {
       return { ok: false, error: messageOf(error) };
-    }
-  }
-
-  /** The moved id leaves every pin section (the board's own rule). */
-  private async dropPin(vaultPath: string, ticketId: string): Promise<void> {
-    const orderPath = path.join(vaultPath, 'tickets/_meta/order.md');
-    const orderText = await fsp.readFile(orderPath, 'utf8').catch(() => null);
-    if (orderText === null) {
-      return;
-    }
-    const { pins } = parseOrderFile(orderText);
-    let touched = false;
-    let text = orderText;
-    for (const [section, ids] of Object.entries(pins)) {
-      const kept = ids.filter((x) => x !== ticketId);
-      if (kept.length !== ids.length) {
-        touched = true;
-        text = rewriteOrderSection(text, section, kept);
-      }
-    }
-    if (touched) {
-      await fsp.writeFile(orderPath, text, 'utf8');
     }
   }
 

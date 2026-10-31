@@ -94,7 +94,6 @@ function card(id: string, phase: string, blockedBy: readonly string[] = []): Tic
     path: `tickets/50-build/${id}.md`,
     phase,
     meta: { ...parsed.meta, blockedBy },
-    pinned: false,
     worker: 'opencode',
     blocked: [],
     blocks: [],
@@ -220,7 +219,6 @@ function boardOf(files: readonly { path: string; text: string }[]) {
     isGitRepo: true,
     defaultWorker: 'opencode',
     pipelineText: PIPELINE,
-    orderText: null,
     reposText: null,
     files,
   });

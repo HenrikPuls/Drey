@@ -184,7 +184,6 @@ export interface TicketCard {
   /** The directory the file sits in (its current phase, or an unknown one). */
   readonly phase: string;
   readonly meta: TicketMeta;
-  readonly pinned: boolean;
   /** The resolved fleet worker for this card (M84 display resolution). */
   readonly worker: string;
   /**
@@ -314,7 +313,7 @@ export interface RepoRef {
 
 export interface BoardColumn {
   readonly phase: PipelinePhase;
-  /** Final order: pins first (listed order), then derived order. */
+  /** Derived order: priority, rank, entered-<phase>, id. */
   readonly tickets: readonly TicketCard[];
   /** The phase's directory exists with tickets, but pipeline.md lost it. */
   readonly unknown: boolean;
@@ -337,7 +336,7 @@ export interface BoardSnapshot {
   readonly repos: readonly RepoRef[];
   readonly reposError: string | null;
   readonly columns: readonly BoardColumn[];
-  /** Board-level findings (pipeline/repos/order files). */
+  /** Board-level findings (pipeline/repos files). */
   readonly issues: readonly TicketIssue[];
   /**
    * The owner's checkpoint columns (M85): manual columns between

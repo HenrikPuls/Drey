@@ -2,8 +2,8 @@
  * The Tickets plugin's main entry (ADR-0076, milestone 83): detects the
  * tickets vault (a registered vault with `tickets/_meta/pipeline.md`),
  * assembles board snapshots from files, and performs the mutations —
- * capture, transitions (move + stamp + log + one git commit), order
- * pins, claims, initialization. All mutations run through one queue
+ * capture, transitions (move + stamp + log + one git commit), archive,
+ * claims, initialization. All mutations run through one queue
  * (single-writer discipline) and re-resolve the tickets vault's state
  * inside the queue, so nothing interleaves.
  *
@@ -37,17 +37,12 @@ import {
 } from '../shared/tickets';
 import {
   assembleBoard,
-  orderAfterInsert,
-  parseOrderFile,
   parseRepos,
   patchPipelinePhase,
   parsePipeline,
-  pinsAfterDrop,
-  removeIdFromPins,
   reorderPipelinePhases,
   reposFileText,
   reposProse,
-  rewriteOrderSection,
 } from './ticket-board';
 import {
   newTicketFileText,
@@ -77,7 +72,6 @@ import {
   parseClaim,
   parseCreate,
   parsePermission,
-  parseReorder,
   parseSend,
   parseStartRun,
   parseStopRun,
@@ -113,7 +107,6 @@ import { parseWorkerValue } from './fleet/assignment';
 import { scanRepoFolder } from './repos-scan';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
-const ORDER_PATH = 'tickets/_meta/order.md';
 const REPOS_PATH = 'tickets/_meta/repos.md';
 const ATTACHMENTS_DIR = 'tickets/attachments';
 
@@ -142,13 +135,6 @@ const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PLAN_INTERACTIVE_PROMPT = 'plan-interactive-default';
 const REFINE_INTERACTIVE_PROMPT = 'refine-interactive-default';
 
-
-const DEFAULT_ORDER = `# Column order pins — listed ids form the top of their column
-
-Unlisted tickets follow the derived order (priority, rank, entered).
-A drag in the board rewrites the affected section; sections are
-sparse on purpose so independent additions merge cleanly.
-`;
 
 const DEFAULT_REPOS = `---
 repos: {}
@@ -280,14 +266,12 @@ class BoardService {
         isGitRepo: false,
         defaultWorker: this.defaultWorker,
         pipelineText: null,
-        orderText: null,
         reposText: null,
         files: [],
       });
     }
-    const [pipelineText, orderText, reposText, mdFiles, location] = await Promise.all([
+    const [pipelineText, reposText, mdFiles, location] = await Promise.all([
       this.readOptional(vault.id, PIPELINE_PATH),
-      this.readOptional(vault.id, ORDER_PATH),
       this.readOptional(vault.id, REPOS_PATH),
       this.ctx.vault.listMarkdownFiles({ vaultId: vault.id }),
       this.locate(vault.path),
@@ -306,7 +290,6 @@ class BoardService {
       isGitRepo: location !== null,
       defaultWorker: this.defaultWorker,
       pipelineText,
-      orderText,
       reposText,
       files,
     });
@@ -513,7 +496,7 @@ class BoardService {
   }
 
   /** One drift's full transition treatment. The path never changes —
-   *  only stamps, Log and pins; exactly one commit closes it. */
+   *  only stamps and Log; exactly one commit closes it. */
   private async treatDrift(
     vault: VaultLike,
     drift: DriftDetection,
@@ -533,23 +516,16 @@ class BoardService {
           });
     await this.ctx.vault.write(drift.path, patched, { vaultId: vault.id });
 
-    const orderText = await this.readOptional(vault.id, ORDER_PATH);
-    const nextOrder = orderText === null ? null : removeIdFromPins(orderText, drift.id);
-    const orderChanged = nextOrder !== null && nextOrder !== orderText;
-    if (orderChanged) {
-      await this.ctx.vault.write(ORDER_PATH, nextOrder as string, { vaultId: vault.id });
-    }
-
     const message =
       drift.kind === 'archive'
         ? `tickets: ${drift.id} archived`
         : `tickets: ${drift.id} ${drift.from ?? 'unknown'} -> ${drift.phase}`;
-    await this.commit(vault, [drift.path, ...(orderChanged ? [ORDER_PATH] : [])], message);
+    await this.commit(vault, [drift.path], message);
     // The optional auto-push (T-0041): warning-level, never a failed move.
     await this.pushTransition(vault, pushRemote);
     this.ctx.vault.announceChanges({
       vaultId: vault.id,
-      changedPaths: [drift.path, ...(orderChanged ? [ORDER_PATH] : [])],
+      changedPaths: [drift.path],
     });
     this.announceChanged();
   }
@@ -655,7 +631,6 @@ class BoardService {
     actor?: string;
     from: string;
     to: string;
-    index: number | null;
   }): Promise<MutationResult> {
     return this.enqueue(async () => {
       const vault = await this.detect();
@@ -719,32 +694,9 @@ class BoardService {
         return { ok: false, error: `move failed: ${messageOf(error)}` };
       }
 
-      // Order pins: the id leaves every section it was pinned in; a
-      // drop index pins it — and everything above it — in the target
-      // column. order.md is only created when a pin demands it.
-      const orderText = await this.readOptional(vault.id, ORDER_PATH);
-      const base = orderText ?? DEFAULT_ORDER;
-      let nextOrder = removeIdFromPins(base, input.id);
-      if (input.index !== null) {
-        const columnIds = (snap.columns.find((c) => c.phase.id === input.to)?.tickets ?? [])
-          .map((t) => t.id)
-          .filter((x) => x !== input.id);
-        const resulting = orderAfterInsert(columnIds, input.id, input.index);
-        nextOrder = rewriteOrderSection(
-          nextOrder,
-          input.to,
-          pinsAfterDrop(resulting, resulting.indexOf(input.id)),
-        );
-      }
-      const orderChanged = nextOrder !== orderText && (orderText !== null || input.index !== null);
-      if (orderChanged) {
-        await this.ctx.vault.write(ORDER_PATH, nextOrder, { vaultId: vault.id });
-      }
-
-      const commitPaths = [card.path, newPath, ...(orderChanged ? [ORDER_PATH] : [])];
       const warning = await this.commit(
         vault,
-        commitPaths,
+        [card.path, newPath],
         `tickets: ${input.id} ${input.from} -> ${input.to}`,
       );
       // The optional auto-push (T-0041): warning-level, never a failed move.
@@ -752,7 +704,7 @@ class BoardService {
       const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
       this.ctx.vault.announceChanges({
         vaultId: vault.id,
-        changedPaths: [newPath, ...(orderChanged ? [ORDER_PATH] : [])],
+        changedPaths: [newPath],
         deletedPaths: [card.path],
       });
       this.announceChanged();
@@ -767,8 +719,8 @@ class BoardService {
   /**
    * Archives a ticket (T-0041): the reserved `tickets/archive/` folder
    * beside `_meta` — not a column, invisible on the board. The treatment
-   * is exact: Log line `archived`, one commit `tickets: <id> archived`,
-   * pin cleanup; NO `entered-` stamp (the Log marker is what makes it
+   * is exact: Log line `archived`, one commit `tickets: <id> archived`;
+   * NO `entered-` stamp (the Log marker is what makes it
    * idempotent and a revive detectable); claim fields ride along.
    * Reviving is a move back into a phase folder — normalization stamps
    * it as `archive -> <phase>`. Final deletion is the owner's manual
@@ -819,22 +771,12 @@ class BoardService {
       } catch (error) {
         return { ok: false, error: `move failed: ${messageOf(error)}` };
       }
-      const orderText = await this.readOptional(vault.id, ORDER_PATH);
-      const nextOrder = orderText === null ? null : removeIdFromPins(orderText, card.id);
-      const orderChanged = nextOrder !== null && nextOrder !== orderText;
-      if (orderChanged) {
-        await this.ctx.vault.write(ORDER_PATH, nextOrder as string, { vaultId: vault.id });
-      }
-      const warning = await this.commit(
-        vault,
-        [card.path, newPath, ...(orderChanged ? [ORDER_PATH] : [])],
-        `tickets: ${card.id} archived`,
-      );
+      const warning = await this.commit(vault, [card.path, newPath], `tickets: ${card.id} archived`);
       const pushWarning = await this.pushTransition(vault, snap.pushRemote);
       const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
       this.ctx.vault.announceChanges({
         vaultId: vault.id,
-        changedPaths: [newPath, ...(orderChanged ? [ORDER_PATH] : [])],
+        changedPaths: [newPath],
         deletedPaths: [card.path],
       });
       this.announceChanged();
@@ -902,23 +844,12 @@ class BoardService {
       } catch (error) {
         return { ok: false, error: `move failed: ${messageOf(error)}` };
       }
-      // Pin cleanup only: an archived ticket holds no board place to re-pin.
-      const orderText = await this.readOptional(vault.id, ORDER_PATH);
-      const nextOrder = orderText === null ? null : removeIdFromPins(orderText, input.id);
-      const orderChanged = nextOrder !== null && nextOrder !== orderText;
-      if (orderChanged) {
-        await this.ctx.vault.write(ORDER_PATH, nextOrder as string, { vaultId: vault.id });
-      }
-      const warning = await this.commit(
-        vault,
-        [oldPath, newPath, ...(orderChanged ? [ORDER_PATH] : [])],
-        `tickets: ${input.id} archive -> ${input.to}`,
-      );
+      const warning = await this.commit(vault, [oldPath, newPath], `tickets: ${input.id} archive -> ${input.to}`);
       const pushWarning = await this.pushTransition(vault, snap.pushRemote);
       const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
       this.ctx.vault.announceChanges({
         vaultId: vault.id,
-        changedPaths: [newPath, ...(orderChanged ? [ORDER_PATH] : [])],
+        changedPaths: [newPath],
         deletedPaths: [oldPath],
       });
       this.announceChanged();
@@ -969,64 +900,6 @@ class BoardService {
     this.ctx.vault.announceChanges({ vaultId: vault.id, deletedPaths: [folder] });
     this.announceChanged();
     return { ok: true };
-  }
-
-  reorder(input: { phase: string; id: string; index: number }): Promise<MutationResult> {
-    return this.enqueue(async () => {
-      const vault = await this.detect();
-      if (vault === null) {
-        return { ok: false, error: 'no tickets vault detected' };
-      }
-      const snap = await this.snapshot();
-      const column = snap.columns.find((c) => c.phase.id === input.phase) ?? null;
-      if (column === null) {
-        return { ok: false, error: `unknown phase "${input.phase}"` };
-      }
-      const orderText = await this.readOptional(vault.id, ORDER_PATH);
-      const { pins } = parseOrderFile(orderText);
-      const current = column.tickets.map((t) => t.id);
-      const resulting = orderAfterInsert(current, input.id, input.index);
-      const nextPins = pinsAfterDrop(resulting, resulting.indexOf(input.id));
-      const previousPins = pins[input.phase] ?? [];
-      if (nextPins.join(',') === previousPins.join(',') && orderText !== null) {
-        return { ok: true };
-      }
-      const base = removeIdFromPins(orderText ?? DEFAULT_ORDER, input.id);
-      const nextText = rewriteOrderSection(base, input.phase, nextPins);
-      try {
-        await this.ctx.vault.write(ORDER_PATH, nextText, { vaultId: vault.id });
-      } catch (error) {
-        return { ok: false, error: `write failed: ${messageOf(error)}` };
-      }
-      const warning = await this.commit(vault, [ORDER_PATH], `tickets: order ${input.phase}`);
-      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [ORDER_PATH] });
-      this.announceChanged();
-      return { ok: true, ...(warning === null ? {} : { warning }) };
-    });
-  }
-
-  /** Drops a ticket's pin: it falls back to the derived order. */
-  unpin(input: { id: string }): Promise<MutationResult> {
-    return this.enqueue(async () => {
-      const vault = await this.detect();
-      if (vault === null) {
-        return { ok: false, error: 'no tickets vault detected' };
-      }
-      const orderText = await this.readOptional(vault.id, ORDER_PATH);
-      const nextText = orderText === null ? null : removeIdFromPins(orderText, input.id);
-      if (orderText === null || nextText === orderText) {
-        return { ok: false, error: `${input.id} is not pinned` };
-      }
-      try {
-        await this.ctx.vault.write(ORDER_PATH, nextText as string, { vaultId: vault.id });
-      } catch (error) {
-        return { ok: false, error: `write failed: ${messageOf(error)}` };
-      }
-      const warning = await this.commit(vault, [ORDER_PATH], `tickets: unpin ${input.id}`);
-      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [ORDER_PATH] });
-      this.announceChanged();
-      return { ok: true, ...(warning === null ? {} : { warning }) };
-    });
   }
 
   setClaim(input: { id: string; mode: 'takeover' | 'release'; actor?: string }): Promise<MutationResult> {
@@ -1993,7 +1866,6 @@ class BoardService {
       const promptPaths = [...shipped.keys()].map((ref) => `${PROMPTS_DIR}/${ref}.md`);
       try {
         await this.ctx.vault.write(PIPELINE_PATH, DEFAULT_PIPELINE, { vaultId: target.id });
-        await this.ctx.vault.write(ORDER_PATH, DEFAULT_ORDER, { vaultId: target.id });
         await this.ctx.vault.write(REPOS_PATH, DEFAULT_REPOS, { vaultId: target.id });
         for (const [ref, text] of shipped) {
           await this.ctx.vault.write(`${PROMPTS_DIR}/${ref}.md`, text, { vaultId: target.id });
@@ -2006,12 +1878,12 @@ class BoardService {
       await this.ensureWorktreesIgnored(target);
       const warning = await this.commit(
         target,
-        [PIPELINE_PATH, ORDER_PATH, REPOS_PATH, ...promptPaths],
+        [PIPELINE_PATH, REPOS_PATH, ...promptPaths],
         'tickets: initialize board',
       );
       this.ctx.vault.announceChanges({
         vaultId: target.id,
-        changedPaths: [PIPELINE_PATH, ORDER_PATH, REPOS_PATH, ...promptPaths],
+        changedPaths: [PIPELINE_PATH, REPOS_PATH, ...promptPaths],
       });
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };
@@ -2228,16 +2100,6 @@ const plugin: MainPluginModule = {
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }
-    });
-
-    ctx.ipc.handle('reorder', async (payload) => {
-      const cmd = parseReorder(payload);
-      return cmd.ok ? board.reorder(cmd.value) : cmd;
-    });
-
-    ctx.ipc.handle('unpin', async (payload) => {
-      const cmd = parseTicketId(payload, 'unpin');
-      return cmd.ok ? board.unpin(cmd.value) : cmd;
     });
 
     ctx.ipc.handle('claim', async (payload) => {

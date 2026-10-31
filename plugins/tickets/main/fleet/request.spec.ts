@@ -35,7 +35,6 @@ function card(over: Partial<TicketCard> = {}): TicketCard {
       interactive: false,
       entered: {},
     },
-    pinned: false,
     worker: 'opencode',
     blocked: [],
     blocks: [],

@@ -230,9 +230,8 @@ describe('kanban drops', () => {
     expect(dropIndexOf([], 999)).toBe(0);
   });
 
-  it('moves across columns, reorders within one, and skips a drop in place', () => {
-    expect(dropActionOf('build', 1, 'review', 0)).toEqual({ kind: 'move', from: 'build', to: 'review', index: 0 });
-    expect(dropActionOf('build', 1, 'build', 0)).toEqual({ kind: 'reorder', phase: 'build', index: 0 });
-    expect(dropActionOf('build', 1, 'build', 1)).toBeNull();
+  it('moves across columns and does nothing inside one — the order is derived (req-74)', () => {
+    expect(dropActionOf('build', 'review')).toEqual({ from: 'build', to: 'review' });
+    expect(dropActionOf('build', 'build')).toBeNull();
   });
 });

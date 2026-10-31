@@ -1,7 +1,7 @@
 /**
  * The chain orchestrator (M85, ADR-0077): the runner-side loop that
  * turns a configured pipeline into running workers. It reads the
- * tickets vault itself (pipeline.md, order.md, repos.md, the ticket
+ * tickets vault itself (pipeline.md, repos.md, the ticket
  * files — the same assembled board Drey renders), plans the next
  * dispatches with the pure rules of `chain.ts`, and starts runs through
  * the per-provider supervisors. Master and per-column control state
@@ -19,7 +19,7 @@ import { hostname } from 'node:os';
 import * as path from 'node:path';
 import type { BoardColumn, BoardSnapshot, PipelinePhase, RepoRef } from '../../shared/tickets';
 import { isValidTicketFile, parseHandover, stripPhasePrefix, TICKETS_ARCHIVE_DIR } from '../../shared/tickets';
-import { assembleBoard, parseOrderFile, rewriteOrderSection, type BoardFile } from '../ticket-board';
+import { assembleBoard, type BoardFile } from '../ticket-board';
 import { patchTicketFile } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
 import { columnPromptRef, dispatchable, isAutoPhase, nextPhaseIdOf, planDispatch } from './chain';
@@ -407,7 +407,6 @@ export class Orchestrator {
       await fsp.mkdir(path.dirname(abs(toRel)), { recursive: true });
       await fsp.rename(abs(fromRel), abs(toRel));
       await fsp.writeFile(abs(toRel), patched, 'utf8');
-      await this.dropPin(config.ticketsVaultPath, candidate.id);
       const location = await git.locate(config.ticketsVaultPath);
       if (location !== null) {
         await git.commitPaths(
@@ -419,28 +418,6 @@ export class Orchestrator {
       this.deps.log(`parked ${candidate.id} in inbox (${column} breaker) — re-prioritizing revives it`);
     } catch (error) {
       this.deps.log(`parking the breaker's candidate failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  /** The moved id leaves every pin section (the board's own rule). */
-  private async dropPin(vaultPath: string, ticketId: string): Promise<void> {
-    const orderPath = path.join(vaultPath, 'tickets/_meta/order.md');
-    const orderText = await fsp.readFile(orderPath, 'utf8').catch(() => null);
-    if (orderText === null) {
-      return;
-    }
-    const { pins } = parseOrderFile(orderText);
-    let touched = false;
-    let text = orderText;
-    for (const [section, ids] of Object.entries(pins)) {
-      const kept = ids.filter((x) => x !== ticketId);
-      if (kept.length !== ids.length) {
-        touched = true;
-        text = rewriteOrderSection(text, section, kept);
-      }
-    }
-    if (touched) {
-      await fsp.writeFile(orderPath, text, 'utf8');
     }
   }
 
@@ -626,7 +603,6 @@ export class Orchestrator {
       await fsp.mkdir(path.dirname(abs(toRel)), { recursive: true });
       await fsp.rename(abs(fromRel), abs(toRel));
       await fsp.writeFile(abs(toRel), patched, 'utf8');
-      await this.dropPin(config.ticketsVaultPath, card.id);
       const location = await git.locate(config.ticketsVaultPath);
       if (location !== null) {
         await git.commitPaths(
@@ -1114,9 +1090,8 @@ export async function readVaultBoard(vaultPath: string, defaultWorker: string): 
   }
   const read = async (rel: string): Promise<string | null> =>
     fsp.readFile(path.join(vaultPath, rel), 'utf8').catch(() => null);
-  const [pipelineText, orderText, reposText] = await Promise.all([
+  const [pipelineText, reposText] = await Promise.all([
     read('tickets/_meta/pipeline.md'),
-    read('tickets/_meta/order.md'),
     read('tickets/_meta/repos.md'),
   ]);
   return assembleBoard({
@@ -1126,7 +1101,6 @@ export async function readVaultBoard(vaultPath: string, defaultWorker: string): 
     isGitRepo: false,
     defaultWorker,
     pipelineText,
-    orderText,
     reposText,
     files,
   });

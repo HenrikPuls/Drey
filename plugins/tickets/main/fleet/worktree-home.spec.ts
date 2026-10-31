@@ -146,7 +146,6 @@ describe('composeRunRequest carries the home rule', () => {
       interactive: false,
       entered: {},
     },
-    pinned: false,
     worker: 'opencode',
     blocked: [],
     blocks: [],

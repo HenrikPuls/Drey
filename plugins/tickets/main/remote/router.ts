@@ -17,7 +17,6 @@ import {
   parseCreate,
   parsePermission,
   parseRefine,
-  parseReorder,
   parseSend,
   parseStartRun,
   parseStopRun,
@@ -180,7 +179,7 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
   if (req.path === '/api/attachments') {
     return write('attachment', parseAttachment(body), (cmd) => port.saveAttachment(cmd, actor));
   }
-  const ticket = /^\/api\/tickets\/([^/]+)\/(move|reorder|unpin|claim|archive|refine)$/.exec(req.path);
+  const ticket = /^\/api\/tickets\/([^/]+)\/(move|claim|archive|refine)$/.exec(req.path);
   if (ticket !== null) {
     const id = decodeURIComponent(ticket[1]!);
     if (!TICKET_ID_PATTERN.test(id)) {
@@ -190,10 +189,6 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
     switch (ticket[2]) {
       case 'move':
         return write(`move ${id}`, parseTransition(withId), (cmd) => port.move(cmd, actor));
-      case 'reorder':
-        return write(`reorder ${id}`, parseReorder(withId), (cmd) => port.reorder(cmd));
-      case 'unpin':
-        return write(`unpin ${id}`, { ok: true, value: { id } }, (cmd) => port.unpin(cmd));
       case 'claim':
         return write(`claim ${id}`, parseClaim(withId), (cmd) => port.claim(cmd, actor));
       case 'refine':

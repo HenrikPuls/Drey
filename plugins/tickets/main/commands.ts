@@ -65,42 +65,23 @@ export interface TransitionCommand {
   readonly id: string;
   readonly from: string;
   readonly to: string;
-  readonly index: number | null;
 }
 
+/** A move between phases. An `index` in the payload (an older remote
+ *  client's drop position) is ignored — there are no pins (req-74). */
 export function parseTransition(payload: unknown): Parsed<TransitionCommand> {
   const p = record(payload);
   if (typeof p['id'] !== 'string' || typeof p['from'] !== 'string' || typeof p['to'] !== 'string') {
     return refuse('bad transition payload');
   }
-  const index = p['index'];
-  return ok({
-    id: p['id'],
-    from: p['from'],
-    to: p['to'],
-    index: typeof index === 'number' && index >= 0 ? Math.floor(index) : null,
-  });
-}
-
-export interface ReorderCommand {
-  readonly phase: string;
-  readonly id: string;
-  readonly index: number;
-}
-
-export function parseReorder(payload: unknown): Parsed<ReorderCommand> {
-  const p = record(payload);
-  if (typeof p['phase'] !== 'string' || typeof p['id'] !== 'string' || typeof p['index'] !== 'number') {
-    return refuse('bad reorder payload');
-  }
-  return ok({ phase: p['phase'], id: p['id'], index: Math.floor(p['index']) });
+  return ok({ id: p['id'], from: p['from'], to: p['to'] });
 }
 
 export interface TicketIdCommand {
   readonly id: string;
 }
 
-/** The commands that name one ticket and nothing else (`unpin`, `archive`). */
+/** The commands that name one ticket and nothing else (`archive`). */
 export function parseTicketId(payload: unknown, what: string): Parsed<TicketIdCommand> {
   const p = record(payload);
   if (typeof p['id'] !== 'string') {

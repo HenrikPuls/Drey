@@ -81,7 +81,7 @@ export function nextPhaseIdOf(columns: readonly BoardColumn[], phaseId: string):
 export interface PlanDispatchInput {
   readonly master: ChainMaster;
   /** Board columns in pipeline order; each column's tickets are already
-   *  in column order (pins first, then derived). */
+   *  in column order (the derived order). */
   readonly columns: readonly BoardColumn[];
   /** Per-column mode; a phase absent here is `playing`. */
   readonly modes: Readonly<Record<string, ColumnMode>>;

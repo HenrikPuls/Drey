@@ -19,8 +19,6 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
     saveAttachment: vi.fn(async () => ({ ok: true, file: 'tickets/attachments/img-test.png' })),
     createTicket: vi.fn(async () => ({ ok: true, id: 'T-0001' })),
     transition: vi.fn(async () => ok),
-    reorder: vi.fn(async () => ok),
-    unpin: vi.fn(async () => ok),
     setClaim: vi.fn(async () => ok),
     archive: vi.fn(async () => ok),
     startRun: vi.fn(async () => ({ ok: true, runId: 'r1' })),
@@ -45,7 +43,7 @@ describe('DreyTicketsPort', () => {
   it('hands the actor to every board write', async () => {
     const { board, fleet } = fakes();
     const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
-    await port.move({ id: 'T-0001', from: 'build', to: 'review', index: null }, 'owner@ipad');
+    await port.move({ id: 'T-0001', from: 'build', to: 'review' }, 'owner@ipad');
     await port.claim({ id: 'T-0001', mode: 'takeover' }, 'owner@ipad');
     await port.archive({ id: 'T-0001' }, 'owner@ipad');
     await port.create({ title: 'x', priority: 'normal', repo: null, description: '' }, 'owner@ipad');

@@ -80,7 +80,7 @@ test('pairs from the link and lists what waits, then works the board', async ({ 
   await page.mouse.move(box.x + 20, box.y + box.height / 2, { steps: 6 });
   await page.mouse.up();
   await expect(page.locator('.toast')).toContainText('T-0050 → Review');
-  expect(calls.at(-1)).toEqual({ what: 'move', args: [{ id: 'T-0050', from: 'build', to: 'review', index: null }, 'owner@iphone'] });
+  expect(calls.at(-1)).toEqual({ what: 'move', args: [{ id: 'T-0050', from: 'build', to: 'review' }, 'owner@iphone'] });
   await expect(page.locator('.swipe', { hasText: 'T-0050' })).toHaveCount(0);
 
   // The busy card has no swipe action; tapping opens it.
@@ -342,27 +342,26 @@ test.describe('on an iPad in landscape (R6)', () => {
     await expect(page.locator('.kcard[data-id="T-0053"]')).toHaveClass(/selected/);
     await expect(page.locator('.detail .btn-primary')).toHaveText('Approve → Build');
 
-    // Hold, then drag into another column: a transition with the landing index.
+    // Hold, then drag into another column: a transition.
     // The selection's reveal centers the selected column; both the source card
     // and the landing column are measured after the strip is back at the start.
     await page.locator('.kcard[data-id="T-0055"]').scrollIntoViewIfNeeded();
     const prioritized = (await page.locator('.kcol[aria-label="Prioritized"] .kcol-list').boundingBox())!;
     await drag(page, 'T-0055', { x: prioritized.x + prioritized.width / 2, y: prioritized.y + 20 });
     await expect(page.locator('.toast')).toContainText('T-0055 → Prioritized');
-    expect(padCalls.at(-1)).toEqual({ what: 'move', args: [{ id: 'T-0055', from: 'inbox', to: 'prioritized', index: 0 }, 'owner@ipad'] });
+    expect(padCalls.at(-1)).toEqual({ what: 'move', args: [{ id: 'T-0055', from: 'inbox', to: 'prioritized' }, 'owner@ipad'] });
     await expect(page.locator('.kcol[aria-label="Prioritized"] .kcard[data-id="T-0055"]')).toBeVisible();
 
-    // Within a column: a reorder above the first card (Build sits off screen at first).
+    // Within a column a drop does nothing — the order is derived (req-74).
+    await page.waitForTimeout(400);
     await page.locator('.kcard[data-id="T-0050"]').scrollIntoViewIfNeeded();
     await page.waitForTimeout(150);
+    const before = padCalls.length;
     const first = (await page.locator('.kcard[data-id="T-0052"]').boundingBox())!;
     await drag(page, 'T-0050', { x: first.x + first.width / 2, y: first.y + 4 });
-    await expect(page.locator('.toast')).toContainText('T-0050 reordered');
-    expect(padCalls.at(-1)).toEqual({ what: 'reorder', args: [{ phase: 'build', id: 'T-0050', index: 0 }] });
+    expect(padCalls.length).toBe(before);
 
     // Moving before the hold is a scroll, never a drag.
-    // The reorder's refresh rebuilds the strip; let it settle before scrolling.
-    await page.waitForTimeout(400);
     const count = padCalls.length;
     await page.locator('.kcard[data-id="T-0048"]').scrollIntoViewIfNeeded();
     const card = (await page.locator('.kcard[data-id="T-0048"]').boundingBox())!;

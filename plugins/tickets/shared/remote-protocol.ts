@@ -12,7 +12,6 @@ import type {
   CreateCommand,
   RefineCommand,
   PermissionCommand,
-  ReorderCommand,
   SendCommand,
   StartRunCommand,
   StopRunCommand,
@@ -79,8 +78,6 @@ export interface TicketsRemotePort {
 
   create(cmd: CreateCommand, actor: string): Promise<CreateResult>;
   move(cmd: TransitionCommand, actor: string): Promise<MutationResult>;
-  reorder(cmd: ReorderCommand): Promise<MutationResult>;
-  unpin(cmd: TicketIdCommand): Promise<MutationResult>;
   claim(cmd: ClaimCommand, actor: string): Promise<MutationResult>;
   archive(cmd: TicketIdCommand, actor: string): Promise<MutationResult>;
   refine(cmd: RefineCommand, actor: string): Promise<RefineReply>;
