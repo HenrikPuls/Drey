@@ -80,6 +80,12 @@ export class DocOpenService {
    * clean tab (it asked to open ALONGSIDE), and a file a plugin opener
    * claims (or an external document) ignores the option: no base tab is
    * added on those paths.
+   *
+   * `beside` (SDK 1.37): an open tab's path identity (resolved like
+   * `documents.get`). Its pane takes focus BEFORE the landing decision,
+   * so the replaced-tab victim is picked from that pane and a plain open
+   * lands inside it; with `split`, the fresh pane opens off it. An anchor
+   * that is not open is a no-op -- the focused pane decides, as before.
    */
   async openFile(
     relativePath: string,
@@ -89,11 +95,16 @@ export class DocOpenService {
       prefetched?: { content: string; modifiedMs: number };
       pinned?: boolean;
       split?: DocSplit;
+      beside?: string;
     } = {},
   ): Promise<void> {
     if (!this.api) {
       return;
     }
+    // The anchor pane takes focus first: everything below (the victim
+    // pick, the plain add, the split) then addresses that pane, never
+    // whatever happened to be focused when the call came in.
+    this.focusAnchor(opts.beside);
     // A split-open is an explicit "alongside" request: the focused pane's
     // clean tab is never replaced (with it, the pre-split pane would
     // collapse out of the layout again).
@@ -169,13 +180,14 @@ export class DocOpenService {
    * Opens `relativePath` and asks the editor to put the caret at the start
    * of 1-based `line` (a tag-search hit lands here). The `Editor` component
    * consumes `revealRequest` once the buffer for that document is loaded.
-   * `opts.split` lands the tab in a fresh split pane (see {@link openFile}).
+   * `opts.split` lands the tab in a fresh split pane, `opts.beside` anchors
+   * the landing on an open tab's pane (see {@link openFile}).
    */
   async openFileAt(
     relativePath: string,
     line: number,
     vaultId?: string,
-    opts?: { split?: DocSplit },
+    opts?: { split?: DocSplit; beside?: string },
   ): Promise<void> {
     await this.openFile(relativePath, vaultId, opts);
     const key = docKey(vaultId ?? this.vault.activeVaultId(), relativePath);
@@ -332,14 +344,36 @@ export class DocOpenService {
    * existence and its display name. No buffer, never dirty, never saved.
    * `split` (SDK 1.35) lands the tab in a fresh split pane beside or below
    * the focused pane; an already-open key still just reveals.
+   * `beside` (SDK 1.37) anchors the landing on an open tab's pane (see
+   * {@link openFile}): its pane is focused before the tab is added.
    */
-  addPluginDoc(kind: string, key: string, name: string, split?: DocSplit): void {
+  addPluginDoc(kind: string, key: string, name: string, opts: { split?: DocSplit; beside?: string } = {}): void {
     if (this.store.has(key)) {
       this.panes.open(key);
       return;
     }
-    this.splitLanding(split);
+    this.focusAnchor(opts.beside);
+    this.splitLanding(opts.split);
     this.store.add(pluginDoc(kind, key, name));
+  }
+
+  /**
+   * Focuses the pane of the `beside` anchor (SDK 1.37): an open tab's
+   * path identity -- a vault-relative path or a contributed key like
+   * `thread://ticket`, resolved like `documents.get`. Everything the
+   * caller does next (the victim pick, a plain add, a split) then lands
+   * relative to that pane. An anchor that is not open is a no-op: the
+   * focused pane stays, exactly as before the option existed.
+   */
+  private focusAnchor(beside: string | undefined): void {
+    if (beside === undefined) {
+      return;
+    }
+    const anchor = this.store.resolveDoc(beside);
+    const paneId = anchor === null ? null : this.panes.paneIdFor(anchor.key);
+    if (paneId !== null) {
+      this.panes.focus(paneId);
+    }
   }
 
   /**

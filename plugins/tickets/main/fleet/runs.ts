@@ -95,11 +95,6 @@ export const HANDOVER_CONTINUE =
   'The fleet runner was replaced by a newer build and your session was resumed; your last turn may have been cut short. ' +
   'Continue the step where you left off; your original brief is earlier in this conversation.';
 
-/** The same for a run the owner holds: the worker picks up the owner's request, then waits. */
-export const HANDOVER_HELD =
-  'The fleet runner was replaced by a newer build and your session was resumed; your last turn may have been cut short. ' +
-  'If you were in the middle of something the owner asked, finish it; otherwise reply with one short line that you are back, then wait for their instructions.';
-
 export type StartOutcome = { readonly ok: true; readonly run: RunInfo } | { readonly ok: false; readonly error: string };
 
 export type StopOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string };
@@ -577,19 +572,21 @@ export class RunSupervisor {
     try {
       handle = this.deps.adapter.spawn({
         cwd: stored.info.worktreePath,
-        // A held worker that stood idle waits for its owner: re-prompting
-        // it re-read the whole transcript for one "I'm back" line (req-80).
-        instruction:
-          held && handover.turnIdle === true && this.deps.adapter.promptless === true
-            ? ''
-            : held
-              ? HANDOVER_HELD
-              : HANDOVER_CONTINUE,
+        // A held run resumes fully silent (req-75): holdAtSpawn below
+        // delivers nothing at all, subsuming req-80's idle empty-prompt
+        // case — only an adapter that ignores holdAtSpawn (claude-code)
+        // still delivers this instruction.
+        instruction: HANDOVER_CONTINUE,
         model: stored.request.model,
         permissionMode: stored.request.permissionMode,
         contextCap: this.contextCapFor(stored.request.model),
         resumeRef: sessionRef,
         ticketId: stored.request.ticketId,
+        // A held run resumes fully silent (req-75): no prompt at all —
+        // the resume prompt itself caused the "I'm back" no-op turns
+        // (evidence R-20261030T20203-wpsd). The worker stands, held,
+        // until the owner sends.
+        ...(held ? { holdAtSpawn: true } : {}),
         // The same run goes on: its own earlier spend stays counted.
         usageBase: stored.usageBase ?? ZERO_USAGE,
         onEvent: (event) => void this.onEvent(run, event),
@@ -848,6 +845,14 @@ export class RunSupervisor {
         text: 'brief: continuation — the resumed session already holds the full brief, only what changed rides',
       });
     }
+    const interactive = request.interactive;
+    // req-75: an interactive dialog starts QUIET — nothing runs until the
+    // owner asks. The worker spawns without its brief; the first owner
+    // send wraps it once (`send`). A reopened session already carries the
+    // brief in its history, so only a fresh spawn is quiet.
+    if (interactive !== undefined && !reopened) {
+      run.info = { ...run.info, quietStart: true };
+    }
     const handle = this.spawnWorker(run, {
       resumeRef,
       ...(continuation !== null ? { instruction: continuation } : {}),
@@ -860,10 +865,9 @@ export class RunSupervisor {
     });
     run.info = { ...run.info, state: 'running', pid: handle.pid };
     // req-65: an interactive dialog is the owner's from turn one — held
-    // at spawn (the worker stands after its first, interviewing turn),
-    // and at its end neither the gate nor a move runs: the owner moves
-    // the ticket themselves. The `run:` stamp below is still laid.
-    const interactive = request.interactive;
+    // at spawn (the worker stands, quiet, until the owner opens the
+    // dialog), and at its end neither the gate nor a move runs: the owner
+    // moves the ticket themselves. The `run:` stamp below is still laid.
     if (interactive !== undefined) {
       handle.setHold?.(true);
       run.info = { ...run.info, held: true, interactive };
@@ -879,7 +883,7 @@ export class RunSupervisor {
     if (interactive !== undefined) {
       await this.logLine(
         run,
-        `interactive dialog (${interactive}) — the worker is yours from the first turn; the run never gates or moves`,
+        `interactive dialog (${interactive}) — the worker waits for your first message; the run never gates or moves`,
       );
     }
 
@@ -928,6 +932,10 @@ export class RunSupervisor {
       contextCap: this.contextCapFor(request.model),
       resumeRef: resume.resumeRef,
       ...(resume.compactFirst === true ? { compactFirst: true } : {}),
+      // A quiet start (req-75) delivers no first prompt — the brief rides
+      // the owner's first message instead (`send`). Read off the info so
+      // the fresh fallback stays quiet, too.
+      ...(run.info.quietStart === true ? { holdAtSpawn: true } : {}),
       ticketId: request.ticketId,
       onEvent: (event) => void this.onEvent(run, event),
       onSessionRef: (ref) => {
@@ -1035,6 +1043,12 @@ export class RunSupervisor {
       sessionRef: null,
     };
     const handle = this.spawnWorker(run, { resumeRef: null });
+    // A held run (an interactive dialog, a quiet start) stays held on its
+    // replacement worker: its quiet stand must not end before the owner's
+    // first prompt (the adapter's turn-end guard fires on `!held`).
+    if (run.info.held === true) {
+      handle.setHold?.(true);
+    }
     run.fallbackActive = false;
     run.info = { ...run.info, state: 'running', pid: handle.pid };
     await this.appendStream(run, {
@@ -1122,10 +1136,22 @@ export class RunSupervisor {
     if (!answersQuestion) {
       await this.holdForOwner(run, 'first prompt');
     }
+    // A quiet start (req-75) delivered no brief at spawn: the composed
+    // instruction rides the owner's FIRST message, once. Guarded on
+    // `quietStart`, never on the steer count — a reopened session already
+    // carries the brief in its history, and a first send can never be an
+    // answer (the special case above ran first anyway).
+    const quiet = run.info.quietStart === true;
+    const outgoing = quiet ? `${run.request.instruction}\n\n---\n\nThe owner starts the dialog:\n${text}` : text;
     // The owner's prompt belongs in the run's transcript, whatever its rung.
     await this.appendStream(run, { ts: this.stamp(), kind: 'note', text: `you › ${text}` });
-    const rung = await run.handle.steer(text);
-    run.info = { ...run.info, steerCount: run.info.steerCount + 1, lastSteerRung: rung };
+    const rung = await run.handle.steer(outgoing);
+    run.info = {
+      ...run.info,
+      steerCount: run.info.steerCount + 1,
+      lastSteerRung: rung,
+      ...(quiet ? { quietStart: undefined } : {}),
+    };
     await this.persist(run);
     await this.logLine(run, `${answersQuestion ? 'answered by the owner' : `steer (${rung})`}: ${text.slice(0, 200)}`);
     if (rung === 'refused') {

@@ -151,7 +151,9 @@ Diagnose read-only first; only stop/steer/switch on the owner's ask.
 | `detached` | the runner restarted while the worker lived on — unwatchable, treat as busy |
 
 A live run may carry `waiting` (req-64): `{kind: "question", text, since}`
-when the worker ended its turn with a `QUESTION:` message (the run stands,
+when the worker ended its turn with a `QUESTION:` message — the marker
+may sit at the message start or at any line start, the last one wins,
+one in prose does not count (the run stands,
 its session kept, until the owner answers via `/send`); the same kind with
 `requestId` and `questions` (each `{key, header?, question, options,
 multiple}`) while OpenCode's `question` tool waits on its form (answer via
@@ -168,9 +170,15 @@ stream; on daemon builds it also feeds `redStreak` and `cooldownUntil` in
 ### Interactive dialog runs (req-65)
 
 A run whose request carries `interactive: "plan" | "refine"` is the
-**owner's dialog from turn one**: held at spawn (the worker stands after
-its first, interviewing turn — the takeover tab is the dialog surface),
-and at its end **neither the gate nor a move runs**, however the worker
+**owner's dialog, and it starts quiet** (req-75): held at spawn with
+**no first prompt delivered** — the worker stands, its session live,
+nothing runs until the owner's first `/send`, which wraps the composed
+brief around the text once (a plain steer afterwards; the record
+carries `quietStart: true` until that send). The thread's composer
+comes pre-filled with the step and its meaning, and its status shows
+the pending hint until the first message. Claude Code has no hold at
+spawn — its dialogs keep today's first posted turn. At the run's end
+**neither the gate nor a move runs**, however the worker
 exits — the owner moves the ticket on the board themselves (the takeover
 tab's end moves are owner moves). The brief's completion discipline is
 replaced by a dialog discipline; the asking protocol (`QUESTION:`) is
@@ -254,6 +262,13 @@ before any init event as one — never fails the run. The supervisor stops
 that worker and respawns **fresh under the same run id** with the same
 instruction (`handoverMode: 'fresh'`, `resumedFrom: null`, one stream
 note). A failure after a successful resume fails the run normally.
+
+**Held runs resume silent (req-75):** a held run whose session a runner
+restart takes over — resumed in place, or respawned fresh by the
+fallback above — receives **no continuation prompt** (it spawns held;
+the pre-req-75 internal resume prompt caused the observed no-op "I'm
+back" turns and is deleted). Non-held resumes still deliver
+`HANDOVER_CONTINUE`.
 
 **Config** (`Settings → Tickets → Fleet`): `fleet.compactAboveTokens`
 (default 60000, provisional) and `fleet.resumePauseTtlMin` (default 15).

@@ -54,6 +54,12 @@ export interface RunComposerDeps {
   /** How many other runs are live right now — the question's meta line. */
   othersLive?: () => number;
   readonly placeholder: string;
+  /**
+   * The thread's quiet start (req-75): fills the box once, at creation,
+   * with the current processing step and its meaning — the owner
+   * completes it with their question. Absent/null keeps the box empty.
+   */
+  prefill?: () => string | null;
 }
 
 export interface RunComposer {
@@ -224,6 +230,13 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     },
   });
   prompt.element.classList.add('tickets-takeover-prompt-input');
+  // The quiet start's pre-fill (req-75): the box opens carrying the
+  // current step and its meaning — applied ONCE, at creation, so a later
+  // paint never clobbers what the owner typed (or cleared after a send).
+  const prefill = deps.prefill?.() ?? '';
+  if (prefill !== '') {
+    prompt.setContent(prefill);
+  }
 
   const fileInput = el('input');
   fileInput.type = 'file';

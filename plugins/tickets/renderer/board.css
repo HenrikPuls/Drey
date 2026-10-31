@@ -2225,6 +2225,19 @@ details[open] > summary > .tickets-tx-think-preview {
   font-size: 12px;
 }
 
+/* The quiet start's pending hint (req-75): one muted line under the
+   status while the worker stands, waiting for the first message. */
+.tickets-thread-pending {
+  flex: none;
+  padding: 4px 16px;
+  color: var(--text-4);
+  font-size: 12px;
+}
+
+.tickets-thread-pending[hidden] {
+  display: none;
+}
+
 .tickets-thread-filelink {
   flex: none;
   border: 0;

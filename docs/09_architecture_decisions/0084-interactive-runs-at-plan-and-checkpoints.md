@@ -78,6 +78,16 @@ ticket header.
 > offers a dialog. End moves are unchanged. Rationale: the owner's
 > columns are theirs to dialog in, wherever they sit.
 
+> **Later change (req-75).** The dialog starts quiet: an interactive run
+> spawns held with **no first prompt** delivered — the worker stands,
+> the session live — and the composed brief rides the owner's first
+> message (the first send wraps it around the text once; the record
+> carries `quietStart` until then, and the thread's composer comes
+> pre-filled with the step and its meaning). Held handover resumes go
+> silent the same way: the internal continuation prompt that caused
+> the observed no-op turns is deleted. Claude Code has no hold at
+> spawn; its dialogs keep today's first posted turn.
+
 **The base gains the split seam.** SDK 1.35: `documents.open` and
 `documents.addDoc` take `split: 'right' | 'down'`; the tab lands in a
 fresh pane beside or below the focused one. It is a landing request — an

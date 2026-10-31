@@ -195,9 +195,9 @@ export class PluginApiFactory {
         list: () => this.editor.openDocs().map(toOpenDoc),
         open: (path, line, opts) => {
           if (line === undefined) {
-            return this.editor.openFile(path, opts?.vaultId, { split: opts?.split });
+            return this.editor.openFile(path, opts?.vaultId, { split: opts?.split, beside: opts?.beside });
           }
-          return this.editor.openFileAt(path, line, opts?.vaultId, { split: opts?.split });
+          return this.editor.openFileAt(path, line, opts?.vaultId, { split: opts?.split, beside: opts?.beside });
         },
         openScratch: (path, content) => this.editor.openScratch(path, content),
         addDoc: (kind, key, name, opts) => {
@@ -206,7 +206,7 @@ export class PluginApiFactory {
           if (this.docKinds.get(kind) === undefined) {
             throw new Error(`documents.addDoc: doc kind "${kind}" is not registered`);
           }
-          this.editor.addPluginDoc(kind, key, name, opts?.split);
+          this.editor.addPluginDoc(kind, key, name, { split: opts?.split, beside: opts?.beside });
         },
         registerFileOpener: (opener) => track(this.fileOpeners.register(opener)),
         rename: (path, name) => this.editor.renameDoc(path, name),
