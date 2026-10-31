@@ -28,7 +28,7 @@ import {
 import { needsBlockedConfirm } from './blocked-view';
 import { PRIORITY_LABEL, createGroupFoldStore, workListLivePaint, workListNode, type WorkPanelDeps } from './work-panel';
 import { createRunComposer } from './run-composer';
-import { THREAD_KEY, ticketPagePlan } from './ticket-page';
+import { pageFollowsActive, THREAD_KEY, ticketPagePlan } from './ticket-page';
 import { PENDING_HINT, dialogStarter } from './dialog-starters';
 import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups, workListSignature } from './work-groups';
 import { readyCardNode, storyNode } from './ready-view';
@@ -285,6 +285,17 @@ const runForCard = (id: string): RunInfo | null =>
 const boardCard = (id: string): TicketCard | null => {
   for (const column of snapshot?.columns ?? []) {
     const found = column.tickets.find((t) => t.id === id);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return null;
+};
+
+/** A card by its vault-relative file path from the current snapshot. */
+const boardCardByPath = (path: string): TicketCard | null => {
+  for (const column of snapshot?.columns ?? []) {
+    const found = column.tickets.find((t) => t.path === path);
     if (found !== undefined) {
       return found;
     }
@@ -1445,6 +1456,8 @@ const THREAD_KIND = 'tickets-thread';
 let threadTicketId: string | null = null;
 /** The ticket file the pair's file pane last showed (reused by the next ticket). */
 let pairFilePath: string | null = null;
+/** True while `openTicketPage` runs: its own tab changes must not re-enter `followActiveTicket`. */
+let pageOpening = false;
 const threadListeners = new Set<() => void>();
 /**
  * A run to unfold when its ticket's thread shows (req-75 W4a): set by a
@@ -1491,6 +1504,33 @@ async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<voi
   if (snapshot?.vaultId == null) {
     return;
   }
+  pageOpening = true;
+  try {
+    await openTicketPageNow(api, card, snapshot.vaultId);
+  } finally {
+    pageOpening = false;
+  }
+}
+
+/** A ticket file that became the active tab by another route (Files panel ...) brings its thread. */
+function followActiveTicket(api: DreyPluginApi): void {
+  const active = api.documents.active();
+  if (active === null || active.kind === THREAD_KIND || active.vaultId !== snapshot?.vaultId) {
+    return;
+  }
+  const card = boardCardByPath(active.path);
+  const follow = pageFollowsActive({
+    activeCardId: card?.id ?? null,
+    threadTicketId,
+    threadOpen: api.documents.get(THREAD_KEY) !== null,
+    busy: pageOpening,
+  });
+  if (follow && card !== null) {
+    void openTicketPage(api, card);
+  }
+}
+
+async function openTicketPageNow(api: DreyPluginApi, card: TicketCard, vaultId: string): Promise<void> {
   const side = { kind: THREAD_KIND, key: THREAD_KEY, title: threadTitle(card.id) };
   const previous = pairFilePath !== null && api.documents.get(pairFilePath) !== null ? pairFilePath : undefined;
   const plan = ticketPagePlan({
@@ -1498,7 +1538,7 @@ async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<voi
     threadOpen: api.documents.get(side.key) !== null,
     previousFile: previous !== card.path ? previous : undefined,
   });
-  await api.documents.open(card.path, undefined, { vaultId: snapshot.vaultId, ...plan.fileOpts });
+  await api.documents.open(card.path, undefined, { vaultId, ...plan.fileOpts });
   pairFilePath = card.path;
   threadTicketId = card.id;
   for (const listener of threadListeners) {
@@ -1520,7 +1560,7 @@ async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<voi
   if (plan.refocusFile) {
     // The side tab's landing or re-activation took the focus: hand it back
     // to the file, so the next ticket opens there and not beside the side.
-    await api.documents.open(card.path, undefined, { vaultId: snapshot.vaultId });
+    await api.documents.open(card.path, undefined, { vaultId });
   }
   markOpenCard(api);
 }
@@ -2815,6 +2855,9 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     api.documents.onChange((event) => {
       if (event.type === 'active-changed' || event.type === 'docs-changed') {
         markOpenCard(api);
+      }
+      if (event.type === 'active-changed') {
+        followActiveTicket(api);
       }
     });
     api.backend.on('board-changed', () => void refreshBoard());

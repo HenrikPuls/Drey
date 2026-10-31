@@ -1,5 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { THREAD_KEY, ticketPagePlan } from './ticket-page';
+import { pageFollowsActive, THREAD_KEY, ticketPagePlan } from './ticket-page';
+
+describe('pageFollowsActive', () => {
+  const base = { activeCardId: 'T-1', threadTicketId: 'T-1', threadOpen: true, busy: false };
+
+  it('a ticket file became active and the thread is closed: bring the thread', () => {
+    expect(pageFollowsActive({ ...base, threadOpen: false })).toBe(true);
+  });
+
+  it('the thread follows another ticket: switch it', () => {
+    expect(pageFollowsActive({ ...base, threadTicketId: 'T-2' })).toBe(true);
+  });
+
+  it('the pair already shows this ticket: nothing to do (no loop)', () => {
+    expect(pageFollowsActive(base)).toBe(false);
+  });
+
+  it('no ticket file active, or the page itself is opening: nothing to do', () => {
+    expect(pageFollowsActive({ ...base, activeCardId: null })).toBe(false);
+    expect(pageFollowsActive({ ...base, threadOpen: false, busy: true })).toBe(false);
+  });
+});
 
 /**
  * The ticket page's pure landing matrix (req-75): the pair anchors on
