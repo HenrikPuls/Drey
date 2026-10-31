@@ -305,6 +305,10 @@ textarea { resize: vertical; line-height: 1.45; }
 .q-line { color: var(--text2); }
 .q-rec { color: var(--faint); }
 .answer .btn.option { display: flex; align-items: baseline; gap: 6px; width: 100%; text-align: left; }
+/* The leading option dot (T-0084): a bullet per row, the recommended
+   one filled with the accent. */
+.answer .btn.option .option-dot { flex: none; align-self: center; width: 6px; height: 6px; border-radius: 50%; border: 1px solid var(--text2); }
+.answer .btn.option.option-rec .option-dot { border-color: var(--accent); background: var(--accent); }
 .answer .btn.option small { font-size: 12px; font-weight: 400; }
 .answer .btn.option small.why { color: var(--text2); }
 .answer .btn.option small.rec { margin-left: auto; color: var(--accent); }

@@ -412,12 +412,18 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
         waitShaped.append(el('div', 'tickets-question-line', `${label}: ${value}`));
       }
     }
+    // One dot row per option, on one line (T-0084): dot, label, the
+    // muted consequence, the small recommendation tag.
     const options = el('div', 'tickets-question-options');
     for (const option of shaped.options) {
-      const b = el('button', `work-option${shaped.recommended === option.n ? ' work-option-recommended' : ''}`, option.label);
+      const b = el(
+        'button',
+        `work-option${shaped.recommended === option.n ? ' work-option-recommended' : ''}`,
+      );
       b.type = 'button';
+      b.append(el('span', 'work-option-dot'), el('span', 'work-option-label', option.label));
       if (option.consequence !== null) {
-        b.append(document.createTextNode(' — '), el('span', 'work-option-why', option.consequence));
+        b.append(el('span', 'work-option-why', option.consequence));
       }
       if (shaped.recommended === option.n) {
         b.append(el('span', 'work-option-flag', 'recommended'));

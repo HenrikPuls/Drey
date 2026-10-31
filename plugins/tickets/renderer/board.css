@@ -2108,6 +2108,7 @@ details[open] > summary > .tickets-tx-think-preview {
 
 .work-option-flag {
   flex: none;
+  margin-left: auto;
   color: var(--accent);
   font-size: 10px;
 }
