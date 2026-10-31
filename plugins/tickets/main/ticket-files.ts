@@ -14,14 +14,15 @@ import { splitFrontmatter } from '../../../shared/frontmatter';
 import {
   DEFAULT_RANK,
   TICKET_ID_PATTERN,
+  TICKET_PRIORITIES,
   branchForTicket,
   formatUtcStamp,
   stripPhasePrefix,
-  TICKET_PRIORITIES,
   type TicketIssue,
   type TicketMeta,
   type TicketPriority,
   type TicketRun,
+  type TicketTrack,
 } from '../shared/tickets';
 
 /** `entered-<phase>` key grammar (phase ids: lowercase, digits, dashes). */
@@ -105,6 +106,16 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
   }
   const worker = asText(obj['worker']);
 
+  // req-75 W1b: the triage track. Only the two words read; anything
+  // else is visibly not triaged (ADR-0087 decision 2).
+  const rawTrack = asText(obj['track']);
+  let track: TicketTrack | null = null;
+  if (rawTrack === 'auto' || rawTrack === 'shape') {
+    track = rawTrack;
+  } else if (rawTrack !== null) {
+    issues.push({ level: 'warning', message: 'track must be auto or shape' });
+  }
+
   const rawPriority = asText(obj['priority']);
   let priority: TicketPriority = 'normal';
   if (rawPriority === null) {
@@ -173,6 +184,7 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
       repo,
       repos,
       worker,
+      track,
       priority,
       rank,
       // The rule wins over whatever the file says (ADR-0076).
@@ -198,6 +210,7 @@ function emptyMeta(stem?: string): TicketMeta {
     repo: null,
     repos: [],
     worker: null,
+    track: null,
     priority: 'normal',
     rank: DEFAULT_RANK,
     branch: stem === undefined ? null : branchForTicket(stem),
@@ -475,6 +488,8 @@ function appendLogLine(body: string, stamp: string, who: string, what: string): 
 export interface HeaderPatch {
   readonly title?: string;
   readonly priority?: TicketPriority;
+  /** The triage track (req-75 W1b); null removes the key (not triaged). */
+  readonly track?: TicketTrack | null;
   readonly repo?: string;
   /**
    * The full work-repo list, primary first (req-72). One name (or none)
@@ -517,6 +532,13 @@ export function patchHeaderFields(block: string, patch: HeaderPatch): string {
     }
     doc.set('priority', patch.priority);
   }
+  if (patch.track !== undefined) {
+    if (patch.track === null) {
+      removeKey(doc, 'track');
+    } else {
+      doc.set('track', patch.track);
+    }
+  }
   if (patch.repo !== undefined && patch.repos === undefined) {
     // `repo:` stays present and empty when cleared — the creation shape.
     const repo = patch.repo.trim();
@@ -556,9 +578,23 @@ export function patchHeaderFields(block: string, patch: HeaderPatch): string {
   return `---\n${yamlOf(doc)}---`;
 }
 
+/**
+ * Sets (or, with null, removes) the ticket's `track` key in a whole
+ * ticket file and appends one Log line naming the value (req-75 W1b) —
+ * the header patch of `setPriority`, with the track's own audit line.
+ */
+export function patchTrack(text: string, track: TicketTrack | null, now: Date, actor: string): string {
+  const { yamlText, body, hadFence } = splitFrontmatter(text);
+  if (!hadFence || yamlText === null) {
+    throw new Error('ticket has no frontmatter fence');
+  }
+  const block = patchHeaderFields(`---\n${yamlText}\n---`, { track });
+  const value = track ?? 'none';
+  return `${block}\n${appendLogLine(body, formatUtcStamp(now), actor, `track ${value}`)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Canonical creation write (the strict writer's shape).
-
 export interface NewTicketInput {
   readonly id: string;
   readonly title: string;

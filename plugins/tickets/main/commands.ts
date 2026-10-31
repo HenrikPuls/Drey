@@ -14,7 +14,7 @@ import {
   type PermissionMode,
   type QuestionAnswers,
 } from './fleet/protocol';
-import { TICKET_PRIORITIES, type TicketPriority } from '../shared/tickets';
+import { TICKET_PRIORITIES, type TicketPriority, type TicketTrack } from '../shared/tickets';
 
 export type Parsed<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: string };
 
@@ -101,6 +101,24 @@ export function parseClaim(payload: unknown): Parsed<ClaimCommand> {
     return refuse('bad claim payload');
   }
   return ok({ id: p['id'], mode: p['mode'] });
+}
+
+/** The Work row menu's triage pick (req-75 W1b): `auto`, `shape`, or null (not triaged). */
+export interface SetTrackCommand {
+  readonly id: string;
+  readonly track: TicketTrack | null;
+}
+
+export function parseSetTrack(payload: unknown): Parsed<SetTrackCommand> {
+  const p = record(payload);
+  if (typeof p['id'] !== 'string') {
+    return refuse('bad track payload');
+  }
+  const track = p['track'];
+  if (track !== null && track !== 'auto' && track !== 'shape') {
+    return refuse('track must be auto, shape or null');
+  }
+  return ok({ id: p['id'], track });
 }
 
 export interface UnarchiveCommand {

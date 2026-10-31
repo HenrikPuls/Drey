@@ -10,6 +10,7 @@ import {
   parsePermission,
   parseRefine,
   parseSend,
+  parseSetTrack,
   parseStartRun,
   parseStopRun,
   parseTicketId,
@@ -59,6 +60,14 @@ describe('command parsers', () => {
     expect(parseCreate({ title: 'X', repo: 'a', repos: ['a', 'b'] })).toMatchObject({ value: { repo: 'a', repos: ['a', 'b'] } });
     const mixed = parseCreate({ title: 'X', repos: ['a', 3] });
     expect(mixed.ok && 'repos' in mixed.value).toBe(false);
+  });
+
+  it('takes the track as auto, shape or null — nothing else (req-75 W1b)', () => {
+    expect(parseSetTrack({ id: 'T-0001', track: 'auto' })).toEqual({ ok: true, value: { id: 'T-0001', track: 'auto' } });
+    expect(parseSetTrack({ id: 'T-0001', track: 'shape' })).toEqual({ ok: true, value: { id: 'T-0001', track: 'shape' } });
+    expect(parseSetTrack({ id: 'T-0001', track: null })).toEqual({ ok: true, value: { id: 'T-0001', track: null } });
+    expect(parseSetTrack({ id: 'T-0001', track: 'fast' })).toEqual({ ok: false, error: 'track must be auto, shape or null' });
+    expect(parseSetTrack({ track: 'auto' })).toEqual({ ok: false, error: 'bad track payload' });
   });
 
   it('checks the run controls', () => {

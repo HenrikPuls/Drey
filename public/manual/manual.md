@@ -760,27 +760,44 @@ creates the configuration files under `tickets/_meta/`:
   inside (the folder itself and its subfolders) with clone URL, branch
   and local path prefilled.
 
-**The Work panel** (req-75) shows three groups, each folded or opened
-by its heading (remembered across restarts):
+**The Work panel** (req-75) shows five groups, each folded or opened by
+its heading (remembered across restarts):
 
 - **Needs you** — only there when something waits on you: a worker's
-  question (*Asks: …*, with **Answer**; in the fixed shape its options
-  sit in the row as buttons — one tap answers), an approval it wants
-  (**Review**), a red gate or a failed run (**Open**, **Run again…**), a
-  checkpoint (**Approve → *next phase***, plus **Refine with agent**),
-  and a finished ticket (**Accept** — it goes to the archive).
-- **Ideas** — the backlog before the machine, highest priority first,
-  newest first within a priority. An idea in the queue the fleet pulls
-  from carries a **Queued** chip.
-- **In progress** — everything the machine is working on or that waits
-  further down the pipeline, closest to done first. A ticket with a live
-  run shows the run's light in front of its id.
+  question (kind chip *Question*, the question as its line — in the
+  thread its options are one-tap pills), an approval it wants
+  (*Approval*), a red gate or a failed run (*Gate red*, *Run failed*),
+  a plan to approve (*Plan to approve*), a review (*Review*), and a
+  finished ticket (*Ready to try*). The buttons for the last three live
+  in the ticket's thread, not on the row.
+- **Shaping** — the tickets you reserved for a dialog with a worker
+  (interactive); the row says whether the dialog runs, pauses or has
+  not started, and how many turns it has.
+- **Running** — everything on its way through the pipeline, closest to
+  done first: a dot (accent while a worker is on it), the step —
+  Planning, Building, Merging or the phase — and the worker's current
+  action in one short line. Without a worker it is queued and says what
+  it waits for.
+- **Ideas** — the backlog before the machine, highest priority first
+  (a small *Urgent*/*High* chip marks the ones that matter), newest
+  first within a priority. An idea in the queue the fleet pulls from
+  carries a **Queued** chip; the chip on the right is its track —
+  **Auto** (runs on its own), **Shape** (a plan-mode dialog with you)
+  or **Triage** (not decided yet). Set both track and priority from the
+  row's menu (right-click or **⋯**). The first five ideas show; *n more*
+  unfolds the rest.
+- **Done this week** — what you accepted into the archive in the last
+  seven days, folded away by default.
 
-Every ticket sits in exactly one group. A row is the priority (click it
-to change it), the title, and one line saying why it waits or where it
-stands. Click a row to open the **ticket page**: the ticket file in the
-editor and its **thread** in the pane beside it. The thread follows
-whichever ticket you open last — one tab, not one per ticket.
+Every ticket sits in exactly one group — Needs you wins. A row is the
+title, an age and one line; the open ticket's row is marked with an
+accent bar. Click a row to open the **ticket page**: the ticket file in
+the editor and its **thread** in the pane beside it — the thread's
+header shows the run's light and who is working, and above its composer
+sits the **decision bar** (Approve → next phase, Refine with agent, or
+Accept). The thread follows whichever ticket you open last — one tab,
+not one per ticket. The panel's footer carries the workers: the worst
+light and who is out there; the header's **+** captures a new idea.
 
 **Everyday use.** Capture with the **+** in the panel header: a title,
 a priority, optionally one or more repositories and a description land
@@ -960,18 +977,18 @@ decision of yours asks: its run stops at the question instead of ending,
 and keeps its session. The same happens when an OpenCode worker wants to
 run a tool that needs approval. Drey then shows a Windows notification
 (*T-0042 asks you*); clicking it opens the ticket page. The ticket moves
-to **Needs you** with *Asks: …* and an **Answer** button, and the
-question also lands in the ticket's Log. In the thread the question
-sits above the prompt box — type your answer and send it; the
+to **Needs you** with a *Question* chip and the question as its line,
+and the question also lands in the ticket's Log. In the thread the
+question sits above the prompt box — type your answer and send it; the
 worker goes on with its step and the run ends normally when it is done.
 
 A question asked in the fixed shape (req-75 W2) carries its context:
 what the ticket is about, where the worker stands, why it asks, two to
 four options with their consequences, and the worker's recommendation.
-Its options sit as buttons in the Needs-you row of the Work panel, in
-the thread's wait card and on the phone — **one tap on an option is the
-answer** (the recommended one is marked); the free-answer field stays
-beside them wherever you are. When the worker offers choices through
+Its options sit as pills in the thread's wait card and on the phone —
+**one tap on an option is the answer** (the recommended one is marked);
+the free-answer field stays beside them wherever you are. When the
+worker offers choices through
 OpenCode's question forms, they appear as buttons instead: with one
 question a click is the answer; with several, pick one per question and
 press **Send answer**. You can always type your own answer instead —

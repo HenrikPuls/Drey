@@ -31,7 +31,7 @@
  * `_meta`. Human moves are logged, never blocked — lane rules stay
  * runner-only.
  */
-import { TICKETS_ARCHIVE_DIR, type PipelinePhase } from '../shared/tickets';
+import { TICKETS_ARCHIVE_DIR, type PipelinePhase, type RecentDone } from '../shared/tickets';
 import { parseTicketFile, ticketPathParts } from './ticket-files';
 
 /** The newest machine-shaped archive marker —
@@ -45,6 +45,50 @@ export function parseArchivedStamp(text: string): string | null {
     }
   }
   return newest;
+}
+
+/** How long a ticket stays in the Done-this-week group (req-75 W1b). */
+const RECENT_DONE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** At most this many rows in the Done-this-week group. */
+const RECENT_DONE_MAX = 20;
+
+/**
+ * The Done-this-week rows (req-75 W1b): every `tickets/archive/*.md`
+ * whose newest `— archived` Log stamp lies within the last 7 days,
+ * newest first, at most 20 (stamp ties break by id). Pure — the board
+ * service feeds it the file list it read anyway, so a refresh costs no
+ * extra reads.
+ */
+export function recentDoneOf(
+  files: readonly { readonly path: string; readonly text: string }[],
+  nowMs: number,
+): RecentDone[] {
+  const prefix = `${TICKETS_ARCHIVE_DIR}/`;
+  const found: { id: string; title: string | null; at: string; t: number }[] = [];
+  for (const file of files) {
+    if (!file.path.startsWith(prefix) || !file.path.endsWith('.md') || file.path.slice(prefix.length).includes('/')) {
+      continue;
+    }
+    const at = parseArchivedStamp(file.text);
+    if (at === null) {
+      continue;
+    }
+    const t = Date.parse(at);
+    if (Number.isNaN(t) || nowMs - t > RECENT_DONE_MS) {
+      continue;
+    }
+    found.push({
+      id: file.path.slice(prefix.length, -'.md'.length),
+      title: parseTicketFile(file.text, file.path).meta.title,
+      at,
+      t,
+    });
+  }
+  return found
+    .sort((a, b) => (a.t !== b.t ? b.t - a.t : a.id < b.id ? -1 : 1))
+    .slice(0, RECENT_DONE_MAX)
+    .map(({ id, title, at }) => ({ id, title, at }));
 }
 
 /** One drift the board's normalization owes a full transition treatment. */

@@ -11,7 +11,8 @@ import {
 } from '../shared/tickets';
 import { createGroupFoldStore, workListNode } from './work-panel';
 
-/** req-75 W1: the Work list's DOM over the default eight-phase pipeline. */
+/** req-75 W1b: the Work list's DOM over the default eight-phase pipeline —
+ *  the canvas's five groups, the rows' chips and the fold store. */
 
 const phase = (id: string, handover: string): PipelinePhase =>
   phaseWithoutPoolKeys({ id, title: id[0]!.toUpperCase() + id.slice(1), wip: null, claim: false, handover });
@@ -27,22 +28,34 @@ const PIPELINE: readonly PipelinePhase[] = [
   phase('done', 'none'),
 ];
 
-const card = (id: string, at: string): TicketCard =>
+const card = (id: string, at: string, opts: { track?: 'auto' | 'shape' | null; interactive?: boolean } = {}): TicketCard =>
   ({
     id,
     path: `tickets/${at}/${id}.md`,
     phase: at,
     worker: 'opencode',
-    meta: { title: `Ticket ${id}`, priority: 'normal', parkedReason: null, claimedBy: null, entered: { inbox: '2026-10-30T10:00:00Z' } },
+    meta: {
+      title: `Ticket ${id}`,
+      priority: 'normal',
+      track: opts.track ?? null,
+      parkedReason: null,
+      claimedBy: null,
+      interactive: opts.interactive ?? false,
+      entered: { inbox: '2026-10-30T10:00:00Z' },
+    },
     blocked: [],
     blocks: [],
     issues: [],
   }) as unknown as TicketCard;
 
-const board = (placed: Record<string, readonly TicketCard[]>): BoardSnapshot =>
+const board = (
+  placed: Record<string, readonly TicketCard[]>,
+  recentDone: BoardSnapshot['recentDone'] = [],
+): BoardSnapshot =>
   ({
     columns: PIPELINE.map((p): BoardColumn => ({ phase: p, unknown: false, tickets: placed[p.id] ?? [] })),
     checkpoints: ['plan-review', 'review', 'done'],
+    recentDone,
   }) as unknown as BoardSnapshot;
 
 const api = { ui: { icon: () => document.createElement('span') } } as unknown as DreyPluginApi;
@@ -50,13 +63,9 @@ const api = { ui: { icon: () => document.createElement('span') } } as unknown as
 const deps = () => ({
   api,
   openTicket: vi.fn(),
-  move: vi.fn(),
-  accept: vi.fn(),
   setPriority: vi.fn(),
-  startDialog: vi.fn(),
-  openRunModal: vi.fn(),
+  setTrack: vi.fn(),
   openMenu: vi.fn(),
-  answer: vi.fn(),
 });
 
 const memoryStorage = (): Storage => {
@@ -71,31 +80,91 @@ const titles = (list: HTMLElement): string[] =>
   [...list.querySelectorAll('.work-group-title')].map((n) => n.textContent ?? '');
 
 describe('workListNode', () => {
-  it('hides Needs you while nothing waits, and shows the ideas and the work in progress', () => {
+  it('shows Running before Ideas, hides Needs you and Shaping while empty', () => {
     const list = workListNode(deps(), board({ inbox: [card('T-0001', 'inbox')], build: [card('T-0002', 'build')] }), [], createGroupFoldStore(null), () => undefined);
-    expect(titles(list)).toEqual(['Ideas', 'In progress']);
+    expect(titles(list)).toEqual(['Running', 'Ideas']);
     expect(list.querySelectorAll('.work-row')).toHaveLength(2);
   });
 
-  it('puts a finished ticket under Needs you with Accept', () => {
+  it('a finished ticket sits under Needs you with its kind chip — the buttons live in the thread now', () => {
     const d = deps();
     const list = workListNode(d, board({ done: [card('T-0003', 'done')] }), [], createGroupFoldStore(null), () => undefined);
     expect(titles(list)[0]).toBe('Needs you');
-    const accept = [...list.querySelectorAll<HTMLButtonElement>('.work-action')].find((b) => b.textContent === 'Accept')!;
-    accept.click();
-    expect(d.accept).toHaveBeenCalledOnce();
-    expect(d.openTicket).not.toHaveBeenCalled();
+    const row = list.querySelector<HTMLElement>('.work-group-needs .work-row')!;
+    expect(row.querySelector('.work-kind')?.textContent).toBe('Ready to try');
+    expect(row.querySelector('.work-row-line')?.textContent).toBe('checks green');
+    expect(row.querySelector('.work-action')).toBeNull();
+    expect(row.querySelector('button.work-action')).toBeNull();
   });
 
-  it('marks a prioritized idea as queued', () => {
-    const list = workListNode(deps(), board({ inbox: [card('T-0004', 'inbox')], prioritized: [card('T-0005', 'prioritized')] }), [], createGroupFoldStore(null), () => undefined);
-    const queued = [...list.querySelectorAll<HTMLElement>('.work-row')].filter((row) => row.querySelector('.work-row-queued') !== null);
-    expect(queued.map((row) => row.dataset['id'])).toEqual(['T-0005']);
+  it('a checkpoint after the plan column reads as a plan to approve', () => {
+    const list = workListNode(deps(), board({ 'plan-review': [card('T-0004', 'plan-review')] }), [], createGroupFoldStore(null), () => undefined);
+    const row = list.querySelector<HTMLElement>('.work-group-needs .work-row')!;
+    expect(row.querySelector('.work-kind')?.textContent).toBe('Plan to approve');
+    expect(row.querySelector('.work-row-line')?.textContent).toBe('plan ready');
+  });
+
+  it('an interactive ticket shapes: the group shows, with the dialog not started', () => {
+    const list = workListNode(deps(), board({ inbox: [card('T-0005', 'inbox', { interactive: true })] }), [], createGroupFoldStore(null), () => undefined);
+    expect(titles(list)).toEqual(['Shaping', 'Running', 'Ideas']);
+    expect(list.querySelector('.work-group-shaping .work-row-sub')?.textContent).toBe('Dialog not started');
+  });
+
+  it('marks a prioritized idea as queued and gives ideas their track chip', () => {
+    const placed = {
+      // Same priority and stamp: newest id first inside Ideas.
+      inbox: [card('T-0006', 'inbox', { track: 'auto' }), card('T-0007', 'inbox', { track: 'shape' })],
+      prioritized: [card('T-0008', 'prioritized')],
+    };
+    const list = workListNode(deps(), board(placed), [], createGroupFoldStore(null), () => undefined);
+    const rows = [...list.querySelectorAll<HTMLElement>('.work-group-ideas .work-row')];
+    // Same priority and stamp: newest id first — the prioritized one leads.
+    expect(rows[0]!.dataset['id']).toBe('T-0008');
+    expect(rows[0]!.querySelector('.work-row-queued')?.textContent).toBe('Queued');
+    expect(rows[0]!.querySelector('.work-track')?.textContent).toBe('Triage');
+    expect(rows[1]!.querySelector('.work-track')?.textContent).toBe('Shape');
+    expect(rows[2]!.querySelector('.work-track')?.textContent).toBe('Auto');
+  });
+
+  it('shows the first five ideas, then "<n> more" unfolds the rest (remembered)', () => {
+    const storage = memoryStorage();
+    const folds = createGroupFoldStore(storage);
+    const rerender = vi.fn();
+    const placed: Record<string, readonly TicketCard[]> = {
+      inbox: Array.from({ length: 7 }, (_, i) => card(`T-00${10 + i}`, 'inbox')),
+    };
+    const list = workListNode(deps(), board(placed), [], folds, rerender);
+    expect(list.querySelectorAll('.work-group-ideas .work-row')).toHaveLength(5);
+    const more = list.querySelector<HTMLButtonElement>('.work-ideas-more')!;
+    expect(more.textContent).toBe('2 more');
+    more.click();
+    expect(rerender).toHaveBeenCalledOnce();
+    const open = workListNode(deps(), board(placed), [], createGroupFoldStore(storage), () => undefined);
+    expect(open.querySelectorAll('.work-group-ideas .work-row')).toHaveLength(7);
+    expect(open.querySelector('.work-ideas-more')?.textContent).toBe('Show fewer');
+  });
+
+  it('a running row carries the dot, the step word and the activity line', () => {
+    const run = {
+      id: 'r1',
+      ticketId: 'T-0009',
+      provider: 'opencode',
+      state: 'running',
+      startedAt: '2026-10-30T10:00:00Z',
+      endedAt: null,
+      gateFailure: null,
+      activity: 'edit electron/capture-hotkey.ts',
+    } as unknown as RunInfo;
+    const list = workListNode(deps(), board({ build: [card('T-0009', 'build')] }), [run], createGroupFoldStore(null), () => undefined);
+    const row = list.querySelector<HTMLElement>('.work-group-running .work-row')!;
+    expect(row.querySelector('.work-run-step')?.textContent).toBe('Building');
+    expect(row.querySelector('.work-run-line')?.textContent).toBe('edit electron/capture-hotkey.ts');
+    expect(row.querySelector('.work-run-dot-queued')).toBeNull();
   });
 
   it('opens the ticket on a row click and the menu on the ⋯ button', () => {
     const d = deps();
-    const list = workListNode(d, board({ inbox: [card('T-0006', 'inbox')] }), [], createGroupFoldStore(null), () => undefined);
+    const list = workListNode(d, board({ inbox: [card('T-0010', 'inbox')] }), [], createGroupFoldStore(null), () => undefined);
     const row = list.querySelector<HTMLElement>('.work-row')!;
     row.click();
     expect(d.openTicket).toHaveBeenCalledOnce();
@@ -108,19 +177,18 @@ describe('workListNode', () => {
     const storage = memoryStorage();
     const folds = createGroupFoldStore(storage);
     const rerender = vi.fn();
-    const list = workListNode(deps(), board({ inbox: [card('T-0007', 'inbox')] }), [], folds, rerender);
+    const list = workListNode(deps(), board({ inbox: [card('T-0011', 'inbox')] }), [], folds, rerender);
     list.querySelector<HTMLButtonElement>('.work-group-ideas .work-group-head')!.click();
     expect(rerender).toHaveBeenCalledOnce();
     expect(createGroupFoldStore(storage).isFolded('ideas')).toBe(true);
-    const folded = workListNode(deps(), board({ inbox: [card('T-0007', 'inbox')] }), [], folds, rerender);
+    const folded = workListNode(deps(), board({ inbox: [card('T-0011', 'inbox')] }), [], folds, rerender);
     expect(folded.querySelector('.work-group-ideas .work-row')).toBeNull();
   });
 
-  it('a question from a live run sits under Needs you with Answer', () => {
-    const d = deps();
+  it('a question from a live run sits under Needs you as its kind chip and text', () => {
     const run = {
-      id: 'r1',
-      ticketId: 'T-0008',
+      id: 'r2',
+      ticketId: 'T-0012',
       provider: 'opencode',
       state: 'running',
       startedAt: '2026-10-30T10:00:00Z',
@@ -131,18 +199,16 @@ describe('workListNode', () => {
       tokensOut: 0,
       waiting: { kind: 'question', text: 'Which file?', since: '2026-10-30T10:05:00Z' },
     } as unknown as RunInfo;
-    const list = workListNode(d, board({ build: [card('T-0008', 'build')] }), [run], createGroupFoldStore(null), () => undefined);
+    const list = workListNode(deps(), board({ build: [card('T-0012', 'build')] }), [run], createGroupFoldStore(null), () => undefined);
     const row = list.querySelector<HTMLElement>('.work-group-needs .work-row')!;
-    expect(row.querySelector('.work-row-line')?.textContent).toBe('Asks: Which file?');
-    row.querySelector<HTMLButtonElement>('.work-action')!.click();
-    expect(d.openTicket).toHaveBeenCalledOnce();
+    expect(row.querySelector('.work-kind')?.textContent).toBe('Question');
+    expect(row.querySelector('.work-row-line')?.textContent).toBe('Which file?');
   });
 
-  it('a shaped question answers from the row: options, one tap sends (req-75 W2)', () => {
-    const d = deps();
+  it('a shaped question shows its question — the option pills live in the thread (req-75 W2)', () => {
     const run = {
-      id: 'r2',
-      ticketId: 'T-0009',
+      id: 'r3',
+      ticketId: 'T-0013',
       provider: 'opencode',
       state: 'running',
       startedAt: '2026-10-30T10:00:00Z',
@@ -169,20 +235,29 @@ describe('workListNode', () => {
         },
       },
     } as unknown as RunInfo;
-    const list = workListNode(d, board({ build: [card('T-0009', 'build')] }), [run], createGroupFoldStore(null), () => undefined);
+    const list = workListNode(deps(), board({ build: [card('T-0013', 'build')] }), [run], createGroupFoldStore(null), () => undefined);
     const row = list.querySelector<HTMLElement>('.work-group-needs .work-row')!;
-    // The status line is the question itself, not the raw turn text.
-    expect(row.querySelector('.work-row-line')?.textContent).toBe('Asks: Which database?');
-    const options = [...row.querySelectorAll<HTMLButtonElement>('.work-option')];
-    expect(options.map((b) => b.textContent)).toEqual(['SQLiterecommended', 'Postgres']);
-    expect(options[0]!.title).toBe('no server');
-    expect(options[0]!.className).toContain('work-option-recommended');
-    options[1]!.click();
-    expect(d.answer).toHaveBeenCalledOnce();
-    expect(d.answer).toHaveBeenCalledWith(expect.objectContaining({ id: 'T-0009' }), run, '2. Postgres');
-    // A tap disables the row's buttons until the send settles.
-    expect(options[0]!.disabled).toBe(true);
-    expect([...row.querySelectorAll<HTMLButtonElement>('.work-action')].every((b) => b.disabled)).toBe(true);
+    expect(row.querySelector('.work-row-line')?.textContent).toBe('Which database?');
+    expect(row.querySelectorAll('.tickets-pill')).toHaveLength(0);
+  });
+
+  it('Done this week starts folded and unfolds to the archived tickets', () => {
+    const folds = createGroupFoldStore(null);
+    expect(folds.isFolded('done')).toBe(true);
+    const rerender = vi.fn();
+    const snap = board({}, [
+      { id: 'T-0014', title: 'Fix the palette race', at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() },
+      { id: 'T-0015', title: null, at: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString() },
+    ]);
+    const list = workListNode(deps(), snap, [], folds, rerender);
+    expect(titles(list)).toEqual(['Running', 'Ideas', 'Done this week']);
+    expect(list.querySelector('.work-done-row')).toBeNull();
+    folds.setFolded('done', false);
+    const open = workListNode(deps(), snap, [], folds, rerender);
+    const rows = [...open.querySelectorAll<HTMLElement>('.work-done-row')];
+    expect(rows.map((r) => r.dataset['id'])).toEqual(['T-0014', 'T-0015']);
+    expect(rows[0]!.querySelector('.work-done-title')?.textContent).toBe('Fix the palette race');
+    expect(rows[1]!.querySelector('.work-done-title')?.textContent).toBe('T-0015');
   });
 
   it('says how to start when the board is empty', () => {

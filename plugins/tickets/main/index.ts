@@ -36,6 +36,7 @@ import {
   type ReposListing,
   type TicketCard,
   type TicketPriority,
+  type TicketTrack,
 } from '../shared/tickets';
 import {
   assembleBoard,
@@ -51,6 +52,7 @@ import {
   parseTicketFile,
   patchHeaderFields,
   patchTicketFile,
+  patchTrack,
   ticketPathParts,
   ticketSections,
   type HeaderPatch,
@@ -58,7 +60,7 @@ import {
 import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from './phase-dirs';
 import { blockedRefusal } from './blocked';
 import { planWorktreeRemoval } from './worktree-removal';
-import { detectDrift, type DriftDetection } from './normalize';
+import { detectDrift, recentDoneOf, type DriftDetection } from './normalize';
 import { openTerminalAt } from './open-terminal';
 import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
 import type { AttachmentReply, RefineReply, TicketReply } from '../shared/remote-protocol';
@@ -75,6 +77,7 @@ import {
   parseCreate,
   parsePermission,
   parseSend,
+  parseSetTrack,
   parseStartRun,
   parseStopRun,
   parseTicketId,
@@ -294,6 +297,8 @@ class BoardService {
       pipelineText,
       reposText,
       files,
+      // The same file list already carries the archive — no extra reads.
+      recentDone: recentDoneOf(files, Date.now()),
     });
     // The chain follows the pipeline: an automatic column anywhere
     // points the runner at this vault (M85). Cheap and idempotent —
@@ -428,6 +433,39 @@ class BoardService {
         return { ok: false, error: messageOf(error) };
       }
       const warning = await this.commit(vault, [card.path], `tickets: ${input.id} refined`);
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [card.path] });
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The triage track (req-75 W1b, ADR-0087 decision 2): the row menu's
+   * Track › pick — one header rewrite, one Log line, one commit
+   * `tickets: <id> track <value>`. A live run refuses like every
+   * header edit.
+   */
+  setTrack(input: { id: string; track: TicketTrack | null; actor?: string }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const found = await this.findCard(input.id);
+      if (found === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const { vault, card, text } = found;
+      if (card.meta.track === input.track) {
+        return { ok: true };
+      }
+      if (card.meta.run !== null) {
+        return { ok: false, error: 'A run is live on this ticket. Change the track when the run has ended.' };
+      }
+      let patched: string;
+      try {
+        patched = patchTrack(text, input.track, new Date(), input.actor ?? OWNER);
+        await this.ctx.vault.write(card.path, patched, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const warning = await this.commit(vault, [card.path], `tickets: ${input.id} track ${input.track ?? 'none'}`);
       this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [card.path] });
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };
@@ -2010,7 +2048,9 @@ export function handoverOverrideKeys(snap: BoardSnapshot, defaultWorker: string)
   return [...keys];
 }
 
-/** The remote gateway's owner (req-66); stopped on deactivate. */
+/**
+ * The remote gateway's owner (req-66); stopped on deactivate.
+ */
 let remote: RemoteService | null = null;
 
 const plugin: MainPluginModule = {
@@ -2153,6 +2193,12 @@ const plugin: MainPluginModule = {
         return { ok: false, error: 'bad priority payload' };
       }
       return board.setPriority({ id: p.id, priority: p.priority as TicketPriority });
+    });
+
+    // The Work row menu's Track › pick (req-75 W1b).
+    ctx.ipc.handle('setTrack', async (payload) => {
+      const cmd = parseSetTrack(payload);
+      return cmd.ok ? board.setTrack(cmd.value) : cmd;
     });
 
     // The settings dialog's writer: one phase's pool keys, one commit (M85).

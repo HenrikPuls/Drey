@@ -20,6 +20,68 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-75 W1b — The Work panel looks like the canvas
+
+**Not yet manually verified by the owner.** Ticket T-0075 (roadmap
+req-75 W1b; [ADR-0087](../docs/09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md),
+design reference `docs/design/work-panel/Home.dc.html`). W1 shipped the
+behaviour; this closes the visual gap to the owner's canvas: the groups
+**Needs you · Shaping · Running · Ideas · Done this week**, two-line rows
+with a kind chip and an age, a track chip on ideas, the worker footer,
+and the thread's header and composer drawn like the artboard.
+
+- **The groups** (`plugins/tickets/renderer/work-groups.ts`): Running
+  absorbs W1's In progress; the new **Shaping** holds every ticket the
+  owner reserved for a dialog (`interactive: true`) or that has a live
+  interactive run. New pure helpers: `needKindLabel` (Question /
+  Approval / Gate red / Run failed / Plan to approve / Review / Ready to
+  try — the checkpoint after the plan column is a plan, the terminal
+  phase a result), `runningStepOf` (Planning / Building / Merging or the
+  phase title, the run's activity as a mono line; queued shows why —
+  `waits for "<blocker>"` or a free worker), `ageWords` (now / n min /
+  n h / yesterday / n d). `statusLineOf` is the Needs-you line after the
+  chip (the question itself, no prefix; `checks green`, `plan ready`,
+  `waits for your review`).
+- **The rows** (`work-panel.ts`): a row is information plus one click —
+  the W1 action buttons moved into the thread's decision bar, and W2's
+  option buttons into the thread's wait card (as pills). Ideas are one
+  line: an Urgent/High mini chip when it matters, the title, a Queued
+  chip, and the triage chip Auto / Shape / Triage. The first five ideas
+  show, then `<n> more` unfolds the rest (remembered, like every fold).
+  Needs-you rows keep the issue badge; the open ticket's row carries a
+  raised background with a 2 px accent bar.
+- **Done this week**: `BoardSnapshot.recentDone` (main, `recentDoneOf`
+  over `parseArchivedStamp`) — the tickets archived within the last 7
+  days, newest first, max 20, from the archive files the refresh lists
+  anyway (no extra reads). The group starts folded; its rows are muted
+  mementos.
+- **The track key** (`track: auto | shape`, `specs/ticket-schema.md`):
+  parsed with a visible warning for anything else, set from the row
+  menu's Track › (Auto / Shape / Not triaged) beside Priority › — one
+  `setTrack` command, one commit `tickets: <id> track <value>`, one Log
+  line.
+- **The panel chrome**: header project · spacer · + (New idea) · refresh
+  · master · ⋯; the fleet chip left the header for the **footer** — the
+  worst light plus `<n> workers · <Provider> <live>` (No workers
+  running when idle). The widget's status says `<n> need you` while
+  something waits. The thread grew its canvas header (the run's dot —
+  modified-hued when it waits on you — the bold title, one muted
+  `state · provider · model · age` line, a Ticket file link, icon-only
+  run buttons) and the **decision bar** above the composer (Approve →
+  next / Refine with agent, or Accept — W1's row buttons, same
+  handlers). The composer is one rounded box with a round send button;
+  attachments and quick prompts sit in a muted row under it; a shaped
+  question's options are pills.
+- Icons vendored for the stage and its successors: `external-link`,
+  `messages-square`, `mic`, `rocket`, `hand`, `users`
+  (`src/app/icons/icon.ts`).
+- Specs: `ticket-files.spec.ts` (track parse + patch), `commands.spec.ts`
+  (`parseSetTrack`), `normalize.spec.ts` (`recentDoneOf`),
+  `work-groups.spec.ts` (the groups, `needKindLabel`, `runningStepOf`,
+  `ageWords`, the Needs-you lines), `work-panel.spec.ts` (the DOM),
+  `icon.spec.ts`, `e2e/work-panel.spec.ts` (the groups, kind chips, the
+  decision bar).
+
 ### Fix — the gate typechecks what the build compiles
 
 **Not yet manually verified by the owner.** Owner request, outside the

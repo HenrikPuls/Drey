@@ -33,8 +33,8 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
-  height: 26px;
-  padding: 0 8px;
+  height: 36px;
+  padding: 0 12px;
   border-top: 1px solid var(--border);
   font-size: 0.75rem;
   white-space: nowrap;
@@ -1402,33 +1402,78 @@ details[open] > summary > .tickets-tx-think-preview {
   }
 }
 
-.tickets-takeover-prompt {
+/* The composer box (req-75 W1b): one rounded box — the prompt with the
+   round send button inside; attachments and quick prompts live under it. */
+.tickets-composer-box {
   flex: none;
   max-height: 40%;
   display: flex;
   flex-direction: column;
-  margin: 0 16px 16px;
+  margin: 0 16px 4px;
   border: 1px solid var(--field-border);
-  border-radius: 8px;
-  background: var(--bg-input);
+  border-radius: 20px;
+  background: var(--bg-sidebar);
   overflow: auto;
+}
+
+.tickets-composer-inputrow {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 6px 8px 8px 14px;
 }
 
 .tickets-takeover-prompt-input {
   min-height: 56px;
 }
 
-.tickets-takeover-composer {
+.tickets-composer-send {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--field-border);
+  border-radius: 50%;
+  background: var(--bg-input);
+  color: var(--text-2);
+  padding: 0;
+  cursor: pointer;
+}
+
+.tickets-composer-send:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.tickets-composer-send:disabled,
+.tickets-composer-plus:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tickets-composer-send[hidden] {
+  display: none;
+}
+
+/* The muted row under the box: attach, stop, the quick prompts. */
+.tickets-composer-under {
   flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  border-top: 1px solid var(--border);
+  margin: 0 16px 12px;
   font-size: 0.75rem;
+  color: var(--text-4);
 }
 
-/* In a narrow pane the quick prompts wrap; Stop and Send keep their place. */
+.tickets-composer-stop {
+  height: 24px;
+  padding: 0 6px;
+}
+
+/* In a narrow pane the quick prompts wrap; the rest keeps its place. */
 .tickets-takeover-chips {
   display: inline-flex;
   flex-wrap: wrap;
@@ -1528,13 +1573,9 @@ details[open] > summary > .tickets-tx-think-preview {
   color: var(--status-added);
 }
 
-.tickets-takeover-prompt {
+.tickets-composer-box {
   border-color: color-mix(in srgb, var(--tk-tone) 60%, var(--field-border));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--tk-tone) 25%, transparent);
-}
-
-.tickets-takeover-composer {
-  background: color-mix(in srgb, var(--tk-tone) 10%, var(--bg-input));
 }
 
 .tickets-takeover-chip {
@@ -1701,7 +1742,7 @@ details[open] > summary > .tickets-tx-think-preview {
   cursor: pointer;
 }
 
-.tickets-takeover-plus {
+.tickets-composer-plus {
   flex: none;
   display: inline-flex;
   align-items: center;
@@ -1715,14 +1756,9 @@ details[open] > summary > .tickets-tx-think-preview {
   cursor: pointer;
 }
 
-.tickets-takeover-plus:hover:not(:disabled) {
+.tickets-composer-plus:hover:not(:disabled) {
   background: var(--accent-surface);
   border-color: var(--accent);
-}
-
-.tickets-takeover-plus:disabled {
-  opacity: 0.45;
-  cursor: default;
 }
 
 /* The project switcher (req-72): which tickets repository the board reads.
@@ -1779,16 +1815,16 @@ details[open] > summary > .tickets-tx-think-preview {
 .work-group-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  height: var(--row-h, 26px);
-  padding: 0 8px;
+  height: var(--row-h, 28px);
+  padding: 0 10px;
   border: 0;
   background: transparent;
-  color: var(--text-3);
+  color: var(--text-heading);
   font: inherit;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
   text-align: left;
   cursor: pointer;
 }
@@ -1798,7 +1834,9 @@ details[open] > summary > .tickets-tx-think-preview {
 }
 
 .work-group-chevron {
+  flex: none;
   display: inline-flex;
+  width: 12px;
   color: var(--text-5);
 }
 
@@ -1809,9 +1847,29 @@ details[open] > summary > .tickets-tx-think-preview {
   font-variant-numeric: tabular-nums;
 }
 
-/* Needs you is the one group that asks for attention. */
-.work-group-needs .work-group-title {
-  color: var(--accent-text, var(--accent));
+/* The attention groups count on a filled badge (the canvas); Ideas and
+   Done this week stay a plain muted number. */
+.work-group-badge {
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs, 4px);
+  text-align: center;
+  font-weight: 600;
+}
+
+.work-group-needs .work-group-badge {
+  background: var(--status-modified);
+  color: var(--accent-contrast);
+}
+
+.work-group-shaping .work-group-badge {
+  background: var(--accent-quote);
+  color: var(--accent-contrast);
+}
+
+.work-group-running .work-group-badge {
+  background: var(--accent);
+  color: var(--on-accent, var(--accent-contrast));
 }
 
 .work-group-empty,
@@ -1842,10 +1900,10 @@ details[open] > summary > .tickets-tx-think-preview {
 
 .work-row.work-row-open {
   background: var(--active-bg, var(--hover-bg-strong));
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.work-row-top,
-.work-row-status {
+.work-row-top {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1859,20 +1917,39 @@ details[open] > summary > .tickets-tx-think-preview {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.8125rem;
+  font-weight: 600;
   color: var(--text-heading);
 }
 
-.work-row-status {
+/* The muted age right of a title (the canvas rows' second column). */
+.work-row-age {
+  flex: none;
+  color: var(--text-5);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The second line: a kind chip plus muted text, a dialog's pulse, or the
+   running dot, step and mono activity line. */
+.work-row-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   padding-left: 2px;
   font-size: 0.72rem;
   color: var(--text-4);
 }
 
-.work-row-id {
+.work-kind {
   flex: none;
-  font-family: var(--font-mono);
-  font-size: var(--fs-mono-num, 0.7rem);
-  color: var(--text-5);
+  padding: 0 6px;
+  border-radius: var(--radius-xs, 4px);
+  background: var(--status-modified);
+  color: var(--accent-contrast);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 17px;
 }
 
 .work-row-line {
@@ -1892,6 +1969,34 @@ details[open] > summary > .tickets-tx-think-preview {
   color: var(--status-deleted);
 }
 
+.work-run-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.work-run-dot-queued {
+  background: var(--text-5);
+}
+
+.work-run-step {
+  flex: none;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+}
+
+.work-run-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-5);
+}
+
 .work-row-more {
   flex: none;
   opacity: 0;
@@ -1903,37 +2008,97 @@ details[open] > summary > .tickets-tx-think-preview {
   opacity: 1;
 }
 
-/* The priority chip: a quiet label, coloured only when it matters. */
-.work-prio {
+/* The idea row's mini priority chip: only urgent and high earn one. */
+.work-prio-mini {
   flex: none;
-  height: 18px;
-  padding: 0 6px;
-  border: 1px solid var(--border);
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-xs, 4px);
-  background: transparent;
   color: var(--text-4);
-  font: inherit;
-  font-size: 0.68rem;
-  cursor: pointer;
+  font-size: 11px;
+  line-height: 16px;
 }
 
-.work-prio:hover {
-  border-color: var(--border-strong);
-  color: var(--text-2);
-}
-
-.work-prio-urgent {
+.work-prio-mini-urgent {
   border-color: var(--status-deleted);
   color: var(--status-deleted);
 }
 
-.work-prio-high {
+.work-prio-mini-high {
   border-color: var(--status-modified);
   color: var(--status-modified);
 }
 
-.work-prio-low {
-  color: var(--text-6);
+/* The idea row is one line (the canvas). */
+.work-row-idea {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  height: var(--row-h, 28px);
+  padding: 0 6px 0 10px;
+}
+
+.work-row-idea .work-row-title {
+  font-weight: 400;
+}
+
+/* The triage chip: Auto (accent), Shape (the accent's soft pink), Triage muted. */
+.work-track {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs, 4px);
+  color: var(--text-5);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.work-track-auto {
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.work-track-shape {
+  border-color: var(--accent-quote);
+  color: var(--accent-fg);
+}
+
+.work-ideas-more {
+  display: block;
+  width: 100%;
+  height: var(--row-h, 28px);
+  padding: 0 6px 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-5);
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.work-ideas-more:hover {
+  background: var(--hover-bg);
+  color: var(--text-2);
+}
+
+/* Done this week: a memento, muted through and through. */
+.work-done-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--row-h, 28px);
+  padding: 0 10px 0 22px;
+}
+
+.work-done-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  color: var(--text-5);
 }
 
 .work-row-queued {
@@ -1971,83 +2136,46 @@ details[open] > summary > .tickets-tx-think-preview {
   color: var(--text-5);
 }
 
-.work-row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.work-action {
-  height: 24px;
-  padding: 0 10px;
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-sm, 6px);
-  background: transparent;
-  color: var(--text-heading);
-  font: inherit;
-  font-size: 0.72rem;
-  cursor: pointer;
-}
-
-.work-action:hover {
-  background: var(--hover-bg);
-}
-
-.work-action-primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--on-accent, var(--accent-contrast));
-}
-
-.work-action-primary:hover {
-  background: var(--accent-hover, var(--accent));
-}
-
-/* The options of a shaped question (req-75 W2): one tap answers. Small
- * buttons in a Work row, full-width rows in the thread's wait card. */
-.work-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.work-option {
+/* The shaped question's option pills (req-75 W2/W1b): radius 15, 30 px
+ * high, the recommended one accent-bordered with a trailing note. */
+.tickets-pill {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
+  align-self: flex-start;
   max-width: 100%;
-  padding: 2px 9px;
+  height: 30px;
+  padding: 0 12px;
   border: 1px solid var(--field-border);
-  border-radius: var(--radius-sm, 6px);
+  border-radius: 15px;
   background: transparent;
   color: var(--text-heading);
   font: inherit;
-  font-size: 0.72rem;
+  font-size: 0.8125rem;
   text-align: left;
   cursor: pointer;
 }
 
-.work-option:hover {
+.tickets-pill:hover {
   background: var(--hover-bg);
 }
 
-.work-option:disabled {
+.tickets-pill:disabled {
   cursor: default;
   opacity: 0.6;
 }
 
-.work-option-why {
-  color: var(--text-3);
+.tickets-pill-why {
+  color: var(--text-4);
 }
 
-.work-option-recommended {
+.tickets-pill-recommended {
   border-color: var(--accent);
 }
 
-.work-option-flag {
+.tickets-pill-flag {
   color: var(--accent);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 /* The shaped question card in the thread's wait card (req-75 W2). */
@@ -2077,11 +2205,23 @@ details[open] > summary > .tickets-tx-think-preview {
   margin-top: 2px;
 }
 
-/* ---- the ticket thread (req-75 W1, ADR-0087 decision 3) ---- */
+/* ---- the ticket thread (req-75 W1/W1b, ADR-0087 decision 3) ---- */
 
 /* The shared composer is a wrapper only: its parts lay out in the tab's column. */
 .tickets-composer {
   display: contents;
+}
+
+/* The header (the canvas): the run's dot, the bold title, one muted
+   line, then the Ticket file link and the run's icon buttons. */
+.tickets-thread-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 16px;
+  border-bottom: 1px solid var(--border);
 }
 
 .tickets-thread-title {
@@ -2090,14 +2230,52 @@ details[open] > summary > .tickets-tx-think-preview {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-heading);
+  font-size: 15px;
+  font-weight: 700;
 }
 
-.tickets-thread-status {
-  font-size: 0.72rem;
+.tickets-thread-meta {
+  flex: none;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-4);
+  font-size: 12px;
 }
 
-.tickets-thread-status:empty {
+.tickets-thread-filelink {
+  flex: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--accent-fg);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.tickets-thread-filelink:hover {
+  color: var(--text-heading);
+}
+
+.tickets-thread-iconbtn {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* The decision bar above the composer: the buttons W1 drew on a row. */
+.tickets-thread-decisions {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px 0;
+}
+
+.tickets-thread-decisions[hidden] {
   display: none;
 }
 
@@ -2113,4 +2291,42 @@ details[open] > summary > .tickets-tx-think-preview {
 .tickets-thread-empty[hidden],
 .tickets-takeover-transcript[hidden] {
   display: none;
+}
+
+/* A dot that waits on the owner is the modified hue, whatever the run's
+   own light says. */
+.tickets-light-waiting {
+  background: var(--status-modified);
+}
+
+/* The panel header's spacer between the project and the buttons. */
+.tickets-head-spacer {
+  flex: 1;
+}
+
+/* The footer's fleet line (req-75 W1b): worst light + who is out there. */
+.tickets-statusbar-fleet {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-4);
+  font-size: 0.72rem;
+}
+
+/* The settings submenus' radio rows (Track ›, Priority ›). */
+.tickets-menu-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tickets-menu-check {
+  flex: none;
+  width: 14px;
+  color: var(--accent-fg);
 }

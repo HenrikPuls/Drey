@@ -1,8 +1,9 @@
 import { test, expect } from './fixtures/drey';
 
 /**
- * The Work panel (req-75 W1, ADR-0087): Needs you, Ideas and In progress
- * in place of the kanban columns, and a ticket's thread beside its file.
+ * The Work panel (req-75 W1/W1b, ADR-0087): Needs you, Shaping, Running
+ * and Ideas in place of the kanban columns, and a ticket's thread beside
+ * its file — its header, its decision bar and the question it waits on.
  * The fleet runner does not run under e2e, so the live runs arrive as a
  * pushed `fleet-changed` snapshot. The screenshots show the panel at its
  * default dock width (~340 px) and the whole window with a ticket open.
@@ -26,7 +27,7 @@ const PIPELINE = [
 
 const REPOS = ['---', 'repos:', '  drey:', '    url: https://example.invalid/drey.git', '    branch: main', '---', ''].join('\n');
 
-function ticket(id: string, title: string, phase: string, priority = 'normal'): string {
+function ticket(id: string, title: string, phase: string, priority = 'normal', interactive = false): string {
   return [
     '---',
     `id: ${id}`,
@@ -36,6 +37,7 @@ function ticket(id: string, title: string, phase: string, priority = 'normal'): 
     `branch: t/${id}`,
     `entered-inbox: '2026-10-2${id.slice(-1)}T09:00:00Z'`,
     ...(phase === 'inbox' ? [] : [`entered-${phase}: '2026-10-30T09:00:00Z'`]),
+    ...(interactive ? ['interactive: true'] : []),
     '---',
     '',
     '## Description',
@@ -77,13 +79,14 @@ test.use({
     'tickets/10-inbox/T-0102.md': ticket('T-0102', 'Export tags as CSV', 'inbox', 'low'),
     'tickets/20-prioritized/T-0103.md': ticket('T-0103', 'Faster vault search', 'prioritized'),
     'tickets/30-plan/T-0107.md': ticket('T-0107', 'Daily note templates per weekday', 'plan'),
+    'tickets/50-build/T-0108.md': ticket('T-0108', 'Weekly security audit run', 'build', 'normal', true),
     'tickets/50-build/T-0104.md': ticket('T-0104', 'Drag headings in the outline', 'build', 'high'),
     'tickets/60-review/T-0105.md': ticket('T-0105', 'Spellcheck inside tables', 'review'),
     'tickets/80-done/T-0106.md': ticket('T-0106', 'Fix the palette race in CI', 'done'),
   },
 });
 
-test.describe('Work panel (req-75 W1)', () => {
+test.describe('Work panel (req-75 W1/W1b)', () => {
   test('groups the tickets, and a ticket opens with its thread beside it', async ({ page, electronApp }, testInfo) => {
     // The Work panel gets the left dock to itself, as an owner would set it.
     await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
@@ -119,20 +122,32 @@ test.describe('Work panel (req-75 W1)', () => {
       },
     );
 
-    const group = (id: string) => panel.locator(`.work-group-${id} .work-row`);
-    await expect(group('needs')).toHaveCount(3);
-    await expect(group('needs').first()).toHaveAttribute('data-id', 'T-0104');
+    const group = (id: string) => panel.locator(`.work-group-${id}`);
+    const rows = (id: string) => group(id).locator('.work-row');
+    // Needs you: the question, the review checkpoint, the finished ticket.
+    await expect(rows('needs')).toHaveCount(3);
+    await expect(rows('needs').first()).toHaveAttribute('data-id', 'T-0104');
+    await expect(panel.locator('.work-row[data-id="T-0104"] .work-kind')).toHaveText('Question');
     await expect(panel.locator('.work-row[data-id="T-0104"] .work-row-line')).toHaveText(
-      'Asks: Should dragging a heading also move the text below it?',
+      'Should dragging a heading also move the text below it?',
     );
-    await expect(panel.locator('.work-row[data-id="T-0105"] .work-action')).toHaveText(['Approve → Commit', 'Refine with agent']);
-    await expect(panel.locator('.work-row[data-id="T-0106"] .work-action')).toHaveText(['Accept']);
-    // Ideas: priority first; the prioritized one carries the Queued chip.
-    await expect(group('ideas')).toHaveCount(3);
-    await expect(group('ideas').first()).toHaveAttribute('data-id', 'T-0101');
+    await expect(panel.locator('.work-row[data-id="T-0105"] .work-kind')).toHaveText('Review');
+    await expect(panel.locator('.work-row[data-id="T-0105"] .work-row-line')).toHaveText('waits for your review');
+    await expect(panel.locator('.work-row[data-id="T-0106"] .work-kind')).toHaveText('Ready to try');
+    // Shaping holds the reserved dialog; Running the live plan run; the
+    // ideas keep their queue chip and carry the triage chip.
+    await expect(rows('shaping')).toHaveCount(1);
+    await expect(rows('shaping').first()).toHaveAttribute('data-id', 'T-0108');
+    await expect(panel.locator('.work-row[data-id="T-0108"] .work-row-sub')).toHaveText('Dialog not started');
+    await expect(rows('running')).toHaveCount(1);
+    await expect(rows('running').first()).toHaveAttribute('data-id', 'T-0107');
+    await expect(panel.locator('.work-row[data-id="T-0107"] .work-run-step')).toHaveText('Planning');
+    await expect(rows('ideas')).toHaveCount(3);
+    await expect(rows('ideas').first()).toHaveAttribute('data-id', 'T-0101');
     await expect(panel.locator('.work-row[data-id="T-0103"] .work-row-queued')).toHaveText('Queued');
-    await expect(group('progress')).toHaveCount(1);
-    await expect(group('progress').first()).toHaveAttribute('data-id', 'T-0107');
+    await expect(panel.locator('.work-row[data-id="T-0102"] .work-track')).toHaveText('Triage');
+    // The footer names the workers out there (the fleet chip left the header).
+    await expect(panel.locator('.tickets-statusbar-fleet')).toHaveText(/2 workers · OpenCode 2/);
 
     const box = (await panel.boundingBox())!;
     expect(box.width).toBeLessThan(420);
@@ -144,11 +159,26 @@ test.describe('Work panel (req-75 W1)', () => {
     const thread = page.locator('.tickets-thread').filter({ visible: true });
     await expect(thread).toBeVisible();
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Drag headings in the outline');
+    await expect(thread.locator('.tickets-thread-meta')).toHaveText(/waiting for you · OpenCode · glm-5.3-flash/);
     await expect(thread.locator('.tickets-takeover-wait-text')).toHaveText(
       'Should dragging a heading also move the text below it?',
     );
+    // A question carries no decision bar — that is the checkpoints'.
+    await expect(thread.locator('.tickets-thread-decisions')).toBeHidden();
     await expect(panel.locator('.work-row[data-id="T-0104"]')).toHaveClass(/work-row-open/);
     await page.screenshot({ path: testInfo.outputPath('work-panel-wide.png') });
+
+    // The decisions live in the thread now (req-75 W1b): the review
+    // checkpoint offers the move, the finished ticket the Accept.
+    await panel.locator('.work-row[data-id="T-0105"]').click();
+    await expect(thread.locator('.tickets-thread-title')).toHaveText('Spellcheck inside tables');
+    await expect(thread.locator('.tickets-thread-decisions')).toBeVisible();
+    await expect(thread.locator('.tickets-thread-decisions .tickets-takeover-btn')).toHaveText([
+      'Approve → Commit',
+      'Refine with agent',
+    ]);
+    await panel.locator('.work-row[data-id="T-0106"]').click();
+    await expect(thread.locator('.tickets-thread-decisions .tickets-takeover-btn')).toHaveText(['Accept']);
 
     // A second ticket reuses the one thread tab.
     await panel.locator('.work-row[data-id="T-0107"]').click();

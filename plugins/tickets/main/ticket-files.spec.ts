@@ -5,6 +5,7 @@ import {
   parseTicketFile,
   patchHeaderFields,
   patchTicketFile,
+  patchTrack,
   ticketPathParts,
 } from './ticket-files';
 
@@ -123,6 +124,19 @@ describe('parseTicketFile', () => {
     expect(noFence.issues[0]!.level).toBe('error');
     const badYaml = parseTicketFile('---\nid: [broken\n---\n', 'tickets/inbox/T-0003.md');
     expect(badYaml.issues[0]!.level).toBe('error');
+  });
+
+  it('reads the track — auto or shape, anything else warns and reads as not triaged (req-75 W1b)', () => {
+    const auto = parseTicketFile(CANONICAL.replace('priority: high', 'track: auto\npriority: high'), 'tickets/inbox/T-0042.md');
+    expect(auto.meta.track).toBe('auto');
+    expect(auto.issues).toEqual([]);
+    const shape = parseTicketFile(CANONICAL.replace('priority: high', 'track: shape\npriority: high'), 'tickets/inbox/T-0042.md');
+    expect(shape.meta.track).toBe('shape');
+    expect(shape.issues).toEqual([]);
+    const garbage = parseTicketFile(CANONICAL.replace('priority: high', 'track: fast\npriority: high'), 'tickets/inbox/T-0042.md');
+    expect(garbage.meta.track).toBeNull();
+    expect(garbage.issues).toEqual([{ level: 'warning', message: 'track must be auto or shape' }]);
+    expect(parseTicketFile(CANONICAL, 'tickets/inbox/T-0042.md').meta.track).toBeNull();
   });
 
   it('reads the interactive reservation only from a bare true (req-65)', () => {
@@ -303,6 +317,39 @@ describe('patchHeaderFields (req-62)', () => {
   it('refuses a block without fences or with broken YAML', () => {
     expect(() => patchHeaderFields('id: T-0042', { priority: 'low' })).toThrow('no frontmatter fence');
     expect(() => patchHeaderFields('---\nid: [\n---', { priority: 'low' })).toThrow('does not parse');
+  });
+
+  it('sets the track key and removes it again (req-75 W1b)', () => {
+    const set = patchHeaderFields(BLOCK, { track: 'shape' });
+    expect(set).toContain('track: shape');
+    expect(parseTicketFile(`${set}\n`, 'tickets/inbox/T-0042.md').meta.track).toBe('shape');
+    expect(patchHeaderFields(set, { track: null })).not.toContain('track:');
+  });
+});
+
+describe('patchTrack (req-75 W1b)', () => {
+  const now = new Date('2026-10-31T09:00:00Z');
+
+  it('sets the key, keeps everything else and logs the value', () => {
+    const out = patchTrack(CANONICAL, 'auto', now, 'owner@desk');
+    expect(out).toContain('track: auto');
+    expect(out).toContain("- '2026-10-31T09:00:00Z' owner@desk — track auto");
+    expect(parseTicketFile(out, 'tickets/inbox/T-0042.md').meta.track).toBe('auto');
+    // Everything else survives verbatim.
+    expect(out).toContain('title: "Fix the palette race in CI"');
+    expect(out).toContain("entered-inbox: '2026-10-17T14:32:00Z'");
+  });
+
+  it('null removes the key and logs "track none"', () => {
+    const withTrack = CANONICAL.replace('priority: high', 'track: shape\npriority: high');
+    const out = patchTrack(withTrack, null, now, 'owner@desk');
+    expect(out).not.toContain('track:');
+    expect(out).toContain('— track none');
+    expect(parseTicketFile(out, 'tickets/inbox/T-0042.md').meta.track).toBeNull();
+  });
+
+  it('refuses a file without a parseable fence', () => {
+    expect(() => patchTrack('no fence', 'auto', now, 'owner@desk')).toThrow('no frontmatter fence');
   });
 });
 

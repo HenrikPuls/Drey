@@ -1,12 +1,14 @@
 /**
- * The Work panel's groups (req-75 W1, ADR-0087): the board snapshot and
- * the fleet's runs folded into three lists — **Needs you** (everything
- * that waits on the owner), **Ideas** (the backlog before the machine)
- * and **In progress** (the rest up to the terminal phase). Pure, so the
- * panel and its specs share it; the phases stay the storage format and
- * are only shown as a row's status.
+ * The Work panel's groups (req-75 W1, W1b; ADR-0087): the board snapshot
+ * and the fleet's runs folded into four lists — **Needs you** (everything
+ * that waits on the owner), **Shaping** (the interactive dialogs), **Running**
+ * (the rest on its way through the pipeline) and **Ideas** (the backlog
+ * before the machine). Pure, so the panel and its specs share it; the
+ * phases stay the storage format and are only shown as a row's status.
  *
- * Every ticket lands in exactly one group: Needs you wins.
+ * Every ticket lands in exactly one group: Needs you wins, then Shaping.
+ * The Done-this-week group is not built here — it comes from the
+ * snapshot's `recentDone` (archived tickets), which the panel draws.
  */
 import type { NeedItem } from '../shared/remote-protocol';
 import {
@@ -22,7 +24,7 @@ import { needsOf } from '../main/remote/needs';
 
 const LIVE: ReadonlySet<RunState> = new Set(['starting', 'running', 'stopping', 'detached']);
 
-export type WorkGroupId = 'needs' | 'ideas' | 'progress';
+export type WorkGroupId = 'needs' | 'shaping' | 'running' | 'ideas' | 'done';
 
 export interface WorkRow {
   readonly card: TicketCard;
@@ -38,8 +40,9 @@ export interface WorkRow {
 
 export interface WorkGroups {
   readonly needs: readonly WorkRow[];
+  readonly shaping: readonly WorkRow[];
+  readonly running: readonly WorkRow[];
   readonly ideas: readonly WorkRow[];
-  readonly progress: readonly WorkRow[];
 }
 
 /** A phase the machine works: an agent pool or a CI check. */
@@ -167,9 +170,17 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
   }
 
   const ideas: WorkRow[] = [];
-  const progress: { row: WorkRow; position: number; index: number }[] = [];
+  const shaping: { row: WorkRow; position: number; index: number }[] = [];
+  const running: { row: WorkRow; position: number; index: number }[] = [];
   for (const { card, column, index } of placed.values()) {
     if (seen.has(card.id)) {
+      continue;
+    }
+    // Shaping: the owner works this ticket in an interactive dialog —
+    // the reservation stands or a live dialog run carries it.
+    if (card.meta.interactive || liveRunOf(card.id, runs)?.interactive !== undefined) {
+      const position = column.unknown ? -1 : pipeline.findIndex((phase) => phase.id === column.phase.id);
+      shaping.push({ row: row(card, column, null), position, index });
       continue;
     }
     if (ideaIds.has(column.phase.id)) {
@@ -178,14 +189,22 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
     }
     // Unknown directories sort after every configured phase.
     const position = column.unknown ? -1 : pipeline.findIndex((phase) => phase.id === column.phase.id);
-    progress.push({ row: row(card, column, null), position, index });
+    running.push({ row: row(card, column, null), position, index });
   }
   ideas.sort(ideaOrder(firstPhaseId));
-  // In progress: closest to done first (finishing beats starting), then
-  // the column's own derived order.
-  progress.sort((a, b) => (a.position !== b.position ? b.position - a.position : a.index - b.index));
+  // Shaping and Running: closest to done first (finishing beats
+  // starting), then the column's own derived order.
+  const byProgress = (a: { position: number; index: number }, b: { position: number; index: number }): number =>
+    a.position !== b.position ? b.position - a.position : a.index - b.index;
+  shaping.sort(byProgress);
+  running.sort(byProgress);
 
-  return { needs, ideas, progress: progress.map((entry) => entry.row) };
+  return {
+    needs,
+    shaping: shaping.map((entry) => entry.row),
+    running: running.map((entry) => entry.row),
+    ideas,
+  };
 }
 
 /** What a checkpoint asks of the owner: approve into the next phase, or accept into the archive. */
@@ -203,39 +222,107 @@ export function checkpointActionOf(board: BoardSnapshot, phaseId: string): Check
   return { kind: 'approve', to: next.phase.id, label: `Approve → ${next.phase.title}` };
 }
 
-/** The one line under a row's title: why it waits, or where it stands. */
+/** The kind chip of a Needs-you row (req-75 W1b): one short word for why. */
+export function needKindLabel(need: NeedItem, board: BoardSnapshot): string {
+  switch (need.kind) {
+    case 'question':
+      return 'Question';
+    case 'permission':
+      return 'Approval';
+    case 'red-gate':
+      return 'Gate red';
+    case 'failed':
+      return 'Run failed';
+    default: {
+      const configured = board.columns.filter((column) => !column.unknown);
+      const index = configured.findIndex((column) => column.phase.id === need.phase);
+      // The terminal phase holds a result to try; a checkpoint right
+      // after the plan column holds a plan to approve.
+      if (index === configured.length - 1) {
+        return 'Ready to try';
+      }
+      const firstMachine = configured.findIndex((column) => isMachinePhase(column.phase));
+      return index - 1 === firstMachine ? 'Plan to approve' : 'Review';
+    }
+  }
+}
+
+/** One Running row's second line: the step word and what the worker does. */
+export interface RunningStep {
+  readonly step: string;
+  readonly line: string;
+  readonly live: boolean;
+}
+
+export function runningStepOf(row: WorkRow, board: BoardSnapshot): RunningStep {
+  const run = row.run;
+  if (run !== null) {
+    const title = board.columns.find((c) => c.phase.id === row.phase.id)?.phase.title ?? row.phase.title;
+    const step =
+      row.phase.id === 'plan' ? 'Planning' : row.phase.id === 'build' ? 'Building' : row.phase.id === 'commit' ? 'Merging' : title;
+    return { step, line: (run.activity ?? '').trim(), live: true };
+  }
+  const blocker = row.card.blocked[0];
+  if (blocker === undefined) {
+    return { step: 'Queued', line: 'waits for a free worker', live: false };
+  }
+  const title =
+    board.columns.flatMap((column) => column.tickets).find((card) => card.id === blocker)?.meta.title ?? blocker;
+  return { step: 'Queued', line: `waits for “${title}”`, live: false };
+}
+
+/** A stamp as the rows show it: `now`, `4 min`, `3 h`, `yesterday`, `2 d`. */
+export function ageWords(iso: string | null, nowMs: number): string {
+  if (iso === null) {
+    return '';
+  }
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) {
+    return '';
+  }
+  const minutes = Math.floor((nowMs - t) / 60_000);
+  if (minutes < 1) {
+    return 'now';
+  }
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours} h`;
+  }
+  if (hours < 48) {
+    return 'yesterday';
+  }
+  return `${Math.floor(hours / 24)} d`;
+}
+
+/** The muted line after a Needs-you row's kind chip: why it waits. */
 export function statusLineOf(row: WorkRow, board: BoardSnapshot): string {
   const need = row.need;
-  if (need !== null) {
-    switch (need.kind) {
-      case 'question': {
-        // A shaped question (req-75 W2) reads as its question, not the blob.
-        const shaped = row.run?.waiting?.shaped ?? null;
-        return shaped === null ? `Asks: ${need.text}` : `Asks: ${shaped.question}`;
-      }
-      case 'permission':
-        return `Wants to: ${need.text}`;
-      case 'red-gate':
-        return `Gate red: ${need.text}`;
-      case 'failed':
-        return `Run failed: ${need.text}`;
-      default: {
-        const action = checkpointActionOf(board, need.phase);
-        return action.kind === 'accept' ? 'Done — accept it into the archive' : `${row.phase.title} — waits for your review`;
+  if (need === null) {
+    return '';
+  }
+  switch (need.kind) {
+    case 'question': {
+      // A shaped question (req-75 W2) reads as its question, not the blob.
+      const shaped = row.run?.waiting?.shaped ?? null;
+      return shaped === null ? need.text : shaped.question;
+    }
+    case 'permission':
+    case 'red-gate':
+    case 'failed':
+      return need.text;
+    default: {
+      switch (needKindLabel(need, board)) {
+        case 'Ready to try':
+          // `<n> files · checks green` is W3's; until then the checks say it.
+          return 'checks green';
+        case 'Plan to approve':
+          return 'plan ready';
+        default:
+          return 'waits for your review';
       }
     }
   }
-  if (row.card.blocked.length > 0) {
-    return `Blocked by ${row.card.blocked.join(', ')}`;
-  }
-  if (row.run !== null) {
-    return `${row.phase.title} — ${row.run.provider} ${row.run.state === 'detached' ? 'detached' : 'working'}`;
-  }
-  if (row.queued) {
-    return 'Queued for the fleet';
-  }
-  if (row.card.meta.parkedReason !== null) {
-    return `Parked: ${row.card.meta.parkedReason}`;
-  }
-  return row.phase.title;
 }
