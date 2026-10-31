@@ -1010,8 +1010,18 @@ run carries it — else its `CLAUDE.md` or `AGENTS.md`), the phase's prompt, the
 run-specific parts (the worktree's diff so far, and on a retry the gate
 failure). Long parts are capped — the gate failure keeps its tail, the
 diff stat its head (40 lines / 4 KB and 50 lines / 4 KB by default; the
-four caps are number fields under Settings → Tickets → Fleet). A
-terminal can read the cost overview the same way the board does:
+four caps are number fields under Settings → Tickets → Fleet). A run
+that continues the previous run's session gets only what changed since
+(the diff, the gate failure, the gate). Its full brief is already in
+that session, so it is not sent twice. When the ticket's plan,
+description or gate changed in the meantime, the full brief goes again.
+
+Every model call of a run re-reads the run's whole context, so a long
+run gets expensive fast. **Context cap** (Settings → Tickets → Fleet,
+160,000 tokens by default) makes OpenCode compact a worker's context
+once it reaches that size, instead of letting it grow toward the
+model's full window (a million tokens for GLM). 0 turns the cap off.
+A terminal can read the cost overview the same way the board does:
 `GET /report` on the runner (see `plugins/tickets/FLEET.md`) groups the
 runs' tokens by ticket, phase and model, and shows how much of each
 run's input was spent before its first write — the exploration cost.

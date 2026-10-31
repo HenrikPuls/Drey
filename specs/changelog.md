@@ -20,6 +20,44 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-80 — Fleet token economy
+
+**Not yet manually verified by the owner.** Owner request, outside the
+list (2026-10-31), from the analysis of T-0061's build run: 87.2M input
+(86.7M cached) for 107k output. Its stream showed five causes, each
+fixed here:
+
+- **No context ceiling.** The run's context grew from 58k to 392k
+  because GLM's 1M window never triggers OpenCode's auto-compaction, and
+  each of about 240 model calls re-read all of it (about 60M real cache
+  reads). The new `fleet.contextCapTokens` (default 160000, per
+  provider/model overrides, Settings → Tickets → Fleet → *Context cap*)
+  starts each OpenCode server with `OPENCODE_CONFIG_CONTENT` setting the
+  pinned model's `limit.context` (`opencodeCapConfig`; measured on
+  v2.0.32: a `context`-only override is dropped, so `output` rides too).
+- **Replayed telemetry.** A session resumed in place after a runner
+  handover re-emitted every old message, `turnUsage` included: 400
+  recorded turns where 240 were real, and 102.5M cache reads recorded
+  against 60.7M. The adapter now marks what predates its first prompt
+  as seen (`seenBeforeMs`), on resume as on re-attach.
+- **"I'm back" turns.** A held worker that stood idle got
+  `HANDOVER_HELD` on every handover, a full-context turn for one line.
+  `RunHandover.turnIdle` + `ProviderAdapter.promptless` now resume it
+  without a prompt.
+- **The brief twice.** A `resume` start posted the whole context pack
+  into a session that already held it (three copies sat in T-0061's
+  session). `composeInstruction` now also yields a short continuation,
+  and the runner sends it while `briefDigest` matches the resumed run's.
+- **Silent refusals.** Three runs ended in 6 s with 0 tokens, and each
+  was gated on untouched code. An idle marker with no assistant message
+  after the newest prompt now fails the run without a gate.
+
+Specs in `providers.spec.ts` (no replay, the empty-answer refusal, the
+cap config and env), `runs.spec.ts` (promptless held handover, the
+continuation vs a changed brief), `request.spec.ts` (continuation and
+digest), `handover.spec.ts` (`contextCap` precedence). FLEET.md
+"Token economy", manual §13 and the settings page updated.
+
 ### Fix — the runner beside the ticket again, running tickets first, one Open row, the chain survives a rebuild
 
 **Not yet manually verified by the owner.** Owner request, outside the

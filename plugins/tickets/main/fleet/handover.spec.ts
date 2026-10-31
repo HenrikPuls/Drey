@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMPACT_CAPABILITY, compactThreshold, HANDOVER_CANDIDATE_STATES, resolveHandover, type HandoverCandidate, type HandoverInput } from './handover';
+import { COMPACT_CAPABILITY, compactThreshold, contextCap, HANDOVER_CANDIDATE_STATES, resolveHandover, type HandoverCandidate, type HandoverInput } from './handover';
 import { DEFAULT_FLEET_HANDOVER, type FleetHandoverConfig, type RunState } from './protocol';
 
 /**
@@ -179,11 +179,26 @@ describe('COMPACT_CAPABILITY', () => {
   });
 });
 
+describe('contextCap — the mid-run cap, same precedence (req-80)', () => {
+  it('model beats provider beats base; 0 means none', () => {
+    const config = {
+      compactAboveTokens: 60_000,
+      resumePauseTtlMin: 15,
+      contextCapTokens: 160_000,
+      contextCapTokensOverrides: { opencode: 120_000, 'opencode/glm-5.3': 0 },
+    };
+    expect(contextCap(config, 'opencode', 'glm-5.3')).toBe(0);
+    expect(contextCap(config, 'opencode', 'glm-5.3-flash')).toBe(120_000);
+    expect(contextCap(config, 'claude-code', null)).toBe(160_000);
+  });
+});
+
 describe('compactThreshold — the per-provider/model overrides', () => {
   const config = {
     compactAboveTokens: 60_000,
     compactAboveTokensOverrides: { opencode: 40_000, 'opencode/glm-5.3': 20_000, broken: -1 },
     resumePauseTtlMin: 15,
+    contextCapTokens: 160_000,
   };
 
   it('the most-specific key wins; unknown keys and a bare base never match', () => {

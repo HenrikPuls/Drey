@@ -162,6 +162,12 @@ function fleetSection(api: DreyPluginApi): HTMLElement {
       numberConfig(api, 'fleet.resumePauseTtlMin'),
       'A pause within this window counts as warm: the previous session resumes and re-pays its transcript as cache reads.',
     ),
+    ...kv(
+      'tset-context-cap',
+      'Context cap — tokens',
+      numberConfig(api, 'fleet.contextCapTokens'),
+      'OpenCode compacts a running worker\'s context once it reaches this size instead of the model\'s full window. Every model call re-reads the whole context, so a long run costs far less under a cap. 0 = the model\'s own window.',
+    ),
   );
   section.append(head, rows);
   return section;

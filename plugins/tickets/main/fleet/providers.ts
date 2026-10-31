@@ -211,6 +211,11 @@ export interface ProviderStart {
    */
   readonly compactFirst?: boolean;
   /**
+   * The context window the worker compacts at (req-80); 0 or absent =
+   * the model's own. OpenCode only — a CLI worker ignores it.
+   */
+  readonly contextCap?: number;
+  /**
    * The resume could not be established (a missing session, a CLI
    * refusal) — reported instead of prompting; the supervisor falls
    * back to a fresh worker under the same run id. Fires at most once,
@@ -313,6 +318,12 @@ export interface ProviderAdapter {
   readonly label: string;
   /** True when steer reaches a live worker without ending it. */
   readonly liveInject: boolean;
+  /**
+   * True when a resumed session can stand without a first prompt — an
+   * empty instruction binds the session and posts nothing (req-80;
+   * OpenCode's server). A CLI needs a prompt to run at all.
+   */
+  readonly promptless?: boolean;
   spawn(start: ProviderStart): WorkerHandle;
   /**
    * A handle on a worker that outlived its runner (absent when the provider
@@ -784,6 +795,26 @@ export function modelBody(model: string | null, text: string): {
   };
 }
 
+/**
+ * The inline OpenCode config that caps the pinned model's window (req-80):
+ * OpenCode auto-compacts against `limit.context`, and an override that
+ * names `context` alone is dropped whole (measured on v2.0.32), so the
+ * output limit rides too. Null without a cap or a `provider/model` pin.
+ */
+export function opencodeCapConfig(model: string | null, cap: number): string | null {
+  if (model === null || !(cap > 0)) {
+    return null;
+  }
+  const slashAt = model.indexOf('/');
+  if (slashAt <= 0 || slashAt === model.length - 1) {
+    return null;
+  }
+  const providerID = model.slice(0, slashAt).trim();
+  const modelID = stripVariant(model.slice(slashAt + 1).trim());
+  const limit = { context: Math.floor(cap), output: Math.min(32_000, Math.floor(cap / 4)) };
+  return JSON.stringify({ provider: { [providerID]: { models: { [modelID]: { limit } } } } });
+}
+
 /** Drops a `#variant` suffix a pin or a catalog id may carry (`glm-5.3#fast`). */
 export function stripVariant(id: string): string {
   const at = id.indexOf('#');
@@ -827,6 +858,8 @@ export function opencodeAdapter(
       ended: false,
       seenAssistant: new Set<string>(),
       seenTools: new Set<string>(),
+      /** Messages settled at or before this instant are history, never re-emitted (attach and resume). */
+      seenBeforeMs: (attached?.seenBeforeMs ?? null) as number | null,
       lastText: '',
       contextTokens: 0,
     };
@@ -1363,11 +1396,21 @@ export function opencodeAdapter(
               start.onEvent({ ts: nowIso(now), kind: 'usage', turn });
             }
           }
+          /**
+           * Whether a model message follows the newest prompt (req-80) —
+           * read from the list's order, never from the server's clock.
+           */
+          let answered = true;
           // The API lists newest first; walk chronologically.
           for (const m of (body.data ?? []).slice().reverse()) {
-            if (m.type === 'assistant' && attached !== null && m.id !== undefined) {
+            if (m.type === 'user') {
+              answered = false;
+            } else if (m.type === 'assistant') {
+              answered = true;
+            }
+            if (m.type === 'assistant' && state.seenBeforeMs !== null && m.id !== undefined) {
               const settledAt = m.time?.completed ?? m.time?.created ?? 0;
-              if (settledAt > 0 && settledAt <= attached.seenBeforeMs) {
+              if (settledAt > 0 && settledAt <= state.seenBeforeMs) {
                 state.seenAssistant.add(m.id);
                 for (const part of m.content ?? []) {
                   if (part.type === 'tool' && part.id !== undefined) {
@@ -1462,6 +1505,19 @@ export function opencodeAdapter(
               if (!state.ended) {
                 state.ended = true;
                 start.onEvent({ ts: nowIso(now), kind: 'error', text: providerErrorText(m.error) });
+                void killWorker();
+              }
+            } else if (m.type === 'idle' && (m.time?.created ?? 0) >= state.lastPromptAt && !answered && !state.held) {
+              // A turn that ends without one model message is a refusal
+              // the server did not mark failed (T-0061: three runs of 0
+              // tokens, each gated on untouched code) — the same failure.
+              if (!state.ended) {
+                state.ended = true;
+                start.onEvent({
+                  ts: nowIso(now),
+                  kind: 'error',
+                  text: m.error !== undefined ? providerErrorText(m.error) : 'the provider answered the prompt with nothing — no model message, no tokens',
+                });
                 void killWorker();
               }
             } else if (m.type === 'idle' && (m.time?.created ?? 0) >= state.lastPromptAt) {
@@ -1698,11 +1754,19 @@ export function opencodeAdapter(
     void (async (): Promise<void> => {
       const port = await pickPort();
       address = `http://127.0.0.1:${port}`;
+      const capConfig = opencodeCapConfig(start.model, start.contextCap ?? 0);
       server = spawnFn(
         'opencode',
         ['serve', '--hostname', '127.0.0.1', '--port', String(port)],
-        { cwd: start.cwd },
+        { cwd: start.cwd, ...(capConfig !== null ? { env: { OPENCODE_CONFIG_CONTENT: capConfig } } : {}) },
       );
+      if (capConfig !== null) {
+        start.onEvent({
+          ts: nowIso(now),
+          kind: 'note',
+          text: `context cap: ${Math.floor(start.contextCap!)} tokens — OpenCode compacts the session there`,
+        });
+      }
       server.onExit((code) => finish(code));
 
       // The server prints its credential on stdout:
@@ -1799,8 +1863,13 @@ export function opencodeAdapter(
         kind: 'note',
         text: `opencode serve on 127.0.0.1:${port}, session ${state.sessionRef}`,
       });
-      // Before the prompt: the resumed session's totals are its past only.
+      // Before the prompt: the resumed session's totals are its past only,
+      // and so are its messages — a fresh adapter that read them again
+      // replayed every old turn's usage into this run's telemetry (req-80).
       await readUsageBase();
+      if (start.resumeRef !== null) {
+        state.seenBeforeMs = now().getTime();
+      }
       // Then, when asked, the native compact — it must settle BEFORE the
       // prompt and before the poll's `lastPromptAt` exists (T-0049).
       await compactBeforePrompt();
@@ -1813,8 +1882,11 @@ export function opencodeAdapter(
       void reportContextWindow();
 
       // The prompt POST queues the turn and returns at once; the poll
-      // loop watches the message list for the `idle` end marker.
-      await postPrompt(start.instruction);
+      // loop watches the message list for the `idle` end marker. An
+      // empty instruction is a resumed session that only stands (req-80).
+      if (start.instruction !== '') {
+        await postPrompt(start.instruction);
+      }
     })().catch(async (error: unknown) => {
       if (state.alive) {
         start.onEvent({ ts: nowIso(now), kind: 'error', text: String(error).slice(0, 400) });
@@ -1832,6 +1904,7 @@ export function opencodeAdapter(
     id: 'opencode',
     label: 'OpenCode',
     liveInject: true,
+    promptless: true,
     spawn: (start) => build(start, null),
     attach: (start, info) => build(start, info),
   };

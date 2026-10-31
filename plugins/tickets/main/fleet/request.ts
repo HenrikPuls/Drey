@@ -6,6 +6,7 @@
  * cannot drift. Pure: file reads (the prompt text, the ticket text)
  * stay with the caller.
  */
+import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import path from 'node:path';
 import {
@@ -193,6 +194,8 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     model: assignment.model,
     permissionMode: input.permissionMode,
     instruction: instruction.text,
+    continuationInstruction: instruction.continuation,
+    briefDigest: createHash('sha256').update(instruction.stable).digest('hex'),
     acceptance,
     gate: acceptance.length > 0 ? 'commands' : 'structural',
     git: input.gitPath.trim() === '' ? 'git' : input.gitPath.trim(),

@@ -258,6 +258,37 @@ describe('RunSupervisor', () => {
     expect(text).toContain('handover resume');
   });
 
+  it('a resume is prompted with the continuation while the brief is unchanged — the full brief otherwise (req-80)', async () => {
+    const rel = await writeTicket();
+    await seedRun('R-old', { endedAt: '2026-10-17T11:57:00Z' });
+    const file = path.join(fleetRoot, 'runs', 'R-old', 'run.json');
+    const seeded = JSON.parse(await fsp.readFile(file, 'utf8')) as { request: Record<string, unknown> };
+    seeded.request['briefDigest'] = 'd1';
+    await fsp.writeFile(file, JSON.stringify(seeded), 'utf8');
+
+    const same = supervisor();
+    await same.sup.adopt();
+    const started = await same.sup.start(
+      request({ ticketRelPath: rel, handover: 'auto', briefDigest: 'd1', continuationInstruction: 'Only what changed.' }),
+    );
+    expect(same.adapter.starts[0]!.resumeRef).toBe('ses_R-old');
+    expect(same.adapter.starts[0]!.instruction).toBe('Only what changed.');
+    const id = (started as { run: { id: string } }).run.id;
+    expect(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'stream.jsonl'), 'utf8')).toContain('brief: continuation');
+
+    await same.sup.stop(id, null);
+    await vi.waitFor(() => expect(same.sup.get(id)?.state).toBe('stopped'));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await fsp.rm(path.join(fleetRoot, 'runs', id), { recursive: true, force: true });
+    const changed = supervisor();
+    await changed.sup.adopt();
+    await changed.sup.start(
+      request({ ticketRelPath: rel, handover: 'auto', briefDigest: 'd2', continuationInstruction: 'Only what changed.' }),
+    );
+    expect(changed.adapter.starts[0]!.resumeRef).toBe('ses_R-old');
+    expect(changed.adapter.starts[0]!.instruction).not.toBe('Only what changed.');
+  });
+
   it('the resolution picks the newest terminal run of the same ticket and model — other tickets and models never', async () => {
     const rel = await writeTicket();
     await seedRun('R-match', { startedAt: '2026-10-17T10:00:00Z', endedAt: '2026-10-17T11:57:00Z' });
@@ -342,7 +373,7 @@ describe('RunSupervisor', () => {
     });
     const { sup, adapter } = supervisor();
     await sup.adopt();
-    sup.setHandoverConfig({ compactAboveTokens: 20_000, resumePauseTtlMin: 15 });
+    sup.setHandoverConfig({ compactAboveTokens: 20_000, resumePauseTtlMin: 15, contextCapTokens: 160_000 });
     const started = await sup.start(request({ ticketRelPath: rel, handover: 'auto' }));
     expect(adapter.starts[0]!.compactFirst).toBe(true);
     expect((started as { run: { handoverMode?: string } }).run.handoverMode).toBe('resume-compact');
@@ -1594,6 +1625,36 @@ describe('RunSupervisor handover', () => {
     expect(second.sup.get(id)?.held).toBe(true);
     expect(second.adapter.starts[0]!.instruction).toBe(HANDOVER_HELD);
     expect(second.adapter.handles[0]!.setHold).toHaveBeenCalledWith(true);
+  });
+
+  it('a held worker that stood idle is resumed without a prompt where the provider can stand (req-80)', async () => {
+    const promptless = (): ReturnType<typeof supervisor> => {
+      const fake = fakeAdapter();
+      const adapter: ProviderAdapter = { ...fake.adapter, id: 'claude-code', attach: undefined, promptless: true };
+      return { ...supervisor({ adapter, exec: noProbe }), adapter: fake };
+    };
+    const first = promptless();
+    const id = await startedClaudeRun(first.sup, first.adapter);
+    expect((await first.sup.takeover(id)).ok).toBe(true);
+    first.adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:00Z', kind: 'usage', turn: 'idle' });
+    await vi.waitFor(() => expect(first.sup.get(id)?.turn).toBe('idle'));
+    await first.sup.handOver();
+
+    const second = promptless();
+    await second.sup.adopt();
+    expect(second.sup.get(id)?.held).toBe(true);
+    expect(second.adapter.starts[0]!.instruction).toBe('');
+
+    // a busy one is still told where it stands
+    const third = promptless();
+    const busy = await startedClaudeRun(third.sup, third.adapter);
+    expect((await third.sup.takeover(busy)).ok).toBe(true);
+    third.adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:00Z', kind: 'usage', turn: 'busy' });
+    await vi.waitFor(() => expect(third.sup.get(busy)?.turn).toBe('busy'));
+    await third.sup.handOver();
+    const fourth = promptless();
+    await fourth.sup.adopt();
+    expect(fourth.adapter.starts.map((s) => s.instruction)).toContain(HANDOVER_HELD);
   });
 
   it('a handed-over run without a session detaches as before', async () => {

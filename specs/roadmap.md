@@ -60,8 +60,8 @@ their changelog markers. The owner's verification round for 1–81 closed
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 90 = req-75 W2; latest requirement id: req-79
-(req-75–78 added 2026-10-31: the Work panel, STRIDE, TARA, the red-gate
+highest used (latest: milestone 90 = req-75 W2; latest requirement id: req-80
+(req-80 = fleet token economy; req-75–78 added 2026-10-31: the Work panel, STRIDE, TARA, the red-gate
 back-move; req-79 = the fleet brief's short instructions file; req-74 = due-date reminders, T-0012; req-73 is readable board
 issues, renumbered from req-66 — the tickets remote holds req-66)),
 the update check's positive answer is inline text — req-43 and req-44
@@ -357,11 +357,12 @@ rest are kept so they still match `docs/11`.
   only carries these numbers as the meta line's tooltip.
 
 - **req-79 (fleet token audit, 2026-10-31):** the other levers the audit
-  of 52 runs / ~372M input tokens found, by size. (1) A run has no
-  context ceiling: four build runs of 174–264 model calls, their context
-  grown to 240–310k, spent 44 % of the total; a budget on
-  `lastTurnContext` or turns that ends the run and starts a fresh one
-  from the diff (T-0049's handover modes) is the largest lever. (2) The
+  of 52 runs / ~372M input tokens found, by size. (1) A run had no
+  context ceiling — req-80 added OpenCode's mid-run compaction at
+  `fleet.contextCapTokens`; still open: a Claude Code worker has no cap
+  (its CLI exposes no window override), and a turn budget that ends a
+  run and starts it fresh from the diff remains the alternative if the
+  compaction's fidelity loss shows. (2) The
   commit phase is mechanical (merge, push, verify from a fresh fetch)
   yet spent 7 % at 15–92 calls per run; the runner could do it in code
   and call a worker only on a conflict. (3) `plugins/tickets/main/index.ts`
