@@ -1,6 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { deepEqual } from '../../../shared/deep-equal';
 import { effectiveChord } from '../../../shared/keybindings';
+import type { GlobalChord, GlobalShortcutStatus } from '../../../shared/ipc-api';
 import { Chord, Command, formatChord, matchesChord, parseChord } from './command';
 
 /**
@@ -35,6 +36,12 @@ import { Chord, Command, formatChord, matchesChord, parseChord } from './command
  *
  * Base commands are registered from `App`; plugins register theirs
  * through the plugin API (ADR-0044).
+ *
+ * A `global` command (SDK 1.37, req-74 W5a) is deliberately NOT matched
+ * in-window: the OS-level `globalShortcut` registration also fires while
+ * Drey is focused, so an in-window binding would run it twice. Main
+ * pushes the press back (see `App`), which calls `run(id)` — the one
+ * path a global command takes.
  */
 @Injectable({ providedIn: 'root' })
 export class KeybindingService {
@@ -47,6 +54,9 @@ export class KeybindingService {
 
   /** Bumped whenever a chord in effect may have changed. */
   private readonly revision = signal(0);
+
+  /** The outcome of main's last system-wide registration round. */
+  private readonly globalStatuses = signal<readonly GlobalShortcutStatus[]>([]);
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -108,6 +118,37 @@ export class KeybindingService {
     return formatChord(this.chordFor(id));
   }
 
+  /**
+   * The global commands with the chord in effect (SDK 1.37) — what `App`
+   * pushes to main for system-wide registration. Reactive: re-read on
+   * every registry or override change.
+   */
+  globalChords(): GlobalChord[] {
+    this.revision();
+    const out: GlobalChord[] = [];
+    for (const command of this.commands.values()) {
+      if (!command.global) {
+        continue;
+      }
+      const chord = this.resolve(command);
+      if (chord !== undefined) {
+        out.push({ id: command.id, chord });
+      }
+    }
+    return out;
+  }
+
+  /** Main's answer to the last global sync (see `App`); feeds the "in use" hint. */
+  setGlobalStatuses(statuses: readonly GlobalShortcutStatus[]): void {
+    this.globalStatuses.set(statuses);
+  }
+
+  /** Whether a global command's chord did not register — another program owns the combo. Reactive. */
+  globalRegistrationFailed(id: string): boolean {
+    const status = this.globalStatuses().find((entry) => entry.id === id);
+    return status !== undefined && !status.registered;
+  }
+
   /** A tooltip with the command's chord appended: `Toggle line numbers (Ctrl G)`. Reactive. */
   titled(label: string, id: string): string {
     const hint = this.hint(id);
@@ -148,7 +189,9 @@ export class KeybindingService {
    * user chose wins over a default that names the same keys; between two
    * defaults the first registered wins. Rebuilding (rather than patching)
    * also drops the chord of a command re-registered without one — a
-   * disabled plugin's inert stand-in.
+   * disabled plugin's inert stand-in. A global command never enters the
+   * in-window bindings: the OS-level registration fires it while Drey is
+   * focused too, so a window binding would double every press.
    */
   private reindex(): void {
     const chosen: Array<{ chord: Chord; command: Command }> = [];
@@ -156,7 +199,7 @@ export class KeybindingService {
     const mouse = new Map<number, Command>();
     for (const command of this.commands.values()) {
       const chord = this.resolve(command);
-      if (chord) {
+      if (chord && !command.global) {
         const list = Object.prototype.hasOwnProperty.call(this.overrides, command.id)
           ? chosen
           : defaults;

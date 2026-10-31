@@ -220,6 +220,61 @@ describe('KeybindingService', () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
+  it('a global command never fires in-window — the press comes back from main (SDK 1.37)', () => {
+    let runs = 0;
+    service.register({
+      id: 't.gl1',
+      label: 'GL1',
+      keybinding: 'Mod+Alt+T',
+      global: true,
+      run: () => runs++,
+    });
+
+    const event = press({ key: 't', ctrlKey: true, altKey: true });
+
+    expect(runs).toBe(0); // not swallowed either: no in-window binding exists
+    expect(event.defaultPrevented).toBe(false);
+    service.run('t.gl1'); // the pushed press runs it, once
+    expect(runs).toBe(1);
+  });
+
+  it('globalChords lists the global commands with the chord in effect', () => {
+    service.register({
+      id: 't.gl2',
+      label: 'GL2',
+      keybinding: 'Mod+Alt+T',
+      global: true,
+      run: () => {},
+    });
+    service.register({ id: 't.gl3', label: 'GL3', keybinding: 'Mod+J', run: () => {} });
+
+    expect(service.globalChords()).toEqual([{ id: 't.gl2', chord: 'Mod+Alt+T' }]);
+
+    service.setOverrides({ 't.gl2': 'Mod+Alt+R' });
+    expect(service.globalChords()).toEqual([{ id: 't.gl2', chord: 'Mod+Alt+R' }]);
+
+    service.setOverrides({ 't.gl2': null }); // no chord left: out of the list
+    expect(service.globalChords()).toEqual([]);
+  });
+
+  it('reports a global chord that did not register, and clears it when main succeeds', () => {
+    service.register({
+      id: 't.gl4',
+      label: 'GL4',
+      keybinding: 'Mod+Alt+T',
+      global: true,
+      run: () => {},
+    });
+
+    expect(service.globalRegistrationFailed('t.gl4')).toBe(false); // no status yet
+    service.setGlobalStatuses([{ id: 't.gl4', chord: 'Mod+Alt+T', registered: false }]);
+    expect(service.globalRegistrationFailed('t.gl4')).toBe(true);
+    expect(service.globalRegistrationFailed('t.other')).toBe(false);
+
+    service.setGlobalStatuses([{ id: 't.gl4', chord: 'Mod+Alt+T', registered: true }]);
+    expect(service.globalRegistrationFailed('t.gl4')).toBe(false);
+  });
+
   it('matches nothing while paused, and again once resumed', () => {
     let runs = 0;
     service.register({ id: 't.o7', label: 'O7', keybinding: 'Mod+Alt+7', run: () => runs++ });
