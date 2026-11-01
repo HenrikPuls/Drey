@@ -802,8 +802,8 @@ Every ticket sits in exactly one group — Needs you wins. Every
 Needs-you, Shaping and Running row carries a **phase chip** — a dot in
 the phase's colour plus its name; the colours are set per column in
 Settings → Tickets → Pipeline (`color:` in pipeline.md, and without one
-a curated default palette applies). A row is the
-title, an age and one line; the open ticket's row is marked with an
+a curated default palette applies). A row leads with the ticket's
+id, then the title, an age and one line; the open ticket's row is marked with an
 accent bar. Click a row to open the ticket's **thread** — the worker's
 page: the thread's header shows the run's light and who is working, and
 above its composer sits the **decision bar** (Approve → next phase,
