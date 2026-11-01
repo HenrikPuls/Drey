@@ -1,7 +1,7 @@
 
 ### req-85 — the Work rows lead with the ticket id
 
-**Not yet manually verified by the owner.** Owner request, 2026-11-01
+Owner request, 2026-11-01
 (outside the list). The Work panel's rows showed only the title; the
 board's stable handle lived in the tooltip alone. Every row — Needs
 you, Shaping, Running, Ideas, Done this week — now leads with a muted
