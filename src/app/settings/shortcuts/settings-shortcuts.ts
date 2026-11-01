@@ -75,6 +75,7 @@ export class SettingsShortcuts implements OnDestroy {
       id: command.id,
       label: command.label,
       defaultChord: this.keys.defaultChord(command.id),
+      global: command.global,
     }));
     return shortcutRows(commands, config);
   });
@@ -110,6 +111,15 @@ export class SettingsShortcuts implements OnDestroy {
     const capture = this.settings.config()?.keybindings.capture ?? null;
     return status !== null && capture !== null && status.chord === capture && !status.registered;
   });
+
+  /**
+   * The same "In use" hint for any row: the capture hotkey through its
+   * main-process status, a global command (SDK 1.37) through main's
+   * last sync answer.
+   */
+  protected rowInUse(row: ShortcutRow): boolean {
+    return row.id === this.captureId ? this.captureInUse() : this.keys.globalRegistrationFailed(row.id);
+  }
 
   protected startRecording(row: ShortcutRow): void {
     this.stopRecording();
