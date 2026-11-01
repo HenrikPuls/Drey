@@ -22,6 +22,7 @@ import type { RunInfo } from '../main/fleet/protocol';
 import type { ChainAlert, ChainAlertAction } from './chain-alerts';
 import { ageWords, needKindLabel, runningStepOf, statusLineOf, workGroups, type WorkGroupId, type WorkRow } from './work-groups';
 import { applyWorkFilter, isFilterActive, NO_WORK_FILTER, type FilteredGroup, type WorkFilterState } from './work-filter';
+import { setSquirrelPose, squirrelNode, squirrelPose } from './squirrel';
 
 export const PRIORITY_LABEL: Readonly<Record<TicketPriority, string>> = {
   urgent: 'Urgent',
@@ -217,6 +218,11 @@ export function workListLivePaint(
       const dot = node.querySelector<HTMLElement>('.work-run-dot');
       if (dot !== null) {
         dot.className = `work-run-dot${step.live ? '' : ' work-run-dot-queued'}`;
+      }
+      // A live row's glyph is the squirrel; its pose follows the run's pulse.
+      const squirrel = node.querySelector<HTMLElement>('.tickets-squirrel');
+      if (squirrel !== null) {
+        setSquirrelPose(squirrel, squirrelPose(row.run, nowMs));
       }
       const stepWord = node.querySelector<HTMLElement>('.work-run-step');
       if (stepWord !== null) {
@@ -507,7 +513,14 @@ function shapingRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
   return node;
 }
 
-/** A Running row: title + the run's age, then dot, the phase chip, the step and the worker's line. */
+/** A live Running row's glyph: the squirrel, posed from the run's pulse. */
+function runSquirrel(run: RunInfo | null): HTMLElement {
+  const node = squirrelNode(12);
+  setSquirrelPose(node, squirrelPose(run, Date.now()));
+  return node;
+}
+
+/** A Running row: title + the run's age, then the glyph, the phase chip, the step and the worker's line. */
 function runningRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLElement {
   const { card } = row;
   const { node, more } = baseRow(deps, card);
@@ -528,7 +541,7 @@ function runningRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow):
   // paint can fill it without touching the row's bones (T-0086).
   const line = el('span', 'work-run-line', step.line);
   line.hidden = step.line === '';
-  sub.append(el('span', `work-run-dot${step.live ? '' : ' work-run-dot-queued'}`), phaseChipNode(row), el('span', 'work-run-step', step.step), line);
+  sub.append(step.live ? runSquirrel(row.run) : el('span', 'work-run-dot work-run-dot-queued'), phaseChipNode(row), el('span', 'work-run-step', step.step), line);
   node.append(sub);
   return node;
 }

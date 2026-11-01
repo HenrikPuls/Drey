@@ -1020,7 +1020,12 @@ lists what the branch carries against its base — each file, its
 status, the lines added and removed — beside **Safe beside others**
 (✓ own worktree). Two quick prompts sit above the prompt box: **What
 are you doing and why?** and **Stop after this step** — a click fills
-the box, you send.
+the box, you send. While a turn runs, the thread shows the worker's
+pulse above the prompt box: a small squirrel that runs while the worker
+works, sprints while output arrives fast and sits when there is nothing
+to do — the same squirrel marks the Running rows and the Workers cards
+— beside what the worker is doing, for how long and the tokens written
+so far.
 
 While the worker is in the middle of a turn, what you send does not cut
 into it: the message waits in a **queue above the prompt box** — click
