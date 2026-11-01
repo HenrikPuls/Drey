@@ -846,10 +846,16 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot, opts?: { dicta
     // fallback hint; the next successful start clears it again.
     const dictationHint = el('p', 'tickets-form-hint', 'Dictation did not start — press Win+H, or type.');
     dictationHint.hidden = true;
+    // The one quiet hint line under the field, shared by dictation and
+    // tidy-up (req-75 W5c): `null` hides it, a string shows it verbatim.
+    const setHint = (text: string | null): void => {
+      dictationHint.textContent = text;
+      dictationHint.hidden = text === null;
+    };
     const startDictation = (): void => {
       description.focus();
       void invokeBoard('dictate').then((result) => {
-        dictationHint.hidden = (result as { ok?: boolean } | null)?.ok === true;
+        setHint((result as { ok?: boolean } | null)?.ok === true ? null : 'Dictation did not start — press Win+H, or type.');
       });
     };
     const descriptionLabelRow = el('div', 'tickets-form-label-row');
@@ -863,6 +869,54 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot, opts?: { dicta
       mic.addEventListener('click', startDictation);
       descriptionLabelRow.append(mic);
     }
+    // req-75 W5c, T-0072: Tidy up, right of the mic — one model call,
+    // on demand, never an automatic rewrite: the owner sees the result
+    // in the fields before creating and can edit or ignore it. The
+    // button is disabled while Description is empty or a run is live;
+    // closing the dialog just drops a late result (no timeout,
+    // ADR-0014 — the detached nodes swallow it).
+    const tidy = el('button', 'icon-btn tickets-form-tidy');
+    tidy.type = 'button';
+    tidy.title = 'Tidy up into a title and description';
+    tidy.setAttribute('aria-label', 'Tidy up');
+    tidy.append(api.ui.icon('sparkles', 14));
+    let tidying = false;
+    // The owner's original words: the input of the FIRST successful
+    // tidy-up, even after later runs on an edited description. A
+    // hand-typed ticket sends no `raw` at all — no Log line.
+    let rawCapture: string | null = null;
+    const refreshTidy = (): void => {
+      tidy.disabled = tidying || description.value.trim() === '';
+    };
+    tidy.addEventListener('click', () => {
+      const input = description.value.trim();
+      if (tidying || input === '') {
+        return;
+      }
+      tidying = true;
+      refreshTidy();
+      setHint('Tidying up…');
+      const settled = (result: unknown): void => {
+        tidying = false;
+        refreshTidy();
+        const r = typeof result === 'object' && result !== null ? (result as Record<string, unknown>) : {};
+        if (r['ok'] === true && typeof r['title'] === 'string' && typeof r['description'] === 'string') {
+          title.value = r['title'];
+          description.value = r['description'];
+          if (rawCapture === null) {
+            rawCapture = input;
+          }
+          setHint(null);
+        } else {
+          // The returned error verbatim; the fields stay as they were.
+          setHint(typeof r['error'] === 'string' ? r['error'] : 'The tidy-up failed.');
+        }
+      };
+      void invokeBoard('tidyCapture', { text: input }).then(settled, settled);
+    });
+    description.addEventListener('input', refreshTidy);
+    refreshTidy();
+    descriptionLabelRow.append(tidy);
     // A div, not a label: the row holds a button now, and a label's
     // first labelable descendant would be that button, not the textarea.
     const descriptionField = el('div', 'tickets-form-field');
@@ -891,6 +945,9 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot, opts?: { dicta
           repo: repos[0] ?? null,
           ...(repos.length > 0 ? { repos } : {}),
           description: description.value,
+          // The raw words behind a tidied capture (req-75 W5c) — only
+          // when Tidy up actually changed the fields.
+          ...(rawCapture !== null ? { raw: rawCapture } : {}),
         }),
       ).then((result) => {
         // The file is pre-filled by the canonical writer — open it so

@@ -7,6 +7,7 @@ import {
   patchTicketFile,
   patchTrack,
   ticketPathParts,
+  type NewTicketInput,
 } from './ticket-files';
 
 const CANONICAL = [
@@ -301,7 +302,7 @@ describe('newTicketFileText', () => {
   });
 
   it('stays byte-identical without rawCapture (req-75 W5c)', () => {
-    const base = {
+    const base: NewTicketInput = {
       id: 'T-0003',
       title: 'Hand typed',
       repo: null,

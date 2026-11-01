@@ -2443,7 +2443,7 @@ const plugin: MainPluginModule = {
       }
       let reply: string;
       try {
-        reply = await ctx.llm.chat(captureTidyMessages(text), { temperature: 0.2 });
+        reply = (await ctx.llm.chat(captureTidyMessages(text), { temperature: 0.2 })).text;
       } catch (error) {
         return { ok: false, error: messageOf(error) };
       }
