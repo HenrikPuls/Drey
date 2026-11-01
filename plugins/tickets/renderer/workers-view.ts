@@ -21,6 +21,7 @@ import { durationWords, headerControls, liveStateWord } from './thread-steps';
 import { contextFill, contextLabel, execClockMs, formatTokens, workerStatus, type Light } from './worker-status';
 import { parseStreamEvents } from './watch-format';
 import { STUCK_REPEATS, recentActions, stuckOf } from './stuck';
+import { setSquirrelPose, squirrelNode, squirrelPose, type SquirrelPose } from './squirrel';
 
 /** A card's action: the header's run controls, narrowed to what a card shows. */
 export type WorkerCardAction = 'pause' | 'continue' | 'stop' | 'tell' | 'nudge';
@@ -45,6 +46,8 @@ export interface WorkerCard {
   readonly actions: readonly WorkerCardAction[];
   /** The worker looks stuck — the card offers Nudge. */
   readonly stuck: boolean;
+  /** The pulse the card's squirrel draws (req-75 W4d). */
+  readonly pose: SquirrelPose;
 }
 
 /** The header controls a card repeats. */
@@ -78,6 +81,7 @@ export function workerCards(runs: readonly RunInfo[], nowMs: number): readonly W
           'tell',
         ],
         stuck: run.stuck === true,
+        pose: squirrelPose(run, nowMs),
       };
     })
     .sort((a, b) => rank[a.light] - rank[b.light] || a.ticketId.localeCompare(b.ticketId));
@@ -120,8 +124,9 @@ export function workersNode(deps: WorkersSectionDeps, runs: readonly RunInfo[], 
     node.dataset['light'] = card.light;
     const top = document.createElement('div');
     top.className = 'tickets-worker-top';
-    const dot = document.createElement('span');
-    dot.className = 'tickets-worker-dot';
+    // The card's pulse: the squirrel, posed from the model (req-75 W4d).
+    const dot = squirrelNode(14);
+    setSquirrelPose(dot, card.pose);
     const state = document.createElement('span');
     state.className = 'tickets-worker-state';
     state.textContent = card.state;

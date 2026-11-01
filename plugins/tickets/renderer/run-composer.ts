@@ -12,6 +12,7 @@ import type { RunInfo, WaitQuestion } from '../main/fleet/protocol';
 import { createMessageQueue, readyToFlush, LIVE_RUN_STATES, type MessageQueue, type QueuedMessage } from './message-queue';
 import { questionNode } from './wait-view';
 import { formatTokens } from './worker-status';
+import { squirrelNode, setSquirrelPose, squirrelPose } from './squirrel';
 
 /** The largest file the prompt box attaches (the runner enforces the same). */
 const MAX_ATTACH_BYTES = 10 * 1024 * 1024;
@@ -580,13 +581,14 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
   // The worker's pulse while a turn runs: what it does now and for how long.
   const progress = el('div', 'tickets-takeover-progress');
   progress.hidden = true;
-  const spinner = el('span', 'tickets-takeover-spinner', '✻');
+  const squirrel = squirrelNode(16);
   const progressText = el('span', 'tickets-takeover-progress-text');
-  progress.append(spinner, progressText);
+  progress.append(squirrel, progressText);
   let busySince: number | null = null;
   let busyRun: string | null = null;
   const paintProgress = (run: RunInfo | null): void => {
     const working = run !== null && LIVE_RUN_STATES.includes(run.state) && run.turn !== 'idle';
+    setSquirrelPose(squirrel, squirrelPose(run, Date.now()));
     if (!working) {
       busySince = null;
       progress.hidden = true;

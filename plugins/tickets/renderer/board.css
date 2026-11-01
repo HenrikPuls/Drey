@@ -1060,14 +1060,6 @@
   gap: 8px;
 }
 
-.tickets-worker-dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--tk-worker-tone);
-}
-
 .tickets-worker-state {
   font-size: 0.82rem;
   font-weight: 600;
@@ -1724,11 +1716,104 @@ details[open] > summary > .tickets-tx-think-preview {
   display: none;
 }
 
-.tickets-takeover-spinner {
-  display: inline-block;
-  font-size: 1rem;
-  color: var(--tk-tone);
-  animation: tickets-spin 2.4s linear infinite;
+/* ---- the worker's pulse: the squirrel (req-75 W4d) ---- */
+
+.tickets-squirrel {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.tickets-squirrel[data-pose='sit'] {
+  color: var(--text-5);
+}
+
+.tickets-squirrel[data-pose='sit'] svg {
+  transform: rotate(-6deg);
+}
+
+.tickets-squirrel[data-pose='run'] svg {
+  animation: tickets-squirrel-bob 0.45s ease-in-out infinite;
+}
+
+.tickets-squirrel[data-pose='run'] .tickets-squirrel-tail {
+  animation: tickets-squirrel-wag 0.45s ease-in-out infinite;
+}
+
+.tickets-squirrel[data-pose='sprint'] svg {
+  transform: rotate(8deg); /* the forward lean — also what reduced motion shows */
+  animation: tickets-squirrel-dash 0.22s ease-in-out infinite;
+}
+
+.tickets-squirrel[data-pose='sprint'] .tickets-squirrel-tail {
+  animation: tickets-squirrel-wag 0.22s ease-in-out infinite;
+}
+
+/* Two short speed lines behind the sprinting squirrel. */
+.tickets-squirrel[data-pose='sprint']::before,
+.tickets-squirrel[data-pose='sprint']::after {
+  content: '';
+  position: absolute;
+  left: -9px;
+  width: 6px;
+  height: 1px;
+  background: var(--text-5);
+  animation: tickets-squirrel-zip 0.22s linear infinite;
+}
+
+.tickets-squirrel[data-pose='sprint']::before {
+  top: 38%;
+}
+
+.tickets-squirrel[data-pose='sprint']::after {
+  top: 64%;
+  animation-delay: 0.11s;
+}
+
+.tickets-squirrel-tail {
+  transform-box: view-box;
+  transform-origin: 18px 6px; /* the stroke's base, where it leaves the head */
+}
+
+@keyframes tickets-squirrel-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1.5px);
+  }
+}
+
+@keyframes tickets-squirrel-dash {
+  0%,
+  100% {
+    transform: translateY(0) rotate(8deg);
+  }
+  50% {
+    transform: translateY(-1.5px) rotate(8deg);
+  }
+}
+
+@keyframes tickets-squirrel-wag {
+  0%,
+  100% {
+    transform: rotate(-8deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
+
+@keyframes tickets-squirrel-zip {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .tickets-takeover-progress-text {
@@ -1739,14 +1824,20 @@ details[open] > summary > .tickets-tx-think-preview {
   animation: tickets-breathe 1.8s ease-in-out infinite;
 }
 
-@keyframes tickets-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .tickets-takeover-spinner,
+  .tickets-squirrel svg,
+  .tickets-squirrel .tickets-squirrel-tail,
+  .tickets-squirrel[data-pose='sprint']::before,
+  .tickets-squirrel[data-pose='sprint']::after {
+    animation: none;
+  }
+
+  /* The poses stay legible: colours and leans hold, nothing moves. */
+  .tickets-squirrel[data-pose='sprint']::before,
+  .tickets-squirrel[data-pose='sprint']::after {
+    opacity: 1;
+  }
+
   .tickets-takeover-progress-text {
     animation: none;
   }
