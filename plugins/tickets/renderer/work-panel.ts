@@ -426,6 +426,12 @@ function baseRow(deps: WorkPanelDeps, card: TicketCard): { node: HTMLElement; mo
   return { node, more };
 }
 
+/** The ticket id left of a row's title (req-85): the board's stable
+ * handle, muted so the title stays the lead. */
+function idNode(id: string): HTMLElement {
+  return el('span', 'work-row-id', id);
+}
+
 /** The issue badge a row with findings carries beside its age. */
 function issuesBadge(card: TicketCard): HTMLElement | null {
   if (card.issues.length === 0) {
@@ -459,7 +465,7 @@ function rowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLEl
     node.dataset['need'] = need.kind;
   }
   const top = el('div', 'work-row-top');
-  top.append(el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
+  top.append(idNode(card.id), el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
   const issues = issuesBadge(card);
   if (issues !== null) {
     top.append(issues);
@@ -488,7 +494,7 @@ function shapingRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
     node.dataset['running'] = 'true';
   }
   const top = el('div', 'work-row-top');
-  top.append(el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
+  top.append(idNode(card.id), el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
   const issues = issuesBadge(card);
   if (issues !== null) {
     top.append(issues);
@@ -510,7 +516,7 @@ function runningRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow):
     node.dataset['running'] = 'true';
   }
   const top = el('div', 'work-row-top');
-  top.append(el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
+  top.append(idNode(card.id), el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
   const issues = issuesBadge(card);
   if (issues !== null) {
     top.append(issues);
@@ -535,7 +541,7 @@ function ideaRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
   if (card.meta.priority === 'urgent' || card.meta.priority === 'high') {
     node.append(el('span', `work-prio-mini work-prio-mini-${card.meta.priority}`, PRIORITY_LABEL[card.meta.priority]));
   }
-  node.append(el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
+  node.append(idNode(card.id), el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
   if (row.queued) {
     const queued = el('span', 'work-row-queued', 'Queued');
     queued.title = 'Queued for the fleet — the next free worker takes it';
@@ -571,6 +577,6 @@ function doneRowNode(done: RecentDone): HTMLElement {
   const node = el('div', 'work-done-row');
   node.dataset['id'] = done.id;
   node.title = `${TICKETS_ARCHIVE_DIR}/${done.id}.md`;
-  node.append(el('span', 'work-done-title', done.title ?? done.id), el('span', 'work-row-age', ageWords(done.at, Date.now())));
+  node.append(idNode(done.id), el('span', 'work-done-title', done.title ?? ''), el('span', 'work-row-age', ageWords(done.at, Date.now())));
   return node;
 }

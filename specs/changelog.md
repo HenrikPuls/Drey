@@ -1,4 +1,14 @@
 
+### req-85 — the Work rows lead with the ticket id
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list). The Work panel's rows showed only the title; the
+board's stable handle lived in the tooltip alone. Every row — Needs
+you, Shaping, Running, Ideas, Done this week — now leads with a muted
+`work-row-id` span before the title; a Done row without a title shows
+the id alone instead of doubling it as the title. Specs: the id-lead
+assertions in `work-panel.spec.ts`.
+
 ### req-84 — explicit entry points: the ticket pair is no longer automatic
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01

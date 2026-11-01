@@ -361,13 +361,46 @@ describe('workListNode', () => {
     const open = workListNode(deps(), snap, [], folds, rerender);
     const rows = [...open.querySelectorAll<HTMLElement>('.work-done-row')];
     expect(rows.map((r) => r.dataset['id'])).toEqual(['T-0014', 'T-0015']);
+    expect(rows[0]!.querySelector('.work-row-id')?.textContent).toBe('T-0014');
     expect(rows[0]!.querySelector('.work-done-title')?.textContent).toBe('Fix the palette race');
-    expect(rows[1]!.querySelector('.work-done-title')?.textContent).toBe('T-0015');
+    expect(rows[1]!.querySelector('.work-done-title')?.textContent).toBe('');
+    expect(rows[1]!.querySelector('.work-row-id')?.textContent).toBe('T-0015');
   });
 
   it('says how to start when the board is empty', () => {
     const list = workListNode(deps(), board({}), [], createGroupFoldStore(null), () => undefined);
     expect(list.querySelector('.work-empty')?.textContent).toBe('No tickets yet — capture one with +');
+  });
+
+  it('leads every row with its ticket id before the title (req-85)', () => {
+    const run = {
+      id: 'r1',
+      ticketId: 'T-0002',
+      provider: 'opencode',
+      state: 'running',
+      startedAt: '2026-10-30T10:00:00Z',
+      endedAt: null,
+      gateFailure: null,
+    } as unknown as RunInfo;
+    const folds = createGroupFoldStore(memoryStorage());
+    folds.setFolded('done', false);
+    const snap = board(
+      {
+        inbox: [card('T-0001', 'inbox'), card('T-0005', 'inbox', { interactive: true })],
+        build: [card('T-0002', 'build')],
+        done: [card('T-0003', 'done')],
+      },
+      [{ id: 'T-0016', title: 'Ledger sync', at: new Date().toISOString() }],
+    );
+    const list = workListNode(deps(), snap, [run], folds, () => undefined);
+    const rows = [...list.querySelectorAll('.work-row, .work-done-row')];
+    expect(rows.length).toBe(5); // one shaped, one needing, one running, one idea, one done
+    for (const row of rows) {
+      const id = row.querySelector<HTMLElement>('.work-row-id')!;
+      const title = row.querySelector<HTMLElement>('.work-row-title, .work-done-title')!;
+      expect(id.textContent).toBe(row.dataset['id']);
+      expect(id.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
   });
 });
 

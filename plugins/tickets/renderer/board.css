@@ -2008,6 +2008,15 @@ details[open] > summary > .tickets-tx-think-preview {
   color: var(--text-heading);
 }
 
+/* The ticket id left of the title (req-85): the stable handle, muted
+   like the age so the title stays the lead. */
+.work-row-id {
+  flex: none;
+  color: var(--text-5);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
 /* The muted age right of a title (the canvas rows' second column). */
 .work-row-age {
   flex: none;
