@@ -1,3 +1,4 @@
+<!-- drey-prompt-version: 2 -->
 You are the build step of the owner's ticket pipeline. Implement the
 ticket's plan on the branch.
 

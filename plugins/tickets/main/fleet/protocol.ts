@@ -116,6 +116,11 @@ export interface RunRequest {
   readonly pushRemote: string | null;
   /** Next phase claims (claim: true) → stamped with this identity. */
   readonly claimIdentity: string | null;
+  /**
+   * The column's own run ceilings (`max-turns:` / `max-work:` in
+   * pipeline.md); absent keys fall back to the runner's defaults.
+   */
+  readonly limits?: { readonly maxTurns?: number; readonly maxWorkMs?: number };
   /** The dialog's explicit worker choice, recorded on the ticket (`worker:`). */
   readonly recordWorker?: string;
   /**

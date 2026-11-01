@@ -2,7 +2,7 @@ import { promises as fsp } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readRepoInstructions, worktreeDiffStat } from './context-pack';
+import { FALLBACK_INSTRUCTIONS_CAP, readRepoInstructions, worktreeDiffStat } from './context-pack';
 
 /**
  * Which file opens a run's brief (T-0048, req-79): the repo's
@@ -30,6 +30,18 @@ describe('readRepoInstructions', () => {
     await put('CLAUDE.md', '# Pair-programming rules');
     await put('docs/agents/fleet-worker.md', '# Fleet worker orientation');
     expect(await readRepoInstructions(repoDir, 'docs/agents/fleet-worker.md')).toBe('# Fleet worker orientation');
+  });
+
+  it('cuts an oversized fallback file at the cap and points at searching it, but never the configured file', async () => {
+    const big = Array.from({ length: 2_000 }, (_, i) => `rule ${i}: keep things tidy and explicit`).join(String.fromCharCode(10));
+    await put('CLAUDE.md', big);
+    const cut = (await readRepoInstructions(repoDir)) as string;
+    expect(Buffer.byteLength(cut, 'utf8')).toBeLessThan(FALLBACK_INSTRUCTIONS_CAP + 400);
+    expect(cut).toContain('rule 0:');
+    expect(cut).not.toContain('rule 1999:');
+    expect(cut).toContain('CLAUDE.md continues — search it');
+    await put('docs/agents/fleet-worker.md', big);
+    expect(await readRepoInstructions(repoDir, 'docs/agents/fleet-worker.md')).toBe(big);
   });
 
   it('falls back to CLAUDE.md when the configured file is missing or blank', async () => {

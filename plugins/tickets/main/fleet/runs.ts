@@ -101,6 +101,14 @@ export const execShell = (command: string, cwd: string): Promise<void> =>
     });
   });
 
+/** An event that closes one tool call — the safe point to pause at. */
+function isActionBoundary(event: NormalizedEvent): boolean {
+  return (
+    (event.kind === 'note' && (event.text ?? '').startsWith('result › ')) ||
+    (event.kind === 'tool' && (event.detail === 'done' || event.detail === 'failed'))
+  );
+}
+
 /** What a paused worker is told when the owner hands the run back. */
 export const HANDBACK_CONTINUE =
   'The owner hands the run back after a pause. Continue the step from where you stopped — do not start over; ' +
@@ -234,6 +242,11 @@ interface LiveRun {
    * next prompt or by handing the run back.
    */
   paused?: boolean;
+  /**
+   * The owner asked for a pause after the current action: the next finished
+   * tool call interrupts the turn (`pauseAfterAction`).
+   */
+  softPause?: boolean;
   /** Folds the run's token telemetry (T-0048) out of every stream event. */
   telemetry: TelemetryFold;
   /** Why the owner stopped the run — becomes the ticket Log line when the run ends. */
@@ -1412,6 +1425,28 @@ export class RunSupervisor {
   }
 
   /**
+   * "Pause after the current action": the turn is interrupted at the next
+   * finished tool call, not in the middle of one — an edit or a command is
+   * never cut off half-way. The owner's plain interrupt (`interrupt`) stays
+   * the immediate stop.
+   */
+  async pauseAfterAction(runId: string): Promise<TakeoverOutcome> {
+    const run = this.liveRunWithHold(runId);
+    if (typeof run === 'string') {
+      return { ok: false, error: run };
+    }
+    if (run.paused === true || run.softPause === true) {
+      return { ok: true };
+    }
+    if (run.info.turn === 'idle' || run.info.waiting != null) {
+      return { ok: false, error: 'the worker has no action in progress to pause after' };
+    }
+    run.softPause = true;
+    await this.logLine(run, 'pause requested — the worker pauses after its current action');
+    return { ok: true };
+  }
+
+  /**
    * Hands a held run back to the runner. A worker that is idle by now has
    * finished its turn, so the run ends and the machine gate decides, as
    * after any finished turn; a busy worker simply carries on.
@@ -1514,6 +1549,14 @@ export class RunSupervisor {
     // delivery, and `agentDone` must already be true when the exit decides.
     if (event.kind === 'result' && run.paused !== true) {
       run.agentDone = true;
+    }
+    if (run.softPause === true && isActionBoundary(event)) {
+      // The action the owner waited for has finished: pause now.
+      run.softPause = false;
+      void this.interrupt(run.info.id).catch(() => undefined);
+    }
+    if (event.kind === 'result') {
+      run.softPause = false; // the turn ended by itself — nothing left to pause
     }
     // The telemetry fold applies here, in arrival order. Everything after
     // the first await queues per run instead — two rapid events must fold
@@ -1649,7 +1692,11 @@ export class RunSupervisor {
         continue;
       }
       if (run.info.held !== true && run.request.interactive === undefined && !run.agentDone) {
-        const over = limitExceeded(run.info, { ...DEFAULT_RUN_LIMITS, ...this.deps.limits }, this.now().getTime());
+        const over = limitExceeded(
+          run.info,
+          { ...DEFAULT_RUN_LIMITS, ...this.deps.limits, ...run.request.limits },
+          this.now().getTime(),
+        );
         if (over !== null) {
           const message = `run limit: ${over}`;
           run.info = { ...run.info, lastError: message };
@@ -1660,6 +1707,30 @@ export class RunSupervisor {
           await this.finish(run, 'failed');
           continue;
         }
+      }
+      // The mid-run context cap (req-80) reached OpenCode only — it compacts
+      // its own session there. claude-code has no native compact here, so a
+      // transcript past the cap (392 k in the live fleet) is ended instead of
+      // re-sent by every further call; the next run starts fresh from the
+      // handover section and the diff stat.
+      const cap = this.contextCapFor(run.request.model);
+      const context = run.info.lastTurnContext ?? 0;
+      if (
+        cap > 0 &&
+        context >= cap &&
+        COMPACT_CAPABILITY[run.info.provider] !== 'native' &&
+        run.info.held !== true &&
+        run.request.interactive === undefined &&
+        !run.agentDone
+      ) {
+        const message = `context cap: ${context} tokens, over the ${cap} cap — the worker cannot compact`;
+        run.info = { ...run.info, lastError: message };
+        await this.logLine(run, `${message}; the step ends here and the next run starts fresh from the handover`);
+        if (run.handle !== null) {
+          await run.handle.stop().catch(() => undefined);
+        }
+        await this.finish(run, 'failed');
+        continue;
       }
       if (this.watchSilence(run)) {
         const quietMin = Math.round(this.silenceMs(run) / 60_000);

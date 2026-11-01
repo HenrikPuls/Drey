@@ -2,7 +2,7 @@ import { promises as fsp } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadShippedPrompts, SHIPPED_PROMPTS_DIR } from './default-prompts';
+import { loadShippedPrompts, promptVersion, SHIPPED_PROMPTS_DIR, stripPromptVersion } from './default-prompts';
 
 describe('shipped prompts', () => {
   it('ships a prompt file for every agent column the default pipeline can name', async () => {
@@ -34,6 +34,21 @@ describe('shipped prompts', () => {
     expect(prompts.get('plan-interactive-default')).toContain('QUESTION:');
     expect(prompts.get('refine-interactive-default')).toContain('QUESTION:');
     expect(prompts.get('refine-interactive-default')).toContain('Never move the ticket yourself');
+  });
+
+  it('every shipped prompt carries a version marker the runner can compare', async () => {
+    for (const [ref, text] of await loadShippedPrompts()) {
+      expect(promptVersion(text), ref).toBeGreaterThan(0);
+      expect(stripPromptVersion(text), ref).not.toContain('drey-prompt-version');
+    }
+  });
+
+  it('reads and strips the marker; a text without one is version 0', () => {
+    const marked = `<!-- drey-prompt-version: 7 -->${String.fromCharCode(10)}Body`;
+    expect(promptVersion(marked)).toBe(7);
+    expect(stripPromptVersion(marked)).toBe('Body');
+    expect(promptVersion('Body')).toBe(0);
+    expect(stripPromptVersion('Body')).toBe('Body');
   });
 
   it('reads a missing folder as no prompts and skips files that are not prompt names', async () => {

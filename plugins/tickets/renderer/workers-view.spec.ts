@@ -38,9 +38,9 @@ describe('workerCards', () => {
   it('shows what the worker does now and offers Continue only on a paused run', () => {
     const [busy] = workerCards([run({})], NOW);
     expect(busy!.now).toBe('bash npm test');
-    expect(busy!.actions).toEqual(['pause', 'stop']);
+    expect(busy!.actions).toEqual(['pause', 'stop', 'tell']);
     const [paused] = workerCards([run({ paused: true, held: true, turn: 'idle' })], NOW);
-    expect(paused!.actions).toEqual(['continue', 'stop']);
+    expect(paused!.actions).toEqual(['continue', 'stop', 'tell']);
     expect(paused!.now).toContain('Continue picks the step up');
   });
 
@@ -51,6 +51,33 @@ describe('workerCards', () => {
     );
     expect(card!.now).toBe('Move the section?');
     expect(card!.state).toBe('Waits for your answer');
+  });
+});
+
+describe('workersNode — Tell and Nudge', () => {
+  const api = { ui: { icon: () => document.createElement('span') } } as unknown as DreyPluginApi;
+
+  it('Tell… opens an input; Send hands the text to the card action and closes it', () => {
+    const deps = { api, open: vi.fn(), act: vi.fn() };
+    const node = workersNode(deps, [run({})], NOW)!;
+    const form = node.querySelector<HTMLFormElement>('.tickets-worker-tell')!;
+    expect(form.hidden).toBe(true);
+    const buttons = [...node.querySelectorAll<HTMLButtonElement>('.icon-btn')];
+    buttons[buttons.length - 1]!.click(); // Tell… is the last icon
+    expect(form.hidden).toBe(false);
+    const input = form.querySelector('input')!;
+    input.value = 'use the second option';
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+    expect(deps.act).toHaveBeenCalledWith('R-1', 'tell', 'use the second option');
+    expect(form.hidden).toBe(true);
+  });
+
+  it('a stuck worker offers Nudge', () => {
+    const deps = { api, open: vi.fn(), act: vi.fn() };
+    const node = workersNode(deps, [run({ stuck: true, lastActivity: '2026-10-31T11:40:00Z' })], NOW)!;
+    node.querySelector<HTMLButtonElement>('.tickets-worker-nudge')!.click();
+    expect(deps.act).toHaveBeenCalledWith('R-1', 'nudge');
+    expect(workersNode(deps, [run({})], NOW)!.querySelector('.tickets-worker-nudge')).toBeNull();
   });
 });
 

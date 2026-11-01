@@ -20,6 +20,7 @@ import * as path from 'node:path';
 import type { BoardColumn, BoardSnapshot, PipelinePhase, RepoRef } from '../../shared/tickets';
 import { isValidTicketFile, parseHandover, stripPhasePrefix, TICKETS_ARCHIVE_DIR } from '../../shared/tickets';
 import { assembleBoard, type BoardFile } from '../ticket-board';
+import { promptVersion, stripPromptVersion } from '../default-prompts';
 import { patchTicketFile } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
 import { columnPromptRef, dispatchable, isAutoPhase, nextPhaseIdOf, planDispatch } from './chain';
@@ -64,6 +65,8 @@ export interface OrchestratorDeps {
   readonly scanIntervalMs?: number;
   /** Test seam over the ci handover's shell exec (cwd = the work repo). */
   readonly execShell?: (command: string, cwd: string) => Promise<void>;
+  /** The shipped default prompt's text for a ref (version comparison); absent = no check. */
+  readonly shippedPrompt?: (ref: string) => Promise<string | null>;
   /** Test seam over the pool probe: a llama.cpp server's `total_slots`, or null. */
   readonly probeSlots?: (baseUrl: string) => Promise<number | null>;
 }
@@ -208,6 +211,8 @@ export class Orchestrator {
   private readonly tripped: Record<string, ChainTrip> = {};
   private readonly ticketFailures: Record<string, TicketFailure> = {};
   private readonly ownerHold: Record<string, OwnerHold> = {};
+  /** Prompts already reported as older than the shipped default. */
+  private readonly promptDriftNoted = new Set<string>();
   /** Run ids the chain itself stopped (column brake, Notaus) — only an
    *  owner's own stop of a single run holds its ticket. */
   private readonly machineStopped = new Set<string>();
@@ -901,6 +906,30 @@ export class Orchestrator {
     }
   }
 
+  /**
+   * Says once per prompt (per runner life) when the vault copy is older than
+   * the shipped default: vault copies are snapshots, and a fixed shipped
+   * prompt never reaches a copy that was seeded before the fix.
+   */
+  private async flagOlderPrompt(ref: string, vaultText: string): Promise<void> {
+    if (this.promptDriftNoted.has(ref) || this.deps.shippedPrompt === undefined) {
+      return;
+    }
+    const shipped = await this.deps.shippedPrompt(ref).catch(() => null);
+    if (shipped === null) {
+      return;
+    }
+    const have = promptVersion(vaultText);
+    const want = promptVersion(shipped);
+    if (want > have) {
+      this.promptDriftNoted.add(ref);
+      this.deps.log(
+        `prompt "${ref}" in the vault is older than the shipped default (v${have} < v${want}) — ` +
+          `Settings → Tickets → Prompts › Reset to the shipped version brings in the fixes`,
+      );
+    }
+  }
+
   /** One dispatch round: read the vault, plan, start what is due. */
   private async dispatchPass(): Promise<void> {
     const config = this.config;
@@ -916,7 +945,10 @@ export class Orchestrator {
       const liveByPool: Record<WorkerProviderId, number> = { opencode: 0, 'claude-code': 0 };
       const busyTickets = new Set<string>();
       for (const record of this.allRecords()) {
-        if (LIVE.includes(record.info.state)) {
+        // A worker waiting on the owner (a question, an approval) takes no pool
+        // slot: with a pool of one, one unanswered question used to block the
+        // whole provider. Its ticket stays busy — only the slot is free.
+        if (LIVE.includes(record.info.state) && record.info.waiting == null) {
           liveByPool[record.info.provider] += 1;
         }
         if (BLOCKING.includes(record.info.state)) {
@@ -1194,6 +1226,8 @@ export class Orchestrator {
         );
         return 'skipped';
       }
+      await this.flagOlderPrompt(promptRef, promptText);
+      promptText = stripPromptVersion(promptText);
     }
     const nextPhaseId = nextPhaseIdOf(columns, workingPhaseId);
     const nextPhaseClaims =

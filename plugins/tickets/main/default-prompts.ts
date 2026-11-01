@@ -13,6 +13,26 @@ import path from 'node:path';
 /** `plugins/tickets/prompts/` from the source tree and from `dist-electron/plugins/tickets/`. */
 export const SHIPPED_PROMPTS_DIR = path.join(__dirname, '..', 'prompts');
 
+/**
+ * The version marker a shipped prompt opens with (`<!-- drey-prompt-version: N -->`).
+ * Vault copies are snapshots seeded from the shipped file, so a copy
+ * without the marker, or with a lower number, is older than what Drey ships —
+ * the runner says so once and the settings page can reset it. The marker
+ * line never reaches the model (`stripPromptVersion`).
+ */
+const PROMPT_VERSION_LINE = /^<!--\s*drey-prompt-version:\s*(\d+)\s*-->[ \t]*\r?\n/;
+
+/** A prompt text's version; 0 when it carries no marker. */
+export function promptVersion(text: string): number {
+  const match = PROMPT_VERSION_LINE.exec(text);
+  return match === null ? 0 : Number(match[1]);
+}
+
+/** The prompt text without its version marker line. */
+export function stripPromptVersion(text: string): string {
+  return text.replace(PROMPT_VERSION_LINE, '');
+}
+
 const PROMPT_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\.md$/;
 
 /** Every shipped prompt, ref → text, in name order. A missing folder reads as none. */

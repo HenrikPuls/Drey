@@ -988,8 +988,12 @@ panel keeps only the light and the states.
 **Workers.** While workers run, a *Workers* section tops the Work panel:
 one card per worker with its state in words (*Building*, *Paused*,
 *Looks stuck*, *Waits for your answer*), the ticket, what it is doing
-now, its working time, context and tokens, and Pause / Continue and
-Stop on the card. A worker silent for ten minutes is flagged *Looks
+now, its working time, context and tokens, and Pause / Continue,
+**Tell…** (a line that reaches the worker as your next message) and
+Stop on the card; a worker that looks stuck also offers **Nudge**, which
+asks it for a status line. **Pause** waits for the current action (a
+command or an edit) to finish and then pauses — it never cuts one off
+half-way. A worker silent for ten minutes is flagged *Looks
 stuck*; after forty it is stopped and the step retries with a growing
 wait.
 

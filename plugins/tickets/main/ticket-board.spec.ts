@@ -30,6 +30,20 @@ describe('parsePipeline', () => {
     expect(phases[0]!.title).toBe('Inbox');
   });
 
+  it('reads the per-column run ceilings max-turns and max-work, ignoring junk', () => {
+    const text = `---
+phases:
+  - { id: inbox }
+  - { id: build, handover: agent build-default, max-turns: 80, max-work: 45 }
+  - { id: done, max-turns: -3, max-work: soon }
+---
+`;
+    const { phases } = parsePipeline(text);
+    expect(phases[1]).toMatchObject({ maxTurns: 80, maxWorkMin: 45 });
+    expect(phases[0]).toMatchObject({ maxTurns: null, maxWorkMin: null });
+    expect(phases[2]).toMatchObject({ maxTurns: null, maxWorkMin: null });
+  });
+
   it('reads the optional push: remote (T-0041)', () => {
     const withPush = PIPELINE.replace(/^---/, "---\npush: origin");
     const parsed = parsePipeline(withPush);

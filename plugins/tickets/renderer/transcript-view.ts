@@ -89,6 +89,11 @@ export function toolGlyph(name: string): string {
   return '';
 }
 
+/** `+4 −1` — the lines an edit adds and removes. */
+export function changesLabel(changes: { readonly added: number; readonly removed: number }): string {
+  return `+${changes.added} −${changes.removed}`;
+}
+
 /** `0:42` — an elapsed span as the running pill shows it. */
 export function elapsedClock(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -193,6 +198,9 @@ export function createTranscriptView(api: DreyPluginApi, worktreePath: string): 
       const target = el('span', 'tickets-tx-target', shortenTarget(step.target, root));
       target.title = step.target;
       row.append(target);
+    }
+    if (step.changes !== undefined && (step.changes.added > 0 || step.changes.removed > 0)) {
+      row.append(el('span', 'tickets-tx-changes', changesLabel(step.changes)));
     }
     if (step.outcome !== undefined && step.outcome !== '') {
       const said = step.failed === true ? `failed: ${step.outcome}` : step.outcome;

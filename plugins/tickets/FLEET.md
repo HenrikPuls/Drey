@@ -439,3 +439,14 @@ device. Its own log lines start with `remote:` in the plugin log.
 - Specs: `specs/ticket-schema.md` (tickets, gates, agent lane rules),
   ADR-0075/0076 (+0077 for the chain), `specs/changelog.md` M84+,
   manual §13 "Running agents on tickets"
+
+## Prompt versions (milestone 96)
+
+Every shipped prompt in `plugins/tickets/prompts/` opens with
+`<!-- drey-prompt-version: N -->`. Vault copies are snapshots seeded from
+it, so a copy with a lower number — or none — is older than the shipped
+default: the runner logs that once per prompt (`prompt "build-default" in
+the vault is older than the shipped default (v0 < v2)`) and Settings →
+Tickets → Prompts › *Reset to the shipped version* brings the fixes in.
+The marker line never reaches the model. Bump the number when a shipped
+prompt changes in substance.

@@ -650,6 +650,48 @@ describe('Orchestrator', () => {
     expect(fleet.records).toHaveLength(1);
   });
 
+  it('a worker waiting on the owner frees its pool slot but keeps its ticket', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    await writeTicket('T-0002', 'plan');
+    const { orch, fleet } = orchestrator();
+    await orch.configure({ ...CONFIG, pools: ONE });
+    await orch.setMaster('run');
+    expect(fleet.records).toHaveLength(1); // one slot, one worker
+
+    const first = fleet.records[0]!;
+    fleet.records[0] = {
+      ...first,
+      info: { ...first.info, turn: 'idle', waiting: { kind: 'question', text: 'Which one?', since: '2026-10-18T12:01:00Z' } },
+    };
+    await orch.setMaster('halted');
+    await orch.setMaster('run');
+    const tickets = fleet.records.map((r) => r.info.ticketId);
+    expect(tickets).toHaveLength(2);
+    expect(new Set(tickets).size).toBe(2); // the other ticket got the slot, the waiting one is not run twice
+  });
+
+  it('says once that the vault prompt is older than the shipped one, and never sends the marker to the model', async () => {
+    await writeMeta(`<!-- drey-prompt-version: 1 -->${String.fromCharCode(10)}Work the plan step.`);
+    await writeTicket('T-0001', 'plan');
+    const logs: string[] = [];
+    const { orch, fleet } = orchestrator({
+      log: (message) => logs.push(message),
+      shippedPrompt: async () => `<!-- drey-prompt-version: 2 -->${String.fromCharCode(10)}Work the plan step, better.`,
+    });
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    const started = fleet.records[0]!;
+    expect(started.request.instruction).toContain('Work the plan step.');
+    expect(started.request.instruction).not.toContain('drey-prompt-version');
+    const notes = logs.filter((line) => line.includes('older than the shipped default'));
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toContain('v1 < v2');
+    await orch.setMaster('halted');
+    await orch.setMaster('run');
+    expect(logs.filter((line) => line.includes('older than the shipped default'))).toHaveLength(1);
+  });
+
   it('a failed-then-requeued ticket dispatches with the gate failure section (T-0048 retry)', async () => {
     await writeMeta();
     await writeTicket('T-0041', 'plan');

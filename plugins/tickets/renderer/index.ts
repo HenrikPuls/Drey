@@ -57,7 +57,7 @@ import {
   WORKER_LABEL,
   workerLabelOf,
 } from './worker-status';
-import { workersNode, type WorkerCardAction } from './workers-view';
+import { NUDGE_TEXT, workersNode, type WorkerCardAction } from './workers-view';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -547,7 +547,8 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     // The Workers cards carry moving text too (activity, clocks): swap the
     // section in place — it is small, and nothing in it holds focus.
     const old = root.querySelector<HTMLElement>('.tickets-workers');
-    const fresh = workersSection(api);
+    const typing = old !== null && old.contains(document.activeElement);
+    const fresh = typing ? null : workersSection(api);
     if (old !== null && fresh !== null) {
       old.replaceWith(fresh);
     }
@@ -579,12 +580,18 @@ function workersSection(api: DreyPluginApi): HTMLElement | null {
           void openTicketPage(api, card);
         }
       },
-      act: (runId: string, action: WorkerCardAction) => {
+      act: (runId: string, action: WorkerCardAction, text?: string) => {
         if (action === 'stop') {
           void runMutation('Stopping the worker', () => invokeBoard('fleetStop', { runId, reason: null }));
           return;
         }
-        const control = action === 'pause' ? 'interrupt' : 'release';
+        if (action === 'tell' || action === 'nudge') {
+          void runMutation(action === 'nudge' ? 'Nudging' : 'Sending', () =>
+            invokeBoard('fleetSend', { runId, text: text ?? NUDGE_TEXT }),
+          );
+          return;
+        }
+        const control = action === 'pause' ? 'softpause' : 'release';
         void runMutation(action === 'pause' ? 'Pausing' : 'Continuing', () =>
           invokeBoard('fleetControl', { action: control, runId }),
         );
@@ -1662,13 +1669,13 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     return b;
   };
   const target = (): RunInfo | null => threadRun(ticketId);
-  const control = (action: 'interrupt' | 'takeover' | 'release', label: string): void => {
+  const control = (action: 'interrupt' | 'softpause' | 'takeover' | 'release', label: string): void => {
     const run = target();
     if (run !== null) {
       void runMutation(label, () => invokeBoard('fleetControl', { action, runId: run.id }));
     }
   };
-  const pauseRun = iconButton('pause', 'Pause after the current action', 'Pause', () => control('interrupt', 'Pausing'));
+  const pauseRun = iconButton('pause', 'Pause after the current action', 'Pause', () => control('softpause', 'Pausing'));
   const takeOverRun = iconButton('hand', 'Take over — the worker waits for your messages', 'Take over', () =>
     control('takeover', 'Taking over'),
   );

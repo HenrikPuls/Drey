@@ -15,7 +15,12 @@ import { durationWords, headerControls, liveStateWord } from './thread-steps';
 import { contextLabel, formatTokens, workerStatus, type Light } from './worker-status';
 
 /** A card's action: the header's run controls, narrowed to what a card shows. */
-export type WorkerCardAction = 'pause' | 'continue' | 'stop';
+export type WorkerCardAction = 'pause' | 'continue' | 'stop' | 'tell' | 'nudge';
+
+/** What Nudge sends a worker that went quiet: a status line, then carry on or ask. */
+export const NUDGE_TEXT =
+  'You have been quiet for a while. Say in one line what you are doing now. If you are blocked on a decision, ask ' +
+  'with QUESTION:; otherwise carry on with the step.';
 
 export interface WorkerCard {
   readonly runId: string;
@@ -30,9 +35,14 @@ export interface WorkerCard {
   /** Working time so far, in words. */
   readonly worked: string;
   readonly actions: readonly WorkerCardAction[];
+  /** The worker looks stuck — the card offers Nudge. */
+  readonly stuck: boolean;
 }
 
-const CARD_ACTIONS: readonly WorkerCardAction[] = ['pause', 'continue', 'stop'];
+/** The header controls a card repeats. */
+type RunControlAction = 'pause' | 'continue' | 'stop';
+
+const CARD_ACTIONS: readonly RunControlAction[] = ['pause', 'continue', 'stop'];
 
 /** The live runs as cards, the ones that need a look first. */
 export function workerCards(runs: readonly RunInfo[], nowMs: number): readonly WorkerCard[] {
@@ -55,7 +65,11 @@ export function workerCards(runs: readonly RunInfo[], nowMs: number): readonly W
         context: contextLabel(run),
         tokens: `${formatTokens(run.tokensIn + run.tokensOut)} tokens`,
         worked: Number.isNaN(started) ? '' : durationWords(run.execMs ?? Math.max(0, nowMs - started)),
-        actions: headerControls(run).filter((c): c is WorkerCardAction => (CARD_ACTIONS as readonly string[]).includes(c)),
+        actions: [
+          ...headerControls(run).filter((c): c is RunControlAction => (CARD_ACTIONS as readonly string[]).includes(c)),
+          'tell',
+        ],
+        stuck: run.stuck === true,
       };
     })
     .sort((a, b) => rank[a.light] - rank[b.light] || a.ticketId.localeCompare(b.ticketId));
@@ -65,13 +79,18 @@ export interface WorkersViewDeps {
   readonly api: DreyPluginApi;
   /** Opens the ticket page of a card's ticket. */
   open(ticketId: string): void;
-  act(runId: string, action: WorkerCardAction): void;
+  act(runId: string, action: WorkerCardAction, text?: string): void;
 }
 
-const ICONS: Record<WorkerCardAction, { icon: string; title: string }> = {
+/** The cards whose Tell… box is open, and what the owner typed — the section is redrawn every second. */
+const tellOpen = new Set<string>();
+const tellDraft = new Map<string, string>();
+
+const ICONS: Record<Exclude<WorkerCardAction, 'nudge'>, { icon: string; title: string }> = {
   pause: { icon: 'pause', title: 'Pause after the current action' },
   continue: { icon: 'play', title: 'Continue — the worker picks the step up where it stopped' },
   stop: { icon: 'square', title: 'Stop the worker' },
+  tell: { icon: 'message-square', title: 'Tell the worker something — it arrives as your next message' },
 };
 
 /** The section's node, or null when no worker lives. */
@@ -106,7 +125,19 @@ export function workersNode(deps: WorkersViewDeps, runs: readonly RunInfo[], now
     const spacer = document.createElement('span');
     spacer.className = 'tickets-worker-spacer';
     top.append(dot, state, ticket, spacer);
+    if (card.stuck) {
+      const nudge = document.createElement('button');
+      nudge.type = 'button';
+      nudge.className = 'tickets-worker-nudge';
+      nudge.textContent = 'Nudge';
+      nudge.title = 'Ask the quiet worker for a status line — it carries on or asks you';
+      nudge.addEventListener('click', () => deps.act(card.runId, 'nudge'));
+      top.append(nudge);
+    }
     for (const action of card.actions) {
+      if (action === 'nudge') {
+        continue;
+      }
       const spec = ICONS[action];
       const button = document.createElement('button');
       button.type = 'button';
@@ -114,7 +145,20 @@ export function workersNode(deps: WorkersViewDeps, runs: readonly RunInfo[], now
       button.title = spec.title;
       button.setAttribute('aria-label', spec.title);
       button.append(deps.api.ui.icon(spec.icon, 13));
-      button.addEventListener('click', () => deps.act(card.runId, action));
+      button.addEventListener('click', () => {
+        if (action === 'tell') {
+          // Opens or closes the card's own input; the redraw keeps it.
+          if (tellOpen.has(card.runId)) {
+            tellOpen.delete(card.runId);
+          } else {
+            tellOpen.add(card.runId);
+          }
+          button.closest('.tickets-worker-card')?.querySelector<HTMLElement>('.tickets-worker-tell')?.toggleAttribute('hidden');
+          button.closest('.tickets-worker-card')?.querySelector<HTMLInputElement>('.tickets-worker-tell input')?.focus();
+          return;
+        }
+        deps.act(card.runId, action);
+      });
       top.append(button);
     }
     const now = document.createElement('div');
@@ -123,7 +167,33 @@ export function workersNode(deps: WorkersViewDeps, runs: readonly RunInfo[], now
     const meta = document.createElement('div');
     meta.className = 'tickets-worker-meta';
     meta.textContent = [card.worked, card.context, card.tokens].filter((part) => part !== '').join(' · ');
-    node.append(top, now, meta);
+    const tell = document.createElement('form');
+    tell.className = 'tickets-worker-tell';
+    tell.hidden = !tellOpen.has(card.runId);
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'tickets-worker-tell-input';
+    input.setAttribute('aria-label', 'Tell the worker');
+    input.value = tellDraft.get(card.runId) ?? '';
+    input.addEventListener('input', () => tellDraft.set(card.runId, input.value));
+    const send = document.createElement('button');
+    send.type = 'submit';
+    send.className = 'tickets-takeover-btn';
+    send.textContent = 'Send';
+    tell.append(input, send);
+    tell.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const said = input.value.trim();
+      if (said === '') {
+        return;
+      }
+      tellDraft.delete(card.runId);
+      tellOpen.delete(card.runId);
+      input.value = '';
+      tell.hidden = true;
+      deps.act(card.runId, 'tell', said);
+    });
+    node.append(top, now, meta, tell);
     section.append(node);
   }
   return section;

@@ -1088,6 +1088,31 @@
   flex: 1;
 }
 
+.tickets-worker-nudge {
+  padding: 1px 8px;
+  border: 1px solid var(--tk-worker-tone);
+  border-radius: 10px;
+  background: none;
+  font-size: 0.72rem;
+  color: var(--tk-worker-tone);
+  cursor: pointer;
+}
+
+.tickets-worker-tell {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.tickets-worker-tell[hidden] {
+  display: none;
+}
+
+.tickets-worker-tell-input {
+  flex: 1;
+  min-width: 0;
+}
+
 .tickets-worker-now {
   margin-top: 4px;
   font-size: 0.78rem;
@@ -1109,6 +1134,13 @@
   color: var(--status-deleted);
   background: color-mix(in srgb, var(--status-deleted) 12%, transparent);
   overflow-wrap: anywhere;
+}
+
+.tickets-tx-changes {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-4);
 }
 
 .tickets-tx-time {

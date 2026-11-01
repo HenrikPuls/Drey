@@ -142,6 +142,12 @@ async function main(): Promise<void> {
     root: args.root,
     log,
     supervisorOf: (provider) => supervisors.get(provider) ?? supervisors.get('opencode')!,
+    // The shipped default prompt beside the built plugin (`<plugin>/prompts/`), for
+    // the "vault copy is older" note; a ref without a shipped file reads as null.
+    shippedPrompt: (ref) =>
+      /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(ref)
+        ? fsp.readFile(path.join(__dirname, '..', '..', 'prompts', `${ref}.md`), 'utf8').catch(() => null)
+        : Promise.resolve(null),
   });
   for (const one of supervisors.values()) {
     await one.adopt();
@@ -412,7 +418,7 @@ async function main(): Promise<void> {
         respond(outcome.ok ? 200 : 422, outcome);
         return;
       }
-      if (req.method === 'POST' && (pathname === '/takeover' || pathname === '/interrupt' || pathname === '/release')) {
+      if (req.method === 'POST' && (pathname === '/takeover' || pathname === '/interrupt' || pathname === '/softpause' || pathname === '/release')) {
         const body = (await readBody(req)) as { runId?: unknown };
         const supervisor = supervisorOfRun(String(body.runId ?? ''));
         if (supervisor === null) {
@@ -425,7 +431,9 @@ async function main(): Promise<void> {
             ? await supervisor.takeover(runId)
             : pathname === '/interrupt'
               ? await supervisor.interrupt(runId)
-              : await supervisor.release(runId);
+              : pathname === '/softpause'
+                ? await supervisor.pauseAfterAction(runId)
+                : await supervisor.release(runId);
         respond(outcome.ok ? 200 : 422, outcome);
         return;
       }

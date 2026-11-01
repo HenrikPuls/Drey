@@ -158,7 +158,7 @@ export class FleetClient {
 
   /** Takeover control of a live run: take over, interrupt the turn, hand back. */
   async control(
-    action: 'takeover' | 'interrupt' | 'release' | 'resume',
+    action: 'takeover' | 'interrupt' | 'softpause' | 'release' | 'resume',
     runId: string,
   ): Promise<{ ok: boolean; error?: string }> {
     // Resuming an ended run is the one control that may find no daemon

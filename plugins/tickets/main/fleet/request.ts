@@ -206,12 +206,24 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     nextPhaseDir: input.interactive !== undefined || input.nextPhaseId === null ? null : input.nextPhaseDir,
     pushRemote: input.pushRemote,
     claimIdentity: input.nextPhaseClaims && input.nextPhaseId !== null && input.interactive === undefined ? agentIdentity() : null,
+    ...(limitsOf(input.workingPhase) !== null ? { limits: limitsOf(input.workingPhase)! } : {}),
     ...(input.workerChoice !== null ? { recordWorker: input.workerChoice } : {}),
     ...(input.dispatchedBy !== undefined ? { column: input.dispatchedBy } : {}),
     ...(input.handover !== undefined ? { handover: input.handover } : {}),
     ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
   };
   return { ok: true, request, truncations: instruction.truncations };
+}
+
+/** The column's own ceilings as the request carries them, or null when it sets none. */
+function limitsOf(phase: PipelinePhase | null): { maxTurns?: number; maxWorkMs?: number } | null {
+  if (phase === null || (phase.maxTurns === null && phase.maxWorkMin === null)) {
+    return null;
+  }
+  return {
+    ...(phase.maxTurns !== null ? { maxTurns: phase.maxTurns } : {}),
+    ...(phase.maxWorkMin !== null ? { maxWorkMs: phase.maxWorkMin * 60_000 } : {}),
+  };
 }
 
 /** The fleet's actor identity for stamps (`agent@<host>`). */
