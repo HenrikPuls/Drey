@@ -23,7 +23,7 @@ const poolField = (provider: WorkerProviderId): RunnerField => ({
   label: 'Pool size',
   key: `fleet.pool.${provider}.size`,
   kind: 'number',
-  hint: `How many ${RUNNER_LABEL[provider]} runs go at once, across every column. Empty is one.`,
+  hint: `How many ${RUNNER_LABEL[provider]} runs go at once, across every column. Empty uses the default.`,
 });
 
 const compactField = (provider: WorkerProviderId): RunnerField => ({
@@ -31,7 +31,7 @@ const compactField = (provider: WorkerProviderId): RunnerField => ({
   label: 'Resume compact threshold — tokens',
   key: `fleet.compactAboveTokens.${provider}`,
   kind: 'number',
-  hint: 'Overrides the shared threshold for this runner. Empty uses the shared one.',
+  hint: 'A resumed session whose last context is at or above this many tokens is compacted first (T-0049). Empty uses the default.',
 });
 
 /**

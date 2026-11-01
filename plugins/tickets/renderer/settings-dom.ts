@@ -1,3 +1,4 @@
+import { fleetSettingDefault } from '../shared/fleet-defaults';
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import type { MutationResult } from '../shared/tickets';
 
@@ -69,6 +70,7 @@ export function textConfig(api: DreyPluginApi, key: string): HTMLInputElement {
   const input = el('input', 'mono-input');
   input.type = 'text';
   input.spellcheck = false;
+  showDefault(input, key);
   void api.settings.get<string>(key).then((value) => {
     input.value = value ?? '';
   });
@@ -79,11 +81,25 @@ export function textConfig(api: DreyPluginApi, key: string): HTMLInputElement {
 }
 
 /** A whole-number config field; empty or invalid clears back to the default. */
+/**
+ * An unset field shows the value the runner will use as its placeholder
+ * (Settings only — the panels keep their placeholder-free fields,
+ * ADR-0057); clearing the field is the reset.
+ */
+function showDefault(input: HTMLInputElement, key: string): void {
+  const fallback = fleetSettingDefault(key);
+  if (fallback !== null) {
+    input.placeholder = String(fallback);
+    input.title = `Empty uses the default: ${fallback}`;
+  }
+}
+
 export function numberConfig(api: DreyPluginApi, key: string): HTMLInputElement {
   const input = el('input', 'mono-input');
   input.type = 'number';
   input.min = '0';
   input.step = '1';
+  showDefault(input, key);
   void api.settings.get<number>(key).then((value) => {
     input.value = typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
   });

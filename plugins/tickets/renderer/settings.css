@@ -787,3 +787,19 @@
 .tset-add-label {
   color: var(--text-muted, inherit);
 }
+
+/* Rarely touched settings, folded; an empty field shows its default. */
+.tset-advanced {
+  margin-top: 12px;
+}
+
+.tset-advanced > summary {
+  cursor: pointer;
+  color: var(--text-muted, inherit);
+  user-select: none;
+  padding: 4px 0;
+}
+
+.tset-advanced[open] > summary {
+  margin-bottom: 8px;
+}

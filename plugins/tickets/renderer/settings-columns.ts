@@ -73,7 +73,7 @@ export function createColumnsSection(api: DreyPluginApi, reload: () => Promise<v
     'section-hint',
     'Model lists come from the worker CLI; an id it does not list can always be typed. How many runs go at once is the provider pool, under Fleet.',
   );
-  root.append(head, banner, hint, table, addForm, status, foot);
+  root.append(head, banner, hint, table, status, foot);
 
   let state: ColumnsState | null = null;
   let renderedKey = '';
@@ -172,6 +172,8 @@ export function createColumnsSection(api: DreyPluginApi, reload: () => Promise<v
       await reload();
     });
   });
+  // The form sits right under the table, above the status line.
+  table.after(addForm);
   const fillAddAfter = (pipeline: readonly PipelinePhase[]): void => {
     const keep = addAfter.value;
     addAfter.replaceChildren();

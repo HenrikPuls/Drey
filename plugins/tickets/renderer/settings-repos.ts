@@ -114,29 +114,46 @@ export function createReposSection(api: DreyPluginApi, reload: () => Promise<voi
   const renderForm = (host: HTMLElement, draft: RepoDraft, onCommit: (draft: RepoDraft) => void): void => {
     host.replaceChildren();
     const form = el('div', 'tset-repo-form');
-    const field = (label: string, key: keyof RepoDraft, hint?: string): void => {
+    const advanced = el('details', 'tset-advanced');
+    advanced.append(el('summary', undefined, 'Advanced'));
+    const field = (
+      label: string,
+      key: keyof RepoDraft,
+      hint?: string,
+      fallback?: string,
+      into: HTMLElement = form,
+    ): void => {
       const wrap = el('label', 'tset-repo-field');
       const name = el('span', 'tset-kv-label', label);
       const input = el('input', 'mono-input');
       input.type = 'text';
       input.spellcheck = false;
       input.value = draft[key];
+      if (fallback !== undefined) {
+        // What an empty field means, shown where the value would stand.
+        input.placeholder = fallback;
+      }
       input.addEventListener('input', () => {
         draft[key] = input.value;
       });
       wrap.append(name, input, ...(hint !== undefined ? [el('span', 'field-hint', hint)] : []));
-      form.append(wrap);
+      into.append(wrap);
     };
     field('Name *', 'name', 'What a ticket\'s repos: field names.');
     field('URL *', 'url', 'The clone URL (origin).');
-    field('Branch', 'branch', 'The integration branch. Empty = the checkout\'s default.');
+    field('Branch', 'branch', 'The integration branch.', 'the checkout\'s default');
     field('Local path', 'path', 'The local checkout the fleet opens and tests in.');
-    field('Policy', 'policy', 'Branch protection a push must respect, as a note for the worker.');
-    field('Worker', 'worker', 'This repo\'s default fleet worker. Empty = the board\'s.');
-    field('Worktrees base', 'worktrees', 'Where the fleet\'s checkouts live. Empty = the tickets repo\'s _worktrees.');
-    field('Launch command', 'launch', 'Runs in the ticket\'s worktree in a new console. Empty: dev.ps1 -Built -Multi when the worktree has one.');
-    field('Agent instructions', 'instructions', 'The file every fleet run\'s brief opens with, relative to the local path. Empty: CLAUDE.md, else AGENTS.md.');
-    field('Link folders', 'link', 'Git-ignored folders a worktree borrows, comma-separated (node_modules, .tools).');
+    field('Worker', 'worker', 'This repo\'s default fleet worker.', 'the board\'s default worker');
+    // Rarely needed: kept out of the way, their defaults shown when empty.
+    const rare = (label: string, key: keyof RepoDraft, hint: string, fallback?: string): void =>
+      field(label, key, hint, fallback, advanced);
+    rare('Policy', 'policy', 'Branch protection a push must respect, as a note for the worker (not enforced by the app).');
+    rare('Worktrees base', 'worktrees', 'Where the fleet\'s checkouts live.', 'the tickets repo\'s _worktrees');
+    rare('Launch command', 'launch', 'Runs in the ticket\'s worktree in a new console.', 'dev.ps1 -Built -Multi (when the worktree has one)');
+    rare('Agent instructions', 'instructions', 'The file every fleet run\'s brief opens with, relative to the local path.', 'CLAUDE.md, else AGENTS.md');
+    rare('Link folders', 'link', 'Git-ignored folders a worktree borrows, comma-separated.', 'node_modules, .tools');
+    advanced.open = [draft.policy, draft.worktrees, draft.launch, draft.instructions, draft.link].some((v) => v.trim() !== '');
+    form.append(advanced);
     const actions = el('div', 'tset-actions');
     const cancel = textButton('Cancel');
     const save = textButton('Save', 'primary');
