@@ -59,11 +59,11 @@ import {
   patchTrack,
   ticketPathParts,
   ticketSections,
-  withLogLine,
   type HeaderPatch,
 } from '../../../packages/tickets-engine/src/core/ticket-files';
 import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from '../../../packages/tickets-engine/src/core/phase-dirs';
 import { blockedRefusal } from '../../../packages/tickets-engine/src/core/blocked';
+import { runTransition, type TransitionIo } from '../../../packages/tickets-engine/src/core/transition';
 import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, recentDoneOf, type DriftDetection } from '../../../packages/tickets-engine/src/core/normalize';
 import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply } from '../shared/changes';
@@ -592,38 +592,34 @@ class BoardService {
   }
 
   /** One drift's full transition treatment. The path never changes —
-   *  only stamps and Log; exactly one commit closes it. */
+   *  only stamps and Log; exactly one commit closes it. In-place run of
+   *  the one transition machine with the pre-read text (the normalization
+   *  pass bulk-read the files; a failure throws so the caller logs
+   *  `normalizing <id> (<path>) failed: …`). */
   private async treatDrift(
     vault: VaultLike,
     drift: DriftDetection,
     text: string,
     pushRemote: string | null,
   ): Promise<void> {
-    const now = new Date();
-    const patched =
-      drift.kind === 'archive'
-        ? patchTicketFile(text, { to: 'archive', from: null, now, actor: OWNER, action: 'archived' })
-        : patchTicketFile(text, {
-            to: drift.phase,
-            // null (no event at all) logs honestly as `unknown -> <phase>`
-            from: drift.from ?? 'unknown',
-            now,
-            actor: OWNER,
-          });
-    await this.ctx.vault.write(drift.path, patched, { vaultId: vault.id });
-
-    const message =
-      drift.kind === 'archive'
-        ? `tickets: ${drift.id} archived`
-        : `tickets: ${drift.id} ${drift.from ?? 'unknown'} -> ${drift.phase}`;
-    await this.commit(vault, [drift.path], message);
-    // The optional auto-push (T-0041): warning-level, never a failed move.
-    await this.pushTransition(vault, pushRemote);
-    this.ctx.vault.announceChanges({
-      vaultId: vault.id,
-      changedPaths: [drift.path],
+    const result = await runTransition(this.transitionIo(vault), {
+      id: drift.id,
+      fromPath: drift.path,
+      text,
+      patch:
+        drift.kind === 'archive'
+          ? { to: 'archive', from: null, now: new Date(), actor: OWNER, action: 'archived' }
+          : // null (no event at all) logs honestly as `unknown -> <phase>`
+            { to: drift.phase, from: drift.from ?? 'unknown', now: new Date(), actor: OWNER },
+      commitMessage:
+        drift.kind === 'archive'
+          ? `tickets: ${drift.id} archived`
+          : `tickets: ${drift.id} ${drift.from ?? 'unknown'} -> ${drift.phase}`,
+      pushRemote,
     });
-    this.announceChanged();
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
   }
 
   /** Serialize mutations; failures never block the next one. */
@@ -672,6 +668,47 @@ class BoardService {
       this.ctx.log(`git push to "${remote}" failed: ${text}`, 'warn');
       return `git push to "${remote}" failed: ${text}`;
     }
+  }
+
+  /**
+   * The host adapter for the one transition machine (ADR-0088, E1): vault
+   * reads/writes, the mkdir+rename with the verbatim path-escape wording,
+   * the warning-level commit/push plumbing and the closing announcement
+   * (vault round + board-changed). Every move kind — transition, archive,
+   * unarchive, drift — runs through `runTransition` with this IO.
+   */
+  private transitionIo(vault: VaultLike): TransitionIo {
+    return {
+      read: (path) => this.ctx.vault.read(path, { vaultId: vault.id }),
+      write: async (path, text) => {
+        await this.ctx.vault.write(path, text, { vaultId: vault.id });
+      },
+      renameInto: async (fromPath, toPath) => {
+        const oldAbs = this.ctx.vault.resolveAssetPath(fromPath, { vaultId: vault.id });
+        const dirAbs = this.ctx.vault.resolveAssetPath(path.posix.dirname(toPath), { vaultId: vault.id });
+        const newAbs = this.ctx.vault.resolveAssetPath(toPath, { vaultId: vault.id });
+        if (oldAbs === null || dirAbs === null || newAbs === null) {
+          return { ok: false, error: 'ticket path escapes the vault' };
+        }
+        try {
+          await fsp.mkdir(dirAbs, { recursive: true });
+          await fsp.rename(oldAbs, newAbs);
+          return { ok: true };
+        } catch (error) {
+          return { ok: false, error: `move failed: ${messageOf(error)}` };
+        }
+      },
+      commit: (paths, message) => this.commit(vault, paths, message),
+      push: (remote) => this.pushTransition(vault, remote),
+      announce: (changedPaths, deletedPaths) => {
+        this.ctx.vault.announceChanges({
+          vaultId: vault.id,
+          changedPaths: [...changedPaths],
+          ...(deletedPaths.length > 0 ? { deletedPaths: [...deletedPaths] } : {}),
+        });
+        this.announceChanged();
+      },
+    };
   }
 
   createTicket(input: {
@@ -755,13 +792,11 @@ class BoardService {
   }
 
   /**
-   * The one transition core, already inside the queue (shared by the
-   * board's own `transition`, the Ready card's Accept and its Send
-   * back, req-75 W3): validate the target, patch (plus an optional
-   * second Log line — the send-back note), move the file into the
-   * resolved numbered directory, one commit, the optional push. The
-   * ordinary Log line is always `<from> -> <to>`, so the commit and
-   * the Log agree for every caller.
+   * The board's move, already inside the queue (shared by `transition`,
+   * the Ready card's Accept and its Send back, req-75 W3): validate the
+   * target and the path guard here, then run the one transition machine —
+   * patch (plus the optional second Log line), rename into the resolved
+   * numbered directory, one commit, the optional push, one announcement.
    */
   private async moveCard(
     vault: VaultLike,
@@ -783,57 +818,24 @@ class BoardService {
       return { ok: false, error: `${card.id} sits in an unexpected path (${card.path})` };
     }
 
-    const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
-    // A hand-move never touches the claim (owner ruling, 2026-10-18): a
-    // stamp here would block the target column's pool, since the
-    // dispatcher never takes claimed cards. Claims belong to the
-    // takeover/release menu and to the fleet's own moves.
-    const now = new Date();
-    let patched: string;
-    try {
-      patched = patchTicketFile(text, { to, from, now, actor });
-      if (extraLog !== undefined) {
-        patched = withLogLine(patched, now, actor, extraLog);
-      }
-    } catch (error) {
-      return { ok: false, error: messageOf(error) };
-    }
-
     const toDir = resolvePhaseDir(
       await this.ticketDirs(vault),
       snap.pipeline.findIndex((p) => p.id === to) + 1,
       to,
     );
-    const newPath = `tickets/${toDir}/${card.id}.md`;
-    try {
-      const oldAbs = this.ctx.vault.resolveAssetPath(card.path, { vaultId: vault.id });
-      const dirAbs = this.ctx.vault.resolveAssetPath(`tickets/${toDir}`, { vaultId: vault.id });
-      const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
-      if (oldAbs === null || dirAbs === null || newAbs === null) {
-        return { ok: false, error: 'ticket path escapes the vault' };
-      }
-      await fsp.mkdir(dirAbs, { recursive: true });
-      await fsp.rename(oldAbs, newAbs);
-      await this.ctx.vault.write(newPath, patched, { vaultId: vault.id });
-    } catch (error) {
-      return { ok: false, error: `move failed: ${messageOf(error)}` };
-    }
-
-    const warning = await this.commit(vault, [card.path, newPath], `tickets: ${card.id} ${from} -> ${to}`);
-    // The optional auto-push (T-0041): warning-level, never a failed move.
-    const pushWarning = await this.pushTransition(vault, snap.pushRemote);
-    const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
-    this.ctx.vault.announceChanges({
-      vaultId: vault.id,
-      changedPaths: [newPath],
-      deletedPaths: [card.path],
+    // A hand-move never touches the claim (owner ruling, 2026-10-18): a
+    // stamp here would block the target column's pool, since the
+    // dispatcher never takes claimed cards. Claims belong to the
+    // takeover/release menu and to the fleet's own moves.
+    return runTransition(this.transitionIo(vault), {
+      id: card.id,
+      fromPath: card.path,
+      patch: { to, from, now: new Date(), actor },
+      ...(extraLog !== undefined ? { extraLog } : {}),
+      toPath: `tickets/${toDir}/${card.id}.md`,
+      commitMessage: `tickets: ${card.id} ${from} -> ${to}`,
+      pushRemote: snap.pushRemote,
     });
-    this.announceChanged();
-    return {
-      ok: true,
-      path: newPath,
-      ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }),
-    };
   }
 
   /**
@@ -863,50 +865,23 @@ class BoardService {
 
   /**
    * The archive treatment itself, already inside the queue (the Ready
-   * card's terminal Accept reuses it, req-75 W3).
+   * card's terminal Accept reuses it, req-75 W3) — one transition-machine
+   * run: the `archived` Log line, NO `entered-` stamp (the Log marker is
+   * what makes it idempotent and a revive detectable), the move into
+   * `tickets/archive/`, one commit, the optional push. Claim fields ride
+   * along. Reviving is a move back into a phase folder — normalization
+   * stamps it as `archive -> <phase>`. Final deletion is the owner's
+   * manual act inside `archive/`.
    */
   private async archiveCard(vault: VaultLike, snap: BoardSnapshot, card: TicketCard, actor: string): Promise<MutationResult> {
-    const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
-    let patched: string;
-    try {
-      patched = patchTicketFile(text, {
-        to: 'archive',
-        from: null,
-        now: new Date(),
-        actor,
-        action: 'archived',
-      });
-    } catch (error) {
-      return { ok: false, error: messageOf(error) };
-    }
-    const newPath = `${TICKETS_ARCHIVE_DIR}/${card.id}.md`;
-    try {
-      const oldAbs = this.ctx.vault.resolveAssetPath(card.path, { vaultId: vault.id });
-      const dirAbs = this.ctx.vault.resolveAssetPath(TICKETS_ARCHIVE_DIR, { vaultId: vault.id });
-      const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
-      if (oldAbs === null || dirAbs === null || newAbs === null) {
-        return { ok: false, error: 'ticket path escapes the vault' };
-      }
-      await fsp.mkdir(dirAbs, { recursive: true });
-      await fsp.rename(oldAbs, newAbs);
-      await this.ctx.vault.write(newPath, patched, { vaultId: vault.id });
-    } catch (error) {
-      return { ok: false, error: `move failed: ${messageOf(error)}` };
-    }
-    const warning = await this.commit(vault, [card.path, newPath], `tickets: ${card.id} archived`);
-    const pushWarning = await this.pushTransition(vault, snap.pushRemote);
-    const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
-    this.ctx.vault.announceChanges({
-      vaultId: vault.id,
-      changedPaths: [newPath],
-      deletedPaths: [card.path],
+    return runTransition(this.transitionIo(vault), {
+      id: card.id,
+      fromPath: card.path,
+      patch: { to: 'archive', from: null, now: new Date(), actor, action: 'archived' },
+      toPath: `${TICKETS_ARCHIVE_DIR}/${card.id}.md`,
+      commitMessage: `tickets: ${card.id} archived`,
+      pushRemote: snap.pushRemote,
     });
-    this.announceChanged();
-    return {
-      ok: true,
-      path: newPath,
-      ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }),
-    };
   }
 
   /**
@@ -1122,57 +1097,20 @@ class BoardService {
       if (toPhase === null) {
         return { ok: false, error: `"${input.to}" is not a phase in the pipeline` };
       }
-      const oldPath = `${TICKETS_ARCHIVE_DIR}/${input.id}.md`;
-      let text: string;
-      try {
-        text = await this.ctx.vault.read(oldPath, { vaultId: vault.id });
-      } catch {
-        return { ok: false, error: `${input.id} is not in the archive` };
-      }
-      let patched: string;
-      try {
-        patched = patchTicketFile(text, {
-          to: input.to,
-          from: 'archive',
-          now: new Date(),
-          actor: input.actor ?? OWNER,
-        });
-      } catch (error) {
-        return { ok: false, error: messageOf(error) };
-      }
       const toDir = resolvePhaseDir(
         await this.ticketDirs(vault),
         snap.pipeline.findIndex((p) => p.id === input.to) + 1,
         input.to,
       );
-      const newPath = `tickets/${toDir}/${input.id}.md`;
-      try {
-        const oldAbs = this.ctx.vault.resolveAssetPath(oldPath, { vaultId: vault.id });
-        const dirAbs = this.ctx.vault.resolveAssetPath(`tickets/${toDir}`, { vaultId: vault.id });
-        const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
-        if (oldAbs === null || dirAbs === null || newAbs === null) {
-          return { ok: false, error: 'ticket path escapes the vault' };
-        }
-        await fsp.mkdir(dirAbs, { recursive: true });
-        await fsp.rename(oldAbs, newAbs);
-        await this.ctx.vault.write(newPath, patched, { vaultId: vault.id });
-      } catch (error) {
-        return { ok: false, error: `move failed: ${messageOf(error)}` };
-      }
-      const warning = await this.commit(vault, [oldPath, newPath], `tickets: ${input.id} archive -> ${input.to}`);
-      const pushWarning = await this.pushTransition(vault, snap.pushRemote);
-      const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
-      this.ctx.vault.announceChanges({
-        vaultId: vault.id,
-        changedPaths: [newPath],
-        deletedPaths: [oldPath],
+      return runTransition(this.transitionIo(vault), {
+        id: input.id,
+        fromPath: `${TICKETS_ARCHIVE_DIR}/${input.id}.md`,
+        readError: `${input.id} is not in the archive`,
+        patch: { to: input.to, from: 'archive', now: new Date(), actor: input.actor ?? OWNER },
+        toPath: `tickets/${toDir}/${input.id}.md`,
+        commitMessage: `tickets: ${input.id} archive -> ${input.to}`,
+        pushRemote: snap.pushRemote,
       });
-      this.announceChanged();
-      return {
-        ok: true,
-        path: newPath,
-        ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }),
-      };
     });
   }
 

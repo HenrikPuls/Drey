@@ -1,4 +1,33 @@
 
+### Milestone 98 — one transition machine + status log + fleet ledger (E1)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md),
+etappe E1 of the Mission-Control migration). The five move variants of the
+board service (`moveCard`, `archiveCard`, `unarchive`, `treatDrift`,
+`acceptTicket`) shared one copied pipeline — patch → rename → commit →
+push → announce; `acceptTicket` stays a dispatcher by nature (terminal
+phase archives, anything else moves). The pipeline now lives once in
+`packages/tickets-engine/src/core/transition.ts` as `runTransition`: pure
+domain with all IO injected (`TransitionIo` — read/write, the mkdir+rename
+with the verbatim `ticket path escapes the vault` wording, the
+warning-level commit/push, the closing vault-round + board-changed
+announcement). The board service builds a `TransitionSpec` per move kind
+and runs it through a host adapter; every historical error surface is
+preserved (propagating read failures, the unarchive wording, the
+normalize log line, warning joining). Nine new machine specs cover the
+pipeline with fakes. Two pure data forms land alongside, parsers and
+writers with specs, no consumers yet (E3/E5): `core/status-log.ts` — the
+per-ticket append-only `<ticket>.status.log` with the verb grammar
+(`working` / `blocked` / `needs-decision` / `paused` / `done` / `failed`
+/ `resolved`), the `[key=slug]` marker convention and the open-decisions
+fold (a key stays open until `resolved`, no matter what piles on top);
+`core/ledger.ts` — the append-only `_meta/ledger.jsonl` fleet events
+(`dispatched` / `phase` / `proof_ready` / `merged` / `archived`) with ts,
+ticket, persona, model and optional cost — the realtime hook for Mission
+Control and the reporting intent, no Markdown parsing. Gate green; the
+board service shrinks by ~60 lines net, the service split itself is E2.
+
 ### Milestone 97 — tickets-engine package cut (Mission-Control migration E0)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01

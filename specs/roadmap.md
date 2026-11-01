@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-01):** version 0.8.1, milestones 1–97 built — 1–83
+**Status (2026-11-01):** version 0.8.1, milestones 1–98 built — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -55,14 +55,14 @@ through the live board rounds T-0001 – T-0006 in the owner's tickets
 repo). **Milestones 84 (the fleet runner) and 85 (continuous
 orchestration, ticket T-0007, ADR-0077) — like the later owner requests
 86–91 — are built and suite-green but await the owner's rounds** — see
-their changelog markers. **Milestone 97 (the tickets-engine package cut,
-ADR-0088, E0 of the Mission-Control migration) is built and suite-green
-but awaits the owner's rounds.** The owner's verification round for 1–81 closed
+their changelog markers. **Milestones 97 (the tickets-engine package cut,
+ADR-0088) and 98 (one transition machine + status log + fleet ledger, E1)
+are built and suite-green but await the owner's rounds.** The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 97 = the tickets-engine package cut; milestone 96 = fleet stability, the rest (limits, prompt versions, edit counts, Tell/Nudge, soft pause); milestone 95 = fleet stability part 4 (the run view); milestone 94 = fleet stability part 2; milestone 93 = fleet stability part 1b; milestone 92 = fleet stability part 1; milestone 91 = ticket T-0084; latest requirement id: req-94
+highest used (latest: milestone 98 = one transition machine + the two data forms; milestone 97 = the tickets-engine package cut; milestone 96 = fleet stability, the rest (limits, prompt versions, edit counts, Tell/Nudge, soft pause); milestone 95 = fleet stability part 4 (the run view); milestone 94 = fleet stability part 2; milestone 93 = fleet stability part 1b; milestone 92 = fleet stability part 1; milestone 91 = ticket T-0084; latest requirement id: req-94
 (req-94 = CI green again: the e2e suite rewritten for req-84/W4a and typechecked via tsconfig.e2e.json, the Ready-card fold CSS bug fixed; req-93 = JIT planning: the plan columns leave the default pipeline, the build step derives file-level detail itself; req-92 = BLOCKED keeps an incomplete step put; req-86 = the step card follows the pipeline, column editor, Settings tidied; req-81–85 see the changelog; req-80 = fleet token economy; req-75–78 added 2026-10-31: the Work panel, STRIDE, TARA, the red-gate
 back-move; req-79 = the fleet brief's short instructions file; req-74 = due-date reminders, T-0012; req-73 is readable board
 issues, renumbered from req-66 — the tickets remote holds req-66)),
@@ -84,7 +84,7 @@ the list, 2026-11-01; migration plan approved by the owner,
 The strangler restructure of the tickets system per the architecture
 concept: `packages/tickets-engine` (domain, fleet, contracts — E0/milestone 97
 shipped) grows server + services through E1 (one transition machine, status
-log + fleet ledger), E2 (standalone engine process serving the HTTP/SSE API
+log + fleet ledger — milestone 98 shipped), E2 (standalone engine process serving the HTTP/SSE API
 and the web app; the Drey plugin becomes a native client of it), E3
 (personas), E4 (verify/proof), E5 (`apps/mission-control` phone-first PWA +
 the chat surface; Drey keeps its native Work panel/thread/editor) and E6
