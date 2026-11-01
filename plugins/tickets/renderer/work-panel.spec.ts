@@ -393,7 +393,7 @@ describe('workListNode', () => {
       [{ id: 'T-0016', title: 'Ledger sync', at: new Date().toISOString() }],
     );
     const list = workListNode(deps(), snap, [run], folds, () => undefined);
-    const rows = [...list.querySelectorAll('.work-row, .work-done-row')];
+    const rows = [...list.querySelectorAll<HTMLElement>('.work-row, .work-done-row')];
     expect(rows.length).toBe(5); // one shaped, one needing, one running, one idea, one done
     for (const row of rows) {
       const id = row.querySelector<HTMLElement>('.work-row-id')!;

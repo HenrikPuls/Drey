@@ -1020,7 +1020,18 @@ lists what the branch carries against its base — each file, its
 status, the lines added and removed — beside **Safe beside others**
 (✓ own worktree). Two quick prompts sit above the prompt box: **What
 are you doing and why?** and **Stop after this step** — a click fills
-the box, you send. In the conversation
+the box, you send.
+
+While the worker is in the middle of a turn, what you send does not cut
+into it: the message waits in a **queue above the prompt box** — click
+one to edit it (Enter saves, Escape cancels), × removes it. When the
+turn ends, the first queued message is sent by itself, the next at the
+following idle. To interrupt the turn and send at once anyway, use
+**Send now** next to the send button or press **Ctrl+Enter**. The queue
+is kept per run, also across a reload; when a run ends with messages
+still queued, a note above the box says so and offers to copy them.
+
+In the conversation
 each tool call is one quiet row: a dot (green when it settled, red when
 it failed), the tool, what it was called on — paths relative to the
 run's worktree, the full path in the tooltip — and its result. More
@@ -1047,6 +1058,28 @@ the reason in the Log and leaves the ticket where it is — the next run
 of that ticket carries the failed gate's output (its tail) so the
 worker fixes it first and continues the branch instead of starting
 over.
+
+**All workers at a glance.** The **Workers** link at the right end of
+the Work panel's footer (also in the header's **⋯** menu) opens one
+tab with a card per live run: its dot, the ticket's title and how long
+it has been at it, one line with the state, the worker, its model and
+how full its context is, and what it does now with the two actions
+before it. Each card carries the thread's controls — **Pause** (a
+pause **Continue** undoes), **Tell…** (a one-line input right in the
+card), **Take over** and **Stop**; a run that waits on you offers
+**Answer** instead, which opens the ticket page. A busy worker
+without progress — no edit for eight minutes, the same file read
+again and again, or the runner itself flagging it — is flagged
+**Looks stuck** (the card's border says so too): **Nudge** sends a
+canned status request — one line on what it is doing, or a question
+when it is blocked —,
+**Hand to …** stops the run and starts the same ticket on the other
+worker, **Stop** ends it; the ticket thread's header shows the same
+*Looks stuck* word. The top row sums the pools up — who runs of how
+many slots per worker, what waits in the queue — and its two buttons
+act on everything at once: **Pause all after this step** and the armed
+**Stop all** (click twice). The tab's footer counts the workers and
+the day's tokens.
 
 Every run's instruction is a **context pack**, assembled in a fixed
 order: the repo's own agent instructions (the file its **Agent

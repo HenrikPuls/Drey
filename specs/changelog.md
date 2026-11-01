@@ -1,4 +1,21 @@
 
+### req-75 W4c — Queue messages for a busy worker
+
+**Not yet manually verified by the owner.** Owner request, 2026-10-31
+(outside the list). While a worker is in the middle of a turn, what the
+owner sends no longer cuts into it: Enter and the send button (now
+reading **Queue**) put the message in a queue above the prompt box,
+attachments riding with it, one row per message — click to edit inline,
+× to remove. When the turn ends the first queued message is sent by
+itself, the next at the following idle — one per idle turn, and never
+while the worker waits on the owner (the owner answers first).
+**Send now** beside the button, or Ctrl+Enter, keeps today's behaviour:
+interrupt the turn, then send. The queue lives per run in the renderer
+and is mirrored to localStorage, so a reload (or a closed Drey) keeps
+it; a run that ends with messages still queued drops them with a notice
+and a Copy button. Pure model: `message-queue.ts` with specs; wired in
+`run-composer.ts`.
+
 ### req-85 — the Work rows lead with the ticket id
 
 Owner request, 2026-11-01
@@ -336,6 +353,69 @@ tooltip are written only when their text changes.
   without a lag beat.
 
 
+
+### req-75 W4b — All workers
+
+**Not yet manually verified by the owner.** Built before the
+fleet-stability milestones landed their own Workers section on main
+(milestone 95/96); rebased onto it — the tab keeps the section's soft
+pause (**Pause** = `softpause`, a paused card's primary is
+**Continue** = `release`) and sends the same canned Nudge text, while
+the section's cards stay as milestone 95 shaped them. The Workers tab
+(`docs/design/work-panel/Workers.dc.html`, artboard "3b · All
+workers"), part 2 of req-75 W4 (part 1: W4a, below): one card per live
+run, opened from the Work panel footer's **Workers** link (right end
+of the footer, a text link) or the header ⋯ menu's **Workers** row —
+the stateless doc kind `tickets-workers` (key `workers://all`, title
+`Workers`, icon `users`, restores itself). The top row: the h1, one
+chip per provider pool — `<Provider> <live>/<size>`, bold numbers,
+the sizes from the `fleet.pool.*` config read once at activation like
+the main side does — the muted queue line (`<n> queued`, plus
+` · <title> waits for <blocker id>` for the first blocked queued
+ticket), then **Pause all after this step** (a soft pause per live
+run under one busy line — each card's **Continue** releases it) and
+the two-step armed **Stop all** (label
+`Stop all — click again`, the chain's emergency stop `chainAbort` —
+the master switch's ■; it disarms after 5 s). Each card (min 320 px
+wide, 8 px radius, 1 px border: `--status-modified` while waiting,
+`--accent` while you tell it something, a warning hue when stuck):
+the run's dot, the bold ticket title, the time right; the muted
+`state · Provider · model · context <pct>` line (state from
+`liveStateWord`, or `Looks stuck`); the **Now** box — the current
+activity (`run.activity`, else the newest action) in 12 px mono with
+the two recent actions before it (`recentActions`); the state's
+controls — working: **Pause** (the soft pause, `softpause`) /
+**Tell…** (a one-line input labelled
+`Tell the worker` with a **Send** button inside the card, sent over
+`fleetSend`) / **Take over** / **Stop**; paused: **Continue**
+(primary, `release`) / **Tell…** / **Take over** / **Stop**;
+waiting: **Answer** (primary,
+opens the ticket page) / **Take over** / **Stop**; stuck: **Nudge**
+(the same canned status request milestone 96's section cards send,
+through `fleetSend`) / **Hand to Claude Code** / **Hand to OpenCode** (stop
+with the reason `handed to <provider> by the owner`, then `fleetStart`
+for the same ticket with the other provider) / **Stop** — and the
+**Open ticket** link right. A busy run without progress reads **Looks
+stuck** — the fleet's own `stuck` flag on the run counts too — from
+`stuckOf` in the new pure `plugins/tickets/renderer/stuck.ts`
+(a hint, never an automatic action): no write/edit tool call for
+`STUCK_NO_EDIT_MIN` = 8 minutes (from the last edit, else the run
+start) or one path read `STUCK_REPEATS` = 4 times among the last 20
+tool calls without an edit after it (the telemetry's
+`READ_TOOLS`/`WRITE_TOOLS` vocabulary over both adapters' tool-call
+shapes); waiting, idle, detached and ended runs never are. The hint
+line says `No progress for <n> minutes and the context is filling up.`
+— `No progress for <n> minutes.` under 60 % fill — or, on repeated
+reads, `Read the same files <n> times without an edit.` The ticket
+thread's header state word reads `Looks stuck` when either stuck
+source says so.
+Each live run's stream is pulled every 5 s while the tab is mounted
+and the pull stops on unmount; the tab's muted footer says
+`<n> workers · today <tokens> tokens` (tokensIn + tokensOut of the
+runs started today). Specs: `stuck.spec.ts` (15),
+`workers-view.spec.ts` (15, jsdom: milestone 95's six section tests
+plus the tab's nine). Docs: roadmap's W4 bullet removed
+(stage shipped), manual §13, docs/05 §5.41 "Workers view" row.
 
 ### Milestone 91 — ticket T-0084: the Work panel's phase colours, filter and running marks
 

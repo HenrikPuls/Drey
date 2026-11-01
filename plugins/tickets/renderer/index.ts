@@ -34,6 +34,8 @@ import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetO
 import { readyCardNode, storyNode } from './ready-view';
 import type { ChangesReply } from '../shared/changes';
 import { checkpointControls, headerControls, liveStateWord, threadSteps, durationWords, type ThreadStep } from './thread-steps';
+import { stuckOf } from './stuck';
+import { mountWorkers, type WorkerPoolEntry, type WorkersViewDeps } from './workers-view';
 import type { WorktreeFile } from '../main/worktree-changes';
 import { createWorkFilterStore, filterPopover, isFilterActive, NO_WORK_FILTER, type WorkFilterState } from './work-filter';
 import { createTicketsSettingsPage } from './settings-page';
@@ -41,6 +43,7 @@ import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-g
 import { createTicketHeader, ticketLogFold } from './ticket-header';
 import { boardIssuesChip, boardIssuesList, type BoardIssuesDeps } from './board-issues';
 import type { ChainStatus, FleetHandoverConfig, RunInfo } from '../main/fleet/protocol';
+import type { NormalizedEvent } from '../main/fleet/providers';
 import { DEFAULT_FLEET_HANDOVER, normalizeFleetHandover } from '../main/fleet/protocol';
 import { handoverDialogState } from './handover-ui';
 import type { HandoverCandidate } from '../main/fleet/handover';
@@ -941,7 +944,7 @@ function masterControlNode(api: DreyPluginApi): HTMLElement {
 function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
   const more = el('button', 'icon-btn');
   more.type = 'button';
-  more.title = 'More — chain log, clean up worktrees';
+  more.title = 'More — workers, chain log, clean up worktrees';
   more.setAttribute('aria-label', 'More actions');
   more.setAttribute('aria-haspopup', 'menu');
   more.append(api.ui.icon('more-horizontal', 14));
@@ -972,6 +975,7 @@ function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
       });
       menu.append(button);
     };
+    item('Workers', 'Every live worker as a card — what it does, its context, its controls', () => openWorkersDoc(api));
     item('Chain log', 'What the fleet daemon did (dispatches, skips, gates), as a readonly editor tab', () => openChainLog(api));
     item('Clean up worktrees…', 'Removes every worktree whose ticket has no live run, then prunes', () => void runWorktreesCleanup());
     document.body.append(menu);
@@ -1068,6 +1072,12 @@ async function runChainAction(method: string, payload: unknown): Promise<void> {
 function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null, fleet: HTMLElement | null): HTMLElement | null {
   const bar = el('div', 'tickets-statusbar');
   const right = el('span', 'tickets-statusbar-right');
+  // The Workers link (req-75 W4b): a text link at the footer's right
+  // end — the tab is one click away wherever the board is.
+  const workersLink = el('button', 'tickets-statusbar-link', 'Workers');
+  workersLink.type = 'button';
+  workersLink.title = 'Every live worker — what it does, its context, its controls';
+  workersLink.addEventListener('click', () => openWorkersDoc(api));
   if (note !== '') {
     const message = el('span', 'tickets-statusbar-note');
     message.dataset['kind'] = noteKind;
@@ -1094,6 +1104,7 @@ function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null, fleet: HT
     right.append(message);
   }
   if (snap === null) {
+    right.append(workersLink);
     if (right.childElementCount === 0) {
       return null;
     }
@@ -1122,6 +1133,7 @@ function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null, fleet: HT
   if (fleet !== null) {
     bar.append(fleet);
   }
+  right.append(workersLink);
   bar.append(right);
   return bar;
 }
@@ -1498,6 +1510,36 @@ const threadListeners = new Set<() => void>();
  * next paint of that ticket's thread.
  */
 let threadFocusRun: string | null = null;
+
+// --- the Workers tab (req-75 W4b) ---------------------------------------------
+
+const WORKERS_KIND = 'tickets-workers';
+const WORKERS_KEY = 'workers://all';
+
+/**
+ * The provider pools as the Workers tab shows them (W4b): read once at
+ * activation from the same config keys the main side reads — pool sizes
+ * apply on restart, so one read mirrors the daemon's own view.
+ */
+let workerPools: readonly WorkerPoolEntry[] = [
+  { id: 'opencode', label: 'OpenCode', size: 1 },
+  { id: 'claude-code', label: 'Claude Code', size: 1 },
+];
+
+const readWorkerPools = async (api: DreyPluginApi): Promise<void> => {
+  const entries = await Promise.all(
+    WORKER_LABEL.map(async ([id, label]) => {
+      const size = await api.settings.get<number>(`fleet.pool.${id}.size`);
+      return { id, label, size: typeof size === 'number' && size >= 1 ? size : 1 };
+    }),
+  );
+  workerPools = entries;
+};
+
+/** Opens (or focuses) the Workers tab. */
+function openWorkersDoc(api: DreyPluginApi): void {
+  api.documents.addDoc(WORKERS_KIND, WORKERS_KEY, 'Workers');
+}
 
 function threadTitle(ticketId: string): string {
   const title = boardCard(ticketId)?.meta.title ?? null;
@@ -2122,6 +2164,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
 
   let pulledFor: string | null = null;
   let lastStream = '\u0000';
+  let threadEvents: readonly NormalizedEvent[] = [];
   let alive = true;
   let runStateSig = '';
   const pull = (): void => {
@@ -2132,6 +2175,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     if (run.id !== pulledFor) {
       pulledFor = run.id;
       lastStream = '\u0000';
+      threadEvents = [];
       transcript.setWorktree(run.worktreePath);
     }
     const runId = run.id;
@@ -2142,7 +2186,8 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       const text = (result as { text?: string }).text ?? '';
       if (text !== lastStream) {
         lastStream = text;
-        transcript.update(formatWatch(parseStreamEvents(text)));
+        threadEvents = parseStreamEvents(text);
+        transcript.update(formatWatch(threadEvents));
         followSteps();
       }
     }).catch(() => undefined);
@@ -2173,8 +2218,11 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     light.className = `tickets-light tickets-light-${waiting ? 'waiting' : live && status !== null ? status.light : 'idle'}`;
     light.hidden = run === null;
     // The state word (W4a): what the worker does now — without a live
-    // run the word says so, and without any run there is no dot.
-    stateWord.textContent = liveStateWord(run) ?? (run !== null ? 'Ended' : 'No run yet');
+    // run the word says so, and without any run there is no dot. W4b:
+    // a busy run the stream says makes no progress reads `Looks stuck`,
+    // and so does one the fleet itself flagged.
+    const stuck = live && run !== null && (run.stuck === true || stuckOf(run, threadEvents, Date.now()).stuck);
+    stateWord.textContent = stuck ? 'Looks stuck' : (liveStateWord(run) ?? (run !== null ? 'Ended' : 'No run yet'));
     // One muted line: provider · model · run time · context (parts without data stay out).
     const fill = run === null ? null : contextFill(run);
     const metaText = [
@@ -2368,6 +2416,87 @@ function mountChainLog(api: DreyPluginApi, host: HTMLElement): () => void {
     alive = false;
     clearInterval(timer);
     view.dispose();
+  };
+}
+
+// --- the Workers tab's wiring (req-75 W4b) ------------------------------------
+
+/** What the Workers tab may do — the board's seams, one factory. */
+function workersViewDeps(api: DreyPluginApi): WorkersViewDeps {
+  return {
+    // Only the watchable runs get a card: a detached run has no stream
+    // to pull and no controls to send — the ticket page says "not connected".
+    runs: () => liveRuns(),
+    stream: (runId) =>
+      invokeBoard('fleetStream', { runId })
+        .then((result) => (result as { text?: string }).text ?? '')
+        .catch(() => ''),
+    pools: () => workerPools,
+    queue: () => {
+      const snap = snapshot;
+      if (snap === null || snap.vaultId === null) {
+        return null;
+      }
+      const queued = workGroups(snap, fleetRuns).running.filter((row) => row.run === null);
+      const blocked = queued.find((row) => row.card.blocked.length > 0);
+      return {
+        count: queued.length,
+        blocked: blocked === undefined ? null : { title: blocked.card.meta.title ?? blocked.card.id, blocker: blocked.card.blocked[0]! },
+      };
+    },
+    titleOf: (ticketId) => boardCard(ticketId)?.meta.title ?? ticketId,
+    providerLabel: workerLabelOf,
+    todayTokens: () => {
+      const today = new Date();
+      const sameDay = (iso: string): boolean => {
+        const at = new Date(iso);
+        return at.getFullYear() === today.getFullYear() && at.getMonth() === today.getMonth() && at.getDate() === today.getDate();
+      };
+      return fleetRuns.filter((run) => sameDay(run.startedAt)).reduce((sum, run) => sum + run.tokensIn + run.tokensOut, 0);
+    },
+    // Pause is the soft pause the thread's header carries (milestone 94):
+    // Continue releases the step again; takeover stays the third control.
+    control: (action, runId) => {
+      const request = action === 'pause' ? 'softpause' : action === 'continue' ? 'release' : 'takeover';
+      const label = action === 'pause' ? 'Pausing' : action === 'continue' ? 'Continuing' : 'Taking over';
+      void runMutation(label, () => invokeBoard('fleetControl', { action: request, runId }));
+    },
+    stop: (runId, reason) =>
+      runMutation('Stopping the worker', () => invokeBoard('fleetStop', { runId, reason })).then((result) => result.ok),
+    send: (runId, text) => {
+      void runMutation('Telling the worker', () => invokeBoard('fleetSend', { runId, text }));
+    },
+    startRun: (ticketId, provider) => {
+      if (boardCard(ticketId) === null) {
+        return;
+      }
+      void runMutation('Starting the run', () => invokeBoard('fleetStart', { id: ticketId, worker: provider, permissionMode: 'accept-edits' }));
+    },
+    // Pause all: every live run paused after its current step under one
+    // busy line — each one resumes with its card's Continue (W4b).
+    pauseAll: () => {
+      const runs = liveRuns();
+      if (runs.length === 0) {
+        return;
+      }
+      void runMutation('Pausing every worker', async () => {
+        const results = await Promise.all(runs.map((run) => invokeBoard('fleetControl', { action: 'softpause', runId: run.id })));
+        const refused = results.filter((result) => (result as { ok?: boolean }).ok === false);
+        return refused.length === 0 ? { ok: true } : (refused[0] as MutationResult);
+      });
+    },
+    // Stop all: the chain's emergency stop — the master switch's ■ (W4b).
+    stopAll: () => void runChainAction('chainAbort', {}),
+    openTicket: (ticketId) => {
+      const card = boardCard(ticketId);
+      if (card !== null) {
+        void openTicketPage(api, card);
+      }
+    },
+    onRunsChanged: (listener) => {
+      fleetListeners.add(listener);
+      return () => fleetListeners.delete(listener);
+    },
   };
 }
 
@@ -2853,6 +2982,20 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       statusText: () => 'fleet daemon',
     });
 
+    // The Workers tab (req-75 W4b): every live run as a card. Stateless —
+    // the session snapshot reopens it from the fixed key.
+    api.ui.registerDocKind({
+      kind: WORKERS_KIND,
+      icon: 'users',
+      serialize: () => null,
+      restore: () => openWorkersDoc(api),
+      mount: (host) => mountWorkers(workersViewDeps(api), host),
+      statusText: () => {
+        const n = liveRuns().length;
+        return n === 0 ? null : `${n} running`;
+      },
+    });
+
     api.ui.registerDocKind({
       kind: THREAD_KIND,
       icon: 'messages-square',
@@ -2906,6 +3049,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       applyFleetSnapshot((payload ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
     void invokeBoard('fleetStatus').then((result) =>
       applyFleetSnapshot((result ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
+    void readWorkerPools(api).catch(() => undefined);
     void refreshBoard();
   },
 };

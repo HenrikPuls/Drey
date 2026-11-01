@@ -109,15 +109,10 @@ routes phase tickets, and the phone as a chat client. Design reference:
 the owner's canvas "Drey Tickets — Workflow redesign" (11 screens).
 Usability findings that motivate it: ADR-0087 "Context". Stages, each
 shipped and confirmed on its own, in this order (W1 shipped as
-milestone 89, W2 as milestone 90 — changelog; W1b, W2b and W3 shipped
-as owner-requested additions, see the changelog).
+milestone 89, W2 as milestone 90, W4 as req-75 W4a + W4b — changelog;
+W1b, W2b and W3 shipped as owner-requested additions, see the
+changelog).
 
-- **W4 — The worker on the ticket.** Current action, recent actions,
-  pause / tell / take over / stop on the ticket page (the takeover tab
-  goes); a Workers view with one card per live worker; a stuck worker
-  (no edit for N minutes, repeated reads) is flagged with nudge /
-  hand over / stop. W4a shipped: the worker on the ticket; the
-  takeover tab is gone.
 - **W5 — Capture by hotkey and voice.** A second global chord "New
   ticket" (ADR-0073) opens a small capture window that starts Windows
   dictation (Win+H) — no own speech recognition (req-11 stays excluded;
@@ -388,8 +383,9 @@ rest are kept so they still match `docs/11`.
 
 - **req-75 W1 (Work panel):** the per-phase brakes (pause / stop / play
   one automatic phase) are no longer drawn — only the master switch is;
-  a single phase is held over the runner's `POST /chain/column`. Decide
-  in W4 (Workers view) whether they come back there. The thread is one
+  a single phase is held over the runner's `POST /chain/column`. The
+  Workers view (W4b) shipped without them; decide whether they come
+  back there. The thread is one
   tab that follows the ticket opened last; one thread per ticket needs a
   plugin SDK way to put a tab into a given pane. The remote client's
   iPad drag still sends a drop index, which the desk now ignores — it

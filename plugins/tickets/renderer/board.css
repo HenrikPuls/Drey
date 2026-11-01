@@ -1501,6 +1501,95 @@ details[open] > summary > .tickets-tx-think-preview {
   justify-content: center;
 }
 
+.tickets-composer-sendnow {
+  height: 28px;
+  font-size: 0.72rem;
+}
+
+/* The queue above the prompt box (req-75 W4c): one row per message the
+   owner sent while the worker was in a turn. */
+.tickets-composer-queue {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 16px 8px;
+}
+
+.tickets-composer-queue[hidden] {
+  display: none;
+}
+
+.tickets-queue-row,
+.tickets-queue-ended {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 8px 3px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 8px;
+  background: var(--bg-sidebar);
+}
+
+.tickets-queue-label {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-4);
+}
+
+.tickets-queue-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+
+.tickets-queue-edit {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 4px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.tickets-queue-x {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  justify-content: center;
+}
+
+.tickets-queue-hint {
+  font-size: 12px;
+  color: var(--text-4);
+  padding: 0 10px;
+}
+
+.tickets-queue-ended-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* The quick prompts sit in the toolbar; in a narrow pane they scroll
    sideways instead of pushing stop and send out of place. */
 .tickets-takeover-chips {
@@ -3188,4 +3277,265 @@ details[open] > summary > .tickets-tx-think-preview {
   flex: none;
   width: 14px;
   color: var(--accent-fg);
+}
+
+/* ---- the Workers tab (req-75 W4b): one card per live worker ---- */
+
+.tickets-workers-tab {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 32px;
+  overflow: hidden auto;
+}
+
+.tickets-workers-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.tickets-workers-h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+/* One chip per provider pool: the label, then live/size in bold. */
+.tickets-workers-pool {
+  color: var(--text-2);
+  font-size: 0.8rem;
+}
+
+.tickets-workers-pool-size {
+  font-weight: 700;
+  color: var(--text-heading);
+}
+
+.tickets-workers-queue {
+  color: var(--text-4);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-workers-spacer {
+  flex: 1;
+}
+
+.tickets-workers-allbtn {
+  height: 32px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.tickets-workers-stopall {
+  color: var(--status-deleted);
+}
+
+.tickets-workers-armed {
+  background: color-mix(in srgb, var(--status-deleted) 18%, transparent);
+  border-color: var(--status-deleted);
+}
+
+/* The cards: min 320 px wide, the border says the state (waiting the
+   modified hue, telling the accent, stuck a hotter warning). */
+.tickets-workers-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  align-content: start;
+}
+
+.tickets-workers-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--bg-dock);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.tickets-workers-card.is-waiting {
+  border-color: var(--status-modified);
+}
+
+.tickets-workers-card.is-telling {
+  border-color: var(--accent);
+}
+
+.tickets-workers-card.is-stuck {
+  border-color: color-mix(in srgb, var(--status-modified) 55%, var(--status-deleted));
+}
+
+.tickets-workers-card.is-paused {
+  border-color: color-mix(in srgb, var(--border) 60%, var(--status-modified));
+}
+
+.tickets-workers-cardhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tickets-workers-cardhead .tickets-light {
+  flex: none;
+  width: 10px;
+  height: 10px;
+}
+
+.tickets-workers-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  color: var(--text-heading);
+}
+
+.tickets-workers-time {
+  flex: none;
+  color: var(--text-4);
+  font-size: 0.75rem;
+}
+
+/* One muted line: state � provider � model � context. */
+.tickets-workers-meta {
+  color: var(--text-4);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tickets-workers-state {
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.tickets-workers-card.is-waiting .tickets-workers-state {
+  color: var(--status-modified);
+}
+
+.tickets-workers-card.is-stuck .tickets-workers-state {
+  color: color-mix(in srgb, var(--status-modified) 55%, var(--status-deleted));
+}
+
+/* The Now box: the current activity, the recent actions muted below. */
+.tickets-workers-now {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-input);
+}
+
+.tickets-workers-nowlabel {
+  color: var(--text-4);
+  font-size: 0.75rem;
+}
+
+.tickets-workers-activity {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-workers-before {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-4);
+  white-space: pre-line;
+}
+
+/* The stuck hint (a hint, never an action). */
+.tickets-workers-hint {
+  color: color-mix(in srgb, var(--status-modified) 55%, var(--status-deleted));
+  font-size: 0.8rem;
+}
+
+/* The Tell input: one line and Send, inside the card. */
+.tickets-workers-tell {
+  display: flex;
+  gap: 8px;
+}
+
+.tickets-workers-tellinput {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+/* The actions row: the state's buttons, Open ticket right. */
+.tickets-workers-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  flex-wrap: wrap;
+}
+
+.tickets-workers-stop {
+  color: var(--status-deleted);
+}
+
+.tickets-workers-open {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--accent-fg);
+  font: inherit;
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.tickets-workers-empty {
+  grid-column: 1 / -1;
+  padding: 24px 0;
+  color: var(--text-4);
+}
+
+.tickets-workers-foot {
+  flex: none;
+  color: var(--text-4);
+  font-size: 0.75rem;
+}
+
+/* The footer's Workers text link (req-75 W4b), at the right end. */
+.tickets-statusbar-link {
+  flex: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--accent-fg);
+  font: inherit;
+  font-size: 0.75rem;
+  text-decoration: underline;
+  cursor: pointer;
 }
