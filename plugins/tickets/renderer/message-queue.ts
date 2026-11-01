@@ -13,6 +13,9 @@ export interface QueuedMessage {
   readonly at: string;
 }
 
+/** The queue's internal, mutable shape. */
+type QueueEntry = { id: string; text: string; attachments: string[]; at: string };
+
 export interface MessageQueue {
   list(): readonly QueuedMessage[];
   add(text: string, attachments: readonly string[], nowIso: string): QueuedMessage;
@@ -38,18 +41,18 @@ const isEntry = (value: unknown): value is QueuedMessage => {
   }
   const v = value as Record<string, unknown>;
   return (
-    typeof v.id === 'string' &&
-    v.id !== '' &&
-    typeof v.text === 'string' &&
-    Array.isArray(v.attachments) &&
-    v.attachments.every((a) => typeof a === 'string') &&
-    typeof v.at === 'string' &&
-    v.at !== ''
+    typeof v['id'] === 'string' &&
+    v['id'] !== '' &&
+    typeof v['text'] === 'string' &&
+    Array.isArray(v['attachments']) &&
+    v['attachments'].every((a) => typeof a === 'string') &&
+    typeof v['at'] === 'string' &&
+    v['at'] !== ''
   );
 };
 
 /** Accepts a stored string or an already-parsed value; anything malformed goes, valid entries stay. */
-const restoreEntries = (restore: unknown): QueuedMessage[] => {
+const restoreEntries = (restore: unknown): QueueEntry[] => {
   let source: unknown = restore;
   if (typeof restore === 'string') {
     try {
@@ -58,7 +61,9 @@ const restoreEntries = (restore: unknown): QueuedMessage[] => {
       return [];
     }
   }
-  return Array.isArray(source) ? source.filter(isEntry) : [];
+  return Array.isArray(source)
+    ? source.filter(isEntry).map((entry) => ({ ...entry, attachments: [...entry.attachments] }))
+    : [];
 };
 
 const newId = (): string =>
@@ -67,11 +72,12 @@ const newId = (): string =>
     : `q-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 export function createMessageQueue(restore?: unknown): MessageQueue {
-  const entries: QueuedMessage[] = restore === undefined ? [] : restoreEntries(restore);
+  // Mutable inside; the interface hands out read-only entries.
+  const entries: QueueEntry[] = restore === undefined ? [] : restoreEntries(restore);
   return {
     list: () => [...entries],
     add: (text, attachments, nowIso) => {
-      const entry: QueuedMessage = { id: newId(), text, attachments: [...attachments], at: nowIso };
+      const entry = { id: newId(), text, attachments: [...attachments], at: nowIso };
       entries.push(entry);
       return entry;
     },
