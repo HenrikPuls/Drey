@@ -105,6 +105,8 @@ export function parsePipeline(text: string): PipelineParse {
     const interactiveRaw = map['interactive'];
     const interactive =
       typeof interactiveRaw === 'string' && interactiveRaw.trim() !== '' ? interactiveRaw.trim() : null;
+    const personaRaw = map['persona'];
+    const persona = typeof personaRaw === 'string' && personaRaw.trim() !== '' ? personaRaw.trim() : null;
     const maxRedRaw = map['max-red'];
     const maxRed = typeof maxRedRaw === 'number' && Number.isInteger(maxRedRaw) && maxRedRaw > 0 ? maxRedRaw : null;
     const tokenBudgetRaw = map['token-budget'];
@@ -145,6 +147,7 @@ export function parsePipeline(text: string): PipelineParse {
       model,
       prompt,
       interactive,
+      persona,
       maxRed,
       tokenBudget,
       maxTurns,
@@ -172,6 +175,16 @@ export interface PhasePoolPatch {
    *  or null removes the key (the default palette applies). Never removed
    *  by a worker clear. */
   readonly color?: string | null;
+  /**
+   * The phase's persona (`persona: pia`, ADR-0088 E3) — an empty string
+   *  or null removes the key. Setting a persona REPLACES the column-level
+   *  agent configuration: the legacy `worker:`/`workers:`/`model:`/
+   *  `prompt:` keys go (they are the persona's job now); the `handover:`
+   *  stays as it is, so an `agent …` column keeps draining itself. The
+   *  old column keys stay readable until the board service's migration
+   *  rewrites them onto personas.
+   */
+  readonly persona?: string | null;
 }
 
 /**
@@ -260,6 +273,21 @@ export function patchPipelinePhase(text: string, phaseId: string, patch: PhasePo
       removeKey('color');
     } else {
       entry.set('color', color);
+    }
+  }
+  if (patch.persona !== undefined) {
+    const persona = patch.persona?.trim() ?? '';
+    if (persona === '') {
+      removeKey('persona');
+    } else {
+      entry.set('persona', persona);
+      // The persona owns the column's agent configuration — the legacy
+      // keys would only shadow it (the handover stays: an `agent …`
+      // column keeps draining itself, now through the persona).
+      removeKey('worker');
+      removeKey('workers');
+      removeKey('model');
+      removeKey('prompt');
     }
   }
 

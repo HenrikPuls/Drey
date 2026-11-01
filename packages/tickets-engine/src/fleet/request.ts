@@ -16,8 +16,9 @@ import {
   type TicketCard,
 } from '../contracts/tickets';
 import { acceptanceCommands, ticketSections } from '../core/ticket-files';
-import { composeInstruction, resolveAssignment, type Truncation } from './assignment';
-import { DEFAULT_FLEET_CAPS, type FleetCaps, type HandoverMode, type InteractiveMode, type PermissionMode, type RunRequest } from './protocol';
+import { composeInstruction, parseWorkerValue, resolveAssignment, type Truncation } from './assignment';
+import { personaMemorySection } from './context-pack';
+import { DEFAULT_FLEET_CAPS, type FleetCaps, type HandoverMode, type InteractiveMode, type PermissionMode, type RunRequest, type WorkerProviderId } from './protocol';
 import { worktreePathFor } from './worktree-home';
 
 export interface ComposeRunInput {
@@ -86,10 +87,46 @@ export interface ComposeRunInput {
    * holds the worker from turn one and never gates or moves.
    */
   readonly interactive?: InteractiveMode;
+  /**
+   * The persona the dispatch resolved (E3, ADR-0088) — the ladder's
+   * winner, loaded from the vault by the caller; null = the assignment
+   * ring decides everything, exactly as before personas.
+   */
+  readonly persona?: PersonaDispatch | null;
+}
+
+/**
+ * What a resolved persona contributes to a dispatch (E3): the worker
+ * harness and model pin (`deriveWorkerModel` with a null context
+ * estimate), its prompt as the instruction base instead of the phase
+ * handover prompt, and its curated memory for the instruction's
+ * `## Memory` slice.
+ */
+export interface PersonaDispatch {
+  /** The persona id — what `RunInfo.persona` stamps and the report groups by. */
+  readonly id: string;
+  /** The harness pin (`opencode` | `claude-code`; anything unreadable leaves the ring in charge). */
+  readonly worker: string;
+  /** The model pin. */
+  readonly model: string;
+  /** The persona's prompt text; null/blank = the phase prompt stands. */
+  readonly prompt: string | null;
+  /** The persona's memory text ('' when the file is absent). */
+  readonly memory: string;
 }
 
 export type ComposeRunResult =
-  | { readonly ok: true; readonly request: RunRequest; readonly truncations: readonly Truncation[] }
+  | {
+      readonly ok: true;
+      readonly request: RunRequest;
+      readonly truncations: readonly Truncation[];
+      /**
+       * The resolved persona id for the supervisor to stamp on
+       * `RunInfo.persona` (null on ring dispatches) — the request itself
+       * stays the wire shape it always was.
+       */
+      readonly persona: string | null;
+    }
   | { readonly ok: false; readonly error: string };
 
 export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
@@ -148,9 +185,28 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     repoWorker: input.repo.worker,
     configuredDefault: input.defaultWorker,
   });
-  if (!assignment.ok) {
+  // E3: a loaded persona beats the legacy ring for provider and model —
+  // a harness the fleet cannot run (an 'api' persona) leaves the ring's
+  // choice in place, as does every ring refusal when no persona resolved.
+  // An owner-picked worker in the start dialog still wins over the
+  // persona (the concept's override order: the owner is the final
+  // authority); the persona's prompt and memory apply regardless.
+  const persona = input.persona ?? null;
+  const personaWorker = persona !== null ? parseWorkerValue(persona.worker) : null;
+  const ownerPicked = (input.workerChoice ?? null) !== null;
+  let provider: WorkerProviderId;
+  let model: string | null;
+  if (persona !== null && personaWorker !== null && !ownerPicked) {
+    provider = personaWorker.provider;
+    model = persona.model;
+  } else if (assignment.ok) {
+    provider = assignment.provider;
+    model = assignment.model;
+  } else {
     return { ok: false, error: assignment.error };
   }
+  const personaPrompt = persona !== null && persona.prompt !== null && persona.prompt.trim() !== '' ? persona.prompt : null;
+  const promptText = personaPrompt ?? input.promptText;
   const branch = input.card.meta.branch ?? branchForTicket(input.card.id);
   // The worktree's home (ADR-0080): computed here, carried on the
   // request — the runner never derives paths, and the brief names the
@@ -167,7 +223,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     description: sections.description,
     plan: sections.plan,
     handover: sections.handover,
-    prompt: input.promptText,
+    prompt: promptText,
     acceptance,
     ticketFile: path.join(input.vaultPath, input.card.path),
     ...(input.repo.link !== undefined && input.repo.link.length > 0 ? { links: input.repo.link } : {}),
@@ -179,6 +235,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     gateFailure: input.gateFailure,
     caps: input.caps ?? DEFAULT_FLEET_CAPS,
     ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
+    ...(persona !== null ? { memorySection: personaMemorySection(persona.memory) } : {}),
   });
   const request: RunRequest = {
     ticketId: input.card.id,
@@ -191,8 +248,8 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     baseRef: input.repo.branch,
     ...(input.repo.link !== undefined && input.repo.link.length > 0 ? { links: input.repo.link } : {}),
     ...(extraRepos.length > 0 ? { extraRepos } : {}),
-    provider: assignment.provider,
-    model: assignment.model,
+    provider,
+    model,
     permissionMode: input.permissionMode,
     instruction: instruction.text,
     continuationInstruction: instruction.continuation,
@@ -212,7 +269,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     ...(input.handover !== undefined ? { handover: input.handover } : {}),
     ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
   };
-  return { ok: true, request, truncations: instruction.truncations };
+  return { ok: true, request, truncations: instruction.truncations, persona: persona?.id ?? null };
 }
 
 /** The column's own ceilings as the request carries them, or null when it sets none. */

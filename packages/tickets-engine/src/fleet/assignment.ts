@@ -165,6 +165,14 @@ export interface InstructionInput {
    * the ticket.
    */
   readonly interactive?: InteractiveMode;
+  /**
+   * The resolved persona's curated memory, already sliced by
+   * `context-pack`'s `personaMemorySection` (E3, ADR-0088): carried as the
+   * first of the instruction's variable parts — the stable prefix
+   * (instructions, prompt, plan) must not move with the persona's lessons.
+   * Null/absent = no section, byte-identical persona-less briefs.
+   */
+  readonly memorySection?: string | null;
 }
 
 /** One capped section of the instruction — the caller logs each application. */
@@ -257,9 +265,11 @@ const ASKING =
  * byte-identical for any two runs of the same repo and phase:
  *
  * 1. the repo's agent instructions, verbatim;
- * 2. the phase instruction template;
+ * 2. the phase instruction template (a resolved persona's prompt rides
+ *    here — it IS the template for its runs);
  * 3. `## Plan` verbatim;
- * 4. the variable parts: who/where, the description, the diff stat
+ * 4. the variable parts: who/where, the description, the persona's
+ *    `## Memory` slice (E3), the earlier step's handover, the diff stat
  *    (head-capped), the previous run's gate failure on a retry
  *    (tail-capped), the gate commands, the completion discipline and
  *    how to ask the owner.
@@ -333,6 +343,10 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
   // The parts that change between runs of one step — the tail of the full
   // brief and the whole of a resume's continuation (req-80).
   const changing: string[] = [];
+  const memorySection = input.memorySection != null && input.memorySection.trim() !== '' ? input.memorySection : null;
+  if (memorySection !== null) {
+    changing.push(memorySection);
+  }
   const handover = input.handover?.trim();
   if (handover != null && handover !== '') {
     changing.push(

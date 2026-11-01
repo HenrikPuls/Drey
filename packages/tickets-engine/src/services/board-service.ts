@@ -25,7 +25,8 @@ import { planWorktreeRemoval } from '../core/worktree-removal';
 import { TicketsGit, type RepoLocation } from '../core/tickets-git';
 import { loadShippedPrompts } from '../core/default-prompts';
 import { type AttachmentCommand, RefineCommand } from '../core/commands';
-import { composeRunRequest } from '../fleet/request';
+import { composeRunRequest, type PersonaDispatch } from '../fleet/request';
+import { deriveWorkerModel, personaLoader, resolvePersonaForTicket } from './persona-loader';
 import { columnPromptRef, isAutoPhase, nextPhaseIdOf } from '../fleet/chain';
 import { readRepoInstructions, worktreeDiffStat } from '../fleet/context-pack';
 import { cleanWorktrees, listOrphans, removeWorktree, type CleanupReport } from '../fleet/worktree-clean';
@@ -34,6 +35,8 @@ import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } f
 import { type ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, InteractiveMode, PermissionMode, RunInfo, FleetPools } from '../fleet/protocol';
 import { type EngineHost, type EngineVaultChangeEvent, EngineVault, FleetPort } from './host';
 import { handoverFromConfig, handoverOverrideKeys } from './handover-config';
+import { appendMemory, memoryPathFor } from './persona-store';
+import { personaFileText, personaMigrationFor, personaRef, PERSONAS_DIR, type Persona, type PersonaMigration } from '../core/persona';
 import { scanRepoFolder } from './repos-scan';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
@@ -192,7 +195,7 @@ export class EngineBoardService {
     ]);
     const active = vaults.find((v) => v.active) ?? null;
     if (vault === null) {
-      this.syncChainConfig(null, []);
+      await this.syncChainConfig(null, []);
       return assembleBoard({
         vaultId: null,
         vaultName: null,
@@ -233,7 +236,7 @@ export class EngineBoardService {
     // points the runner at this vault (M85). Cheap and idempotent —
     // the runner re-reads the vault on every dispatch pass anyway.
     await this.refreshHandover(snapshot);
-    this.syncChainConfig(vault, snapshot.pipeline);
+    await this.syncChainConfig(vault, snapshot.pipeline);
     return snapshot;
   }
 
@@ -246,16 +249,18 @@ export class EngineBoardService {
   }
 
   /** Keeps the runner's chain config in step with the pipeline (never spawns). */
-  private syncChainConfig(
+  private async syncChainConfig(
     vault: { readonly path: string } | null,
     pipeline: readonly PipelinePhase[],
-  ): ChainConfig | null {
+  ): Promise<ChainConfig | null> {
+    const defaultPersona = ((await this.host.configGet<string>('personas.default')) ?? '').trim() || null;
     const chain: ChainConfig | null =
       vault !== null && pipeline.some((phase) => isAutoPhase(phase))
         ? {
             ticketsVaultPath: vault.path,
             git: this.gitPath.trim() === '' ? 'git' : this.gitPath.trim(),
             defaultWorker: this.defaultWorker,
+            defaultPersona,
             permissionMode: this.autoPermissionMode,
             caps: this.caps,
             pools: this.pools,
@@ -444,12 +449,15 @@ export class EngineBoardService {
 
   /**
    * The `board` IPC route (T-0041): normalize first — a file move is a
-   * ticket move — then snapshot. Normalization runs enqueued (the same
-   * single-writer queue as every mutation) and snapshots are taken
-   * OUTSIDE it, so this never nests `enqueue` inside `enqueue`.
+   * ticket move — then migrate legacy column keys onto personas (E3,
+   * same single-writer queue), then snapshot. Normalization and the
+   * migration run enqueued (the same single-writer queue as every
+   * mutation) and snapshots are taken OUTSIDE it, so this never nests
+   * `enqueue` inside `enqueue`.
    */
   async refresh(): Promise<BoardSnapshot> {
     await this.normalizeDrift();
+    await this.migrateLegacyPersonas();
     return this.snapshot();
   }
 
@@ -1205,6 +1213,26 @@ export class EngineBoardService {
         );
       }
       const gateFailure = await this.lastGateFailure(card.id);
+      // E3: the persona ladder (ticket pin > phase persona > engine
+      // default) — a resolved persona contributes worker/model/prompt/
+      // memory; an owner-picked worker in the dialog still wins.
+      const loader = personaLoader((rel) => this.host.read(vault.id, rel));
+      const personaResolution = await resolvePersonaForTicket(loader, {
+        ticketPersona: card.meta.persona,
+        phasePersona: workingPhase?.persona ?? null,
+        defaultPersona: ((await this.host.configGet<string>('personas.default')) ?? '').trim() || null,
+      });
+      let personaDispatch: PersonaDispatch | null = null;
+      if (personaResolution.persona !== null) {
+        const derived = deriveWorkerModel(personaResolution.persona, null);
+        personaDispatch = {
+          id: personaResolution.persona.id,
+          worker: derived.workerChoice,
+          model: derived.model ?? '',
+          prompt: await loader.prompt(personaResolution.persona.id),
+          memory: await loader.memory(personaResolution.persona.id),
+        };
+      }
       const composed = composeRunRequest({
         card,
         ticketText: text,
@@ -1232,6 +1260,7 @@ export class EngineBoardService {
         diffStat,
         gateFailure,
         caps: this.caps,
+        ...(personaDispatch !== null ? { persona: personaDispatch } : {}),
         ...(input.handover !== null ? { handover: input.handover } : input.interactive !== null ? { handover: 'auto' } : {}),
         ...(input.interactive !== null ? { interactive: input.interactive } : {}),
       });
@@ -1807,6 +1836,177 @@ export class EngineBoardService {
       this.host.announceChanges(vault.id, added);
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  // --- personas (ADR-0088, E3) ----------------------------------------
+
+  /** The loader over the detected vault's host reads — one seam for every persona read. */
+  private personaLoaderFor(vault: EngineVault) {
+    return personaLoader((rel) => this.host.read(vault.id, rel));
+  }
+
+  /**
+   * The persona directory listing (E3): every
+   * `tickets/_meta/personas/<id>/persona.md` parsed through the loader,
+   * sorted by id; [] when no personas live in the vault.
+   */
+  async listPersonas(): Promise<readonly Persona[]> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return [];
+    }
+    const loader = this.personaLoaderFor(vault);
+    const files = await this.host.listMarkdownFiles(vault.id);
+    const ids: string[] = [];
+    for (const file of files) {
+      const match = /^tickets\/_meta\/personas\/([a-z0-9][a-z0-9-]{0,63})\/persona\.md$/.exec(file);
+      if (match !== null) {
+        ids.push(match[1]!);
+      }
+    }
+    ids.sort();
+    const personas: Persona[] = [];
+    for (const id of ids) {
+      const persona = await loader.load(id);
+      if (persona !== null) {
+        personas.push(persona);
+      }
+    }
+    return personas;
+  }
+
+  /**
+   * The confirmed memory entry (E3 acceptance): one owner-confirmed
+   * lesson appended to the persona's memory.md — the same store the
+   * fleet's settle path writes through. Refuses unknown persona ids;
+   * exactly one commit `personas: <id> memory +1` (a commit failure is
+   * the usual warning, never a lost entry).
+   */
+  personaLearn(input: { id: string; entry: string }): Promise<BoardMutationResult> {
+    return this.enqueue(async () => {
+      let id: string;
+      try {
+        id = personaRef(input.id);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const loader = this.personaLoaderFor(vault);
+      if ((await loader.load(id)) === null) {
+        return { ok: false, error: `persona "${id}" does not exist — create tickets/_meta/personas/${id}/persona.md first` };
+      }
+      // One line, always: flatten what the dialog sent, bounded.
+      const entry = input.entry.trim().replace(/\s*\n\s*/g, ' ').slice(0, 500);
+      if (entry === '') {
+        return { ok: false, error: 'a memory entry is one non-empty line' };
+      }
+      const path = memoryPathFor(id);
+      try {
+        await appendMemory(
+          (rel) => this.host.read(vault.id, rel),
+          (rel, text) => this.host.write(vault.id, rel, text),
+          id,
+          entry,
+        );
+      } catch (error) {
+        return { ok: false, error: `memory write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, [path], `personas: ${id} memory +1`);
+      this.host.announceChanges(vault.id, [path]);
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The legacy column-key migration (E3, idempotent — the marker is the
+   * absence of the legacy keys themselves): a pipeline phase still
+   * carrying `worker:`/`model:`/`prompt:` keys is the pre-persona world.
+   * Each such phase's configuration becomes a persona directory
+   * (`persona.md` + `prompt.md`, the prompt text from
+   * `_meta/prompts/<ref>.md` when that file exists, else an empty
+   * prompt.md) and the phase rewrites to `persona: <id>` through
+   * `patchPipelinePhase` — the legacy keys go, the `handover:` stays, so
+   * the column keeps draining itself, now through the persona. Exactly
+   * one commit `tickets: personas migrated`. Passes where every derived
+   * persona already exists leave the owner's files alone. A failure
+   * logs and leaves the board refresh unscathed.
+   */
+  private migrateLegacyPersonas(): Promise<void> {
+    return this.enqueue(async () => {
+      try {
+        const vault = await this.detect();
+        if (vault === null) {
+          return;
+        }
+        const pipelineText = await this.readOptional(vault.id, PIPELINE_PATH);
+        if (pipelineText === null) {
+          return;
+        }
+        const { phases } = parsePipeline(pipelineText);
+        const legacy = phases.filter((p) => p.worker !== null || p.model !== null || p.prompt !== null);
+        if (legacy.length === 0) {
+          return; // nothing carries the old keys — the migration is done (or never needed)
+        }
+        const candidates = new Map<string, { readonly phaseId: string; readonly migration: PersonaMigration }>();
+        for (const phase of legacy) {
+          const migration = personaMigrationFor({ phaseId: phase.id, worker: phase.worker, model: phase.model, prompt: phase.prompt });
+          if (migration !== null && !candidates.has(migration.id)) {
+            candidates.set(migration.id, { phaseId: phase.id, migration });
+          }
+        }
+        if (candidates.size === 0) {
+          return;
+        }
+        const loader = this.personaLoaderFor(vault);
+        const missing: PersonaMigration[] = [];
+        for (const { migration } of candidates.values()) {
+          if ((await loader.load(migration.id)) === null) {
+            missing.push(migration);
+          }
+        }
+        if (missing.length === 0) {
+          return; // every derived persona exists — the owner's state stays as written
+        }
+        const written: string[] = [];
+        for (const migration of missing) {
+          const persona: Persona = {
+            id: migration.id,
+            title: migration.title,
+            role: 'custom',
+            worker: migration.worker,
+            models: { default: migration.model ?? 'opus', pool: [migration.model ?? 'opus'], router: 'off' },
+            color: '#a78bfa',
+            skills: [],
+          };
+          const personaPath = `${PERSONAS_DIR}/${migration.id}/persona.md`;
+          await this.host.write(vault.id, personaPath, personaFileText(persona));
+          written.push(personaPath);
+          const promptText =
+            migration.promptRef !== null
+              ? await this.readOptional(vault.id, `${PROMPTS_DIR}/${migration.promptRef}.md`)
+              : null;
+          const promptPath = `${PERSONAS_DIR}/${migration.id}/prompt.md`;
+          await this.host.write(vault.id, promptPath, promptText ?? '');
+          written.push(promptPath);
+        }
+        // Every candidate phase rewrites — including those whose persona
+        // already existed (their keys are still the old world).
+        let patched = pipelineText;
+        for (const { phaseId, migration } of candidates.values()) {
+          patched = patchPipelinePhase(patched, phaseId, { persona: migration.id });
+        }
+        await this.host.write(vault.id, PIPELINE_PATH, patched);
+        await this.commit(vault, [PIPELINE_PATH, ...written], 'tickets: personas migrated');
+        this.host.announceChanges(vault.id, [PIPELINE_PATH, ...written]);
+        this.announceChanged();
+      } catch (error) {
+        this.host.log(`persona migration failed: ${messageOf(error)}`, 'warn');
+      }
     });
   }
 

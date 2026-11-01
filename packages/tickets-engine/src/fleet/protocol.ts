@@ -402,6 +402,8 @@ export type PermissionDecision = 'once' | 'always' | 'reject';
 export interface RunInfo {
   readonly id: string;
   readonly ticketId: string;
+  /** The persona that dispatched the run (ADR-0088 E3); null/absent pre-personas. */
+  readonly persona?: string | null;
   readonly provider: WorkerProviderId;
   readonly state: RunState;
   readonly pid: number | null;
@@ -620,6 +622,8 @@ export interface ChainConfig {
   readonly git: string;
   /** The plugin's configured default worker (the assignment ring's floor). */
   readonly defaultWorker: string;
+  /** The engine's default persona (config `personas.default`, ADR-0088 E3); absent pre-personas. */
+  readonly defaultPersona?: string | null;
   /** Permission mode of dispatched runs (no dialog to ask in). */
   readonly permissionMode: PermissionMode;
   /** The instruction output caps (T-0048); absent = `DEFAULT_FLEET_CAPS`. */

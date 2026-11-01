@@ -135,6 +135,7 @@ describe('composeRunRequest carries the home rule', () => {
       repo: 'drey',
       repos: ['drey'],
       worker: null,
+      persona: null,
       track: null,
       priority: 'normal',
       rank: 5000,

@@ -156,6 +156,8 @@ export interface TicketMeta {
   readonly repos: readonly string[];
   /** The ticket's worker pin (`worker: opencode`); null = not pinned. */
   readonly worker: string | null;
+  /** The ticket's persona pin (`persona: tessa`, ADR-0088 E3); null = ladder. */
+  readonly persona: string | null;
   /** The ticket's track, ADR-0087 decision 2 — null = not triaged yet. */
   readonly track: TicketTrack | null;
   readonly priority: TicketPriority;
@@ -230,6 +232,11 @@ export interface PipelinePhase {
    */
   readonly interactive: string | null;
   /**
+   * The phase's persona (`persona: pia`, ADR-0088 E3) — the ladder's
+   * middle level; null = the ticket pin or the default decides.
+   */
+  readonly persona: string | null;
+  /**
    * The circuit breaker's threshold (`max-red:`, M85): consecutive red
    * gates the column tolerates before it trips. Default 3.
    */
@@ -283,6 +290,7 @@ export function phaseWithoutPoolKeys(
     model: null,
     prompt: null,
     interactive: null,
+    persona: null,
     maxRed: null,
     tokenBudget: null,
     maxTurns: null,

@@ -12,6 +12,7 @@ import {
   RATE_LIMIT_SHRINK_MS,
   RED_COOLDOWN_MS,
   type OrchestratorDeps,
+  type StartOptions,
   type SupervisorPort,
 } from './orchestrator';
 import type { StartOutcome, StopOutcome, SupervisorRecord } from './runs';
@@ -102,8 +103,7 @@ async function writeMeta(prompt = 'Work the plan step.'): Promise<void> {
 function fakePort() {
   const records: SupervisorRecord[] = [];
   let counter = 0;
-  const port: SupervisorPort = {
-    start: vi.fn(async (request: RunRequest): Promise<StartOutcome> => {
+  const start = vi.fn(async (request: RunRequest, _options?: StartOptions): Promise<StartOutcome> => {
       counter += 1;
       const info: RunInfo = {
         id: `R-${String(counter).padStart(3, '0')}`,
@@ -126,7 +126,9 @@ function fakePort() {
       };
       records.push({ info, request });
       return { ok: true, run: info };
-    }),
+  });
+  const port: SupervisorPort = {
+    start,
     stop: vi.fn(async (runId: string, reason: string | null): Promise<StopOutcome> => {
       const index = records.findIndex((r) => r.info.id === runId);
       if (index >= 0) {
@@ -137,7 +139,7 @@ function fakePort() {
     records: () => [...records],
     reap: vi.fn(async (): Promise<void> => undefined),
   };
-  return { port, records, start: port.start, stop: port.stop };
+  return { port, records, start, stop: port.stop };
 }
 
 function orchestrator(over: Partial<OrchestratorDeps> = {}): { orch: Orchestrator; fleet: ReturnType<typeof fakePort> } {
@@ -856,6 +858,189 @@ describe('Orchestrator', () => {
       await expect(fsp.access(await phasePath('build', 'T-0009'))).rejects.toBeDefined();
       const text = await fsp.readFile(path.join(vaultDir, 'tickets', 'plan-review', 'T-0009.md'), 'utf8');
       expect(text).toContain('retry in 10 min');
+    });
+  });
+
+  describe('persona dispatch (E3, ADR-0088)', () => {
+    const PLAN_LINE =
+      '  - { id: plan, title: Plan, handover: agent plan-default, worker: opencode, model: zai/glm-5.3 }';
+
+    /** The plan column carries the phase persona. */
+    async function writePersonaPipeline(): Promise<void> {
+      await writeMeta();
+      await fsp.writeFile(
+        path.join(vaultDir, 'tickets', '_meta', 'pipeline.md'),
+        PIPELINE.replace(PLAN_LINE, `${PLAN_LINE.slice(0, -2)}, persona: pia }`),
+        'utf8',
+      );
+    }
+
+    async function writePersona(
+      id: string,
+      over: { worker?: string; model?: string; prompt?: string | null; memory?: string } = {},
+    ): Promise<void> {
+      const dir = path.join(vaultDir, 'tickets', '_meta', 'personas', id);
+      await fsp.mkdir(dir, { recursive: true });
+      const model = over.model ?? 'opus';
+      await fsp.writeFile(
+        path.join(dir, 'persona.md'),
+        [
+          '---',
+          `title: ${id}`,
+          'role: builder',
+          `worker: ${over.worker ?? 'opencode'}`,
+          'models:',
+          `  default: ${model}`,
+          `  pool: [${model}]`,
+          '  router: off',
+          "color: '#a78bfa'",
+          'skills: []',
+          '---',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+      if (over.prompt != null) {
+        await fsp.writeFile(path.join(dir, 'prompt.md'), over.prompt, 'utf8');
+      }
+      if (over.memory != null) {
+        await fsp.writeFile(path.join(dir, 'memory.md'), over.memory, 'utf8');
+      }
+    }
+
+    async function writePinnedTicket(id: string, phase: string, persona: string): Promise<void> {
+      await writeTicket(id, phase);
+      const rel = path.join(vaultDir, 'tickets', phase, `${id}.md`);
+      await fsp.writeFile(rel, ticketText(id, phase).replace('repo: drey', `repo: drey\npersona: ${persona}`), 'utf8');
+    }
+
+    it('a resolved persona beats the assignment ring: harness, model, prompt, memory', async () => {
+      await writePersonaPipeline();
+      await writePersona('pia', {
+        worker: 'claude-code',
+        model: 'sonnet',
+        prompt: 'You are Pia — plan with care.',
+        memory: '# Memory\n\n- 2026-10-30 · T-0099 · handed-over · 900 tokens\n',
+      });
+      await writeTicket('T-0100', 'plan');
+      const logs: string[] = [];
+      const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      expect(fleet.records).toHaveLength(1);
+      const started = fleet.records[0]!;
+      // the legacy ring would have said opencode/zai-glm — the persona wins
+      expect(started.request.provider).toBe('claude-code');
+      expect(started.request.model).toBe('sonnet');
+      expect(started.request.instruction).toContain('You are Pia — plan with care.');
+      expect(started.request.instruction).not.toContain('Work the plan step.');
+      // the persona's curated memory is the instruction's ## Memory slice
+      expect(started.request.instruction).toContain('## Memory');
+      expect(started.request.instruction).toContain('T-0099');
+      // the resolved id rides the start options — RunInfo.persona stamps from it
+      expect(fleet.start.mock.calls[0]![1]).toEqual({ persona: 'pia' });
+      expect(logs.some((line) => line.startsWith('dispatched T-0100') && line.includes('persona pia'))).toBe(true);
+    });
+
+    it('the ladder: the ticket pin beats the phase persona', async () => {
+      await writePersonaPipeline();
+      await writePersona('pia', { worker: 'opencode', model: 'gpt-5' });
+      await writePersona('tessa', { worker: 'claude-code', model: 'haiku' });
+      await writePinnedTicket('T-0101', 'plan', 'tessa');
+      const { orch, fleet } = orchestrator();
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      const started = fleet.records[0]!;
+      expect(started.request.provider).toBe('claude-code'); // tessa's harness, not pia's
+      expect(started.request.model).toBe('haiku');
+      expect(fleet.start.mock.calls[0]![1]).toEqual({ persona: 'tessa' });
+    });
+
+    it('the ladder: the engine default persona applies when nothing else names one', async () => {
+      await writeMeta(); // no persona anywhere in the pipeline
+      await writePersona('pia', { worker: 'claude-code', model: 'sonnet' });
+      await writeTicket('T-0102', 'plan');
+      const { orch, fleet } = orchestrator();
+      await orch.configure({ ...CONFIG, defaultPersona: 'pia' });
+      await orch.setMaster('run');
+
+      const started = fleet.records[0]!;
+      expect(started.request.provider).toBe('claude-code');
+      expect(fleet.start.mock.calls[0]![1]).toEqual({ persona: 'pia' });
+    });
+
+    it('a missing persona file falls back to the ring — byte for byte', async () => {
+      await writePersonaPipeline();
+      // no tickets/_meta/personas/ghost at all
+      await writeTicket('T-0103', 'plan');
+      const logs: string[] = [];
+      const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      const started = fleet.records[0]!;
+      expect(started.request.provider).toBe('opencode'); // the ring's column pin
+      expect(started.request.model).toBe('zai/glm-5.3');
+      expect(started.request.instruction).toContain('Work the plan step.');
+      expect(fleet.start.mock.calls[0]![1]).toEqual({ persona: null });
+      expect(logs.filter((line) => line.includes('"pia" is missing or invalid'))).toHaveLength(1);
+    });
+
+    it("a persona without a prompt.md keeps the phase template — and still beats the ring", async () => {
+      await writePersonaPipeline();
+      await writePersona('pia', { worker: 'claude-code', model: 'sonnet' }); // no prompt.md
+      await writeTicket('T-0104', 'plan');
+      const logs: string[] = [];
+      const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      const started = fleet.records[0]!;
+      expect(started.request.provider).toBe('claude-code');
+      expect(started.request.instruction).toContain('Work the plan step.');
+      expect(started.request.instruction).not.toContain('## Memory');
+      expect(fleet.start.mock.calls[0]![1]).toEqual({ persona: 'pia' });
+      expect(logs.filter((line) => line.includes('has no prompt.md'))).toHaveLength(1);
+    });
+
+    it('the persona takes its own provider pool slot', async () => {
+      await writePersonaPipeline();
+      await writePersona('pia', { worker: 'claude-code', model: 'sonnet' });
+      await writeTicket('T-0105', 'plan'); // persona → the claude-code pool
+      await writeTicket('T-0106', 'build'); // the ring → the opencode pool
+      const logs: string[] = [];
+      const fleet = fakePort();
+      // One claude-code slot, already taken: the persona ticket waits while
+      // the ring ticket dispatches on the free opencode slot.
+      fleet.records.push({
+        info: {
+          ...failedRecord('T-0098', '').info,
+          id: 'R-seed',
+          state: 'running',
+          provider: 'claude-code',
+        },
+        request: { ticketId: 'T-0098', column: 'plan' } as RunRequest,
+      });
+      const orch = new Orchestrator({
+        root: fleetRoot,
+        log: (message) => logs.push(message),
+        supervisorOf: () => fleet.port,
+        scanIntervalMs: 60_000,
+      });
+      await orch.configure({
+        ...CONFIG,
+        pools: normalizeFleetPools({ opencode: { size: 1 }, 'claude-code': { size: 1 } }),
+      });
+      await orch.setMaster('run');
+
+      expect(fleet.records.filter((r) => r.info.state === 'running' && r.info.id !== 'R-seed')).toHaveLength(1);
+      expect(fleet.records.find((r) => r.info.id !== 'R-seed')!.request.ticketId).toBe('T-0106');
+      const waits = logs.filter((line) => line.startsWith('dispatch waits'));
+      expect(waits).toHaveLength(1);
+      expect(waits[0]).toContain('T-0105');
+      expect(waits[0]).toContain('no free claude-code pool slot yet');
     });
   });
 });

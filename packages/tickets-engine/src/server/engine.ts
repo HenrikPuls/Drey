@@ -54,6 +54,7 @@ const BOARD_METHODS = [
   'worktreesStatus', 'setClaim', 'startRun', 'setColumnConfig', 'listPrompts', 'savePrompt',
   'restoreShippedPrompts', 'listRepos', 'saveRepos', 'pickFolder', 'scanRepos', 'listProjects',
   'switchProject', 'openTicketsFolder', 'folderStatus', 'numberFolders', 'reorderPhases', 'editPhase',
+  'personaLearn', 'listPersonas',
   'initialize', 'onVaultEvent',
 ] as const;
 

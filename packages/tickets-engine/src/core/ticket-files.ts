@@ -106,6 +106,7 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
     issues.push({ level: 'noise', message: `repo: "${legacyRepo}" differs from the repos: list — repos: wins` });
   }
   const worker = asText(obj['worker']);
+  const persona = asText(obj['persona']);
 
   // req-75 W1b: the triage track. Only the two words read; anything
   // else is visibly not triaged (ADR-0087 decision 2).
@@ -185,6 +186,7 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
       repo,
       repos,
       worker,
+      persona,
       track,
       priority,
       rank,
@@ -211,6 +213,7 @@ function emptyMeta(stem?: string): TicketMeta {
     repo: null,
     repos: [],
     worker: null,
+    persona: null,
     track: null,
     priority: 'normal',
     rank: DEFAULT_RANK,

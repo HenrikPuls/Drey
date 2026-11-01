@@ -25,7 +25,7 @@ import { claudeCodeAdapter, opencodeAdapter } from './providers';
 import { freePort, nodeSpawnFn, scrubInheritedEnv } from './procs';
 import { Orchestrator } from './orchestrator';
 import { MAX_ATTACHMENT_BYTES, RunSupervisor, type SupervisorRecord } from './runs';
-import { tokenReport, type ReportRun } from './report';
+import { personaCostReport, tokenReport, type ReportRun } from './report';
 import {
   isWorkerProvider,
   normalizeFleetCaps,
@@ -362,6 +362,8 @@ async function main(): Promise<void> {
         }
         const runs: ReportRun[] = [...byId.values()].map((record) => ({
           ticketId: record.info.ticketId,
+          persona: record.info.persona ?? null,
+          costUsd: record.info.costUsd ?? null,
           phase: record.info.phase ?? record.request.phase,
           model: record.info.model ?? record.request.model,
           provider: record.info.provider,
@@ -370,7 +372,7 @@ async function main(): Promise<void> {
           tokensOut: record.info.tokensOut,
           tokensBeforeFirstWrite: record.info.tokensBeforeFirstWrite ?? null,
         }));
-        respond(200, { ok: true, groups: tokenReport(runs) });
+        respond(200, { ok: true, groups: tokenReport(runs), byPersona: personaCostReport(runs) });
         return;
       }
       if (req.method === 'POST' && pathname === '/start') {

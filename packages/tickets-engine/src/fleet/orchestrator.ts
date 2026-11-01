@@ -23,8 +23,9 @@ import { assembleBoard, type BoardFile } from '../core/ticket-board';
 import { promptVersion, stripPromptVersion } from '../core/default-prompts';
 import { patchTicketFile } from '../core/ticket-files';
 import { TicketsGit } from '../core/tickets-git';
+import { PERSONAS_DIR, parsePersonaFile, personaModelFor, resolvePersona, type Persona, type PersonaResolution } from '../core/persona';
 import { columnPromptRef, dispatchable, isAutoPhase, nextPhaseIdOf, planDispatch } from './chain';
-import { resolveAssignment } from './assignment';
+import { parseWorkerValue, resolveAssignment } from './assignment';
 import { composeRunRequest } from './request';
 import { listTicketDirs, resolvePhaseDir } from '../core/phase-dirs';
 import { execShell, shortGateLine, type SupervisorRecord, type StartOutcome, type StopOutcome } from './runs';
@@ -48,11 +49,37 @@ const CHAIN_FILE = 'chain.json';
 
 /** The slice of RunSupervisor the orchestrator drives. */
 export interface SupervisorPort {
-  readonly start: (request: RunRequest) => Promise<StartOutcome>;
+  readonly start: (request: RunRequest, options?: StartOptions) => Promise<StartOutcome>;
   readonly stop: (runId: string, reason: string | null) => Promise<StopOutcome>;
   readonly records: () => readonly SupervisorRecord[];
   /** The lease reaper round (M85). */
   readonly reap: () => Promise<void>;
+}
+
+/**
+ * What a dispatched run carries beyond the wire request (E3): the persona
+ * the ladder resolved for the ticket — the supervisor stamps it on
+ * `RunInfo.persona`, which the report groups by and the settle hooks read.
+ */
+export interface StartOptions {
+  readonly persona?: string | null;
+}
+
+/**
+ * One ticket's persona resolution for a dispatch pass (E3, ADR-0088):
+ * the ladder's winner and the loaded persona — null persona when nothing
+ * resolves or the persona file is missing/unreadable (the assignment
+ * ring then runs unchanged).
+ */
+interface TicketPersona {
+  /** Which level decided ('ticket' | 'phase' | 'default' | 'none'). */
+  readonly resolution: PersonaResolution;
+  /** The loaded persona; null = the ring decides and no persona stamps. */
+  readonly persona: Persona | null;
+  /** The persona's prompt.md text; null when the file is absent. */
+  readonly prompt: string | null;
+  /** The persona's memory.md text ('' when absent). */
+  readonly memory: string;
 }
 
 export interface OrchestratorDeps {
@@ -1000,7 +1027,18 @@ export class Orchestrator {
       for (const provider of WORKER_PROVIDERS) {
         probedSlots[provider] = this.probed[provider]?.slots ?? null;
       }
+      // E3: the persona ladder (ticket pin > phase persona > engine
+      // default) resolves before the assignment ring, so a persona run
+      // takes its persona's pool slot — not the ring provider's.
+      const personas = this.master === 'run' ? await this.resolveBoardPersonas(config, snap) : new Map<string, TicketPersona>();
       const poolOf = (card: BoardColumn['tickets'][number], phase: PipelinePhase): WorkerProviderId | null => {
+        const persona = personas.get(card.id)?.persona ?? null;
+        if (persona !== null) {
+          const parsed = parseWorkerValue(persona.worker);
+          if (parsed !== null) {
+            return parsed.provider; // the persona's harness decides the pool
+          }
+        }
         const repo = card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card.meta.repo) ?? null);
         const assignment = resolveAssignment({
           ticketWorker: card.meta.worker,
@@ -1029,7 +1067,7 @@ export class Orchestrator {
       const dispatched = new Set<string>(plan.map((item) => item.card.id));
       const refusedByColumn = new Map<string, string>();
       for (const item of plan) {
-        const outcome = await this.dispatchOne(config, snap.columns, item.workingPhase, item.card, snap);
+        const outcome = await this.dispatchOne(config, snap.columns, item.workingPhase, item.card, snap, personas);
         if (outcome === 'refused' && !refusedByColumn.has(item.workingPhase)) {
           refusedByColumn.set(item.workingPhase, item.card.id);
         }
@@ -1228,6 +1266,61 @@ export class Orchestrator {
     }
   }
 
+  /**
+   * The persona ladder for every ticket of the board, resolved once per
+   * pass (E3): ticket `persona:` frontmatter > the phase's `persona:` >
+   * the engine's `personas.default`. Vault reads run through one
+   * per-pass cache; an absent or unreadable persona file degrades to the
+   * ring — the pass must never fail on one bad persona. The loader is
+   * built from `node:fs` directly (the orchestrator already reads the
+   * vault) — a fleet→services value import would close a runtime cycle.
+   */
+  private async resolveBoardPersonas(
+    config: ChainConfig,
+    snap: BoardSnapshot,
+  ): Promise<Map<string, TicketPersona>> {
+    const cache = new Map<string, Promise<string>>();
+    const read = (rel: string): Promise<string> => {
+      const hit = cache.get(rel);
+      if (hit !== undefined) {
+        return hit;
+      }
+      const promise = fsp.readFile(path.join(config.ticketsVaultPath, rel), 'utf8');
+      cache.set(rel, promise);
+      return promise;
+    };
+    const fileOf = async (rel: string): Promise<string | null> => read(rel).catch(() => null);
+    const personas = new Map<string, TicketPersona>();
+    for (const column of snap.columns) {
+      for (const card of column.tickets) {
+        const resolution = resolvePersona({
+          ticketPersona: card.meta.persona,
+          phasePersona: column.phase.persona,
+          defaultPersona: config.defaultPersona ?? null,
+        });
+        let persona: Persona | null = null;
+        let prompt: string | null = null;
+        let memory = '';
+        if (resolution.persona !== null) {
+          const text = await fileOf(`${PERSONAS_DIR}/${resolution.persona}/persona.md`);
+          if (text !== null) {
+            try {
+              persona = parsePersonaFile(resolution.persona, text);
+            } catch {
+              persona = null; // an invalid persona file degrades to the ring
+            }
+          }
+          if (persona !== null) {
+            prompt = await fileOf(`${PERSONAS_DIR}/${persona.id}/prompt.md`);
+            memory = (await fileOf(`${PERSONAS_DIR}/${persona.id}/memory.md`)) ?? '';
+          }
+        }
+        personas.set(card.id, { resolution, persona, prompt, memory });
+      }
+    }
+    return personas;
+  }
+
   /** One planned dispatch; the pass collects the refusals per column. */
   private async dispatchOne(
     config: ChainConfig,
@@ -1235,6 +1328,7 @@ export class Orchestrator {
     workingPhaseId: string,
     card: BoardColumn['tickets'][number],
     snap: BoardSnapshot,
+    personas: ReadonlyMap<string, TicketPersona>,
   ): Promise<'dispatched' | 'refused' | 'skipped'> {
     const workingPhase = snap.pipeline.find((p) => p.id === workingPhaseId) ?? null;
     const repo =
@@ -1260,21 +1354,42 @@ export class Orchestrator {
       }
       extraRepos.push(extra);
     }
+    // E3: a resolved persona's prompt is the instruction base instead of
+    // the phase handover prompt; a persona without a prompt.md leaves the
+    // phase template standing, and a missing/invalid persona file leaves
+    // the whole dispatch to the ring (said once per ticket).
+    const entry = personas.get(card.id) ?? null;
+    const persona = entry?.persona ?? null;
+    if (entry !== null && entry.resolution.persona !== null && entry.persona === null) {
+      this.noteSkip(
+        card.id,
+        `dispatch: ${card.id}'s persona "${entry.resolution.persona}" is missing or invalid ` +
+          `(${PERSONAS_DIR}/${entry.resolution.persona}/persona.md) — the assignment ring decides`,
+      );
+    }
     const promptRef = columnPromptRef(workingPhase);
     let promptText: string | null = null;
-    if (promptRef !== null) {
-      promptText = await fsp
-        .readFile(path.join(config.ticketsVaultPath, 'tickets', '_meta', 'prompts', `${promptRef}.md`), 'utf8')
-        .catch(() => null);
-      if (promptText === null) {
-        this.noteSkip(
-          card.id,
-          `dispatch skips ${card.id}: prompt "${promptRef}" is missing (tickets/_meta/prompts/${promptRef}.md)`,
-        );
-        return 'skipped';
+    const personaPrompt = persona !== null ? ((entry?.prompt ?? '').trim() !== '' ? entry!.prompt : null) : null;
+    if (personaPrompt !== null) {
+      promptText = personaPrompt;
+    } else {
+      if (persona !== null && entry?.resolution.persona !== null) {
+        this.noteSkip(card.id, `dispatch: ${card.id}'s persona "${persona.id}" has no prompt.md — the phase prompt stands`);
       }
-      await this.flagOlderPrompt(promptRef, promptText);
-      promptText = stripPromptVersion(promptText);
+      if (promptRef !== null) {
+        promptText = await fsp
+          .readFile(path.join(config.ticketsVaultPath, 'tickets', '_meta', 'prompts', `${promptRef}.md`), 'utf8')
+          .catch(() => null);
+        if (promptText === null) {
+          this.noteSkip(
+            card.id,
+            `dispatch skips ${card.id}: prompt "${promptRef}" is missing (tickets/_meta/prompts/${promptRef}.md)`,
+          );
+          return 'skipped';
+        }
+        await this.flagOlderPrompt(promptRef, promptText);
+        promptText = stripPromptVersion(promptText);
+      }
     }
     const nextPhaseId = nextPhaseIdOf(columns, workingPhaseId);
     const nextPhaseClaims =
@@ -1341,6 +1456,20 @@ export class Orchestrator {
       // The dispatcher asks the supervisor's rules to decide (T-0049):
       // the dialog is the only place an explicit mode is chosen.
       handover: 'auto',
+      // E3: a loaded persona supplies the harness/model pins (beating the
+      // ring), the instruction base and the memory slice; the composed
+      // result carries its id for the RunInfo stamp.
+      ...(persona !== null
+        ? {
+            persona: {
+              id: persona.id,
+              worker: persona.worker,
+              model: personaModelFor(persona, null).model,
+              prompt: personaPrompt,
+              memory: entry?.memory ?? '',
+            },
+          }
+        : {}),
     });
     if (!composed.ok) {
       this.noteSkip(card.id, `dispatch skips ${card.id}: ${composed.error}`);
@@ -1351,11 +1480,14 @@ export class Orchestrator {
         `instruction: ${card.id} ${truncation.section} truncated: true, originalSize ${truncation.originalSize}`,
       );
     }
-    const outcome = await this.deps.supervisorOf(composed.request.provider).start(composed.request);
+    const outcome = await this.deps
+      .supervisorOf(composed.request.provider)
+      .start(composed.request, { persona: composed.persona });
     if (outcome.ok) {
       this.deps.log(
         `dispatched ${card.id} (${workingPhaseId} pool, ${composed.request.provider}` +
-          `${composed.request.model !== null ? `/${composed.request.model}` : ''}) as ${outcome.run.id}`,
+          `${composed.request.model !== null ? `/${composed.request.model}` : ''}` +
+          `${composed.persona !== null ? `, persona ${composed.persona}` : ''}) as ${outcome.run.id}`,
       );
       this.notes.delete(card.id);
       return 'dispatched';

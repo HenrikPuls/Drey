@@ -23,6 +23,7 @@ function card(over: Partial<TicketCard> = {}): TicketCard {
       repo: 'drey',
       repos: ['drey'],
       worker: null,
+      persona: null,
       track: null,
       priority: 'normal',
       rank: 5000,
@@ -291,5 +292,108 @@ describe('multi-repo runs (req-72)', () => {
   it('refuses an extra repo without a checkout', () => {
     const result = composeRunRequest(base({ extraRepos: [{ ...EXTRA, path: null }] }));
     expect(result).toMatchObject({ ok: false, error: expect.stringContaining('lariscus') });
+  });
+});
+
+
+describe('persona dispatch (E3, ADR-0088)', () => {
+  const PIA = { id: 'pia', worker: 'claude-code', model: 'sonnet', prompt: 'You are Pia.', memory: '' };
+
+  it('a persona beats the assignment ring for provider and model', () => {
+    const result = composeRunRequest(
+      base({
+        workingPhase: phase('plan', { handover: 'agent plan-default', worker: 'opencode', model: 'zai/glm-5.3' }),
+        promptText: 'Phase template.',
+        persona: PIA,
+      }),
+    );
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.provider).toBe('claude-code');
+    expect(result.request.model).toBe('sonnet');
+    expect(result.persona).toBe('pia');
+    expect(result.request.recordWorker).toBeUndefined(); // a persona is configuration, never a ticket worker pin
+    expect(result.request.instruction).toContain('You are Pia.');
+    expect(result.request.instruction).not.toContain('Phase template.');
+  });
+
+  it('a persona with a harness the fleet cannot run leaves the ring in charge', () => {
+    const result = composeRunRequest(
+      base({
+        workingPhase: phase('plan', { handover: 'agent plan-default', worker: 'opencode', model: 'zai/glm-5.3' }),
+        persona: { ...PIA, worker: 'api' },
+      }),
+    );
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.provider).toBe('opencode'); // the ring's column pin stands
+    expect(result.request.model).toBe('zai/glm-5.3');
+    expect(result.persona).toBe('pia'); // the persona still dispatched — prompt, memory, stamp
+  });
+
+  it('a persona without a prompt keeps the phase template as the instruction base', () => {
+    const result = composeRunRequest(base({ promptText: 'Phase template.', persona: { ...PIA, prompt: null } }));
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.instruction).toContain('Phase template.');
+    expect(result.persona).toBe('pia');
+  });
+
+  it('an unreadable ring pin is not a refusal when a usable persona decided', () => {
+    const pinned = card({ meta: { ...card().meta, worker: 'not-a-worker' } });
+    const result = composeRunRequest(base({ card: pinned, persona: PIA }));
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.provider).toBe('claude-code');
+  });
+
+  it('the memory slice rides the variable tail: capped by lines and tokens, absent when empty', () => {
+    const lines = [...Array(25).keys()].map((i) => `- lesson ${i + 1}`);
+    const result = composeRunRequest(base({ persona: { ...PIA, memory: `# Memory\n\n${lines.join('\n')}\n` } }));
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    const instruction = result.request.instruction;
+    expect(instruction).toContain('## Memory');
+    expect(instruction).toContain('- lesson 25'); // newest
+    expect(instruction).toContain('- lesson 6'); // oldest of the last 20
+    expect(instruction).not.toContain('- lesson 5'); // the line cap drops it
+    // persona-less bytes stay identical — no memory, no section
+    const bare = composeRunRequest(base({ promptText: 'Phase template.' }));
+    if (!bare.ok) {
+      throw new Error(bare.error);
+    }
+    expect(bare.request.instruction).not.toContain('## Memory');
+    const again = composeRunRequest(base({ promptText: 'Phase template.' }));
+    if (!again.ok) {
+      throw new Error(again.error);
+    }
+    expect(again.request.instruction).toBe(bare.request.instruction);
+  });
+
+  it('the memory slice rides the resume continuation; memory is not stable-digest material', () => {
+    const memory = '# Memory\n\n- one lesson\n';
+    const withMemory = composeRunRequest(base({ persona: { ...PIA, prompt: null, memory } }));
+    if (!withMemory.ok) {
+      throw new Error(withMemory.error);
+    }
+    expect(withMemory.request.continuationInstruction).toContain('## Memory');
+    expect(withMemory.request.continuationInstruction).toContain('one lesson');
+    // Two briefs differing ONLY in memory share the digest — the slice is
+    // a variable part, like the diff stat; a changed prompt is a new brief.
+    const otherMemory = composeRunRequest(base({ persona: { ...PIA, prompt: null, memory: '# Memory\n\n- other lesson\n' } }));
+    if (!otherMemory.ok) {
+      throw new Error(otherMemory.error);
+    }
+    expect(otherMemory.request.briefDigest).toBe(withMemory.request.briefDigest);
+    const withPrompt = composeRunRequest(base({ persona: { ...PIA, memory } }));
+    if (!withPrompt.ok) {
+      throw new Error(withPrompt.error);
+    }
+    expect(withPrompt.request.briefDigest).not.toBe(withMemory.request.briefDigest);
   });
 });

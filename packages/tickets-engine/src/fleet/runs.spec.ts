@@ -1891,6 +1891,131 @@ describe('RunSupervisor handover', () => {
   });
 });
 
+describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
+  beforeEach(async () => {
+    vaultDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-vault-'));
+    fleetRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-fleet-'));
+  });
+
+  afterEach(async () => {
+    await fsp.rm(vaultDir, { recursive: true, force: true });
+    await fsp.rm(fleetRoot, { recursive: true, force: true });
+  });
+
+  const memoryFile = (): string => path.join(vaultDir, 'tickets', '_meta', 'personas', 'pia', 'memory.md');
+
+  it('a dispatched persona stamps RunInfo.persona at start', async () => {
+    const rel = await writeTicket();
+    const { sup } = supervisor();
+    const started = await sup.start(request({ ticketRelPath: rel }), { persona: 'pia' });
+    expect(started.ok).toBe(true);
+    expect((started as { run: RunInfo }).run.persona).toBe('pia');
+    // nothing settled yet — no memory file appears
+    await expect(fsp.access(memoryFile())).rejects.toBeDefined();
+  });
+
+  it('a ring run carries persona null and touches no personas dir', async () => {
+    const rel = await writeTicket();
+    const { sup } = supervisor();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    expect(started.ok).toBe(true);
+    expect((started as { run: RunInfo }).run.persona).toBeNull();
+    await expect(fsp.access(path.join(vaultDir, 'tickets', '_meta', 'personas'))).rejects.toBeDefined();
+  });
+
+  it('a green persona run appends its one-line lesson (handed-over, token sum)', async () => {
+    const rel = await writeTicket();
+    const { sup, adapter } = supervisor();
+    const started = await sup.start(request({ ticketRelPath: rel }), { persona: 'pia' });
+    const id = (started as { run: RunInfo }).run.id;
+    adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:10Z', kind: 'usage', tokensIn: 12_000, tokensOut: 300 });
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    // The settle's tail (persist, the ticket stamp, the memory append)
+    // still runs when the state flips — poll the file, don't read it once.
+    await vi.waitFor(async () => {
+      const memory = await fsp.readFile(memoryFile(), 'utf8');
+      expect(memory.startsWith('# Memory')).toBe(true);
+      expect(memory).toContain('- 2026-10-17 · T-0001 · handed-over · 12300 tokens');
+    });
+  });
+
+  it('a red gate appends a failed lesson; an owner stop appends a stopped one', async () => {
+    const rel = await writeTicket();
+    const { sup, adapter } = supervisor({
+      execShell: async () => {
+        throw new Error('exit 1');
+      },
+    });
+    const started = await sup.start(request({ ticketRelPath: rel }), { persona: 'pia' });
+    const id = (started as { run: RunInfo }).run.id;
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(1);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+    await vi.waitFor(async () => {
+      expect(await fsp.readFile(memoryFile(), 'utf8')).toContain('· failed ·');
+    });
+
+    const second = await sup.start(request({ ticketRelPath: rel }), { persona: 'pia' });
+    const id2 = (second as { run: RunInfo }).run.id;
+    await sup.stop(id2, 'test');
+    await vi.waitFor(() => expect(sup.get(id2)?.state).toBe('stopped'));
+    await vi.waitFor(async () => {
+      const memory = await fsp.readFile(memoryFile(), 'utf8');
+      expect(memory).toContain('· stopped ·');
+      expect(memory.split('\n').filter((line) => line.startsWith('- '))).toHaveLength(2);
+    });
+  });
+
+  it('the memory file caps at 200 lines — the oldest lessons drop first, the header stays', async () => {
+    const rel = await writeTicket();
+    const dir = path.join(vaultDir, 'tickets', '_meta', 'personas', 'pia');
+    await fsp.mkdir(dir, { recursive: true });
+    const lines = ['# Memory', ''];
+    for (let i = 1; i <= 198; i++) {
+      lines.push(`- 2026-10-01 · T-0${String(i).padStart(3, '0')} · handed-over · ${i} tokens`);
+    }
+    await fsp.writeFile(path.join(dir, 'memory.md'), `${lines.join('\n')}\n`, 'utf8');
+
+    const { sup, adapter } = supervisor();
+    const started = await sup.start(request({ ticketRelPath: rel }), { persona: 'pia' });
+    const id = (started as { run: RunInfo }).run.id;
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await vi.waitFor(async () => {
+      const memory = await fsp.readFile(memoryFile(), 'utf8');
+      expect(memory).toContain('- 2026-10-17 · T-0001 · handed-over · 0 tokens'); // the new entry landed
+    });
+
+    const memory = await fsp.readFile(memoryFile(), 'utf8');
+    const nonEmpty = memory.split('\n').filter((line) => line !== '');
+    expect(nonEmpty).toHaveLength(199); // the header + 198 entries — the file's 200 lines with the blank
+    expect(nonEmpty[0]).toBe('# Memory');
+    expect(memory).toContain('- 2026-10-01 · T-0002 · handed-over · 2 tokens'); // shifted up, kept
+    expect(memory).not.toContain('- 2026-10-01 · T-0001 · handed-over · 1 tokens'); // the oldest, dropped
+  });
+
+  it('a memory write failure never fails the settle', async () => {
+    const rel = await writeTicket();
+    // A file where the personas directory belongs: the mkdir of the
+    // persona folder fails, the append must not.
+    await fsp.mkdir(path.join(vaultDir, 'tickets', '_meta'), { recursive: true });
+    await fsp.writeFile(path.join(vaultDir, 'tickets', '_meta', 'personas'), 'not a directory', 'utf8');
+    const logs: string[] = [];
+    const { sup, adapter } = supervisor({ log: (message) => logs.push(message) });
+    const started = await sup.start(request({ ticketRelPath: rel }), { persona: 'pia' });
+    const id = (started as { run: RunInfo }).run.id;
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await vi.waitFor(() => {
+      expect(logs.some((line) => line.includes('persona memory append failed'))).toBe(true);
+    });
+  });
+});
+
 describe('limitExceeded — the per-run ceilings', () => {
   const info = (over: Partial<RunInfo>): RunInfo => ({ ...({} as RunInfo), ...over });
   const limits = { maxTurns: 100, maxWorkMs: 60 * 60_000 };

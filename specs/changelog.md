@@ -1,4 +1,38 @@
 
+### Milestone 102 — personas (Mission-Control migration E3)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md),
+etappe E3). A named agent is role + behaviour + model + memory in one:
+personas live in the tickets repo as `tickets/_meta/personas/<id>/`
+(`persona.md` frontmatter + `prompt.md` + `memory.md`, optional
+`avatar.png`), fully specified in
+`specs/ticket-schema.md`. The three-level resolution
+ladder — ticket `persona:` pin > phase `persona:` in `pipeline.md` >
+engine config `personas.default` — resolves at dispatch before the legacy
+assignment ring: a resolved persona feeds worker and model (a router only
+climbs inside the persona's pool) and its `prompt.md` becomes the run's
+instruction base instead of the phase handover prompt; when nothing
+resolves, or the persona file is missing, the ring runs unchanged, so
+unmigrated boards behave byte-identically. Every run stamps
+`RunInfo.persona`, and the token report gains the per-persona cost
+grouping (`personaCostReport`) — tokens in/out/cache, run count and cost
+per persona, `unassigned` for persona-less runs. Memory has two append
+paths, both capped at 200 lines dropping the oldest: the fleet appends
+one outcome line to the persona's `memory.md` when a persona run settles
+(a write failure is logged and never fails the settle), and the board
+service's `personaLearn` is the confirmed single-entry write (one commit
+`personas: <id> memory +1`, unknown persona ids refused); the run brief's
+context pack carries the persona's memory slice (the last ~20 lines /
+~500 tokens under a `## Memory` heading — no section at all when the file
+is absent, so persona-less instructions stay byte-identical). The board
+service also lists the personas (`listPersonas`) and migrates the legacy
+column `worker:`/`model:`/`prompt:` keys onto generated personas
+idempotently — one commit `tickets: personas migrated`; both methods ride
+the engine's invoke allowlist. Deliberate scope cut: the chat-ingestion UI
+and the Team view are E5 — E3 lands the data model, the resolution, the
+memory paths and the cost attribution.
+
 ### Milestone 101 — the standalone tickets engine (Mission-Control migration E2b-2)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01

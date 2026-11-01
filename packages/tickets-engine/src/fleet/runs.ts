@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { acceptanceCommands, patchTicketFile, ticketPathParts } from '../core/ticket-files';
 import { TicketsGit } from '../core/tickets-git';
+import { PERSONAS_DIR } from '../core/persona';
 import { answersFromText, answersText, ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
 import { COMPACT_CAPABILITY, contextCap, HANDOVER_CANDIDATE_STATES, resolveHandover, type HandoverCandidate, type HandoverDecision } from './handover';
 import { killTreeGuarded, listenerPid, processAlive, processStartMs, type ExecFn } from './procs';
@@ -335,6 +336,13 @@ export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const ATTACHMENT_DIR = '.drey-attachments';
 
 const TERMINAL: readonly RunState[] = ['done', 'stopped', 'failed'];
+
+/**
+ * The persona memory file never grows past this many lines, the
+ * `# Memory` header included — the same cap `persona-store` applies on
+ * the service side (the two writers keep one file shape).
+ */
+export const PERSONA_MEMORY_LINE_CAP = 200;
 
 /** 331122 -> `331k`, 3_400_000 -> `3.4M`: the Log's short token counts. */
 function tokenWords(n: number): string {
@@ -808,7 +816,12 @@ export class RunSupervisor {
     return run === undefined ? null : path.join(run.dir, 'stream.jsonl');
   }
 
-  async start(request: RunRequest, resumeRef: string | null = null, reopened = false): Promise<StartOutcome> {
+  async start(
+    request: RunRequest,
+    options: { readonly persona?: string | null } = {},
+    resumeRef: string | null = null,
+    reopened = false,
+  ): Promise<StartOutcome> {
     if (this.retiring) {
       return { ok: false, error: 'the runner is handing over to a newer build — try again in a moment' };
     }
@@ -880,6 +893,9 @@ export class RunSupervisor {
     const info: RunInfo = {
       id,
       ticketId: request.ticketId,
+      // E3: the persona the dispatcher's ladder resolved for this ticket
+      // (null on ring dispatches and on every pre-personas caller).
+      persona: options.persona ?? null,
       provider: request.provider,
       state: 'starting',
       pid: null,
@@ -1342,6 +1358,7 @@ export class RunSupervisor {
           'The runner restarted and this session was resumed. Continue the step where you left off; ' +
           'your original brief is earlier in this conversation. Do not search the disk for files already named in it.',
       },
+      {},
       sessionRef,
     );
   }
@@ -1366,6 +1383,7 @@ export class RunSupervisor {
           prompt ??
           'The owner has reopened this session to talk to you. Reply with one short line that you are ready, then wait for their instructions.',
       },
+      {},
       old.info.sessionRef,
       true,
     );
@@ -2071,9 +2089,56 @@ export class RunSupervisor {
     this.deps.log(`run ${run.info.id} → ${state}`);
     await this.persist(run);
     await this.clearRunStamp(run, run.stopNote === undefined ? null : `${run.stopNote}${usageSummary(run.info)}`);
+    // E3: the run's one-line lesson lands in its persona's memory — the
+    // next dispatch of this persona reads it back as the instruction's
+    // `## Memory` slice. Best-effort: a memory write never fails the settle.
+    await this.appendPersonaMemory(run, state);
     // The slot is free and the ticket is where it belongs — the chain
     // may dispatch again (M85; a no-op while no chain is configured).
     void this.deps.onRunSettled?.(run.info);
+  }
+
+  /**
+   * Appends at most one line — `- <date> · <ticket> · <outcome> · <tokens>
+   * tokens` — to `tickets/_meta/personas/<persona>/memory.md` when the run
+   * carried a persona (E3, ADR-0088). The file shape mirrors the service
+   * side's `persona-store` exactly (a `# Memory` header at creation, the
+   * whole file capped at {@link PERSONA_MEMORY_LINE_CAP} lines, oldest
+   * entries first out) — two writers, one shape. Plain fs against the
+   * run's vault; every failure is a log line, never a thrown error.
+   */
+  private async appendPersonaMemory(run: LiveRun, state: RunState): Promise<void> {
+    const persona = run.info.persona ?? null;
+    if (persona === null || persona.trim() === '') {
+      return;
+    }
+    const outcome: 'handed-over' | 'failed' | 'stopped' =
+      state === 'done' ? 'handed-over' : state === 'failed' ? 'failed' : 'stopped';
+    const entry = `- ${this.stamp().slice(0, 10)} · ${run.info.ticketId} · ${outcome} · ${run.info.tokensIn + run.info.tokensOut} tokens`;
+    try {
+      const abs = path.join(run.request.ticketsVaultPath, PERSONAS_DIR, persona, 'memory.md');
+      const existing = await fsp.readFile(abs, 'utf8').catch(() => null);
+      let header: string[];
+      let entries: string[];
+      if (existing === null || existing.trim() === '') {
+        header = ['# Memory', ''];
+        entries = [];
+      } else {
+        const lines = existing.split('\n');
+        const hasHeader = (lines[0] ?? '').startsWith('#');
+        header = hasHeader ? [lines[0]!, ''] : [];
+        entries = (hasHeader ? lines.slice(1) : lines).filter((line) => line.trim() !== '');
+      }
+      entries.push(entry);
+      const maxEntries = PERSONA_MEMORY_LINE_CAP - header.length;
+      while (entries.length > maxEntries) {
+        entries.shift(); // the oldest lesson goes first — the header never drops
+      }
+      await fsp.mkdir(path.dirname(abs), { recursive: true });
+      await fsp.writeFile(abs, `${[...header, ...entries].join('\n')}\n`, 'utf8');
+    } catch (error) {
+      this.deps.log(`run ${run.info.id}: persona memory append failed — ${messageOf(error)}`);
+    }
   }
 
   /**

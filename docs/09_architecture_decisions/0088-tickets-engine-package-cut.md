@@ -113,5 +113,20 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   (synced at activation), the fleet run history moves to
   `~/.drey-engine/fleet`, and unsynced per-worker handover overrides fall
   back to defaults.
+- **E3 (milestone 102):** personas — a named agent (role + behaviour +
+  model + memory) as one directory `tickets/_meta/personas/<id>/`
+  (`persona.md` + `prompt.md` + `memory.md`, optional `avatar.png`; the
+  format lives in
+  [`specs/ticket-schema.md`](../../specs/ticket-schema.md)). The
+  three-level ladder (ticket `persona:` pin > phase `persona:` key >
+  engine default `personas.default`) resolves at dispatch ahead of the
+  legacy assignment ring, which stays the fallback for persona-less
+  boards; runs stamp `RunInfo.persona` and the token report groups cost
+  per persona (`unassigned` bucket). Memory appends at settle (capped at
+  200 lines, a write failure never fails the settle) beside the
+  confirmed `personaLearn` service entry, the run brief carries the
+  persona's memory slice, and the board service migrates the legacy
+  column `worker:`/`model:`/`prompt:` keys onto personas in one
+  idempotent commit (`tickets: personas migrated`).
 
 

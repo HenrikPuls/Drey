@@ -57,6 +57,8 @@ Top-level rules, once, up front:
       order.md        # ignored since req-75 W1 (the former order pins), may be absent
       repos.md        # work-repo name -> clone URL/path mapping
       prompts/        # the handover prompts (`agent <prompt-ref>` names one file)
+      personas/       # the agent personas (E3): <id>/persona.md + prompt.md +
+                      #   memory.md (+ avatar.png) — see Personas below
     10-inbox/
       T-0042.md       # one ticket per file, in its current phase's folder
     20-prioritized/
@@ -204,6 +206,7 @@ before the machine takes over; must end with the acceptance criteria.
 | `repo` | string | Name from `_meta/repos.md`: the ticket's **primary** work repo (req-72) — where the fleet's gate runs and whose worktree is the run's home. May be empty until the ticket leaves inbox for a work phase; entering one without a known repo is an issue. |
 | `repos` | list of names | Optional (req-72). Every work repo the ticket touches, **primary first** — `repos: [drey, lariscus]`. When set, the list is the truth and `repo:` repeats its first entry (a mismatch is a noise finding, the list wins). One worktree per named repo, all on the ticket's branch; a run refuses while any named repo lacks a local `path:` in `_meta/repos.md`. One or zero names write no `repos:` line. |
 | `worker` | string | Optional pin for the fleet worker (M84): `opencode`, `claude-code`, or `<provider>/<model>`. Wins over the column's `worker:` key, the phase handover's `@worker` pin, the repo's `worker:` and the configured default (M85's assignment ring). An unknown value badges the card; a run start with it refuses. |
+| `persona` | string | Optional persona pin (ADR-0088 E3): `persona: pia` — the top of the persona ladder, winning over the phase's `persona:` key and the engine default (`personas.default`). The persona's worker/model/prompt drive the dispatch; when nothing resolves or the persona file is missing the legacy assignment ring runs unchanged. See `_meta/personas/` below. |
 | `priority` | `urgent \| high \| normal \| low` | Required. Default `normal`; machine writers always write it. |
 | `track` | `auto \| shape` | Optional (req-75 W1b, ADR-0087 decision 2). The ticket's triage track: `auto` runs on its own, `shape` goes through the plan-mode dialog with the owner. Absent (or any other value — a warning) reads as not triaged; set from the Work panel's row menu (Track ›) until W5c/W6 fill it from triage. |
 | `rank` | integer 0-999999 | Default `5000`. Fine ordering inside derived order. |
@@ -386,6 +389,12 @@ Prose for humans. The board follows this file on refresh.
   tab) are owner moves. While the run is live the ticket carries
   `interactive: true`, which keeps the dispatcher off it; the move
   drops the field.
+- `persona`: optional persona id (ADR-0088 E3) — the ladder's middle
+  level: every ticket of this column dispatches with this persona unless
+  the ticket pins its own. For the run the persona's worker and model
+  replace the assignment ring's resolution and the persona's `prompt.md`
+  becomes the instruction base instead of the phase handover prompt.
+  See `_meta/personas/` below.
 - Editing this file is the owner's; the board re-reads it on every
   refresh. Unknown keys in a phase entry are ignored.
 
@@ -395,9 +404,13 @@ commit per change; hand edits win on refresh):
 - `worker:` — the column's worker pin (`opencode`,
   `claude-code`, `<provider>/<model>`), the assignment ladder's column
   level (ticket pin > column > handover `@worker` > repo default >
-  configured default). Unset on a manual column.
+  configured default). Unset on a manual column. **Deprecated with
+  personas (E3):** stays readable until the board service migrates the
+  column onto a persona, then is rewritten to null — the ladder decides
+  from then on.
 - `model:` — the model pin for the column's runs (OpenCode:
-  `providerID/modelID`).
+  `providerID/modelID`). **Deprecated with personas (E3):** readable
+  until migrated onto the persona's `models`, then cleared to null.
 - `workers:` — **retired (req-63).** The parallel slots belong to the
   worker providers (`fleet.pool.<provider>.size` in the plugin config,
   Settings → Tickets → Workers, req-71), shared by every column. A leftover key is
@@ -405,6 +418,9 @@ commit per change; hand edits win on refresh):
 - `prompt:` — the prompt ref override; the default is the handover's
   ref (and setting a worker in the dialog writes the matching
   `agent <phase>-default` handover, clearing it writes `manual`).
+  **Deprecated with personas (E3):** readable until migrated — the
+  persona's own `prompt.md` carries the prompt from then on — then
+  cleared to null.
 - `max-red:` — the circuit breaker's tolerance: consecutive red gates
   the column takes before it trips (holds + parks its next candidate
   in inbox). Default 3.
@@ -450,6 +466,87 @@ automatic column, ordered by priority class (`urgent` / `high` before
 finishing beats starting — then the column's derived order. Each candidate takes a slot of the provider pool its
 assignment resolves to; a full pool makes it wait, a running run is
 never preempted.
+
+## `_meta/personas/` — the agent personas (E3)
+
+A persona is a named agent — role + behaviour + model + memory in one
+directory (ADR-0088 E3). One folder per persona, directly under
+`tickets/_meta/personas/`:
+
+```text
+tickets/_meta/personas/
+  pia/
+    persona.md   # frontmatter: title, role, worker, models, color, skills
+    prompt.md    # the persona prompt — the run's instruction base when present
+    memory.md    # curated memory (format and cap below)
+    avatar.png   # optional
+```
+
+- The persona id **is** the folder name: lowercase letters, digits and
+  dashes, at most 64 characters (`pia`, `build-opus-1m`).
+- `persona.md` frontmatter fields (tolerant parse — what parses reads,
+  the rest falls back to these defaults):
+
+  | Field | Shape | Default |
+  |---|---|---|
+  | `title` | string | the id |
+  | `role` | `planner \| builder \| reviewer \| tester \| custom` | `custom` |
+  | `worker` | the CLI harness (`claude-code`, `opencode`, `api`) | `opencode` |
+  | `models.default` | the model nothing else decides | `opus` |
+  | `models.pool` | allowed models; the order is the fallback order on rate-limits/outages | `[models.default]` |
+  | `models.router` | `off \| budget \| escalate-on-fail` — a router only ever picks inside the pool | `off` |
+  | `color` | `#rrggbb`, the chips and avatars | `#a78bfa` |
+  | `skills` | reusable skill files under `_meta/skills/` the persona carries | `[]` |
+
+- `prompt.md` — the longform persona prompt, free Markdown. When a
+  persona resolves at dispatch, this file is the run's instruction base,
+  replacing the phase handover prompt.
+- `memory.md` — the persona's curated memory. Created on first write with
+  a `# Memory` header; **capped at 200 lines**, the oldest lines drop off.
+  One entry per line:
+
+  ```markdown
+  - <YYYY-MM-DD> · <ticketId> · <lesson>
+  ```
+
+  Two writers append (a writer never rewrites existing entries): the
+  fleet settles a persona run with its outcome line — the outcome word
+  (`handed-over` / `failed` / `stopped`) plus the token count; a memory
+  write failure is logged and never fails the settle. And the board
+  service's confirmed `personaLearn` entry is the owner's hand-confirmed
+  lesson, one line per call, committed once as `personas: <id> memory +1`.
+  The run brief's context pack carries a slice of this file — the last
+  ~20 lines / ~500 tokens, whichever is smaller, under a `## Memory`
+  heading with a one-line explanation; an absent file adds no section at
+  all.
+
+**The resolution ladder** — three levels, first hit wins:
+
+1. the ticket's `persona:` frontmatter pin,
+2. the phase's `persona:` key in `pipeline.md`,
+3. the engine default, the config key `personas.default`.
+
+A resolved persona drives the dispatch: worker and model come from the
+persona (the model from `models.default`, a router only climbs inside
+`models.pool`) and `prompt.md` replaces the handover prompt. When nothing
+resolves, or the persona file is missing, the legacy assignment ring runs
+unchanged — a board without personas behaves exactly as before. Every run
+records the resolved id in its `RunInfo.persona` (null on ring
+dispatches), which is also the key the token report's per-persona cost
+grouping aggregates under (`unassigned` for persona-less runs).
+
+**Migration of the legacy column keys.** The phase-level `worker:` /
+`model:` / `prompt:` pool keys stay readable until the board service
+migrates a column: on a snapshot that sees any of the three keys, the
+service writes the generated persona (`persona.md` + `prompt.md`, seeded
+from `tickets/_meta/prompts/<prompt-ref>.md` when that file exists, an
+empty `prompt.md` when it does not) under the derived id
+(`personaMigrationFor`), rewrites the phase with `persona: <id>` and the
+three legacy keys cleared to null, and closes with exactly one commit
+`tickets: personas migrated`. The pass is idempotent — a pipeline
+carrying no legacy key is left alone — and announces like every other
+board write. After the migration the ladder decides; the legacy keys are
+never written again.
 
 ## `_meta/order.md` — retired (req-75 W1)
 

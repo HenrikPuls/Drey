@@ -8,6 +8,7 @@ const meta = (over: Partial<TicketMeta> = {}): TicketMeta => ({
   repo: 'drey',
   repos: ['drey'],
   worker: null,
+  persona: null,
   track: null,
   priority: 'normal',
   rank: 5000,
