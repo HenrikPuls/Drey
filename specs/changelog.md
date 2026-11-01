@@ -1,4 +1,22 @@
 
+### req-75 W4d — The squirrel
+
+**Not yet manually verified by the owner.** Owner request, 2026-10-31
+(outside the list). The worker's pulse is now a small squirrel, where
+the `✻` glyph and the plain dots stood: in the thread's progress line
+(the `Thinking… 12s · ↓ tokens` line), in the Running rows of the Work
+panel and on the Workers cards. While the worker works it **runs**
+(bobbing, tail wagging, in the accent colour); when output streams fast
+— the last activity less than 4 s ago — it **sprints** (twice as fast,
+leaning forward, two speed lines); when there is nothing to do (no run,
+idle, ended, waiting on the owner) it **sits** (still, muted). One pose
+rule over the fields every run already carries
+(`squirrel.ts`: `squirrelPose`), one inline SVG built with the SVG DOM;
+all movement is CSS on `data-pose`, `transform` and `opacity` only, and
+`prefers-reduced-motion` draws the poses still. The squirrel carries
+`role="img"` with the pose as its aria-label (Worker running /
+sprinting / idle). Specs: `squirrel.spec.ts`.
+
 ### req-75 W4c — Queue messages for a busy worker
 
 **Not yet manually verified by the owner.** Owner request, 2026-10-31
