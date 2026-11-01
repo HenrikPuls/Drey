@@ -1048,6 +1048,28 @@ of that ticket carries the failed gate's output (its tail) so the
 worker fixes it first and continues the branch instead of starting
 over.
 
+**All workers at a glance.** The **Workers** link at the right end of
+the Work panel's footer (also in the header's **⋯** menu) opens one
+tab with a card per live run: its dot, the ticket's title and how long
+it has been at it, one line with the state, the worker, its model and
+how full its context is, and what it does now with the two actions
+before it. Each card carries the thread's controls — **Pause** (a
+pause **Continue** undoes), **Tell…** (a one-line input right in the
+card), **Take over** and **Stop**; a run that waits on you offers
+**Answer** instead, which opens the ticket page. A busy worker
+without progress — no edit for eight minutes, the same file read
+again and again, or the runner itself flagging it — is flagged
+**Looks stuck** (the card's border says so too): **Nudge** sends a
+canned status request — one line on what it is doing, or a question
+when it is blocked —,
+**Hand to …** stops the run and starts the same ticket on the other
+worker, **Stop** ends it; the ticket thread's header shows the same
+*Looks stuck* word. The top row sums the pools up — who runs of how
+many slots per worker, what waits in the queue — and its two buttons
+act on everything at once: **Pause all after this step** and the armed
+**Stop all** (click twice). The tab's footer counts the workers and
+the day's tokens.
+
 Every run's instruction is a **context pack**, assembled in a fixed
 order: the repo's own agent instructions (the file its **Agent
 instructions** field names — keep it short, every model call of the
