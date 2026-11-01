@@ -98,6 +98,11 @@ export const IPC_CHANNELS = {
   // change) — a narrow write, not the whole-config `config:set`.
   configSetTriggerConfirm: 'config:set-trigger-confirm',
   captureHotkeyStatus: 'shortcuts:capture-status',
+  // The system-wide chords of GLOBAL commands (SDK 1.37, req-74 W5a): the
+  // renderer owns the command registry and pushes the list; a press comes
+  // back as a push, like `dailyOpen`.
+  globalShortcutsSync: 'shortcuts:global-sync',
+  globalShortcutPress: 'shortcuts:global-press',
   llmListModels: 'llm:list-models',
   llmTestConnection: 'llm:test-connection',
   llmDebugList: 'llm:debug-list',

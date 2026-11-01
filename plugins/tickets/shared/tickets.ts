@@ -531,3 +531,25 @@ export function openTicketCount(snapshot: BoardSnapshot): number {
     0,
   );
 }
+
+/** The widest a derived title may be before it is cut (req-75 W5b). */
+export const TITLE_FROM_DESCRIPTION_MAX = 80;
+
+/**
+ * A create's title from its description (req-75 W5b): the first
+ * non-empty line, trimmed, cut at 80 characters on a word boundary
+ * (`…` appended when cut) — '' when nothing usable is there.
+ */
+export function titleFromDescription(text: string): string {
+  const line = text.split(/\r?\n/).find((candidate) => candidate.trim() !== '');
+  if (line === undefined) {
+    return '';
+  }
+  const trimmed = line.trim();
+  if (trimmed.length <= TITLE_FROM_DESCRIPTION_MAX) {
+    return trimmed;
+  }
+  const slice = trimmed.slice(0, TITLE_FROM_DESCRIPTION_MAX);
+  const cut = slice.lastIndexOf(' ');
+  return `${(cut > 0 ? slice.slice(0, cut) : slice).trimEnd()}…`;
+}

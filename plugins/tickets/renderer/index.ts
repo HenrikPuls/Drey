@@ -797,7 +797,7 @@ function emptyState(
 
 // --- the create modal (opens the new file — T-0001) ------------------------
 
-function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
+function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot, opts?: { dictate?: boolean }): void {
   const close = api.ui.showModal((host) => {
     const form = el('div', 'tickets-form');
     const title = el('input', 'tickets-form-title') as HTMLInputElement;
@@ -840,6 +840,35 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
     description.rows = 4;
     description.setAttribute('aria-label', 'Description');
 
+    // req-75 W5b, T-0071: Windows dictation, not speech recognition of
+    // our own. Win+H types into the focused field, so Description is
+    // focused before the press — PowerShell's ~300 ms start-up is the
+    // natural delay, no timer. A failed start shows the one-line
+    // fallback hint; the next successful start clears it again.
+    const dictationHint = el('p', 'tickets-form-hint', 'Dictation did not start — press Win+H, or type.');
+    dictationHint.hidden = true;
+    const startDictation = (): void => {
+      description.focus();
+      void invokeBoard('dictate').then((result) => {
+        dictationHint.hidden = (result as { ok?: boolean } | null)?.ok === true;
+      });
+    };
+    const descriptionLabelRow = el('div', 'tickets-form-label-row');
+    descriptionLabelRow.append(el('span', 'tickets-form-label', 'Description'));
+    if (navigator.userAgent.includes('Windows')) {
+      const mic = el('button', 'icon-btn tickets-form-dictate');
+      mic.type = 'button';
+      mic.title = 'Dictate (Win+H)';
+      mic.setAttribute('aria-label', 'Dictate');
+      mic.append(api.ui.icon('mic', 14));
+      mic.addEventListener('click', startDictation);
+      descriptionLabelRow.append(mic);
+    }
+    // A div, not a label: the row holds a button now, and a label's
+    // first labelable descendant would be that button, not the textarea.
+    const descriptionField = el('div', 'tickets-form-field');
+    descriptionField.append(descriptionLabelRow, description, dictationHint);
+
     const actions = el('div', 'tickets-form-actions');
     const cancel = el('button', undefined, 'Cancel');
     cancel.type = 'button';
@@ -848,7 +877,9 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
     create.type = 'button';
     const submit = (): void => {
       const text = title.value.trim();
-      if (text === '') {
+      // An empty title is fine while the description carries one — its
+      // first line becomes the title, derived main-side (req-75 W5b).
+      if (text === '' && description.value.trim() === '') {
         title.focus();
         return;
       }
@@ -882,7 +913,7 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
     rowFields.append(field('Priority', priority), field('Repositories', repoGroup));
 
     form.append(el('h3', 'tickets-form-heading', 'New ticket'));
-    form.append(field('Title', title), rowFields, field('Description', description), actions);
+    form.append(field('Title', title), rowFields, descriptionField, actions);
     form.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && event.target === title) {
         event.preventDefault();
@@ -893,7 +924,13 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
       }
     });
     host.append(form);
-    title.focus();
+    // The chord's opening dictates into Description right away
+    // (req-75 W5b); the panel's + button keeps today's focus.
+    if (opts?.dictate === true) {
+      startDictation();
+    } else {
+      title.focus();
+    }
   });
 }
 
@@ -3141,6 +3178,26 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     void invokeBoard('fleetStatus').then((result) =>
       applyFleetSnapshot((result ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
     void readWorkerPools(api).catch(() => undefined);
+
+    // New ticket from anywhere (req-75 W5a, SDK 1.37): the system-wide
+    // chord raises Drey, reveals the board and opens the create modal.
+    // Global — the base registers it with the OS; it never also fires
+    // in-window. Without a tickets vault only the reveal happens (the
+    // panel shows its setup state).
+    api.commands.register({
+      id: 'tickets.newTicket',
+      label: 'New ticket',
+      keybinding: 'Mod+Alt+T',
+      global: true,
+      run: () => {
+        api.ui.revealWidget('tickets');
+        if (snapshot?.vaultId != null) {
+          // req-75 W5b: the chord means dictation — the modal opens on
+          // Description and Win+H starts by itself.
+          openCreateModal(api, snapshot, { dictate: true });
+        }
+      },
+    });
     void refreshBoard();
   },
 };

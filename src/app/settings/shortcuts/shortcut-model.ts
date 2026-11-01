@@ -22,6 +22,8 @@ export interface CommandDefault {
   id: string;
   label: string;
   defaultChord: string | undefined;
+  /** The command is system-wide (SDK 1.37): its row label gains the same suffix as the capture row. */
+  global?: boolean;
 }
 
 export interface ShortcutRow {
@@ -50,7 +52,7 @@ export function shortcutRows(
     .sort((a, b) => a.label.localeCompare(b.label))
     .map((command) => ({
       id: command.id,
-      label: command.label,
+      label: command.global ? `${command.label} (system-wide)` : command.label,
       chord: effectiveChord(command.id, command.defaultChord, config.overrides),
       defaultChord: command.defaultChord,
       changed: Object.prototype.hasOwnProperty.call(config.overrides, command.id),

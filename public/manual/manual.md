@@ -875,6 +875,21 @@ edits the frontmatter as YAML; its header folds back to the ticket
 header. The **Log** section opens folded the first time a ticket shows
 in a session — the fold marker beside "Log" opens it.
 
+**By voice.** On Windows the dialog's Description label carries a
+**mic button**: it starts Windows dictation (Win+H — Windows' own;
+Drey adds no speech recognition), so speaking types into the
+description. Typing works beside it at any time, and when dictation
+does not start a one-line hint says so. A title is optional while the
+description has one — its first line becomes the ticket's title
+(trimmed and cut at 80 characters).
+
+**From anywhere.** The same dialog is one chord away outside Drey:
+`Ctrl+Alt+T` anywhere in Windows brings Drey to the front, opens the
+board and opens the dialog on Description with dictation already
+started (a failed start shows the hint — press Win+H yourself, or
+type). Rebind it in Settings → Keyboard shortcuts like every other
+shortcut.
+
 A row's **⋯** button (or a right-click) opens its menu: **Open ticket**
 (the ticket page); **Queue for the fleet** on an idea and **Back
 to ideas** on a queued one; **Move to ›** with every other phase by

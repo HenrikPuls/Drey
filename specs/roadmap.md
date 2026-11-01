@@ -114,11 +114,14 @@ W1b, W2b and W3 shipped as owner-requested additions, see the
 changelog).
 
 - **W5 — Capture by hotkey and voice.** A second global chord "New
-  ticket" (ADR-0073) opens a small capture window that starts Windows
+  ticket" (ADR-0073) raises Drey and opens the New ticket dialog in the
+  main window (no separate capture window — the quick-capture call,
+  ADR-0002); the dialog starts Windows
   dictation (Win+H) — no own speech recognition (req-11 stays excluded;
   local Whisper may be reopened later). One model call tidies the
   dictated text into title and description (raw text kept in the Log)
-  and suggests the track.
+  and suggests the track. W5a shipped: the system-wide New ticket chord.
+  W5b shipped: Windows dictation in the New ticket dialog.
 - **W6 — Shape track.** The plan-mode dialog with the project context
   assembled automatically and shown as chips (CLAUDE.md, specs, ADRs,
   related tickets — over the existing context pack); read-only on the

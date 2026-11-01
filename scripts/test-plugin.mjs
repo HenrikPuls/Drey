@@ -9,7 +9,8 @@
  *
  * The scope argument is either a plugin id (`tags`, `tickets`) or a path
  * fragment that vitest matches against the spec files (`shared`,
- * `electron/ipc`, `plugins/tags/main`). Anything after the scope is passed
+ * `electron/ipc`, `plugins/tags/main`, `electron/global-shortcuts`).
+ * Anything after the scope is passed
  * through to vitest: `-t "rename"` for single tests, `--watch` for watch
  * mode. An unknown scope fails loudly with the available plugin ids -- a
  * typo would otherwise run nothing (vitest finds no files) or, with a
@@ -33,6 +34,16 @@ function fail(message) {
   process.exit(1);
 }
 
+/** Whether `rel` (e.g. `electron/global-shortcuts`) prefixes an entry in its folder. */
+function matchesExistingPath(rel) {
+  const dir = path.dirname(path.join(repoRoot, rel));
+  const base = path.basename(rel);
+  if (!existsSync(dir)) {
+    return false;
+  }
+  return readdirSync(dir).some((entry) => entry.startsWith(base));
+}
+
 const args = process.argv.slice(2);
 const watch = args.includes('--watch');
 const [scope, ...extra] = args.filter((arg) => arg !== '--watch');
@@ -45,12 +56,18 @@ if (!scope) {
   );
 }
 
-// A plugin id scopes to plugins/<id>; anything else must at least exist as
-// a folder (or folder prefix) to pass through as a vitest filter.
+// A plugin id scopes to plugins/<id>; anything else must at least exist
+// as a folder (or folder / file prefix) to pass through as a vitest
+// filter — `electron/ipc` (a folder) and `electron/global-shortcuts` (a
+// file fragment) both scope to their specs.
 let filter;
 if (pluginIds.includes(scope)) {
   filter = `plugins/${scope}`;
-} else if (existsSync(path.join(repoRoot, scope)) || existsSync(path.join(repoRoot, `plugins/${scope}`))) {
+} else if (
+  existsSync(path.join(repoRoot, scope)) ||
+  existsSync(path.join(repoRoot, `plugins/${scope}`)) ||
+  matchesExistingPath(scope)
+) {
   filter = scope;
 } else {
   fail(

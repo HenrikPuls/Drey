@@ -528,7 +528,10 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   `keybinding` is its default; the chord in effect is the user's override
   (`keybindings.overrides`, fed in by `App` from the persisted config,
   `null` = none — ADR-0073), and the index is rebuilt from the commands
-  on every change. `hint(id)` / `titled()` are what every menu row,
+  on every change. A command flagged `global` (SDK 1.37, plugin
+  commands) stays out of the in-window index — `App` pushes its chord
+  to main's `GlobalShortcuts` for OS-level registration, and a press
+  runs it exactly once. `hint(id)` / `titled()` are what every menu row,
   context menu and tooltip prints, so none holds a chord of its own;
   `pause()` lets the Settings recorder read a raw key press. Plus a
   capture-phase `mouseup` listener for `Command.mouseButton`

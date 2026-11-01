@@ -53,6 +53,46 @@ remove), `shared/fleet-defaults.spec.ts`, `main/default-prompts.spec.ts`.
 ⚠️ Not run in the author's sandbox: the full `npm run test:all`, lint,
 the Electron build and the UI itself (seven fleet specs on Windows paths
 fail there on `main` as well).
+### req-75 W5b — Dictation in the New ticket dialog
+
+**Not yet manually verified by the owner.** Part 2 of req-75 W5: the
+New ticket dialog starts Windows dictation — the OS's own, Drey still
+runs no speech recognition (req-11 stays excluded). Opened by the
+system-wide New ticket chord (W5a) the dialog opens on Description and
+the Win+H press happens by itself: the plugin's main side starts
+PowerShell with `-EncodedCommand` (base64 of UTF-16LE, so the script's
+double quotes survive argument quoting) whose script presses and
+releases the keys through user32 `keybd_event`. Off Windows, or on a
+failed start, the press refuses and the dialog shows one hint line —
+"Dictation did not start — press Win+H, or type." — under the field,
+cleared by the next successful start; typing is always the fallback.
+On Windows the Description label row carries a **mic button** that
+restarts the press. A ticket may now be created from a description
+alone: its first non-empty line, trimmed and cut at 80 characters on
+a word boundary with an ellipsis, becomes the title
+(`titleFromDescription` in the shared contract; `parseCreate` derives
+it — both empty still refuses). Specs: `dictation.spec.ts` (`execFile`
+injected — a spec never starts PowerShell), `tickets.spec.ts`
+(derivation), `commands.spec.ts` (create).
+
+### req-75 W5a — New ticket from anywhere
+
+**Not yet manually verified by the owner.** A second system-wide chord,
+**Ctrl+Alt+T**, raises Drey from anywhere in Windows, reveals the
+tickets board and opens the existing New ticket dialog with the cursor
+in its Title field; with no tickets vault the reveal is all that
+happens (the board shows its setup state). Built as a generic SDK seam
+(1.37): a plugin command may be `global` — the base registers its chord
+with the OS and never also fires it in-window, so it runs exactly once.
+Settings → Keyboard shortcuts shows the row "New ticket (system-wide)",
+rebindable like every other row, with the quick-capture row's "in use"
+hint when another program owns the combo. Main's `GlobalShortcuts`
+(modelled on the quick-capture hotkey, ADR-0073; the raise is the
+quick-capture call, ADR-0002) registers exactly the renderer's list,
+keeps the quick-capture accelerator reserved and reports failures
+instead of throwing. Specs: `electron/global-shortcuts.spec.ts`,
+`keybinding.service.spec.ts` (global commands leave the in-window
+keymap), `shortcut-model.spec.ts` (the row label).
 
 ### req-75 W4d — The squirrel
 

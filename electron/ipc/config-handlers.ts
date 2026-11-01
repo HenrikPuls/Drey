@@ -1,7 +1,15 @@
 import { ipcMain } from 'electron';
-import { AppConfig, CaptureHotkeyStatus, IPC_CHANNELS } from '../../shared/ipc-api';
+import {
+  AppConfig,
+  CaptureHotkeyStatus,
+  GlobalChord,
+  GlobalShortcutStatus,
+  IPC_CHANNELS,
+} from '../../shared/ipc-api';
+import { chordToAccelerator } from '../../shared/keybindings';
 import { AppConfigStore } from '../app-config';
 import { CaptureHotkey } from '../capture-hotkey';
+import { GlobalShortcuts } from '../global-shortcuts';
 import { PluginHost } from '../plugin-host';
 import { SpellcheckService } from '../spellcheck';
 
@@ -19,6 +27,8 @@ export interface ConfigHandlerDeps {
   syncWindowIcon: () => void;
   /** The system-wide quick-capture hotkey (ADR-0073). */
   captureHotkey: CaptureHotkey;
+  /** The system-wide chords of global plugin commands (SDK 1.37, req-75 W5a). */
+  globalShortcuts: GlobalShortcuts;
 }
 
 /** `config:get` / `config:set`, with the side effects a saved config triggers. */
@@ -31,9 +41,26 @@ export function registerConfigHandlers({
   syncVaultWatcher,
   syncWindowIcon,
   captureHotkey,
+  globalShortcuts,
 }: ConfigHandlerDeps): void {
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
   ipcMain.handle(IPC_CHANNELS.captureHotkeyStatus, (): CaptureHotkeyStatus => captureHotkey.status());
+  // The renderer pushes the global commands' chords; the quick-capture
+  // accelerator is reserved, so the two can never fight over one combo.
+  ipcMain.handle(
+    IPC_CHANNELS.globalShortcutsSync,
+    (_event, payload: unknown): GlobalShortcutStatus[] => {
+      const chords = parseGlobalChords(payload);
+      const captureChord = captureHotkey.status().chord;
+      const reserved =
+        captureChord === null
+          ? []
+          : [chordToAccelerator(captureChord)].filter(
+              (accelerator): accelerator is string => accelerator !== null,
+            );
+      return globalShortcuts.sync(chords, reserved);
+    },
+  );
   // The confirmation dialog's per-trigger "don't ask again": a narrow
   // write into the assistant plugin's own config, where the triggers
   // live since the ADR-0010 later change. NOT the whole-config
@@ -77,5 +104,27 @@ export function registerConfigHandlers({
       pluginHost.emitVaultChange({ kind: 'refresh' });
     }
     return stored;
+  });
+}
+
+/**
+ * The `globalShortcutsSync` payload as `GlobalChord`s: an array of
+ * `{ id: string, chord: string }`; anything else yields the empty list
+ * (an unknown id simply registers nothing — the renderer owns the ids).
+ */
+function parseGlobalChords(payload: unknown): GlobalChord[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+  return payload.flatMap((entry): GlobalChord[] => {
+    if (
+      typeof entry === 'object' &&
+      entry !== null &&
+      typeof (entry as { id?: unknown }).id === 'string' &&
+      typeof (entry as { chord?: unknown }).chord === 'string'
+    ) {
+      return [{ id: (entry as { id: string }).id, chord: (entry as { chord: string }).chord }];
+    }
+    return [];
   });
 }
