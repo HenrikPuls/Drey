@@ -1,4 +1,31 @@
 
+### req-92 — A step the worker cannot complete stays put (BLOCKED)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list). Two tickets landed on `done` merged and pushed
+nothing (T-0062, T-0071): their commit step had ended blocked on a
+merge conflict, but any finished turn counted as the agent's done
+declaration, and the green machine gate over the branch moved the
+ticket regardless — the worker's own report was never heard. Now a
+worker can declare a step incomplete: a final message ending with
+`BLOCKED: <reason>` (parsed exactly like `QUESTION:`, line-start
+markers, the last one wins, a question still wins over it) ends the
+run **without** a gate and **without** a move; the reason rides the
+record (`blocked` in `run.json` and `/status`), the stream notes it,
+and the chain holds the ticket like an owner-stopped run until the
+owner moves or starts it — the dispatcher logs
+`dispatch holds <id>: its last run ended stopped or blocked`. The
+completion discipline in every brief names the marker, and the
+shipped `commit-default` prompt (v3) now has the commit worker
+**resolve merge conflicts itself** — mechanical ones (both sides add
+changelog/list entries: keep both, newest first) always, code
+conflicts only when confident and gated green in the merge worktree
+before the push — ending `BLOCKED:` only when a conflict is genuinely
+semantic or the repo is protected. The two stranded tickets were
+moved back to commit by hand; their re-runs then merged (conflict
+self-resolved), pushed and completed the step for real. Specs:
+`runs.spec.ts`, `providers.spec.ts` (`blockedOf`), `orchestrator.spec.ts`.
+
 ### req-75 W4d — The squirrel
 
 **Not yet manually verified by the owner.** Owner request, 2026-10-31
