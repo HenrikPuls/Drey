@@ -1,4 +1,26 @@
 
+### req-75 W5b — Dictation in the New ticket dialog
+
+**Not yet manually verified by the owner.** Part 2 of req-75 W5: the
+New ticket dialog starts Windows dictation — the OS's own, Drey still
+runs no speech recognition (req-11 stays excluded). Opened by the
+system-wide New ticket chord (W5a) the dialog opens on Description and
+the Win+H press happens by itself: the plugin's main side starts
+PowerShell with `-EncodedCommand` (base64 of UTF-16LE, so the script's
+double quotes survive argument quoting) whose script presses and
+releases the keys through user32 `keybd_event`. Off Windows, or on a
+failed start, the press refuses and the dialog shows one hint line —
+"Dictation did not start — press Win+H, or type." — under the field,
+cleared by the next successful start; typing is always the fallback.
+On Windows the Description label row carries a **mic button** that
+restarts the press. A ticket may now be created from a description
+alone: its first non-empty line, trimmed and cut at 80 characters on
+a word boundary with an ellipsis, becomes the title
+(`titleFromDescription` in the shared contract; `parseCreate` derives
+it — both empty still refuses). Specs: `dictation.spec.ts` (`execFile`
+injected — a spec never starts PowerShell), `tickets.spec.ts`
+(derivation), `commands.spec.ts` (create).
+
 ### req-75 W5a — New ticket from anywhere
 
 **Not yet manually verified by the owner.** A second system-wide chord,

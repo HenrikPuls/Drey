@@ -39,6 +39,14 @@ describe('command parsers', () => {
     });
   });
 
+  it('derives an empty create title from the description (req-75 W5b)', () => {
+    expect(parseCreate({ title: '  ', description: ' the outline panel should scroll\nmore' })).toEqual({
+      ok: true,
+      value: { title: 'the outline panel should scroll', priority: 'normal', repo: null, description: ' the outline panel should scroll\nmore' },
+    });
+    expect(parseCreate({ title: '', description: '   ' })).toEqual({ ok: false, error: 'the title is empty' });
+  });
+
   it('ignores a transition index from an older client — there are no pins (req-75)', () => {
     const base = { id: 'T-0001', from: 'build', to: 'review' };
     expect(parseTransition({ ...base, index: 2.7 })).toEqual({ ok: true, value: base });
