@@ -9,10 +9,9 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import type { MutationResult } from '../shared/tickets';
 import type { RunInfo, WaitQuestion } from '../main/fleet/protocol';
+import { createMessageQueue, readyToFlush, LIVE_RUN_STATES, type MessageQueue, type QueuedMessage } from './message-queue';
 import { questionNode } from './wait-view';
 import { formatTokens } from './worker-status';
-
-const LIVE_RUN_STATES: readonly string[] = ['starting', 'running', 'stopping'];
 
 /** The largest file the prompt box attaches (the runner enforces the same). */
 const MAX_ATTACH_BYTES = 10 * 1024 * 1024;
@@ -33,6 +32,56 @@ const QUICK_PROMPTS: ReadonlyArray<readonly [string, string]> = [
   ['What are you doing and why?', 'What are you doing and why?'],
   ['Stop after this step', 'Finish the current step, update the ticket Log, then stop and wait for me.'],
 ];
+
+// The queue of messages the owner sent while the worker was in a turn
+// (req-75 W4c). Module level, so both composers — the takeover tab and the
+// thread — see the same queue for a run and a rebuilt composer keeps it;
+// mirrored to localStorage per run id, so a reload keeps it too.
+const queues = new Map<string, MessageQueue>();
+/** Runs whose head was already sent this idle turn — one message per idle, the worker answers first. */
+const sentThisIdle = new Set<string>();
+/** Runs with a flush in flight — `paint()` runs every second and must not send twice. */
+const flushing = new Set<string>();
+/** Entries being inline-edited right now (both composers must hold their flush). */
+const editingLocks = new Set<string>();
+/** Queues dropped when their run ended: run id → the messages, for the notice. */
+const endedQueues = new Map<string, readonly string[]>();
+
+const queueKey = (runId: string): string => `drey.tickets.queue.${runId}`;
+
+const readQueueStorage = (runId: string): unknown => {
+  try {
+    return localStorage.getItem(queueKey(runId));
+  } catch {
+    return undefined;
+  }
+};
+
+const writeQueueStorage = (runId: string, queue: MessageQueue): void => {
+  try {
+    if (queue.list().length === 0) {
+      localStorage.removeItem(queueKey(runId));
+    } else {
+      localStorage.setItem(queueKey(runId), queue.toJSON());
+    }
+  } catch {
+    // storage blocked or full — the queue lives on for this session
+  }
+};
+
+const dropQueueStorage = (runId: string): void => {
+  try {
+    localStorage.removeItem(queueKey(runId));
+  } catch {
+    // as above
+  }
+};
+
+/** The message as it goes out — attachments ride after the text, like a direct send. */
+const composeMessage = (entry: QueuedMessage): string =>
+  entry.attachments.length === 0
+    ? entry.text
+    : `${entry.text === '' ? 'See the attached files.' : entry.text}\n\nAttached files:\n${entry.attachments.map((a) => `- ${a}`).join('\n')}`;
 
 export interface RunComposerDeps {
   readonly api: DreyPluginApi;
@@ -195,6 +244,52 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     }
   };
 
+  // --- the queue (req-75 W4c) -------------------------------------------
+  // Enter while the worker is in a turn queues instead of cutting into it.
+  const busyTurn = (run: RunInfo | null): boolean =>
+    run !== null && LIVE_RUN_STATES.includes(run.state) && run.turn === 'busy';
+  const queueFor = (runId: string): MessageQueue => {
+    let queue = queues.get(runId);
+    if (queue === undefined) {
+      queue = createMessageQueue(readQueueStorage(runId));
+      queues.set(runId, queue);
+    }
+    return queue;
+  };
+  const enqueue = (text: string): void => {
+    const typed = text.trim();
+    const id = runId();
+    if (id === null || (typed === '' && attached.length === 0)) {
+      return;
+    }
+    const queue = queueFor(id);
+    queue.add(typed, attached.map((a) => a.path), new Date().toISOString());
+    writeQueueStorage(id, queue);
+    attached.length = 0;
+    paintAttached();
+    prompt.setContent('');
+    prompt.focus();
+    paint();
+  };
+  // Send now keeps today's behaviour: interrupt the turn, then send.
+  const sendNow = (text: string): void => {
+    const run = deps.target();
+    if (run !== null && busyTurn(run)) {
+      void deps.mutate('Interrupting', () => deps.invoke('fleetControl', { action: 'interrupt', runId: run.id })).then(() => {
+        void send(text);
+      });
+      return;
+    }
+    void send(text);
+  };
+  const sendTyped = (text: string): void => {
+    if (busyTurn(deps.target())) {
+      enqueue(text);
+    } else {
+      void send(text);
+    }
+  };
+
   // "/" lists the commands the worker accepts; anything typed goes through as it is.
   const commandMenu = el('div', 'tickets-takeover-commands');
   commandMenu.hidden = true;
@@ -225,10 +320,23 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     },
     onSubmit: (text) => {
       commandMenu.hidden = true;
-      void send(text);
+      sendTyped(text);
     },
   });
   prompt.element.classList.add('tickets-takeover-prompt-input');
+  // Ctrl/Cmd+Enter sends now even while the box queues on Enter (req-75 W4c).
+  prompt.element.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        event.stopPropagation();
+        commandMenu.hidden = true;
+        sendNow(prompt.getContent());
+      }
+    },
+    true,
+  );
   // The quiet start's pre-fill (req-75): the box opens carrying the
   // current step and its meaning — applied ONCE, at creation, so a later
   // paint never clobbers what the owner typed (or cleared after a send).
@@ -296,16 +404,178 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     }
   });
   stopBtn.classList.add('tickets-composer-stop');
-  // The send button closes the toolbar inside the box.
+  // The send button closes the toolbar inside the box. While the worker is
+  // in a turn it becomes the queue button (req-75 W4c): the icon and title
+  // swap, Enter queues too, and Send now beside it interrupts instead.
   const sendBtn = el('button', 'tickets-composer-send');
   sendBtn.type = 'button';
   sendBtn.title = 'Send the message — a working worker takes it into its turn';
   sendBtn.setAttribute('aria-label', 'Send');
   sendBtn.append(api.ui.icon('arrow-up', 14));
-  sendBtn.addEventListener('click', () => {
-    void send(prompt.getContent());
+  let primaryQueues = false;
+  const setPrimaryAction = (queue: boolean): void => {
+    if (queue === primaryQueues) {
+      return;
+    }
+    primaryQueues = queue;
+    sendBtn.replaceChildren(api.ui.icon(queue ? 'corner-down-left' : 'arrow-up', 14));
+    sendBtn.title = queue
+      ? 'Queue the message — it is sent when the worker finishes its turn'
+      : 'Send the message — a working worker takes it into its turn';
+    sendBtn.setAttribute('aria-label', queue ? 'Queue' : 'Send');
+  };
+  sendBtn.addEventListener('click', () => sendTyped(prompt.getContent()));
+  const sendNowBtn = el('button', 'tickets-takeover-btn tickets-composer-sendnow', 'Send now');
+  sendNowBtn.type = 'button';
+  sendNowBtn.title = 'Interrupt the turn and send now';
+  sendNowBtn.hidden = true;
+  sendNowBtn.addEventListener('click', () => {
+    commandMenu.hidden = true;
+    sendNow(prompt.getContent());
   });
-  toolbar.append(plusBtn, fileInput, el('span', 'tickets-takeover-spacer'), stopBtn, sendBtn);
+  toolbar.append(plusBtn, fileInput, el('span', 'tickets-takeover-spacer'), stopBtn, sendNowBtn, sendBtn);
+
+  // The queue above the prompt box (req-75 W4c): one row per message,
+  // editable until it leaves, and under them what they wait for.
+  const queueBlock = el('div', 'tickets-composer-queue');
+  queueBlock.hidden = true;
+  let editing: string | null = null;
+  const beginEdit = (row: HTMLElement, runId: string, queue: MessageQueue, entry: QueuedMessage): void => {
+    if (editing !== null) {
+      return;
+    }
+    editing = entry.id;
+    editingLocks.add(entry.id);
+    const input = el('input', 'tickets-queue-edit');
+    input.type = 'text';
+    input.value = entry.text;
+    let closed = false;
+    const done = (save: boolean): void => {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      editing = null;
+      editingLocks.delete(entry.id);
+      const text = input.value.trim();
+      if (save && text !== '') {
+        queue.edit(entry.id, text);
+        writeQueueStorage(runId, queue);
+      }
+      paintQueue(deps.target());
+    };
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        done(true);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        done(false);
+      }
+    });
+    input.addEventListener('blur', () => done(false));
+    row.replaceChildren(el('span', 'tickets-queue-label', 'Queued'), input);
+    input.focus();
+    input.select();
+  };
+  const queueRow = (runId: string, queue: MessageQueue, entry: QueuedMessage): HTMLElement => {
+    const row = el('div', 'tickets-queue-row');
+    row.append(el('span', 'tickets-queue-label', 'Queued'));
+    const text = el('button', 'tickets-queue-text', entry.text === '' ? `${entry.attachments.length} attached files` : entry.text);
+    text.type = 'button';
+    text.title = 'Edit the queued message';
+    text.addEventListener('click', () => beginEdit(row, runId, queue, entry));
+    row.append(text);
+    const drop = iconButton('x', 'Remove from the queue', () => {
+      queue.remove(entry.id);
+      writeQueueStorage(runId, queue);
+      paintQueue(deps.target());
+    });
+    drop.classList.add('tickets-queue-x');
+    row.append(drop);
+    return row;
+  };
+  const endedRow = (dropped: readonly string[]): HTMLElement => {
+    const row = el('div', 'tickets-queue-ended');
+    const n = dropped.length;
+    row.append(
+      el(
+        'span',
+        'tickets-queue-ended-text',
+        `The run ended — ${n} queued message${n === 1 ? '' : 's'} ${n === 1 ? 'was' : 'were'} not sent.`,
+      ),
+    );
+    row.append(
+      iconButton('copy', 'Copy the unsent messages', () => {
+        void navigator.clipboard.writeText(dropped.join('\n\n'));
+      }),
+    );
+    return row;
+  };
+  const paintQueue = (run: RunInfo | null): void => {
+    if (editing !== null) {
+      return; // a repaint (every second) must not tear down the inline editor
+    }
+    queueBlock.replaceChildren();
+    if (run === null) {
+      queueBlock.hidden = true;
+      return;
+    }
+    if (LIVE_RUN_STATES.includes(run.state)) {
+      const queue = queueFor(run.id);
+      const entries = queue.list();
+      for (const entry of entries) {
+        queueBlock.append(queueRow(run.id, queue, entry));
+      }
+      if (entries.length > 0) {
+        queueBlock.append(el('div', 'tickets-queue-hint', 'Sends when the worker finishes its turn.'));
+      }
+    } else {
+      // Ended (or detached): the queue can never be sent — drop it with a notice.
+      const entries = queueFor(run.id).list();
+      if (entries.length > 0) {
+        endedQueues.set(run.id, entries.map(composeMessage));
+        queues.delete(run.id);
+        dropQueueStorage(run.id);
+      }
+      const dropped = endedQueues.get(run.id);
+      if (dropped !== undefined) {
+        queueBlock.append(endedRow(dropped));
+      }
+    }
+    queueBlock.hidden = queueBlock.childElementCount === 0;
+  };
+  // The run went idle and waits on nothing: send the first queued message,
+  // once — the guards keep a repaint (or the other composer) from sending
+  // twice, and one message per idle turn: the worker answers each first.
+  const maybeFlush = (run: RunInfo | null): void => {
+    const id = run?.id;
+    if (run !== null && run.turn === 'busy' && id !== undefined) {
+      sentThisIdle.delete(id); // a new turn began — its end may send the next
+    }
+    if (id === undefined || !readyToFlush(run) || flushing.has(id) || sentThisIdle.has(id)) {
+      return;
+    }
+    const queue = queueFor(id);
+    const head = queue.head();
+    if (head === null || editingLocks.has(head.id)) {
+      return;
+    }
+    flushing.add(id);
+    sentThisIdle.add(id);
+    void deps
+      .mutate('Sending', () => deps.invoke('fleetSend', { runId: id, text: composeMessage(head) }))
+      .then((result) => {
+        flushing.delete(id);
+        if (result.ok) {
+          queue.remove(head.id);
+          writeQueueStorage(id, queue);
+        }
+        // A failure keeps the entry; mutate shows the error. The next try
+        // waits for a busy turn first, so a dead runner is not hammered.
+        paintQueue(deps.target());
+      });
+  };
 
   // The worker's pulse while a turn runs: what it does now and for how long.
   const progress = el('div', 'tickets-takeover-progress');
@@ -488,22 +758,34 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     const typable = active || reopenable || startable;
     prompt.setReadOnly(!typable);
     const busy = active && run.turn !== 'idle';
+    const queueing = busyTurn(run);
+    const emptyBox = prompt.getContent().trim() === '' && attached.length === 0;
     stopBtn.hidden = !busy;
-    sendBtn.hidden = busy && prompt.getContent().trim() === '' && attached.length === 0;
+    setPrimaryAction(queueing);
+    sendBtn.hidden = queueing && emptyBox;
     sendBtn.disabled = !typable;
+    sendNowBtn.hidden = !queueing || emptyBox;
     plusBtn.disabled = !(active || reopenable);
     for (const chip of chips.children) {
       (chip as HTMLButtonElement).disabled = !typable;
     }
     paintWait(run);
     paintProgress(run);
+    paintQueue(run);
+    maybeFlush(run);
   };
 
-  wrap.append(progress, askSlot, waitCard, chipsRow, box);
+  wrap.append(progress, askSlot, waitCard, chipsRow, queueBlock, box);
   paint();
   return {
     element: wrap,
     paint,
-    dispose: () => prompt.dispose(),
+    dispose: () => {
+      if (editing !== null) {
+        editingLocks.delete(editing);
+        editing = null;
+      }
+      prompt.dispose();
+    },
   };
 }
