@@ -4,7 +4,7 @@
  * Each view draws from the app state and calls back through `Ctx`; the
  * rules behind the buttons live in `model.ts` and on the desk.
  */
-import type { FleetSnapshot } from '../main/fleet-client';
+import type { FleetSnapshot } from '../../../packages/tickets-engine/src/services/fleet-client';
 import type { NeedKind, RunReply } from '../shared/remote-protocol';
 import {
   ageOf,

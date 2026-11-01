@@ -5,7 +5,7 @@ import type {
   FleetPort,
 } from '../../../packages/tickets-engine/src/services/host';
 import { runInNewConsole } from './open-terminal';
-import type { FleetClient } from './fleet-client';
+import type { FleetClient } from '../../../packages/tickets-engine/src/services/fleet-client';
 
 /**
  * The Drey host behind the engine's service layer (ADR-0088, E2a): every

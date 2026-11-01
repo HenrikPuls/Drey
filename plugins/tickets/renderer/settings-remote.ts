@@ -1,5 +1,5 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
-import type { RemoteStatus } from '../main/remote/service';
+import type { RemoteStatus } from '../../../packages/tickets-engine/src/server/service';
 import { ageOf } from '../shared/tickets';
 import { el, textButton } from './settings-dom';
 

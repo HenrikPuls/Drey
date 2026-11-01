@@ -22,9 +22,9 @@ import {
   parseStopRun,
   parseTransition,
   type Parsed,
-} from '../../../../packages/tickets-engine/src/core/commands';
-import { remoteActorOf, type TicketsRemotePort } from '../../shared/remote-protocol';
-import { TICKET_ID_PATTERN } from '../../shared/tickets';
+} from '../core/commands';
+import { remoteActorOf, type TicketsRemotePort } from '../contracts/remote-protocol';
+import { TICKET_ID_PATTERN } from '../contracts/tickets';
 import type { DeviceRegistry, DeviceView, FailureLimiter, PairingCodes, RemoteDevice } from './auth';
 
 /** The registry's part the router uses (`DeviceRegistry` fits it). */

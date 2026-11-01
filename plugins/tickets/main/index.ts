@@ -41,10 +41,10 @@ import { normalizeFleetCaps, normalizeFleetPools, WORKER_PROVIDERS, type FleetCa
 import { RUNNER_SCRIPT_PATH } from '../../../packages/tickets-engine/src/fleet/runner-path';
 import { openTerminalAt } from './open-terminal';
 import { startWindowsDictation } from './dictation';
-import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
-import { RemoteService } from './remote/service';
+import { ChangeHub, DreyTicketsPort } from '../../../packages/tickets-engine/src/server/drey-port';
+import { RemoteService } from '../../../packages/tickets-engine/src/server/service';
 import { createFleetMcpTools } from './mcp-tools';
-import { FleetClient } from './fleet-client';
+import { FleetClient } from '../../../packages/tickets-engine/src/services/fleet-client';
 import { listWorkerModels } from './worker-models';
 import { DreyEngineHost, FleetClientPort } from './engine-host';
 

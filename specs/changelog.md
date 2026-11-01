@@ -1,4 +1,25 @@
 
+### Milestone 100 — the gateway and the fleet client move into the engine (E2b-1)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md),
+etappe E2b part 1 of 2 — structural, no behaviour change). The remote
+gateway (`gateway`, `router`, `auth`, `config`, `service`, `drey-port`,
+`needs`, `qr`, `fallback-client`) and the `FleetClient` move from the
+plugin into the engine (`packages/tickets-engine/src/server/` and
+`src/services/`); the remote protocol becomes an engine contract
+(`src/contracts/remote-protocol.ts`, with the reply shapes alongside and
+a re-export shim in `plugins/tickets/shared/` — every existing import
+path keeps working). Both were already host-shaped: `RemoteService` takes
+its config/port/log as injected deps, the `FleetClient` its root, runner
+entry and listeners — the moves are pure path surgery, all 2743 specs
+pass unmodified. This is the server half the standalone engine process
+(E2b-2) boots: one HTTP+SSE surface, one pairing/device store, one
+writer. Known-unrelated: `runs.spec.ts > a red gate fails the run…` is
+load-flaky (fails intermittently under full-suite timing, green in
+isolation, reproducible on the pre-migration tree) — flagged, not fixed
+here.
+
 ### Milestone 99 — host-agnostic service layer (Mission-Control migration E2a)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01

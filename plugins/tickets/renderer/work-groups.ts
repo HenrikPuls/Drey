@@ -24,7 +24,7 @@ import {
   type TicketCard,
 } from '../shared/tickets';
 import type { RunInfo, RunState } from '../../../packages/tickets-engine/src/fleet/protocol';
-import { needsOf } from '../main/remote/needs';
+import { needsOf } from '../../../packages/tickets-engine/src/server/needs';
 import { phaseColorOf } from './phase-colors';
 
 const LIVE: ReadonlySet<RunState> = new Set(['starting', 'running', 'stopping', 'detached']);

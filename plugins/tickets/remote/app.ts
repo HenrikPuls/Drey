@@ -5,8 +5,8 @@
  * URL fragment (`#needs`, `#board/<phase>`, `#ticket/<id>[/log]`,
  * `#capture`) so the back gesture and a home-screen launch both work.
  */
-import type { FleetSnapshot } from '../main/fleet-client';
-import type { DeviceView } from '../main/remote/auth';
+import type { FleetSnapshot } from '../../../packages/tickets-engine/src/services/fleet-client';
+import type { DeviceView } from '../../../packages/tickets-engine/src/server/auth';
 import type { NeedItem, TicketReply } from '../shared/remote-protocol';
 import type { BoardSnapshot } from '../shared/tickets';
 import { Api, ApiError } from './api';

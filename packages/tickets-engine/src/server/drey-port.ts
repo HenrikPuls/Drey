@@ -17,10 +17,10 @@ import type {
   StopRunCommand,
   TicketIdCommand,
   TransitionCommand,
-} from '../../../../packages/tickets-engine/src/core/commands';
-import { chainResult } from '../../../../packages/tickets-engine/src/core/commands';
-import type { FleetSnapshot } from '../fleet-client';
-import type { ChainMaster, ChainStatus, ColumnMode, PermissionDecision, QuestionAnswers, RunInfo } from '../../../../packages/tickets-engine/src/fleet/protocol';
+} from '../core/commands';
+import { chainResult } from '../core/commands';
+import type { FleetSnapshot } from '../services/fleet-client';
+import type { ChainMaster, ChainStatus, ColumnMode, PermissionDecision, QuestionAnswers, RunInfo } from '../fleet/protocol';
 import type {
   AttachmentReply,
   ChainReply,
@@ -30,8 +30,8 @@ import type {
   RunReply,
   TicketReply,
   TicketsRemotePort,
-} from '../../shared/remote-protocol';
-import type { BoardSnapshot, CreateResult, MutationResult } from '../../shared/tickets';
+} from '../contracts/remote-protocol';
+import type { BoardSnapshot, CreateResult, MutationResult } from '../contracts/tickets';
 import { needsOf } from './needs';
 
 /** The board service's part the remote uses (`BoardService` fits it). */

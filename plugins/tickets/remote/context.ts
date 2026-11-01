@@ -2,7 +2,7 @@
  * The phone client's shared shapes (req-66): what the app keeps, what a
  * view may call back into, and what a view returns.
  */
-import type { FleetSnapshot } from '../main/fleet-client';
+import type { FleetSnapshot } from '../../../packages/tickets-engine/src/services/fleet-client';
 import type { NeedItem, TicketReply } from '../shared/remote-protocol';
 import type { BoardSnapshot, MutationResult } from '../shared/tickets';
 import type { Api } from './api';

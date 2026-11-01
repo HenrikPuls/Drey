@@ -22,8 +22,8 @@ import type {
   RunInfo,
   RunRequest,
   RunnerDescriptor,
-} from '../../../packages/tickets-engine/src/fleet/protocol';
-import { fleetBuildStamp, isStaleDaemon } from '../../../packages/tickets-engine/src/fleet/build-stamp';
+} from '../fleet/protocol';
+import { fleetBuildStamp, isStaleDaemon } from '../fleet/build-stamp';
 
 export interface FleetClientOpts {
   /** The fleet root — `<userRoot>/fleet` (descriptor, runs, worktrees). */

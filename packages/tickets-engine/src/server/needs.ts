@@ -6,9 +6,9 @@
  * Order: questions, permissions, red gates, failed runs, then the
  * tickets sitting in a checkpoint column; oldest first within a kind.
  */
-import type { NeedItem, NeedKind } from '../../shared/remote-protocol';
-import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
-import type { RunInfo, RunState } from '../../../../packages/tickets-engine/src/fleet/protocol';
+import type { NeedItem, NeedKind } from '../contracts/remote-protocol';
+import type { BoardSnapshot, TicketCard } from '../contracts/tickets';
+import type { RunInfo, RunState } from '../fleet/protocol';
 
 const LIVE: ReadonlySet<RunState> = new Set(['starting', 'running', 'stopping', 'detached']);
 const KIND_ORDER: readonly NeedKind[] = ['question', 'permission', 'red-gate', 'failed', 'checkpoint'];

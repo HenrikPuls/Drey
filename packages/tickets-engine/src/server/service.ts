@@ -5,7 +5,7 @@
  * the remote's settings apply at once, unlike the fleet's.
  */
 import { networkInterfaces } from 'node:os';
-import type { TicketsRemotePort } from '../../shared/remote-protocol';
+import type { TicketsRemotePort } from '../contracts/remote-protocol';
 import { DeviceRegistry, FailureLimiter, PairingCodes, type DeviceView, type RemoteDevice } from './auth';
 import {
   allowedHostsOf,

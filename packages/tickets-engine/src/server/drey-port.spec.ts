@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { remoteActorOf } from '../../shared/remote-protocol';
-import type { BoardSnapshot } from '../../shared/tickets';
+import { remoteActorOf } from '../contracts/remote-protocol';
+import type { BoardSnapshot } from '../contracts/tickets';
 import { BYPASS_REFUSAL, ChangeHub, DreyTicketsPort, type RemoteBoard, type RemoteFleet } from './drey-port';
 
 /**

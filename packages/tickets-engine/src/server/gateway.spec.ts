@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { RemoteChange, TicketsRemotePort } from '../../shared/remote-protocol';
+import type { RemoteChange, TicketsRemotePort } from '../contracts/remote-protocol';
 import { DeviceRegistry, FailureLimiter, PairingCodes } from './auth';
 import { RemoteGateway } from './gateway';
 

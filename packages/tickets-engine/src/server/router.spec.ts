@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { TicketsRemotePort } from '../../shared/remote-protocol';
+import type { TicketsRemotePort } from '../contracts/remote-protocol';
 import { DeviceRegistry, FailureLimiter, PairingCodes } from './auth';
 import { route, type RemoteRequest, type RouterDeps } from './router';
 

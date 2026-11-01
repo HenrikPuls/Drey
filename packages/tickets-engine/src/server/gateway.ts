@@ -7,7 +7,7 @@
 import { promises as fsp } from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
-import type { RemoteChange } from '../../shared/remote-protocol';
+import type { RemoteChange } from '../contracts/remote-protocol';
 import { FALLBACK_FILES } from './fallback-client';
 import { authorize, hostRefusal, route, type RemoteRequest, type RouterDeps } from './router';
 
