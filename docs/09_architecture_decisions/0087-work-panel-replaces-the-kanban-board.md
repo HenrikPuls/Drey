@@ -170,3 +170,11 @@ phone. Watch any worker and step in when needed.
 > file beside the thread, whatever pane is focused or whatever else is
 > open, never a third pane — and every ticket switch re-activates both
 > tabs, the focus back on the file.
+
+> **Later change (req-84, owner 2026-11-01).** The automatic pair is
+> dropped: landing follows the focused pane, so a note opened later
+> drifted beside or into the thread. A Work row opens the **thread
+> alone** (one tab, where the focus is, no split); the Files panel opens
+> the plain file; only the ticket menu's *Open ticket* still opens file and
+> thread side by side. The `beside` landing above remains the mechanism
+> of that one action.

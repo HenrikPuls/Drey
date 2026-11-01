@@ -1,5 +1,20 @@
 
-### req-83 — a ticket opened from the Files panel brings its thread
+### req-84 — explicit entry points: the ticket pair is no longer automatic
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list). Pairing file and thread across panes proved
+unreliable: landing follows the focused pane, so a normal note opened
+later sat beside or inside the thread. Removed req-83's follow-the-active-tab
+(`followActiveTicket`, `pageFollowsActive`, `boardCardByPath`). Now: a
+**Work row** (also a Workers card, a wait notification, a Past-runs row,
+the one-click dialog) opens the **thread alone** through the new
+`openTicketThread` — one tab following the ticket, opened where the focus
+is, no split, no anchor; the **Files panel** opens the plain file; the
+ticket menu's **Open ticket** keeps the pair (`openTicketPage`, req-82's
+pane reuse stays). Recorded in `specs/decisions.md`, ADR-0087 decision 3,
+the manual's Work panel section.
+
+### req-83 — a ticket opened from the Files panel brings its thread (removed again by req-84)
 
 **Not yet manually verified by the owner.** Owner request, 2026-10-31
 (outside the list). The ticket page (file + thread) opened only from the

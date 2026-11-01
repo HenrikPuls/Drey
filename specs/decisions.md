@@ -94,6 +94,15 @@ one means moving it back to the roadmap with a new justification.
 
 ## Won't do (decided against, kept for the record)
 
+- **Auto-pairing the ticket file and its thread across panes** (owner,
+  2026-11-01, req-84). The pair's landing matrix (req-75), its pane reuse
+  (req-82) and the follow-the-active-tab rule (req-83) all lean on the
+  base's focus-based landing: a normal note opened later lands beside or
+  inside the thread, and the layout drifts again. The entry points are
+  explicit instead — a Work row opens the thread alone, the Files panel
+  opens the plain file, the ticket menu's *Open ticket* opens both. Not to
+  be re-proposed as an automatic pair.
+
 - **The kanban board as the tickets UI** — columns, worker lanes and
   per-column brakes, drag and drop between and within columns, the
   `order.md` order pins (with Move to top / bottom), folded columns, the
