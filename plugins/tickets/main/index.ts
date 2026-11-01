@@ -11,6 +11,7 @@
  * validation and YAML stay here.
  */
 import { BrowserWindow, dialog, shell, type OpenDialogOptions } from 'electron';
+import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { promises as fsp, existsSync } from 'node:fs';
 import { hostname } from 'node:os';
@@ -64,6 +65,7 @@ import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, recentDoneOf, type DriftDetection } from './normalize';
 import { parseChanges, planApprovedOf, storyOf, type ChangesReply } from '../shared/changes';
 import { openTerminalAt, runInNewConsole } from './open-terminal';
+import { startWindowsDictation } from './dictation';
 import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
 import type { AttachmentReply, RefineReply, TicketReply } from '../shared/remote-protocol';
 import type { AttachmentCommand, RefineCommand } from './commands';
@@ -2415,6 +2417,10 @@ const plugin: MainPluginModule = {
       const cmd = parseCreate(payload);
       return cmd.ok ? board.createTicket(cmd.value) : cmd;
     });
+
+    // One Win+H press for the create modal's mic button (req-75 W5b,
+    // T-0071) — the OS's dictation, never speech recognition of our own.
+    ctx.ipc.handle('dictate', () => startWindowsDictation(process.platform, execFile));
 
     ctx.ipc.handle('transition', async (payload) => {
       const cmd = parseTransition(payload);
