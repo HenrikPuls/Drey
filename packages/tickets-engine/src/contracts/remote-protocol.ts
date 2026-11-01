@@ -47,7 +47,7 @@ export interface NeedItem {
 
 export type RunReply = { readonly ok: boolean; readonly error?: string; readonly runId?: string };
 export type ChainReply = { readonly ok: true; readonly status: ChainStatus } | { readonly ok: false; readonly error: string };
-export type RemoteChange = 'board' | 'fleet';
+export type RemoteChange = 'board' | 'fleet' | 'remote';
 /** A refine's outcome: the new revision, or why not (`conflict` when the file changed meanwhile). */
 // The reply shapes live in the engine contracts (ADR-0088, E2a) — this
 // re-export keeps every existing import path working.

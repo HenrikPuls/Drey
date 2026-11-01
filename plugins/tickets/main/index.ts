@@ -1,19 +1,15 @@
 /**
- * The Tickets plugin's main entry (ADR-0076, milestone 83; ADR-0088 E2a):
- * the board service itself lives in the engine package
- * (`packages/tickets-engine/src/services/board-service.ts`, host-agnostic);
- * this module is the Drey wiring — the plugin-context host adapter, the
- * IPC handlers as thin adapters over the service, the remote gateway, the
- * fleet client and the MCP tools. The renderer still only ever sees
- * BoardSnapshot payloads over the fixed plugin channels.
+ * The Tickets plugin's main entry (ADR-0076, milestone 83; ADR-0088 E2b):
+ * the board service, the fleet client and the remote gateway run in the
+ * standalone tickets engine — this module is the Drey client wiring: it
+ * adopts or spawns the engine, proxies the service surface over the
+ * loopback invoke channel behind the unchanged IPC handlers, and keeps
+ * the renderer on the same events. The engine outlives Drey; the phone
+ * reaches the same engine through the gateway's pairing.
  */
 import { execFile } from 'node:child_process';
-import { hostname } from 'node:os';
-import * as path from 'node:path';
 import type { MainPluginContext, MainPluginModule } from '../../../shared/plugin-api';
 import { TICKET_PRIORITIES, type RepoRef, type TicketPriority } from '../shared/tickets';
-import { EngineBoardService } from '../../../packages/tickets-engine/src/services/board-service';
-import { handoverFromConfig } from '../../../packages/tickets-engine/src/services/handover-config';
 import {
   chainResult,
   parseAnswer,
@@ -32,127 +28,48 @@ import {
   parseTransition,
   parseUnarchive,
 } from '../../../packages/tickets-engine/src/core/commands';
-import { TicketsGit } from '../../../packages/tickets-engine/src/core/tickets-git';
 import { parseTicketFile, patchHeaderFields, type HeaderPatch } from '../../../packages/tickets-engine/src/core/ticket-files';
 import { planWorktreeRemoval } from '../../../packages/tickets-engine/src/core/worktree-removal';
 import { captureTidyMessages, parseCaptureTidy } from '../shared/capture-tidy';
 import type { AttachmentReply, RefineReply, TicketReply } from '../shared/remote-protocol';
-import { normalizeFleetCaps, normalizeFleetPools, WORKER_PROVIDERS, type FleetCaps, type FleetHandoverConfig, type FleetPools, type PermissionMode } from '../../../packages/tickets-engine/src/fleet/protocol';
-import { RUNNER_SCRIPT_PATH } from '../../../packages/tickets-engine/src/fleet/runner-path';
 import { openTerminalAt } from './open-terminal';
 import { startWindowsDictation } from './dictation';
-import { ChangeHub, DreyTicketsPort } from '../../../packages/tickets-engine/src/server/drey-port';
-import { RemoteService } from '../../../packages/tickets-engine/src/server/service';
 import { createFleetMcpTools } from './mcp-tools';
-import { FleetClient } from '../../../packages/tickets-engine/src/services/fleet-client';
 import { listWorkerModels } from './worker-models';
-import { DreyEngineHost, FleetClientPort } from './engine-host';
-
-const OWNER = `owner@${hostname().toLowerCase()}`;
-
-/**
- * The Drey board service: the engine's host-agnostic service behind the
- * plugin-context host and the FleetClient port — same constructor the
- * plugin context builds, so activate() below is untouched.
- */
-class BoardService extends EngineBoardService {
-  constructor(
-    ctx: MainPluginContext,
-    git: TicketsGit,
-    defaultWorker: string,
-    autoPermissionMode: PermissionMode,
-    gitPath: string,
-    fleet: FleetClient,
-    fleetRoot: string,
-    caps: FleetCaps,
-    pools: FleetPools,
-    handover: FleetHandoverConfig,
-  ) {
-    super(
-      new DreyEngineHost(ctx),
-      git,
-      defaultWorker,
-      autoPermissionMode,
-      gitPath,
-      new FleetClientPort(fleet),
-      fleetRoot,
-      caps,
-      pools,
-      handover,
-      OWNER,
-    );
-  }
-}
-
+import { EngineClient } from './engine-client';
+import { ensureEngine } from './engine-lifecycle';
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-let remote: RemoteService | null = null;
+let engineEvents: (() => void) | null = null;
 
 const plugin: MainPluginModule = {
   async deactivate() {
-    await remote?.stop();
-    remote = null;
+    // The engine outlives Drey (the phone may still be on it) — only the
+    // event stream unsubscribes here.
+    engineEvents?.();
+    engineEvents = null;
   },
 
   async activate(ctx: MainPluginContext) {
-    const gitPath = ((await ctx.config.get<string>('gitPath')) ?? '').trim();
-    const git = new TicketsGit(() => (gitPath === '' ? 'git' : gitPath));
+    // The tickets engine (ADR-0088, E2b): the board service, the fleet
+    // client and the remote gateway run in the standalone engine process;
+    // Drey is a native client of it over the loopback invoke channel, and
+    // so is the phone through the gateway's pairing. Adopt a live engine
+    // or spawn one; never stop it.
+    const endpoints = await ensureEngine(ctx, ctx.log);
+    const client = new EngineClient(endpoints);
+    const board = client.board();
+    const fleet = client.fleet();
+    const remoteService = client.remote();
     const defaultWorker = ((await ctx.config.get<string>('defaultWorker')) ?? '').trim() || 'opencode';
-    const autoPermissionMode: PermissionMode =
-      (await ctx.config.get<string>('autoPermissionMode')) === 'bypass' ? 'bypass' : 'accept-edits';
-    const remoteChanges = new ChangeHub();
-    const fleet = new FleetClient({
-      root: path.join(ctx.app.userRoot, 'fleet'),
-      runnerScript: RUNNER_SCRIPT_PATH,
-      log: ctx.log,
-      onFleetChanged: (fleetSnapshot) => {
-        ctx.ipc.emit('fleet-changed', fleetSnapshot);
-        remoteChanges.emit('fleet');
-      },
+    engineEvents = client.onEvent((what) => {
+      ctx.ipc.emit(what === 'board' ? 'board-changed' : what === 'fleet' ? 'fleet-changed' : 'remote-changed');
     });
-    fleet.startPolling();
-    const fleetRoot = path.join(ctx.app.userRoot, 'fleet');
-    // The instruction output caps (T-0048): flat dotted keys in the
-    // plugin config, opaque strings to the store — read once, applied on
-    // restart like every fleet setting here.
-    const capConfig: Record<string, unknown> = {};
-    for (const key of ['gateFailureLines', 'gateFailureBytes', 'diffStatLines', 'diffStatBytes']) {
-      const value = await ctx.config.get<number>(`fleet.cap.${key}`);
-      if (value !== undefined) {
-        capConfig[key] = value;
-      }
-    }
-    const caps = normalizeFleetCaps(capConfig);
-    // The provider pools (req-63): `fleet.pool.<provider>.size` / `.probe`.
-    const poolConfig: Record<string, { size?: number; probeUrl?: string }> = {};
-    for (const provider of WORKER_PROVIDERS) {
-      const size = await ctx.config.get<number>(`fleet.pool.${provider}.size`);
-      const probeUrl = await ctx.config.get<string>(`fleet.pool.${provider}.probe`);
-      poolConfig[provider] = {
-        ...(size !== undefined ? { size } : {}),
-        ...(probeUrl !== undefined ? { probeUrl } : {}),
-      };
-    }
-    const pools = normalizeFleetPools(poolConfig);
-    // The handover thresholds (T-0049): the base keys once at activation;
-    // every board snapshot re-reads them with the board's override keys.
-    const handover = await handoverFromConfig(ctx.config.get.bind(ctx.config));
-    const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet, fleetRoot, caps, pools, handover);
-
-    // The tickets remote (req-66, ADR-0086): off until Settings enables it.
-    board.onChanged(() => remoteChanges.emit('board'));
-    const remoteService: RemoteService = new RemoteService({
-      config: ctx.config,
-      port: new DreyTicketsPort(board, fleet, remoteChanges, { allowBypass: () => remoteService.allowBypass() }),
-      clientDir: path.join(__dirname, '..', 'remote'),
-      log: ctx.log,
-      onChanged: () => ctx.ipc.emit('remote-changed'),
-    });
-    remote = remoteService;
-    void remoteService.init().catch((error: unknown) => ctx.log(`remote: ${messageOf(error)}`, 'error'));
+    void fleet.startPolling();
+    void board.worktreeBootSweep().catch((error: unknown) => ctx.log(`engine boot sweep: ${messageOf(error)}`, 'warn'));
     ctx.ipc.handle('remoteStatus', () => remoteService.status());
     ctx.ipc.handle('remoteConfigure', async (payload) => {
       const p = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
@@ -529,8 +446,6 @@ const plugin: MainPluginModule = {
     ctx.ipc.handle('worktreesCleanup', async () => board.worktreeCleanup());
 
     ctx.ipc.handle('worktreesStatus', async () => board.worktreesStatus());
-
-    void board.worktreeBootSweep();
 
     // --- the chain (M85, ADR-0077) -------------------------------------
     ctx.ipc.handle('chainStatus', async () => fleet.chainStatus());

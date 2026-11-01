@@ -94,9 +94,24 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
 - **E2a (milestone 99):** the whole board service moves into the engine as
   `services/board-service.ts`, host-agnostic over `services/host.ts`
   (`EngineHost` + `FleetPort`, the owner identity injected). The plugin
-  keeps a thin subclass over `DreyEngineHost`/`FleetClientPort`; the
-  planned four-way service split deliberately becomes one service class
-  first — the board/run/settings cycles share one context today, and
-  forcing four services now would fight that graph. The split happens
-  inside the engine when E2b's server routes need it.
+  kept a thin subclass over `DreyEngineHost`/`FleetClientPort`; the
+  planned four-way service split deliberately became one service class
+  first — the board/run/settings cycles share one context, and forcing
+  four services would have fought that graph.
+- **E2b (milestone 101):** the engine becomes a process.
+  `src/server/engine.ts` composes board service + fleet client + remote
+  gateway over one vault (`FsEngineHost` + `FileConfigStore` in
+  `~/.drey-engine`); the channel is one loopback invoke listener with an
+  explicit method allowlist, a persisted bearer token and an SSE stream;
+  `engine-main.js --vault <path>` is the CLI. The Drey plugin adopts or
+  spawns the engine (lockfile, `ELECTRON_RUN_AS_NODE`) and proxies the
+  service surface through `EngineClient` — the IPC handlers and the
+  renderer are untouched; Drey config syncs into the engine config on
+  activation. The engine outlives Drey; the phone uses the same engine
+  through the gateway's pairing either way. Known wrinkles (owner-visible,
+  accepted for E2): remote settings/devices move to the engine home
+  (synced at activation), the fleet run history moves to
+  `~/.drey-engine/fleet`, and unsynced per-worker handover overrides fall
+  back to defaults.
+
 

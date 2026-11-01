@@ -15,15 +15,15 @@ export async function handoverFromConfig(
   const raw: Record<string, unknown> = {};
   const base = await get<number>('fleet.compactAboveTokens');
   if (base !== undefined) {
-    raw.compactAboveTokens = base;
+    raw["compactAboveTokens"] = base;
   }
   const ttl = await get<number>('fleet.resumePauseTtlMin');
   if (ttl !== undefined) {
-    raw.resumePauseTtlMin = ttl;
+    raw["resumePauseTtlMin"] = ttl;
   }
   const cap = await get<number>('fleet.contextCapTokens');
   if (cap !== undefined) {
-    raw.contextCapTokens = cap;
+    raw["contextCapTokens"] = cap;
   }
   const overrides: Record<string, number> = {};
   const capOverrides: Record<string, number> = {};
@@ -38,10 +38,10 @@ export async function handoverFromConfig(
     }
   }
   if (Object.keys(overrides).length > 0) {
-    raw.compactAboveTokensOverrides = overrides;
+    raw["compactAboveTokensOverrides"] = overrides;
   }
   if (Object.keys(capOverrides).length > 0) {
-    raw.contextCapTokensOverrides = capOverrides;
+    raw["contextCapTokensOverrides"] = capOverrides;
   }
   return normalizeFleetHandover(raw);
 }

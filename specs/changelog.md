@@ -1,4 +1,39 @@
 
+### Milestone 101 — the standalone tickets engine (Mission-Control migration E2b-2)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md),
+etappe E2b part 2 of 2 — the flip). The tickets engine is now a process:
+`packages/tickets-engine/src/server/engine.ts` composes the host-agnostic
+board service, the fleet client and the remote gateway over one tickets
+vault on disk (`FsEngineHost`, plain fs with the same vault-relative
+containment discipline; `FileConfigStore` in `~/.drey-engine/config.json`).
+The channel is one loopback listener: `POST /api/invoke` against an
+explicit method allowlist (board/fleet/remote/config), bearer-token only
+(generated once, persisted), plus `/api/events` SSE and `/api/health` —
+always on, independent of the phone remote's enabled flag.
+`engine-main.js --vault <path>` is the CLI entry (lockfile with
+pid/port/token in the engine home). The Drey plugin adopts a live engine
+through the lockfile or spawns one (`ELECTRON_RUN_AS_NODE`, the runner's
+own pattern) and proxies the whole service surface through
+`EngineClient` — the ~50 IPC handlers, the renderer's events and the MCP
+tools read exactly as before, because the proxies forward by method name
+and the IPC channel names are untouched. Drey's config keys the engine
+reads (git path, worker, caps, pools, handover thresholds, remote
+settings incl. paired devices) sync into the engine config on every
+activation. The phone pairs with the same engine through the gateway
+whether Drey runs or not — the single writer holds either way. The
+engine acceptance spec boots the real composition against a temp vault
+over HTTP: snapshot, create/transition with the one-commit discipline,
+config round-trip, auth refusal, SSE events. Wrinkles, owner-visible:
+remote settings and paired devices now live in the engine home (synced
+from Drey config at activation; the fleet run history moves to
+`~/.drey-engine/fleet` — a runner started under Drey is not adopted, a
+fresh one spawns); per-worker handover overrides that were never in the
+synced key list fall back to defaults. E2e impact: the plugin now spawns
+the engine in app runs — the built-app e2e round is part of the owner's
+verification.
+
 ### Milestone 100 — the gateway and the fleet client move into the engine (E2b-1)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01
