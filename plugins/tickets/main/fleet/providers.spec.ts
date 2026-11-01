@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { answersFromText, answersText, claudeCodeAdapter, formText, modelBody, OPENCODE_API, opencodeAdapter, opencodeCapConfig, permissionText, providerErrorText, questionOf, type FetchFn, type NormalizedEvent, type ProviderStart, INTERRUPT_WAIT_MS, toolActivity, editChanges } from './providers';
+import { answersFromText, answersText, blockedOf, claudeCodeAdapter, formText, modelBody, OPENCODE_API, opencodeAdapter, opencodeCapConfig, permissionText, providerErrorText, questionOf, type FetchFn, type NormalizedEvent, type ProviderStart, INTERRUPT_WAIT_MS, toolActivity, editChanges } from './providers';
 import { telemetryFromEvents } from './telemetry';
 import type { RunnerProcess, SpawnFn } from './procs';
 
@@ -1476,6 +1476,42 @@ describe('questionOf / permissionText — what a worker waits on (req-64)', () =
     expect(permissionText({ action: 'edit', resources: ['a.ts'], message: 'outside the worktree' })).toBe(
       'edit a.ts — outside the worktree',
     );
+  });
+});
+
+describe('blockedOf — the refusal marker of a step the worker could not complete', () => {
+  it('reads the marker like questionOf: line starts, the last one wins', () => {
+    expect(blockedOf('BLOCKED: merge conflict in specs/changelog.md')).toBe('merge conflict in specs/changelog.md');
+    expect(blockedOf('  blocked:\nthe owner must merge')).toBe('the owner must merge');
+    expect(blockedOf('The step is not complete.\nBLOCKED: protected repo — the owner merges')).toBe(
+      'protected repo — the owner merges',
+    );
+    expect(blockedOf('BLOCKED: first attempt\nnoise\nBLOCKED: second attempt')).toBe('second attempt');
+    expect(blockedOf('Done. BLOCKED: none')).toBeNull();
+    expect(blockedOf('BLOCKED:   ')).toBeNull();
+    expect(blockedOf('all done')).toBeNull();
+  });
+
+  it('a result that ends BLOCKED: carries the reason; a QUESTION: still wins (the run waits instead)', async () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.stdout(
+      JSON.stringify({
+        type: 'result',
+        usage: { input_tokens: 10, output_tokens: 2 },
+        result: 'The step is not complete.\nBLOCKED: merge conflict in specs/changelog.md',
+      }),
+    );
+    expect(events.find((e) => e.kind === 'result')?.blocked).toBe('merge conflict in specs/changelog.md');
+    expect(proc.stdinWrites.at(-1)).toBe('<<end>>');
+
+    const proc2 = fakeProcess();
+    const { events: events2, start: start2 } = collect();
+    claudeCodeAdapter(spawnOf(proc2)).spawn(start2);
+    proc2.stdout(JSON.stringify({ type: 'result', usage: {}, result: 'BLOCKED: not now\nQUESTION: Which way?' }));
+    expect(events2.find((e) => e.kind === 'result')).toBeUndefined();
+    expect(events2.find((e) => e.waiting !== undefined)?.waiting).toMatchObject({ kind: 'question' });
   });
 });
 

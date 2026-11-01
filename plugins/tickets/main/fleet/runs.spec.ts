@@ -18,7 +18,7 @@ import { TicketsGit, type GitExecFn } from '../tickets-git';
 
 function fakeAdapter() {
   const handles: Array<
-    WorkerHandle & { fail: (code: number | null) => void; onEvent: (text: string) => void; result: () => void }
+    WorkerHandle & { fail: (code: number | null) => void; onEvent: (text: string) => void; result: (blocked?: string | null) => void }
   > = [];
   const attachInfos: AttachInfo[] = [];
   const starts: ProviderStart[] = [];
@@ -38,7 +38,7 @@ function fakeAdapter() {
       const handle: WorkerHandle & {
         fail: (code: number | null) => void;
         onEvent: (text: string) => void;
-        result: () => void;
+        result: (blocked?: string | null) => void;
       } = {
         pid: 4242,
         exited: new Promise<number | null>((resolve) => {
@@ -54,7 +54,13 @@ function fakeAdapter() {
         }),
         fail: (code) => exitResolve?.(code),
         onEvent: (text) => start.onEvent({ ts: '2026-10-17T12:00:00Z', kind: 'note', text }),
-        result: () => start.onEvent({ ts: '2026-10-17T12:00:00Z', kind: 'result', text: 'done' }),
+        result: (blocked?: string | null) =>
+          start.onEvent({
+            ts: '2026-10-17T12:00:00Z',
+            kind: 'result',
+            text: 'done',
+            ...(blocked !== undefined ? { blocked } : {}),
+          }),
       };
       handles.push(handle);
       return handle;
@@ -1308,6 +1314,31 @@ describe('RunSupervisor', () => {
     adapter.handles[0]!.fail(0);
     await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
     expect(sup.get(id)?.gateResult).toBe('green');
+  });
+
+  it('a result that ends BLOCKED: runs no gate and moves nothing — the ticket waits (the refusal half of ADR-0077)', async () => {
+    const { sup, adapter, gate } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    expect(started.ok).toBe(true);
+    const id = (started as { run: { id: string } }).run.id;
+
+    adapter.handles[0]!.result('merge conflict in specs/changelog.md — not resolvable');
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    // No gate ran — a green one over the branch would say nothing about the step's own report.
+    expect(gate).toHaveLength(0);
+    expect(sup.get(id)?.gateResult).toBeNull();
+    expect(sup.get(id)?.blocked).toBe('merge conflict in specs/changelog.md — not resolvable');
+    // The ticket file still sits in its phase folder; no move was performed.
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    expect(text).not.toContain('moving to build');
+    await expect(fsp.access(path.join(vaultDir, 'tickets/build/T-0001.md'))).rejects.toBeDefined();
+    // The record is durable: run.json carries the reason.
+    const stored = JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')) as {
+      info: { blocked?: string | null };
+    };
+    expect(stored.info.blocked).toBe('merge conflict in specs/changelog.md — not resolvable');
   });
 
   it('folds the run telemetry into the record as events arrive', async () => {

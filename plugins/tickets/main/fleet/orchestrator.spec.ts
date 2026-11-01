@@ -584,6 +584,26 @@ describe('Orchestrator', () => {
     expect(orch.status().columns['plan'] ?? 'playing').toBe('playing');
   });
 
+  it('a run that ends done but blocked holds its ticket — no re-dispatch into the same wall', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    const { orch, fleet } = orchestrator();
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    expect(fleet.records).toHaveLength(1);
+
+    const record = fleet.records[0]!;
+    const settled = { ...record.info, state: 'done' as const, blocked: 'merge conflict in specs/changelog.md' };
+    fleet.records[0] = { ...record, info: settled };
+    await orch.onRunSettled(settled);
+
+    // The ticket waits for the owner: a pass triggered afresh (the
+    // master flip) must not dispatch it again.
+    await orch.setMaster('halted');
+    await orch.setMaster('run');
+    expect(fleet.records).toHaveLength(1); // held like an owner-stopped run
+  });
+
   it('a run that fails without a gate verdict backs off per ticket instead of re-dispatching at once', async () => {
     await writeMeta();
     await writeTicket('T-0001', 'plan');

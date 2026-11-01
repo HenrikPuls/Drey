@@ -383,6 +383,17 @@ export interface RunWaiting {
  */
 export const QUESTION_MARKER = 'QUESTION:';
 
+/**
+ * The lead-in a worker ends its last message with when the step cannot
+ * be completed (an unresolved merge conflict, a protected repo's merge,
+ * a failed push): the turn ends, but it is no completion declaration —
+ * the runner runs no gate and moves nothing; the ticket stays put until
+ * the owner moves it (ADR-0077's agent-decided completion, the refusal
+ * half: a green gate must never move a step the worker declared
+ * incomplete).
+ */
+export const BLOCKED_MARKER = 'BLOCKED:';
+
 /** The owner's answer to a permission request (OpenCode's three replies). */
 export type PermissionDecision = 'once' | 'always' | 'reject';
 
@@ -484,6 +495,12 @@ export interface RunInfo {
   readonly worktree?: WorktreeOutcome;
   /** The machine gate's verdict, once it ran (T-0048); absent when it never did. */
   readonly gateResult?: 'green' | 'red' | null;
+  /**
+   * Why the worker declared the step incomplete (`BLOCKED:` in its final
+   * message): no gate ran, nothing moved — the ticket waits for the
+   * owner. Null/absent on every other end.
+   */
+  readonly blocked?: string | null;
   /** The worker's last error event (req-63: a rate limit shrinks the pool). */
   readonly lastError?: string | null;
   // --- token telemetry (T-0048); all optional so adopt() restores older

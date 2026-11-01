@@ -237,6 +237,12 @@ interface LiveRun {
   /** The worker finished its turn — the adapter's `result` event, the agent-done signal. */
   agentDone: boolean;
   /**
+   * Why the worker declared the step incomplete (`BLOCKED:` in its final
+   * message), set with `agentDone` in the synchronous event prefix — the
+   * exit decides from it: no gate, no move. Null on every other end.
+   */
+  blocked?: string | null;
+  /**
    * The owner interrupted the turn: the `result` that follows is the
    * interrupt's own, not a completion declaration. Cleared by the owner's
    * next prompt or by handing the run back.
@@ -917,6 +923,7 @@ export class RunSupervisor {
       gating: false,
       audited: false,
       agentDone: false,
+      blocked: null,
       telemetry: new TelemetryFold(),
       eventQueue: Promise.resolve(),
       writeQueue: Promise.resolve(),
@@ -1418,6 +1425,7 @@ export class RunSupervisor {
       return { ok: false, error: `the ${run.info.provider} worker took no interrupt — it may be idle already` };
     }
     run.agentDone = false;
+    run.blocked = null;
     run.info = { ...run.info, paused: true };
     await this.persist(run);
     await this.logLine(run, 'turn interrupted by the owner — the session is kept');
@@ -1462,6 +1470,7 @@ export class RunSupervisor {
       // instead of ending the run and letting the gate judge half a step.
       run.paused = false;
       run.agentDone = false;
+      run.blocked = null;
       run.info = { ...run.info, held: false, paused: false };
       await this.persist(run);
       const rung = await run.handle!.steer(HANDBACK_CONTINUE);
@@ -1549,6 +1558,7 @@ export class RunSupervisor {
     // delivery, and `agentDone` must already be true when the exit decides.
     if (event.kind === 'result' && run.paused !== true) {
       run.agentDone = true;
+      run.blocked = event.blocked ?? null;
     }
     if (run.softPause === true && isActionBoundary(event)) {
       // The action the owner waited for has finished: pause now.
@@ -1587,6 +1597,7 @@ export class RunSupervisor {
       ...(event.cacheReadTokens !== undefined ? { cacheReadTokens: event.cacheReadTokens } : {}),
       ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}),
       ...(event.waiting !== undefined ? { waiting: event.waiting === null ? null : { ...event.waiting, since: event.ts } } : {}),
+      ...(event.blocked !== undefined ? { blocked: event.blocked } : {}),
       usage: telemetry.usage,
       lastTurnContext: telemetry.lastTurnContext,
       turns: telemetry.turns,
@@ -1904,6 +1915,21 @@ export class RunSupervisor {
     }
     if (run.reopened === true) {
       await this.logLine(run, `reopened session ended (exit ${code ?? 'signal'})`);
+      await this.finish(run, 'done');
+      return;
+    }
+    // A blocked end is the refusal half of agent-decided completion
+    // (ADR-0077): the worker declared the step incomplete, so no gate
+    // runs and nothing moves — a green gate over the branch would say
+    // nothing about the step's own report, and moving on it stranded
+    // tickets (T-0062/T-0071: merged nothing, landed on done).
+    const blocked = run.blocked ?? null;
+    if (blocked !== null) {
+      run.info = { ...run.info, blocked };
+      await this.logLine(
+        run,
+        `blocked — ${(blocked.split('\n')[0] ?? '').slice(0, 200)} — no gate runs, the ticket stays put`,
+      );
       await this.finish(run, 'done');
       return;
     }

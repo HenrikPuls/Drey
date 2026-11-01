@@ -8,7 +8,7 @@
  * `opencode`, `claude-code`, `claude-code/sonnet`. An unreadable value
  * is a refusal at run start — never a guess (ADR-0076).
  */
-import { isWorkerProvider, QUESTION_MARKER, type FleetCaps, type InteractiveMode, type WorkerProviderId } from './protocol';
+import { isWorkerProvider, BLOCKED_MARKER, QUESTION_MARKER, type FleetCaps, type InteractiveMode, type WorkerProviderId } from './protocol';
 import { parseHandover } from '../../shared/tickets';
 import { capHead, capTail } from './capping';
 
@@ -196,7 +196,10 @@ const COMPLETION_DISCIPLINE =
   'Completion discipline: work the step, then run the gate commands above yourself and fix what they surface. ' +
   'Declare the step done only when every command passes and you consider the work ready — your finished turn is ' +
   'that declaration. After it the runner re-runs the gate: green moves the ticket one column right; a red gate ' +
-  'parks the step (the failure is logged and the ticket waits).';
+  'parks the step (the failure is logged and the ticket waits). When you CANNOT complete the step — what blocks ' +
+  'it is the owner\u2019s to decide, or completing it would break a rule of this brief — end your final message ' +
+  `with \`${BLOCKED_MARKER} <reason in one line>\`: the runner then runs no gate and moves nothing, and the ticket waits ` +
+  'for the owner. Never declare done what you did not finish.';
 
 /** The most of an earlier handover the brief carries. */
 const HANDOVER_CAP = 2_000;

@@ -25,6 +25,7 @@
 import { freePort, type RunnerProcess, type SpawnFn } from './procs';
 import { parseShapedQuestion } from '../../shared/question-shape';
 import {
+  BLOCKED_MARKER,
   QUESTION_MARKER,
   type PermissionDecision,
   type PermissionMode,
@@ -76,6 +77,11 @@ export interface NormalizedEvent {
   /** The worker began (or stopped) waiting on the owner (req-64); `since` is the event's `ts`. */
   readonly waiting?: Omit<RunWaiting, 'since'> | null;
   /**
+   * On a `result` event: why the worker declared the step incomplete
+   * (`BLOCKED:` in its final message); null/absent when it completes.
+   */
+  readonly blocked?: string | null;
+  /**
    * Exactly one per assistant model call: THAT call's usage. The
    * providers' aggregates (`tokensIn`/`tokensOut`, the result event) are
    * cumulative over the run and must never pose as a turn's context.
@@ -117,6 +123,28 @@ export function editChanges(name: string | undefined, input: Record<string, unkn
 }
 
 /**
+ * The text from the LAST line-start occurrence of `marker` to the end of
+ * the message, trimmed — the shared body of the `QUESTION:` and
+ * `BLOCKED:` markers. A marker buried mid-message still counts; one in
+ * running prose (`Done. QUESTION: none`) does not, because only
+ * line-start markers are considered.
+ */
+function lastMarkerText(text: string, marker: string): string | null {
+  const lines = text.split('\n');
+  let at = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.trimStart().toUpperCase().startsWith(marker)) {
+      at = i;
+    }
+  }
+  if (at === -1) {
+    return null;
+  }
+  const marked = `${lines[at]!.trimStart().slice(marker.length)}\n${lines.slice(at + 1).join('\n')}`.trim();
+  return marked === '' ? null : marked;
+}
+
+/**
  * The question a turn's last message asks the owner, or null when it asks
  * none: the text from the LAST line-start `QUESTION:` marker (the
  * message's start or any line start) to the message's end, trimmed. A
@@ -126,18 +154,18 @@ export function editChanges(name: string | undefined, input: Record<string, unkn
  * every brief and stays the primary path; this is only the fallback.
  */
 export function questionOf(text: string): string | null {
-  const lines = text.split('\n');
-  let at = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i]!.trimStart().toUpperCase().startsWith(QUESTION_MARKER)) {
-      at = i;
-    }
-  }
-  if (at === -1) {
-    return null;
-  }
-  const question = `${lines[at]!.trimStart().slice(QUESTION_MARKER.length)}\n${lines.slice(at + 1).join('\n')}`.trim();
-  return question === '' ? null : question;
+  return lastMarkerText(text, QUESTION_MARKER);
+}
+
+/**
+ * Why the worker declared the step incomplete (`BLOCKED:`), or null when
+ * it did not: parsed exactly like `questionOf`, from the LAST line-start
+ * marker to the message's end. A question wins over a blocked
+ * declaration — a worker that asks waits for the answer; the blocked
+ * end only applies to a turn that otherwise completes.
+ */
+export function blockedOf(text: string): string | null {
+  return lastMarkerText(text, BLOCKED_MARKER);
 }
 
 /** One line for a permission request: what the tool wants to do, on what. */
@@ -606,6 +634,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
               ts: nowIso(now),
               kind: 'result',
               text: (event.result ?? '').slice(0, 8_000),
+              blocked: blockedOf(event.result ?? ''),
               tokensIn,
               tokensOut,
               cacheReadTokens,
@@ -1665,6 +1694,7 @@ export function opencodeAdapter(
             ts: nowIso(now),
             kind: 'result',
             text: state.lastText.slice(0, 8_000),
+            blocked: blockedOf(state.lastText),
             tokensIn: state.tokensIn,
             tokensOut: state.tokensOut,
             cacheReadTokens: state.cacheReadTokens,

@@ -145,7 +145,7 @@ Diagnose read-only first; only stop/steer/switch on the owner's ask.
 |---|---|
 | `starting` / `running` | live worker |
 | `stopping` | stop requested, worker ending |
-| `done` | worker finished its turn (gate ran after; check `gateFailure`) |
+| `done` | worker finished its turn (gate ran after; check `gateFailure`). A turn that ended `BLOCKED:` is also done, but no gate ran and nothing moved — the reason sits in `blocked` and the ticket waits for the owner |
 | `stopped` | stopped by request |
 | `failed` | worker died or errored (see stream `error` events) |
 | `detached` | the runner restarted while the worker lived on — unwatchable, treat as busy |
@@ -224,7 +224,10 @@ treats absent as unknown):
 - `gateResult` (`green`/`red` once the gate ran), `model`, `phase`,
   `handoverMode` (`fresh` | `resume` | `resume-compact` — T-0049) and
   `resumedFrom` (the candidate's session a resumed run continued; null
-  on fresh and on a resume that fell back fresh).
+  on fresh and on a resume that fell back fresh). A run whose worker
+  ended its turn with `BLOCKED: <reason>` carries `blocked` (the
+  reason) instead: no gate ran, no move was performed, and the chain
+  holds the ticket until the owner moves or starts it.
 
 `GET /report` groups these by ticket, phase and model (see the route
 table); the board's lanes show `ctx`/`turns`/`reads` chips per run (a

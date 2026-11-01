@@ -452,6 +452,13 @@ export class Orchestrator {
         this.redStreak[column] = 0;
         delete this.ticketFailures[info.ticketId];
         delete this.ownerHold[info.ticketId];
+        if ((info.blocked ?? null) !== null) {
+          // A blocked end: the step is incomplete — hold the ticket like
+          // an owner-stopped run, or the dispatcher would run it into the
+          // same wall again at once. The owner releases it by moving or
+          // starting the ticket.
+          this.ownerHold[info.ticketId] = { phase: record.request.phase, at: this.now().toISOString() };
+        }
       }
       if (info.state === 'stopped' && !this.machineStopped.has(info.id)) {
         // The owner stopped this run: the ticket stays put until they move
@@ -1109,6 +1116,15 @@ export class Orchestrator {
           continue;
         }
         if (busy.has(card.id)) {
+          if (this.ownerHold[card.id] !== undefined && mode !== 'held' && isAutoPhase(column.phase)) {
+            // A run the owner stopped, or one that ended blocked: the
+            // ticket waits for the owner either way — say so, or the
+            // column looks idle for no reason.
+            this.noteSkip(
+              card.id,
+              `dispatch holds ${card.id}: its last run ended stopped or blocked — the owner moves or starts it to release the ticket`,
+            );
+          }
           // A detached run (the runner restarted while its worker lived on)
           // blocks its ticket until it is stopped — say so, or the column
           // looks idle for no reason.
