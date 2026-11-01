@@ -481,6 +481,20 @@
   color: var(--text-3);
 }
 
+/* The Description label and its mic button on one line (req-75 W5b). */
+.tickets-form-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The dictation fallback hint: one quiet line under the field. */
+.tickets-form-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
 .tickets-form-title:focus,
 .tickets-form-desc:focus,
 .tickets-form-row select:focus {
