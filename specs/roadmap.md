@@ -121,6 +121,7 @@ changelog).
   local Whisper may be reopened later). One model call tidies the
   dictated text into title and description (raw text kept in the Log)
   and suggests the track. W5a shipped: the system-wide New ticket chord.
+  W5b shipped: Windows dictation in the New ticket dialog.
 - **W6 — Shape track.** The plan-mode dialog with the project context
   assembled automatically and shown as chips (CLAUDE.md, specs, ADRs,
   related tickets — over the existing context pack); read-only on the
