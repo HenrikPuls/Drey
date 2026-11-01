@@ -67,6 +67,7 @@ import { blockedRefusal } from './blocked';
 import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, recentDoneOf, type DriftDetection } from './normalize';
 import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply } from '../shared/changes';
+import { captureTidyMessages, parseCaptureTidy } from '../shared/capture-tidy';
 import { openTerminalAt, runInNewConsole } from './open-terminal';
 import { startWindowsDictation } from './dictation';
 import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
@@ -682,6 +683,9 @@ class BoardService {
     /** Every work repo, primary first (req-72); absent = just the primary. */
     repos?: readonly string[];
     description: string;
+    /** The owner's raw words behind a tidied create (req-75 W5c); absent
+     *  for a hand-typed ticket — one more Log line when set. */
+    raw?: string;
   }): Promise<MutationResult> {
     return this.enqueue(async () => {
       const vault = await this.detect();
@@ -712,6 +716,7 @@ class BoardService {
         now: new Date(),
         actor: input.actor ?? OWNER,
         description: input.description,
+        ...(input.raw !== undefined ? { rawCapture: input.raw } : {}),
       });
       try {
         await this.ctx.vault.writeAnnounced(path, text, { vaultId: vault.id });
@@ -2512,6 +2517,32 @@ const plugin: MainPluginModule = {
     // One Win+H press for the create modal's mic button (req-75 W5b,
     // T-0071) — the OS's dictation, never speech recognition of our own.
     ctx.ipc.handle('dictate', () => startWindowsDictation(process.platform, execFile));
+
+    // The create modal's Tidy up button (req-75 W5c, T-0072): one
+    // model call shapes a captured idea into a title and a
+    // description, on demand — the raw words ride the create as a Log
+    // line. The call runs here, never in the renderer, and carries no
+    // timeout (ADR-0014); the button stays disabled while it runs.
+    ctx.ipc.handle('tidyCapture', async (payload) => {
+      const p = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+      const text = typeof p['text'] === 'string' ? p['text'].trim() : '';
+      if (text === '') {
+        return { ok: false, error: 'There is no text to tidy up.' };
+      }
+      if (!ctx.llm.enabled()) {
+        return { ok: false, error: 'The language model is turned off.' };
+      }
+      let reply: string;
+      try {
+        reply = (await ctx.llm.chat(captureTidyMessages(text), { temperature: 0.2 })).text;
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const tidied = parseCaptureTidy(reply, text);
+      return tidied === null
+        ? { ok: false, error: "The model's reply could not be read — the text is unchanged." }
+        : { ok: true, title: tidied.title, description: tidied.description };
+    });
 
     ctx.ipc.handle('transition', async (payload) => {
       const cmd = parseTransition(payload);

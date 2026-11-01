@@ -169,6 +169,45 @@ rewrite; image-tab results open as a scratch tab.
 
 ---
 
+## Prompt 4 — Ticket capture tidy-up (plugins/tickets, req-75 W5c)
+
+The `tickets` plugin's New ticket dialog offers a **Tidy up** button
+in the Description label row: one model call turns a dictated (or
+hastily typed) idea into the ticket's title and description — on
+demand, never an automatic rewrite; the owner sees the result in the
+fields before creating. **The prompt lives in the plugin**
+(`plugins/tickets/shared/capture-tidy.ts`), not in
+`shared/app-config.ts` — like the OCR prompt it has no user-editable
+template (v1). The call runs in the plugin's main entry (the
+`'tidyCapture'` IPC → `ctx.llm.chat`, `temperature: 0.2`), gated on
+the master switch (`ctx.llm.enabled`); it carries no timeout
+(ADR-0014) — the button stays disabled while it runs.
+
+```
+System:
+You turn a spoken or hastily typed idea into a ticket for a software project's backlog.
+Reply with one JSON object and nothing else: {"title": "...", "description": "..."}
+Rules:
+- title: at most 70 characters, a short noun phrase or imperative, no trailing period, no ticket id.
+- description: one to four short sentences in plain Markdown that keep every fact, name and constraint from the text. Drop filler words, false starts and repetitions.
+- Keep the language of the text. Do not add requirements, file names or solutions the text does not contain.
+
+User:
+<the raw text, trimmed>
+```
+
+The reply is one JSON object read through `parseJsonObject`
+(`shared/llm`), so an object wrapped in a code fence reads too:
+`parseCaptureTidy` takes a title trimmed to a non-empty 80 characters
+and a description trimmed, an empty one falling back to the raw text.
+Anything else — no object, a broken one, a missing or non-string
+field — is rejected: the dialog shows "The model's reply could not be
+read — the text is unchanged." and the fields stay as they were. The
+owner's original words (the first successful run's input) ride the
+create as a `raw capture:` Log line (ticket-schema).
+
+---
+
 ## Other LLM prompts (for completeness)
 
 - **`ASK_SYSTEM`** (`plugins/assistant/main/ask-prompts.ts`) — the role

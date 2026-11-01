@@ -71,6 +71,14 @@ describe('command parsers', () => {
     expect(mixed.ok && 'repos' in mixed.value).toBe(false);
   });
 
+  it('keeps a create\'s raw capture only when it is a non-empty string (req-75 W5c)', () => {
+    expect(parseCreate({ title: 'X', raw: 'the palette flickers fix it' })).toMatchObject({
+      value: { raw: 'the palette flickers fix it' },
+    });
+    const dropped = parseCreate({ title: 'X', raw: '   ' });
+    expect(dropped.ok && 'raw' in dropped.value).toBe(false);
+  });
+
   it('takes the track as auto, shape or null — nothing else (req-75 W1b)', () => {
     expect(parseSetTrack({ id: 'T-0001', track: 'auto' })).toEqual({ ok: true, value: { id: 'T-0001', track: 'auto' } });
     expect(parseSetTrack({ id: 'T-0001', track: 'shape' })).toEqual({ ok: true, value: { id: 'T-0001', track: 'shape' } });

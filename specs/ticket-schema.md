@@ -323,7 +323,9 @@ the runner rely on:
 - `## Log` — append-only. Machine-appended entries use the exact line
   shape `- '<UTC timestamp>' <who> — <text>`; humans may append in any
   readable shape. Every transition, claim, takeover, injection, stop
-  and budget event lands here (ADR-0075).
+  and budget event lands here (ADR-0075). A ticket created from a
+  tidied capture (req-75 W5c) carries a `raw capture:` Log line with
+  the owner's original words, right after `created in`.
 
 ## `_meta/pipeline.md` — the phases and their handovers
 

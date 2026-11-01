@@ -38,6 +38,9 @@ export interface CreateCommand {
   /** Every work repo, primary first (req-72); absent = just the primary. */
   readonly repos?: readonly string[];
   readonly description: string;
+  /** The owner's raw words a tidied create came from (req-75 W5c);
+   *  present only when tidy-up changed the fields. */
+  readonly raw?: string;
 }
 
 export function parseCreate(payload: unknown): Parsed<CreateCommand> {
@@ -56,12 +59,16 @@ export function parseCreate(payload: unknown): Parsed<CreateCommand> {
     : 'normal';
   const repo = typeof p['repo'] === 'string' && p['repo'].trim() !== '' ? p['repo'].trim() : null;
   const repos = p['repos'];
+  // The raw words travel with a tidied create (req-75 W5c) — kept
+  // only when a non-empty string, dropped otherwise.
+  const raw = typeof p['raw'] === 'string' && p['raw'].trim() !== '' ? p['raw'] : undefined;
   return ok({
     title,
     priority,
     repo,
     ...(Array.isArray(repos) && repos.every((r): r is string => typeof r === 'string') ? { repos } : {}),
     description,
+    ...(raw !== undefined ? { raw } : {}),
   });
 }
 
