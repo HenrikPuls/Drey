@@ -50,7 +50,7 @@ import {
   reorderPipelinePhases,
   reposFileText,
   reposProse,
-} from './ticket-board';
+} from '../../../packages/tickets-engine/src/core/ticket-board';
 import {
   newTicketFileText,
   parseTicketFile,
@@ -61,18 +61,18 @@ import {
   ticketSections,
   withLogLine,
   type HeaderPatch,
-} from './ticket-files';
-import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from './phase-dirs';
-import { blockedRefusal } from './blocked';
+} from '../../../packages/tickets-engine/src/core/ticket-files';
+import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from '../../../packages/tickets-engine/src/core/phase-dirs';
+import { blockedRefusal } from '../../../packages/tickets-engine/src/core/blocked';
 import { planWorktreeRemoval } from './worktree-removal';
-import { detectDrift, recentDoneOf, type DriftDetection } from './normalize';
+import { detectDrift, recentDoneOf, type DriftDetection } from '../../../packages/tickets-engine/src/core/normalize';
 import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply } from '../shared/changes';
 import { captureTidyMessages, parseCaptureTidy } from '../shared/capture-tidy';
 import { openTerminalAt, runInNewConsole } from './open-terminal';
 import { startWindowsDictation } from './dictation';
 import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
 import type { AttachmentReply, RefineReply, TicketReply } from '../shared/remote-protocol';
-import type { AttachmentCommand, RefineCommand } from './commands';
+import type { AttachmentCommand, RefineCommand } from '../../../packages/tickets-engine/src/core/commands';
 import { refineTicket, revisionOf } from './ticket-refine';
 import { RemoteService } from './remote/service';
 import {
@@ -92,33 +92,34 @@ import {
   parseTicketId,
   parseTransition,
   parseUnarchive,
-} from './commands';
-import { TicketsGit, type RepoLocation } from './tickets-git';
+} from '../../../packages/tickets-engine/src/core/commands';
+import { TicketsGit, type RepoLocation } from '../../../packages/tickets-engine/src/core/tickets-git';
 import { createFleetMcpTools } from './mcp-tools';
-import { loadShippedPrompts } from './default-prompts';
+import { loadShippedPrompts } from '../../../packages/tickets-engine/src/core/default-prompts';
 import { FleetClient } from './fleet-client';
 import { listWorkerModels } from './worker-models';
-import { agentIdentity, composeRunRequest } from './fleet/request';
-import { checkpointPhaseIds, columnPromptRef, isAutoPhase, nextPhaseIdOf } from './fleet/chain';
-import { readRepoInstructions, worktreeDiffStat } from './fleet/context-pack';
+import { agentIdentity, composeRunRequest } from '../../../packages/tickets-engine/src/fleet/request';
+import { checkpointPhaseIds, columnPromptRef, isAutoPhase, nextPhaseIdOf } from '../../../packages/tickets-engine/src/fleet/chain';
+import { readRepoInstructions, worktreeDiffStat } from '../../../packages/tickets-engine/src/fleet/context-pack';
 import {
   cleanWorktrees,
   listOrphans,
   removeWorktree,
   type CleanupReport,
-} from './fleet/worktree-clean';
-import { unlinkShared } from './fleet/worktrees';
-import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } from './fleet/worktree-home';
+} from '../../../packages/tickets-engine/src/fleet/worktree-clean';
+import { unlinkShared } from '../../../packages/tickets-engine/src/fleet/worktrees';
+import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } from '../../../packages/tickets-engine/src/fleet/worktree-home';
 import { mergeWorktreeChanges, type WorktreeFile } from './worktree-changes';
-import type { ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, InteractiveMode, PermissionMode, RunInfo } from './fleet/protocol';
+import type { ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, InteractiveMode, PermissionMode, RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 import {
   normalizeFleetCaps,
   normalizeFleetHandover,
   normalizeFleetPools,
   WORKER_PROVIDERS,
   type FleetPools,
-} from './fleet/protocol';
-import { parseWorkerValue } from './fleet/assignment';
+} from '../../../packages/tickets-engine/src/fleet/protocol';
+import { parseWorkerValue } from '../../../packages/tickets-engine/src/fleet/assignment';
+import { RUNNER_SCRIPT_PATH } from '../../../packages/tickets-engine/src/fleet/runner-path';
 import { scanRepoFolder } from './repos-scan';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
@@ -2438,7 +2439,7 @@ const plugin: MainPluginModule = {
     const remoteChanges = new ChangeHub();
     const fleet = new FleetClient({
       root: path.join(ctx.app.userRoot, 'fleet'),
-      runnerScript: path.join(__dirname, 'fleet', 'runner.js'),
+      runnerScript: RUNNER_SCRIPT_PATH,
       log: ctx.log,
       onFleetChanged: (fleetSnapshot) => {
         ctx.ipc.emit('fleet-changed', fleetSnapshot);

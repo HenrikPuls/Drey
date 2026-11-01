@@ -5,7 +5,7 @@
  * announced, so a wait is announced once — and again only when the worker
  * asks anew.
  */
-import type { RunInfo } from '../main/fleet/protocol';
+import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 
 export interface WaitNotice {
   readonly run: RunInfo;

@@ -5,14 +5,14 @@ import {
   parseTicketFile,
   patchTicketFile,
   ticketSections,
-} from './ticket-files';
+} from '../../../packages/tickets-engine/src/core/ticket-files';
 import { parseHandover } from '../shared/tickets';
 import {
   composeInstruction,
   parseWorkerValue,
   resolveAssignment,
-} from './fleet/assignment';
-import { DEFAULT_FLEET_CAPS } from './fleet/protocol';
+} from '../../../packages/tickets-engine/src/fleet/assignment';
+import { DEFAULT_FLEET_CAPS } from '../../../packages/tickets-engine/src/fleet/protocol';
 
 /**
  * The fleet's assignment brain (M84, the owner's ruling): ticket pin >

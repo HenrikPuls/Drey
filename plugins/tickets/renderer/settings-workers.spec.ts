@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WORKER_PROVIDERS } from '../main/fleet/protocol';
+import { WORKER_PROVIDERS } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { RUNNER_FIELDS, RUNNER_LABEL } from './settings-workers';
 
 const keysOf = (provider: keyof typeof RUNNER_FIELDS): string[] => RUNNER_FIELDS[provider].map((f) => f.key);

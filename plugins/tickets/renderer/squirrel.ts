@@ -4,7 +4,7 @@
  * it. The pose is one `data-pose` attribute — all movement is CSS
  * (`board.css`), so a panel full of squirrels costs no timers.
  */
-import type { RunInfo } from '../main/fleet/protocol';
+import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { LIVE_RUN_STATES } from './message-queue';
 
 export type SquirrelPose = 'run' | 'sprint' | 'sit';

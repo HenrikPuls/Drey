@@ -4,7 +4,7 @@
  * conversation shows earlier runs as one folded line each and the live
  * (or newest) run open at the bottom. Pure: `mountThreadOf` draws it.
  */
-import type { RunInfo } from '../main/fleet/protocol';
+import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 import type { NeedItem } from '../shared/remote-protocol';
 import { execClockMs } from './worker-status';
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
-import type { RunInfo } from '../main/fleet/protocol';
+import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 import {
   phaseWithoutPoolKeys,
   type BoardColumn,

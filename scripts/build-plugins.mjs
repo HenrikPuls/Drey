@@ -22,7 +22,10 @@
  * A bundler would also inline a package without complaint, and a second
  * copy of `@codemirror/*` breaks the editor silently (ADR-0044 rule 1).
  * `onlyOwnSources` therefore fails the build on any runtime import that is
- * not a relative path into the plugin's own folder or the repo's `shared/`.
+ * not a relative path into the plugin's own folder, the repo's `shared/`,
+ * or — since the tickets-engine extraction (ADR-0088, E0) —
+ * `packages/tickets-engine/src/` (the engine is the plugin's pure domain
+ * package; the boundary that keeps the later process split honest).
  * Type-only imports never get that far — esbuild drops them while parsing.
  *
  * The `sample` plugin (ADR-0068) is NOT part of the default output: it is
@@ -43,6 +46,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const tsc = path.join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc');
 const pluginsDir = path.join(repoRoot, 'plugins');
 const sharedDir = path.join(repoRoot, 'shared');
+const engineSrcDir = path.join(repoRoot, 'packages', 'tickets-engine', 'src');
+const enginePkgDir = path.join(repoRoot, 'packages', 'tickets-engine');
 const mainOut = path.join(repoRoot, 'dist-electron');
 
 // ADR-0068: the sample plugin leaves the default scope — built (and thereby
@@ -82,11 +87,11 @@ function onlyOwnSources(pluginDir) {
           };
         }
         const target = path.resolve(args.resolveDir, args.path);
-        if (!isInside(pluginDir, target) && !isInside(sharedDir, target)) {
+        if (!isInside(pluginDir, target) && !isInside(sharedDir, target) && !isInside(engineSrcDir, target)) {
           return {
             errors: [
               {
-                text: `${from} imports "${args.path}", which is neither inside its own plugin folder nor in shared/.`,
+                text: `${from} imports "${args.path}", which is neither inside its own plugin folder, in shared/, nor in packages/tickets-engine/src/.`,
               },
             ],
           };
@@ -188,6 +193,16 @@ for (const entry of readdirSync(pluginsDir)) {
   if (existsSync(vendorSrc)) {
     cpSync(vendorSrc, pluginOut, { recursive: true });
   }
+}
+
+// The tickets engine ships beside the plugins: the main tsc program above
+// already compiled packages/tickets-engine/src -> dist-electron/packages/
+// tickets-engine/src/ (rootDir = repo root). The prompts the engine's
+// default-prompts module seeds from resolve next to that output
+// (SHIPPED_PROMPTS_DIR goes up from src/core to the package root).
+const enginePromptsSrc = path.join(enginePkgDir, 'prompts');
+if (existsSync(enginePromptsSrc)) {
+  cpSync(enginePromptsSrc, path.join(mainOut, 'packages', 'tickets-engine', 'prompts'), { recursive: true });
 }
 
 // The main-side tsc config still emits sample (it stays type-checked);

@@ -15,8 +15,8 @@
  * every 5 s and stops pulling the moment the tab unmounts.
  */
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
-import type { RunInfo } from '../main/fleet/protocol';
-import type { NormalizedEvent } from '../main/fleet/providers';
+import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
+import type { NormalizedEvent } from '../../../packages/tickets-engine/src/fleet/providers';
 import { durationWords, headerControls, liveStateWord } from './thread-steps';
 import { contextFill, contextLabel, execClockMs, formatTokens, workerStatus, type Light } from './worker-status';
 import { parseStreamEvents } from './watch-format';

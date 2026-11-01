@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ChainStatus, RunInfo } from '../main/fleet/protocol';
+import type { ChainStatus, RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { phaseWithoutPoolKeys, type BoardColumn, type BoardSnapshot, type PipelinePhase, type TicketCard } from '../shared/tickets';
 import { chainAlertsOf, newChainAlerts } from './chain-alerts';
 

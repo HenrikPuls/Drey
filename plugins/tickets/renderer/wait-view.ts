@@ -8,7 +8,7 @@
  * going. A plain question (no shape) renders the lead-in and its text;
  * the free answer is the caller's prompt box below.
  */
-import type { RunWaiting } from '../main/fleet/protocol';
+import type { RunWaiting } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { answerText } from '../shared/question-shape';
 
 /** What the ask view needs from its host: the answer path, and whether

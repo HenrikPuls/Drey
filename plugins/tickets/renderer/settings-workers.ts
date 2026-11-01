@@ -1,5 +1,5 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
-import { WORKER_PROVIDERS, type WorkerProviderId } from '../main/fleet/protocol';
+import { WORKER_PROVIDERS, type WorkerProviderId } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { el, kv, numberConfig, selectConfig, textConfig } from './settings-dom';
 
 /** One per-runner field: the plugin-config key it writes and how. */

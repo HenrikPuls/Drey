@@ -9,7 +9,7 @@
  */
 import { createHash } from 'node:crypto';
 import { splitFrontmatter } from '../../../shared/frontmatter';
-import { patchHeaderFields, withLogLine, type HeaderPatch } from './ticket-files';
+import { patchHeaderFields, withLogLine, type HeaderPatch } from '../../../packages/tickets-engine/src/core/ticket-files';
 
 export const REFINE_SECTIONS = {
   description: { title: 'Description', level: 2 },

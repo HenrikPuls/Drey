@@ -502,15 +502,31 @@ Plugins (`plugins/<id>/`, ADR-0044 — each `plugin.json` + `main/` +
 - `drawio/` — the diagram editor tab (ADR-0064)
 - `git/` — Git vaults + Source control panel incl. merge, stash, amend,
   file history (ADR-0065 + M67)
-- `tickets/` — the kanban board over a dedicated tickets repository:
+- `tickets/` — the Work panel over a dedicated tickets repository:
   capture → inbox, transitions as one-commit git moves, claims/takeover,
   derived order + sparse pins, the deterministic validator
-  (ADR-0075/0076, M83; format spec `specs/ticket-schema.md`); the fleet
-  runner + run control (M84) and the chain orchestrator — dispatcher,
-  master/brakes, breaker, ci handover, the fleet_* MCP tools
-  (ADR-0077, M85)
+  (ADR-0075/0076, M83; format spec `specs/ticket-schema.md`); the remote
+  gateway + phone client (req-66, ADR-0086); run control and the chain
+  orchestrator's Drey-side wiring (ADR-0077/0084, M84/85). The domain,
+  the fleet runner and the cross-layer contracts live in
+  `packages/tickets-engine` since ADR-0088 — the plugin keeps the
+  BoardService wiring, gateway, UI and the Drey seams, reaching the
+  engine by relative import
 - `sample/` — the authoring reference, dev/test-only (ADR-0068);
   `plugins/TUTORIAL.md` + `plugins/AUTHORING.md` are the guides
+
+Packages (`packages/<name>/`, npm workspaces — the tickets-engine
+extraction, ADR-0088):
+
+- `tickets-engine/` — the tickets domain as a pure package
+  (`src/core` ticket parse/patch, board assembly, git plumbing, command
+  parsers · `src/fleet` the runner, orchestrator, providers, worktrees,
+  telemetry · `src/contracts` the cross-layer types and pure helpers).
+  No Drey/Electron/plugin imports (ESLint-enforced); the plugin main tsc
+  program compiles it into `dist-electron/packages/tickets-engine/`, and
+  `plugins/tickets/shared/` holds thin re-export shims for the renderer
+  and phone client. The engine's own HTTP/SSE server and standalone
+  process arrive with migration etappe E2.
 
 This map is a starting point, not a fixed contract — but any deviation
 should be called out explicitly (see Working Style below), not

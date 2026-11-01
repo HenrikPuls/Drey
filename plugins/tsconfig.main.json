@@ -21,12 +21,14 @@
     "../shared/plugin-api/**/*.ts",
     "../shared/tag-grammar.ts",
     "../shared/tag-style.ts",
-    "../shared/text-diff.ts"
+    "../shared/text-diff.ts",
+    "../packages/tickets-engine/src/**/*.ts"
   ],
   "exclude": [
     "../shared/plugin-api/plugin-api.ts",
     "../shared/plugin-api/renderer.ts",
     "../shared/**/*.spec.ts",
+    "../packages/**/*.spec.ts",
     "./**/main/**/*.spec.ts",
     "./**/shared/**/*.spec.ts"
   ]

@@ -14,7 +14,12 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['plugins/**/*.spec.ts', 'electron/**/*.spec.ts', 'shared/**/*.spec.ts'],
+    include: [
+      'plugins/**/*.spec.ts',
+      'packages/**/*.spec.ts',
+      'electron/**/*.spec.ts',
+      'shared/**/*.spec.ts',
+    ],
     globals: true,
   },
 });

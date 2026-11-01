@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { NormalizedEvent } from '../main/fleet/providers';
+import type { NormalizedEvent } from '../../../packages/tickets-engine/src/fleet/providers';
 import { clockTime, formatWatch, parseStreamEvents, renderWatchMarkdown } from './watch-format';
 
 const ev = (event: Partial<NormalizedEvent> & { kind: NormalizedEvent['kind'] }): NormalizedEvent => ({

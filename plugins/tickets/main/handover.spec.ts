@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseHandover } from '../shared/tickets';
-import { acceptanceCommands } from './ticket-files';
+import { acceptanceCommands } from '../../../packages/tickets-engine/src/core/ticket-files';
 
 describe('parseHandover — the pipeline handover grammar', () => {
   it('reads the four plain modes', () => {

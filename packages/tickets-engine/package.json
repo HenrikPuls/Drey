@@ -1,0 +1,7 @@
+{
+  "name": "@drey/tickets-engine",
+  "version": "0.0.0",
+  "description": "The Drey tickets engine — ticket domain, git store, fleet runner and (later) the HTTP/SSE server that serves every tickets client. No Drey/Electron imports (ADR-0088).",
+  "private": true,
+  "license": "GPL-3.0-only"
+}

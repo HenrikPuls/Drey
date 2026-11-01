@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { SPRINT_MS, setSquirrelPose, squirrelNode, squirrelPose } from './squirrel';
-import type { RunInfo } from '../main/fleet/protocol';
+import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 
 const NOW = Date.parse('2026-10-31T12:00:00Z');
 

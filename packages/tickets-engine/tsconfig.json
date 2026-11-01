@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "lib": ["ES2022"],
+    "noEmit": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "//": "The engine package's own typecheck project. The shipping compile happens through plugins/tsconfig.main.json (single emit program, rootDir = repo root) until the engine process owns its build in E2; this project exists so the package boundary is checked standalone and ESLint typed rules cover the sources.",
+  "include": ["./src/**/*.ts"]
+}

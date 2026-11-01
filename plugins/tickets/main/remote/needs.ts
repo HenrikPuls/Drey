@@ -8,7 +8,7 @@
  */
 import type { NeedItem, NeedKind } from '../../shared/remote-protocol';
 import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
-import type { RunInfo, RunState } from '../fleet/protocol';
+import type { RunInfo, RunState } from '../../../../packages/tickets-engine/src/fleet/protocol';
 
 const LIVE: ReadonlySet<RunState> = new Set(['starting', 'running', 'stopping', 'detached']);
 const KIND_ORDER: readonly NeedKind[] = ['question', 'permission', 'red-gate', 'failed', 'checkpoint'];

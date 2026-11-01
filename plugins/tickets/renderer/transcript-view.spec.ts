@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
-import type { NormalizedEvent } from '../main/fleet/providers';
+import type { NormalizedEvent } from '../../../packages/tickets-engine/src/fleet/providers';
 import { createTranscriptView, shortenTarget, transcriptItems } from './transcript-view';
 import { formatWatch, type WatchBlock } from './watch-format';
 

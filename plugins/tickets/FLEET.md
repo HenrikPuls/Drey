@@ -112,7 +112,7 @@ Invoke-RestMethod "http://127.0.0.1:$($d.port)/health" -Headers $h
 | `POST /chain/column` `{phase, mode: "playing"\|"held"}` or `{phase, stop: true}` | column control |
 | `POST /chain/abort` | stop every live run |
 | `POST /shutdown` | graceful retire: stops live runs (bounded), exits. With `{handover: true}` (what Drey sends for a newer build, req-51) no run ends: live runs are left to the successor (OpenCode re-attached; a worker it cannot bind to is stopped and its session resumed in place under the same run id); 409 while a run is gating/starting/stopping |
-| `POST /start` | starts a run — **do not hand-craft**: the `RunRequest` (see `plugins/tickets/main/fleet/protocol.ts`) carries the composed instruction, worktree, gate commands, phase plumbing; runs are started by the board's "Run agent" or the chain dispatcher |
+| `POST /start` | starts a run — **do not hand-craft**: the `RunRequest` (see `packages/tickets-engine/src/fleet/protocol.ts`) carries the composed instruction, worktree, gate commands, phase plumbing; runs are started by the board's "Run agent" or the chain dispatcher |
 
 Writes change real state (worker processes, the board, the tickets repo).
 Diagnose read-only first; only stop/steer/switch on the owner's ask.
@@ -238,7 +238,7 @@ resumed run appends `resumed`).
 How a run's context reaches its worker. `RunRequest.handover` rides the
 start: the dialog sends the owner's explicit choice, the dispatcher
 sends `auto`, an older sender's absence means `fresh`. One resolver —
-`main/fleet/handover.ts`, pure — decides:
+`packages/tickets-engine/src/fleet/handover.ts`, pure — decides:
 
 - The **review phase always resolves fresh** (an independent worker
   judges the step).
@@ -436,7 +436,7 @@ device. Its own log lines start with `remote:` in the plugin log.
 
 ## Pointers
 
-- Code: `plugins/tickets/main/fleet/` (`runner.ts`, `runs.ts`, `chain.ts`,
+- Code: `packages/tickets-engine/src/fleet/` (`runner.ts`, `runs.ts`, `chain.ts`,
   `orchestrator.ts`, `providers.ts`, `protocol.ts`), client side
   `plugins/tickets/main/fleet-client.ts`
 - Specs: `specs/ticket-schema.md` (tickets, gates, agent lane rules),
@@ -445,7 +445,7 @@ device. Its own log lines start with `remote:` in the plugin log.
 
 ## Prompt versions (milestone 96)
 
-Every shipped prompt in `plugins/tickets/prompts/` opens with
+Every shipped prompt in `packages/tickets-engine/prompts/` opens with
 `<!-- drey-prompt-version: N -->`. Vault copies are snapshots seeded from
 it, so a copy with a lower number — or none — is older than the shipped
 default: the runner logs that once per prompt (`prompt "build-default" in

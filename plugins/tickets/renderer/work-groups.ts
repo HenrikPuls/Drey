@@ -23,7 +23,7 @@ import {
   type PipelinePhase,
   type TicketCard,
 } from '../shared/tickets';
-import type { RunInfo, RunState } from '../main/fleet/protocol';
+import type { RunInfo, RunState } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { needsOf } from '../main/remote/needs';
 import { phaseColorOf } from './phase-colors';
 

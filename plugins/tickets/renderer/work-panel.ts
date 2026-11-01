@@ -18,7 +18,7 @@ import {
   type TicketPriority,
   type TicketTrack,
 } from '../shared/tickets';
-import type { RunInfo } from '../main/fleet/protocol';
+import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 import type { ChainAlert, ChainAlertAction } from './chain-alerts';
 import { ageWords, needKindLabel, runningStepOf, statusLineOf, workGroups, type WorkGroupId, type WorkRow } from './work-groups';
 import { applyWorkFilter, isFilterActive, NO_WORK_FILTER, type FilteredGroup, type WorkFilterState } from './work-filter';

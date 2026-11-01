@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { recentActions, stuckOf, STUCK_NO_EDIT_MIN, STUCK_REPEATS } from './stuck';
-import type { RunInfo } from '../main/fleet/protocol';
-import type { NormalizedEvent } from '../main/fleet/providers';
+import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
+import type { NormalizedEvent } from '../../../packages/tickets-engine/src/fleet/providers';
 
 const NOW = Date.parse('2026-10-31T12:00:00Z');
 

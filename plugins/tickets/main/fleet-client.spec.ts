@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FleetClient } from './fleet-client';
-import { formatStamp } from './fleet/build-stamp';
+import { formatStamp } from '../../../packages/tickets-engine/src/fleet/build-stamp';
 
 /**
  * The client's retirement of a runner from an older build (req-51)

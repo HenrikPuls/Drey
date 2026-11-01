@@ -22,7 +22,7 @@ import {
   parseStopRun,
   parseTransition,
   type Parsed,
-} from '../commands';
+} from '../../../../packages/tickets-engine/src/core/commands';
 import { remoteActorOf, type TicketsRemotePort } from '../../shared/remote-protocol';
 import { TICKET_ID_PATTERN } from '../../shared/tickets';
 import type { DeviceRegistry, DeviceView, FailureLimiter, PairingCodes, RemoteDevice } from './auth';

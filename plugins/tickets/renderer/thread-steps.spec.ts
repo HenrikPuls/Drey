@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RunInfo } from '../main/fleet/protocol';
+import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 import type { NeedItem } from '../shared/remote-protocol';
 import { checkpointControls, durationWords, headerControls, liveStateWord, threadSteps } from './thread-steps';
 

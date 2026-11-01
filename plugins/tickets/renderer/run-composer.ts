@@ -8,7 +8,7 @@
  */
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import type { MutationResult } from '../shared/tickets';
-import type { RunInfo, WaitQuestion } from '../main/fleet/protocol';
+import type { RunInfo, WaitQuestion } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { createMessageQueue, readyToFlush, LIVE_RUN_STATES, type MessageQueue, type QueuedMessage } from './message-queue';
 import { questionNode } from './wait-view';
 import { formatTokens } from './worker-status';

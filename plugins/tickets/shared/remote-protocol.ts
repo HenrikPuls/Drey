@@ -17,9 +17,9 @@ import type {
   StopRunCommand,
   TicketIdCommand,
   TransitionCommand,
-} from '../main/commands';
+} from '../../../packages/tickets-engine/src/core/commands';
 import type { FleetSnapshot } from '../main/fleet-client';
-import type { ChainMaster, ChainStatus, ColumnMode, WaitQuestion } from '../main/fleet/protocol';
+import type { ChainMaster, ChainStatus, ColumnMode, WaitQuestion } from '../../../packages/tickets-engine/src/fleet/protocol';
 import type { ShapedQuestion } from './question-shape';
 import type { BoardSnapshot, CreateResult, MutationResult, TicketCard } from './tickets';
 

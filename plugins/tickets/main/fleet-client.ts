@@ -22,13 +22,13 @@ import type {
   RunInfo,
   RunRequest,
   RunnerDescriptor,
-} from './fleet/protocol';
-import { fleetBuildStamp, isStaleDaemon } from './fleet/build-stamp';
+} from '../../../packages/tickets-engine/src/fleet/protocol';
+import { fleetBuildStamp, isStaleDaemon } from '../../../packages/tickets-engine/src/fleet/build-stamp';
 
 export interface FleetClientOpts {
   /** The fleet root — `<userRoot>/fleet` (descriptor, runs, worktrees). */
   readonly root: string;
-  /** The bundled runner entry (`dist-electron/plugins/tickets/main/fleet/runner.js`). */
+  /** The bundled runner entry (`dist-electron/packages/tickets-engine/src/fleet/runner.js`, exported by the engine as `RUNNER_SCRIPT_PATH`). */
   readonly runnerScript: string;
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   /** Pushed whenever the polled run list or chain state differs — the board re-renders. */

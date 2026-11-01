@@ -35,10 +35,13 @@ import tseslint from 'typescript-eslint';
 /** A relative import that reaches into one of the repo's top-level parts. */
 const layer = (dir, message) => ({ group: [`**/${dir}/**`], message });
 
-const NO_RENDERER = layer(
-  'src',
-  'Only the renderer imports `src/`. What both sides need belongs in `shared/`.',
-);
+const NO_RENDERER = {
+  // `**/src/**` alone would also match `packages/*/src/**` — the engine's
+  // sources live under its own package and are reached from the plugin by
+  // design (ADR-0088). The negation keeps the layer rule root-only.
+  group: ['**/src/**', '!**/packages/**'],
+  message: 'Only the renderer imports `src/`. What both sides need belongs in `shared/`.',
+};
 const NO_MAIN = layer(
   'electron',
   'Only the main process imports `electron/`. What both sides need belongs in `shared/` (`shared/ipc-api.ts` is the contract).',
@@ -46,6 +49,10 @@ const NO_MAIN = layer(
 const NO_PLUGINS = layer(
   'plugins',
   'The base never imports a plugin -- it reaches plugin behaviour through a registry the plugin filled (ADR-0044).',
+);
+const NO_APPS = layer(
+  'apps',
+  '`apps/` is the served client surface -- nothing imports it; it consumes the engine API, never the other way round.',
 );
 
 const PLUGIN_IDS = readdirSync(new URL('./plugins', import.meta.url), { withFileTypes: true })
@@ -119,6 +126,7 @@ export default tseslint.config(
           'tsconfig.spec.json',
           'plugins/tsconfig.main.json',
           'plugins/tsconfig.renderer.json',
+          'packages/tickets-engine/tsconfig.json',
         ],
         tsconfigRootDir: import.meta.dirname,
       },
@@ -199,6 +207,20 @@ export default tseslint.config(
     },
   },
   {
+    // The tickets engine (ADR-0088): a pure package -- its own folder and
+    // the repo's shared/, never Drey (src/, electron/), never a plugin,
+    // never an app. Until E2 the shipping compile runs inside the plugin
+    // main tsc program (single rootDir = repo root); the boundary is what
+    // keeps the later process split honest.
+    files: ['packages/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        { patterns: [NO_RENDERER, NO_MAIN, NO_PLUGINS, NO_APPS] },
+      ],
+    },
+  },
+  {
     files: ['src/**/*.ts'],
     rules: {
       '@typescript-eslint/no-restricted-imports': ['error', { patterns: [NO_MAIN, NO_PLUGINS] }],
@@ -243,6 +265,7 @@ export default tseslint.config(
               message:
                 'A plugin works through its `MainPluginContext` and `shared/`, never a file under `electron/` (ADR-0044).',
             },
+            NO_APPS,
             ...otherPluginPatterns(id),
           ],
         },

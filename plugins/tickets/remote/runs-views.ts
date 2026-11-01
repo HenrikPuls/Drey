@@ -5,7 +5,7 @@
  * own watch view model (`renderer/watch-format.ts`); replies and
  * results render its Markdown (`markdown.ts`), the rest stays text.
  */
-import type { RunInfo, WaitQuestion } from '../main/fleet/protocol';
+import type { RunInfo, WaitQuestion } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { formatWatch, parseStreamEvents, type WatchBlock } from '../renderer/watch-format';
 import { ageOf } from '../shared/tickets';
 import type { ShapedQuestion } from '../shared/question-shape';

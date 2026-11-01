@@ -7,7 +7,7 @@
  * them, so a breaker trip went unseen. Pure — the panel and the
  * notifications share it, the spec pins it.
  */
-import type { ChainStatus, RunInfo, RunState } from '../main/fleet/protocol';
+import type { ChainStatus, RunInfo, RunState } from '../../../packages/tickets-engine/src/fleet/protocol';
 import type { BoardSnapshot } from '../shared/tickets';
 import { isMachinePhase } from './work-groups';
 

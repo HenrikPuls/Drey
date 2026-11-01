@@ -5,6 +5,10 @@
   "author": "Henrik Puls",
   "homepage": "https://drey.lariscus.de",
   "main": "dist-electron/electron/main.js",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -14,7 +18,7 @@
     "test:plugin": "node scripts/test-plugin.mjs",
     "test:app": "ng test --watch=false",
     "test:all": "npm run lint && npm run typecheck && npm run cycles && npm run test:app && npm run test:plugins",
-    "lint": "eslint \"electron/**/*.ts\" \"shared/**/*.ts\" \"src/**/*.ts\" \"plugins/**/*.ts\"",
+    "lint": "eslint \"electron/**/*.ts\" \"shared/**/*.ts\" \"src/**/*.ts\" \"plugins/**/*.ts\" \"packages/**/*.ts\"",
     "typecheck": "tsc -p electron/tsconfig.json --noEmit && tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.plugins.json --noEmit && tsc -p plugins/tsconfig.main.json --noEmit && tsc -p plugins/tsconfig.renderer.json && tsc -p electron/tsconfig.spec.json && tsc -p tsconfig.e2e.json",
     "cycles": "node scripts/check-cycles.mjs",
     "verify:pack": "node scripts/verify-pack.mjs",

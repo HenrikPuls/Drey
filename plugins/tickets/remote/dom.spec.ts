@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { RunInfo } from '../main/fleet/protocol';
+import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 import type { NeedItem } from '../shared/remote-protocol';
 import type { ShapedQuestion } from '../shared/question-shape';
 import type { BoardColumn, BoardSnapshot, PipelinePhase, TicketCard } from '../shared/tickets';

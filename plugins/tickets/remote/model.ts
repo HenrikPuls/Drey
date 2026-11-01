@@ -3,7 +3,7 @@
  * tested without a DOM: where a ticket sits, what its one primary
  * action is, the ticket file as display blocks, and the swipe rule.
  */
-import type { RunInfo } from '../main/fleet/protocol';
+import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { splitRow } from '../shared/markdown';
 import { parseHandover, type BoardColumn, type BoardSnapshot, type TicketCard } from '../shared/tickets';
 

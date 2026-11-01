@@ -1,4 +1,35 @@
 
+### Milestone 97 — tickets-engine package cut (Mission-Control migration E0)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list; the migration plan was approved by the owner,
+[ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)).
+The strangler restructure of the tickets system begins: the root becomes an
+npm workspace and `packages/tickets-engine` (`@drey/tickets-engine`) takes
+the tickets domain (`src/core`: ticket parse/patch, board assembly, phase
+dirs, drift, blocked-by, git plumbing, command parsers, shipped prompts),
+the whole fleet runner (`src/fleet`: runner, orchestrator, providers,
+worktrees, telemetry) and the cross-layer contracts (`src/contracts`:
+board snapshot types, question shape, fleet defaults, capture tidy) — no
+behaviour change, every moved spec passes unmodified (218 files / 2718
+tests green, renderer suite 1196 green). The plugin keeps the BoardService
+wiring, the remote gateway and all UI, reaching the engine by relative
+import; renderer and phone client keep their paths through thin re-export
+shims in `plugins/tickets/shared/`. One compile program stays (the plugin
+main tsc, rootDir = repo root) emitting `dist-electron/packages/tickets-engine/`,
+so electron-builder ships the engine through its existing globs (`pack:dir`
+verified). ESLint enforces the package boundary (packages never import
+`src/`, `electron/`, `plugins/`, `apps/`); the `NO_RENDERER` glob gains a
+`!**/packages/**` negation. The bundled runner entry moves behind the
+engine's `RUNNER_SCRIPT_PATH`; the shipped prompts move to
+`packages/tickets-engine/prompts` (build copies them next to the compiled
+engine). Roadmap: the migration item holds E1–E6 (transition machine, the
+standalone engine process + web app, personas, verify/proof, mission
+control + chat, self-improvement) and supersedes req-75 W6–W8. Specs/docs:
+ADR-0088, CLAUDE.md ownership map, docs/05 paths, `plugins/tickets/FLEET.md`
+paths. E2 will add the engine's own HTTP/SSE server; until then the runtime
+shape is unchanged.
+
 ### req-94 — CI green again: the e2e suite runs, and is typechecked
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01

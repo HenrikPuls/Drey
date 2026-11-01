@@ -3,7 +3,7 @@
  * become a traffic light, a context fill and the short texts the lane
  * shows. No DOM — the board draws it (index.ts), the spec pins it.
  */
-import type { RunInfo } from '../main/fleet/protocol';
+import type { RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 import type { ChainAlert } from './chain-alerts';
 
 /**

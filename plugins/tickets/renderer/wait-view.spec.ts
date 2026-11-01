@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import type { RunWaiting } from '../main/fleet/protocol';
+import type { RunWaiting } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { answerText } from '../shared/question-shape';
 import { questionNode } from './wait-view';
 

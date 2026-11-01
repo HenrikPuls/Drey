@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { HandoverCandidate } from '../main/fleet/handover';
-import { DEFAULT_FLEET_HANDOVER } from '../main/fleet/protocol';
+import type { HandoverCandidate } from '../../../packages/tickets-engine/src/fleet/handover';
+import { DEFAULT_FLEET_HANDOVER } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { handoverDialogState, type HandoverDialogInput } from './handover-ui';
 
 /**

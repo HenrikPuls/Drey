@@ -1319,13 +1319,16 @@ again.
 
 Where a worker column meets your judgment, the pipeline stays yours: a
 column without a worker between two worker columns is your
-**checkpoint** (plan-review in the default pipeline) — the machine
-never pulls across it; you review, edit, and move the ticket back to
-plan, forward to build, or back to Inbox. A manual column *before* the
-first worker column is a plain queue — the next pool drains it
-(prioritized feeds plan). And a ticket held by `blocked-by` never
-enters a pool while a blocker is open — the chain log line names it
-and its blockers.
+**checkpoint** — the machine never pulls across it; you review, edit,
+and move the ticket on, back a column, or back to Inbox. The shipped
+default has none (Build flows into Commit on its own); add a manual
+column between two worker columns and it becomes your checkpoint. A
+manual column *before* the first worker column is your queue — the
+machine never pulls from it: refine and plan your tickets there (the
+build worker derives file-level detail itself, at run time) and move
+one into the worker column when you want it worked. And a ticket held
+by `blocked-by` never enters a pool while a blocker is open — the
+chain log line names it and its blockers.
 
 **Each worker has its own settings.** Settings → *Tickets* → *Workers*
 has a switch between **OpenCode** and **Claude Code**. It opens on your
@@ -1395,7 +1398,8 @@ On the phone, four tabs sit at the bottom:
 
 - **Needs you** — what waits on you: a worker's question or permission
   request, a red gate or a failed run, and below them the tickets in
-  your checkpoint columns (Plan review, Commit). The badge counts the
+  your checkpoint columns (a manual column between worker columns; the
+  shipped default has none). The badge counts the
   first group. Tap an entry to open its ticket.
 - **Board** — one column at a time; the chips at the top switch
   columns and show their counts. **Swipe a card left** to move it to

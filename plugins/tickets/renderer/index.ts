@@ -43,12 +43,12 @@ import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import { createTicketHeader, ticketLogFold } from './ticket-header';
 import { boardIssuesChip, boardIssuesList, type BoardIssuesDeps } from './board-issues';
-import type { ChainStatus, FleetHandoverConfig, RunInfo } from '../main/fleet/protocol';
-import type { NormalizedEvent } from '../main/fleet/providers';
-import { DEFAULT_FLEET_HANDOVER, normalizeFleetHandover } from '../main/fleet/protocol';
+import type { ChainStatus, FleetHandoverConfig, RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
+import type { NormalizedEvent } from '../../../packages/tickets-engine/src/fleet/providers';
+import { DEFAULT_FLEET_HANDOVER, normalizeFleetHandover } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { handoverDialogState } from './handover-ui';
-import type { HandoverCandidate } from '../main/fleet/handover';
-import { parseWorkerValue } from '../main/fleet/assignment';
+import type { HandoverCandidate } from '../../../packages/tickets-engine/src/fleet/handover';
+import { parseWorkerValue } from '../../../packages/tickets-engine/src/fleet/assignment';
 import {
   contextFill,
   contextLabel,
