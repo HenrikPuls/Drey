@@ -126,6 +126,14 @@ phone. Watch any worker and step in when needed.
   the owner's too.
 - Built and shipped in stages W1–W9 (`specs/roadmap.md`, req-75); W1
   shipped 2026-10-31 and made this ADR accepted.
+- Later change (req-86, owner 2026-11-01): decision 3's card no longer
+  follows the mere presence of a `## Changes` section (it stayed on Done
+  tickets after the merge). It follows the ticket's place in the
+  pipeline: a human gate gets the gate card, the terminal column a final
+  report whose only action is Archive, led by the commit step's new
+  `## Result` section; the card folds to a strip and has a resizable
+  height. Columns can now be added, renamed (title only) and removed
+  in Settings.
 - Later change (T-0084, 2026-10-31): every Needs-you, Shaping and
   Running row carries a coloured phase chip (color: per phase in
   pipeline.md, else a default palette by column position), the list

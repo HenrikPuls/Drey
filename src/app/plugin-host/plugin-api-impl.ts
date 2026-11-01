@@ -302,10 +302,14 @@ export class PluginApiFactory {
       },
       commands: {
         register: (command: PluginCommand) => {
+          // `global` rides along (SDK 1.37): the chord registers with the
+          // OS, not the in-window keymap.
           this.keys.register(command);
           return track(() => {
             // The keybinding registry has no removal; disabling replaces the
-            // command with an inert one so the id can't be invoked.
+            // command with an inert one so the id can't be invoked. The
+            // stand-in carries no `global`, so the system-wide chord
+            // retires with the plugin.
             this.keys.register({ id: command.id, label: command.label, run: () => {} });
           });
         },

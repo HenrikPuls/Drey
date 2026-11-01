@@ -37,3 +37,10 @@ Rules when building from them:
   Those are the permitted deviations.
 - Panel header controls stay icon-only with `title` + `aria-label`
   (ADR-0057), as the artboards already draw them.
+- `Ready.dc.html` is the gate card's starting point; req-86 deviates on
+  purpose: a strip above the card folds it (the buttons move into the
+  strip), a splitter sets its height, the primary button names the next
+  column ("Move to Commit") instead of "Accept and merge", Launch is
+  offered only when a worktree and launch command exist, and a ticket
+  in the terminal column shows a final report (the commit step's
+  `## Result` first) with Archive as the only button.

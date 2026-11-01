@@ -26,6 +26,102 @@ moved back to commit by hand; their re-runs then merged (conflict
 self-resolved), pushed and completed the step for real. Specs:
 `runs.spec.ts`, `providers.spec.ts` (`blockedOf`), `orchestrator.spec.ts`.
 
+### req-86 — the step card follows the pipeline; add, rename and remove columns; Settings tidied
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list). Three things the owner met on T-0062:
+
+**The card follows the ticket's place, not a section.** The Ready card
+showed whenever the ticket file carried a `## Changes` section, so it sat
+on a Done ticket after the merge, with the worktree gone. `stepCardOf`
+(`shared/step-card.ts`) now decides: a **gate** (a manual column behind
+an automatic one) shows the card with what the step did and the gate's
+moves — **Launch this version** only when a worktree and a launch
+command exist (`ChangesReply.launchable`), **Move to <next column>**
+(the column's name, no longer "Accept and merge"), **Send back…**; the
+**terminal column** shows a **final report** — led by **What was
+delivered**, the new `## Result` section the commit step writes (merge
+commit, what landed, anything left over; commit prompt version 3) — with
+**Archive** as its only button; a ticket an agent is working shows no
+card. The plan gate keeps its own approval UI.
+
+**Foldable and resizable.** A strip above the card (fold chevron, ticket,
+state) stays; folding hides the body and brings the buttons into the
+strip, so the agent log gets the whole height and the gate is still
+decidable. A splitter below the body sets its height (drag, ↑/↓ keys,
+double-click resets), remembered across sessions
+(`localStorage['drey.tickets.readyHeight']`). The story column no longer
+takes 320 px of height when the pane is narrow.
+
+**Columns can be added, renamed and removed** (Settings → Tickets →
+Pipeline). *New column* adds a manual checkpoint after a chosen column
+(default: before Done); the pencil renames in place — the title only, so
+id, folder and tickets stay; the bin removes a column after a second
+click and refuses while tickets sit in it. Inbox and Done stay pinned.
+One commit each (`editPhase`; `addPipelinePhase` /
+`renamePipelinePhase` / `removePipelinePhase` in `ticket-board.ts`, which
+keep a hand-formatted `pipeline.md` intact).
+
+**Settings tidied.** Every unset fleet field shows the value the runner
+will use as its placeholder, from one table (`shared/fleet-defaults.ts`;
+`protocol.ts`'s `DEFAULT_*` derive from it) — a deviation from "panel
+fields carry no placeholder" (ADR-0057), limited to Settings; clearing a
+field resets it. The four output caps and the shared compact threshold
+left the page (the keys still work by hand, defaults unchanged); resume
+pause TTL, context cap and git path moved under **Advanced**, as did the
+repository fields policy, worktrees base, launch command, agent
+instructions and link folders.
+
+Specs: `shared/step-card.spec.ts` (gate / final / none matrix),
+`renderer/ready-view.spec.ts` (gate, final, fold strip),
+`renderer/settings-columns.spec.ts` (the column editor — it caught a
+use-before-declaration), `main/ticket-board.spec.ts` (add / rename /
+remove), `shared/fleet-defaults.spec.ts`, `main/default-prompts.spec.ts`.
+⚠️ Not run in the author's sandbox: the full `npm run test:all`, lint,
+the Electron build and the UI itself (seven fleet specs on Windows paths
+fail there on `main` as well).
+
+### req-75 W5b — Dictation in the New ticket dialog
+
+**Not yet manually verified by the owner.** Part 2 of req-75 W5: the
+New ticket dialog starts Windows dictation — the OS's own, Drey still
+runs no speech recognition (req-11 stays excluded). Opened by the
+system-wide New ticket chord (W5a) the dialog opens on Description and
+the Win+H press happens by itself: the plugin's main side starts
+PowerShell with `-EncodedCommand` (base64 of UTF-16LE, so the script's
+double quotes survive argument quoting) whose script presses and
+releases the keys through user32 `keybd_event`. Off Windows, or on a
+failed start, the press refuses and the dialog shows one hint line —
+"Dictation did not start — press Win+H, or type." — under the field,
+cleared by the next successful start; typing is always the fallback.
+On Windows the Description label row carries a **mic button** that
+restarts the press. A ticket may now be created from a description
+alone: its first non-empty line, trimmed and cut at 80 characters on
+a word boundary with an ellipsis, becomes the title
+(`titleFromDescription` in the shared contract; `parseCreate` derives
+it — both empty still refuses). Specs: `dictation.spec.ts` (`execFile`
+injected — a spec never starts PowerShell), `tickets.spec.ts`
+(derivation), `commands.spec.ts` (create).
+
+### req-75 W5a — New ticket from anywhere
+
+**Not yet manually verified by the owner.** A second system-wide chord,
+**Ctrl+Alt+T**, raises Drey from anywhere in Windows, reveals the
+tickets board and opens the existing New ticket dialog with the cursor
+in its Title field; with no tickets vault the reveal is all that
+happens (the board shows its setup state). Built as a generic SDK seam
+(1.37): a plugin command may be `global` — the base registers its chord
+with the OS and never also fires it in-window, so it runs exactly once.
+Settings → Keyboard shortcuts shows the row "New ticket (system-wide)",
+rebindable like every other row, with the quick-capture row's "in use"
+hint when another program owns the combo. Main's `GlobalShortcuts`
+(modelled on the quick-capture hotkey, ADR-0073; the raise is the
+quick-capture call, ADR-0002) registers exactly the renderer's list,
+keeps the quick-capture accelerator reserved and reports failures
+instead of throwing. Specs: `electron/global-shortcuts.spec.ts`,
+`keybinding.service.spec.ts` (global commands leave the in-window
+keymap), `shortcut-model.spec.ts` (the row label).
+
 ### req-75 W4d — The squirrel
 
 **Not yet manually verified by the owner.** Owner request, 2026-10-31

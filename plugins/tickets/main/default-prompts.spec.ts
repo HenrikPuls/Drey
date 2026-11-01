@@ -29,6 +29,8 @@ describe('shipped prompts', () => {
     // The build step ends on the Changes section the Ready page reads (req-75 W3).
     expect(prompts.get('build-default')).toContain('## Changes');
     expect(prompts.get('build-default')).toContain('**What changed for you:**');
+    // The commit step closes with the report the final card shows.
+    expect(prompts.get('commit-default')).toContain('`## Result`');
     // The interactive defaults (req-65): interview first, never move the
     // ticket themselves.
     expect(prompts.get('plan-interactive-default')).toContain('QUESTION:');

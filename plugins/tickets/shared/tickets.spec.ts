@@ -8,6 +8,7 @@ import {
   phaseDirectoryName,
   stripPhasePrefix,
   ticketOfBranch,
+  titleFromDescription,
   type BoardSnapshot,
   type TicketCard,
 } from './tickets';
@@ -118,6 +119,31 @@ describe('openTicketCount', () => {
 
   it('is zero without columns', () => {
     expect(openTicketCount({ columns: [] } as unknown as BoardSnapshot)).toBe(0);
+  });
+});
+
+describe('titleFromDescription (req-75 W5b)', () => {
+  it('takes the first non-empty line, trimmed', () => {
+    expect(titleFromDescription('\n\n  Fix the flare  \nsecond line')).toBe('Fix the flare');
+  });
+
+  it('returns the short line unchanged — no ellipsis', () => {
+    expect(titleFromDescription('Outline panel should scroll')).toBe('Outline panel should scroll');
+  });
+
+  it('cuts at 80 characters on a word boundary and appends the ellipsis', () => {
+    const title = titleFromDescription('word '.repeat(30).trim());
+    expect(title).toBe(`${'word '.repeat(15)}word…`);
+    expect(title.length).toBe(80);
+  });
+
+  it('hard-cuts a single word longer than 80 characters', () => {
+    expect(titleFromDescription(`x${'a'.repeat(90)}`)).toBe(`x${'a'.repeat(79)}…`);
+  });
+
+  it('is empty for empty or whitespace-only text', () => {
+    expect(titleFromDescription('')).toBe('');
+    expect(titleFromDescription(' \n\t\n  ')).toBe('');
   });
 });
 

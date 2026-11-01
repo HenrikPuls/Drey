@@ -11,6 +11,7 @@
  * vault is where prompts and ticket context live); the runner owns the
  * worker process, its pipes, the worktree and the machine gate.
  */
+import { FLEET_SETTING_DEFAULTS } from '../../shared/fleet-defaults';
 import type { ShapedQuestion } from '../../shared/question-shape';
 
 /** The workers of milestone 84, in fleet order (the assignment default). */
@@ -210,9 +211,9 @@ export interface FleetHandoverConfig {
 
 /** The handover thresholds' defaults — an absent or invalid config degrades to these. */
 export const DEFAULT_FLEET_HANDOVER: FleetHandoverConfig = {
-  compactAboveTokens: 60_000,
-  resumePauseTtlMin: 15,
-  contextCapTokens: 160_000,
+  compactAboveTokens: FLEET_SETTING_DEFAULTS['fleet.compactAboveTokens'],
+  resumePauseTtlMin: FLEET_SETTING_DEFAULTS['fleet.resumePauseTtlMin'],
+  contextCapTokens: FLEET_SETTING_DEFAULTS['fleet.contextCapTokens'],
 };
 
 /** Resolves handover thresholds of unknown shape to valid ones, per key
@@ -259,10 +260,10 @@ export interface FleetCaps {
 
 /** The caps' defaults — an absent or invalid config degrades to these. */
 export const DEFAULT_FLEET_CAPS: FleetCaps = {
-  gateFailureLines: 40,
-  gateFailureBytes: 4096,
-  diffStatLines: 50,
-  diffStatBytes: 4096,
+  gateFailureLines: FLEET_SETTING_DEFAULTS['fleet.cap.gateFailureLines'],
+  gateFailureBytes: FLEET_SETTING_DEFAULTS['fleet.cap.gateFailureBytes'],
+  diffStatLines: FLEET_SETTING_DEFAULTS['fleet.cap.diffStatLines'],
+  diffStatBytes: FLEET_SETTING_DEFAULTS['fleet.cap.diffStatBytes'],
 };
 
 /** Resolves a caps value of unknown shape (wire body, plugin config) to
@@ -300,7 +301,7 @@ export interface FleetPool {
 
 export type FleetPools = Readonly<Record<WorkerProviderId, FleetPool>>;
 
-export const DEFAULT_FLEET_POOL: FleetPool = { size: 1, probeUrl: null };
+export const DEFAULT_FLEET_POOL: FleetPool = { size: FLEET_SETTING_DEFAULTS['fleet.pool.size'], probeUrl: null };
 
 /** Resolves pools of unknown shape (wire body, plugin config) per
  *  provider: a whole size ≥ 1 and an http(s) probe URL win, anything

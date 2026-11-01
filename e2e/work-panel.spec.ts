@@ -82,7 +82,11 @@ test.use({
     'tickets/50-build/T-0108.md': ticket('T-0108', 'Weekly security audit run', 'build', 'normal', true),
     'tickets/50-build/T-0104.md': ticket('T-0104', 'Drag headings in the outline', 'build', 'high'),
     'tickets/60-review/T-0105.md': ticket('T-0105', 'Spellcheck inside tables', 'review'),
-    'tickets/80-done/T-0106.md': ticket('T-0106', 'Fix the palette race in CI', 'done'),
+    // A finished ticket carries the build worker's `## Changes`: the final card reports from it.
+    'tickets/80-done/T-0106.md': ticket('T-0106', 'Fix the palette race in CI', 'done').replace(
+      '## Log',
+      '## Changes\n\n**What changed for you:** The palette opens once, even on a double press.\n\n## Log',
+    ),
   },
 });
 
@@ -184,26 +188,29 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
 
     // The decisions live in the thread (req-75 W1b); for a Review or
     // Ready-to-try checkpoint the Ready card's buttons replace the bar
-    // (req-75 W3): Accept and merge before the last phase, Accept in it.
+    // (req-75 W3, req-86): a gate offers the move to the next column (Launch
+    // only with a worktree — none here), the terminal column Archive alone.
     const readyButtons = thread.locator('.tickets-ready-card .tickets-takeover-btn');
     await panel.locator('.work-row[data-id="T-0105"]').click();
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Spellcheck inside tables');
     await expect(thread.locator('.tickets-thread-decisions')).toBeHidden();
-    await expect(readyButtons).toHaveText(['Launch this version', 'Accept and merge', 'Send back…']);
+    await expect(readyButtons).toHaveText(['Move to Commit', 'Send back…']);
     await panel.locator('.work-row[data-id="T-0106"]').click();
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Fix the palette race in CI');
-    await expect(readyButtons).toHaveText(['Launch this version', 'Accept and archive', 'Send back…']);
+    await expect(readyButtons).toHaveText(['Archive']);
+    await expect(thread.locator('.tickets-ready-section b').first()).toHaveText('What changed for you');
 
     // The checkpoint actions live in the status row too (req-81) — always
-    // there — and the Ready chip folds the card away and brings it back.
+    // there — and the chip folds the card to its strip (the buttons move
+    // into it, the agent log gets the height) and brings it back.
     await expect(thread.locator('.tickets-thread-checkpoints button')).toHaveCount(3);
-    await expect(thread.locator('.tickets-thread-chip')).toHaveText('Ready to try ⌄');
+    await expect(thread.locator('.tickets-thread-chip')).toHaveText('Report ⌄');
     await thread.locator('.tickets-thread-chip').click();
-    await expect(thread.locator('.tickets-ready')).toBeHidden();
-    await expect(thread.locator('.tickets-thread-decisions')).toBeVisible();
+    await expect(thread.locator('.tickets-ready-body-host')).toBeHidden();
+    await expect(thread.locator('.tickets-ready-bar .tickets-ready-actions button')).toHaveText(['Archive']);
     await thread.locator('.tickets-thread-chip').click();
-    await expect(thread.locator('.tickets-ready')).toBeVisible();
-    await expect(readyButtons).toHaveText(['Launch this version', 'Accept and archive', 'Send back…']);
+    await expect(thread.locator('.tickets-ready-body-host')).toBeVisible();
+    await expect(readyButtons).toHaveText(['Archive']);
 
     // A ticket with a live run brings its run tab back into the same pane.
     await panel.locator('.work-row[data-id="T-0107"]').click();

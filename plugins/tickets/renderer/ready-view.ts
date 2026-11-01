@@ -2,12 +2,13 @@
  * The Ready card of the ticket thread (req-75 W3, ADR-0087 decision 3,
  * the canvas `docs/design/work-panel/Ready.dc.html`, artboard "3c"):
  * in plain words what changed for the owner, where, which checks
- * passed and how to try it — Launch this version, Accept and merge,
+ * passed and how to try it — Launch this version, the move on,
  * Send back… — plus "How it got here", the ticket's story from its
  * Log. Plain DOM over `shared/changes.ts`; the section is the worker's
  * writing, missing sections are simply left out.
  */
 import type { ParsedChanges, StoryItem, StoryTotals } from '../shared/changes';
+import type { StepCard } from '../shared/step-card';
 import type { TicketTrack } from '../shared/tickets';
 import { formatTokens } from './worker-status';
 
@@ -26,9 +27,11 @@ export interface ReadyData {
   readonly title: string | null;
   readonly track: TicketTrack | null;
   readonly repo: string | null;
-  /** In the terminal phase the Accept button reads `Accept and archive` (req-81). */
-  readonly terminal: boolean;
+  /** Which card this is and what it offers (`stepCardOf`): a gate or the final report. */
+  readonly card: StepCard;
   readonly changes: ParsedChanges | null;
+  /** The commit step's `## Result` report — the final card's lead section. */
+  readonly result: string | null;
 }
 
 /** The story column's data. */
@@ -56,8 +59,9 @@ function el<K extends keyof HTMLElementTagNameMap>(
 const NOTHING_ELSE = 'Nothing else you can see has changed.';
 
 /**
- * The Ready card: the canvas header (kicker, title, chips) above a
- * bordered card of sections and the three buttons. A ticket without a
+ * The step card: the canvas header (kicker, title, chips) above a
+ * bordered card of sections and the buttons — a gate's (launch, move on,
+ * send back) or the final report's (archive). A ticket without a
  * `## Changes` section still gets the header, the buttons and the hint.
  */
 export function readyCardNode(deps: ReadyViewDeps, data: ReadyData): HTMLElement {
@@ -73,7 +77,10 @@ export function readyCardNode(deps: ReadyViewDeps, data: ReadyData): HTMLElement
   if (data.repo !== null) {
     chips.append(el('span', 'tickets-ready-chip', data.repo));
   }
-  chips.append(el('span', 'tickets-ready-chip tickets-ready-chip-ready', 'Ready to try'));
+  const final = data.card.kind === 'final';
+  chips.append(
+    el('span', `tickets-ready-chip ${final ? 'tickets-ready-chip-done' : 'tickets-ready-chip-ready'}`, final ? 'Done' : 'Needs your decision'),
+  );
   head.append(title, chips);
 
   const body = el('div', 'tickets-ready-body');
@@ -83,6 +90,11 @@ export function readyCardNode(deps: ReadyViewDeps, data: ReadyData): HTMLElement
     body.append(node);
     return node;
   };
+
+  if (final && data.result !== null) {
+    const node = section('What was delivered');
+    node.append(el('p', 'tickets-ready-for-you', data.result));
+  }
 
   const changes = data.changes;
   if (changes !== null) {
@@ -118,25 +130,76 @@ export function readyCardNode(deps: ReadyViewDeps, data: ReadyData): HTMLElement
     }
   }
 
-  const actions = el('div', 'tickets-ready-actions');
-  const launch = el('button', 'tickets-takeover-btn tickets-takeover-btn-primary tickets-ready-launch');
-  launch.type = 'button';
-  launch.title = 'Open the ticket worktree in a new console and start it there';
-  launch.append(deps.icon('rocket', 14), el('span', undefined, 'Launch this version'));
-  launch.addEventListener('click', deps.onLaunch);
-  const accept = el('button', 'tickets-takeover-btn', data.terminal ? 'Accept and archive' : 'Accept and merge');
-  accept.type = 'button';
-  accept.addEventListener('click', deps.onAccept);
-  const sendBack = el('button', 'tickets-takeover-btn tickets-ready-sendback', 'Send back…');
-  sendBack.type = 'button';
-  sendBack.addEventListener('click', deps.onSendBack);
-  actions.append(launch, accept, el('span', 'tickets-takeover-spacer'), sendBack);
-
-  body.append(actions, el('p', 'tickets-ready-hint',
-    'Launch opens this ticket\'s worktree in a new console and starts it there. Accept moves the ticket on: in Done it goes to the archive and its worktree is removed; earlier, the next phase merges it.'));
+  body.append(readyActionsNode(deps, data.card), el('p', 'tickets-ready-hint', hintOf(data.card)));
 
   root.append(head, body);
   return root;
+}
+
+function hintOf(card: StepCard): string {
+  if (card.kind === 'final') {
+    return 'This step is finished and merged. Archive files the ticket away and removes its clean worktree.';
+  }
+  return `${card.canLaunch ? 'Launch opens this ticket\'s worktree in a new console and starts it there. ' : ''}${card.acceptLabel} moves the ticket on; Send back returns it to the agent with your note.`;
+}
+
+/** The card's buttons: Launch (when a build can run), the primary move, Send back. */
+export function readyActionsNode(deps: ReadyViewDeps, card: StepCard): HTMLElement {
+  const actions = el('div', 'tickets-ready-actions');
+  if (card.canLaunch) {
+    const launch = el('button', 'tickets-takeover-btn tickets-takeover-btn-primary tickets-ready-launch');
+    launch.type = 'button';
+    launch.title = 'Open the ticket worktree in a new console and start it there';
+    launch.append(deps.icon('rocket', 14), el('span', undefined, 'Launch this version'));
+    launch.addEventListener('click', deps.onLaunch);
+    actions.append(launch);
+  }
+  const accept = el(
+    'button',
+    `tickets-takeover-btn${card.canLaunch ? '' : ' tickets-takeover-btn-primary'}`,
+    card.acceptLabel,
+  );
+  accept.type = 'button';
+  accept.addEventListener('click', deps.onAccept);
+  actions.append(accept, el('span', 'tickets-takeover-spacer'));
+  if (card.canSendBack) {
+    const sendBack = el('button', 'tickets-takeover-btn tickets-ready-sendback', 'Send back…');
+    sendBack.type = 'button';
+    sendBack.addEventListener('click', deps.onSendBack);
+    actions.append(sendBack);
+  }
+  return actions;
+}
+
+/**
+ * The strip above the card: a fold toggle, the ticket and the card's
+ * state — and, while folded, the card's buttons, so the gate stays
+ * decidable with the agent log given the whole height.
+ */
+export function readyBarNode(
+  deps: ReadyViewDeps,
+  data: ReadyData,
+  state: { readonly open: boolean; onToggle(): void },
+): HTMLElement {
+  const bar = el('div', 'tickets-ready-bar');
+  const toggle = el('button', 'icon-btn tickets-ready-fold');
+  toggle.type = 'button';
+  toggle.title = state.open ? 'Fold the card away' : 'Unfold the card';
+  toggle.setAttribute('aria-label', toggle.title);
+  toggle.setAttribute('aria-expanded', String(state.open));
+  toggle.append(deps.icon(state.open ? 'chevron-down' : 'chevron-right', 14));
+  toggle.addEventListener('click', state.onToggle);
+  const final = data.card.kind === 'final';
+  bar.append(
+    toggle,
+    el('span', 'tickets-ready-bar-id', data.id),
+    el('span', 'tickets-ready-bar-title', data.title ?? '(untitled)'),
+    el('span', `tickets-ready-chip ${final ? 'tickets-ready-chip-done' : 'tickets-ready-chip-ready'}`, final ? 'Done' : 'Needs your decision'),
+  );
+  if (!state.open) {
+    bar.append(el('span', 'tickets-takeover-spacer'), readyActionsNode(deps, data.card));
+  }
+  return bar;
 }
 
 /** "How it got here": the story rows and the muted totals line. */

@@ -3664,6 +3664,13 @@ sequenceDiagram
     B->>G: moveCard: "<from> -> <to>" + "sent back: <note>",<br/>one commit
 ```
 
+**Which card (req-86).** `stepCardOf` (`shared/step-card.ts`) picks it
+from the ticket's place, not from the section: a checkpoint gives the
+gate card (Launch only when `ChangesReply.launchable`, the move named
+after the next column, Send back), the terminal column the final card
+(`## Result` first, Archive alone), an agent-worked ticket none. The
+strip folds the body; the splitter's height persists.
+
 The `## Changes` section is the worker's writing (the build prompt
 makes it write or update the section before it ends); the desk never
 parses a diff. `parseChanges` and `storyOf` (`shared/changes.ts`) are

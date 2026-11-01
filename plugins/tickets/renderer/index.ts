@@ -31,7 +31,8 @@ import { createRunComposer } from './run-composer';
 import { THREAD_KEY, ticketPagePlan } from './ticket-page';
 import { PENDING_HINT, dialogStarter } from './dialog-starters';
 import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups, workListSignature } from './work-groups';
-import { readyCardNode, storyNode } from './ready-view';
+import { readyBarNode, readyCardNode, storyNode } from './ready-view';
+import { stepCardOf } from '../shared/step-card';
 import type { ChangesReply } from '../shared/changes';
 import { checkpointControls, headerControls, liveStateWord, threadSteps, durationWords, type ThreadStep } from './thread-steps';
 import { stuckOf } from './stuck';
@@ -796,7 +797,7 @@ function emptyState(
 
 // --- the create modal (opens the new file — T-0001) ------------------------
 
-function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
+function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot, opts?: { dictate?: boolean }): void {
   const close = api.ui.showModal((host) => {
     const form = el('div', 'tickets-form');
     const title = el('input', 'tickets-form-title') as HTMLInputElement;
@@ -839,6 +840,35 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
     description.rows = 4;
     description.setAttribute('aria-label', 'Description');
 
+    // req-75 W5b, T-0071: Windows dictation, not speech recognition of
+    // our own. Win+H types into the focused field, so Description is
+    // focused before the press — PowerShell's ~300 ms start-up is the
+    // natural delay, no timer. A failed start shows the one-line
+    // fallback hint; the next successful start clears it again.
+    const dictationHint = el('p', 'tickets-form-hint', 'Dictation did not start — press Win+H, or type.');
+    dictationHint.hidden = true;
+    const startDictation = (): void => {
+      description.focus();
+      void invokeBoard('dictate').then((result) => {
+        dictationHint.hidden = (result as { ok?: boolean } | null)?.ok === true;
+      });
+    };
+    const descriptionLabelRow = el('div', 'tickets-form-label-row');
+    descriptionLabelRow.append(el('span', 'tickets-form-label', 'Description'));
+    if (navigator.userAgent.includes('Windows')) {
+      const mic = el('button', 'icon-btn tickets-form-dictate');
+      mic.type = 'button';
+      mic.title = 'Dictate (Win+H)';
+      mic.setAttribute('aria-label', 'Dictate');
+      mic.append(api.ui.icon('mic', 14));
+      mic.addEventListener('click', startDictation);
+      descriptionLabelRow.append(mic);
+    }
+    // A div, not a label: the row holds a button now, and a label's
+    // first labelable descendant would be that button, not the textarea.
+    const descriptionField = el('div', 'tickets-form-field');
+    descriptionField.append(descriptionLabelRow, description, dictationHint);
+
     const actions = el('div', 'tickets-form-actions');
     const cancel = el('button', undefined, 'Cancel');
     cancel.type = 'button';
@@ -847,7 +877,9 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
     create.type = 'button';
     const submit = (): void => {
       const text = title.value.trim();
-      if (text === '') {
+      // An empty title is fine while the description carries one — its
+      // first line becomes the title, derived main-side (req-75 W5b).
+      if (text === '' && description.value.trim() === '') {
         title.focus();
         return;
       }
@@ -881,7 +913,7 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
     rowFields.append(field('Priority', priority), field('Repositories', repoGroup));
 
     form.append(el('h3', 'tickets-form-heading', 'New ticket'));
-    form.append(field('Title', title), rowFields, field('Description', description), actions);
+    form.append(field('Title', title), rowFields, descriptionField, actions);
     form.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && event.target === title) {
         event.preventDefault();
@@ -892,7 +924,13 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
       }
     });
     host.append(form);
-    title.focus();
+    // The chord's opening dictates into Description right away
+    // (req-75 W5b); the panel's + button keeps today's focus.
+    if (opts?.dictate === true) {
+      startDictation();
+    } else {
+      title.focus();
+    }
   });
 }
 
@@ -1782,9 +1820,78 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   // it (a right column from 900 px pane width, below when narrower).
   const readyWrap = el('div', 'tickets-ready');
   readyWrap.hidden = true;
+  const readyBar = el('div', 'tickets-ready-barhost');
+  const readyBody = el('div', 'tickets-ready-body-host');
   const readyMain = el('div', 'tickets-ready-main');
   const readyStoryHost = el('aside', 'tickets-ready-story');
-  readyWrap.append(readyMain, readyStoryHost);
+  readyBody.append(readyMain, readyStoryHost);
+  // The splitter between the card and the agent log: drag to give either
+  // more of the pane; the height is remembered (one value, per machine).
+  const READY_HEIGHT_KEY = 'drey.tickets.readyHeight';
+  const readySplit = el('div', 'tickets-ready-split');
+  readySplit.setAttribute('role', 'separator');
+  readySplit.setAttribute('aria-orientation', 'horizontal');
+  readySplit.setAttribute('aria-label', 'Resize the card');
+  readySplit.tabIndex = 0;
+  readySplit.hidden = true;
+  const setReadyHeight = (px: number | null, persist: boolean): void => {
+    if (px === null) {
+      readyBody.style.height = '';
+    } else {
+      const clamped = Math.max(96, Math.round(px));
+      readyBody.style.height = `${clamped}px`;
+      if (persist) {
+        try {
+          localStorage.setItem(READY_HEIGHT_KEY, String(clamped));
+        } catch {
+          // storage unavailable: the height just is not remembered
+        }
+      }
+    }
+  };
+  try {
+    const stored = Number(localStorage.getItem(READY_HEIGHT_KEY));
+    if (Number.isFinite(stored) && stored > 0) {
+      setReadyHeight(stored, false);
+    }
+  } catch {
+    // no storage: the stylesheet's default height applies
+  }
+  readySplit.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    readySplit.setPointerCapture(event.pointerId);
+    const startY = event.clientY;
+    const startH = readyBody.getBoundingClientRect().height;
+    const onMove = (move: PointerEvent): void => setReadyHeight(startH + (move.clientY - startY), false);
+    const onUp = (): void => {
+      readySplit.removeEventListener('pointermove', onMove);
+      readySplit.removeEventListener('pointerup', onUp);
+      readySplit.removeEventListener('pointercancel', onUp);
+      setReadyHeight(readyBody.getBoundingClientRect().height, true);
+    };
+    readySplit.addEventListener('pointermove', onMove);
+    readySplit.addEventListener('pointerup', onUp);
+    readySplit.addEventListener('pointercancel', onUp);
+  });
+  readySplit.addEventListener('keydown', (event) => {
+    const step = event.key === 'ArrowUp' ? -32 : event.key === 'ArrowDown' ? 32 : 0;
+    if (step !== 0) {
+      event.preventDefault();
+      setReadyHeight(readyBody.getBoundingClientRect().height + step, true);
+    }
+  });
+  readySplit.addEventListener('dblclick', () => {
+    setReadyHeight(null, false);
+    try {
+      localStorage.removeItem(READY_HEIGHT_KEY);
+    } catch {
+      // nothing remembered to forget
+    }
+  });
+  readyWrap.append(readyBar, readyBody, readySplit);
   let readyPulledFor: string | null = null;
   let readyReply: ChangesReply | null = null;
   let readyKey = '';
@@ -1848,52 +1955,73 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     if (card === null || snap === null || snap.pipeline.length === 0) {
       readyWrap.hidden = true;
       readyChip.hidden = true;
+      readySplit.hidden = true;
       readyKey = '';
       return;
     }
     const need = workGroups(snap, fleetRuns).needs.find((row) => row.card.id === ticketId)?.need ?? null;
     const kind = need !== null && need.kind === 'checkpoint' ? needKindLabel(need, snap) : null;
     const reply = readyReply;
-    if (kind !== 'Ready to try' && kind !== 'Review' && (reply?.changes ?? null) === null) {
+    // The card follows the ticket's place in the pipeline, not the mere
+    // existence of a `## Changes` section (a Done ticket kept showing it).
+    const step = stepCardOf({
+      pipeline: snap.pipeline.map((p) => ({ id: p.id, title: p.title })),
+      phaseId: card.phase,
+      atCheckpoint: kind !== null,
+      planGate: kind === 'Plan to approve',
+      hasReport: (reply?.changes ?? null) !== null || (reply?.result ?? null) !== null,
+      launchable: reply?.launchable ?? false,
+    });
+    if (step.kind === 'none') {
       readyWrap.hidden = true;
       readyChip.hidden = true;
+      readySplit.hidden = true;
       readyKey = '';
       return;
     }
-    const chipText = `${kind ?? 'Result card'} ${readyOpen ? '⌄' : '›'}`;
+    const chipText = `${step.kind === 'final' ? 'Report' : (kind ?? 'Review')} ${readyOpen ? '⌄' : '›'}`;
     if (readyChip.textContent !== chipText) {
       readyChip.textContent = chipText;
     }
     readyChip.hidden = false;
-    const terminal = snap.pipeline[snap.pipeline.length - 1]!.id === card.phase;
-    const key = JSON.stringify([card.id, card.meta.title, card.meta.track, card.meta.repo, terminal, reply]);
+    const key = JSON.stringify([card.id, card.meta.title, card.meta.track, card.meta.repo, step, reply, readyOpen]);
     if (readyKey !== key) {
       readyKey = key;
-      readyMain.replaceChildren(
-        readyCardNode(
-          {
-            onLaunch: () =>
-              void runMutation(`Launching ${ticketId}`, () => invokeBoard('launchVersion', { id: ticketId })),
-            onAccept: () =>
-              void runMutation(`Accepting ${ticketId}`, () => invokeBoard('acceptTicket', { id: ticketId })),
-            onSendBack: () => sendBackModal(),
-            icon: (name, size) => api.ui.icon(name, size),
+      const deps = {
+        onLaunch: () => void runMutation(`Launching ${ticketId}`, () => invokeBoard('launchVersion', { id: ticketId })),
+        onAccept: () =>
+          void runMutation(`${step.kind === 'final' ? 'Archiving' : 'Moving'} ${ticketId}`, () =>
+            invokeBoard('acceptTicket', { id: ticketId }),
+          ),
+        onSendBack: () => sendBackModal(),
+        icon: (name: string, size?: number) => api.ui.icon(name, size),
+      };
+      const data = {
+        id: card.id,
+        title: card.meta.title,
+        track: card.meta.track,
+        repo: card.meta.repo,
+        card: step,
+        changes: reply?.changes ?? null,
+        result: reply?.result ?? null,
+      };
+      readyBar.replaceChildren(
+        readyBarNode(deps, data, {
+          open: readyOpen,
+          onToggle: () => {
+            readyOpen = !readyOpen;
+            paintReady();
           },
-          {
-            id: card.id,
-            title: card.meta.title,
-            track: card.meta.track,
-            repo: card.meta.repo,
-            terminal,
-            changes: reply?.changes ?? null,
-          },
-        ),
+        }),
       );
+      readyMain.replaceChildren(readyCardNode(deps, data));
       readyStoryHost.replaceChildren(
         storyNode({ story: reply?.story ?? [], totals: reply?.totals ?? { minutes: null, tokens: null } }),
       );
     }
-    readyWrap.hidden = !readyOpen;
+    readyWrap.hidden = false;
+    readyBody.hidden = !readyOpen;
+    readySplit.hidden = !readyOpen;
   };
   // The quiet start's pending hint (req-75): under the status line while
   // a live run stands quiet — nothing happens until the first message.
@@ -3050,6 +3178,26 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     void invokeBoard('fleetStatus').then((result) =>
       applyFleetSnapshot((result ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
     void readWorkerPools(api).catch(() => undefined);
+
+    // New ticket from anywhere (req-75 W5a, SDK 1.37): the system-wide
+    // chord raises Drey, reveals the board and opens the create modal.
+    // Global — the base registers it with the OS; it never also fires
+    // in-window. Without a tickets vault only the reveal happens (the
+    // panel shows its setup state).
+    api.commands.register({
+      id: 'tickets.newTicket',
+      label: 'New ticket',
+      keybinding: 'Mod+Alt+T',
+      global: true,
+      run: () => {
+        api.ui.revealWidget('tickets');
+        if (snapshot?.vaultId != null) {
+          // req-75 W5b: the chord means dictation — the modal opens on
+          // Description and Win+H starts by itself.
+          openCreateModal(api, snapshot, { dictate: true });
+        }
+      },
+    });
     void refreshBoard();
   },
 };

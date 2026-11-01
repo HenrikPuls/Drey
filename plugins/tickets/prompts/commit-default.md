@@ -36,6 +36,11 @@ remote, so the ticket can move to done.
 - If the work is already on the remote's integration branch (an
   earlier push, the owner's merged PR), verify that from a fresh
   fetch and complete — the push already happened.
+- When the merge is done, write a `## Result` section into the ticket
+  (replace one that exists): three to six plain lines for the owner,
+  who has not seen your work. Say what landed (the merge commit and
+  branch), what the owner can now see or do differently, and anything
+  left over or skipped. No filler, no restating the Changes section.
 - Before you end: append a Log line with the evidence (branch tip,
   merge commit, remote state). When the step cannot be completed —
   an unresolved conflict, a protected repo's merge, a push that

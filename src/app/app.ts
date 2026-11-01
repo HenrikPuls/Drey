@@ -229,6 +229,22 @@ export class App {
     effect(() => {
       keys.setOverrides(this.settings.config()?.keybindings.overrides ?? {});
     });
+    // The system-wide chords of global commands (SDK 1.37, req-75 W5a).
+    // The command registry lives in the renderer, so it pushes the chord
+    // list to main and stores the registration answer for the shortcuts
+    // page. Re-runs on every registry or override change — plugins
+    // register late; a rejected sync just leaves the last answer in place.
+    effect(() => {
+      const chords = keys.globalChords();
+      void window.dreyApi
+        ?.syncGlobalShortcuts?.(chords)
+        .then((statuses) => keys.setGlobalStatuses(statuses))
+        .catch(() => undefined);
+    });
+    // A press arrives from main: the OS-level chord fired outside (or
+    // over) the window — the command has no in-window binding, so it
+    // runs exactly once.
+    window.dreyApi?.onGlobalShortcut?.((id) => keys.run(id));
     keys.register({
       id: 'note.new',
       label: 'New note',

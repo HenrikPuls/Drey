@@ -33,6 +33,13 @@ describe('shortcutRows', () => {
     expect(row(config, 'note.save')).toMatchObject({ chord: undefined, changed: true });
     expect(row(config, CAPTURE_ROW_ID)).toMatchObject({ chord: undefined, changed: true });
   });
+
+  it("labels a global command's row with the (system-wide) suffix", () => {
+    const globals: CommandDefault[] = [...commands, { id: 'tickets.newTicket', label: 'New ticket', defaultChord: 'Mod+Alt+T', global: true }];
+    const rows = shortcutRows(globals, fresh());
+    expect(rows.find((r) => r.id === 'tickets.newTicket')?.label).toBe('New ticket (system-wide)');
+    expect(rows.find((r) => r.id === 'note.save')?.label).toBe('Save');
+  });
 });
 
 describe('holderOf / conflictingIds', () => {

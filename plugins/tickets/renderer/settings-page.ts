@@ -125,37 +125,13 @@ function fleetSection(api: DreyPluginApi): HTMLElement {
       ], 'opencode'),
       'For a run no ticket, column or repository assigns a worker to.',
     ),
-    ...kv('tset-git', 'Git executable', textConfig(api, 'gitPath'), 'Empty uses git from PATH.'),
-    ...kv(
-      'tset-cap-gate-lines',
-      'Gate failure cap — lines',
-      numberConfig(api, 'fleet.cap.gateFailureLines'),
-      'How many lines of a failed gate\'s output a retry\'s instruction keeps (the tail).',
-    ),
-    ...kv(
-      'tset-cap-gate-bytes',
-      'Gate failure cap — bytes',
-      numberConfig(api, 'fleet.cap.gateFailureBytes'),
-      'The same cap as a byte bound.',
-    ),
-    ...kv(
-      'tset-cap-diff-lines',
-      'Diff stat cap — lines',
-      numberConfig(api, 'fleet.cap.diffStatLines'),
-      'How many lines of the worktree\'s diff stat an instruction carries (the head).',
-    ),
-    ...kv(
-      'tset-cap-diff-bytes',
-      'Diff stat cap — bytes',
-      numberConfig(api, 'fleet.cap.diffStatBytes'),
-      'The same cap as a byte bound.',
-    ),
-    ...kv(
-      'tset-handover-compact',
-      'Resume compact threshold — tokens',
-      numberConfig(api, 'fleet.compactAboveTokens'),
-      'A resumed session whose last context is at or above this many tokens is natively compacted first (T-0049). A runner below may override it.',
-    ),
+  );
+  // Rarely worth touching: folded away, every empty field showing its default.
+  const advanced = el('details', 'tset-advanced');
+  advanced.append(el('summary', undefined, 'Advanced'));
+  const advancedRows = el('div', 'tset-kv');
+  advancedRows.append(
+    ...kv('tset-git', 'Git executable', textConfig(api, 'gitPath'), 'Only needed when git is not on PATH.'),
     ...kv(
       'tset-handover-ttl',
       'Resume pause TTL — minutes',
@@ -166,9 +142,10 @@ function fleetSection(api: DreyPluginApi): HTMLElement {
       'tset-context-cap',
       'Context cap — tokens',
       numberConfig(api, 'fleet.contextCapTokens'),
-      'OpenCode compacts a running worker\'s context once it reaches this size instead of the model\'s full window. Every model call re-reads the whole context, so a long run costs far less under a cap. 0 = the model\'s own window.',
+      'OpenCode compacts a running worker\'s context once it reaches this size instead of the model\'s full window. 0 = the model\'s own window.',
     ),
   );
-  section.append(head, rows);
+  advanced.append(advancedRows);
+  section.append(head, rows, advanced);
   return section;
 }

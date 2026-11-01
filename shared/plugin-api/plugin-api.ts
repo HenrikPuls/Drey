@@ -385,6 +385,13 @@ export interface PluginCommand {
    */
   readonly keybinding?: string;
   /**
+   * A system-wide command (SDK 1.37): its chord is registered with the
+   * OS (`globalShortcut`) instead of the in-window keymap, so it fires
+   * while any app is focused — Drey comes to the front and the command
+   * runs. Rebindable in Settings → Keyboard shortcuts like any command.
+   */
+  readonly global?: boolean;
+  /**
    * `payload` carries optional context from the invoker (SDK 1.9 — e.g.
    * base tag pills run the Search panel's `search.open` with `{ tag }`);
    * keyboard invocations pass none.

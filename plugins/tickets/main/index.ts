@@ -11,6 +11,7 @@
  * validation and YAML stay here.
  */
 import { BrowserWindow, dialog, shell, type OpenDialogOptions } from 'electron';
+import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { promises as fsp, existsSync } from 'node:fs';
 import { hostname } from 'node:os';
@@ -41,7 +42,10 @@ import {
 import {
   assembleBoard,
   parseRepos,
+  addPipelinePhase,
   patchPipelinePhase,
+  removePipelinePhase,
+  renamePipelinePhase,
   parsePipeline,
   reorderPipelinePhases,
   reposFileText,
@@ -62,8 +66,9 @@ import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhase
 import { blockedRefusal } from './blocked';
 import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, recentDoneOf, type DriftDetection } from './normalize';
-import { parseChanges, planApprovedOf, storyOf, type ChangesReply } from '../shared/changes';
+import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply } from '../shared/changes';
 import { openTerminalAt, runInNewConsole } from './open-terminal';
+import { startWindowsDictation } from './dictation';
 import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
 import type { AttachmentReply, RefineReply, TicketReply } from '../shared/remote-protocol';
 import type { AttachmentCommand, RefineCommand } from './commands';
@@ -1053,7 +1058,7 @@ class BoardService {
   async changesOf(id: string): Promise<ChangesReply> {
     const found = await this.findCard(id);
     if (found === null) {
-      return { changes: null, story: [], totals: { minutes: null, tokens: null }, planApproved: null };
+      return { changes: null, story: [], totals: { minutes: null, tokens: null }, planApproved: null, result: null, launchable: false };
     }
     const story = storyOf(found.text);
     return {
@@ -1061,7 +1066,35 @@ class BoardService {
       story: story.items,
       totals: story.totals,
       planApproved: planApprovedOf(found.text),
+      result: parseResult(found.text),
+      launchable: await this.launchableFor(id),
     };
+  }
+
+  /** Whether "Launch this version" can work: a worktree on disk and a command to run in it. */
+  private async launchableFor(id: string): Promise<boolean> {
+    try {
+      const vault = await this.detect();
+      if (vault === null) {
+        return false;
+      }
+      const snap = await this.snapshot();
+      const card = findOnBoard(snap, id);
+      const repo = card?.meta.repo == null ? null : snap.repos.find((r) => r.name === card.meta.repo) ?? null;
+      if (card === null || repo === null) {
+        return false;
+      }
+      const worktreePath = worktreePathFor(vault.path, repo, card.id);
+      if (!(await fsp.stat(worktreePath).then((s) => s.isDirectory()).catch(() => false))) {
+        return false;
+      }
+      return (
+        repo.launch !== null ||
+        (await fsp.stat(`${worktreePath}${path.sep}dev.ps1`).then((s) => s.isFile()).catch(() => false))
+      );
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -2126,6 +2159,66 @@ class BoardService {
     });
   }
 
+  /**
+   * The settings page's column editor: add, rename or remove a phase in
+   * `_meta/pipeline.md`, one commit each. A rename changes the title only
+   * (the id, the folder and every ticket stay); an add writes a manual
+   * phase whose folder appears on first use; a remove is refused while
+   * tickets sit in the phase, so none is orphaned.
+   */
+  editPhase(
+    input:
+      | { op: 'add'; title: string; afterId?: string | null }
+      | { op: 'rename'; phase: string; title: string }
+      | { op: 'remove'; phase: string },
+  ): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const text = await this.readOptional(vault.id, PIPELINE_PATH);
+      if (text === null) {
+        return { ok: false, error: 'tickets/_meta/pipeline.md is missing' };
+      }
+      const snap = await this.snapshot();
+      let patched: string;
+      let message: string;
+      try {
+        if (input.op === 'add') {
+          const added = addPipelinePhase(text, { title: input.title, afterId: input.afterId ?? null });
+          patched = added.text;
+          message = `tickets: add phase ${added.id}`;
+        } else if (input.op === 'rename') {
+          patched = renamePipelinePhase(text, input.phase, input.title);
+          message = `tickets: rename phase ${input.phase}`;
+        } else {
+          const column = snap.columns.find((c) => c.phase.id === input.phase);
+          const count = column?.tickets.length ?? 0;
+          if (count > 0) {
+            return {
+              ok: false,
+              error: `${count} ticket${count === 1 ? '' : 's'} still in "${column?.phase.title ?? input.phase}" — move ${count === 1 ? 'it' : 'them'} to another column first`,
+            };
+          }
+          patched = removePipelinePhase(text, input.phase);
+          message = `tickets: remove phase ${input.phase}`;
+        }
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      try {
+        await this.ctx.vault.write(PIPELINE_PATH, patched, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, [PIPELINE_PATH], message);
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [PIPELINE_PATH] });
+      this.announceChanged();
+      return warning === null ? { ok: true } : { ok: true, warning };
+    });
+  }
+
   /** The shared body of reorder and "Number folders"; runs inside the queue. */
   private async renumber(
     vault: VaultLike,
@@ -2416,6 +2509,10 @@ const plugin: MainPluginModule = {
       return cmd.ok ? board.createTicket(cmd.value) : cmd;
     });
 
+    // One Win+H press for the create modal's mic button (req-75 W5b,
+    // T-0071) — the OS's dictation, never speech recognition of our own.
+    ctx.ipc.handle('dictate', () => startWindowsDictation(process.platform, execFile));
+
     ctx.ipc.handle('transition', async (payload) => {
       const cmd = parseTransition(payload);
       return cmd.ok ? board.transition(cmd.value) : cmd;
@@ -2576,6 +2673,20 @@ const plugin: MainPluginModule = {
       return board.reorderPhases(p.order);
     });
 
+    ctx.ipc.handle('editPhase', async (payload) => {
+      const p = payload as { op?: unknown; title?: unknown; phase?: unknown; afterId?: unknown };
+      if (p.op === 'add' && typeof p.title === 'string') {
+        return board.editPhase({ op: 'add', title: p.title, afterId: typeof p.afterId === 'string' ? p.afterId : null });
+      }
+      if (p.op === 'rename' && typeof p.phase === 'string' && typeof p.title === 'string') {
+        return board.editPhase({ op: 'rename', phase: p.phase, title: p.title });
+      }
+      if (p.op === 'remove' && typeof p.phase === 'string') {
+        return board.editPhase({ op: 'remove', phase: p.phase });
+      }
+      return { ok: false, error: 'bad phase edit payload' };
+    });
+
     // The model picker's list: what the worker CLI offers (req-46).
     ctx.ipc.handle('models', async (payload) => {
       const p = payload as { worker?: unknown };
@@ -2609,7 +2720,7 @@ const plugin: MainPluginModule = {
       const cmd = parseTicketId(payload, 'changes');
       return cmd.ok
         ? board.changesOf(cmd.value.id)
-        : { changes: null, story: [], totals: { minutes: null, tokens: null } };
+        : { changes: null, story: [], totals: { minutes: null, tokens: null }, planApproved: null, result: null, launchable: false };
     });
 
     // T-0042: a move out of tickets/archive/ performed as the board
