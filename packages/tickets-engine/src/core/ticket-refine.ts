@@ -8,8 +8,8 @@
  * Log is append-only and never a refine target.
  */
 import { createHash } from 'node:crypto';
-import { splitFrontmatter } from '../../../shared/frontmatter';
-import { patchHeaderFields, withLogLine, type HeaderPatch } from '../../../packages/tickets-engine/src/core/ticket-files';
+import { splitFrontmatter } from '../../../../shared/frontmatter';
+import { patchHeaderFields, withLogLine, type HeaderPatch } from './ticket-files';
 
 export const REFINE_SECTIONS = {
   description: { title: 'Description', level: 2 },

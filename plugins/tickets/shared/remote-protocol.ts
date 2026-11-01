@@ -49,24 +49,10 @@ export type RunReply = { readonly ok: boolean; readonly error?: string; readonly
 export type ChainReply = { readonly ok: true; readonly status: ChainStatus } | { readonly ok: false; readonly error: string };
 export type RemoteChange = 'board' | 'fleet';
 /** A refine's outcome: the new revision, or why not (`conflict` when the file changed meanwhile). */
-export interface RefineReply {
-  readonly ok: boolean;
-  readonly error?: string;
-  readonly warning?: string;
-  readonly conflict?: boolean;
-  readonly revision?: string;
-}
-/** One ticket as the remote's ticket view reads it: the card and the file text. */
-export type TicketReply =
-  | { readonly ok: true; readonly card: TicketCard; readonly text: string; readonly revision: string }
-  | { readonly ok: false; readonly error: string };
-/** An image upload's outcome: the vault-relative file it saved, or why not. */
-export interface AttachmentReply {
-  readonly ok: boolean;
-  readonly file?: string;
-  readonly error?: string;
-  readonly warning?: string;
-}
+// The reply shapes live in the engine contracts (ADR-0088, E2a) — this
+// re-export keeps every existing import path working.
+export type { RefineReply, TicketReply, AttachmentReply } from '../../../packages/tickets-engine/src/contracts/replies';
+import type { RefineReply, TicketReply, AttachmentReply } from '../../../packages/tickets-engine/src/contracts/replies';
 
 /**
  * The host's remote surface. Every writing call carries the actor the

@@ -10,7 +10,7 @@
 import { promises as fsp } from 'node:fs';
 import type { Dirent } from 'node:fs';
 import * as path from 'node:path';
-import type { RepoCandidate } from '../shared/tickets';
+import type { RepoCandidate } from '../contracts/tickets';
 
 /** The git seam — TicketsGit.run (one queue per working directory). */
 export type RepoScanExec = (cwd: string, args: readonly string[]) => Promise<string>;

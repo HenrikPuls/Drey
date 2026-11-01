@@ -519,14 +519,16 @@ Packages (`packages/<name>/`, npm workspaces — the tickets-engine
 extraction, ADR-0088):
 
 - `tickets-engine/` — the tickets domain as a pure package
-  (`src/core` ticket parse/patch, board assembly, git plumbing, command
-  parsers · `src/fleet` the runner, orchestrator, providers, worktrees,
-  telemetry · `src/contracts` the cross-layer types and pure helpers).
-  No Drey/Electron/plugin imports (ESLint-enforced); the plugin main tsc
+  (`src/core` ticket parse/patch, board assembly, the one transition
+  machine, drift, status log, ledger, git plumbing · `src/fleet` the
+  runner, orchestrator, providers, worktrees, telemetry · `src/contracts`
+  the cross-layer types and pure helpers · `src/services` since E2a the
+  host-agnostic board service behind `EngineHost`/`FleetPort`). No
+  Drey/Electron/plugin imports (ESLint-enforced); the plugin main tsc
   program compiles it into `dist-electron/packages/tickets-engine/`, and
   `plugins/tickets/shared/` holds thin re-export shims for the renderer
-  and phone client. The engine's own HTTP/SSE server and standalone
-  process arrive with migration etappe E2.
+  and phone client. The standalone engine process + HTTP/SSE server
+  arrive with E2b.
 
 This map is a starting point, not a fixed contract — but any deviation
 should be called out explicitly (see Working Style below), not

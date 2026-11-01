@@ -82,3 +82,21 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   `store/` extract from the now-visible domain core; E2 turns
   `packages/tickets-engine` into the standalone server process.
 - Licence stays GPL-3.0-only; no repo split (concept §9 trigger list).
+
+## Later changes
+
+- **E1 (milestone 98):** `core/transition.ts` is the one transition
+  machine (read → patch → rename → write → commit → push → announce, IO
+  injected via `TransitionIo`); the five historical move variants run
+  through it. `core/status-log.ts` (per-ticket append-only verb log, the
+  `[key=slug]` convention, the open-decisions fold) and `core/ledger.ts`
+  (`_meta/ledger.jsonl` fleet events) land as pure data forms.
+- **E2a (milestone 99):** the whole board service moves into the engine as
+  `services/board-service.ts`, host-agnostic over `services/host.ts`
+  (`EngineHost` + `FleetPort`, the owner identity injected). The plugin
+  keeps a thin subclass over `DreyEngineHost`/`FleetClientPort`; the
+  planned four-way service split deliberately becomes one service class
+  first — the board/run/settings cycles share one context today, and
+  forcing four services now would fight that graph. The split happens
+  inside the engine when E2b's server routes need it.
+

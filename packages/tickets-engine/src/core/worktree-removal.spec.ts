@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RepoRef, TicketCard, TicketMeta } from '../shared/tickets';
+import type { RepoRef, TicketCard, TicketMeta } from '../contracts/tickets';
 import { planWorktreeRemoval } from './worktree-removal';
 
 const meta = (over: Partial<TicketMeta> = {}): TicketMeta => ({

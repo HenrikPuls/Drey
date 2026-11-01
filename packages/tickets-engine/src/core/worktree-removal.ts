@@ -9,7 +9,7 @@
  * ships dormant (the folder does not exist yet); only the matcher
  * constant moves if that ticket picks another layout.
  */
-import type { RepoRef, TicketCard } from '../shared/tickets';
+import type { RepoRef, TicketCard } from '../contracts/tickets';
 
 /** Where fleet worktrees live, relative to the tickets vault's root. */
 export const WORKTREES_DIR = '_worktrees';

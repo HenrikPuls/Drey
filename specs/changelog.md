@@ -1,4 +1,29 @@
 
+### Milestone 99 — host-agnostic service layer (Mission-Control migration E2a)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md),
+etappe E2a). The board service — the whole mutation surface (capture,
+transitions via the one machine, archive/claims, runs, worktrees,
+settings, phases, projects, initialize) — moves into the engine as
+`packages/tickets-engine/src/services/board-service.ts` (`EngineBoardService`),
+host-agnostic: every IO arrives injected through `services/host.ts`
+(`EngineHost`: vault read/write/list/resolve/announce/markManaged,
+config get/set, the debounced board-changed, log, the native folder
+picker/shell reveal/console launcher; `FleetPort`: runs/start/configureChain).
+The acting owner (`owner@host`) is injected, not derived. The plugin keeps
+a thin `BoardService` subclass (same constructor activate() has always
+built) over `DreyEngineHost` (the plugin context) and `FleetClientPort` —
+the IPC handlers, the remote gateway, the MCP tools and the renderer are
+untouched. Pure helpers move with their consumers: `ticket-refine`,
+`worktree-changes`, `worktree-removal` to `core/`, `repos-scan` and the
+handover-config readers to `services/`; `changes` and the remote reply
+shapes move to `contracts/` (the plugin keeps re-export shims, so every
+existing import path works). Behaviour is unchanged — all 2743
+plugin/engine specs and the 1196 renderer specs pass unmodified. This is
+the seam the standalone engine process (E2b) implements over plain fs:
+phone without Drey.
+
 ### Milestone 98 — one transition machine + status log + fleet ledger (E1)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01

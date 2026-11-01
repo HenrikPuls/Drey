@@ -37,7 +37,7 @@ import type { ChangesReply } from '../shared/changes';
 import { checkpointControls, headerControls, liveStateWord, threadSteps, durationWords, type ThreadStep } from './thread-steps';
 import { stuckOf } from './stuck';
 import { mountWorkers, type WorkerPoolEntry, type WorkersViewDeps } from './workers-view';
-import type { WorktreeFile } from '../main/worktree-changes';
+import type { WorktreeFile } from '../../../packages/tickets-engine/src/core/worktree-changes';
 import { createWorkFilterStore, filterPopover, isFilterActive, NO_WORK_FILTER, type WorkFilterState } from './work-filter';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
