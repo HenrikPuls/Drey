@@ -820,32 +820,31 @@ header keeps the project menu, **+**, refresh, run/halt, abort and
 **⋯**, wrapping onto a second row at narrow widths instead of out of
 view; the header's **+** captures a new idea.
 
-**Ready to try** (req-75 W3). When a ticket's work is built — a
-*Ready to try* or *Review* row in Needs you, or any ticket whose file
-carries a `## Changes` section — the thread shows the **Ready card**
-above the transcript: what changed for you, where (which files, and
-why), which checks passed, and how to try it, all as the build worker
-wrote it into the ticket's `## Changes` section. The card folds: the
-header's **Ready chip** (its label says which checkpoint waits) hides
-the card and brings it back any time (req-81); while it is folded the
-decision bar above the composer carries the actions again. The same
-three actions sit in the thread header's status row whenever the
-ticket waits on you — Launch, Accept, Send back, beside the run
-controls — whatever the card does. Under it, three buttons:
+**The step card** (req-75 W3, reworked in req-86). At the end of a
+step, the thread shows a card above the transcript that follows where the
+ticket stands:
 
-- **Launch this version** opens the ticket's worktree in a new console
-  and starts the repository's program there (the launch command from
-  Settings → Tickets → Repositories; without one, `dev.ps1 -Built
-  -Multi` when the worktree has it) — a second instance beside the
-  one you are using, yours untouched.
-- **Accept and merge** follows the pipeline: in Done — where the
-  button reads **Accept and archive**, the merge has already happened —
-  the ticket goes to the archive and its worktree is removed (a dirty
-  worktree stays and says so); in an earlier phase the ticket moves
-  on — with a *Commit* column next, that step merges the branch.
-- **Send back…** asks for one note ("What should change?") and moves
-  the ticket back to the nearest agent phase (Build in the default
-  pipeline) with the note in its log.
+- **At a checkpoint of yours** — a *Ready to try* or *Review* row in
+  Needs you — it reports what the step did: what changed for you, where
+  (which files, and why), which checks passed and how to try it, as the
+  worker wrote it into the ticket's `## Changes` section. Its buttons:
+  **Launch this version** (only when the ticket has a worktree and a
+  launch command — it opens the worktree in a new console and starts the
+  program there, a second instance beside yours), **Move to <next
+  column>**, and **Send back…** (one note, then the ticket goes back to
+  the nearest agent column with the note in its log).
+- **In Done** it is the final report: **What was delivered** first (the
+  commit step's `## Result`: the merge commit, what landed, anything
+  left over), then the changes. The only button is **Archive**, which
+  files the ticket away and removes its worktree when clean (a dirty
+  one stays and says so).
+- While an agent works the ticket, there is no card.
+
+The strip at the top of the card stays when you fold it with the chevron
+(or the header chip); folded, the strip carries the buttons, so the
+agent log gets the whole height. Drag the bar under the card to give
+either side more room — arrow keys work too, a double-click resets, and
+the height is remembered.
 
 Beside the card sits **How it got here** — the ticket's story from
 capture to now, read from its log, with the total time and tokens. On
@@ -1223,6 +1222,20 @@ last. A move rewrites `pipeline.md` and renames the phase folders to
 their new numbers in one commit; the line under the table says what
 moved, with **Undo**. A column whose tickets are being worked on right
 now cannot be renumbered — stop or finish the run first.
+
+**Adding, renaming and removing columns.** Below the table, *New
+column* adds a checkpoint after the column you pick (by default just
+before Done); give it a worker to make it run itself. The pencil next to
+a column's name renames it in place — only the name changes, its folder
+and tickets stay. The bin removes a column after a second click, and
+only while it holds no tickets (move them first). Inbox and Done cannot
+be removed.
+
+**Defaults and Advanced.** In Settings → Tickets a field you left empty
+shows the value in use as grey text; clearing a field resets it. The
+rarely needed settings (git executable, resume pause, context cap, and
+a repository's policy, worktrees base, launch command, agent
+instructions and link folders) sit under **Advanced**.
 
 **Number folders.** Phase folders carry their column number
 (`10-inbox`, `20-prioritized`, …). A repository from before that — or one

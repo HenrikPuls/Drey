@@ -305,6 +305,12 @@ the runner rely on:
   (renamed); a path without a why is fine. The page also reads the
   ticket's story ("How it got here") from the Log section alone — no
   frontmatter is added for any of this.
+- `## Result` — the closing report (req-86). The **commit step** writes
+  it after the merge: three to six plain lines for the owner — what
+  landed (merge commit, branch), what they can now see or do
+  differently, anything left over. Free text under the heading
+  (`parseResult`); the final card shows it first, as "What was
+  delivered". Absent, the final card shows `## Changes` alone.
 - `## Handover` — what a step leaves for the next one and for its own
   resume (milestone 94). The worker **replaces** the section (never a
   second one, before `## Log`) at the end of every step: `State` (`done`
@@ -418,6 +424,12 @@ commit per change; hand edits win on refresh):
   worker reviews it before the move. Default off.
 - `semantic: true` — every green step in the column gets a second
   worker's review before it moves. Default off.
+- Columns are added, renamed and removed in Settings → Tickets →
+  Pipeline (req-86): an add writes `{ id, title, handover: manual }`
+  (the id derives from the title, a clash takes `-2`), a rename changes
+  `title` only — the id, the folder and every ticket stay — and a remove
+  is refused while tickets sit in the column; the first and last
+  phase are never removed.
 - `color:` — optional `#rrggbb`. The Work panel's phase chip uses it;
   without it a curated default palette colours by position.
 

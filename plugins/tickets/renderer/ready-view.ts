@@ -2,7 +2,7 @@
  * The Ready card of the ticket thread (req-75 W3, ADR-0087 decision 3,
  * the canvas `docs/design/work-panel/Ready.dc.html`, artboard "3c"):
  * in plain words what changed for the owner, where, which checks
- * passed and how to try it — Launch this version, Accept and merge,
+ * passed and how to try it — Launch this version, the move on,
  * Send back… — plus "How it got here", the ticket's story from its
  * Log. Plain DOM over `shared/changes.ts`; the section is the worker's
  * writing, missing sections are simply left out.

@@ -1,4 +1,59 @@
 
+### req-86 — the step card follows the pipeline; add, rename and remove columns; Settings tidied
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list). Three things the owner met on T-0062:
+
+**The card follows the ticket's place, not a section.** The Ready card
+showed whenever the ticket file carried a `## Changes` section, so it sat
+on a Done ticket after the merge, with the worktree gone. `stepCardOf`
+(`shared/step-card.ts`) now decides: a **gate** (a manual column behind
+an automatic one) shows the card with what the step did and the gate's
+moves — **Launch this version** only when a worktree and a launch
+command exist (`ChangesReply.launchable`), **Move to <next column>**
+(the column's name, no longer "Accept and merge"), **Send back…**; the
+**terminal column** shows a **final report** — led by **What was
+delivered**, the new `## Result` section the commit step writes (merge
+commit, what landed, anything left over; commit prompt version 3) — with
+**Archive** as its only button; a ticket an agent is working shows no
+card. The plan gate keeps its own approval UI.
+
+**Foldable and resizable.** A strip above the card (fold chevron, ticket,
+state) stays; folding hides the body and brings the buttons into the
+strip, so the agent log gets the whole height and the gate is still
+decidable. A splitter below the body sets its height (drag, ↑/↓ keys,
+double-click resets), remembered across sessions
+(`localStorage['drey.tickets.readyHeight']`). The story column no longer
+takes 320 px of height when the pane is narrow.
+
+**Columns can be added, renamed and removed** (Settings → Tickets →
+Pipeline). *New column* adds a manual checkpoint after a chosen column
+(default: before Done); the pencil renames in place — the title only, so
+id, folder and tickets stay; the bin removes a column after a second
+click and refuses while tickets sit in it. Inbox and Done stay pinned.
+One commit each (`editPhase`; `addPipelinePhase` /
+`renamePipelinePhase` / `removePipelinePhase` in `ticket-board.ts`, which
+keep a hand-formatted `pipeline.md` intact).
+
+**Settings tidied.** Every unset fleet field shows the value the runner
+will use as its placeholder, from one table (`shared/fleet-defaults.ts`;
+`protocol.ts`'s `DEFAULT_*` derive from it) — a deviation from "panel
+fields carry no placeholder" (ADR-0057), limited to Settings; clearing a
+field resets it. The four output caps and the shared compact threshold
+left the page (the keys still work by hand, defaults unchanged); resume
+pause TTL, context cap and git path moved under **Advanced**, as did the
+repository fields policy, worktrees base, launch command, agent
+instructions and link folders.
+
+Specs: `shared/step-card.spec.ts` (gate / final / none matrix),
+`renderer/ready-view.spec.ts` (gate, final, fold strip),
+`renderer/settings-columns.spec.ts` (the column editor — it caught a
+use-before-declaration), `main/ticket-board.spec.ts` (add / rename /
+remove), `shared/fleet-defaults.spec.ts`, `main/default-prompts.spec.ts`.
+⚠️ Not run in the author's sandbox: the full `npm run test:all`, lint,
+the Electron build and the UI itself (seven fleet specs on Windows paths
+fail there on `main` as well).
+
 ### req-75 W4d — The squirrel
 
 **Not yet manually verified by the owner.** Owner request, 2026-10-31
