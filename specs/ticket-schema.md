@@ -324,6 +324,38 @@ the runner rely on:
   step's brief and a resume carry it (capped at 2 KB) instead of the Log
   tail; `ticketSections` reads it. A Log line stays one short line under
   200 characters — detail belongs here.
+- `## Verification` — the verify run's proof (E4, ADR-0088 later
+  change). Written by the engine's verify step, **replaced** after every
+  run (never a second section, before `## Log`). The canonical shape:
+
+  ```markdown
+  ## Verification
+
+  Tested on 2026-11-01T14:32:00Z by verify@engine — Electron 34.2.0 on win32.
+
+  ### Criteria
+
+  - [x] `npm run build` → ![](../attachments/verify-20261101-143200-01.png)
+  - [ ] `npm test` — no screenshot: the app never became ready
+
+  ### Findings
+
+  - The settings page stayed blank until the reload.
+  ```
+
+  `### Criteria` carries one `- [x]` / `- [ ]` checkbox per acceptance
+  criterion — the backticked command exactly as written under the Plan —
+  and, when the run captured one, the screenshot proof as
+  `→ ![](../attachments/<name>)`; `### Findings` (Auffälligkeiten) lists
+  what the runner noticed beyond the criteria and is omitted when empty.
+  The screenshot files live in `tickets/attachments/` (the `verify-…`
+  names are the runner's; `img-…` stays the phone's). The proof card
+  reads the section tolerantly (`core/verification.ts`); an absent
+  section means "not verified yet". The engine's verify step is a
+  machine step, not an agent run: it launches the ticket worktree's
+  built app (repos.md `launch:`, else the `dev.ps1 -Built -Multi`
+  convention), walks the criteria headless, persists the section and
+  moves the ticket to the owner's checkpoint.
 - `## Log` — append-only. Machine-appended entries use the exact line
   shape `- '<UTC timestamp>' <who> — <text>`; humans may append in any
   readable shape. Every transition, claim, takeover, injection, stop

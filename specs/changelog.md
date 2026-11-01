@@ -1,4 +1,53 @@
 
+### Milestone 103 — verify/proof (Mission-Control migration E4)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md),
+etappe E4). The verification step exists: a ticket's proof is the app
+run, not a worker's say-so — the verify step is a machine step, not an
+agent run (a harness run → screenshots + the ticket's `## Verification`
+section → one commit → the ticket on the owner's checkpoint). The
+contract (`packages/tickets-engine/src/contracts/verify.ts`) names the
+shapes: `VerificationReport` (the persisted proof), `VerifyHarness` /
+`VerifyRunInput` / `VerifyRunResult` (the harness seam), `VerifyStatus`
+(the proof card's live state) and `VerifyJudge` — the judge seam, E4
+stubbed: a run without a judge counts a captured screenshot as its
+criterion's pass, and the section's Findings carry the caveats until the
+vision pass lands. `MAX_VERIFY_SHOTS` is 6 — the phone's proof card
+shows them inline, beyond six the owner stops looking. The ticket gains
+a `## Verification` section (`packages/tickets-engine/src/core/verification.ts`
++ spec; the canonical shape in `specs/ticket-schema.md`): the verify
+service replaces it after every run — the stamp line (`Tested on … by
+verify@<host> — <build and platform>`), `### Criteria` with one
+`- [x]` / `- [ ]` checkbox per acceptance criterion (the backticked
+command exactly as written under `### Acceptance criteria`, the
+screenshot proof as `→ ![](../attachments/<name>)`, a note where one
+exists) and `### Findings` (Auffälligkeiten, omitted when empty); the
+writer is strict, the proof card's reader forgiving — an absent or
+half-readable section means "not verified yet", never a guess. The
+harness (`packages/tickets-engine/src/server/verify-harness.ts`) is the
+Playwright Electron driver: it launches the ticket worktree's built app
+(repos.md `launch:`, else the `dev.ps1 -Built -Multi` convention), walks
+the criteria headless and captures the proof screenshots into the
+vault's `tickets/attachments/` under `verify-…` names — the phone's
+`img-…` stays untouched — with a failure recording beside them;
+`packages/tickets-engine/src/server/web-harness.ts` is the same contract
+over a web build, the skeleton the web app's proof (E5) grows from. The
+verify service resolves the ticket's worktree and launch command (the
+board service's `launchVersion` resolution), runs the harness, persists
+the report and the screenshots in one commit (the `TicketsGit` locate +
+`commitPaths` discipline, as the orchestrator's commit step), then moves
+the ticket to the owner's checkpoint phase; it auto-scans the pipeline's
+configured verify phase, so a ticket that lands there is proven without
+a hand on it. `verifyTicket` and `verifyStatus` ride the engine's invoke
+allowlist — the proof card's trigger and live state. The judge's shipped
+prompt lands with the step (`packages/tickets-engine/prompts/qa-default.md`):
+walk the ticket's acceptance criteria, compare each against its captured
+screenshot, verdict `passed` / `failed` with a one-line note, findings in
+the owner's language. Deliberate scope cut: the judge itself is not
+wired — E4 ships the harness, the section contract, the service and the
+seam; the vision pass that fills the seam is its own milestone.
+
 ### Milestone 102 — personas (Mission-Control migration E3)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01

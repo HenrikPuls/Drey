@@ -5,14 +5,17 @@ import * as http from 'node:http';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import { TicketsGit } from '../core/tickets-git';
+import type { VerifyHarness } from '../contracts/verify';
 import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools } from '../fleet/protocol';
 import { RUNNER_SCRIPT_PATH } from '../fleet/runner-path';
 import { EngineBoardService } from '../services/board-service';
 import { FleetClient } from '../services/fleet-client';
+import { VerifyService } from '../services/verify-service';
 import { ChangeHub, DreyTicketsPort } from './drey-port';
 import { FileConfigStore } from './file-config';
 import { RemoteService } from './service';
 import { FsEngineHost } from './standalone-host';
+import { createPlaywrightVerifyHarness } from './verify-harness';
 
 /**
  * The standalone tickets engine (ADR-0088, E2b): the whole board service,
@@ -33,6 +36,8 @@ export interface EngineOptions {
   readonly log?: (message: string, level?: 'info' | 'warn' | 'error') => void;
   /** The invoke listener's port; 0 picks a free one. */
   readonly invokePort?: number;
+  /** The verify step's harness; the Playwright driver by default (the specs' seam). */
+  readonly verifyHarness?: VerifyHarness;
 }
 
 export interface Engine {
@@ -54,7 +59,7 @@ const BOARD_METHODS = [
   'worktreesStatus', 'setClaim', 'startRun', 'setColumnConfig', 'listPrompts', 'savePrompt',
   'restoreShippedPrompts', 'listRepos', 'saveRepos', 'pickFolder', 'scanRepos', 'listProjects',
   'switchProject', 'openTicketsFolder', 'folderStatus', 'numberFolders', 'reorderPhases', 'editPhase',
-  'personaLearn', 'listPersonas',
+  'personaLearn', 'listPersonas', 'verifyTicket', 'verifyStatus',
   'initialize', 'onVaultEvent',
 ] as const;
 
@@ -96,6 +101,22 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   );
   board.onChanged(() => hub.emit('board'));
 
+  // E4: the machine verification step — the harness runs the ticket
+  // worktree's built app headless; the service persists the proofs and
+  // moves the ticket to the owner's checkpoint.
+  const verify = new VerifyService({
+    board,
+    host,
+    harness: opts.verifyHarness ?? createPlaywrightVerifyHarness(),
+    config,
+    git,
+    actor: `verify@${hostname().toLowerCase()}`,
+    log,
+  });
+  // The engine listens only after the board was checked for verify
+  // candidates (and the scan's startup IO has settled).
+  await verify.initialScan;
+
   const remoteService: RemoteService = new RemoteService({
     config,
     port: new DreyTicketsPort(board, fleet, hub, { allowBypass: () => remoteService.allowBypass() }),
@@ -116,6 +137,9 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     }
   };
   register(board, BOARD_METHODS);
+  // The verify service answers the two verify methods — register() picks
+  // exactly the names an object carries, the rest of BOARD_METHODS is the board's.
+  register(verify, BOARD_METHODS);
   register(fleet, FLEET_METHODS);
   register(remoteService, REMOTE_METHODS);
   // The plugin's config sync: Drey's settings keys the engine reads.
@@ -236,6 +260,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
         return;
       }
       closed = true;
+      verify.dispose();
       await remoteService.stop();
       server.close();
       await once(server, 'close').catch(() => undefined);

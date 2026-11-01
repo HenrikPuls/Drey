@@ -128,5 +128,20 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   persona's memory slice, and the board service migrates the legacy
   column `worker:`/`model:`/`prompt:` keys onto personas in one
   idempotent commit (`tickets: personas migrated`).
+- **E4 (milestone 103):** verify/proof — a ticket's proof is the app
+  run, not an agent's say-so: the verify step is a machine step (a
+  harness run → screenshots + the ticket's `## Verification` section →
+  one commit → the owner's checkpoint), never a fleet run. The contract
+  (`src/contracts/verify.ts`) carries the report, the harness seam and
+  the proof card's status, with `MAX_VERIFY_SHOTS` = 6; the section
+  itself (`core/verification.ts`, the canonical shape in
+  `specs/ticket-schema.md`) is written strictly and read tolerantly —
+  an absent or half-readable section means "not verified yet", never a
+  guess. Screenshot discipline: at most six per run, `verify-…` names
+  in `tickets/attachments/`, the phone's `img-…` untouched. The judge
+  seam (`VerifyJudge`) ships stubbed — without a judge a captured
+  screenshot counts as its criterion's pass; the vision pass that fills
+  the seam is its own milestone, its worker's prompt already shipped as
+  `prompts/qa-default.md`.
 
 

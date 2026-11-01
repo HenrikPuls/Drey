@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { hostname, tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { VerifyHarness, VerifyRunInput, VerifyRunResult, VerifyStatus } from '../contracts/verify';
 import { createEngine, type Engine } from './engine';
 
 /**
@@ -35,6 +36,7 @@ beforeEach(async () => {
   await fsp.mkdir(path.join(root, 'client'), { recursive: true });
   await fsp.mkdir(home, { recursive: true });
   await fsp.writeFile(path.join(vault, 'tickets/_meta/pipeline.md'), PIPELINE, 'utf8');
+  await gitInitVault();
   engine = await createEngine({ vaultPath: vault, home, clientDir: path.join(root, 'client'), log: () => undefined });
 });
 
@@ -274,5 +276,139 @@ describe('personas (ADR-0088, E3)', () => {
     expect(pipelineText).toContain('worker: opencode');
     expect(pipelineText).not.toContain('persona:');
     expect(await fsp.readFile(path.join(vault, 'tickets/_meta/personas/build-v2/persona.md'), 'utf8')).toBe(PIA_PERSONA);
+  });
+});
+
+
+const VERIFY_PIPELINE = `---
+phases:
+  - { id: inbox, title: Inbox, handover: manual }
+  - { id: verify, title: Verify, handover: none }
+  - { id: needs-owner, title: Needs owner, handover: manual }
+---
+The pipeline.
+`;
+
+const VERIFY_REPOS = `---
+repos:
+  demo:
+    url: https://example.com/demo.git
+    branch: main
+    launch: npm run demo:app
+---
+Work repos.
+`;
+
+/** A 1x1 transparent PNG — the fake harness's "screenshot". */
+const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+describe('verify (E4)', () => {
+  let harnessInput: VerifyRunInput | null = null;
+
+  beforeEach(async () => {
+    await engine.close();
+    harnessInput = null;
+    await fsp.writeFile(path.join(vault, 'tickets/_meta/pipeline.md'), VERIFY_PIPELINE, 'utf8');
+    await fsp.writeFile(path.join(vault, 'tickets/_meta/repos.md'), VERIFY_REPOS, 'utf8');
+    await gitInitVault();
+    await git(['add', '-A']);
+    await git(['commit', '-m', 'seed']);
+    const fakeHarness: VerifyHarness = {
+      async run(input: VerifyRunInput): Promise<VerifyRunResult> {
+        harnessInput = input;
+        const file = 'verify-test-01.png';
+        await fsp.mkdir(input.attachDir, { recursive: true });
+        await fsp.writeFile(path.join(input.attachDir, file), Buffer.from(PNG_1PX, 'base64'));
+        return {
+          environment: 'Electron test on win32',
+          shots: [{ file, criterion: input.criteria[0] ?? null }],
+          findings: [],
+          video: null,
+          error: null,
+        };
+      },
+    };
+    engine = await createEngine({
+      vaultPath: vault,
+      home,
+      clientDir: path.join(root, 'client'),
+      log: () => undefined,
+      verifyHarness: fakeHarness,
+    });
+  });
+
+  it('persists the proofs as one commit and moves the ticket to the owner', async () => {
+    const created = (await engine.invoke('createTicket', {
+      title: 'Verify me',
+      priority: 'normal',
+      repo: 'demo',
+      description: ['The body.', '', '### Acceptance criteria', '', '- [x] `npm run build`', '- [ ] `npm test`'].join('\n'),
+    })) as { ok: boolean; id?: string };
+    expect(created.ok).toBe(true);
+    const id = created.id!;
+
+    const moved = (await engine.invoke('transition', { id, from: 'inbox', to: 'verify' })) as { ok: boolean };
+    expect(moved.ok).toBe(true);
+    await fsp.mkdir(path.join(vault, '_worktrees', id), { recursive: true });
+
+    const outcome = (await engine.invoke('verifyTicket', { id })) as { ok: boolean; error?: string };
+    expect(outcome).toEqual({ ok: true });
+
+    // The harness got the resolved worktree, the repo's launch command and the criteria.
+    expect(harnessInput).not.toBeNull();
+    expect(harnessInput!.worktree).toBe(path.join(vault, '_worktrees', id));
+    expect(harnessInput!.command).toBe('npm run demo:app');
+    expect(harnessInput!.criteria).toEqual(['npm run build', 'npm test']);
+    expect(harnessInput!.judge).toBeNull();
+
+    // The proof card: the section, the tested line, both criteria, the screenshot link.
+    const snapshot = (await engine.invoke('snapshot')) as {
+      columns: { phase: { id: string }; tickets: { id: string; path: string }[] }[];
+    };
+    const ownerColumn = snapshot.columns.find((c) => c.phase.id === 'needs-owner')!;
+    expect(ownerColumn.tickets.map((t) => t.id)).toContain(id);
+    expect(snapshot.columns.find((c) => c.phase.id === 'verify')!.tickets).toEqual([]);
+    const cardPath = ownerColumn.tickets.find((t) => t.id === id)!.path;
+    const text = await fsp.readFile(path.join(vault, cardPath), 'utf8');
+    expect(text).toContain('## Verification');
+    expect(text).toMatch(new RegExp(`Tested on \\S+ by verify@${hostname().toLowerCase()} — Electron test on win32\\.`));
+    expect(text).toContain('- [x] `npm run build` → ![](../attachments/verify-test-01.png)');
+    expect(text).toContain('- [ ] `npm test` — no screenshot');
+    expect(text).toContain('verified — 1/2 criteria green');
+
+    // The screenshot landed in the vault's attachments folder.
+    await expect(fsp.stat(path.join(vault, 'tickets/attachments/verify-test-01.png'))).resolves.toBeDefined();
+
+    // The story: the verify commit covers the ticket file and the screenshot,
+    // then the move commit follows — no other commits.
+    const subjects = (await git(['log', '--format=%s'])).trim().split('\n');
+    expect(subjects).toEqual([
+      `tickets: ${id} verify -> needs-owner`,
+      `tickets: ${id} verified`,
+      `tickets: ${id} inbox -> verify`,
+      `tickets: ${id} + inbox`,
+      'seed',
+    ]);
+    const names = await git(['show', '--name-only', '--format=', 'HEAD~1']);
+    expect(names).toContain(`tickets/20-verify/${id}.md`);
+    expect(names).toContain('tickets/attachments/verify-test-01.png');
+
+    // The live state the proof card polls.
+    const status = (await engine.invoke('verifyStatus', { id })) as VerifyStatus;
+    expect(status).toEqual({
+      ticket: id,
+      state: 'done',
+      error: null,
+      report: {
+        testedAt: expect.any(String),
+        tester: `verify@${hostname().toLowerCase()}`,
+        environment: 'Electron test on win32',
+        criteria: [
+          { command: 'npm run build', passed: true, screenshot: 'verify-test-01.png', note: null },
+          { command: 'npm test', passed: false, screenshot: null, note: 'no screenshot' },
+        ],
+        findings: [],
+      },
+    });
   });
 });

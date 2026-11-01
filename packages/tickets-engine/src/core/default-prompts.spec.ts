@@ -12,6 +12,7 @@ describe('shipped prompts', () => {
       'commit-default',
       'plan-default',
       'plan-interactive-default',
+      'qa-default',
       'refine-interactive-default',
       'review-default',
     ]);
