@@ -36,7 +36,10 @@ test.describe('Files panel inline rename input', () => {
     // stayed selected.)
     await page.keyboard.press('ArrowLeft');
     expect(
-      await input.evaluate((el) => el.selectionStart === el.selectionEnd),
+      await input.evaluate((el) => {
+        const field = el as HTMLInputElement;
+        return field.selectionStart === field.selectionEnd;
+      }),
     ).toBe(true);
 
     // Delete edits the name (caret at 0 removes the leading "a") -- it must

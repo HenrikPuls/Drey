@@ -11,8 +11,9 @@ electron-builder ([ADR-0023](09_architecture_decisions/0023-windows-packaging-el
 
 0. `test:all` — the release gate, via `prepack` (**`npm run pack` only**;
    `pack:dir` stays the fast smoke build and runs no gate — npm fires
-   no pre-hooks for colon-named scripts): lint, the four typechecks,
-   import cycles, then both unit suites (`test:app`, `test:plugins`).
+   no pre-hooks for colon-named scripts): lint, the typechecks (main,
+   renderer, plugins, main-process specs, e2e), import cycles, then
+   both unit suites (`test:app`, `test:plugins`).
    Skippable with `npm run pack --ignore-scripts`.
 1. `clean` — wipes `dist/`, `dist-electron/`, `release/` (`tsc` never
    cleans its `outDir`, so a stale build could otherwise ship orphaned
@@ -59,12 +60,16 @@ Both installed and portable builds use the **same** config directory,
 
 One `windows-latest` job per push to `main` / PR / `v*` tag, one build, in
 pipeline order: lint (import boundaries + the typed promise rules) → the
-tsc typechecks (main, main-process specs, renderer) → unit tests (`ng test`,
-`test:plugins`) → `fetch:drawio` (cached on the version pin) → build →
-e2e → `electron-builder --win` → `verify:pack`. The fetch is its own
-step because the job builds and packs separately instead of running
-`npm run pack`; without it the drawio e2e tests skip and the packed app
-ships no editor. Every run packs and smoke-tests the two exes, but only a
+tsc typechecks (main, main-process specs, plugins, renderer, e2e) → unit
+tests (`ng test`, `test:plugins`) → `fetch:drawio` (cached on the version
+pin) → build → e2e → `electron-builder --win` → `verify:pack`. The fetch
+is its own step because the job builds and packs separately instead of
+running `npm run pack`; without it the drawio e2e tests skip and the
+packed app ships no editor. The e2e project is typechecked too
+(`tsconfig.e2e.json`): Playwright only transpiles the specs, so a broken
+spec — a merge that leaves a duplicate binding — is a compile error
+here, minutes before the e2e step would refuse to load it (req-94).
+Every run packs and smoke-tests the two exes, but only a
 `v*` tag push or a manual run (`workflow_dispatch`, Actions → CI → Run
 workflow) uploads them as workflow **artifacts** (3 days, run page) —
 uploading them on every push and PR filled the account's artifact storage

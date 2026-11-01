@@ -58,12 +58,16 @@ test.use({
 
 test.describe('Ticket header in the editor (req-62)', () => {
   test('shows title and fields, edits them as buffer changes, folds the Log', async ({ page }) => {
-    // The Work row opens the ticket — the owner's path.
+    // The owner's path: a Work row opens the ticket's thread (req-84),
+    // its Ticket file link opens the file with the header.
     await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
     await page.locator('.work-row[data-id="T-0042"]').filter({ visible: true }).click();
+    const thread = page.locator('.tickets-thread').filter({ visible: true });
+    await expect(thread).toBeVisible({ timeout: 15_000 });
+    await thread.locator('.tickets-thread-filelink').click();
 
     const head = page.locator('app-editor .tickets-head');
-    await expect(head).toBeVisible({ timeout: 15_000 });
+    await expect(head).toBeVisible();
     await expect(head.locator('.tickets-head-title')).toHaveValue('Fix the palette race in CI');
     await expect(head.locator('.tickets-head-id')).toHaveText('T-0042');
     await expect(head.locator('.tickets-head-phase')).toHaveText('Plan');

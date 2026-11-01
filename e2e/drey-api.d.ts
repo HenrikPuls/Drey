@@ -4,6 +4,11 @@
  * members the tests touch -- so the E2E project stays decoupled from the
  * renderer's own `Window` augmentation in `src/`. Widen as tests grow.
  */
+interface E2eSpellcheckConfig {
+  personalWords: string[];
+  languageWords: Record<string, string[]>;
+}
+
 interface DreyApiForE2E {
   getAppInfo(): Promise<{
     appVersion: string;
@@ -16,6 +21,11 @@ interface DreyApiForE2E {
   listVaults(): Promise<
     Array<{ id: string; name: string; path: string; exists: boolean; active: boolean }>
   >;
+  getConfig(): Promise<{
+    appearance: { accent: string };
+    daily: { dir: string };
+    spellcheck: E2eSpellcheckConfig;
+  }>;
   saveVaultAsset(
     bytes: Uint8Array,
     ext: string,
@@ -26,6 +36,13 @@ interface DreyApiForE2E {
   listVaultFiles(): Promise<
     Array<{ name: string; relativePath: string; type: 'file' | 'directory' }>
   >;
+  checkSpelling(words: string[], language?: string): Promise<{ language: string; misspelled: string[] }>;
+  suggestSpelling(word: string, language?: string): Promise<string[]>;
+  addSpellWord(word: string, target: 'language' | 'personal', language?: string): Promise<{
+    spellcheck: E2eSpellcheckConfig;
+  }>;
+  installPluginPackage(zipPath: string): Promise<Record<string, unknown>>;
+  uninstallPlugin(pluginId: string): Promise<Record<string, unknown>>;
   listPlugins(): Promise<
     Array<{
       id: string;

@@ -30,10 +30,35 @@ interface WireMessage {
   content: unknown;
 }
 
-function reply(res: http.ServerResponse, message: Record<string, unknown>, delayMs = 0): void {
+function reply(res: http.ServerResponse, message: Record<string, unknown>, delayMs = 0, stream = false): void {
   setTimeout(() => {
-    res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ choices: [{ message, finish_reason: 'stop' }] }));
+    if (!stream) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ choices: [{ message, finish_reason: 'stop' }] }));
+      return;
+    }
+    // The providers send their tool rounds (and every onDelta call) with
+    // `stream: true` and read SSE (shared/llm/stream-assembly): answer in
+    // that shape -- the content or the whole tool_calls in one delta
+    // frame, then the finish frame and [DONE].
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    const frame = (chunk: Record<string, unknown>): void => {
+      res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+    };
+    const delta: Record<string, unknown> = {};
+    if (typeof message.content === 'string' && message.content !== '') {
+      delta['content'] = message.content;
+    }
+    if (Array.isArray(message.tool_calls)) {
+      delta['tool_calls'] = message.tool_calls.map((call, index) => ({
+        index,
+        ...(call as Record<string, unknown>),
+      }));
+    }
+    frame({ choices: [{ delta }] });
+    frame({ choices: [{ delta: {}, finish_reason: 'stop' }] });
+    res.write('data: [DONE]\n\n');
+    res.end();
   }, delayMs);
 }
 
@@ -74,21 +99,23 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
   let raw = '';
   req.on('data', (chunk: Buffer) => (raw += chunk.toString()));
   req.on('end', () => {
-    const body = JSON.parse(raw) as { messages: WireMessage[]; tools?: unknown[] };
+    const body = JSON.parse(raw) as { messages: WireMessage[]; tools?: unknown[]; stream?: boolean };
+    const respond = (message: Record<string, unknown>, delayMs = 0): void =>
+      reply(res, message, delayMs, body.stream === true);
     const last = body.messages.at(-1);
     // The chat-title call and anything else without tools: a plain reply.
     if (body.tools === undefined) {
       const asked = typeof last?.content === 'string' && last.content.includes('Which tools');
-      reply(res, { content: asked ? 'NO VAULT TOOLS' : 'Harbour fee' });
+      respond({ content: asked ? 'NO VAULT TOOLS' : 'Harbour fee' });
       return;
     }
     if (last?.role === 'tool' && typeof last.content === 'string' && last.content.includes('Tide tables')) {
-      reply(res, { content: 'High water is at 14:20.' });
+      respond({ content: 'High water is at 14:20.' });
       return;
     }
     if (last?.role === 'tool') {
       // Held back for a moment so the running chips are observable.
-      reply(res, { content: ANSWER }, 1200);
+      respond({ content: ANSWER }, 1200);
       return;
     }
     const question = typeof last?.content === 'string' ? last.content : '';
@@ -97,7 +124,7 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
       // Answers from the system prompt alone: the context block names the note.
       const first = body.messages[0]?.content;
       const system = typeof first === 'string' ? first : '';
-      reply(res, {
+      respond({
         content:
           system.includes('VAULT CONTEXT') &&
           system.includes('physics/relativity.md — Relativity') &&
@@ -108,7 +135,7 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
       return;
     }
     if (question.includes('Which tools')) {
-      reply(res, {
+      respond({
         content: offered.includes('vault_search')
           ? 'VAULT TOOLS OFFERED'
           : offered.includes('vault_edit')
@@ -119,8 +146,7 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
     }
     if (question.includes('high water')) {
       // Searches only when the tool was offered: the Web chip decides.
-      reply(
-        res,
+      respond(
         offered.includes('web_search')
           ? {
               content: null,
@@ -137,7 +163,7 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
       return;
     }
     if (question.includes('Raise the fee')) {
-      reply(res, {
+      respond({
         content: null,
         tool_calls: [
           {
@@ -159,7 +185,7 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
       // The document's name comes from the message: a tab that was never
       // saved has no path of its own to script against.
       const name = /DOCUMENT \((.+?)\):/.exec(question)?.[1] ?? '';
-      reply(res, {
+      respond({
         content: null,
         tool_calls: [
           {
@@ -178,7 +204,7 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
       return;
     }
     if (question.includes('berth fee')) {
-      reply(res, {
+      respond({
         content: null,
         tool_calls: [
           {
@@ -197,7 +223,7 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
       return;
     }
     if (question.includes('in text form')) {
-      reply(res, {
+      respond({
         content: `<tool_call>${JSON.stringify({
           name: 'vault_read',
           arguments: { path: 'notes/harbour.md' },
@@ -205,7 +231,7 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
       });
       return;
     }
-    reply(res, {
+    respond({
       content: null,
       tool_calls: [
         {

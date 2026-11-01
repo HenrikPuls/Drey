@@ -1,0 +1,17 @@
+/* Typecheck project for the e2e specs (req-94). Playwright transpiles
+ * them without checking types, and no other project includes e2e/ — a
+ * broken spec (a merge that left a duplicate binding, a name that no
+ * longer exists) only surfaced in CI's e2e step minutes after lint,
+ * typecheck and the unit suites had passed. This project is what makes
+ * `tsc --noEmit` see them early, like tsconfig.plugins.json does for the
+ * plugin specs. Plain Node context (the specs drive the app from
+ * outside; no Angular, no DOM lib beyond what @playwright/test brings).
+ */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["e2e/**/*.ts", "playwright.config.ts"]
+}

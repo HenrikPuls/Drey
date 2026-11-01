@@ -76,7 +76,7 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   (`-t "name"`), and a path fragment instead of an id scopes outside
   `plugins/` (`shared`, `electron/ipc`). `npm run test:plugins` runs
   the whole out-of-Angular suite, `npm run test:app` the renderer suite
-  once. `npm run test:all` — lint, the six typechecks, import cycles,
+  once. `npm run test:all` — lint, the seven typechecks, import cycles,
   both suites — is the **release gate**: `prepack` runs it before every
   `npm run pack` (skip the gate with `npm run pack --ignore-scripts`).
   `pack:dir` stays the fast unpacked smoke build and runs no gate —
@@ -84,9 +84,11 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   `npm run test:all` yourself there when needed.
 - Bash: `export PATH="$PWD/.tools/node:$PATH"`, then invoke tools **by
   script path**, not by bin-shim name:
-  - Typecheck (all six configs — the plugins' build configs
+  - Typecheck (all seven configs — the plugins' build configs
     `plugins/tsconfig.main.json` / `plugins/tsconfig.renderer.json`
-    included, since a type error there only showed in the build):
+    included, since a type error there only showed in the build; and
+    `tsconfig.e2e.json`, added by req-94 after a broken e2e spec had
+    slipped past every earlier gate):
     `npm run typecheck`; raw, one config
     at a time: `node node_modules/typescript/bin/tsc -p <config>
     --noEmit` with `electron/tsconfig.json` (main + shared),

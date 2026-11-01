@@ -112,7 +112,7 @@ test.describe('line-number gutter alignment', () => {
     let marker: { x: number; y: number; drift: number } | null = null;
     await expect
       .poll(async () => {
-        marker = await page.evaluate((title) => {
+        marker = await page.evaluate((title: string) => {
           const heading = [
             ...document.querySelectorAll<HTMLElement>('app-editor .cm-content .cm-line'),
           ].find((l) => l.textContent?.includes('A heading line rendered larger'));

@@ -1,4 +1,4 @@
-import type { Locator } from '@playwright/test';
+import type { Locator, Request, Response } from '@playwright/test';
 import { test, expect, type Page } from './fixtures/drey';
 import { activeVaultAssetUrl } from './fixtures/asset-url';
 
@@ -108,7 +108,7 @@ function embedPath(notePath: string, name: string): string {
  */
 async function embedsSurvivePaneSwitch(page: Page, notePath: string): Promise<void> {
   const failed: string[] = [];
-  page.on('requestfailed', (request) => {
+  page.on('requestfailed', (request: Request) => {
     if (!request.url().startsWith('drey-asset://')) {
       return;
     }
@@ -119,7 +119,7 @@ async function embedsSurvivePaneSwitch(page: Page, notePath: string): Promise<vo
     }
     failed.push(request.url());
   });
-  page.on('response', (response) => {
+  page.on('response', (response: Response) => {
     if (response.status() >= 400 && response.url().startsWith('drey-asset://')) {
       failed.push(`${response.status()} ${response.url()}`);
     }

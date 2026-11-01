@@ -2,10 +2,11 @@ import { test, expect } from './fixtures/drey';
 
 /**
  * The Work panel (req-75 W1/W1b, ADR-0087): Needs you, Shaping, Running
- * and Ideas in place of the kanban columns, and a ticket's thread beside
- * its file — its header, its decision bar and the question it waits on.
- * The fleet runner does not run under e2e, so the live runs arrive as a
- * pushed `fleet-changed` snapshot. The screenshots show the panel at its
+ * and Ideas in place of the kanban columns; a Work row opens a ticket's
+ * thread alone (req-84) — its header, its decision bar and the question
+ * it waits on — and only the row menu's Open ticket adds the file beside
+ * it. The fleet runner does not run under e2e, so the live runs arrive as
+ * a pushed `fleet-changed` snapshot. The screenshots show the panel at its
  * default dock width (~340 px) and the whole window with a ticket open.
  */
 
@@ -91,7 +92,7 @@ test.use({
 });
 
 test.describe('Work panel (req-75 W1/W1b)', () => {
-  test('groups the tickets, and a ticket opens with its thread beside it', async ({ page, electronApp }, testInfo) => {
+  test('groups the tickets, and a row opens the ticket thread alone', async ({ page, electronApp }, testInfo) => {
     // The Work panel gets the left dock to itself, as an owner would set it.
     await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
     for (const other of ['Calendar', 'Files', 'Open windows']) {
@@ -138,11 +139,12 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(panel.locator('.work-row[data-id="T-0105"] .work-kind')).toHaveText('Review');
     await expect(panel.locator('.work-row[data-id="T-0105"] .work-row-line')).toHaveText('waits for your review');
     await expect(panel.locator('.work-row[data-id="T-0106"] .work-kind')).toHaveText('Ready to try');
-    // Shaping holds the reserved dialog; Running the live plan run; the
-    // ideas keep their queue chip and carry the triage chip.
+    // Shaping holds the reserved dialog (its phase chip names the column);
+    // Running the live plan run; the ideas keep their queue chip and carry
+    // the triage chip.
     await expect(rows('shaping')).toHaveCount(1);
     await expect(rows('shaping').first()).toHaveAttribute('data-id', 'T-0108');
-    await expect(panel.locator('.work-row[data-id="T-0108"] .work-row-sub')).toHaveText('Dialog not started');
+    await expect(panel.locator('.work-row[data-id="T-0108"] .work-row-line')).toHaveText('Dialog not started');
     await expect(rows('running')).toHaveCount(1);
     await expect(rows('running').first()).toHaveAttribute('data-id', 'T-0107');
     await expect(panel.locator('.work-row[data-id="T-0107"] .work-run-step')).toHaveText('Planning');
@@ -150,20 +152,20 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(rows('ideas').first()).toHaveAttribute('data-id', 'T-0101');
     await expect(panel.locator('.work-row[data-id="T-0103"] .work-row-queued')).toHaveText('Queued');
     await expect(panel.locator('.work-row[data-id="T-0102"] .work-track')).toHaveText('Triage');
-    // The footer names the workers out there (the fleet chip left the header).
-    await expect(panel.locator('.tickets-statusbar-fleet')).toHaveText(/2 workers · OpenCode 2/);
+    // The footer names the workers out there (the fleet chip left the
+    // header): one running, one waiting on the owner.
+    await expect(panel.locator('.tickets-statusbar-fleet')).toHaveText(/1 running · 1 need attention · OpenCode 2/);
 
     const box = (await panel.boundingBox())!;
     expect(box.width).toBeLessThan(420);
     await panel.screenshot({ path: testInfo.outputPath('work-panel-narrow.png') });
 
-    // The ticket page: the thread opens beside the file — since W4a the
-    // worker lives there in every state (the run tab is gone), and the
-    // page still never splits again (main's fix, 2026-10-31).
+    // A Work row opens the thread alone (req-84): since W4a the worker
+    // lives there in every state (the run tab is gone) — no file pair,
+    // no second pane; the thread lands where the focus is.
     await panel.locator('.work-row[data-id="T-0104"]').click();
-    await expect(page.locator('app-editor .tickets-head')).toBeVisible({ timeout: 15_000 });
     const thread = page.locator('.tickets-thread').filter({ visible: true });
-    await expect(thread).toBeVisible();
+    await expect(thread).toBeVisible({ timeout: 15_000 });
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Drag headings in the outline');
     // The worker lives on the ticket (req-75 W4a): the header's bold state
     // word says what it does, the meta line names it — and the takeover
@@ -171,9 +173,11 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(thread.locator('.tickets-thread-state')).toHaveText('Waiting for you');
     await expect(thread.locator('.tickets-thread-meta')).toHaveText(/OpenCode · glm-5.3-flash/);
     await expect(thread.getByTitle('Open the run in its own tab', { exact: false })).toHaveCount(0);
-    await expect(thread.getByRole('button', { name: 'Pause' })).toBeVisible();
+    // Pause only exists while a turn runs (an idle turn has nothing to
+    // interrupt); Take over and Stop are always there while connected.
+    await expect(thread.getByRole('button', { name: 'Pause' })).toHaveCount(0);
     await expect(thread.getByRole('button', { name: 'Take over' })).toBeVisible();
-    await expect(thread.getByRole('button', { name: 'Stop' })).toBeVisible();
+    await expect(thread.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
     // The question is part of the conversation now (req-75 W2b): no card.
     await expect(thread.locator('.tickets-takeover-wait')).toBeHidden();
     await expect(thread.locator('.tickets-ask-question')).toHaveText(
@@ -181,10 +185,9 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     );
     // A question carries no decision bar — that is the checkpoints'.
     await expect(thread.locator('.tickets-thread-decisions')).toBeHidden();
-    await expect(page.locator('app-pane-leaf')).toHaveCount(2);
+    await expect(page.locator('app-pane-leaf')).toHaveCount(1);
     await expect(panel.locator('.work-row[data-id="T-0104"]')).toHaveClass(/work-row-open/);
     await page.screenshot({ path: testInfo.outputPath('work-panel-wide.png') });
-    const thread = page.locator('.tickets-thread').filter({ visible: true });
 
     // The decisions live in the thread (req-75 W1b); for a Review or
     // Ready-to-try checkpoint the Ready card's buttons replace the bar
@@ -212,42 +215,48 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(thread.locator('.tickets-ready-body-host')).toBeVisible();
     await expect(readyButtons).toHaveText(['Archive']);
 
-    // A ticket with a live run brings its run tab back into the same pane.
+    // A second row reuses the one thread tab (req-84): the live run's
+    // doings live in the thread too — never a second thread, never a
+    // new pane.
     await panel.locator('.work-row[data-id="T-0107"]').click();
-    await expect(runTab.locator('.tickets-takeover-ticket')).toHaveText('T-0107');
-    await expect(page.locator('app-pane-leaf')).toHaveCount(2);
-    // The thread stays one tab, behind the run tab in that pane.
-    await expect(page.locator('app-tab-bar .tab[title="thread://ticket"]')).toHaveCount(1);
+    await expect(thread.locator('.tickets-thread-title')).toHaveText('Daily note templates per weekday');
+    await expect(page.locator('.tickets-thread')).toHaveCount(1);
+    await expect(page.locator('app-pane-leaf')).toHaveCount(1);
   });
 
-  test('the next ticket lands in the last ticket pane, not a new split', async ({ page }, testInfo) => {
+  test('rows reuse the one thread tab; Open ticket opens the pair', async ({ page }, testInfo) => {
     await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
 
+    // A row opens the thread alone (req-84) — no file, no split.
     await panel.locator('.work-row[data-id="T-0101"]').click();
     const thread = page.locator('.tickets-thread').filter({ visible: true });
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Dark mode for the calendar');
-    await expect(page.locator('app-pane-leaf')).toHaveCount(2);
+    await expect(page.locator('app-pane-leaf')).toHaveCount(1);
 
-    // A click into the thread focuses its pane: the case that used to split.
+    // The next rows switch the same tab in place.
     for (const [id, title] of [
       ['T-0102', 'Export tags as CSV'],
       ['T-0103', 'Faster vault search'],
-      ['T-0105', 'Spellcheck inside tables'],
     ] as const) {
-      await thread.locator('.tickets-thread-head').click();
       await panel.locator(`.work-row[data-id="${id}"]`).click();
       await expect(thread.locator('.tickets-thread-title')).toHaveText(title);
-      await expect(page.locator('app-pane-leaf')).toHaveCount(2);
-      await expect(page.locator('app-tab-bar .tab', { hasText: `${id}.md` })).toHaveCount(1);
+      await expect(page.locator('.tickets-thread')).toHaveCount(1);
+      await expect(page.locator('app-pane-leaf')).toHaveCount(1);
     }
-    // The clean ticket tabs were replaced, not stacked.
-    await expect(page.locator('app-tab-bar .tab', { hasText: /T-0\d+\.md/ })).toHaveCount(1);
+
+    // The row menu's Open ticket keeps the pair (req-84): the ticket file
+    // with the thread beside it — one split, and nothing stacks further.
+    await panel.locator('.work-row[data-id="T-0103"] .work-row-more').click();
+    await page.locator('.tickets-menu .tickets-menu-item', { hasText: 'Open ticket' }).click();
+    await expect(page.locator('app-tab-bar .tab', { hasText: 'T-0103.md' })).toHaveCount(1);
+    await expect(page.locator('app-pane-leaf')).toHaveCount(2);
+    await expect(page.locator('.tickets-thread')).toHaveCount(1);
     await page.screenshot({ path: testInfo.outputPath('ticket-page-no-split.png') });
   });
 
-  test('an ended run keeps the box free: no resume in the header, the toolbar inside the box', async ({
+  test('an ended run keeps the box free: no run link in the header, the toolbar inside the box', async ({
     page,
     electronApp,
   }, testInfo) => {
@@ -271,11 +280,16 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     );
     await panel.locator('.work-row[data-id="T-0107"]').click();
     const thread = page.locator('.tickets-thread').filter({ visible: true });
-    await expect(thread.locator('.tickets-thread-meta')).toHaveText(/^ended · OpenCode/);
+    // The state word says how it ended (W4a); the meta line names the
+    // worker — and no run link: the run's doings live in the thread.
+    await expect(thread.locator('.tickets-thread-state')).toHaveText('Ended');
+    await expect(thread.locator('.tickets-thread-meta')).toHaveText(/^OpenCode · glm-5.3-flash/);
     await expect(thread.locator('.tickets-thread-head button[aria-label^="Open the run"]')).toHaveCount(0);
     const box = thread.locator('.tickets-composer-box');
     await expect(box.locator('.tickets-composer-toolbar .tickets-composer-send')).toBeEnabled();
-    await expect(box.locator('.tickets-composer-toolbar .tickets-takeover-chip').first()).toBeEnabled();
+    // The quick-prompt chips sit in their own row above the box (W4a) and
+    // stay clickable for an ended run with a session.
+    await expect(thread.locator('.tickets-composer-chips .tickets-takeover-chip').first()).toBeEnabled();
     // Send sits at the toolbar's right end, under the prompt, inside the box.
     const sendBox = (await box.locator('.tickets-composer-send').boundingBox())!;
     const promptBox = (await box.locator('.tickets-takeover-prompt-input').boundingBox())!;
@@ -301,17 +315,20 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
 
-    // Running precedes Ideas (the canvas order, W1b).
-    await expect(panel.locator('.work-group-title')).toHaveText(['Running', 'Ideas']);
+    // The canvas order (W1b): Needs you, Running, Shaping, Ideas — the
+    // seeded review checkpoint and finished ticket fill the first.
+    await expect(panel.locator('.work-group-title')).toHaveText(['Needs you', 'Running', 'Shaping', 'Ideas']);
 
-    // The filter popover: one status chip hides the idle ideas.
+    // The filter popover: the Idle chip keeps the idle ideas — the queued
+    // one (and only it) goes.
     const head = page.locator('.tickets-panel-head').filter({ visible: true });
     await head.locator('.work-filter-btn').click();
     const pop = page.locator('.work-filter-pop');
     await expect(pop).toBeVisible();
     await pop.getByRole('button', { name: 'Idle', exact: true }).click();
-    await expect(panel.locator('.work-group-ideas .work-row')).toHaveCount(1);
-    await expect(panel.locator('.work-group-ideas .work-group-count')).toHaveText('1/3');
+    await expect(panel.locator('.work-group-ideas .work-row')).toHaveCount(2);
+    await expect(panel.locator('.work-group-ideas .work-row[data-id="T-0103"]')).toHaveCount(0);
+    await expect(panel.locator('.work-group-ideas .work-group-count')).toHaveText('2/3');
     await pop.getByRole('button', { name: 'Clear', exact: true }).click();
     await expect(panel.locator('.work-group-ideas .work-row')).toHaveCount(3);
     await expect(panel.locator('.work-group-ideas .work-group-count')).toHaveText('3');

@@ -8,6 +8,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+// The Playwright types the specs import from this fixture (one import
+// line per spec keeps them short; `type` exports vanish at runtime).
+export type { ElectronApplication, Locator, Page } from '@playwright/test';
+
 const repoRoot = path.resolve(__dirname, '..', '..');
 const electronMain = path.join(repoRoot, 'dist-electron', 'electron', 'main.js');
 

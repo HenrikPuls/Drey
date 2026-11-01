@@ -1,4 +1,48 @@
 
+### req-94 — CI green again: the e2e suite runs, and is typechecked
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list). CI had been red since 2026-10-31: the W4a merge
+(591be22) resolved `e2e/work-panel.spec.ts` badly — both sides' lines
+survived, leaving a duplicate `thread` binding and a `runTab` that no
+longer existed; Playwright refused to load the file, and no step before
+e2e ever looked at the folder (the whole Work-panel e2e set had never
+run: the last green CI predates milestone 89). The spec now states the
+shipped behaviour — req-84 (a Work row opens the thread alone, only the
+row menu's Open ticket opens the file + thread pair), W4a's worker
+header (state word, no run link, Pause only while a turn runs), the
+composer's quick-prompt chips above the box, the footer's
+"1 running · 1 need attention · OpenCode 2" wording, Needs you and
+Shaping in the group order, the Idle filter keeping a triage idea —
+and `ticket-header.spec.ts` / `interactive-dialog.spec.ts` walk the
+owner's path (row → thread → its Ticket file link). The assistant-tools
+mock now speaks SSE: the providers stream their tool rounds since the
+fleet-stability wave (milestones 95/96, `stream: true` + the shared
+chunk sink), and the scripted endpoint still answered plain JSON, so
+every tool-loop ask died on "The endpoint returned no message content" —
+the mock answers `data:` frames when the request asks to stream (ten
+tests that each burned their 30 s timeout now pass in two). The board
+issues chip assertion drops its "one line with the title" geometry: the
+panel head has wrapped its controls since T-0086, so containment in the
+header is the claim that holds. The first green run of the fold
+assertion caught a real bug: the Ready card's Report chip
+folded nothing — `.tickets-ready-body-host`'s `display: flex` defeated
+the `hidden` attribute; `board.css` gains the `[hidden]` guard its
+siblings already had. Guard against recurrence: **the e2e project is
+typechecked** (`tsconfig.e2e.json`, the seventh config in
+`npm run typecheck` and a CI step of its own — a duplicate binding or a
+gone name is now a compile error before anything builds, not a failed
+run three minutes in); the fixture re-exports the Playwright types the
+specs import from it, and `e2e/drey-api.d.ts` is widened to the members
+the tests touch (`getConfig`, the spelling calls, plugin
+install/uninstall). Specs: `e2e/work-panel.spec.ts`,
+`e2e/ticket-header.spec.ts`, `e2e/interactive-dialog.spec.ts`,
+`e2e/assistant-tools.spec.ts`, `e2e/board-issues.spec.ts`,
+`e2e/fixtures/drey.ts`, `e2e/drey-api.d.ts`, type annotations across
+the e2e specs the new project sees, `tsconfig.e2e.json`,
+`package.json`, `.github/workflows/ci.yml`,
+`plugins/tickets/renderer/board.css`.
+
 ### req-93 — just-in-time planning: the plan columns leave the pipeline
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01
