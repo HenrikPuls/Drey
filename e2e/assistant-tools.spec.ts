@@ -46,11 +46,13 @@ function reply(res: http.ServerResponse, message: Record<string, unknown>, delay
       res.write(`data: ${JSON.stringify(chunk)}\n\n`);
     };
     const delta: Record<string, unknown> = {};
-    if (typeof message.content === 'string' && message.content !== '') {
-      delta['content'] = message.content;
+    const content = message['content'];
+    if (typeof content === 'string' && content !== '') {
+      delta['content'] = content;
     }
-    if (Array.isArray(message.tool_calls)) {
-      delta['tool_calls'] = message.tool_calls.map((call, index) => ({
+    const toolCalls = message['tool_calls'];
+    if (Array.isArray(toolCalls)) {
+      delta['tool_calls'] = toolCalls.map((call, index) => ({
         index,
         ...(call as Record<string, unknown>),
       }));
