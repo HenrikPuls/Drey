@@ -3043,22 +3043,75 @@ details[open] > summary > .tickets-tx-think-preview {
 }
 
 .tickets-ready {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 0;
   min-height: 0;
-  overflow: auto;
+}
+
+/* The strip stays; the body under it has a height the splitter sets
+   (default: at most 45% of the window, scrolling inside). */
+.tickets-ready-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 12px;
   border-bottom: 1px solid var(--border);
 }
 
+.tickets-ready-bar-id {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-muted, inherit);
+}
+
+.tickets-ready-bar-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.tickets-ready-body-host {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  max-height: 45vh;
+  min-height: 96px;
+  overflow: auto;
+}
+
+.tickets-ready-body-host[style*='height'] {
+  max-height: none;
+}
+
+.tickets-ready-split {
+  flex: 0 0 6px;
+  cursor: row-resize;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+}
+
+.tickets-ready-split:hover,
+.tickets-ready-split:focus-visible {
+  background: var(--border);
+  outline: none;
+}
+
+.tickets-ready-chip-done {
+  background: var(--bg-hover, transparent);
+}
+
 @container (min-width: 900px) {
-  .tickets-ready {
+  .tickets-ready-body-host {
     flex-direction: row;
     align-items: stretch;
   }
 
   .tickets-ready-story {
+    flex: 0 0 320px;
     border-left: 1px solid var(--border);
     border-top: 0;
   }
@@ -3245,7 +3298,7 @@ details[open] > summary > .tickets-tx-think-preview {
 
 /* The story column beside the card. */
 .tickets-ready-story {
-  flex: 0 0 320px;
+  flex: 0 0 auto;
   min-width: 0;
   padding: 20px;
   border-top: 1px solid var(--border);

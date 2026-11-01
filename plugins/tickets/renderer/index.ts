@@ -31,7 +31,8 @@ import { createRunComposer } from './run-composer';
 import { THREAD_KEY, ticketPagePlan } from './ticket-page';
 import { PENDING_HINT, dialogStarter } from './dialog-starters';
 import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups, workListSignature } from './work-groups';
-import { readyCardNode, storyNode } from './ready-view';
+import { readyBarNode, readyCardNode, storyNode } from './ready-view';
+import { stepCardOf } from '../shared/step-card';
 import type { ChangesReply } from '../shared/changes';
 import { checkpointControls, headerControls, liveStateWord, threadSteps, durationWords, type ThreadStep } from './thread-steps';
 import { stuckOf } from './stuck';
@@ -1782,9 +1783,78 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   // it (a right column from 900 px pane width, below when narrower).
   const readyWrap = el('div', 'tickets-ready');
   readyWrap.hidden = true;
+  const readyBar = el('div', 'tickets-ready-barhost');
+  const readyBody = el('div', 'tickets-ready-body-host');
   const readyMain = el('div', 'tickets-ready-main');
   const readyStoryHost = el('aside', 'tickets-ready-story');
-  readyWrap.append(readyMain, readyStoryHost);
+  readyBody.append(readyMain, readyStoryHost);
+  // The splitter between the card and the agent log: drag to give either
+  // more of the pane; the height is remembered (one value, per machine).
+  const READY_HEIGHT_KEY = 'drey.tickets.readyHeight';
+  const readySplit = el('div', 'tickets-ready-split');
+  readySplit.setAttribute('role', 'separator');
+  readySplit.setAttribute('aria-orientation', 'horizontal');
+  readySplit.setAttribute('aria-label', 'Resize the card');
+  readySplit.tabIndex = 0;
+  readySplit.hidden = true;
+  const setReadyHeight = (px: number | null, persist: boolean): void => {
+    if (px === null) {
+      readyBody.style.height = '';
+    } else {
+      const clamped = Math.max(96, Math.round(px));
+      readyBody.style.height = `${clamped}px`;
+      if (persist) {
+        try {
+          localStorage.setItem(READY_HEIGHT_KEY, String(clamped));
+        } catch {
+          // storage unavailable: the height just is not remembered
+        }
+      }
+    }
+  };
+  try {
+    const stored = Number(localStorage.getItem(READY_HEIGHT_KEY));
+    if (Number.isFinite(stored) && stored > 0) {
+      setReadyHeight(stored, false);
+    }
+  } catch {
+    // no storage: the stylesheet's default height applies
+  }
+  readySplit.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    readySplit.setPointerCapture(event.pointerId);
+    const startY = event.clientY;
+    const startH = readyBody.getBoundingClientRect().height;
+    const onMove = (move: PointerEvent): void => setReadyHeight(startH + (move.clientY - startY), false);
+    const onUp = (): void => {
+      readySplit.removeEventListener('pointermove', onMove);
+      readySplit.removeEventListener('pointerup', onUp);
+      readySplit.removeEventListener('pointercancel', onUp);
+      setReadyHeight(readyBody.getBoundingClientRect().height, true);
+    };
+    readySplit.addEventListener('pointermove', onMove);
+    readySplit.addEventListener('pointerup', onUp);
+    readySplit.addEventListener('pointercancel', onUp);
+  });
+  readySplit.addEventListener('keydown', (event) => {
+    const step = event.key === 'ArrowUp' ? -32 : event.key === 'ArrowDown' ? 32 : 0;
+    if (step !== 0) {
+      event.preventDefault();
+      setReadyHeight(readyBody.getBoundingClientRect().height + step, true);
+    }
+  });
+  readySplit.addEventListener('dblclick', () => {
+    setReadyHeight(null, false);
+    try {
+      localStorage.removeItem(READY_HEIGHT_KEY);
+    } catch {
+      // nothing remembered to forget
+    }
+  });
+  readyWrap.append(readyBar, readyBody, readySplit);
   let readyPulledFor: string | null = null;
   let readyReply: ChangesReply | null = null;
   let readyKey = '';
@@ -1848,52 +1918,73 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     if (card === null || snap === null || snap.pipeline.length === 0) {
       readyWrap.hidden = true;
       readyChip.hidden = true;
+      readySplit.hidden = true;
       readyKey = '';
       return;
     }
     const need = workGroups(snap, fleetRuns).needs.find((row) => row.card.id === ticketId)?.need ?? null;
     const kind = need !== null && need.kind === 'checkpoint' ? needKindLabel(need, snap) : null;
     const reply = readyReply;
-    if (kind !== 'Ready to try' && kind !== 'Review' && (reply?.changes ?? null) === null) {
+    // The card follows the ticket's place in the pipeline, not the mere
+    // existence of a `## Changes` section (a Done ticket kept showing it).
+    const step = stepCardOf({
+      pipeline: snap.pipeline.map((p) => ({ id: p.id, title: p.title })),
+      phaseId: card.phase,
+      atCheckpoint: kind !== null,
+      planGate: kind === 'Plan to approve',
+      hasReport: (reply?.changes ?? null) !== null || (reply?.result ?? null) !== null,
+      launchable: reply?.launchable ?? false,
+    });
+    if (step.kind === 'none') {
       readyWrap.hidden = true;
       readyChip.hidden = true;
+      readySplit.hidden = true;
       readyKey = '';
       return;
     }
-    const chipText = `${kind ?? 'Result card'} ${readyOpen ? '⌄' : '›'}`;
+    const chipText = `${step.kind === 'final' ? 'Report' : (kind ?? 'Review')} ${readyOpen ? '⌄' : '›'}`;
     if (readyChip.textContent !== chipText) {
       readyChip.textContent = chipText;
     }
     readyChip.hidden = false;
-    const terminal = snap.pipeline[snap.pipeline.length - 1]!.id === card.phase;
-    const key = JSON.stringify([card.id, card.meta.title, card.meta.track, card.meta.repo, terminal, reply]);
+    const key = JSON.stringify([card.id, card.meta.title, card.meta.track, card.meta.repo, step, reply, readyOpen]);
     if (readyKey !== key) {
       readyKey = key;
-      readyMain.replaceChildren(
-        readyCardNode(
-          {
-            onLaunch: () =>
-              void runMutation(`Launching ${ticketId}`, () => invokeBoard('launchVersion', { id: ticketId })),
-            onAccept: () =>
-              void runMutation(`Accepting ${ticketId}`, () => invokeBoard('acceptTicket', { id: ticketId })),
-            onSendBack: () => sendBackModal(),
-            icon: (name, size) => api.ui.icon(name, size),
+      const deps = {
+        onLaunch: () => void runMutation(`Launching ${ticketId}`, () => invokeBoard('launchVersion', { id: ticketId })),
+        onAccept: () =>
+          void runMutation(`${step.kind === 'final' ? 'Archiving' : 'Moving'} ${ticketId}`, () =>
+            invokeBoard('acceptTicket', { id: ticketId }),
+          ),
+        onSendBack: () => sendBackModal(),
+        icon: (name: string, size?: number) => api.ui.icon(name, size),
+      };
+      const data = {
+        id: card.id,
+        title: card.meta.title,
+        track: card.meta.track,
+        repo: card.meta.repo,
+        card: step,
+        changes: reply?.changes ?? null,
+        result: reply?.result ?? null,
+      };
+      readyBar.replaceChildren(
+        readyBarNode(deps, data, {
+          open: readyOpen,
+          onToggle: () => {
+            readyOpen = !readyOpen;
+            paintReady();
           },
-          {
-            id: card.id,
-            title: card.meta.title,
-            track: card.meta.track,
-            repo: card.meta.repo,
-            terminal,
-            changes: reply?.changes ?? null,
-          },
-        ),
+        }),
       );
+      readyMain.replaceChildren(readyCardNode(deps, data));
       readyStoryHost.replaceChildren(
         storyNode({ story: reply?.story ?? [], totals: reply?.totals ?? { minutes: null, tokens: null } }),
       );
     }
-    readyWrap.hidden = !readyOpen;
+    readyWrap.hidden = false;
+    readyBody.hidden = !readyOpen;
+    readySplit.hidden = !readyOpen;
   };
   // The quiet start's pending hint (req-75): under the status line while
   // a live run stands quiet — nothing happens until the first message.

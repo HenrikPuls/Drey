@@ -65,7 +65,7 @@ import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhase
 import { blockedRefusal } from './blocked';
 import { planWorktreeRemoval } from './worktree-removal';
 import { detectDrift, recentDoneOf, type DriftDetection } from './normalize';
-import { parseChanges, planApprovedOf, storyOf, type ChangesReply } from '../shared/changes';
+import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply } from '../shared/changes';
 import { openTerminalAt, runInNewConsole } from './open-terminal';
 import { ChangeHub, DreyTicketsPort } from './remote/drey-port';
 import type { AttachmentReply, RefineReply, TicketReply } from '../shared/remote-protocol';
@@ -1056,7 +1056,7 @@ class BoardService {
   async changesOf(id: string): Promise<ChangesReply> {
     const found = await this.findCard(id);
     if (found === null) {
-      return { changes: null, story: [], totals: { minutes: null, tokens: null }, planApproved: null };
+      return { changes: null, story: [], totals: { minutes: null, tokens: null }, planApproved: null, result: null, launchable: false };
     }
     const story = storyOf(found.text);
     return {
@@ -1064,7 +1064,35 @@ class BoardService {
       story: story.items,
       totals: story.totals,
       planApproved: planApprovedOf(found.text),
+      result: parseResult(found.text),
+      launchable: await this.launchableFor(id),
     };
+  }
+
+  /** Whether "Launch this version" can work: a worktree on disk and a command to run in it. */
+  private async launchableFor(id: string): Promise<boolean> {
+    try {
+      const vault = await this.detect();
+      if (vault === null) {
+        return false;
+      }
+      const snap = await this.snapshot();
+      const card = findOnBoard(snap, id);
+      const repo = card?.meta.repo == null ? null : snap.repos.find((r) => r.name === card.meta.repo) ?? null;
+      if (card === null || repo === null) {
+        return false;
+      }
+      const worktreePath = worktreePathFor(vault.path, repo, card.id);
+      if (!(await fsp.stat(worktreePath).then((s) => s.isDirectory()).catch(() => false))) {
+        return false;
+      }
+      return (
+        repo.launch !== null ||
+        (await fsp.stat(`${worktreePath}${path.sep}dev.ps1`).then((s) => s.isFile()).catch(() => false))
+      );
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -2686,7 +2714,7 @@ const plugin: MainPluginModule = {
       const cmd = parseTicketId(payload, 'changes');
       return cmd.ok
         ? board.changesOf(cmd.value.id)
-        : { changes: null, story: [], totals: { minutes: null, tokens: null } };
+        : { changes: null, story: [], totals: { minutes: null, tokens: null }, planApproved: null, result: null, launchable: false };
     });
 
     // T-0042: a move out of tickets/archive/ performed as the board

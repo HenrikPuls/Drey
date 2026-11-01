@@ -64,6 +64,29 @@ function changesBody(ticketText: string): string[] | null {
   return body;
 }
 
+/**
+ * The `## Result` section the commit step writes after the merge: the
+ * closing report for the owner (merge commit, what landed, anything
+ * left over), as the plain lines under the heading. Null when absent or
+ * empty. Shown on the final card only.
+ */
+export function parseResult(ticketText: string): string | null {
+  const lines = ticketText.split('\n');
+  const at = lines.findIndex((line) => /^##\s+Result\s*$/.test(line));
+  if (at < 0) {
+    return null;
+  }
+  const body: string[] = [];
+  for (let i = at + 1; i < lines.length; i++) {
+    if (/^##\s/.test(lines[i]!)) {
+      break;
+    }
+    body.push(lines[i]!.replace(/\r$/, ''));
+  }
+  const text = body.join('\n').trim();
+  return text === '' ? null : text;
+}
+
 /** The `## Changes` section of a ticket body; null when absent. */
 export function parseChanges(ticketText: string): ParsedChanges | null {
   const body = changesBody(ticketText);
@@ -217,6 +240,10 @@ export interface ChangesReply {
    * them. Null without such a line.
    */
   readonly planApproved: string | null;
+  /** The commit step's `## Result` report; null without one. */
+  readonly result: string | null;
+  /** The ticket's worktree exists and a launch command resolves — "Launch" is offered. */
+  readonly launchable: boolean;
 }
 
 /**

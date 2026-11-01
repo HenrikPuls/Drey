@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { readyCardNode, storyNode, type ReadyViewDeps } from './ready-view';
+import { readyBarNode, readyCardNode, storyNode, type ReadyViewDeps } from './ready-view';
+import type { StepCard } from '../shared/step-card';
 import type { ParsedChanges, StoryItem, StoryTotals } from '../shared/changes';
 
 const CHANGES: ParsedChanges = {
@@ -21,6 +22,9 @@ const deps = (): ReadyViewDeps => ({
   icon: () => document.createElementNS('http://www.w3.org/2000/svg', 'svg'),
 });
 
+const GATE: StepCard = { kind: 'gate', acceptLabel: 'Move to Commit', canLaunch: true, canSendBack: true };
+const FINAL: StepCard = { kind: 'final', acceptLabel: 'Archive', canLaunch: false, canSendBack: false };
+
 const click = (node: Element): void => {
   (node as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }));
 };
@@ -33,7 +37,8 @@ describe('readyCardNode (req-75 W3)', () => {
       title: 'Palette opens twice on slow CI',
       track: 'auto',
       repo: 'drey',
-      terminal: false,
+      card: GATE,
+      result: null,
       changes: CHANGES,
     });
     expect(card.querySelector('.tickets-ready-kicker')!.textContent).toBe('T-0126');
@@ -41,7 +46,7 @@ describe('readyCardNode (req-75 W3)', () => {
     expect([...card.querySelectorAll('.tickets-ready-chip')].map((n) => n.textContent)).toEqual([
       'Auto track',
       'drey',
-      'Ready to try',
+      'Needs your decision',
     ]);
     expect(card.querySelector('.tickets-ready-for-you')!.textContent).toContain('opens once');
     // The worker's fixed closing line reads muted, under the text.
@@ -54,24 +59,55 @@ describe('readyCardNode (req-75 W3)', () => {
     expect(files[2]!.querySelector('.tickets-ready-status-D')).not.toBeNull();
     expect(card.querySelector('.tickets-ready-tick')!.textContent).toBe('✓');
     expect(card.textContent).toContain('1. Launch this version');
-    expect(card.textContent).toContain('Accept and merge');
+    expect(card.textContent).toContain('Move to Commit');
     expect(card.textContent).toContain('Send back…');
-    expect(card.querySelector('.tickets-ready-hint')!.textContent).toContain('worktree is removed');
+    expect(card.querySelector('.tickets-ready-hint')!.textContent).toContain('Move to Commit moves the ticket on');
 
     click(card.querySelector('.tickets-ready-launch')!);
-    click([...card.querySelectorAll('.tickets-ready-actions button')].find((b) => b.textContent === 'Accept and merge')!);
+    click([...card.querySelectorAll('.tickets-ready-actions button')].find((b) => b.textContent === 'Move to Commit')!);
     click(card.querySelector('.tickets-ready-sendback')!);
     expect(d.onLaunch).toHaveBeenCalledTimes(1);
     expect(d.onAccept).toHaveBeenCalledTimes(1);
     expect(d.onSendBack).toHaveBeenCalledTimes(1);
   });
 
-  it('labels the terminal button Accept and archive — the merge already happened', () => {
-    const card = readyCardNode(deps(), { id: 'T-0001', title: null, track: null, repo: null, terminal: true, changes: CHANGES });
-    expect(card.textContent).toContain('Accept and archive');
-    expect(card.textContent).not.toContain('Accept and merge');
-    expect([...card.querySelectorAll('.tickets-ready-chip')].map((n) => n.textContent)).toEqual(['Ready to try']);
+  it('the final card leads with the delivered report and offers Archive alone', () => {
+    const d = deps();
+    const card = readyCardNode(d, {
+      id: 'T-0001',
+      title: null,
+      track: null,
+      repo: null,
+      card: FINAL,
+      result: 'Merged as 035f139 into main and pushed.',
+      changes: CHANGES,
+    });
+    const headings = [...card.querySelectorAll('.tickets-ready-section > b')].map((n) => n.textContent);
+    expect(headings[0]).toBe('What was delivered');
+    expect(card.querySelector('.tickets-ready-for-you')!.textContent).toContain('035f139');
+    expect([...card.querySelectorAll('.tickets-ready-actions button')].map((b) => b.textContent)).toEqual(['Archive']);
+    expect(card.querySelector('.tickets-ready-launch')).toBeNull();
+    expect(card.querySelector('.tickets-ready-sendback')).toBeNull();
+    expect([...card.querySelectorAll('.tickets-ready-chip')].map((n) => n.textContent)).toEqual(['Done']);
     expect(card.querySelector('.tickets-ready-title')!.textContent).toBe('(untitled)');
+    click(card.querySelector('.tickets-ready-actions button')!);
+    expect(d.onAccept).toHaveBeenCalledTimes(1);
+  });
+
+  it('a gate without a runnable build hides Launch and promotes the move', () => {
+    const card = readyCardNode(deps(), {
+      id: 'T-0003',
+      title: 'Plan only',
+      track: null,
+      repo: null,
+      card: { ...GATE, canLaunch: false },
+      result: null,
+      changes: null,
+    });
+    expect(card.querySelector('.tickets-ready-launch')).toBeNull();
+    const move = card.querySelector('.tickets-ready-actions button')!;
+    expect(move.textContent).toBe('Move to Commit');
+    expect(move.className).toContain('tickets-takeover-btn-primary');
   });
 
   it('leaves missing sections out and still shows the buttons without a Changes section', () => {
@@ -80,7 +116,8 @@ describe('readyCardNode (req-75 W3)', () => {
       title: 'No changes yet',
       track: null,
       repo: null,
-      terminal: false,
+      card: GATE,
+      result: null,
       changes: { forYou: null, files: [], checks: [], howToTry: null },
     });
     expect(card.textContent).not.toContain('What changed for you');
@@ -89,6 +126,28 @@ describe('readyCardNode (req-75 W3)', () => {
     expect(card.textContent).not.toContain('How to try it');
     expect(card.querySelector('.tickets-ready-launch')).not.toBeNull();
     expect(card.querySelector('.tickets-ready-hint')).not.toBeNull();
+  });
+});
+
+describe('readyBarNode (the fold strip)', () => {
+  const data = { id: 'T-0009', title: 'Fold me', track: null, repo: null, card: GATE, result: null, changes: null };
+
+  it('open: id, title and state, with no buttons — the card below carries them', () => {
+    const bar = readyBarNode(deps(), data, { open: true, onToggle: vi.fn() });
+    expect(bar.querySelector('.tickets-ready-bar-title')!.textContent).toBe('Fold me');
+    expect(bar.querySelector('.tickets-ready-fold')!.getAttribute('aria-expanded')).toBe('true');
+    expect(bar.querySelector('.tickets-ready-actions')).toBeNull();
+  });
+
+  it('folded: the gate stays decidable from the strip, and the toggle unfolds', () => {
+    const onToggle = vi.fn();
+    const d = deps();
+    const bar = readyBarNode(d, data, { open: false, onToggle });
+    expect(bar.querySelector('.tickets-ready-fold')!.getAttribute('aria-expanded')).toBe('false');
+    click([...bar.querySelectorAll('.tickets-ready-actions button')].find((b) => b.textContent === 'Move to Commit')!);
+    expect(d.onAccept).toHaveBeenCalledTimes(1);
+    click(bar.querySelector('.tickets-ready-fold')!);
+    expect(onToggle).toHaveBeenCalledTimes(1);
   });
 });
 
