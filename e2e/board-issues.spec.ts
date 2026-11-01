@@ -32,12 +32,13 @@ test('the board issues are a header chip that unfolds readable messages', async 
   // req-73's final shape: icon and count only, the summary in the tooltip.
   await expect(chip).toContainText('2');
 
-  // One line: the header's title and the controls share a row.
-  // Centred on it, too: the editor's `.tickets-head` rule once leaked in here.
-  const title = page.locator('.head', { has: page.locator('.tickets-panel-head') }).locator('.title');
-  const titleBox = (await title.boundingBox())!;
+  // Contained in the header (T-0086: the head wraps its controls to
+  // their own line when narrow — containment is the claim, not one row).
+  const head = page.locator('.head', { has: page.locator('.tickets-panel-head') }).filter({ visible: true });
+  const headBox = (await head.boundingBox())!;
   const chipBox = (await chip.boundingBox())!;
-  expect(Math.abs(titleBox.y + titleBox.height / 2 - (chipBox.y + chipBox.height / 2))).toBeLessThan(2);
+  expect(chipBox.y).toBeGreaterThanOrEqual(headBox.y);
+  expect(chipBox.y + chipBox.height).toBeLessThanOrEqual(headBox.y + headBox.height);
   await page.screenshot({ path: test.info().outputPath('board-issues-folded.png') });
 
   await chip.click();

@@ -61,20 +61,26 @@ test.describe('Interactive dialog affordances (req-65)', () => {
   test('the header offers the dialog exactly where the column does', async ({ page }) => {
     await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
 
+    // A row opens the ticket's thread (req-84); its Ticket file link
+    // opens the file whose header carries the dialog.
+    const openFileOf = async (id: string): Promise<void> => {
+      await page.locator(`.work-row[data-id="${id}"]`).filter({ visible: true }).click();
+      const thread = page.locator('.tickets-thread').filter({ visible: true });
+      await expect(thread).toBeVisible({ timeout: 15_000 });
+      await thread.locator('.tickets-thread-filelink').click();
+      await expect(page.locator('app-editor .tickets-head')).toBeVisible({ timeout: 15_000 });
+    };
+
     // Plan column: the plan dialog.
-    await page.locator('.work-row[data-id="T-0042"]').filter({ visible: true }).click();
-    const head = page.locator('app-editor .tickets-head');
-    await expect(head).toBeVisible({ timeout: 15_000 });
-    await expect(head.locator('.tickets-head-dialog')).toHaveText('Plan with agent');
+    await openFileOf('T-0042');
+    await expect(page.locator('app-editor .tickets-head .tickets-head-dialog')).toHaveText('Plan with agent');
 
     // The checkpoint: the refine dialog.
-    await page.locator('.work-row[data-id="T-0043"]').filter({ visible: true }).click();
-    await expect(page.locator('app-editor .tickets-head')).toBeVisible({ timeout: 15_000 });
+    await openFileOf('T-0043');
     await expect(page.locator('app-editor .tickets-head .tickets-head-dialog')).toHaveText('Refine with agent');
 
-    // A middle agent column (build) offers none — and neither does a plain note.
-    await page.locator('.work-row[data-id="T-0044"]').filter({ visible: true }).click();
-    await expect(page.locator('app-editor .tickets-head')).toBeVisible({ timeout: 15_000 });
+    // A middle agent column (build) offers none.
+    await openFileOf('T-0044');
     await expect(page.locator('app-editor .tickets-head .tickets-head-dialog')).toHaveCount(0);
   });
 

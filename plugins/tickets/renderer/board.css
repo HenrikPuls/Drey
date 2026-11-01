@@ -2838,7 +2838,8 @@ details[open] > summary > .tickets-tx-think-preview {
 
 .tickets-thread-empty[hidden],
 .tickets-takeover-transcript[hidden],
-.tickets-ready[hidden] {
+.tickets-ready[hidden],
+.tickets-ready-body-host[hidden] {
   display: none;
 }
 

@@ -29,6 +29,9 @@
     },
     {
       "path": "./tsconfig.plugins.json"
+    },
+    {
+      "path": "./tsconfig.e2e.json"
     }
   ]
 }

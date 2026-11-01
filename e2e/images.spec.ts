@@ -29,7 +29,7 @@ async function pasteImage(
   kind: 'paste' | 'drop' = 'paste',
 ): Promise<void> {
   await page.evaluate(
-    ({ selector, kind, b64 }) => {
+    ({ selector, kind, b64 }: { selector: string; kind: 'paste' | 'drop'; b64: string }) => {
       const el = document.querySelector(selector);
       if (!el) {
         throw new Error(`no element for ${selector}`);

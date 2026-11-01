@@ -27,7 +27,7 @@ async function openNote(page: Page, vaultDir: string, name: string, body: string
 
 /** Dispatch dragover + drop on `.cm-content` with a DataTransfer carrying `data`. */
 async function dropOnEditor(page: Page, data: Record<string, string>): Promise<void> {
-  await page.evaluate((entries) => {
+  await page.evaluate((entries: Record<string, string>) => {
     const el = document.querySelector('app-editor .cm-content')!;
     const dt = new DataTransfer();
     for (const [type, value] of Object.entries(entries)) {

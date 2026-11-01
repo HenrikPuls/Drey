@@ -40,7 +40,7 @@ async function openFile(page: Page, name: string): Promise<void> {
 
 /** Sets the editor scroll offset and lets CodeMirror render the viewport. */
 async function scrollTo(page: Page, value: number): Promise<void> {
-  await page.evaluate((top) => {
+  await page.evaluate((top: number) => {
     (document.querySelector('app-editor .cm-scroller') as HTMLElement).scrollTop = top;
   }, value);
   await page.waitForTimeout(120);
