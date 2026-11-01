@@ -750,3 +750,40 @@
 .tset-remote-device > button {
   margin-left: auto;
 }
+
+/* Column editor: inline rename, armed remove, the add form. */
+.tset-name-input {
+  min-width: 0;
+  width: 100%;
+  font: inherit;
+}
+
+.tset-name-meta .icon-btn {
+  opacity: 0;
+}
+
+.tset-row:hover .tset-name-meta .icon-btn,
+.tset-row:focus-within .tset-name-meta .icon-btn {
+  opacity: 1;
+}
+
+.tset-name-meta .icon-btn.tset-armed {
+  opacity: 1;
+  color: var(--status-deleted);
+}
+
+.tset-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.tset-add .tset-name-input {
+  flex: 0 1 220px;
+}
+
+.tset-add-label {
+  color: var(--text-muted, inherit);
+}

@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addPipelinePhase,
   assembleBoard,
   orderColumn,
   parsePipeline,
   parseRepos,
   patchPipelinePhase,
+  phaseIdFromTitle,
+  removePipelinePhase,
+  renamePipelinePhase,
   reorderPipelinePhases,
   reposFileText,
 } from './ticket-board';
@@ -406,6 +410,52 @@ describe('reorderPipelinePhases - the sortable columns (req-50)', () => {
     expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'qa', 'prioritized', 'done'])).toThrow('exactly once');
     expect(() => reorderPipelinePhases(PIPELINE, ['prioritized', 'inbox', 'build', 'done'])).toThrow('keep their places');
     expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'prioritized', 'done', 'build'])).toThrow('keep their places');
+  });
+});
+
+describe('phase editor - add, rename, remove', () => {
+  it('derives a stable id from a title and avoids clashes', () => {
+    expect(phaseIdFromTitle('QA & Sign-off', [])).toBe('qa-sign-off');
+    expect(phaseIdFromTitle('Build', ['build'])).toBe('build-2');
+    expect(phaseIdFromTitle('2nd look', [])).toBe('p-2nd-look');
+    expect(phaseIdFromTitle('???', [])).toBe('phase');
+  });
+
+  it('adds a manual phase before the terminal one by default, or after a named phase', () => {
+    const added = addPipelinePhase(PIPELINE, { title: 'QA' });
+    const parsed = parsePipeline(added.text);
+    expect(parsed.error).toBeNull();
+    expect(added.id).toBe('qa');
+    expect(parsed.phases.map((p) => p.id)).toEqual(['inbox', 'prioritized', 'build', 'qa', 'done']);
+    expect(parsed.phases[3]!.handover).toBe('manual');
+    expect(added.text).toContain('Prose.');
+    const after = addPipelinePhase(PIPELINE, { title: 'Triage', afterId: 'inbox' });
+    expect(parsePipeline(after.text).phases.map((p) => p.id)).toEqual(['inbox', 'triage', 'prioritized', 'build', 'done']);
+  });
+
+  it('refuses a blank name, an unknown anchor and a slot after the terminal phase', () => {
+    expect(() => addPipelinePhase(PIPELINE, { title: '  ' })).toThrow('needs a name');
+    expect(() => addPipelinePhase(PIPELINE, { title: 'X', afterId: 'nope' })).toThrow('no phase');
+    expect(() => addPipelinePhase(PIPELINE, { title: 'X', afterId: 'done' })).toThrow('terminal');
+  });
+
+  it('renames the title only; id, keys and prose stay', () => {
+    const renamed = renamePipelinePhase(PIPELINE, 'build', '  Implementation  ');
+    const phase = parsePipeline(renamed).phases.find((p) => p.id === 'build')!;
+    expect(phase.title).toBe('Implementation');
+    expect(phase.wip).toBe(2);
+    expect(phase.handover).toBe('agent build-default');
+    expect(renamed).toContain('Prose.');
+    expect(() => renamePipelinePhase(PIPELINE, 'nope', 'X')).toThrow('no phase');
+    expect(() => renamePipelinePhase(PIPELINE, 'build', '')).toThrow('needs a name');
+  });
+
+  it('removes a middle phase but keeps the capture target and the terminal phase', () => {
+    const removed = removePipelinePhase(PIPELINE, 'prioritized');
+    expect(parsePipeline(removed).phases.map((p) => p.id)).toEqual(['inbox', 'build', 'done']);
+    expect(() => removePipelinePhase(PIPELINE, 'inbox')).toThrow('stay');
+    expect(() => removePipelinePhase(PIPELINE, 'done')).toThrow('stay');
+    expect(() => removePipelinePhase(PIPELINE, 'nope')).toThrow('no phase');
   });
 });
 

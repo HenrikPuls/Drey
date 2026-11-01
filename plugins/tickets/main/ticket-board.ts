@@ -6,7 +6,7 @@
  * paths, the specs feed it fixtures. Everything here is deterministic:
  * the same files always produce the same board (no stored state).
  */
-import { isCollection, isMap, parseDocument, stringify, type YAMLMap, type YAMLSeq } from 'yaml';
+import { isCollection, isMap, parseDocument, stringify, type Document, type YAMLMap, type YAMLSeq } from 'yaml';
 import { splitFrontmatter } from '../../../shared/frontmatter';
 import {
   parseHandover,
@@ -311,6 +311,129 @@ export function reorderPipelinePhases(text: string, order: readonly string[]): s
     yaml += '\n';
   }
   return `---\n${yaml}---\n${body}`;
+}
+
+// --- phase add / rename / remove (the settings page's column editor) ----------
+
+/**
+ * A phase id from a human title: lower-case, every run of characters
+ * outside `[a-z0-9]` becomes one `-`, a leading digit gets a `p-` prefix
+ * (an id starts with a letter), and a clash with `taken` takes the first
+ * free `-2`, `-3`, … suffix. Empty input falls back to `phase`.
+ */
+export function phaseIdFromTitle(title: string, taken: readonly string[]): string {
+  let base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (base === '') {
+    base = 'phase';
+  }
+  if (!/^[a-z]/.test(base)) {
+    base = `p-${base}`;
+  }
+  let id = base;
+  for (let n = 2; taken.includes(id); n += 1) {
+    id = `${base}-${n}`;
+  }
+  return id;
+}
+
+/** Parses pipeline.md into its document and phase list, or throws the one refusal. */
+function openPipelineDoc(text: string): { doc: Document; phases: YAMLSeq; body: string } {
+  const { yamlText, body, hadFence } = splitFrontmatter(text);
+  if (!hadFence || yamlText === null) {
+    throw new Error('pipeline.md has no frontmatter fence');
+  }
+  const doc = parseDocument(yamlText);
+  if (doc.errors.length > 0) {
+    throw new Error('pipeline.md does not parse');
+  }
+  const phases = doc.get('phases', true);
+  if (!isCollection(phases)) {
+    throw new Error('pipeline.md needs a phases list');
+  }
+  return { doc, phases: phases as YAMLSeq, body };
+}
+
+function closePipelineDoc(doc: Document, body: string): string {
+  let yaml = doc.toString({ flowCollectionPadding: false, lineWidth: 0 });
+  if (!yaml.endsWith('\n')) {
+    yaml += '\n';
+  }
+  return `---\n${yaml}---\n${body}`;
+}
+
+function phaseIdOfItem(item: unknown): string | null {
+  const id = isMap(item) ? item.get('id') : null;
+  return typeof id === 'string' ? id : null;
+}
+
+/** The title of a phase never carries a line break or a YAML-hostile edge. */
+function cleanTitle(title: string): string {
+  const clean = title.replace(/\s+/g, ' ').trim();
+  if (clean === '') {
+    throw new Error('a phase needs a name');
+  }
+  return clean;
+}
+
+/**
+ * Adds a manual phase. It lands right after `afterId` (default: just
+ * before the terminal phase) — never before the capture target or after
+ * the terminal one. Returns the new text and the id the phase got.
+ */
+export function addPipelinePhase(
+  text: string,
+  input: { readonly title: string; readonly afterId?: string | null },
+): { readonly text: string; readonly id: string } {
+  const { doc, phases, body } = openPipelineDoc(text);
+  const ids = phases.items.map(phaseIdOfItem);
+  const title = cleanTitle(input.title);
+  const id = phaseIdFromTitle(title, ids.filter((x): x is string => x !== null));
+  let at = ids.length - 1; // before the terminal phase
+  if (input.afterId !== undefined && input.afterId !== null) {
+    const after = ids.indexOf(input.afterId);
+    if (after < 0) {
+      throw new Error(`pipeline.md has no phase "${input.afterId}"`);
+    }
+    if (after === ids.length - 1) {
+      throw new Error('nothing comes after the terminal phase');
+    }
+    at = after + 1;
+  }
+  phases.items.splice(at, 0, doc.createNode({ id, title, handover: 'manual' }, { flow: true }));
+  return { text: closePipelineDoc(doc, body), id };
+}
+
+/**
+ * Renames a phase: only its `title`. The id — and with it the phase
+ * folder, every ticket's place and every `handover` / prompt reference —
+ * stays, so a rename touches no ticket.
+ */
+export function renamePipelinePhase(text: string, phaseId: string, title: string): string {
+  const { doc, phases, body } = openPipelineDoc(text);
+  const entry = phases.items.find((item) => phaseIdOfItem(item) === phaseId);
+  if (entry === undefined || !isMap(entry)) {
+    throw new Error(`pipeline.md has no phase "${phaseId}"`);
+  }
+  entry.set('title', cleanTitle(title));
+  return closePipelineDoc(doc, body);
+}
+
+/** Removes a phase entry; the capture target and the terminal phase are kept. */
+export function removePipelinePhase(text: string, phaseId: string): string {
+  const { doc, phases, body } = openPipelineDoc(text);
+  const ids = phases.items.map(phaseIdOfItem);
+  const at = ids.indexOf(phaseId);
+  if (at < 0) {
+    throw new Error(`pipeline.md has no phase "${phaseId}"`);
+  }
+  if (at === 0 || at === ids.length - 1) {
+    throw new Error('the first and the last phase stay');
+  }
+  phases.items.splice(at, 1);
+  return closePipelineDoc(doc, body);
 }
 
 // --- repos.md --------------------------------------------------------------

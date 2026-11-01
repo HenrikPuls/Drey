@@ -41,7 +41,10 @@ import {
 import {
   assembleBoard,
   parseRepos,
+  addPipelinePhase,
   patchPipelinePhase,
+  removePipelinePhase,
+  renamePipelinePhase,
   parsePipeline,
   reorderPipelinePhases,
   reposFileText,
@@ -2126,6 +2129,66 @@ class BoardService {
     });
   }
 
+  /**
+   * The settings page's column editor: add, rename or remove a phase in
+   * `_meta/pipeline.md`, one commit each. A rename changes the title only
+   * (the id, the folder and every ticket stay); an add writes a manual
+   * phase whose folder appears on first use; a remove is refused while
+   * tickets sit in the phase, so none is orphaned.
+   */
+  editPhase(
+    input:
+      | { op: 'add'; title: string; afterId?: string | null }
+      | { op: 'rename'; phase: string; title: string }
+      | { op: 'remove'; phase: string },
+  ): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const text = await this.readOptional(vault.id, PIPELINE_PATH);
+      if (text === null) {
+        return { ok: false, error: 'tickets/_meta/pipeline.md is missing' };
+      }
+      const snap = await this.snapshot();
+      let patched: string;
+      let message: string;
+      try {
+        if (input.op === 'add') {
+          const added = addPipelinePhase(text, { title: input.title, afterId: input.afterId ?? null });
+          patched = added.text;
+          message = `tickets: add phase ${added.id}`;
+        } else if (input.op === 'rename') {
+          patched = renamePipelinePhase(text, input.phase, input.title);
+          message = `tickets: rename phase ${input.phase}`;
+        } else {
+          const column = snap.columns.find((c) => c.phase.id === input.phase);
+          const count = column?.tickets.length ?? 0;
+          if (count > 0) {
+            return {
+              ok: false,
+              error: `${count} ticket${count === 1 ? '' : 's'} still in "${column?.phase.title ?? input.phase}" — move ${count === 1 ? 'it' : 'them'} to another column first`,
+            };
+          }
+          patched = removePipelinePhase(text, input.phase);
+          message = `tickets: remove phase ${input.phase}`;
+        }
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      try {
+        await this.ctx.vault.write(PIPELINE_PATH, patched, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, [PIPELINE_PATH], message);
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [PIPELINE_PATH] });
+      this.announceChanged();
+      return warning === null ? { ok: true } : { ok: true, warning };
+    });
+  }
+
   /** The shared body of reorder and "Number folders"; runs inside the queue. */
   private async renumber(
     vault: VaultLike,
@@ -2574,6 +2637,20 @@ const plugin: MainPluginModule = {
         return { ok: false, error: 'bad reorder payload' };
       }
       return board.reorderPhases(p.order);
+    });
+
+    ctx.ipc.handle('editPhase', async (payload) => {
+      const p = payload as { op?: unknown; title?: unknown; phase?: unknown; afterId?: unknown };
+      if (p.op === 'add' && typeof p.title === 'string') {
+        return board.editPhase({ op: 'add', title: p.title, afterId: typeof p.afterId === 'string' ? p.afterId : null });
+      }
+      if (p.op === 'rename' && typeof p.phase === 'string' && typeof p.title === 'string') {
+        return board.editPhase({ op: 'rename', phase: p.phase, title: p.title });
+      }
+      if (p.op === 'remove' && typeof p.phase === 'string') {
+        return board.editPhase({ op: 'remove', phase: p.phase });
+      }
+      return { ok: false, error: 'bad phase edit payload' };
     });
 
     // The model picker's list: what the worker CLI offers (req-46).
