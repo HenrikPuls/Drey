@@ -24,6 +24,7 @@ import {
   type TicketRun,
   type TicketTrack,
 } from '../shared/tickets';
+import { rawCaptureLogText } from '../shared/capture-tidy';
 
 /** `entered-<phase>` key grammar (phase ids: lowercase, digits, dashes). */
 const ENTERED_KEY = /^entered-([a-z][a-z0-9-]*)$/;
@@ -616,6 +617,9 @@ export interface NewTicketInput {
   readonly now: Date;
   readonly actor: string;
   readonly description: string;
+  /** The owner's raw words behind a tidied capture (req-75 W5c); absent
+   *  for a hand-typed ticket — set only when tidy-up changed the fields. */
+  readonly rawCapture?: string;
 }
 
 /** The strict canonical ticket file — exactly the shapes of the spec. */
@@ -652,6 +656,10 @@ export function newTicketFileText(input: NewTicketInput): string {
     '## Log',
     '',
     `- '${stamp}' ${input.actor} — created in ${input.firstPhase}`,
+    // One more line right after `created in …` (req-75 W5c): the raw
+    // words a misheard dictation is recovered from. Nothing without
+    // `rawCapture` — the canonical shape stays byte-identical.
+    ...(input.rawCapture !== undefined ? [`- '${stamp}' ${input.actor} — ${rawCaptureLogText(input.rawCapture)}`] : []),
     '',
   ].join('\n');
 }

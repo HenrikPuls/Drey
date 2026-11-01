@@ -280,6 +280,40 @@ describe('newTicketFileText', () => {
     expect(text).toContain('Do the thing.');
     expect(text).toContain('- \'2026-10-17T14:32:00Z\' owner@desk — created in inbox');
   });
+
+  it('adds one raw capture Log line right after created in (req-75 W5c)', () => {
+    const withRaw = newTicketFileText({
+      id: 'T-0002',
+      title: 'Fix the palette race',
+      repo: null,
+      priority: 'normal',
+      rank: 5000,
+      firstPhase: 'inbox',
+      now: new Date('2026-10-17T14:32:00Z'),
+      actor: 'owner@desk',
+      description: 'The palette flickers at startup.',
+      rawCapture: '  so   the palette\n\nflickers at startup ',
+    });
+    expect(withRaw).toContain(
+      '- \'2026-10-17T14:32:00Z\' owner@desk — created in inbox\n- \'2026-10-17T14:32:00Z\' owner@desk — raw capture: so the palette flickers at startup',
+    );
+    expect(parseTicketFile(withRaw, 'tickets/inbox/T-0002.md').issues).toEqual([]);
+  });
+
+  it('stays byte-identical without rawCapture (req-75 W5c)', () => {
+    const base = {
+      id: 'T-0003',
+      title: 'Hand typed',
+      repo: null,
+      priority: 'normal',
+      rank: 5000,
+      firstPhase: 'inbox',
+      now: new Date('2026-10-17T14:32:00Z'),
+      actor: 'owner@desk',
+      description: 'No dictation here.',
+    };
+    expect(newTicketFileText({ ...base, rawCapture: undefined })).toBe(newTicketFileText(base));
+  });
 });
 
 describe('patchHeaderFields (req-62)', () => {
