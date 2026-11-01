@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { answersFromText, answersText, claudeCodeAdapter, formText, modelBody, OPENCODE_API, opencodeAdapter, opencodeCapConfig, permissionText, providerErrorText, questionOf, type FetchFn, type NormalizedEvent, type ProviderStart, INTERRUPT_WAIT_MS, toolActivity } from './providers';
+import { answersFromText, answersText, claudeCodeAdapter, formText, modelBody, OPENCODE_API, opencodeAdapter, opencodeCapConfig, permissionText, providerErrorText, questionOf, type FetchFn, type NormalizedEvent, type ProviderStart, INTERRUPT_WAIT_MS, toolActivity, editChanges } from './providers';
 import { telemetryFromEvents } from './telemetry';
 import type { RunnerProcess, SpawnFn } from './procs';
 
@@ -1538,5 +1538,22 @@ describe('toolActivity — the one line a tool call shows on the lane', () => {
     expect(toolActivity(undefined, undefined)).toBe('tool');
     expect(toolActivity('question', { questions: [{ question: 'How should I merge?' }] })).toBe('asks How should I merge?');
     expect(toolActivity('shell', { command: 'x'.repeat(400) }).length).toBeLessThanOrEqual(140);
+  });
+});
+
+describe('editChanges — the lines an edit-like call adds and removes', () => {
+  const nl = String.fromCharCode(10);
+  it('counts an Edit by its old and new string', () => {
+    expect(editChanges('Edit', { old_string: 'a', new_string: ['b', 'c', 'd', 'e'].join(nl) })).toEqual({ added: 4, removed: 1 });
+  });
+
+  it('sums a MultiEdit and counts a Write as all added', () => {
+    expect(editChanges('MultiEdit', { edits: [{ old_string: 'a', new_string: 'b' }, { old_string: ['x', 'y'].join(nl), new_string: '' }] })).toEqual({ added: 1, removed: 3 });
+    expect(editChanges('Write', { content: ['1', '2', '3'].join(nl) })).toEqual({ added: 3, removed: 0 });
+  });
+
+  it('is null for other tools and shapes', () => {
+    expect(editChanges('Read', { file_path: 'a.ts' })).toBeNull();
+    expect(editChanges(undefined, undefined)).toBeNull();
   });
 });

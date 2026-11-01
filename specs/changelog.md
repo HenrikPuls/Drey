@@ -24,6 +24,49 @@ its pane without a split. The split beside the thread remains only for
 the first ticket after the pair was closed. Specs: two new rows in
 `plugins/tickets/renderer/ticket-page.spec.ts`.
 
+### Milestone 96 — fleet stability, the rest: limits, prompt versions, edit counts, Tell/Nudge, soft pause
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+("everything but M3"): the roadmap's M1c, M2b and M4b.
+
+- **Run ceilings per column.** `max-turns:` and `max-work:` (minutes of
+  busy time) in `pipeline.md` set the column's own ceilings; the
+  request carries them (`RunRequest.limits`), the reaper prefers them to
+  the runner defaults (`ticket-schema.md`).
+- **A waiting worker frees its pool slot** (the ticket stays busy): with a
+  pool of one, one unanswered question no longer blocks the provider.
+- **claude-code's context cap is enforced mid-run.** A run whose
+  `lastTurnContext` reaches the cap ends (fails into the back-off) — the
+  worker cannot compact; the next run starts fresh from the handover
+  section and the diff stat. OpenCode keeps compacting its own session.
+- **Prompt versions.** Shipped prompts carry
+  `<!-- drey-prompt-version: N -->` (plan/build/commit are v2); the runner
+  says once per prompt when the vault copy is older (a copy without the
+  marker reads as v0 — all of today's) and strips the marker before
+  composing. The owner resets from Settings → Prompts. Flag, not
+  replace: a customised copy is never overwritten behind the owner's
+  back (`FLEET.md`).
+- **Fallback repo instructions are capped** at 16 KB (a `CLAUDE.md` /
+  `AGENTS.md` used when no `instructions:` file is configured) with a
+  pointer to search the rest; the configured file stays verbatim.
+- **Edit counts.** Edit/MultiEdit/Write calls carry `changes` (lines added
+  / removed, read off the call's input); the transcript shows `+4 −1`
+  beside the `✎` row.
+- **Pause after the current action.** `pauseAfterAction` (`/softpause`,
+  `fleetControl softpause`): the turn is interrupted at the next finished
+  tool call. The header's and the cards' Pause use it; the composer's
+  square keeps the immediate interrupt.
+- **Tell… and Nudge on the Workers cards.** Tell opens an input that sends
+  a message (`fleetSend`; the draft survives the section's redraws); a
+  stuck worker offers Nudge with a canned status request.
+
+Specs: `orchestrator.spec.ts` (waiting slot, prompt-version note and
+marker strip), `runs.spec.ts` (column limits, cap, soft pause),
+`ticket-board.spec.ts` (keys), `default-prompts.spec.ts`,
+`context-pack.spec.ts`, `providers.spec.ts` (`editChanges`),
+`transcript-view.spec.ts`, `workers-view.spec.ts`. Left: roadmap
+"Fleet stability" (M3 and three small items).
+
 ### Milestone 95 — fleet stability, part 4: the run view tells the truth
 
 **Not yet manually verified by the owner.** Owner request, 2026-10-31

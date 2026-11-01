@@ -240,6 +240,17 @@ export interface PipelinePhase {
    */
   readonly tokenBudget: number | null;
   /**
+   * The most model turns one run of the column may take (`max-turns:`);
+   * null = the runner's default ceiling.
+   */
+  readonly maxTurns: number | null;
+  /**
+   * The most working minutes one run of the column may take (`max-work:`,
+   * busy time only — a wait for the owner does not count); null = the
+   * runner's default ceiling.
+   */
+  readonly maxWorkMin: number | null;
+  /**
    * The ci handover's check command (`ci:`, M85): a green run moves the
    * ticket one column right — the machine gate in the work repo.
    */
@@ -274,6 +285,8 @@ export function phaseWithoutPoolKeys(
     interactive: null,
     maxRed: null,
     tokenBudget: null,
+    maxTurns: null,
+    maxWorkMin: null,
     ci: null,
     audit: null,
     semantic: false,

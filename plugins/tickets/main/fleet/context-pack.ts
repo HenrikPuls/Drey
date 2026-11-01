@@ -9,19 +9,35 @@ import * as path from 'node:path';
 import type { TicketsGit } from '../tickets-git';
 
 /**
- * The work repo's agent instructions, verbatim and never capped — the
- * stable in-repo prefix every phase instruction opens with. The repo's
+ * The work repo's agent instructions — the stable in-repo prefix every
+ * phase instruction opens with. The repo's
  * `instructions:` file (req-79) first — a short brief for unattended
  * runs instead of the pair-programming rules every model call would
  * otherwise carry — then `CLAUDE.md`, then `AGENTS.md`; null when the
- * repo carries none of them (or the checkout is unreachable).
+ * repo carries none of them (or the checkout is unreachable). The
+ * configured file is verbatim (the owner chose it for exactly this); the
+ * fallbacks are the pair-programming rules of the whole repo (Drey's is
+ * 50 KB, re-sent with every model call of the run) and are cut at
+ * `FALLBACK_INSTRUCTIONS_CAP` with a pointer to search the file instead.
  */
+export const FALLBACK_INSTRUCTIONS_CAP = 16 * 1024;
+const NL = String.fromCharCode(10);
+
 export async function readRepoInstructions(repoPath: string, configured: string | null = null): Promise<string | null> {
   const names = configured !== null ? [configured, 'CLAUDE.md', 'AGENTS.md'] : ['CLAUDE.md', 'AGENTS.md'];
   for (const name of names) {
     const text = await fsp.readFile(path.join(repoPath, name), 'utf8').catch(() => null);
     if (text !== null && text.trim() !== '') {
-      return text;
+      if (name === configured || Buffer.byteLength(text, 'utf8') <= FALLBACK_INSTRUCTIONS_CAP) {
+        return text;
+      }
+      const head = text.slice(0, FALLBACK_INSTRUCTIONS_CAP);
+      const cut = head.lastIndexOf(NL);
+      return (
+        `${(cut > FALLBACK_INSTRUCTIONS_CAP / 2 ? head.slice(0, cut) : head).trimEnd()}${NL}${NL}` +
+        `[${name} continues — search it for the topic at hand instead of reading it whole: it is ` +
+        `${Math.round(Buffer.byteLength(text, 'utf8') / 1024)} KB.]`
+      );
     }
   }
   return null;

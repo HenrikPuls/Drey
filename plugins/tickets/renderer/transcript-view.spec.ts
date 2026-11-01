@@ -102,3 +102,12 @@ describe('createTranscriptView — system lines and the pause', () => {
     expect(html.querySelector('.tickets-tx-running')?.textContent).toMatch(/^running · \d+:\d\d$/);
   });
 });
+
+describe('createTranscriptView — edit counts', () => {
+  it('shows +n −m beside an edit row', () => {
+    const view = createTranscriptView(api, 'W:/wt');
+    view.update(formatWatch([ev({ kind: 'note', text: 'edit src/a.ts', changes: { added: 4, removed: 1 } })]));
+    expect(view.element.querySelector('.tickets-tx-changes')?.textContent).toBe('+4 −1');
+    expect(view.element.querySelector('.tickets-tx-tool')?.textContent).toBe('✎ Edit');
+  });
+});

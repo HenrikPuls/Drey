@@ -36,6 +36,8 @@ export interface WatchStep {
   readonly outcome?: string;
   /** The call settled as failed. */
   readonly failed?: boolean;
+  /** An edit or write: the lines it adds and removes. */
+  readonly changes?: { readonly added: number; readonly removed: number };
 }
 
 /** One rendered block of the transcript. */
@@ -371,7 +373,7 @@ export function formatWatch(events: readonly NormalizedEvent[]): WatchView {
           // The provider's own stderr or an unparseable line: kept, folded.
           blocks.push({ kind: 'diagnostic', markdown: flat(text), text: flat(text), at: event.ts });
         } else {
-          const step = toolParts(text);
+          const step: WatchStep = { ...toolParts(text), ...(event.changes !== undefined ? { changes: event.changes } : {}) };
           blocks.push({ kind: 'step', markdown: toolLine(step), step, tool: text.split(' ')[0], at: event.ts });
         }
         break;

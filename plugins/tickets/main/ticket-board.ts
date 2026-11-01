@@ -112,6 +112,10 @@ export function parsePipeline(text: string): PipelineParse {
       typeof tokenBudgetRaw === 'number' && Number.isFinite(tokenBudgetRaw) && tokenBudgetRaw > 0
         ? tokenBudgetRaw
         : null;
+    const positiveInt = (raw: unknown): number | null =>
+      typeof raw === 'number' && Number.isInteger(raw) && raw > 0 ? raw : null;
+    const maxTurns = positiveInt(map['max-turns']);
+    const maxWorkMin = positiveInt(map['max-work']);
     const ciRaw = map['ci'];
     const ci = typeof ciRaw === 'string' && ciRaw.trim() !== '' ? ciRaw.trim() : null;
     const auditRaw = map['audit'];
@@ -143,6 +147,8 @@ export function parsePipeline(text: string): PipelineParse {
       interactive,
       maxRed,
       tokenBudget,
+      maxTurns,
+      maxWorkMin,
       ci,
       audit,
       semantic,

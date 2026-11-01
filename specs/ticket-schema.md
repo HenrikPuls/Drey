@@ -402,6 +402,12 @@ commit per change; hand edits win on refresh):
 - `max-red:` — the circuit breaker's tolerance: consecutive red gates
   the column takes before it trips (holds + parks its next candidate
   in inbox). Default 3.
+- `max-turns:` / `max-work:` — the column's own run ceilings (milestone
+  96): the most model turns, and the most working minutes (busy time —
+  a wait for the owner does not count), one run of the column may take
+  before the lease reaper stops it and the step fails into the back-off.
+  Positive integers; absent or invalid = the runner's defaults (250
+  turns, 90 minutes).
 - `token-budget:` — the column's daily token budget (the pool's settled
   runs are summed per day); over budget trips the breaker. Off by
   default.

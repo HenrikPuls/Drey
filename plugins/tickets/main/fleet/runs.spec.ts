@@ -262,6 +262,60 @@ describe('RunSupervisor', () => {
     expect(sup.get(id)!.lastError).toContain('run limit');
   });
 
+  /** A run of `provider` whose context is past the cap, reaped once. */
+  async function reapPastCap(provider: 'claude-code' | 'opencode'): Promise<RunInfo> {
+    const rel = await writeTicket();
+    const fake = fakeAdapter();
+    const alive = async (_cmd: string, args: readonly string[]): Promise<string> =>
+      `"${args.join(' ').match(/\d+/)?.[0] ?? ''}"`;
+    const { sup } = supervisor({ adapter: { ...fake.adapter, id: provider }, exec: alive });
+    const started = await sup.start(request({ ticketRelPath: rel, provider }));
+    const id = (started as { run: { id: string } }).run.id;
+    const live = (sup as unknown as { runs: Map<string, { info: RunInfo }> }).runs.get(id)!;
+    live.info = { ...live.info, lastTurnContext: 170_000 };
+    await sup.reap();
+    return sup.get(id)!;
+  }
+
+  it('the reaper ends a claude-code run past the context cap', async () => {
+    const info = await reapPastCap('claude-code');
+    expect(info.state).toBe('failed');
+    expect(info.lastError).toContain('context cap: 170000 tokens');
+  });
+
+  it('an OpenCode run past the cap is left alone — it compacts its own session', async () => {
+    const info = await reapPastCap('opencode');
+    expect(info.state).toBe('running');
+  });
+
+  it('a soft pause waits for the end of the current action, then interrupts', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    const handle = adapter.handles[0]!;
+
+    expect((await sup.pauseAfterAction(runId)).ok).toBe(true);
+    expect(handle.interrupt).not.toHaveBeenCalled(); // asked, not yet done
+    handle.onEvent('bash npm test'); // a call starting is not the end of an action
+    expect(handle.interrupt).not.toHaveBeenCalled();
+    handle.onEvent('result › 41 passed');
+    await vi.waitFor(() => expect(handle.interrupt).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(sup.get(runId)!.paused).toBe(true));
+  });
+
+  it("the column's own max-turns beats the runner default", async () => {
+    const rel = await writeTicket();
+    const { sup } = supervisor();
+    const started = await sup.start(request({ ticketRelPath: rel, limits: { maxTurns: 3 } }));
+    const id = (started as { run: { id: string } }).run.id;
+    const live = (sup as unknown as { runs: Map<string, { info: RunInfo }> }).runs.get(id)!;
+    live.info = { ...live.info, turns: 4 }; // far under the default 250, over the column's 3
+    await sup.reap();
+    expect(sup.get(id)!.state).toBe('failed');
+    expect(sup.get(id)!.lastError).toContain('4 turns, over the limit of 3');
+  });
+
   it('an auto handover resumes a warm same-phase retry and stamps mode and lineage (T-0049)', async () => {
     const rel = await writeTicket();
     await seedRun('R-old', { endedAt: '2026-10-17T11:57:00Z' }); // 3 min before the fixed now

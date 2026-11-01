@@ -63,6 +63,8 @@ export interface NormalizedEvent {
   readonly costUsd?: number;
   /** One short line: what the worker is doing now (a tool call, a text opening). */
   readonly activity?: string;
+  /** On an edit/write tool-call note: the lines it adds and removes (`+4 −1` in the transcript). */
+  readonly changes?: { readonly added: number; readonly removed: number };
   /** The current context window's size in tokens. */
   readonly contextTokens?: number;
   /** The model's context window in tokens (its limit), reported once when known. */
@@ -79,6 +81,39 @@ export interface NormalizedEvent {
    * cumulative over the run and must never pose as a turn's context.
    */
   readonly turnUsage?: RunUsage;
+}
+
+/** The lines in a text: none for an empty one. */
+const lineCount = (text: unknown): number => (typeof text === 'string' && text !== '' ? text.split(String.fromCharCode(10)).length : 0);
+
+/**
+ * The lines an edit-like tool call adds and removes, read off its input:
+ * `Edit` (old/new string), `MultiEdit` (a list of them), `Write` (the whole
+ * file counts as added — whether it replaced one is not in the call). Null
+ * for every other tool and for an input of another shape.
+ */
+export function editChanges(name: string | undefined, input: Record<string, unknown> | undefined): { added: number; removed: number } | null {
+  if (name === undefined || input === undefined) {
+    return null;
+  }
+  switch (name.toLowerCase()) {
+    case 'edit':
+      return { added: lineCount(input['new_string']), removed: lineCount(input['old_string']) };
+    case 'multiedit': {
+      const edits = Array.isArray(input['edits']) ? (input['edits'] as Array<Record<string, unknown>>) : [];
+      return edits.reduce<{ added: number; removed: number }>(
+        (sum, edit) => ({
+          added: sum.added + lineCount(edit['new_string']),
+          removed: sum.removed + lineCount(edit['old_string']),
+        }),
+        { added: 0, removed: 0 },
+      );
+    }
+    case 'write':
+      return { added: lineCount(input['content']), removed: 0 };
+    default:
+      return null;
+  }
 }
 
 /**
@@ -507,10 +542,12 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
                 start.onEvent({ ts: nowIso(now), kind: 'text', text: (part.text ?? '').slice(0, 8_000) });
               } else if (part.type === 'tool_use') {
                 activity = toolActivity(part.name, part.input);
+                const changes = editChanges(part.name, part.input);
                 start.onEvent({
                   ts: nowIso(now),
                   kind: 'note',
                   text: activity,
+                  ...(changes !== null ? { changes } : {}),
                   ...(part.name !== undefined ? { tool: part.name } : {}),
                 });
               }
