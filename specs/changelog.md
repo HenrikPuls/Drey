@@ -1,4 +1,23 @@
 
+### req-75 W5a — New ticket from anywhere
+
+**Not yet manually verified by the owner.** A second system-wide chord,
+**Ctrl+Alt+T**, raises Drey from anywhere in Windows, reveals the
+tickets board and opens the existing New ticket dialog with the cursor
+in its Title field; with no tickets vault the reveal is all that
+happens (the board shows its setup state). Built as a generic SDK seam
+(1.37): a plugin command may be `global` — the base registers its chord
+with the OS and never also fires it in-window, so it runs exactly once.
+Settings → Keyboard shortcuts shows the row "New ticket (system-wide)",
+rebindable like every other row, with the quick-capture row's "in use"
+hint when another program owns the combo. Main's `GlobalShortcuts`
+(modelled on the quick-capture hotkey, ADR-0073; the raise is the
+quick-capture call, ADR-0002) registers exactly the renderer's list,
+keeps the quick-capture accelerator reserved and reports failures
+instead of throwing. Specs: `electron/global-shortcuts.spec.ts`,
+`keybinding.service.spec.ts` (global commands leave the in-window
+keymap), `shortcut-model.spec.ts` (the row label).
+
 ### req-75 W4c — Queue messages for a busy worker
 
 **Not yet manually verified by the owner.** Owner request, 2026-10-31

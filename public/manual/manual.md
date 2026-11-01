@@ -876,6 +876,11 @@ edits the frontmatter as YAML; its header folds back to the ticket
 header. The **Log** section opens folded the first time a ticket shows
 in a session — the fold marker beside "Log" opens it.
 
+**From anywhere.** The same dialog is one chord away outside Drey:
+`Ctrl+Alt+T` anywhere in Windows brings Drey to the front, opens the
+board and puts the cursor in the dialog's Title field. Rebind it in
+Settings → Keyboard shortcuts like every other shortcut.
+
 A row's **⋯** button (or a right-click) opens its menu: **Open ticket**
 (the ticket page); **Queue for the fleet** on an idea and **Back
 to ideas** on a queued one; **Move to ›** with every other phase by
