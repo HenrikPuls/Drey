@@ -804,17 +804,14 @@ the phase's colour plus its name; the colours are set per column in
 Settings → Tickets → Pipeline (`color:` in pipeline.md, and without one
 a curated default palette applies). A row is the
 title, an age and one line; the open ticket's row is marked with an
-accent bar. Click a row to open the **ticket page**: the ticket file in
-the editor and beside it, while a worker is on the ticket, its **run
-tab** — the transcript, the metrics (turn, context, tokens, elapsed),
-the prompt box, hand back and resume. Without a live run the pane
-beside the file shows the ticket's **thread** instead — the thread's
-header shows the run's light and who is working, and above its composer
-sits the **decision bar** (Approve → next phase, Refine with agent, or
-Accept). The thread follows whichever ticket you open last — one tab,
-not one per ticket — and the next ticket's run tab or thread opens in
-the same pair of panes: both tabs re-activate, the file ends up
-focused, and the pair never opens a third pane, whatever else is open. The panel's footer carries the whole fleet: the worst light, the
+accent bar. Click a row to open the ticket's **thread** — the worker's
+page: the thread's header shows the run's light and who is working, and
+above its composer sits the **decision bar** (Approve → next phase,
+Refine with agent, or Accept). The thread follows whichever ticket you
+click last — one tab, not one per ticket — and opens where your focus is,
+never as an automatic split. A ticket picked in the Files panel opens as
+a plain file tab. The row's menu **Open ticket** opens both: the ticket
+file with its thread beside it. The panel's footer carries the whole fleet: the worst light, the
 states in words and who is out there — `2 running · OpenCode 2` — with
 tokens in flight and the oldest run's age in its tooltip; when nothing
 runs but an alert stands (a halted chain, a held column, a tripped
@@ -985,15 +982,31 @@ light, the states in words, the tokens in flight and how long the
 oldest live run has been at it — hover it for the long form; a narrow
 panel keeps only the light and the states.
 
+**Workers.** While workers run, a *Workers* section tops the Work panel:
+one card per worker with its state in words (*Building*, *Paused*,
+*Looks stuck*, *Waits for your answer*), the ticket, what it is doing
+now, its working time, context and tokens, and Pause / Continue,
+**Tell…** (a line that reaches the worker as your next message) and
+Stop on the card; a worker that looks stuck also offers **Nudge**, which
+asks it for a status line. **Pause** waits for the current action (a
+command or an edit) to finish and then pauses — it never cuts one off
+half-way. A worker silent for ten minutes is flagged *Looks
+stuck*; after forty it is stopped and the step retries with a growing
+wait.
+
 **The worker on the ticket.** The thread's conversation is the
 ticket's story in steps: each earlier run of the ticket is one folded
 line — a mark (✓ done with a green gate, ✕ failed, ■ stopped, ●
 live), what it did and how long it took; click it to read that run's
 transcript. The current run sits open at the bottom, streaming; your
 own messages are bubbles on the right. **Pause** interrupts the
-running turn (the session and its context stay). **Take over** holds
+running turn (the session and its context stay); the header then reads
+*Paused* and offers **Continue**, which lets the worker pick the step up
+where it stopped. A worker standing idle has no turn to interrupt, so
+it shows no Pause. **Take over** holds
 the run — the runner sends nothing of its own until you **Hand back**
-(a worker that is idle by then ends the run and the gate decides);
+(a worker that is idle by then ends the run and the gate decides —
+after a Pause, Hand back continues the step instead);
 your first message alone takes over too. **Stop** ends the run. The
 header always offers exactly one way on: Stop while the run lives
 (also for a worker that lost its runner — it reads *Running* with a
@@ -1755,7 +1768,7 @@ history store is deliberately outside it).
 ---
 
 *Manual for Drey 0.8.1; manual content last changed
-2026-10-31. Screenshots were captured automatically from
+2026-11-01. Screenshots were captured automatically from
 the built app (Anthrazit theme, 1600Ã—1000) by
 `e2e/manual-screenshots.spec.ts` — run
 `$env:DREY_MANUAL_SHOTS='1'; npm run e2e:run -- manual-screenshots`

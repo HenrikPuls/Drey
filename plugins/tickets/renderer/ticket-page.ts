@@ -45,23 +45,6 @@ export interface TicketPagePlan {
 }
 
 /**
- * Whether the active tab being a ticket file (opened from the Files panel,
- * the palette, a link ...) should bring up the page's thread too: the thread
- * is closed or follows another ticket. `busy` covers the page's own opens,
- * whose intermediate active changes must not re-enter.
- */
-export function pageFollowsActive(state: {
-  activeCardId: string | null;
-  threadTicketId: string | null;
-  threadOpen: boolean;
-  busy: boolean;
-}): boolean {
-  return (
-    !state.busy && state.activeCardId !== null && (!state.threadOpen || state.threadTicketId !== state.activeCardId)
-  );
-}
-
-/**
  * The landing matrix of the ticket page (req-75): whatever pane is
  * focused and whatever else is open, the pair -- the ticket file and
  * its thread -- ends up side by side and both tabs re-activate on every
