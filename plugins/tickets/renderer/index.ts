@@ -3050,6 +3050,24 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     void invokeBoard('fleetStatus').then((result) =>
       applyFleetSnapshot((result ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
     void readWorkerPools(api).catch(() => undefined);
+
+    // New ticket from anywhere (req-75 W5a, SDK 1.37): the system-wide
+    // chord raises Drey, reveals the board and opens the create modal.
+    // Global — the base registers it with the OS; it never also fires
+    // in-window. Without a tickets vault only the reveal happens (the
+    // panel shows its setup state).
+    api.commands.register({
+      id: 'tickets.newTicket',
+      label: 'New ticket',
+      keybinding: 'Mod+Alt+T',
+      global: true,
+      run: () => {
+        api.ui.revealWidget('tickets');
+        if (snapshot?.vaultId != null) {
+          openCreateModal(api, snapshot);
+        }
+      },
+    });
     void refreshBoard();
   },
 };
