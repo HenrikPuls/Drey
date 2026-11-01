@@ -41,7 +41,7 @@
             </button>
           </div>
 
-          @if (row.id === captureId && captureInUse()) {
+          @if (rowInUse(row)) {
             <p class="note status-error">
               In use by another program — Drey could not claim it. Choose another.
             </p>

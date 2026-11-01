@@ -210,6 +210,23 @@ export interface AppIpc {
    * chord means another program holds the combo.
    */
   getCaptureHotkeyStatus(): Promise<CaptureHotkeyStatus>;
+
+  /**
+   * Pushes the chords of the app's GLOBAL commands (SDK 1.37, req-74
+   * W5a): main registers each system-wide and reports what succeeded —
+   * `registered: false` means another program holds the combo (or the
+   * quick-capture hotkey owns it). The renderer owns the command
+   * registry, so the push is the whole truth; main registers and
+   * reports, nothing more.
+   */
+  syncGlobalShortcuts(chords: readonly GlobalChord[]): Promise<GlobalShortcutStatus[]>;
+
+  /**
+   * A system-wide shortcut fired (main has already raised the window);
+   * `id` is the command to run. The only path a global command takes —
+   * it has no in-window binding.
+   */
+  onGlobalShortcut(listener: (id: string) => void): () => void;
 }
 
 /** The quick-capture hotkey as main last registered it (ADR-0073). */
@@ -217,4 +234,17 @@ export interface CaptureHotkeyStatus {
   /** The stored chord (`shared/keybindings.ts` grammar); `null` = none set. */
   chord: string | null;
   registered: boolean;
+}
+
+/** One global command's chord, pushed to main for system-wide registration (SDK 1.37). */
+export interface GlobalChord {
+  readonly id: string;
+  readonly chord: string;
+}
+
+/** The outcome of registering one {@link GlobalChord} system-wide. */
+export interface GlobalShortcutStatus {
+  readonly id: string;
+  readonly chord: string;
+  readonly registered: boolean;
 }

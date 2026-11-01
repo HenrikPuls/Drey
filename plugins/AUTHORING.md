@@ -60,7 +60,7 @@ leaves the app on the previous build. Verify with
 
 - `apiVersion` is a **major gate**: a manifest whose major differs from
   `PLUGIN_API_VERSION.major` (`shared/plugin-api/versions.ts`, currently
-  `{ major: 1, minor: 32 }`) is never imported — the plugin shows up in
+  `{ major: 1, minor: 37 }`) is never imported — the plugin shows up in
   Settings → Panels & plugins as incompatible. Minor bumps are additive;
   1.9 added `commands.run(id, payload?)`, `ui.createTagField` (the shared
   tag chip field — prefer it over a hand-rolled chip row), the main-side
@@ -77,6 +77,10 @@ leaves the app on the previous build. Verify with
   operating-system notification for what needs the user while they look
   elsewhere; a click brings Drey to the front, a repeated `tag` replaces
   the earlier one (the tickets board uses it for a worker that waits).
+  1.37 added the `global` flag on `commands.register` -- the command's
+  chord registers with the OS instead of the in-window keymap, so it
+  fires while any app is focused; Drey comes to the front and runs it
+  (the tickets plugin's New ticket is the reference).
   `ui.registerComposerContribution` is a deprecated no-op since the
   "Add entry" drawer was removed (ADR-0057). 1.11 added the task-index
   seam (`ctx.tasks.registerTaskQuery` / `queryProvider` — the `TaskQueryProvider`
