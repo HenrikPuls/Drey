@@ -1501,6 +1501,95 @@ details[open] > summary > .tickets-tx-think-preview {
   justify-content: center;
 }
 
+.tickets-composer-sendnow {
+  height: 28px;
+  font-size: 0.72rem;
+}
+
+/* The queue above the prompt box (req-75 W4c): one row per message the
+   owner sent while the worker was in a turn. */
+.tickets-composer-queue {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 16px 8px;
+}
+
+.tickets-composer-queue[hidden] {
+  display: none;
+}
+
+.tickets-queue-row,
+.tickets-queue-ended {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 8px 3px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 8px;
+  background: var(--bg-sidebar);
+}
+
+.tickets-queue-label {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-4);
+}
+
+.tickets-queue-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+
+.tickets-queue-edit {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 4px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.tickets-queue-x {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  justify-content: center;
+}
+
+.tickets-queue-hint {
+  font-size: 12px;
+  color: var(--text-4);
+  padding: 0 10px;
+}
+
+.tickets-queue-ended-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* The quick prompts sit in the toolbar; in a narrow pane they scroll
    sideways instead of pushing stop and send out of place. */
 .tickets-takeover-chips {

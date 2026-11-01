@@ -1,4 +1,21 @@
 
+### req-75 W4c — Queue messages for a busy worker
+
+**Not yet manually verified by the owner.** Owner request, 2026-10-31
+(outside the list). While a worker is in the middle of a turn, what the
+owner sends no longer cuts into it: Enter and the send button (now
+reading **Queue**) put the message in a queue above the prompt box,
+attachments riding with it, one row per message — click to edit inline,
+× to remove. When the turn ends the first queued message is sent by
+itself, the next at the following idle — one per idle turn, and never
+while the worker waits on the owner (the owner answers first).
+**Send now** beside the button, or Ctrl+Enter, keeps today's behaviour:
+interrupt the turn, then send. The queue lives per run in the renderer
+and is mirrored to localStorage, so a reload (or a closed Drey) keeps
+it; a run that ends with messages still queued drops them with a notice
+and a Copy button. Pure model: `message-queue.ts` with specs; wired in
+`run-composer.ts`.
+
 ### req-84 — explicit entry points: the ticket pair is no longer automatic
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01

@@ -1020,7 +1020,18 @@ lists what the branch carries against its base — each file, its
 status, the lines added and removed — beside **Safe beside others**
 (✓ own worktree). Two quick prompts sit above the prompt box: **What
 are you doing and why?** and **Stop after this step** — a click fills
-the box, you send. In the conversation
+the box, you send.
+
+While the worker is in the middle of a turn, what you send does not cut
+into it: the message waits in a **queue above the prompt box** — click
+one to edit it (Enter saves, Escape cancels), × removes it. When the
+turn ends, the first queued message is sent by itself, the next at the
+following idle. To interrupt the turn and send at once anyway, use
+**Send now** next to the send button or press **Ctrl+Enter**. The queue
+is kept per run, also across a reload; when a run ends with messages
+still queued, a note above the box says so and offers to copy them.
+
+In the conversation
 each tool call is one quiet row: a dot (green when it settled, red when
 it failed), the tool, what it was called on — paths relative to the
 run's worktree, the full path in the tooltip — and its result. More
