@@ -46,7 +46,12 @@ the tickets repo — `tickets/_meta/pipeline.md` (ordered phases with
 id, title, optional WIP limit, optional claim flag, and the
 per-handover spec `manual | agent <prompt-ref> | ci | none`). Default:
 inbox → prioritized → plan → plan-review → build → review → commit →
-done. Board state is never stored: everything (columns, order, claims,
+done. (Amended 2026-11-01, req-93: the shipped default is
+inbox → prioritized → build → commit → done. The plan columns went —
+the owner clarifies and plans in prioritized, and the build step
+derives file-level detail itself, at run time, against the code it
+finds; a plan written long before the run ages faster than it pays.)
+Board state is never stored: everything (columns, order, claims,
 ages) is derived from the files on every render.
 
 **Strict frontmatter, tolerant readers, free humans.** Machine writers

@@ -1,4 +1,37 @@
 
+### req-93 — just-in-time planning: the plan columns leave the pipeline
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-01
+(outside the list). The detailed up-front plan aged faster than it
+paid: a plan written when the ticket was captured sat in the queue for
+a day while other tickets merged, and the build worker met stale line
+numbers (T-0062 stopped over a req-74 that main had shipped meanwhile)
+or re-derived the touching points anyway. The shipped default pipeline
+is now **inbox → prioritized → build → commit → done** — the plan and
+plan-review columns are gone (a vault that wants them configures them;
+the schema and the checkpoint mechanism are unchanged). **Prioritized
+is the planning column:** clarify the task, its decisions and its
+acceptance criteria there (the shape dialog or the owner's hand) —
+what ages slowly. The **build step derives file-level detail itself**
+(`build-default` prompt v3): it orients first — symbols and files
+verified against the checkout it actually works in, never line numbers
+— writes a lean working plan into `## Plan` when the ticket carries
+none, and treats a plan's file references as hints to verify, not
+facts. The shape dialog (`plan-interactive-default` v2) asks the 2–4
+questions that matter (goal, scope, constraints, verification) and
+writes goal/decisions/constraints/acceptance criteria instead of a
+file map. Acceptance criteria remain the contract: the fleet still
+refuses to start a run on a ticket without backticked criteria.
+Also: the chain daemon now **drops control state of phases the
+pipeline no longer has** (`prunePhaseState` — a removed column's
+held/streak/cooldown keys rode along in `chain.json` forever; the old
+`review` column's leftovers clear on the next pass). Specs:
+`orchestrator.spec.ts` (stale-phase prune), `specs/ticket-schema.md`
+(default pipeline, plan section, validation 9), ADR-0076/0077
+amendments, `docs/agents/fleet-worker.md`, the manual's checkpoint
+paragraph. The owner's tickets vault reorders its `pipeline.md` in the
+same step.
+
 ### req-92 — A step the worker cannot complete stays put (BLOCKED)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01

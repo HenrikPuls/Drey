@@ -33,7 +33,9 @@ column" pulled tickets out of `prioritized`, a folder the machine must not touch
 
 **Checkpoints: a manual column between automatic ones is the owner's.** The dispatcher never pulls — the owner's
 forward move is what feeds every pool (plan-review in the live default: refine / implement / park, all human moves).
-Backward moves are always human moves — never blocked, always logged; the lane rule binds agents only.
+Backward moves are always human moves — never blocked, always logged; the lane rule binds agents only. (Amended
+2026-11-01, req-93: the shipped default has no checkpoint column — build flows into commit; the mechanism stands for
+pipelines that add one.)
 
 **Step completion is the agent's call; the gate is the safety net.** Every run brief ends with the completion
 discipline: work the step, run the acceptance commands yourself, declare the step done only when they pass and the
@@ -101,6 +103,8 @@ moved T-0060 to done without a merge).
 
 - The board runs itself wherever a column has a worker; the owner's leverage concentrates in triage (inbox), the
   checkpoints (plan-review, commit) and the switches. The live default gives workers to plan, build and review.
+  (Amended 2026-11-01, req-93: the default's worker columns are build and commit; the owner's leverage sits in triage
+  and prioritized, where tickets are clarified and planned.)
 - The runner grows from "one run, supervised" to a loop with state (`chain.json`); its dispatch decisions are
   event-driven (config/control changes, run settle) with a 15-second safety-net rescan, so external board moves are
   picked up even with Drey closed.
