@@ -884,6 +884,16 @@ does not start a one-line hint says so. A title is optional while the
 description has one — its first line becomes the ticket's title
 (trimmed and cut at 80 characters).
 
+**Tidy up.** Right of the mic, the **sparkles button** turns the
+dictated or hastily typed idea in Description into a title and a
+description with one call to the language model — on demand, never on
+its own: the result lands in the two fields for you to edit or
+discard before the ticket exists. Your original words are kept — the
+new ticket's Log carries them on a `raw capture:` line, so a misheard
+dictation is always recoverable. The button needs the language model
+on (Settings → LLM); while the call runs it stays disabled, and a
+reply it cannot read changes nothing.
+
 **From anywhere.** The same dialog is one chord away outside Drey:
 `Ctrl+Alt+T` anywhere in Windows brings Drey to the front, opens the
 board and opens the dialog on Description with dictation already

@@ -1,4 +1,27 @@
 
+### req-75 W5c — Tidy up a captured idea
+
+**Not yet manually verified by the owner.** Part 3 of req-75 W5: a
+**Tidy up** button in the New ticket dialog's Description label row
+(sparkles, right of the mic) makes one model call that turns the
+dictated or hastily typed idea into a title and a description — on
+demand, never an automatic rewrite: the owner sees the result in the
+fields before creating and can edit or ignore it. The prompt lives in
+the plugin (`plugins/tickets/shared/capture-tidy.ts`, classifier-spec
+Prompt 4); the call runs main-side (the `'tidyCapture'` IPC →
+`ctx.llm.chat`, `temperature: 0.2`, gated on the master switch, no
+timeout — ADR-0014, the button stays disabled while it runs). The
+reply is one JSON object through `parseJsonObject` — a title trimmed
+to 80 characters, a description with an empty one falling back to the
+raw text; an unreadable reply leaves the fields and shows the hint
+"The model's reply could not be read — the text is unchanged." The
+owner's original words (the first successful run's input, whitespace
+folded, cut at 2000) ride the create as a second Log line
+`raw capture: …` right after `created in` — a misheard dictation is
+always recoverable; a hand-typed ticket gets no such line and the
+canonical file stays byte-identical. Specs: `capture-tidy.spec.ts`,
+`ticket-files.spec.ts`, `commands.spec.ts`.
+
 ### req-75 W5b — Dictation in the New ticket dialog
 
 **Not yet manually verified by the owner.** Part 2 of req-75 W5: the

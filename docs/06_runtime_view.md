@@ -3674,3 +3674,39 @@ second merge implementation on the desk: the terminal phase archives
 earlier phase moves one column right, where an agent `commit` column
 does the merge as its own step.
 
+## 6.75 Capture by voice, tidied into a ticket (req-75 W5a–W5c, [ADR-0087](09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md))
+
+One chord, one idea: the system-wide New ticket chord (W5a) opens the
+dialog on Description, Windows dictation (W5b) types the owner's words
+into it, and one model call — **Tidy up**, on demand (W5c) — shapes
+them into the ticket's title and description before the file exists.
+
+```mermaid
+sequenceDiagram
+    participant U as Owner
+    participant D as New ticket dialog (renderer)
+    participant M as tickets plugin (main)
+    participant PR as Provider (ctx.llm.chat)
+
+    U->>D: Ctrl+Alt+T - the dialog opens on Description,<br/>Win+H dictation types the idea
+    U->>D: Tidy up (sparkles, right of the mic)
+    D->>D: button disabled, hint "Tidying up…"
+    D->>M: invoke("tidyCapture", { text })
+    M->>M: empty text / llm.enabled() gates - error strings
+    M->>PR: chat(captureTidyMessages(text), { temperature: 0.2 })<br/>no timeout (ADR-0014)
+    PR-->>M: reply text
+    M->>M: parseCaptureTidy (parseJsonObject; title ≤ 80 chars,<br/>empty description falls back to the raw text)
+    M-->>D: { ok, title, description } | { ok: false, error }
+    D->>D: fields replaced, hint cleared (error verbatim, fields stay);<br/>raw = the FIRST successful run's input
+    U->>D: Create ticket
+    D->>M: invoke("create", { title, description, …, raw })
+    M->>M: parseCreate keeps raw (non-empty string) →<br/>newTicketFileText: Log "created in <phase>" +<br/>"raw capture: <words, whitespace folded, cut 2000>"
+    M-->>U: the ticket file opens, one commit
+```
+
+Tidy-up never rewrites on its own: the owner sees the result in the
+fields, may edit or ignore it, and the raw words — of the first
+successful run only — ride the create as a Log line, so a misheard
+dictation stays recoverable. A hand-typed ticket sends no `raw`, and
+the canonical file is byte-identical to before.
+
