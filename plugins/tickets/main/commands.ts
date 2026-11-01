@@ -14,7 +14,7 @@ import {
   type PermissionMode,
   type QuestionAnswers,
 } from './fleet/protocol';
-import { TICKET_PRIORITIES, type TicketPriority, type TicketTrack } from '../shared/tickets';
+import { TICKET_PRIORITIES, titleFromDescription, type TicketPriority, type TicketTrack } from '../shared/tickets';
 
 export type Parsed<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: string };
 
@@ -42,7 +42,12 @@ export interface CreateCommand {
 
 export function parseCreate(payload: unknown): Parsed<CreateCommand> {
   const p = record(payload);
-  const title = typeof p['title'] === 'string' ? p['title'].trim() : '';
+  const given = typeof p['title'] === 'string' ? p['title'].trim() : '';
+  const description = typeof p['description'] === 'string' ? p['description'] : '';
+  // An empty title is no longer refused when the description carries one:
+  // its first line becomes the title (req-75 W5b — a dictated description
+  // alone is enough). Both empty still refuse.
+  const title = given !== '' ? given : titleFromDescription(description);
   if (title === '') {
     return refuse('the title is empty');
   }
@@ -51,7 +56,6 @@ export function parseCreate(payload: unknown): Parsed<CreateCommand> {
     : 'normal';
   const repo = typeof p['repo'] === 'string' && p['repo'].trim() !== '' ? p['repo'].trim() : null;
   const repos = p['repos'];
-  const description = typeof p['description'] === 'string' ? p['description'] : '';
   return ok({
     title,
     priority,
