@@ -477,6 +477,36 @@ describe('Orchestrator', () => {
     second.orch.dispose();
   });
 
+  it('drops the control state of phases the pipeline no longer has', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'build');
+    const first = orchestrator();
+    await first.orch.configure(CONFIG);
+    await first.orch.setMaster('run');
+    await first.orch.setColumn('plan-review', 'held');
+    await first.orch.setColumn('build', 'held');
+    first.orch.dispose();
+
+    // The owner removes the plan-review column from the pipeline.
+    const withoutCheckpoint = PIPELINE.split('\n').filter((line) => !line.includes('id: plan-review')).join('\n');
+    await fsp.writeFile(path.join(vaultDir, 'tickets', '_meta', 'pipeline.md'), withoutCheckpoint, 'utf8');
+
+    const second = orchestrator();
+    await second.orch.load();
+    // Loaded — the stale key survives until a pass has read the pipeline.
+    expect(second.orch.status().columns['plan-review']).toBe('held');
+    await second.orch.configure(CONFIG);
+    const status = second.orch.status();
+    expect(status.columns['plan-review']).toBeUndefined();
+    const chain = JSON.parse(
+      await fsp.readFile(path.join(fleetRoot, 'chain.json'), 'utf8'),
+    ) as { columns: Record<string, string> };
+    expect(chain.columns['plan-review']).toBeUndefined();
+    // A phase the pipeline still has keeps its state.
+    expect(status.columns['build']).toBe('held');
+    second.orch.dispose();
+  });
+
   it('a handover to a newer build is no new session: the successor keeps the master running', async () => {
     await writeMeta();
     let current = new Date('2026-10-31T15:04:18Z');

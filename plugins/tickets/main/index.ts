@@ -131,16 +131,16 @@ const DEFAULT_PIPELINE = `---
 phases:
   - { id: inbox, title: Inbox, handover: manual }
   - { id: prioritized, title: Prioritized, handover: manual }
-  - { id: plan, title: Plan, wip: 1, handover: agent plan-default }
-  - { id: plan-review, title: Plan review, handover: manual }
   - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default }
-  - { id: review, title: Review, handover: manual }
-  - { id: commit, title: Commit, handover: manual }
+  - { id: commit, title: Commit, handover: agent commit-default }
   - { id: done, title: Done, handover: none }
 ---
 The pipeline: ordered phases (first = capture target, last = terminal),
 configurable per handover (manual | agent <prompt-ref> | ci | none).
-See specs/ticket-schema.md. Edit freely; the board follows on refresh.
+Prioritized is the owner's checkpoint: clarify the task and its
+acceptance criteria there; the build step derives file-level detail
+itself, against the code it finds. See specs/ticket-schema.md.
+Edit freely; the board follows on refresh.
 `;
 
 const PROMPTS_DIR = 'tickets/_meta/prompts';

@@ -345,6 +345,35 @@ export class Orchestrator {
     return out;
   }
 
+  /**
+   * Drops the per-phase control state of phases the pipeline no longer
+   * has (a removed or renamed column — req-93 dropped the old plan
+   * columns): a stale key would ride along in chain.json and /chain
+   * forever. Called whenever the pass has read the pipeline; a phase
+   * that returns starts fresh.
+   */
+  private async prunePhaseState(): Promise<void> {
+    const known = new Set(this.lastPhases.map((p) => p.id));
+    let changed = false;
+    const prune = (map: Record<string, unknown>): void => {
+      for (const key of Object.keys(map)) {
+        if (!known.has(key)) {
+          delete map[key];
+          changed = true;
+        }
+      }
+    };
+    prune(this.columns);
+    prune(this.redStreak);
+    prune(this.cooldownUntil);
+    prune(this.tokensDay);
+    prune(this.tokensUsed);
+    prune(this.tripped);
+    if (changed) {
+      await this.persist();
+    }
+  }
+
   /** Points the chain at a tickets vault (idempotent) and scans. */
   async configure(config: ChainConfig): Promise<ChainStatus> {
     const same =
@@ -674,6 +703,7 @@ export class Orchestrator {
     try {
       const snap = await readVaultBoard(config.ticketsVaultPath, config.defaultWorker);
       this.lastPhases = snap.pipeline;
+      await this.prunePhaseState();
       for (const column of snap.columns) {
         const phase = column.phase;
         if (parseHandover(phase.handover).mode !== 'ci' || phase.ci === null) {
@@ -994,6 +1024,7 @@ export class Orchestrator {
         nowMs: this.now().getTime(),
       });
       this.lastPhases = snap.pipeline;
+      await this.prunePhaseState();
       this.notedThisPass = new Set();
       const dispatched = new Set<string>(plan.map((item) => item.card.id));
       const refusedByColumn = new Map<string, string>();

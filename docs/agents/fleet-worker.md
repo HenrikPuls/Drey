@@ -90,8 +90,10 @@ A spec sits beside the file it tests. The dependency rules between
   cites `file:line` for every claim. Read yourself only the files you
   will edit, at line ranges. Every turn of yours re-sends your whole
   context; a lean context is the cheapest token saving there is.
-- Start from the plan's file list and line ranges. Otherwise search for
-  the symbol or the UI string, then read the lines around the hits.
+- Start from the plan's steps and names, not its file list: find the
+  touching points yourself (symbol, UI string) and read the lines
+  around the hits. A file the plan names is a hint to verify against
+  your checkout, never a fact — plans age.
 - Every model call of your run carries everything read so far, so a
   file read twice is paid twice on every later call. Never read these
   whole, only line ranges around search hits: `specs/changelog.md`

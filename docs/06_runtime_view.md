@@ -3463,7 +3463,7 @@ sequenceDiagram
     U->>R: answers in the thread's prompt box
     R->>F: POST /send (the answer, no takeover — already held)
     W->>W: writes the agreed plan into the ticket, commits, asks on
-    U->>R: an end-move button (Finish -> plan-review)
+    U->>R: an end-move button (Finish -> the next manual column)
     R->>F: POST /stop (a living run ends)
     R->>B: transition {from, to} — the owner move, one commit
     B->>B: drops interactive: true; the dispatcher may take it again

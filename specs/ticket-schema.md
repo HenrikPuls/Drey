@@ -60,12 +60,9 @@ Top-level rules, once, up front:
     10-inbox/
       T-0042.md       # one ticket per file, in its current phase's folder
     20-prioritized/
-    30-plan/
-    40-plan-review/
-    50-build/
-    60-review/
-    70-commit/
-    80-done/
+    30-build/
+    40-commit/
+    50-done/
     archive/          # reserved (T-0041): archived tickets, never a column
     attachments/      # reserved (req-66 R8): images a paired device
                       #   uploaded — binary only, never a column, never
@@ -183,7 +180,8 @@ What and why, in plain Markdown. Links to notes, PRs, people.
 
 ## Plan
 
-How. Filled in the plan phase; must end with the acceptance criteria.
+How. Authored at refine — the owner's hand or the shape dialog —
+before the machine takes over; must end with the acceptance criteria.
 
 ### Acceptance criteria
 
@@ -272,8 +270,11 @@ Free Markdown; the section headings below are convention that Drey and
 the runner rely on:
 
 - `## Description` — what and why. The capture text lands here.
-- `## Plan` — how; authored in plan phase. Leaving plan-review without
-  acceptance criteria is an issue (the machine gate needs them).
+- `## Plan` — how; authored at refine (the shape dialog or the
+  owner's hand) and completed by the build step at run time (req-93:
+  the build derives file-level detail itself, against the code it
+  finds). A ticket without backticked acceptance criteria under the
+  plan cannot run — the fleet refuses the start.
 - `### Acceptance criteria` — under Plan. Checkbox lines whose text
   starts with a backticked command; the machine gate runs exactly
   these, locally, in the worker's checkout (ADR-0076: validator, not
@@ -335,11 +336,8 @@ push: origin
 phases:
   - { id: inbox, title: Inbox, handover: manual }
   - { id: prioritized, title: Prioritized, handover: manual }
-  - { id: plan, title: Plan, wip: 1, handover: manual }
-  - { id: plan-review, title: Plan review, handover: manual }
   - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default, color: '#c96442' }
-  - { id: review, title: Review, handover: manual }
-  - { id: commit, title: Commit, handover: manual }
+  - { id: commit, title: Commit, handover: agent commit-default }
   - { id: done, title: Done, handover: none }
 ---
 Prose for humans. The board follows this file on refresh.
@@ -440,7 +438,7 @@ board serves the human): an agent works the tickets the dispatcher
 gives it — the column's own queue first, then the previous column's
 top — and a dispatched run's completion moves the ticket from where it
 sits to the **working column's next phase** (a pulled ticket goes
-`prioritized` → `plan-review` in one step). A manual column between
+`prioritized` → `commit` in one step). A manual column between
 automatic columns is the owner's **checkpoint**: the machine never
 pulls across it, and only the owner's moves cross it (refine /
 implement / park). Backward moves are human moves — the one exception
@@ -546,8 +544,9 @@ column; the board still renders), the fleet runner before every action
 6. `claimed-by` grammar; `claimed-at` present with `claimed-by`.
 7. `repo` (when present) resolves in `repos.md`.
 8. (Removed with req-75 W1: `order.md` is no longer read.)
-9. Leaving `plan-review` without acceptance criteria = issue on the
-   ticket (the board shows it; the runner enforces it from M84).
+9. A ticket without backticked acceptance criteria cannot be worked:
+   the fleet refuses to start an agent run for it (the most common
+   dispatch hold — the gate would have nothing to run).
 10. `blocked-by` resolution (T-0050): ids resolve against the board's
     columns only — never `tickets/archive/` — and a satisfied reference
     is one sitting in the terminal phase **or no longer on the board**:
