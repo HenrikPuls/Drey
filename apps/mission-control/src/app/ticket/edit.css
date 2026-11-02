@@ -1,0 +1,117 @@
+/*
+ * The raw edit mode (concept §5.5/§7): one column — the warning banner on
+ * top, the monospace editor growing to the viewport in the middle, the
+ * footer actions in the thumb's reach at the bottom. Design tokens only.
+ */
+:host {
+  display: block;
+  height: 100%;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--mc-bg);
+}
+
+/* -- the warning banner ------------------------------------------------------ */
+
+.warning {
+  margin: 0;
+  padding: 10px 12px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  border-bottom: 1px solid var(--mc-line);
+  border-left: 3px solid var(--mc-danger);
+  background: color-mix(in srgb, var(--mc-danger) 10%, transparent);
+  color: var(--mc-text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.warning-glyph {
+  color: var(--mc-danger);
+}
+
+/* -- the raw editor ------------------------------------------------------------ */
+
+.raw {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: var(--mc-bg);
+  color: var(--mc-text);
+  font:
+    13px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+}
+
+/* -- the conflict block -------------------------------------------------------- */
+
+.conflict {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border-top: 1px solid var(--mc-line);
+  background: color-mix(in srgb, var(--mc-danger) 10%, transparent);
+}
+
+.conflict-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--mc-danger);
+  font-size: 13px;
+}
+
+/* -- the footer actions ---------------------------------------------------------- */
+
+.actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--mc-line);
+  background: var(--mc-panel);
+}
+
+.btn {
+  padding: 8px 14px;
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+  background: var(--mc-panel-2);
+  color: var(--mc-text);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn.accent {
+  background: var(--mc-accent);
+  border-color: var(--mc-accent);
+  color: #101216;
+  font-weight: 600;
+}
+
+.btn.ghost {
+  background: transparent;
+}
+
+.btn.armed {
+  border-color: var(--mc-danger);
+  color: var(--mc-danger);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

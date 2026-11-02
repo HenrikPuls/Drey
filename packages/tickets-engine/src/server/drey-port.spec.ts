@@ -23,6 +23,11 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
     archive: vi.fn(async () => ok),
     startRun: vi.fn(async () => ({ ok: true, runId: 'r1' })),
     listPersonas: vi.fn(async () => []),
+    saveTicket: vi.fn(async () => ({ ok: true, revision: '0123456789abcdef' })),
+    ticketDiff: vi.fn(async () => ({ files: [], truncated: false })),
+    worktreeChangesOf: vi.fn(async () => []),
+    acceptTicket: vi.fn(async () => ok),
+    sendBack: vi.fn(async () => ok),
   };
   const fleet: RemoteFleet = {
     runs: vi.fn(async () => []),

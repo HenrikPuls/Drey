@@ -34,6 +34,7 @@ import type {
   TicketsRemotePort,
 } from '../contracts/remote-protocol';
 import type { BoardSnapshot, CreateResult, MutationResult } from '../contracts/tickets';
+import type { TicketDiff, WorktreeFile } from '../core/worktree-changes';
 import type { ChatDecisionResult, ChatServicePort, ChatSession, ChatSessionMeta, ChatTurnResult } from '../contracts/chat';
 import { needsOf } from './needs';
 
@@ -50,6 +51,16 @@ export interface RemoteBoard {
   startRun(input: StartRunCommand): Promise<RunReply>;
   /** The Team tab's cards (E5b). */
   listPersonas(): Promise<readonly import('../core/persona').Persona[]>;
+  /** The raw-text save behind the phone edit mode (E5c). */
+  saveTicket(input: { id: string; text: string; baseRevision?: string; actor?: string }): Promise<RefineReply>;
+  /** The proof card's unified diff (E5c). */
+  ticketDiff(id: string): Promise<TicketDiff>;
+  /** The proof card's file stat list (E5c). */
+  worktreeChangesOf(id: string): Promise<readonly WorktreeFile[]>;
+  /** The Ready card's accept (E5c). */
+  acceptTicket(input: { id: string; actor?: string }): Promise<MutationResult>;
+  /** The proof card's send-back with a mandatory note (E5c). */
+  sendBack(input: { id: string; note: string; actor?: string }): Promise<MutationResult>;
 }
 
 /** The fleet client's part the remote uses (`FleetClient` fits it). */
@@ -206,6 +217,26 @@ export class DreyTicketsPort implements TicketsRemotePort {
       pool: p.models.pool,
       color: p.color,
     }));
+  }
+
+  ticketSave(cmd: { id: string; text: string; baseRevision?: string }, actor: string): Promise<RefineReply> {
+    return this.boardService.saveTicket({ ...cmd, actor });
+  }
+
+  ticketAccept(cmd: TicketIdCommand, actor: string): Promise<MutationResult> {
+    return this.boardService.acceptTicket({ ...cmd, actor });
+  }
+
+  ticketSendBack(cmd: { id: string; note: string }, actor: string): Promise<MutationResult> {
+    return this.boardService.sendBack({ ...cmd, actor });
+  }
+
+  ticketWorktreeChanges(id: string): Promise<readonly WorktreeFile[]> {
+    return this.boardService.worktreeChangesOf(id);
+  }
+
+  ticketDiff(id: string): Promise<TicketDiff> {
+    return this.boardService.ticketDiff(id);
   }
 
   chatSessions(): Promise<readonly ChatSessionMeta[]> {

@@ -86,6 +86,9 @@
       <p class="sheet-error" role="alert">{{ error }}</p>
     }
     <div class="sheet-actions">
+      @if (state?.openTicket) {
+        <button type="button" class="btn" (click)="openTicket()">Open ticket</button>
+      }
       @if (!readOnly() && moveTarget(); as target) {
         <button
           type="button"

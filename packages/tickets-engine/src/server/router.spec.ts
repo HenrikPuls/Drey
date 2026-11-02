@@ -18,6 +18,11 @@ function port(): TicketsRemotePort {
     fleet: vi.fn(async () => ({ runs: [], chain: null })),
     needs: vi.fn(async () => []),
     personas: vi.fn(async () => []),
+    ticketSave: vi.fn(async () => ({ ok: true, revision: '0123456789abcdef' })),
+    ticketAccept: vi.fn(ok),
+    ticketSendBack: vi.fn(ok),
+    ticketWorktreeChanges: vi.fn(async () => []),
+    ticketDiff: vi.fn(async () => ({ files: [], truncated: false })),
     ticket: vi.fn(async (id: string) => ({ ok: true, card: { id }, text: '# x' })),
     create: vi.fn(ok),
     move: vi.fn(ok),
@@ -136,6 +141,32 @@ describe('route', () => {
       'owner@iphone-15',
     );
     expect(remote.answer).toHaveBeenCalledWith({ runId: 'r-1', answers: { q0: 'Yes' } });
+  });
+
+  it('routes the E5c ticket screen: save, accept, send-back, diff and worktree-changes', async () => {
+    const { deps, devices, remote } = setup();
+    const { token } = await devices.add('iPhone 15', false, new Date());
+    const auth = `Bearer ${token}`;
+
+    const saved = await route(
+      req({ method: 'POST', path: '/api/tickets/T-0052/save', authorization: auth, body: { text: '---\nid: T-0052\n---\n', baseRevision: 'abc' } }),
+      deps,
+    );
+    expect(saved.status).toBe(200);
+    expect(remote.ticketSave).toHaveBeenCalledWith({ id: 'T-0052', text: '---\nid: T-0052\n---\n', baseRevision: 'abc' }, 'owner@iphone-15');
+
+    await route(req({ method: 'POST', path: '/api/tickets/T-0052/accept', authorization: auth }), deps);
+    expect(remote.ticketAccept).toHaveBeenCalledWith({ id: 'T-0052' }, 'owner@iphone-15');
+
+    const silent = await route(req({ method: 'POST', path: '/api/tickets/T-0052/send-back', authorization: auth, body: {} }), deps);
+    expect(silent.body).toEqual({ ok: false, error: 'a send-back needs a note' });
+    await route(req({ method: 'POST', path: '/api/tickets/T-0052/send-back', authorization: auth, body: { note: 'The button still misaligns' } }), deps);
+    expect(remote.ticketSendBack).toHaveBeenCalledWith({ id: 'T-0052', note: 'The button still misaligns' }, 'owner@iphone-15');
+
+    expect((await route(req({ path: '/api/tickets/T-0052/diff', authorization: auth }), deps)).status).toBe(200);
+    expect(remote.ticketDiff).toHaveBeenCalledWith('T-0052');
+    expect((await route(req({ path: '/api/tickets/T-0052/worktree-changes', authorization: auth }), deps)).status).toBe(200);
+    expect(remote.ticketWorktreeChanges).toHaveBeenCalledWith('T-0052');
   });
 
   it('a refused command is a 200 with ok:false; unknown ids and routes are 404', async () => {

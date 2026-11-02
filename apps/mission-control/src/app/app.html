@@ -8,6 +8,10 @@
       <mc-team />
     }
   </main>
+  <div class="ticket-overlay" [class.open]="ticketOpen() !== null">
+    <mc-ticket />
+    <mc-ticket-edit />
+  </div>
   <nav class="tabbar" aria-label="Primary">
     <button type="button" class="tab" [class.active]="tab() === 'work'" (click)="tab.set('work')">
       <span class="glyph" aria-hidden="true">▤</span>

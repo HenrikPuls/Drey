@@ -4,24 +4,20 @@ import {
   inject,
   provideAppInitializer,
   provideBrowserGlobalErrorListeners,
+  signal,
 } from '@angular/core';
 import { McState } from './api/state';
+import { bootHintsFromLocation } from './api/client';
 import { MC_CHAT_STATE } from './chat/chat';
+import { MC_TICKET, type GatePhase, type TicketDoc, type TicketVm } from './ticket/ticket.model';
 import { MC_TEAM_STATE, type McTeamPersona, type McTeamState } from './team/team';
 import { MC_WORK_STATE, type McPersona, type McWorkState } from './work/work.model';
 
-/** The pairing code arrives as `#pair=CODE` in the device's URL (req-66). */
-function pairCodeFromLocation(): string | null {
-  if (typeof location === 'undefined') {
-    return null;
-  }
-  return /^#pair=([A-Za-z0-9-]+)$/.exec(location.hash)?.[1] ?? null;
-}
-
 /**
  * One shared McState for the whole shell: the chat tab consumes it
- * directly, Work and Team through the thin view adapters below — every
- * tab reads the same signals and writes through the same actions.
+ * directly, Work, Team and the ticket screen through the thin view
+ * adapters below — every tab reads the same signals and writes through
+ * the same actions.
  */
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -46,6 +42,7 @@ export const appConfig: ApplicationConfig = {
             return state.readOnly();
           },
           moveTicket: (ticketId, phaseId) => state.moveTicket(ticketId, phaseId),
+          openTicket: (ticketId) => state.openTicket(ticketId),
         };
       },
     },
@@ -58,6 +55,86 @@ export const appConfig: ApplicationConfig = {
         };
       },
     },
-    provideAppInitializer(() => inject(McState).boot(pairCodeFromLocation())),
+    {
+      provide: MC_TICKET,
+      useFactory: (): TicketVm => {
+        const state = inject(McState);
+        const editing = signal(false);
+        const savedFlash = signal<string | null>(null);
+        const checkpoints = computed(() => {
+          const raw = state.board() as { checkpoints?: readonly string[] } | null;
+          return new Set(raw?.checkpoints ?? []);
+        });
+        const phaseColors = computed(() => {
+          const raw = state.board() as { columns?: readonly { phase: { id: string; color?: string | null } }[] } | null;
+          const map = new Map<string, string>();
+          for (const column of raw?.columns ?? []) {
+            if (typeof column.phase.color === 'string' && column.phase.color !== '') {
+              map.set(column.phase.id, column.phase.color);
+            }
+          }
+          return map;
+        });
+        const doc = computed((): TicketDoc | null => {
+          const detail = state.ticketDetail();
+          if (detail === null) {
+            return null;
+          }
+          const marks = checkpoints();
+          const phases: GatePhase[] = detail.phases.map((phase) => ({
+            id: phase.id,
+            title: phase.title,
+            checkpoint: marks.has(phase.id),
+          }));
+          return {
+            id: detail.id,
+            title: detail.title,
+            text: detail.text,
+            revision: detail.revision,
+            phase: detail.phase,
+            phases,
+          };
+        });
+        return {
+          doc: () => doc(),
+          editing: () => editing(),
+          enterEdit: () => editing.set(true),
+          exitEdit: () => editing.set(false),
+          savedFlash: () => savedFlash(),
+          flashSaved: () => {
+            savedFlash.set('Saved — one commit on the desk.');
+            setTimeout(() => savedFlash.set(null), 4000);
+          },
+          loadError: () => state.ticketError(),
+          reload: async () => {
+            const open = state.ticketOpen();
+            if (open !== null) {
+              await state.loadTicket(open.id);
+            }
+          },
+          phaseColor: () => {
+            const detail = state.ticketDetail();
+            return detail === null ? null : (phaseColors().get(detail.phase) ?? null);
+          },
+          diff: () => state.diff() as ReturnType<TicketVm['diff']>,
+          readOnly: () => state.readOnly(),
+          attachmentUrl: (name) => {
+            const url = state.attachmentUrl(name);
+            if (url === null) {
+              void state.ensureAttachment(name);
+            }
+            return url;
+          },
+          onClose: () => state.closeTicket(),
+          save: async (text) => {
+            const reply = await state.saveTicket(text);
+            return reply.ok ? { ok: true } : { ok: false, error: reply.error };
+          },
+          accept: () => state.acceptTicket(),
+          sendBack: (note) => state.sendBack(note),
+        };
+      },
+    },
+    provideAppInitializer(() => inject(McState).boot(bootHintsFromLocation())),
   ],
 };

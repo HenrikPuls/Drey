@@ -188,5 +188,37 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   decisions: one column, English UI, the chat tab raised in the bottom
   tab bar (the regular intervention), cards not columns on the Work tab;
   tablet/desktop widen the same views instead of replacing them.
+- **E5c (milestone 106):** the ticket screen, the raw-edit exception
+  path and Drey hosting. **The ticket screen** (concept §5.5) is
+  read-only first: the gate bar over the safe-markdown render, the proof
+  card (concept §5.3) with its swipable screenshot gallery, the
+  fullscreen shot viewer, and the capped unified diff — per file
+  collapsible, the +/- balance, horizontally scrollable lines, the
+  per-file fullscreen zoom with stepped font size — rendered from
+  `GET /api/tickets/<id>/diff` (`{files: [{status, path, patch}],
+  truncated}`) through the `diffOfOutput` parser; the raw edit mode is
+  the exception path behind a warning and saves through
+  `POST /api/tickets/<id>/save` (`{text, baseRevision?}`) — a stale
+  revision is refused in-band (`{ok: false, conflict: true}`, the
+  refine wording, never a 409), a save that stops parsing as a ticket
+  is refused, every accepted save is one commit; `POST
+  /api/tickets/<id>/accept` and `POST /api/tickets/<id>/send-back`
+  close the owner checkpoint, the send-back note mandatory (an empty
+  note is a 200 refusal). `GET /api/attachments/<name>` serves the
+  proof shots' bytes bearer-authenticated, the name pinned to
+  `[A-Za-z0-9._-]+.(png|jpg|jpeg|webp|mp4|webm)` with no slashes, the
+  gateway CSP widening only to `img-src 'self' data: blob:`.
+  **Drey hosting (concept §3.5.4 — the same app in a Drey window):**
+  `RemoteService.localClient` registers Drey itself as a device (no
+  pairing dance) and returns the bearer token plus the gateway URL —
+  null while the remote is off. The tickets plugin's main opens one
+  sandboxed window (`plugins/tickets/main/mission-control.ts`, the
+  browser plugin's view discipline minimised: own persisted partition,
+  no preload, sandbox + context isolation, http(s)-only top-level
+  navigation, off-window links to the OS browser) and loads
+  `${url}#token=${token}`; the Work panel's ⋯ menu gains the
+  'Mission Control' row, and a remote that is off answers honestly
+  ('Enable remote access in Settings → Tickets → Remote'). Not yet
+  manually verified by the owner.
 
 

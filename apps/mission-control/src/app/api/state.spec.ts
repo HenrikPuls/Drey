@@ -40,6 +40,7 @@ const makeDesk = () => {
     fleet: unknown;
     sessions: unknown;
     sessionA: unknown;
+    ticket: unknown;
   } = {
     board: { columns: [{ phase: { id: 'inbox', title: 'Inbox' }, tickets: [] }], checkpoints: [] as string[] },
     needs: [] as unknown[],
@@ -47,6 +48,12 @@ const makeDesk = () => {
     fleet: { runs: [] as unknown[], chain: null },
     sessions: [] as unknown[],
     sessionA: { file: FILE_A, title: 'A', createdAt: '2026-11-01', messages: [] as unknown[], proposals: [] as unknown[] },
+    ticket: {
+      ok: true,
+      card: { id: 'T-1', title: 'One', phase: 'verify', meta: { priority: 'high' } },
+      text: '---\nid: T-1\n---\n\n# One\n',
+      revision: 'r1',
+    },
   };
   desk.on('GET', '/api/me', () => ({ ok: true, device: { name: 'phone', readOnly: false } }));
   desk.on('GET', '/api/board', () => data.board);
@@ -55,6 +62,7 @@ const makeDesk = () => {
   desk.on('GET', '/api/fleet', () => data.fleet);
   desk.on('GET', '/api/chat/sessions', () => data.sessions);
   desk.on('GET', `/api/chat/sessions/${enc(FILE_A)}`, () => data.sessionA);
+  desk.on('GET', '/api/tickets/T-1', () => data.ticket);
   return { desk, data };
 };
 
@@ -67,7 +75,7 @@ describe('boot', () => {
     desk.on('POST', '/api/pair', () => ({ ok: true, token: 'fresh-token', device: { name: 'phone' } }));
     const state = makeState(desk);
 
-    await state.boot('  1234-5678  ');
+    await state.boot({ pairCode: '  1234-5678  ', token: null });
 
     expect(desk.storage.getItem('drey.remote.token')).toBe('fresh-token');
     expect(state.pairing()).toBe('ready');
@@ -119,9 +127,33 @@ describe('boot', () => {
     const { desk } = makeDesk();
     desk.on('POST', '/api/pair', () => ({ ok: true, token: 'fresh-token', device: {} }));
     const state = makeState(desk);
-    await state.boot('AAAA');
-    await state.boot('BBBB');
+    await state.boot({ pairCode: 'AAAA', token: null });
+    await state.boot({ pairCode: 'BBBB', token: null });
     expect(desk.callsOf('POST', '/api/pair').map((c) => c.body)).toEqual([{ code: 'AAAA' }]);
+  });
+
+  it('a #token= bearer stores the token directly and skips pairing', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+
+    await state.boot({ pairCode: null, token: 'embedded-bearer' });
+
+    expect(desk.storage.getItem('drey.remote.token')).toBe('embedded-bearer');
+    expect(state.pairing()).toBe('ready');
+    expect(desk.callsOf('POST', '/api/pair').length).toBe(0);
+    await waitFor(() => expect(state.connected()).toBe(true));
+    expect(desk.callsOf('GET', '/api/events').length).toBe(1);
+  });
+
+  it('a #token= bearer wins over a stored token (a re-embedded Drey re-registers)', async () => {
+    const { desk } = makeDesk();
+    desk.storage.setItem('drey.remote.token', 'old-token');
+    const state = makeState(desk);
+
+    await state.boot({ pairCode: null, token: 'fresh-bearer' });
+
+    expect(desk.storage.getItem('drey.remote.token')).toBe('fresh-bearer');
+    expect(state.pairing()).toBe('ready');
   });
 
   it('a pairing failure surfaces the error and stays on needs-code', async () => {
@@ -444,5 +476,250 @@ describe('moveTicket', () => {
 
     expect(reply).toEqual({ ok: false, error: 'ticket T-9 is not on the board' });
     expect(desk.callsOf('POST', '/api/tickets/T-9/move').length).toBe(0);
+  });
+});
+
+describe('ticket screen', () => {
+  const TWO_PHASES = {
+    columns: [
+      { phase: { id: 'inbox', title: 'Inbox' }, tickets: [] },
+      { phase: { id: 'verify', title: 'Verify' }, tickets: [{ id: 'T-1', title: 'One', phase: 'verify', blocked: [], meta: {} }] },
+    ],
+    checkpoints: [] as string[],
+  };
+  const TICKET_WITH_PROOF = [
+    '---',
+    'id: T-1',
+    '---',
+    '',
+    '# One',
+    '',
+    '## Verification',
+    '',
+    'Tested on 2026-11-01T14:32:00Z by verify@engine — Electron 34.2.0 on win32.',
+    '',
+    '### Criteria',
+    '',
+    '- [x] `npm test` → ![](../attachments/verify-01.png)',
+    '',
+    '## Log',
+    '',
+    '- entry',
+    '',
+  ].join('\n');
+
+  it('openTicket loads the detail, the phases from the board view and the parsed proof', async () => {
+    const { desk, data } = makeDesk();
+    data.board = TWO_PHASES;
+    data.ticket = {
+      ok: true,
+      card: { id: 'T-1', title: 'One', phase: 'verify', meta: {} },
+      text: TICKET_WITH_PROOF,
+      revision: 'r1',
+    };
+    desk.storage.setItem('drey.remote.token', 'tok');
+    const state = makeState(desk);
+    await state.boot();
+    await waitFor(() => expect(state.work().groups.length).toBe(2));
+
+    state.openTicket('T-1');
+
+    expect(state.ticketOpen()).toEqual({ id: 'T-1' });
+    await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
+    const detail = state.ticketDetail()!;
+    expect(detail.id).toBe('T-1');
+    expect(detail.title).toBe('One');
+    expect(detail.revision).toBe('r1');
+    expect(detail.text).toContain('# One');
+    expect(detail.phases).toEqual([
+      { id: 'inbox', title: 'Inbox' },
+      { id: 'verify', title: 'Verify' },
+    ]);
+    expect(detail.phase).toBe('verify');
+    expect(detail.verification).toEqual({
+      testedAt: '2026-11-01T14:32:00Z',
+      tester: 'verify@engine',
+      environment: 'Electron 34.2.0 on win32',
+      criteria: [{ command: 'npm test', passed: true, screenshot: 'verify-01.png', note: null }],
+      findings: [],
+    });
+    expect(state.ticketError()).toBeNull();
+    expect(desk.callsOf('GET', '/api/tickets/T-1').length).toBe(1);
+  });
+
+  it('a missing ticket lands on ticketError with the desk wording', async () => {
+    const { desk, data } = makeDesk();
+    data.ticket = { __status: 404, __body: { ok: false, error: 'no such ticket' } };
+    const state = makeState(desk);
+
+    state.openTicket('T-1');
+
+    await waitFor(() => expect(state.ticketError()).toBe('no such ticket'));
+    expect(state.ticketDetail()).toBeNull();
+  });
+
+  it('saveTicket posts the text with the loaded base revision and refreshes the detail', async () => {
+    const { desk, data } = makeDesk();
+    const state = makeState(desk);
+    state.openTicket('T-1');
+    await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
+    desk.on('POST', '/api/tickets/T-1/save', (body) => {
+      data.ticket = { ...(data.ticket as Record<string, unknown>), revision: 'r2' };
+      expect(body).toEqual({ text: 'edited markdown', baseRevision: 'r1' });
+      return { ok: true, revision: 'r2' };
+    });
+
+    const reply = await state.saveTicket('edited markdown');
+
+    expect(reply).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/tickets/T-1/save').length).toBe(1);
+    // The success re-loads the ticket: the desk's new revision is the next base.
+    expect(state.ticketDetail()!.revision).toBe('r2');
+    expect(desk.callsOf('GET', '/api/tickets/T-1').length).toBe(2);
+  });
+
+  it('a stale base revision answers with the refine sentence, not the desk wording', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.openTicket('T-1');
+    await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
+    desk.on('POST', '/api/tickets/T-1/save', () => ({ ok: false, conflict: true, error: 'base revision r0 is stale' }));
+
+    const reply = await state.saveTicket('edited markdown');
+
+    expect(reply).toEqual({ ok: false, error: 'The ticket changed since you opened it. Reload it and edit again.' });
+    expect(state.ticketDetail()!.revision).toBe('r1');
+  });
+
+  it('a desk refusal surfaces the error and keeps the loaded detail', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.openTicket('T-1');
+    await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
+    desk.on('POST', '/api/tickets/T-1/save', () => ({ ok: false, error: 'the file no longer parses as a ticket' }));
+
+    const reply = await state.saveTicket('broken');
+
+    expect(reply).toEqual({ ok: false, error: 'the file no longer parses as a ticket' });
+    expect(state.ticketDetail()!.revision).toBe('r1');
+  });
+
+  it('saveTicket refuses before posting when no ticket is open', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+
+    const reply = await state.saveTicket('edited markdown');
+
+    expect(reply).toEqual({ ok: false, error: 'no ticket is open' });
+    expect(desk.callsOf('POST', '/api/tickets/T-1/save').length).toBe(0);
+  });
+
+  it('acceptTicket posts to the accept route and refreshes', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.openTicket('T-1');
+    await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
+    desk.on('POST', '/api/tickets/T-1/accept', () => ({ ok: true }));
+
+    const reply = await state.acceptTicket();
+
+    expect(reply).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/tickets/T-1/accept').length).toBe(1);
+    expect(desk.callsOf('GET', '/api/tickets/T-1').length).toBe(2);
+  });
+
+  it('sendBack needs a note, then posts it trimmed', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.openTicket('T-1');
+    await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
+
+    const silent = await state.sendBack('   ');
+    expect(silent).toEqual({ ok: false, error: 'a send-back needs a note' });
+    expect(desk.callsOf('POST', '/api/tickets/T-1/send-back').length).toBe(0);
+
+    desk.on('POST', '/api/tickets/T-1/send-back', () => ({ ok: true }));
+    const reply = await state.sendBack('  The button still misaligns  ');
+    expect(reply).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/tickets/T-1/send-back')[0]!.body).toEqual({ note: 'The button still misaligns' });
+  });
+
+  it('loadDiff loads the proof card diff and keeps the last good view on a failed GET', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.openTicket('T-1');
+    await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
+    const view = { files: [{ status: 'M', path: 'src/a.ts', patch: '@@ -1 +1 @@\n-old\n+new' }], truncated: false };
+    desk.on('GET', '/api/tickets/T-1/diff', () => view);
+
+    await state.loadDiff();
+    expect(state.diff()).toEqual(view);
+
+    desk.on('GET', '/api/tickets/T-1/diff', () => ({ __status: 500, __body: null }));
+    await state.loadDiff();
+    expect(state.diff()).toEqual(view);
+  });
+
+  it('loadDiff without an open ticket posts nothing', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    await state.loadDiff();
+    expect(state.diff()).toBeNull();
+    expect(desk.callsOf('GET', '/api/tickets/T-1/diff').length).toBe(0);
+  });
+
+  it('attachments memoize per name and closeTicket revokes them', async () => {
+    const desk = new FakeDesk();
+    const created: string[] = [];
+    const revoked: string[] = [];
+    const client = new McClient({
+      fetch: desk.fetch,
+      storage: desk.storage,
+      createObjectUrl: () => {
+        const url = `blob:fake-${created.length + 1}`;
+        created.push(url);
+        return url;
+      },
+      revokeObjectUrl: (url) => revoked.push(url),
+    });
+    const state = new McState(client);
+    desk.on('GET', '/api/tickets/T-1', () => ({
+      ok: true,
+      card: { id: 'T-1', title: 'One', phase: 'inbox', meta: {} },
+      text: '# One',
+      revision: 'r1',
+    }));
+    desk.on('GET', '/api/attachments/shot.png', () => ({ __bytes: new Uint8Array([1, 2, 3]), __contentType: 'image/png' }));
+    state.openTicket('T-1');
+    await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
+
+    expect(state.attachmentUrl('shot.png')).toBeNull();
+    expect(await state.ensureAttachment('shot.png')).toBe('blob:fake-1');
+    expect(state.attachmentUrl('shot.png')).toBe('blob:fake-1');
+    // The memo serves the second ask: one GET for two asks.
+    expect(await state.ensureAttachment('shot.png')).toBe('blob:fake-1');
+    expect(desk.callsOf('GET', '/api/attachments/shot.png').length).toBe(1);
+
+    state.closeTicket();
+    expect(revoked).toEqual(['blob:fake-1']);
+    expect(state.attachmentUrl('shot.png')).toBeNull();
+    expect(state.ticketOpen()).toBeNull();
+    expect(state.ticketDetail()).toBeNull();
+    expect(state.diff()).toBeNull();
+  });
+
+  it('a failed attachment fetch leaves no URL behind', async () => {
+    const desk = new FakeDesk();
+    const client = new McClient({
+      fetch: desk.fetch,
+      storage: desk.storage,
+      createObjectUrl: () => 'blob:fake-1',
+      revokeObjectUrl: () => undefined,
+    });
+    const state = new McState(client);
+    desk.on('GET', '/api/attachments/missing.png', () => ({ __status: 404, __body: { ok: false, error: 'no such attachment' } }));
+
+    expect(await state.ensureAttachment('missing.png')).toBeNull();
+    expect(state.attachmentUrl('missing.png')).toBeNull();
   });
 });

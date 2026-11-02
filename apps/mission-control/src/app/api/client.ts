@@ -1,13 +1,15 @@
 /**
- * Mission Control's connection to the desk (E5b): JSON calls with the
- * device token, and the live event stream read with `fetch` (an
+ * Mission Control's connection to the desk (E5b, extended E5c): JSON calls
+ * with the device token, the live event stream read with `fetch` (an
  * EventSource cannot send the bearer header), reconnecting with backoff
- * and at once when the document returns to visibility. Mirrors the
- * proven phone client (`plugins/tickets/remote/api.ts`, req-66).
+ * and at once when the document returns to visibility, plus the ticket
+ * screen's reads — attachment bytes as object URLs and best-effort raw
+ * JSON GETs. Mirrors the proven phone client
+ * (`plugins/tickets/remote/api.ts`, req-66).
  *
- * The fetch and the token storage are injected so the specs run under
- * Node with fakes; the token lives under the same key the legacy client
- * uses, so one pairing serves both apps.
+ * The fetch, the token storage and the object-URL factory are injected
+ * so the specs run under Node with fakes; the token lives under the same
+ * key the legacy client uses, so one pairing serves both apps.
  */
 import { SseParser } from './sse';
 
@@ -23,9 +25,44 @@ export interface McStorage {
 
 export type McFetch = (path: string, init?: RequestInit) => Promise<Response>;
 
+/**
+ * The object-URL seam: `attachment` hands the bytes to `createObjectUrl`
+ * and the caller releases the handle through `release`. Both default to
+ * the guarded `URL.createObjectURL`/`revokeObjectURL` — and to no-ops
+ * where the platform has neither (the Node specs inject fakes).
+ */
+export type McObjectUrlFactory = (blob: Blob) => string | null;
+export type McObjectUrlRevoker = (url: string) => void;
+
 export interface McClientOptions {
   readonly fetch?: McFetch;
   readonly storage?: McStorage;
+  readonly createObjectUrl?: McObjectUrlFactory;
+  readonly revokeObjectUrl?: McObjectUrlRevoker;
+}
+
+/** The boot hints the URL carries: `#pair=CODE` from the desk, `#token=BEARER` from Drey itself (E5c). */
+export interface McBootHints {
+  /** `#pair=CODE` — the pairing code the desk shows (req-66). */
+  readonly pairCode: string | null;
+  /** `#token=BEARER` — Drey's embedded client lands its device token this way, no pairing. */
+  readonly token: string | null;
+}
+
+const PAIR_HASH_RE = /^#pair=([A-Za-z0-9-]+)$/;
+const TOKEN_HASH_RE = /^#token=([A-Za-z0-9._~+-]+={0,2})$/;
+
+/** Reads one location hash for the boot hints; an empty hash yields none. */
+export function bootHintsFromHash(hash: string): McBootHints {
+  return {
+    pairCode: PAIR_HASH_RE.exec(hash)?.[1] ?? null,
+    token: TOKEN_HASH_RE.exec(hash)?.[1] ?? null,
+  };
+}
+
+/** The shell's boot hints from `location.hash`; none where there is no DOM. */
+export function bootHintsFromLocation(): McBootHints {
+  return typeof location === 'undefined' ? { pairCode: null, token: null } : bootHintsFromHash(location.hash);
 }
 
 export class ApiError extends Error {
@@ -59,13 +96,35 @@ const defaultStorage = (): McStorage | null => {
   }
 };
 
+const defaultCreateObjectUrl: McObjectUrlFactory = (blob) => {
+  try {
+    return typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function' ? null : URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
+};
+
+const defaultRevokeObjectUrl: McObjectUrlRevoker = (url) => {
+  try {
+    if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(url);
+    }
+  } catch {
+    // the URL is already gone
+  }
+};
+
 export class McClient {
   private readonly fetchFn: McFetch;
   private readonly store: McStorage | null;
+  private readonly createObjectUrlFn: McObjectUrlFactory;
+  private readonly revokeObjectUrlFn: McObjectUrlRevoker;
 
   constructor(options: McClientOptions = {}) {
     this.fetchFn = options.fetch ?? ((path, init) => fetch(path, init));
     this.store = options.storage ?? defaultStorage();
+    this.createObjectUrlFn = options.createObjectUrl ?? defaultCreateObjectUrl;
+    this.revokeObjectUrlFn = options.revokeObjectUrl ?? defaultRevokeObjectUrl;
   }
 
   token(): string | null {
@@ -96,6 +155,12 @@ export class McClient {
   private headers(): Record<string, string> {
     const token = this.token();
     return { 'Content-Type': 'application/json', ...(token === null ? {} : { Authorization: `Bearer ${token}` }) };
+  }
+
+  /** A byte read carries no JSON content type — just the bearer when there is one. */
+  private bearerHeaders(): Record<string, string> {
+    const token = this.token();
+    return token === null ? {} : { Authorization: `Bearer ${token}` };
   }
 
   async request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
@@ -134,6 +199,49 @@ export class McClient {
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : 'Pairing failed.' };
     }
+  }
+
+  /**
+   * A best-effort JSON GET: the parsed body, or null on any failure — the
+   * read pattern the state slices already use (`request(...).catch(() =>
+   * null)`), extracted for the ticket screen's diff/changes reads (E5c).
+   */
+  async raw<T>(path: string): Promise<T | null> {
+    return await this.request<T>('GET', path).catch(() => null);
+  }
+
+  /**
+   * One attachment's bytes (`GET /api/attachments/<name>`, bearer) as an
+   * object URL; null where the platform cannot create object URLs (the
+   * Node specs) — and it throws `ApiError` when the desk has no such
+   * file. The caller owns the handle: `release` revokes it.
+   */
+  async attachment(name: string): Promise<string | null> {
+    let res: Response;
+    try {
+      res = await this.fetchFn(`/api/attachments/${encodeURIComponent(name)}`, {
+        headers: this.bearerHeaders(),
+        cache: 'no-store',
+      });
+    } catch {
+      throw new ApiError(0, 'The desk does not answer.');
+    }
+    if (!res.ok) {
+      let data: unknown = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+      const message = (data as { error?: unknown } | null)?.error;
+      throw new ApiError(res.status, typeof message === 'string' ? message : `HTTP ${res.status}`);
+    }
+    return this.createObjectUrlFn(await res.blob());
+  }
+
+  /** Revokes one object URL `attachment` handed out. */
+  release(url: string): void {
+    this.revokeObjectUrlFn(url);
   }
 
   /**

@@ -1039,7 +1039,7 @@ function masterControlNode(api: DreyPluginApi): HTMLElement {
 function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
   const more = el('button', 'icon-btn');
   more.type = 'button';
-  more.title = 'More — workers, chain log, clean up worktrees';
+  more.title = 'More — mission control, workers, chain log, clean up worktrees';
   more.setAttribute('aria-label', 'More actions');
   more.setAttribute('aria-haspopup', 'menu');
   more.append(api.ui.icon('more-horizontal', 14));
@@ -1070,6 +1070,23 @@ function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
       });
       menu.append(button);
     };
+    item('Mission Control', 'The same app in its own window — the whole desk at full size', () => {
+      void invokeBoard('openMissionControl', {}).then(
+        (result) => {
+          const reply = (result ?? {}) as { ok?: boolean; error?: string };
+          if (reply.ok !== true) {
+            // The honest cases ride the board's message bar: the remote
+            // is off, the engine refused, the window failed to load.
+            setNote(reply.error ?? 'Mission Control did not open', 'error');
+            notifyViews();
+          }
+        },
+        (error: unknown) => {
+          setNote(messageOf(error), 'error');
+          notifyViews();
+        },
+      );
+    });
     item('Workers', 'Every live worker as a card — what it does, its context, its controls', () => openWorkersDoc(api));
     item('Chain log', 'What the fleet daemon did (dispatches, skips, gates), as a readonly editor tab', () => openChainLog(api));
     item('Clean up worktrees…', 'Removes every worktree whose ticket has no live run, then prunes', () => void runWorktreesCleanup());

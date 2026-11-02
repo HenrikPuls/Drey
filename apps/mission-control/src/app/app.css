@@ -14,6 +14,20 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* The ticket screen covers the shell while a ticket is open (E5c). */
+.ticket-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: var(--mc-bg);
+  display: none;
+  flex-direction: column;
+}
+
+.ticket-overlay.open {
+  display: flex;
+}
+
 /* The tab bar sits in the thumb's reach; the chat tab is raised because
    it is the regular intervention (concept §7). */
 .tabbar {

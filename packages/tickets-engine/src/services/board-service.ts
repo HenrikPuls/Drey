@@ -14,13 +14,13 @@ import { archivedTicketIds, nextTicketId, TICKETS_ARCHIVE_DIR, type BoardSnapsho
 import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply } from '../contracts/changes';
 import { type RefineReply, TicketReply, AttachmentReply } from '../contracts/replies';
 import { assembleBoard, parseRepos, addPipelinePhase, patchPipelinePhase, removePipelinePhase, renamePipelinePhase, parsePipeline, reorderPipelinePhases, reposFileText, reposProse } from '../core/ticket-board';
-import { newTicketFileText, patchTicketFile, patchTrack, ticketPathParts } from '../core/ticket-files';
+import { newTicketFileText, parseTicketFile, patchTicketFile, patchTrack, ticketPathParts } from '../core/ticket-files';
 import { refineTicket, revisionOf } from '../core/ticket-refine';
 import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from '../core/phase-dirs';
 import { detectDrift, recentDoneOf, type DriftDetection } from '../core/normalize';
 import { blockedRefusal } from '../core/blocked';
 import { runTransition, type TransitionIo } from '../core/transition';
-import { mergeWorktreeChanges, type WorktreeFile } from '../core/worktree-changes';
+import { mergeWorktreeChanges, diffOfOutput, type TicketDiff, type WorktreeFile } from '../core/worktree-changes';
 import { planWorktreeRemoval } from '../core/worktree-removal';
 import { TicketsGit, type RepoLocation } from '../core/tickets-git';
 import { loadShippedPrompts } from '../core/default-prompts';
@@ -337,6 +337,84 @@ export class EngineBoardService {
       this.announceChanged();
       return { ok: true, revision: revisionOf(refined), ...(warning === null ? {} : { warning }) };
     });
+  }
+
+  /**
+   * The raw-text save behind the phone edit mode (concept §5.5): the
+   * exception path, not the everyday one — same conflict discipline as
+   * refine (baseRevision stale → conflict, never a silent overwrite),
+   * same one-commit rule. The text must still parse as a ticket file,
+   * so a stray keystroke can never break the parsers downstream.
+   */
+  saveTicket(input: { id: string; text: string; baseRevision?: string; actor?: string }): Promise<RefineReply> {
+    return this.enqueue(async () => {
+      const found = await this.findCard(input.id);
+      if (found === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const { vault, card, text } = found;
+      if (input.baseRevision !== undefined && revisionOf(text) !== input.baseRevision) {
+        return { ok: false, conflict: true, error: 'The ticket changed since you opened it. Reload it and edit again.' };
+      }
+      if (card.meta.run !== null) {
+        return { ok: false, error: 'A run is live on this ticket. Edit it when the run has ended.' };
+      }
+      try {
+        const parsed = parseTicketFile(input.text, card.path);
+        if (parsed.issues.some((issue) => issue.level === 'error')) {
+          return { ok: false, error: `the text is not a valid ticket file: ${parsed.issues.find((i) => i.level === 'error')!.message}` };
+        }
+      } catch (error) {
+        return { ok: false, error: `the text does not parse: ${messageOf(error)}` };
+      }
+      try {
+        await this.host.write(vault.id, card.path, input.text);
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, [card.path], `tickets: ${input.id} edited`);
+      this.host.announceChanges(vault.id, [card.path]);
+      this.announceChanged();
+      return { ok: true, revision: revisionOf(input.text), ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The proof card's diff (concept §5.3): the worktree branch against
+   * its base, one capped unified diff. No worktree/no repo → an empty
+   * diff (the card shows the Changes section alone, honestly).
+   */
+  async ticketDiff(id: string): Promise<TicketDiff> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return { files: [], truncated: false };
+    }
+    const snap = await this.snapshot();
+    let card: TicketCard | null = null;
+    for (const column of snap.columns) {
+      const found = column.tickets.find((t) => t.id === id);
+      if (found !== undefined) {
+        card = found;
+        break;
+      }
+    }
+    const repoName = card !== null && card.meta.repo !== null ? card.meta.repo : null;
+    const repo = repoName === null ? null : snap.repos.find((r) => r.name === repoName) ?? null;
+    if (card === null || repo === null || repo.path === null) {
+      return { files: [], truncated: false };
+    }
+    const record = this.newestRecordFor(await this.fleetRecords(), card.id);
+    const worktreePath = record !== null ? record.worktreePath : worktreePathFor(vault.path, repo, card.id);
+    if (!existsSync(worktreePath)) {
+      return { files: [], truncated: false };
+    }
+    const base = repo.branch ?? 'main';
+    try {
+      const output = await this.git.run(worktreePath, ['diff', '--unified=3', `${base}...HEAD`]);
+      return diffOfOutput(output);
+    } catch {
+      return { files: [], truncated: false };
+    }
   }
 
   /**

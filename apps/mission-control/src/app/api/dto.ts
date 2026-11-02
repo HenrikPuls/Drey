@@ -139,6 +139,66 @@ export type McEvent =
   | { readonly kind: 'chat'; readonly file: string; readonly event: ChatStreamView }
   | { readonly kind: 'unknown'; readonly name: string };
 
+// --- Ticket screen (E5c) -----------------------------------------------------
+
+/** One acceptance criterion's proof line from `### Criteria`. */
+export interface VerificationCriterionView {
+  /** The backticked command, exactly as written under the Plan. */
+  readonly command: string;
+  readonly passed: boolean;
+  /** The screenshot file from `→ ![](../attachments/<name>)`; null when the run captured none. */
+  readonly screenshot: string | null;
+  /** The em-dash note ('— no screenshot: …'); null when the line carries none. */
+  readonly note: string | null;
+}
+
+/**
+ * The `## Verification` section as the proof card renders it (concept
+ * §5.3): the Tested-on stamp, the criteria checklist with their screenshot
+ * proofs, the findings list. Absent section means "not verified yet".
+ */
+export interface VerificationView {
+  readonly testedAt: string;
+  readonly tester: string;
+  readonly environment: string;
+  readonly criteria: readonly VerificationCriterionView[];
+  readonly findings: readonly string[];
+}
+
+/** One phase of the current board view; the ticket's own phase is the highlighted one. */
+export interface TicketPhaseOption {
+  readonly id: string;
+  readonly title: string;
+}
+
+/** The loaded ticket document plus what the screen's chrome renders around it. */
+export interface TicketDetail {
+  readonly id: string;
+  readonly title: string;
+  /** The loaded file's revision — the base revision the next save sends. */
+  readonly revision: string;
+  /** The full markdown, exactly as the desk stores it. */
+  readonly text: string;
+  readonly verification: VerificationView | null;
+  /** The phases of the current board view. */
+  readonly phases: readonly TicketPhaseOption[];
+  /** The card's phase (the highlighted entry of `phases`). */
+  readonly phase: string;
+}
+
+/** One file's git patch off `/api/tickets/<id>/diff`. */
+export interface TicketDiffFileView {
+  readonly status: string;
+  readonly path: string;
+  readonly patch: string;
+}
+
+/** The worktree-vs-base diff the proof card renders as git (concept §5.3). */
+export interface TicketDiffView {
+  readonly files: readonly TicketDiffFileView[];
+  readonly truncated: boolean;
+}
+
 // --- the mappers ------------------------------------------------------------
 
 const rec = (value: unknown): Record<string, unknown> | null =>
@@ -399,4 +459,111 @@ export function parseChatEvent(name: string, data: string): McEvent {
     default:
       return { kind: 'unknown', name };
   }
+}
+
+// --- ticket screen mappers (E5c) ----------------------------------------------
+
+const VERIFICATION_HEADING = '## Verification';
+
+/** [start, end) of the `## Verification` block — end at the next H2 or EOF. */
+function verificationBoundsOf(text: string): { start: number; end: number } | null {
+  const heading = /^## Verification$/m.exec(text);
+  if (heading === null) {
+    return null;
+  }
+  const rest = text.slice(heading.index);
+  const next = /^## /gm.exec(rest.slice(VERIFICATION_HEADING.length));
+  const end = next === null ? text.length : heading.index + VERIFICATION_HEADING.length + next.index;
+  return { start: heading.index, end };
+}
+
+/**
+ * Reads the ticket's `## Verification` section tolerantly — the same
+ * asymmetric-tolerance rule as the engine's `core/verification.ts`: an
+ * absent heading means null ("not verified yet"), a partially unreadable
+ * section degrades to defaults instead of throwing. The screenshot link
+ * is the schema's `→ ![](../attachments/<name>)` proof reference.
+ */
+export function parseVerification(text: string): VerificationView | null {
+  if (typeof text !== 'string') {
+    return null;
+  }
+  const bounds = verificationBoundsOf(text);
+  if (bounds === null) {
+    return null;
+  }
+  const section = text.slice(bounds.start, bounds.end);
+  const tested = /^Tested on (\S+) by ([^—]+?)(?: — (.+?))?\.?$/m.exec(section);
+  const criteria: VerificationCriterionView[] = [];
+  const criterionRe = /^- \[([ xX])\] `([^`]+)`(?: → !\[\]\(\.\.\/attachments\/([^)]+)\))?(?: — (.+))?$/gm;
+  for (let match = criterionRe.exec(section); match !== null; match = criterionRe.exec(section)) {
+    criteria.push({
+      command: match[2]!,
+      passed: match[1]!.toLowerCase() === 'x',
+      screenshot: match[3] ?? null,
+      note: match[4] ?? null,
+    });
+  }
+  const findings: string[] = [];
+  const findingsAt = section.indexOf('### Findings');
+  if (findingsAt >= 0) {
+    for (const line of section.slice(findingsAt).split('\n')) {
+      const match = /^- (.+)$/.exec(line.trim());
+      if (match !== null) {
+        findings.push(match[1]!);
+      }
+    }
+  }
+  return {
+    testedAt: tested?.[1] ?? '',
+    tester: tested?.[2]?.trim() ?? '',
+    environment: tested?.[3]?.trim() ?? '',
+    criteria,
+    findings,
+  };
+}
+
+/**
+ * The `GET /api/tickets/<id>` answer (`{ok, card, text, revision}`) as the
+ * ticket screen renders it; null when the desk sent no usable card. The
+ * Verification section is parsed out of the full markdown; `phases` rides
+ * along from the caller's current board view.
+ */
+export function parseTicketDetail(json: unknown, phases: readonly TicketPhaseOption[]): TicketDetail | null {
+  const body = rec(json);
+  if (body === null || body['ok'] === false) {
+    return null;
+  }
+  const card = rec(body['card']);
+  if (card === null) {
+    return null;
+  }
+  const meta = rec(card['meta']) ?? {};
+  const id = str(card['id'], str(meta['id']));
+  if (id === '') {
+    return null;
+  }
+  const text = str(body['text']);
+  return {
+    id,
+    title: str(card['title'], str(meta['title'])) || id,
+    revision: str(body['revision']),
+    text,
+    verification: parseVerification(text),
+    phases,
+    phase: str(card['phase']),
+  };
+}
+
+/** The `/api/tickets/<id>/diff` answer as the proof card renders it; junk yields an empty diff. */
+export function parseTicketDiff(json: unknown): TicketDiffView {
+  const body = rec(json) ?? {};
+  return {
+    files: arr(body['files'])
+      .map((raw) => rec(raw))
+      .filter((file): file is Record<string, unknown> => file !== null)
+      .map((file) => ({ status: str(file['status']), path: str(file['path']), patch: str(file['patch']) }))
+      .filter((file) => file.path !== ''),
+    truncated: body['truncated'] === true,
+  };
 }

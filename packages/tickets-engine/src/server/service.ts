@@ -65,6 +65,8 @@ export interface RemoteServiceDeps {
   };
   readonly port: TicketsRemotePort;
   readonly clientDir: string;
+  /** The vault's attachment bytes for the proof gallery (E5c); null = no such file. */
+  readonly attachments?: (name: string) => Promise<Uint8Array | null>;
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   /** Settings shows a fresh status (a device paired, the server stopped). */
   readonly onChanged: () => void;
@@ -87,6 +89,7 @@ export class RemoteService {
     this.now = deps.now ?? ((): Date => new Date());
     this.gateway = new RemoteGateway({
       clientDir: deps.clientDir,
+      attachments: deps.attachments,
       log: deps.log,
       router: {
         port: deps.port,
@@ -194,6 +197,23 @@ export class RemoteService {
       this.deps.log(`remote: revoked "${name}"`);
     }
     return this.status();
+  }
+
+  /**
+   * A client embedded in Drey itself (E5c, concept §3.5.4 — the same web
+   * app in a Drey window): registered directly as a device, no pairing
+   * dance. Returns the bearer token and the URL to load; while the
+   * remote is off the URL is null and the caller says so honestly.
+   */
+  async localClient(input: { name?: unknown }): Promise<{ ok: boolean; token?: string; url?: string | null; error?: string }> {
+    const raw = typeof input?.name === 'string' ? input.name : 'Drey';
+    const deviceName = raw.trim().slice(0, 40);
+    try {
+      const { token } = await this.registry().add(deviceName === '' ? 'Drey' : deviceName, false, this.now());
+      return { ok: true, token, url: this.status().deviceUrl };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   async stop(): Promise<void> {

@@ -18,7 +18,7 @@ const KEEPALIVE_MS = 25_000;
 
 const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   'Content-Security-Policy':
-    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; " +
+    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; " +
     "manifest-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
@@ -34,12 +34,22 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
 };
+
+/** The attachment names the proof card's gallery asks for (`verify-…`, `img-…`). */
+const ATTACHMENT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(png|jpg|jpeg|webp|mp4|webm)$/;
 
 export interface GatewayOptions {
   readonly router: RouterDeps;
   /** The built phone client (R3); missing = the built-in pairing page. */
   readonly clientDir: string;
+  /** The vault's attachment bytes (E5c); null = no such file. */
+  readonly attachments?: (name: string) => Promise<Uint8Array | null>;
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
 }
 
@@ -121,6 +131,10 @@ export class RemoteGateway {
       this.openEvents({ ...base, body: undefined }, res);
       return;
     }
+    if (method === 'GET' && url.pathname.startsWith('/api/attachments/')) {
+      await this.serveAttachment(base, decodeURIComponent(url.pathname.slice('/api/attachments/'.length)), res);
+      return;
+    }
 
     let body: unknown;
     if (method === 'POST') {
@@ -173,6 +187,40 @@ export class RemoteGateway {
       this.streams.delete(res);
     };
     res.on('close', close);
+  }
+
+  private async serveAttachment(
+    req: Pick<RemoteRequest, 'method' | 'host' | 'origin' | 'authorization' | 'remote'>,
+    name: string,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const auth = authorize({ ...req, path: '/api/attachments', body: undefined }, this.options.router);
+    if ('response' in auth) {
+      send(res, auth.response.status, auth.response.body);
+      return;
+    }
+    const read = this.options.attachments;
+    if (read === undefined || !ATTACHMENT_NAME.test(name) || name.includes('/') || name.includes('\\')) {
+      send(res, 404, { ok: false, error: 'no such attachment' });
+      return;
+    }
+    try {
+      const bytes = await read(name);
+      if (bytes === null) {
+        send(res, 404, { ok: false, error: 'no such attachment' });
+        return;
+      }
+      const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
+      res.writeHead(200, {
+        'content-type': CONTENT_TYPES[ext] ?? 'application/octet-stream',
+        'cache-control': 'private, max-age=60',
+        'content-length': bytes.byteLength,
+      });
+      res.end(Buffer.from(bytes));
+    } catch (error) {
+      this.options.log(`remote: attachment ${name} failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+      send(res, 500, { ok: false, error: 'reading the attachment failed' });
+    }
   }
 
   private async serveStatic(method: string, pathname: string, res: http.ServerResponse): Promise<void> {

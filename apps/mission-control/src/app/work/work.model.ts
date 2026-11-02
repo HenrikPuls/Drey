@@ -96,6 +96,8 @@ export interface McWorkState {
   /** Read-only paired devices watch but never mutate: the move hides. */
   readonly readOnly: boolean;
   moveTicket(ticketId: string, phaseId: string): Promise<McMoveResult>;
+  /** Opens the ticket screen (E5c); absent = the sheet hides the button. */
+  openTicket?(ticketId: string): void;
 }
 
 export const MC_WORK_STATE = new InjectionToken<McWorkState>('mc.work-state');

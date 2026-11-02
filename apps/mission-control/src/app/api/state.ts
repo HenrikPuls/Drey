@@ -1,8 +1,9 @@
 /**
- * Mission Control's signal store (E5b): the one owner of the connection
- * (`McClient` + the `/api/events` listen lifecycle) and of every view
- * the tabs render. Pure signals — no DOM here; the only DOM touch in
- * the whole layer lives behind `typeof document` guards in the client.
+ * Mission Control's signal store (E5b, extended E5c with the ticket
+ * screen's slice): the one owner of the connection (`McClient` + the
+ * `/api/events` listen lifecycle) and of every view the tabs render.
+ * Pure signals — no DOM here; the only DOM touches in the whole layer
+ * live behind `typeof document`/`typeof location` guards in the client.
  *
  * Event-driven refreshes: a `board`/`needs` frame re-fetches the Work
  * slice, a `fleet`/`remote` frame re-folds the Team runs, and a `chat`
@@ -12,7 +13,7 @@
  * owe us.
  */
 import { signal } from '@angular/core';
-import { ApiError, McClient, type McEventHandlers } from './client';
+import { ApiError, McClient, type McBootHints, type McEventHandlers } from './client';
 import {
   parseActiveSession,
   parseChatEvent,
@@ -20,12 +21,17 @@ import {
   parseProposal,
   parseSessions,
   parseTeam,
+  parseTicketDetail,
+  parseTicketDiff,
   parseWork,
   type ChatProposalView,
   type ChatStateView,
   type ChatStreamView,
   type NeedView,
   type TeamView,
+  type TicketDetail,
+  type TicketDiffView,
+  type TicketPhaseOption,
   type WorkView,
 } from './dto';
 
@@ -34,16 +40,17 @@ export type PairingPhase = 'needs-code' | 'pairing' | 'ready';
 /** What every mutation hands back so the UI can surface a failure. */
 export type McReply = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
-const fail = (error: unknown): McReply => ({
+const fail = (error: unknown): { readonly ok: false; readonly error: string } => ({
   ok: false,
   error: error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'The desk does not answer.',
 });
 
 /** A caught request error (an McReply) versus a 200 body the desk may still have refused. */
-const isFailure = (value: unknown): value is McReply =>
+const isFailure = (value: unknown): value is { readonly ok: false; readonly error: string } =>
   typeof value === 'object' && value !== null && (value as { ok?: unknown }).ok === false;
 
-const refusal = (body: unknown, fallback: string): McReply => {
+/** The `{ok:false, error}` the desk's refusal (or the fallback) becomes — always the false variant. */
+const refusal = (body: unknown, fallback: string): { readonly ok: false; readonly error: string } => {
   const error = (typeof body === 'object' && body !== null ? (body as { error?: unknown }) : {})['error'];
   return { ok: false, error: typeof error === 'string' && error !== '' ? error : fallback };
 };
@@ -70,6 +77,18 @@ export class McState {
   /** The paired device's read-only flag (`GET /api/me`): it watches, never mutates. */
   readonly readOnly = signal(false);
 
+  // --- the ticket screen's slice (E5c) --------------------------------------
+  /** The ticket the screen shows; null = the board, not one ticket. */
+  readonly ticketOpen = signal<{ id: string } | null>(null);
+  /** The loaded ticket; null while the first fetch runs or it failed. */
+  readonly ticketDetail = signal<TicketDetail | null>(null);
+  /** The last load/save failure the ticket screen surfaces; null when all is well. */
+  readonly ticketError = signal<string | null>(null);
+  /** The worktree-vs-base diff the proof card renders; null until loaded. */
+  readonly diff = signal<TicketDiffView | null>(null);
+  /** The attachment object-URL memo: the file name to the URL `ensureAttachment` fetched. */
+  private readonly attachmentUrls = signal<ReadonlyMap<string, string>>(new Map());
+
   private stopListen: (() => void) | null = null;
   private booted = false;
   private tail: StreamTail | null = null;
@@ -77,20 +96,32 @@ export class McState {
   constructor(private readonly client: McClient = new McClient()) {}
 
   /**
-   * Boots the connection: a stored token goes straight to ready; else a
-   * pairing code (from the URL the desk shows) is exchanged; else the
-   * app waits on the pairing screen. Idempotent.
+   * Boots the connection: a `#token=` bearer from the URL (Drey's
+   * embedded client) stores the token directly and skips pairing; else a
+   * stored token goes straight to ready; else a `#pair=` code is
+   * exchanged; else the app waits on the pairing screen. Idempotent.
+   *
+   * A bare string is read as the pairing code — the shape the shell
+   * passed before the `#token=` hint existed; prefer `McBootHints`.
    */
-  async boot(pairCodeFromUrl?: string | null): Promise<void> {
+  async boot(hints?: McBootHints | string | null): Promise<void> {
     if (this.booted) {
       return;
     }
     this.booted = true;
+    const fromUrl: McBootHints | null =
+      typeof hints === 'string' ? { pairCode: hints, token: null } : (hints ?? null);
+    const landed = (fromUrl?.token ?? '').trim();
+    if (landed !== '') {
+      this.client.setToken(landed);
+      this.enterReady();
+      return;
+    }
     if (this.client.token() !== null) {
       this.enterReady();
       return;
     }
-    const code = (pairCodeFromUrl ?? '').trim();
+    const code = (fromUrl?.pairCode ?? '').trim();
     if (code !== '') {
       await this.pair(code);
       return;
@@ -330,6 +361,165 @@ export class McState {
       }
     }
     return null;
+  }
+
+  // --- the ticket screen (E5c) ------------------------------------------------
+
+  /**
+   * Opens one ticket: the screen shows it, the detail and the diff start
+   * loading. The board view supplies the phase list; the card's own
+   * phase is the highlighted entry.
+   */
+  openTicket(id: string): void {
+    this.ticketOpen.set({ id });
+    this.ticketDetail.set(null);
+    this.ticketError.set(null);
+    this.diff.set(null);
+    void this.loadTicket(id);
+  }
+
+  /** Back to the board: drops the detail and revokes every object URL the memo holds. */
+  closeTicket(): void {
+    for (const url of this.attachmentUrls().values()) {
+      this.client.release(url);
+    }
+    this.attachmentUrls.set(new Map());
+    this.ticketOpen.set(null);
+    this.ticketDetail.set(null);
+    this.ticketError.set(null);
+    this.diff.set(null);
+  }
+
+  /**
+   * Loads one ticket's full markdown (`GET /api/tickets/<id>`); a 404 or
+   * a dropped desk lands on `ticketError` and leaves the detail empty. A
+   * newer `openTicket` racing this fetch wins — the stale answer is dropped.
+   */
+  async loadTicket(id: string): Promise<void> {
+    const body = await this.client.request('GET', `/api/tickets/${encodeURIComponent(id)}`).catch(fail);
+    if (this.ticketOpen()?.id !== id) {
+      return;
+    }
+    if (isFailure(body)) {
+      this.ticketDetail.set(null);
+      this.ticketError.set(body.error);
+      return;
+    }
+    const detail = parseTicketDetail(body, this.phaseOptions());
+    if (detail === null) {
+      this.ticketDetail.set(null);
+      this.ticketError.set(refusal(body, 'the ticket did not come through').error);
+      return;
+    }
+    const phase = detail.phase === '' ? (this.phaseOf(detail.id) ?? '') : detail.phase;
+    this.ticketError.set(null);
+    this.ticketDetail.set({ ...detail, phase });
+  }
+
+  /** The current board view's phases, for the ticket screen's phase rail. */
+  private phaseOptions(): readonly TicketPhaseOption[] {
+    return this.work().groups.map((group) => ({ id: group.id, title: group.title }));
+  }
+
+  /**
+   * Saves the raw markdown (`POST /api/tickets/<id>/save`, the loaded
+   * revision as the base); one git commit on the desk when it lands. A
+   * stale base is the refine sentence, never the desk's raw wording; a
+   * success re-loads the detail (the revision moves on).
+   */
+  async saveTicket(text: string): Promise<McReply> {
+    const detail = this.ticketDetail();
+    if (detail === null) {
+      return { ok: false, error: 'no ticket is open' };
+    }
+    const path = `/api/tickets/${encodeURIComponent(detail.id)}/save`;
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', path, { text, baseRevision: detail.revision })
+      .catch(fail);
+    // A stale base rides a 200 `{ok:false, conflict:true}` — the refine
+    // sentence covers it before the plain isFailure pass below.
+    if ((body as Record<string, unknown>)['conflict'] === true) {
+      return { ok: false, error: 'The ticket changed since you opened it. Reload it and edit again.' };
+    }
+    if (isFailure(body)) {
+      return body;
+    }
+    if (body['ok'] !== true) {
+      return refusal(body, 'the desk did not save the ticket');
+    }
+    await this.loadTicket(detail.id);
+    return { ok: true };
+  }
+
+  /** Accepts the open ticket (`POST …/accept` — it leaves the owner's hands). */
+  async acceptTicket(): Promise<McReply> {
+    const open = this.ticketOpen();
+    if (open === null) {
+      return { ok: false, error: 'no ticket is open' };
+    }
+    const path = `/api/tickets/${encodeURIComponent(open.id)}/accept`;
+    const body = await this.client.request<Record<string, unknown>>('POST', path).catch(fail);
+    if (isFailure(body)) {
+      return body;
+    }
+    if (body['ok'] !== true) {
+      return refusal(body, 'the desk did not accept the ticket');
+    }
+    await this.loadTicket(open.id);
+    return { ok: true };
+  }
+
+  /** Sends the open ticket back to the agent; the note is mandatory (an empty one refuses). */
+  async sendBack(note: string): Promise<McReply> {
+    const open = this.ticketOpen();
+    if (open === null) {
+      return { ok: false, error: 'no ticket is open' };
+    }
+    const text = note.trim();
+    if (text === '') {
+      return { ok: false, error: 'a send-back needs a note' };
+    }
+    const path = `/api/tickets/${encodeURIComponent(open.id)}/send-back`;
+    const body = await this.client.request<Record<string, unknown>>('POST', path, { note: text }).catch(fail);
+    if (isFailure(body)) {
+      return body;
+    }
+    if (body['ok'] !== true) {
+      return refusal(body, 'the desk did not send the ticket back');
+    }
+    await this.loadTicket(open.id);
+    return { ok: true };
+  }
+
+  /** Loads the worktree-vs-base diff the proof card renders; a failed GET keeps the last good view. */
+  async loadDiff(): Promise<void> {
+    const open = this.ticketOpen();
+    if (open === null) {
+      return;
+    }
+    const body = await this.client.raw(`/api/tickets/${encodeURIComponent(open.id)}/diff`);
+    if (body !== null) {
+      this.diff.set(parseTicketDiff(body));
+    }
+  }
+
+  /** The memoized object URL for one attachment; null until `ensureAttachment` fetched it. */
+  attachmentUrl(name: string): string | null {
+    return this.attachmentUrls().get(name) ?? null;
+  }
+
+  /** Fetches one attachment on demand; the memo hands out the same URL afterwards. */
+  async ensureAttachment(name: string): Promise<string | null> {
+    const known = this.attachmentUrls().get(name);
+    if (known !== undefined) {
+      return known;
+    }
+    const url = await this.client.attachment(name).catch(() => null);
+    if (url === null) {
+      return null;
+    }
+    this.attachmentUrls.update((map) => new Map(map).set(name, url));
+    return url;
   }
 
   // --- the chat stream ------------------------------------------------------

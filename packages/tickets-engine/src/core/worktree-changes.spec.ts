@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_WORKTREE_FILES, mergeWorktreeChanges, parseNameStatus, parseNumstat } from './worktree-changes';
+import { MAX_WORKTREE_FILES, mergeWorktreeChanges, parseNameStatus, parseNumstat, parseUnifiedDiff } from './worktree-changes';
 
 describe('parseNumstat', () => {
   it('reads added, removed and the path; CRLF tolerantly', () => {
@@ -72,5 +72,58 @@ describe('mergeWorktreeChanges', () => {
   it('empty inputs give an empty list', () => {
     expect(mergeWorktreeChanges([{ numstat: '', nameStatus: '' }])).toEqual([]);
     expect(mergeWorktreeChanges([])).toEqual([]);
+  });
+});
+
+describe('parseUnifiedDiff', () => {
+  const SAMPLE = [
+    'diff --git a/src/a.ts b/src/a.ts',
+    'index 1111111..2222222 100644',
+    '--- a/src/a.ts',
+    '+++ b/src/a.ts',
+    '@@ -1,2 +1,2 @@',
+    '-old line',
+    '+new line',
+    'diff --git a/src/new.ts b/src/new.ts',
+    'new file mode 100644',
+    '--- /dev/null',
+    '+++ b/src/new.ts',
+    '@@ -0,0 +1 @@',
+    '+hello',
+    'diff --git a/src/gone.ts b/src/gone.ts',
+    'deleted file mode 100644',
+    '--- a/src/gone.ts',
+    '+++ /dev/null',
+  ].join('\n');
+
+  it('splits per file with statuses from the header lines', () => {
+    const diff = parseUnifiedDiff(SAMPLE, { maxFiles: 10, maxPatchBytes: 10_000, maxTotalBytes: 100_000 });
+    expect(diff.truncated).toBe(false);
+    expect(diff.files.map((f) => [f.status, f.path])).toEqual([
+      ['M', 'src/a.ts'],
+      ['A', 'src/new.ts'],
+      ['D', 'src/gone.ts'],
+    ]);
+    expect(diff.files[0]!.patch).toContain('@@ -1,2 +1,2 @@');
+    expect(diff.files[0]!.patch).toContain('+new line');
+  });
+
+  it('caps at the file boundary and says truncated', () => {
+    const diff = parseUnifiedDiff(SAMPLE, { maxFiles: 2, maxPatchBytes: 10_000, maxTotalBytes: 100_000 });
+    expect(diff.files).toHaveLength(2);
+    expect(diff.truncated).toBe(true);
+  });
+
+  it('marks a patch beyond its byte cap but keeps the file', () => {
+    const diff = parseUnifiedDiff(SAMPLE, { maxFiles: 10, maxPatchBytes: 40, maxTotalBytes: 100_000 });
+    expect(diff.truncated).toBe(true);
+    expect(diff.files[0]!.patch.length).toBeLessThanOrEqual(80);
+  });
+
+  it('reads an empty diff as no files', () => {
+    expect(parseUnifiedDiff('', { maxFiles: 10, maxPatchBytes: 10_000, maxTotalBytes: 100_000 })).toEqual({
+      files: [],
+      truncated: false,
+    });
   });
 });

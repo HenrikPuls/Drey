@@ -103,6 +103,30 @@ function parseChatSend(file: string, body: unknown): Parsed<{ file: string; text
   return { ok: true, value: { file, text } };
 }
 
+/** The phone edit mode's raw save: the text must be a whole ticket file (E5c). */
+function parseTicketSave(body: unknown): Parsed<{ id: string; text: string; baseRevision?: string }> {
+  const obj = asObject(body);
+  const text = typeof obj?.['text'] === 'string' ? obj['text'] : '';
+  const base = obj?.['baseRevision'];
+  if (obj === null || text.trim() === '') {
+    return { ok: false, error: 'a save needs the ticket text' };
+  }
+  if (base !== undefined && typeof base !== 'string') {
+    return { ok: false, error: 'baseRevision must be a string' };
+  }
+  return { ok: true, value: { ...(obj as { id: string }), text, ...(typeof base === 'string' ? { baseRevision: base } : {}) } };
+}
+
+/** Send-back: the note is mandatory — a send-back never goes without why (E5c). */
+function parseSendBack(body: unknown): Parsed<{ id: string; note: string }> {
+  const obj = asObject(body);
+  const note = typeof obj?.['note'] === 'string' ? obj['note'].trim() : '';
+  if (obj === null || note === '') {
+    return { ok: false, error: 'a send-back needs a note' };
+  }
+  return { ok: true, value: { ...(obj as { id: string }), note } };
+}
+
 /** The Host check every request passes first — API, events and static files alike. */
 export function hostRefusal(req: Pick<RemoteRequest, 'host'>, deps: Pick<RouterDeps, 'allowedHosts'>): RemoteResponse | null {
   return hostAllowed(req.host, deps.allowedHosts()) ? null : fail(421, 'this address is not served here');
@@ -208,6 +232,16 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
     if (stream !== null) {
       return json({ text: await port.stream(stream[1]!) });
     }
+    const changes = /^\/api\/tickets\/([^/]+)\/worktree-changes$/.exec(req.path);
+    if (changes !== null) {
+      const id = decodeURIComponent(changes[1]!);
+      return TICKET_ID_PATTERN.test(id) ? json(await port.ticketWorktreeChanges(id)) : fail(404, 'no such ticket id');
+    }
+    const diff = /^\/api\/tickets\/([^/]+)\/diff$/.exec(req.path);
+    if (diff !== null) {
+      const id = decodeURIComponent(diff[1]!);
+      return TICKET_ID_PATTERN.test(id) ? json(await port.ticketDiff(id)) : fail(404, 'no such ticket id');
+    }
     const chatSession = /^\/api\/chat\/sessions\/(.+)$/.exec(req.path);
     if (chatSession !== null) {
       const file = decodeURIComponent(chatSession[1]!);
@@ -225,7 +259,7 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
   if (req.path === '/api/attachments') {
     return write('attachment', parseAttachment(body), (cmd) => port.saveAttachment(cmd, actor));
   }
-  const ticket = /^\/api\/tickets\/([^/]+)\/(move|claim|archive|refine)$/.exec(req.path);
+  const ticket = /^\/api\/tickets\/([^/]+)\/(move|claim|archive|refine|save|accept|send-back)$/.exec(req.path);
   if (ticket !== null) {
     const id = decodeURIComponent(ticket[1]!);
     if (!TICKET_ID_PATTERN.test(id)) {
@@ -239,6 +273,12 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
         return write(`claim ${id}`, parseClaim(withId), (cmd) => port.claim(cmd, actor));
       case 'refine':
         return write(`refine ${id}`, parseRefine(withId), (cmd) => port.refine(cmd, actor));
+      case 'save':
+        return write(`save ${id}`, parseTicketSave(withId), (cmd) => port.ticketSave(cmd, actor));
+      case 'accept':
+        return write(`accept ${id}`, { ok: true, value: { id } }, (cmd) => port.ticketAccept(cmd, actor));
+      case 'send-back':
+        return write(`send-back ${id}`, parseSendBack(withId), (cmd) => port.ticketSendBack(cmd, actor));
       default:
         return write(`archive ${id}`, { ok: true, value: { id } }, (cmd) => port.archive(cmd, actor));
     }

@@ -35,7 +35,8 @@ const jsonResponse = (body: unknown, status = 200): Response =>
 /**
  * The fake desk: JSON routes by `METHOD path`, plus one controllable
  * `/api/events` stream. A responder may return `{__status, __body}` to
- * answer a non-200, or throw to answer a 500 with the error's message.
+ * answer a non-200, `{__bytes, __contentType}` to answer with raw bytes
+ * (the attachment reads), or throw to answer a 500 with the error's message.
  */
 export class FakeDesk {
   readonly storage = new FakeStorage();
@@ -92,6 +93,13 @@ export class FakeDesk {
     }
     try {
       const result = route(parsed) as unknown;
+      if (typeof result === 'object' && result !== null && '__bytes' in result) {
+        const bytes = result as { __bytes: Uint8Array<ArrayBuffer>; __contentType?: string; __status?: number };
+        return new Response(bytes.__bytes, {
+          status: bytes.__status ?? 200,
+          headers: { 'content-type': bytes.__contentType ?? 'application/octet-stream' },
+        });
+      }
       if (typeof result === 'object' && result !== null && '__status' in result) {
         const special = result as { __status: number; __body: unknown };
         return jsonResponse(special.__body, special.__status);

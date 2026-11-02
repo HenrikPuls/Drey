@@ -5,7 +5,7 @@
  * 401 give-up. Runs under Node against the fake desk.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, McClient, TOKEN_KEY } from './client';
+import { ApiError, bootHintsFromHash, McClient, TOKEN_KEY } from './client';
 import { FakeDesk } from './fakes';
 
 const stops: (() => void)[] = [];
@@ -30,6 +30,24 @@ const waitFor = async (check: () => void): Promise<void> => {
   }
   check();
 };
+
+describe('boot hints', () => {
+  it('reads the pairing code from a #pair hash', () => {
+    expect(bootHintsFromHash('#pair=1234-5678')).toEqual({ pairCode: '1234-5678', token: null });
+  });
+
+  it('reads the bearer token from a #token hash', () => {
+    expect(bootHintsFromHash('#token=aZ_9-x.Q~+')).toEqual({ pairCode: null, token: 'aZ_9-x.Q~+' });
+    expect(bootHintsFromHash('#token=abc==')).toEqual({ pairCode: null, token: 'abc==' });
+  });
+
+  it('yields none for an empty or foreign hash', () => {
+    expect(bootHintsFromHash('')).toEqual({ pairCode: null, token: null });
+    expect(bootHintsFromHash('#section-2')).toEqual({ pairCode: null, token: null });
+    expect(bootHintsFromHash('#token=')).toEqual({ pairCode: null, token: null });
+    expect(bootHintsFromHash('#pair=12 34')).toEqual({ pairCode: null, token: null });
+  });
+});
 
 describe('McClient token storage', () => {
   it('stores the token under the key the legacy client uses', () => {
@@ -155,6 +173,95 @@ describe('McClient.pair', () => {
     const client = new McClient({ fetch: () => Promise.reject(new Error('down')), storage: new FakeDesk().storage });
     const reply = await client.pair('1234-5678');
     expect(reply).toEqual({ ok: false, error: 'The desk does not answer.' });
+  });
+});
+
+describe('McClient.raw', () => {
+  it('returns the parsed JSON body', async () => {
+    const desk = new FakeDesk();
+    desk.on('GET', '/api/tickets/T-1/diff', () => ({ files: [{ status: 'M', path: 'a.ts', patch: '+x' }], truncated: false }));
+    const client = makeClient(desk);
+    const body = await client.raw('/api/tickets/T-1/diff');
+    expect(body).toEqual({ files: [{ status: 'M', path: 'a.ts', patch: '+x' }], truncated: false });
+    expect(desk.callsOf('GET', '/api/tickets/T-1/diff')[0]!.headers['Authorization']).toBeUndefined();
+  });
+
+  it('returns null instead of throwing on a failed GET', async () => {
+    const desk = new FakeDesk();
+    desk.on('GET', '/api/tickets/T-1/diff', () => ({ __status: 404, __body: { ok: false, error: 'no such ticket' } }));
+    const client = makeClient(desk);
+    expect(await client.raw('/api/tickets/T-1/diff')).toBeNull();
+  });
+
+  it('returns null when the desk does not answer', async () => {
+    const client = new McClient({ fetch: () => Promise.reject(new Error('down')), storage: new FakeDesk().storage });
+    expect(await client.raw('/api/tickets/T-1/diff')).toBeNull();
+  });
+});
+
+describe('McClient.attachment', () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+  it('fetches the bytes with the bearer and hands the blob to the object-URL seam', async () => {
+    const desk = new FakeDesk();
+    desk.on('GET', '/api/attachments/shot.png', () => ({ __bytes: PNG, __contentType: 'image/png' }));
+    desk.storage.setItem(TOKEN_KEY, 'tok-9');
+    let seen: Blob | null = null;
+    const client = new McClient({
+      fetch: desk.fetch,
+      storage: desk.storage,
+      createObjectUrl: (blob) => {
+        seen = blob;
+        return 'blob:fake-1';
+      },
+    });
+    const url = await client.attachment('shot.png');
+    expect(url).toBe('blob:fake-1');
+    const call = desk.callsOf('GET', '/api/attachments/shot.png')[0]!;
+    expect(call.headers['Authorization']).toBe('Bearer tok-9');
+    expect(call.headers['Content-Type']).toBeUndefined();
+    expect(new Uint8Array(await seen!.arrayBuffer())).toEqual(PNG);
+  });
+
+  it('sends no bearer header while unpaired', async () => {
+    const desk = new FakeDesk();
+    desk.on('GET', '/api/attachments/shot.png', () => ({ __bytes: PNG }));
+    const client = new McClient({ fetch: desk.fetch, storage: desk.storage, createObjectUrl: () => 'blob:fake-2' });
+    await client.attachment('shot.png');
+    expect(desk.callsOf('GET', '/api/attachments/shot.png')[0]!.headers['Authorization']).toBeUndefined();
+  });
+
+  it('throws ApiError when the desk has no such attachment', async () => {
+    const desk = new FakeDesk();
+    desk.on('GET', '/api/attachments/missing.png', () => ({ __status: 404, __body: { ok: false, error: 'no such attachment' } }));
+    const client = new McClient({ fetch: desk.fetch, storage: desk.storage, createObjectUrl: () => 'blob:fake-3' });
+    const error = await client.attachment('missing.png').catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 404, message: 'no such attachment' });
+  });
+
+  it('surfaces a desk that does not answer', async () => {
+    const client = new McClient({
+      fetch: () => Promise.reject(new Error('refused')),
+      storage: new FakeDesk().storage,
+      createObjectUrl: () => 'blob:fake-4',
+    });
+    await expect(client.attachment('shot.png')).rejects.toMatchObject({ status: 0, message: 'The desk does not answer.' });
+  });
+
+  it('returns null where the platform cannot create object URLs', async () => {
+    const desk = new FakeDesk();
+    desk.on('GET', '/api/attachments/shot.png', () => ({ __bytes: PNG }));
+    const client = new McClient({ fetch: desk.fetch, storage: desk.storage, createObjectUrl: () => null });
+    expect(await client.attachment('shot.png')).toBeNull();
+  });
+
+  it('release revokes through the seam', async () => {
+    const revoked: string[] = [];
+    const desk = new FakeDesk();
+    const client = new McClient({ fetch: desk.fetch, storage: desk.storage, revokeObjectUrl: (url) => revoked.push(url) });
+    client.release('blob:fake-9');
+    expect(revoked).toEqual(['blob:fake-9']);
   });
 });
 

@@ -72,7 +72,7 @@ const BOARD_METHODS = [
 
 const FLEET_METHODS = ['runs', 'start', 'chainStatus', 'stop', 'send', 'answerPermission', 'answerQuestion', 'stream', 'setMaster', 'setColumn', 'stopColumn', 'abortAll', 'startPolling', 'attach', 'control', 'log', 'status'] as const;
 
-const REMOTE_METHODS = ['status', 'configure', 'pair', 'revoke', 'init'] as const;
+const REMOTE_METHODS = ['status', 'configure', 'pair', 'revoke', 'init', 'localClient'] as const;
 
 export async function createEngine(opts: EngineOptions): Promise<Engine> {
   const log = opts.log ?? (() => undefined);
@@ -143,6 +143,19 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     config,
     port: new DreyTicketsPort(board, fleet, hub, { allowBypass: () => remoteService.allowBypass() }, chat),
     clientDir: opts.clientDir,
+    // E5c: the proof card's gallery — attachment bytes straight from the
+    // vault, authorized per device token (the gateway stays vault-agnostic).
+    attachments: async (name) => {
+      const vault = await board.detect();
+      if (vault === null) {
+        return null;
+      }
+      try {
+        return await fsp.readFile(path.join(vault.path, 'tickets', 'attachments', name));
+      } catch {
+        return null;
+      }
+    },
     log,
     onChanged: () => hub.emit('remote'),
   });

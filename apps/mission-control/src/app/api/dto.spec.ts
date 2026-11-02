@@ -11,6 +11,9 @@ import {
   parseProposal,
   parseSessions,
   parseTeam,
+  parseTicketDetail,
+  parseTicketDiff,
+  parseVerification,
   parseWork,
 } from './dto';
 
@@ -303,5 +306,139 @@ describe('parseChatEvent', () => {
     expect(parseChatEvent('chat', '{"event":{"kind":"done"}}')).toEqual({ kind: 'unknown', name: 'chat' });
     expect(parseChatEvent('chat', '{"file":"f.md","event":{"kind":"mystery"}}')).toEqual({ kind: 'unknown', name: 'chat' });
     expect(parseChatEvent('board-extra', '{}')).toEqual({ kind: 'unknown', name: 'board-extra' });
+  });
+});
+
+describe('parseVerification', () => {
+  const SECTION = [
+    '## Verification',
+    '',
+    'Tested on 2026-11-01T14:32:00Z by verify@engine — Electron 34.2.0 on win32.',
+    '',
+    '### Criteria',
+    '',
+    '- [x] `npm run build` → ![](../attachments/verify-20261101-143200-01.png)',
+    '- [ ] `npm test` — no screenshot: the app never became ready',
+    '',
+    '### Findings',
+    '',
+    '- The settings page stayed blank until the reload.',
+    '',
+  ].join('\n');
+
+  it('maps the canonical section', () => {
+    expect(parseVerification(SECTION)).toEqual({
+      testedAt: '2026-11-01T14:32:00Z',
+      tester: 'verify@engine',
+      environment: 'Electron 34.2.0 on win32',
+      criteria: [
+        { command: 'npm run build', passed: true, screenshot: 'verify-20261101-143200-01.png', note: null },
+        { command: 'npm test', passed: false, screenshot: null, note: 'no screenshot: the app never became ready' },
+      ],
+      findings: ['The settings page stayed blank until the reload.'],
+    });
+  });
+
+  it('reads the section out of a full ticket file and stops at the next H2', () => {
+    const file = `---\nid: T-1\n---\n\n# T-1\n\n## Plan\n\ndo it\n\n${SECTION}## Log\n\n- '2026-11-01T14:40:00Z' me — moved\n`;
+    const verification = parseVerification(file);
+    expect(verification).not.toBeNull();
+    expect(verification!.criteria).toHaveLength(2);
+    expect(verification!.findings).toEqual(['The settings page stayed blank until the reload.']);
+  });
+
+  it('tolerates a bare section: stamp without environment, no screenshots, no findings', () => {
+    const verification = parseVerification('## Verification\n\n- [X] `npm run build`\n');
+    expect(verification).toEqual({
+      testedAt: '',
+      tester: '',
+      environment: '',
+      criteria: [{ command: 'npm run build', passed: true, screenshot: null, note: null }],
+      findings: [],
+    });
+  });
+
+  it('returns null when the heading is absent and never throws on junk', () => {
+    expect(parseVerification('# T-1\n\nno proof yet\n')).toBeNull();
+    expect(parseVerification('')).toBeNull();
+    expect(parseVerification(null as unknown as string)).toBeNull();
+    expect(parseVerification('## Verificationism\n\n- [x] `x`')).toBeNull();
+  });
+});
+
+describe('parseTicketDetail', () => {
+  const phases = [
+    { id: 'inbox', title: 'Inbox' },
+    { id: 'verify', title: 'Verify' },
+  ];
+  const TICKET_TEXT = ['---', 'id: T-1', '---', '', '# One', '', '## Verification', '', '- [x] `npm test`', ''].join('\n');
+
+  it('maps the ticket reply with the verification parsed out of the markdown', () => {
+    const detail = parseTicketDetail(
+      {
+        ok: true,
+        card: { id: 'T-1', title: 'One', phase: 'verify', meta: { priority: 'high' } },
+        text: TICKET_TEXT,
+        revision: 'abc123',
+      },
+      phases,
+    );
+    expect(detail).toEqual({
+      id: 'T-1',
+      title: 'One',
+      revision: 'abc123',
+      text: TICKET_TEXT,
+      verification: {
+        testedAt: '',
+        tester: '',
+        environment: '',
+        criteria: [{ command: 'npm test', passed: true, screenshot: null, note: null }],
+        findings: [],
+      },
+      phases,
+      phase: 'verify',
+    });
+  });
+
+  it('falls back to the meta title and an empty phase, and rides the given phases along', () => {
+    const detail = parseTicketDetail({ ok: true, card: { id: 'T-2', meta: { title: 'Two' } }, text: 'x', revision: '' }, phases);
+    expect(detail).toMatchObject({ id: 'T-2', title: 'Two', phase: '', phases });
+  });
+
+  it('returns null for a refused, card-less or id-less answer and never throws on junk', () => {
+    expect(parseTicketDetail({ ok: false, error: 'no such ticket' }, phases)).toBeNull();
+    expect(parseTicketDetail({ ok: true, text: 'x' }, phases)).toBeNull();
+    expect(parseTicketDetail({ ok: true, card: { meta: {} }, text: 'x' }, phases)).toBeNull();
+    expect(parseTicketDetail(null, phases)).toBeNull();
+    expect(parseTicketDetail('ticket', phases)).toBeNull();
+  });
+});
+
+describe('parseTicketDiff', () => {
+  it('maps the files and the truncated flag', () => {
+    expect(
+      parseTicketDiff({
+        files: [
+          { status: 'M', path: 'src/a.ts', patch: '@@ -1 +1 @@\n-old\n+new' },
+          { status: 'A', path: 'src/b.ts', patch: '' },
+        ],
+        truncated: true,
+      }),
+    ).toEqual({
+      files: [
+        { status: 'M', path: 'src/a.ts', patch: '@@ -1 +1 @@\n-old\n+new' },
+        { status: 'A', path: 'src/b.ts', patch: '' },
+      ],
+      truncated: true,
+    });
+  });
+
+  it('drops file entries without a path and never throws on junk', () => {
+    expect(parseTicketDiff({ files: [{ status: 'M' }, null, { status: 'D', path: 'gone.ts' }], truncated: 'yes' })).toEqual({
+      files: [{ status: 'D', path: 'gone.ts', patch: '' }],
+      truncated: false,
+    });
+    expect(parseTicketDiff(null)).toEqual({ files: [], truncated: false });
+    expect(parseTicketDiff('diff')).toEqual({ files: [], truncated: false });
   });
 });

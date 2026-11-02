@@ -64,6 +64,7 @@ export interface ChatChangePayload {
 // re-export keeps every existing import path working.
 export type { RefineReply, TicketReply, AttachmentReply } from './replies';
 import type { RefineReply, TicketReply, AttachmentReply } from './replies';
+import type { TicketDiff, WorktreeFile } from '../core/worktree-changes';
 
 /**
  * The host's remote surface. Every writing call carries the actor the
@@ -99,6 +100,17 @@ export interface TicketsRemotePort {
 
   /** The team: every persona, read-only (the Team tab's cards). */
   personas(): Promise<readonly PersonaView[]>;
+
+  /** The phone edit mode's raw-text save (E5c). */
+  ticketSave(cmd: { id: string; text: string; baseRevision?: string }, actor: string): Promise<RefineReply>;
+  /** The proof card's accept — merges/archives per the pipeline (E5c). */
+  ticketAccept(cmd: TicketIdCommand, actor: string): Promise<MutationResult>;
+  /** The proof card's send-back; the note is mandatory (E5c). */
+  ticketSendBack(cmd: { id: string; note: string }, actor: string): Promise<MutationResult>;
+  /** The proof card's file stat list (E5c). */
+  ticketWorktreeChanges(id: string): Promise<readonly WorktreeFile[]>;
+  /** The proof card's unified diff (E5c). */
+  ticketDiff(id: string): Promise<TicketDiff>;
 
   /** The Mission Control chat surface (E5a) — the service's port verbatim. */
   chatSessions(): Promise<readonly ChatSessionMeta[]>;

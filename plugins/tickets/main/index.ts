@@ -38,17 +38,22 @@ import { createFleetMcpTools } from './mcp-tools';
 import { listWorkerModels } from './worker-models';
 import { EngineClient } from './engine-client';
 import { ensureEngine } from './engine-lifecycle';
+import { MissionControlHost, createMissionControlView } from './mission-control';
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
 let engineEvents: (() => void) | null = null;
+let missionControl: MissionControlHost | null = null;
 
 const plugin: MainPluginModule = {
   async deactivate() {
     // The engine outlives Drey (the phone may still be on it) — only the
-    // event stream unsubscribes here.
+    // event stream unsubscribes here. The Mission Control window is ours,
+    // it closes with the plugin.
+    missionControl?.dispose();
+    missionControl = null;
     engineEvents?.();
     engineEvents = null;
   },
@@ -91,6 +96,18 @@ const plugin: MainPluginModule = {
       const id = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>)['id'] : undefined;
       return typeof id === 'string' ? remoteService.revoke(id) : remoteService.status();
     });
+
+    // Mission Control in a Drey window (E5c, concept §3.5.4 — the same web
+    // app in a Drey window): the Work panel's ⋯ row asks here; main takes a
+    // local client from the engine (registered as a device directly, no
+    // pairing) and opens the gateway URL with `#token=` appended — or
+    // answers honestly that the remote is off.
+    const mcHost = new MissionControlHost({
+      localClient: () => remoteService.localClient({ name: 'Drey' }),
+      createView: () => createMissionControlView((line) => ctx.log(line, 'warn')),
+    });
+    missionControl = mcHost;
+    ctx.ipc.handle('openMissionControl', () => mcHost.open());
 
     ctx.ipc.handle('board', () => board.refresh());
 

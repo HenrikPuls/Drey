@@ -59,6 +59,16 @@ export class Work {
     this.movePending.set(false);
   }
 
+  /** The sheet's "Open ticket": the ticket screen takes over (E5c). */
+  protected openTicket(): void {
+    const card = this.openCard();
+    if (card === null || this.state?.openTicket === undefined) {
+      return;
+    }
+    this.state.openTicket(card.id);
+    this.closeSheet();
+  }
+
   /** "Move to next phase": the card on to the next group; the error shows inline. */
   protected async moveOn(): Promise<void> {
     const state = this.state;

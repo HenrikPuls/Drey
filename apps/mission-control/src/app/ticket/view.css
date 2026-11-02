@@ -1,0 +1,616 @@
+/* The ticket screen (concept §5.3–5.5): phone-first, the actions in the
+   thumb's reach. Colours and radii come from the global tokens. */
+
+:host {
+  display: block;
+}
+
+.ticket {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+}
+
+.ticket-empty {
+  margin: 24px 16px;
+  font-size: 13px;
+  color: var(--mc-dim);
+}
+
+.ticket-empty-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 16px;
+}
+
+.ticket-empty-box .ticket-empty {
+  margin: 0;
+}
+
+.ticket-error {
+  color: var(--mc-danger);
+}
+
+/* The header: back arrow, id + title, the phase chip. */
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.back {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  margin: -6px 0 0 -8px;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--mc-dim);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--mc-radius);
+}
+
+.back:active {
+  background: var(--mc-panel-2);
+}
+
+.head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.tid {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--mc-dim);
+}
+
+.title {
+  margin: 2px 0 0;
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 40vw;
+  padding: 1px 8px;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--mc-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: 999px;
+}
+
+.chip-phase {
+  flex: none;
+  margin-top: 2px;
+  color: var(--mc-text);
+}
+
+/* The gate bar: the pipeline as a horizontal step strip. */
+
+.gate {
+  display: flex;
+  gap: 4px;
+  padding: 10px 12px;
+  margin: 0;
+  overflow-x: auto;
+  list-style: none;
+  background: var(--mc-panel);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+.gate-step {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 56px;
+}
+
+.gate-dot {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--mc-text);
+}
+
+.gate-title {
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--mc-text);
+  text-align: center;
+}
+
+.gate-past .gate-dot,
+.gate-past .gate-title {
+  color: var(--mc-dim);
+}
+
+.gate-current .gate-dot,
+.gate-current .gate-title {
+  color: var(--mc-accent);
+}
+
+.gate-current .gate-title {
+  font-weight: 600;
+}
+
+.gate-future .gate-dot,
+.gate-future .gate-title {
+  color: var(--mc-dim);
+  opacity: 0.45;
+}
+
+/* Cards: the proof card and the diff card share one surface. */
+
+.card {
+  padding: 12px;
+  background: var(--mc-panel);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+.card-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mc-dim);
+}
+
+/* The proof card. */
+
+.tested {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--mc-dim);
+}
+
+.criteria {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.criteria li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.box {
+  flex: none;
+  font-size: 13px;
+  color: var(--mc-dim);
+}
+
+.criterion-pass .box {
+  color: var(--mc-ok);
+}
+
+.criterion-fail .box {
+  color: var(--mc-danger);
+}
+
+.cmd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--mc-text);
+  overflow-wrap: anywhere;
+}
+
+.criterion-note {
+  font-size: 12px;
+  color: var(--mc-dim);
+}
+
+.shots {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.shot {
+  flex: none;
+  width: 104px;
+  height: 78px;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+.shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.findings {
+  margin-top: 10px;
+}
+
+.findings-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mc-danger);
+}
+
+/* The generic markdown body. */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.md-h {
+  margin: 6px 0 0;
+  font-size: 15px;
+}
+
+.body > .md-h:first-child {
+  margin-top: 0;
+}
+
+.md-p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--mc-text);
+  overflow-wrap: anywhere;
+}
+
+.md-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.md-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.md-code {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+/* The diff card: one row per file, the patch under it, git-coloured. */
+
+.diff-file + .diff-file {
+  border-top: 1px solid var(--mc-line);
+}
+
+.diff-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.diff-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 0;
+  color: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  text-align: left;
+}
+
+.diff-status {
+  flex: none;
+  min-width: 18px;
+  padding: 0 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--mc-dim);
+  text-align: center;
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: 4px;
+}
+
+.diff-status-a {
+  color: var(--mc-ok);
+}
+
+.diff-status-m {
+  color: var(--mc-accent);
+}
+
+.diff-status-d {
+  color: var(--mc-danger);
+}
+
+.diff-status-r {
+  color: var(--mc-dim);
+}
+
+.diff-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-counts {
+  flex: none;
+  display: inline-flex;
+  gap: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.diff-add {
+  color: var(--mc-ok);
+}
+
+.diff-del {
+  color: var(--mc-danger);
+}
+
+.diff-fs {
+  flex: none;
+  width: 36px;
+  padding: 0;
+  font-size: 15px;
+  color: var(--mc-dim);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.patch {
+  margin: 0 0 10px;
+  padding: 8px 0 8px 10px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+.patch-line {
+  display: block;
+  white-space: pre;
+}
+
+.pl-add {
+  color: var(--mc-ok);
+}
+
+.pl-del {
+  color: var(--mc-danger);
+}
+
+.pl-meta {
+  color: var(--mc-dim);
+}
+
+.diff-truncated {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--mc-dim);
+}
+
+/* The inline action result: an error line or a dim confirmation. */
+
+.result {
+  margin: 0;
+  font-size: 13px;
+}
+
+.result-error {
+  color: var(--mc-danger);
+}
+
+.result-note {
+  color: var(--mc-dim);
+}
+
+/* The actions row, pinned to the thumb's reach; the send-back panel and
+   the raw editor ride it. */
+
+.actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0 calc(4px + env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, var(--mc-bg) 24%);
+}
+
+.action-row {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  width: 100%;
+  min-height: 44px;
+  color: var(--mc-text);
+  cursor: pointer;
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+.btn-primary {
+  font-weight: 600;
+  color: #101216;
+  background: var(--mc-accent);
+  border-color: var(--mc-accent);
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.sendback {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--mc-panel);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+.sendback-label {
+  font-size: 13px;
+  color: var(--mc-dim);
+}
+
+.sendback-text {
+  width: 100%;
+  padding: 10px 12px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--mc-text);
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+/* The fullscreen overlays: the screenshot viewer and the patch viewer. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 88%);
+}
+
+.overlay-img {
+  max-width: 100vw;
+  max-height: 100dvh;
+  object-fit: contain;
+}
+
+.overlay-close {
+  position: absolute;
+  top: calc(8px + env(safe-area-inset-top));
+  right: 12px;
+  width: 44px;
+  height: 44px;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--mc-text);
+  cursor: pointer;
+  background: rgb(0 0 0 / 40%);
+  border: 0;
+  border-radius: 50%;
+}
+
+.fs {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100dvh;
+}
+
+.fs-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+}
+
+.fs-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--mc-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fs-zoom {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.fs-btn {
+  min-width: 40px;
+  height: 36px;
+  padding: 0 8px;
+  font-size: 14px;
+  color: var(--mc-text);
+  cursor: pointer;
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+.fs .overlay-close {
+  position: static;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  font-size: 22px;
+}
+
+.fs-patch {
+  flex: 1;
+  margin: 0;
+  padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  line-height: 1.5;
+}

@@ -1,4 +1,67 @@
 
+### Milestone 106 — the ticket screen + proof card + Drey hosting (Mission-Control migration E5c)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-02
+(outside the list; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md),
+etappe E5c — the concept's §5.3/§5.5 on the device and §3.5.4 in Drey:
+one ticket = one card, the read-only-first ticket screen, and the same
+app hosted in a Drey window). The device API grows the ticket screen's
+reads and the owner's checkpoint moves: `GET /api/tickets/<id>` carries
+the ticket's full markdown with its `revision`; `GET
+/api/tickets/<id>/diff` answers the branch against its base as `{files:
+[{status, path, patch}], truncated}` — parsed on the engine by
+`diffOfOutput` (the same core the desk uses,
+`packages/tickets-engine/src/core/worktree-changes.ts`); `GET
+/api/tickets/<id>/worktree-changes` lists the moving files; `POST
+/api/tickets/<id>/save {text, baseRevision?}` is the raw edit's writer
+— 409-less: a stale revision answers 200 `{ok: false, conflict: true}`
+with the refine wording ('The ticket changed since you opened it.
+Reload it and edit again.'), a text that no longer parses as a ticket
+is refused with its issues, an accepted save is one commit on the desk;
+`POST /api/tickets/<id>/accept` and `POST /api/tickets/<id>/send-back`
+close the checkpoint — the send-back note is mandatory, an empty note
+is a 200 refusal, never a silent move. `GET /api/attachments/<name>`
+serves the proof shots' bytes bearer-authenticated, the name pinned to
+`[A-Za-z0-9._-]+.(png|jpg|jpeg|webp|mp4|webm)` with no slashes, the
+gateway's CSP widening only to `img-src 'self' data: blob:`. The ticket
+screen (concept §5.5) is read-only first: the gate bar over the
+pipeline's phases, the ticket body as safe Markdown (rendered, never
+raw HTML), the `## Verification` section as the proof card (concept
+§5.3 — the criteria checklist, the swipeable screenshot gallery, the
+fullscreen shot viewer, findings), below it the diff as git rendered —
+per file collapsible, the +/- balance, horizontally scrollable lines,
+the per-file fullscreen zoom with stepped font size (`patchLineKind`
+per line); the armed two-step Accept and the send-back with its
+mandatory note sit in the actions row at the bottom, in the thumb's
+reach (concept §7), and the raw edit mode is the exception path behind
+a warning, its save conflict-checked. Drey hosts the same app (concept
+§3.5.4): `RemoteService.localClient` registers the Drey window directly
+as a device (no pairing dance) and answers `{ok, token, url}` — null
+while the remote is off; the tickets plugin's main opens one sandboxed
+window (`plugins/tickets/main/mission-control.ts` — the browser
+plugin's view discipline minimised: own persisted partition, no
+preload, sandbox + context isolation, http(s)-only top-level
+navigation, off-window links to the OS browser) and loads
+`${url}#token=${token}`; the Work panel's ⋯ menu gains the 'Mission
+Control' row and a remote that is off answers honestly ('Enable remote
+access in Settings → Tickets → Remote'). Specs:
+`apps/mission-control/src/app/ticket/view.spec.ts` (33; the gate steps,
+the section split, `proofOf`, the accept-arm reducer, the diff's font
+steps and patch-line kinds, the component's render and moves),
+`apps/mission-control/src/app/ticket/edit.spec.ts` (15; the conflict
+wording, the refused save, the warning gate),
+`apps/mission-control/src/app/ticket/markdown.spec.ts` (14; the safe
+renderer), `plugins/tickets/main/mission-control.spec.ts` (11; focus
+the living window, the honest remote-off answer, the failed-load
+cleanup); the grown slices ship their own rows — the engine's
+`server/router.spec.ts` (save/accept/send-back/diff/attachments
+routes), `server/gateway.spec.ts` (the attachment bytes and the CSP),
+`core/worktree-changes.spec.ts` (`diffOfOutput`),
+`server/drey-port.spec.ts` (the board port's new ticket verbs), the
+app's `api/client.spec.ts`, `api/dto.spec.ts`, `api/state.spec.ts`.
+Deliberate scope cut: inherited from E4 — the proof card's judge stays
+stubbed (the vision pass is its own milestone).
+
 ### Milestone 105 — the Mission Control app (Mission-Control migration E5b)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-02

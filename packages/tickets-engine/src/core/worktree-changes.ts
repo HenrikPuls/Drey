@@ -120,3 +120,83 @@ export function mergeWorktreeChanges(
       return { status: statuses.get(path) ?? 'M', path, added: entry.added, removed: entry.removed };
     });
 }
+
+/** One file's unified diff as the proof card renders it (E5c). */
+export interface DiffFile {
+  /** The git status letter (A/M/D/R…). */
+  readonly status: string;
+  readonly path: string;
+  /** The unified patch (`@@ …` hunks included); '' for binary files. */
+  readonly patch: string;
+}
+
+export interface TicketDiff {
+  readonly files: readonly DiffFile[];
+  /** True when the caps cut content — the card says so honestly. */
+  readonly truncated: boolean;
+}
+
+/** The caps keep one diff phone-sized and the route's body bounded. */
+export const MAX_DIFF_FILES = 20;
+export const MAX_DIFF_PATCH_BYTES = 24 * 1024;
+export const MAX_DIFF_TOTAL_BYTES = 200 * 1024;
+
+/**
+ * Splits `git diff --unified=3 <base>...HEAD` into per-file patches
+ * (pure, no git). Status comes from the file's header lines; binary
+ * files keep an empty patch. Output order is the diff's order; the caps
+ * cut at the file boundary and mark the result truncated.
+ */
+export function parseUnifiedDiff(text: string, caps: { maxFiles: number; maxPatchBytes: number; maxTotalBytes: number }): TicketDiff {
+  const files: DiffFile[] = [];
+  let truncated = false;
+  let current: { status: string; path: string; lines: string[] } | null = null;
+  let total = 0;
+  const flush = (): void => {
+    if (current === null) {
+      return;
+    }
+    files.push({ status: current.status, path: current.path, patch: current.lines.join('\n') });
+    total += current.lines.join('\n').length;
+    current = null;
+  };
+  const header = /^diff --git a\/(.+) b\/(.+)$/;
+  for (const line of text.split('\n')) {
+    const start = header.exec(line);
+    if (start !== null) {
+      flush();
+      if (files.length >= caps.maxFiles || total >= caps.maxTotalBytes) {
+        truncated = true;
+        break;
+      }
+      current = { status: 'M', path: start[2]!, lines: [line] };
+      continue;
+    }
+    if (current === null) {
+      continue;
+    }
+    if (line.startsWith('new file mode')) {
+      current.status = 'A';
+    } else if (line.startsWith('deleted file mode')) {
+      current.status = 'D';
+    } else if (line.startsWith('rename to ')) {
+      current.status = 'R';
+      current.path = line.slice('rename to '.length);
+    } else if (line.startsWith('Binary files ') || line.startsWith('GIT binary patch')) {
+      current.lines.push(line);
+    }
+    const projected = current.lines.join('\n').length + line.length + 1;
+    if (projected > caps.maxPatchBytes) {
+      truncated = true;
+      continue; // skip the overflow within this file, keep the file itself
+    }
+    current.lines.push(line);
+  }
+  flush();
+  return { files, truncated };
+}
+
+/** The board service's diff run: one git call, capped parsing (E5c). */
+export function diffOfOutput(gitDiff: string): TicketDiff {
+  return parseUnifiedDiff(gitDiff, { maxFiles: MAX_DIFF_FILES, maxPatchBytes: MAX_DIFF_PATCH_BYTES, maxTotalBytes: MAX_DIFF_TOTAL_BYTES });
+}
