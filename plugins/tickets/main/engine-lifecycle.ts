@@ -93,12 +93,44 @@ const SYNCED_KEYS = (providers: readonly string[]): readonly string[] => [
   'remote.devices',
 ];
 
-async function syncConfig(client: EngineClient, ctx: {
+/** The assistant LLM slice the chat bridge needs, out of the base app config. */
+interface ChatLlmSettings {
+  readonly baseUrl: string;
+  readonly apiKey: string | null;
+  readonly model: string | null;
+}
+
+/** The narrow invoke surface the sync needs — EngineClient fits it. */
+interface ConfigSyncClient {
+  invoke(method: string, payload?: unknown): Promise<unknown>;
+}
+
+/**
+ * Pushes the synced keys into the engine's config store. The assistant
+ * LLM settings (the app config's llm slice, ADR-0047) ride along mapped
+ * onto the chat.* keys the Mission Control bridge reads — so
+ * activation/adoption always hands the engine the provider the assistant
+ * already uses. The api key travels the invoke channel but is never
+ * logged; keys the settings do not carry are left untouched.
+ */
+export async function syncConfig(client: ConfigSyncClient, ctx: {
   config: { get<T>(key: string): Promise<T | undefined> };
+  appConfig: { get(): { llm: ChatLlmSettings } };
 }): Promise<void> {
   for (const key of SYNCED_KEYS(WORKER_PROVIDERS)) {
     const value = await ctx.config.get<unknown>(key);
     if (value !== undefined) {
+      await client.invoke('configSet', { key, value }).catch(() => undefined);
+    }
+  }
+  const llm = ctx.appConfig.get().llm;
+  const chatKeys: [string, string | null][] = [
+    ['chat.baseUrl', llm.baseUrl.trim() === '' ? null : llm.baseUrl.trim()],
+    ['chat.apiKey', llm.apiKey === null || llm.apiKey.trim() === '' ? null : llm.apiKey.trim()],
+    ['chat.model', llm.model === null || llm.model.trim() === '' ? null : llm.model.trim()],
+  ];
+  for (const [key, value] of chatKeys) {
+    if (value !== null) {
       await client.invoke('configSet', { key, value }).catch(() => undefined);
     }
   }

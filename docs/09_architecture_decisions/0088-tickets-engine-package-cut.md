@@ -143,5 +143,33 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   screenshot counts as its criterion's pass; the vision pass that fills
   the seam is its own milestone, its worker's prompt already shipped as
   `prompts/qa-default.md`.
+- **E5a (milestone 104):** the Mission Control chat engine — the chat
+  is a **client of the board**, never a second writer. A mission turn
+  proposes typed mutations (`createTicket` / `transition` /
+  `setPriority` — the union in `src/contracts/chat.ts` is the entire
+  write surface, growing only with the intents) as proposal cards in a
+  session file under `tickets/_meta/chat/` (one session = one
+  strict-written, tolerant-read vault file, openable in Drey's editor;
+  the grammar lives in
+  [`specs/ticket-schema.md`](../../specs/ticket-schema.md)); only the
+  owner's explicit confirm executes a command — through the same board
+  methods the invoke channel exposes — and the decision records its
+  outcome on the file's decision line, one git commit per turn
+  (`tickets: chat <file>`). **The LLM seam is a direct call** behind
+  `ChatBridge` — an OpenAI-compatible chat-completions stream, no
+  harness and no fleet slot; the bridge reads the engine config keys
+  `chat.baseUrl` / `chat.apiKey` / `chat.model`, synced from Drey's
+  assistant settings on activation like the other engine keys, and an
+  unconfigured chat answers honestly that no model is set, never a
+  silent fallback. **The engine invoke allowlist gains**
+  `chatSessions` / `chatOpen` / `chatSend` / `chatStart` /
+  `chatConfirm` / `chatDismiss`, **the SSE change kinds stay
+  additive** (`'chat'` beside board/fleet/remote — a client that does
+  not know it ignores it), and the paired-device gateway routes the
+  same `ChatServicePort`, so the phone chats under the board's writer
+  rules. E5b (`apps/mission-control`, the Angular mission-control app —
+  the owner decisions of 2026-11-02: the web UI stack is Angular, the
+  UI language is English) renders this surface; the wider intents
+  (configure, dispatch) wait for E5c/E6.
 
 

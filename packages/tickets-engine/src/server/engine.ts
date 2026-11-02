@@ -5,10 +5,14 @@ import * as http from 'node:http';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import { TicketsGit } from '../core/tickets-git';
+import type { ChatBridge } from '../contracts/chat';
+import type { ChatChangePayload } from '../contracts/remote-protocol';
 import type { VerifyHarness } from '../contracts/verify';
 import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools } from '../fleet/protocol';
 import { RUNNER_SCRIPT_PATH } from '../fleet/runner-path';
 import { EngineBoardService } from '../services/board-service';
+import { ChatService } from '../services/chat-service';
+import { createChatBridge } from '../services/chat-llm';
 import { FleetClient } from '../services/fleet-client';
 import { VerifyService } from '../services/verify-service';
 import { ChangeHub, DreyTicketsPort } from './drey-port';
@@ -38,6 +42,8 @@ export interface EngineOptions {
   readonly invokePort?: number;
   /** The verify step's harness; the Playwright driver by default (the specs' seam). */
   readonly verifyHarness?: VerifyHarness;
+  /** The Mission Control chat's LLM bridge; `createChatBridge` by default (the specs' seam). */
+  readonly chatBridge?: ChatBridge;
 }
 
 export interface Engine {
@@ -47,7 +53,7 @@ export interface Engine {
   readonly token: string;
   config: FileConfigStore;
   invoke(method: string, payload?: unknown): Promise<unknown>;
-  onEvent(listener: (what: 'board' | 'fleet' | 'remote') => void): () => void;
+  onEvent(listener: (what: 'board' | 'fleet' | 'remote' | 'chat', payload?: ChatChangePayload) => void): () => void;
   close(): Promise<void>;
 }
 
@@ -60,6 +66,7 @@ const BOARD_METHODS = [
   'restoreShippedPrompts', 'listRepos', 'saveRepos', 'pickFolder', 'scanRepos', 'listProjects',
   'switchProject', 'openTicketsFolder', 'folderStatus', 'numberFolders', 'reorderPhases', 'editPhase',
   'personaLearn', 'listPersonas', 'verifyTicket', 'verifyStatus',
+  'chatSessions', 'chatOpen', 'chatSend', 'chatStart', 'chatConfirm', 'chatDismiss',
   'initialize', 'onVaultEvent',
 ] as const;
 
@@ -117,9 +124,24 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   // candidates (and the scan's startup IO has settled).
   await verify.initialScan;
 
+  // E5a: the Mission Control chat — sessions under `tickets/_meta/chat/`,
+  // one mission turn per owner message, every mutation a proposal card
+  // that executes only on the owner's confirm, through the same board
+  // methods the invoke channel exposes. The stream rides the hub as
+  // 'chat' changes carrying { file, event }.
+  const chat = new ChatService({
+    board,
+    host,
+    git,
+    bridge: opts.chatBridge ?? createChatBridge({ config }),
+    actor: `chat@${hostname().toLowerCase()}`,
+    log,
+    onEvent: (file, event) => hub.emit('chat', { file, event }),
+  });
+
   const remoteService: RemoteService = new RemoteService({
     config,
-    port: new DreyTicketsPort(board, fleet, hub, { allowBypass: () => remoteService.allowBypass() }),
+    port: new DreyTicketsPort(board, fleet, hub, { allowBypass: () => remoteService.allowBypass() }, chat),
     clientDir: opts.clientDir,
     log,
     onChanged: () => hub.emit('remote'),
@@ -142,6 +164,19 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   register(verify, BOARD_METHODS);
   register(fleet, FLEET_METHODS);
   register(remoteService, REMOTE_METHODS);
+  // The chat service speaks the ChatServicePort names (sessions/open/send/…);
+  // the invoke channel exposes them under the chat* names from BOARD_METHODS.
+  table.set('chatSessions', () => chat.sessions());
+  table.set('chatOpen', (payload) => {
+    if (typeof payload !== 'string') {
+      throw new Error('chatOpen expects a session file path');
+    }
+    return chat.open(payload);
+  });
+  table.set('chatSend', (payload) => chat.send(payload as { readonly file: string; readonly text: string }));
+  table.set('chatStart', (payload) => chat.start(payload as { readonly title?: string; readonly text: string }));
+  table.set('chatConfirm', (payload) => chat.confirm(payload as { readonly file: string; readonly id: string }));
+  table.set('chatDismiss', (payload) => chat.dismiss(payload as { readonly file: string; readonly id: string }));
   // The plugin's config sync: Drey's settings keys the engine reads.
   table.set('configSet', (payload) => {
     const message = payload as { key?: unknown; value?: unknown };
@@ -183,7 +218,8 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     const url = new URL(req.url ?? '/', 'http://engine.invalid');
     if (req.method === 'GET' && url.pathname === '/api/events') {
       // The plugin's live-update channel: same hub the gateway's SSE uses,
-      // bearer-only. Events: board | fleet | remote.
+      // bearer-only. Events: board | fleet | remote | chat (chat carries
+      // the { file, event } stream payload).
       const auth = req.headers.authorization ?? '';
       const expected = `Bearer ${token}`;
       if (auth.length !== expected.length || !timingSafeEqualStr(auth, expected)) {
@@ -197,8 +233,8 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
         connection: 'keep-alive',
       });
       res.write(`: connected\n\n`);
-      const unsubscribe = hub.subscribe((what) => {
-        res.write(`data: ${JSON.stringify({ change: what })}\n\n`);
+      const unsubscribe = hub.subscribe((what, payload) => {
+        res.write(`data: ${JSON.stringify(payload === undefined ? { change: what } : { change: what, ...payload })}\n\n`);
       });
       const keepAlive = setInterval(() => res.write(`: keep-alive\n\n`), 25_000);
       req.on('close', () => {
@@ -254,7 +290,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
       }
       return fn(payload);
     },
-    onEvent: (listener) => hub.subscribe((what) => listener(what as 'board' | 'fleet' | 'remote')),
+    onEvent: (listener) => hub.subscribe((what, payload) => listener(what, payload)),
     close: async () => {
       if (closed) {
         return;

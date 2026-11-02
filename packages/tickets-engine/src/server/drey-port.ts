@@ -24,6 +24,7 @@ import type { ChainMaster, ChainStatus, ColumnMode, PermissionDecision, Question
 import type {
   AttachmentReply,
   ChainReply,
+  ChatChangePayload,
   NeedItem,
   RemoteChange,
   RefineReply,
@@ -32,6 +33,7 @@ import type {
   TicketsRemotePort,
 } from '../contracts/remote-protocol';
 import type { BoardSnapshot, CreateResult, MutationResult } from '../contracts/tickets';
+import type { ChatDecisionResult, ChatServicePort, ChatSession, ChatSessionMeta, ChatTurnResult } from '../contracts/chat';
 import { needsOf } from './needs';
 
 /** The board service's part the remote uses (`BoardService` fits it). */
@@ -62,17 +64,20 @@ export interface RemoteFleet {
   abortAll(): Promise<ChainStatus | null>;
 }
 
-/** Fan-out of board/fleet changes to the remote's listeners. */
+/** Fan-out of board/fleet/remote/chat changes to the remote's listeners. */
 export class ChangeHub {
-  private readonly listeners = new Set<(what: RemoteChange) => void>();
+  private readonly listeners = new Set<(what: RemoteChange, payload?: ChatChangePayload) => void>();
 
-  emit(what: RemoteChange): void {
+  /** Chat changes carry their stream payload; every other change travels bare. */
+  emit(what: 'chat', payload: ChatChangePayload): void;
+  emit(what: Exclude<RemoteChange, 'chat'>): void;
+  emit(what: RemoteChange, payload?: ChatChangePayload): void {
     for (const listener of [...this.listeners]) {
-      listener(what);
+      listener(what, payload);
     }
   }
 
-  subscribe(listener: (what: RemoteChange) => void): () => void {
+  subscribe(listener: (what: RemoteChange, payload?: ChatChangePayload) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
@@ -91,7 +96,16 @@ export class DreyTicketsPort implements TicketsRemotePort {
     private readonly fleetClient: RemoteFleet,
     private readonly changes: ChangeHub,
     private readonly options: DreyPortOptions,
+    private readonly chatService: ChatServicePort | null = null,
   ) {}
+
+  /** The chat delegations throw a clear line when the engine did not wire the service. */
+  private chat(): ChatServicePort {
+    if (this.chatService === null) {
+      throw new Error('the chat service is not wired on this port');
+    }
+    return this.chatService;
+  }
 
   board(): Promise<BoardSnapshot> {
     return this.boardService.refresh();
@@ -178,7 +192,31 @@ export class DreyTicketsPort implements TicketsRemotePort {
     return chainResult(await this.fleetClient.abortAll());
   }
 
-  onChanged(listener: (what: RemoteChange) => void): () => void {
+  chatSessions(): Promise<readonly ChatSessionMeta[]> {
+    return this.chat().sessions();
+  }
+
+  chatOpen(file: string): Promise<ChatSession | null> {
+    return this.chat().open(file);
+  }
+
+  chatSend(input: { readonly file: string; readonly text: string }): Promise<ChatTurnResult> {
+    return this.chat().send(input);
+  }
+
+  chatStart(input: { readonly title?: string; readonly text: string }): Promise<ChatTurnResult> {
+    return this.chat().start(input);
+  }
+
+  chatConfirm(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult> {
+    return this.chat().confirm(input);
+  }
+
+  chatDismiss(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult> {
+    return this.chat().dismiss(input);
+  }
+
+  onChanged(listener: (what: RemoteChange, payload?: ChatChangePayload) => void): () => void {
     return this.changes.subscribe(listener);
   }
 }

@@ -1,4 +1,60 @@
 
+### Milestone 104 — the Mission Control chat engine (Mission-Control migration E5a)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-02
+(outside the list; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md),
+etappe E5a — the engine half of the concept's §6 central chat; the
+Angular mission-control app that renders it is E5b, under the owner's
+2026-11-02 decisions: the web UI stack is Angular, the UI language is
+English). The iron rule holds: the chat never writes on its own —
+every mutation is a typed command wrapped in a proposal card, executed
+only on the owner's explicit confirm, through the same board methods
+the invoke channel exposes, never a second write path. The contract
+(`packages/tickets-engine/src/contracts/chat.ts`) names the shapes:
+`ChatMessage` / `ChatSession` (one session = one file under
+`tickets/_meta/chat/`), `ChatProposal` — pending → confirmed/dismissed,
+append-only history, a decision adds a line, never rewrites one — with
+its `ChatCommand` union (`createTicket` / `transition` / `setPriority`:
+the chat's entire write surface, growing only with the intents),
+`ChatStreamEvent` (the streaming unit the UI renders: thought dim, then
+text, then the cards), `ChatServicePort` (the invoke channel and the
+paired-device gateway share it) and `ChatBridge` — the LLM seam: the
+bridge owns provider speak, the service owns persistence and execution,
+the bridge never touches the vault. The session file
+(`core/chat-session.ts`, the canonical grammar now in
+`specs/ticket-schema.md`) is a strict-written, tolerant-read vault file,
+openable in Drey's editor; the mission answers a turn with one strict
+JSON envelope (`say` / `thought` / `commands`), read by
+`core/chat-intents.ts` with hand-rolled shape checks — no schema
+library; a command that fails validation drops out visibly, and a reply
+holding no JSON at all gets an honest fallback answer, never a guessed
+write. The chat service mirrors the verify service's discipline —
+injected deps, one turn in flight per session, the `TicketsGit` locate +
+`commitPaths` helper, exactly one commit per turn (`tickets: chat
+<file>`), `announce` like every board write. A confirm re-validates the
+pending command and executes it through the board service — the same
+methods the Work panel's buttons call — then records the outcome on the
+decision line's ` → …` tail; a dismiss just records. The bridge
+(`src/services/chat-llm.ts`) is a direct OpenAI-compatible
+chat-completions call over the engine config keys `chat.baseUrl` /
+`chat.apiKey` / `chat.model`, which the plugin syncs from Drey's
+assistant settings (`llm.baseUrl` / `llm.apiKey` / `llm.model`) at
+activation like the other engine keys; an unconfigured chat answers
+honestly that no model is set — never a silent fallback. The engine's
+invoke allowlist gains `chatSessions` / `chatOpen` / `chatSend` /
+`chatStart` / `chatConfirm` / `chatDismiss`, the SSE hub's additive
+`'chat'` change kind rides beside board/fleet/remote, and the gateway
+grows the chat routes for paired devices over the same port — the phone
+chats under the board's writer rules. Specs:
+`core/chat-session.spec.ts` (7), `core/chat-intents.spec.ts` (6),
+`services/chat-service.spec.ts`, `services/chat-llm.spec.ts`, the
+engine acceptance spec's chat rows (`server/engine.spec.ts`), the
+gateway router's (`server/router.spec.ts`). Deliberate scope cut: E5a
+ships the engine half — sessions, the turn loop, proposal cards and the
+confirm path, the bridge, invoke + SSE + gateway routes; the Angular
+mission-control app is E5b, the wider intents (configure, dispatch)
+wait for E5c/E6.
+
 ### Milestone 103 — verify/proof (Mission-Control migration E4)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-01

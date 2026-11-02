@@ -59,6 +59,8 @@ Top-level rules, once, up front:
       prompts/        # the handover prompts (`agent <prompt-ref>` names one file)
       personas/       # the agent personas (E3): <id>/persona.md + prompt.md +
                       #   memory.md (+ avatar.png) — see Personas below
+      chat/           # the Mission Control chat sessions (E5a): one file per
+                      #   session — see _meta/chat/ below
     10-inbox/
       T-0042.md       # one ticket per file, in its current phase's folder
     20-prioritized/
@@ -650,6 +652,71 @@ current branch, absolute `path`). The file stays the single source of
 truth; the scan is a seeding step, not a live reference. A ticket may
 name several of these repos in its `repos:` list (see the frontmatter
 fields) — the fleet prepares one worktree per name.
+
+## `_meta/chat/` — the Mission Control sessions
+
+One Mission Control chat session = one Markdown file under
+`tickets/_meta/chat/` (E5a, ADR-0088 later change). A session is a vault
+file like a ticket — indexed, watched and openable in Drey's editor; the
+transcript the owner reads in the chat is the file itself. The filename
+minted at start is `<stamp>-<slug>.md` (`20261102-090100-costs-export.md`):
+the UTC stamp keeps names unique, the slug — the title lowercased to
+`[a-z0-9-]`, cut on a word boundary, `chat` when empty — keeps them
+readable. The frontmatter is exactly two keys:
+
+```markdown
+---
+title: "Costs export"
+created: '2026-11-02T09:00:00Z'
+---
+```
+
+The body is the transcript, one strict line shape per event. The writer
+is strict (exactly these shapes), the reader tolerant (an unreadable
+line is skipped, never guessed — the asymmetric-tolerance rule):
+
+````markdown
+- '2026-11-02T09:01:00Z' owner — Move T-0086 to review
+- '2026-11-02T09:01:12Z' thought — The owner wants T-0086 moved …
+- '2026-11-02T09:01:44Z' mission — Done. T-0086 sits in review now.
+- '2026-11-02T09:01:44Z' proposal p-1 pending — Move T-0086 from build to review
+  ```json
+  {"kind":"transition","id":"T-0086","from":"build","to":"review"}
+  ```
+- '2026-11-02T09:02:10Z' proposal p-1 confirmed — Move T-0086 from build to review → ok
+````
+
+- `- '<UTC>' owner — <text>` — the owner's message.
+- `- '<UTC>' thought — <text>` — the mission's thinking trace, the line
+  directly before its `mission` line; folded away in the UI once the
+  turn completes.
+- `- '<UTC>' mission — <text>` — the mission's spoken reply.
+- `- '<UTC>' proposal p-<n> pending — <summary>` followed by the command
+  in an indented fenced block marked `json` — a **proposal card**:
+  `<summary>` is the human sentence the card shows, the block is the
+  typed `ChatCommand` (`createTicket` / `transition` / `setPriority` —
+  the union in `packages/tickets-engine/src/contracts/chat.ts` is the
+  entire write surface). Ids mint per session (`p-1`, `p-2`, …).
+- `- '<UTC>' proposal p-<n> confirmed|dismissed — <summary>` — the
+  owner's decision. The summary repeats the pending card's; a
+  ` → <outcome>` tail (the moved path, a refusal) rides when the
+  execution reported one. Proposals are append-only history — a
+  decision adds a line, never rewrites one.
+
+The grammar exists for the chat's iron rule (concept §6): **the chat
+never writes on its own.** The session file is the only thing the chat
+writes; a ticket mutation exists only as a proposal's command block and
+runs on the owner's explicit confirm, through the same board methods
+the invoke channel exposes — never a second write path. The file is the
+audit trail: read top to bottom it shows every proposed and every
+executed mutation.
+
+Every session write is exactly **one git commit**, message
+`tickets: chat <file>` — the owner turn (owner line, thought, mission
+reply and its proposal lines) commits once; a confirm/dismiss decision
+commits once. The reader (`packages/tickets-engine/src/core/chat-session.ts`)
+forgives: a file without a readable frontmatter fence reads as absent,
+a half-readable one yields what it can.
 
 ## Validation (where it runs, what it checks)
 

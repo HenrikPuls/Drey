@@ -4,6 +4,8 @@ import { hostname, tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { ChatBridge, ChatDecisionResult, ChatSessionMeta, ChatStreamEvent, ChatTurnResult } from '../contracts/chat';
+import { CHAT_DIR, parseSessionFile } from '../core/chat-session';
 import type { VerifyHarness, VerifyRunInput, VerifyRunResult, VerifyStatus } from '../contracts/verify';
 import { createEngine, type Engine } from './engine';
 
@@ -410,5 +412,186 @@ describe('verify (E4)', () => {
         findings: [],
       },
     });
+  });
+});
+
+/**
+ * E5a acceptance: the Mission Control chat engine behind the invoke
+ * channel — a session file per conversation under `tickets/_meta/chat/`,
+ * the mission turn streamed through onEvent as 'chat' changes, every
+ * mutation a proposal card, and the owner's confirm the only executor
+ * (through the same board methods the invoke channel exposes). The fake
+ * bridge stands in for the LLM: no network, fixed envelope.
+ */
+describe('chat (E5a)', () => {
+  let seeded: { id: string };
+  let bridgeCalls: { text: string; history: readonly unknown[]; board: string }[];
+  let turnCount: number;
+
+  beforeEach(async () => {
+    await engine.close();
+    seeded = { id: '' };
+    bridgeCalls = [];
+    turnCount = 0;
+    await git(['add', '-A']);
+    await git(['commit', '-m', 'seed']);
+    const fakeBridge: ChatBridge = {
+      async runTurn(input) {
+        bridgeCalls.push({ text: input.text, history: input.history, board: input.board });
+        turnCount += 1;
+        input.emit({ kind: 'thought', text: 'Reading the board.' });
+        input.emit({ kind: 'text', text: turnCount === 1 ? 'Moving it to build.' : 'Noted.' });
+        return {
+          say: turnCount === 1 ? 'Moved it to build.' : 'Noted.',
+          thought: 'The owner wants the seed ticket handled.',
+          // Turn 1 proposes the move; a later turn proposes a priority
+          // change that a dismiss must leave untouched.
+          commands:
+            turnCount === 1
+              ? [{ kind: 'transition', id: seeded.id, from: 'inbox', to: 'build' }]
+              : [{ kind: 'setPriority', id: seeded.id, priority: 'high' }],
+        };
+      },
+    };
+    engine = await createEngine({
+      vaultPath: vault,
+      home,
+      clientDir: path.join(root, 'client'),
+      log: () => undefined,
+      chatBridge: fakeBridge,
+    });
+  });
+
+  it('starts a session, streams the turn, lists it, and executes a confirmed proposal through the board', async () => {
+    const created = (await engine.invoke('createTicket', {
+      title: 'Chat seed',
+      priority: 'normal',
+      repo: null,
+      description: '',
+    })) as { ok: boolean; id?: string };
+    expect(created.ok).toBe(true);
+    seeded.id = created.id!;
+
+    // Subscribe before the turn so every stream event is caught.
+    const events: { what: string; payload?: { file: string; event: ChatStreamEvent } }[] = [];
+    const unsubscribe = engine.onEvent((what, payload) => events.push({ what, payload }));
+
+    const turn = (await engine.invoke('chatStart', { title: 'Move the seed', text: 'Move the seed ticket to build' })) as ChatTurnResult;
+    unsubscribe();
+    expect(turn.ok).toBe(true);
+    expect(turn.error).toBeUndefined();
+
+    // The session file landed under tickets/_meta/chat/.
+    expect(turn.file!.startsWith(`${CHAT_DIR}/`)).toBe(true);
+    const onDisk = await fsp.readFile(path.join(vault, turn.file!), 'utf8');
+    expect(onDisk).toContain('Move the seed ticket to build');
+
+    // The bridge got the message, the session history and a board digest.
+    expect(bridgeCalls).toHaveLength(1);
+    expect(bridgeCalls[0]!.text).toBe('Move the seed ticket to build');
+    expect(Array.isArray(bridgeCalls[0]!.history)).toBe(true);
+    expect(bridgeCalls[0]!.board.length).toBeGreaterThan(0);
+
+    // The turn streamed through onEvent as 'chat' changes on this session.
+    const chatEvents = events.filter((e) => e.what === 'chat');
+    expect(chatEvents.length).toBeGreaterThan(0);
+    for (const event of chatEvents) {
+      expect(event.payload).toMatchObject({ file: turn.file });
+    }
+    expect(chatEvents.some((e) => e.payload!.event.kind === 'text' && e.payload!.event.text === 'Moving it to build.')).toBe(true);
+
+    // The parsed session: owner + mission (with the thought) and the pending proposal.
+    const session = parseSessionFile(onDisk, turn.file!)!;
+    expect(session.file).toBe(turn.file);
+    expect(session.title).toBe('Move the seed');
+    expect(session.messages.map((m) => m.role)).toEqual(['owner', 'mission']);
+    expect(session.messages[0]!.text).toBe('Move the seed ticket to build');
+    expect(session.messages[1]!.text).toBe('Moved it to build.');
+    expect(session.messages[1]!.thought).toBe('The owner wants the seed ticket handled.');
+    expect(session.proposals).toHaveLength(1);
+    expect(session.proposals[0]).toMatchObject({
+      id: 'p-1',
+      state: 'pending',
+      decidedAt: null,
+      outcome: null,
+      command: { kind: 'transition', id: seeded.id, from: 'inbox', to: 'build' },
+    });
+    expect(session.proposals[0]!.summary.length).toBeGreaterThan(0);
+
+    // The listing: one session, one pending card.
+    const listed = (await engine.invoke('chatSessions')) as readonly ChatSessionMeta[];
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toMatchObject({ file: turn.file, title: 'Move the seed', pending: 1 });
+    expect(typeof listed[0]!.createdAt).toBe('string');
+    expect(typeof listed[0]!.updatedAt).toBe('string');
+
+    // chatOpen answers the same session (the invoke alias takes the raw file string).
+    const opened = (await engine.invoke('chatOpen', turn.file)) as ReturnType<typeof parseSessionFile>;
+    expect(opened).toMatchObject({ file: turn.file, title: 'Move the seed' });
+    expect(opened!.proposals).toHaveLength(1);
+
+    // The owner's confirm executes the proposal — through the board methods.
+    const decision = (await engine.invoke('chatConfirm', { file: turn.file, id: 'p-1' })) as ChatDecisionResult;
+    expect(decision.ok).toBe(true);
+    expect(decision.proposal).toMatchObject({ id: 'p-1', state: 'confirmed' });
+
+    // The decision line carries the outcome the execution reported.
+    const confirmedText = await fsp.readFile(path.join(vault, turn.file!), 'utf8');
+    expect(confirmedText).toMatch(/proposal p-1 confirmed — .+ → .+/);
+    const confirmed = parseSessionFile(confirmedText, turn.file!)!;
+    expect(confirmed.proposals[0]).toMatchObject({
+      state: 'confirmed',
+      decidedAt: expect.any(String),
+      outcome: expect.any(String),
+    });
+    expect(confirmed.proposals[0]!.outcome!.length).toBeGreaterThan(0);
+
+    // The move really happened: the ticket sits in build, the inbox is empty.
+    const snapshot = (await engine.invoke('snapshot')) as { columns: { phase: { id: string }; tickets: { id: string }[] }[] };
+    expect(snapshot.columns.find((c) => c.phase.id === 'build')!.tickets.map((t) => t.id)).toContain(seeded.id);
+    expect(snapshot.columns.find((c) => c.phase.id === 'inbox')!.tickets).toEqual([]);
+  });
+
+  it('dismisses a proposal without executing it', async () => {
+    const created = (await engine.invoke('createTicket', {
+      title: 'Chat seed',
+      priority: 'normal',
+      repo: null,
+      description: '',
+    })) as { ok: boolean; id?: string };
+    expect(created.ok).toBe(true);
+    seeded.id = created.id!;
+
+    const turn = (await engine.invoke('chatStart', { title: 'Handle it', text: 'Handle the seed ticket' })) as ChatTurnResult;
+    expect(turn.ok).toBe(true);
+    // The first turn's move proposal stays pending — nothing executed yet.
+    const before = (await engine.invoke('snapshot')) as { columns: { phase: { id: string }; tickets: { id: string }[] }[] };
+    expect(before.columns.find((c) => c.phase.id === 'inbox')!.tickets.map((t) => t.id)).toContain(seeded.id);
+
+    // A second turn proposes a priority change; the owner dismisses it.
+    const second = (await engine.invoke('chatSend', { file: turn.file, text: 'And raise it' })) as ChatTurnResult;
+    expect(second.ok).toBe(true);
+    expect(second.proposals).toHaveLength(1);
+    const proposalId = second.proposals![0]!.id;
+
+    const dismissed = (await engine.invoke('chatDismiss', { file: turn.file, id: proposalId })) as ChatDecisionResult;
+    expect(dismissed.ok).toBe(true);
+    expect(dismissed.proposal).toMatchObject({ id: proposalId, state: 'dismissed', outcome: null });
+
+    // The dismissed line carries no outcome and the board is untouched:
+    // the ticket stays in the inbox at normal priority.
+    const text = await fsp.readFile(path.join(vault, turn.file!), 'utf8');
+    expect(text).toContain(`proposal ${proposalId} dismissed`);
+    expect(text).not.toMatch(new RegExp(`proposal ${proposalId} dismissed — .* → `));
+    const session = parseSessionFile(text, turn.file!)!;
+    expect(session.messages.map((m) => m.role)).toEqual(['owner', 'mission', 'owner', 'mission']);
+    expect(session.proposals.map((p) => p.state)).toEqual(['pending', 'dismissed']);
+
+    const snapshot = (await engine.invoke('snapshot')) as {
+      columns: { phase: { id: string }; tickets: { id: string; meta: { priority: string } }[] }[];
+    };
+    const card = snapshot.columns.flatMap((c) => c.tickets).find((t) => t.id === seeded.id)!;
+    expect(card.meta.priority).toBe('normal');
+    expect(snapshot.columns.find((c) => c.phase.id === 'inbox')!.tickets.map((t) => t.id)).toContain(seeded.id);
   });
 });

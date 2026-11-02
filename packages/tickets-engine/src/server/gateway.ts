@@ -7,7 +7,7 @@
 import { promises as fsp } from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
-import type { RemoteChange } from '../contracts/remote-protocol';
+import type { ChatChangePayload, RemoteChange } from '../contracts/remote-protocol';
 import { FALLBACK_FILES } from './fallback-client';
 import { authorize, hostRefusal, route, type RemoteRequest, type RouterDeps } from './router';
 
@@ -143,7 +143,11 @@ export class RemoteGateway {
     send(res, response.status, response.body);
   }
 
-  /** Server-Sent Events: `board` / `fleet` on every change, a comment line as keep-alive. */
+  /**
+   * Server-Sent Events: `board` / `fleet` / `remote` / `chat` on every
+   * change — chat changes carry their `{ file, event }` stream payload,
+   * the others stay an empty JSON object. A comment line as keep-alive.
+   */
   private openEvents(req: RemoteRequest, res: http.ServerResponse): void {
     const auth = authorize(req, this.options.router);
     if ('response' in auth) {
@@ -159,8 +163,8 @@ export class RemoteGateway {
     });
     res.write('retry: 3000\n\n');
     this.streams.add(res);
-    const off = this.options.router.port.onChanged((what: RemoteChange) => {
-      res.write(`event: ${what}\ndata: {}\n\n`);
+    const off = this.options.router.port.onChanged((what: RemoteChange, payload?: ChatChangePayload) => {
+      res.write(`event: ${what}\ndata: ${JSON.stringify(payload ?? {})}\n\n`);
     });
     const keepAlive = setInterval(() => res.write(': ping\n\n'), KEEPALIVE_MS);
     const close = (): void => {

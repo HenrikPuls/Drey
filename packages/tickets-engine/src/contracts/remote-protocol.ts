@@ -18,6 +18,7 @@ import type {
   TicketIdCommand,
   TransitionCommand,
 } from '../core/commands';
+import type { ChatDecisionResult, ChatSession, ChatSessionMeta, ChatStreamEvent, ChatTurnResult } from './chat';
 import type { FleetSnapshot } from '../services/fleet-client';
 import type { ChainMaster, ChainStatus, ColumnMode, WaitQuestion } from '../fleet/protocol';
 import type { ShapedQuestion } from './question-shape';
@@ -47,7 +48,17 @@ export interface NeedItem {
 
 export type RunReply = { readonly ok: boolean; readonly error?: string; readonly runId?: string };
 export type ChainReply = { readonly ok: true; readonly status: ChainStatus } | { readonly ok: false; readonly error: string };
-export type RemoteChange = 'board' | 'fleet' | 'remote';
+export type RemoteChange = 'board' | 'fleet' | 'remote' | 'chat';
+
+/**
+ * What a `chat` change carries to the subscribers (and the `/api/events`
+ * SSE payload): the session file the stream event belongs to and the
+ * event itself. Board/fleet/remote changes carry no payload.
+ */
+export interface ChatChangePayload {
+  readonly file: string;
+  readonly event: ChatStreamEvent;
+}
 /** A refine's outcome: the new revision, or why not (`conflict` when the file changed meanwhile). */
 // The reply shapes live in the engine contracts (ADR-0088, E2a) — this
 // re-export keeps every existing import path working.
@@ -86,8 +97,16 @@ export interface TicketsRemotePort {
   chainColumnStop(phase: string): Promise<ChainReply>;
   chainAbort(): Promise<ChainReply>;
 
-  /** Board or fleet changed; returns the unsubscribe. */
-  onChanged(listener: (what: RemoteChange) => void): () => void;
+  /** The Mission Control chat surface (E5a) — the service's port verbatim. */
+  chatSessions(): Promise<readonly ChatSessionMeta[]>;
+  chatOpen(file: string): Promise<ChatSession | null>;
+  chatSend(input: { readonly file: string; readonly text: string }): Promise<ChatTurnResult>;
+  chatStart(input: { readonly title?: string; readonly text: string }): Promise<ChatTurnResult>;
+  chatConfirm(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult>;
+  chatDismiss(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult>;
+
+  /** Board, fleet, remote or chat changed; returns the unsubscribe. Chat changes carry their stream payload. */
+  onChanged(listener: (what: RemoteChange, payload?: ChatChangePayload) => void): () => void;
 }
 
 /**

@@ -34,6 +34,12 @@ function port(): TicketsRemotePort {
     chainColumn: vi.fn(ok),
     chainColumnStop: vi.fn(ok),
     chainAbort: vi.fn(ok),
+    chatSessions: vi.fn(async () => []),
+    chatOpen: vi.fn(async () => null),
+    chatSend: vi.fn(ok),
+    chatStart: vi.fn(ok),
+    chatConfirm: vi.fn(ok),
+    chatDismiss: vi.fn(ok),
     onChanged: () => () => undefined,
   } as unknown as TicketsRemotePort;
 }
@@ -162,5 +168,44 @@ describe('route', () => {
     );
     expect(refused).toEqual({ status: 200, body: { ok: false, error: 'the file is not a PNG, JPEG, GIF or WebP image' } });
     expect((await route(req({ method: 'POST', path: '/api/attachments', origin: `http://${HOST}` }), deps)).status).toBe(401);
+  });
+
+  it('routes the chat surface for a paired device — reads for all, writes refused for read-only', async () => {
+    const { deps, devices, remote } = setup();
+    const { token } = await devices.add('iPhone', false, new Date());
+    const auth = `Bearer ${token}`;
+    const origin = `http://${HOST}`;
+    const file = 'tickets/_meta/chat/20261102-090000-demo.md';
+
+    expect((await route(req({ path: '/api/chat/sessions', authorization: auth }), deps)).status).toBe(200);
+
+    const opened = await route(req({ path: `/api/chat/sessions/${file}`, authorization: auth }), deps);
+    expect(opened.status).toBe(200);
+    expect(remote.chatOpen).toHaveBeenCalledWith(file);
+
+    const started = await route(req({ method: 'POST', path: '/api/chat/sessions', origin, authorization: auth, body: { title: 'Hi', text: 'Hello there' } }), deps);
+    expect(started.status).toBe(200);
+    expect(remote.chatStart).toHaveBeenCalledWith({ title: 'Hi', text: 'Hello there' });
+
+    await route(req({ method: 'POST', path: `/api/chat/sessions/${file}/messages`, origin, authorization: auth, body: { text: 'And more' } }), deps);
+    expect(remote.chatSend).toHaveBeenCalledWith({ file, text: 'And more' });
+
+    await route(req({ method: 'POST', path: `/api/chat/sessions/${file}/proposals/p-1/confirm`, origin, authorization: auth }), deps);
+    expect(remote.chatConfirm).toHaveBeenCalledWith({ file, id: 'p-1' });
+    await route(req({ method: 'POST', path: `/api/chat/sessions/${file}/proposals/p-1/dismiss`, origin, authorization: auth }), deps);
+    expect(remote.chatDismiss).toHaveBeenCalledWith({ file, id: 'p-1' });
+
+    // A session file outside tickets/_meta/chat/ is not a route; a blank
+    // message is a refused command, not a transport error.
+    expect((await route(req({ path: '/api/chat/sessions/tickets/evil.md', authorization: auth }), deps)).status).toBe(404);
+    expect(await route(req({ method: 'POST', path: '/api/chat/sessions', origin, authorization: auth, body: { text: '  ' } }), deps)).toEqual({
+      status: 200,
+      body: { ok: false, error: 'a chat start needs text' },
+    });
+
+    const { token: ro } = await devices.add('Viewer', true, new Date());
+    const readOnly = await route(req({ method: 'POST', path: '/api/chat/sessions', origin, authorization: `Bearer ${ro}`, body: { text: 'Hi' } }), deps);
+    expect(readOnly).toEqual({ status: 403, body: { ok: false, error: 'this device is paired read-only' } });
+    expect((await route(req({ path: '/api/chat/sessions', authorization: `Bearer ${ro}` }), deps)).status).toBe(200);
   });
 });

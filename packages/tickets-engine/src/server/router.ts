@@ -66,6 +66,43 @@ export interface RouterDeps {
 const fail = (status: number, error: string): RemoteResponse => ({ status, body: { ok: false, error } });
 const json = (body: unknown): RemoteResponse => ({ status: 200, body });
 
+/**
+ * The chat session files live under `tickets/_meta/chat/` (core/chat-session.ts).
+ * The router admits exactly that shape — no `..`, no other folders — before
+ * a path reaches the port.
+ */
+const CHAT_FILE_PATTERN = /^tickets\/_meta\/chat\/[A-Za-z0-9][A-Za-z0-9._-]*\.md$/;
+
+function asObject(body: unknown): Record<string, unknown> | null {
+  return typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
+}
+
+function parseChatStart(body: unknown): Parsed<{ title?: string; text: string }> {
+  const obj = asObject(body);
+  const text = typeof obj?.['text'] === 'string' ? obj['text'].trim() : '';
+  const title = obj?.['title'];
+  if (obj === null || (title !== undefined && typeof title !== 'string')) {
+    return { ok: false, error: 'bad chat start payload' };
+  }
+  if (text === '') {
+    return { ok: false, error: 'a chat start needs text' };
+  }
+  const name = typeof title === 'string' ? title.trim() : '';
+  return { ok: true, value: { title: name === '' ? undefined : name, text } };
+}
+
+function parseChatSend(file: string, body: unknown): Parsed<{ file: string; text: string }> {
+  const obj = asObject(body);
+  const text = typeof obj?.['text'] === 'string' ? obj['text'].trim() : '';
+  if (obj === null) {
+    return { ok: false, error: 'bad chat message payload' };
+  }
+  if (text === '') {
+    return { ok: false, error: 'a chat message needs text' };
+  }
+  return { ok: true, value: { file, text } };
+}
+
 /** The Host check every request passes first — API, events and static files alike. */
 export function hostRefusal(req: Pick<RemoteRequest, 'host'>, deps: Pick<RouterDeps, 'allowedHosts'>): RemoteResponse | null {
   return hostAllowed(req.host, deps.allowedHosts()) ? null : fail(421, 'this address is not served here');
@@ -157,6 +194,8 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
         return json(await port.fleet());
       case '/api/needs':
         return json(await port.needs());
+      case '/api/chat/sessions':
+        return json(await port.chatSessions());
     }
     const ticket = /^\/api\/tickets\/([^/]+)$/.exec(req.path);
     if (ticket !== null) {
@@ -166,6 +205,11 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
     const stream = /^\/api\/runs\/([A-Za-z0-9_.-]+)\/stream$/.exec(req.path);
     if (stream !== null) {
       return json({ text: await port.stream(stream[1]!) });
+    }
+    const chatSession = /^\/api\/chat\/sessions\/(.+)$/.exec(req.path);
+    if (chatSession !== null) {
+      const file = decodeURIComponent(chatSession[1]!);
+      return CHAT_FILE_PATTERN.test(file) ? json(await port.chatOpen(file)) : fail(404, 'no such chat session');
     }
     return fail(404, 'no such route');
   }
@@ -213,6 +257,30 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
       default:
         return write(`permission ${run[1]}`, parsePermission(withRun), (cmd) => port.permission(cmd));
     }
+  }
+  if (req.path === '/api/chat/sessions') {
+    return write('chat start', parseChatStart(body), (cmd) => port.chatStart(cmd));
+  }
+  const chatMessage = /^\/api\/chat\/sessions\/(.+)\/messages$/.exec(req.path);
+  if (chatMessage !== null) {
+    const file = decodeURIComponent(chatMessage[1]!);
+    if (!CHAT_FILE_PATTERN.test(file)) {
+      return fail(404, 'no such chat session');
+    }
+    return write('chat send', parseChatSend(file, body), (cmd) => port.chatSend(cmd));
+  }
+  const chatDecision = /^\/api\/chat\/sessions\/(.+)\/proposals\/(p-\d+)\/(confirm|dismiss)$/.exec(req.path);
+  if (chatDecision !== null) {
+    const file = decodeURIComponent(chatDecision[1]!);
+    if (!CHAT_FILE_PATTERN.test(file)) {
+      return fail(404, 'no such chat session');
+    }
+    const input = { file, id: chatDecision[2]! };
+    return write(
+      `chat ${chatDecision[3]}`,
+      { ok: true, value: input },
+      (cmd) => (chatDecision[3] === 'confirm' ? port.chatConfirm(cmd) : port.chatDismiss(cmd)),
+    );
   }
   switch (req.path) {
     case '/api/chain/master':
