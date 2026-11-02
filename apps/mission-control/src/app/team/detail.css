@@ -23,7 +23,7 @@
   padding: 0 4px;
   font-size: 22px;
   line-height: 1;
-  color: var(--mc-dim);
+  color: var(--text-2);
   cursor: pointer;
   background: transparent;
   border: 0;
@@ -37,7 +37,7 @@
   display: grid;
   place-items: center;
   font-weight: 600;
-  color: var(--mc-bg);
+  color: var(--bg);
 }
 
 .who {
@@ -53,13 +53,13 @@
 .role {
   margin: 0;
   font-size: 13px;
-  color: var(--mc-dim);
+  color: var(--text-2);
 }
 
 .friction {
   margin: 0;
   font-size: 13px;
-  color: var(--mc-accent);
+  color: var(--accent);
 }
 
 .detail-note,
@@ -68,7 +68,7 @@
   padding: 24px 0;
   text-align: center;
   font-size: 13px;
-  color: var(--mc-dim);
+  color: var(--text-2);
 }
 
 .detail-error-state {
@@ -81,7 +81,7 @@
 .detail-error {
   margin: 0;
   font-size: 13px;
-  color: var(--mc-danger);
+  color: var(--danger);
 }
 
 .proposals {
@@ -93,9 +93,9 @@
   display: grid;
   gap: 10px;
   padding: 14px;
-  background: var(--mc-panel);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
 }
 
 .card-row {
@@ -113,17 +113,17 @@
   padding: 1px 8px;
   overflow: hidden;
   font-size: 11px;
-  color: var(--mc-dim);
+  color: var(--text-2);
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
   border-radius: 999px;
 }
 
 .chip-target {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: var(--mc-accent);
+  font-family: var(--mono);
+  color: var(--accent);
 }
 
 .proposal-title {
@@ -136,7 +136,7 @@
   margin: 0;
   padding: 0 0 0 18px;
   font-size: 12px;
-  color: var(--mc-dim);
+  color: var(--text-2);
 }
 
 .evidence li {
@@ -146,7 +146,7 @@
 .evidence-more {
   margin: 0;
   font-size: 12px;
-  color: var(--mc-dim);
+  color: var(--text-2);
 }
 
 .content-preview {
@@ -158,9 +158,9 @@
   color: inherit;
   text-align: left;
   cursor: pointer;
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
 }
 
 .content-label {
@@ -168,28 +168,28 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--mc-dim);
+  color: var(--text-2);
 }
 
 .content-text {
   margin: 0;
   overflow-x: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 12px;
   white-space: pre-wrap;
-  color: var(--mc-text);
+  color: var(--text);
 }
 
 .lesson {
   margin: 0;
   font-size: 13px;
-  color: var(--mc-text);
+  color: var(--text);
 }
 
 .proposal-error {
   margin: 0;
   font-size: 13px;
-  color: var(--mc-danger);
+  color: var(--danger);
 }
 
 .proposal-actions {
@@ -201,18 +201,18 @@
 .btn {
   width: 100%;
   min-height: 44px;
-  color: var(--mc-text);
+  color: var(--text);
   cursor: pointer;
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
 }
 
 .btn-primary {
   font-weight: 600;
-  color: #101216;
-  background: var(--mc-accent);
-  border-color: var(--mc-accent);
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .btn:disabled {
@@ -233,7 +233,7 @@
   align-items: baseline;
   gap: 6px;
   font-size: 12px;
-  color: var(--mc-dim);
+  color: var(--text-2);
   overflow-wrap: anywhere;
 }
 
@@ -243,6 +243,6 @@
 }
 
 .history-title {
-  color: var(--mc-text);
+  color: var(--text);
   opacity: 0.7;
 }

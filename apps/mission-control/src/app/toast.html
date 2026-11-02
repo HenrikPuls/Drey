@@ -1,0 +1,9 @@
+<div
+  class="toast"
+  [class.show]="toast() !== null"
+  [attr.data-kind]="toast()?.kind"
+  role="status"
+  aria-live="polite"
+>
+  {{ toast()?.message }}
+</div>

@@ -1,189 +1,290 @@
 <div class="chat">
-  @if (viewMode() === 'list') {
-    <header class="bar">
-      <h1 class="bar-title">Chat</h1>
-      <button type="button" class="btn accent" (click)="newChat()">New chat</button>
-    </header>
-    <section class="list">
-      @if (listError(); as error) {
-        <p class="inline-error">{{ error }}</p>
-      }
-      @if (sessions().length === 0) {
-        <p class="empty">One chat for the whole board — steer, create and ask. Nothing writes without your confirmation.</p>
-      } @else {
-        <ul class="sessions">
-          @for (entry of sessions(); track entry.file) {
-            <li>
-              <button type="button" class="session-row" (click)="openSession(entry.file)">
-                <span class="session-title">{{ entry.title }}</span>
-                <span class="session-age">{{ relativeAge(entry.updatedAt) }}</span>
-                @if (entry.pending > 0) {
-                  <span class="badge" [attr.aria-label]="entry.pending + ' proposals waiting'">{{ entry.pending }}</span>
-                }
-              </button>
-            </li>
-          }
-        </ul>
-      }
-    </section>
-  } @else {
-    <header class="bar">
-      <button type="button" class="icon-btn" (click)="back()" aria-label="Back to sessions">←</button>
-      <h1 class="bar-title">{{ viewMode() === 'session' ? activeTitle() : 'New chat' }}</h1>
-      @if (viewMode() === 'session') {
-        <button type="button" class="text-btn" (click)="newChat()">New chat</button>
-      }
-    </header>
-    @if (viewMode() === 'session') {
-      <div class="thread" role="log" aria-live="polite" #thread>
-        @for (item of timeline(); track trackOf(item, $index)) {
-          @switch (item.kind) {
-            @case ('message') {
-              @if (item.message.role === 'owner') {
-                <div class="msg owner">
-                  <p class="bubble">{{ item.message.text }}</p>
-                </div>
-              } @else {
-                <div class="msg mission">
-                  @if (item.message.thought !== null) {
-                    @if (isThoughtOpen(item.message)) {
-                      <button
-                        type="button"
-                        class="thought open"
-                        (click)="toggleThought(item.message)"
-                        aria-expanded="true">
-                        <span class="thought-kicker">thought</span>
-                        <span class="thought-text">{{ item.message.thought }}</span>
-                      </button>
-                    } @else {
-                      <button
-                        type="button"
-                        class="thought"
-                        (click)="toggleThought(item.message)"
-                        aria-expanded="false"
-                        title="Show the thinking trace">
-                        thought …
-                      </button>
-                    }
-                  }
-                  <p class="bubble">{{ item.message.text }}</p>
-                </div>
-              }
-            }
-            @case ('proposal') {
-              <div class="card" [attr.aria-busy]="isCardBusy(item.proposal.id)">
-                <p class="card-summary">{{ item.proposal.summary }}</p>
-                @if (chainCompareFor(item.proposal); as compare) {
-                  <div class="chain-compare" aria-label="The gate chain before and after this change">
-                    <div class="chain-side">
-                      <span class="chain-side-label">Before</span>
-                      <span class="chain-strip">
-                        @for (step of compare.before; track $index) {
-                          <span
-                            class="chain-gate"
-                            [class.chain-past]="step.state === 'past'"
-                            [class.chain-current]="step.state === 'current'"
-                            [class.chain-inserted]="step.inserted">
-                            <span class="chain-dot" aria-hidden="true">{{ step.checkpoint ? '◆' : '●' }}</span>
-                            <span class="chain-gate-title" [class.chain-struck]="step.skipped">
-                              @if (step.inserted) {
-                                <span class="chain-add" aria-hidden="true">+</span>
-                              }
-                              {{ step.title }}
-                            </span>
-                            @if (step.notify) {
-                              <span class="chain-notify" aria-hidden="true">◎</span>
-                            }
-                          </span>
-                        }
-                      </span>
-                    </div>
-                    <div class="chain-side">
-                      <span class="chain-side-label">After</span>
-                      <span class="chain-strip">
-                        @for (step of compare.after; track $index) {
-                          <span
-                            class="chain-gate"
-                            [class.chain-past]="step.state === 'past'"
-                            [class.chain-current]="step.state === 'current'"
-                            [class.chain-inserted]="step.inserted">
-                            <span class="chain-dot" aria-hidden="true">{{ step.checkpoint ? '◆' : '●' }}</span>
-                            <span class="chain-gate-title" [class.chain-struck]="step.skipped">
-                              @if (step.inserted) {
-                                <span class="chain-add" aria-hidden="true">+</span>
-                              }
-                              {{ step.title }}
-                            </span>
-                            @if (step.notify) {
-                              <span class="chain-notify" aria-hidden="true">◎</span>
-                            }
-                          </span>
-                        }
-                      </span>
-                    </div>
+  <header class="hdr">
+    <div class="hd">
+      <h1 class="ttl">Mission Control</h1>
+      <p class="sub">anlegen · steuern · berichten · konfigurieren</p>
+    </div>
+    <span class="hspace" aria-hidden="true"></span>
+    <button type="button" class="hbtn" (click)="openSessions()" aria-label="Sitzungen" title="Sitzungen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M4 6h16M4 12h16M4 18h10" />
+      </svg>
+    </button>
+    <button type="button" class="hbtn" (click)="newChat()" aria-label="Neuer Chat" title="Neuer Chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    </button>
+  </header>
+
+  @if (viewMode() === 'session') {
+    <div class="thread" role="log" aria-live="polite" #thread>
+      @for (item of timeline(); track trackOf(item, $index)) {
+        @switch (item.kind) {
+          @case ('message') {
+            @if (item.message.role === 'owner') {
+              <div class="msg owner">
+                <p class="bubble">{{ item.message.text }}</p>
+              </div>
+            } @else if (isLive(item)) {
+              <div class="msg mission live">
+                @if ((item.message.thought ?? '') !== '') {
+                  <div class="thinklive" aria-label="Mission Control denkt">
+                    <span class="th">{{ item.message.thought }}</span><span class="cursor" aria-hidden="true"></span>
                   </div>
                 }
-                @if (cardError(item.proposal.id); as error) {
-                  <p class="inline-error">{{ error }}</p>
+                @if (item.message.text !== '') {
+                  <p class="bubble">{{ item.message.text }}</p>
                 }
-                <div class="card-actions">
-                  <button
-                    type="button"
-                    class="btn accent"
-                    [disabled]="isCardBusy(item.proposal.id)"
-                    (click)="confirm(item.proposal.id)">
-                    Confirm
-                  </button>
-                  <button
-                    type="button"
-                    class="btn ghost"
-                    [disabled]="isCardBusy(item.proposal.id)"
-                    (click)="dismiss(item.proposal.id)">
-                    Dismiss
-                  </button>
-                </div>
+              </div>
+            } @else {
+              <div class="msg mission">
+                @if (item.message.thought !== null && (item.message.thought ?? '') !== '') {
+                  <details class="think">
+                    <summary>
+                      <span class="chev" aria-hidden="true">▸</span>
+                      {{ thinkFoldOf(item) }}
+                    </summary>
+                    <div class="step-body">{{ item.message.thought }}</div>
+                  </details>
+                }
+                <p class="bubble">{{ item.message.text }}</p>
               </div>
             }
-            @case ('decision') {
-              <p class="decision">
-                <span class="decision-state">{{ item.proposal.state }}</span>
-                <span class="decision-summary">{{ item.proposal.summary }}</span>
-                @if (item.proposal.outcome !== null) {
-                  <span class="decision-outcome">→ {{ item.proposal.outcome }}</span>
+          }
+          @case ('proposal') {
+            <div class="confirm" [class.dimmed]="isDimmed(item.proposal.id)" [attr.aria-busy]="isCardBusy(item.proposal.id)">
+              <div class="ck">{{ ckOf(item.proposal) }}</div>
+              <ng-container [ngTemplateOutlet]="richBody" [ngTemplateOutletContext]="{ $implicit: item.proposal }" />
+              @if (cardError(item.proposal.id); as error) {
+                <p class="inline-error">{{ error }}</p>
+              }
+              <div class="row">
+                <button
+                  type="button"
+                  class="btn ghost"
+                  [disabled]="isCardBusy(item.proposal.id)"
+                  (click)="dismiss(item.proposal.id)">
+                  Verwerfen
+                </button>
+                <button
+                  type="button"
+                  class="btn primary"
+                  [disabled]="isCardBusy(item.proposal.id)"
+                  (click)="confirm(item.proposal.id)">
+                  Bestätigen
+                </button>
+              </div>
+            </div>
+          }
+          @case ('decision') {
+            @if (item.proposal.state === 'confirmed') {
+              <div class="confirm done">
+                <div class="ck">{{ ckDoneOf(item.proposal) }}</div>
+                <ng-container [ngTemplateOutlet]="richBody" [ngTemplateOutletContext]="{ $implicit: item.proposal }" />
+                @if (item.proposal.outcome !== null && item.proposal.outcome !== '') {
+                  <p class="outcome">→ {{ item.proposal.outcome }} (Commit)</p>
                 }
-              </p>
+              </div>
+            } @else {
+              <div class="confirm dimmed">
+                <div class="ck">Verworfen</div>
+                <ng-container [ngTemplateOutlet]="richBody" [ngTemplateOutletContext]="{ $implicit: item.proposal }" />
+              </div>
             }
           }
         }
-        @if (streaming()) {
-          <div class="msg mission">
-            <p class="bubble pending" aria-label="The mission is thinking">
-              <span class="dot"></span>
-              <span class="dot"></span>
-              <span class="dot"></span>
-            </p>
-          </div>
-        }
-      </div>
+      }
+      @if (streaming()) {
+        <div class="msg mission">
+          <p class="bubble pending" aria-label="Mission Control denkt">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </p>
+        </div>
+      }
+    </div>
+  } @else {
+    <div class="body">
+      @if (viewMode() === 'composer') {
+        <p class="empty">Neues Gespräch — frischer Kontext. Die alten Sitzungen liegen im Sheet (oben rechts).</p>
+      } @else {
+        <p class="empty">Ein Gespräch fürs Board — anlegen, steuern, fragen. Nichts schreibt ohne deine Bestätigung.</p>
+      }
+    </div>
+  }
+
+  <div class="composer" [class.ro]="readOnly()">
+    @if (composerError(); as error) {
+      <p class="inline-error">{{ error }}</p>
     }
-    <div class="composer">
-      @if (composerError(); as error) {
+    <div class="composer-row">
+      <button type="button" class="attach" disabled title="Anhänge — folgt" aria-label="Anhänge — folgt">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 11.5l-8.5 8.5a5.5 5.5 0 01-7.8-7.8l8.5-8.5a3.67 3.67 0 015.2 5.2l-8.5 8.5a1.83 1.83 0 01-2.6-2.6l7.8-7.8" />
+        </svg>
+      </button>
+      <textarea
+        class="composer-input"
+        [rows]="rows()"
+        [value]="draft()"
+        [disabled]="readOnly()"
+        (input)="onDraft($event)"
+        (keydown)="onComposerKeydown($event)"
+        placeholder="„Neues Ticket: …“ oder „T-0084 an Ralf zurück“…"
+        aria-label="Nachricht an Mission Control"></textarea>
+      <button type="button" class="send" [disabled]="!canSend() || readOnly()" (click)="send()" aria-label="Senden">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 19V5M5 12l7-7 7 7" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  @if (sheetOpen()) {
+    <div class="sheet-backdrop" (click)="closeSheet()"></div>
+    <div class="sheet" role="dialog" aria-label="Sitzungen">
+      <div class="grab" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h4 class="sheet-title">Sitzungen</h4>
+        <button type="button" class="sheet-close" (click)="closeSheet()" aria-label="Schließen">×</button>
+      </div>
+      @if (sheetError(); as error) {
         <p class="inline-error">{{ error }}</p>
       }
-      <div class="composer-box">
-        <textarea
-          class="composer-input"
-          [rows]="rows()"
-          [value]="draft()"
-          (input)="onDraft($event)"
-          (keydown)="onComposerKeydown($event)"
-          placeholder="Message the board…"
-          aria-label="Message the board"></textarea>
-        <div class="composer-bar">
-          <button type="button" class="icon-btn attach" title="coming with E5c" aria-label="Attach (coming with E5c)">⎘</button>
-          <button type="button" class="btn accent send" [disabled]="!canSend()" (click)="send()">Send</button>
-        </div>
-      </div>
+      @if (liveEntry(); as live) {
+        <button type="button" class="sess-row" [class.cur]="active()?.file === live.file" (click)="openFromSheet(live)">
+          <svg class="sess-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M21 12a8 8 0 01-8 8H5l-2 2V12a8 8 0 018-8h2a8 8 0 018 8z" />
+          </svg>
+          <span class="st">
+            <b>{{ live.title }}</b>
+            <small>läuft jetzt</small>
+          </span>
+          @if (active()?.file === live.file) {
+            <span class="tag">offen</span>
+          }
+        </button>
+      }
+      @for (entry of sessions(); track entry.file) {
+        @if (entry.file !== liveEntry()?.file) {
+          <button type="button" class="sess-row" [class.cur]="entry.file === active()?.file" (click)="openFromSheet(entry)">
+            <svg class="sess-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M21 12a8 8 0 01-8 8H5l-2 2V12a8 8 0 018-8h2a8 8 0 018 8z" />
+            </svg>
+            <span class="st">
+              <b>{{ entry.title }}</b>
+              <small>{{ relativeAge(entry.updatedAt) }}</small>
+            </span>
+            @if (entry.pending > 0) {
+              <span class="badge" [attr.aria-label]="entry.pending + ' Karten warten'">{{ entry.pending }}</span>
+            }
+            @if (entry.file === active()?.file) {
+              <span class="tag">offen</span>
+            }
+          </button>
+        }
+      }
+      @if (sessions().length === 0) {
+        <p class="sheet-hint">Noch keine Sitzung — schreib die erste Zeile unten.</p>
+      }
+      <p class="sheet-hint">
+        Jede Sitzung ist eine Datei unter <code>tickets/_meta/chat/</code> — „Neuer Chat“ heißt: frischer Kontext,
+        nichts wird gelöscht. Eine andere geöffnete Sitzung ist nur Lesezugriff.
+      </p>
     </div>
   }
 </div>
+
+<!-- The proposal cards' rich body, shared by the pending, done and dismissed faces. -->
+<ng-template #richBody let-proposal>
+  @if (chainCompareFor(proposal); as compare) {
+    <div class="chain-compare" aria-label="Die Gate-Kette vorher und nachher">
+      <div class="cmp-label">Vorher</div>
+      <div class="chainline">
+        @for (step of compare.before; track $index) {
+          <span
+            class="gate"
+            [class.past]="step.state === 'past'"
+            [class.now]="step.state === 'current'"
+            [class.new]="step.inserted">
+            @if (step.inserted) {
+              <span class="gadd" aria-hidden="true">+</span>
+            }
+            <span [class.struck]="step.skipped">{{ step.title }}</span>
+            @if (step.notify) {
+              <span class="gnote" aria-hidden="true" title="meldet nach Abschluss">◎</span>
+            }
+          </span>
+          @if (!$last) {
+            <span class="garrow" aria-hidden="true">→</span>
+          }
+        }
+      </div>
+      <div class="cmp-label">Nachher</div>
+      <div class="chainline">
+        @for (step of compare.after; track $index) {
+          <span
+            class="gate"
+            [class.past]="step.state === 'past'"
+            [class.now]="step.state === 'current'"
+            [class.new]="step.inserted">
+            @if (step.inserted) {
+              <span class="gadd" aria-hidden="true">+</span>
+            }
+            <span [class.struck]="step.skipped">{{ step.title }}</span>
+            @if (step.notify) {
+              <span class="gnote" aria-hidden="true" title="meldet nach Abschluss">◎</span>
+            }
+          </span>
+          @if (!$last) {
+            <span class="garrow" aria-hidden="true">→</span>
+          }
+        }
+      </div>
+    </div>
+  } @else if (detailOf(proposal); as detail) {
+    @switch (detail.kind) {
+      @case ('transition') {
+        <div class="arrowx">
+          <span class="p1">{{ detail.id }} · {{ phaseTitle(detail.from) }}</span>
+          <span class="arr" aria-hidden="true">→</span>
+          <span class="p2">{{ phaseTitle(detail.to) }}</span>
+        </div>
+      }
+      @case ('create') {
+        <div class="diffbox">
+          @if (createDirOf(detail); as dir) {
+            <span class="dl-file">tickets/{{ dir }}/&lt;id&gt;.md (neu)</span>
+          }
+          <span class="dl-add">+ # {{ detail.title }}</span>
+          <span class="dl-add">+ phase: {{ detail.phase }}</span>
+        </div>
+      }
+      @case ('blocked') {
+        @if (detail.ids.length === 0) {
+          <p class="cmdline">{{ detail.id }} · Blocker cleared</p>
+        } @else {
+          <p class="cmdline">{{ detail.id }} · blockiert von: {{ detail.ids.join(', ') }}</p>
+        }
+      }
+      @case ('priority') {
+        <div class="arrowx">
+          <span class="p1">priorität: {{ priorityFromOf(detail.id) ?? '—' }}</span>
+          <span class="arr" aria-hidden="true">→</span>
+          <span class="p2">{{ detail.to }}</span>
+        </div>
+      }
+      @case ('promote') {
+        <div class="arrowx">
+          <span class="p1">form: scout</span>
+          <span class="arr" aria-hidden="true">→</span>
+          <span class="p2">ship</span>
+        </div>
+      }
+    }
+  } @else {
+    <p class="card-summary">{{ proposal.summary }}</p>
+  }
+</ng-template>

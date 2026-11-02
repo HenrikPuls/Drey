@@ -1,269 +1,401 @@
-@if (isEmpty()) {
+@if (editing()) {
+  <!-- The raw editor (mc-ticket-edit) owns the overlay while the mode stands. -->
+} @else if (isEmpty()) {
   @if (vm.loadError(); as error) {
     <div class="ticket-empty-box">
       <p class="ticket-empty ticket-error" role="alert">{{ error }}</p>
-      <button type="button" class="btn" (click)="vm.reload()">Reload</button>
+      <button type="button" class="btn ghost" (click)="vm.reload()">Reload</button>
     </div>
   } @else {
     <p class="ticket-empty">No ticket open.</p>
   }
 } @else {
   <div class="ticket">
-    <header class="head">
-      <button type="button" class="back" aria-label="Back" (click)="vm.onClose()">←</button>
-      <div class="head-text">
-        <span class="tid">{{ id() }}</span>
-        <h1 class="title">{{ title() }}</h1>
-      </div>
-      @if (priority(); as p) {
-        <span class="chip chip-priority" [class.chip-priority-jump]="priorityJump()">{{ p }}</span>
+    <header class="hdr">
+      <button type="button" class="back" (click)="vm.onClose()">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.4"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <path d="M15 5l-7 7 7 7" />
+        </svg>
+        Arbeit
+      </button>
+      <span class="spacer"></span>
+      <span class="tid">{{ id() }}</span>
+      @if (!readOnly()) {
+        <button
+          type="button"
+          class="tedit"
+          [class.on]="editing()"
+          aria-label="Edit ticket"
+          (click)="toggleEdit()"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.9"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M16.5 4.5l3 3L8 19l-4 1 1-4L16.5 4.5z" />
+          </svg>
+        </button>
       }
-      <span class="chip chip-phase" [style.background-color]="phaseColor()">{{ phaseTitle() }}</span>
     </header>
 
-    @if (blockers(); as note) {
-      <p class="blockers" [class.blockers-open]="note.kind === 'blocked'">
-        {{ note.kind === 'blocked' ? 'Blocked by' : 'Depends on' }} {{ note.ids.join(', ') }}
-      </p>
-    }
+    <div class="page">
+      <div class="card-top">
+        <span class="phase" [style.color]="phaseColor()" [style.border-color]="phaseColor()">
+          {{ phaseTitle() }}
+        </span>
+        @if (persona(); as p) {
+          <span class="pchip">
+            <i aria-hidden="true">{{ p.charAt(0).toUpperCase() }}</i>
+            {{ personaTitle(p) }}
+          </span>
+        }
+        @if (cost(); as c) {
+          <span class="tkcost">{{ c }}</span>
+        }
+      </div>
+      <h1 class="tk-title">{{ title() }}</h1>
+      <p class="tk-fm">{{ fmLine() }}</p>
 
-    @if (steps().length > 0) {
-      <button
-        type="button"
-        class="gate gate-tap"
-        [disabled]="readOnly()"
-        aria-label="Gate chain — tap to insert a gate, set a notify rule or return to the standard flow"
-        (click)="openSheet()">
-        @for (step of steps(); track $index) {
-          <span
-            class="gate-step"
-            [class.gate-past]="step.state === 'past'"
-            [class.gate-current]="step.state === 'current'"
-            [class.gate-future]="step.state === 'future'"
-            [class.gate-inserted]="step.inserted"
-            [class.gate-skipped]="step.skipped"
-            [attr.aria-current]="step.state === 'current' ? 'step' : null">
-            <span class="gate-dot" aria-hidden="true">{{ step.checkpoint ? '◆' : '●' }}</span>
-            <span class="gate-title">
-              @if (step.inserted) {
-                <span class="gate-add" aria-hidden="true">+</span>
+      @if (steps().length > 0) {
+        <button
+          type="button"
+          class="gates gate-tap"
+          [disabled]="readOnly()"
+          aria-label="Gate chain — tap to insert a gate, set a notify rule or return to the standard flow"
+          (click)="openSheet()">
+          @for (step of steps(); track $index) {
+            @if ($index > 0) {
+              <span class="garrow" aria-hidden="true">→</span>
+            }
+            <span
+              class="gate"
+              [class.done]="step.state === 'past'"
+              [class.now]="step.state === 'current'"
+              [class.new]="step.inserted"
+              [class.skipped]="step.skipped"
+              [attr.aria-current]="step.state === 'current' ? 'step' : null">
+              @if (step.state === 'past' || step.state === 'current') {
+                <span class="gs" aria-hidden="true">{{ step.state === 'past' ? '✓' : '●' }}</span>
               }
-              {{ step.title }}
-            </span>
-            <span class="gate-badges">
-              @if (step.persona) {
-                <span class="gate-persona">{{ step.persona }}</span>
+              @if (step.inserted) {
+                <span class="gs" aria-hidden="true">+</span>
+              }
+              <span class="gt">{{ step.title }}</span>
+              @if (step.state === 'current' && step.persona; as p) {
+                <span class="gp">{{ personaTitle(p) }}</span>
+              }
+              @if (step.cost; as c) {
+                <span class="gc">{{ c }}</span>
               }
               @if (step.notify) {
                 <span
-                  class="gate-notify"
+                  class="gn"
                   title="Tells you when this gate completes"
                   [attr.aria-label]="'Notifies you when ' + step.title + ' completes'">◎</span>
               }
             </span>
-          </span>
-        }
-      </button>
-    }
+          }
+          @if (costTotal(); as total) {
+            <span class="cs-total">{{ total }}</span>
+          }
+        </button>
+        <button type="button" class="chain-hint" [disabled]="readOnly()" (click)="openSheet()">
+          Kette: Standard-Flow + Delta aus dem Frontmatter · antippen zum Anpassen
+        </button>
+      }
 
-    @if (report(); as scoutReport) {
-      <section class="card scout" aria-label="Scout report">
-        <h2 class="card-title">Scout report</h2>
-        @if (scoutReport.writtenAt || scoutReport.by) {
-          <p class="tested">
-            Written on {{ scoutReport.writtenAt === '' ? '…' : scoutReport.writtenAt }} by
-            {{ scoutReport.by === '' ? 'scout' : scoutReport.by }}.
-          </p>
+      <div class="body">
+        @for (block of blocks(); track $index) {
+          @switch (block.kind) {
+            @case ('heading') {
+              @if (block.level === 2) {
+                <h3 class="tk-sec">{{ block.text }}</h3>
+              } @else {
+                <h4 class="tk-sub">{{ block.text }}</h4>
+              }
+            }
+            @case ('paragraph') {
+              <p class="tk-p">{{ block.text }}</p>
+            }
+            @case ('list') {
+              <ul class="tk-list">
+                @for (item of block.items; track $index) {
+                  <li class="tk-li" [class.li-done]="item.checked === true">
+                    <span class="box" aria-hidden="true">
+                      {{ item.checked === null ? '–' : item.checked ? '☑' : '☐' }}
+                    </span>
+                    <span>{{ item.text }}</span>
+                  </li>
+                }
+              </ul>
+            }
+            @case ('code') {
+              <pre class="tk-yaml">{{ block.text }}</pre>
+            }
+          }
         }
-        @if (scoutReport.summary) {
-          <p class="scout-summary">{{ scoutReport.summary }}</p>
-        }
-        @if (scoutReport.decisions.length > 0) {
-          <ul class="criteria scout-decisions">
-            @for (decision of scoutReport.decisions; track $index) {
-              <li [class.decision-open]="!decision.resolved" [class.decision-done]="decision.resolved">
-                <span class="box" aria-hidden="true">{{ decision.resolved ? '☑' : '☐' }}</span>
-                <span class="scout-decision-body">
-                  <span class="scout-decision-question">
-                    @if (decision.key) {
-                      <span class="scout-decision-key">{{ decision.key }}:</span>
+      </div>
+
+      @if (verlauf(); as verlauf) {
+        <section class="verlauf" aria-label="Verlauf">
+          <h3 class="tk-sec">Verlauf</h3>
+          <pre class="tk-yaml">{{ verlauf }}</pre>
+        </section>
+      }
+
+      @if (report(); as scoutReport) {
+        <section class="card scout" aria-label="Scout report">
+          <h3 class="tk-sec">Report</h3>
+          @if (scoutReport.writtenAt || scoutReport.by) {
+            <p class="tested">
+              Written on {{ scoutReport.writtenAt === '' ? '…' : scoutReport.writtenAt }} by
+              {{ scoutReport.by === '' ? 'scout' : scoutReport.by }}.
+            </p>
+          }
+          @if (scoutReport.summary) {
+            <p class="scout-summary">{{ scoutReport.summary }}</p>
+          }
+          @if (scoutReport.decisions.length > 0) {
+            <ul class="tk-list scout-decisions">
+              @for (decision of scoutReport.decisions; track $index) {
+                <li class="tk-li" [class.li-done]="decision.resolved">
+                  <span class="box" aria-hidden="true">{{ decision.resolved ? '☑' : '☐' }}</span>
+                  <span class="scout-decision-body">
+                    <span class="scout-decision-question">
+                      @if (decision.key) {
+                        <span class="scout-decision-key">{{ decision.key }}:</span>
+                      }
+                      {{ decision.question }}
+                    </span>
+                    @if (decision.recommendation) {
+                      <span class="scout-decision-rec">Recommendation: {{ decision.recommendation }}</span>
                     }
-                    {{ decision.question }}
                   </span>
-                  @if (decision.recommendation) {
-                    <span class="scout-decision-rec">Recommendation: {{ decision.recommendation }}</span>
-                  }
-                </span>
-              </li>
-            }
-          </ul>
-        }
-      </section>
-    }
-
-    @if (proof(); as report) {
-      <section class="card proof" aria-label="Verification">
-        <h2 class="card-title">Verification</h2>
-        @if (report.testedOn) {
-          <p class="tested">{{ report.testedOn }}</p>
-        }
-        <ul class="criteria">
-          @for (criterion of report.criteria; track criterion.command) {
-            <li [class.criterion-pass]="criterion.passed" [class.criterion-fail]="!criterion.passed">
-              <span class="box" aria-hidden="true">{{ criterion.passed ? '☑' : '☐' }}</span>
-              <code class="cmd">{{ criterion.command }}</code>
-              @if (criterion.note) {
-                <span class="criterion-note">{{ criterion.note }}</span>
-              }
-            </li>
-          }
-        </ul>
-        @if (shots().length > 0) {
-          <div class="shots" aria-label="Screenshots">
-            @for (shot of shots(); track shot.name) {
-              <button type="button" class="shot" (click)="openViewer(shot)">
-                <img [src]="shot.url" [alt]="shot.name" loading="lazy" />
-              </button>
-            }
-          </div>
-        }
-        @if (report.findings.length > 0) {
-          <div class="findings">
-            <h3 class="findings-title">Findings</h3>
-            <ul class="md-list">
-              @for (finding of report.findings; track $index) {
-                <li><span>{{ finding }}</span></li>
-              }
-            </ul>
-          </div>
-        }
-      </section>
-    }
-
-    <div class="body">
-      @for (block of blocks(); track $index) {
-        @switch (block.kind) {
-          @case ('heading') {
-            <h3 class="md-h" [attr.aria-level]="block.level">{{ block.text }}</h3>
-          }
-          @case ('paragraph') {
-            <p class="md-p">{{ block.text }}</p>
-          }
-          @case ('list') {
-            <ul class="md-list">
-              @for (item of block.items; track $index) {
-                <li>
-                  @if (item.checked !== null) {
-                    <span class="box" aria-hidden="true">{{ item.checked ? '☑' : '☐' }}</span>
-                  }
-                  <span>{{ item.text }}</span>
                 </li>
               }
             </ul>
           }
-          @case ('code') {
-            <pre class="md-code">{{ block.text }}</pre>
+        </section>
+      }
+
+      @if (proof(); as report) {
+        <section class="card proof" aria-label="Verification">
+          <h3 class="tk-sec">Verification</h3>
+          @if (verdict(); as v) {
+            <p class="verdict">
+              <b>{{ v.passed }}/{{ v.total }} green.</b>
+              {{ v.stamp }}
+            </p>
+          } @else if (report.testedOn) {
+            <p class="tested">{{ report.testedOn }}</p>
           }
-        }
+          @if (report.criteria.length > 0) {
+            <div class="checks">
+              @for (criterion of report.criteria; track criterion.command) {
+                <div class="check" [class.check-fail]="!criterion.passed">
+                  <span class="ok" aria-hidden="true">{{ criterion.passed ? '[x]' : '[ ]' }}</span>
+                  <span class="check-body">
+                    {{ criterion.command }}
+                    @if (criterion.note) {
+                      <small class="check-note">{{ criterion.note }}</small>
+                    }
+                  </span>
+                </div>
+              }
+            </div>
+          }
+          @if (shots().length > 0) {
+            <div class="gal" #gal aria-label="Screenshots" (scroll)="onGalScroll(gal)">
+              @for (shot of shots(); track shot.name) {
+                <button type="button" class="shot" (click)="openViewer(shot)">
+                  <img [src]="shot.url" [alt]="shot.name" loading="lazy" />
+                </button>
+              }
+            </div>
+            @if (shots().length > 1) {
+              <div class="gal-dots">
+                @for (shot of shots(); track $index) {
+                  <i
+                    [class.on]="$index === galIndex()"
+                    (click)="galTo($index, gal)"></i>
+                }
+              </div>
+            }
+          }
+          @if (report.findings.length > 0) {
+            <div class="findings">
+              <h3 class="findings-title">Findings</h3>
+              <ul class="findings-list">
+                @for (finding of report.findings; track $index) {
+                  <li><span>{{ finding }}</span></li>
+                }
+              </ul>
+            </div>
+          }
+        </section>
+      }
+
+      @if (diff(); as diff) {
+        <section class="card diff" aria-label="Changes">
+          <h3 class="tk-sec">
+            Changes
+            @if (diff.files.length > 0) {
+              <span class="cnt">· {{ diff.files.length }} files</span>
+            }
+          </h3>
+          @for (file of diff.files; track file.path) {
+            <div class="dfile" [class.open]="isExpanded(file.path)">
+              <div class="dfile-h">
+                <button
+                  type="button"
+                  class="dfile-main"
+                  [attr.aria-expanded]="isExpanded(file.path)"
+                  (click)="toggleExpanded(file.path)"
+                >
+                  <svg
+                    class="chev"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.4"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 5l7 7-7 7" />
+                  </svg>
+                  <span class="fp">{{ file.path }}</span>
+                  @if (file.added !== null && file.removed !== null) {
+                    <span class="fs">
+                      <b>+{{ file.added }}</b>
+                      <b class="del">−{{ file.removed }}</b>
+                    </span>
+                  }
+                </button>
+                <button
+                  type="button"
+                  class="zmag"
+                  title="Fullscreen"
+                  aria-label="Show the patch fullscreen"
+                  (click)="openFullscreen(file, $event)"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M21 21l-4.3-4.3M8 11h6M11 8v6" />
+                  </svg>
+                </button>
+              </div>
+              @if (isExpanded(file.path) && file.patch !== '') {
+                <div class="dfile-b">
+                  @for (row of patchRows(file.patch); track $index) {
+                    <div
+                      class="dl2"
+                      [class.add]="row.kind === 'add'"
+                      [class.del]="row.kind === 'del'"
+                      [class.hunk]="row.kind === 'hunk'"
+                    >
+                      <span class="ln">{{ row.oldNo ?? '' }}</span>
+                      <span class="ln">{{ row.newNo ?? '' }}</span>
+                      <span class="sg">{{ row.sign }}</span>
+                      <span class="code">{{ row.text === '' ? ' ' : row.text }}</span>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+          @if (diff.truncated) {
+            <p class="diff-truncated">Diff truncated for size.</p>
+          }
+        </section>
+      }
+
+      @if (savedFlash(); as flash) {
+        <p class="result result-note">{{ flash }}</p>
+      }
+      @if (result(); as result) {
+        <p
+          class="result"
+          [class.result-error]="result.kind === 'error'"
+          [class.result-note]="result.kind === 'note'"
+          aria-live="polite"
+        >
+          {{ result.text }}
+        </p>
+      }
+
+      @if (accepted()) {
+        <div class="done-wrap" role="status">
+          <div class="done-ring">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 12.5l5 5L20 6.5" />
+            </svg>
+          </div>
+          <h3 class="done-title">Angenommen</h3>
+          @if (result(); as r) {
+            <p class="done-note">{{ r.text }}</p>
+          }
+          <button type="button" class="btn ghost done-back" (click)="vm.onClose()">Zurück zur Arbeit</button>
+        </div>
+      } @else if (!readOnly()) {
+        <div class="actions">
+          @if (sendBackOpen()) {
+            <div class="sendback">
+              <label class="sendback-label" for="sendback-note">What is wrong? A send-back needs a note.</label>
+              <textarea
+                id="sendback-note"
+                class="sendback-text"
+                rows="3"
+                aria-label="Send-back note"
+                [value]="note()"
+                (input)="onNote($event)"
+              ></textarea>
+              <div class="action-row">
+                <button
+                  type="button"
+                  class="btn warn"
+                  [disabled]="note().trim() === '' || sendBackPending()"
+                  (click)="sendBack()"
+                >
+                  {{ sendBackPending() ? 'Sending…' : 'Send back' }}
+                </button>
+                <button type="button" class="btn ghost" (click)="toggleSendBack()">Cancel</button>
+              </div>
+            </div>
+          } @else {
+            <div class="action-row">
+              <button type="button" class="btn ghost" (click)="toggleSendBack()">Send back…</button>
+              <button
+                type="button"
+                class="btn primary"
+                [disabled]="acceptPending()"
+                (click)="acceptTap()">
+                {{ acceptPending() ? 'Accepting…' : arm().armed ? 'Tap again to accept' : 'Accept' }}
+              </button>
+            </div>
+            <button type="button" class="btn ghost" (click)="changeByChat()">Per Chat ändern</button>
+          }
+        </div>
       }
     </div>
-
-    @if (diff(); as diff) {
-      <section class="card diff" aria-label="Changes">
-        <h2 class="card-title">Changes</h2>
-        @for (file of diff.files; track file.path) {
-          <div class="diff-file">
-            <div class="diff-row">
-              <button
-                type="button"
-                class="diff-main"
-                [attr.aria-expanded]="isExpanded(file.path)"
-                (click)="toggleExpanded(file.path)"
-              >
-                <span [class]="'diff-status ' + diffStatusClass(file.status)">{{ file.status }}</span>
-                <span class="diff-path">{{ file.path }}</span>
-                @if (file.added !== null && file.removed !== null) {
-                  <span class="diff-counts">
-                    <span class="diff-add">+{{ file.added }}</span>
-                    <span class="diff-del">−{{ file.removed }}</span>
-                  </span>
-                }
-              </button>
-              <button
-                type="button"
-                class="diff-fs"
-                title="Fullscreen"
-                aria-label="Show the patch fullscreen"
-                (click)="openFullscreen(file, $event)"
-              >
-                ⤢
-              </button>
-            </div>
-            @if (isExpanded(file.path)) {
-              <pre class="patch">
-                @for (line of patchLines(file.patch); track $index) {
-                  <span [class]="'patch-line pl-' + patchLineKind(line)">{{ line }}</span>
-                }
-              </pre>
-            }
-          </div>
-        }
-        @if (diff.truncated) {
-          <p class="diff-truncated">Diff truncated for size.</p>
-        }
-      </section>
-    }
-
-    @if (savedFlash(); as flash) {
-      <p class="result result-note">{{ flash }}</p>
-    }
-    @if (result(); as result) {
-      <p
-        class="result"
-        [class.result-error]="result.kind === 'error'"
-        [class.result-note]="result.kind === 'note'"
-        aria-live="polite"
-      >
-        {{ result.text }}
-      </p>
-    }
-
-    @if (!readOnly()) {
-      <div class="actions">
-        <button type="button" class="btn btn-primary" [disabled]="acceptPending()" (click)="acceptTap()">
-          {{ acceptPending() ? 'Accepting…' : arm().armed ? 'Tap again to accept' : 'Accept' }}
-        </button>
-        @if (sendBackOpen()) {
-          <div class="sendback">
-            <label class="sendback-label" for="sendback-note">What is wrong? A send-back needs a note.</label>
-            <textarea
-              id="sendback-note"
-              class="sendback-text"
-              rows="3"
-              aria-label="Send-back note"
-              [value]="note()"
-              (input)="onNote($event)"
-            ></textarea>
-            <div class="action-row">
-              <button
-                type="button"
-                class="btn btn-primary"
-                [disabled]="note().trim() === '' || sendBackPending()"
-                (click)="sendBack()"
-              >
-                {{ sendBackPending() ? 'Sending…' : 'Send back' }}
-              </button>
-              <button type="button" class="btn" (click)="toggleSendBack()">Cancel</button>
-            </div>
-          </div>
-        } @else {
-          <button type="button" class="btn" (click)="toggleSendBack()">Send back…</button>
-          <button type="button" class="btn" (click)="toggleEdit()">
-            {{ vm.editing() ? 'Close editor' : 'Edit' }}
-          </button>
-        }
-      </div>
-    }
   </div>
 }
 
@@ -280,16 +412,26 @@
       <div class="fs-head">
         <span class="fs-path">{{ file.path }}</span>
         <span class="fs-zoom">
-          <button type="button" class="fs-btn" aria-label="Smaller text" (click)="stepFont(-1)">A−</button>
-          <button type="button" class="fs-btn" aria-label="Larger text" (click)="stepFont(1)">A+</button>
+          <button type="button" class="fs-btn" aria-label="Smaller text" (click)="stepFont(-1)">−</button>
+          <button type="button" class="fs-btn" aria-label="Larger text" (click)="stepFont(1)">+</button>
         </span>
         <button type="button" class="overlay-close" aria-label="Close" (click)="closeFullscreen()">×</button>
       </div>
-      <pre class="fs-patch" [style.font-size.px]="fontSize()">
-        @for (line of patchLines(file.patch); track $index) {
-          <span [class]="'patch-line pl-' + patchLineKind(line)">{{ line }}</span>
+      <div class="fs-patch" [style.font-size.px]="fontSize()">
+        @for (row of patchRows(file.patch); track $index) {
+          <div
+            class="dl2"
+            [class.add]="row.kind === 'add'"
+            [class.del]="row.kind === 'del'"
+            [class.hunk]="row.kind === 'hunk'"
+          >
+            <span class="ln">{{ row.oldNo ?? '' }}</span>
+            <span class="ln">{{ row.newNo ?? '' }}</span>
+            <span class="sg">{{ row.sign }}</span>
+            <span class="code">{{ row.text === '' ? ' ' : row.text }}</span>
+          </div>
         }
-      </pre>
+      </div>
     </div>
   </div>
 }
@@ -333,7 +475,7 @@
         <input type="checkbox" [checked]="insertNotify()" (change)="onInsertNotify($event)" />
         Tell me when it completes
       </label>
-      <button type="button" class="btn btn-primary" [disabled]="insertDisabled()" (click)="prefillInsert()">
+      <button type="button" class="btn primary" [disabled]="insertDisabled()" (click)="prefillInsert()">
         Prefill chat
       </button>
     </section>
@@ -349,7 +491,7 @@
         </select>
         <span class="sheet-static">completes</span>
       </div>
-      <button type="button" class="btn btn-primary" [disabled]="notifyDisabled()" (click)="prefillNotify()">
+      <button type="button" class="btn primary" [disabled]="notifyDisabled()" (click)="prefillNotify()">
         Prefill chat
       </button>
     </section>
@@ -357,7 +499,7 @@
     <section class="sheet-section" aria-label="Back to the standard flow">
       <h3 class="sheet-label">Standard flow</h3>
       <p class="sheet-note">Drop every deviation — the pipeline's standard flow applies again.</p>
-      <button type="button" class="btn" (click)="prefillStandard()">Prefill chat</button>
+      <button type="button" class="btn ghost" (click)="prefillStandard()">Prefill chat</button>
     </section>
   </div>
 }

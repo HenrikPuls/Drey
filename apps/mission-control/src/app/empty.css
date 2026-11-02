@@ -1,0 +1,41 @@
+/* The idle center pane (the prototype's .empty-hint): the shell only
+   mounts it on tablet/desktop while no detail claims the middle column. */
+
+:host {
+  display: flex;
+}
+
+.empty-hint {
+  margin: auto;
+  padding: 24px;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.9;
+  text-align: center;
+}
+
+.hint {
+  margin: 0;
+}
+
+.elogo {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.mono {
+  margin: 10px 0 0;
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}

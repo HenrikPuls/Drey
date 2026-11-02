@@ -1,9 +1,10 @@
 /**
- * The work tab's specs: the pure group/next-phase logic, then the
- * component class against a fake state object — no DOM (the unit-test
- * builder runs these under jsdom, but nothing here renders a template).
- * The improvements card's tap and the scout report card's promote (E8)
- * close the file.
+ * The work tab's specs: the pure group/next-phase logic plus the header's
+ * helpers (vault sub, Fleet chip, the card's tolerant cost/ctx/wait
+ * slots), then the component class against a fake state object — no DOM
+ * (the unit-test builder runs these under jsdom, but nothing here renders
+ * a template). The improvements card's tap and the scout report card's
+ * promote (E8) close the file.
  */
 import type { Signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -11,16 +12,24 @@ import { Work } from './work';
 import {
   MC_WORK_STATE,
   NEED_KIND_LABELS,
+  blockerIdsOf,
+  costLabelOf,
+  ctxPercentOf,
   displayTitleOf,
+  fleetLabelOf,
   groupsOf,
   isBlockedTicket,
   isFlaggedTicket,
+  liveRunCountOf,
   needKindLabelOf,
   nextPhaseOf,
+  personaInitialOf,
   personaMapOf,
+  vaultTitleOf,
   type McBoard,
   type McNeed,
   type McPersona,
+  type McRun,
   type McScoutReport,
   type McTicket,
   type McWorkState,
@@ -48,6 +57,8 @@ interface FakeState extends McWorkState {
   board: McBoard | null;
   personas: McPersona[];
   readOnly: boolean;
+  runs?: readonly McRun[] | null;
+  toast?: (message: string, kind?: 'ok' | 'warn' | 'error') => void;
   moveResults: McMoveResultForTest[];
 }
 
@@ -84,6 +95,10 @@ function makeFake(patch: Partial<FakeState> = {}): { state: FakeState; calls: Mo
 interface WorkSurface {
   groups: Signal<WorkGroup[]>;
   readOnly: Signal<boolean>;
+  vaultTitle: Signal<string | null>;
+  liveRuns: Signal<number | null>;
+  fleetLabel: Signal<string>;
+  fleetLive: Signal<boolean>;
   openCard: Signal<TicketVm | null>;
   moveError: Signal<string | null>;
   movePending: Signal<boolean>;
@@ -93,6 +108,7 @@ interface WorkSurface {
   moveOn(): Promise<void>;
   needTappable(vm: NeedVm): boolean;
   openNeedPersona(vm: NeedVm): void;
+  onFleetTap(): void;
 }
 
 function surface(work: Work): WorkSurface {
@@ -140,7 +156,7 @@ describe('groupsOf', () => {
   it('puts the needs-you group first, then the board groups in order', () => {
     const groups = groupsOf([need('question', 'Pick a lane')], board, []);
     expect(groups.map((g) => g.kind)).toEqual(['needs', 'phase', 'phase', 'phase']);
-    expect(groups.map((g) => g.title)).toEqual(['Needs you', 'Inbox', 'Build', 'lost']);
+    expect(groups.map((g) => g.title)).toEqual(['Braucht dich', 'Inbox', 'Build', 'lost']);
   });
 
   it('omits the needs group when nothing waits', () => {
@@ -188,10 +204,20 @@ describe('groupsOf', () => {
   it('keys an improvements need on its persona title, stable across refreshes (E6)', () => {
     const keyOf = (groups: WorkGroup[], title: string): string | undefined => {
       const group = groups[0];
-      return group?.kind === 'needs' ? group.needs.find((n) => n.need.title === title)?.key : undefined;
+      return group?.kind === 'needs'
+        ? group.needs.find((n) => n.need.title === title)?.key
+        : undefined;
     };
-    const first = groupsOf([need('improvements', 'Pia', { ticketId: '' }), need('question', 'Ask')], null, []);
-    const refreshed = groupsOf([need('question', 'New one'), need('improvements', 'Pia', { ticketId: '' })], null, []);
+    const first = groupsOf(
+      [need('improvements', 'Pia', { ticketId: '' }), need('question', 'Ask')],
+      null,
+      [],
+    );
+    const refreshed = groupsOf(
+      [need('question', 'New one'), need('improvements', 'Pia', { ticketId: '' })],
+      null,
+      [],
+    );
     // The title is the persona title (the engine's guarantee): the key
     // survives a refresh that shifts the list around it.
     expect(keyOf(first, 'Pia')).toBe('improvements:Pia');
@@ -208,13 +234,46 @@ describe('groupsOf', () => {
     const [first, second] = build.tickets as [TicketVm, TicketVm];
     expect(first.title).toBe('Wire the board');
     expect(first.persona).toBeNull();
+    expect(first.personaInitial).toBeNull();
     expect(first.flagged).toBe(false);
     expect(first.blocked).toBe(false);
     expect(first.phaseColor).toBe('#123456');
     expect(second.title).toBe('T-0002');
     expect(second.flagged).toBe(true);
     expect(second.blocked).toBe(true);
+    expect(second.blockers).toEqual(['T-0001']);
     expect(second.persona?.color).toBe('#ff8800');
+    expect(second.personaInitial).toBe('T');
+  });
+
+  it('fills the card’s cost, ctx and wait slots only from present data — never a 0-fake', () => {
+    const configured: McBoard = {
+      columns: [
+        {
+          phase: { id: 'build', title: 'Build' },
+          tickets: [
+            ticket('T-0001', { cost: 0.44, ctx: 58.4 }),
+            ticket('T-0002', { cost: null, ctx: undefined, meta: { blockedBy: ['T-0007'] } }),
+            ticket('T-0003', { cost: 0, ctx: 101 }),
+          ],
+        },
+      ],
+    };
+    const groups = groupsOf([], configured, []);
+    const build = groups.find((g) => g.kind === 'phase' && g.phaseId === 'build');
+    if (build?.kind !== 'phase') {
+      throw new Error('expected the build group');
+    }
+    const [rich, waiting, junk] = build.tickets as [TicketVm, TicketVm, TicketVm];
+    expect(rich.costLabel).toBe('0,44 $');
+    expect(rich.ctxPercent).toBe(58);
+    expect(rich.blocked).toBe(false);
+    expect(waiting.costLabel).toBeNull();
+    expect(waiting.ctxPercent).toBeNull();
+    expect(waiting.blockers).toEqual(['T-0007']);
+    expect(junk.costLabel).toBeNull();
+    expect(junk.ctxPercent).toBeNull();
+    expect(junk.blocked).toBe(false);
   });
 
   it('flags cards by the board’s configured vocabulary when mapping the groups', () => {
@@ -344,6 +403,83 @@ describe('card helpers', () => {
   });
 });
 
+// --- the header's helpers (vault sub, Fleet chip, slot formatters) -----------------
+
+describe('header helpers', () => {
+  it('names the vault for the header sub: vaultName first, the folder name as fallback', () => {
+    expect(vaultTitleOf({ vaultName: 'lariscus', activeVaultName: 'vault-dir' } as McBoard)).toBe(
+      'lariscus',
+    );
+    expect(vaultTitleOf({ vaultName: null, activeVaultName: 'vault-dir' } as McBoard)).toBe(
+      'vault-dir',
+    );
+    expect(vaultTitleOf({ activeVaultName: '  spaced  ' } as McBoard)).toBe('spaced');
+    // Tolerance: blank on both, absent, junk — the sub line hides instead.
+    expect(vaultTitleOf({ vaultName: '   ', activeVaultName: '' } as McBoard)).toBeNull();
+    expect(vaultTitleOf({} as McBoard)).toBeNull();
+    expect(vaultTitleOf(null)).toBeNull();
+    expect(vaultTitleOf({ vaultName: 42 } as unknown as McBoard)).toBeNull();
+  });
+
+  it('derives the wait-line’s ids: the OPEN blockers first, the raw blocked-by as fallback', () => {
+    expect(blockerIdsOf(ticket('a', { blocked: ['T-0002', 'T-0003'] }))).toEqual([
+      'T-0002',
+      'T-0003',
+    ]);
+    expect(blockerIdsOf(ticket('a', { blocked: [], meta: { blockedBy: ['T-0009'] } }))).toEqual([
+      'T-0009',
+    ]);
+    expect(blockerIdsOf(ticket('a', { blocked: [], meta: {} }))).toEqual([]);
+    expect(blockerIdsOf(ticket('a'))).toEqual([]);
+  });
+
+  it('formats the cost slot German-style; absent, zero and junk hide the slot', () => {
+    expect(costLabelOf(0.44)).toBe('0,44 $');
+    expect(costLabelOf(1.87)).toBe('1,87 $');
+    expect(costLabelOf(12)).toBe('12,00 $');
+    expect(costLabelOf(null)).toBeNull();
+    expect(costLabelOf(undefined)).toBeNull();
+    expect(costLabelOf(0)).toBeNull();
+    expect(costLabelOf(-3)).toBeNull();
+    expect(costLabelOf(Number.NaN)).toBeNull();
+    expect(costLabelOf(Number.POSITIVE_INFINITY)).toBeNull();
+  });
+
+  it('rounds the ctx slot to a 1–100 percent; 0 and out-of-range junk hide the bar', () => {
+    expect(ctxPercentOf(58.4)).toBe(58);
+    expect(ctxPercentOf(1)).toBe(1);
+    expect(ctxPercentOf(100)).toBe(100);
+    expect(ctxPercentOf(0)).toBeNull();
+    expect(ctxPercentOf(101)).toBeNull();
+    expect(ctxPercentOf(null)).toBeNull();
+    expect(ctxPercentOf(undefined)).toBeNull();
+    expect(ctxPercentOf(Number.NaN)).toBeNull();
+  });
+
+  it('takes the persona chip’s initial from the title’s first character, uppercased', () => {
+    expect(personaInitialOf('Pia')).toBe('P');
+    expect(personaInitialOf('tessa')).toBe('T');
+    expect(personaInitialOf('  Ralf ')).toBe('R');
+    expect(personaInitialOf('')).toBe('');
+  });
+
+  it('counts the fleet’s live runs; without run data the count stays unknown (null)', () => {
+    const run = (state: string): McRun => ({ state });
+    expect(liveRunCountOf([run('running'), run('starting'), run('done'), run('failed')])).toBe(2);
+    expect(liveRunCountOf([run('stopping'), run('detached')])).toBe(2);
+    expect(liveRunCountOf([run('stopped'), run('done'), { state: null }, {}])).toBe(0);
+    expect(liveRunCountOf([])).toBe(0);
+    expect(liveRunCountOf(null)).toBeNull();
+    expect(liveRunCountOf(undefined)).toBeNull();
+  });
+
+  it('labels the Fleet chip: the count when data exist, the bare word without', () => {
+    expect(fleetLabelOf(3)).toBe('3 aktiv');
+    expect(fleetLabelOf(0)).toBe('0 aktiv');
+    expect(fleetLabelOf(null)).toBe('Fleet');
+  });
+});
+
 // --- the component class -----------------------------------------------------------
 
 describe('Work', () => {
@@ -365,10 +501,68 @@ describe('Work', () => {
     expect(vm.readOnly()).toBe(false);
   });
 
-  it('derives the groups from the fake state, needs first', () => {
+  it('derives the groups from the fake state, Braucht dich first', () => {
     const { state } = makeFake({ needs: [need('permission', 'Allow deploy?')], board });
     const vm = surface(setup(state));
-    expect(vm.groups().map((g) => g.title)).toEqual(['Needs you', 'Inbox', 'Build', 'Done']);
+    expect(vm.groups().map((g) => g.title)).toEqual(['Braucht dich', 'Inbox', 'Build', 'Done']);
+  });
+
+  it('reads the header sub tolerantly from the board payload', () => {
+    const { state } = makeFake({ board });
+    expect(surface(setup(state)).vaultTitle()).toBeNull();
+
+    const named = makeFake({ board: { ...board, vaultName: 'lariscus' } });
+    expect(surface(setup(named.state)).vaultTitle()).toBe('lariscus');
+
+    const folder = makeFake({ board: { ...board, vaultName: '', activeVaultName: 'vault-dir' } });
+    expect(surface(setup(folder.state)).vaultTitle()).toBe('vault-dir');
+  });
+
+  it('shows the Fleet chip live while runs are live, idle without run data', () => {
+    const live = makeFake({ board, runs: [{ state: 'running' }, { state: 'starting' }] });
+    const liveVm = surface(setup(live.state));
+    expect(liveVm.liveRuns()).toBe(2);
+    expect(liveVm.fleetLabel()).toBe('2 aktiv');
+    expect(liveVm.fleetLive()).toBe(true);
+
+    const quiet = makeFake({ board, runs: [{ state: 'done' }] });
+    const quietVm = surface(setup(quiet.state));
+    expect(quietVm.fleetLabel()).toBe('0 aktiv');
+    expect(quietVm.fleetLive()).toBe(false);
+
+    const blind = makeFake({ board });
+    const blindVm = surface(setup(blind.state));
+    expect(blindVm.liveRuns()).toBeNull();
+    expect(blindVm.fleetLabel()).toBe('Fleet');
+    expect(blindVm.fleetLive()).toBe(false);
+  });
+
+  it('the Fleet tap toasts the live count — only when runs are actually live', () => {
+    const toasts: string[] = [];
+    const { state } = makeFake({
+      board,
+      runs: [{ state: 'running' }, { state: 'running' }, { state: 'starting' }],
+    });
+    state.toast = (message: string) => toasts.push(message);
+    const vm = surface(setup(state));
+    vm.onFleetTap();
+    expect(toasts).toEqual(['Runner: 3 Runs live']);
+
+    const quiet = makeFake({ board, runs: [{ state: 'done' }] });
+    quiet.state.toast = (message: string) => toasts.push(message);
+    surface(setup(quiet.state)).onFleetTap();
+
+    const blind = makeFake({ board });
+    blind.state.toast = (message: string) => toasts.push(message);
+    surface(setup(blind.state)).onFleetTap();
+
+    expect(toasts).toEqual(['Runner: 3 Runs live']);
+  });
+
+  it('the Fleet tap is a no-op when the adapter offers no toast', () => {
+    const { state } = makeFake({ board, runs: [{ state: 'running' }] });
+    const vm = surface(setup(state));
+    expect(() => vm.onFleetTap()).not.toThrow();
   });
 
   it('surfaces the readOnly flag', () => {
@@ -416,7 +610,10 @@ describe('Work', () => {
   });
 
   it('shows the refusal inline and keeps the sheet open on failure', async () => {
-    const { state, calls } = makeFake({ board, moveResults: [{ ok: false, error: 'the gate is red' }] });
+    const { state, calls } = makeFake({
+      board,
+      moveResults: [{ ok: false, error: 'the gate is red' }],
+    });
     const vm = surface(setup(state));
     const buildGroup = vm.groups().find((g) => g.kind === 'phase' && g.phaseId === 'build')!;
     vm.openSheet(buildGroup.kind === 'phase' ? buildGroup.tickets[0]! : (null as never));
@@ -484,12 +681,17 @@ describe('improvements needs', () => {
     const plainVm = surface(setup(plain.state));
     expect(plainVm.needTappable(improvementsNeed(plainVm))).toBe(false);
 
-    const { state } = makeFake({ needs: [need('improvements', 'Pia'), need('question', 'Ask away')] });
+    const { state } = makeFake({
+      needs: [need('improvements', 'Pia'), need('question', 'Ask away')],
+    });
     state.openPersona = () => undefined;
     const vm = surface(setup(state));
     expect(vm.needTappable(improvementsNeed(vm))).toBe(true);
     const group = vm.groups()[0]!;
-    const question = group.kind === 'needs' ? group.needs.find((n) => n.need.kind === 'question')! : (null as never);
+    const question =
+      group.kind === 'needs'
+        ? group.needs.find((n) => n.need.kind === 'question')!
+        : (null as never);
     expect(vm.needTappable(question)).toBe(false);
   });
 
@@ -532,7 +734,6 @@ describe('improvements needs', () => {
   });
 });
 
-
 // --- the scout report card (E8) -----------------------------------------------------
 
 describe('report needs (E8)', () => {
@@ -541,7 +742,12 @@ describe('report needs (E8)', () => {
     by: 'pia',
     summary: 'The repo carries two index implementations.',
     decisions: [
-      { key: 'D1', question: 'Which storage should back the index?', recommendation: 'SQLite', resolved: false },
+      {
+        key: 'D1',
+        question: 'Which storage should back the index?',
+        recommendation: 'SQLite',
+        resolved: false,
+      },
       { key: 'D2', question: 'Migrate existing data?', recommendation: null, resolved: true },
     ],
   };
@@ -565,7 +771,13 @@ describe('report needs (E8)', () => {
   function setupReport(patch: Partial<FakeState> = {}): { vm: ReportSurface; promoted: string[] } {
     const promoted: string[] = [];
     const { state } = makeFake({
-      needs: [need('report', 'Which storage backs the index?', { ticketId: 'T-0004', summary: '1 of 2 decisions open', report: REPORT })],
+      needs: [
+        need('report', 'Which storage backs the index?', {
+          ticketId: 'T-0004',
+          summary: '1 of 2 decisions open',
+          report: REPORT,
+        }),
+      ],
       ...patch,
     });
     state.promote = (ticketId: string) => promoted.push(ticketId);
@@ -586,7 +798,9 @@ describe('report needs (E8)', () => {
     const { vm } = setupReport();
     expect(vm.canPromote(reportNeedOf(vm, 'report'))).toBe(true);
 
-    const withoutAdapter = makeFake({ needs: [need('report', 'R', { ticketId: 'T-1', report: REPORT })] });
+    const withoutAdapter = makeFake({
+      needs: [need('report', 'R', { ticketId: 'T-1', report: REPORT })],
+    });
     const noAdapter = setup(withoutAdapter.state) as unknown as ReportSurface;
     expect(noAdapter.canPromote(reportNeedOf(noAdapter, 'report'))).toBe(false);
 

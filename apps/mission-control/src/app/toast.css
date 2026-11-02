@@ -1,0 +1,49 @@
+:host {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + 26px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 40;
+  pointer-events: none;
+}
+
+/* The prototype's pill: mono, panel surface, --line rim, fade/slide in. */
+.toast {
+  min-width: 0;
+  max-width: min(88vw, 520px);
+  overflow: hidden;
+  padding: 11px 18px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: none;
+}
+
+.toast[data-kind='ok'] {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 35%, var(--line));
+}
+
+.toast[data-kind='warn'] {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--line));
+}
+
+.toast[data-kind='error'] {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+}

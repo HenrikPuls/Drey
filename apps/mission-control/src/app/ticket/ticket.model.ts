@@ -66,6 +66,11 @@ export interface GateStep extends GatePhase {
   readonly notify: boolean;
   /** The persona pinned to this gate; null = the ladder decides. */
   readonly persona: string | null;
+  /**
+   * The gate's run cost as the engine's stage ledger reports it, ready to
+   * show; null = not delivered yet — the pill renders no cost slot.
+   */
+  readonly cost: string | null;
 }
 
 /**
@@ -82,6 +87,7 @@ export function gateStepsOf(phases: readonly GatePhase[], currentPhaseId: string
     skipped: false,
     notify: false,
     persona: null,
+    cost: null,
   }));
 }
 
@@ -212,6 +218,7 @@ export function chainStepsOf(
     skipped: false,
     notify: false,
     persona: null,
+    cost: null,
   }));
   const indexOf = (phase: string): number => steps.findIndex((step) => step.id === phase);
   for (const entry of entries) {
@@ -240,6 +247,7 @@ export function chainStepsOf(
       skipped: false,
       notify: entry.notify,
       persona: entry.persona,
+      cost: null,
     };
     if (anchorAt >= 0) {
       steps.splice(entry.position === 'before' ? anchorAt : anchorAt + 1, 0, step);
@@ -330,7 +338,7 @@ export function proofOf(sectionText: string): ProofReport {
 // --- the section splitter --------------------------------------------------------
 
 /** The section titles the screen treats specially (lowercased, exact). */
-const SPECIAL_TITLES = ['verification', 'report', 'changes', 'handover', 'log'] as const;
+const SPECIAL_TITLES = ['verification', 'report', 'changes', 'handover', 'log', 'verlauf'] as const;
 
 function isSpecialTitle(title: string): title is (typeof SPECIAL_TITLES)[number] {
   return (SPECIAL_TITLES as readonly string[]).includes(title);
@@ -339,8 +347,8 @@ function isSpecialTitle(title: string): title is (typeof SPECIAL_TITLES)[number]
 /**
  * The ticket body, split for the screen (concept §5.3/§5.5): the generic
  * sections render as Markdown; Verification feeds the proof card; Report
- * feeds the scout report card (E8); Changes/Handover/Log get their
- * special treatment and never render raw.
+ * feeds the scout report card (E8); Verlauf feeds its yaml box; Log gets
+ * its special treatment and never renders raw.
  */
 export interface TicketSections {
   /** The frontmatter-stripped text minus the special sections, for the generic render. */
@@ -355,6 +363,11 @@ export interface TicketSections {
   readonly handover: string | null;
   /** The `## Log` section's text (heading excluded); null when absent or empty. */
   readonly log: string | null;
+  /**
+   * The `## Verlauf` section's text (heading excluded); null when absent —
+   * the engine does not write the chapter yet, the screen stays silent.
+   */
+  readonly verlauf: string | null;
 }
 
 const FRONTMATTER = /^---\n[\s\S]*?\n---\n?/;
@@ -376,6 +389,7 @@ export function splitTicketSections(text: string): TicketSections {
     changes: [],
     handover: [],
     log: [],
+    verlauf: [],
   };
   let target: 'body' | (typeof SPECIAL_TITLES)[number] = 'body';
   for (const line of source.split('\n')) {
@@ -401,7 +415,25 @@ export function splitTicketSections(text: string): TicketSections {
     changes: sectionOf(buckets.changes),
     handover: sectionOf(buckets.handover),
     log: sectionOf(buckets.log),
+    verlauf: sectionOf(buckets.verlauf),
   };
+}
+
+/**
+ * The Verlauf section as its yaml box renders it: a fenced block loses
+ * its fence (the fence marks stay markup, the run lines stay text), a
+ * section without a fence renders as written — the engine may start the
+ * chapter with prose before it learns to write the yaml ledger.
+ */
+export function verlaufTextOf(sectionText: string): string {
+  const lines = sectionText.split('\n');
+  const open = lines.findIndex((line) => line.trim().startsWith('```'));
+  if (open < 0) {
+    return sectionText.trim();
+  }
+  const close = lines.findIndex((line, at) => at > open && line.trim().startsWith('```'));
+  const body = close < 0 ? lines.slice(open + 1) : lines.slice(open + 1, close);
+  return body.join('\n').trim();
 }
 
 // --- the scout report card (E8, concept §5.6) -------------------------------------
@@ -511,6 +543,64 @@ export function patchLineKind(line: string): PatchLineKind {
     return 'del';
   }
   return 'context';
+}
+
+/** One patch row as the git table renders it: the two line numbers, the sign, the code. */
+export interface PatchRow {
+  readonly kind: PatchLineKind | 'hunk';
+  /** The old file's line number; null when the row carries none. */
+  readonly oldNo: number | null;
+  /** The new file's line number; null when the row carries none. */
+  readonly newNo: number | null;
+  /** '+' added, '−' removed, '' context/meta/hunk — the `.sg` column. */
+  readonly sign: string;
+  readonly text: string;
+}
+
+const HUNK_HEAD = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+
+/**
+ * The unified patch as numbered rows (the proof's `.ln`/`.sg` table):
+ * hunk headers seed the counters, `+`/`-`/context rows spend them, the
+ * fence lines (`diff`, `index`, `---`, `+++`, `\ No newline`) ride as
+ * meta without numbers. Tolerant of any order — a patch that skips the
+ * hunk header still renders, the numbers just start at 1.
+ */
+export function patchRowsOf(patch: string): PatchRow[] {
+  const rows: PatchRow[] = [];
+  if (patch === '') {
+    return rows; // a binary file's empty patch — no rows
+  }
+  let oldNo = 1;
+  let newNo = 1;
+  const lines = patch.split('\n');
+  // A '\n'-terminated patch ends in an empty string — an artifact, not a row.
+  if (lines.length > 1 && lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+  for (const line of lines) {
+    const hunk = HUNK_HEAD.exec(line);
+    if (hunk !== null) {
+      oldNo = parseInt(hunk[1]!, 10);
+      newNo = parseInt(hunk[2]!, 10);
+      rows.push({ kind: 'hunk', oldNo: null, newNo: null, sign: '', text: line });
+      continue;
+    }
+    if (patchLineKind(line) === 'meta' || line.startsWith('\\')) {
+      rows.push({ kind: 'meta', oldNo: null, newNo: null, sign: '', text: line });
+      continue;
+    }
+    if (line.startsWith('+')) {
+      rows.push({ kind: 'add', oldNo: null, newNo: newNo++, sign: '+', text: line.slice(1) });
+      continue;
+    }
+    if (line.startsWith('-')) {
+      rows.push({ kind: 'del', oldNo: oldNo++, newNo: null, sign: '−', text: line.slice(1) });
+      continue;
+    }
+    rows.push({ kind: 'context', oldNo: oldNo++, newNo: newNo++, sign: '', text: line.slice(1) });
+  }
+  return rows;
 }
 
 /** The patch viewer's font-size steps (px); A- / A+ walk this list, clamped at both ends. */
@@ -675,6 +765,12 @@ export interface TicketVm {
    * path, the owner reviews and sends, the proposal card confirms.
    */
   proposeChain(text: string): void;
+  /**
+   * The ticket view's 'Per Chat ändern' CTA: prefill the composer with a
+   * free command (`<id>: …`). Optional while the parent wires the name —
+   * the view falls back to `proposeChain`, the same one prefill path.
+   */
+  prefillChat?(text: string): void;
   /** The raw edit's save; one commit on the desk, the refusal inline. */
   save(text: string): Promise<TicketSaveReply>;
   accept(): Promise<TicketActionReply>;
@@ -697,6 +793,7 @@ const EMPTY_TICKET: TicketVm = {
   attachmentUrl: () => null,
   onClose: () => undefined,
   proposeChain: () => undefined,
+  prefillChat: () => undefined,
   save: () => Promise.resolve({ ok: false, error: 'Not connected to a desk.' }),
   accept: () => Promise.resolve({ ok: false, error: 'Not connected to a desk.' }),
   sendBack: () => Promise.resolve({ ok: false, error: 'Not connected to a desk.' }),

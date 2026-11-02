@@ -5,38 +5,58 @@
         <li class="card">
           @if (canOpen()) {
             <button type="button" class="card-btn" (click)="open(persona)">
-              <div class="row">
-                <span class="avatar" [style.background-color]="persona.color" aria-hidden="true">{{ initialsOf(persona.title) }}</span>
-                <div class="who">
-                  <h2 class="title">{{ persona.title }}</h2>
-                  <p class="role">{{ persona.role }}</p>
-                </div>
+              <div class="ptop">
+                <span class="pava" [style.background-color]="persona.color" aria-hidden="true">{{
+                  initialsOf(persona.title)
+                }}</span>
+                <span class="pwho">
+                  <span class="pname">{{ persona.title }}</span>
+                  <span class="prole">{{ persona.role }} · {{ persona.model }}</span>
+                </span>
+                <span class="pstat">
+                  @if (persona.currentRun; as run) {
+                    <span
+                      class="led"
+                      [class]="'led ' + runStateClass(run.state)"
+                      aria-hidden="true"
+                    ></span>
+                    <span class="pstat-label">on {{ run.ticketId }}</span>
+                  } @else {
+                    <span class="led run-dim" aria-hidden="true"></span>
+                    <span class="pstat-label">idle</span>
+                  }
+                </span>
               </div>
-              <p class="meta">{{ persona.worker }} · {{ persona.model }}</p>
-              <div class="state">
-                @if (persona.currentRun; as run) {
-                  <span class="chip" [class]="'chip ' + runStateClass(run.state)">on {{ run.ticketId }}</span>
-                } @else {
-                  <span class="chip run-dim">idle</span>
-                }
+              <div class="pfoot">
+                <span>Worker: {{ persona.worker }}</span>
               </div>
             </button>
           } @else {
             <div class="card-body">
-              <div class="row">
-                <span class="avatar" [style.background-color]="persona.color" aria-hidden="true">{{ initialsOf(persona.title) }}</span>
-                <div class="who">
-                  <h2 class="title">{{ persona.title }}</h2>
-                  <p class="role">{{ persona.role }}</p>
-                </div>
+              <div class="ptop">
+                <span class="pava" [style.background-color]="persona.color" aria-hidden="true">{{
+                  initialsOf(persona.title)
+                }}</span>
+                <span class="pwho">
+                  <span class="pname">{{ persona.title }}</span>
+                  <span class="prole">{{ persona.role }} · {{ persona.model }}</span>
+                </span>
+                <span class="pstat">
+                  @if (persona.currentRun; as run) {
+                    <span
+                      class="led"
+                      [class]="'led ' + runStateClass(run.state)"
+                      aria-hidden="true"
+                    ></span>
+                    <span class="pstat-label">on {{ run.ticketId }}</span>
+                  } @else {
+                    <span class="led run-dim" aria-hidden="true"></span>
+                    <span class="pstat-label">idle</span>
+                  }
+                </span>
               </div>
-              <p class="meta">{{ persona.worker }} · {{ persona.model }}</p>
-              <div class="state">
-                @if (persona.currentRun; as run) {
-                  <span class="chip" [class]="'chip ' + runStateClass(run.state)">on {{ run.ticketId }}</span>
-                } @else {
-                  <span class="chip run-dim">idle</span>
-                }
+              <div class="pfoot">
+                <span>Worker: {{ persona.worker }}</span>
               </div>
             </div>
           }

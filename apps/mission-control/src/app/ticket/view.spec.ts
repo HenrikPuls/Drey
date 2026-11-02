@@ -20,15 +20,16 @@ import {
   gateStepsOf,
   parseChainEntryView,
   patchLineKind,
+  patchRowsOf,
   phaseTitleOf,
   proofOf,
   renderChainEntryView,
   renderChainEntryViews,
   scoutReportOf,
   splitTicketSections,
+  verlaufTextOf,
   type GatePhase,
   type TicketActionReply,
-  type TicketBlockerNote,
   type TicketDiff,
   type TicketDoc,
   type TicketSaveReply,
@@ -47,7 +48,7 @@ interface FakeTicket extends TicketVm {
   phaseColorValue: string | null;
   readOnlyValue: boolean;
   attachmentUrls: ReadonlyMap<string, string>;
-  calls: { accept: number; sendBack: string[]; save: string[]; onClose: number; enterEdit: number; exitEdit: number; reload: number; proposeChain: string[] };
+  calls: { accept: number; sendBack: string[]; save: string[]; onClose: number; enterEdit: number; exitEdit: number; reload: number; proposeChain: string[]; prefillChat: string[] };
   acceptReply: TicketActionReply;
   sendBackReply: TicketActionReply;
   saveReply: TicketSaveReply;
@@ -72,6 +73,7 @@ function makeFake(patch: Partial<FakeTicket> = {}): FakeTicket {
       exitEdit: 0,
       reload: 0,
       proposeChain: [] as string[],
+      prefillChat: [] as string[],
     },
     acceptReply: { ok: true } as TicketActionReply,
     sendBackReply: { ok: true } as TicketActionReply,
@@ -118,6 +120,9 @@ function makeFake(patch: Partial<FakeTicket> = {}): FakeTicket {
     },
     proposeChain(text: string): void {
       this.calls.proposeChain.push(text);
+    },
+    prefillChat(text: string): void {
+      this.calls.prefillChat.push(text);
     },
     save(text: string): Promise<TicketSaveReply> {
       this.calls.save.push(text);
@@ -195,6 +200,13 @@ Tested on 2026-11-01T14:32:00Z by verify@engine — Electron 34.2.0 on win32.
 
 State: done
 
+## Verlauf
+
+\`\`\`yaml
+- {phase: plan, persona: pia, model: opus, tokens: 12k, cost: 0.14, ausgang: handed-over}
+- {phase: verify, persona: tessa, model: sonnet, tokens: 52k, cost: 0.64, ausgang: proof}
+\`\`\`
+
 ## Log
 
 - '2026-10-17T14:32:00Z' owner — created in inbox
@@ -243,20 +255,25 @@ interface TicketSurface {
   id(): string;
   title(): string;
   phaseTitle(): string;
-  priority(): string | null;
-  priorityJump(): boolean;
-  blockers(): TicketBlockerNote | null;
+  persona(): string | null;
+  personaTitle(persona: string): string;
+  cost(): string | null;
+  costTotal(): string | null;
+  fmLine(): string;
   readOnly(): boolean;
   steps(): ReturnType<typeof gateStepsOf>;
   blocks(): readonly unknown[];
   proof(): ReturnType<typeof proofOf> | null;
   report(): ReturnType<typeof scoutReportOf> | null;
+  verlauf(): string | null;
+  verdict(): { passed: number; total: number; stamp: string } | null;
   shots(): readonly { name: string; url: string }[];
   diff(): unknown;
   result(): { kind: 'error' | 'note'; text: string } | null;
   savedFlash(): string | null;
   arm(): { armed: boolean; since: number };
   acceptPending(): boolean;
+  accepted(): boolean;
   acceptTap(): void;
   sendBackOpen(): boolean;
   note(): string;
@@ -264,7 +281,12 @@ interface TicketSurface {
   onNote(event: Event): void;
   toggleSendBack(): void;
   sendBack(): Promise<void>;
+  editing(): boolean;
   toggleEdit(): void;
+  changeByChat(): void;
+  galIndex(): number;
+  onGalScroll(gal: HTMLElement): void;
+  galTo(index: number, gal: HTMLElement): void;
   expanded(): readonly string[];
   isExpanded(path: string): boolean;
   toggleExpanded(path: string): void;
@@ -562,17 +584,22 @@ describe('phaseTitleOf', () => {
 // --- the section splitter ------------------------------------------------------------
 
 describe('splitTicketSections', () => {
-  it('pulls Verification, Changes, Handover and Log out of the generic render', () => {
+  it('pulls Verification, Changes, Handover, Verlauf and Log out of the generic render', () => {
     const sections = splitTicketSections(FULL_TEXT);
     expect(sections.body).toContain('## Description');
     expect(sections.body).toContain('### Acceptance criteria');
     expect(sections.body).toContain('## Result');
     expect(sections.body).not.toContain('Tested on');
     expect(sections.body).not.toContain('created in inbox');
+    expect(sections.body).not.toContain('ausgang');
     expect(sections.verification).toContain('Tested on 2026-11-01T14:32:00Z');
     expect(sections.verification).not.toContain('## Verification');
     expect(sections.changes).toBe('**What changed for you:** The command palette opens once.');
     expect(sections.handover).toBe('State: done');
+    expect(sections.verlauf).toContain('{phase: plan, persona: pia');
+    expect(sections.verlauf).toContain('ausgang: proof');
+    expect(sections.verlauf).toContain('```yaml');
+    expect(sections.verlauf).not.toContain('## Verlauf');
     expect(sections.log).toContain("'2026-10-17T14:32:00Z' owner — created in inbox");
   });
 
@@ -584,10 +611,11 @@ describe('splitTicketSections', () => {
 
   it('matches the special titles case-insensitively and H3 headings ride inside', () => {
     const sections = splitTicketSections(
-      '## verification\n\n- [x] `a`\n\n### Criteria\n\nx\n\n## LOG\n\n- line',
+      '## verification\n\n- [x] `a`\n\n### Criteria\n\nx\n\n## LOG\n\n- line\n\n## VERLAUF\n\n- {a: 1}',
     );
     expect(sections.verification).toContain('### Criteria');
     expect(sections.log).toBe('- line');
+    expect(sections.verlauf).toBe('- {a: 1}');
   });
 
   it('reports absent sections as null and an all-generic file whole in the body', () => {
@@ -597,6 +625,7 @@ describe('splitTicketSections', () => {
     expect(sections.changes).toBeNull();
     expect(sections.handover).toBeNull();
     expect(sections.log).toBeNull();
+    expect(sections.verlauf).toBeNull();
     expect(sections.body).toBe('## Description\n\nOnly this.');
   });
 
@@ -615,6 +644,34 @@ describe('splitTicketSections', () => {
     expect(sections.body).not.toContain('Written on');
     expect(sections.body).not.toContain('D1: Which storage');
     expect(sections.log).toContain('scouted the index question');
+  });
+});
+
+// --- the verlauf box -----------------------------------------------------------------
+
+describe('verlaufTextOf', () => {
+  it('strips the fence from a yaml block and keeps the run lines', () => {
+    expect(verlaufTextOf('```yaml\n- {phase: plan, cost: 0.14}\n- {phase: build}\n```')).toBe(
+      '- {phase: plan, cost: 0.14}\n- {phase: build}',
+    );
+  });
+
+  it('keeps prose sections as written — the engine may start with words', () => {
+    expect(verlaufTextOf('(noch keine Runs — die Idee wartet auf Triage)')).toBe(
+      '(noch keine Runs — die Idee wartet auf Triage)',
+    );
+  });
+
+  it('closes an unterminated fence at the end of the section', () => {
+    expect(verlaufTextOf('```yaml\n- {phase: plan}')).toBe('- {phase: plan}');
+  });
+
+  it('shows the fenced block when prose rides before it', () => {
+    expect(verlaufTextOf('Vorab eine Notiz.\n\n```yaml\n- {a: 1}\n```')).toBe('- {a: 1}');
+  });
+
+  it('tolerates whitespace around the fence marks', () => {
+    expect(verlaufTextOf('  ```\n- {a: 1}\n  ```  ')).toBe('- {a: 1}');
   });
 });
 
@@ -760,6 +817,48 @@ describe('patchLineKind', () => {
   });
 });
 
+describe('patchRowsOf', () => {
+  it('numbers the rows off the hunk heads and signs added and removed', () => {
+    const rows = patchRowsOf(
+      [
+        'diff --git a/a.ts b/a.ts',
+        '--- a/a.ts',
+        '+++ b/a.ts',
+        '@@ -12,3 +12,3 @@',
+        ' context',
+        '-gone',
+        '+here',
+        '\\ No newline at end of file',
+      ].join('\n'),
+    );
+    expect(rows).toEqual([
+      { kind: 'meta', oldNo: null, newNo: null, sign: '', text: 'diff --git a/a.ts b/a.ts' },
+      { kind: 'meta', oldNo: null, newNo: null, sign: '', text: '--- a/a.ts' },
+      { kind: 'meta', oldNo: null, newNo: null, sign: '', text: '+++ b/a.ts' },
+      { kind: 'hunk', oldNo: null, newNo: null, sign: '', text: '@@ -12,3 +12,3 @@' },
+      { kind: 'context', oldNo: 12, newNo: 12, sign: '', text: 'context' },
+      { kind: 'del', oldNo: 13, newNo: null, sign: '−', text: 'gone' },
+      { kind: 'add', oldNo: null, newNo: 13, sign: '+', text: 'here' },
+      { kind: 'meta', oldNo: null, newNo: null, sign: '', text: '\\ No newline at end of file' },
+    ]);
+  });
+
+  it('renders no rows for an empty patch and starts at 1 without a hunk head', () => {
+    expect(patchRowsOf('')).toEqual([]);
+    expect(patchRowsOf('+first\n context')).toEqual([
+      { kind: 'add', oldNo: null, newNo: 1, sign: '+', text: 'first' },
+      { kind: 'context', oldNo: 1, newNo: 2, sign: '', text: 'context' },
+    ]);
+  });
+
+  it('re-seeds the counters at every hunk', () => {
+    const rows = patchRowsOf('@@ -1 +1 @@\n-a\n+b\n@@ -40,2 +42,2 @@\n c');
+    expect(rows[1]).toMatchObject({ kind: 'del', oldNo: 1, newNo: null });
+    expect(rows[2]).toMatchObject({ kind: 'add', oldNo: null, newNo: 1 });
+    expect(rows[4]).toMatchObject({ kind: 'context', oldNo: 40, newNo: 42 });
+  });
+});
+
 // --- the priority chip and the blocker line --------------------------------------
 
 describe('blockerNoteOf', () => {
@@ -770,43 +869,31 @@ describe('blockerNoteOf', () => {
   });
 });
 
-describe('TicketView priority chip and blocker line', () => {
-  it('surfaces the priority id as the label and accents the jump class', () => {
-    // The default order: high sits before the middle, so it jumps.
+describe('TicketView head card', () => {
+  it('reads the persona off the current gate and raises it for display', () => {
+    const doc: TicketDoc = {
+      ...DOC,
+      phase: 'design',
+      chain: [parseChainEntryView('insert design(pia) after build')!],
+    };
+    const vm = surface(setup(makeFake({ docValue: doc })));
+    expect(vm.persona()).toBe('pia');
+    expect(vm.personaTitle('pia')).toBe('Pia');
+    expect(vm.fmLine()).toBe('phase: design · persona: pia');
+  });
+
+  it('stays silent without a persona: the chip and the fm slot drop out', () => {
     const vm = surface(setup(makeFake({ docValue: DOC })));
-    expect(vm.priority()).toBe('high');
-    expect(vm.priorityJump()).toBe(true);
-
-    const calm = surface(setup(makeFake({ docValue: { ...DOC, priority: 'normal' } })));
-    expect(calm.priority()).toBe('normal');
-    expect(calm.priorityJump()).toBe(false);
+    expect(vm.persona()).toBeNull();
+    expect(vm.fmLine()).toBe('phase: verify');
   });
 
-  it('reads the jump class off the configured vocabulary, never a fixed four', () => {
-    const flipped = surface(
-      setup(makeFake({ docValue: { ...DOC, priority: 'low', priorities: ['low', 'normal', 'high', 'urgent'] } })),
-    );
-    expect(flipped.priority()).toBe('low');
-    expect(flipped.priorityJump()).toBe(true);
-
-    const odd = surface(setup(makeFake({ docValue: { ...DOC, priority: 'p0', priorities: ['p0', 'p1', 'p2'] } })));
-    expect(odd.priorityJump()).toBe(true);
-    const mid = surface(setup(makeFake({ docValue: { ...DOC, priority: 'p1', priorities: ['p0', 'p1', 'p2'] } })));
-    expect(mid.priorityJump()).toBe(false);
-    // An id the vocabulary does not know never jumps.
-    const unknown = surface(setup(makeFake({ docValue: { ...DOC, priority: 'zzz' } })));
-    expect(unknown.priorityJump()).toBe(false);
-  });
-
-  it('warns on open blockers and falls back to the declared deps, neutral', () => {
-    const open = surface(setup(makeFake({ docValue: { ...DOC, blocked: ['T-0001', 'T-0003'], blockedBy: ['T-0001'] } })));
-    expect(open.blockers()).toEqual({ kind: 'blocked', ids: ['T-0001', 'T-0003'] });
-
-    const declared = surface(setup(makeFake({ docValue: { ...DOC, blockedBy: ['T-0007'] } })));
-    expect(declared.blockers()).toEqual({ kind: 'depends', ids: ['T-0007'] });
-
-    const none = surface(setup(makeFake({ docValue: DOC })));
-    expect(none.blockers()).toBeNull();
+  it('keeps the cost slots empty until the engine delivers the ledger', () => {
+    const vm = surface(setup(makeFake({ docValue: DOC })));
+    expect(vm.cost()).toBeNull();
+    expect(vm.costTotal()).toBeNull();
+    // The merged chain ships the cost slot on every step, null until filled.
+    expect(vm.steps().every((step) => step.cost === null)).toBe(true);
   });
 });
 
@@ -821,13 +908,12 @@ describe('TicketView', () => {
     expect(vm.steps()).toEqual([]);
     expect(vm.proof()).toBeNull();
     expect(vm.report()).toBeNull();
-    expect(vm.priority()).toBeNull();
-    expect(vm.priorityJump()).toBe(false);
-    expect(vm.blockers()).toBeNull();
+    expect(vm.verlauf()).toBeNull();
+    expect(vm.verdict()).toBeNull();
     expect(vm.savedFlash()).toBeNull();
   });
 
-  it('derives the header, the steps, the body blocks and the proof from the bound doc', () => {
+  it('derives the header, the steps, the body blocks, the proof and the verlauf from the bound doc', () => {
     const vm = surface(setup(makeFake({ docValue: FULL_DOC })));
     expect(vm.isEmpty()).toBe(false);
     expect(vm.id()).toBe('T-0042');
@@ -843,6 +929,16 @@ describe('TicketView', () => {
     ]);
     expect(vm.proof()?.criteria).toHaveLength(2);
     expect(vm.proof()?.findings).toEqual(['The settings page stayed blank until the reload.']);
+    // The Verlauf chapter left the body and arrives fence-stripped in its box.
+    expect(vm.verlauf()).toBe(
+      '- {phase: plan, persona: pia, model: opus, tokens: 12k, cost: 0.14, ausgang: handed-over}\n'
+        + '- {phase: verify, persona: tessa, model: sonnet, tokens: 52k, cost: 0.64, ausgang: proof}',
+    );
+    expect(vm.verdict()).toEqual({
+      passed: 1,
+      total: 2,
+      stamp: 'Tested on 2026-11-01T14:32:00Z by verify@engine — Electron 34.2.0 on win32.',
+    });
   });
 
   it('falls back to the id when the title is blank and to the phase id off the pipeline', () => {
@@ -1010,7 +1106,7 @@ describe('TicketView', () => {
     expect(vm.isEmpty()).toBe(false);
   });
 
-  it('expands one diff file at a time and keeps the font size across fullscreen', () => {
+  it('opens the first diff file by default and then follows the taps', () => {
     const diff = {
       files: [
         {
@@ -1028,10 +1124,16 @@ describe('TicketView', () => {
     const vm = surface(setup(fake));
     expect(vm.diff()).toEqual(diff);
 
-    vm.toggleExpanded('src/a.ts');
+    // The prototype's first-open: file one starts expanded, the rest closed.
     expect(vm.isExpanded('src/a.ts')).toBe(true);
     expect(vm.isExpanded('src/b.ts')).toBe(false);
+
+    // The first tap retires the implicit seed and owns the state from there.
     vm.toggleExpanded('src/a.ts');
+    expect(vm.isExpanded('src/a.ts')).toBe(false);
+    expect(vm.isExpanded('src/b.ts')).toBe(false);
+    vm.toggleExpanded('src/b.ts');
+    expect(vm.isExpanded('src/b.ts')).toBe(true);
     expect(vm.isExpanded('src/a.ts')).toBe(false);
 
     vm.openFullscreen(diff.files[0], tapEvent());
@@ -1043,5 +1145,80 @@ describe('TicketView', () => {
     vm.closeFullscreen();
     expect(vm.fullscreen()).toBeNull();
     expect(vm.fontSize()).toBe(15);
+  });
+
+  it('prefills the chat with the ticket context through the vm prefill path', () => {
+    const fake = makeFake({ docValue: DOC });
+    const vm = surface(setup(fake));
+    vm.changeByChat();
+    expect(fake.calls.prefillChat).toEqual(['T-0042: ']);
+    expect(fake.calls.proposeChain).toEqual([]);
+  });
+
+  it('falls back to the chain prefill path while the vm ships no prefillChat', () => {
+    const fake = makeFake({ docValue: DOC, prefillChat: undefined });
+    const vm = surface(setup(fake));
+    vm.changeByChat();
+    expect(fake.calls.proposeChain).toEqual(['T-0042: ']);
+  });
+
+  it('swaps the actions for the mint done ring once the accept lands', async () => {
+    const fake = makeFake({ docValue: FULL_DOC });
+    const vm = surface(setup(fake));
+    expect(vm.accepted()).toBe(false);
+
+    vm.acceptTap();
+    vm.acceptTap();
+    await Promise.resolve();
+    expect(fake.calls.accept).toBe(1);
+    expect(vm.accepted()).toBe(true);
+    expect(vm.result()).toEqual({ kind: 'note', text: 'Accepted.' });
+
+    const refusing = makeFake({ docValue: FULL_DOC, acceptReply: { ok: false, error: 'the gate is red' } });
+    const vm2 = surface(setup(refusing));
+    vm2.acceptTap();
+    vm2.acceptTap();
+    await Promise.resolve();
+    expect(vm2.accepted()).toBe(false);
+    expect(vm2.result()).toEqual({ kind: 'error', text: 'the gate is red' });
+  });
+
+  it('syncs the gallery dots with the scroll position and taps back', () => {
+    const galleryText = `---
+id: T-0044
+title: 'Three shots'
+---
+
+## Verification
+
+- [x] \`one\` → ![](../attachments/s1.png)
+- [x] \`two\` → ![](../attachments/s2.png)
+- [x] \`three\` → ![](../attachments/s3.png)
+`;
+    const fake = makeFake({
+      docValue: { ...DOC, id: 'T-0044', text: galleryText },
+    });
+    fake.attachmentUrls = new Map([
+      ['s1.png', '/api/attachments/s1.png'],
+      ['s2.png', '/api/attachments/s2.png'],
+      ['s3.png', '/api/attachments/s3.png'],
+    ]);
+    const vm = surface(setup(fake));
+    expect(vm.shots()).toHaveLength(3);
+    const gal = {
+      scrollLeft: 0,
+      scrollWidth: 900,
+      clientWidth: 300,
+      scrollTo: () => undefined,
+    } as unknown as HTMLElement;
+    vm.onGalScroll(gal);
+    expect(vm.galIndex()).toBe(0);
+
+    const wide = { ...gal, scrollLeft: 640 } as unknown as HTMLElement;
+    vm.onGalScroll(wide);
+    expect(vm.galIndex()).toBe(2);
+
+    vm.galTo(1, gal);
+    expect(vm.galIndex()).toBe(1);
   });
 });

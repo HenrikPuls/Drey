@@ -138,6 +138,8 @@ export interface PersonaView {
 
 export interface TeamView {
   readonly personas: readonly PersonaView[];
+  /** The fleet's runs with their raw state — the work tab counts the live ones. */
+  readonly runs: readonly { readonly state: string | null }[];
 }
 
 // --- Persona improvements (E6) ------------------------------------------------
@@ -595,7 +597,12 @@ export function parseTeam(personasJson: unknown, fleetJson: unknown): TeamView {
       currentRun: liveRun === null || liveRun === undefined || state === null ? null : { ticketId: str(liveRun['ticketId']), state },
     });
   }
-  return { personas };
+  return {
+    personas,
+    runs: runs
+      .map((run) => rec(run))
+      .map((run) => ({ state: run !== null && typeof run['state'] === 'string' ? run['state'] : null })),
+  };
 }
 
 /** The proposal's state; anything the desk got wrong degrades to open, never a guess. */

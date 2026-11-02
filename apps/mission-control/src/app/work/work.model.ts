@@ -10,7 +10,12 @@
  * guess.
  */
 import { InjectionToken } from '@angular/core';
-import { DEFAULT_PRIORITY_CONFIG, isJumpPriority, parsePriorities, type McPriorityConfig } from '../api/dto';
+import {
+  DEFAULT_PRIORITY_CONFIG,
+  isJumpPriority,
+  parsePriorities,
+  type McPriorityConfig,
+} from '../api/dto';
 
 // --- the consumed device-state surface ---------------------------------------
 
@@ -80,6 +85,17 @@ export interface McTicket {
   readonly summary?: string | null;
   /** The OPEN blockers (derived); non-empty drives the blocked marker. */
   readonly blocked?: readonly string[];
+  /**
+   * The runs' accumulated cost in dollars, when the desk sends it; absent
+   * (the wire carries none today) hides the card's cost slot — a missing
+   * number never renders as a 0-fake.
+   */
+  readonly cost?: number | null;
+  /**
+   * The live run's context fill in percent, when the desk sends it; absent
+   * hides the card's ctx bar the same way.
+   */
+  readonly ctx?: number | null;
   readonly meta: McTicketMeta;
 }
 
@@ -109,6 +125,15 @@ export interface McBoard {
    * tolerantly when the groups map; the default list when absent or junk.
    */
   readonly priorities?: McPriorityConfig;
+  /**
+   * The vault's display name (the board snapshot's `vaultName`, the
+   * initialized vault), read tolerantly; the header's mono sub shows it —
+   * absent on an uninitialized vault, where `activeVaultName` may still
+   * name the folder.
+   */
+  readonly vaultName?: string | null;
+  /** The active vault folder's name; the sub's fallback when `vaultName` is blank. */
+  readonly activeVaultName?: string | null;
 }
 
 /** The team tab's persona slice; work cards only need id/title/color. */
@@ -126,9 +151,21 @@ export interface McMoveResult {
 }
 
 /**
+ * One fleet run as the header's Fleet chip counts it — the tolerant slice
+ * of the `/api/fleet` runs list the adapter may expose; the card itself
+ * never needs a run's ticket or persona.
+ */
+export interface McRun {
+  readonly state?: string | null;
+}
+
+/**
  * Exactly what the work tab consumes of the device state. The api
  * module's `McState` is bound to `MC_WORK_STATE` by the shell; the tab
- * also renders a "not connected" note when nothing is bound.
+ * also renders a "not connected" note when nothing is bound. The optional
+ * members (`runs`, `toast`) are tolerant: an adapter that lacks them keeps
+ * the tab whole — the Fleet chip then shows its idle face and a tap stays
+ * silent.
  */
 export interface McWorkState {
   readonly needs: readonly McNeed[];
@@ -136,6 +173,12 @@ export interface McWorkState {
   readonly personas: readonly McPersona[];
   /** Read-only paired devices watch but never mutate: the move hides. */
   readonly readOnly: boolean;
+  /**
+   * The fleet's live runs, folded in by the adapter (the same snapshot the
+   * Team tab reads); absent or null = no run data in the state — the chip
+   * degrades to its idle face instead of guessing a count.
+   */
+  readonly runs?: readonly McRun[] | null;
   moveTicket(ticketId: string, phaseId: string): Promise<McMoveResult>;
   /** Opens the ticket screen (E5c); absent = the sheet hides the button. */
   openTicket?(ticketId: string): void;
@@ -153,6 +196,12 @@ export interface McWorkState {
    * a title or an id.
    */
   openPersona?(personaTitleOrId: string): void;
+  /**
+   * A transient status note (the prototype's toast pill); absent = the
+   * tab skips the nicety silently. The kind picks the accent (the api
+   * module's ToastKind).
+   */
+  toast?(message: string, kind?: 'ok' | 'warn' | 'error'): void;
 }
 
 export const MC_WORK_STATE = new InjectionToken<McWorkState>('mc.work-state');
@@ -174,8 +223,16 @@ export interface TicketVm {
   readonly phaseColor: string | null;
   /** Resolved from the persona map; null = no pin or an unknown persona. */
   readonly persona: McPersona | null;
+  /** The persona chip's initial; null when no persona resolves. */
+  readonly personaInitial: string | null;
   readonly flagged: boolean;
   readonly blocked: boolean;
+  /** The blocker ids the statline names (`wartet auf …`); non-empty exactly when blocked. */
+  readonly blockers: readonly string[];
+  /** The cost slot's label (`0,44 $`); null = the desk sent none — the slot stays hidden. */
+  readonly costLabel: string | null;
+  /** The ctx bar's percent (1–100); null = no data, the slot stays hidden. */
+  readonly ctxPercent: number | null;
 }
 
 /**
@@ -186,7 +243,7 @@ export type WorkGroup =
   | {
       readonly kind: 'needs';
       readonly key: 'needs';
-      readonly title: 'Needs you';
+      readonly title: 'Braucht dich';
       readonly needs: readonly NeedVm[];
     }
   | {
@@ -232,13 +289,92 @@ export function displayTitleOf(ticket: McTicket): string {
  * flags whatever the vault puts before its own middle — and an unknown
  * id never flags.
  */
-export function isFlaggedTicket(ticket: McTicket, config: McPriorityConfig = DEFAULT_PRIORITY_CONFIG): boolean {
+export function isFlaggedTicket(
+  ticket: McTicket,
+  config: McPriorityConfig = DEFAULT_PRIORITY_CONFIG,
+): boolean {
   return isJumpPriority(ticket.meta.priority ?? null, config.order);
 }
 
 /** The blocked marker: open blockers as derived, else the raw `blocked-by` list. */
 export function isBlockedTicket(ticket: McTicket): boolean {
   return (ticket.blocked?.length ?? 0) > 0 || (ticket.meta.blockedBy?.length ?? 0) > 0;
+}
+
+/**
+ * The blocker ids the statline names: the derived OPEN blockers when the
+ * desk sent them, else the raw `blocked-by` ids as written. Empty = the
+ * card is not blocked (or blocked with no readable ids).
+ */
+export function blockerIdsOf(ticket: McTicket): readonly string[] {
+  return (ticket.blocked?.length ?? 0) > 0 ? (ticket.blocked ?? []) : (ticket.meta.blockedBy ?? []);
+}
+
+/**
+ * The cost slot's label; null unless the desk sent a usable positive
+ * number — absent, zero and junk hide the slot instead of faking a 0.
+ */
+export function costLabelOf(cost: number | null | undefined): string | null {
+  return typeof cost === 'number' && Number.isFinite(cost) && cost > 0
+    ? `${cost.toFixed(2).replace('.', ',')} $`
+    : null;
+}
+
+/**
+ * The ctx bar's percent, rounded; null unless the desk sent a usable
+ * 1–100 number — 0 and out-of-range junk hide the bar, never fake it.
+ */
+export function ctxPercentOf(ctx: number | null | undefined): number | null {
+  if (typeof ctx !== 'number' || !Number.isFinite(ctx)) {
+    return null;
+  }
+  const percent = Math.round(ctx);
+  return percent >= 1 && percent <= 100 ? percent : null;
+}
+
+/** The persona chip's initial: the title's first character, uppercased. */
+export function personaInitialOf(title: string): string {
+  return title.trim().charAt(0).toUpperCase();
+}
+
+/** The header's mono sub: the board's vault name, the folder name as fallback. */
+export function vaultTitleOf(board: McBoard | null): string | null {
+  for (const name of [board?.vaultName, board?.activeVaultName]) {
+    const trimmed = typeof name === 'string' ? name.trim() : '';
+    if (trimmed !== '') {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+/**
+ * The run states that mean "live" — mirrored from the api module's
+ * `LIVE_RUN_STATES` (`starting`/`running`/`stopping`/`detached`); the
+ * rest is history and never counts.
+ */
+const LIVE_RUN_STATES: readonly string[] = ['starting', 'running', 'stopping', 'detached'];
+
+/**
+ * The Fleet chip's live-run count; null = no run data in the state (the
+ * chip degrades to its idle face), 0 = data present, nothing live.
+ */
+export function liveRunCountOf(runs: readonly McRun[] | null | undefined): number | null {
+  if (runs === null || runs === undefined) {
+    return null;
+  }
+  let count = 0;
+  for (const run of runs) {
+    if (run.state !== null && run.state !== undefined && LIVE_RUN_STATES.includes(run.state)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+/** The chip's label: the count when run data exist, the bare word when not. */
+export function fleetLabelOf(count: number | null): string {
+  return count === null ? 'Fleet' : `${count} aktiv`;
 }
 
 /** Persona id → persona; the ticket's persona pin resolves here. */
@@ -266,6 +402,7 @@ function ticketVmOf(
   config: McPriorityConfig,
 ): TicketVm {
   const personaId = ticket.meta.persona ?? null;
+  const persona = personaId === null ? null : (personas.get(personaId) ?? null);
   return {
     ticket,
     id: ticket.id,
@@ -273,9 +410,13 @@ function ticketVmOf(
     phaseId: column.phase.id,
     phaseTitle: column.phase.title,
     phaseColor: column.phase.color ?? null,
-    persona: personaId === null ? null : (personas.get(personaId) ?? null),
+    persona,
+    personaInitial: persona === null ? null : personaInitialOf(persona.title),
     flagged: isFlaggedTicket(ticket, config),
     blocked: isBlockedTicket(ticket),
+    blockers: blockerIdsOf(ticket),
+    costLabel: costLabelOf(ticket.cost),
+    ctxPercent: ctxPercentOf(ticket.ctx),
   };
 }
 
@@ -297,7 +438,7 @@ export function groupsOf(
     groups.push({
       kind: 'needs',
       key: 'needs',
-      title: 'Needs you',
+      title: 'Braucht dich',
       needs: needs.map((need, index) => ({
         key: needKeyOf(need, index),
         need,

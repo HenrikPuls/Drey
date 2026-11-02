@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { type Signal, type WritableSignal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { ActiveSession, ChatMessageView, ChatStateView, McChainEntry, WorkView } from '../api/dto';
+import type { ActiveSession, ChatMessageView, ChatProposalView, ChatStateView, McChainEntry, WorkView } from '../api/dto';
 import { DEFAULT_PRIORITY_CONFIG } from '../api/dto';
 import type { McState } from '../api/state';
 import {
@@ -9,11 +9,16 @@ import {
   MC_CHAT_STATE,
   TimelineProposal,
   TimelineSession,
+  cardPriorityOf,
   chainCompareOf,
   composerRowsOf,
   errorOf,
   isTurnStreaming,
+  phaseDirOf,
+  proposalDetailOf,
   relativeAge,
+  thinkFoldLabel,
+  thinkSecondsLabel,
   timelineOf,
 } from './chat';
 
@@ -27,9 +32,15 @@ function proposal(
   id: string,
   state: 'pending' | 'confirmed' | 'dismissed',
   at?: string,
-  options: { decidedAt?: string | null; outcome?: string | null } = {},
+  options: { decidedAt?: string | null; outcome?: string | null; summary?: string; chain?: TimelineProposal['chain'] } = {},
 ): TimelineProposal {
-  const item: TimelineProposal = { id, state, summary: `summary ${id}`, outcome: options.outcome ?? null };
+  const item: TimelineProposal = {
+    id,
+    state,
+    summary: options.summary ?? `summary ${id}`,
+    outcome: options.outcome ?? null,
+    ...(options.chain !== undefined ? { chain: options.chain } : {}),
+  };
   if (at !== undefined) {
     (item as { at?: string }).at = at;
   }
@@ -237,6 +248,137 @@ describe('errorOf', () => {
   });
 });
 
+// -- proposalDetailOf: the rich cards' fields off the summary sentence ---------
+
+describe('proposalDetailOf', () => {
+  it('reads a transition card’s id, from and to', () => {
+    expect(proposalDetailOf('Move T-0086 from build to verify')).toEqual({
+      kind: 'transition',
+      id: 'T-0086',
+      from: 'build',
+      to: 'verify',
+    });
+  });
+
+  it('reads a create card’s title and phase', () => {
+    expect(proposalDetailOf('Create ticket "Wochenkosten als CSV" in ideas')).toEqual({
+      kind: 'create',
+      title: 'Wochenkosten als CSV',
+      phase: 'ideas',
+    });
+  });
+
+  it('reads a blocked-by card’s id list', () => {
+    expect(proposalDetailOf('Block T-0002 by T-0001, T-0003')).toEqual({
+      kind: 'blocked',
+      id: 'T-0002',
+      ids: ['T-0001', 'T-0003'],
+    });
+  });
+
+  it('reads a cleared blockers card as the empty id list', () => {
+    expect(proposalDetailOf('Clear T-0002 blockers')).toEqual({ kind: 'blocked', id: 'T-0002', ids: [] });
+  });
+
+  it('reads a setPriority card’s target priority', () => {
+    expect(proposalDetailOf('Set T-0086 priority to urgent')).toEqual({
+      kind: 'priority',
+      id: 'T-0086',
+      to: 'urgent',
+    });
+  });
+
+  it('reads a promote card’s ticket id', () => {
+    expect(proposalDetailOf('Promote T-0090 to a ship ticket')).toEqual({ kind: 'promote', id: 'T-0090' });
+  });
+
+  it('returns null for anything the engine does not mint — the summary line shows', () => {
+    expect(proposalDetailOf('Set T-0086 chain to 2 entries')).toBeNull();
+    expect(proposalDetailOf('Return T-0086 to the standard flow')).toBeNull();
+    expect(proposalDetailOf('')).toBeNull();
+    expect(proposalDetailOf('Create ticket without quotes in ideas')).toBeNull();
+  });
+});
+
+// -- phaseDirOf: the create diffbox's directory ---------------------------------
+
+describe('phaseDirOf', () => {
+  const board = {
+    columns: [
+      {
+        phase: { id: 'inbox', title: 'Inbox' },
+        tickets: [{ id: 'T-0001', path: 'tickets/10-inbox/T-0001.md' }],
+      },
+      {
+        phase: { id: 'build', title: 'Build' },
+        tickets: [{ id: 'T-0002', path: 'tickets/25-build/T-0002.md' }],
+      },
+      { phase: { id: 'ideas', title: 'Ideas' }, tickets: [] },
+    ],
+  };
+
+  it('reuses the directory a sibling ticket in the phase sits in', () => {
+    expect(phaseDirOf(board, 'build')).toBe('25-build');
+  });
+
+  it('derives the NN-id name when the phase has no sibling yet', () => {
+    expect(phaseDirOf(board, 'ideas')).toBe('30-ideas');
+  });
+
+  it('returns null for a phase the board does not know — no path line', () => {
+    expect(phaseDirOf(board, 'archive')).toBeNull();
+    expect(phaseDirOf(null, 'ideas')).toBeNull();
+    expect(phaseDirOf(board, '')).toBeNull();
+  });
+});
+
+// -- cardPriorityOf: the priority card's "from" side -----------------------------
+
+describe('cardPriorityOf', () => {
+  const board = {
+    columns: [
+      {
+        phase: { id: 'build', title: 'Build' },
+        tickets: [
+          { id: 'T-0001', meta: { priority: 'high' } },
+          { id: 'T-0002', meta: {} },
+        ],
+      },
+    ],
+  };
+
+  it('reads the ticket’s current priority off the board', () => {
+    expect(cardPriorityOf(board, 'T-0001')).toBe('high');
+  });
+
+  it('is null without a readable priority or a missing card', () => {
+    expect(cardPriorityOf(board, 'T-0002')).toBeNull();
+    expect(cardPriorityOf(board, 'T-9999')).toBeNull();
+    expect(cardPriorityOf(null, 'T-0001')).toBeNull();
+  });
+});
+
+// -- the thinking trace's fold ------------------------------------------------------
+
+describe('think fold labels', () => {
+  it('formats the measured window as German seconds with one decimal', () => {
+    expect(thinkSecondsLabel(1_000, 3_400)).toBe('2,4 s');
+    expect(thinkSecondsLabel(0, 10_050)).toBe('10,1 s');
+  });
+
+  it('is null while the window is not measurable', () => {
+    expect(thinkSecondsLabel(null, 1_000)).toBeNull();
+    expect(thinkSecondsLabel(1_000, null)).toBeNull();
+    expect(thinkSecondsLabel(2_000, 1_000)).toBeNull();
+    // Text arrived with the thought: nothing measurable happened.
+    expect(thinkSecondsLabel(1_000, 1_050)).toBeNull();
+  });
+
+  it('folds with the duration when measured, else without seconds', () => {
+    expect(thinkFoldLabel(null)).toBe('Gedacht');
+    expect(thinkFoldLabel('2,4 s')).toBe('Gedacht · 2,4 s');
+  });
+});
 
 // -- the constructor's prefill adoption (E8) --------------------------------------
 
@@ -257,7 +399,7 @@ describe('Chat prefill adoption (E8)', () => {
   // the class directly, so expose it through one typed lens.
   interface ChatSurface {
     draft(): string;
-    viewMode(): 'list' | 'composer' | 'session';
+    viewMode(): 'empty' | 'composer' | 'session';
   }
 
   function setup(fake: FakeChatState): { vm: ChatSurface; fake: FakeChatState } {
@@ -269,10 +411,10 @@ describe('Chat prefill adoption (E8)', () => {
     return { vm: chat as unknown as ChatSurface, fake };
   }
 
-  it('opens on the session list when nothing waits', () => {
+  it('opens empty when nothing waits', () => {
     const { vm, fake } = setup(fakeState(null));
     expect(vm.draft()).toBe('');
-    expect(vm.viewMode()).toBe('list');
+    expect(vm.viewMode()).toBe('empty');
     expect(fake.chatPrefill()).toBeNull();
   });
 
@@ -413,8 +555,7 @@ describe('Chat setChain before/after card (E9)', () => {
 
   it('renders a setBlockedBy proposal by its summary alone — no chain compare', () => {
     // The card's compare strips exist for setChain only; a setBlockedBy
-    // command (the block/unblock proposal) carries no gate delta, so the
-    // generic rendering shows the summary line alone.
+    // command carries no gate delta, so the rich body reads the summary.
     const vm = setup(fakeState(BOARD, WORK));
     const setBlockedBy: TimelineProposal = {
       id: 'p-3',
@@ -438,5 +579,371 @@ describe('Chat setChain before/after card (E9)', () => {
     expect(compare).not.toBeNull();
     expect(compare!.before.every((step) => !step.skipped)).toBe(true);
     expect(compare!.after.find((step) => step.id === 'build')?.notify).toBe(true);
+  });
+});
+
+// -- the cards' kickers (the mono .ck labels) ---------------------------------------
+
+describe('Chat card kickers', () => {
+  function setup(chatView: ChatStateView): { vm: CardSurface } {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: MC_CHAT_STATE,
+          useValue: {
+            chatPrefill: signal(null),
+            chat: signal<ChatStateView>(chatView),
+            board: signal(null),
+            work: signal<WorkView>({ groups: [], priorities: DEFAULT_PRIORITY_CONFIG }),
+          } as unknown as McState,
+        },
+      ],
+    });
+    return { vm: TestBed.runInInjectionContext(() => new Chat()) as unknown as CardSurface };
+  }
+
+  interface CardSurface {
+    ckOf(proposal: TimelineProposal): string;
+    ckDoneOf(proposal: TimelineProposal): string;
+  }
+
+  it('labels each kind’s pending card', () => {
+    const { vm } = setup({ sessions: [], active: null });
+    expect(vm.ckOf(proposal('p-1', 'pending', undefined, { chain: { id: 'T-1', chain: [] } }))).toBe('T-1 · Kette');
+    expect(vm.ckOf(proposal('p-2', 'pending', undefined, { summary: 'Move T-0086 from build to verify' }))).toBe(
+      'Übergang · Bestätigung',
+    );
+    expect(vm.ckOf(proposal('p-3', 'pending', undefined, { summary: 'Create ticket "CSV" in ideas' }))).toBe(
+      'Neues Ticket · Bestätigung',
+    );
+    expect(vm.ckOf(proposal('p-4', 'pending', undefined, { summary: 'Block T-0002 by T-0001' }))).toBe(
+      'Blocker · Bestätigung',
+    );
+    expect(vm.ckOf(proposal('p-5', 'pending', undefined, { summary: 'Set T-0086 priority to urgent' }))).toBe(
+      'Priorität · Bestätigung',
+    );
+    expect(vm.ckOf(proposal('p-6', 'pending', undefined, { summary: 'Promote T-0090 to a ship ticket' }))).toBe(
+      'Promote · Bestätigung',
+    );
+    expect(vm.ckOf(proposal('p-7', 'pending'))).toBe('Bestätigung nötig');
+  });
+
+  it('labels the done card — the create announces itself as angelegt', () => {
+    const { vm } = setup({ sessions: [], active: null });
+    expect(vm.ckDoneOf(proposal('p-1', 'confirmed', undefined, { summary: 'Create ticket "CSV" in ideas' }))).toBe(
+      'Angelegt',
+    );
+    expect(vm.ckDoneOf(proposal('p-2', 'confirmed', undefined, { summary: 'Move T-1 from build to verify' }))).toBe(
+      'Bestätigt',
+    );
+  });
+});
+
+// -- decisions: dismiss dim + toasts, confirm outcome toast -------------------------
+
+describe('Chat card decisions (toasts)', () => {
+  interface DecisionFakeState {
+    chatPrefill: WritableSignal<string | null>;
+    chat: WritableSignal<ChatStateView>;
+    board: Signal<unknown>;
+    work: Signal<WorkView>;
+    toasts: [string, string | undefined][];
+    toast(message: string, kind?: string): void;
+    openSession(file: string): Promise<void>;
+    confirm(file: string, id: string): Promise<unknown>;
+    dismiss(file: string, id: string): Promise<unknown>;
+    send(text: string): Promise<unknown>;
+    newSession(text: string): Promise<unknown>;
+  }
+
+  function view(extra: Partial<ChatProposalView> & { id: string }): ChatProposalView {
+    return {
+      state: 'pending',
+      summary: 'Move T-0086 from build to verify',
+      at: '2026-11-02T09:00:00Z',
+      decidedAt: null,
+      outcome: null,
+      ...extra,
+    } as ChatProposalView;
+  }
+
+  function activeOf(file: string, proposals: readonly ChatProposalView[]): ActiveSession {
+    return { file, title: file, createdAt: '', messages: [], proposals };
+  }
+
+  function fakeState(
+    active: ActiveSession | null,
+    hooks: { confirm?: (file: string, id: string) => unknown; dismiss?: (file: string, id: string) => unknown } = {},
+  ): DecisionFakeState {
+    const toasts: [string, string | undefined][] = [];
+    const state: DecisionFakeState = {
+      toasts,
+      chatPrefill: signal(null),
+      chat: signal<ChatStateView>({ sessions: [], active }),
+      board: signal(null),
+      work: signal<WorkView>({ groups: [], priorities: DEFAULT_PRIORITY_CONFIG }),
+      toast: (message, kind) => toasts.push([message, kind]),
+      openSession: (file) => {
+        state.chat.update((chat) => ({ ...chat, active: activeOf(file, []) }));
+        return Promise.resolve();
+      },
+      confirm: (file, id) =>
+        Promise.resolve(
+          hooks.confirm !== undefined
+            ? hooks.confirm(file, id)
+            : (() => {
+                state.chat.update((chat) => {
+                  const open = chat.active;
+                  if (open === null) {
+                    return chat;
+                  }
+                  const proposals = open.proposals.map((p) =>
+                    p.id === id ? { ...p, state: 'confirmed' as const, decidedAt: '2026-11-02T09:01:00Z' } : p,
+                  );
+                  return { ...chat, active: { ...open, proposals } };
+                });
+                return { ok: true };
+              })(),
+        ),
+      dismiss: (file, id) =>
+        Promise.resolve(
+          hooks.dismiss !== undefined
+            ? hooks.dismiss(file, id)
+            : (() => {
+                state.chat.update((chat) => {
+                  const open = chat.active;
+                  if (open === null) {
+                    return chat;
+                  }
+                  const proposals = open.proposals.map((p) =>
+                    p.id === id ? { ...p, state: 'dismissed' as const, decidedAt: '2026-11-02T09:01:00Z' } : p,
+                  );
+                  return { ...chat, active: { ...open, proposals } };
+                });
+                return { ok: true };
+              })(),
+        ),
+      send: () => Promise.resolve({ ok: true }),
+      newSession: () => Promise.resolve({ ok: true }),
+    };
+    return state;
+  }
+
+  interface DecisionSurface {
+    confirm(id: string): Promise<void>;
+    dismiss(id: string): Promise<void>;
+    isDimmed(id: string): boolean;
+    cardError(id: string): string | null;
+    readOnly(): boolean;
+    toasts(): readonly [string, string | undefined][];
+  }
+
+  function setup(fake: DecisionFakeState, active: ActiveSession): DecisionSurface {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [{ provide: MC_CHAT_STATE, useValue: fake as unknown as McState }],
+    });
+    fake.chat.set({ sessions: [], active });
+    const chat = TestBed.runInInjectionContext(() => new Chat());
+    const surface = chat as unknown as DecisionSurface & { toasts: [string, string | undefined][] };
+    return {
+      confirm: (id) => surface.confirm(id),
+      dismiss: (id) => surface.dismiss(id),
+      isDimmed: (id) => surface.isDimmed(id),
+      cardError: (id) => surface.cardError(id),
+      readOnly: () => surface.readOnly(),
+      toasts: () => fake.toasts,
+    };
+  }
+
+  it('dismiss dims the card at once and toasts that nothing changed', async () => {
+    const fake = fakeState(null);
+    const vm = setup(fake, activeOf('s.md', [view({ id: 'p-1' })]));
+    await vm.dismiss('p-1');
+    expect(vm.isDimmed('p-1')).toBe(true);
+    expect(vm.toasts()).toContainEqual(['Verworfen — nichts wurde geändert', 'warn']);
+  });
+
+  it('a refused dismiss lifts the dim and stays on the card, without the toast', async () => {
+    const fake = fakeState(null, { dismiss: () => ({ ok: false, error: 'already decided' }) });
+    const vm = setup(fake, activeOf('s.md', [view({ id: 'p-1' })]));
+    await vm.dismiss('p-1');
+    expect(vm.isDimmed('p-1')).toBe(false);
+    expect(vm.cardError('p-1')).toBe('already decided');
+    expect(vm.toasts()).toEqual([]);
+  });
+
+  it('confirm toasts the engine’s outcome line with the commit reference', async () => {
+    const fake = fakeState(null, {
+      confirm: (_file, id) => {
+        fake.chat.update((chat) => {
+          const open = chat.active;
+          if (open === null) {
+            return chat;
+          }
+          const proposals = open.proposals.map((p) =>
+            p.id === id
+              ? { ...p, state: 'confirmed' as const, outcome: 'tickets/40-verify/T-0086-plan.md' }
+              : p,
+          );
+          return { ...chat, active: { ...open, proposals } };
+        });
+        return { ok: true };
+      },
+    });
+    const vm = setup(fake, activeOf('s.md', [view({ id: 'p-1' })]));
+    await vm.confirm('p-1');
+    expect(vm.toasts()).toContainEqual(['Bestätigt — tickets/40-verify/T-0086-plan.md (Commit)', 'ok']);
+  });
+
+  it('confirm without an outcome toasts plain', async () => {
+    const fake = fakeState(null);
+    const vm = setup(fake, activeOf('s.md', [view({ id: 'p-1' })]));
+    await vm.confirm('p-1');
+    expect(vm.toasts()).toContainEqual(['Bestätigt', 'ok']);
+  });
+});
+
+// -- the sessions sheet: live vs read-only -----------------------------------------
+
+describe('Chat sessions sheet (read-only views)', () => {
+  interface SheetFakeState {
+    chatPrefill: WritableSignal<string | null>;
+    chat: WritableSignal<ChatStateView>;
+    board: Signal<unknown>;
+    work: Signal<WorkView>;
+    toasts: [string, string | undefined][];
+    toast(message: string, kind?: string): void;
+    openSession(file: string): Promise<void>;
+    send(text: string): Promise<unknown>;
+    newSession(text: string): Promise<unknown>;
+  }
+
+  function fakeState(sessions: readonly { file: string; title: string }[]): SheetFakeState {
+    const toasts: [string, string | undefined][] = [];
+    const metas = sessions.map((s) => ({ ...s, createdAt: '', updatedAt: '', pending: 0 }));
+    const state: SheetFakeState = {
+      toasts,
+      chatPrefill: signal(null),
+      chat: signal<ChatStateView>({ sessions: metas, active: null }),
+      board: signal(null),
+      work: signal<WorkView>({ groups: [], priorities: DEFAULT_PRIORITY_CONFIG }),
+      toast: (message, kind) => toasts.push([message, kind]),
+      openSession: (file) => {
+        const meta = metas.find((m) => m.file === file);
+        state.chat.update((chat) => ({
+          ...chat,
+          active: meta === undefined ? null : { ...meta, messages: [], proposals: [] },
+        }));
+        return Promise.resolve();
+      },
+      send: vi.fn(() => Promise.resolve({ ok: true })),
+      newSession: vi.fn(() => Promise.resolve({ ok: true })),
+    };
+    return state;
+  }
+
+  interface SheetSurface {
+    openFromSheet(entry: { file: string; title: string }): Promise<void>;
+    liveEntry(): { file: string; title: string } | null;
+    readOnly(): boolean;
+    sheetError(): string | null;
+    sheetOpen(): boolean;
+    toasts(): readonly [string, string | undefined][];
+    send(): Promise<void>;
+  }
+
+  function setup(fake: SheetFakeState): SheetSurface {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [{ provide: MC_CHAT_STATE, useValue: fake as unknown as McState }],
+    });
+    const chat = TestBed.runInInjectionContext(() => new Chat()) as unknown as {
+      openFromSheet(entry: { file: string; title: string }): Promise<void>;
+      liveEntry(): { file: string; title: string } | null;
+      readOnly(): boolean;
+      sheetError(): string | null;
+      sheetOpen(): boolean;
+      draft: WritableSignal<string>;
+      send(): Promise<void>;
+    };
+    return {
+      openFromSheet: (entry) => chat.openFromSheet(entry),
+      liveEntry: () => chat.liveEntry(),
+      readOnly: () => chat.readOnly(),
+      sheetError: () => chat.sheetError(),
+      sheetOpen: () => chat.sheetOpen(),
+      toasts: () => fake.toasts,
+      send: () => {
+        chat.draft.set('hello');
+        return chat.send();
+      },
+    };
+  }
+
+  it('the first opened session becomes the live one — continuable, quiet', async () => {
+    const fake = fakeState([
+      { file: 'a.md', title: 'A' },
+      { file: 'b.md', title: 'B' },
+    ]);
+    const vm = setup(fake);
+    await vm.openFromSheet({ file: 'a.md', title: 'A' });
+    expect(vm.liveEntry()?.file).toBe('a.md');
+    expect(vm.readOnly()).toBe(false);
+    expect(vm.toasts()).toEqual([]);
+  });
+
+  it('a non-live session opens read-only with the warn toast', async () => {
+    const fake = fakeState([
+      { file: 'a.md', title: 'A' },
+      { file: 'b.md', title: 'B' },
+    ]);
+    const vm = setup(fake);
+    await vm.openFromSheet({ file: 'a.md', title: 'A' });
+    await vm.openFromSheet({ file: 'b.md', title: 'B' });
+    expect(vm.readOnly()).toBe(true);
+    expect(vm.toasts()).toContainEqual(['Sitzung geöffnet: B — nur Lesezugriff', 'warn']);
+  });
+
+  it('the read-only view refuses sends', async () => {
+    const fake = fakeState([
+      { file: 'a.md', title: 'A' },
+      { file: 'b.md', title: 'B' },
+    ]);
+    const vm = setup(fake);
+    await vm.openFromSheet({ file: 'a.md', title: 'A' });
+    await vm.openFromSheet({ file: 'b.md', title: 'B' });
+    await vm.send();
+    expect(fake.send).not.toHaveBeenCalled();
+  });
+
+  it('returning to the live session lifts the lock and announces it', async () => {
+    const fake = fakeState([
+      { file: 'a.md', title: 'A' },
+      { file: 'b.md', title: 'B' },
+    ]);
+    const vm = setup(fake);
+    await vm.openFromSheet({ file: 'a.md', title: 'A' });
+    await vm.openFromSheet({ file: 'b.md', title: 'B' });
+    const live = vm.liveEntry()!;
+    await vm.openFromSheet(live);
+    expect(vm.readOnly()).toBe(false);
+    expect(vm.toasts()).toContainEqual(['Zurück im aktuellen Gespräch', 'ok']);
+    await vm.send();
+    expect(fake.send).toHaveBeenCalledWith('hello');
+  });
+
+  it('a failed open keeps the pane and reports inside the sheet', async () => {
+    const fake = fakeState([{ file: 'a.md', title: 'A' }]);
+    (fake as { openSession(file: string): Promise<void> }).openSession = () => {
+      fake.chat.update((chat) => ({ ...chat, active: null }));
+      return Promise.resolve();
+    };
+    const vm = setup(fake);
+    await vm.openFromSheet({ file: 'gone.md', title: 'Gone' });
+    expect(vm.readOnly()).toBe(false);
+    expect(vm.sheetError()).toBe('Die Sitzung ließ sich nicht öffnen: Gone');
+    expect(vm.sheetOpen()).toBe(true);
   });
 });

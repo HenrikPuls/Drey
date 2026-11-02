@@ -43,6 +43,10 @@ export const appConfig: ApplicationConfig = {
           get readOnly() {
             return state.readOnly();
           },
+          get runs() {
+            return state.team().runs;
+          },
+          toast: (message, kind) => state.toast(message, kind),
           moveTicket: (ticketId, phaseId) => state.moveTicket(ticketId, phaseId),
           openTicket: (ticketId) => state.openTicket(ticketId),
           promote: (ticketId) => state.prefillChat(`promote ${ticketId}`),
@@ -178,6 +182,7 @@ export const appConfig: ApplicationConfig = {
           },
           onClose: () => state.closeTicket(),
           proposeChain: (text) => state.prefillChat(text),
+          prefillChat: (text) => state.prefillChat(text),
           save: async (text) => {
             const reply = await state.saveTicket(text);
             return reply.ok ? { ok: true } : { ok: false, error: reply.error };

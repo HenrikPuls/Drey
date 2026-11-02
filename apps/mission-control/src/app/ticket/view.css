@@ -1,5 +1,8 @@
-/* The ticket screen (concept §5.3–5.5): phone-first, the actions in the
-   thumb's reach. Colours and radii come from the global tokens. */
+/*
+ * The ticket screen (concept §5.3–5.5) in the prototype's look: full-bleed
+ * header, the head card, the gate pills, the mono-caps body, the proof
+ * card with snap gallery and the git-table diff. Design tokens only.
+ */
 
 :host {
   display: block;
@@ -8,14 +11,881 @@
 .ticket {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  height: 100%;
+  font-family: var(--sans);
 }
+
+/* -- the header: Arbeit back, the mono id, the edit pencil ------------------- */
+
+.hdr {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hdr .spacer {
+  flex: 1;
+}
+
+.back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 2px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  transition: color 0.15s ease;
+}
+
+.back:hover {
+  color: var(--accent);
+}
+
+.back svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tid {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+
+.tedit {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-left: 8px;
+  color: var(--text-2);
+  cursor: pointer;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  transition: all 0.15s ease;
+}
+
+.tedit svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tedit.on {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+/* -- the scroll body ---------------------------------------------------------- */
+
+.page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px calc(90px + env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
+}
+
+/* -- the head card -------------------------------------------------------------- */
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.phase {
+  padding: 3px 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+.pchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 5px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+}
+
+.pchip i {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--panel-3);
+  border-radius: 50%;
+}
+
+.tkcost {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--warn);
+}
+
+.tk-title {
+  margin: 6px 0 2px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.tk-fm {
+  margin: 2px 0 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--text-3);
+}
+
+/* -- the gate pills --------------------------------------------------------------- */
+
+.gates {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 0 14px;
+  overflow-x: auto;
+  font: inherit;
+  text-align: inherit;
+  scrollbar-width: none;
+}
+
+.gates::-webkit-scrollbar {
+  display: none;
+}
+
+.gate-tap {
+  margin: 0;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.gate-tap:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.gate {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  opacity: 0.55;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+}
+
+.gate .gs {
+  font-size: 9px;
+}
+
+.gate.done {
+  color: var(--text-2);
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+}
+
+.gate.done .gs {
+  color: var(--ok);
+}
+
+.gate.now {
+  color: var(--accent);
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.gate.now .gs {
+  color: var(--accent);
+}
+
+.gate.new {
+  color: var(--accent);
+  opacity: 1;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.gate.new .gs {
+  color: var(--accent);
+}
+
+.gate.skipped .gt {
+  text-decoration: line-through;
+}
+
+.gates .garrow {
+  flex: none;
+  font-size: 9px;
+  color: var(--line);
+}
+
+.gate .gn {
+  color: var(--accent);
+}
+
+.cs-total {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--warn);
+}
+
+.chain-hint {
+  margin: -10px 0 10px;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  transition: color 0.15s ease;
+}
+
+.chain-hint:hover {
+  color: var(--accent);
+}
+
+.chain-hint:disabled {
+  cursor: default;
+}
+
+.chain-hint:disabled:hover {
+  color: var(--text-3);
+}
+
+/* -- the markdown body ------------------------------------------------------------- */
+
+.body {
+  display: flex;
+  flex-direction: column;
+}
+
+.tk-sec {
+  margin: 16px 0 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.body > .tk-sec:first-child,
+.card-top + .body .tk-sec:first-child {
+  margin-top: 8px;
+}
+
+.card .tk-sec:first-child {
+  margin-top: 2px;
+}
+
+.tk-sub {
+  margin: 10px 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.tk-p {
+  margin: 4px 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.tk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.tk-li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0 2px 4px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.tk-li .box {
+  flex: none;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.tk-li.li-done {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+
+.tk-yaml {
+  margin: 6px 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  color: var(--text-2);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+/* -- cards (scout report, proof, diff) ------------------------------------------------ */
+
+.card {
+  margin-top: 10px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.tested {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.verdict {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 12px 0;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--ok) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
+  border-radius: 12px;
+}
+
+.verdict b {
+  font-weight: 600;
+  color: var(--ok);
+}
+
+.scout-summary {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  white-space: pre-wrap;
+}
+
+.scout-decisions li {
+  align-items: flex-start;
+}
+
+.scout-decision-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.scout-decision-key {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.scout-decision-rec {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* -- the proof card: criteria, gallery, findings ---------------------------------------- */
+
+.checks {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 0 4px;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 10px 2px;
+  font-size: 13.5px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+
+.check:last-child {
+  border-bottom: none;
+}
+
+.check .ok {
+  flex: none;
+  margin-top: 1px;
+  font-family: var(--mono);
+  color: var(--ok);
+}
+
+.check-fail .ok {
+  color: var(--danger);
+}
+
+.check-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.check-note {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.gal {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 4px 2px 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.gal::-webkit-scrollbar {
+  display: none;
+}
+
+.shot {
+  flex: 0 0 86%;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  scroll-snap-align: center;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.gal-dots {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin: 2px 0 12px;
+}
+
+.gal-dots i {
+  width: 5px;
+  height: 5px;
+  cursor: pointer;
+  background: var(--line);
+  border-radius: 50%;
+  transition: background 0.15s ease;
+}
+
+.gal-dots i.on {
+  background: var(--accent);
+}
+
+.findings {
+  margin-top: 10px;
+}
+
+.findings-title {
+  margin: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--danger);
+}
+
+.findings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.findings-list li {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+/* -- the diff card: the git table ---------------------------------------------------------- */
+
+.dfile {
+  margin-bottom: 8px;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.dfile-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 11px;
+  background: var(--panel);
+}
+
+.dfile-main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.dfile-h .chev {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--text-3);
+  transition: transform 0.18s;
+}
+
+.dfile.open .dfile-h .chev {
+  transform: rotate(90deg);
+}
+
+.dfile-h .fp {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.dfile-h .fs {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  white-space: nowrap;
+  color: var(--text-3);
+}
+
+.dfile-h .fs b {
+  font-weight: 600;
+  color: var(--ok);
+}
+
+.dfile-h .fs b.del {
+  color: var(--danger);
+}
+
+.dfile-h .zmag {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--text-3);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.dfile-h .zmag svg {
+  width: 14px;
+  height: 14px;
+}
+
+.dfile-h .zmag:active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.dfile-b {
+  padding: 6px 0;
+  overflow-x: auto;
+  border-top: 1px solid var(--line);
+}
+
+.dl2 {
+  display: flex;
+  min-width: max-content;
+  padding-right: 14px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.7;
+}
+
+.dl2 .ln {
+  flex: none;
+  width: 26px;
+  padding-right: 6px;
+  text-align: right;
+  color: color-mix(in srgb, var(--text-3) 70%, transparent);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.dl2 .sg {
+  flex: none;
+  width: 15px;
+  text-align: center;
+  color: var(--text-3);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.dl2 .code {
+  white-space: pre;
+  color: var(--text);
+}
+
+.dl2.add {
+  background: color-mix(in srgb, var(--ok) 7%, transparent);
+}
+
+.dl2.add .sg {
+  color: var(--ok);
+}
+
+.dl2.del {
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+}
+
+.dl2.del .sg {
+  color: var(--danger);
+}
+
+.dl2.hunk {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.dl2.hunk .code {
+  color: var(--accent);
+}
+
+.diff-truncated {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* -- the inline action result ---------------------------------------------------------------- */
+
+.result {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.result-error {
+  color: var(--danger);
+}
+
+.result-note {
+  color: var(--text-3);
+}
+
+/* -- the accepted state: the mint ring --------------------------------------------------------- */
+
+.done-wrap {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 30px;
+  text-align: center;
+}
+
+.done-ring {
+  display: grid;
+  place-items: center;
+  width: 74px;
+  height: 74px;
+  margin-bottom: 20px;
+  color: var(--ok);
+  border: 1.5px solid var(--ok);
+  border-radius: 50%;
+  box-shadow: 0 0 30px color-mix(in srgb, var(--ok) 25%, transparent);
+}
+
+.done-ring svg {
+  width: 30px;
+  height: 30px;
+}
+
+.done-title {
+  margin: 0 0 8px;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.done-note {
+  max-width: 30ch;
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.done-back {
+  max-width: 220px;
+}
+
+/* -- the actions row and the send-back panel ------------------------------------------------ */
+
+.actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px 0 calc(4px + env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, var(--bg) 24%);
+}
+
+.action-row {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  flex: 1;
+  min-height: 44px;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.btn.ghost {
+  color: var(--text-2);
+  background: var(--panel);
+}
+
+.btn.primary {
+  color: var(--bg);
+  background: var(--ok);
+  border-color: var(--ok);
+}
+
+.btn.warn {
+  color: var(--bg);
+  background: var(--warn);
+  border-color: var(--warn);
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.sendback {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.sendback-label {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.sendback-text {
+  width: 100%;
+  padding: 10px 12px;
+  resize: vertical;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.sendback-text:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* -- the empty state -------------------------------------------------------------------------- */
 
 .ticket-empty {
   margin: 24px 16px;
   font-size: 13px;
-  color: var(--mc-dim);
+  color: var(--text-3);
 }
 
 .ticket-empty-box {
@@ -30,602 +900,14 @@
 }
 
 .ticket-error {
-  color: var(--mc-danger);
+  color: var(--danger);
 }
 
-/* The header: back arrow, id + title, the phase chip. */
-
-.head {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.back {
+.ticket-empty-box .btn {
   flex: none;
-  width: 36px;
-  height: 36px;
-  margin: -6px 0 0 -8px;
-  font-size: 20px;
-  line-height: 1;
-  color: var(--mc-dim);
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  border-radius: var(--mc-radius);
 }
 
-.back:active {
-  background: var(--mc-panel-2);
-}
-
-.head-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.tid {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  color: var(--mc-dim);
-}
-
-.title {
-  margin: 2px 0 0;
-  font-size: 17px;
-  line-height: 1.3;
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  max-width: 40vw;
-  padding: 1px 8px;
-  overflow: hidden;
-  font-size: 11px;
-  color: var(--mc-dim);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
-  border-radius: 999px;
-}
-
-.chip-phase {
-  flex: none;
-  margin-top: 2px;
-  color: var(--mc-text);
-}
-
-/* The priority chip: the configured id IS the label; the jump class
-   (the vocabulary's upper half) wears the work card's flag accent. */
-.chip-priority {
-  flex: none;
-  margin-top: 2px;
-}
-
-.chip-priority-jump {
-  color: var(--mc-danger);
-  border-color: var(--mc-danger);
-}
-
-/* One compact line under the header: the open blockers warn, the
-   declared `blocked-by:` deps read dim. */
-.blockers {
-  margin: -8px 0 0;
-  font-size: 12px;
-  color: var(--mc-dim);
-}
-
-.blockers-open {
-  color: var(--mc-danger);
-}
-
-/* The gate bar: the pipeline as a horizontal step strip. */
-
-.gate {
-  display: flex;
-  gap: 4px;
-  padding: 10px 12px;
-  margin: 0;
-  overflow-x: auto;
-  list-style: none;
-  background: var(--mc-panel);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
-}
-
-/* The bar is one big tap target: the gate sheet's only door (E9). */
-.gate-tap {
-  width: 100%;
-  font: inherit;
-  text-align: inherit;
-  cursor: pointer;
-}
-
-.gate-tap:disabled {
-  cursor: default;
-  opacity: 0.85;
-}
-
-.gate-step {
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  min-width: 56px;
-}
-
-.gate-add {
-  margin-right: 2px;
-  font-weight: 700;
-  color: var(--mc-accent);
-}
-
-.gate-badges {
-  display: flex;
-  gap: 3px;
-  min-height: 12px;
-  font-size: 9px;
-  line-height: 1;
-}
-
-.gate-persona {
-  padding: 1px 4px;
-  color: var(--mc-dim);
-  border: 1px solid var(--mc-line);
-  border-radius: 999px;
-}
-
-.gate-notify {
-  color: var(--mc-accent);
-}
-
-/* A skipped gate strikes through; an inserted one already accents via .gate-add. */
-.gate-skipped .gate-title {
-  text-decoration: line-through;
-  opacity: 0.6;
-}
-
-.gate-dot {
-  font-size: 12px;
-  line-height: 1;
-  color: var(--mc-text);
-}
-
-.gate-title {
-  font-size: 10px;
-  line-height: 1.2;
-  color: var(--mc-text);
-  text-align: center;
-}
-
-.gate-past .gate-dot,
-.gate-past .gate-title {
-  color: var(--mc-dim);
-}
-
-.gate-current .gate-dot,
-.gate-current .gate-title {
-  color: var(--mc-accent);
-}
-
-.gate-current .gate-title {
-  font-weight: 600;
-}
-
-.gate-future .gate-dot,
-.gate-future .gate-title {
-  color: var(--mc-dim);
-  opacity: 0.45;
-}
-
-/* Cards: the proof card and the diff card share one surface. */
-
-.card {
-  padding: 12px;
-  background: var(--mc-panel);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
-}
-
-.card-title {
-  margin: 0 0 8px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--mc-dim);
-}
-
-/* The proof card. */
-
-.tested {
-  margin: 0 0 10px;
-  font-size: 12px;
-  color: var(--mc-dim);
-}
-
-.criteria {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.criteria li {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.box {
-  flex: none;
-  font-size: 13px;
-  color: var(--mc-dim);
-}
-
-.criterion-pass .box {
-  color: var(--mc-ok);
-}
-
-.criterion-fail .box {
-  color: var(--mc-danger);
-}
-
-.cmd {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  color: var(--mc-text);
-  overflow-wrap: anywhere;
-}
-
-.criterion-note {
-  font-size: 12px;
-  color: var(--mc-dim);
-}
-
-/* The scout report card (E8): stamp, summary, the decision options. */
-
-.scout-summary {
-  margin: 0 0 10px;
-  font-size: 13px;
-  white-space: pre-wrap;
-}
-
-.scout-decisions li {
-  align-items: flex-start;
-}
-
-.scout-decision-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  font-size: 13px;
-}
-
-.scout-decision-key {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-}
-
-.decision-done .scout-decision-body {
-  color: var(--mc-dim);
-}
-
-.scout-decision-rec {
-  font-size: 12px;
-  color: var(--mc-dim);
-}
-
-.shots {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-
-.shot {
-  flex: none;
-  width: 104px;
-  height: 78px;
-  padding: 0;
-  overflow: hidden;
-  cursor: pointer;
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
-}
-
-.shot img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.findings {
-  margin-top: 10px;
-}
-
-.findings-title {
-  margin: 0 0 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--mc-danger);
-}
-
-/* The generic markdown body. */
-
-.body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.md-h {
-  margin: 6px 0 0;
-  font-size: 15px;
-}
-
-.body > .md-h:first-child {
-  margin-top: 0;
-}
-
-.md-p {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--mc-text);
-  overflow-wrap: anywhere;
-}
-
-.md-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
-.md-list li {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.md-code {
-  margin: 0;
-  padding: 10px 12px;
-  overflow-x: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
-}
-
-/* The diff card: one row per file, the patch under it, git-coloured. */
-
-.diff-file + .diff-file {
-  border-top: 1px solid var(--mc-line);
-}
-
-.diff-row {
-  display: flex;
-  align-items: stretch;
-  gap: 4px;
-}
-
-.diff-main {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 10px 0;
-  color: inherit;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  text-align: left;
-}
-
-.diff-status {
-  flex: none;
-  min-width: 18px;
-  padding: 0 3px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
-  line-height: 18px;
-  color: var(--mc-dim);
-  text-align: center;
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
-  border-radius: 4px;
-}
-
-.diff-status-a {
-  color: var(--mc-ok);
-}
-
-.diff-status-m {
-  color: var(--mc-accent);
-}
-
-.diff-status-d {
-  color: var(--mc-danger);
-}
-
-.diff-status-r {
-  color: var(--mc-dim);
-}
-
-.diff-path {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.diff-counts {
-  flex: none;
-  display: inline-flex;
-  gap: 6px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
-}
-
-.diff-add {
-  color: var(--mc-ok);
-}
-
-.diff-del {
-  color: var(--mc-danger);
-}
-
-.diff-fs {
-  flex: none;
-  width: 36px;
-  padding: 0;
-  font-size: 15px;
-  color: var(--mc-dim);
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-}
-
-.patch {
-  margin: 0 0 10px;
-  padding: 8px 0 8px 10px;
-  overflow-x: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.5;
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
-}
-
-.patch-line {
-  display: block;
-  white-space: pre;
-}
-
-.pl-add {
-  color: var(--mc-ok);
-}
-
-.pl-del {
-  color: var(--mc-danger);
-}
-
-.pl-meta {
-  color: var(--mc-dim);
-}
-
-.diff-truncated {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: var(--mc-dim);
-}
-
-/* The inline action result: an error line or a dim confirmation. */
-
-.result {
-  margin: 0;
-  font-size: 13px;
-}
-
-.result-error {
-  color: var(--mc-danger);
-}
-
-.result-note {
-  color: var(--mc-dim);
-}
-
-/* The actions row, pinned to the thumb's reach; the send-back panel and
-   the raw editor ride it. */
-
-.actions {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 0 calc(4px + env(safe-area-inset-bottom));
-  background: linear-gradient(transparent, var(--mc-bg) 24%);
-}
-
-.action-row {
-  display: flex;
-  gap: 8px;
-}
-
-.btn {
-  width: 100%;
-  min-height: 44px;
-  color: var(--mc-text);
-  cursor: pointer;
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
-}
-
-.btn-primary {
-  font-weight: 600;
-  color: #101216;
-  background: var(--mc-accent);
-  border-color: var(--mc-accent);
-}
-
-.btn:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.sendback {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  background: var(--mc-panel);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
-}
-
-.sendback-label {
-  font-size: 13px;
-  color: var(--mc-dim);
-}
-
-.sendback-text {
-  width: 100%;
-  padding: 10px 12px;
-  resize: vertical;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--mc-text);
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
-}
-
-/* The fullscreen overlays: the screenshot viewer and the patch viewer. */
+/* -- the fullscreen overlays: the screenshot viewer and the patch zoom ------------------- */
 
 .overlay {
   position: fixed;
@@ -651,7 +933,7 @@
   height: 44px;
   font-size: 26px;
   line-height: 1;
-  color: var(--mc-text);
+  color: var(--text);
   cursor: pointer;
   background: rgb(0 0 0 / 40%);
   border: 0;
@@ -676,9 +958,9 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 12px;
-  color: var(--mc-dim);
+  color: var(--text-2);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -689,15 +971,18 @@
 }
 
 .fs-btn {
+  display: grid;
   min-width: 40px;
   height: 36px;
   padding: 0 8px;
-  font-size: 14px;
-  color: var(--mc-text);
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 16px;
+  color: var(--text-2);
   cursor: pointer;
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
 }
 
 .fs .overlay-close {
@@ -711,15 +996,20 @@
 .fs-patch {
   flex: 1;
   margin: 0;
-  padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+  padding: 8px 0 calc(12px + env(safe-area-inset-bottom));
   overflow: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  line-height: 1.5;
 }
 
-/* The gate sheet (E9, concept §5.7): slides up over everything, the three
-   chain interventions stacked in the thumb's reach — each prefills the
-   chat's setChain command, nothing writes from here. */
+.fs-patch .dl2 {
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.fs-patch .dl2 .ln {
+  width: 34px;
+}
+
+/* -- the gate sheet (E9, concept §5.7) --------------------------------------------------------- */
 
 .sheet-backdrop {
   position: fixed;
@@ -740,10 +1030,10 @@
   max-height: 80dvh;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
   overflow-y: auto;
-  background: var(--mc-panel);
-  border: 1px solid var(--mc-line);
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-bottom: 0;
-  border-radius: 16px 16px 0 0;
+  border-radius: 18px 18px 0 0;
   animation: sheet-up 0.18s ease-out;
 }
 
@@ -774,7 +1064,7 @@
   padding: 0 4px;
   font-size: 22px;
   line-height: 1;
-  color: var(--mc-dim);
+  color: var(--text-3);
   cursor: pointer;
   background: transparent;
   border: 0;
@@ -783,7 +1073,7 @@
 .sheet-note {
   margin: 0;
   font-size: 13px;
-  color: var(--mc-dim);
+  color: var(--text-2);
 }
 
 .sheet-section {
@@ -791,16 +1081,17 @@
   flex-direction: column;
   gap: 8px;
   padding-top: 12px;
-  border-top: 1px solid var(--mc-line);
+  border-top: 1px solid var(--line);
 }
 
 .sheet-label {
   margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--mc-dim);
+  color: var(--text-3);
 }
 
 .sheet-row {
@@ -815,10 +1106,10 @@
   min-height: 40px;
   padding: 0 8px;
   font-size: 14px;
-  color: var(--mc-text);
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
 }
 
 .sheet-select-narrow {
@@ -828,7 +1119,7 @@
 .sheet-static {
   flex: none;
   font-size: 13px;
-  color: var(--mc-dim);
+  color: var(--text-3);
 }
 
 .sheet-check {
@@ -836,7 +1127,7 @@
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  color: var(--mc-text);
+  color: var(--text);
 }
 
 @media (min-width: 768px) {

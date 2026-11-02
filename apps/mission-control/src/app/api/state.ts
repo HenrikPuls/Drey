@@ -45,6 +45,18 @@ export type PairingPhase = 'needs-code' | 'pairing' | 'ready';
 /** The shell's visible tab — owned here so any surface can switch to it (E8: the report card's promote drops into the chat). */
 export type McTab = 'work' | 'chat' | 'team';
 
+/** The colour a toast carries: ok (green), warn (amber), error (red). */
+export type ToastKind = 'ok' | 'warn' | 'error';
+
+/** One transient toast: the message and the kind the pill tints it with. */
+export interface ToastMessage {
+  readonly message: string;
+  readonly kind: ToastKind;
+}
+
+/** How long a toast stays up before it hides itself (the prototype's 2.2 s). */
+export const TOAST_HIDE_MS = 2200;
+
 /** What every mutation hands back so the UI can surface a failure. */
 export type McReply = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
@@ -81,7 +93,7 @@ export class McState {
   readonly chatPrefill = signal<string | null>(null);
   readonly work = signal<WorkView>({ groups: [], priorities: DEFAULT_PRIORITY_CONFIG });
   readonly needs = signal<readonly NeedView[]>([]);
-  readonly team = signal<TeamView>({ personas: [] });
+  readonly team = signal<TeamView>({ personas: [], runs: [] });
   readonly chat = signal<ChatStateView>({ sessions: [], active: null });
   /**
    * The raw desk answers, for tabs that map their own views from the wire
@@ -92,6 +104,26 @@ export class McState {
   readonly personas = signal<readonly unknown[]>([]);
   /** The paired device's read-only flag (`GET /api/me`): it watches, never mutates. */
   readonly readOnly = signal(false);
+
+  // --- the toast pill ---------------------------------------------------------
+  /** The current toast the shell's pill renders; null = nothing showing. */
+  readonly toastMessage = signal<ToastMessage | null>(null);
+  private toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Shows the toast pill: one message at a time — a new toast replaces the
+   * running one and restarts the hide timer (the prototype's showToast).
+   */
+  toast(message: string, kind: ToastKind = 'ok'): void {
+    if (this.toastTimer !== null) {
+      clearTimeout(this.toastTimer);
+    }
+    this.toastMessage.set({ message, kind });
+    this.toastTimer = setTimeout(() => {
+      this.toastTimer = null;
+      this.toastMessage.set(null);
+    }, TOAST_HIDE_MS);
+  }
 
   // --- the ticket screen's slice (E5c) --------------------------------------
   /** The ticket the screen shows; null = the board, not one ticket. */

@@ -1,7 +1,8 @@
 /*
- * The raw edit mode (concept §5.5/§7): one column — the warning banner on
- * top, the monospace editor growing to the viewport in the middle, the
- * footer actions in the thumb's reach at the bottom. Design tokens only.
+ * The raw edit mode (concept §5.5/§7), the prototype's look: one column —
+ * the amber warning banner on top, the monospace editor growing to the
+ * viewport in the middle, the footer actions in the thumb's reach at the
+ * bottom. Design tokens only.
  */
 :host {
   display: block;
@@ -12,27 +13,28 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--mc-bg);
+  font-family: var(--sans);
+  background: var(--bg);
 }
 
 /* -- the warning banner ------------------------------------------------------ */
 
 .warning {
-  margin: 0;
-  padding: 10px 12px;
   display: flex;
   gap: 8px;
   align-items: baseline;
-  border-bottom: 1px solid var(--mc-line);
-  border-left: 3px solid var(--mc-danger);
-  background: color-mix(in srgb, var(--mc-danger) 10%, transparent);
-  color: var(--mc-text);
+  margin: 0;
+  padding: 10px 12px;
   font-size: 13px;
   line-height: 1.4;
+  color: var(--text);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  border-left: 3px solid var(--warn);
 }
 
 .warning-glyph {
-  color: var(--mc-danger);
+  color: var(--warn);
 }
 
 /* -- the raw editor ------------------------------------------------------------ */
@@ -45,14 +47,11 @@
   border: 0;
   outline: none;
   resize: none;
-  background: var(--mc-bg);
-  color: var(--mc-text);
-  font:
-    13px/1.5 ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Consolas,
-    monospace;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
 }
 
 /* -- the conflict block -------------------------------------------------------- */
@@ -62,16 +61,16 @@
   gap: 8px;
   align-items: center;
   padding: 10px 12px;
-  border-top: 1px solid var(--mc-line);
-  background: color-mix(in srgb, var(--mc-danger) 10%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
 }
 
 .conflict-text {
   flex: 1;
   min-width: 0;
   margin: 0;
-  color: var(--mc-danger);
   font-size: 13px;
+  color: var(--danger);
 }
 
 /* -- the footer actions ---------------------------------------------------------- */
@@ -81,25 +80,25 @@
   justify-content: space-between;
   gap: 8px;
   padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--mc-line);
-  background: var(--mc-panel);
+  background: var(--panel);
+  border-top: 1px solid var(--line);
 }
 
 .btn {
-  padding: 8px 14px;
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
-  background: var(--mc-panel-2);
-  color: var(--mc-text);
-  font-size: 14px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  color: var(--text-2);
 }
 
 .btn.accent {
-  background: var(--mc-accent);
-  border-color: var(--mc-accent);
-  color: #101216;
-  font-weight: 600;
+  color: var(--bg);
+  background: var(--ok);
+  border-color: var(--ok);
 }
 
 .btn.ghost {
@@ -107,11 +106,11 @@
 }
 
 .btn.armed {
-  border-color: var(--mc-danger);
-  color: var(--mc-danger);
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .btn:disabled {
-  opacity: 0.5;
   cursor: default;
+  opacity: 0.35;
 }

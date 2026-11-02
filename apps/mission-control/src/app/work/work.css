@@ -1,130 +1,282 @@
-/* The work tab: groups of full-width cards, phone-first (concept §7). */
+/*
+ * The work tab in the prototype's dress (#v-arbeit): header with logo,
+ * title, vault sub and Fleet chip, mono group heads, full-width cards —
+ * phase chips, persona pills, the amber wait-line, the tolerant cost and
+ * ctx slots — and the bottom sheet with handle and dim. Component styles
+ * read only the shared tokens (no component-invented colours).
+ */
 
 :host {
   display: block;
 }
 
+/* ---------- header ---------- */
+
+.hdr {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px 12px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+}
+
+.logo {
+  display: grid;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 8px;
+}
+
+.hd {
+  min-width: 0;
+}
+
+.ttl {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.sub {
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hspace {
+  flex: 1;
+}
+
+/* fleet status chip */
+
+.fleet {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-2);
+  cursor: pointer;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  transition: border-color 0.15s ease;
+}
+
+.fleet:hover {
+  border-color: var(--accent);
+}
+
+.led {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  background: var(--ok);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--ok);
+  animation: led-pulse 1.5s ease-in-out infinite;
+}
+
+.led.amber {
+  background: var(--warn);
+  box-shadow: 0 0 8px var(--warn);
+}
+
+.led.red {
+  background: var(--danger);
+  box-shadow: 0 0 8px var(--danger);
+}
+
+.led.idle {
+  background: var(--text-3);
+  box-shadow: none;
+  animation: none;
+}
+
+@keyframes led-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .led {
+    animation: none;
+  }
+}
+
+/* ---------- scroll body / groups ---------- */
+
 .groups {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 16px;
+  padding: 0 16px 16px;
 }
 
-.group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.group-title {
+.ghead {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: 8px;
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  margin: 22px 2px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--mc-dim);
+  color: var(--text-3);
 }
 
-.group-count {
+.groups .ghead:first-child {
+  margin-top: 16px;
+}
+
+.ghead .cnt {
   font-weight: 400;
-  opacity: 0.8;
 }
 
-.group-unknown .group-title {
-  color: var(--mc-danger);
+.ghead.hot {
+  color: var(--warn);
+}
+
+.group-unknown .ghead-title {
+  color: var(--danger);
 }
 
 .group-empty,
 .work-note {
   margin: 4px 0 0;
   font-size: 13px;
-  color: var(--mc-dim);
+  color: var(--text-3);
 }
 
-/* One ticket = one card: the same visual form everywhere. */
+/* ---------- cards ---------- */
 
 .card {
   display: block;
   width: 100%;
-  padding: 10px 12px;
+  padding: 14px 15px;
+  margin: 0 0 10px;
   text-align: left;
-  background: var(--mc-panel);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
-.ticket-card {
+button.card {
   color: inherit;
   cursor: pointer;
 }
 
-.ticket-card:active {
-  background: var(--mc-panel-2);
+button.card:hover {
+  background: var(--panel-2);
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
 }
 
-.card-row {
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.card-top {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
+  margin-bottom: 7px;
 }
 
 .tid {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  color: var(--mc-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
 }
 
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 40vw;
-  padding: 1px 8px;
+/* phase chip */
+
+.phase {
+  padding: 3px 8px;
   overflow: hidden;
-  font-size: 11px;
-  color: var(--mc-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
-  border-radius: 999px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
 }
 
-.chip-phase {
-  color: var(--mc-text);
+.phase.tinted {
+  color: var(--pc);
+  border-color: color-mix(in srgb, var(--pc) 35%, transparent);
 }
 
-.chip-need {
-  color: var(--mc-accent);
-}
+/* persona pill */
 
-.chip-persona .dot {
+.pchip {
+  display: inline-flex;
   flex: none;
-  width: 8px;
-  height: 8px;
+  gap: 6px;
+  align-items: center;
+  max-width: 40vw;
+  padding: 3px 9px 3px 5px;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+}
+
+.pchip i {
+  display: grid;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--bg);
   border-radius: 50%;
-}
-
-.chip-blocked {
-  color: var(--mc-danger);
-}
-
-.flag {
-  font-size: 13px;
-  color: var(--mc-danger);
 }
 
 .ticket-title,
 .need-title {
-  margin-top: 6px;
+  margin: 0;
   font-size: 15px;
-  color: var(--mc-text);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
 }
 
 .need-tappable {
@@ -132,29 +284,100 @@
   cursor: pointer;
 }
 
-.need-tappable:active {
-  background: var(--mc-panel-2);
-}
-
 .need-summary {
   margin: 6px 0 0;
-  font-size: 13px;
-  color: var(--mc-dim);
+  font-size: 13.5px;
+  color: var(--text-2);
 }
 
-/* The scout report card (E8, concept §5.6): the report rides on the need —
+/* the card's status row: wait-line, flag, ctx bar, cost — data-driven slots */
+
+.meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 9px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.statline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.statline.warn {
+  color: var(--warn);
+}
+
+.flag {
+  flex: none;
+  font-size: 13px;
+  color: var(--warn);
+}
+
+.ctxbar {
+  display: block;
+  flex: 1;
+  height: 3px;
+  overflow: hidden;
+  background: var(--line);
+  border-radius: 99px;
+}
+
+.ctxbar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 99px;
+}
+
+.ctxbar.warn i {
+  background: var(--warn);
+}
+
+.tkcost {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--warn);
+}
+
+/* question cards: the needs-you group's dress — 2px amber left border */
+
+.qcard {
+  border-left: 2px solid var(--warn);
+}
+
+.qk {
+  margin-bottom: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
+/* the scout report card (E8, concept §5.6): the report rides on the need —
    stamp, summary, the decision options — with the promote action below. */
 
 .report-stamp {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--mc-dim);
+  margin: 8px 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 .report-summary {
   margin: 6px 0 0;
   font-size: 13px;
-  color: var(--mc-text);
+  color: var(--text-2);
   white-space: pre-wrap;
 }
 
@@ -176,7 +399,7 @@
 
 .report-decisions .box {
   flex: none;
-  color: var(--mc-dim);
+  color: var(--text-3);
 }
 
 .decision-body {
@@ -187,34 +410,34 @@
 }
 
 .decision-key {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 12px;
 }
 
 .decision-open .decision-question {
-  color: var(--mc-text);
+  color: var(--text);
 }
 
 .report-decisions li:not(.decision-open) .decision-body {
-  color: var(--mc-dim);
+  color: var(--text-3);
 }
 
 .decision-rec {
   font-size: 12px;
-  color: var(--mc-dim);
+  color: var(--text-3);
 }
 
 .need-promote {
   margin-top: 10px;
 }
 
-/* The bottom sheet: slides up over everything, actions in the thumb's reach. */
+/* ---------- bottom sheet: slides up over everything, handle + dim ---------- */
 
 .sheet-backdrop {
   position: fixed;
   inset: 0;
   z-index: 30;
-  background: rgb(0 0 0 / 55%);
+  background: rgb(3 6 12 / 60%);
 }
 
 .sheet {
@@ -227,13 +450,12 @@
   flex-direction: column;
   gap: 12px;
   max-height: 80dvh;
-  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  padding: 8px 16px calc(14px + env(safe-area-inset-bottom));
   overflow-y: auto;
-  background: var(--mc-panel);
-  border: 1px solid var(--mc-line);
-  border-bottom: 0;
-  border-radius: 16px 16px 0 0;
-  animation: sheet-up 0.18s ease-out;
+  background: var(--panel-2);
+  border-top: 1px solid var(--line);
+  border-radius: 18px 18px 0 0;
+  animation: sheet-up 0.2s ease-out;
 }
 
 @keyframes sheet-up {
@@ -247,6 +469,20 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation: none;
+  }
+}
+
+.grab {
+  width: 36px;
+  height: 4px;
+  margin: 6px auto 10px;
+  background: var(--line);
+  border-radius: 99px;
+}
+
 .sheet-head {
   display: flex;
   align-items: flex-start;
@@ -257,13 +493,14 @@
   flex: 1;
   margin: 0;
   font-size: 17px;
+  line-height: 1.35;
 }
 
 .sheet-close {
   padding: 0 4px;
   font-size: 22px;
   line-height: 1;
-  color: var(--mc-dim);
+  color: var(--text-3);
   cursor: pointer;
   background: transparent;
   border: 0;
@@ -271,8 +508,8 @@
 
 .sheet-summary {
   margin: 0;
-  font-size: 14px;
-  color: var(--mc-dim);
+  font-size: 13.5px;
+  color: var(--text-2);
   white-space: pre-wrap;
 }
 
@@ -282,14 +519,40 @@
   gap: 6px;
   margin: 0;
   font-size: 13px;
-  color: var(--mc-dim);
+  color: var(--text-3);
 }
 
-.sheet-blocked,
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 40vw;
+  padding: 1px 8px;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.chip.tinted {
+  color: var(--pc);
+  border-color: color-mix(in srgb, var(--pc) 35%, transparent);
+}
+
+.sheet-blocked {
+  margin: 0;
+  font-size: 13px;
+  color: var(--warn);
+}
+
 .sheet-error {
   margin: 0;
   font-size: 13px;
-  color: var(--mc-danger);
+  color: var(--danger);
 }
 
 .sheet-actions {
@@ -302,18 +565,25 @@
 .btn {
   width: 100%;
   min-height: 44px;
-  color: var(--mc-text);
+  color: var(--text);
   cursor: pointer;
-  background: var(--mc-panel-2);
-  border: 1px solid var(--mc-line);
-  border-radius: var(--mc-radius);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.btn:hover {
+  border-color: var(--text-2);
 }
 
 .btn-primary {
   font-weight: 600;
-  color: #101216;
-  background: var(--mc-accent);
-  border-color: var(--mc-accent);
+  color: var(--bg);
+  background: var(--ok);
+  border-color: var(--ok);
 }
 
 .btn:disabled {

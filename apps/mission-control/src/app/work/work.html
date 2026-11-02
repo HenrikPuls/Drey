@@ -1,26 +1,40 @@
 @if (state === null) {
   <p class="work-note">Not connected to a desk.</p>
 } @else {
+  <header class="hdr">
+    <div class="logo" aria-hidden="true">D</div>
+    <div class="hd">
+      <div class="ttl">Arbeit</div>
+      @if (vaultTitle(); as vault) {
+        <div class="sub">{{ vault }}</div>
+      }
+    </div>
+    <div class="hspace"></div>
+    <button type="button" class="fleet" title="Chain-Status" (click)="onFleetTap()">
+      <span class="led" [class.idle]="!fleetLive()" aria-hidden="true"></span>{{ fleetLabel() }}
+    </button>
+  </header>
+
   <div class="groups">
     @for (group of groups(); track group.key) {
       <section class="group" [class.group-unknown]="group.kind === 'phase' && group.unknown">
-        <h2 class="group-title">
-          <span>{{ group.title }}</span>
-          <span class="group-count">{{
-            group.kind === 'needs' ? group.needs.length : group.tickets.length
-          }}</span>
+        <h2 class="ghead" [class.hot]="group.kind === 'needs'">
+          <span class="ghead-title">{{ group.title }}</span>
+          <span class="cnt"
+            >· {{ group.kind === 'needs' ? group.needs.length : group.tickets.length }}</span
+          >
         </h2>
         @if (group.kind === 'needs') {
           @for (vm of group.needs; track vm.key) {
             @if (vm.need.kind === 'report') {
-              <article class="card need-card need-report">
-                <div class="card-row">
-                  <span class="chip chip-need">{{ vm.kindLabel }}</span>
+              <article class="card qcard need-card need-report">
+                <div class="qk">{{ vm.kindLabel }}</div>
+                <div class="card-top">
                   @if (vm.need.ticketId) {
                     <span class="tid">{{ vm.need.ticketId }}</span>
                   }
                 </div>
-                <div class="need-title">{{ vm.need.title }}</div>
+                <h3 class="need-title">{{ vm.need.title }}</h3>
                 @if (vm.need.summary) {
                   <p class="need-summary">{{ vm.need.summary }}</p>
                 }
@@ -38,7 +52,9 @@
                     <ul class="report-decisions" aria-label="Decisions">
                       @for (decision of report.decisions; track $index) {
                         <li [class.decision-open]="!decision.resolved">
-                          <span class="box" aria-hidden="true">{{ decision.resolved ? '☑' : '☐' }}</span>
+                          <span class="box" aria-hidden="true">{{
+                            decision.resolved ? '☑' : '☐'
+                          }}</span>
                           <span class="decision-body">
                             <span class="decision-question">
                               @if (decision.key) {
@@ -47,7 +63,9 @@
                               {{ decision.question }}
                             </span>
                             @if (decision.recommendation) {
-                              <span class="decision-rec">Recommendation: {{ decision.recommendation }}</span>
+                              <span class="decision-rec"
+                                >Recommendation: {{ decision.recommendation }}</span
+                              >
                             }
                           </span>
                         </li>
@@ -56,33 +74,41 @@
                   }
                 }
                 @if (canPromote(vm)) {
-                  <button type="button" class="btn btn-primary need-promote" (click)="promoteTicket(vm)">
+                  <button
+                    type="button"
+                    class="btn btn-primary need-promote"
+                    (click)="promoteTicket(vm)"
+                  >
                     Promote to ship
                   </button>
                 }
               </article>
             } @else if (needTappable(vm)) {
-              <button type="button" class="card need-card need-tappable" (click)="openNeedPersona(vm)">
-                <div class="card-row">
-                  <span class="chip chip-need">{{ vm.kindLabel }}</span>
+              <button
+                type="button"
+                class="card qcard need-card need-tappable"
+                (click)="openNeedPersona(vm)"
+              >
+                <div class="qk">{{ vm.kindLabel }}</div>
+                <div class="card-top">
                   @if (vm.need.ticketId) {
                     <span class="tid">{{ vm.need.ticketId }}</span>
                   }
                 </div>
-                <div class="need-title">{{ vm.need.title }}</div>
+                <h3 class="need-title">{{ vm.need.title }}</h3>
                 @if (vm.need.summary) {
                   <p class="need-summary">{{ vm.need.summary }}</p>
                 }
               </button>
             } @else {
-              <article class="card need-card">
-                <div class="card-row">
-                  <span class="chip chip-need">{{ vm.kindLabel }}</span>
+              <article class="card qcard need-card">
+                <div class="qk">{{ vm.kindLabel }}</div>
+                <div class="card-top">
                   @if (vm.need.ticketId) {
                     <span class="tid">{{ vm.need.ticketId }}</span>
                   }
                 </div>
-                <div class="need-title">{{ vm.need.title }}</div>
+                <h3 class="need-title">{{ vm.need.title }}</h3>
                 @if (vm.need.summary) {
                   <p class="need-summary">{{ vm.need.summary }}</p>
                 }
@@ -92,25 +118,51 @@
         } @else {
           @for (vm of group.tickets; track vm.id) {
             <button type="button" class="card ticket-card" (click)="openSheet(vm)">
-              <div class="card-row">
+              <div class="card-top">
                 <span class="tid">{{ vm.id }}</span>
-                <span class="chip chip-phase" [style.background-color]="vm.phaseColor ?? null">{{
-                  vm.phaseTitle
-                }}</span>
+                <span
+                  class="phase"
+                  [class.tinted]="vm.phaseColor !== null"
+                  [style.--pc]="vm.phaseColor ?? null"
+                  >{{ vm.phaseTitle }}</span
+                >
+                <span class="hspace"></span>
                 @if (vm.persona) {
-                  <span class="chip chip-persona">
-                    <span class="dot" [style.background-color]="vm.persona.color"></span>
-                    {{ vm.persona.title }}
+                  <span class="pchip">
+                    <i aria-hidden="true" [style.background-color]="vm.persona.color">{{
+                      vm.personaInitial
+                    }}</i
+                    >{{ vm.persona.title }}
                   </span>
                 }
-                @if (vm.flagged) {
-                  <span class="flag" aria-hidden="true">⚑</span>
-                }
-                @if (vm.blocked) {
-                  <span class="chip chip-blocked">Blocked</span>
-                }
               </div>
-              <div class="ticket-title">{{ vm.title }}</div>
+              <h3 class="ticket-title">{{ vm.title }}</h3>
+              @if (vm.blocked || vm.flagged || vm.ctxPercent !== null || vm.costLabel !== null) {
+                <div class="meta">
+                  @if (vm.blocked) {
+                    <span class="statline warn">
+                      <span class="led amber" aria-hidden="true"></span>wartet auf
+                      {{ vm.blockers.join(', ') }}
+                    </span>
+                  }
+                  @if (vm.flagged) {
+                    <span class="flag" aria-hidden="true">⚑</span>
+                  }
+                  @if (vm.ctxPercent !== null) {
+                    <span
+                      class="ctxbar"
+                      [class.warn]="vm.ctxPercent >= 80"
+                      role="img"
+                      [attr.aria-label]="'ctx ' + vm.ctxPercent + '%'"
+                    >
+                      <i [style.width.%]="vm.ctxPercent"></i>
+                    </span>
+                  }
+                  @if (vm.costLabel !== null) {
+                    <span class="tkcost">{{ vm.costLabel }}</span>
+                  }
+                </div>
+              }
             </button>
           } @empty {
             <p class="group-empty">No tickets here.</p>
@@ -126,6 +178,7 @@
 @if (openCard(); as card) {
   <div class="sheet-backdrop" (click)="closeSheet()"></div>
   <div class="sheet" role="dialog" aria-modal="true" [attr.aria-label]="card.title">
+    <div class="grab" aria-hidden="true"></div>
     <div class="sheet-head">
       <span class="tid">{{ card.id }}</span>
       <h2 class="sheet-title">{{ card.title }}</h2>
@@ -136,9 +189,12 @@
     }
     <p class="sheet-phase">
       Phase:
-      <span class="chip chip-phase" [style.background-color]="card.phaseColor ?? null">{{
-        card.phaseTitle
-      }}</span>
+      <span
+        class="chip chip-phase"
+        [class.tinted]="card.phaseColor !== null"
+        [style.--pc]="card.phaseColor ?? null"
+        >{{ card.phaseTitle }}</span
+      >
     </p>
     @if (card.blocked) {
       <p class="sheet-blocked">
@@ -154,12 +210,7 @@
         <button type="button" class="btn" (click)="openTicket()">Open ticket</button>
       }
       @if (!readOnly() && moveTarget(); as target) {
-        <button
-          type="button"
-          class="btn btn-primary"
-          [disabled]="movePending()"
-          (click)="moveOn()"
-        >
+        <button type="button" class="btn btn-primary" [disabled]="movePending()" (click)="moveOn()">
           {{ movePending() ? 'Moving…' : 'Move to ' + target.title }}
         </button>
       }

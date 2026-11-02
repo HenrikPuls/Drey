@@ -1,8 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import {
   MC_WORK_STATE,
+  fleetLabelOf,
   groupsOf,
+  liveRunCountOf,
   nextPhaseOf,
+  vaultTitleOf,
   type McMoveResult,
   type McScoutReport,
   type NeedVm,
@@ -11,13 +14,16 @@ import {
 } from './work.model';
 
 /**
- * The work tab (concept §7): the needs-you group first, then the board's
- * phase groups in order — groups, not kanban columns. One ticket = one
- * card (id, title, phase chip, persona chip, priority flag, blocked
- * marker); the card tap opens the bottom sheet with the move/close
- * actions in the thumb's reach. A scout report need (E8) renders its
- * report — stamp, summary, the decision options — plus the promote
- * action that prefills the chat.
+ * The work tab (concept §7): the header — logo, "Arbeit" title, the
+ * vault's name as the mono sub, the Fleet chip (live-run count, idle
+ * face without run data) — then the Braucht-dich group first and the
+ * board's phase groups in order: groups, not kanban columns. One ticket
+ * = one card in the prototype's dress (id, phase chip, persona pill,
+ * amber wait-line when blocked, priority flag; the cost and ctx slots
+ * appear only when the desk sends data). The card tap opens the bottom
+ * sheet with the move/close actions in the thumb's reach. A scout
+ * report need (E8) renders its report — stamp, summary, the decision
+ * options — plus the promote action that prefills the chat.
  */
 @Component({
   selector: 'mc-work',
@@ -35,6 +41,26 @@ export class Work {
   });
 
   protected readonly readOnly = computed(() => this.state?.readOnly ?? false);
+
+  /** The header sub: the board's vault name; null hides the line. */
+  protected readonly vaultTitle = computed(() => vaultTitleOf(this.state?.board ?? null));
+
+  /** The fleet's live-run count; null = no run data in the state. */
+  protected readonly liveRuns = computed(() => liveRunCountOf(this.state?.runs ?? null));
+
+  /** The chip's label: `<n> aktiv` with data, the bare word without. */
+  protected readonly fleetLabel = computed(() => fleetLabelOf(this.liveRuns()));
+
+  /** The chip's LED face: mint and pulsing while runs are live, idle otherwise. */
+  protected readonly fleetLive = computed(() => (this.liveRuns() ?? 0) > 0);
+
+  /** The Fleet chip's tap: a status note, only when runs are actually live. */
+  protected onFleetTap(): void {
+    const count = this.liveRuns();
+    if (count !== null && count > 0) {
+      this.state?.toast?.(`Runner: ${count} Runs live`, 'ok');
+    }
+  }
 
   /** The card whose bottom sheet is open. */
   protected readonly openCard = signal<TicketVm | null>(null);
@@ -107,7 +133,12 @@ export class Work {
    */
   protected promoteTicket(vm: NeedVm): void {
     const ticketId = vm.need.ticketId;
-    if (ticketId === undefined || ticketId === null || ticketId === '' || this.state?.promote === undefined) {
+    if (
+      ticketId === undefined ||
+      ticketId === null ||
+      ticketId === '' ||
+      this.state?.promote === undefined
+    ) {
       return;
     }
     this.state.promote(ticketId);

@@ -3,32 +3,31 @@ import {
   Component,
   DestroyRef,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
 import { renderMarkdown, type MdBlock } from './markdown';
-import { isJumpPriority } from '../api/dto';
 import {
   ACCEPT_ARM_WINDOW_MS,
   ACCEPT_DISARMED,
   DEFAULT_DIFF_FONT_SIZE,
   MC_TICKET,
   acceptArmReduce,
-  blockerNoteOf,
   chainPrefillOf,
   chainStepsOf,
   diffFontSizeStep,
-  patchLineKind,
+  patchRowsOf,
   phaseTitleOf,
   proofOf,
   renderChainEntryViews,
   scoutReportOf,
   splitTicketSections,
+  verlaufTextOf,
   type AcceptArmState,
   type GateStep,
   type ProofReport,
   type ScoutReport,
-  type TicketBlockerNote,
   type TicketDiffFile,
 } from './ticket.model';
 
@@ -38,31 +37,34 @@ export interface TicketScreenResult {
   readonly text: string;
 }
 
-/** One screenshot thumbnail in the proof card's swipeable row. */
+/** One screenshot thumbnail in the proof card's swipeable gallery. */
 export interface ProofShot {
   readonly name: string;
   readonly url: string;
 }
 
 /**
- * The ticket screen (concept §5.3–5.5): the destination every card
- * points to. Header with the back arrow, id, title and phase chip; the
- * gate bar over the merged gate chain (E9, concept §5.7: the standard
- * flow plus the ticket's `chain:` delta — inserted gates wear the
- * addition mark, skipped ones strike through, the Bescheid rule rings);
- * the bar is tappable and opens the gate sheet — the three most common
- * chain interventions, each prefilling the chat's setChain command; the
- * ticket body as safe Markdown blocks; the `## Verification` section as
- * the proof card (criteria checklist, the swipeable screenshot gallery,
- * findings); the `## Report` section as the scout report card (E8: the
- * stamp, the summary, the decision options — a scout ticket's endpoint);
- * below it the diff as git rendered — collapsible files, the +/-
- * balance, a fullscreen patch viewer with stepped font size. The
- * actions row sits at the bottom in the thumb's reach: the armed
- * two-step Accept, the send-back panel with its mandatory note, and the
- * Edit toggle that hands the raw file to `mc-ticket-edit` (the exception
- * path, §5.5). Read-only paired devices watch: their actions hide
- * entirely, and the gate bar opens no sheet.
+ * The ticket screen (concept §5.3–5.5) in the prototype's look: the
+ * header with the 'Arbeit' back label, the mono id and the edit pencil
+ * (the raw-edit exception path toggles to `mc-ticket-edit`); the head
+ * card with the phase chip, the persona chip and the cost slot (tolerant
+ * empty until the engine's stage ledger delivers); the gate bar as pills
+ * over the merged gate chain (E9, concept §5.7 — done pills wear the
+ * check, the current one the dot and its persona, an inserted one the
+ * dashed addition mark, a skipped one the strike-through, the Bescheid
+ * rule rings ◎); tappable into the gate sheet, the chain-hint line under
+ * it saying so. The body renders as safe Markdown blocks (section heads
+ * in mono caps, checkboxes struck, code fences boxed); the `## Verlauf`
+ * chapter surfaces as its own yaml box when the file carries one; the
+ * `## Verification` section becomes the proof card (the verdict line,
+ * the criteria checklist, the snap gallery with its scroll-synced dots
+ * and the fullscreen viewer, the findings); the diff renders as the
+ * git table — file heads with chevron, path and the +/- balance, the
+ * magnifier into the fullscreen zoom, the first file open by default.
+ * The actions stay in the thumb's reach: the armed two-step Accept (the
+ * mint done ring takes over once accepted), the send-back panel with its
+ * mandatory note, and 'Per Chat ändern' prefilling the composer.
+ * Read-only paired devices watch: the writing actions hide entirely.
  */
 @Component({
   selector: 'mc-ticket',
@@ -100,25 +102,58 @@ export class TicketView {
 
   protected readonly readOnly = computed(() => this.vm.readOnly());
 
-  // --- the priority chip and the blocker line ---------------------------------
+  // --- the head card: persona, cost slot, the frontmatter line ---------------
 
-  /** The ticket's priority id — the chip's label; null = no chip. */
-  protected readonly priority = computed(() => this.doc()?.priority ?? null);
-
-  /** True when the priority sits in the configured vocabulary's jump class. */
-  protected readonly priorityJump = computed(() =>
-    isJumpPriority(this.priority(), this.doc()?.priorities ?? []),
+  /**
+   * The persona running the current gate — the chip's label; the chain
+   * delta can pin it, the plain ladder cannot, so this reads null until
+   * a delta names one (tolerant: the chip stays hidden then).
+   */
+  protected readonly persona = computed(
+    () => this.steps().find((step) => step.state === 'current')?.persona ?? null,
   );
 
-  /** The blocker line's note; null = the ticket names no dependencies. */
-  protected readonly blockers = computed<TicketBlockerNote | null>(() => {
+  /** The persona's display name: the id with its first letter raised. */
+  protected personaTitle(persona: string): string {
+    return persona.charAt(0).toUpperCase() + persona.slice(1);
+  }
+
+  /**
+   * The ticket's accumulated cost for the head card's slot — the engine
+   * does not deliver the stage ledger yet, so this reads null and the
+   * slot renders nothing (tolerant empty until it does).
+   */
+  protected readonly cost = computed<string | null>(() => null);
+
+  /** The mono frontmatter line under the title: `phase: x · persona: y`. */
+  protected readonly fmLine = computed(() => {
     const doc = this.doc();
-    return doc === null ? null : blockerNoteOf(doc.blocked, doc.blockedBy);
+    if (doc === null) {
+      return '';
+    }
+    const persona = this.persona();
+    return persona === null ? `phase: ${doc.phase}` : `phase: ${doc.phase} · persona: ${persona}`;
   });
 
   protected readonly steps = computed<GateStep[]>(() => {
     const doc = this.doc();
     return doc === null ? [] : chainStepsOf(doc.phases, doc.phase, doc.chain);
+  });
+
+  /**
+   * The chain total for the bar's end slot — the costs the engine has
+   * delivered so far, summed; null while no gate carries one (the slot
+   * renders nothing then, tolerant until the ledger wires up).
+   */
+  protected readonly costTotal = computed<string | null>(() => {
+    const costs = this.steps()
+      .map((step) => step.cost)
+      .filter((cost) => cost !== null);
+    if (costs.length === 0) {
+      return null;
+    }
+    const sum = costs.reduce((acc, cost) => acc + (Number.parseFloat(cost.replace(',', '.')) || 0), 0);
+    return `${sum.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
   });
 
   // --- the gate sheet (E9, concept §5.7) ----------------------------------------
@@ -275,6 +310,29 @@ export class TicketView {
     return verification === null ? null : proofOf(verification);
   });
 
+  /**
+   * The `## Verlauf` chapter as its yaml box reads it — fences stripped,
+   * prose kept; null while the ticket carries no chapter (the engine
+   * does not write one yet).
+   */
+  protected readonly verlauf = computed<string | null>(() => {
+    const section = this.sections().verlauf;
+    return section === null ? null : verlaufTextOf(section);
+  });
+
+  /** The proof's pass count for the verdict line; null while there is nothing to count. */
+  protected readonly verdict = computed<{ passed: number; total: number; stamp: string } | null>(() => {
+    const proof = this.proof();
+    if (proof === null || proof.criteria.length === 0) {
+      return null;
+    }
+    return {
+      passed: proof.criteria.filter((criterion) => criterion.passed).length,
+      total: proof.criteria.length,
+      stamp: proof.testedOn,
+    };
+  });
+
   /** The scout report card's data (E8); null = the ticket carries no Report section. */
   protected readonly report = computed<ScoutReport | null>(() => {
     const section = this.sections().report;
@@ -313,7 +371,15 @@ export class TicketView {
 
   protected readonly arm = signal<AcceptArmState>(ACCEPT_DISARMED);
   protected readonly acceptPending = signal(false);
+  /** True once an accept landed — the mint done ring takes over the actions. */
+  protected readonly accepted = signal(false);
   private armTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** A fresh ticket starts unaccepted — the ring belongs to one accept only. */
+  private readonly resetAcceptedOnTicket = effect(() => {
+    this.doc()?.id;
+    this.accepted.set(false);
+  });
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.clearArmTimer());
@@ -345,6 +411,7 @@ export class TicketView {
           ? { kind: 'note', text: reply.warning ?? 'Accepted.' }
           : { kind: 'error', text: reply.error ?? 'The accept failed.' },
       );
+      this.accepted.set(reply.ok);
     } catch {
       this.result.set({ kind: 'error', text: 'The accept failed.' });
     } finally {
@@ -403,7 +470,13 @@ export class TicketView {
 
   // --- the raw-edit exception path (rendered by mc-ticket-edit) --------------------
 
-  /** The Edit toggle: the vm owns the mode so the view and the editor agree on it. */
+  /**
+   * The edit pencil in the header: the vm owns the mode so the view and
+   * the editor agree on it — the view yields the overlay to the editor
+   * while the mode stands.
+   */
+  protected readonly editing = computed(() => this.vm.editing());
+
   protected toggleEdit(): void {
     if (this.readOnly() || this.isEmpty()) {
       return;
@@ -415,18 +488,71 @@ export class TicketView {
     }
   }
 
+  // --- the chat CTA -------------------------------------------------------------
+
+  /**
+   * 'Per Chat ändern': the composer inherits the ticket context as the
+   * `<id>:` prefix and the owner words the change — the one safe path,
+   * nothing writes from here.
+   */
+  protected changeByChat(): void {
+    const doc = this.doc();
+    if (doc === null) {
+      return;
+    }
+    const prefill = this.vm.prefillChat ?? this.vm.proposeChain;
+    prefill.call(this.vm, `${doc.id}: `);
+  }
+
+  // --- the gallery dots ------------------------------------------------------------
+
+  /** The gallery's snap position — the dot wearing the accent. */
+  protected readonly galIndex = signal(0);
+
+  /** The scroll-sync: the dot follows the shot the thumb parked on. */
+  protected onGalScroll(gal: HTMLElement): void {
+    const count = this.shots().length;
+    if (count === 0 || gal.scrollWidth === 0) {
+      return;
+    }
+    const step = gal.scrollWidth / count;
+    const at = Math.min(Math.max(Math.round(gal.scrollLeft / step), 0), count - 1);
+    this.galIndex.set(at);
+  }
+
+  /** A dot tap scrolls the gallery to that shot. */
+  protected galTo(index: number, gal: HTMLElement): void {
+    const count = this.shots().length;
+    if (count === 0 || gal.scrollWidth === 0) {
+      return;
+    }
+    gal.scrollTo({ left: (gal.scrollWidth / count) * index, behavior: 'smooth' });
+    this.galIndex.set(index);
+  }
+
   // --- the diff card -------------------------------------------------------------
+
+  /** True once the owner toggled a file head — the implicit first-open then retires. */
+  private readonly touched = signal(false);
 
   protected readonly expanded = signal<readonly string[]>([]);
 
+  /**
+   * A file is open when the owner opened it; before any tap the diff
+   * follows the prototype: the first file starts open, the rest closed.
+   */
   protected isExpanded(path: string): boolean {
+    if (!this.touched()) {
+      return this.diff()?.files[0]?.path === path;
+    }
     return this.expanded().includes(path);
   }
 
   protected toggleExpanded(path: string): void {
-    this.expanded.update((paths) =>
-      paths.includes(path) ? paths.filter((known) => known !== path) : [...paths, path],
-    );
+    const first = this.diff()?.files[0]?.path;
+    const base = !this.touched() && first !== undefined ? [first] : [...this.expanded()];
+    this.touched.set(true);
+    this.expanded.set(base.includes(path) ? base.filter((known) => known !== path) : [...base, path]);
   }
 
   protected readonly fullscreen = signal<TicketDiffFile | null>(null);
@@ -446,16 +572,7 @@ export class TicketView {
     this.fontSize.set(diffFontSizeStep(this.fontSize(), direction));
   }
 
-  protected patchLines(patch: string): readonly string[] {
-    return patch.split('\n');
-  }
-
-  protected readonly patchLineKind = patchLineKind;
-
-  protected diffStatusClass(status: string): string {
-    const letter = status.trim().charAt(0).toLowerCase();
-    return letter === '' ? 'diff-status' : `diff-status-${letter}`;
-  }
+  protected readonly patchRows = patchRowsOf;
 
   // --- the screenshot viewer -------------------------------------------------------
 

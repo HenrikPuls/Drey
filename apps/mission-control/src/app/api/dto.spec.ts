@@ -292,8 +292,8 @@ describe('parseTeam', () => {
   });
 
   it('never throws on junk', () => {
-    expect(parseTeam(null, null)).toEqual({ personas: [] });
-    expect(parseTeam([null, { title: 'no id' }, 'x'], 'junk')).toEqual({ personas: [] });
+    expect(parseTeam(null, null)).toEqual({ personas: [], runs: [] });
+    expect(parseTeam([null, { title: 'no id' }, 'x'], 'junk')).toEqual({ personas: [], runs: [] });
   });
 });
 
