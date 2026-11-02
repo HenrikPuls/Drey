@@ -366,6 +366,36 @@ the runner rely on:
   tidied capture (req-75 W5c) carries a `raw capture:` Log line with
   the owner's original words, right after `created in`.
 
+### The ticket status log (E7)
+
+`tickets/<phase>/<id>.status.log` — one machine log per ticket, in the
+ticket's current phase folder, beside the `<id>.md` file it mirrors.
+It is the fleet's and the engine's single source for "whose turn /
+what blocks"; the UI reads projections from it, never free text.
+**Append-only**: ONE line per event, machine shape
+`- '<UTC timestamp>' <verb>: <payload>`, the verbs:
+
+- `working:` — what the run does now.
+- `needs-decision: [<short-key>] <the question, with a recommendation>`
+  — waits for the owner.
+- `blocked: [<short-key>] <what holds the run>`.
+- `paused: <reason> until <time>`.
+- `resolved: <key>` — the owner answered / the blocker cleared; the
+  payload IS the key.
+- `done:` — the step handed over.
+- `failed: <why>`.
+
+Every `needs-decision` and `blocked` **carries a key** — a short
+lowercase slug (`[palette-shortcut]`) — because the key is how the
+owner answers: an open key stays on the owner's desk (the Needs-you
+list raises one card per open key) until a `resolved:` line naming it
+closes it. Newer lines never close a key implicitly; a keyless line
+is its own item, surfaced visibly instead of matched. Writers append
+their own lines only — an older line is never rewritten or reordered;
+readers are tolerant (a broken line is skipped, never guessed). The
+log is plain text a human may read and append; it never lives inside
+the ticket file, and the ticket file never embeds it.
+
 ## `_meta/pipeline.md` — the phases and their handovers
 
 ```markdown

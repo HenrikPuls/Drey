@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { remoteActorOf } from '../contracts/remote-protocol';
-import type { BoardSnapshot } from '../contracts/tickets';
+import type { BoardSnapshot, TicketCard } from '../contracts/tickets';
+import { parseStatusLog, type StatusLine } from '../core/status-log';
 import { BYPASS_REFUSAL, ChangeHub, DreyTicketsPort, type RemoteBoard, type RemoteFleet } from './drey-port';
 
 /**
@@ -43,6 +44,7 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
     sendBack: vi.fn(async () => ok),
     personaImprovements: vi.fn(async () => ({ ok: false as const, error: 'persona "pia" does not exist' })),
     decideImprovement: vi.fn(async () => ok),
+    statusOf: vi.fn(async () => [] as readonly StatusLine[]),
   };
   const fleet: RemoteFleet = {
     runs: vi.fn(async () => []),
@@ -192,6 +194,140 @@ describe('DreyTicketsPort', () => {
         : { ok: true, persona: fakePersona('ben', 'Ben'), proposals: [], openCount: 1, frictionCount: 0 },
     );
     expect(await port.needs()).toEqual([]);
+  });
+
+  describe('the E7 status needs', () => {
+    /** A minimal board card — only what needsOf and statusNeeds read. */
+    function card(id: string, phase: string, title: string | null): TicketCard {
+      return {
+        id,
+        path: `tickets/${phase}/${id}.md`,
+        phase,
+        meta: { title, entered: {}, run: null, claimedBy: null },
+      } as unknown as TicketCard;
+    }
+
+    function boardWith(cards: readonly { id: string; phase: string; title: string | null }[]): BoardSnapshot {
+      const phases = [...new Set(cards.map((c) => c.phase))];
+      return {
+        columns: phases.map((phase) => ({
+          phase: { id: phase },
+          tickets: cards.filter((c) => c.phase === phase).map((c) => card(c.id, c.phase, c.title)),
+          unknown: false,
+        })),
+        checkpoints: [],
+      } as unknown as BoardSnapshot;
+    }
+
+    it('surfaces every board ticket open decisions and blockers, keys in the text', async () => {
+      const { board, fleet } = fakes();
+      vi.mocked(board.refresh).mockResolvedValue(
+        boardWith([
+          { id: 'T-0001', phase: 'build', title: 'The build ticket' },
+          { id: 'T-0002', phase: 'review', title: null },
+        ]),
+      );
+      vi.mocked(board.statusOf).mockImplementation(async (id: string) =>
+        id === 'T-0001'
+          ? parseStatusLog(
+              [
+                "- '2026-11-02T09:00:00Z' working: build on opus",
+                "- '2026-11-02T09:12:00Z' needs-decision: [palette-shortcut] Which shortcut should open the palette?",
+                "- '2026-11-02T09:30:00Z' blocked: waiting for CI",
+              ].join('\n'),
+            )
+          : parseStatusLog("- '2026-11-02T10:00:00Z' needs-decision: Which colour?"),
+      );
+      const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+
+      expect(await port.needs()).toEqual([
+        // The keyless blocked line is its own item and the fold surfaces
+        // keyless items before the keyed ones.
+        {
+          kind: 'blocked',
+          ticketId: 'T-0001',
+          title: 'The build ticket',
+          phase: 'build',
+          runId: null,
+          text: 'waiting for CI',
+          since: '2026-11-02T09:30:00Z',
+        },
+        {
+          kind: 'needs-decision',
+          ticketId: 'T-0001',
+          title: 'The build ticket',
+          phase: 'build',
+          runId: null,
+          text: '[palette-shortcut] Which shortcut should open the palette?',
+          since: '2026-11-02T09:12:00Z',
+        },
+        {
+          kind: 'needs-decision',
+          ticketId: 'T-0002',
+          title: 'T-0002',
+          phase: 'review',
+          runId: null,
+          text: 'Which colour?',
+          since: '2026-11-02T10:00:00Z',
+        },
+      ]);
+    });
+
+    it('a resolved key vanishes; a ticket with nothing open contributes nothing', async () => {
+      const { board, fleet } = fakes();
+      vi.mocked(board.refresh).mockResolvedValue(boardWith([{ id: 'T-0001', phase: 'build', title: 'The build ticket' }]));
+      vi.mocked(board.statusOf).mockResolvedValue(
+        parseStatusLog(
+          [
+            "- '2026-11-02T09:12:00Z' needs-decision: [palette-shortcut] Which shortcut should open the palette?",
+            "- '2026-11-02T09:40:00Z' resolved: palette-shortcut",
+            "- '2026-11-02T09:45:00Z' done: handed over on build",
+          ].join('\n'),
+        ),
+      );
+      const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+      expect(await port.needs()).toEqual([]);
+    });
+
+    it('a broken status read appends nothing, the other tickets still surface', async () => {
+      const { board, fleet } = fakes();
+      vi.mocked(board.refresh).mockResolvedValue(
+        boardWith([
+          { id: 'T-0001', phase: 'build', title: 'The build ticket' },
+          { id: 'T-0002', phase: 'review', title: null },
+        ]),
+      );
+      vi.mocked(board.statusOf).mockImplementation(async (id: string) =>
+        id === 'T-0001'
+          ? Promise.reject(new Error('EBUSY: the status log is locked'))
+          : parseStatusLog("- '2026-11-02T10:00:00Z' blocked: [ci-red] the gate is red"),
+      );
+      const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+
+      expect(await port.needs()).toEqual([
+        {
+          kind: 'blocked',
+          ticketId: 'T-0002',
+          title: 'T-0002',
+          phase: 'review',
+          runId: null,
+          text: '[ci-red] the gate is red',
+          since: '2026-11-02T10:00:00Z',
+        },
+      ]);
+    });
+
+    it('caps the status needs at 20', async () => {
+      const { board, fleet } = fakes();
+      vi.mocked(board.refresh).mockResolvedValue(boardWith([{ id: 'T-0001', phase: 'build', title: null }]));
+      const many = Array.from({ length: 25 }, (_, i) => `- '2026-11-02T1${String(i).padStart(2, '0')}:00:00Z' needs-decision: question ${i + 1}?`);
+      vi.mocked(board.statusOf).mockResolvedValue(parseStatusLog(many.join('\n')));
+      const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+
+      const needs = await port.needs();
+      expect(needs).toHaveLength(20);
+      expect(needs.every((item) => item.kind === 'needs-decision' && item.ticketId === 'T-0001')).toBe(true);
+    });
   });
 });
 

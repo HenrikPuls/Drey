@@ -20,6 +20,8 @@ import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhase
 import { detectDrift, recentDoneOf, type DriftDetection } from '../core/normalize';
 import { blockedRefusal } from '../core/blocked';
 import { runTransition, type TransitionIo } from '../core/transition';
+import { parseStatusLog, type StatusLine } from '../core/status-log';
+import type { LedgerWrite } from '../core/ledger';
 import { mergeWorktreeChanges, diffOfOutput, type TicketDiff, type WorktreeFile } from '../core/worktree-changes';
 import { planWorktreeRemoval } from '../core/worktree-removal';
 import { TicketsGit, type RepoLocation } from '../core/tickets-git';
@@ -35,6 +37,7 @@ import { columnPromptRef, isAutoPhase, nextPhaseIdOf } from '../fleet/chain';
 import { readRepoInstructions, worktreeDiffStat } from '../fleet/context-pack';
 import { cleanWorktrees, listOrphans, removeWorktree, type CleanupReport } from '../fleet/worktree-clean';
 import { unlinkShared } from '../fleet/worktrees';
+import { statusLogPathOf } from '../fleet/event-writer';
 import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } from '../fleet/worktree-home';
 import { type ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, InteractiveMode, PermissionMode, RunInfo, FleetPools } from '../fleet/protocol';
 import { type EngineHost, type EngineVaultChangeEvent, EngineVault, FleetPort } from './host';
@@ -172,6 +175,20 @@ export interface ImprovementInput {
   readonly settledRuns: number;
 }
 
+/**
+ * The E7 ledger sink (concept §3.3): the runner's event writer or a test
+ * fake. Fire-and-forget — a failure never reaches the board mutation.
+ */
+export interface LedgerEvents {
+  readonly ledger: (write: LedgerWrite) => void;
+}
+
+/** The optional construction extras (E7); the default keeps every existing call site. */
+export interface BoardServiceOptions {
+  /** The fleet ledger writes behind the board's lifecycle events; absent = silent no-op. */
+  readonly events?: LedgerEvents;
+}
+
 export class EngineBoardService {
   private queueTail: Promise<unknown> = Promise.resolve();
   private readonly gitLocations = new Map<string, RepoLocation | null>();
@@ -199,6 +216,8 @@ export class EngineBoardService {
     private handover: FleetHandoverConfig,
     /** The acting owner (`owner@host`) — injected by the host. */
     private readonly owner: string,
+    /** The optional extras (E7 ledger writes); `{}` keeps the service event-free. */
+    private readonly options: BoardServiceOptions = {},
   ) {}
 
   /** The board's emit, debounced — one push per burst of changes. */
@@ -381,6 +400,20 @@ export class EngineBoardService {
     return found === null
       ? { ok: false, error: `${id} is not on the board` }
       : { ok: true, card: found.card, text: found.text, revision: revisionOf(found.text) };
+  }
+
+  /**
+   * The E7 status read (concept §3.3): the ticket's `<card>.status.log`
+   * parsed tolerant — the persona's verbs, newest last. An absent ticket
+   * or log reads as no lines; broken lines are skipped, never guessed.
+   */
+  async statusOf(id: string): Promise<readonly StatusLine[]> {
+    const found = await this.findCard(id);
+    if (found === null) {
+      return [];
+    }
+    const text = await this.readOptional(found.vault.id, statusLogPathOf(found.card.path));
+    return text === null ? [] : parseStatusLog(text);
   }
 
   /**
@@ -897,7 +930,7 @@ export class EngineBoardService {
     // stamp here would block the target column's pool, since the
     // dispatcher never takes claimed cards. Claims belong to the
     // takeover/release menu and to the fleet's own moves.
-    return runTransition(this.transitionIo(vault), {
+    const result = await runTransition(this.transitionIo(vault), {
       id: card.id,
       fromPath: card.path,
       patch: { to, from, now: new Date(), actor },
@@ -906,6 +939,11 @@ export class EngineBoardService {
       commitMessage: `tickets: ${card.id} ${from} -> ${to}`,
       pushRemote: snap.pushRemote,
     });
+    // E7: the ledger's phase line rides the successful move.
+    if (result.ok) {
+      this.options.events?.ledger({ kind: 'phase', ticket: card.id, from, to });
+    }
+    return result;
   }
 
   /**
@@ -944,7 +982,7 @@ export class EngineBoardService {
    * manual act inside `archive/`.
    */
   private async archiveCard(vault: EngineVault, snap: BoardSnapshot, card: TicketCard, actor: string): Promise<BoardMutationResult> {
-    return runTransition(this.transitionIo(vault), {
+    const result = await runTransition(this.transitionIo(vault), {
       id: card.id,
       fromPath: card.path,
       patch: { to: 'archive', from: null, now: new Date(), actor, action: 'archived' },
@@ -952,6 +990,11 @@ export class EngineBoardService {
       commitMessage: `tickets: ${card.id} archived`,
       pushRemote: snap.pushRemote,
     });
+    // E7: the ledger's archived line rides the successful archive.
+    if (result.ok) {
+      this.options.events?.ledger({ kind: 'archived', ticket: card.id });
+    }
+    return result;
   }
 
   /**
@@ -1032,6 +1075,9 @@ export class EngineBoardService {
       if (!archived.ok) {
         return archived;
       }
+      // E7: a terminal Accept is the ledger's merged line (the archive
+      // itself already wrote the archived line).
+      this.options.events?.ledger({ kind: 'merged', ticket: card.id });
       const warnings = [archived.warning];
       const worktreeWarning = await this.removeWorktreeAfterAccept(vault, snap, card);
       if (worktreeWarning !== null) {

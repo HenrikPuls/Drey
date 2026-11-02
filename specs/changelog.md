@@ -1,4 +1,62 @@
 
+### Milestone 108 — the status log + fleet ledger surface (Mission-Control migration E7)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-02
+(outside the list; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md),
+etappe E7 — the concept's §3.3: the machine keeps a ticket's status
+and the fleet's events in machine-shaped files the UI reads as
+projections, never free text). The status-log contract
+(`packages/tickets-engine/src/core/status-log.ts`, a pure data form
+since milestone 98) gains its writers and readers: one append-only
+`tickets/<phase>/<id>.status.log` beside the ticket — ONE line per
+event, `- '<ISO stamp>' <verb>: <payload>`, the verbs `working` /
+`needs-decision` / `blocked` / `paused` / `done` / `failed` /
+`resolved`; every `needs-decision` and `blocked` carries a
+`[short-key]` so the owner can resolve it, and an open key stays open
+until a `resolved: <key>` line closes it — the open-decisions fold:
+newer lines never close a key implicitly, a keyless line is its own
+item, surfaced visibly instead of dropped (strict writer, tolerant
+reader — the ADR-0076 discipline; the log is append-only, an older
+line is never rewritten). The fleet ledger (`core/ledger.ts`, also a
+data form since 98) is the events' fast lane:
+`tickets/_meta/ledger.jsonl`, one strict JSON line per event —
+`dispatched` / `phase` / `proof_ready` / `merged` / `archived`
+(`v: 1`, ts, ticket, persona, model, cost, from/to when known) — read
+by Mission Control and the reports without parsing Markdown; it is
+swept into git by the next regular commit rather than committed per
+line. The writers ride optional seams, absent = silent no-op: the
+runner side (an event-writer on the orchestrator's deps) writes
+`dispatched` / `working` / `done` / `blocked` / `failed` for its runs,
+the board side writes `phase` on every move and `merged` / `archived`
+at the terminal transitions, the verify service writes `proof_ready`
+with the run's settled cost — each append rides its writer's own
+commit cadence. The Needs-you composition (`server/drey-port.ts`'s
+`needs()` over `needsOf`) folds the status logs in: every open key
+lifts one card of the two new kinds `'needs-decision'` / `'blocked'`
+(`NeedKind` in `contracts/remote-protocol.ts`) onto the owner's list,
+beside the question / permission / red-gate / checkpoint items, keyed
+so the owner's answer lands as the ticket's `resolved:` line. The
+workers' write path ships in the prompts — build, review and qa carry
+the 'The status log is the owner's live view' paragraph asking for
+the one-line-per-event discipline before the run ends (key every
+needs-decision and blocked; append only your own lines). Specs:
+`core/status-log.spec.ts` (4; the verb grammar, the keyed lines, the
+open-decisions fold), `core/ledger.spec.ts` (4; the strict line, the
+tolerant read, the cost rounding), the runner rows in
+`fleet/orchestrator.spec.ts` (the event-writer: dispatch, settle,
+blocked, failed), `services/board-service.spec.ts` (the
+phase/merged/archived appends on the transition pipeline),
+`services/verify-service.spec.ts` (`proof_ready` with the cost),
+`server/drey-port.spec.ts` and the gateway's `server/router.spec.ts`
+(the two new NeedKinds end to end), the app's `work.spec.ts` and
+`api/dto.ts` (the new kinds' labels and parse), the prompts' shape
+still asserted by `core/default-prompts.spec.ts` (LF,
+newline-terminated, the working style in every prompt). Deliberate
+scope cut: the status log and the ledger record, they do not yet
+drive — no auto-action fires on an open key beyond the Needs-you
+card, and the ledger's report surface waits for the reporting
+milestone.
+
 ### Milestone 107 — the self-improvement loop (Mission-Control migration E6)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-02

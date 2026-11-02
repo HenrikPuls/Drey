@@ -98,3 +98,15 @@ How to work:
   — `tickets/_meta/personas/<your persona>/friction.md`, shape
   `- <date> · <ticket id> · <what was missing>`. One line per finding,
   plain words. No persona in your brief: skip it.
+- The status log is the owner's live view of your run (the Needs-you
+  list reads it): before you end, bring the ticket's status log up to
+  date — `tickets/<phase>/<ticket id>.status.log` beside the ticket,
+  ONE line per event, shape `- '<ISO stamp>' <verb>: <payload>`, with
+  the verbs `working:` (what you do), `needs-decision: [<short-key>]
+  <the question, with your recommendation>`, `blocked: [<short-key>]
+  <what holds you>`, `paused: <reason> until <time>`, `resolved:
+  <key>` (the owner answered / the blocker cleared), `done:` (handed
+  over) and `failed:` (why). Key every needs-decision and blocked so
+  the owner can resolve it — an open key stays on the owner's desk
+  until a `resolved:` line closes it. Append only YOUR lines; never
+  rewrite an older one.

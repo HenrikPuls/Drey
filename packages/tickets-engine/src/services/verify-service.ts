@@ -29,7 +29,7 @@ import { acceptanceCommands, withLogLine } from '../core/ticket-files';
 import { TicketsGit } from '../core/tickets-git';
 import { nextPhaseIdOf } from '../fleet/chain';
 import { worktreePathFor } from '../fleet/worktree-home';
-import type { EngineBoardService } from './board-service';
+import type { EngineBoardService, LedgerEvents } from './board-service';
 import type { EngineHost, EngineVault } from './host';
 
 /** The vault's attachment folder — the `verify-…` file names are ours (`img-…` stays the phone's). */
@@ -53,6 +53,8 @@ export interface VerifyServiceDeps {
   /** The run's author (`verify@<host>`) — the section's tester and the Log lines' who. */
   readonly actor: string;
   readonly log?: (message: string, level?: 'info' | 'warn' | 'error') => void;
+  /** E7: the fleet ledger writes; absent = the proof persists without a ledger line. */
+  readonly events?: LedgerEvents;
 }
 
 export type VerifyTriggerResult = { readonly ok: true; readonly warning?: string } | { readonly ok: false; readonly error: string };
@@ -210,6 +212,8 @@ export class VerifyService {
     await this.deps.host.write(vaultId, card.path, patched);
     const shotPaths = shots.map((s) => `${ATTACHMENTS_DIR}/${s.file}`);
     const warning = await this.commit(vault, [card.path, ...shotPaths], `tickets: ${id} verified`);
+    // E7: the ledger's proof_ready line rides the persisted proof.
+    this.deps.events?.ledger({ kind: 'proof_ready', ticket: id, persona: null, model: null });
     this.deps.host.announceChanges(vaultId, [card.path, ...shotPaths]);
     this.setStatus(id, 'done', report, null);
 

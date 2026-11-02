@@ -295,7 +295,7 @@ export function parseWork(json: unknown): WorkView {
 
 /** The needs JSON (`[{kind, ticketId?, title, summary}]`); junk yields no needs. */
 export function parseNeeds(json: unknown): NeedView[] {
-  const NEED_KINDS = ['question', 'permission', 'red-gate', 'failed', 'checkpoint', 'improvements'];
+  const NEED_KINDS = ['question', 'permission', 'red-gate', 'failed', 'checkpoint', 'improvements', 'needs-decision', 'blocked'];
   const needs: NeedView[] = [];
   for (const raw of arr(json)) {
     const item = rec(raw);

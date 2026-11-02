@@ -27,7 +27,17 @@ import type { ImprovementProposal, ImprovementState } from '../core/improvements
 import type { Persona } from '../core/persona';
 
 /** What the "Needs you" list holds, in the order it shows them. */
-export type NeedKind = 'question' | 'permission' | 'red-gate' | 'failed' | 'checkpoint' | 'improvements';
+export type NeedKind =
+  | 'question'
+  | 'permission'
+  | 'red-gate'
+  | 'failed'
+  | 'checkpoint'
+  | 'improvements'
+  /** E7: an open decision key in the ticket's status log. */
+  | 'needs-decision'
+  /** E7: an open blocker in the ticket's status log. */
+  | 'blocked';
 
 /** One thing that waits on the owner. */
 export interface NeedItem {

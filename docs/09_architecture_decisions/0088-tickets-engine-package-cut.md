@@ -1,7 +1,7 @@
 # 0088 — Tickets engine: the package cut (Mission-Control migration, E0)
 
 - Status: accepted (2026-11-01, E0 of the owner-approved migration plan; the
-  later etappen E1–E6 amend this record as they land)
+  later etappen E1–E7 amend this record as they land)
 - Relates: [ADR-0075](0075-agent-fleet-architecture-governance-and-run-control.md)
   (the fleet runner — its code moves, its behaviour does not),
   [ADR-0076](0076-ticket-repository-format-and-coordination.md) (the format
@@ -246,6 +246,31 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   commit per decision, never rewriting a line already written. The
   Needs-you group gains the `'improvements'` kind, raised when a
   persona's open proposals reach the threshold. Not yet manually
+  verified by the owner.
+- **E7 (milestone 108):** the status log + fleet ledger (concept §3.3) —
+  the machine keeps a ticket's status and the fleet's events in
+  machine-shaped files the UI reads as projections. The per-ticket
+  `tickets/<phase>/<id>.status.log` (the contract in
+  `core/status-log.ts`, a data form since E1) is append-only beside
+  the ticket: one line per event, `- '<ISO stamp>' <verb>: <payload>`,
+  the verbs `working` / `needs-decision` / `blocked` / `paused` /
+  `done` / `failed` / `resolved`, every `needs-decision` and `blocked`
+  keyed (`[short-key]`) so the owner can resolve it — an open key
+  stays on the owner's desk until a `resolved:` line closes it (the
+  open-decisions fold; strict writer, tolerant reader). The fleet
+  ledger (`core/ledger.ts`) writes `tickets/_meta/ledger.jsonl` — one
+  strict JSON line per `dispatched` / `phase` / `proof_ready` /
+  `merged` / `archived` event, swept into git by the next regular
+  commit, never committed per line. The writers are optional seams:
+  the orchestrator's deps carry a runner-side event-writer
+  (dispatched / working / done / blocked / failed), the board service
+  appends phase / merged / archived on its transitions, the verify
+  service appends proof_ready with the settled cost. The Needs-you
+  composition (`drey-port.ts`'s `needs()`) lifts every open key into
+  one card of the two new kinds `'needs-decision'` / `'blocked'`
+  (`NeedKind` in `contracts/remote-protocol.ts`), and the build /
+  review / qa prompts carry the status-log paragraph asking the worker
+  to keep the log current before the run ends. Not yet manually
   verified by the owner.
 
 

@@ -251,10 +251,20 @@ describe('nextPhaseOf', () => {
 
 describe('card helpers', () => {
   it('labels the known need kinds and passes unknown ones through', () => {
-    expect(NEED_KIND_LABELS['checkpoint']).toBe('Checkpoint');
-    expect(NEED_KIND_LABELS['improvements']).toBe('Improvements');
+    expect(NEED_KIND_LABELS).toEqual({
+      question: 'Asks you',
+      permission: 'Wants permission',
+      'red-gate': 'Gate red',
+      failed: 'Run failed',
+      checkpoint: 'Checkpoint',
+      improvements: 'Improvements',
+      'needs-decision': 'Needs decision',
+      blocked: 'Blocked',
+    });
     expect(needKindLabelOf('question')).toBe('Asks you');
     expect(needKindLabelOf('improvements')).toBe('Improvements');
+    expect(needKindLabelOf('needs-decision')).toBe('Needs decision');
+    expect(needKindLabelOf('blocked')).toBe('Blocked');
     expect(needKindLabelOf('mystery')).toBe('mystery');
   });
 

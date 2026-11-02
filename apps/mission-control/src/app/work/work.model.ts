@@ -162,6 +162,8 @@ export const NEED_KIND_LABELS: Readonly<Record<string, string>> = {
   failed: 'Run failed',
   checkpoint: 'Checkpoint',
   improvements: 'Improvements',
+  'needs-decision': 'Needs decision',
+  blocked: 'Blocked',
 };
 
 /** The need card's kind chip; an unknown kind shows itself, never a guess. */

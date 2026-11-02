@@ -1,134 +1,108 @@
 /**
- * The per-ticket status log (ADR-0088, E1 — data form; consumers arrive
- * with the watcher and the chat in E3/E5). A `<ticket>.status.log` sits
- * beside the ticket file: append-only, machine-written, one verb line per
- * event. Personas write exactly one line per event —
+ * The ticket status log (E7, concept §3.3): `<ticket>.status.log` beside
+ * the ticket file lives one machine line per event — the persona's
+ * verbs. It is the single source for "whose turn / what blocks": the
+ * UI reads projections from it, never free text. Strict writer,
+ * tolerant reader (ADR-0076 discipline).
  *
- *   - 2026-11-01T14:30:00Z working: plan draft ready
- *   - 2026-11-01T14:31:12Z needs-decision: [key=base-ref] fork from the freshest ref?
- *   - 2026-11-01T15:02:40Z paused: waiting for CI until 15:00
- *   - 2026-11-01T16:00:00Z resolved: base-ref
+ *     - '2026-11-02T09:00:00Z' working: build on opus
+ *     - '2026-11-02T09:12:00Z' needs-decision: [palette-shortcut] Which shortcut should open the palette?
+ *     - '2026-11-02T09:30:00Z' blocked: waiting for CI
+ *     - '2026-11-02T09:31:00Z' paused: owner review until 15:00
+ *     - '2026-11-02T09:40:00Z' resolved: palette-shortcut
+ *     - '2026-11-02T09:45:00Z' done: handed over
+ *     - '2026-11-02T09:46:00Z' failed: gate red — npm test
  *
- * The log is the single source for "needs you" and the state chips
- * (Firstmate's keyed decisions): an open `needs-decision`/`blocked` KEY
- * stays visible until it is explicitly closed by `resolved: <key>` — no
- * matter how many newer lines pile up on top (the open-decisions fold).
- * Derived state is computed, never stored.
+ * Open `needs-decision`/`blocked` keys stay visible until a `resolved:`
+ * line closes them — no matter how many newer lines pile on top
+ * (the open-decisions fold).
  */
 
-export type StatusVerb = 'working' | 'blocked' | 'needs-decision' | 'paused' | 'done' | 'failed' | 'resolved';
+export type StatusVerb = 'working' | 'needs-decision' | 'blocked' | 'paused' | 'done' | 'failed' | 'resolved';
 
-export const STATUS_VERBS: readonly StatusVerb[] = ['working', 'blocked', 'needs-decision', 'paused', 'done', 'failed', 'resolved'];
-
-/** The verbs whose detail may carry a `[key=<slug>]` — the foldable decisions. */
-export const KEYED_VERBS: readonly StatusVerb[] = ['needs-decision', 'blocked'];
-
-export interface StatusEntry {
-  /** ISO-8601 UTC stamp, as written. */
-  readonly ts: string;
+export interface StatusLine {
+  /** ISO stamp as written. */
+  readonly at: string;
   readonly verb: StatusVerb;
   /**
-   * The fold key for the keyed verbs (`[key=base-ref]` in the detail);
-   * null for the other verbs and for malformed key shapes.
+   * The decision key (`[palette-shortcut]`); null for the other verbs —
+   * and for needs-decision lines written without a key.
    */
   readonly key: string | null;
-  /** The detail after the verb, key marker stripped. */
-  readonly detail: string;
+  /** The free-text payload; '' when the line carries none. */
+  readonly text: string;
 }
 
-export interface OpenDecision {
-  readonly key: string;
-  /** The verb that opened it (`needs-decision` or `blocked`). */
-  readonly verb: StatusVerb;
-  readonly ts: string;
-  readonly detail: string;
-}
+const LINE = /^- '([^']+)' (working|needs-decision|blocked|paused|done|failed|resolved): ?(.*)$/;
 
-const LINE_RE = /^- (\S+) (working|blocked|needs-decision|paused|done|failed|resolved):(?:\s+(.*))?$/;
-const KEY_RE = /^\[key=([a-z0-9][a-z0-9-]*)\]\s*(.*)$/;
-
-export function isStatusVerb(word: string): word is StatusVerb {
-  return (STATUS_VERBS as readonly string[]).includes(word);
-}
-
-/** Parse the whole log, oldest first. Lines the grammar does not know —
- *  human scribbles, empty lines — are skipped, never fatal: the file is a
- *  machine interface a human may still touch. */
-export function parseStatusLog(text: string): StatusEntry[] {
-  const entries: StatusEntry[] = [];
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trimEnd();
-    if (line === '' || !line.startsWith('- ')) {
-      continue;
-    }
-    const match = LINE_RE.exec(line);
+/** Reads the log tolerantly; broken lines are skipped, never guessed. */
+export function parseStatusLog(text: string): readonly StatusLine[] {
+  const lines: StatusLine[] = [];
+  for (const raw of text.split('\n')) {
+    const match = LINE.exec(raw.trim());
     if (match === null) {
       continue;
     }
-    const verb = match[2] as StatusVerb;
-    let detail = (match[3] ?? '').trim();
+    let payload = match[3]!.trim();
     let key: string | null = null;
-    if (KEYED_VERBS.includes(verb)) {
-      const keyed = KEY_RE.exec(detail);
+    if (match[2] === 'resolved') {
+      // `resolved: <key>` — the payload IS the key.
+      if (/^[a-z0-9][a-z0-9-]{0,63}$/i.test(payload)) {
+        key = payload.toLowerCase();
+        payload = '';
+      }
+    } else if (match[2] === 'needs-decision' || match[2] === 'blocked') {
+      const keyed = /^\[([a-z0-9][a-z0-9-]{0,63})\]\s*(.*)$/i.exec(payload);
       if (keyed !== null) {
-        key = keyed[1]!;
-        detail = keyed[2]!.trim();
-      }
-    } else if (verb === 'resolved') {
-      // `resolved: <key>` carries the key positionally — the first token
-      // of the detail (a note may follow).
-      const positional = /^([a-z0-9][a-z0-9-]*)(?:\s+(.*))?$/.exec(detail);
-      if (positional !== null) {
-        key = positional[1]!;
-        detail = (positional[2] ?? '').trim();
+        key = keyed[1]!.toLowerCase();
+        payload = keyed[2]!.trim();
       }
     }
-    entries.push({ ts: match[1]!, verb, key, detail });
+    lines.push({ at: match[1]!, verb: match[2] as StatusVerb, key, text: payload });
   }
-  return entries;
+  return lines;
 }
 
-function isoUtc(now: Date): string {
-  return now.toISOString().replace(/\.\d{3}Z$/, 'Z');
+/** One open decision/blocker: the projection the Needs-you list renders. */
+export interface OpenStatusItem {
+  readonly verb: 'needs-decision' | 'blocked';
+  readonly key: string | null;
+  readonly text: string;
+  readonly since: string;
 }
 
 /**
- * Append one machine-shaped line. The key convention is enforced for the
- * keyed verbs: pass `key` and it is written as `[key=<slug>]`; a key that
- * does not match the slug grammar is refused (a mistyped key would open a
- * decision nothing can close).
+ * The open-decisions fold: every needs-decision/blocked key that has
+ * not seen a matching `resolved:` line, oldest first. A keyless line is
+ * its own item and can only be closed by a keyless `resolved:` … which
+ * never matches — so writers SHOULD key their decisions; the reader
+ * surfaces keyless ones instead of dropping them (visible, not silent).
  */
-export function appendStatusLine(text: string, now: Date, verb: StatusVerb, detail: string, key?: string): string {
-  const stamp = isoUtc(now);
-  const clean = detail.trim();
-  if (key !== undefined && KEYED_VERBS.includes(verb)) {
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(key)) {
-      throw new Error(`status-log key must be [a-z0-9-], got "${key}"`);
-    }
-    const line = `- ${stamp} ${verb}: [key=${key}] ${clean}`;
-    return text === '' ? line : `${text.replace(/\s+$/, '')}\n${line}`;
-  }
-  const line = `- ${stamp} ${verb}: ${clean}`;
-  return text === '' ? line : `${text.replace(/\s+$/, '')}\n${line}`;
-}
-
-/**
- * The open-decisions fold: the keys whose LAST event is `needs-decision`
- * or `blocked` — a `resolved: <key>` (or a newer keyed line of the same
- * key) closes it, anything else leaves it open. Verbs without a key never
- * open one. Deterministic and order-only: no clocks, no heuristics.
- */
-export function openDecisions(entries: readonly StatusEntry[]): OpenDecision[] {
-  const state = new Map<string, { verb: StatusVerb; ts: string; detail: string }>();
-  for (const entry of entries) {
-    if (entry.key === null) {
+export function openStatusItems(lines: readonly StatusLine[]): readonly OpenStatusItem[] {
+  const open = new Map<string, OpenStatusItem>();
+  const keyless: OpenStatusItem[] = [];
+  for (const line of lines) {
+    if (line.verb === 'resolved') {
+      if (line.key !== null) {
+        open.delete(line.key);
+      }
       continue;
     }
-    if (entry.verb === 'resolved') {
-      state.delete(entry.key);
-    } else if (KEYED_VERBS.includes(entry.verb)) {
-      state.set(entry.key, { verb: entry.verb, ts: entry.ts, detail: entry.detail });
+    if (line.verb !== 'needs-decision' && line.verb !== 'blocked') {
+      continue;
+    }
+    const item: OpenStatusItem = { verb: line.verb, key: line.key, text: line.text, since: line.at };
+    if (line.key === null) {
+      keyless.push(item);
+    } else {
+      open.set(line.key, item);
     }
   }
-  return [...state.entries()].map(([key, open]) => ({ key, ...open }));
+  return [...keyless, ...open.values()];
+}
+
+/** Appends one strict line; the file may be absent (the first line starts it). */
+export function appendStatusLine(text: string, at: string, verb: StatusVerb, payload: string): string {
+  const base = text === '' ? '' : text.endsWith('\n') ? text : `${text}\n`;
+  return `${base}- '${at}' ${verb}: ${payload.trim()}\n`;
 }

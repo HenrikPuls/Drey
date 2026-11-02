@@ -16,6 +16,8 @@ import { AGGREGATOR_SYSTEM_PROMPT, createChatBridge } from '../services/chat-llm
 import { FleetClient } from '../services/fleet-client';
 import { ImprovementsService } from '../services/improvements-service';
 import { VerifyService } from '../services/verify-service';
+import { FleetEventWriter, statusPathFor } from '../fleet/event-writer';
+import type { FleetEvents } from '../fleet/orchestrator';
 import { ChangeHub, DreyTicketsPort } from './drey-port';
 import { FileConfigStore } from './file-config';
 import { RemoteService } from './service';
@@ -97,6 +99,10 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     log,
     onFleetChanged: () => hub.emit('fleet'),
   });
+  // E7: one shared event writer for the engine process — the board stamps
+  // ledger phase/merged/archived lines, the verify service proof_ready
+  // lines; the append-only files ride the next regular commit.
+  const events = new FleetEventWriter({ vaultPath: opts.vaultPath, log });
   const board = new EngineBoardService(
     host,
     git,
@@ -109,6 +115,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     normalizeFleetPools({}),
     normalizeFleetHandover({}),
     `engine@${hostname().toLowerCase()}`,
+    { events },
   );
   board.onChanged(() => hub.emit('board'));
 
@@ -122,6 +129,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     config,
     git,
     actor: `verify@${hostname().toLowerCase()}`,
+    events,
     log,
   });
   // The engine listens only after the board was checked for verify

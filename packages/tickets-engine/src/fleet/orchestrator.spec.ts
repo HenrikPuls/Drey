@@ -861,6 +861,152 @@ describe('Orchestrator', () => {
     });
   });
 
+  describe('E7 event writes (the ledger and the status seams)', () => {
+    function fakeEvents() {
+      return { ledger: vi.fn(), status: vi.fn() };
+    }
+
+    it('a dispatch writes the ledger dispatched line and the working status line', async () => {
+      await writeMeta();
+      await writeTicket('T-0001', 'plan');
+      const events = fakeEvents();
+      const { orch, fleet } = orchestrator({ events, cardPathOf: async () => null });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      expect(fleet.records).toHaveLength(1);
+      expect(events.ledger).toHaveBeenCalledTimes(1);
+      expect(events.ledger).toHaveBeenCalledWith({
+        kind: 'dispatched',
+        ticket: 'T-0001',
+        persona: null,
+        model: 'zai/glm-5.3',
+      });
+      expect(events.status).toHaveBeenCalledTimes(1);
+      expect(events.status).toHaveBeenCalledWith(
+        'tickets/plan/T-0001.md',
+        expect.any(String),
+        'working',
+        'plan on zai/glm-5.3',
+      );
+    });
+
+    it('a run that ends done writes `done: handed over on <column>` to its card path', async () => {
+      await writeMeta();
+      await writeTicket('T-0001', 'plan');
+      const events = fakeEvents();
+      const cardPathOf = vi.fn(async (ticketId: string) => `tickets/plan/${ticketId}.md`);
+      const { orch, fleet } = orchestrator({ events, cardPathOf });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+      await orch.setMaster('halted'); // no re-dispatch on the settle pass
+
+      const record = fleet.records[0]!;
+      const settled = { ...record.info, state: 'done' as const };
+      fleet.records[0] = { ...record, info: settled };
+      await orch.onRunSettled(settled);
+
+      expect(cardPathOf).toHaveBeenCalledWith('T-0001');
+      expect(events.status).toHaveBeenLastCalledWith(
+        'tickets/plan/T-0001.md',
+        expect.any(String),
+        'done',
+        'handed over on plan',
+      );
+      expect(events.status).toHaveBeenCalledTimes(2); // working + done
+    });
+
+    it('a run that ends done but blocked writes `blocked:` with the worker reason', async () => {
+      await writeMeta();
+      await writeTicket('T-0001', 'plan');
+      const events = fakeEvents();
+      const { orch, fleet } = orchestrator({
+        events,
+        cardPathOf: async () => 'tickets/plan/T-0001.md',
+      });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+      await orch.setMaster('halted');
+
+      const record = fleet.records[0]!;
+      const settled = { ...record.info, state: 'done' as const, blocked: 'merge conflict in specs/changelog.md' };
+      fleet.records[0] = { ...record, info: settled };
+      await orch.onRunSettled(settled);
+
+      expect(events.status).toHaveBeenLastCalledWith(
+        'tickets/plan/T-0001.md',
+        expect.any(String),
+        'blocked',
+        'merge conflict in specs/changelog.md',
+      );
+    });
+
+    it('a failed run writes the short gate line, or the last error first line without a gate', async () => {
+      await writeMeta();
+      await writeTicket('T-0001', 'plan');
+      const events = fakeEvents();
+      const { orch, fleet } = orchestrator({
+        events,
+        cardPathOf: async () => 'tickets/plan/T-0001.md',
+      });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+      await orch.setMaster('halted');
+
+      const record = fleet.records[0]!;
+      const gated = { ...record.info, state: 'failed' as const, gateFailure: '`npm test` failed\n\noutput details' };
+      fleet.records[0] = { ...record, info: gated };
+      await orch.onRunSettled(gated);
+      expect(events.status).toHaveBeenLastCalledWith('tickets/plan/T-0001.md', expect.any(String), 'failed', '`npm test` failed');
+
+      const noGate = { ...record.info, state: 'failed' as const, gateFailure: null, lastError: 'spawn failed\nat somewhere' };
+      fleet.records[0] = { ...record, info: noGate };
+      await orch.onRunSettled(noGate);
+      expect(events.status).toHaveBeenLastCalledWith('tickets/plan/T-0001.md', expect.any(String), 'failed', 'spawn failed');
+    });
+
+    it('absent seams stay silent: no cardPathOf means no settle line, no events means no writes at all', async () => {
+      await writeMeta();
+      await writeTicket('T-0001', 'plan');
+
+      // Events wired, cardPathOf not: the dispatch lines still fire, the settle writes nothing.
+      const withEvents = fakeEvents();
+      const first = orchestrator({ events: withEvents });
+      await first.orch.configure(CONFIG);
+      await first.orch.setMaster('run');
+      await first.orch.setMaster('halted');
+      const dispatched = first.fleet.records[0]!;
+      const settledDone = { ...dispatched.info, state: 'done' as const };
+      first.fleet.records[0] = { ...dispatched, info: settledDone };
+      await first.orch.onRunSettled(settledDone);
+      expect(withEvents.ledger).toHaveBeenCalledTimes(1);
+      expect(withEvents.status).toHaveBeenCalledTimes(1); // only the dispatch's working line
+
+      // An unresolvable path is silent too.
+      const unresolvable = fakeEvents();
+      const second = orchestrator({ events: unresolvable, cardPathOf: async () => null });
+      await second.orch.configure(CONFIG);
+      await second.orch.setMaster('run');
+      await second.orch.setMaster('halted');
+      const record = second.fleet.records[0]!;
+      const settled = { ...record.info, state: 'done' as const };
+      second.fleet.records[0] = { ...record, info: settled };
+      await second.orch.onRunSettled(settled);
+      expect(unresolvable.status).toHaveBeenCalledTimes(1); // the dispatch line only
+
+      // No events at all (the pre-E7 construction): everything stays silent.
+      const silent = orchestrator();
+      await silent.orch.configure(CONFIG);
+      await silent.orch.setMaster('run');
+      await silent.orch.setMaster('halted');
+      const quietRecord = silent.fleet.records[0]!;
+      const quietSettled = { ...quietRecord.info, state: 'done' as const };
+      silent.fleet.records[0] = { ...quietRecord, info: quietSettled };
+      await silent.orch.onRunSettled(quietSettled);
+      expect(silent.fleet.records).toHaveLength(1);
+    });
+  });
+
   describe('persona dispatch (E3, ADR-0088)', () => {
     const PLAN_LINE =
       '  - { id: plan, title: Plan, handover: agent plan-default, worker: opencode, model: zai/glm-5.3 }';

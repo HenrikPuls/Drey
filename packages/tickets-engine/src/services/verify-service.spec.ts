@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { RepoRef, TicketCard } from '../contracts/tickets';
 import type { VerifyRunInput, VerifyRunResult } from '../contracts/verify';
+import type { LedgerWrite } from '../core/ledger';
 import { renderVerificationSection } from '../core/verification';
 import type { TicketsGit } from '../core/tickets-git';
 import type { EngineBoardService } from './board-service';
@@ -104,6 +105,7 @@ let card: TicketCard;
 let boardListeners: (() => void)[];
 let boardTransitions: unknown[];
 let boardSnapshot: FakeSnapshot;
+let ledgerWrites: LedgerWrite[];
 let service: VerifyService;
 
 async function waitFor(cond: () => boolean, ms = 4_000): Promise<void> {
@@ -128,6 +130,7 @@ beforeEach(async () => {
   card = makeCard();
   boardListeners = [];
   boardTransitions = [];
+  ledgerWrites = [];
   boardSnapshot = makeSnapshot([card], ['inbox', 'verify', 'needs-owner']);
 });
 
@@ -190,7 +193,16 @@ function boot(opts: BootOptions = {}): VerifyService {
       commits.push({ root: rootDir, paths: [...paths], message });
     },
   } as unknown as TicketsGit;
-  return new VerifyService({ board, host, harness, config, git, actor: ACTOR, log: () => undefined });
+  return new VerifyService({
+    board,
+    host,
+    harness,
+    config,
+    git,
+    actor: ACTOR,
+    log: () => undefined,
+    events: { ledger: (write) => ledgerWrites.push(write) },
+  });
 }
 
 describe('VerifyService.verifyTicket', () => {
@@ -242,6 +254,25 @@ describe('VerifyService.verifyTicket', () => {
         findings: ['The settings page stayed blank until the reload.'],
       },
     });
+  });
+
+  it('writes the ledger proof_ready line after the persisted proof (E7)', async () => {
+    service = boot();
+
+    const outcome = await service.verifyTicket({ id: TICKET_ID });
+
+    expect(outcome).toEqual({ ok: true });
+    expect(ledgerWrites).toEqual([{ kind: 'proof_ready', ticket: TICKET_ID, persona: null, model: null }]);
+  });
+
+  it('writes no ledger line when the run refuses before any proof exists', async () => {
+    harnessResult = { ...OK_RESULT, error: 'the app never came up' };
+    service = boot();
+
+    const outcome = await service.verifyTicket({ id: TICKET_ID });
+
+    expect(outcome.ok).toBe(false);
+    expect(ledgerWrites).toEqual([]);
   });
 
   it('runs from any phase — a manual trigger does not need the verify phase', async () => {

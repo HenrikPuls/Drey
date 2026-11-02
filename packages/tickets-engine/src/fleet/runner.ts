@@ -23,7 +23,8 @@ import * as path from 'node:path';
 import { fleetBuildStamp } from './build-stamp';
 import { claudeCodeAdapter, opencodeAdapter } from './providers';
 import { freePort, nodeSpawnFn, scrubInheritedEnv } from './procs';
-import { Orchestrator } from './orchestrator';
+import { Orchestrator, type FleetEvents } from './orchestrator';
+import { FleetEventWriter, statusPathFor } from './event-writer';
 import { MAX_ATTACHMENT_BYTES, RunSupervisor, type SupervisorRecord } from './runs';
 import { personaCostReport, tokenReport, type ReportRun } from './report';
 import {
@@ -138,9 +139,35 @@ async function main(): Promise<void> {
       }),
     ]),
   );
+  // E7: the status log + fleet ledger writer. The vault path arrives only
+  // with the chain config below, so the writer is built lazily on the
+  // first event and shared from then on.
+  let eventWriter: FleetEventWriter | null = null;
+  let eventsVaultPath: string | null = null;
+  const events: FleetEvents = {
+    ledger: (write) => {
+      if (eventsVaultPath === null) {
+        return;
+      }
+      eventWriter ??= new FleetEventWriter({ vaultPath: eventsVaultPath, log });
+      eventWriter.ledger(write);
+    },
+    status: (cardPath, at, verb, payload) => {
+      if (eventsVaultPath === null) {
+        return;
+      }
+      eventWriter ??= new FleetEventWriter({ vaultPath: eventsVaultPath, log });
+      eventWriter.status(cardPath, at, verb, payload);
+    },
+  };
   orchestrator = new Orchestrator({
     root: args.root,
     log,
+    events,
+    cardPathOf: (ticketId) =>
+      eventsVaultPath === null
+        ? Promise.resolve(null)
+        : statusPathFor(eventsVaultPath, ticketId),
     supervisorOf: (provider) => supervisors.get(provider) ?? supervisors.get('opencode')!,
     // The shipped default prompt beside the built plugin (`<plugin>/prompts/`), for
     // the "vault copy is older" note; a ref without a shipped file reads as null.
@@ -307,6 +334,7 @@ async function main(): Promise<void> {
           // same way — their start-time resolution reads them.
           handover: normalizeFleetHandover(body.handover),
         });
+        eventsVaultPath = body.ticketsVaultPath;
         for (const one of supervisors.values()) {
           one.setHandoverConfig(normalizeFleetHandover(body.handover));
         }

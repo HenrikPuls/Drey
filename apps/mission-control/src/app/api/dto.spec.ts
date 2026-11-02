@@ -134,6 +134,21 @@ describe('parseNeeds', () => {
     expect(needs).toEqual([{ kind: 'improvements', ticketId: null, title: 'Pia', summary: '3 improvement proposals wait for the 1:1' }]);
   });
 
+  it('accepts the E7 kinds, keyed and keyless, with their text untouched', () => {
+    const needs = parseNeeds([
+      { kind: 'needs-decision', ticketId: 'T-7', title: 'Palette shortcut', text: '[palette-shortcut] Which shortcut should open the palette?' },
+      { kind: 'blocked', ticketId: 'T-8', title: 'The build', text: '[ci] waiting for the build' },
+      { kind: 'needs-decision', title: 'Palette shortcut', text: 'Which shortcut should open the palette?' },
+      { kind: 'blocked', title: 'The build', text: 'waiting for the build' },
+    ]);
+    expect(needs).toEqual([
+      { kind: 'needs-decision', ticketId: 'T-7', title: 'Palette shortcut', summary: '[palette-shortcut] Which shortcut should open the palette?' },
+      { kind: 'blocked', ticketId: 'T-8', title: 'The build', summary: '[ci] waiting for the build' },
+      { kind: 'needs-decision', ticketId: null, title: 'Palette shortcut', summary: 'Which shortcut should open the palette?' },
+      { kind: 'blocked', ticketId: null, title: 'The build', summary: 'waiting for the build' },
+    ]);
+  });
+
   it('never throws on junk', () => {
     expect(parseNeeds(null)).toEqual([]);
     expect(parseNeeds({ kind: 'question' })).toEqual([]);

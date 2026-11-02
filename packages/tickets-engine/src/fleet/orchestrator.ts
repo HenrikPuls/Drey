@@ -29,6 +29,8 @@ import { parseWorkerValue, resolveAssignment } from './assignment';
 import { composeRunRequest } from './request';
 import { listTicketDirs, resolvePhaseDir } from '../core/phase-dirs';
 import { execShell, shortGateLine, type SupervisorRecord, type StartOutcome, type StopOutcome } from './runs';
+import type { LedgerWrite } from '../core/ledger';
+import type { StatusVerb } from '../core/status-log';
 import { readRepoInstructions, worktreeDiffStat } from './context-pack';
 import { worktreePathFor } from './worktree-home';
 import type {
@@ -82,6 +84,16 @@ interface TicketPersona {
   readonly memory: string;
 }
 
+/**
+ * The E7 event sink (concept §3.3): the runner's event writer or a test
+ * fake. Every call is fire-and-forget — a failure never reaches the
+ * orchestration loop.
+ */
+export interface FleetEvents {
+  readonly ledger: (write: LedgerWrite) => void;
+  readonly status: (cardPath: string, at: string, verb: StatusVerb, payload: string) => void;
+}
+
 export interface OrchestratorDeps {
   readonly root: string;
   readonly log: (message: string) => void;
@@ -96,6 +108,17 @@ export interface OrchestratorDeps {
   readonly shippedPrompt?: (ref: string) => Promise<string | null>;
   /** Test seam over the pool probe: a llama.cpp server's `total_slots`, or null. */
   readonly probeSlots?: (baseUrl: string) => Promise<number | null>;
+  /**
+   * E7: the fleet event writes (the ledger and the ticket status logs);
+   * absent = silent no-op — every existing construction keeps working.
+   */
+  readonly events?: FleetEvents;
+  /**
+   * E7: a ticket's vault-relative card path, for the status line a settle
+   * appends — the engine wires it from the board, the runner from a vault
+   * scan (`statusPathFor`). Absent = settles write no status line.
+   */
+  readonly cardPathOf?: (ticketId: string) => Promise<string | null>;
 }
 
 interface ChainFile {
@@ -495,6 +518,7 @@ export class Orchestrator {
     const record = this.allRecords().find((r) => r.info.id === info.id) ?? null;
     const column = record?.request.column ?? null;
     if (column !== null && record !== null) {
+      await this.noteSettledStatus(info, column);
       const tokens = info.tokensIn + info.tokensOut;
       if (tokens > 0) {
         const day = this.stamp().slice(0, 10);
@@ -569,6 +593,43 @@ export class Orchestrator {
       }
     }
     await this.dispatchPass();
+  }
+
+  /**
+   * The E7 status line a settled run appends to its ticket's log: `done`
+   * hands over on the column, a blocked end is a `blocked` line with the
+   * worker's reason, a `failed` end carries the short gate line or the
+   * last error's first line. Only when both seams are wired — the events
+   * sink and the card-path resolver; the path's absence is silent.
+   */
+  private async noteSettledStatus(info: RunInfo, column: string): Promise<void> {
+    const events = this.deps.events;
+    const cardPathOf = this.deps.cardPathOf;
+    if (events === undefined || cardPathOf === undefined) {
+      return;
+    }
+    if (info.state !== 'done' && info.state !== 'failed') {
+      return;
+    }
+    const cardPath = await cardPathOf(info.ticketId).catch(() => null);
+    if (cardPath === null) {
+      return;
+    }
+    const at = this.stamp();
+    if (info.state === 'done') {
+      const blocked = info.blocked ?? null;
+      if (blocked !== null) {
+        events.status(cardPath, at, 'blocked', blocked);
+      } else {
+        events.status(cardPath, at, 'done', `handed over on ${column}`);
+      }
+      return;
+    }
+    const payload =
+      info.gateFailure !== null
+        ? shortGateLine(info.gateFailure)
+        : ((info.lastError ?? '').split('\n')[0] ?? '').trim() || 'the run failed';
+    events.status(cardPath, at, 'failed', payload);
   }
 
   /** The breaker trips: the column holds, its next candidate parks. */
@@ -1488,6 +1549,19 @@ export class Orchestrator {
         `dispatched ${card.id} (${workingPhaseId} pool, ${composed.request.provider}` +
           `${composed.request.model !== null ? `/${composed.request.model}` : ''}` +
           `${composed.persona !== null ? `, persona ${composed.persona}` : ''}) as ${outcome.run.id}`,
+      );
+      // E7: the ledger's dispatched line and the ticket's `working` line.
+      this.deps.events?.ledger({
+        kind: 'dispatched',
+        ticket: card.id,
+        persona: composed.persona ?? null,
+        model: composed.request.model,
+      });
+      this.deps.events?.status(
+        card.path,
+        this.stamp(),
+        'working',
+        `${workingPhaseId} on ${composed.request.model ?? 'the default model'}`,
       );
       this.notes.delete(card.id);
       return 'dispatched';

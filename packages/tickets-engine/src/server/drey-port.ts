@@ -39,7 +39,12 @@ import type { BoardSnapshot, CreateResult, MutationResult } from '../contracts/t
 import type { TicketDiff, WorktreeFile } from '../core/worktree-changes';
 import type { ChatDecisionResult, ChatServicePort, ChatSession, ChatSessionMeta, ChatTurnResult } from '../contracts/chat';
 import { IMPROVEMENTS_THRESHOLD } from '../core/improvements';
+import { openStatusItems } from '../core/status-log';
+import type { StatusLine } from '../core/status-log';
 import { needsOf } from './needs';
+
+/** How many status-log needs (E7) one needs() pass appends at most. */
+const STATUS_NEEDS_CAP = 20;
 
 /** The board service's part the remote uses (`BoardService` fits it). */
 export interface RemoteBoard {
@@ -68,6 +73,8 @@ export interface RemoteBoard {
   personaImprovements(personaId: string): Promise<PersonaImprovementsReply>;
   /** The E6 1:1 decision; the apply lands in exactly one commit on the desk. */
   decideImprovement(input: { id: string; proposalId: string; decision: ImprovementDecision; now?: string }): Promise<MutationResult>;
+  /** E7: the ticket's status-log lines (`<card>.status.log`); [] when absent or broken. */
+  statusOf(ticketId: string): Promise<readonly StatusLine[]>;
 }
 
 /** The fleet client's part the remote uses (`FleetClient` fits it). */
@@ -155,6 +162,42 @@ export class DreyTicketsPort implements TicketsRemotePort {
           text: `${improvements.openCount} improvement proposals wait for the 1:1`,
           since: null,
         });
+      }
+    }
+    // E7: the tickets' status logs — every open decision or blocker is a
+    // needs-you line (capped; a broken read appends nothing).
+    items.push(...(await this.statusNeeds(board)));
+    return items;
+  }
+
+  /**
+   * The E7 status needs (concept §3.3): one board sweep, every ticket's
+   * open-decisions fold, oldest open item first per ticket. The cap keeps
+   * a neglected board from flooding the phone; a ticket whose log cannot
+   * be read contributes nothing — never a failed needs() for one file.
+   */
+  private async statusNeeds(board: BoardSnapshot): Promise<readonly NeedItem[]> {
+    const items: NeedItem[] = [];
+    for (const column of board.columns) {
+      for (const card of column.tickets) {
+        if (items.length >= STATUS_NEEDS_CAP) {
+          return items;
+        }
+        const lines = await this.boardService.statusOf(card.id).catch(() => [] as readonly StatusLine[]);
+        for (const item of openStatusItems(lines)) {
+          if (items.length >= STATUS_NEEDS_CAP) {
+            return items;
+          }
+          items.push({
+            kind: item.verb,
+            ticketId: card.id,
+            title: card.meta.title ?? card.id,
+            phase: column.phase.id,
+            runId: null,
+            text: item.key !== null ? `[${item.key}] ${item.text}`.trim() : item.text,
+            since: item.since,
+          });
+        }
       }
     }
     return items;

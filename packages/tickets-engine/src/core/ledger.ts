@@ -1,95 +1,111 @@
 /**
- * The fleet ledger (ADR-0088, E1 — data form; its writers and readers
- * arrive with the watcher/chat in E3/E5). `_meta/ledger.jsonl` in the
- * tickets repo: append-only JSON Lines, one object per fleet event —
+ * The fleet ledger (E7, concept §3.3): `_meta/ledger.jsonl`, one JSON
+ * line per fleet event — the real-time hook for Mission Control and
+ * the reports, without parsing Markdown. Append-only; the git log
+ * stays the history of contents, the ledger is the events' fast lane.
  *
- *   {"ts":"2026-11-01T14:30:00Z","ticket":"T-0086","persona":"ben","model":"glm-5.2","event":"dispatched"}
- *   {"ts":"2026-11-01T15:12:00Z","ticket":"T-0086","persona":"ben","model":"glm-5.2","event":"phase","detail":"build -> review","cost":0.61}
+ *     {"v":1,"ts":"2026-11-02T09:00:00Z","event":"dispatched","ticket":"T-0002","persona":"pia","model":"opus"}
+ *     {"v":1,"ts":"2026-11-02T09:40:00Z","event":"phase","ticket":"T-0002","from":"build","to":"review"}
+ *     {"v":1,"ts":"2026-11-02T09:45:00Z","event":"proof_ready","ticket":"T-0001"}
+ *     {"v":1,"ts":"2026-11-02T10:00:00Z","event":"merged","ticket":"T-0001","persona":"tessa"}
+ *     {"v":1,"ts":"2026-11-02T10:05:00Z","event":"archived","ticket":"T-0001"}
  *
- * The git log stays the history of the tickets' CONTENTS; the ledger is
- * the realtime hook for Mission Control and the "what did the week cost"
- * intent — no Markdown parsing to answer it.
+ * Cost rides the events that know it (`cost` in USD cents? No — the
+ * house telemetry reports tokens; `cost` is the fractional dollar the
+ * report computes, rounded to four digits).
  */
 
-export type LedgerEvent = 'dispatched' | 'phase' | 'proof_ready' | 'merged' | 'archived';
+export type LedgerEventKind = 'dispatched' | 'phase' | 'proof_ready' | 'merged' | 'archived';
 
-export const LEDGER_EVENTS: readonly LedgerEvent[] = ['dispatched', 'phase', 'proof_ready', 'merged', 'archived'];
-
-export interface LedgerEntry {
-  /** ISO-8601 UTC stamp. */
+export interface LedgerEvent {
+  readonly kind: LedgerEventKind;
   readonly ts: string;
-  /** Ticket id (`T-0001`). */
   readonly ticket: string;
-  /** The persona that ran (the worker id until personas land in E3). */
-  readonly persona: string;
-  /** The model that ACTUALLY ran — router or not, the ledger audits it. */
-  readonly model: string;
-  readonly event: LedgerEvent;
-  /** Optional cost figure in credits (the telemetry's token-cost fold). */
-  readonly cost?: number;
-  /** Optional short note (e.g. `build -> review` for a phase event). */
-  readonly detail?: string;
+  readonly persona: string | null;
+  readonly model: string | null;
+  /** Settled-run cost in dollars when known; null otherwise. */
+  readonly cost: number | null;
+  readonly from: string | null;
+  readonly to: string | null;
 }
 
-export function isLedgerEvent(word: string): word is LedgerEvent {
-  return (LEDGER_EVENTS as readonly string[]).includes(word);
+export interface LedgerWrite {
+  readonly kind: LedgerEventKind;
+  readonly ticket: string;
+  readonly persona?: string | null;
+  readonly model?: string | null;
+  readonly cost?: number | null;
+  readonly from?: string | null;
+  readonly to?: string | null;
 }
 
-function isLedgerEntry(value: unknown): value is LedgerEntry {
-  if (typeof value !== 'object' || value === null) {
-    return false;
+export const LEDGER_FILE = 'tickets/_meta/ledger.jsonl';
+
+/** The strict one-line wire shape; null refuses instead of guessing. */
+export function parseLedgerLine(raw: string): LedgerEvent | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
   }
-  const v = value as Record<string, unknown>;
-  return (
-    typeof v['ts'] === 'string' &&
-    typeof v['ticket'] === 'string' &&
-    typeof v['persona'] === 'string' &&
-    typeof v['model'] === 'string' &&
-    typeof v['event'] === 'string' &&
-    isLedgerEvent(v['event']) &&
-    (v['cost'] === undefined || (typeof v['cost'] === 'number' && Number.isFinite(v['cost']) && v['cost'] >= 0)) &&
-    (v['detail'] === undefined || typeof v['detail'] === 'string')
-  );
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const obj = value as Record<string, unknown>;
+  if (obj['v'] !== 1) {
+    return null;
+  }
+  const kind = obj['event'];
+  const ts = typeof obj['ts'] === 'string' ? obj['ts'] : '';
+  const ticket = typeof obj['ticket'] === 'string' ? obj['ticket'] : '';
+  if (!isKind(kind) || ts === '' || ticket === '') {
+    return null;
+  }
+  const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+  const cost = typeof obj['cost'] === 'number' && Number.isFinite(obj['cost']) ? Math.round(obj['cost'] * 10_000) / 10_000 : null;
+  return {
+    kind,
+    ts,
+    ticket,
+    persona: str(obj['persona']),
+    model: str(obj['model']),
+    cost,
+    from: str(obj['from']),
+    to: str(obj['to']),
+  };
 }
 
-/** Parse the whole ledger, oldest first; malformed lines are skipped —
- *  the file is a machine interface that must never take a reader down. */
-export function parseLedger(text: string): LedgerEntry[] {
-  const entries: LedgerEntry[] = [];
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (line === '') {
+/** Reads the whole ledger tolerantly; torn lines are skipped. */
+export function parseLedger(text: string): readonly LedgerEvent[] {
+  const events: LedgerEvent[] = [];
+  for (const line of text.split('\n')) {
+    if (line.trim() === '') {
       continue;
     }
-    try {
-      const value: unknown = JSON.parse(line);
-      if (isLedgerEntry(value)) {
-        entries.push(value);
-      }
-    } catch {
-      // a torn or human-edited line — skipped, never fatal
+    const event = parseLedgerLine(line);
+    if (event !== null) {
+      events.push(event);
     }
   }
-  return entries;
+  return events;
 }
 
-/**
- * Append one event as a single JSON line. Throws on an invalid entry so
- * a buggy writer fails at the source instead of poisoning the file.
- */
-export function appendLedgerEvent(text: string, entry: LedgerEntry): string {
-  if (!isLedgerEntry(entry)) {
-    throw new Error(`invalid ledger entry: ${JSON.stringify(entry)}`);
-  }
-  // Stable key order keeps the append byte-stable through reads/writes.
-  const line = JSON.stringify({
-    ts: entry.ts,
-    ticket: entry.ticket,
-    persona: entry.persona,
-    model: entry.model,
-    event: entry.event,
-    ...(entry.cost !== undefined ? { cost: entry.cost } : {}),
-    ...(entry.detail !== undefined ? { detail: entry.detail } : {}),
-  });
-  return text === '' ? line : `${text.replace(/\s+$/, '')}\n${line}`;
+/** The one-line serialization an append-only writer emits. */
+export function renderLedgerLine(ts: string, write: LedgerWrite): string {
+  return `${JSON.stringify({
+    v: 1,
+    ts,
+    event: write.kind,
+    ticket: write.ticket,
+    ...(write.persona != null && write.persona !== '' ? { persona: write.persona } : {}),
+    ...(write.model != null && write.model !== '' ? { model: write.model } : {}),
+    ...(write.cost != null ? { cost: write.cost } : {}),
+    ...(write.from != null && write.from !== '' ? { from: write.from } : {}),
+    ...(write.to != null && write.to !== '' ? { to: write.to } : {}),
+  })}\n`;
+}
+
+function isKind(value: unknown): value is LedgerEventKind {
+  return value === 'dispatched' || value === 'phase' || value === 'proof_ready' || value === 'merged' || value === 'archived';
 }
