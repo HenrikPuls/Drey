@@ -1,0 +1,73 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.shell {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  height: 100dvh;
+}
+
+.view {
+  overflow-y: auto;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* The tab bar sits in the thumb's reach; the chat tab is raised because
+   it is the regular intervention (concept §7). */
+.tabbar {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  align-items: end;
+  min-height: calc(var(--mc-tabbar-h) + env(safe-area-inset-bottom));
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  gap: 8px;
+  background: var(--mc-panel);
+  border-top: 1px solid var(--mc-line);
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0 4px;
+  border: 0;
+  border-radius: var(--mc-radius);
+  background: transparent;
+  color: var(--mc-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.tab .glyph {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.tab.active {
+  color: var(--mc-text);
+  background: var(--mc-panel-2);
+}
+
+.tab-chat {
+  transform: translateY(-10px);
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: 16px;
+  padding: 8px 0 6px;
+}
+
+.tab-chat.active {
+  border-color: var(--mc-accent);
+  color: var(--mc-accent);
+}
+
+@media (min-width: 768px) {
+  .view {
+    max-width: 720px;
+    margin: 0 auto;
+    width: 100%;
+  }
+}

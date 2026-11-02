@@ -1,0 +1,255 @@
+/* The work tab: groups of full-width cards, phone-first (concept §7). */
+
+:host {
+  display: block;
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 16px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mc-dim);
+}
+
+.group-count {
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.group-unknown .group-title {
+  color: var(--mc-danger);
+}
+
+.group-empty,
+.work-note {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--mc-dim);
+}
+
+/* One ticket = one card: the same visual form everywhere. */
+
+.card {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  background: var(--mc-panel);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+.ticket-card {
+  color: inherit;
+  cursor: pointer;
+}
+
+.ticket-card:active {
+  background: var(--mc-panel-2);
+}
+
+.card-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tid {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--mc-dim);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 40vw;
+  padding: 1px 8px;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--mc-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: 999px;
+}
+
+.chip-phase {
+  color: var(--mc-text);
+}
+
+.chip-need {
+  color: var(--mc-accent);
+}
+
+.chip-persona .dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.chip-blocked {
+  color: var(--mc-danger);
+}
+
+.flag {
+  font-size: 13px;
+  color: var(--mc-danger);
+}
+
+.ticket-title,
+.need-title {
+  margin-top: 6px;
+  font-size: 15px;
+  color: var(--mc-text);
+}
+
+.need-summary {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--mc-dim);
+}
+
+/* The bottom sheet: slides up over everything, actions in the thumb's reach. */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgb(0 0 0 / 55%);
+}
+
+.sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 80dvh;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background: var(--mc-panel);
+  border: 1px solid var(--mc-line);
+  border-bottom: 0;
+  border-radius: 16px 16px 0 0;
+  animation: sheet-up 0.18s ease-out;
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0.6;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.sheet-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sheet-title {
+  flex: 1;
+  margin: 0;
+  font-size: 17px;
+}
+
+.sheet-close {
+  padding: 0 4px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--mc-dim);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.sheet-summary {
+  margin: 0;
+  font-size: 14px;
+  color: var(--mc-dim);
+  white-space: pre-wrap;
+}
+
+.sheet-phase {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--mc-dim);
+}
+
+.sheet-blocked,
+.sheet-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--mc-danger);
+}
+
+.sheet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.btn {
+  width: 100%;
+  min-height: 44px;
+  color: var(--mc-text);
+  cursor: pointer;
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+.btn-primary {
+  font-weight: 600;
+  color: #101216;
+  background: var(--mc-accent);
+  border-color: var(--mc-accent);
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+@media (min-width: 768px) {
+  .sheet {
+    left: 50%;
+    max-width: 480px;
+    translate: -50% 0;
+  }
+}

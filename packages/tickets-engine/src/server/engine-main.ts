@@ -52,13 +52,21 @@ async function main(): Promise<void> {
       console.log(line);
     }
   };
+  // The built Mission Control app when present, the legacy remote
+  // client otherwise — the strangler hand-over (E5b).
+  const repoRoot = path.resolve(__dirname, '../../../..', '..');
+  const builtApp = path.join(repoRoot, 'dist', 'mission-control', 'browser');
+  const clientDir = (await fsp.stat(path.join(builtApp, 'index.html'))).isFile()
+    ? builtApp
+    : path.resolve(__dirname, '../../../..', 'plugins', 'tickets', 'remote');
   await fsp.mkdir(opts.home, { recursive: true });
   const engine = await createEngine({
     vaultPath: opts.vault,
     home: opts.home,
-    clientDir: path.resolve(__dirname, '../../../..', 'plugins', 'tickets', 'remote'),
+    clientDir,
     log,
   });
+  log(`serving ${clientDir === builtApp ? 'Mission Control' : 'the legacy remote client'}`);
   const invokePort = Number(new URL(engine.invokeUrl).port);
   await writeEngineLock(opts.home, { pid: process.pid, invokePort, token: engine.token, vaultPath: opts.vault });
   log(`tickets engine up: vault=${opts.vault} invoke=${engine.invokeUrl}`);

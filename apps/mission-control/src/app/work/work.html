@@ -1,0 +1,102 @@
+@if (state === null) {
+  <p class="work-note">Not connected to a desk.</p>
+} @else {
+  <div class="groups">
+    @for (group of groups(); track group.key) {
+      <section class="group" [class.group-unknown]="group.kind === 'phase' && group.unknown">
+        <h2 class="group-title">
+          <span>{{ group.title }}</span>
+          <span class="group-count">{{
+            group.kind === 'needs' ? group.needs.length : group.tickets.length
+          }}</span>
+        </h2>
+        @if (group.kind === 'needs') {
+          @for (vm of group.needs; track vm.key) {
+            <article class="card need-card">
+              <div class="card-row">
+                <span class="chip chip-need">{{ vm.kindLabel }}</span>
+                @if (vm.need.ticketId) {
+                  <span class="tid">{{ vm.need.ticketId }}</span>
+                }
+              </div>
+              <div class="need-title">{{ vm.need.title }}</div>
+              @if (vm.need.summary) {
+                <p class="need-summary">{{ vm.need.summary }}</p>
+              }
+            </article>
+          }
+        } @else {
+          @for (vm of group.tickets; track vm.id) {
+            <button type="button" class="card ticket-card" (click)="openSheet(vm)">
+              <div class="card-row">
+                <span class="tid">{{ vm.id }}</span>
+                <span class="chip chip-phase" [style.background-color]="vm.phaseColor ?? null">{{
+                  vm.phaseTitle
+                }}</span>
+                @if (vm.persona) {
+                  <span class="chip chip-persona">
+                    <span class="dot" [style.background-color]="vm.persona.color"></span>
+                    {{ vm.persona.title }}
+                  </span>
+                }
+                @if (vm.flagged) {
+                  <span class="flag" aria-hidden="true">⚑</span>
+                }
+                @if (vm.blocked) {
+                  <span class="chip chip-blocked">Blocked</span>
+                }
+              </div>
+              <div class="ticket-title">{{ vm.title }}</div>
+            </button>
+          } @empty {
+            <p class="group-empty">No tickets here.</p>
+          }
+        }
+      </section>
+    } @empty {
+      <p class="work-note">Nothing on the board.</p>
+    }
+  </div>
+}
+
+@if (openCard(); as card) {
+  <div class="sheet-backdrop" (click)="closeSheet()"></div>
+  <div class="sheet" role="dialog" aria-modal="true" [attr.aria-label]="card.title">
+    <div class="sheet-head">
+      <span class="tid">{{ card.id }}</span>
+      <h2 class="sheet-title">{{ card.title }}</h2>
+      <button type="button" class="sheet-close" aria-label="Close" (click)="closeSheet()">×</button>
+    </div>
+    @if (card.ticket.summary) {
+      <p class="sheet-summary">{{ card.ticket.summary }}</p>
+    }
+    <p class="sheet-phase">
+      Phase:
+      <span class="chip chip-phase" [style.background-color]="card.phaseColor ?? null">{{
+        card.phaseTitle
+      }}</span>
+    </p>
+    @if (card.blocked) {
+      <p class="sheet-blocked">
+        Blocked — waiting on
+        {{ card.ticket.blocked?.join(', ') || (card.ticket.meta.blockedBy ?? []).join(', ') }}.
+      </p>
+    }
+    @if (moveError(); as error) {
+      <p class="sheet-error" role="alert">{{ error }}</p>
+    }
+    <div class="sheet-actions">
+      @if (!readOnly() && moveTarget(); as target) {
+        <button
+          type="button"
+          class="btn btn-primary"
+          [disabled]="movePending()"
+          (click)="moveOn()"
+        >
+          {{ movePending() ? 'Moving…' : 'Move to ' + target.title }}
+        </button>
+      }
+      <button type="button" class="btn" (click)="closeSheet()">Close</button>
+    </div>
+  </div>
+}

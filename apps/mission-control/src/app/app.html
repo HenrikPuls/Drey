@@ -1,0 +1,25 @@
+<div class="shell">
+  <main class="view">
+    @if (tab() === 'work') {
+      <mc-work />
+    } @else if (tab() === 'chat') {
+      <mc-chat />
+    } @else {
+      <mc-team />
+    }
+  </main>
+  <nav class="tabbar" aria-label="Primary">
+    <button type="button" class="tab" [class.active]="tab() === 'work'" (click)="tab.set('work')">
+      <span class="glyph" aria-hidden="true">▤</span>
+      <span>Work</span>
+    </button>
+    <button type="button" class="tab tab-chat" [class.active]="tab() === 'chat'" (click)="tab.set('chat')">
+      <span class="glyph" aria-hidden="true">◍</span>
+      <span>Chat</span>
+    </button>
+    <button type="button" class="tab" [class.active]="tab() === 'team'" (click)="tab.set('team')">
+      <span class="glyph" aria-hidden="true">◔</span>
+      <span>Team</span>
+    </button>
+  </nav>
+</div>

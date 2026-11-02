@@ -1,4 +1,45 @@
 
+### Milestone 105 — the Mission Control app (Mission-Control migration E5b)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-02
+(outside the list; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md),
+etappe E5b — the client half of the concept's §6/§7: `apps/mission-control`,
+the Angular phone-first web app that renders the engine's surfaces on the
+owner's devices; the 2026-11-02 owner decisions stand: the web UI stack is
+Angular, the UI language is English). The app is a standalone Angular
+project inside the repo workspace (`apps/mission-control`, prefix `mc`:
+standalone components, OnPush + signals, external templates/styles, the
+design tokens in its `styles.css`), built by its own
+`ng build mission-control --configuration production` into
+`dist/mission-control/browser`; the repo's build chain gains
+`build:mission-control` (`npm run build` runs it after renderer,
+electron and plugins), `test:app` runs drey's renderer suite then
+mission-control's, lint and the typecheck cover the app's sources, and
+`apps/` joins the cycles scan roots. The engine process serves the built
+app from `dist/mission-control/browser` (engine-main) and keeps the
+legacy remote as the fallback until the owner verifies — one more loop of
+the strangler, not a cutover. The device API grows `GET /api/personas`
+returning `PersonaView` (`{id,title,role,worker,model,pool,color}` —
+personas as the wire DTO, never tickets). The shell (concept §7) is
+phone-first, one column: the bottom tab bar holds Work left, the raised
+Chat middle (the regular intervention) and Team right; tablet/desktop
+widen the same views instead of replacing them. The Team tab renders the
+personas of concept §4.3 — one card per persona (initials avatar on the
+persona colour, role, the worker/model line, the live run chip: `on T-…`
+state-coloured — running accent, failed danger, waiting dim — `idle`
+otherwise), with a dim settings hint when the pool is empty; the cards
+are read-only and the run chip links nowhere yet (E5c opens the ticket
+screen). The Work tab renders the board as card groups (needs-you,
+running, ideas); the Chat tab renders the E5a sessions with their
+proposal cards, confirm executes through the board. Specs:
+`apps/mission-control/src/app/team/team.spec.ts` (11) for the persona
+helpers (initials, run-state colour); the work/chat/api slices ship
+their own specs under `apps/mission-control/src/app/`. Deliberate scope
+cut: E5b ships the phone shell and the tabs' first live slice over the
+gateway — the ticket screen (proof/diff, the Drey webview) is E5c,
+persona pause/config waits for the persona detail, and the run chips are
+labels, not links.
+
 ### Milestone 104 — the Mission Control chat engine (Mission-Control migration E5a)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-02

@@ -171,5 +171,22 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   the owner decisions of 2026-11-02: the web UI stack is Angular, the
   UI language is English) renders this surface; the wider intents
   (configure, dispatch) wait for E5c/E6.
+- **E5b (milestone 105):** the Mission Control app — `apps/mission-control`,
+  an Angular project owned by the repo workspace but **built standalone**:
+  its own `ng build mission-control --configuration production` into
+  `dist/mission-control/browser`, while the repo's chains learn it —
+  `npm run build` gains `build:mission-control`, `test:app` runs drey's
+  renderer suite then mission-control's, lint and the typecheck cover the
+  app's sources, `apps/` joins the cycles scan roots. **The engine serves
+  the build output** (engine-main) — the strangler tightens one more loop,
+  and the legacy remote stays the fallback until the owner verifies; no
+  cutover. **`PersonaView` is the wire DTO** the new device route
+  `GET /api/personas` returns, and the Team tab renders it personas-only
+  (concept §4.3 — one card per persona: avatar on the persona colour,
+  role, worker/model, the state-coloured live-run chip; cards read-only).
+  **The shell is phone-first** per concept §7 and the owner's 2026-11-02
+  decisions: one column, English UI, the chat tab raised in the bottom
+  tab bar (the regular intervention), cards not columns on the Work tab;
+  tablet/desktop widen the same views instead of replacing them.
 
 

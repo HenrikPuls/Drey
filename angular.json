@@ -74,7 +74,10 @@
               "outputHashing": "all",
               "optimization": {
                 "scripts": true,
-                "styles": { "minify": true, "inlineCritical": false },
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
                 "fonts": true
               }
             },
@@ -104,6 +107,69 @@
             "include": [
               "src/**/*.spec.ts",
               "plugins/**/*.spec.ts"
+            ]
+          }
+        }
+      }
+    },
+    "mission-control": {
+      "projectType": "application",
+      "root": "apps/mission-control",
+      "sourceRoot": "apps/mission-control/src",
+      "prefix": "mc",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "apps/mission-control/src/main.ts",
+            "tsConfig": "apps/mission-control/tsconfig.app.json",
+            "outputPath": "dist/mission-control",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "apps/mission-control/public"
+              }
+            ],
+            "styles": [
+              "apps/mission-control/src/styles.css"
+            ]
+          },
+          "configurations": {
+            "production": {
+              "outputHashing": "all",
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
+                "fonts": true
+              }
+            },
+            "development": {
+              "optimization": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "production": {
+              "buildTarget": "mission-control:build:production"
+            },
+            "development": {
+              "buildTarget": "mission-control:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "include": [
+              "apps/mission-control/src/**/*.spec.ts"
             ]
           }
         }

@@ -32,6 +32,12 @@
     },
     {
       "path": "./tsconfig.e2e.json"
+    },
+    {
+      "path": "apps/mission-control/tsconfig.app.json"
+    },
+    {
+      "path": "apps/mission-control/tsconfig.spec.json"
     }
   ]
 }

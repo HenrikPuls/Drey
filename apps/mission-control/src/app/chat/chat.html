@@ -1,0 +1,139 @@
+<div class="chat">
+  @if (viewMode() === 'list') {
+    <header class="bar">
+      <h1 class="bar-title">Chat</h1>
+      <button type="button" class="btn accent" (click)="newChat()">New chat</button>
+    </header>
+    <section class="list">
+      @if (listError(); as error) {
+        <p class="inline-error">{{ error }}</p>
+      }
+      @if (sessions().length === 0) {
+        <p class="empty">One chat for the whole board — steer, create and ask. Nothing writes without your confirmation.</p>
+      } @else {
+        <ul class="sessions">
+          @for (entry of sessions(); track entry.file) {
+            <li>
+              <button type="button" class="session-row" (click)="openSession(entry.file)">
+                <span class="session-title">{{ entry.title }}</span>
+                <span class="session-age">{{ relativeAge(entry.updatedAt) }}</span>
+                @if (entry.pending > 0) {
+                  <span class="badge" [attr.aria-label]="entry.pending + ' proposals waiting'">{{ entry.pending }}</span>
+                }
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  } @else {
+    <header class="bar">
+      <button type="button" class="icon-btn" (click)="back()" aria-label="Back to sessions">←</button>
+      <h1 class="bar-title">{{ viewMode() === 'session' ? activeTitle() : 'New chat' }}</h1>
+      @if (viewMode() === 'session') {
+        <button type="button" class="text-btn" (click)="newChat()">New chat</button>
+      }
+    </header>
+    @if (viewMode() === 'session') {
+      <div class="thread" role="log" aria-live="polite" #thread>
+        @for (item of timeline(); track trackOf(item, $index)) {
+          @switch (item.kind) {
+            @case ('message') {
+              @if (item.message.role === 'owner') {
+                <div class="msg owner">
+                  <p class="bubble">{{ item.message.text }}</p>
+                </div>
+              } @else {
+                <div class="msg mission">
+                  @if (item.message.thought !== null) {
+                    @if (isThoughtOpen(item.message)) {
+                      <button
+                        type="button"
+                        class="thought open"
+                        (click)="toggleThought(item.message)"
+                        aria-expanded="true">
+                        <span class="thought-kicker">thought</span>
+                        <span class="thought-text">{{ item.message.thought }}</span>
+                      </button>
+                    } @else {
+                      <button
+                        type="button"
+                        class="thought"
+                        (click)="toggleThought(item.message)"
+                        aria-expanded="false"
+                        title="Show the thinking trace">
+                        thought …
+                      </button>
+                    }
+                  }
+                  <p class="bubble">{{ item.message.text }}</p>
+                </div>
+              }
+            }
+            @case ('proposal') {
+              <div class="card" [attr.aria-busy]="isCardBusy(item.proposal.id)">
+                <p class="card-summary">{{ item.proposal.summary }}</p>
+                @if (cardError(item.proposal.id); as error) {
+                  <p class="inline-error">{{ error }}</p>
+                }
+                <div class="card-actions">
+                  <button
+                    type="button"
+                    class="btn accent"
+                    [disabled]="isCardBusy(item.proposal.id)"
+                    (click)="confirm(item.proposal.id)">
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    class="btn ghost"
+                    [disabled]="isCardBusy(item.proposal.id)"
+                    (click)="dismiss(item.proposal.id)">
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            }
+            @case ('decision') {
+              <p class="decision">
+                <span class="decision-state">{{ item.proposal.state }}</span>
+                <span class="decision-summary">{{ item.proposal.summary }}</span>
+                @if (item.proposal.outcome !== null) {
+                  <span class="decision-outcome">→ {{ item.proposal.outcome }}</span>
+                }
+              </p>
+            }
+          }
+        }
+        @if (streaming()) {
+          <div class="msg mission">
+            <p class="bubble pending" aria-label="The mission is thinking">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </p>
+          </div>
+        }
+      </div>
+    }
+    <div class="composer">
+      @if (composerError(); as error) {
+        <p class="inline-error">{{ error }}</p>
+      }
+      <div class="composer-box">
+        <textarea
+          class="composer-input"
+          [rows]="rows()"
+          [value]="draft()"
+          (input)="onDraft($event)"
+          (keydown)="onComposerKeydown($event)"
+          placeholder="Message the board…"
+          aria-label="Message the board"></textarea>
+        <div class="composer-bar">
+          <button type="button" class="icon-btn attach" title="coming with E5c" aria-label="Attach (coming with E5c)">⎘</button>
+          <button type="button" class="btn accent send" [disabled]="!canSend()" (click)="send()">Send</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

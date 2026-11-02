@@ -22,6 +22,7 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
     setClaim: vi.fn(async () => ok),
     archive: vi.fn(async () => ok),
     startRun: vi.fn(async () => ({ ok: true, runId: 'r1' })),
+    listPersonas: vi.fn(async () => []),
   };
   const fleet: RemoteFleet = {
     runs: vi.fn(async () => []),
@@ -40,6 +41,26 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
 }
 
 describe('DreyTicketsPort', () => {
+  it('maps personas to the team cards the Team tab renders', async () => {
+    const { board, fleet } = fakes();
+    vi.mocked(board.listPersonas).mockResolvedValue([
+      {
+        id: 'pia',
+        title: 'Pia',
+        role: 'planner',
+        worker: 'claude-code',
+        models: { default: 'opus', pool: ['opus', 'sonnet'], router: 'off' },
+        color: '#a78bfa',
+        skills: [],
+        body: 'Who Pia is.',
+      },
+    ] as unknown as Awaited<ReturnType<typeof board.listPersonas>>);
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+    await expect(port.personas()).resolves.toEqual([
+      { id: 'pia', title: 'Pia', role: 'planner', worker: 'claude-code', model: 'opus', pool: ['opus', 'sonnet'], color: '#a78bfa' },
+    ]);
+  });
+
   it('hands the actor to every board write', async () => {
     const { board, fleet } = fakes();
     const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });

@@ -17,6 +17,7 @@ function port(): TicketsRemotePort {
     board: vi.fn(async () => ({ columns: [] })),
     fleet: vi.fn(async () => ({ runs: [], chain: null })),
     needs: vi.fn(async () => []),
+    personas: vi.fn(async () => []),
     ticket: vi.fn(async (id: string) => ({ ok: true, card: { id }, text: '# x' })),
     create: vi.fn(ok),
     move: vi.fn(ok),
@@ -110,6 +111,7 @@ describe('route', () => {
     const readOnly = await route(req({ method: 'POST', path: '/api/chain/abort', origin: `http://${HOST}`, authorization: auth }), deps);
     expect(readOnly).toEqual({ status: 403, body: { ok: false, error: 'this device is paired read-only' } });
     expect((await route(req({ path: '/api/needs', authorization: auth }), deps)).status).toBe(200);
+    expect((await route(req({ path: '/api/personas', authorization: auth }), deps)).status).toBe(200);
   });
 
   it('hands the ticket id from the path and the device actor to the port', async () => {

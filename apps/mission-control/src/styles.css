@@ -1,0 +1,45 @@
+/*
+ * Mission Control's design tokens (E5b, ADR-0057's anthracite chrome):
+ * one dark surface family, phone-first. Components read the tokens,
+ * they never invent their own colours.
+ */
+:root {
+  --mc-bg: #101216;
+  --mc-panel: #17191f;
+  --mc-panel-2: #1d2027;
+  --mc-line: #262a33;
+  --mc-text: #e8eaee;
+  --mc-dim: #9aa3b2;
+  --mc-accent: #7aa2f7;
+  --mc-danger: #e06c75;
+  --mc-ok: #98c379;
+  --mc-radius: 12px;
+  --mc-tabbar-h: 58px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--mc-bg);
+  color: var(--mc-text);
+  font:
+    15px/1.5 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}

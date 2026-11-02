@@ -26,6 +26,7 @@ import type {
   ChainReply,
   ChatChangePayload,
   NeedItem,
+  PersonaView,
   RemoteChange,
   RefineReply,
   RunReply,
@@ -47,6 +48,8 @@ export interface RemoteBoard {
   setClaim(input: ClaimCommand & { actor?: string }): Promise<MutationResult>;
   archive(input: TicketIdCommand & { actor?: string }): Promise<MutationResult>;
   startRun(input: StartRunCommand): Promise<RunReply>;
+  /** The Team tab's cards (E5b). */
+  listPersonas(): Promise<readonly import('../core/persona').Persona[]>;
 }
 
 /** The fleet client's part the remote uses (`FleetClient` fits it). */
@@ -190,6 +193,19 @@ export class DreyTicketsPort implements TicketsRemotePort {
 
   async chainAbort(): Promise<ChainReply> {
     return chainResult(await this.fleetClient.abortAll());
+  }
+
+  async personas(): Promise<readonly PersonaView[]> {
+    const personas = await this.boardService.listPersonas();
+    return personas.map((p) => ({
+      id: p.id,
+      title: p.title,
+      role: p.role,
+      worker: p.worker,
+      model: p.models.default,
+      pool: p.models.pool,
+      color: p.color,
+    }));
   }
 
   chatSessions(): Promise<readonly ChatSessionMeta[]> {

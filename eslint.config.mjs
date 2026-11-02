@@ -124,6 +124,8 @@ export default tseslint.config(
           'electron/tsconfig.spec.json',
           'tsconfig.app.json',
           'tsconfig.spec.json',
+          'apps/mission-control/tsconfig.app.json',
+          'apps/mission-control/tsconfig.spec.json',
           'plugins/tsconfig.main.json',
           'plugins/tsconfig.renderer.json',
           'packages/tickets-engine/tsconfig.json',

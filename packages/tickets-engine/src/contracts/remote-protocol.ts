@@ -97,6 +97,9 @@ export interface TicketsRemotePort {
   chainColumnStop(phase: string): Promise<ChainReply>;
   chainAbort(): Promise<ChainReply>;
 
+  /** The team: every persona, read-only (the Team tab's cards). */
+  personas(): Promise<readonly PersonaView[]>;
+
   /** The Mission Control chat surface (E5a) — the service's port verbatim. */
   chatSessions(): Promise<readonly ChatSessionMeta[]>;
   chatOpen(file: string): Promise<ChatSession | null>;
@@ -107,6 +110,22 @@ export interface TicketsRemotePort {
 
   /** Board, fleet, remote or chat changed; returns the unsubscribe. Chat changes carry their stream payload. */
   onChanged(listener: (what: RemoteChange, payload?: ChatChangePayload) => void): () => void;
+}
+
+/**
+ * The team card's persona shape (E5b): the display slice of the
+ * persona directory, without prompt and memory.
+ */
+export interface PersonaView {
+  readonly id: string;
+  readonly title: string;
+  readonly role: string;
+  readonly worker: string;
+  /** The default model (`models.default`). */
+  readonly model: string;
+  readonly pool: readonly string[];
+  /** `#rrggbb`; the chips' and avatars' colour. */
+  readonly color: string;
 }
 
 /**

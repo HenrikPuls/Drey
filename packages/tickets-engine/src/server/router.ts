@@ -194,6 +194,8 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
         return json(await port.fleet());
       case '/api/needs':
         return json(await port.needs());
+      case '/api/personas':
+        return json(await port.personas());
       case '/api/chat/sessions':
         return json(await port.chatSessions());
     }
