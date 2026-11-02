@@ -1,0 +1,248 @@
+/* The persona detail — the 1:1 (concept §4.8): facts on top, open proposals as cards. */
+
+:host {
+  display: block;
+  padding: 16px;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.detail-close {
+  order: 2;
+  margin-left: auto;
+  padding: 0 4px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--mc-dim);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.avatar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  color: var(--mc-bg);
+}
+
+.who {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.role {
+  margin: 0;
+  font-size: 13px;
+  color: var(--mc-dim);
+}
+
+.friction {
+  margin: 0;
+  font-size: 13px;
+  color: var(--mc-accent);
+}
+
+.detail-note,
+.detail-empty {
+  margin: 0;
+  padding: 24px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--mc-dim);
+}
+
+.detail-error-state {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.detail-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--mc-danger);
+}
+
+.proposals {
+  display: grid;
+  gap: 12px;
+}
+
+.card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  background: var(--mc-panel);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+.card-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 40vw;
+  padding: 1px 8px;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--mc-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: 999px;
+}
+
+.chip-target {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--mc-accent);
+}
+
+.proposal-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.evidence {
+  margin: 0;
+  padding: 0 0 0 18px;
+  font-size: 12px;
+  color: var(--mc-dim);
+}
+
+.evidence li {
+  margin: 2px 0;
+}
+
+.evidence-more {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mc-dim);
+}
+
+.content-preview {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+.content-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mc-dim);
+}
+
+.content-text {
+  margin: 0;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  color: var(--mc-text);
+}
+
+.lesson {
+  margin: 0;
+  font-size: 13px;
+  color: var(--mc-text);
+}
+
+.proposal-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--mc-danger);
+}
+
+.proposal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn {
+  width: 100%;
+  min-height: 44px;
+  color: var(--mc-text);
+  cursor: pointer;
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+.btn-primary {
+  font-weight: 600;
+  color: #101216;
+  background: var(--mc-accent);
+  border-color: var(--mc-accent);
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.history-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--mc-dim);
+  overflow-wrap: anywhere;
+}
+
+.history-state {
+  flex: none;
+  text-transform: lowercase;
+}
+
+.history-title {
+  color: var(--mc-text);
+  opacity: 0.7;
+}

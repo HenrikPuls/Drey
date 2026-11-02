@@ -74,6 +74,7 @@ const NEED_LABEL: Readonly<Record<NeedKind, string>> = {
   'red-gate': 'Gate red',
   failed: 'Run failed',
   checkpoint: '',
+  improvements: 'Improvements',
 };
 
 export function needsView(ctx: Ctx): View {

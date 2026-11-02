@@ -9,6 +9,7 @@ import {
 import { McState } from './api/state';
 import { bootHintsFromLocation } from './api/client';
 import { MC_CHAT_STATE } from './chat/chat';
+import { MC_TEAM_DETAIL, type PersonaFacts, type TeamDetailVm } from './team/detail';
 import { MC_TICKET, type GatePhase, type TicketDoc, type TicketVm } from './ticket/ticket.model';
 import { MC_TEAM_STATE, type McTeamPersona, type McTeamState } from './team/team';
 import { MC_WORK_STATE, type McPersona, type McWorkState } from './work/work.model';
@@ -43,6 +44,12 @@ export const appConfig: ApplicationConfig = {
           },
           moveTicket: (ticketId, phaseId) => state.moveTicket(ticketId, phaseId),
           openTicket: (ticketId) => state.openTicket(ticketId),
+          openPersona: (titleOrId) => {
+            const byTitle = (state.personas() as unknown as readonly { id: string; title: string }[]).find(
+              (p) => p.title === titleOrId || p.id === titleOrId,
+            );
+            state.openPersona(byTitle?.id ?? titleOrId);
+          },
         };
       },
     },
@@ -52,6 +59,39 @@ export const appConfig: ApplicationConfig = {
         const state = inject(McState);
         return {
           team: computed(() => state.team().personas as unknown as readonly McTeamPersona[] | null),
+          openPersona: (id) => state.openPersona(id),
+        };
+      },
+    },
+    {
+      provide: MC_TEAM_DETAIL,
+      useFactory: (): TeamDetailVm => {
+        const state = inject(McState);
+        const persona = computed((): PersonaFacts | null => {
+          const open = state.personaDetail();
+          if (open === null) {
+            return null;
+          }
+          const found = (state.personas() as unknown as readonly { id: string; title: string; role: string; color: string }[]).find(
+            (p) => p.id === open.id,
+          );
+          return found ?? { id: open.id, title: open.id, role: '', color: '' };
+        });
+        return {
+          open: () => state.personaDetail(),
+          persona: () => persona(),
+          improvements: () => state.improvements(),
+          loadError: () => state.improvementsError(),
+          readOnly: () => state.readOnly(),
+          reload: async () => {
+            const open = state.personaDetail();
+            if (open !== null) {
+              await state.loadPersona(open.id);
+            }
+          },
+          close: () => state.closePersona(),
+          apply: (proposal) => state.applyImprovement(state.personaDetail()?.id ?? '', proposal.id),
+          dismiss: (proposal) => state.dismissImprovement(state.personaDetail()?.id ?? '', proposal.id),
         };
       },
     },

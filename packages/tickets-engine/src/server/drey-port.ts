@@ -25,7 +25,9 @@ import type {
   AttachmentReply,
   ChainReply,
   ChatChangePayload,
+  ImprovementDecision,
   NeedItem,
+  PersonaImprovementsReply,
   PersonaView,
   RemoteChange,
   RefineReply,
@@ -36,6 +38,7 @@ import type {
 import type { BoardSnapshot, CreateResult, MutationResult } from '../contracts/tickets';
 import type { TicketDiff, WorktreeFile } from '../core/worktree-changes';
 import type { ChatDecisionResult, ChatServicePort, ChatSession, ChatSessionMeta, ChatTurnResult } from '../contracts/chat';
+import { IMPROVEMENTS_THRESHOLD } from '../core/improvements';
 import { needsOf } from './needs';
 
 /** The board service's part the remote uses (`BoardService` fits it). */
@@ -61,6 +64,10 @@ export interface RemoteBoard {
   acceptTicket(input: { id: string; actor?: string }): Promise<MutationResult>;
   /** The proof card's send-back with a mandatory note (E5c). */
   sendBack(input: { id: string; note: string; actor?: string }): Promise<MutationResult>;
+  /** The E6 improvements card: one persona's proposals and counts. */
+  personaImprovements(personaId: string): Promise<PersonaImprovementsReply>;
+  /** The E6 1:1 decision; the apply lands in exactly one commit on the desk. */
+  decideImprovement(input: { id: string; proposalId: string; decision: ImprovementDecision; now?: string }): Promise<MutationResult>;
 }
 
 /** The fleet client's part the remote uses (`FleetClient` fits it). */
@@ -132,7 +139,25 @@ export class DreyTicketsPort implements TicketsRemotePort {
 
   async needs(): Promise<readonly NeedItem[]> {
     const [board, runs] = await Promise.all([this.boardService.refresh(), this.fleetClient.runs()]);
-    return needsOf(board, runs);
+    const items = [...needsOf(board, runs)];
+    // E6: a persona whose open proposals reached the threshold waits for
+    // the owner's 1:1 — after the ticket-scoped needs, one line per persona.
+    const personas = await this.boardService.listPersonas();
+    for (const persona of personas) {
+      const improvements = await this.boardService.personaImprovements(persona.id);
+      if (improvements.ok && improvements.openCount >= IMPROVEMENTS_THRESHOLD) {
+        items.push({
+          kind: 'improvements',
+          ticketId: '',
+          title: persona.title,
+          phase: '',
+          runId: null,
+          text: `${improvements.openCount} improvement proposals wait for the 1:1`,
+          since: null,
+        });
+      }
+    }
+    return items;
   }
 
   ticket(id: string): Promise<TicketReply> {
@@ -217,6 +242,14 @@ export class DreyTicketsPort implements TicketsRemotePort {
       pool: p.models.pool,
       color: p.color,
     }));
+  }
+
+  personaImprovements(personaId: string): Promise<PersonaImprovementsReply> {
+    return this.boardService.personaImprovements(personaId);
+  }
+
+  personaImprovementDecide(cmd: { readonly persona: string; readonly proposal: string; readonly decision: ImprovementDecision }): Promise<MutationResult> {
+    return this.boardService.decideImprovement({ id: cmd.persona, proposalId: cmd.proposal, decision: cmd.decision });
   }
 
   ticketSave(cmd: { id: string; text: string; baseRevision?: string }, actor: string): Promise<RefineReply> {

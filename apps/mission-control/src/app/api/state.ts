@@ -17,6 +17,7 @@ import { ApiError, McClient, type McBootHints, type McEventHandlers } from './cl
 import {
   parseActiveSession,
   parseChatEvent,
+  parseImprovements,
   parseNeeds,
   parseProposal,
   parseSessions,
@@ -28,6 +29,7 @@ import {
   type ChatStateView,
   type ChatStreamView,
   type NeedView,
+  type PersonaImprovementsView,
   type TeamView,
   type TicketDetail,
   type TicketDiffView,
@@ -88,6 +90,14 @@ export class McState {
   readonly diff = signal<TicketDiffView | null>(null);
   /** The attachment object-URL memo: the file name to the URL `ensureAttachment` fetched. */
   private readonly attachmentUrls = signal<ReadonlyMap<string, string>>(new Map());
+
+  // --- the persona detail's slice (E6) ----------------------------------------
+  /** The persona whose 1:1 is open; null = the team list, no detail. */
+  readonly personaDetail = signal<{ id: string } | null>(null);
+  /** The loaded improvements view; null while the first fetch runs or it failed. */
+  readonly improvements = signal<PersonaImprovementsView | null>(null);
+  /** The last load failure the 1:1 surfaces; null when all is well. */
+  readonly improvementsError = signal<string | null>(null);
 
   private stopListen: (() => void) | null = null;
   private booted = false;
@@ -520,6 +530,82 @@ export class McState {
     }
     this.attachmentUrls.update((map) => new Map(map).set(name, url));
     return url;
+  }
+
+  // --- the persona detail (E6) -------------------------------------------------
+
+  /**
+   * Opens one persona's 1:1 (concept §4.8): the screen shows it and the
+   * improvements start loading. The persona's directory facts ride along
+   * in the answer's `persona` field — the Team tab's list needs nothing.
+   */
+  openPersona(id: string): void {
+    this.personaDetail.set({ id });
+    this.improvements.set(null);
+    this.improvementsError.set(null);
+    void this.loadPersona(id);
+  }
+
+  /** Back to the team list: drops the loaded improvements and any failure. */
+  closePersona(): void {
+    this.personaDetail.set(null);
+    this.improvements.set(null);
+    this.improvementsError.set(null);
+  }
+
+  /**
+   * Loads one persona's improvements (`GET /api/personas/<id>/improvements`);
+   * a missing persona or a dropped desk lands on `improvementsError` and
+   * leaves the view empty. A newer `openPersona` racing this fetch wins —
+   * the stale answer is dropped (the ticket screen's load pattern).
+   */
+  async loadPersona(id: string): Promise<void> {
+    const body = await this.client.request('GET', `/api/personas/${encodeURIComponent(id)}/improvements`).catch(fail);
+    if (this.personaDetail()?.id !== id) {
+      return;
+    }
+    if (isFailure(body)) {
+      this.improvements.set(null);
+      this.improvementsError.set(body.error);
+      return;
+    }
+    const view = parseImprovements(body);
+    if (view === null) {
+      this.improvements.set(null);
+      this.improvementsError.set(refusal(body, 'the improvements did not come through').error);
+      return;
+    }
+    this.improvementsError.set(null);
+    this.improvements.set(view);
+  }
+
+  /**
+   * Applies one open proposal (`POST …/improvements/<imp>/apply` — the
+   * desk rewrites the proposal's target in exactly one commit); a success
+   * re-loads the view, moving the proposal into the history.
+   */
+  applyImprovement(personaId: string, proposalId: string): Promise<McReply> {
+    return this.decideImprovement(personaId, proposalId, 'apply');
+  }
+
+  /** Dismisses one open proposal (`POST …/improvements/<imp>/dismiss`); a success re-loads the view. */
+  dismissImprovement(personaId: string, proposalId: string): Promise<McReply> {
+    return this.decideImprovement(personaId, proposalId, 'dismiss');
+  }
+
+  private async decideImprovement(personaId: string, proposalId: string, which: 'apply' | 'dismiss'): Promise<McReply> {
+    const base = `/api/personas/${encodeURIComponent(personaId)}/improvements`;
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', `${base}/${encodeURIComponent(proposalId)}/${which}`)
+      .catch(fail);
+    if (isFailure(body)) {
+      return body;
+    }
+    if (body['ok'] !== true) {
+      return refusal(body, `the desk could not ${which} the proposal`);
+    }
+    await this.loadPersona(personaId);
+    return { ok: true };
   }
 
   // --- the chat stream ------------------------------------------------------

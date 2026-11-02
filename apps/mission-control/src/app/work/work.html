@@ -12,18 +12,33 @@
         </h2>
         @if (group.kind === 'needs') {
           @for (vm of group.needs; track vm.key) {
-            <article class="card need-card">
-              <div class="card-row">
-                <span class="chip chip-need">{{ vm.kindLabel }}</span>
-                @if (vm.need.ticketId) {
-                  <span class="tid">{{ vm.need.ticketId }}</span>
+            @if (needTappable(vm)) {
+              <button type="button" class="card need-card need-tappable" (click)="openNeedPersona(vm)">
+                <div class="card-row">
+                  <span class="chip chip-need">{{ vm.kindLabel }}</span>
+                  @if (vm.need.ticketId) {
+                    <span class="tid">{{ vm.need.ticketId }}</span>
+                  }
+                </div>
+                <div class="need-title">{{ vm.need.title }}</div>
+                @if (vm.need.summary) {
+                  <p class="need-summary">{{ vm.need.summary }}</p>
                 }
-              </div>
-              <div class="need-title">{{ vm.need.title }}</div>
-              @if (vm.need.summary) {
-                <p class="need-summary">{{ vm.need.summary }}</p>
-              }
-            </article>
+              </button>
+            } @else {
+              <article class="card need-card">
+                <div class="card-row">
+                  <span class="chip chip-need">{{ vm.kindLabel }}</span>
+                  @if (vm.need.ticketId) {
+                    <span class="tid">{{ vm.need.ticketId }}</span>
+                  }
+                </div>
+                <div class="need-title">{{ vm.need.title }}</div>
+                @if (vm.need.summary) {
+                  <p class="need-summary">{{ vm.need.summary }}</p>
+                }
+              </article>
+            }
           }
         } @else {
           @for (vm of group.tickets; track vm.id) {

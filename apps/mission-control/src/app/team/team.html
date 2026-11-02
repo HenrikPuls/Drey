@@ -3,21 +3,43 @@
     <ul class="cards">
       @for (persona of list; track persona.id) {
         <li class="card">
-          <div class="row">
-            <span class="avatar" [style.background-color]="persona.color" aria-hidden="true">{{ initialsOf(persona.title) }}</span>
-            <div class="who">
-              <h2 class="title">{{ persona.title }}</h2>
-              <p class="role">{{ persona.role }}</p>
+          @if (canOpen()) {
+            <button type="button" class="card-btn" (click)="open(persona)">
+              <div class="row">
+                <span class="avatar" [style.background-color]="persona.color" aria-hidden="true">{{ initialsOf(persona.title) }}</span>
+                <div class="who">
+                  <h2 class="title">{{ persona.title }}</h2>
+                  <p class="role">{{ persona.role }}</p>
+                </div>
+              </div>
+              <p class="meta">{{ persona.worker }} · {{ persona.model }}</p>
+              <div class="state">
+                @if (persona.currentRun; as run) {
+                  <span class="chip" [class]="'chip ' + runStateClass(run.state)">on {{ run.ticketId }}</span>
+                } @else {
+                  <span class="chip run-dim">idle</span>
+                }
+              </div>
+            </button>
+          } @else {
+            <div class="card-body">
+              <div class="row">
+                <span class="avatar" [style.background-color]="persona.color" aria-hidden="true">{{ initialsOf(persona.title) }}</span>
+                <div class="who">
+                  <h2 class="title">{{ persona.title }}</h2>
+                  <p class="role">{{ persona.role }}</p>
+                </div>
+              </div>
+              <p class="meta">{{ persona.worker }} · {{ persona.model }}</p>
+              <div class="state">
+                @if (persona.currentRun; as run) {
+                  <span class="chip" [class]="'chip ' + runStateClass(run.state)">on {{ run.ticketId }}</span>
+                } @else {
+                  <span class="chip run-dim">idle</span>
+                }
+              </div>
             </div>
-          </div>
-          <p class="meta">{{ persona.worker }} · {{ persona.model }}</p>
-          <div class="state">
-            @if (persona.currentRun; as run) {
-              <span class="chip" [class]="'chip ' + runStateClass(run.state)">on {{ run.ticketId }}</span>
-            } @else {
-              <span class="chip run-dim">idle</span>
-            }
-          </div>
+          }
         </li>
       }
     </ul>

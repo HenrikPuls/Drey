@@ -57,8 +57,9 @@ Top-level rules, once, up front:
       order.md        # ignored since req-75 W1 (the former order pins), may be absent
       repos.md        # work-repo name -> clone URL/path mapping
       prompts/        # the handover prompts (`agent <prompt-ref>` names one file)
-      personas/       # the agent personas (E3): <id>/persona.md + prompt.md +
-                      #   memory.md (+ avatar.png) — see Personas below
+      personas/       # the agent personas (E3, the improvement loop E6):
+                      #   <id>/persona.md + prompt.md + memory.md + friction.md +
+                      #   improvements.md (+ avatar.png) — see Personas below
       chat/           # the Mission Control chat sessions (E5a): one file per
                       #   session — see _meta/chat/ below
     10-inbox/
@@ -510,10 +511,12 @@ directory (ADR-0088 E3). One folder per persona, directly under
 ```text
 tickets/_meta/personas/
   pia/
-    persona.md   # frontmatter: title, role, worker, models, color, skills
-    prompt.md    # the persona prompt — the run's instruction base when present
-    memory.md    # curated memory (format and cap below)
-    avatar.png   # optional
+    persona.md        # frontmatter: title, role, worker, models, color, skills
+    prompt.md         # the persona prompt — the run's instruction base when present
+    memory.md         # curated memory (format and cap below)
+    friction.md       # the worker's findings (E6 — format below)
+    improvements.md   # the aggregation's proposals (E6 — format below)
+    avatar.png        # optional
 ```
 
 - The persona id **is** the folder name: lowercase letters, digits and
@@ -553,6 +556,55 @@ tickets/_meta/personas/
   ~20 lines / ~500 tokens, whichever is smaller, under a `## Memory`
   heading with a one-line explanation; an absent file adds no section at
   all.
+
+**The improvement loop (E6).** Two more files may live in the persona
+directory — the worker's findings and the aggregation's proposals (the
+format's grammar lives in the engine's `core/improvements.ts`, the
+trigger and the owner's apply in
+[ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)'s
+E6 record):
+
+- `friction.md` — the worker's write path, created on first append; one
+  finding per line, nothing else:
+
+  ```markdown
+  - <YYYY-MM-DD> · <ticketId> · <what was missing>
+  ```
+
+  The ticket id may stay empty. The reader tolerates the rest — an
+  unparseable line is skipped, never guessed. The build / review / qa
+  prompts ask the worker for one line per finding (lacked context,
+  guessed a convention, the same obstacle twice); no persona in the
+  brief, no line. Lines move out of this file on aggregation — what the
+  aggregator consumed into a proposal's evidence does not stay behind.
+- `improvements.md` — the machine's half of the owner's 1:1, strict
+  writer / tolerant reader; an absent or broken file reads as empty, the
+  caps (`MAX_IMPROVEMENT_EVIDENCE` = 10 items, `MAX_IMPROVEMENT_CONTENT`
+  = 8 KiB per proposal) keep a phone review small. The shape:
+
+  ```markdown
+  # Improvements — pia
+
+  - aggregate: '2026-11-02T10:00:00Z'
+
+  - imp-1 open prompt.md — Order the context pack by name
+    - proposed: '2026-11-02T10:00:00Z'
+    - evidence:
+      - 2026-11-01 · T-0007 · guessed the order.md shape
+    - lesson: Keep the pack recipe explicit.
+    - content:
+        You build in the ticket's worktree …
+  ```
+
+  The `- aggregate:` stamp marks the last aggregation run (absent when
+  never). Each proposal is one `- imp-<n> <state> <target> — <title>`
+  block: the states are `open | accepted | dismissed` — a decision adds
+  the `- decided:` stamp, never rewrites the block's history; the
+  targets are `prompt.md | models.default | memory`, the file the
+  owner's Apply rewrites; `evidence:` carries the friction lines the
+  draft was read from; a `- lesson:` line rides only when the proposal
+  brings one. Ids are minted per persona file and never reused. The
+  trigger's constant is `IMPROVEMENTS_THRESHOLD` = 3.
 
 **The resolution ladder** — three levels, first hit wins:
 

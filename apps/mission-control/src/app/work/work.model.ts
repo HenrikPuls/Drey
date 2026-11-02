@@ -100,6 +100,14 @@ export interface McWorkState {
   moveTicket(ticketId: string, phaseId: string): Promise<McMoveResult>;
   /** Opens the ticket screen (E5c); absent = the sheet hides the button. */
   openTicket?(ticketId: string): void;
+  /**
+   * Opens the persona's 1:1 detail (E6); absent = an improvements need
+   * card renders non-interactive. The caller passes the need item's
+   * title — the engine guarantees it IS the persona title — resolved
+   * against the persona directory when it is known; the adapter accepts
+   * a title or an id.
+   */
+  openPersona?(personaTitleOrId: string): void;
 }
 
 export const MC_WORK_STATE = new InjectionToken<McWorkState>('mc.work-state');
@@ -153,6 +161,7 @@ export const NEED_KIND_LABELS: Readonly<Record<string, string>> = {
   'red-gate': 'Gate red',
   failed: 'Run failed',
   checkpoint: 'Checkpoint',
+  improvements: 'Improvements',
 };
 
 /** The need card's kind chip; an unknown kind shows itself, never a guess. */
@@ -182,7 +191,16 @@ export function personaMapOf(personas: readonly McPersona[]): ReadonlyMap<string
   return new Map(personas.map((persona) => [persona.id, persona]));
 }
 
+/**
+ * The need card's stable key. An improvements need's `ticketId` is '' and
+ * its `title` IS the persona title (the engine's guarantee), so the title
+ * is the key — an index would churn whenever another need joins the list.
+ * Every other need keys on kind, ticket id and index.
+ */
 function needKeyOf(need: McNeed, index: number): string {
+  if (need.kind === 'improvements' && need.title.trim() !== '') {
+    return `improvements:${need.title.trim()}`;
+  }
   return `${need.kind}:${need.ticketId ?? 'none'}:${index}`;
 }
 

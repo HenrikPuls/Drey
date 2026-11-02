@@ -127,6 +127,15 @@
   color: var(--mc-text);
 }
 
+.need-tappable {
+  color: inherit;
+  cursor: pointer;
+}
+
+.need-tappable:active {
+  background: var(--mc-panel-2);
+}
+
 .need-summary {
   margin: 6px 0 0;
   font-size: 13px;

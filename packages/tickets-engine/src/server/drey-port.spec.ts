@@ -11,6 +11,19 @@ import { BYPASS_REFUSAL, ChangeHub, DreyTicketsPort, type RemoteBoard, type Remo
 
 const ok = { ok: true } as const;
 
+/** A full-shaped persona for the E6 reply fakes (the reply type carries Persona). */
+function fakePersona(id: string, title: string): import('../core/persona').Persona {
+  return {
+    id,
+    title,
+    role: 'builder',
+    worker: 'claude-code',
+    models: { default: 'opus', pool: ['opus'], router: 'off' },
+    color: '#a78bfa',
+    skills: [],
+  };
+}
+
 function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
   const board: RemoteBoard = {
     refresh: vi.fn(async () => ({ columns: [], checkpoints: [] }) as unknown as BoardSnapshot),
@@ -28,6 +41,8 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
     worktreeChangesOf: vi.fn(async () => []),
     acceptTicket: vi.fn(async () => ok),
     sendBack: vi.fn(async () => ok),
+    personaImprovements: vi.fn(async () => ({ ok: false as const, error: 'persona "pia" does not exist' })),
+    decideImprovement: vi.fn(async () => ok),
   };
   const fleet: RemoteFleet = {
     runs: vi.fn(async () => []),
@@ -126,6 +141,57 @@ describe('DreyTicketsPort', () => {
     off();
     hub.emit('fleet');
     expect(seen).toEqual(['board']);
+  });
+
+  it('delegates the E6 improvements card and the 1:1 decision to the board', async () => {
+    const { board, fleet } = fakes();
+    const view = {
+      ok: true as const,
+      persona: fakePersona('pia', 'Pia'),
+      proposals: [{ id: 'imp-1', state: 'open' as const, target: 'prompt.md' as const, title: 'T', evidence: [], content: 'c', lesson: null, at: '2026-11-02T10:00:00Z', decidedAt: null }],
+      openCount: 1,
+      frictionCount: 2,
+    };
+    vi.mocked(board.personaImprovements).mockResolvedValue(view);
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+    await expect(port.personaImprovements('pia')).resolves.toBe(view);
+    expect(board.personaImprovements).toHaveBeenCalledWith('pia');
+
+    await port.personaImprovementDecide({ persona: 'pia', proposal: 'imp-1', decision: 'accepted' });
+    expect(board.decideImprovement).toHaveBeenCalledWith({ id: 'pia', proposalId: 'imp-1', decision: 'accepted' });
+  });
+
+  it('appends an improvements need per persona at or above the threshold, after the ticket needs', async () => {
+    const { board, fleet } = fakes();
+    vi.mocked(board.listPersonas).mockResolvedValue([
+      { id: 'ben', title: 'Ben' },
+      { id: 'pia', title: 'Pia' },
+    ] as unknown as Awaited<ReturnType<typeof board.listPersonas>>);
+    vi.mocked(board.personaImprovements).mockImplementation(async (id: string) =>
+      id === 'pia'
+        ? { ok: true, persona: fakePersona('pia', 'Pia'), proposals: [], openCount: 3, frictionCount: 5 }
+        : { ok: true, persona: fakePersona('ben', 'Ben'), proposals: [], openCount: 2, frictionCount: 5 },
+    );
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+    expect(await port.needs()).toEqual([
+      {
+        kind: 'improvements',
+        ticketId: '',
+        title: 'Pia',
+        phase: '',
+        runId: null,
+        text: '3 improvement proposals wait for the 1:1',
+        since: null,
+      },
+    ]);
+
+    // Below the threshold (and a broken read) appends nothing.
+    vi.mocked(board.personaImprovements).mockImplementation(async (id: string) =>
+      id === 'pia'
+        ? { ok: false, error: 'no tickets vault detected' }
+        : { ok: true, persona: fakePersona('ben', 'Ben'), proposals: [], openCount: 1, frictionCount: 0 },
+    );
+    expect(await port.needs()).toEqual([]);
   });
 });
 

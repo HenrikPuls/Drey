@@ -4,10 +4,12 @@
  * structured answer out). It speaks the OpenAI-compatible dialect
  * directly: POST {baseUrl}/chat/completions, `stream: true`, SSE `data:`
  * frames whose `choices.delta.content` accumulates the reply, parsed by
- * core/chat-intents after the stream completes. The bridge never touches
- * the vault and never throws: a missing model, an unreachable provider
- * and an unreadable answer each resolve an honest envelope whose say
- * explains the situation and whose commands stay empty.
+ * core/chat-intents after the stream completes. The system prompt is a
+ * dep (the mission prompt by default, AGGREGATOR_SYSTEM_PROMPT for the
+ * improvement loop's turns — E6). The bridge never touches the vault and
+ * never throws: a missing model, an unreachable provider and an
+ * unreadable answer each resolve an honest envelope whose say explains
+ * the situation and whose commands stay empty.
  */
 import type { ChatBridge, ChatCommand, ChatStreamEvent } from '../contracts/chat';
 import { parseEnvelope } from '../core/chat-intents';
@@ -43,6 +45,27 @@ Rules:
 - description fields are written in the owner's language.
 - Propose only what the board itself does: createTicket, transition, setPriority.`;
 
+/**
+ * The system prompt of an improvement turn (E6, concept §4.8): the
+ * aggregator reads one persona's friction log plus a short run history
+ * and answers with improvement drafts. Same wire, same STRICT contract
+ * style as the mission prompt — the reply parses as one JSON array.
+ */
+export const AGGREGATOR_SYSTEM_PROMPT = `You are the improvement aggregator for one tickets persona.
+
+You read the persona's friction log — one line per thing that went wrong on a ticket — plus a short run history, and you propose concrete improvements as STRICTLY one JSON array and nothing outside it — no prose before or after, no markdown fences:
+[{"target":"prompt.md|models.default|memory","title":"…","evidence":["<friction lines used>"],"content":"<replacement text / model id / lesson line>","lesson":"<optional short lesson>"}]
+- "target" names what the draft changes: the persona's prompt.md, its models.default, or its memory.md.
+- "title" is one short sentence naming the improvement.
+- "evidence" quotes the friction lines the draft rests on — only lines from the input.
+- "content" is the complete replacement: the full new prompt text, the model id, or the one-line memory lesson. It drops into the file as written.
+- "lesson" is optional — a short lesson worth remembering once the draft is applied.
+
+Rules:
+- Propose at most 3 drafts; merge duplicate findings into one proposal.
+- Every draft is backed by evidence from the input — never invent friction.
+- Content must be concrete and complete, never a summary.`;
+
 /** The config access the bridge needs — the engine's FileConfigStore fits. */
 export interface ChatLlmConfig {
   get<T>(key: string): Promise<T | undefined>;
@@ -54,6 +77,8 @@ export interface ChatBridgeDeps {
   readonly fetch?: typeof fetch;
   /** The clock; the turn-timeout check reads it, so a spec can simulate a stall. */
   readonly now?: () => number;
+  /** The system prompt of every turn; MISSION_SYSTEM_PROMPT by default (the aggregator passes its own). */
+  readonly systemPrompt?: string;
 }
 
 /** The mission's answer — or its honest explanation of why there is none. */
@@ -66,6 +91,7 @@ interface TurnOutcome {
 export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
   const transport = deps.fetch ?? fetch;
   const now = deps.now ?? Date.now;
+  const systemPrompt = deps.systemPrompt ?? MISSION_SYSTEM_PROMPT;
 
   return {
     async runTurn(input) {
@@ -103,7 +129,7 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
             model: modelId,
             stream: true,
             messages: [
-              { role: 'system', content: `${MISSION_SYSTEM_PROMPT}\n\n## Board digest\n\n${input.board}` },
+              { role: 'system', content: `${systemPrompt}\n\n## Board digest\n\n${input.board}` },
               ...input.history.map((message) => ({
                 role: message.role === 'owner' ? 'user' : 'assistant',
                 content: message.text,

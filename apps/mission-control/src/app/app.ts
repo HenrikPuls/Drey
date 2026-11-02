@@ -3,6 +3,7 @@ import { McState } from './api/state';
 import { Work } from './work/work';
 import { Chat } from './chat/chat';
 import { Team } from './team/team';
+import { PersonaDetail } from './team/detail';
 import { TicketView } from './ticket/view';
 import { TicketEdit } from './ticket/edit';
 
@@ -18,7 +19,7 @@ export type McTab = 'work' | 'chat' | 'team';
   selector: 'mc-root',
   templateUrl: './app.html',
   styleUrl: './app.css',
-  imports: [Work, Chat, Team, TicketView, TicketEdit],
+  imports: [Work, Chat, Team, PersonaDetail, TicketView, TicketEdit],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App {

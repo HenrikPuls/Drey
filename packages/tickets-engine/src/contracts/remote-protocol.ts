@@ -23,9 +23,11 @@ import type { FleetSnapshot } from '../services/fleet-client';
 import type { ChainMaster, ChainStatus, ColumnMode, WaitQuestion } from '../fleet/protocol';
 import type { ShapedQuestion } from './question-shape';
 import type { BoardSnapshot, CreateResult, MutationResult, TicketCard } from './tickets';
+import type { ImprovementProposal, ImprovementState } from '../core/improvements';
+import type { Persona } from '../core/persona';
 
 /** What the "Needs you" list holds, in the order it shows them. */
-export type NeedKind = 'question' | 'permission' | 'red-gate' | 'failed' | 'checkpoint';
+export type NeedKind = 'question' | 'permission' | 'red-gate' | 'failed' | 'checkpoint' | 'improvements';
 
 /** One thing that waits on the owner. */
 export interface NeedItem {
@@ -48,6 +50,24 @@ export interface NeedItem {
 
 export type RunReply = { readonly ok: boolean; readonly error?: string; readonly runId?: string };
 export type ChainReply = { readonly ok: true; readonly status: ChainStatus } | { readonly ok: false; readonly error: string };
+
+/** The 1:1's two outcomes (E6); an open proposal carries none of them yet. */
+export type ImprovementDecision = Exclude<ImprovementState, 'open'>;
+
+/**
+ * The E6 improvements card (concept §4.8): one persona's proposals file
+ * plus the counts that gate the aggregation and the "needs you" entry.
+ * `frictionCount` is the raw findings still waiting in friction.md.
+ */
+export type PersonaImprovementsReply =
+  | {
+      readonly ok: true;
+      readonly persona: Persona;
+      readonly proposals: readonly ImprovementProposal[];
+      readonly openCount: number;
+      readonly frictionCount: number;
+    }
+  | { readonly ok: false; readonly error: string };
 export type RemoteChange = 'board' | 'fleet' | 'remote' | 'chat';
 
 /**
@@ -100,6 +120,11 @@ export interface TicketsRemotePort {
 
   /** The team: every persona, read-only (the Team tab's cards). */
   personas(): Promise<readonly PersonaView[]>;
+
+  /** The E6 improvements card: one persona's proposals, open count and friction count. */
+  personaImprovements(personaId: string): Promise<PersonaImprovementsReply>;
+  /** The E6 1:1 decision (apply = accepted, dismiss = dismissed); one commit on the desk. */
+  personaImprovementDecide(cmd: { readonly persona: string; readonly proposal: string; readonly decision: ImprovementDecision }): Promise<MutationResult>;
 
   /** The phone edit mode's raw-text save (E5c). */
   ticketSave(cmd: { id: string; text: string; baseRevision?: string }, actor: string): Promise<RefineReply>;

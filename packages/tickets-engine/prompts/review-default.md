@@ -56,3 +56,9 @@ How to work:
 - Keep text between steps to one short sentence. Your Log entry and final
   message are for a reader who saw none of this: lead with the outcome,
   then what matters, in plain prose without filler.
+- Friction is a gift (the owner's improvement loop reads it): when you
+  lacked context, had to guess a convention, or hit the same obstacle
+  twice, append ONE line to your persona's friction file before you end
+  — `tickets/_meta/personas/<your persona>/friction.md`, shape
+  `- <date> · <ticket id> · <what was missing>`. One line per finding,
+  plain words. No persona in your brief: skip it.

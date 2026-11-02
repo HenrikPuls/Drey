@@ -25,6 +25,10 @@ import { planWorktreeRemoval } from '../core/worktree-removal';
 import { TicketsGit, type RepoLocation } from '../core/tickets-git';
 import { loadShippedPrompts } from '../core/default-prompts';
 import { type AttachmentCommand, RefineCommand } from '../core/commands';
+import { nextImprovementId, parseFriction, parseImprovements, renderImprovements, type FrictionLine, type ImprovementDraft, type ImprovementProposal } from '../core/improvements';
+import type { ImprovementDecision, PersonaImprovementsReply } from '../contracts/remote-protocol';
+import { isMap, isScalar, parseDocument } from 'yaml';
+import { splitFrontmatter } from '../../../../shared/frontmatter';
 import { composeRunRequest, type PersonaDispatch } from '../fleet/request';
 import { deriveWorkerModel, personaLoader, resolvePersonaForTicket } from './persona-loader';
 import { columnPromptRef, isAutoPhase, nextPhaseIdOf } from '../fleet/chain';
@@ -89,6 +93,83 @@ function findOnBoard(snap: BoardSnapshot, id: string): TicketCard | null {
     }
   }
   return null;
+}
+
+// --- the self-improvement loop's file seams (E6, concept §4.8) ---------
+
+function improvementsPathFor(id: string): string {
+  return `${PERSONAS_DIR}/${id}/improvements.md`;
+}
+
+function frictionPathFor(id: string): string {
+  return `${PERSONAS_DIR}/${id}/friction.md`;
+}
+
+/** One memory entry is always one line, bounded (the personaLearn shape). */
+function oneMemoryLine(text: string): string {
+  return text.trim().replace(/\s*\n\s*/g, ' ').slice(0, 500);
+}
+
+/**
+ * The aggregation's truncation of friction.md: the findings moved into
+ * the proposals' evidence, so only the heading stays. A file without a
+ * `#` heading truncates to empty (the worker's file is heading-led).
+ */
+function frictionHeadingOnly(text: string): string {
+  const head: string[] = [];
+  for (const line of text.split('\n')) {
+    head.push(line);
+    if (line.startsWith('#')) {
+      break;
+    }
+  }
+  return `${head.join('\n').replace(/\n+$/, '')}\n`;
+}
+
+/**
+ * The models.default decision's rewrite of persona.md: the yaml
+ * doc-mutation discipline of `patchHeaderFields` — only
+ * `models.default` changes, every other key, the pool/router and any
+ * comment survive the round-trip untouched.
+ */
+function patchPersonaDefaultModel(text: string, model: string): string {
+  const { yamlText, body, hadFence } = splitFrontmatter(text);
+  if (!hadFence || yamlText === null) {
+    throw new Error('persona.md has no frontmatter fence');
+  }
+  const modelId = model.trim();
+  if (modelId === '') {
+    throw new Error('the default model is empty');
+  }
+  const doc = parseDocument(yamlText);
+  if (doc.errors.length > 0) {
+    throw new Error('persona.md frontmatter does not parse');
+  }
+  const models = doc.get('models', true);
+  if (isMap(models)) {
+    const existing = models.get('default', true);
+    if (isScalar(existing)) {
+      existing.value = modelId; // in place — the line's comment and style survive
+    } else {
+      models.set('default', modelId);
+    }
+  } else if (models === undefined) {
+    doc.set('models', { default: modelId });
+  } else {
+    throw new Error('persona.md models is not a map');
+  }
+  let out = doc.toString({ flowCollectionPadding: false, lineWidth: 0 });
+  if (!out.endsWith('\n')) {
+    out += '\n';
+  }
+  return `---\n${out}---\n${body}`;
+}
+
+/** The aggregator's input slice (E6): what the desk hands the LLM route. */
+export interface ImprovementInput {
+  readonly friction: readonly FrictionLine[];
+  readonly lastAggregation: string | null;
+  readonly settledRuns: number;
 }
 
 export class EngineBoardService {
@@ -1954,6 +2035,12 @@ export class EngineBoardService {
     return personas;
   }
 
+  /** The persona directory's ids (the improvement loop's sweep list). */
+  async listPersonaIds(): Promise<readonly string[]> {
+    const personas = await this.listPersonas();
+    return personas.map((p) => p.id);
+  }
+
   /**
    * The confirmed memory entry (E3 acceptance): one owner-confirmed
    * lesson appended to the persona's memory.md — the same store the
@@ -1978,7 +2065,7 @@ export class EngineBoardService {
         return { ok: false, error: `persona "${id}" does not exist — create tickets/_meta/personas/${id}/persona.md first` };
       }
       // One line, always: flatten what the dialog sent, bounded.
-      const entry = input.entry.trim().replace(/\s*\n\s*/g, ' ').slice(0, 500);
+      const entry = oneMemoryLine(input.entry);
       if (entry === '') {
         return { ok: false, error: 'a memory entry is one non-empty line' };
       }
@@ -2085,6 +2172,233 @@ export class EngineBoardService {
       } catch (error) {
         this.host.log(`persona migration failed: ${messageOf(error)}`, 'warn');
       }
+    });
+  }
+
+  // --- the self-improvement loop (E6, concept §4.8) ---------------------
+
+  /**
+   * The E6 improvements card's data (concept §4.8): the persona's
+   * improvements.md parsed tolerant-reader style, plus the open count
+   * (the 1:1's work) and the friction count (findings still waiting for
+   * an aggregation). A read — outside the single-writer queue; the
+   * persona must exist, everything else tolerates absence.
+   */
+  async personaImprovements(personaId: string): Promise<PersonaImprovementsReply> {
+    let id: string;
+    try {
+      id = personaRef(personaId);
+    } catch (error) {
+      return { ok: false, error: messageOf(error) };
+    }
+    const vault = await this.detect();
+    if (vault === null) {
+      return { ok: false, error: 'no tickets vault detected' };
+    }
+    const persona = await this.personaLoaderFor(vault).load(id);
+    if (persona === null) {
+      return { ok: false, error: `persona "${id}" does not exist — create tickets/_meta/personas/${id}/persona.md first` };
+    }
+    const [improvementsText, frictionText] = await Promise.all([
+      this.readOptional(vault.id, improvementsPathFor(id)),
+      this.readOptional(vault.id, frictionPathFor(id)),
+    ]);
+    const proposals = parseImprovements(improvementsText ?? '').proposals;
+    return {
+      ok: true,
+      persona,
+      proposals,
+      openCount: proposals.filter((p) => p.state === 'open').length,
+      frictionCount: parseFriction(frictionText ?? '').length,
+    };
+  }
+
+  /**
+   * The aggregation's input (E6): the persona's raw friction findings,
+   * the last aggregation stamp, and how many of this persona's fleet
+   * records started since then (0 when never aggregated). A read —
+   * tolerant everywhere, so an unknown persona or a missing vault reads
+   * as an empty input rather than an error.
+   */
+  async improvementInput(personaId: string): Promise<ImprovementInput> {
+    let id: string;
+    try {
+      id = personaRef(personaId);
+    } catch {
+      return { friction: [], lastAggregation: null, settledRuns: 0 };
+    }
+    const vault = await this.detect();
+    if (vault === null) {
+      return { friction: [], lastAggregation: null, settledRuns: 0 };
+    }
+    const [improvementsText, frictionText, runs] = await Promise.all([
+      this.readOptional(vault.id, improvementsPathFor(id)),
+      this.readOptional(vault.id, frictionPathFor(id)),
+      this.fleetRecords().catch(() => [] as readonly RunInfo[]),
+    ]);
+    const lastAggregation = parseImprovements(improvementsText ?? '').lastAggregation;
+    const settledRuns =
+      lastAggregation === null
+        ? 0
+        : runs.filter((run) => (run.persona ?? null) === id && run.startedAt > lastAggregation).length;
+    return { friction: parseFriction(frictionText ?? ''), lastAggregation, settledRuns };
+  }
+
+  /**
+   * The aggregation's write (E6): the validated drafts become open
+   * proposals — ids minted from the file (`imp-<n>`, never reused), one
+   * strict re-render, lastAggregation stamped — and friction.md
+   * truncates to its heading, the findings having moved into the
+   * evidence. Exactly one commit `personas: <id> improvements +<n>`,
+   * then the announcement.
+   */
+  applyAggregation(input: { id: string; drafts: readonly ImprovementDraft[]; now?: string }): Promise<BoardMutationResult> {
+    return this.enqueue(async () => {
+      let id: string;
+      try {
+        id = personaRef(input.id);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      if ((await this.personaLoaderFor(vault).load(id)) === null) {
+        return { ok: false, error: `persona "${id}" does not exist — create tickets/_meta/personas/${id}/persona.md first` };
+      }
+      if (input.drafts.length === 0) {
+        return { ok: true }; // nothing to aggregate — the files stay exactly as they are
+      }
+      const at = input.now ?? new Date().toISOString();
+      const improvementsPath = improvementsPathFor(id);
+      const existingText = (await this.readOptional(vault.id, improvementsPath)) ?? '';
+      const file = parseImprovements(existingText);
+      // The mint scans the raw text: even a hand-broken proposal's id is
+      // never reused. The queue serializes, so the running max suffices.
+      let next = Number(nextImprovementId(existingText).slice('imp-'.length));
+      const added: ImprovementProposal[] = input.drafts.map((draft) => ({
+        id: `imp-${next++}`,
+        state: 'open',
+        target: draft.target,
+        title: draft.title,
+        evidence: [...draft.evidence],
+        content: draft.content,
+        lesson: draft.lesson,
+        at,
+        decidedAt: null,
+      }));
+      const frictionPath = frictionPathFor(id);
+      const frictionText = await this.readOptional(vault.id, frictionPath);
+      const touched = [improvementsPath];
+      try {
+        await this.host.write(vault.id, improvementsPath, renderImprovements(id, { lastAggregation: at, proposals: [...file.proposals, ...added] }));
+        if (frictionText !== null) {
+          await this.host.write(vault.id, frictionPath, frictionHeadingOnly(frictionText));
+          touched.push(frictionPath);
+        }
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, touched, `personas: ${id} improvements +${added.length}`);
+      this.host.announceChanges(vault.id, touched);
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The 1:1's decision (E6): an open proposal is accepted (the target
+   * applies — prompt.md rewritten, models.default patched through the
+   * yaml doc-mutation, memory appended as one line) or dismissed; a
+   * non-null lesson lands in memory.md either way. Unknown or already
+   * decided proposals refuse with a readable error; exactly one commit
+   * `personas: <id> improvement <accepted|dismissed> (<proposalId>)`.
+   */
+  decideImprovement(input: { id: string; proposalId: string; decision: ImprovementDecision; now?: string }): Promise<BoardMutationResult> {
+    return this.enqueue(async () => {
+      let id: string;
+      try {
+        id = personaRef(input.id);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      if ((await this.personaLoaderFor(vault).load(id)) === null) {
+        return { ok: false, error: `persona "${id}" does not exist — create tickets/_meta/personas/${id}/persona.md first` };
+      }
+      const improvementsPath = improvementsPathFor(id);
+      const file = parseImprovements((await this.readOptional(vault.id, improvementsPath)) ?? '');
+      const proposal = file.proposals.find((p) => p.id === input.proposalId) ?? null;
+      if (proposal === null) {
+        return { ok: false, error: `${input.proposalId} is not one of ${id}'s improvement proposals` };
+      }
+      if (proposal.state !== 'open') {
+        return { ok: false, error: `${input.proposalId} is already ${proposal.state}` };
+      }
+      const at = input.now ?? new Date().toISOString();
+      const touched = new Set<string>([improvementsPath]);
+      const appendLesson = async (line: string): Promise<string | null> => {
+        try {
+          const flattened = oneMemoryLine(line);
+          // The memory file is a bullet list — the line carries its own marker.
+          await appendMemory(
+            (rel) => this.host.read(vault.id, rel),
+            (rel, text) => this.host.write(vault.id, rel, text),
+            id,
+            flattened.startsWith('- ') ? flattened : `- ${flattened}`,
+          );
+          touched.add(memoryPathFor(id));
+          return null;
+        } catch (error) {
+          return `memory write failed: ${messageOf(error)}`;
+        }
+      };
+      if (input.decision === 'accepted') {
+        try {
+          if (proposal.target === 'prompt.md') {
+            const promptPath = `${PERSONAS_DIR}/${id}/prompt.md`;
+            await this.host.write(vault.id, promptPath, proposal.content);
+            touched.add(promptPath);
+          } else if (proposal.target === 'models.default') {
+            const personaPath = `${PERSONAS_DIR}/${id}/persona.md`;
+            const patched = patchPersonaDefaultModel(await this.host.read(vault.id, personaPath), proposal.content);
+            await this.host.write(vault.id, personaPath, patched);
+            touched.add(personaPath);
+          } else {
+            const failure = await appendLesson(proposal.content);
+            if (failure !== null) {
+              return { ok: false, error: failure };
+            }
+          }
+        } catch (error) {
+          return { ok: false, error: `write failed: ${messageOf(error)}` };
+        }
+      }
+      if (proposal.lesson !== null) {
+        const failure = await appendLesson(proposal.lesson);
+        if (failure !== null) {
+          return { ok: false, error: failure };
+        }
+      }
+      const decided: ImprovementProposal = { ...proposal, state: input.decision, decidedAt: at };
+      const paths = [...touched];
+      try {
+        await this.host.write(
+          vault.id,
+          improvementsPath,
+          renderImprovements(id, { lastAggregation: file.lastAggregation, proposals: file.proposals.map((p) => (p.id === decided.id ? decided : p)) }),
+        );
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, paths, `personas: ${id} improvement ${input.decision} (${proposal.id})`);
+      this.host.announceChanges(vault.id, paths);
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
     });
   }
 

@@ -220,5 +220,32 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   'Mission Control' row, and a remote that is off answers honestly
   ('Enable remote access in Settings → Tickets → Remote'). Not yet
   manually verified by the owner.
+- **E6 (milestone 107):** the self-improvement loop (concept §4.8) —
+  personas that improve from their own friction. The worker's write
+  path is one line per finding in the persona's `friction.md` (the
+  build / review / qa prompts carry the 'Friction is a gift'
+  paragraph); the `ImprovementsService`
+  (`services/improvements-service.ts`, composed over the
+  `PersonaImprovementsPort` the board service implements on its
+  single-writer queue) turns a persona's findings into at most three
+  evidence-backed drafts once the threshold is met — the first
+  aggregation at `IMPROVEMENTS_THRESHOLD` = 3 waiting findings, a
+  repeat after 5 settled runs since the file's last `- aggregate:`
+  stamp — through the E5a chat bridge behind its own
+  `AGGREGATOR_SYSTEM_PROMPT`: the same OpenAI-compatible stream, the
+  same honesty when no model is set; the survivors land through the
+  port's `applyAggregation`, one commit per aggregation.
+  `core/improvements.ts` owns the machine format (`improvements.md`:
+  strict writer, tolerant reader, `imp-<n>` ids never reused, 10
+  evidence items / 8 KiB content per proposal — phone-reviewable by
+  design). The owner's unit of work is the persona detail's 1:1: the
+  open proposals as cards, an armed two-step Apply / Dismiss deciding
+  each — the board service applies through its service entries
+  (`prompt.md` rewritten, `models.default` patched via
+  `patchHeaderFields`, the lesson appended to `memory.md`), exactly one
+  commit per decision, never rewriting a line already written. The
+  Needs-you group gains the `'improvements'` kind, raised when a
+  persona's open proposals reach the threshold. Not yet manually
+  verified by the owner.
 
 

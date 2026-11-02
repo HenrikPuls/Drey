@@ -12,8 +12,9 @@ import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools } from 
 import { RUNNER_SCRIPT_PATH } from '../fleet/runner-path';
 import { EngineBoardService } from '../services/board-service';
 import { ChatService } from '../services/chat-service';
-import { createChatBridge } from '../services/chat-llm';
+import { AGGREGATOR_SYSTEM_PROMPT, createChatBridge } from '../services/chat-llm';
 import { FleetClient } from '../services/fleet-client';
+import { ImprovementsService } from '../services/improvements-service';
 import { VerifyService } from '../services/verify-service';
 import { ChangeHub, DreyTicketsPort } from './drey-port';
 import { FileConfigStore } from './file-config';
@@ -163,6 +164,29 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     onChanged: () => hub.emit('remote'),
   });
   await remoteService.init();
+
+  // E6: the self-improvement loop — the aggregator watches the fleet's
+  // settled runs per persona; when the friction pile crosses the
+  // threshold it compacts findings into proposals through the LLM bridge
+  // (its own system prompt), and the board persists them in one commit.
+  const improvements = new ImprovementsService({
+    // The board speaks the house command objects; the service speaks
+    // positional args — the seam adapts.
+    board: {
+      listPersonaIds: () => board.listPersonaIds(),
+      improvementInput: (personaId) => board.improvementInput(personaId),
+      applyAggregation: (personaId, drafts, now) =>
+        board.applyAggregation({ id: personaId, drafts, now: now.toISOString() }),
+    },
+    bridge: createChatBridge({ config, systemPrompt: AGGREGATOR_SYSTEM_PROMPT }),
+    onRunsSettled: (listener) => hub.subscribe((what) => {
+      if (what === 'fleet') {
+        listener();
+      }
+    }),
+    log,
+  });
+  await improvements.start();
 
   // The invoke table: the service instances behind an explicit allowlist.
   const table = new Map<string, (payload: unknown) => Promise<unknown>>();
@@ -320,6 +344,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
         return;
       }
       closed = true;
+      improvements.dispose();
       verify.dispose();
       await remoteService.stop();
       server.close();

@@ -41,6 +41,8 @@ const makeDesk = () => {
     sessions: unknown;
     sessionA: unknown;
     ticket: unknown;
+    piaImprovements: unknown;
+    tessaImprovements: unknown;
   } = {
     board: { columns: [{ phase: { id: 'inbox', title: 'Inbox' }, tickets: [] }], checkpoints: [] as string[] },
     needs: [] as unknown[],
@@ -54,6 +56,25 @@ const makeDesk = () => {
       text: '---\nid: T-1\n---\n\n# One\n',
       revision: 'r1',
     },
+    piaImprovements: {
+      persona: { id: 'pia', title: 'Pia', role: 'Planner', worker: 'opencode', model: 'zai/glm-5.3', pool: [], color: '#ff0000' },
+      proposals: [
+        {
+          id: 'imp-1',
+          state: 'open',
+          target: 'prompt.md',
+          title: 'Order the pack',
+          evidence: ['2026-11-01 · T-0007 · guessed the shape'],
+          content: 'You build in the ticket’s worktree…',
+          lesson: 'Keep the pack recipe explicit.',
+          at: '2026-11-02T10:00:00Z',
+          decidedAt: null,
+        },
+      ],
+      openCount: 1,
+      frictionCount: 4,
+    },
+    tessaImprovements: { persona: { id: 'tessa', title: 'Tessa' }, proposals: [], openCount: 0, frictionCount: 0 },
   };
   desk.on('GET', '/api/me', () => ({ ok: true, device: { name: 'phone', readOnly: false } }));
   desk.on('GET', '/api/board', () => data.board);
@@ -63,6 +84,8 @@ const makeDesk = () => {
   desk.on('GET', '/api/chat/sessions', () => data.sessions);
   desk.on('GET', `/api/chat/sessions/${enc(FILE_A)}`, () => data.sessionA);
   desk.on('GET', '/api/tickets/T-1', () => data.ticket);
+  desk.on('GET', '/api/personas/pia/improvements', () => data.piaImprovements);
+  desk.on('GET', '/api/personas/tessa/improvements', () => data.tessaImprovements);
   return { desk, data };
 };
 
@@ -721,5 +744,116 @@ describe('ticket screen', () => {
 
     expect(await state.ensureAttachment('missing.png')).toBeNull();
     expect(state.attachmentUrl('missing.png')).toBeNull();
+  });
+});
+
+describe('persona detail (E6)', () => {
+  it('openPersona opens the 1:1 and loads the improvements', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+
+    state.openPersona('pia');
+
+    expect(state.personaDetail()).toEqual({ id: 'pia' });
+    await waitFor(() => expect(state.improvements()).not.toBeNull());
+    const view = state.improvements()!;
+    expect(view.persona?.title).toBe('Pia');
+    expect(view.proposals.map((p) => p.id)).toEqual(['imp-1']);
+    expect(view.openCount).toBe(1);
+    expect(view.frictionCount).toBe(4);
+    expect(state.improvementsError()).toBeNull();
+    expect(desk.callsOf('GET', '/api/personas/pia/improvements').length).toBe(1);
+  });
+
+  it('closePersona drops the loaded view', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.openPersona('pia');
+    await waitFor(() => expect(state.improvements()).not.toBeNull());
+
+    state.closePersona();
+
+    expect(state.personaDetail()).toBeNull();
+    expect(state.improvements()).toBeNull();
+    expect(state.improvementsError()).toBeNull();
+  });
+
+  it('a missing persona lands on improvementsError with the desk wording', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+
+    state.openPersona('ghost');
+
+    await waitFor(() => expect(state.improvementsError()).toBe('no route GET /api/personas/ghost/improvements'));
+    expect(state.improvements()).toBeNull();
+    expect(state.personaDetail()).toEqual({ id: 'ghost' });
+  });
+
+  it('a newer openPersona racing the fetch wins — the stale answer is dropped', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+
+    state.openPersona('pia');
+    state.openPersona('tessa');
+
+    await waitFor(() => expect(state.improvements()?.persona?.id).toBe('tessa'));
+    expect(state.personaDetail()).toEqual({ id: 'tessa' });
+    // pia's GET fired, but its answer arrived after the detail moved on: dropped.
+    expect(desk.callsOf('GET', '/api/personas/pia/improvements').length).toBe(1);
+    expect(desk.callsOf('GET', '/api/personas/tessa/improvements').length).toBe(1);
+  });
+
+  it('applyImprovement posts to the apply route and re-loads the view', async () => {
+    const { desk, data } = makeDesk();
+    const state = makeState(desk);
+    state.openPersona('pia');
+    await waitFor(() => expect(state.improvements()).not.toBeNull());
+    desk.on('POST', '/api/personas/pia/improvements/imp-1/apply', () => {
+      const before = data.piaImprovements as { proposals: Array<Record<string, unknown>> };
+      data.piaImprovements = {
+        ...(data.piaImprovements as Record<string, unknown>),
+        proposals: [{ ...before.proposals[0]!, state: 'accepted', decidedAt: '2026-11-02T12:00:00Z' }],
+        openCount: 0,
+      };
+      return { ok: true };
+    });
+
+    const reply = await state.applyImprovement('pia', 'imp-1');
+
+    expect(reply).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/personas/pia/improvements/imp-1/apply').length).toBe(1);
+    // The success re-loads the file: the proposal moved into the history.
+    await waitFor(() => expect(state.improvements()?.proposals[0]?.state).toBe('accepted'));
+    expect(state.improvements()?.proposals[0]?.decidedAt).toBe('2026-11-02T12:00:00Z');
+    expect(state.improvements()?.openCount).toBe(0);
+  });
+
+  it('a refused apply surfaces the error and does not re-load', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.openPersona('pia');
+    await waitFor(() => expect(state.improvements()).not.toBeNull());
+    const gets = desk.callsOf('GET', '/api/personas/pia/improvements').length;
+    desk.on('POST', '/api/personas/pia/improvements/imp-1/apply', () => ({ ok: false, error: 'the proposal is already decided' }));
+
+    const reply = await state.applyImprovement('pia', 'imp-1');
+
+    expect(reply).toEqual({ ok: false, error: 'the proposal is already decided' });
+    expect(desk.callsOf('GET', '/api/personas/pia/improvements').length).toBe(gets);
+    expect(state.improvements()?.proposals[0]?.state).toBe('open');
+  });
+
+  it('dismissImprovement posts to the dismiss route and re-loads', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.openPersona('pia');
+    await waitFor(() => expect(state.improvements()).not.toBeNull());
+    desk.on('POST', '/api/personas/pia/improvements/imp-1/dismiss', () => ({ ok: true }));
+
+    const reply = await state.dismissImprovement('pia', 'imp-1');
+
+    expect(reply).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/personas/pia/improvements/imp-1/dismiss').length).toBe(1);
+    await waitFor(() => expect(desk.callsOf('GET', '/api/personas/pia/improvements').length).toBe(2));
   });
 });

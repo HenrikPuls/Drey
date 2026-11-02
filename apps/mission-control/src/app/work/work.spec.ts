@@ -88,6 +88,8 @@ interface WorkSurface {
   openSheet(card: TicketVm): void;
   closeSheet(): void;
   moveOn(): Promise<void>;
+  needTappable(vm: NeedVm): boolean;
+  openNeedPersona(vm: NeedVm): void;
 }
 
 function surface(work: Work): WorkSurface {
@@ -180,6 +182,20 @@ describe('groupsOf', () => {
     expect(vm.need.summary).toBe('tests failed');
   });
 
+  it('keys an improvements need on its persona title, stable across refreshes (E6)', () => {
+    const keyOf = (groups: WorkGroup[], title: string): string | undefined => {
+      const group = groups[0];
+      return group?.kind === 'needs' ? group.needs.find((n) => n.need.title === title)?.key : undefined;
+    };
+    const first = groupsOf([need('improvements', 'Pia', { ticketId: '' }), need('question', 'Ask')], null, []);
+    const refreshed = groupsOf([need('question', 'New one'), need('improvements', 'Pia', { ticketId: '' })], null, []);
+    // The title is the persona title (the engine's guarantee): the key
+    // survives a refresh that shifts the list around it.
+    expect(keyOf(first, 'Pia')).toBe('improvements:Pia');
+    expect(keyOf(refreshed, 'Pia')).toBe('improvements:Pia');
+    expect(keyOf(refreshed, 'New one')).toBe('question:none:0');
+  });
+
   it('builds ticket cards with title, phase, persona, flag and blocked state', () => {
     const groups = groupsOf([], board, [persona('tessa', '#ff8800')]);
     const build = groups.find((g) => g.kind === 'phase' && g.phaseId === 'build');
@@ -236,7 +252,9 @@ describe('nextPhaseOf', () => {
 describe('card helpers', () => {
   it('labels the known need kinds and passes unknown ones through', () => {
     expect(NEED_KIND_LABELS['checkpoint']).toBe('Checkpoint');
+    expect(NEED_KIND_LABELS['improvements']).toBe('Improvements');
     expect(needKindLabelOf('question')).toBe('Asks you');
+    expect(needKindLabelOf('improvements')).toBe('Improvements');
     expect(needKindLabelOf('mystery')).toBe('mystery');
   });
 
@@ -387,5 +405,69 @@ describe('Work', () => {
     const vm = surface(setup(state));
     await vm.moveOn();
     expect(calls).toEqual([]);
+  });
+});
+
+// --- the improvements need card (E6) -------------------------------------------------
+
+describe('improvements needs', () => {
+  const improvementsNeed = (vm: WorkSurface): NeedVm => {
+    const group = vm.groups()[0];
+    if (group?.kind !== 'needs') {
+      throw new Error('expected the needs group');
+    }
+    return group.needs[0]!;
+  };
+
+  it('is tappable only when the adapter offers openPersona — and only for that kind', () => {
+    const plain = makeFake({ needs: [need('improvements', 'Pia')] });
+    const plainVm = surface(setup(plain.state));
+    expect(plainVm.needTappable(improvementsNeed(plainVm))).toBe(false);
+
+    const { state } = makeFake({ needs: [need('improvements', 'Pia'), need('question', 'Ask away')] });
+    state.openPersona = () => undefined;
+    const vm = surface(setup(state));
+    expect(vm.needTappable(improvementsNeed(vm))).toBe(true);
+    const group = vm.groups()[0]!;
+    const question = group.kind === 'needs' ? group.needs.find((n) => n.need.kind === 'question')! : (null as never);
+    expect(vm.needTappable(question)).toBe(false);
+  });
+
+  it('tapping resolves the persona title against the directory at call time and opens the 1:1', () => {
+    const opened: string[] = [];
+    const { state } = makeFake({
+      needs: [need('improvements', 'Pia')],
+      personas: [{ id: 'pia', title: 'Pia', color: '#ff0000' }],
+    });
+    state.openPersona = (idOrTitle: string) => opened.push(idOrTitle);
+    const vm = surface(setup(state));
+
+    vm.openNeedPersona(improvementsNeed(vm));
+
+    expect(opened).toEqual(['pia']);
+  });
+
+  it('an unknown persona falls back to the raw title — the adapter accepts either', () => {
+    const opened: string[] = [];
+    const { state } = makeFake({ needs: [need('improvements', 'Pia')] });
+    state.openPersona = (idOrTitle: string) => opened.push(idOrTitle);
+    const vm = surface(setup(state));
+
+    vm.openNeedPersona(improvementsNeed(vm));
+
+    expect(opened).toEqual(['Pia']);
+  });
+
+  it('tapping without the adapter (or another kind) is a no-op', () => {
+    const { state } = makeFake({ needs: [need('improvements', 'Pia')] });
+    const vm = surface(setup(state));
+    expect(() => vm.openNeedPersona(improvementsNeed(vm))).not.toThrow();
+
+    const { state: withOpen } = makeFake({ needs: [need('question', 'Ask away')] });
+    withOpen.openPersona = () => undefined;
+    const vm2 = surface(setup(withOpen));
+    const group = vm2.groups()[0]!;
+    const question = group.kind === 'needs' ? group.needs[0]! : (null as never);
+    expect(() => vm2.openNeedPersona(question)).not.toThrow();
   });
 });

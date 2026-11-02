@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseActiveSession,
   parseChatEvent,
+  parseImprovements,
   parseNeeds,
   parseProposal,
   parseSessions,
@@ -128,6 +129,11 @@ describe('parseNeeds', () => {
     ]);
   });
 
+  it('keeps the improvements kind (E6) with its empty ticket id', () => {
+    const needs = parseNeeds([{ kind: 'improvements', ticketId: '', title: 'Pia', text: '3 improvement proposals wait for the 1:1' }]);
+    expect(needs).toEqual([{ kind: 'improvements', ticketId: null, title: 'Pia', summary: '3 improvement proposals wait for the 1:1' }]);
+  });
+
   it('never throws on junk', () => {
     expect(parseNeeds(null)).toEqual([]);
     expect(parseNeeds({ kind: 'question' })).toEqual([]);
@@ -167,6 +173,103 @@ describe('parseTeam', () => {
   it('never throws on junk', () => {
     expect(parseTeam(null, null)).toEqual({ personas: [] });
     expect(parseTeam([null, { title: 'no id' }, 'x'], 'junk')).toEqual({ personas: [] });
+  });
+});
+
+describe('parseImprovements', () => {
+  const PIA = { id: 'pia', title: 'Pia', role: 'Planner', worker: 'opencode', model: 'zai/glm-5.3', pool: ['a'], color: '#ff0000' };
+
+  it('maps the answer with the persona, the proposals and the counters', () => {
+    const view = parseImprovements({
+      persona: PIA,
+      proposals: [
+        {
+          id: 'imp-1',
+          state: 'open',
+          target: 'prompt.md',
+          title: 'Order the pack',
+          evidence: ['2026-11-01 · T-0007 · guessed the shape'],
+          content: 'You build in the ticket’s worktree…',
+          lesson: 'Keep the pack recipe explicit.',
+          at: '2026-11-02T10:00:00Z',
+          decidedAt: null,
+        },
+        {
+          id: 'imp-2',
+          state: 'dismissed',
+          target: 'models.default',
+          title: 'Try sonnet',
+          evidence: [],
+          content: 'sonnet',
+          lesson: null,
+          at: '2026-11-02T10:00:00Z',
+          decidedAt: '2026-11-02T11:00:00Z',
+        },
+      ],
+      openCount: 1,
+      frictionCount: 4,
+    });
+    expect(view).toEqual({
+      persona: { ...PIA, currentRun: null },
+      proposals: [
+        {
+          id: 'imp-1',
+          state: 'open',
+          target: 'prompt.md',
+          title: 'Order the pack',
+          evidence: ['2026-11-01 · T-0007 · guessed the shape'],
+          content: 'You build in the ticket’s worktree…',
+          lesson: 'Keep the pack recipe explicit.',
+          at: '2026-11-02T10:00:00Z',
+          decidedAt: null,
+        },
+        {
+          id: 'imp-2',
+          state: 'dismissed',
+          target: 'models.default',
+          title: 'Try sonnet',
+          evidence: [],
+          content: 'sonnet',
+          lesson: null,
+          at: '2026-11-02T10:00:00Z',
+          decidedAt: '2026-11-02T11:00:00Z',
+        },
+      ],
+      openCount: 1,
+      frictionCount: 4,
+    });
+  });
+
+  it('counts the open proposals when the desk omits openCount, and defaults the rest', () => {
+    const view = parseImprovements({
+      proposals: [
+        { id: 'imp-1', state: 'open', target: 'memory', title: 'A', content: 'x' },
+        { id: 'imp-2', state: 'open', target: 'memory', title: 'B', content: 'y' },
+        { id: 'imp-3', state: 'accepted', target: 'memory', title: 'C', content: 'z' },
+      ],
+    });
+    expect(view?.openCount).toBe(2);
+    expect(view?.frictionCount).toBe(0);
+    expect(view?.persona).toBeNull();
+  });
+
+  it('degrades an unknown state to open, drops id-less proposals, filters junk evidence', () => {
+    const view = parseImprovements({
+      proposals: [
+        { target: 'memory', title: 'no id', content: 'x' },
+        null,
+        { id: 'imp-9', state: 'weird', target: 'prompt.md', title: 'Odd', evidence: ['a', 2, 'b'], content: 'c' },
+      ],
+    });
+    expect(view?.proposals).toEqual([
+      { id: 'imp-9', state: 'open', target: 'prompt.md', title: 'Odd', evidence: ['a', 'b'], content: 'c', lesson: null, at: '', decidedAt: null },
+    ]);
+  });
+
+  it('never throws on junk', () => {
+    expect(parseImprovements(null)).toBeNull();
+    expect(parseImprovements('junk')).toBeNull();
+    expect(parseImprovements({})).toEqual({ persona: null, proposals: [], openCount: 0, frictionCount: 0 });
   });
 });
 

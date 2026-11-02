@@ -20,6 +20,24 @@
   border-radius: var(--mc-radius);
 }
 
+/* The tappable card (E6): the button resets to the card's look, the li keeps the frame. */
+.card-btn {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.card-btn:active {
+  opacity: 0.75;
+}
+
 .row {
   display: flex;
   align-items: center;

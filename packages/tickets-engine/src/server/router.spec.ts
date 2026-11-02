@@ -18,6 +18,8 @@ function port(): TicketsRemotePort {
     fleet: vi.fn(async () => ({ runs: [], chain: null })),
     needs: vi.fn(async () => []),
     personas: vi.fn(async () => []),
+    personaImprovements: vi.fn(async () => ({ ok: true, persona: { id: 'pia' }, proposals: [], openCount: 0, frictionCount: 0 })),
+    personaImprovementDecide: vi.fn(ok),
     ticketSave: vi.fn(async () => ({ ok: true, revision: '0123456789abcdef' })),
     ticketAccept: vi.fn(ok),
     ticketSendBack: vi.fn(ok),
@@ -240,5 +242,31 @@ describe('route', () => {
     const readOnly = await route(req({ method: 'POST', path: '/api/chat/sessions', origin, authorization: `Bearer ${ro}`, body: { text: 'Hi' } }), deps);
     expect(readOnly).toEqual({ status: 403, body: { ok: false, error: 'this device is paired read-only' } });
     expect((await route(req({ path: '/api/chat/sessions', authorization: `Bearer ${ro}` }), deps)).status).toBe(200);
+  });
+
+  it('routes the E6 improvements card: GET for every device, apply/dismiss POSTs with pinned ids', async () => {
+    const { deps, devices, remote } = setup();
+    const { token } = await devices.add('iPhone 15', false, new Date());
+    const auth = `Bearer ${token}`;
+    const origin = `http://${HOST}`;
+
+    const listed = await route(req({ path: '/api/personas/pia/improvements', authorization: auth }), deps);
+    expect(listed.status).toBe(200);
+    expect(remote.personaImprovements).toHaveBeenCalledWith('pia');
+
+    await route(req({ method: 'POST', path: '/api/personas/pia/improvements/imp-1/apply', origin, authorization: auth }), deps);
+    expect(remote.personaImprovementDecide).toHaveBeenCalledWith({ persona: 'pia', proposal: 'imp-1', decision: 'accepted' });
+    await route(req({ method: 'POST', path: '/api/personas/pia/improvements/imp-2/dismiss', origin, authorization: auth }), deps);
+    expect(remote.personaImprovementDecide).toHaveBeenCalledWith({ persona: 'pia', proposal: 'imp-2', decision: 'dismissed' });
+
+    // Both ids are pinned by their grammars before the port sees them;
+    // a read-only device gets the usual 403 on the POST.
+    expect((await route(req({ path: '/api/personas/Pia%2Fx/improvements', authorization: auth }), deps)).status).toBe(404);
+    expect((await route(req({ method: 'POST', path: '/api/personas/pia/improvements/1/apply', origin, authorization: auth }), deps)).status).toBe(404);
+    expect((await route(req({ method: 'POST', path: '/api/personas/pia/improvements/imp-1/nope', origin, authorization: auth }), deps)).status).toBe(404);
+    const { token: ro } = await devices.add('Viewer', true, new Date());
+    const readOnly = await route(req({ method: 'POST', path: '/api/personas/pia/improvements/imp-1/apply', origin, authorization: `Bearer ${ro}` }), deps);
+    expect(readOnly).toEqual({ status: 403, body: { ok: false, error: 'this device is paired read-only' } });
+    expect((await route(req({ path: '/api/personas/pia/improvements', authorization: `Bearer ${ro}` }), deps)).status).toBe(200);
   });
 });

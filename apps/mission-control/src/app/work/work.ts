@@ -4,6 +4,7 @@ import {
   groupsOf,
   nextPhaseOf,
   type McMoveResult,
+  type NeedVm,
   type TicketVm,
   type WorkGroup,
 } from './work.model';
@@ -67,6 +68,30 @@ export class Work {
     }
     this.state.openTicket(card.id);
     this.closeSheet();
+  }
+
+  /**
+   * An improvements need is tappable only when the state adapter offers
+   * `openPersona` (the shell binds it; absent = the card stays a note).
+   */
+  protected needTappable(vm: NeedVm): boolean {
+    return this.state?.openPersona !== undefined && vm.need.kind === 'improvements';
+  }
+
+  /**
+   * The improvements need's tap: the need item's title IS the persona
+   * title (the engine's guarantee). It is matched against the persona
+   * directory at call time — the directory may arrive after the needs
+   * list — and the resolved id goes to the adapter; an unknown persona
+   * falls back to the raw title, which the adapter also accepts.
+   */
+  protected openNeedPersona(vm: NeedVm): void {
+    const state = this.state;
+    if (state?.openPersona === undefined || vm.need.kind !== 'improvements') {
+      return;
+    }
+    const persona = state.personas.find((known) => known.title === vm.need.title);
+    state.openPersona(persona?.id ?? vm.need.title);
   }
 
   /** "Move to next phase": the card on to the next group; the error shows inline. */

@@ -23,7 +23,7 @@ import {
   parseTransition,
   type Parsed,
 } from '../core/commands';
-import { remoteActorOf, type TicketsRemotePort } from '../contracts/remote-protocol';
+import { remoteActorOf, type ImprovementDecision, type TicketsRemotePort } from '../contracts/remote-protocol';
 import { TICKET_ID_PATTERN } from '../contracts/tickets';
 import type { DeviceRegistry, DeviceView, FailureLimiter, PairingCodes, RemoteDevice } from './auth';
 
@@ -228,6 +228,12 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
       const id = decodeURIComponent(ticket[1]!);
       return TICKET_ID_PATTERN.test(id) ? json(await port.ticket(id)) : fail(404, 'no such ticket id');
     }
+    // The E6 improvements card; the persona id is pinned by the personaRef
+    // grammar (lowercase letters, digits, dashes) before it reaches the port.
+    const improvements = /^\/api\/personas\/([a-z0-9][a-z0-9-]{0,63})\/improvements$/.exec(req.path);
+    if (improvements !== null) {
+      return json(await port.personaImprovements(improvements[1]!));
+    }
     const stream = /^\/api\/runs\/([A-Za-z0-9_.-]+)\/stream$/.exec(req.path);
     if (stream !== null) {
       return json({ text: await port.stream(stream[1]!) });
@@ -322,6 +328,18 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
       `chat ${chatDecision[3]}`,
       { ok: true, value: input },
       (cmd) => (chatDecision[3] === 'confirm' ? port.chatConfirm(cmd) : port.chatDismiss(cmd)),
+    );
+  }
+
+  // E6: the 1:1's decision — apply/dismiss one open proposal of one
+  // persona; the path pins both ids (personaRef grammar, imp-<n>).
+  const improvement = /^\/api\/personas\/([a-z0-9][a-z0-9-]{0,63})\/improvements\/(imp-\d+)\/(apply|dismiss)$/.exec(req.path);
+  if (improvement !== null) {
+    const decision: ImprovementDecision = improvement[3] === 'apply' ? 'accepted' : 'dismissed';
+    return write(
+      `improvement ${improvement[2]} ${decision}`,
+      { ok: true, value: { persona: improvement[1]!, proposal: improvement[2]!, decision } },
+      (cmd) => port.personaImprovementDecide(cmd),
     );
   }
   switch (req.path) {

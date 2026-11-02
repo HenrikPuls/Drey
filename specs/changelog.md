@@ -1,4 +1,78 @@
 
+### Milestone 107 — the self-improvement loop (Mission-Control migration E6)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-02
+(outside the list; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md),
+etappe E6 — the concept's §4.8: the personas improve themselves — the
+friction a worker reports becomes proposal drafts the owner accepts or
+dismisses, one armed 1:1 per persona). The loop's data shapes are pure
+format in
+`packages/tickets-engine/src/core/improvements.ts`: `parseFriction`
+reads the worker's `friction.md` — one line per finding, `- <date> ·
+<ticket id> · <what was missing>` — skipping unparseable lines, never
+guessing; `validateDraft` vets the aggregator's output (`null` refuses
+instead of guessing — unknown targets, empty or oversize content; at
+most `MAX_IMPROVEMENT_EVIDENCE` = 10 evidence items and
+`MAX_IMPROVEMENT_CONTENT` = 8 KiB of content); `renderImprovements` is
+the strict writer and `parseImprovements` the tolerant reader of the
+persona's `improvements.md` — an absent or broken file reads as empty,
+ids come from `nextImprovementId` and are never reused. The aggregation
+step is the `ImprovementsService`
+(`packages/tickets-engine/src/services/improvements-service.ts`),
+composed over a `PersonaImprovementsPort` the board service implements
+on its single-writer queue: a sweep — once at start, then on every run
+settle (`onRunsSettled`, wired to the fleet changes by the engine) —
+aggregates a persona once its `friction.md` holds
+`IMPROVEMENTS_THRESHOLD` = 3 findings; a repeat aggregation
+additionally waits for 5 settled runs since the file's last
+`- aggregate:` stamp. The LLM seam is the E5a chat bridge with a
+per-turn system prompt — `AGGREGATOR_SYSTEM_PROMPT`, the same
+OpenAI-compatible stream and the same honesty (an unconfigured model
+says so, never a silent fallback); the turn's prompt carries the most
+recent 20 friction lines plus the run-history digest, the reply must
+parse as one JSON array of at most 3 drafts, each backed by the
+friction evidence it rests on — never invented —, `validateDraft`
+drops the malformed ones one by one, and the survivors hand to the
+board port's `applyAggregation`, which owns the `improvements.md`
+write — the consumed friction moves into the proposals' `evidence:`
+blocks — in one commit. The board service
+owns the owner's decision — the app routes the 1:1's buttons through
+its service entries: Apply rewrites the proposal's target in exactly
+one commit (`prompt.md` replaced by the draft's content, a
+`models.default` patch through `patchHeaderFields` on `persona.md`'s
+frontmatter, a `memory` lesson appended to `memory.md`), Dismiss
+records the decision the same way; both stamp the proposal's state and
+its `decided:` line, never rewriting a line already written. The
+Needs-you group gains the kind `'improvements'`: a persona whose open
+proposals reach the threshold raises one card pointing at the 1:1. The
+workers' write path ships in the prompts — build, review and qa carry
+the 'Friction is a gift' paragraph asking for one friction line before
+the run ends (no persona in the brief: skip it). The app's persona
+detail is that 1:1 (concept §4.8): the persona's facts on top, its open
+proposals below as cards — target, title, evidence, the content's
+beginning, the lesson when present — each with an armed two-step Apply
+and Dismiss, the ticket screen's `acceptArmReduce` reducer reused.
+Specs:
+`packages/tickets-engine/src/core/improvements.spec.ts` (6; the
+friction grammar, the strict writer / tolerant reader round-trip,
+`validateDraft`'s refusals), the service rows —
+`packages/tickets-engine/src/services/improvements-service.spec.ts`
+(15; the sweep's trigger — the first aggregation at 3 waiting
+findings, a repeat after 5 settled runs —, the JSON-array reply, the
+per-draft validation drops, the one-commit hand-off) and
+`packages/tickets-engine/src/services/board-service.spec.ts`
+(`applyAggregation` and the owner's apply/dismiss entries), the device
+row —
+`packages/tickets-engine/src/server/router.spec.ts` (the persona
+routes), the app's `work.spec.ts` (the `'improvements'` card) and the
+persona detail's own spec under `apps/mission-control/src/app/team/`;
+the prompts' paragraphs are asserted by
+`packages/tickets-engine/src/core/default-prompts.spec.ts` (LF,
+newline-terminated, the working style in every prompt). Deliberate
+scope cut: the aggregator only proposes — evidence and caps keep every
+draft phone-reviewable, and no target is ever rewritten without the
+owner's confirm, exactly like the chat's proposal cards.
+
 ### Milestone 106 — the ticket screen + proof card + Drey hosting (Mission-Control migration E5c)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-02

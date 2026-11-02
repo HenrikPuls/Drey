@@ -52,6 +52,11 @@ export interface McTeamPersona extends McPersonaView {
  */
 export interface McTeamState {
   readonly team: Signal<readonly McTeamPersona[] | null>;
+  /**
+   * Opens the persona's 1:1 detail (E6, concept §4.8); absent = the
+   * cards stay read-only, as they did before the detail existed.
+   */
+  openPersona?(id: string): void;
 }
 
 /**
@@ -88,8 +93,8 @@ export function runStateClass(state: McRunState): 'run-live' | 'run-failed' | 'r
 /**
  * The team (concept §4.3): one card per persona from `McState.team`,
  * never tickets — avatar, role, worker/model line and the live run chip.
- * Cards are read-only in E5b; the run chip links nowhere yet (E5c opens
- * the ticket screen).
+ * The card tap opens the persona's 1:1 (E6) when the bound state offers
+ * `openPersona`; the run chip stays informational.
  */
 @Component({
   selector: 'mc-team',
@@ -108,6 +113,13 @@ export class Team {
     const team = this.state.team();
     return team !== null && team.length === 0;
   });
+
+  /** True when the bound state can open the 1:1 — the cards become tappable. */
+  protected readonly canOpen = computed(() => this.state.openPersona !== undefined);
+
+  protected open(persona: McTeamPersona): void {
+    this.state.openPersona?.(persona.id);
+  }
 
   protected readonly initialsOf = initialsOf;
   protected readonly runStateClass = runStateClass;

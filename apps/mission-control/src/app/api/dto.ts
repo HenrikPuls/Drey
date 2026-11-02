@@ -77,6 +77,40 @@ export interface TeamView {
   readonly personas: readonly PersonaView[];
 }
 
+// --- Persona improvements (E6) ------------------------------------------------
+
+/**
+ * One aggregation proposal as the persona detail (the 1:1, concept §4.8)
+ * renders it — the unit the owner applies or dismisses.
+ */
+export interface ImprovementProposalView {
+  readonly id: string;
+  readonly state: 'open' | 'accepted' | 'dismissed';
+  /** The proposal's target — 'prompt.md', 'models.default' or 'memory'. */
+  readonly target: string;
+  readonly title: string;
+  readonly evidence: readonly string[];
+  readonly content: string;
+  readonly lesson: string | null;
+  /** ISO stamp of the proposal; '' when the desk omits it. */
+  readonly at: string;
+  /** ISO stamp of the decision; null while open. */
+  readonly decidedAt: string | null;
+}
+
+/**
+ * The `GET /api/personas/<id>/improvements` answer as the 1:1 renders it:
+ * the persona's directory facts, its proposals and the two counters the
+ * header shows.
+ */
+export interface PersonaImprovementsView {
+  /** The persona directory slice; null when the desk omitted it (the header falls back to the id). */
+  readonly persona: PersonaView | null;
+  readonly proposals: readonly ImprovementProposalView[];
+  readonly openCount: number;
+  readonly frictionCount: number;
+}
+
 // --- Chat ------------------------------------------------------------------
 
 export interface SessionMeta {
@@ -261,7 +295,7 @@ export function parseWork(json: unknown): WorkView {
 
 /** The needs JSON (`[{kind, ticketId?, title, summary}]`); junk yields no needs. */
 export function parseNeeds(json: unknown): NeedView[] {
-  const NEED_KINDS = ['question', 'permission', 'red-gate', 'failed', 'checkpoint'];
+  const NEED_KINDS = ['question', 'permission', 'red-gate', 'failed', 'checkpoint', 'improvements'];
   const needs: NeedView[] = [];
   for (const raw of arr(json)) {
     const item = rec(raw);
@@ -285,6 +319,29 @@ const LIVE_RUN_STATES: readonly RunStateView[] = ['starting', 'running', 'stoppi
 const runStateOf = (value: unknown): RunStateView | null =>
   LIVE_RUN_STATES.includes(value as RunStateView) ? (value as RunStateView) : null;
 
+/** One persona directory entry, tolerantly mapped; null when the id is missing. */
+function personaOf(raw: unknown): PersonaView | null {
+  const persona = rec(raw);
+  if (persona === null) {
+    return null;
+  }
+  const id = str(persona['id']);
+  if (id === '') {
+    return null;
+  }
+  return {
+    id,
+    title: str(persona['title'], id),
+    role: str(persona['role']),
+    worker: str(persona['worker']),
+    model: str(persona['model']),
+    pool: strArray(persona['pool']),
+    color: str(persona['color'], '#7aa2f7'),
+    // A lone directory entry carries no fleet context; parseTeam folds the run in.
+    currentRun: null,
+  };
+}
+
 /**
  * The personas list with the fleet's live runs folded in: a persona's
  * `currentRun` is the newest run it dispatched that is still live.
@@ -293,30 +350,74 @@ export function parseTeam(personasJson: unknown, fleetJson: unknown): TeamView {
   const runs = arr(rec(fleetJson)?.['runs']);
   const personas: PersonaView[] = [];
   for (const raw of arr(personasJson)) {
-    const persona = rec(raw);
+    const persona = personaOf(raw);
     if (persona === null) {
-      continue;
-    }
-    const id = str(persona['id']);
-    if (id === '') {
       continue;
     }
     const liveRun = runs
       .map((run) => rec(run))
-      .find((run) => run !== null && str(run['persona']) === id && runStateOf(run['state']) !== null);
+      .find((run) => run !== null && str(run['persona']) === persona.id && runStateOf(run['state']) !== null);
     const state = liveRun === null || liveRun === undefined ? null : runStateOf(liveRun['state']);
     personas.push({
-      id,
-      title: str(persona['title'], id),
-      role: str(persona['role']),
-      worker: str(persona['worker']),
-      model: str(persona['model']),
-      pool: strArray(persona['pool']),
-      color: str(persona['color'], '#7aa2f7'),
+      ...persona,
       currentRun: liveRun === null || liveRun === undefined || state === null ? null : { ticketId: str(liveRun['ticketId']), state },
     });
   }
   return { personas };
+}
+
+/** The proposal's state; anything the desk got wrong degrades to open, never a guess. */
+function improvementStateOf(value: unknown): 'open' | 'accepted' | 'dismissed' {
+  return value === 'accepted' || value === 'dismissed' ? value : 'open';
+}
+
+function improvementProposalOf(raw: unknown): ImprovementProposalView | null {
+  const proposal = rec(raw);
+  if (proposal === null) {
+    return null;
+  }
+  const id = str(proposal['id']);
+  if (id === '') {
+    return null;
+  }
+  return {
+    id,
+    state: improvementStateOf(proposal['state']),
+    target: str(proposal['target']),
+    title: str(proposal['title'], id),
+    evidence: strArray(proposal['evidence']),
+    content: str(proposal['content']),
+    lesson: strOrNull(proposal['lesson']),
+    at: str(proposal['at']),
+    decidedAt: strOrNull(proposal['decidedAt']),
+  };
+}
+
+/** A non-negative integer counter; anything else takes the fallback. */
+function countOf(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
+}
+
+/**
+ * The improvements answer (`{persona, proposals, openCount, frictionCount}`)
+ * as the 1:1 renders it; null when the desk sent nothing usable. A
+ * missing `openCount` falls back to counting the open proposals; a
+ * missing `frictionCount` reads as 0; proposals without an id are dropped.
+ */
+export function parseImprovements(json: unknown): PersonaImprovementsView | null {
+  const body = rec(json);
+  if (body === null) {
+    return null;
+  }
+  const proposals = arr(body['proposals'])
+    .map(improvementProposalOf)
+    .filter((proposal): proposal is ImprovementProposalView => proposal !== null);
+  return {
+    persona: personaOf(body['persona']),
+    proposals,
+    openCount: countOf(body['openCount'], proposals.filter((proposal) => proposal.state === 'open').length),
+    frictionCount: countOf(body['frictionCount'], 0),
+  };
 }
 
 function sessionMetaOf(raw: unknown): SessionMeta | null {

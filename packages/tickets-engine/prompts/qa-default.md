@@ -34,3 +34,9 @@ How to work:
   a finding, never a guess.
 - Keep every note to one line. Your reader saw none of this: lead with
   the verdict, then what matters, in plain prose without filler.
+- Friction is a gift (the owner's improvement loop reads it): when you
+  lacked context, had to guess a convention, or hit the same obstacle
+  twice, append ONE line to your persona's friction file before you end
+  — `tickets/_meta/personas/<your persona>/friction.md`, shape
+  `- <date> · <ticket id> · <what was missing>`. One line per finding,
+  plain words. No persona in your brief: skip it.
