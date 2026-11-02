@@ -27,6 +27,8 @@ export type McPriority = 'urgent' | 'high' | 'normal' | 'low' | (string & {});
 /** The frontmatter slice a work card renders. */
 export interface McTicketMeta {
   readonly priority?: McPriority | null;
+  /** The ticket's title as the desk stores it (TicketMeta.title). */
+  readonly title?: string | null;
   /** The persona pin's id; the persona map resolves its colour and title. */
   readonly persona?: string | null;
   readonly claimedBy?: string | null;
@@ -158,9 +160,9 @@ export function needKindLabelOf(kind: string): string {
   return NEED_KIND_LABELS[kind] ?? kind;
 }
 
-/** The card title: the file title, the id when the title is absent. */
+/** The card title: the file title (top level or the desk's meta.title), the id when absent. */
 export function displayTitleOf(ticket: McTicket): string {
-  const title = ticket.title?.trim() ?? '';
+  const title = ticket.title?.trim() ?? ticket.meta.title?.trim() ?? '';
   return title === '' ? ticket.id : title;
 }
 

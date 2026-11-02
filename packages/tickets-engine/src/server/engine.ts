@@ -72,7 +72,10 @@ const BOARD_METHODS = [
 
 const FLEET_METHODS = ['runs', 'start', 'chainStatus', 'stop', 'send', 'answerPermission', 'answerQuestion', 'stream', 'setMaster', 'setColumn', 'stopColumn', 'abortAll', 'startPolling', 'attach', 'control', 'log', 'status'] as const;
 
-const REMOTE_METHODS = ['status', 'configure', 'pair', 'revoke', 'init', 'localClient'] as const;
+// pair/revoke take primitive args; the invoke channel carries one object
+// payload, so both get explicit adapters below (the generic register would
+// hand the whole payload where a string is expected).
+const REMOTE_METHODS = ['status', 'configure', 'init', 'localClient'] as const;
 
 export async function createEngine(opts: EngineOptions): Promise<Engine> {
   const log = opts.log ?? (() => undefined);
@@ -177,6 +180,14 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   register(verify, BOARD_METHODS);
   register(fleet, FLEET_METHODS);
   register(remoteService, REMOTE_METHODS);
+  table.set('pair', (payload) => {
+    const message = (payload ?? {}) as { deviceName?: unknown; readOnly?: unknown };
+    return Promise.resolve(remoteService.pair(typeof message.deviceName === 'string' ? message.deviceName : '', message.readOnly === true));
+  });
+  table.set('revoke', (payload) => {
+    const message = (payload ?? {}) as { id?: unknown };
+    return remoteService.revoke(typeof message.id === 'string' ? message.id : '');
+  });
   // The chat service speaks the ChatServicePort names (sessions/open/send/…);
   // the invoke channel exposes them under the chat* names from BOARD_METHODS.
   table.set('chatSessions', () => chat.sessions());
