@@ -46,40 +46,13 @@ import { type EngineHost, type EngineVaultChangeEvent, EngineVault, FleetPort } 
 import { handoverFromConfig, handoverOverrideKeys } from './handover-config';
 import { appendMemory, memoryPathFor } from './persona-store';
 import { personaFileText, personaMigrationFor, personaRef, PERSONAS_DIR, type Persona, type PersonaMigration } from '../core/persona';
+import { PIPELINE_PATH, PROMPTS_DIR, REPOS_PATH, initScaffoldFiles } from '../core/init-scaffold';
 import { scanRepoFolder } from './repos-scan';
 
-const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
-const REPOS_PATH = 'tickets/_meta/repos.md';
 const ATTACHMENTS_DIR = 'tickets/attachments';
-const PROMPTS_DIR = 'tickets/_meta/prompts';
-const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PLAN_INTERACTIVE_PROMPT = 'plan-interactive-default';
 const REFINE_INTERACTIVE_PROMPT = 'refine-interactive-default';
-const DEFAULT_PIPELINE = `---
-phases:
-  - { id: inbox, title: Inbox, handover: manual }
-  - { id: prioritized, title: Prioritized, handover: manual }
-  - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default }
-  - { id: commit, title: Commit, handover: agent commit-default }
-  - { id: done, title: Done, handover: none }
----
-The pipeline: ordered phases (first = capture target, last = terminal),
-configurable per handover (manual | agent <prompt-ref> | ci | none).
-Prioritized is the owner's checkpoint: clarify the task and its
-acceptance criteria there; the build step derives file-level detail
-itself, against the code it finds. See specs/ticket-schema.md.
-Edit freely; the board follows on refresh.
-`;
-const DEFAULT_REPOS = `---
-repos: {}
----
-Work repositories a ticket's \`repo:\`/\`repos:\` fields may name. Example:
-
-  lariscus:
-    url: https://dev.azure.com/org/project/_git/lariscus
-    branch: main
-    policy: Azure DevOps branch policies protect main
-`;
+const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -2929,9 +2902,11 @@ export class EngineBoardService {
       }
       const shipped = await loadShippedPrompts();
       const promptPaths = [...shipped.keys()].map((ref) => `${PROMPTS_DIR}/${ref}.md`);
+      const files = initScaffoldFiles();
       try {
-        await this.host.write(target.id, PIPELINE_PATH, DEFAULT_PIPELINE);
-        await this.host.write(target.id, REPOS_PATH, DEFAULT_REPOS);
+        for (const file of files) {
+          await this.host.write(target.id, file.path, file.text);
+        }
         for (const [ref, text] of shipped) {
           await this.host.write(target.id, `${PROMPTS_DIR}/${ref}.md`, text);
         }
@@ -2943,10 +2918,10 @@ export class EngineBoardService {
       await this.ensureWorktreesIgnored(target);
       const warning = await this.commit(
         target,
-        [PIPELINE_PATH, REPOS_PATH, ...promptPaths],
+        files.map((file) => file.path).concat(promptPaths),
         'tickets: initialize board',
       );
-      this.host.announceChanges(target.id, [PIPELINE_PATH, REPOS_PATH, ...promptPaths]);
+      this.host.announceChanges(target.id, files.map((file) => file.path).concat(promptPaths));
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };
     });

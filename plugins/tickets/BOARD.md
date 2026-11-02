@@ -197,9 +197,22 @@ splits the fleet's dispatch classes at its middle
 at it waits as the default, the rest is the calm half. The chat
 names the vocabulary in its board digest and may only propose its
 words; `setPriority`, `createTicket` and every header edit refuse a
-foreign word with a readable error. (The Work panel's priority chip
-and the phone client still offer the shipped four words — teaching
-them the vault's list is open work.)
+foreign word with a readable error. (The Work panel's chip and flag,
+the create modal, the card menu, the header editor and the phone
+capture/refine pickers all offer the vault's own words.)
+
+**Starting a tickets repository from nothing** (M112): the engine
+CLI's init subcommand — `node engine-main.js init <dir>` — is the
+`git init` of the tickets vault: it creates the `_meta` scaffold
+(pipeline with the priority vocabulary written out beside the phases,
+repos, the shipped prompts), the numbered phase directories
+(`tickets/10-inbox`, …) and, when git answers, initializes a
+repository with one commit `tickets: initialize board` (without git
+the vault works unversioned). It refuses a directory that already
+holds a board (`pipeline.md` exists). The desk's empty-state
+initialize writes the same scaffold — one module, two doors — into an
+already-registered vault; start the engine on the result with
+`node engine-main.js --vault <dir>`.
 
 **Blockers are one edit away** (T-0050): besides the frontmatter
 hand edit, the chat's `setBlockedBy` command ("T-0002 waits for
