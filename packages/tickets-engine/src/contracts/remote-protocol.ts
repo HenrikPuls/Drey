@@ -40,7 +40,9 @@ export type NeedKind =
   /** E7: an open blocker in the ticket's status log. */
   | 'blocked'
   /** E8 (concept §5.6): a scout ticket's report waits for the owner. */
-  | 'report';
+  | 'report'
+  /** E9 (concept §5.7): a chain gate with a Bescheid rule just completed. */
+  | 'notify';
 
 /** One thing that waits on the owner. */
 export interface NeedItem {

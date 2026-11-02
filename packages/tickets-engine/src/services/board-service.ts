@@ -14,7 +14,9 @@ import { archivedTicketIds, nextTicketId, TICKETS_ARCHIVE_DIR, type BoardSnapsho
 import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply } from '../contracts/changes';
 import { type RefineReply, TicketReply, AttachmentReply } from '../contracts/replies';
 import { assembleBoard, parseRepos, addPipelinePhase, patchPipelinePhase, removePipelinePhase, renamePipelinePhase, parsePipeline, reorderPipelinePhases, reposFileText, reposProse } from '../core/ticket-board';
-import { newTicketFileText, parseTicketFile, patchTicketFile, patchForm, patchTrack, ticketPathParts } from '../core/ticket-files';
+import { newTicketFileText, parseTicketFile, patchTicketFile, patchChain, patchForm, patchTrack, ticketPathParts } from '../core/ticket-files';
+import { parseChainEntry, renderChainEntries, validateChain } from '../core/chain-delta';
+import type { ChainEntry } from '../contracts/chain';
 import { refineTicket, revisionOf } from '../core/ticket-refine';
 import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from '../core/phase-dirs';
 import { detectDrift, recentDoneOf, type DriftDetection } from '../core/normalize';
@@ -625,6 +627,64 @@ export class EngineBoardService {
         return { ok: false, error: messageOf(error) };
       }
       const warning = await this.commit(vault, [card.path], `tickets: ${input.id} form ${input.form}`);
+      this.host.announceChanges(vault.id, [card.path]);
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The chain delta (concept §5.7): the chat's setChain execution — the
+   * entries must each parse and hold against the pipeline and the
+   * ticket's current position (`validateChain`), then one header
+   * rewrite (`patchChain`), one Log line, one commit
+   * `tickets: <id> chain <n entries|standard>`. An unchanged delta is a
+   * no-op success; a live run refuses like every header edit.
+   */
+  setChain(input: { id: string; chain: readonly string[]; actor?: string }): Promise<BoardMutationResult> {
+    return this.enqueue(async () => {
+      const found = await this.findCard(input.id);
+      if (found === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const { vault, card, text } = found;
+      const snap = await this.snapshot();
+      const entries: ChainEntry[] = [];
+      for (const raw of input.chain) {
+        const entry = parseChainEntry(raw);
+        if (entry === null) {
+          return { ok: false, error: `chain entry "${raw}" is not readable — expected e.g. "insert design after review"` };
+        }
+        entries.push(entry);
+      }
+      const refusal = validateChain(
+        snap.pipeline.map((phase) => ({ id: phase.id, title: phase.title })),
+        card.phase,
+        entries,
+      );
+      if (refusal !== null) {
+        return { ok: false, error: refusal };
+      }
+      const canonical = entries.length === 0 ? null : renderChainEntries(entries);
+      const current = card.meta.chain ?? [];
+      if (canonical !== null && current.length === entries.length && renderChainEntries(current).join('\n') === canonical.join('\n')) {
+        return { ok: true };
+      }
+      if (canonical === null && current.length === 0) {
+        return { ok: true };
+      }
+      if (card.meta.run !== null) {
+        return { ok: false, error: 'A run is live on this ticket. Change the chain when the run has ended.' };
+      }
+      let patched: string;
+      try {
+        patched = patchChain(text, canonical, new Date(), input.actor ?? this.owner);
+        await this.host.write(vault.id, card.path, patched);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const value = canonical === null ? 'standard' : `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`;
+      const warning = await this.commit(vault, [card.path], `tickets: ${input.id} chain ${value}`);
       this.host.announceChanges(vault.id, [card.path]);
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };

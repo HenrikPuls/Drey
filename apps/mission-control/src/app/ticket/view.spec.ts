@@ -13,11 +13,16 @@ import {
   DEFAULT_DIFF_FONT_SIZE,
   MC_TICKET,
   acceptArmReduce,
+  chainPrefillOf,
+  chainStepsOf,
   diffFontSizeStep,
   gateStepsOf,
+  parseChainEntryView,
   patchLineKind,
   phaseTitleOf,
   proofOf,
+  renderChainEntryView,
+  renderChainEntryViews,
   scoutReportOf,
   splitTicketSections,
   type GatePhase,
@@ -40,7 +45,7 @@ interface FakeTicket extends TicketVm {
   phaseColorValue: string | null;
   readOnlyValue: boolean;
   attachmentUrls: ReadonlyMap<string, string>;
-  calls: { accept: number; sendBack: string[]; save: string[]; onClose: number; enterEdit: number; exitEdit: number; reload: number };
+  calls: { accept: number; sendBack: string[]; save: string[]; onClose: number; enterEdit: number; exitEdit: number; reload: number; proposeChain: string[] };
   acceptReply: TicketActionReply;
   sendBackReply: TicketActionReply;
   saveReply: TicketSaveReply;
@@ -64,6 +69,7 @@ function makeFake(patch: Partial<FakeTicket> = {}): FakeTicket {
       enterEdit: 0,
       exitEdit: 0,
       reload: 0,
+      proposeChain: [] as string[],
     },
     acceptReply: { ok: true } as TicketActionReply,
     sendBackReply: { ok: true } as TicketActionReply,
@@ -108,6 +114,9 @@ function makeFake(patch: Partial<FakeTicket> = {}): FakeTicket {
     onClose(): void {
       this.calls.onClose += 1;
     },
+    proposeChain(text: string): void {
+      this.calls.proposeChain.push(text);
+    },
     save(text: string): Promise<TicketSaveReply> {
       this.calls.save.push(text);
       return Promise.resolve(this.saveReply);
@@ -138,6 +147,7 @@ const DOC: TicketDoc = {
   revision: 'rev-1',
   phase: 'verify',
   phases: PHASES,
+  chain: [],
 };
 
 const FULL_TEXT = `---
@@ -313,6 +323,222 @@ describe('gateStepsOf', () => {
 
   it('dims everything when the ticket sits in a phase the pipeline does not know', () => {
     expect(gateStepsOf(phases, 'limbo').every((step) => step.state === 'future')).toBe(true);
+  });
+});
+
+// --- the chain delta (E9, concept §5.7) ------------------------------------------------
+
+describe('parseChainEntryView', () => {
+  it('reads the three grammar shapes and never guesses', () => {
+    expect(parseChainEntryView('skip verify')).toEqual({
+      kind: 'skip',
+      phase: 'verify',
+      anchor: null,
+      position: null,
+      persona: null,
+      notify: false,
+    });
+    expect(parseChainEntryView('notify build')).toEqual({
+      kind: 'notify',
+      phase: 'build',
+      anchor: null,
+      position: null,
+      persona: null,
+      notify: false,
+    });
+    expect(parseChainEntryView('insert design(pia, notify) after review')).toEqual({
+      kind: 'insert',
+      phase: 'design',
+      anchor: 'review',
+      position: 'after',
+      persona: 'pia',
+      notify: true,
+    });
+  });
+
+  it('refuses anything the grammar does not hold', () => {
+    expect(parseChainEntryView('')).toBeNull();
+    expect(parseChainEntryView('skip Verify')).toBeNull();
+    expect(parseChainEntryView('insert design after')).toBeNull();
+    expect(parseChainEntryView('insert design(nope!) after review')).toBeNull();
+    expect(parseChainEntryView('insert design(pia, extra, notify) after review')).toBeNull();
+    expect(parseChainEntryView('delete verify')).toBeNull();
+  });
+});
+
+describe('renderChainEntryView', () => {
+  it('round-trips what the parser reads', () => {
+    const texts = [
+      'skip verify',
+      'notify build',
+      'insert design after review',
+      'insert design(pia, notify) before review',
+    ];
+    for (const text of texts) {
+      const entry = parseChainEntryView(text);
+      expect(entry).not.toBeNull();
+      expect(renderChainEntryView(entry!)).toBe(text);
+    }
+    expect(renderChainEntryViews(texts.map((text) => parseChainEntryView(text)!))).toEqual(texts);
+  });
+});
+
+describe('chainStepsOf', () => {
+  const phases: GatePhase[] = [
+    { id: 'inbox', title: 'Inbox', checkpoint: false },
+    { id: 'build', title: 'Build', checkpoint: false },
+    { id: 'verify', title: 'Verify', checkpoint: true },
+    { id: 'done', title: 'Done', checkpoint: false },
+  ];
+
+  it('renders the standard flow untouched when the delta is empty', () => {
+    expect(chainStepsOf(phases, 'build', [])).toEqual(gateStepsOf(phases, 'build'));
+  });
+
+  it('strikes a skipped gate and raises the notify flag', () => {
+    const entries = [
+      parseChainEntryView('skip verify')!,
+      parseChainEntryView('notify build')!,
+    ];
+    const steps = chainStepsOf(phases, 'build', entries);
+    expect(steps.find((step) => step.id === 'verify')?.skipped).toBe(true);
+    expect(steps.find((step) => step.id === 'build')?.notify).toBe(true);
+  });
+
+  it('splices an inserted gate after its anchor, persona and notify riding along', () => {
+    const entries = [parseChainEntryView('insert design(pia, notify) after verify')!];
+    const steps = chainStepsOf(phases, 'verify', entries);
+    const at = steps.findIndex((step) => step.id === 'design');
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(steps[at! - 1]?.id).toBe('verify');
+    expect(steps[at!]).toMatchObject({ inserted: true, persona: 'pia', notify: true, title: 'design' });
+  });
+
+  it('tolerates an unknown anchor by appending and an unknown phase by id-title', () => {
+    const entries = [parseChainEntryView('insert design after limbo')!];
+    const steps = chainStepsOf(phases, 'inbox', entries);
+    expect(steps[steps.length - 1]).toMatchObject({ id: 'design', title: 'design', inserted: true });
+  });
+});
+
+describe('chainPrefillOf', () => {
+  it('words the standard-flow return like the card summary', () => {
+    expect(chainPrefillOf('T-0042', [])).toBe('Return T-0042 to the standard flow');
+  });
+
+  it('carries the entries behind one colon', () => {
+    expect(chainPrefillOf('T-0042', ['skip verify'])).toBe('Set T-0042 chain: skip verify');
+    expect(chainPrefillOf('T-0042', ['insert design(pia, notify) after review', 'skip verify'])).toBe(
+      'Set T-0042 chain: insert design(pia, notify) after review; skip verify',
+    );
+  });
+});
+
+// --- the gate sheet (E9, concept §5.7) ------------------------------------------------
+
+describe('TicketView gate sheet', () => {
+  interface SheetSurface {
+    sheetOpen(): boolean;
+    hasDelta(): boolean;
+    insertPhase(): string;
+    insertAnchor(): string;
+    insertDisabled(): boolean;
+    notifyGate(): string;
+    notifyDisabled(): boolean;
+    openSheet(): void;
+    closeSheet(): void;
+    onInsertPhase(event: Event): void;
+    onInsertAnchor(event: Event): void;
+    onInsertNotify(event: Event): void;
+    onNotifyGate(event: Event): void;
+    prefillInsert(): void;
+    prefillNotify(): void;
+    prefillStandard(): void;
+  }
+
+  const sheet = (view: TicketView): SheetSurface => view as unknown as SheetSurface;
+
+  function checkedEvent(checked: boolean): Event {
+    return { target: { checked } } as unknown as Event;
+  }
+
+  it('opens with the current gate as anchor and notify pick', () => {
+    const fake = makeFake({ docValue: DOC });
+    const vm = sheet(setup(fake));
+    vm.openSheet();
+    expect(vm.sheetOpen()).toBe(true);
+    expect(vm.insertAnchor()).toBe('verify');
+    expect(vm.notifyGate()).toBe('verify');
+    expect(vm.hasDelta()).toBe(false);
+  });
+
+  it('prefills the chat with the delta plus the insert entry and closes', () => {
+    const fake = makeFake({ docValue: DOC });
+    const vm = sheet(setup(fake));
+    vm.openSheet();
+    vm.onInsertPhase(noteEvent('design'));
+    vm.onInsertNotify(checkedEvent(true));
+    vm.prefillInsert();
+    expect(vm.sheetOpen()).toBe(false);
+    expect(fake.calls.proposeChain).toEqual(['Set T-0042 chain: insert design(notify) after verify']);
+  });
+
+  it('keeps the entries the ticket already holds when inserting', () => {
+    const doc: TicketDoc = { ...DOC, chain: [parseChainEntryView('skip done')!] };
+    const fake = makeFake({ docValue: doc });
+    const vm = sheet(setup(fake));
+    vm.openSheet();
+    vm.onInsertPhase(noteEvent('design'));
+    vm.prefillInsert();
+    expect(fake.calls.proposeChain).toEqual(['Set T-0042 chain: skip done; insert design after verify']);
+    expect(vm.hasDelta()).toBe(true);
+  });
+
+  it('refuses the insert while phase and anchor match and when it adds nothing new', () => {
+    const fake = makeFake({ docValue: DOC });
+    const vm = sheet(setup(fake));
+    vm.openSheet();
+    vm.onInsertPhase(noteEvent('verify'));
+    expect(vm.insertDisabled()).toBe(true);
+    vm.onInsertPhase(noteEvent('design'));
+    expect(vm.insertDisabled()).toBe(false);
+    vm.prefillInsert();
+    // The same entry twice: the second run sees it in the delta and disables.
+    const again = sheet(setup(makeFake({ docValue: { ...DOC, chain: [parseChainEntryView('insert design after verify')!] } })));
+    again.openSheet();
+    again.onInsertPhase(noteEvent('design'));
+    expect(again.insertDisabled()).toBe(true);
+  });
+
+  it('prefills the notify rule for the picked gate and disables gates that already ring', () => {
+    const doc: TicketDoc = { ...DOC, chain: [parseChainEntryView('notify build')!] };
+    const fake = makeFake({ docValue: doc });
+    const vm = sheet(setup(fake));
+    vm.openSheet();
+    expect(vm.notifyDisabled()).toBe(false); // verify rings nothing yet
+    vm.onNotifyGate(noteEvent('build'));
+    expect(vm.notifyDisabled()).toBe(true);
+    vm.onNotifyGate(noteEvent('done'));
+    expect(vm.notifyDisabled()).toBe(false);
+    vm.prefillNotify();
+    expect(fake.calls.proposeChain).toEqual(['Set T-0042 chain: notify build; notify done']);
+  });
+
+  it('prefills the standard-flow return with an empty delta', () => {
+    const doc: TicketDoc = { ...DOC, chain: [parseChainEntryView('skip done')!] };
+    const fake = makeFake({ docValue: doc });
+    const vm = sheet(setup(fake));
+    vm.openSheet();
+    vm.prefillStandard();
+    expect(vm.sheetOpen()).toBe(false);
+    expect(fake.calls.proposeChain).toEqual(['Return T-0042 to the standard flow']);
+  });
+
+  it('opens nothing without a document', () => {
+    const fake = makeFake({ docValue: null });
+    const vm = sheet(setup(fake));
+    vm.openSheet();
+    expect(vm.sheetOpen()).toBe(false);
   });
 });
 

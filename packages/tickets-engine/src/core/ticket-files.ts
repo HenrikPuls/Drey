@@ -26,6 +26,8 @@ import {
   type TicketTrack,
 } from '../contracts/tickets';
 import { rawCaptureLogText } from '../contracts/capture-tidy';
+import { parseChainEntry } from './chain-delta';
+import type { ChainEntry } from '../contracts/chain';
 
 /** `entered-<phase>` key grammar (phase ids: lowercase, digits, dashes). */
 const ENTERED_KEY = /^entered-([a-z][a-z0-9-]*)$/;
@@ -129,6 +131,19 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
     issues.push({ level: 'warning', message: 'form must be ship or scout — read as ship' });
   }
 
+  // The chain delta (concept §5.7): a list of declarative entries; an
+  // entry outside the grammar warns and drops — never a guess.
+  const rawChain = asStringArray(obj['chain']);
+  const chain: ChainEntry[] = [];
+  for (const raw of rawChain) {
+    const entry = parseChainEntry(raw);
+    if (entry === null) {
+      issues.push({ level: 'warning', message: `chain entry "${raw}" is not readable — expected e.g. "insert design after review"` });
+    } else {
+      chain.push(entry);
+    }
+  }
+
   const rawPriority = asText(obj['priority']);
   let priority: TicketPriority = 'normal';
   if (rawPriority === null) {
@@ -200,6 +215,7 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
       persona,
       track,
       ...(form !== undefined ? { form } : {}),
+      ...(chain.length > 0 ? { chain } : {}),
       priority,
       rank,
       // The rule wins over whatever the file says (ADR-0076).
@@ -516,6 +532,11 @@ export interface HeaderPatch {
   readonly track?: TicketTrack | null;
   /** The ticket form (concept §5.6); null removes the key (the ship default). */
   readonly form?: TicketForm | null;
+  /**
+   * The chain delta (concept §5.7) as canonical strings; null removes
+   * the key (back to the standard flow).
+   */
+  readonly chain?: readonly string[] | null;
   readonly repo?: string;
   /**
    * The full work-repo list, primary first (req-72). One name (or none)
@@ -570,6 +591,13 @@ export function patchHeaderFields(block: string, patch: HeaderPatch): string {
       removeKey(doc, 'form');
     } else {
       doc.set('form', patch.form);
+    }
+  }
+  if (patch.chain !== undefined) {
+    if (patch.chain === null) {
+      removeKey(doc, 'chain');
+    } else {
+      doc.set('chain', [...patch.chain]);
     }
   }
   if (patch.repo !== undefined && patch.repos === undefined) {
@@ -640,6 +668,25 @@ export function patchForm(text: string, form: TicketForm | null, now: Date, acto
   const block = patchHeaderFields(`---\n${yamlText}\n---`, { form });
   const value = form ?? 'none';
   return `${block}\n${appendLogLine(body, formatUtcStamp(now), actor, `form ${value}`)}`;
+}
+
+/**
+ * Rewrites the ticket's `chain:` delta (concept §5.7) in a whole ticket
+ * file and appends one Log line — `chain standard` when the delta goes
+ * away (back to the standard flow), else `chain <n> entries`. The
+ * header patch carries the canonical strings; an empty delta removes
+ * the key, exactly like `patchForm`'s null.
+ */
+export function patchChain(text: string, chain: readonly string[] | null, now: Date, actor: string): string {
+  const { yamlText, body, hadFence } = splitFrontmatter(text);
+  if (!hadFence || yamlText === null) {
+    throw new Error('ticket has no frontmatter fence');
+  }
+  const normalized = chain === null || chain.length === 0 ? null : chain;
+  const block = patchHeaderFields(`---\n${yamlText}\n---`, { chain: normalized });
+  const count = chain?.length ?? 0;
+  const value = normalized === null ? 'standard' : `${count} ${count === 1 ? 'entry' : 'entries'}`;
+  return `${block}\n${appendLogLine(body, formatUtcStamp(now), actor, `chain ${value}`)}`;
 }
 
 // ---------------------------------------------------------------------------

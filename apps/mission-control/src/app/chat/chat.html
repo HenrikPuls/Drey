@@ -73,6 +73,56 @@
             @case ('proposal') {
               <div class="card" [attr.aria-busy]="isCardBusy(item.proposal.id)">
                 <p class="card-summary">{{ item.proposal.summary }}</p>
+                @if (chainCompareFor(item.proposal); as compare) {
+                  <div class="chain-compare" aria-label="The gate chain before and after this change">
+                    <div class="chain-side">
+                      <span class="chain-side-label">Before</span>
+                      <span class="chain-strip">
+                        @for (step of compare.before; track $index) {
+                          <span
+                            class="chain-gate"
+                            [class.chain-past]="step.state === 'past'"
+                            [class.chain-current]="step.state === 'current'"
+                            [class.chain-inserted]="step.inserted">
+                            <span class="chain-dot" aria-hidden="true">{{ step.checkpoint ? '◆' : '●' }}</span>
+                            <span class="chain-gate-title" [class.chain-struck]="step.skipped">
+                              @if (step.inserted) {
+                                <span class="chain-add" aria-hidden="true">+</span>
+                              }
+                              {{ step.title }}
+                            </span>
+                            @if (step.notify) {
+                              <span class="chain-notify" aria-hidden="true">◎</span>
+                            }
+                          </span>
+                        }
+                      </span>
+                    </div>
+                    <div class="chain-side">
+                      <span class="chain-side-label">After</span>
+                      <span class="chain-strip">
+                        @for (step of compare.after; track $index) {
+                          <span
+                            class="chain-gate"
+                            [class.chain-past]="step.state === 'past'"
+                            [class.chain-current]="step.state === 'current'"
+                            [class.chain-inserted]="step.inserted">
+                            <span class="chain-dot" aria-hidden="true">{{ step.checkpoint ? '◆' : '●' }}</span>
+                            <span class="chain-gate-title" [class.chain-struck]="step.skipped">
+                              @if (step.inserted) {
+                                <span class="chain-add" aria-hidden="true">+</span>
+                              }
+                              {{ step.title }}
+                            </span>
+                            @if (step.notify) {
+                              <span class="chain-notify" aria-hidden="true">◎</span>
+                            }
+                          </span>
+                        }
+                      </span>
+                    </div>
+                  </div>
+                }
                 @if (cardError(item.proposal.id); as error) {
                   <p class="inline-error">{{ error }}</p>
                 }

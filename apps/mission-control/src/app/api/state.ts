@@ -289,16 +289,19 @@ export class McState {
   // --- chat mutations -------------------------------------------------------
 
   /**
-   * The report card's promote (E8): fills the chat draft — the owner
-   * reviews the command and sends it, the desk answers with the proposal
-   * card the confirmation needs — and switches to the chat tab, where the
-   * freshly constructed composer adopts the one-shot prefill.
+   * The chat prefill (E8 promote, E9 gate sheet): fills the chat draft —
+   * the owner reviews the command and sends it, the desk answers with the
+   * proposal card the confirmation needs — and switches to the chat tab,
+   * where the freshly constructed composer adopts the one-shot prefill.
+   * The ticket overlay closes: the owner leaves the ticket screen for the
+   * composer, otherwise the overlay would cover the prefilled tab.
    */
   prefillChat(text: string): void {
     const trimmed = text.trim();
     if (trimmed === '') {
       return;
     }
+    this.closeTicket();
     this.chatPrefill.set(trimmed);
     this.tab.set('chat');
   }

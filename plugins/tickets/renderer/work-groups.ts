@@ -368,6 +368,8 @@ export function needKindLabel(need: NeedItem, board: BoardSnapshot): string {
       return 'Gate red';
     case 'failed':
       return 'Run failed';
+    case 'notify':
+      return 'Gate done';
     default: {
       const configured = board.columns.filter((column) => !column.unknown);
       const index = configured.findIndex((column) => column.phase.id === need.phase);

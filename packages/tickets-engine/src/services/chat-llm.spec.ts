@@ -226,7 +226,7 @@ describe('createChatBridge', () => {
     }
   });
 
-  it('prompts the promote intent — the scout → ship promotion is one of the four intents', async () => {
+  it('prompts the promote intent — the scout → ship promotion is one of the five intents', async () => {
     const calls: RecordedCall[] = [];
     const bridge = createChatBridge({
       config: chatConfig({ 'chat.baseUrl': 'http://127.0.0.1:1234/v1', 'chat.model': 'glm-5' }),
@@ -236,10 +236,29 @@ describe('createChatBridge', () => {
 
     const body = JSON.parse(String(calls[0]!.init.body)) as { messages: { role: string; content: string }[] };
     const system = body.messages[0]!.content;
-    expect(system).toContain('exactly four intents');
+    expect(system).toContain('exactly five intents');
     expect(system).toContain('- promote —');
     expect(system).toContain('scout');
-    expect(system).toMatch(/createTicket, transition, setPriority, promote/);
+    expect(system).toMatch(/createTicket, transition, setPriority, promote, setChain/);
+  });
+
+  it('prompts the chain intent with the setChain grammar — the fifth intent', async () => {
+    const calls: RecordedCall[] = [];
+    const bridge = createChatBridge({
+      config: chatConfig({ 'chat.baseUrl': 'http://127.0.0.1:1234/v1', 'chat.model': 'glm-5' }),
+      fetch: fakeFetch(calls, [frame('{"say":"Understood."}')]),
+    });
+    await bridge.runTurn({ text: 'notify me when the build gate completes', history: [], board: BOARD, emit: () => undefined });
+
+    const body = JSON.parse(String(calls[0]!.init.body)) as { messages: { role: string; content: string }[] };
+    const system = body.messages[0]!.content;
+    expect(system).toContain('- chain —');
+    expect(system).toContain('setChain replaces the ticket\'s whole chain delta');
+    expect(system).toContain('insert <phase>[(<persona>[, notify] | notify)] after|before <anchor>');
+    expect(system).toContain('skip <phase>');
+    expect(system).toContain('notify <phase>');
+    expect(system).toContain('An empty list returns the ticket to the standard flow');
+    expect(system).toContain('{"kind":"setChain","id":"T-0086","chain":["insert design(pia, notify) after review","skip verify"]}');
   });
 
   it('round-trips a promote command from the strict envelope', async () => {
@@ -256,6 +275,29 @@ describe('createChatBridge', () => {
       say: 'Promoted — the ticket enters the normal pipeline on its next run.',
       thought: 'The scout report on T-0004 is ready and the owner accepted it.',
       commands: [{ kind: 'promote', id: 'T-0004' }],
+    });
+  });
+
+  it('round-trips a setChain command from the strict envelope', async () => {
+    const calls: RecordedCall[] = [];
+    const bridge = createChatBridge({
+      config: chatConfig({ 'chat.baseUrl': 'http://127.0.0.1:1234/v1', 'chat.model': 'glm-5' }),
+      fetch: fakeFetch(calls, [
+        frame('{"say":"The chain now skips verify and notifies you after design.","thought":"The owner wants verify bypassed and a Bescheid on the inserted design gate.","commands":[{"kind":"setChain","id":"T-0086","chain":["insert design(pia, notify) after review","skip verify"]}]}'),
+      ]),
+    });
+    const result = await bridge.runTurn({ text: 'skip verify and tell me when design is done', history: [], board: BOARD, emit: () => undefined });
+
+    expect(result).toEqual({
+      say: 'The chain now skips verify and notifies you after design.',
+      thought: 'The owner wants verify bypassed and a Bescheid on the inserted design gate.',
+      commands: [
+        {
+          kind: 'setChain',
+          id: 'T-0086',
+          chain: ['insert design(pia, notify) after review', 'skip verify'],
+        },
+      ],
     });
   });
 });

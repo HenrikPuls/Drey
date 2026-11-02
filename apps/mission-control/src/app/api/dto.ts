@@ -71,6 +71,23 @@ export interface NeedView {
   readonly report?: ScoutReportView;
 }
 
+// --- Chain delta (E9, concept §5.7) ----------------------------------------------
+
+/**
+ * One `chain:` delta entry as the desk parsed it (the engine's ChainEntry,
+ * contracts/chain.ts) — mirrored here tolerantly; the ticket screen's
+ * model carries the same shape (`ticket/ticket.model.ts` stays the owner
+ * of the render logic, this is the wire slice).
+ */
+export interface McChainEntry {
+  readonly kind: 'insert' | 'skip' | 'notify';
+  readonly phase: string;
+  readonly anchor: string | null;
+  readonly position: 'after' | 'before' | null;
+  readonly persona: string | null;
+  readonly notify: boolean;
+}
+
 // --- Team ------------------------------------------------------------------
 
 /** A persona's live run, folded in from the fleet snapshot. */
@@ -164,6 +181,12 @@ export interface ChatProposalView {
   readonly decidedAt: string | null;
   /** The outcome line the execution reported; null while pending. */
   readonly outcome: string | null;
+  /**
+   * E9 (concept §5.7): the setChain command the card wraps — the
+   * before/after confirmation renders the proposed delta from it;
+   * present exactly on a setChain proposal.
+   */
+  readonly chain?: { readonly id: string; readonly chain: readonly string[] };
 }
 
 export interface ActiveSession {
@@ -241,6 +264,11 @@ export interface TicketDetail {
   readonly phases: readonly TicketPhaseOption[];
   /** The card's phase (the highlighted entry of `phases`). */
   readonly phase: string;
+  /**
+   * The `chain:` delta parsed off the card's meta (E9, concept §5.7);
+   * empty = the standard flow applies silently.
+   */
+  readonly chain: readonly McChainEntry[];
 }
 
 /** One file's git patch off `/api/tickets/<id>/diff`. */
@@ -273,6 +301,44 @@ const isoNow = (): string => new Date().toISOString();
 
 function priorityOf(value: unknown): McPriority {
   return PRIORITIES.includes(value as McPriority) ? (value as McPriority) : 'normal';
+}
+
+/** One chain entry's wire JSON; null when nothing renderable survives (no kind or no phase). */
+function chainEntryOf(raw: unknown): McChainEntry | null {
+  const entry = rec(raw);
+  if (entry === null) {
+    return null;
+  }
+  const phase = str(entry['phase']);
+  if (phase === '') {
+    return null;
+  }
+  const kind = str(entry['kind']);
+  if (kind === 'skip' || kind === 'notify') {
+    return { kind, phase, anchor: null, position: null, persona: null, notify: false };
+  }
+  if (kind === 'insert') {
+    const anchor = str(entry['anchor']);
+    if (anchor === '') {
+      return null;
+    }
+    return {
+      kind: 'insert',
+      phase,
+      anchor,
+      position: entry['position'] === 'before' ? 'before' : 'after',
+      persona: strOrNull(entry['persona']),
+      notify: entry['notify'] === true,
+    };
+  }
+  return null;
+}
+
+/** The `chain:` delta's wire JSON as entry views; junk entries drop out, never a throw. */
+export function chainEntriesOf(raw: unknown): readonly McChainEntry[] {
+  return arr(raw)
+    .map(chainEntryOf)
+    .filter((entry): entry is McChainEntry => entry !== null);
 }
 
 function cardOf(raw: unknown, phaseFallback: string): TicketCardView {
@@ -367,6 +433,8 @@ export function parseNeeds(json: unknown): NeedView[] {
     'needs-decision',
     'blocked',
     'report',
+    /** E9 (concept §5.7): a chain gate with a Bescheid rule just completed. */
+    'notify',
   ];
   const needs: NeedView[] = [];
   for (const raw of arr(json)) {
@@ -541,6 +609,7 @@ function proposalOf(raw: unknown): ChatProposalView | null {
   }
   const id = str(proposal['id']);
   const state = str(proposal['state']);
+  const chain = chainCommandOf(proposal['command']);
   return {
     id,
     state: state === 'confirmed' || state === 'dismissed' ? state : 'pending',
@@ -548,7 +617,25 @@ function proposalOf(raw: unknown): ChatProposalView | null {
     at: str(proposal['at']),
     decidedAt: strOrNull(proposal['decidedAt']),
     outcome: strOrNull(proposal['outcome']),
+    ...(chain !== undefined ? { chain } : {}),
   };
+}
+
+/**
+ * The setChain payload of a proposal's command block; undefined when the
+ * command is absent or another kind (the card then renders the summary
+ * line alone — the asymmetric-tolerance rule).
+ */
+function chainCommandOf(raw: unknown): { readonly id: string; readonly chain: readonly string[] } | undefined {
+  const command = rec(raw);
+  if (command === null || str(command['kind']) !== 'setChain') {
+    return undefined;
+  }
+  const id = str(command['id']);
+  if (id === '') {
+    return undefined;
+  }
+  return { id, chain: strArray(command['chain']) };
 }
 
 /** One proposal's JSON as the card view renders it; null when unusable. */
@@ -728,7 +815,32 @@ export function parseTicketDetail(json: unknown, phases: readonly TicketPhaseOpt
     verification: parseVerification(text),
     phases,
     phase: str(card['phase']),
+    chain: chainEntriesOf(meta['chain']),
   };
+}
+
+/**
+ * One board card off `/api/board` by id — the chat's chain before/after
+ * card reads the ticket's current delta and phase from it; null when the
+ * board JSON holds no such card (a stale board degrades to no "before").
+ */
+export function parseBoardCard(
+  json: unknown,
+  id: string,
+): { readonly phase: string; readonly chain: readonly McChainEntry[] } | null {
+  const board = rec(json);
+  for (const raw of arr(board?.['columns'])) {
+    const column = rec(raw);
+    for (const rawTicket of arr(column?.['tickets'])) {
+      const card = rec(rawTicket);
+      if (card === null || str(card['id']) !== id) {
+        continue;
+      }
+      const meta = rec(card['meta']) ?? {};
+      return { phase: str(card['phase']), chain: chainEntriesOf(meta['chain']) };
+    }
+  }
+  return null;
 }
 
 /** The `/api/tickets/<id>/diff` answer as the proof card renders it; junk yields an empty diff. */

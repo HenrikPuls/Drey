@@ -370,3 +370,76 @@
     max-width: 75%;
   }
 }
+
+/* The setChain card's before/after (E9, concept §5.7): two compact gate
+   strips — the merged chain as it stands against the proposed one. */
+
+.chain-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.chain-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chain-side-label {
+  flex: 0 0 44px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mc-dim);
+}
+
+.chain-strip {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.chain-gate {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--mc-dim);
+}
+
+.chain-dot {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.chain-gate-title {
+  color: var(--mc-text);
+}
+
+.chain-current .chain-dot,
+.chain-current .chain-gate-title {
+  color: var(--mc-accent);
+  font-weight: 600;
+}
+
+.chain-past .chain-dot,
+.chain-past .chain-gate-title {
+  color: var(--mc-dim);
+}
+
+.chain-add,
+.chain-notify {
+  color: var(--mc-accent);
+}
+
+.chain-add {
+  font-weight: 700;
+}
+
+.chain-struck {
+  text-decoration: line-through;
+  opacity: 0.6;
+}

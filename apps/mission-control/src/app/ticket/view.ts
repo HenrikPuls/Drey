@@ -13,11 +13,13 @@ import {
   DEFAULT_DIFF_FONT_SIZE,
   MC_TICKET,
   acceptArmReduce,
+  chainPrefillOf,
+  chainStepsOf,
   diffFontSizeStep,
-  gateStepsOf,
   patchLineKind,
   phaseTitleOf,
   proofOf,
+  renderChainEntryViews,
   scoutReportOf,
   splitTicketSections,
   type AcceptArmState,
@@ -42,17 +44,22 @@ export interface ProofShot {
 /**
  * The ticket screen (concept §5.3–5.5): the destination every card
  * points to. Header with the back arrow, id, title and phase chip; the
- * gate bar over the pipeline's phases; the ticket body as safe Markdown
- * blocks; the `## Verification` section as the proof card (criteria
- * checklist, the swipeable screenshot gallery, findings); the `## Report`
- * section as the scout report card (E8: the stamp, the summary, the
- * decision options — a scout ticket's endpoint); below it the diff as
- * git rendered — collapsible files, the +/- balance, a fullscreen patch
- * viewer with stepped font size. The actions row sits at the bottom in
- * the thumb's reach: the armed two-step Accept, the send-back panel with
- * its mandatory note, and the Edit toggle that hands the raw file to
- * `mc-ticket-edit` (the exception path, §5.5). Read-only paired devices
- * watch: their actions hide entirely.
+ * gate bar over the merged gate chain (E9, concept §5.7: the standard
+ * flow plus the ticket's `chain:` delta — inserted gates wear the
+ * addition mark, skipped ones strike through, the Bescheid rule rings);
+ * the bar is tappable and opens the gate sheet — the three most common
+ * chain interventions, each prefilling the chat's setChain command; the
+ * ticket body as safe Markdown blocks; the `## Verification` section as
+ * the proof card (criteria checklist, the swipeable screenshot gallery,
+ * findings); the `## Report` section as the scout report card (E8: the
+ * stamp, the summary, the decision options — a scout ticket's endpoint);
+ * below it the diff as git rendered — collapsible files, the +/-
+ * balance, a fullscreen patch viewer with stepped font size. The
+ * actions row sits at the bottom in the thumb's reach: the armed
+ * two-step Accept, the send-back panel with its mandatory note, and the
+ * Edit toggle that hands the raw file to `mc-ticket-edit` (the exception
+ * path, §5.5). Read-only paired devices watch: their actions hide
+ * entirely, and the gate bar opens no sheet.
  */
 @Component({
   selector: 'mc-ticket',
@@ -92,8 +99,149 @@ export class TicketView {
 
   protected readonly steps = computed<GateStep[]>(() => {
     const doc = this.doc();
-    return doc === null ? [] : gateStepsOf(doc.phases, doc.phase);
+    return doc === null ? [] : chainStepsOf(doc.phases, doc.phase, doc.chain);
   });
+
+  // --- the gate sheet (E9, concept §5.7) ----------------------------------------
+
+  /** The bottom sheet the tappable gate bar opens: the three chain interventions. */
+  protected readonly sheetOpen = signal(false);
+  /** The insert form: which phase, hung where, and whether it raises the Bescheid. */
+  protected readonly insertPhase = signal('');
+  protected readonly insertPosition = signal<'after' | 'before'>('after');
+  protected readonly insertAnchor = signal('');
+  protected readonly insertNotify = signal(false);
+  /** The notify form: which gate's completion lands a card in "Needs you". */
+  protected readonly notifyGate = signal('');
+
+  /** The ticket's own delta entries, canonically rendered. */
+  private readonly chainTexts = computed<readonly string[]>(() => {
+    const doc = this.doc();
+    return doc === null ? [] : renderChainEntryViews(doc.chain);
+  });
+
+  /** True when the ticket deviates from the standard flow. */
+  protected readonly hasDelta = computed(() => this.chainTexts().length > 0);
+
+  /** The insert form's phase options — the whole pipeline, anything may be revisited. */
+  protected readonly insertPhaseOptions = computed(() => this.doc()?.phases ?? []);
+
+  /**
+   * The anchor/notify options — the current and the future gates. The
+   * desk's validateChain refuses a past anchor and news from a past
+   * gate, so the sheet never offers them.
+   */
+  private readonly openSteps = computed<readonly GateStep[]>(() =>
+    this.steps().filter((step) => step.state !== 'past'),
+  );
+
+  protected readonly anchorOptions = computed(() => this.openSteps());
+
+  /** The notify picker's gates — those without the Bescheid rule standing yet. */
+  protected readonly notifyOptions = computed(() => this.openSteps().filter((step) => !step.notify));
+
+  /** The insert form's would-be entry; null while phase or anchor is unchosen. */
+  private readonly insertEntryText = computed<string | null>(() => {
+    const phase = this.insertPhase();
+    const anchor = this.insertAnchor();
+    if (phase === '' || anchor === '' || phase === anchor) {
+      return null;
+    }
+    const opts = this.insertNotify() ? '(notify)' : '';
+    return `insert ${phase}${opts} ${this.insertPosition()} ${anchor}`;
+  });
+
+  /** True when the insert form adds nothing the delta does not already hold. */
+  protected readonly insertDisabled = computed(() => {
+    const entry = this.insertEntryText();
+    if (entry === null) {
+      return true;
+    }
+    return this.chainTexts().includes(entry);
+  });
+
+  /** True when the notify picker adds nothing new (the gate already rings). */
+  protected readonly notifyDisabled = computed(() => {
+    const gate = this.notifyGate();
+    const step = this.steps().find((known) => known.id === gate);
+    return gate === '' || step === undefined || step.notify;
+  });
+
+  protected openSheet(): void {
+    if (this.isEmpty()) {
+      return;
+    }
+    const open = this.openSteps();
+    const current = this.steps().find((step) => step.state === 'current');
+    this.insertPhase.set(this.doc()?.phases[0]?.id ?? '');
+    this.insertPosition.set('after');
+    this.insertAnchor.set(current?.id ?? open[0]?.id ?? '');
+    this.insertNotify.set(false);
+    this.notifyGate.set(current?.id ?? open[0]?.id ?? '');
+    this.sheetOpen.set(true);
+  }
+
+  protected closeSheet(): void {
+    this.sheetOpen.set(false);
+  }
+
+  protected onInsertPhase(event: Event): void {
+    this.insertPhase.set((event.target as HTMLSelectElement).value);
+  }
+
+  protected onInsertPosition(event: Event): void {
+    this.insertPosition.set((event.target as HTMLSelectElement).value === 'before' ? 'before' : 'after');
+  }
+
+  protected onInsertAnchor(event: Event): void {
+    this.insertAnchor.set((event.target as HTMLSelectElement).value);
+  }
+
+  protected onInsertNotify(event: Event): void {
+    this.insertNotify.set((event.target as HTMLInputElement).checked);
+  }
+
+  protected onNotifyGate(event: Event): void {
+    this.notifyGate.set((event.target as HTMLSelectElement).value);
+  }
+
+  /** Insert gate: prefill the chat with the delta plus the form's entry. */
+  protected prefillInsert(): void {
+    const entry = this.insertEntryText();
+    const doc = this.doc();
+    if (entry === null || doc === null) {
+      return;
+    }
+    this.propose([...this.chainTexts(), entry]);
+  }
+
+  /** Set notify rule: prefill the chat with the delta plus the Bescheid entry. */
+  protected prefillNotify(): void {
+    const gate = this.notifyGate();
+    const doc = this.doc();
+    if (gate === '' || doc === null) {
+      return;
+    }
+    this.propose([...this.chainTexts(), `notify ${gate}`]);
+  }
+
+  /** Back to the standard flow: prefill the chat with the empty delta. */
+  protected prefillStandard(): void {
+    if (this.doc() === null) {
+      return;
+    }
+    this.propose([]);
+  }
+
+  /** The one mutation path: the sheet's draft becomes the chat composer's command. */
+  private propose(entries: readonly string[]): void {
+    const doc = this.doc();
+    if (doc === null) {
+      return;
+    }
+    this.sheetOpen.set(false);
+    this.vm.proposeChain(chainPrefillOf(doc.id, entries));
+  }
 
   private readonly sections = computed(() => {
     const doc = this.doc();

@@ -64,9 +64,11 @@ ADR-0088 E5a) and 105 (the Mission Control app, ADR-0088 E5b) and 106
 (the ticket screen + proof card + Drey hosting, ADR-0088 E5c) and 107
 (the self-improvement loop, ADR-0088 E6) and 108 (the status log +
 fleet ledger surface, ADR-0088 E7) and 109 (the Scout track,
-ADR-0088 E8 — concept §5.6) are built
+ADR-0088 E8 — concept §5.6) and E9 (the chain delta, ADR-0088 E9 —
+concept §5.7, the last concept item) are built
 and suite-green but await the owner's
-rounds** — with E8 the whole E0–E8 arc stands built, caveat:
+rounds** — with E9 the whole E0–E9 arc stands built and the concept
+is complete, caveat:
 none of it is owner-verified yet; the next step is the owner's
 verification round before anything further. The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
@@ -131,10 +133,15 @@ owner's round) and E8 (the Scout track, concept §5.6 — milestone
 ticket file — no worktree, no gate, no move —, the report card in
 Needs you and the chat's `promote` command with confirmation
 flipping the ticket to ship; built and suite-green but awaiting the
-owner's round). **E7 is done-with-caveat** — all of E0–E7 stands
+owner's round) and E9 (the chain delta, concept §5.7 — the last
+concept item: the ticket's `chain:` delta against the pipeline's
+standard flow, the insert/skip/notify grammar with its semantic
+write-guard, the merge that feeds the gate bar and the Bescheid
+"Needs you" cards, and the chat's `setChain` command with
+confirmation; built and suite-green but awaiting the owner's
+round). **E9 completes the concept** — all of E0–E9 stands
 built, none of it owner-verified; next is the owner's verification
-round, then the concept's remaining items (the chain delta §5.7 —
-not yet built; §4.9's watcher depth now rides on
+round (§4.9's watcher depth now rides on
 the status log in place). Drey keeps its
 native Work panel/thread/editor throughout. Supersedes req-75 W6–W8 (E3/E5 replace the Shape
 dialog, the rules-file orchestrator and the phone-client rebuild); W9 stays.

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { remoteActorOf } from '../contracts/remote-protocol';
 import type { BoardSnapshot, TicketCard } from '../contracts/tickets';
+import type { ChainEntry } from '../contracts/chain';
 import type { ScoutReport } from '../contracts/scout';
 import { renderScoutReportSection } from '../core/scout';
 import { parseStatusLog, type StatusLine } from '../core/status-log';
@@ -29,7 +30,7 @@ function fakePersona(id: string, title: string): import('../core/persona').Perso
 
 function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
   const board: RemoteBoard = {
-    refresh: vi.fn(async () => ({ columns: [], checkpoints: [] }) as unknown as BoardSnapshot),
+    refresh: vi.fn(async () => ({ columns: [], checkpoints: [], pipeline: [] }) as unknown as BoardSnapshot),
     readTicket: vi.fn(async () => ({ ok: false as const, error: 'x' })),
     refineTicket: vi.fn(async () => ({ ok: true, revision: '0123456789abcdef' })),
     saveAttachment: vi.fn(async () => ({ ok: true, file: 'tickets/attachments/img-test.png' })),
@@ -212,6 +213,7 @@ describe('DreyTicketsPort', () => {
     function boardWith(cards: readonly { id: string; phase: string; title: string | null }[]): BoardSnapshot {
       const phases = [...new Set(cards.map((c) => c.phase))];
       return {
+        pipeline: phases.map((id) => ({ id })),
         columns: phases.map((phase) => ({
           phase: { id: phase },
           tickets: cards.filter((c) => c.phase === phase).map((c) => card(c.id, c.phase, c.title)),
@@ -359,6 +361,7 @@ describe('DreyTicketsPort', () => {
     it("surfaces a scout ticket's report section as a report card", async () => {
       const { board, fleet } = fakes();
       vi.mocked(board.refresh).mockResolvedValue({
+        pipeline: [{ id: 'plan' }],
         columns: [{ phase: { id: 'plan' }, tickets: [card('T-0004', 'plan', 'Explore storage', 'scout')], unknown: false }],
         checkpoints: [],
       } as unknown as BoardSnapshot);
@@ -387,6 +390,7 @@ describe('DreyTicketsPort', () => {
     it('skips a promoted ticket even though the report chapter stays in the file', async () => {
       const { board, fleet } = fakes();
       vi.mocked(board.refresh).mockResolvedValue({
+        pipeline: [{ id: 'plan' }],
         columns: [{ phase: { id: 'plan' }, tickets: [card('T-0004', 'plan', 'Explore storage')], unknown: false }],
         checkpoints: [],
       } as unknown as BoardSnapshot);
@@ -405,6 +409,7 @@ describe('DreyTicketsPort', () => {
     it('a scout ticket without a section, a broken read or a failed read surfaces nothing', async () => {
       const { board, fleet } = fakes();
       vi.mocked(board.refresh).mockResolvedValue({
+        pipeline: [{ id: 'plan' }],
         columns: [
           {
             phase: { id: 'plan' },
@@ -435,6 +440,7 @@ describe('DreyTicketsPort', () => {
     it('appends the report cards after the needsOf, improvements and status needs', async () => {
       const { board, fleet } = fakes();
       vi.mocked(board.refresh).mockResolvedValue({
+        pipeline: [{ id: 'plan-review' }],
         columns: [
           {
             phase: { id: 'plan-review' },
@@ -471,6 +477,89 @@ describe('DreyTicketsPort', () => {
         ['needs-decision', 'T-0005'],
         ['report', 'T-0004'],
       ]);
+    });
+  });
+
+  describe('the E9 notify needs', () => {
+    /** A minimal board card — only what needsOf and notifyNeedsOf read. */
+    function card(id: string, phase: string, title: string | null, chain?: readonly ChainEntry[], entered: Record<string, string> = {}): TicketCard {
+      return {
+        id,
+        path: `tickets/${phase}/${id}.md`,
+        phase,
+        meta: { title, entered, run: null, claimedBy: null, ...(chain !== undefined && chain.length > 0 ? { chain } : {}) },
+      } as unknown as TicketCard;
+    }
+
+    const phases = [
+      { id: 'plan', title: 'Plan' },
+      { id: 'design', title: 'Design' },
+      { id: 'build', title: 'Build' },
+    ];
+
+    const boardWith = (tickets: readonly TicketCard[]): BoardSnapshot =>
+      ({
+        pipeline: phases,
+        columns: phases.map((phase) => ({ phase, tickets: tickets.filter((t) => t.phase === phase.id), unknown: false })),
+        checkpoints: [],
+      }) as unknown as BoardSnapshot;
+
+    it('appends a Bescheid card derived from the snapshot alone — no ticket file is read', async () => {
+      const { board, fleet } = fakes();
+      vi.mocked(board.refresh).mockResolvedValue(
+        boardWith([card('T-0001', 'design', 'The design ticket', [{ kind: 'notify', phase: 'plan' }], { design: new Date(Date.now() - 60 * 60_000).toISOString() })]),
+      );
+      const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+
+      expect(await port.needs()).toEqual([
+        {
+          kind: 'notify',
+          ticketId: 'T-0001',
+          title: 'The design ticket',
+          phase: 'design',
+          runId: null,
+          text: 'the Plan gate completed',
+          since: expect.any(String),
+        },
+      ]);
+      expect(board.readTicket).not.toHaveBeenCalled();
+    });
+
+    it('appends the Bescheid cards after the status and report needs', async () => {
+      const { board, fleet } = fakes();
+      vi.mocked(board.refresh).mockResolvedValue(
+        boardWith([
+          card('T-0001', 'design', 'The design ticket', [{ kind: 'notify', phase: 'plan' }], { design: new Date(Date.now() - 60 * 60_000).toISOString() }),
+          card('T-0002', 'build', 'The build ticket', undefined, { build: new Date(Date.now() - 2 * 60 * 60_000).toISOString() }),
+        ]),
+      );
+      vi.mocked(board.statusOf).mockImplementation(async (id: string) =>
+        id === 'T-0002' ? parseStatusLog("- '2026-11-02T09:12:00Z' needs-decision: Which colour?") : [],
+      );
+      const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+
+      const items = await port.needs();
+      expect(items.map((i) => [i.kind, i.ticketId])).toEqual([
+        ['needs-decision', 'T-0002'],
+        ['notify', 'T-0001'],
+      ]);
+    });
+
+    it('a stale or still-running gate appends nothing', async () => {
+      const { board, fleet } = fakes();
+      vi.mocked(board.refresh).mockResolvedValue(
+        boardWith([
+          // Stale: the completion is a day and a half old.
+          card('T-0001', 'design', 'Old news', [{ kind: 'notify', phase: 'plan' }], { design: new Date(Date.now() - 36 * 60 * 60_000).toISOString() }),
+          // Still running: the ticket sits in the notified gate.
+          card('T-0002', 'plan', 'Not yet', [{ kind: 'notify', phase: 'plan' }], { plan: new Date(Date.now() - 60 * 60_000).toISOString() }),
+          // No delta at all.
+          card('T-0003', 'build', 'Standard flow', undefined, { build: new Date(Date.now() - 60 * 60_000).toISOString() }),
+        ]),
+      );
+      const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+
+      expect(await port.needs()).toEqual([]);
     });
   });
 });

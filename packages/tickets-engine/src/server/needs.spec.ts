@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { RunInfo } from '../fleet/protocol';
 import type { BoardColumn, BoardSnapshot, PipelinePhase, TicketCard } from '../contracts/tickets';
+import type { ChainEntry } from '../contracts/chain';
+import { NOTIFY_WINDOW_MS } from '../contracts/chain';
 import type { ScoutReport } from '../contracts/scout';
-import { needsOf, reportNeedOf } from './needs';
+import { needsOf, notifyNeedsOf, reportNeedOf } from './needs';
 
 /**
  * req-66: the remote's "Needs you" list — waiting runs, red gates and
  * failed runs whose ticket has not moved on, and checkpoint tickets
  * without a live run, in that order. E8 adds the pure report-card packer
- * the port builds a scout ticket's parsed `## Report` into.
+ * the port builds a scout ticket's parsed `## Report` into; E9 adds the
+ * Bescheid fold (`notifyNeedsOf`) — the merged chain plus the entered
+ * stamps decide which notify rules still wait for the owner.
  */
 
 const card = (id: string, phase: string, entered: string | null = null, form?: 'scout'): TicketCard =>
@@ -147,5 +151,118 @@ describe('reportNeedOf', () => {
     const item = reportNeedOf(card('T-0004', 'plan'), 'plan', { ...report, writtenAt: '' });
     expect(item.since).toBeNull();
     expect(item.text).toBe('1 of 2 decisions open — Which storage should back the index?');
+  });
+});
+
+describe('notifyNeedsOf', () => {
+  const NOW = Date.parse('2026-11-02T12:00:00Z');
+  const H = 60 * 60_000;
+
+  const pipeline: readonly PipelinePhase[] = [
+    { id: 'plan', title: 'Plan' },
+    { id: 'design', title: 'Design' },
+    { id: 'build', title: 'Build' },
+    { id: 'verify', title: 'Verify' },
+  ] as unknown as readonly PipelinePhase[];
+
+  /** One column per pipeline phase; the card's own phase names its column. */
+  const notifyBoard = (cards: readonly TicketCard[]): BoardSnapshot =>
+    ({
+      pipeline,
+      columns: pipeline.map((phase) => ({
+        phase,
+        tickets: cards.filter((c) => c.phase === phase.id),
+        unknown: false,
+      })),
+      checkpoints: [],
+    }) as unknown as BoardSnapshot;
+
+  const chainCard = (id: string, phase: string, chain: readonly ChainEntry[], entered: Record<string, string>): TicketCard =>
+    ({
+      id,
+      path: `tickets/${phase}/${id}.md`,
+      phase,
+      meta: { title: `Ticket ${id}`, entered, chain },
+    }) as unknown as TicketCard;
+
+  const notifyPlan: ChainEntry = { kind: 'notify', phase: 'plan' };
+
+  it('lands a card while the ticket sits in the gate following the notified one', () => {
+    const board = notifyBoard([chainCard('T-0001', 'design', [notifyPlan], { design: '2026-11-02T11:00:00Z' })]);
+    expect(notifyNeedsOf(board, NOW)).toEqual([
+      {
+        kind: 'notify',
+        ticketId: 'T-0001',
+        title: 'Ticket T-0001',
+        phase: 'design',
+        runId: null,
+        text: 'the Plan gate completed',
+        since: '2026-11-02T11:00:00Z',
+      },
+    ]);
+  });
+
+  it('shows nothing before the gate completes and nothing for a ticket without a delta', () => {
+    // The ticket still sits in the notified gate — the following gate has
+    // no stamp yet.
+    const current = notifyBoard([chainCard('T-0001', 'plan', [notifyPlan], { plan: '2026-11-02T11:00:00Z' })]);
+    expect(notifyNeedsOf(current, NOW)).toEqual([]);
+    // No delta — the standard flow carries no notify rules.
+    const standard = notifyBoard([chainCard('T-0001', 'design', [], { design: '2026-11-02T11:00:00Z' })]);
+    expect(notifyNeedsOf(standard, NOW)).toEqual([]);
+  });
+
+  it('drops the card once the ticket leaves the following gate', () => {
+    const board = notifyBoard([chainCard('T-0001', 'build', [notifyPlan], { design: '2026-11-02T11:00:00Z', build: '2026-11-02T11:30:00Z' })]);
+    expect(notifyNeedsOf(board, NOW)).toEqual([]);
+  });
+
+  it('caps the card at the freshness window', () => {
+    const fresh = notifyBoard([chainCard('T-0001', 'design', [notifyPlan], { design: new Date(NOW - 23 * H).toISOString() })]);
+    expect(notifyNeedsOf(fresh, NOW)).toHaveLength(1);
+    const stale = notifyBoard([chainCard('T-0001', 'design', [notifyPlan], { design: new Date(NOW - 25 * H).toISOString() })]);
+    expect(notifyNeedsOf(stale, NOW)).toEqual([]);
+    // Exactly at the window's end the news is out.
+    const edge = notifyBoard([chainCard('T-0001', 'design', [notifyPlan], { design: new Date(NOW - NOTIFY_WINDOW_MS).toISOString() })]);
+    expect(notifyNeedsOf(edge, NOW)).toEqual([]);
+  });
+
+  it('a stamp that does not parse still shows the card — the move-on check bounds it', () => {
+    const board = notifyBoard([chainCard('T-0001', 'design', [notifyPlan], { design: 'not a stamp' })]);
+    expect(notifyNeedsOf(board, NOW)).toEqual([
+      expect.objectContaining({ kind: 'notify', since: 'not a stamp' }),
+    ]);
+  });
+
+  it('fires for an inserted revisit gate carrying the notify option', () => {
+    // Skip the upfront design gate, revisit it after build with a Bescheid.
+    const delta: ChainEntry[] = [
+      { kind: 'skip', phase: 'design' },
+      { kind: 'insert', phase: 'design', anchor: 'build', position: 'after', persona: null, notify: true },
+    ];
+    const waiting = notifyBoard([chainCard('T-0001', 'build', delta, { build: '2026-11-02T11:00:00Z' })]);
+    expect(notifyNeedsOf(waiting, NOW)).toEqual([]);
+    const done = notifyBoard([chainCard('T-0001', 'verify', delta, { build: '2026-11-02T11:00:00Z', verify: '2026-11-02T11:30:00Z' })]);
+    expect(notifyNeedsOf(done, NOW)).toEqual([
+      expect.objectContaining({ kind: 'notify', phase: 'verify', text: 'the Design gate completed' }),
+    ]);
+  });
+
+  it('fires on a skipped gate too — the ticket still passes through it', () => {
+    const delta: ChainEntry[] = [
+      { kind: 'skip', phase: 'design' },
+      { kind: 'notify', phase: 'design' },
+    ];
+    const board = notifyBoard([chainCard('T-0001', 'build', delta, { design: '2026-11-02T10:00:00Z', build: '2026-11-02T11:00:00Z' })]);
+    expect(notifyNeedsOf(board, NOW)).toEqual([
+      expect.objectContaining({ kind: 'notify', text: 'the Design gate completed' }),
+    ]);
+  });
+
+  it('never fires on the chain\'s last gate — its completion lands outside the chain', () => {
+    const board = notifyBoard([
+      chainCard('T-0001', 'verify', [{ kind: 'notify', phase: 'verify' }], { verify: '2026-11-02T11:00:00Z' }),
+    ]);
+    expect(notifyNeedsOf(board, NOW)).toEqual([]);
   });
 });

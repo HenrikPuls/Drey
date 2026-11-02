@@ -106,7 +106,31 @@ export function validateChatCommand(raw: unknown): ChatCommand | null {
     }
     return { kind: 'promote', id };
   }
+  if (kind === 'setChain') {
+    const id = ticketIdOf(obj['id']);
+    const chain = chainOf(obj['chain']);
+    if (id === null || chain === null) {
+      return null;
+    }
+    return { kind: 'setChain', id, chain };
+  }
   return null;
+}
+
+/** The setChain payload's shape check: a list of non-empty strings (the
+ *  grammar and the pipeline semantics validate at execution). */
+function chainOf(value: unknown): readonly string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const chain: string[] = [];
+  for (const entry of value as unknown[]) {
+    if (typeof entry !== 'string' || entry.trim() === '') {
+      return null;
+    }
+    chain.push(entry.trim());
+  }
+  return chain;
 }
 
 function textOf(value: unknown): string | null {

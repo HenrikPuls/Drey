@@ -77,6 +77,8 @@ export interface ChatBoardPort {
   setPriority(input: { readonly id: string; readonly priority: TicketPriority; readonly actor?: string }): Promise<ChatMutationResult>;
   /** E8 (concept §5.6): the scout → ship promotion's form flip. */
   setForm(input: { readonly id: string; readonly form: TicketForm; readonly actor?: string }): Promise<ChatMutationResult>;
+  /** E9 (concept §5.7): the chain-delta replacement. */
+  setChain(input: { readonly id: string; readonly chain: readonly string[]; readonly actor?: string }): Promise<ChatMutationResult>;
 }
 
 export interface ChatServiceDeps {
@@ -106,6 +108,10 @@ function summaryOf(command: ChatCommand): string {
       return `Set ${command.id} priority to ${command.priority}`;
     case 'promote':
       return `Promote ${command.id} to a ship ticket`;
+    case 'setChain':
+      return command.chain.length === 0
+        ? `Return ${command.id} to the standard flow`
+        : `Set ${command.id} chain to ${command.chain.length} ${command.chain.length === 1 ? 'entry' : 'entries'}`;
   }
 }
 
@@ -381,7 +387,7 @@ export class ChatService implements ChatServicePort {
 
   /**
    * The confirm's execution — the iron rule in code: the typed command
-   * reaches the board ONLY through these four methods, always with the
+   * reaches the board ONLY through these five methods, always with the
    * acting owner. The outcome line records what happened: a transition's
    * moved path, a create's minted id, `ok` otherwise. A create lands in
    * the pipeline's first phase (the board's capture target); when the
@@ -425,6 +431,10 @@ export class ChatService implements ChatServicePort {
       }
       case 'promote': {
         const result = await this.deps.board.setForm({ id: command.id, form: 'ship', actor });
+        return result.ok ? { ok: true, outcome: 'ok' } : { ok: false, error: result.error };
+      }
+      case 'setChain': {
+        const result = await this.deps.board.setChain({ id: command.id, chain: command.chain, actor });
         return result.ok ? { ok: true, outcome: 'ok' } : { ok: false, error: result.error };
       }
     }

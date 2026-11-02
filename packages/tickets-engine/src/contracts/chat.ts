@@ -67,7 +67,16 @@ export type ChatCommand =
    * worktree, gate) on its next run. The report chapter stays in the
    * file as history.
    */
-  | { readonly kind: 'promote'; readonly id: string };
+  | { readonly kind: 'promote'; readonly id: string }
+  /**
+   * E9 (concept §5.7): replace the ticket's chain delta with the given
+   * canonical entries (`insert design(pia, notify) after review`,
+   * `skip verify`, `notify build`); an empty list returns the ticket
+   * to the pipeline's standard flow. The grammar and the semantic
+   * validation run at execution — the proposal card shows the chain
+   * before/after before the owner confirms.
+   */
+  | { readonly kind: 'setChain'; readonly id: string; readonly chain: readonly string[] };
 
 /** One chat session = one file under `tickets/_meta/chat/`. */
 export interface ChatSession {

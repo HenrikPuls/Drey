@@ -62,4 +62,20 @@ describe('validateChatCommand', () => {
     expect(validateChatCommand({ kind: 'promote', id: 'T-1' })).toBeNull();
     expect(validateChatCommand({ kind: 'promote' })).toBeNull();
   });
+
+  it('validates setChain with a string list', () => {
+    expect(validateChatCommand({ kind: 'setChain', id: 'T-0086', chain: ['insert design after review'] })).toEqual({
+      kind: 'setChain',
+      id: 'T-0086',
+      chain: ['insert design after review'],
+    });
+    expect(validateChatCommand({ kind: 'setChain', id: 'T-0086', chain: [] })).toEqual({
+      kind: 'setChain',
+      id: 'T-0086',
+      chain: [],
+    });
+    expect(validateChatCommand({ kind: 'setChain', id: 'T-0086', chain: ['ok', 4] })).toBeNull();
+    expect(validateChatCommand({ kind: 'setChain', id: 'T-0086' })).toBeNull();
+    expect(validateChatCommand({ kind: 'setChain', id: 'T-1', chain: [] })).toBeNull();
+  });
 });

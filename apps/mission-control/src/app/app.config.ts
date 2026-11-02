@@ -134,6 +134,7 @@ export const appConfig: ApplicationConfig = {
             revision: detail.revision,
             phase: detail.phase,
             phases,
+            chain: detail.chain,
           };
         });
         return {
@@ -167,6 +168,7 @@ export const appConfig: ApplicationConfig = {
             return url;
           },
           onClose: () => state.closeTicket(),
+          proposeChain: (text) => state.prefillChat(text),
           save: async (text) => {
             const reply = await state.saveTicket(text);
             return reply.ok ? { ok: true } : { ok: false, error: reply.error };

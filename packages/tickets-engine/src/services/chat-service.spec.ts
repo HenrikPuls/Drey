@@ -41,6 +41,12 @@ const CREATE_IN_INBOX: ChatCommand = {
 const CREATE_IN_BUILD: ChatCommand = { ...CREATE_IN_INBOX, phase: 'build' };
 const SET_PRIORITY: ChatCommand = { kind: 'setPriority', id: 'T-0086', priority: 'urgent' };
 const PROMOTE: ChatCommand = { kind: 'promote', id: 'T-0086' };
+const SET_CHAIN: ChatCommand = {
+  kind: 'setChain',
+  id: 'T-0086',
+  chain: ['insert design(pia, notify) after review', 'skip verify'],
+};
+const RETURN_TO_STANDARD: ChatCommand = { kind: 'setChain', id: 'T-0086', chain: [] };
 
 interface FakeCard {
   id: string;
@@ -78,10 +84,12 @@ let boardCreates: unknown[];
 let boardTransitions: unknown[];
 let boardPriorities: unknown[];
 let boardForms: unknown[];
+let boardChains: unknown[];
 let boardCreateResult: unknown;
 let boardTransitionResult: unknown;
 let boardSetPriorityResult: unknown;
 let boardSetFormResult: unknown;
+let boardSetChainResult: unknown;
 let clock: Date;
 let service: ChatService;
 
@@ -153,10 +161,12 @@ beforeEach(async () => {
   boardTransitions = [];
   boardPriorities = [];
   boardForms = [];
+  boardChains = [];
   boardCreateResult = { ok: true, id: 'T-0103', path: 'tickets/10-inbox/T-0103.md' };
   boardTransitionResult = { ok: true, path: 'tickets/30-review/T-0086.md' };
   boardSetPriorityResult = { ok: true };
   boardSetFormResult = { ok: true };
+  boardSetChainResult = { ok: true };
   clock = new Date('2026-11-02T09:00:00Z');
 });
 
@@ -199,6 +209,10 @@ function boot(): ChatService {
     setForm: async (input: unknown) => {
       boardForms.push(input);
       return boardSetFormResult;
+    },
+    setChain: async (input: unknown) => {
+      boardChains.push(input);
+      return boardSetChainResult;
     },
   } as unknown as ChatBoardPort;
   const bridge = {
@@ -247,7 +261,11 @@ async function seedSession(
           ? `Create ticket "${command.title}" in ${command.phase}`
           : command.kind === 'promote'
             ? `Promote ${command.id} to a ship ticket`
-            : `Set ${command.id} priority to ${command.priority}`;
+            : command.kind === 'setChain'
+              ? command.chain.length === 0
+                ? `Return ${command.id} to the standard flow`
+                : `Set ${command.id} chain to ${command.chain.length} ${command.chain.length === 1 ? 'entry' : 'entries'}`
+              : `Set ${command.id} priority to ${command.priority}`;
     text = appendProposal(text, new Date('2026-11-02T08:02:00Z'), summary, command).text;
   }
   const file = `tickets/_meta/chat/20261102-080000-${sessionSlug(title)}.md`;
@@ -378,6 +396,54 @@ describe('ChatService start and send', () => {
     expect(text).toContain('{"kind":"promote","id":"T-0086"}');
     // The card is a proposal only — the board port has not been asked yet.
     expect(boardForms).toEqual([]);
+  });
+
+  it('a setChain command from the mission renders as the chain proposal card', async () => {
+    service = boot();
+    bridgeReply = { say: 'Here is the new chain.', thought: null, commands: [SET_CHAIN] };
+
+    const result = await service.start({ title: 'Chain', text: 'insert a design gate after review' });
+
+    expect(result.ok).toBe(true);
+    expect(result.proposals).toEqual([
+      {
+        id: 'p-1',
+        state: 'pending',
+        summary: 'Set T-0086 chain to 2 entries',
+        command: SET_CHAIN,
+        at: expect.any(String),
+        decidedAt: null,
+        outcome: null,
+      },
+    ]);
+    const text = await readOnDisk(result.file!);
+    expect(text).toContain('- \'2026-11-02T09:00:02.000Z\' proposal p-1 pending — Set T-0086 chain to 2 entries');
+    expect(text).toContain('{"kind":"setChain","id":"T-0086","chain":["insert design(pia, notify) after review","skip verify"]}');
+    // The card is a proposal only — the board port has not been asked yet.
+    expect(boardChains).toEqual([]);
+  });
+
+  it('an empty setChain chain renders as the return-to-standard card', async () => {
+    service = boot();
+    bridgeReply = { say: 'Back to the standard flow.', thought: null, commands: [RETURN_TO_STANDARD] };
+
+    const result = await service.start({ title: 'Standard', text: 'drop the chain changes' });
+
+    expect(result.ok).toBe(true);
+    expect(result.proposals).toEqual([
+      {
+        id: 'p-1',
+        state: 'pending',
+        summary: 'Return T-0086 to the standard flow',
+        command: RETURN_TO_STANDARD,
+        at: expect.any(String),
+        decidedAt: null,
+        outcome: null,
+      },
+    ]);
+    expect(await readOnDisk(result.file!)).toContain(
+      'proposal p-1 pending — Return T-0086 to the standard flow',
+    );
   });
 
   it('hands the bridge the recent history and a board digest of open tickets', async () => {
@@ -620,6 +686,52 @@ describe('ChatService confirm and dismiss', () => {
     expect(text).toContain('proposal p-1 pending — Promote T-0086 to a ship ticket');
   });
 
+  it('confirm on a setChain executes with the actor and records ok as the outcome', async () => {
+    const { file } = await seedSession([SET_CHAIN]);
+    service = boot();
+
+    const result = await service.confirm({ file, id: 'p-1' });
+
+    expect(result.ok).toBe(true);
+    expect(boardChains).toEqual([{ id: 'T-0086', chain: SET_CHAIN.chain, actor: ACTOR }]);
+    expect(boardTransitions).toEqual([]);
+    expect(result.proposal).toMatchObject({
+      id: 'p-1',
+      state: 'confirmed',
+      summary: 'Set T-0086 chain to 2 entries',
+      outcome: 'ok',
+      decidedAt: expect.any(String),
+    });
+    const text = await readOnDisk(file);
+    expect(text).toContain("- '2026-11-02T09:00:00.000Z' proposal p-1 confirmed — Set T-0086 chain to 2 entries → ok");
+    // The pending card and its command block stay as history.
+    expect(text).toContain('proposal p-1 pending — Set T-0086 chain to 2 entries');
+  });
+
+  it('confirm on a return-to-standard setChain executes with an empty chain', async () => {
+    const { file } = await seedSession([RETURN_TO_STANDARD]);
+    service = boot();
+
+    const result = await service.confirm({ file, id: 'p-1' });
+
+    expect(result.ok).toBe(true);
+    expect(boardChains).toEqual([{ id: 'T-0086', chain: [], actor: ACTOR }]);
+    expect(result.proposal).toMatchObject({ state: 'confirmed', outcome: 'ok' });
+    expect(await readOnDisk(file)).toContain('proposal p-1 confirmed — Return T-0086 to the standard flow → ok');
+  });
+
+  it('a failed setChain execution leaves the proposal pending and writes no decision', async () => {
+    const { file, text } = await seedSession([SET_CHAIN]);
+    boardSetChainResult = { ok: false, error: 'the pipeline has no phase "design"' };
+    service = boot();
+
+    const result = await service.confirm({ file, id: 'p-1' });
+
+    expect(result).toEqual({ ok: false, error: 'the pipeline has no phase "design"' });
+    expect(await readOnDisk(file)).toBe(text);
+    expect(commits).toEqual([]);
+  });
+
   it('a failed promote execution leaves the proposal pending and writes no decision', async () => {
     const { file, text } = await seedSession([PROMOTE]);
     boardSetFormResult = { ok: false, error: 'A run is live on this ticket. Change the form when the run has ended.' };
@@ -663,6 +775,20 @@ describe('ChatService confirm and dismiss', () => {
     expect(text).toContain("'2026-11-02T09:00:00.000Z' proposal p-1 dismissed — Move T-0086 from build to review");
     expect(text).not.toContain('→');
     expect(commits).toEqual([{ root: vaultPath, paths: [file], message: `tickets: chat ${file}` }]);
+  });
+
+  it('dismiss on a setChain records the decision without executing anything', async () => {
+    const { file } = await seedSession([SET_CHAIN]);
+    service = boot();
+
+    const result = await service.dismiss({ file, id: 'p-1' });
+
+    expect(result.ok).toBe(true);
+    expect(boardChains).toEqual([]);
+    expect(result.proposal).toMatchObject({ state: 'dismissed', outcome: null });
+    const text = await readOnDisk(file);
+    expect(text).toContain('proposal p-1 dismissed — Set T-0086 chain to 2 entries');
+    expect(text).not.toContain('→');
   });
 
   it('refuses unknown and already-decided proposal ids', async () => {

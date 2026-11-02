@@ -199,6 +199,8 @@ export const NEED_KIND_LABELS: Readonly<Record<string, string>> = {
   'needs-decision': 'Needs decision',
   blocked: 'Blocked',
   report: 'Scout report',
+  /** E9 (concept §5.7): a chain gate with a Bescheid rule just completed. */
+  notify: 'Gate done',
 };
 
 /** The need card's kind chip; an unknown kind shows itself, never a guess. */

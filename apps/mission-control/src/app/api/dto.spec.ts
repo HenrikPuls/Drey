@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseActiveSession,
+  parseBoardCard,
   parseChatEvent,
   parseImprovements,
   parseNeeds,
@@ -132,6 +133,11 @@ describe('parseNeeds', () => {
   it('keeps the improvements kind (E6) with its empty ticket id', () => {
     const needs = parseNeeds([{ kind: 'improvements', ticketId: '', title: 'Pia', text: '3 improvement proposals wait for the 1:1' }]);
     expect(needs).toEqual([{ kind: 'improvements', ticketId: null, title: 'Pia', summary: '3 improvement proposals wait for the 1:1' }]);
+  });
+
+  it('keeps the notify kind (E9) — a Bescheid card, not a checkpoint', () => {
+    const needs = parseNeeds([{ kind: 'notify', ticketId: 'T-9', title: 'The build gate', text: 'verify completed' }]);
+    expect(needs).toEqual([{ kind: 'notify', ticketId: 'T-9', title: 'The build gate', summary: 'verify completed' }]);
   });
 
   it('accepts the E7 kinds, keyed and keyless, with their text untouched', () => {
@@ -448,6 +454,46 @@ describe('parseProposal', () => {
     });
     expect(parseProposal(null)).toBeNull();
   });
+
+  it('carries the setChain command payload (E9) and nothing on other kinds', () => {
+    expect(
+      parseProposal({
+        id: 'p-3',
+        summary: 'Set T-0042 chain to 2 entries',
+        state: 'pending',
+        at: 't1',
+        decidedAt: null,
+        outcome: null,
+        command: { kind: 'setChain', id: 'T-0042', chain: ['skip verify', 'notify build'] },
+      }),
+    ).toEqual({
+      id: 'p-3',
+      state: 'pending',
+      summary: 'Set T-0042 chain to 2 entries',
+      at: 't1',
+      decidedAt: null,
+      outcome: null,
+      chain: { id: 'T-0042', chain: ['skip verify', 'notify build'] },
+    });
+    expect(
+      parseProposal({ id: 'p-4', summary: 'Move T-1 from a to b', command: { kind: 'transition', id: 'T-1', from: 'a', to: 'b' } }),
+    ).toEqual({
+      id: 'p-4',
+      state: 'pending',
+      summary: 'Move T-1 from a to b',
+      at: '',
+      decidedAt: null,
+      outcome: null,
+    });
+    expect(parseProposal({ id: 'p-5', summary: 's', command: { kind: 'setChain', id: '', chain: [] } })).toEqual({
+      id: 'p-5',
+      state: 'pending',
+      summary: 's',
+      at: '',
+      decidedAt: null,
+      outcome: null,
+    });
+  });
 });
 
 describe('parseChatEvent', () => {
@@ -587,7 +633,38 @@ describe('parseTicketDetail', () => {
       },
       phases,
       phase: 'verify',
+      chain: [],
     });
+  });
+
+  it('maps the chain delta off the card meta tolerantly', () => {
+    const detail = parseTicketDetail(
+      {
+        ok: true,
+        card: {
+          id: 'T-1',
+          phase: 'build',
+          meta: {
+            chain: [
+              { kind: 'insert', phase: 'design', anchor: 'review', position: 'after', persona: 'pia', notify: true },
+              { kind: 'skip', phase: 'verify' },
+              { kind: 'notify', phase: 'build' },
+              { kind: 'mystery', phase: 'x' },
+              { kind: 'insert', phase: 'no-anchor' },
+              'junk',
+            ],
+          },
+        },
+        text: TICKET_TEXT,
+        revision: 'abc123',
+      },
+      phases,
+    );
+    expect(detail?.chain).toEqual([
+      { kind: 'insert', phase: 'design', anchor: 'review', position: 'after', persona: 'pia', notify: true },
+      { kind: 'skip', phase: 'verify', anchor: null, position: null, persona: null, notify: false },
+      { kind: 'notify', phase: 'build', anchor: null, position: null, persona: null, notify: false },
+    ]);
   });
 
   it('falls back to the meta title and an empty phase, and rides the given phases along', () => {
@@ -601,6 +678,39 @@ describe('parseTicketDetail', () => {
     expect(parseTicketDetail({ ok: true, card: { meta: {} }, text: 'x' }, phases)).toBeNull();
     expect(parseTicketDetail(null, phases)).toBeNull();
     expect(parseTicketDetail('ticket', phases)).toBeNull();
+  });
+});
+
+describe('parseBoardCard (E9)', () => {
+  const BOARD = {
+    columns: [
+      {
+        phase: { id: 'build', title: 'Build' },
+        tickets: [
+          {
+            id: 'T-1',
+            phase: 'build',
+            meta: { chain: [{ kind: 'skip', phase: 'verify' }] },
+          },
+        ],
+      },
+      { phase: { id: 'verify', title: 'Verify' }, tickets: [{ id: 'T-2', phase: 'verify', meta: {} }] },
+    ],
+  };
+
+  it('finds the card and reads its phase and chain delta', () => {
+    expect(parseBoardCard(BOARD, 'T-1')).toEqual({
+      phase: 'build',
+      chain: [{ kind: 'skip', phase: 'verify', anchor: null, position: null, persona: null, notify: false }],
+    });
+    expect(parseBoardCard(BOARD, 'T-2')).toEqual({ phase: 'verify', chain: [] });
+  });
+
+  it('returns null for an unknown id and never throws on junk', () => {
+    expect(parseBoardCard(BOARD, 'T-9')).toBeNull();
+    expect(parseBoardCard(null, 'T-1')).toBeNull();
+    expect(parseBoardCard('board', 'T-1')).toBeNull();
+    expect(parseBoardCard({ columns: [{ tickets: [null, 'x', { id: 'T-3' }] }] }, 'T-3')).toEqual({ phase: '', chain: [] });
   });
 });
 

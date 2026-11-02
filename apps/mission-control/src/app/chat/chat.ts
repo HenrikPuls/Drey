@@ -9,8 +9,15 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import type { ChatMessageView, SessionMeta } from '../api/dto';
 import { McState } from '../api/state';
+import { parseBoardCard, type ChatMessageView, type McChainEntry, type SessionMeta } from '../api/dto';
+import {
+  chainStepsOf,
+  parseChainEntryView,
+  type ChainEntryView,
+  type GatePhase,
+  type GateStep,
+} from '../ticket/ticket.model';
 
 // ---------------------------------------------------------------------------
 // Pure view logic (spec'd in chat.spec.ts)
@@ -31,6 +38,11 @@ export interface TimelineProposal {
   readonly at?: string;
   /** ISO stamp of the decision; null while pending (or when dropped). */
   readonly decidedAt?: string | null;
+  /**
+   * E9 (concept §5.7): the setChain command the card wraps — the
+   * before/after confirmation renders the proposed delta from it.
+   */
+  readonly chain?: { readonly id: string; readonly chain: readonly string[] };
 }
 
 /** The session slice the merged timeline renders. */
@@ -107,6 +119,38 @@ export function isTurnStreaming(
   }
   const last = messages[messages.length - 1];
   return last === undefined || last.role === 'owner';
+}
+
+// --- the setChain before/after card (E9, concept §5.7) ----------------------------
+
+/** The two merged gate chains a setChain proposal card renders. */
+export interface ChainCompare {
+  /** The merge with the ticket's current delta (the board card's `chain:`). */
+  readonly before: readonly GateStep[];
+  /** The merge with the proposed delta — the proposal command's entries. */
+  readonly after: readonly GateStep[];
+}
+
+/**
+ * The before/after the confirmation card shows before the owner commits
+ * a chain change: both merges render through the same tolerant merger
+ * the ticket screen's gate bar uses (standard flow + delta). Proposed
+ * entries the grammar does not read drop out — the desk refuses them the
+ * same way at execution, never a guess here.
+ */
+export function chainCompareOf(
+  phases: readonly GatePhase[],
+  currentPhaseId: string,
+  current: readonly McChainEntry[],
+  proposed: readonly string[],
+): ChainCompare {
+  const afterEntries = proposed
+    .map((entry) => parseChainEntryView(entry))
+    .filter((entry): entry is ChainEntryView => entry !== null);
+  return {
+    before: chainStepsOf(phases, currentPhaseId, current),
+    after: chainStepsOf(phases, currentPhaseId, afterEntries),
+  };
 }
 
 /** The composer grows with the draft, up to `max` rows. */
@@ -241,6 +285,23 @@ export class Chat {
   protected readonly timeline = computed<ChatTimelineItem[]>(() => {
     const active = this.active();
     return active === null ? [] : timelineOf(active);
+  });
+  /**
+   * The pipeline as the chain strips merge it — board order, the
+   * checkpoints marked (the raw board JSON carries the checkpoint ids).
+   */
+  private readonly chainPhases = computed<readonly GatePhase[]>(() => {
+    const raw = this.state.board() as { checkpoints?: readonly unknown[] } | null;
+    const marks = new Set(
+      Array.isArray(raw?.checkpoints)
+        ? raw.checkpoints.filter((mark): mark is string => typeof mark === 'string')
+        : [],
+    );
+    return this.state.work().groups.map((group) => ({
+      id: group.id,
+      title: group.title,
+      checkpoint: marks.has(group.id),
+    }));
   });
   /** The waiting ellipsis: a turn runs and no mission text has landed yet. */
   protected readonly streaming = computed(() => isTurnStreaming(this.messages(), this.sending()));
@@ -382,6 +443,24 @@ export class Chat {
 
   protected isCardBusy(id: string): boolean {
     return this.cardBusy()[id] === true;
+  }
+
+  // -- the setChain before/after card (E9) ---------------------------------------
+
+  /**
+   * The proposal's two merged gate chains — the ticket's current delta
+   * against the proposed one; null on any other command kind, so the
+   * card renders the summary line alone. A board without the card
+   * degrades to an empty "before" (the current phase unknown) — the
+   * asymmetric-tolerance rule: absence reads as "no detail", never a guess.
+   */
+  protected chainCompareFor(proposal: TimelineProposal): ChainCompare | null {
+    const chain = proposal.chain;
+    if (chain === undefined) {
+      return null;
+    }
+    const card = parseBoardCard(this.state.board(), chain.id);
+    return chainCompareOf(this.chainPhases(), card?.phase ?? '', card?.chain ?? [], chain.chain);
   }
 
   // -- template helpers -----------------------------------------------------

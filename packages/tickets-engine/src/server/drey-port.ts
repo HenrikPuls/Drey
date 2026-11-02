@@ -42,7 +42,7 @@ import { IMPROVEMENTS_THRESHOLD } from '../core/improvements';
 import { openStatusItems } from '../core/status-log';
 import type { StatusLine } from '../core/status-log';
 import { parseScoutReportSection } from '../core/scout';
-import { needsOf, reportNeedOf } from './needs';
+import { needsOf, notifyNeedsOf, reportNeedOf } from './needs';
 
 /** How many status-log needs (E7) one needs() pass appends at most. */
 const STATUS_NEEDS_CAP = 20;
@@ -171,6 +171,10 @@ export class DreyTicketsPort implements TicketsRemotePort {
     // E8: the scout tickets' report cards — a `form: scout` ticket whose
     // file carries a `## Report` waits for the owner's promotion decision.
     items.push(...(await this.reportNeeds(board)));
+    // E9: the Bescheid cards — a chain gate with a notify rule whose
+    // completion is still fresh. Pure over the snapshot (chain + entered
+    // stamps); no file reads, so no sweep of its own.
+    items.push(...notifyNeedsOf(board, Date.now()));
     return items;
   }
 

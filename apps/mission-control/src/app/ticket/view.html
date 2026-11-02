@@ -19,20 +19,42 @@
     </header>
 
     @if (steps().length > 0) {
-      <ol class="gate" aria-label="Pipeline">
-        @for (step of steps(); track step.id) {
-          <li
+      <button
+        type="button"
+        class="gate gate-tap"
+        [disabled]="readOnly()"
+        aria-label="Gate chain — tap to insert a gate, set a notify rule or return to the standard flow"
+        (click)="openSheet()">
+        @for (step of steps(); track $index) {
+          <span
             class="gate-step"
             [class.gate-past]="step.state === 'past'"
             [class.gate-current]="step.state === 'current'"
             [class.gate-future]="step.state === 'future'"
-            [attr.aria-current]="step.state === 'current' ? 'step' : null"
-          >
+            [class.gate-inserted]="step.inserted"
+            [class.gate-skipped]="step.skipped"
+            [attr.aria-current]="step.state === 'current' ? 'step' : null">
             <span class="gate-dot" aria-hidden="true">{{ step.checkpoint ? '◆' : '●' }}</span>
-            <span class="gate-title">{{ step.title }}</span>
-          </li>
+            <span class="gate-title">
+              @if (step.inserted) {
+                <span class="gate-add" aria-hidden="true">+</span>
+              }
+              {{ step.title }}
+            </span>
+            <span class="gate-badges">
+              @if (step.persona) {
+                <span class="gate-persona">{{ step.persona }}</span>
+              }
+              @if (step.notify) {
+                <span
+                  class="gate-notify"
+                  title="Tells you when this gate completes"
+                  [attr.aria-label]="'Notifies you when ' + step.title + ' completes'">◎</span>
+              }
+            </span>
+          </span>
         }
-      </ol>
+      </button>
     }
 
     @if (report(); as scoutReport) {
@@ -260,5 +282,73 @@
         }
       </pre>
     </div>
+  </div>
+}
+
+@if (sheetOpen()) {
+  <div class="sheet-backdrop" (click)="closeSheet()"></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-label="Gate chain">
+    <div class="sheet-head">
+      <h2 class="sheet-title">Gate chain</h2>
+      <button type="button" class="sheet-close" aria-label="Close" (click)="closeSheet()">×</button>
+    </div>
+    @if (hasDelta()) {
+      <p class="sheet-note">This ticket deviates from the standard flow — the bar shows what changes.</p>
+    } @else {
+      <p class="sheet-note">The pipeline's standard flow applies to this ticket.</p>
+    }
+
+    <section class="sheet-section" aria-label="Insert a gate">
+      <h3 class="sheet-label">Insert a gate</h3>
+      <div class="sheet-row">
+        <select class="sheet-select" aria-label="Phase to insert" [value]="insertPhase()" (change)="onInsertPhase($event)">
+          @for (phase of insertPhaseOptions(); track phase.id) {
+            <option [value]="phase.id">{{ phase.title }}</option>
+          }
+        </select>
+        <select
+          class="sheet-select sheet-select-narrow"
+          aria-label="Position against the anchor"
+          [value]="insertPosition()"
+          (change)="onInsertPosition($event)">
+          <option value="after">after</option>
+          <option value="before">before</option>
+        </select>
+        <select class="sheet-select" aria-label="Anchor gate" [value]="insertAnchor()" (change)="onInsertAnchor($event)">
+          @for (step of anchorOptions(); track step.id) {
+            <option [value]="step.id">{{ step.title }}</option>
+          }
+        </select>
+      </div>
+      <label class="sheet-check">
+        <input type="checkbox" [checked]="insertNotify()" (change)="onInsertNotify($event)" />
+        Tell me when it completes
+      </label>
+      <button type="button" class="btn btn-primary" [disabled]="insertDisabled()" (click)="prefillInsert()">
+        Prefill chat
+      </button>
+    </section>
+
+    <section class="sheet-section" aria-label="Set a notify rule">
+      <h3 class="sheet-label">Notify me</h3>
+      <div class="sheet-row">
+        <span class="sheet-static">when</span>
+        <select class="sheet-select" aria-label="Gate whose completion notifies" [value]="notifyGate()" (change)="onNotifyGate($event)">
+          @for (step of notifyOptions(); track step.id) {
+            <option [value]="step.id">{{ step.title }}</option>
+          }
+        </select>
+        <span class="sheet-static">completes</span>
+      </div>
+      <button type="button" class="btn btn-primary" [disabled]="notifyDisabled()" (click)="prefillNotify()">
+        Prefill chat
+      </button>
+    </section>
+
+    <section class="sheet-section" aria-label="Back to the standard flow">
+      <h3 class="sheet-label">Standard flow</h3>
+      <p class="sheet-note">Drop every deviation — the pipeline's standard flow applies again.</p>
+      <button type="button" class="btn" (click)="prefillStandard()">Prefill chat</button>
+    </section>
   </div>
 }

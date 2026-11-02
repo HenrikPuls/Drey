@@ -111,6 +111,19 @@
   border-radius: var(--mc-radius);
 }
 
+/* The bar is one big tap target: the gate sheet's only door (E9). */
+.gate-tap {
+  width: 100%;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.gate-tap:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
 .gate-step {
   flex: 1 0 auto;
   display: flex;
@@ -118,6 +131,37 @@
   align-items: center;
   gap: 3px;
   min-width: 56px;
+}
+
+.gate-add {
+  margin-right: 2px;
+  font-weight: 700;
+  color: var(--mc-accent);
+}
+
+.gate-badges {
+  display: flex;
+  gap: 3px;
+  min-height: 12px;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.gate-persona {
+  padding: 1px 4px;
+  color: var(--mc-dim);
+  border: 1px solid var(--mc-line);
+  border-radius: 999px;
+}
+
+.gate-notify {
+  color: var(--mc-accent);
+}
+
+/* A skipped gate strikes through; an inserted one already accents via .gate-add. */
+.gate-skipped .gate-title {
+  text-decoration: line-through;
+  opacity: 0.6;
 }
 
 .gate-dot {
@@ -647,4 +691,134 @@
   overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   line-height: 1.5;
+}
+
+/* The gate sheet (E9, concept §5.7): slides up over everything, the three
+   chain interventions stacked in the thumb's reach — each prefills the
+   chat's setChain command, nothing writes from here. */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgb(0 0 0 / 55%);
+}
+
+.sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 80dvh;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background: var(--mc-panel);
+  border: 1px solid var(--mc-line);
+  border-bottom: 0;
+  border-radius: 16px 16px 0 0;
+  animation: sheet-up 0.18s ease-out;
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0.6;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.sheet-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sheet-title {
+  flex: 1;
+  margin: 0;
+  font-size: 17px;
+}
+
+.sheet-close {
+  padding: 0 4px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--mc-dim);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.sheet-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--mc-dim);
+}
+
+.sheet-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mc-line);
+}
+
+.sheet-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mc-dim);
+}
+
+.sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sheet-select {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 8px;
+  font-size: 14px;
+  color: var(--mc-text);
+  background: var(--mc-panel-2);
+  border: 1px solid var(--mc-line);
+  border-radius: var(--mc-radius);
+}
+
+.sheet-select-narrow {
+  flex: 0 0 auto;
+}
+
+.sheet-static {
+  flex: none;
+  font-size: 13px;
+  color: var(--mc-dim);
+}
+
+.sheet-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--mc-text);
+}
+
+@media (min-width: 768px) {
+  .sheet {
+    left: 50%;
+    max-width: 480px;
+    translate: -50% 0;
+  }
 }

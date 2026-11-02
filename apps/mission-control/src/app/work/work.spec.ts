@@ -264,12 +264,14 @@ describe('card helpers', () => {
       'needs-decision': 'Needs decision',
       blocked: 'Blocked',
       report: 'Scout report',
+      notify: 'Gate done',
     });
     expect(needKindLabelOf('question')).toBe('Asks you');
     expect(needKindLabelOf('improvements')).toBe('Improvements');
     expect(needKindLabelOf('needs-decision')).toBe('Needs decision');
     expect(needKindLabelOf('blocked')).toBe('Blocked');
     expect(needKindLabelOf('report')).toBe('Scout report');
+    expect(needKindLabelOf('notify')).toBe('Gate done');
     expect(needKindLabelOf('mystery')).toBe('mystery');
   });
 

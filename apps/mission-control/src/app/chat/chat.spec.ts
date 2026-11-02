@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { type Signal, type WritableSignal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { ActiveSession, ChatMessageView, ChatStateView } from '../api/dto';
+import type { ActiveSession, ChatMessageView, ChatStateView, McChainEntry, WorkView } from '../api/dto';
 import type { McState } from '../api/state';
 import {
   Chat,
   MC_CHAT_STATE,
   TimelineProposal,
   TimelineSession,
+  chainCompareOf,
   composerRowsOf,
   errorOf,
   isTurnStreaming,
@@ -288,5 +289,131 @@ describe('Chat prefill adoption (E8)', () => {
     expect(vm.draft()).toBe('promote T-0004');
     expect(vm.viewMode()).toBe('session');
     expect(fake.chatPrefill()).toBeNull();
+  });
+});
+
+// -- chainCompareOf: the setChain before/after (E9) --------------------------------
+
+describe('chainCompareOf', () => {
+  const phases = [
+    { id: 'inbox', title: 'Inbox', checkpoint: false },
+    { id: 'build', title: 'Build', checkpoint: false },
+    { id: 'verify', title: 'Verify', checkpoint: true },
+    { id: 'done', title: 'Done', checkpoint: false },
+  ];
+  const skipVerify: McChainEntry = { kind: 'skip', phase: 'verify', anchor: null, position: null, persona: null, notify: false };
+
+  it('merges the current delta into "before" and the proposed entries into "after"', () => {
+    const compare = chainCompareOf(phases, 'build', [skipVerify], ['skip verify', 'notify build']);
+    expect(compare.before.map((step) => step.id)).toEqual(['inbox', 'build', 'verify', 'done']);
+    expect(compare.before.find((step) => step.id === 'verify')?.skipped).toBe(true);
+    expect(compare.before.find((step) => step.id === 'build')?.notify).toBe(false);
+    expect(compare.after.find((step) => step.id === 'build')?.notify).toBe(true);
+    expect(compare.after.find((step) => step.id === 'verify')?.skipped).toBe(true);
+  });
+
+  it('splices inserted gates into the after strip only', () => {
+    const compare = chainCompareOf(phases, 'build', [], ['insert design(pia, notify) after build']);
+    expect(compare.before.map((step) => step.id)).not.toContain('design');
+    const at = compare.after.findIndex((step) => step.id === 'design');
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(compare.after[at! - 1]?.id).toBe('build');
+    expect(compare.after[at!]).toMatchObject({ inserted: true, persona: 'pia', notify: true });
+  });
+
+  it('drops proposed entries the grammar does not read — never a guess', () => {
+    const compare = chainCompareOf(phases, 'build', [], ['notify build', 'make tea', '']);
+    expect(compare.after.map((step) => step.id)).toEqual(['inbox', 'build', 'verify', 'done']);
+    expect(compare.after.find((step) => step.id === 'build')?.notify).toBe(true);
+  });
+
+  it('marks nothing current when the ticket sits outside the chain', () => {
+    const compare = chainCompareOf(phases, 'limbo', [], ['notify build']);
+    expect(compare.after.every((step) => step.state === 'future')).toBe(true);
+  });
+});
+
+// -- the component's chainCompareFor (E9) ------------------------------------------
+
+describe('Chat setChain before/after card (E9)', () => {
+  interface ChainFakeState {
+    chatPrefill: WritableSignal<string | null>;
+    chat: Signal<ChatStateView>;
+    board: Signal<unknown>;
+    work: Signal<WorkView>;
+  }
+
+  const BOARD = {
+    checkpoints: ['verify'],
+    columns: [
+      { phase: { id: 'inbox', title: 'Inbox' }, tickets: [] },
+      {
+        phase: { id: 'build', title: 'Build' },
+        tickets: [{ id: 'T-1', phase: 'build', meta: { chain: [{ kind: 'skip', phase: 'verify' }] } }],
+      },
+      { phase: { id: 'verify', title: 'Verify' }, tickets: [] },
+      { phase: { id: 'done', title: 'Done' }, tickets: [] },
+    ],
+  };
+
+  const WORK: WorkView = {
+    groups: [
+      { id: 'inbox', title: 'Inbox', cards: [] },
+      { id: 'build', title: 'Build', cards: [] },
+      { id: 'verify', title: 'Verify', cards: [] },
+      { id: 'done', title: 'Done', cards: [] },
+    ],
+  };
+
+  function fakeState(board: unknown, work: WorkView): ChainFakeState {
+    return {
+      chatPrefill: signal(null),
+      chat: signal<ChatStateView>({ sessions: [], active: null }),
+      board: signal(board),
+      work: signal(work),
+    };
+  }
+
+  interface ChainSurface {
+    chainCompareFor(proposal: TimelineProposal): { before: readonly { id: string; skipped: boolean; notify: boolean }[]; after: readonly { id: string; skipped: boolean; notify: boolean }[] } | null;
+  }
+
+  function setup(fake: ChainFakeState): ChainSurface {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [{ provide: MC_CHAT_STATE, useValue: fake as unknown as McState }],
+    });
+    return TestBed.runInInjectionContext(() => new Chat()) as unknown as ChainSurface;
+  }
+
+  const setChain: TimelineProposal = {
+    id: 'p-1',
+    state: 'pending',
+    summary: 'Set T-1 chain to 1 entry',
+    outcome: null,
+    chain: { id: 'T-1', chain: ['notify build'] },
+  };
+
+  it('renders the ticket’s current delta as "before" and the proposal as "after"', () => {
+    const vm = setup(fakeState(BOARD, WORK));
+    const compare = vm.chainCompareFor(setChain);
+    expect(compare).not.toBeNull();
+    expect(compare!.before.find((step) => step.id === 'verify')?.skipped).toBe(true);
+    expect(compare!.before.find((step) => step.id === 'build')?.notify).toBe(false);
+    expect(compare!.after.find((step) => step.id === 'build')?.notify).toBe(true);
+  });
+
+  it('returns null for proposals that wrap no setChain command', () => {
+    const vm = setup(fakeState(BOARD, WORK));
+    const other: TimelineProposal = { id: 'p-2', state: 'pending', summary: 'Move T-1', outcome: null };
+    expect(vm.chainCompareFor(other)).toBeNull();
+  });
+
+  it('degrades to an all-future "before" when the board holds no such card', () => {
+    const vm = setup(fakeState({ checkpoints: [], columns: [] }, WORK));
+    const compare = vm.chainCompareFor(setChain);
+    expect(compare).not.toBeNull();
+    expect(compare!.before.every((step) => !step.skipped)).toBe(true);
+    expect(compare!.after.find((step) => step.id === 'build')?.notify).toBe(true);
   });
 });

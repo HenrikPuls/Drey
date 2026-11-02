@@ -10,6 +10,7 @@
  * engine and the validator are main-side, where the `yaml` package is
  * reachable; the plugin renderer bundle may not import packages).
  */
+import type { ChainEntry } from './chain';
 
 /** `T-` + at least four digits (`T-0042`). Grammar of ids AND file stems. */
 export const TICKET_ID_PATTERN = /^T-\d{4,}$/;
@@ -176,6 +177,12 @@ export interface TicketMeta {
    * untouched ticket stays the default everywhere.
    */
   readonly form?: TicketForm;
+  /**
+   * The chain delta (concept §5.7): the ticket's deviations from the
+   * pipeline's standard flow, parsed from the frontmatter's `chain:`
+   * list. Absent = the standard flow applies silently.
+   */
+  readonly chain?: readonly ChainEntry[];
   readonly priority: TicketPriority;
   readonly rank: number;
   readonly branch: string | null;

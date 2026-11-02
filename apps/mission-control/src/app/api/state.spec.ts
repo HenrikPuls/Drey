@@ -457,7 +457,7 @@ describe('chat', () => {
   });
 });
 
-describe('prefillChat (E8)', () => {
+describe('prefillChat (E8, E9)', () => {
   it('fills the one-shot prefill and switches to the chat tab', () => {
     const { desk } = makeDesk();
     const state = makeState(desk);
@@ -465,6 +465,21 @@ describe('prefillChat (E8)', () => {
     state.prefillChat('promote T-0004');
 
     expect(state.chatPrefill()).toBe('promote T-0004');
+    expect(state.tab()).toBe('chat');
+  });
+
+  it('closes an open ticket overlay — the prefill would sit under it (E9)', () => {
+    const { desk } = makeDesk();
+    desk.storage.setItem('drey.remote.token', 'tok');
+    const state = makeState(desk);
+
+    state.openTicket('T-1');
+    expect(state.ticketOpen()).toEqual({ id: 'T-1' });
+
+    state.prefillChat('Return T-0002 to the standard flow');
+
+    expect(state.ticketOpen()).toBeNull();
+    expect(state.chatPrefill()).toBe('Return T-0002 to the standard flow');
     expect(state.tab()).toBe('chat');
   });
 

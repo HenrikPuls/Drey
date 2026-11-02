@@ -50,9 +50,22 @@ export interface GatePhase {
 
 export type GateStepState = 'past' | 'current' | 'future';
 
-/** One gate-bar step: the phase plus where it sits against the current one. */
+/**
+ * One gate-bar step: the phase plus where it sits against the current
+ * one. The chain-delta flags (E9, concept §5.7) mark what the ticket's
+ * `chain:` delta does to this gate: an inserted revisit, a skipped
+ * bypass, the Bescheid rule standing on it, the pinned persona.
+ */
 export interface GateStep extends GatePhase {
   readonly state: GateStepState;
+  /** A delta-inserted gate (rendered as an addition). */
+  readonly inserted: boolean;
+  /** A delta-skipped gate (rendered struck; the ticket bypasses it). */
+  readonly skipped: boolean;
+  /** The Bescheid rule stands on this gate — its completion lands in "Needs you". */
+  readonly notify: boolean;
+  /** The persona pinned to this gate; null = the ladder decides. */
+  readonly persona: string | null;
 }
 
 /**
@@ -64,6 +77,179 @@ export function gateStepsOf(phases: readonly GatePhase[], currentPhaseId: string
   const at = phases.findIndex((phase) => phase.id === currentPhaseId);
   return phases.map((phase, index) => ({
     ...phase,
+    state: at < 0 ? 'future' : index < at ? 'past' : index === at ? 'current' : 'future',
+    inserted: false,
+    skipped: false,
+    notify: false,
+    persona: null,
+  }));
+}
+
+// --- the chain delta (E9, concept §5.7) -----------------------------------------
+
+/**
+ * One declarative `chain:` entry as this screen renders it — the local
+ * mirror of the engine's ChainEntry (contracts/chain.ts). The app never
+ * imports engine code; the grammar below is the same strict writer the
+ * desk parses (`insert design(pia, notify) after review`, `skip verify`,
+ * `notify build`) and the merge mirrors core/chain-delta.ts, tolerant by
+ * design: unknown phases render with their id as title, an unknown
+ * anchor appends.
+ */
+export interface ChainEntryView {
+  readonly kind: 'insert' | 'skip' | 'notify';
+  /** The pipeline phase the entry concerns. */
+  readonly phase: string;
+  /** The anchor phase an insert hangs on; null on skip/notify. */
+  readonly anchor: string | null;
+  /** The insert's position against its anchor; null on skip/notify. */
+  readonly position: 'after' | 'before' | null;
+  /** The persona pinned to an inserted gate; null = the ladder decides. */
+  readonly persona: string | null;
+  /** The Bescheid rule on an inserted gate. */
+  readonly notify: boolean;
+}
+
+const CHAIN_PHASE_ID = /^[a-z][a-z0-9-]*$/;
+const CHAIN_SKIP = /^skip ([a-z][a-z0-9-]*)$/;
+const CHAIN_NOTIFY = /^notify ([a-z][a-z0-9-]*)$/;
+const CHAIN_INSERT = /^insert ([a-z][a-z0-9-]*)(?:\(([^)]*)\))? (after|before) ([a-z][a-z0-9-]*)$/;
+
+/**
+ * Parses one `chain:` entry; null when the text is not the grammar —
+ * never a guess (the desk refuses the same text at execution, so the
+ * screen only offers parses it can render).
+ */
+export function parseChainEntryView(text: string): ChainEntryView | null {
+  const raw = text.trim();
+  const skip = CHAIN_SKIP.exec(raw);
+  if (skip !== null) {
+    return { kind: 'skip', phase: skip[1]!, anchor: null, position: null, persona: null, notify: false };
+  }
+  const notify = CHAIN_NOTIFY.exec(raw);
+  if (notify !== null) {
+    return { kind: 'notify', phase: notify[1]!, anchor: null, position: null, persona: null, notify: false };
+  }
+  const insert = CHAIN_INSERT.exec(raw);
+  if (insert !== null) {
+    const opts = insert[2] === undefined ? [] : insert[2].split(',').map((o) => o.trim()).filter((o) => o !== '');
+    let persona: string | null = null;
+    let notifyFlag = false;
+    for (const opt of opts) {
+      if (opt === 'notify') {
+        notifyFlag = true;
+      } else if (CHAIN_PHASE_ID.test(opt) && persona === null) {
+        persona = opt;
+      } else {
+        return null; // an unreadable option poisons the whole entry
+      }
+    }
+    return {
+      kind: 'insert',
+      phase: insert[1]!,
+      anchor: insert[4]!,
+      position: insert[3] === 'before' ? 'before' : 'after',
+      persona,
+      notify: notifyFlag,
+    };
+  }
+  return null;
+}
+
+/** Renders one entry in the canonical grammar — the round trip with `parseChainEntryView`. */
+export function renderChainEntryView(entry: ChainEntryView): string {
+  switch (entry.kind) {
+    case 'skip':
+      return `skip ${entry.phase}`;
+    case 'notify':
+      return `notify ${entry.phase}`;
+    case 'insert': {
+      const opts: string[] = [];
+      if (entry.persona !== null) {
+        opts.push(entry.persona);
+      }
+      if (entry.notify) {
+        opts.push('notify');
+      }
+      const paren = opts.length > 0 ? `(${opts.join(', ')})` : '';
+      return `insert ${entry.phase}${paren} ${entry.position ?? 'after'} ${entry.anchor ?? ''}`.trim();
+    }
+  }
+}
+
+/** The canonical strings of a whole delta — what the sheet prefills into the chat command. */
+export function renderChainEntryViews(entries: readonly ChainEntryView[]): string[] {
+  return entries.map((entry) => renderChainEntryView(entry));
+}
+
+/**
+ * The gate sheet's chat prefill (E9, concept §5.7): the one mutation
+ * path's "word" — a sentence the owner reviews and sends, the mission
+ * answers with the setChain proposal card. An empty delta is the
+ * standard-flow return, worded like the card's own summary sentence.
+ */
+export function chainPrefillOf(id: string, entries: readonly string[]): string {
+  return entries.length === 0 ? `Return ${id} to the standard flow` : `Set ${id} chain: ${entries.join('; ')}`;
+}
+
+/**
+ * Merges the standard flow with a ticket's delta into the concrete chain
+ * the gate bar renders (mirrors the engine's mergeChain, same tolerance):
+ * `skip` strikes its gate, `notify` raises the Bescheid flag, `insert`
+ * splices a revisit at its anchor — or appends when the anchor is not in
+ * the pipeline. The state fold marks the current gate; a ticket outside
+ * the merged chain renders everything `future`.
+ */
+export function chainStepsOf(
+  phases: readonly GatePhase[],
+  currentPhaseId: string,
+  entries: readonly ChainEntryView[],
+): GateStep[] {
+  const steps: GateStep[] = phases.map((phase) => ({
+    ...phase,
+    state: 'future',
+    inserted: false,
+    skipped: false,
+    notify: false,
+    persona: null,
+  }));
+  const indexOf = (phase: string): number => steps.findIndex((step) => step.id === phase);
+  for (const entry of entries) {
+    if (entry.kind === 'skip') {
+      const at = indexOf(entry.phase);
+      if (at >= 0) {
+        steps[at] = { ...steps[at]!, skipped: true };
+      }
+      continue;
+    }
+    if (entry.kind === 'notify') {
+      const at = indexOf(entry.phase);
+      if (at >= 0) {
+        steps[at] = { ...steps[at]!, notify: true };
+      }
+      continue;
+    }
+    const anchorAt = indexOf(entry.anchor ?? '');
+    const known = phases.find((phase) => phase.id === entry.phase);
+    const step: GateStep = {
+      id: entry.phase,
+      title: known?.title ?? entry.phase,
+      checkpoint: known?.checkpoint ?? false,
+      state: 'future',
+      inserted: true,
+      skipped: false,
+      notify: entry.notify,
+      persona: entry.persona,
+    };
+    if (anchorAt >= 0) {
+      steps.splice(entry.position === 'before' ? anchorAt : anchorAt + 1, 0, step);
+    } else {
+      steps.push(step);
+    }
+  }
+  const at = indexOf(currentPhaseId);
+  return steps.map((step, index) => ({
+    ...step,
     state: at < 0 ? 'future' : index < at ? 'past' : index === at ? 'current' : 'future',
   }));
 }
@@ -400,6 +586,11 @@ export interface TicketDoc {
   readonly phase: string;
   /** The pipeline's phases in order — the gate bar's steps. */
   readonly phases: readonly GatePhase[];
+  /**
+   * The ticket's chain delta (E9, concept §5.7) — the parsed `chain:`
+   * frontmatter entries; empty = the standard flow applies silently.
+   */
+  readonly chain: readonly ChainEntryView[];
 }
 
 /**
@@ -443,6 +634,12 @@ export interface TicketVm {
 
   /** The back arrow: the shell closes the screen. */
   onClose(): void;
+  /**
+   * The gate sheet's interventions (E9, concept §5.7): prefill the chat
+   * composer with the setChain command the sheet built — one mutation
+   * path, the owner reviews and sends, the proposal card confirms.
+   */
+  proposeChain(text: string): void;
   /** The raw edit's save; one commit on the desk, the refusal inline. */
   save(text: string): Promise<TicketSaveReply>;
   accept(): Promise<TicketActionReply>;
@@ -464,6 +661,7 @@ const EMPTY_TICKET: TicketVm = {
   readOnly: () => true,
   attachmentUrl: () => null,
   onClose: () => undefined,
+  proposeChain: () => undefined,
   save: () => Promise.resolve({ ok: false, error: 'Not connected to a desk.' }),
   accept: () => Promise.resolve({ ok: false, error: 'Not connected to a desk.' }),
   sendBack: () => Promise.resolve({ ok: false, error: 'Not connected to a desk.' }),

@@ -7,12 +7,17 @@
  * tickets sitting in a checkpoint column; oldest first within a kind.
  * The E8 report card is not derived here — it needs the ticket files'
  * `## Report` sections, so the port sweeps those (drey-port.ts) and packs
- * each item through `reportNeedOf` below.
+ * each item through `reportNeedOf` below. The E9 Bescheid card IS derived
+ * here — a notify rule fires purely on the snapshot: the merged chain
+ * (pipeline + the ticket's delta) plus the `entered-<phase>` stamps, no
+ * file reads (`notifyNeedsOf` below).
  */
+import { NOTIFY_WINDOW_MS } from '../contracts/chain';
 import type { NeedItem, NeedKind } from '../contracts/remote-protocol';
 import type { ScoutReport } from '../contracts/scout';
 import { scoutNeedText } from '../contracts/scout';
 import type { BoardSnapshot, TicketCard } from '../contracts/tickets';
+import { mergeChain } from '../core/chain-delta';
 import type { RunInfo, RunState } from '../fleet/protocol';
 
 const LIVE: ReadonlySet<RunState> = new Set(['starting', 'running', 'stopping', 'detached']);
@@ -118,6 +123,62 @@ export function reportNeedOf(card: TicketCard, phase: string, report: ScoutRepor
     since: report.writtenAt === '' ? null : report.writtenAt,
     report,
   };
+}
+
+/**
+ * E9 (concept §5.7): the Bescheid cards — one board sweep, every ticket's
+ * chain delta merged over the pipeline, every notify rule on the merged
+ * chain judged against the `entered-<phase>` stamps. A rule shows a card
+ * from its gate's completion (the stamp of the following gate — entering
+ * it IS the completion) until the ticket leaves the following gate or
+ * `NOTIFY_WINDOW_MS` runs out, whichever comes first; a rule on the
+ * chain's last gate has no observable completion and never fires. Pure —
+ * the port appends the fold after its file-reading sweeps.
+ */
+export function notifyNeedsOf(board: BoardSnapshot, nowMs: number): readonly NeedItem[] {
+  const phases = board.pipeline.map((phase) => ({ id: phase.id, title: phase.title }));
+  const items: NeedItem[] = [];
+  for (const column of board.columns) {
+    for (const card of column.tickets) {
+      const delta = card.meta.chain;
+      if (delta === undefined || delta.length === 0) {
+        continue;
+      }
+      const merged = mergeChain(phases, card.phase, delta);
+      for (let at = 0; at < merged.length; at++) {
+        const step = merged[at]!;
+        if (!step.notify) {
+          continue;
+        }
+        const following = merged[at + 1];
+        if (following === undefined) {
+          continue; // the chain's last gate completes outside the chain
+        }
+        const since = card.meta.entered[following.phase] ?? null;
+        if (since === null) {
+          continue; // the gate has not completed yet
+        }
+        const after = merged[at + 2];
+        if (after !== undefined && card.meta.entered[after.phase] !== undefined) {
+          continue; // the ticket left the following gate — the news is stale
+        }
+        const completedAt = Date.parse(since);
+        if (Number.isFinite(completedAt) && completedAt + NOTIFY_WINDOW_MS <= nowMs) {
+          continue; // the window ran out
+        }
+        items.push({
+          kind: 'notify',
+          ticketId: card.id,
+          title: titleOf(card),
+          phase: column.phase.id,
+          runId: null,
+          text: `the ${step.title} gate completed`,
+          since,
+        });
+      }
+    }
+  }
+  return items;
 }
 
 function titleOf(card: TicketCard): string {

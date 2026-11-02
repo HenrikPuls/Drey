@@ -145,6 +145,45 @@ ticket: plan, worktree, gate — and this guide's recipe applies from
 then on. The `## Report` section stays in the file as history; the
 promotion commit never deletes it.
 
+## The chain delta (E9, concept §5.7)
+
+The pipeline's standard flow is team configuration
+(`_meta/pipeline.md`) and applies silently; a ticket stores only
+its **delta** in the frontmatter's `chain:` list — one declarative
+entry per item:
+
+- `insert <phase>[(<persona>[, notify] | notify)] after|before
+  <anchor>` — add a gate at the anchor phase (a standard-flow phase
+  may be revisited this way, at most once);
+- `skip <phase>` — bypass a gate for this ticket;
+- `notify <phase>` — the Bescheid rule: a card lands in "Needs
+  you" when the gate completes.
+
+The engine merges standard + delta into the ticket's concrete
+chain — the gate bar, the notify cards and the chat's
+before/after confirmation render from that merge; the ticket file
+remains the only source of truth. Changes run through the Mission
+Control chat as a `setChain` command ("set T-0086's chain to
+insert design after review, skip verify") — a proposal card the
+owner confirms, like every chat mutation (concept §6: the chat
+never writes on its own).
+
+The board half is a header rewrite, not a move — one frontmatter
+patch, one Log line `- '<UTC>' <actor> — chain 2 entries` (or
+`chain standard` when the delta goes away and the key is removed),
+exactly one commit `tickets: <id> chain <n entries|standard>`. It
+refuses while a run is live on the ticket, and it is a no-op
+success when the file already carries the delta. Setting the delta
+by hand is the same edit — frontmatter plus the Log line; the
+machine shape above is what the board service writes.
+
+The write guard refuses, with the reason, when the delta: names a
+phase or anchor the pipeline does not contain; anchors a phase on
+its own insert; inserts a phase twice; skips and inserts the same
+phase ("strike the gate or revisit it, not both"); or skips,
+anchors on, or notifies a current or past gate — the delta only
+reaches future gates.
+
 ## What is — and is not — automated
 
 - Whether a column runs itself is the **pipeline's call**

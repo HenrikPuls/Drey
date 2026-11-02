@@ -213,6 +213,7 @@ before the machine takes over; must end with the acceptance criteria.
 | `priority` | `urgent \| high \| normal \| low` | Required. Default `normal`; machine writers always write it. |
 | `track` | `auto \| shape` | Optional (req-75 W1b, ADR-0087 decision 2). The ticket's triage track: `auto` runs on its own, `shape` goes through the plan-mode dialog with the owner. Absent (or any other value — a warning) reads as not triaged; set from the Work panel's row menu (Track ›) until W5c/W6 fill it from triage. |
 | `form` | `ship \| scout` | Optional (concept §5.6, E8). The ticket's form: `ship` (the default — an absent key reads as ship) is the known way, plan → worktree → gate → move. `scout` is exploration only: a scout run reads repo/history/data and writes the ticket's `## Report` section — no worktree, no diff, no gate, no move; the report surfaces as a card in "Needs you" and the owner promotes the ticket to ship from there. Any other value warns (`form must be ship or scout — read as ship`) and reads as ship. See [The scout form](#the-scout-form-e8-concept-56). |
+| `chain` | list of strings | Optional (concept §5.7, E9). The ticket's **delta** against the pipeline's standard flow — the standard flow itself is team configuration in `_meta/pipeline.md` and applies to every ticket silently; the ticket stores only the deviations, one declarative entry per item in the strict grammar: `insert <phase>[(<persona>[, notify] \| notify)] after\|before <anchor>` (add a gate at the anchor — a standard-flow phase may be revisited this way, at most once), `skip <phase>` (bypass a gate), `notify <phase>` (the Bescheid rule: a card lands in "Needs you" when the gate completes). Absent (or empty) reads as the standard flow. An entry outside the grammar warns and drops (`chain entry "<raw>" is not readable — expected e.g. "insert design after review"`). See [The chain delta](#the-chain-delta-e9-concept-57). |
 | `rank` | integer 0-999999 | Default `5000`. Fine ordering inside derived order. |
 | `branch` | `t/<id>` | Written by machine writers; validated against the rule; rule wins. |
 | `entered-<phase>` | UTC timestamp | One per phase ever entered; holds the **most recent** entry time into that phase (first entry lives in git history). `entered-inbox` exists from creation. |
@@ -425,6 +426,67 @@ back to ship by hand is the same header edit; the machine shape
 above is what the board writes. From its next normal run the
 promoted ticket is an ordinary ship ticket: plan, worktree, gate.
 The `## Report` section stays in the file as history.
+
+### The chain delta (E9, concept §5.7)
+
+The pipeline's standard flow is **team configuration**
+(`_meta/pipeline.md`) and applies to every ticket **silently**. A
+ticket stores only its **delta** — declarative entries in the
+frontmatter's `chain:` list:
+
+```markdown
+chain:
+  - insert design(pia, notify) after review
+  - skip verify
+```
+
+The engine merges standard + delta into the ticket's concrete
+chain, from which the gate bar, the notify cards and the chat's
+before/after confirmation render. No second source of truth, no UI
+state — the chain is data in the ticket. The merge is read-tolerant
+(an unknown phase renders with its id as title, an unknown anchor
+appends at the end); **writes** are guarded semantically.
+
+The grammar, one entry per list item:
+
+- `insert <phase>[(<persona>[, notify] | notify)] after|before
+  <anchor>` — adds a gate at the anchor phase. A phase the standard
+  flow already contains may be inserted — a **front-loaded revisit**
+  — at most once per phase. The persona pins who works the gate
+  (absent = the ladder decides); `notify` is the Bescheid rule (see
+  below).
+- `skip <phase>` — the ticket bypasses the gate (rendered struck).
+- `notify <phase>` — the **Bescheid rule** on a standard gate: a
+  card lands in "Needs you" when the gate completes. The card shows
+  from the gate's completion until the ticket leaves the following
+  gate or the freshness window (`NOTIFY_WINDOW_MS`, 24 h) runs out,
+  whichever comes first.
+
+Phase ids are the pipeline's id grammar (`[a-z][a-z0-9-]*`),
+persona names bare lowercase words.
+
+**The write guard** (`validateChain`,
+`packages/tickets-engine/src/core/chain-delta.ts`) runs where a
+write is decided — the board service's `setChain`, the chat
+command's execution — never on render. It refuses, with the reason:
+a phase or anchor the pipeline does not contain; a phase anchored
+on its own insert; a phase inserted twice; a phase both skipped and
+inserted ("strike the gate or revisit it, not both"); a skip,
+anchor or notify of the current or a past gate (the delta only
+reaches future gates).
+
+**The machine write** is the chat's `setChain` command (concept §6:
+the change runs through the chat as a command **with confirmation**
+— the proposal card shows the chain before/after and executes only
+on the owner's confirm). The board half is one header rewrite
+(`patchChain`), one Log line — `chain <n> entries`, or
+`chain standard` when the delta goes away (the key is removed) —
+and exactly one commit `tickets: <id> chain <n entries|standard>`.
+It refuses while a run is live on the ticket and is a no-op success
+when the file already carries the delta — the mirror of `track` in
+every way. Setting the delta by hand is the same edit — frontmatter
+plus the Log line; the machine shape above is what the board
+service writes.
 
 ### The ticket status log (E7)
 
@@ -837,7 +899,8 @@ line is skipped, never guessed — the asymmetric-tolerance rule):
   in an indented fenced block marked `json` — a **proposal card**:
   `<summary>` is the human sentence the card shows, the block is the
   typed `ChatCommand` (`createTicket` / `transition` / `setPriority` /
-  `promote` — the union in `packages/tickets-engine/src/contracts/chat.ts`
+  `promote` / `setChain` — the union in
+  `packages/tickets-engine/src/contracts/chat.ts`
   is the entire write surface). Ids mint per session (`p-1`, `p-2`, …).
 - `- '<UTC>' proposal p-<n> confirmed|dismissed — <summary>` — the
   owner's decision. The summary repeats the pending card's; a
@@ -904,6 +967,12 @@ column; the board still renders), the fleet runner before every action
 11. `form` (E8): when present, `ship` or `scout` — any other value
     warns (`form must be ship or scout — read as ship`); the key is
     preserved on rewrite like every unknown field.
+12. `chain` (E9): each entry parses in the delta grammar (`insert …
+    after|before …`, `skip …`, `notify …`) — an unreadable entry
+    warns and drops, never guessed; the semantic guard (unknown
+    phases, past-gate references, skip/insert conflicts) runs where a
+    write is decided, not on render (see
+    [The chain delta](#the-chain-delta-e9-concept-57)).
 
 A validation issue never blocks rendering and never blocks a human
 transition (a warning shows); it blocks an agent action.
