@@ -728,9 +728,7 @@ describe('ticket screen', () => {
     await state.loadDiff();
     expect(state.diff()).toBeNull();
     expect(desk.callsOf('GET', '/api/tickets/T-1/diff').length).toBe(0);
-  });
-
-  it('attachments memoize per name and closeTicket revokes them', async () => {
+  });  it('attachments memoize per name and closeTicket revokes them', async () => {
     const desk = new FakeDesk();
     const created: string[] = [];
     const revoked: string[] = [];
@@ -783,6 +781,63 @@ describe('ticket screen', () => {
 
     expect(await state.ensureAttachment('missing.png')).toBeNull();
     expect(state.attachmentUrl('missing.png')).toBeNull();
+  });
+});
+
+describe('fleet answers (req-64)', () => {
+  /** Boots the state with the question needs the runs wait on. */
+  const makeWaiting = async (needs: unknown) => {
+    const { desk } = makeDesk();
+    desk.on('GET', '/api/needs', () => needs);
+    const state = makeState(desk);
+    desk.storage.setItem('drey.remote.token', 'tok');
+    await state.boot(null);
+    const count = Array.isArray(needs) ? needs.length : 0;
+    await waitFor(() => expect(state.needs()).toHaveLength(count));
+    return { desk, state };
+  };
+
+  it('posts the answers record keyed off the need’s question form', async () => {
+    const { desk, state } = await makeWaiting([
+      {
+        kind: 'question',
+        ticketId: 'T-1',
+        title: 'One',
+        text: 'QUESTION: Which way?',
+        runId: 'r-12',
+        questions: [{ key: 'q0', header: null, question: 'Which way?', options: [{ label: 'Left' }, { label: 'Right' }], multiple: false }],
+      },
+    ]);
+    desk.on('POST', '/api/runs/r-12/answer', () => ({ ok: true }));
+
+    const reply = await state.answerRun('r-12', '  Right  ');
+
+    expect(reply).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/runs/r-12/answer')[0]!.body).toEqual({ answers: { q0: 'Right' } });
+  });
+
+  it('refuses an empty answer locally and surfaces the desk’s refusal', async () => {
+    const { desk, state } = await makeWaiting([]);
+    const silent = await state.answerRun('r-12', '   ');
+    expect(silent).toEqual({ ok: false, error: 'the answer is empty' });
+    expect(desk.callsOf('POST', '/api/runs/r-12/answer').length).toBe(0);
+
+    desk.on('POST', '/api/runs/r-12/answer', () => ({ ok: false, error: 'the worker took no answer' }));
+    expect(await state.answerRun('r-12', 'Left')).toEqual({ ok: false, error: 'the worker took no answer' });
+  });
+
+  it("a QUESTION: turn carries no form: the desk's refusal reroutes the wording through the steer route", async () => {
+    const { desk, state } = await makeWaiting([
+      { kind: 'question', ticketId: 'T-1', title: 'One', text: 'QUESTION: Which way?', runId: 'r-13' },
+    ]);
+    desk.on('POST', '/api/runs/r-13/answer', () => ({ ok: false, error: 'run r-13 asks no question' }));
+    desk.on('POST', '/api/runs/r-13/send', () => ({ ok: true }));
+
+    const reply = await state.answerRun('r-13', '2. Right');
+
+    expect(reply).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/runs/r-13/answer').length).toBe(1);
+    expect(desk.callsOf('POST', '/api/runs/r-13/send')[0]!.body).toEqual({ text: '2. Right' });
   });
 });
 

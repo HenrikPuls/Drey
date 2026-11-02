@@ -100,6 +100,59 @@ export interface ScoutReportView {
   readonly decisions: readonly ScoutDecisionView[];
 }
 
+/**
+ * One option of a worker's question form (the engine's WaitQuestion
+ * option, fleet/protocol.ts — mirrored here tolerantly): the choice's
+ * label and its description line; absent description reads as null.
+ */
+export interface WaitOptionView {
+  readonly label: string;
+  readonly description: string | null;
+}
+
+/**
+ * One question of a worker's question form (the engine's WaitQuestion,
+ * fleet/protocol.ts — mirrored here tolerantly): the form field the
+ * answer goes to (`q0`, `q1`, …), the short header, the question text,
+ * the choices (the owner may answer in their own words too) and whether
+ * several may be picked.
+ */
+export interface WaitQuestionView {
+  readonly key: string;
+  readonly header: string | null;
+  readonly question: string;
+  readonly options: readonly WaitOptionView[];
+  readonly multiple: boolean;
+}
+
+/** One numbered option of a shaped `QUESTION:` turn (question-shape.ts). */
+export interface ShapedOptionView {
+  readonly n: number;
+  readonly label: string;
+  /** What the option concretely does; null when the line named none. */
+  readonly consequence: string | null;
+}
+
+/**
+ * A `QUESTION:` turn's parsed fixed shape (the engine's ShapedQuestion,
+ * contracts/question-shape.ts, req-75 W2 — mirrored here tolerantly):
+ * the question, its context lines and the 2–4 numbered options with the
+ * recommended one's `n`.
+ */
+export interface ShapedQuestionView {
+  readonly question: string;
+  /** The "Ticket:" line. */
+  readonly context: string | null;
+  /** The "Where:" line. */
+  readonly where: string | null;
+  /** The "Why:" line. */
+  readonly why: string | null;
+  readonly options: readonly ShapedOptionView[];
+  /** The recommended option's `n`; null without a valid recommendation. */
+  readonly recommended: number | null;
+  readonly recommendationWhy: string | null;
+}
+
 /** One thing that waits on the owner, as the Needs-you list renders it. */
 export interface NeedView {
   readonly kind: string;
@@ -108,6 +161,15 @@ export interface NeedView {
   readonly summary: string;
   /** E8: the parsed scout report; present exactly on a 'report' need. */
   readonly report?: ScoutReportView;
+  /**
+   * The run the need concerns (the engine's NeedItem.runId); null for a
+   * checkpoint/report. The option card's answer addresses it.
+   */
+  readonly runId?: string | null;
+  /** A question form's fields (OpenCode's `question` tool); absent otherwise. */
+  readonly questions?: readonly WaitQuestionView[];
+  /** A `QUESTION:` turn's parsed fixed shape (req-75 W2); absent otherwise. */
+  readonly shaped?: ShapedQuestionView;
 }
 
 // --- Chain delta (E9, concept §5.7) ----------------------------------------------
@@ -637,6 +699,78 @@ function scoutReportOf(raw: unknown): ScoutReportView | undefined {
   };
 }
 
+/**
+ * A question form's field, tolerantly mapped (the engine's WaitQuestion);
+ * null when the wire sent nothing usable — the option card degrades to
+ * the plain question text then.
+ */
+function waitQuestionOf(raw: unknown): WaitQuestionView | null {
+  const item = rec(raw);
+  if (item === null) {
+    return null;
+  }
+  const key = str(item['key']);
+  const question = str(item['question']);
+  if (key === '' || question === '') {
+    return null;
+  }
+  return {
+    key,
+    header: strOrNull(item['header']),
+    question,
+    options: arr(item['options'])
+      .map((option) => {
+        const body = rec(option);
+        return body === null ? null : { label: str(body['label']), description: strOrNull(body['description']) };
+      })
+      .filter((option): option is WaitOptionView => option !== null && option.label !== ''),
+    multiple: item['multiple'] === true,
+  };
+}
+
+/** One numbered option of a shaped question; null when the wire sent no label. */
+function shapedOptionOf(raw: unknown): ShapedOptionView | null {
+  const item = rec(raw);
+  if (item === null) {
+    return null;
+  }
+  const label = str(item['label']);
+  if (label === '') {
+    return null;
+  }
+  const n = typeof item['n'] === 'number' && Number.isFinite(item['n']) ? item['n'] : 0;
+  return { n, label, consequence: strOrNull(item['consequence']) };
+}
+
+/**
+ * A `QUESTION:` turn's fixed shape, tolerantly mapped (the engine's
+ * ShapedQuestion); null when the wire sent nothing usable. Options the
+ * shape cannot read drop out; an unreadable recommendation reads as none.
+ */
+function shapedQuestionOf(raw: unknown): ShapedQuestionView | null {
+  const item = rec(raw);
+  if (item === null) {
+    return null;
+  }
+  const question = str(item['question']);
+  if (question === '') {
+    return null;
+  }
+  const recommended =
+    typeof item['recommended'] === 'number' && Number.isFinite(item['recommended']) ? item['recommended'] : null;
+  return {
+    question,
+    context: strOrNull(item['context']),
+    where: strOrNull(item['where']),
+    why: strOrNull(item['why']),
+    options: arr(item['options'])
+      .map(shapedOptionOf)
+      .filter((option): option is ShapedOptionView => option !== null),
+    recommended,
+    recommendationWhy: strOrNull(item['recommendationWhy']),
+  };
+}
+
 /** The needs JSON (`[{kind, ticketId?, title, summary}]`); junk yields no needs. */
 export function parseNeeds(json: unknown): NeedView[] {
   const NEED_KINDS = [
@@ -660,12 +794,18 @@ export function parseNeeds(json: unknown): NeedView[] {
     }
     const kind = str(item['kind']);
     const report = kind === 'report' ? scoutReportOf(item['report']) : undefined;
+    const questions = kind === 'question' ? arr(item['questions']).map(waitQuestionOf).filter((q): q is WaitQuestionView => q !== null) : [];
+    const shaped = kind === 'question' ? shapedQuestionOf(item['shaped']) : null;
+    const runId = strOrNull(item['runId']);
     const need: NeedView = {
       kind: NEED_KINDS.includes(kind) ? kind : 'checkpoint',
       ticketId: strOrNull(item['ticketId']),
       title: str(item['title'], str(item['ticketId'], 'untitled')),
       summary: str(item['summary'], str(item['text'])),
       ...(report !== undefined ? { report } : {}),
+      ...(runId !== null ? { runId } : {}),
+      ...(questions.length > 0 ? { questions } : {}),
+      ...(shaped !== null ? { shaped } : {}),
     };
     needs.push(need);
   }

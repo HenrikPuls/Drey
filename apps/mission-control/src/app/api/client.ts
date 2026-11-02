@@ -2,9 +2,10 @@
  * Mission Control's connection to the desk (E5b, extended E5c): JSON calls
  * with the device token, the live event stream read with `fetch` (an
  * EventSource cannot send the bearer header), reconnecting with backoff
- * and at once when the document returns to visibility, plus the ticket
+ * and at once when the document returns to visibility, the ticket
  * screen's reads — attachment bytes as object URLs and best-effort raw
- * JSON GETs. Mirrors the proven phone client
+ * JSON GETs — and the chat composer's uploads (`POST /api/attachments`).
+ * Mirrors the proven phone client
  * (`plugins/tickets/remote/api.ts`, req-66).
  *
  * The fetch, the token storage and the object-URL factory are injected
@@ -52,6 +53,20 @@ export interface McBootHints {
 const PAIR_HASH_RE = /^#pair=([A-Za-z0-9-]+)$/;
 const TOKEN_HASH_RE = /^#token=([A-Za-z0-9._~+-]+={0,2})$/;
 
+/** The largest upload the desk accepts decoded — its own cap, mirrored for a fail-fast refusal. */
+const MAX_UPLOAD_BYTES = 6 * 1024 * 1024;
+
+/** Standard base64 of raw bytes — chunked so a wide file does not blow the call stack. */
+function base64Of(bytes: ArrayBuffer): string {
+  const view = new Uint8Array(bytes);
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let at = 0; at < view.length; at += CHUNK) {
+    binary += String.fromCharCode(...view.subarray(at, at + CHUNK));
+  }
+  return btoa(binary);
+}
+
 /** Reads one location hash for the boot hints; an empty hash yields none. */
 export function bootHintsFromHash(hash: string): McBootHints {
   return {
@@ -87,6 +102,15 @@ export interface McEventHandlers {
 }
 
 export type PairReply = { readonly ok: true; readonly token: string } | { readonly ok: false; readonly error: string };
+
+/**
+ * The attachment-upload reply (`uploadAttachments`): on success the paths
+ * the desk stored (each like `tickets/attachments/img-…png`), else the
+ * first refusal's sentence.
+ */
+export type McUploadReply =
+  | { readonly ok: true; readonly stored: readonly string[] }
+  | { readonly ok: false; readonly error: string };
 
 const defaultStorage = (): McStorage | null => {
   try {
@@ -242,6 +266,41 @@ export class McClient {
   /** Revokes one object URL `attachment` handed out. */
   release(url: string): void {
     this.revokeObjectUrlFn(url);
+  }
+
+  /**
+   * Uploads picked files to `POST /api/attachments`, one JSON request per
+   * file with `{ dataBase64 }` — the body the desk's `parseAttachment`
+   * reads (no multipart): strict base64 of the raw bytes; the extension
+   * is derived server-side from what the bytes are, never from a name the
+   * client sent. The desk stores each image under `tickets/attachments/`
+   * and answers `{ ok, file }`; the first refusal — a non-image, the 6 MB
+   * cap, a dead desk — stops the run and surfaces its error.
+   */
+  async uploadAttachments(files: File[]): Promise<McUploadReply> {
+    const stored: string[] = [];
+    for (const file of files) {
+      if (file.size > MAX_UPLOAD_BYTES) {
+        return { ok: false, error: 'the image is larger than 6 MB' };
+      }
+      let body: Record<string, unknown>;
+      try {
+        body = await this.request<Record<string, unknown>>('POST', '/api/attachments', {
+          dataBase64: base64Of(await file.arrayBuffer()),
+        });
+      } catch (error) {
+        return {
+          ok: false,
+          error: error instanceof Error && error.message.trim() !== '' ? error.message : 'the desk refused the upload',
+        };
+      }
+      if (body['ok'] === true && typeof body['file'] === 'string') {
+        stored.push(body['file']);
+        continue;
+      }
+      return { ok: false, error: typeof body['error'] === 'string' ? body['error'] : 'the desk stored no attachment' };
+    }
+    return { ok: true, stored };
   }
 
   /**

@@ -368,6 +368,7 @@ button:focus-visible {
 
 .qcard {
   border-left: 2px solid var(--warn);
+  cursor: pointer; /* the prototype's teaser taps through to the ticket */
 }
 
 .qk {
@@ -444,6 +445,115 @@ button:focus-visible {
 
 .need-promote {
   margin-top: 10px;
+}
+
+/* the question option card ('Auswahl nie = Aktion'): tapping marks only —
+   sending takes the send row's button */
+
+.qcard-question {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  color: var(--text-2);
+  white-space: pre-wrap;
+}
+
+.opts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.opt:hover {
+  border-color: var(--accent);
+}
+
+.opt:disabled {
+  cursor: default;
+}
+
+.opt.sel {
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+  border-color: var(--ok);
+}
+
+.opt .dot {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--text-3);
+  border-radius: 50%;
+}
+
+.opt.sel .dot {
+  border-color: var(--ok);
+}
+
+.opt.sel .dot::after {
+  width: 6px;
+  height: 6px;
+  background: var(--ok);
+  border-radius: 50%;
+  content: '';
+}
+
+.opt-body {
+  min-width: 0;
+}
+
+.opt small {
+  display: block;
+  margin-top: 1px;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.opt .rec {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ok);
+}
+
+.qcard-send {
+  margin-top: 10px;
+}
+
+.qcard-done {
+  margin: 10px 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ok);
+}
+
+.need-inline-error {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--danger);
 }
 
 /* ---------- bottom sheet: slides up over everything, handle + dim ---------- */

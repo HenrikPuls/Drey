@@ -163,6 +163,45 @@ export function composerRowsOf(text: string, max = 5): number {
   return Math.min(Math.max(lines, 1), max);
 }
 
+// --- the attach sheet (concept §6, the composer's attach slot) -----------------
+
+/** One picked file's chip above the composer: the name and its thumbnail URL (null = none). */
+export interface AttachmentChip {
+  readonly name: string;
+  readonly url: string | null;
+}
+
+/** The file path's last segment — `tickets/attachments/img-….png` → `img-….png`. */
+export function basenameOf(path: string): string {
+  const at = path.lastIndexOf('/');
+  return at === -1 ? path : path.slice(at + 1);
+}
+
+/**
+ * The upload-success toast: one attachment or several, with the names the
+ * desk minted. The `warn` tint is deliberate — the files are laid down
+ * under `tickets/attachments/`, nothing was sent into the session.
+ */
+export function attachmentToastOf(stored: readonly string[]): { message: string; kind: 'warn' } {
+  const names = stored.map(basenameOf).join(', ');
+  return {
+    message: stored.length === 1 ? `Anhang abgelegt: ${names}` : `${stored.length} Anhänge abgelegt: ${names}`,
+    kind: 'warn',
+  };
+}
+
+/** An object URL for an image file's thumbnail; null for non-images or where the platform has none. */
+export function thumbnailUrlOf(file: File): string | null {
+  if (!file.type.startsWith('image/')) {
+    return null;
+  }
+  try {
+    return typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Relative age words for the session rows: `now` under 45 s, then minutes,
  * then hours; `yesterday` for the previous calendar day, else `<n> d`.
@@ -393,7 +432,15 @@ interface SheetEntry {
  * and priority lines) with Verwerfen/Bestätigen and the toast feedback,
  * decided ones as mint done-cards with the engine's outcome line, and the
  * composer below: Enter sends, Shift+Enter newline, the circle send idles
- * while the mission's turn runs, the attach slot is a disabled placeholder.
+ * while the mission's turn runs, and the attach circle opens the 'Anhang'
+ * sheet — 'Foto oder Kamera' and 'Datei wählen' — whose picks upload
+ * through the state's `uploadAttachment` (a host without it keeps the
+ * button disabled). Success lays chips (name, thumbnail) above the
+ * composer until the next send and fires the warn toast naming what the
+ * desk stored under `tickets/attachments/` — a failure shows inline at
+ * the composer plus an error toast. The upload is display-only: nothing
+ * rides the message; the desk links attachments where its ticket-upload
+ * context does.
  *
  * The sessions sheet lists every session file as a row (title, mono age,
  * pending badge; the open one marked cur + `offen`). Opening a session
@@ -443,6 +490,12 @@ export class Chat {
   private readonly dimmedCards = signal<Readonly<Record<string, boolean>>>({});
   /** Whether the sessions sheet is up. */
   protected readonly sheetOpen = signal(false);
+  /** Whether the attach sheet is up. */
+  protected readonly attachSheetOpen = signal(false);
+  /** True while the picked files are still on their way to the desk. */
+  protected readonly uploading = signal(false);
+  /** The laid-down files' chips above the composer — until the next send. */
+  protected readonly attachments = signal<readonly AttachmentChip[]>([]);
   /**
    * The pane's live (continuable) session file; null until one opens.
    * A session opened from the sheet that is not this one shows read-only.
@@ -509,6 +562,14 @@ export class Chat {
   });
   protected readonly canSend = computed(() => !this.sending() && this.draft().trim() !== '');
   protected readonly rows = computed(() => composerRowsOf(this.draft()));
+  /**
+   * The attach button's gate: read-only never uploads, an in-flight upload
+   * waits, and a host that wires no `uploadAttachment` keeps the button
+   * disabled — the honest placeholder it was before the sheet existed.
+   */
+  protected readonly attachDisabled = computed(
+    () => this.readOnly() || this.uploading() || this.state.uploadAttachment === undefined,
+  );
 
   private readonly messages = computed<readonly ChatMessageView[]>(
     () => this.active()?.messages ?? NO_MESSAGES,
@@ -596,6 +657,7 @@ export class Chat {
 
   protected openSessions(): void {
     this.sheetError.set(null);
+    this.attachSheetOpen.set(false);
     this.sheetOpen.set(true);
   }
 
@@ -636,9 +698,103 @@ export class Chat {
   /** The header's `Neuer Chat`: a fresh session's composer. */
   protected newChat(): void {
     this.sheetOpen.set(false);
+    this.attachSheetOpen.set(false);
     this.composing.set(true);
     this.draft.set('');
     this.composerError.set(null);
+    this.clearAttachments();
+  }
+
+  // -- the attach sheet (concept §6) -------------------------------------------
+
+  private readonly attachImageInput = viewChild<ElementRef<HTMLInputElement>>('attachImageInput');
+  private readonly attachFileInput = viewChild<ElementRef<HTMLInputElement>>('attachFileInput');
+
+  protected openAttachSheet(): void {
+    this.sheetOpen.set(false);
+    this.sheetError.set(null);
+    this.attachSheetOpen.set(true);
+  }
+
+  protected closeAttachSheet(): void {
+    this.attachSheetOpen.set(false);
+  }
+
+  /** The hidden input's picker opens; the picked files come back through `onPicked`. */
+  protected pickImage(): void {
+    this.attachImageInput()?.nativeElement.click();
+  }
+
+  protected pickFile(): void {
+    this.attachFileInput()?.nativeElement.click();
+  }
+
+  /** The picker answered: take the files, reset the input so a re-pick fires again. */
+  protected async onPicked(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
+    await this.uploadPicked(files);
+  }
+
+  /**
+   * Uploads through the state's `uploadAttachment`, busy while it runs.
+   * Success lays the chips above the composer, fires the warn toast
+   * naming what the desk stored and closes the sheet; a failure closes it
+   * too — the error shows inline at the composer plus an error toast.
+   */
+  protected async uploadPicked(files: File[]): Promise<void> {
+    const upload = this.state.uploadAttachment;
+    if (upload === undefined || files.length === 0 || this.uploading()) {
+      return;
+    }
+    this.composerError.set(null);
+    this.uploading.set(true);
+    try {
+      // Called on the state — a detached reference would lose `this`.
+      const reply = await this.state.uploadAttachment?.(files);
+      if (reply === undefined) {
+        return;
+      }
+      if (!reply.ok) {
+        this.failUpload(reply.error);
+        return;
+      }
+      this.attachments.update((current) => [
+        ...current,
+        ...files.map((file) => ({ name: file.name, url: thumbnailUrlOf(file) })),
+      ]);
+      const note = attachmentToastOf(reply.stored);
+      this.toast(note.message, note.kind);
+      this.attachSheetOpen.set(false);
+    } catch (err) {
+      this.failUpload(errorText(err));
+    } finally {
+      this.uploading.set(false);
+    }
+  }
+
+  private failUpload(message: string): void {
+    this.composerError.set(message);
+    this.toast(message, 'error');
+    this.attachSheetOpen.set(false);
+  }
+
+  /** Drops the chips and revokes their thumbnail URLs. */
+  private clearAttachments(): void {
+    for (const chip of this.attachments()) {
+      if (chip.url === null) {
+        continue;
+      }
+      try {
+        if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+          URL.revokeObjectURL(chip.url);
+        }
+      } catch {
+        // the URL is already gone
+      }
+    }
+    this.attachments.set([]);
   }
 
   // -- composer -------------------------------------------------------------
@@ -674,6 +830,7 @@ export class Chat {
         return;
       }
       this.draft.set('');
+      this.clearAttachments();
       if (starting) {
         // The state opens the fresh session itself; show it — as the live one.
         this.composing.set(false);

@@ -19,6 +19,15 @@ import {
  */
 export type McChatReply = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
+/**
+ * The attachment-upload reply: on success the paths the desk stored (each
+ * like `tickets/attachments/img-…png`) — an upload is laid down on the
+ * desk, not sent into the session, so there is nothing more to report.
+ */
+export type McChatUploadReply =
+  | { readonly ok: true; readonly stored: readonly string[] }
+  | { readonly ok: false; readonly error: string };
+
 /** Exactly what the chat tab consumes of the app state. */
 export interface McChatState {
   /** The report card's one-shot draft prefill; the tab consumes and clears it. */
@@ -37,6 +46,12 @@ export interface McChatState {
   send(text: string): Promise<McChatReply>;
   confirm(file: string, id: string): Promise<McChatReply>;
   dismiss(file: string, id: string): Promise<McChatReply>;
+  /**
+   * Uploads the picked files to the desk's `POST /api/attachments` —
+   * optional: a host that does not wire uploads leaves it off and the
+   * composer's attach button stays disabled (the unwired fallback does).
+   */
+  uploadAttachment?(files: File[]): Promise<McChatUploadReply>;
   /** A transient status note (the toast pill); the kind picks the accent. */
   toast(message: string, kind?: 'ok' | 'warn' | 'error'): void;
 }

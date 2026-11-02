@@ -265,6 +265,91 @@ describe('McClient.attachment', () => {
   });
 });
 
+describe('McClient.uploadAttachments', () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const PNG_B64 = btoa(String.fromCharCode(...PNG));
+
+  const pngFile = (name = 'shot.png'): File => new File([PNG], name, { type: 'image/png' });
+
+  it('POSTs one JSON body per file — { dataBase64 } with the bearer — and returns the stored paths', async () => {
+    const desk = new FakeDesk();
+    desk.on('POST', '/api/attachments', () => ({ ok: true, file: 'tickets/attachments/img-x.png' }));
+    desk.storage.setItem(TOKEN_KEY, 'tok-9');
+    const client = makeClient(desk);
+    const reply = await client.uploadAttachments([pngFile()]);
+    expect(reply).toEqual({ ok: true, stored: ['tickets/attachments/img-x.png'] });
+    const call = desk.callsOf('POST', '/api/attachments')[0]!;
+    expect(call.headers['Authorization']).toBe('Bearer tok-9');
+    expect(call.headers['Content-Type']).toBe('application/json');
+    expect(call.body).toEqual({ dataBase64: PNG_B64 });
+  });
+
+  it('uploads several files in order, one request each', async () => {
+    const desk = new FakeDesk();
+    let nth = 0;
+    desk.on('POST', '/api/attachments', () => ({ ok: true, file: `tickets/attachments/img-${++nth}.png` }));
+    const client = makeClient(desk);
+    const reply = await client.uploadAttachments([pngFile('a.png'), pngFile('b.jpeg')]);
+    expect(reply).toEqual({ ok: true, stored: ['tickets/attachments/img-1.png', 'tickets/attachments/img-2.png'] });
+    expect(desk.callsOf('POST', '/api/attachments').length).toBe(2);
+  });
+
+  it('returns ok with nothing stored for an empty pick, without a request', async () => {
+    const desk = new FakeDesk();
+    const client = makeClient(desk);
+    expect(await client.uploadAttachments([])).toEqual({ ok: true, stored: [] });
+    expect(desk.calls.length).toBe(0);
+  });
+
+  it('surfaces the desk’s refusal — a non-image — without storing', async () => {
+    const desk = new FakeDesk();
+    desk.on('POST', '/api/attachments', () => ({
+      __status: 400,
+      __body: { ok: false, error: 'the file is not a PNG, JPEG, GIF or WebP image' },
+    }));
+    const client = makeClient(desk);
+    const pdf = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], 'brief.pdf', { type: 'application/pdf' });
+    expect(await client.uploadAttachments([pdf])).toEqual({
+      ok: false,
+      error: 'the file is not a PNG, JPEG, GIF or WebP image',
+    });
+  });
+
+  it('stops at the first failure — the earlier files stay stored, the error surfaces', async () => {
+    const desk = new FakeDesk();
+    let nth = 0;
+    desk.on('POST', '/api/attachments', () =>
+      nth++ === 0
+        ? { ok: true, file: 'tickets/attachments/img-1.png' }
+        : { __status: 400, __body: { ok: false, error: 'the image is larger than 6 MB' } },
+    );
+    const client = makeClient(desk);
+    const reply = await client.uploadAttachments([pngFile('a.png'), pngFile('b.png')]);
+    expect(reply).toEqual({ ok: false, error: 'the image is larger than 6 MB' });
+    expect(desk.callsOf('POST', '/api/attachments').length).toBe(2);
+  });
+
+  it('refuses an oversized file without a request', async () => {
+    const desk = new FakeDesk();
+    const client = makeClient(desk);
+    const big = new File([new Uint8Array(6 * 1024 * 1024 + 1)], 'big.png', { type: 'image/png' });
+    expect(await client.uploadAttachments([big])).toEqual({ ok: false, error: 'the image is larger than 6 MB' });
+    expect(desk.calls.length).toBe(0);
+  });
+
+  it('surfaces a desk that does not answer', async () => {
+    const client = new McClient({ fetch: () => Promise.reject(new Error('refused')), storage: new FakeDesk().storage });
+    expect(await client.uploadAttachments([pngFile()])).toEqual({ ok: false, error: 'The desk does not answer.' });
+  });
+
+  it('reports a 200 answer that stored nothing', async () => {
+    const desk = new FakeDesk();
+    desk.on('POST', '/api/attachments', () => ({ ok: true }));
+    const client = makeClient(desk);
+    expect(await client.uploadAttachments([pngFile()])).toEqual({ ok: false, error: 'the desk stored no attachment' });
+  });
+});
+
 describe('McClient.listen', () => {
   it('delivers parsed frames and reports the connection', async () => {
     const desk = new FakeDesk();

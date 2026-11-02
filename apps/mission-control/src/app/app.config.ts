@@ -61,6 +61,7 @@ export const appConfig: ApplicationConfig = {
           moveTicket: (ticketId, phaseId) => state.moveTicket(ticketId, phaseId),
           openTicket: (ticketId) => state.openTicket(ticketId),
           promote: (ticketId) => state.prefillChat(`promote ${ticketId}`),
+          answer: (runId, text) => state.answerRun(runId, text),
           openPersona: (titleOrId) => {
             const byTitle = (state.personas() as unknown as readonly { id: string; title: string }[]).find(
               (p) => p.title === titleOrId || p.id === titleOrId,

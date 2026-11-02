@@ -3,11 +3,13 @@ import { type Signal, type WritableSignal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { ActiveSession, ChatMessageView, ChatProposalView, ChatStateView, McChainEntry, WorkView } from '../api/dto';
 import { DEFAULT_PRIORITY_CONFIG } from '../api/dto';
-import type { McChatState } from './chat.model';
+import type { McChatState, McChatUploadReply } from './chat.model';
 import {
   Chat,
   TimelineProposal,
   TimelineSession,
+  attachmentToastOf,
+  basenameOf,
   cardPriorityOf,
   chainCompareOf,
   composerRowsOf,
@@ -945,5 +947,232 @@ describe('Chat sessions sheet (read-only views)', () => {
     expect(vm.readOnly()).toBe(false);
     expect(vm.sheetError()).toBe('Die Sitzung ließ sich nicht öffnen: Gone');
     expect(vm.sheetOpen()).toBe(true);
+  });
+});
+
+// -- the attach sheet: the composer's uploads (concept §6) ---------------------------
+
+describe('basenameOf', () => {
+  it('keeps a bare name and strips a stored path', () => {
+    expect(basenameOf('img-a.png')).toBe('img-a.png');
+    expect(basenameOf('tickets/attachments/img-a.png')).toBe('img-a.png');
+  });
+});
+
+describe('attachmentToastOf', () => {
+  it('names one stored file in the singular', () => {
+    expect(attachmentToastOf(['tickets/attachments/img-a.png'])).toEqual({
+      message: 'Anhang abgelegt: img-a.png',
+      kind: 'warn',
+    });
+  });
+
+  it('counts several stored files and keeps only their names', () => {
+    const note = attachmentToastOf(['tickets/attachments/img-a.png', 'img-b.jpeg']);
+    expect(note.message).toBe('2 Anhänge abgelegt: img-a.png, img-b.jpeg');
+    expect(note.kind).toBe('warn');
+  });
+});
+
+describe('Chat attach sheet (composer uploads)', () => {
+  interface AttachFakeState {
+    chatPrefill: WritableSignal<string | null>;
+    chat: WritableSignal<ChatStateView>;
+    board: Signal<unknown>;
+    work: Signal<WorkView>;
+    toasts: [string, string | undefined][];
+    toast(message: string, kind?: string): void;
+    uploadAttachment?(files: File[]): Promise<McChatUploadReply>;
+    openSession(file: string): Promise<void>;
+    send(text: string): Promise<unknown>;
+    newSession(text: string): Promise<unknown>;
+  }
+
+  function fakeState(
+    upload?: (files: File[]) => Promise<McChatUploadReply>,
+    sessions: readonly { file: string; title: string }[] = [],
+  ): AttachFakeState {
+    const toasts: [string, string | undefined][] = [];
+    const metas = sessions.map((s) => ({ ...s, createdAt: '', updatedAt: '', pending: 0 }));
+    const state: AttachFakeState = {
+      toasts,
+      chatPrefill: signal(null),
+      chat: signal<ChatStateView>({ sessions: metas, active: null }),
+      board: signal(null),
+      work: signal<WorkView>({ groups: [], priorities: DEFAULT_PRIORITY_CONFIG }),
+      toast: (message, kind) => toasts.push([message, kind]),
+      ...(upload === undefined ? {} : { uploadAttachment: (files: File[]) => upload(files) }),
+      openSession: (file) => {
+        const meta = metas.find((m) => m.file === file);
+        state.chat.update((chat) => ({
+          ...chat,
+          active: meta === undefined ? null : { ...meta, messages: [], proposals: [] },
+        }));
+        return Promise.resolve();
+      },
+      send: () => Promise.resolve({ ok: true }),
+      newSession: () => Promise.resolve({ ok: true }),
+    };
+    return state;
+  }
+
+  interface AttachSurface {
+    attachDisabled(): boolean;
+    attachSheetOpen(): boolean;
+    uploading(): boolean;
+    attachments(): readonly { name: string; url: string | null }[];
+    composerError(): string | null;
+    openAttachSheet(): void;
+    closeAttachSheet(): void;
+    openFromSheet(entry: { file: string; title: string }): Promise<void>;
+    uploadPicked(files: File[]): Promise<void>;
+    send(): Promise<void>;
+  }
+
+  function setup(fake: AttachFakeState): { vm: AttachSurface; fake: AttachFakeState } {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [{ provide: MC_CHAT_STATE, useValue: fake as unknown as McChatState }],
+    });
+    const chat = TestBed.runInInjectionContext(() => new Chat()) as unknown as AttachSurface & {
+      draft: WritableSignal<string>;
+    };
+    const vm: AttachSurface = {
+      attachDisabled: () => chat.attachDisabled(),
+      attachSheetOpen: () => chat.attachSheetOpen(),
+      uploading: () => chat.uploading(),
+      attachments: () => chat.attachments(),
+      composerError: () => chat.composerError(),
+      openAttachSheet: () => chat.openAttachSheet(),
+      closeAttachSheet: () => chat.closeAttachSheet(),
+      openFromSheet: (entry) => chat.openFromSheet(entry),
+      uploadPicked: (files) => chat.uploadPicked(files),
+      send: () => {
+        chat.draft.set('hallo');
+        return chat.send();
+      },
+    };
+    return { vm, fake };
+  }
+
+  const png = (): File => new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'shot.png', { type: 'image/png' });
+
+  it('keeps the attach button disabled while the state wires no uploadAttachment', () => {
+    const { vm } = setup(fakeState());
+    expect(vm.attachDisabled()).toBe(true);
+  });
+
+  it('enables the attach button once the state uploads', () => {
+    const { vm } = setup(fakeState(async () => ({ ok: true, stored: [] })));
+    expect(vm.attachDisabled()).toBe(false);
+  });
+
+  it('disables the attach button again in a read-only session', async () => {
+    const { vm } = setup(
+      fakeState(async () => ({ ok: true, stored: [] }), [
+        { file: 'a.md', title: 'A' },
+        { file: 'b.md', title: 'B' },
+      ]),
+    );
+    await vm.openFromSheet({ file: 'a.md', title: 'A' });
+    await vm.openFromSheet({ file: 'b.md', title: 'B' });
+    expect(vm.attachDisabled()).toBe(true);
+  });
+
+  it('opens and closes the sheet', () => {
+    const { vm } = setup(fakeState(async () => ({ ok: true, stored: [] })));
+    expect(vm.attachSheetOpen()).toBe(false);
+    vm.openAttachSheet();
+    expect(vm.attachSheetOpen()).toBe(true);
+    vm.closeAttachSheet();
+    expect(vm.attachSheetOpen()).toBe(false);
+  });
+
+  it('uploads the picked files, lays their chips and toasts the stored names', async () => {
+    const uploads: string[][] = [];
+    const { vm, fake } = setup(
+      fakeState(async (files) => {
+        uploads.push(files.map((file) => file.name));
+        return { ok: true, stored: ['tickets/attachments/img-x.png'] };
+      }),
+    );
+    vm.openAttachSheet();
+    await vm.uploadPicked([png(), new File([new Uint8Array([1])], 'notiz.md', { type: 'text/markdown' })]);
+    expect(uploads).toEqual([['shot.png', 'notiz.md']]);
+    expect(vm.attachSheetOpen()).toBe(false);
+    expect(vm.uploading()).toBe(false);
+    // The thumbnail rides the platform's object URLs — where there are none the chip keeps the name alone.
+    expect(vm.attachments().map((chip) => chip.name)).toEqual(['shot.png', 'notiz.md']);
+    expect(vm.attachments().every((chip) => chip.url === null || chip.url.startsWith('blob:'))).toBe(true);
+    expect(fake.toasts).toEqual([['Anhang abgelegt: img-x.png', 'warn']]);
+  });
+
+  it('surfaces a refusal inline at the composer and as an error toast, no chips', async () => {
+    const { vm, fake } = setup(
+      fakeState(async () => ({ ok: false, error: 'the file is not a PNG, JPEG, GIF or WebP image' })),
+    );
+    vm.openAttachSheet();
+    await vm.uploadPicked([new File([new Uint8Array([1, 2, 3])], 'brief.pdf', { type: 'application/pdf' })]);
+    expect(vm.composerError()).toBe('the file is not a PNG, JPEG, GIF or WebP image');
+    expect(fake.toasts).toEqual([['the file is not a PNG, JPEG, GIF or WebP image', 'error']]);
+    expect(vm.attachments()).toEqual([]);
+    expect(vm.attachSheetOpen()).toBe(false);
+  });
+
+  it('surfaces a thrown upload like a refusal', async () => {
+    const { vm, fake } = setup(
+      fakeState(async () => {
+        throw new Error('the desk does not answer');
+      }),
+    );
+    await vm.uploadPicked([png()]);
+    expect(vm.composerError()).toBe('the desk does not answer');
+    expect(fake.toasts).toEqual([['the desk does not answer', 'error']]);
+    expect(vm.uploading()).toBe(false);
+  });
+
+  it('ignores an empty pick', async () => {
+    let calls = 0;
+    const { vm, fake } = setup(
+      fakeState(async () => {
+        calls++;
+        return { ok: true, stored: ['tickets/attachments/img-x.png'] };
+      }),
+    );
+    vm.openAttachSheet();
+    await vm.uploadPicked([]);
+    expect(calls).toBe(0);
+    expect(vm.attachSheetOpen()).toBe(true);
+    expect(fake.toasts).toEqual([]);
+  });
+
+  it('ignores a second pick while one upload runs', async () => {
+    let release: (() => void) | null = null;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    const { vm } = setup(
+      fakeState(async () => {
+        calls++;
+        await gate;
+        return { ok: true, stored: ['tickets/attachments/img-x.png'] };
+      }),
+    );
+    const first = vm.uploadPicked([png()]);
+    await vm.uploadPicked([png()]);
+    release!();
+    await first;
+    expect(calls).toBe(1);
+    expect(vm.attachments().length).toBe(1);
+    expect(vm.uploading()).toBe(false);
+  });
+
+  it('clears the chips once the message is sent', async () => {
+    const { vm } = setup(fakeState(async () => ({ ok: true, stored: ['tickets/attachments/img-x.png'] })));
+    await vm.uploadPicked([png()]);
+    expect(vm.attachments().length).toBe(1);
+    await vm.send();
+    expect(vm.attachments()).toEqual([]);
   });
 });

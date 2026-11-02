@@ -7,6 +7,18 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { MC_CHAT_STATE } from '../chat/chat.model';
+import {
+  MC_WORK_STATE,
+  questionCardOf,
+  questionNeedOf,
+  ticketPersonaOf,
+  type McBoard,
+  type McNeed,
+  type McPersona,
+  type QuestionCardVm,
+} from '../work/work.model';
 import { renderMarkdown, type MdBlock } from './markdown';
 import {
   ACCEPT_ARM_WINDOW_MS,
@@ -21,9 +33,11 @@ import {
   patchRowsOf,
   phaseTitleOf,
   proofOf,
+  proofRecommendationOf,
   renderChainEntryViews,
   scoutReportOf,
   splitTicketSections,
+  threadItemsOf,
   usdLabelOf,
   verlaufBoxOf,
   verlaufCostsOf,
@@ -32,6 +46,7 @@ import {
   type GateStep,
   type ProofReport,
   type ScoutReport,
+  type ThreadItem,
   type TicketDiffFile,
 } from './ticket.model';
 
@@ -47,39 +62,56 @@ export interface ProofShot {
   readonly url: string;
 }
 
+/** The ticket screen's three faces: the ticket, its proof, its thread. */
+export type TicketMode = 'ticket' | 'proof' | 'thread';
+
 /**
- * The ticket screen (concept §5.3–5.5) in the prototype's look: the
- * header with the 'Arbeit' back label, the mono id and the edit pencil
- * (the raw-edit exception path toggles to `mc-ticket-edit`); the head
- * card with the phase chip, the persona chip and the cost slot (tolerant
- * empty until the engine's stage ledger delivers); the gate bar as pills
- * over the merged gate chain (E9, concept §5.7 — done pills wear the
- * check, the current one the dot and its persona, an inserted one the
- * dashed addition mark, a skipped one the strike-through, the Bescheid
- * rule rings ◎); tappable into the gate sheet, the chain-hint line under
- * it saying so. The body renders as safe Markdown blocks (section heads
- * in mono caps, checkboxes struck, code fences boxed); the `## Verlauf`
- * chapter surfaces as its own yaml box — one entry per line — when the
- * chapter carries parseable entries, its per-phase sums dress the gate
- * pills and its total the bar's end slot; the `## Verification` section
- * becomes the proof card (the verdict line,
- * the criteria checklist, the snap gallery with its scroll-synced dots
- * and the fullscreen viewer, the findings); the diff renders as the
- * git table — file heads with chevron, path and the +/- balance, the
- * magnifier into the fullscreen zoom, the first file open by default.
- * The actions stay in the thumb's reach: the armed two-step Accept (the
- * mint done ring takes over once accepted), the send-back panel with its
- * mandatory note, and 'Per Chat ändern' prefilling the composer.
- * Read-only paired devices watch: the writing actions hide entirely.
+ * The ticket screen (concept §5.3–5.5) in the prototype's look, in three
+ * modes the CTA row switches between (the prototype's Ticket→Proof/Thread
+ * screens, no routes of their own): the **ticket** mode — the header with
+ * the 'Arbeit' back label, the mono id and the edit pencil (the raw-edit
+ * exception path toggles to `mc-ticket-edit`); the head card with the
+ * phase chip, the persona chip and the cost slot (tolerant empty until
+ * the engine's stage ledger delivers); the gate bar as pills over the
+ * merged gate chain (E9, concept §5.7) tappable into the gate sheet, the
+ * chain-hint line under it saying so; the body renders as safe Markdown
+ * blocks (section heads in mono caps, checkboxes struck, code fences
+ * boxed); the `## Verlauf` chapter surfaces as its own yaml box; the CTA
+ * row carries 'Proof ansehen — <n/n> grün' (when the Verification
+ * criteria exist), 'Frage von <persona> beantworten' (when a question
+ * need waits for the ticket) or the ghost 'Thread öffnen', plus 'Per
+ * Chat ändern' prefilling the composer.
+ *
+ * The **proof** mode (prototype screen 03) gathers what accepting needs:
+ * the gate bar with its per-gate costs and the total, the mint verdict
+ * box (`<n/n> grün.` + the tester's recommendation when the stamp names
+ * one), the criteria checklist with their evidence lines, the screenshot
+ * gallery with its scroll-synced dots and the fullscreen viewer, the git
+ * diff with the magnifier into the fullscreen zoom, and the two owner
+ * actions — 'Zurückschicken…' with its mandatory note, the armed
+ * 'Annehmen & mergen' whose mint done ring takes over once accepted.
+ *
+ * The **thread** mode (prototype screen 04) is the ticket's filtered
+ * view of the active chat session: the messages whose text names the
+ * ticket plus the proposal cards whose command does, the question's
+ * option card ('Auswahl nie = Aktion' — a tap marks only, the send row
+ * acts), and a composer prefilled with the `<id>:` context that sends
+ * into the active session like the chat tab does. Read-only paired
+ * devices watch: the writing actions hide entirely.
  */
 @Component({
   selector: 'mc-ticket',
   templateUrl: './view.html',
   styleUrl: './view.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [NgTemplateOutlet],
 })
 export class TicketView {
   protected readonly vm = inject(MC_TICKET);
+  /** The work slice (needs/board/personas): the question CTA and the option card. */
+  protected readonly work = inject(MC_WORK_STATE, { optional: true });
+  /** The chat slice: the thread's filtered source and its composer's send. */
+  protected readonly chat = inject(MC_CHAT_STATE, { optional: true });
 
   // --- the rendered ticket -------------------------------------------------
 
@@ -107,6 +139,51 @@ export class TicketView {
   protected readonly phaseColor = computed(() => this.vm.phaseColor());
 
   protected readonly readOnly = computed(() => this.vm.readOnly());
+
+  // --- the three faces: ticket, proof, thread ---------------------------------
+
+  /** The screen's face; every open resets it to the ticket. */
+  protected readonly mode = signal<TicketMode>('ticket');
+
+  protected openProof(): void {
+    if (this.isEmpty()) {
+      return;
+    }
+    this.mode.set('proof');
+  }
+
+  protected openThread(): void {
+    if (this.isEmpty()) {
+      return;
+    }
+    this.mode.set('thread');
+    // The composer inherits the ticket context as the `<id>:` prefix —
+    // one prefill per open, the owner's own edits keep.
+    if (this.threadDraft().trim() === '') {
+      this.threadDraft.set(`${this.id()}: `);
+    }
+  }
+
+  /** Back to the ticket face (the proof/thread header's back arrow). */
+  protected backToTicket(): void {
+    this.mode.set('ticket');
+  }
+
+  /**
+   * A fresh ticket starts on its ticket face with a clean thread — the
+   * ring belongs to one accept only, and the draft to one open.
+   */
+  private readonly resetPerTicket = effect(() => {
+    this.doc()?.id;
+    this.mode.set('ticket');
+    this.accepted.set(false);
+    this.threadDraft.set('');
+    this.threadError.set(null);
+    this.threadQSelected.set(null);
+    this.threadQPending.set(false);
+    this.threadQDone.set(false);
+    this.threadQError.set(null);
+  });
 
   // --- the head card: persona, cost slot, the frontmatter line ---------------
 
@@ -361,6 +438,182 @@ export class TicketView {
 
   protected readonly diff = computed(() => this.vm.diff());
 
+  // --- the CTA row: proof, thread, per chat -------------------------------------
+
+  /** 'Proof ansehen — <n/n> grün'; null = the ticket carries no criteria (no CTA). */
+  protected readonly proofCta = computed<string | null>(() => {
+    const verdict = this.verdict();
+    return verdict === null ? null : `Proof ansehen — ${verdict.passed}/${verdict.total} grün`;
+  });
+
+  /** The tester's recommendation for the verdict box; null when the stamp names none. */
+  protected readonly proofRecommendation = computed<string | null>(() => {
+    const proof = this.proof();
+    return proof === null ? null : proofRecommendationOf(proof);
+  });
+
+  /** The open question need for this ticket; null = none waits. */
+  protected readonly questionNeed = computed<McNeed | null>(() => {
+    const work = this.work;
+    const doc = this.doc();
+    if (work === null || doc === null) {
+      return null;
+    }
+    return questionNeedOf(work.needs, doc.id);
+  });
+
+  /** The question's option card; null = the need asks without a readable shape. */
+  protected readonly questionCard = computed<QuestionCardVm | null>(() => {
+    const need = this.questionNeed();
+    return need === null ? null : questionCardOf(need);
+  });
+
+  /** The ticket's persona off the board's pin; null when the board carries none. */
+  protected readonly questionPersona = computed<McPersona | null>(() => {
+    const work = this.work;
+    const doc = this.doc();
+    if (work === null || doc === null) {
+      return null;
+    }
+    return ticketPersonaOf(work.board as McBoard | null, doc.id, work.personas);
+  });
+
+  /** The thread face's chip persona: the board's pin, the current gate's as fallback. */
+  protected readonly threadPersona = computed<{ title: string; color: string | null } | null>(() => {
+    const pinned = this.questionPersona();
+    if (pinned !== null) {
+      return { title: pinned.title, color: pinned.color };
+    }
+    const gate = this.persona();
+    return gate === null ? null : { title: this.personaTitle(gate), color: null };
+  });
+
+  /** The thread CTA: 'Frage von <persona> beantworten' or the ghost 'Thread öffnen'. */
+  protected readonly threadCta = computed<string | null>(() => {
+    if (this.doc() === null) {
+      return null;
+    }
+    const need = this.questionNeed();
+    if (need === null) {
+      return 'Thread öffnen';
+    }
+    const persona = this.questionPersona()?.title ?? this.threadPersona()?.title ?? null;
+    return persona === null ? 'Frage beantworten' : `Frage von ${persona} beantworten`;
+  });
+
+  // --- the thread face -------------------------------------------------------------
+
+  /** The ticket's filtered view of the active chat session. */
+  protected readonly threadItems = computed<readonly ThreadItem[]>(() => {
+    const doc = this.doc();
+    const active = this.chat?.chat().active ?? null;
+    if (doc === null || active === null) {
+      return [];
+    }
+    return threadItemsOf(doc.id, active.messages, active.proposals);
+  });
+
+  /** The thread composer's draft — prefilled with the `<id>:` context on open. */
+  protected readonly threadDraft = signal('');
+  protected readonly threadSending = signal(false);
+  protected readonly threadError = signal<string | null>(null);
+
+  protected onThreadDraft(event: Event): void {
+    this.threadDraft.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  protected onThreadKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Enter' || event.shiftKey) {
+      return;
+    }
+    event.preventDefault();
+    void this.threadSend();
+  }
+
+  /**
+   * The thread composer's send: into the ACTIVE session like the chat tab
+   * (a fresh session when none is open). The streamed reply lands in the
+   * session the thread filters, so the list grows on its own.
+   */
+  protected async threadSend(): Promise<void> {
+    const chat = this.chat;
+    const text = this.threadDraft().trim();
+    if (chat === null || text === '' || this.threadSending() || this.readOnly()) {
+      return;
+    }
+    this.threadError.set(null);
+    this.threadSending.set(true);
+    try {
+      const reply = chat.chat().active === null ? await chat.newSession(text) : await chat.send(text);
+      if (reply.ok) {
+        this.threadDraft.set('');
+      } else {
+        this.threadError.set(reply.error);
+      }
+    } catch (err) {
+      this.threadError.set(err instanceof Error && err.message.trim() !== '' ? err.message : 'Something went wrong — try again.');
+    } finally {
+      this.threadSending.set(false);
+    }
+  }
+
+  // --- the thread face's option card ('Auswahl nie = Aktion') -----------------------
+
+  protected readonly threadQSelected = signal<number | null>(null);
+  protected readonly threadQPending = signal(false);
+  protected readonly threadQDone = signal(false);
+  protected readonly threadQError = signal<string | null>(null);
+
+  /** The send row's dynamic label: `"<Option>" senden`. */
+  protected threadQSendLabel(card: QuestionCardVm): string {
+    const option = card.options[this.threadQSelected() ?? -1];
+    return option === undefined ? 'Antwort senden' : `„${option.label}“ senden`;
+  }
+
+  /** Marks the tapped option; nothing sends until the send row's button fires. */
+  protected threadQSelect(index: number): void {
+    if (this.readOnly() || this.threadQDone() || this.threadQPending()) {
+      return;
+    }
+    this.threadQSelected.set(index);
+  }
+
+  /** The done line's persona label: the persona title, the ticket id as fallback. */
+  protected readonly threadPersonaLabel = computed<string>(() => {
+    const pinned = this.questionPersona()?.title;
+    if (pinned !== undefined && pinned !== '') {
+      return pinned;
+    }
+    const gate = this.persona();
+    return gate === null ? this.id() : this.personaTitle(gate);
+  });
+
+  /** The one acting tap: the chosen option's answer goes to the run. */
+  protected async threadQSend(): Promise<void> {
+    const card = this.questionCard();
+    const answer = this.work?.answer;
+    const runId = card?.runId ?? null;
+    const option = card === null ? undefined : card.options[this.threadQSelected() ?? -1];
+    if (answer === undefined || runId === null || option === undefined) {
+      return;
+    }
+    this.threadQPending.set(true);
+    this.threadQError.set(null);
+    try {
+      const reply = await answer(runId, option.answerText);
+      if (reply.ok) {
+        this.threadQDone.set(true);
+        this.work?.toast?.(`Antwort gesendet — ${this.threadPersonaLabel()} läuft weiter`, 'ok');
+      } else {
+        this.threadQError.set(reply.error);
+      }
+    } catch {
+      this.threadQError.set('The answer did not go through.');
+    } finally {
+      this.threadQPending.set(false);
+    }
+  }
+
   // --- the inline result -----------------------------------------------------
 
   protected readonly result = signal<TicketScreenResult | null>(null);
@@ -375,12 +628,6 @@ export class TicketView {
   /** True once an accept landed — the mint done ring takes over the actions. */
   protected readonly accepted = signal(false);
   private armTimer: ReturnType<typeof setTimeout> | null = null;
-
-  /** A fresh ticket starts unaccepted — the ring belongs to one accept only. */
-  private readonly resetAcceptedOnTicket = effect(() => {
-    this.doc()?.id;
-    this.accepted.set(false);
-  });
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.clearArmTimer());

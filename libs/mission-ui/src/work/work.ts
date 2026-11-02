@@ -5,10 +5,16 @@ import {
   groupsOf,
   liveRunCountOf,
   nextPhaseOf,
+  questionCardOf,
+  ticketPersonaOf,
   vaultTitleOf,
+  type McAnswerReply,
+  type McBoard,
   type McMoveResult,
+  type McPersona,
   type McScoutReport,
   type NeedVm,
+  type QuestionCardVm,
   type TicketVm,
   type WorkGroup,
 } from './work.model';
@@ -99,6 +105,15 @@ export class Work {
     this.closeSheet();
   }
 
+  /** A need card whose ticket is on the board opens it (the prototype's
+   *  proof teaser taps through to the ticket screen). */
+  protected openNeedTicket(vm: NeedVm): void {
+    const id = vm.need.ticketId;
+    if (id !== null && id !== undefined && this.state?.openTicket !== undefined) {
+      this.state.openTicket(id);
+    }
+  }
+
   /**
    * An improvements need is tappable only when the state adapter offers
    * `openPersona` (the shell binds it; absent = the card stays a note).
@@ -158,6 +173,103 @@ export class Work {
     }
     const persona = state.personas.find((known) => known.title === vm.need.title);
     state.openPersona(persona?.id ?? vm.need.title);
+  }
+
+  // --- the question option card ('Auswahl nie = Aktion') -------------------------
+
+  /** The question need's option card; null = the plain question text renders alone. */
+  protected questionCardOfNeed(vm: NeedVm): QuestionCardVm | null {
+    return questionCardOf(vm.need);
+  }
+
+  /** The card's persona (the board's pin resolved) — the chip and the done line read it. */
+  protected needPersona(vm: NeedVm): McPersona | null {
+    const state = this.state;
+    const ticketId = vm.need.ticketId;
+    if (state === null || ticketId === null || ticketId === undefined || ticketId === '') {
+      return null;
+    }
+    return ticketPersonaOf(state.board as McBoard | null, ticketId, state.personas);
+  }
+
+  /** The done line's persona label: the persona title, the ticket id as fallback. */
+  protected personaLabelOf(vm: NeedVm): string {
+    return this.needPersona(vm)?.title ?? vm.need.ticketId ?? 'die Persona';
+  }
+
+  /** The selected option per need key — a tap only marks ('Auswahl nie = Aktion'). */
+  private readonly qSelected = signal<Readonly<Record<string, number>>>({});
+  private readonly qPending = signal<Readonly<Record<string, boolean>>>({});
+  private readonly qDone = signal<Readonly<Record<string, boolean>>>({});
+  private readonly qError = signal<Readonly<Record<string, string>>>({});
+
+  protected qSelectedIndex(vm: NeedVm): number | null {
+    return this.qSelected()[vm.key] ?? null;
+  }
+
+  protected qIsPending(vm: NeedVm): boolean {
+    return this.qPending()[vm.key] === true;
+  }
+
+  /** True once an answer landed — the mint done line takes over the card. */
+  protected qIsDone(vm: NeedVm): boolean {
+    return this.qDone()[vm.key] === true;
+  }
+
+  protected qErrorOf(vm: NeedVm): string | null {
+    const value = this.qError()[vm.key];
+    return value === undefined || value === '' ? null : value;
+  }
+
+  /** The send button's dynamic label: `"<Option>" senden`. */
+  protected qSendLabel(card: QuestionCardVm, vm: NeedVm): string {
+    const at = this.qSelectedIndex(vm);
+    const option = at === null ? null : card.options[at];
+    return option === null || option === undefined ? 'Antwort senden' : `„${option.label}“ senden`;
+  }
+
+  /** Marks the tapped option; nothing sends until the send row's button fires. */
+  protected qSelect(vm: NeedVm, index: number): void {
+    if (this.readOnly() || this.qIsDone(vm) || this.qIsPending(vm)) {
+      return;
+    }
+    this.qSelected.update((current) => ({ ...current, [vm.key]: index }));
+  }
+
+  /** The send row appears once an option carries the selection. */
+  protected qHasSelection(vm: NeedVm): boolean {
+    return this.qSelectedIndex(vm) !== null;
+  }
+
+  /**
+   * The one acting tap: the chosen option's answer goes to the run, the
+   * card turns into its mint done line, and the need disappears with the
+   * next needs refresh (the desk clears it once answered). A refusal
+   * shows inline and leaves the card answerable.
+   */
+  protected async qSend(vm: NeedVm, card: QuestionCardVm): Promise<void> {
+    const state = this.state;
+    const at = this.qSelectedIndex(vm);
+    const option = at === null ? undefined : card.options[at];
+    const runId = card.runId;
+    if (state === null || state.answer === undefined || option === undefined || runId === null) {
+      return;
+    }
+    this.qPending.update((current) => ({ ...current, [vm.key]: true }));
+    this.qError.update((current) => ({ ...current, [vm.key]: '' }));
+    let reply: McAnswerReply;
+    try {
+      reply = await state.answer(runId, option.answerText);
+    } catch {
+      reply = { ok: false, error: 'The answer did not go through.' };
+    }
+    this.qPending.update((current) => ({ ...current, [vm.key]: false }));
+    if (reply.ok) {
+      this.qDone.update((current) => ({ ...current, [vm.key]: true }));
+      state.toast?.(`Antwort gesendet — ${this.personaLabelOf(vm)} läuft weiter`, 'ok');
+    } else {
+      this.qError.update((current) => ({ ...current, [vm.key]: reply.error }));
+    }
   }
 
   /** "Move to next phase": the card on to the next group; the error shows inline. */

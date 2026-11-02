@@ -517,6 +517,42 @@ details.think .step-body {
   margin: 0 0 6px;
 }
 
+/* the laid-down attachments' chips, above the composer until the next send */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 4px 10px 4px 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+}
+
+.chip-thumb {
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+  border-radius: 99px;
+}
+
+.chip-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .composer-row {
   display: flex;
   flex-direction: row;
@@ -691,6 +727,11 @@ details.think .step-body {
 
 .sess-row:hover {
   border-color: var(--text-2);
+}
+
+.sess-row:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .sess-row.cur {

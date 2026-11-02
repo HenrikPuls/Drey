@@ -27,7 +27,10 @@
         @if (group.kind === 'needs') {
           @for (vm of group.needs; track vm.key) {
             @if (vm.need.kind === 'report') {
-              <article class="card qcard need-card need-report">
+              <article
+                class="card qcard need-card need-report"
+                (click)="openNeedTicket(vm)"
+              >
                 <div class="qk">{{ vm.kindLabel }}</div>
                 <div class="card-top">
                   @if (vm.need.ticketId) {
@@ -77,10 +80,82 @@
                   <button
                     type="button"
                     class="btn btn-primary need-promote"
-                    (click)="promoteTicket(vm)"
+                    (click)="promoteTicket(vm); $event.stopPropagation()"
                   >
                     Promote to ship
                   </button>
+                }
+              </article>
+            } @else if (vm.need.kind === 'question') {
+              <article class="card qcard need-card need-question">
+                <div class="qk">{{ vm.kindLabel }}</div>
+                <div class="card-top">
+                  @if (vm.need.ticketId) {
+                    <span class="tid">{{ vm.need.ticketId }}</span>
+                  }
+                  <span class="hspace"></span>
+                  @if (needPersona(vm); as persona) {
+                    <span class="pchip">
+                      <i aria-hidden="true" [style.background-color]="persona.color">{{
+                        persona.title.charAt(0).toUpperCase()
+                      }}</i
+                      >{{ persona.title }}
+                    </span>
+                  }
+                </div>
+                <h3 class="need-title">{{ vm.need.title }}</h3>
+                @if (questionCardOfNeed(vm); as card) {
+                  @if (!readOnly()) {
+                    <p class="qcard-question">{{ card.question }}</p>
+                    <div class="opts" role="radiogroup" [attr.aria-label]="card.question">
+                      @for (option of card.options; track $index) {
+                        <button
+                          type="button"
+                          class="opt"
+                          role="radio"
+                          [attr.aria-checked]="qSelectedIndex(vm) === $index"
+                          [class.sel]="qSelectedIndex(vm) === $index"
+                          [disabled]="qIsDone(vm) || qIsPending(vm)"
+                          (click)="qSelect(vm, $index)"
+                        >
+                          <span class="dot" aria-hidden="true"></span>
+                          <span class="opt-body">
+                            {{ option.label }}
+                            @if (option.consequence) {
+                              <small>{{ option.consequence }}</small>
+                            }
+                          </span>
+                          @if (option.recommended) {
+                            <span class="rec">empfohlen</span>
+                          }
+                        </button>
+                      }
+                    </div>
+                    @if (qErrorOf(vm); as error) {
+                      <p class="need-inline-error" role="alert">{{ error }}</p>
+                    }
+                    @if (qHasSelection(vm)) {
+                      <div class="qcard-send">
+                        <button
+                          type="button"
+                          class="btn btn-primary"
+                          [disabled]="qIsPending(vm)"
+                          (click)="qSend(vm, card)"
+                        >
+                          {{ qIsPending(vm) ? 'Sending…' : qSendLabel(card, vm) }}
+                        </button>
+                      </div>
+                    }
+                  } @else {
+                    <p class="qcard-question">{{ card.question }}</p>
+                  }
+                  @if (qIsDone(vm)) {
+                    <p class="qcard-done" role="status">
+                      Antwort gesendet — {{ personaLabelOf(vm) }} läuft weiter
+                    </p>
+                  }
+                } @else if (vm.need.summary) {
+                  <p class="need-summary">{{ vm.need.summary }}</p>
                 }
               </article>
             } @else if (needTappable(vm)) {
@@ -101,7 +176,7 @@
                 }
               </button>
             } @else {
-              <article class="card qcard need-card">
+              <article class="card qcard need-card" (click)="openNeedTicket(vm)">
                 <div class="qk">{{ vm.kindLabel }}</div>
                 <div class="card-top">
                   @if (vm.need.ticketId) {

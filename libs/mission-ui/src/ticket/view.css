@@ -264,6 +264,11 @@
   color: var(--accent);
 }
 
+/* the proof/thread faces' bar: a strip, not a button — compact in the thread */
+.gates-compact {
+  padding-bottom: 6px;
+}
+
 .cs-total {
   flex: none;
   margin-left: auto;
@@ -427,6 +432,22 @@
 .verdict b {
   font-weight: 600;
   color: var(--ok);
+}
+
+.verdict-body {
+  min-width: 0;
+}
+
+/* -- the ticket face's CTA row (proof / thread / per chat) --------------------- */
+
+.cta-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.cta-row .btn {
+  min-width: 0;
 }
 
 .scout-summary {
@@ -1149,4 +1170,336 @@
     max-width: 480px;
     translate: -50% 0;
   }
+}
+
+/* -- the thread face (prototype screen 04): filtered chat view ------------------- */
+
+.thread-page {
+  padding-bottom: 14px;
+}
+
+.team-hint {
+  margin: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+.thread-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.msg {
+  max-width: 88%;
+  font-size: 14px;
+}
+
+.msg.me {
+  align-self: flex-end;
+}
+
+.msg.agent {
+  align-self: flex-start;
+}
+
+.msg .bubble {
+  margin: 0;
+  padding: 10px 13px;
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+
+.msg.agent .bubble {
+  border-left: 2px solid var(--ok);
+  border-bottom-left-radius: 6px;
+}
+
+.msg.me .bubble {
+  background: var(--panel-3);
+  border-bottom-right-radius: 6px;
+}
+
+details.think {
+  margin: 0 0 4px;
+}
+
+details.think summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  cursor: pointer;
+  list-style: none;
+  transition: color 0.15s ease;
+}
+
+details.think summary::-webkit-details-marker {
+  display: none;
+}
+
+details.think summary:hover {
+  color: var(--text-2);
+}
+
+details.think .chev {
+  flex: none;
+  font-size: 9px;
+  transition: transform 0.2s ease;
+}
+
+details.think[open] summary .chev {
+  transform: rotate(90deg);
+}
+
+details.think .step-body {
+  padding: 4px 2px 6px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-3);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  border-left: 2px solid var(--line);
+}
+
+.thread-empty {
+  margin: 6px 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.thread-card {
+  padding: 11px 13px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 12px;
+}
+
+.thread-card .ck {
+  margin-bottom: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.thread-card.done {
+  background: color-mix(in srgb, var(--ok) 6%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+}
+
+.thread-card.done .ck {
+  color: var(--ok);
+}
+
+.thread-card.dim {
+  opacity: 0.55;
+}
+
+.thread-card.qcard {
+  background: var(--panel);
+  border-color: var(--line);
+  border-left: 2px solid var(--warn);
+}
+
+.thread-card.qcard .ck {
+  color: var(--warn);
+}
+
+.thread-card-summary {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.thread-inline-error {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+/* the thread's option card ('Auswahl nie = Aktion'): a tap marks only */
+
+.opts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.opt:hover {
+  border-color: var(--accent);
+}
+
+.opt:disabled {
+  cursor: default;
+}
+
+.opt.sel {
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+  border-color: var(--ok);
+}
+
+.opt .dot {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--text-3);
+  border-radius: 50%;
+}
+
+.opt.sel .dot {
+  border-color: var(--ok);
+}
+
+.opt.sel .dot::after {
+  width: 6px;
+  height: 6px;
+  background: var(--ok);
+  border-radius: 50%;
+  content: '';
+}
+
+.opt-body {
+  min-width: 0;
+}
+
+.opt small {
+  display: block;
+  margin-top: 1px;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.opt .rec {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ok);
+}
+
+.qsend {
+  margin-top: 10px;
+}
+
+.qcard-done {
+  margin: 10px 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ok);
+}
+
+/* -- the thread face's composer ------------------------------------------------ */
+
+.composer {
+  flex: none;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  border-top: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+}
+
+.composer .thread-inline-error {
+  margin: 0 0 6px;
+}
+
+.composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+}
+
+.composer-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 13px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  resize: none;
+  outline: none;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  transition: border-color 0.15s ease;
+}
+
+.composer-input::placeholder {
+  color: var(--text-3);
+}
+
+.composer-input:focus {
+  border-color: var(--accent);
+}
+
+.send {
+  display: grid;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  cursor: pointer;
+  place-items: center;
+  color: var(--bg);
+  background: var(--accent);
+  border: 0;
+  border-radius: 50%;
+  transition:
+    transform 0.12s ease,
+    opacity 0.15s ease;
+}
+
+.send svg {
+  width: 16px;
+  height: 16px;
+}
+
+.send:active {
+  transform: scale(0.93);
+}
+
+.send:disabled {
+  cursor: default;
+  opacity: 0.5;
 }

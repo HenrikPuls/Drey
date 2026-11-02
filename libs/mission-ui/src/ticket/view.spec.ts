@@ -8,8 +8,17 @@
  * these under jsdom, but nothing here renders a template). The raw
  * editor's own specs live in `edit.spec.ts`.
  */
+import { signal, type Provider } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { McVerlaufEntry } from '../api/dto';
+import type { ActiveSession, ChatStateView, McVerlaufEntry } from '../api/dto';
+import { MC_CHAT_STATE, disconnectedChatState, type McChatState } from '../chat/chat.model';
+import {
+  MC_WORK_STATE,
+  type McNeed,
+  type McShapedQuestion,
+  type McWorkState,
+  type QuestionCardVm,
+} from '../work/work.model';
 import {
   ACCEPT_DISARMED,
   DEFAULT_DIFF_FONT_SIZE,
@@ -26,16 +35,21 @@ import {
   patchRowsOf,
   phaseTitleOf,
   proofOf,
+  proofRecommendationOf,
   renderChainEntryView,
   renderChainEntryViews,
   scoutReportOf,
   splitTicketSections,
+  threadItemsOf,
   usdLabelOf,
   verlaufBoxOf,
   verlaufCostsOf,
   verlaufLineOf,
   verlaufTotalOf,
   type GatePhase,
+  type ProofReport,
+  type ThreadItem,
+  type ThreadMessage,
   type TicketActionReply,
   type TicketDiff,
   type TicketDoc,
@@ -735,12 +749,13 @@ describe('the Verlauf dress', () => {
 // --- the proof reader ------------------------------------------------------------------
 
 describe('proofOf', () => {
-  it('reads the stamp, the criteria with screenshots and notes, and the findings', () => {
+  it('reads the stamp, the tester, the criteria with screenshots and notes, and the findings', () => {
     const verification = splitTicketSections(FULL_TEXT).verification!;
     const proof = proofOf(verification);
     expect(proof.testedOn).toBe(
       'Tested on 2026-11-01T14:32:00Z by verify@engine — Electron 34.2.0 on win32.',
     );
+    expect(proof.tester).toBe('verify@engine');
     expect(proof.criteria).toEqual([
       { command: 'npm run build', passed: true, screenshot: 'verify-20261101-143200-01.png', note: null },
       { command: 'npm test', passed: false, screenshot: null, note: 'no screenshot: the app never became ready' },
@@ -749,7 +764,7 @@ describe('proofOf', () => {
   });
 
   it('degrades honestly on half-readable sections', () => {
-    expect(proofOf('')).toEqual({ testedOn: '', criteria: [], findings: [] });
+    expect(proofOf('')).toEqual({ testedOn: '', tester: '', criteria: [], findings: [] });
     const loose = proofOf('- [x] checked by hand\n- [ ] `npm run build`\ngarbage line');
     expect(loose.criteria).toEqual([
       { command: 'checked by hand', passed: true, screenshot: null, note: null },
@@ -1314,3 +1329,328 @@ title: 'Three shots'
     expect(vm.galIndex()).toBe(1);
   });
 });
+
+// --- the proof verdict's recommendation ----------------------------------------------
+
+describe('proofRecommendationOf', () => {
+  const report = (tester: string): ProofReport => ({
+    testedOn: tester === '' ? '' : `Tested on 2026-11-01T14:32:00Z by ${tester} — Electron 34.2.0`,
+    tester,
+    criteria: [{ command: 'npm test', passed: true, screenshot: null, note: null }],
+    findings: [],
+  });
+
+  it('names the tester with its first letter raised', () => {
+    expect(proofRecommendationOf(report('tessa'))).toBe('Tessa empfiehlt die Annahme.');
+  });
+
+  it('stays silent when the stamp names no tester', () => {
+    expect(proofRecommendationOf(report(''))).toBeNull();
+  });
+});
+
+// --- the thread's filtered view of the active session ----------------------------------
+
+describe('threadItemsOf', () => {
+  const message = (text: string, at = '2026-11-02T09:12:00Z'): ThreadMessage => ({
+    role: 'owner',
+    text,
+    thought: null,
+    at,
+  });
+  const proposal = (id: string, summary: string, state = 'pending', commandId = 'T-0091'): unknown => ({
+    id,
+    state,
+    summary,
+    at: '2026-11-02T09:14:00Z',
+    command: { kind: 'setChain', id: commandId, chain: [] },
+  });
+
+  it('keeps the messages whose text names the ticket and drops the rest', () => {
+    const items = threadItemsOf('T-0091', [message('T-0091: wie weiter?'), message('unrelated')], []);
+    expect(items).toHaveLength(1);
+    expect(items[0]!.kind === 'message' && items[0]!.message.text).toBe('T-0091: wie weiter?');
+  });
+
+  it('keeps the proposal cards whose command names the ticket (tolerantly serialized)', () => {
+    const items = threadItemsOf(
+      'T-0091',
+      [message('hi')],
+      [proposal('p-1', 'Set T-0091 chain: skip verify'), proposal('p-2', 'Move T-0077 to build', 'confirmed', 'T-0077')],
+    );
+    expect(items).toHaveLength(1);
+    const item = items[0]!;
+    expect(item.kind).toBe('proposal');
+    if (item.kind === 'proposal') {
+      expect(item.proposal.id).toBe('p-1');
+    }
+  });
+
+  it('interleaves stamped items by their ISO stamps; unstamped ones keep file order', () => {
+    const stamped = threadItemsOf('T-0091', [message('T-0091 first', '2026-11-02T09:20:00Z')], [
+      proposal('p-1', 'Set T-0091 chain'),
+    ]);
+    expect(stamped.map((item) => item.kind)).toEqual(['proposal', 'message']);
+
+    const unstamped = threadItemsOf('T-0091', [message('T-0091 first', '')], [
+      { id: 'p-1', state: 'pending', summary: 'Set T-0091 chain' },
+    ]);
+    expect(unstamped.map((item) => item.kind)).toEqual(['message', 'proposal']);
+  });
+
+  it('an empty id never matches; an unreadable proposal drops', () => {
+    expect(threadItemsOf('', [message('T-0091')], [])).toEqual([]);
+    expect(threadItemsOf('T-0091', [], ['junk', null, { summary: 'T-0091 without an id' }])).toEqual([]);
+  });
+});
+
+// --- the three faces: ticket, proof, thread ---------------------------------------------
+
+describe('TicketView faces', () => {
+  function chatState(messages: readonly ThreadMessage[], proposals: readonly unknown[] = []): McChatState {
+    return {
+      ...disconnectedChatState(),
+      chat: signal<ChatStateView>({
+        sessions: [],
+        active: {
+          file: 's.md',
+          title: 'S',
+          createdAt: '',
+          messages,
+          proposals: proposals as ActiveSession['proposals'],
+        },
+      }),
+      send: () => Promise.resolve({ ok: true }),
+      newSession: () => Promise.resolve({ ok: true }),
+    };
+  }
+
+  function workState(patch: Partial<McWorkState> = {}): McWorkState {
+    return {
+      needs: patch.needs ?? [],
+      board: patch.board ?? null,
+      personas: patch.personas ?? [],
+      readOnly: patch.readOnly ?? false,
+      moveTicket: () => Promise.resolve({ ok: true }),
+      answer: patch.answer,
+      toast: patch.toast,
+    };
+  }
+
+  const ASKING_NEED: McNeed = {
+    kind: 'question',
+    ticketId: 'T-0042',
+    title: 'Ask',
+    summary: 'Which way?',
+    runId: 'r-1',
+    shaped: cardQuestionShaped(),
+  };
+
+  interface FaceSurface extends TicketSurface {
+    mode(): 'ticket' | 'proof' | 'thread';
+    openProof(): void;
+    openThread(): void;
+    backToTicket(): void;
+    proofCta(): string | null;
+    proofRecommendation(): string | null;
+    threadCta(): string | null;
+    questionNeed(): McNeed | null;
+    questionCard(): QuestionCardVm | null;
+    threadPersona(): { title: string; color: string | null } | null;
+    threadPersonaLabel(): string;
+    threadItems(): readonly ThreadItem[];
+    threadDraft(): string;
+    onThreadDraft(event: Event): void;
+    threadSend(): Promise<void>;
+    threadError(): string | null;
+    threadQSelected(): number | null;
+    threadQDone(): boolean;
+    threadQError(): string | null;
+    threadQSendLabel(card: QuestionCardVm): string;
+    threadQSelect(index: number): void;
+    threadQSend(): Promise<void>;
+  }
+
+  function setupFaces(
+    fake: TicketVm,
+    patch: { chat?: McChatState | null; work?: McWorkState | null } = {},
+  ): FaceSurface {
+    TestBed.resetTestingModule();
+    const providers: Provider[] = [{ provide: MC_TICKET, useValue: fake }];
+    if (patch.chat !== null) {
+      providers.push({ provide: MC_CHAT_STATE, useValue: patch.chat ?? chatState([]) });
+    }
+    if (patch.work !== null) {
+      providers.push({ provide: MC_WORK_STATE, useValue: patch.work ?? workState() });
+    }
+    TestBed.configureTestingModule({ providers });
+    return TestBed.runInInjectionContext(() => new TicketView()) as unknown as FaceSurface;
+  }
+
+  const PROOF_TEXT = `## Verification\n\nTested on 2026-11-01T14:32:00Z by tessa — Electron 34.2.0.\n\n### Criteria\n\n- [x] \`npm run build\` → ![](../attachments/verify-01.png)\n- [x] \`npm test\` — exits 0\n`;
+
+  it('a fresh ticket starts on its ticket face; the proof CTA names the count, the verdict the tester', () => {
+    const vm = setupFaces(makeFake({ docValue: { ...FULL_DOC, text: PROOF_TEXT } }));
+    expect(vm.mode()).toBe('ticket');
+    expect(vm.proofCta()).toBe('Proof ansehen — 2/2 grün');
+    expect(vm.proofRecommendation()).toBe('Tessa empfiehlt die Annahme.');
+
+    vm.openProof();
+    expect(vm.mode()).toBe('proof');
+    vm.backToTicket();
+    expect(vm.mode()).toBe('ticket');
+
+    // Without criteria the CTA stays hidden.
+    const bare = setupFaces(makeFake({ docValue: { ...DOC, text: '## Description\n\nNothing verified.' } }));
+    expect(bare.proofCta()).toBeNull();
+    expect(bare.proofRecommendation()).toBeNull();
+  });
+
+  it('switching tickets resets the face, the draft and the option card', () => {
+    const fake = makeFake({ docValue: { ...DOC, text: PROOF_TEXT } });
+    const vm = setupFaces(fake, { chat: chatState([{ role: 'owner', text: 'T-0042: hi', thought: null, at: '' }]) });
+    vm.openThread();
+    expect(vm.mode()).toBe('thread');
+    expect(vm.threadDraft()).toBe('T-0042: ');
+
+    fake.docValue = { ...DOC, id: 'T-0043', text: '' };
+    TestBed.flushEffects();
+    expect(vm.mode()).toBe('ticket');
+    expect(vm.threadDraft()).toBe('');
+    expect(vm.threadQDone()).toBe(false);
+  });
+
+  it("the thread CTA names the asking persona; without a question need it's the ghost", () => {
+    const asking = setupFaces(makeFake({ docValue: FULL_DOC }), {
+      work: workState({
+        needs: [ASKING_NEED],
+        board: {
+          columns: [
+            {
+              phase: { id: 'verify', title: 'Verify' },
+              tickets: [{ id: 'T-0042', title: null, meta: { persona: 'pia' } }],
+            },
+          ],
+        },
+        personas: [{ id: 'pia', title: 'Pia', color: '#a78bfa' }],
+      }),
+    });
+    expect(asking.threadCta()).toBe('Frage von Pia beantworten');
+    expect(asking.questionNeed()).not.toBeNull();
+    expect(asking.questionCard()).not.toBeNull();
+    expect(asking.threadPersona()).toEqual({ title: 'Pia', color: '#a78bfa' });
+    expect(asking.threadPersonaLabel()).toBe('Pia');
+
+    const ghost = setupFaces(makeFake({ docValue: FULL_DOC }), { work: workState() });
+    expect(ghost.threadCta()).toBe('Thread öffnen');
+    expect(ghost.questionCard()).toBeNull();
+    // No board pin and no gate persona — the chip and the label degrade honestly.
+    expect(ghost.threadPersona()).toBeNull();
+    expect(ghost.threadPersonaLabel()).toBe('T-0042');
+  });
+
+  it('the thread filters the active session and the composer sends into it, prefilled', async () => {
+    const sent: string[] = [];
+    const chat = chatState(
+      [
+        { role: 'owner', text: 'T-0042: the palette race', thought: null, at: '2026-11-02T09:12:00Z' },
+        { role: 'owner', text: 'unrelated grumbling', thought: null, at: '2026-11-02T09:13:00Z' },
+      ],
+      [{ id: 'p-1', state: 'confirmed', summary: 'Move T-0042 to done', at: '2026-11-02T09:14:00Z' }],
+    );
+    chat.send = (text: string) => {
+      sent.push(text);
+      return Promise.resolve({ ok: true });
+    };
+    const vm = setupFaces(makeFake({ docValue: FULL_DOC }), { chat });
+    vm.openThread();
+    expect(vm.threadItems()).toHaveLength(2);
+    expect(vm.threadDraft()).toBe('T-0042: ');
+
+    vm.onThreadDraft(noteEvent('T-0042: do it this way'));
+    await vm.threadSend();
+    expect(sent).toEqual(['T-0042: do it this way']);
+    expect(vm.threadDraft()).toBe('');
+    expect(vm.threadError()).toBeNull();
+  });
+
+  it('without an open session the composer starts one; a refusal surfaces inline', async () => {
+    const started: string[] = [];
+    const chat: McChatState = {
+      ...disconnectedChatState(),
+      chat: signal<ChatStateView>({ sessions: [], active: null }),
+      newSession: (text: string) => {
+        started.push(text);
+        return Promise.resolve({ ok: true });
+      },
+    };
+    const vm = setupFaces(makeFake({ docValue: FULL_DOC }), { chat });
+    vm.openThread();
+    vm.onThreadDraft(noteEvent('T-0042: first words'));
+    await vm.threadSend();
+    expect(started).toEqual(['T-0042: first words']);
+
+    const refusing: McChatState = { ...chat, newSession: () => Promise.resolve({ ok: false, error: 'not connected' }) };
+    const vm2 = setupFaces(makeFake({ docValue: FULL_DOC }), { chat: refusing });
+    vm2.openThread();
+    vm2.onThreadDraft(noteEvent('T-0042: again'));
+    await vm2.threadSend();
+    expect(vm2.threadError()).toBe('not connected');
+    expect(vm2.threadDraft()).not.toBe('');
+  });
+
+  it("the thread's option card marks only — sending acts once, then the card is done", async () => {
+    const answers: { runId: string; text: string }[] = [];
+    const toasts: string[] = [];
+    const vm = setupFaces(makeFake({ docValue: FULL_DOC }), {
+      work: {
+        ...workState({ needs: [ASKING_NEED] }),
+        answer: (runId, text) => {
+          answers.push({ runId, text });
+          return Promise.resolve({ ok: true });
+        },
+        toast: (message) => toasts.push(message),
+      },
+    });
+    const card = vm.questionCard()!;
+    expect(card.options[1]!.recommended).toBe(true);
+    expect(vm.threadQSendLabel(card)).toBe('Antwort senden');
+
+    vm.threadQSelect(1);
+    expect(vm.threadQSelected()).toBe(1);
+    expect(vm.threadQSendLabel(card)).toBe('„Right“ senden');
+    await vm.threadQSend();
+    expect(answers).toEqual([{ runId: 'r-1', text: '2. Right' }]);
+    expect(vm.threadQDone()).toBe(true);
+    // No pin, no gate persona: the done line names the ticket.
+    expect(toasts).toEqual(['Antwort gesendet — T-0042 läuft weiter']);
+
+    // A refusal lands inline and leaves the card answerable.
+    const refusing = setupFaces(makeFake({ docValue: FULL_DOC }), {
+      work: {
+        ...workState({ needs: [ASKING_NEED] }),
+        answer: () => Promise.resolve({ ok: false, error: 'the run is gone' }),
+      },
+    });
+    refusing.threadQSelect(0);
+    await refusing.threadQSend();
+    expect(refusing.threadQDone()).toBe(false);
+    expect(refusing.threadQError()).toBe('the run is gone');
+  });
+});
+
+/** The shaped question the option-card specs reuse. */
+function cardQuestionShaped(): McShapedQuestion {
+  return {
+    question: 'Which way?',
+    context: null,
+    where: null,
+    why: null,
+    options: [
+      { n: 1, label: 'Left', consequence: 'the left way' },
+      { n: 2, label: 'Right', consequence: null },
+    ],
+    recommended: 2,
+    recommendationWhy: null,
+  };
+}

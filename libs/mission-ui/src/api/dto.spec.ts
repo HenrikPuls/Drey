@@ -279,6 +279,100 @@ describe('parseNeeds', () => {
     ]);
   });
 
+  it('keeps a question need with its run id, its form fields and its shaped question', () => {
+    const needs = parseNeeds([
+      {
+        kind: 'question',
+        ticketId: 'T-0091',
+        title: 'Kanban import',
+        text: 'QUESTION: How should the 3 deviating ranks be handled?\nOptions:\n1. Keep the deviations — the manual ranks become the order\n2. Discard all\nRecommendation: 1 — confirmed by hand',
+        runId: 'r-12',
+        questions: [
+          {
+            key: 'q0',
+            header: 'Import',
+            question: 'How should the ranks be handled?',
+            options: [
+              { label: 'Keep the deviations', description: 'the manual ranks become the order' },
+              { label: 'Discard all', description: null },
+            ],
+            multiple: false,
+          },
+          { key: '', question: '' },
+        ],
+        shaped: {
+          question: 'How should the 3 deviating ranks be handled?',
+          context: 'T-0091 — the kanban import',
+          where: 'in the plan phase',
+          why: 'the manual ranks look deliberate',
+          options: [
+            { n: 1, label: 'Keep the deviations', consequence: 'the manual ranks become the order' },
+            { n: 2, label: 'Discard all', consequence: null },
+          ],
+          recommended: 1,
+          recommendationWhy: 'confirmed by hand',
+        },
+      },
+    ]);
+    expect(needs).toEqual([
+      {
+        kind: 'question',
+        ticketId: 'T-0091',
+        title: 'Kanban import',
+        summary:
+          'QUESTION: How should the 3 deviating ranks be handled?\nOptions:\n1. Keep the deviations — the manual ranks become the order\n2. Discard all\nRecommendation: 1 — confirmed by hand',
+        runId: 'r-12',
+        questions: [
+          {
+            key: 'q0',
+            header: 'Import',
+            question: 'How should the ranks be handled?',
+            options: [
+              { label: 'Keep the deviations', description: 'the manual ranks become the order' },
+              { label: 'Discard all', description: null },
+            ],
+            multiple: false,
+          },
+        ],
+        shaped: {
+          question: 'How should the 3 deviating ranks be handled?',
+          context: 'T-0091 — the kanban import',
+          where: 'in the plan phase',
+          why: 'the manual ranks look deliberate',
+          options: [
+            { n: 1, label: 'Keep the deviations', consequence: 'the manual ranks become the order' },
+            { n: 2, label: 'Discard all', consequence: null },
+          ],
+          recommended: 1,
+          recommendationWhy: 'confirmed by hand',
+        },
+      },
+    ]);
+  });
+
+  it('carries a question need tolerantly: junk form fields drop, a null run id stays absent', () => {
+    const needs = parseNeeds([
+      {
+        kind: 'question',
+        ticketId: 'T-0091',
+        title: 'Half a shape',
+        text: 'QUESTION: Which way?',
+        runId: null,
+        questions: ['junk', null, { key: 'q0' }, { key: 'q1', question: 'Which way?', options: [{ label: '' }, 'junk', { label: 'Keep' }] }],
+        shaped: { question: '', options: [{ n: 1, label: 'Keep' }] },
+      },
+    ]);
+    expect(needs).toEqual([
+      {
+        kind: 'question',
+        ticketId: 'T-0091',
+        title: 'Half a shape',
+        summary: 'QUESTION: Which way?',
+        questions: [{ key: 'q1', header: null, question: 'Which way?', options: [{ label: 'Keep', description: null }], multiple: false }],
+      },
+    ]);
+  });
+
   it('never throws on junk', () => {
     expect(parseNeeds(null)).toEqual([]);
     expect(parseNeeds({ kind: 'question' })).toEqual([]);

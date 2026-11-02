@@ -285,11 +285,14 @@ export interface ProofCriterion {
 export interface ProofReport {
   /** The 'Tested on …' line as written ('' when the section carries none). */
   readonly testedOn: string;
+  /** The stamp's tester (`by <persona>`); '' when the line carries none. */
+  readonly tester: string;
   readonly criteria: readonly ProofCriterion[];
   readonly findings: readonly string[];
 }
 
 const TESTED_ON = /^Tested on .+$/m;
+const TESTED_BY = /^Tested on \S+ by (\S+)/m;
 const CRITERION = /^- \[([ xX])\] `([^`]+)`(?:\s*→\s*!\[\]\(\.\.\/attachments\/([^)]+)\))?(?:\s+—\s+(.+))?$/;
 const LOOSE_CRITERION = /^- \[([ xX])\] (?!`)(.+)$/;
 const FINDINGS_HEAD = /^###\s+findings\s*$/im;
@@ -334,7 +337,107 @@ export function proofOf(sectionText: string): ProofReport {
       criteria.push({ command: loose[2]!.trim(), passed: loose[1]!.toLowerCase() === 'x', screenshot: null, note: null });
     }
   }
-  return { testedOn, criteria, findings };
+  return { testedOn, tester: TESTED_BY.exec(sectionText)?.[1]?.trim() ?? '', criteria, findings };
+}
+
+/**
+ * The proof verdict's recommendation sentence: `<Tester> empfiehlt die
+ * Annahme.` — the tester the stamp names, its first letter raised; null
+ * when the stamp names none (the verdict box then shows the count
+ * alone). Tolerant by construction: it exists exactly when a tester is
+ * readable, never guessed.
+ */
+export function proofRecommendationOf(report: ProofReport): string | null {
+  const tester = report.tester.trim();
+  return tester === '' ? null : `${tester.charAt(0).toUpperCase()}${tester.slice(1)} empfiehlt die Annahme.`;
+}
+
+// --- the thread (prototype screen 04) ---------------------------------------------
+
+/**
+ * One chat message as the ticket's thread renders it — the active chat
+ * session's message slice, mirrored here so this screen stays decoupled
+ * from the chat tab's DTO (the parent binds the same objects).
+ */
+export interface ThreadMessage {
+  readonly role: 'owner' | 'mission';
+  readonly text: string;
+  /** The mission's thinking trace, folded away after completion. */
+  readonly thought: string | null;
+  /** ISO stamp; '' when the desk omitted it. */
+  readonly at: string;
+}
+
+/** One proposal the thread renders as its card line (the readable slice). */
+export interface ThreadProposal {
+  readonly id: string;
+  readonly state: 'pending' | 'confirmed' | 'dismissed';
+  readonly summary: string;
+  /** ISO stamp of the proposal; '' when the desk omitted it. */
+  readonly at: string;
+}
+
+/** One entry the thread list renders: a message bubble or a proposal card. */
+export type ThreadItem =
+  | { readonly kind: 'message'; readonly at: string; readonly message: ThreadMessage }
+  | { readonly kind: 'proposal'; readonly at: string; readonly proposal: ThreadProposal };
+
+/** One session proposal JSON as the card line reads it; null when unusable. */
+function threadProposalOf(raw: unknown): ThreadProposal | null {
+  if (typeof raw !== 'object' || raw === null) {
+    return null;
+  }
+  const body = raw as Record<string, unknown>;
+  const id = typeof body['id'] === 'string' ? body['id'] : '';
+  if (id === '') {
+    return null;
+  }
+  const state = body['state'] === 'confirmed' || body['state'] === 'dismissed' ? body['state'] : 'pending';
+  return {
+    id,
+    state,
+    summary: typeof body['summary'] === 'string' ? body['summary'] : '',
+    at: typeof body['at'] === 'string' ? body['at'] : '',
+  };
+}
+
+/**
+ * The thread's filtered view of the ACTIVE chat session (concept: the
+ * gefilterte Sicht): the messages whose text names the ticket plus the
+ * proposal cards whose command does (the whole session JSON serialized —
+ * tolerant, the id rides different fields per command kind). Stamped
+ * items interleave by their ISO stamps (equal stamps keep the session's
+ * message-before-proposal order), unstamped ones degrade to file order
+ * — messages first, then proposals. An empty result renders the
+ * 'Noch keine Nachrichten' line; an empty id never matches.
+ */
+export function threadItemsOf(
+  id: string,
+  messages: readonly ThreadMessage[],
+  proposals: readonly unknown[],
+): ThreadItem[] {
+  if (id === '') {
+    return [];
+  }
+  const items: ThreadItem[] = [];
+  for (const message of messages) {
+    if (message.text.includes(id)) {
+      items.push({ kind: 'message', at: message.at, message });
+    }
+  }
+  for (const raw of proposals) {
+    const proposal = threadProposalOf(raw);
+    if (proposal !== null && JSON.stringify(raw).includes(id)) {
+      items.push({ kind: 'proposal', at: proposal.at, proposal });
+    }
+  }
+  const stamped = items.every((item) => item.at !== '');
+  if (!stamped) {
+    const rank = (item: ThreadItem): number => (item.kind === 'message' ? 0 : 1);
+    return items.sort((a, b) => rank(a) - rank(b));
+  }
+  const rank = (item: ThreadItem): number => (item.kind === 'message' ? 0 : 1);
+  return items.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : rank(a) - rank(b)));
 }
 
 // --- the section splitter --------------------------------------------------------

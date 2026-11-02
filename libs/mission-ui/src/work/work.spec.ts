@@ -25,6 +25,9 @@ import {
   nextPhaseOf,
   personaInitialOf,
   personaMapOf,
+  questionCardOf,
+  questionNeedOf,
+  ticketPersonaOf,
   tokensSumLabelOf,
   vaultTitleOf,
   type McBoard,
@@ -35,6 +38,7 @@ import {
   type McTicket,
   type McWorkState,
   type NeedVm,
+  type QuestionCardVm,
   type TicketVm,
   type WorkGroup,
 } from './work.model';
@@ -878,5 +882,233 @@ describe('report needs (E8)', () => {
     const bare = setup(state) as unknown as ReportSurface;
     bare.promoteTicket(reportNeedOf(bare, 'report'));
     expect(promoted).toEqual(['T-0004']);
+  });
+});
+
+// --- the question option card ('Auswahl nie = Aktion') -------------------------------
+
+describe('question option cards', () => {
+  const shapedNeed: McNeed = {
+    kind: 'question',
+    ticketId: 'T-0091',
+    title: 'Kanban import',
+    summary: 'QUESTION: How should the 3 deviating ranks be handled?',
+    runId: 'r-12',
+    shaped: {
+      question: 'How should the 3 deviating ranks be handled?',
+      context: null,
+      where: null,
+      why: null,
+      options: [
+        { n: 1, label: 'Keep the deviations', consequence: 'the manual ranks become the order' },
+        { n: 2, label: 'Discard all', consequence: null },
+        { n: 3, label: 'Show the list first', consequence: 'three tickets to look through' },
+      ],
+      recommended: 1,
+      recommendationWhy: 'confirmed by hand',
+    },
+  };
+
+  const formNeed: McNeed = {
+    kind: 'question',
+    ticketId: 'T-0092',
+    title: 'Form question',
+    summary: 'Which way?',
+    runId: 'r-13',
+    questions: [
+      {
+        key: 'q0',
+        header: 'Import',
+        question: 'Which way?',
+        options: [
+          { label: 'Keep', description: 'the ranks stay' },
+          { label: 'Discard', description: null },
+        ],
+        multiple: false,
+      },
+    ],
+  };
+
+  const pinnedBoard: McBoard = {
+    columns: [
+      {
+        phase: { id: 'plan', title: 'Plan' },
+        tickets: [{ id: 'T-0091', title: null, meta: { persona: 'pia' } }],
+      },
+    ],
+  };
+
+  it('reads the shaped question into options with consequences and the recommendation badge', () => {
+    expect(questionCardOf(shapedNeed)).toEqual({
+      question: 'How should the 3 deviating ranks be handled?',
+      runId: 'r-12',
+      options: [
+        {
+          label: 'Keep the deviations',
+          consequence: 'the manual ranks become the order',
+          recommended: true,
+          answerText: '1. Keep the deviations',
+        },
+        { label: 'Discard all', consequence: null, recommended: false, answerText: '2. Discard all' },
+        {
+          label: 'Show the list first',
+          consequence: 'three tickets to look through',
+          recommended: false,
+          answerText: '3. Show the list first',
+        },
+      ],
+    });
+  });
+
+  it('reads a question form as the fallback: descriptions ride as consequences, no badge', () => {
+    expect(questionCardOf(formNeed)).toEqual({
+      question: 'Which way?',
+      runId: 'r-13',
+      options: [
+        { label: 'Keep', consequence: 'the ranks stay', recommended: false, answerText: 'Keep' },
+        { label: 'Discard', consequence: null, recommended: false, answerText: 'Discard' },
+      ],
+    });
+  });
+
+  it('yields null without a readable shape — the plain question text renders alone', () => {
+    expect(questionCardOf({ kind: 'question', title: 'Bare', summary: 'Which way?' })).toBeNull();
+    expect(questionCardOf({ ...shapedNeed, shaped: { ...shapedNeed.shaped!, options: [] } })).toBeNull();
+    expect(questionCardOf({ ...formNeed, questions: [] })).toBeNull();
+    expect(questionCardOf({ ...shapedNeed, kind: 'checkpoint' })).toBeNull();
+  });
+
+  it('finds the open question need for one ticket, first wins, none matches otherwise', () => {
+    const other: McNeed = { ...shapedNeed, ticketId: 'T-0099' };
+    expect(questionNeedOf([other, formNeed], 'T-0092')).toBe(formNeed);
+    expect(questionNeedOf([other], 'T-0092')).toBeNull();
+    expect(questionNeedOf([], 'T-0092')).toBeNull();
+  });
+
+  it('resolves the persona off the board’s card pin, tolerantly', () => {
+    const personas: McPersona[] = [{ id: 'pia', title: 'Pia', color: '#a78bfa' }];
+    expect(ticketPersonaOf(pinnedBoard, 'T-0091', personas)).toEqual(personas[0]);
+    expect(ticketPersonaOf(pinnedBoard, 'T-0092', personas)).toBeNull();
+    expect(ticketPersonaOf(null, 'T-0091', personas)).toBeNull();
+    expect(ticketPersonaOf(pinnedBoard, 'T-0091', [])).toBeNull();
+  });
+
+  interface QuestionSurface {
+    groups: Signal<WorkGroup[]>;
+    readOnly: Signal<boolean>;
+    questionCardOfNeed(vm: NeedVm): QuestionCardVm | null;
+    needPersona(vm: NeedVm): McPersona | null;
+    personaLabelOf(vm: NeedVm): string;
+    qSelectedIndex(vm: NeedVm): number | null;
+    qHasSelection(vm: NeedVm): boolean;
+    qSendLabel(card: QuestionCardVm, vm: NeedVm): string;
+    qIsPending(vm: NeedVm): boolean;
+    qIsDone(vm: NeedVm): boolean;
+    qErrorOf(vm: NeedVm): string | null;
+    qSelect(vm: NeedVm, index: number): void;
+    qSend(vm: NeedVm, card: QuestionCardVm): Promise<void>;
+  }
+
+  function needOf(vm: QuestionSurface): NeedVm {
+    const group = vm.groups()[0];
+    if (group?.kind !== 'needs') {
+      throw new Error('expected the needs group');
+    }
+    return group.needs[0]!;
+  }
+
+  function setupQuestion(patch: Partial<FakeState> = {}): {
+    vm: QuestionSurface;
+    answers: { runId: string; text: string }[];
+    toasts: string[];
+  } {
+    const answers: { runId: string; text: string }[] = [];
+    const toasts: string[] = [];
+    const { state } = makeFake({
+      needs: [shapedNeed],
+      board: pinnedBoard,
+      personas: [{ id: 'pia', title: 'Pia', color: '#a78bfa' }],
+      ...patch,
+    });
+    state.answer = (runId: string, text: string) => {
+      answers.push({ runId, text });
+      return Promise.resolve({ ok: true });
+    };
+    state.toast = (message: string) => toasts.push(message);
+    const work = setup(state);
+    return { vm: work as unknown as QuestionSurface, answers, toasts };
+  }
+
+  it('a tap only marks: the send row appears with the dynamic label, nothing sends', () => {
+    const { vm } = setupQuestion();
+    const vmNeed = needOf(vm);
+    const card = vm.questionCardOfNeed(vmNeed)!;
+    expect(card).not.toBeNull();
+    expect(vm.qSelectedIndex(vmNeed)).toBeNull();
+    expect(vm.qHasSelection(vmNeed)).toBe(false);
+
+    vm.qSelect(vmNeed, 0);
+    expect(vm.qSelectedIndex(vmNeed)).toBe(0);
+    expect(vm.qHasSelection(vmNeed)).toBe(true);
+    expect(vm.qSendLabel(card, vmNeed)).toBe('„Keep the deviations“ senden');
+
+    vm.qSelect(vmNeed, 2);
+    expect(vm.qSelectedIndex(vmNeed)).toBe(2);
+    expect(vm.qSendLabel(card, vmNeed)).toBe('„Show the list first“ senden');
+  });
+
+  it('sending acts once: the answer carries the run id and the option wording, the card turns done', async () => {
+    const { vm, answers, toasts } = setupQuestion();
+    const vmNeed = needOf(vm);
+    const card = vm.questionCardOfNeed(vmNeed)!;
+    vm.qSelect(vmNeed, 1);
+    await vm.qSend(vmNeed, card);
+    expect(answers).toEqual([{ runId: 'r-12', text: '2. Discard all' }]);
+    expect(vm.qIsDone(vmNeed)).toBe(true);
+    expect(vm.qIsPending(vmNeed)).toBe(false);
+    expect(vm.qErrorOf(vmNeed)).toBeNull();
+    expect(toasts).toEqual(['Antwort gesendet — Pia läuft weiter']);
+    expect(vm.personaLabelOf(vmNeed)).toBe('Pia');
+  });
+
+  it('a refusal shows inline and leaves the card answerable; without the adapter nothing sends', async () => {
+    const answered: { runId: string; text: string }[] = [];
+    const { state } = makeFake({ needs: [shapedNeed], board: pinnedBoard });
+    state.answer = (runId: string, text: string) => {
+      answered.push({ runId, text });
+      return Promise.resolve({ ok: false, error: 'the worker took no answer' });
+    };
+    state.toast = () => {};
+    const vm = setup(state) as unknown as QuestionSurface;
+    const vmNeed = needOf(vm);
+    vm.qSelect(vmNeed, 0);
+    await vm.qSend(vmNeed, vm.questionCardOfNeed(vmNeed)!);
+    expect(answered).toEqual([{ runId: 'r-12', text: '1. Keep the deviations' }]);
+    expect(vm.qIsDone(vmNeed)).toBe(false);
+    expect(vm.qErrorOf(vmNeed)).toBe('the worker took no answer');
+
+    const adapterless = setup(makeFake({ needs: [shapedNeed] }).state) as unknown as QuestionSurface;
+    const bareNeed = needOf(adapterless);
+    adapterless.qSelect(bareNeed, 0);
+    await adapterless.qSend(bareNeed, adapterless.questionCardOfNeed(bareNeed)!);
+    expect(adapterless.qIsDone(bareNeed)).toBe(false);
+    expect(adapterless.qErrorOf(bareNeed)).toBeNull();
+  });
+
+  it('a read-only device never selects; a thrown answer lands inline, no toast', async () => {
+    const { vm, toasts } = setupQuestion({ readOnly: true });
+    const vmNeed = needOf(vm);
+    vm.qSelect(vmNeed, 0);
+    expect(vm.qSelectedIndex(vmNeed)).toBeNull();
+    expect(toasts).toEqual([]);
+
+    const { state } = makeFake({ needs: [shapedNeed], board: pinnedBoard });
+    state.answer = () => Promise.reject(new Error('gone'));
+    const work = setup(state) as unknown as QuestionSurface;
+    const bareNeed = needOf(work);
+    work.qSelect(bareNeed, 0);
+    await work.qSend(bareNeed, work.questionCardOfNeed(bareNeed)!);
+    expect(work.qIsDone(bareNeed)).toBe(false);
+    expect(work.qErrorOf(bareNeed)).toBe('The answer did not go through.');
   });
 });

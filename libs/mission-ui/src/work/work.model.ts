@@ -32,6 +32,52 @@ export interface McNeed {
    * 'report' need (the engine's guarantee); absent otherwise.
    */
   readonly report?: McScoutReport;
+  /**
+   * The run the need concerns (the engine's NeedItem.runId — the run the
+   * option card's answer addresses); null/absent for a checkpoint or a
+   * report. The wire slice rides in `api/dto` (`NeedView`); the shapes
+   * stay in step because the shell binds the api's list directly.
+   */
+  readonly runId?: string | null;
+  /** A question form's fields (OpenCode's `question` tool); absent otherwise. */
+  readonly questions?: readonly McWaitQuestion[];
+  /** A `QUESTION:` turn's parsed fixed shape (req-75 W2); absent otherwise. */
+  readonly shaped?: McShapedQuestion;
+}
+
+/** One option of a worker's question form (the engine's WaitQuestion option). */
+export interface McWaitOption {
+  readonly label: string;
+  readonly description: string | null;
+}
+
+/** One question of a worker's question form (the engine's WaitQuestion). */
+export interface McWaitQuestion {
+  /** The form field the answer goes to (`q0`, `q1`, …). */
+  readonly key: string;
+  readonly header: string | null;
+  readonly question: string;
+  readonly options: readonly McWaitOption[];
+  readonly multiple: boolean;
+}
+
+/** One numbered option of a shaped `QUESTION:` turn (question-shape.ts). */
+export interface McShapedOption {
+  readonly n: number;
+  readonly label: string;
+  /** What the option concretely does; null when the line named none. */
+  readonly consequence: string | null;
+}
+
+/** A `QUESTION:` turn's parsed fixed shape (the engine's ShapedQuestion). */
+export interface McShapedQuestion {
+  readonly question: string;
+  readonly context: string | null;
+  readonly where: string | null;
+  readonly why: string | null;
+  readonly options: readonly McShapedOption[];
+  readonly recommended: number | null;
+  readonly recommendationWhy: string | null;
 }
 
 /** One scout decision as the report card renders it. */
@@ -210,7 +256,17 @@ export interface McWorkState {
    * module's ToastKind).
    */
   toast?(message: string, kind?: 'ok' | 'warn' | 'error'): void;
+  /**
+   * Answers a run's question (req-64): the option card's send — one POST
+   * to the desk, the run goes on with its step. `text` is the chosen
+   * option's answer wording (`questionAnswerTextOf`). Optional while the
+   * parent wires it; absent = the option card renders display-only.
+   */
+  answer?(runId: string, text: string): Promise<McAnswerReply>;
 }
+
+/** What an answer hands back (`McReply` in the app's api layer, restated). */
+export type McAnswerReply = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
 export const MC_WORK_STATE = new InjectionToken<McWorkState>('mc.work-state');
 
@@ -284,6 +340,106 @@ export const NEED_KIND_LABELS: Readonly<Record<string, string>> = {
 /** The need card's kind chip; an unknown kind shows itself, never a guess. */
 export function needKindLabelOf(kind: string): string {
   return NEED_KIND_LABELS[kind] ?? kind;
+}
+
+// --- the question option card ('Auswahl nie = Aktion') ---------------------------
+
+/** One option row the question card renders. */
+export interface QuestionOptionVm {
+  readonly label: string;
+  /** What the option concretely does; null = the line named none. */
+  readonly consequence: string | null;
+  /** The recommendation badge's row (a shaped question's recommended option). */
+  readonly recommended: boolean;
+  /**
+   * What sending hands the desk: `<n>. <label>` on a shaped question
+   * (the engine's answerText), the bare label on a question form (the
+   * runner's own matcher reads labels).
+   */
+  readonly answerText: string;
+}
+
+/** The question card's render slice; null = the need asks nothing readable. */
+export interface QuestionCardVm {
+  readonly question: string;
+  readonly options: readonly QuestionOptionVm[];
+  /** The run the answer addresses; null = nothing to answer (composer prefill only). */
+  readonly runId: string | null;
+}
+
+/**
+ * The question need's option card ('Auswahl nie = Aktion'): the shaped
+ * `QUESTION:` shape wins — its numbered options with their consequences
+ * and the recommendation badge; a question form (`questions`) renders
+ * its first question's choices with their descriptions. A need with
+ * neither shape — or without two readable options — yields null: the
+ * card then shows the plain question text alone and the composer
+ * carries the answer.
+ */
+export function questionCardOf(need: McNeed): QuestionCardVm | null {
+  if (need.kind !== 'question') {
+    return null;
+  }
+  const runId = need.runId ?? null;
+  const shaped = need.shaped;
+  if (shaped !== undefined && shaped.options.length >= 2) {
+    return {
+      question: shaped.question,
+      runId,
+      options: shaped.options.map((option) => ({
+        label: option.label,
+        consequence: option.consequence,
+        recommended: shaped.recommended !== null && option.n === shaped.recommended,
+        answerText: `${option.n}. ${option.label}`,
+      })),
+    };
+  }
+  const form = need.questions?.[0];
+  if (form !== undefined && form.options.length >= 2) {
+    return {
+      question: form.question,
+      runId,
+      options: form.options.map((option) => ({
+        label: option.label,
+        consequence: option.description,
+        recommended: false,
+        answerText: option.label,
+      })),
+    };
+  }
+  return null;
+}
+
+/**
+ * The open question need for one ticket: the first 'question' item whose
+ * ticket id matches; null = none waits (the thread CTA degrades to the
+ * ghost 'Thread öffnen').
+ */
+export function questionNeedOf(needs: readonly McNeed[], ticketId: string): McNeed | null {
+  return needs.find((need) => need.kind === 'question' && (need.ticketId ?? '') === ticketId) ?? null;
+}
+
+/**
+ * The persona behind a ticket, resolved off the board's card pin — the
+ * question chip and the CTA's label read it; null when the board holds
+ * no such card, no pin, or the persona is unmapped (tolerant: the chip
+ * stays hidden then).
+ */
+export function ticketPersonaOf(
+  board: McBoard | null,
+  ticketId: string,
+  personas: readonly McPersona[],
+): McPersona | null {
+  for (const column of board?.columns ?? []) {
+    for (const ticket of column.tickets) {
+      if (ticket.id !== ticketId) {
+        continue;
+      }
+      const id = ticket.meta.persona ?? null;
+      return id === null ? null : (personaMapOf(personas).get(id) ?? null);
+    }
+  }
+  return null;
 }
 
 /** The card title: the file title (top level or the desk's meta.title), the id when absent. */

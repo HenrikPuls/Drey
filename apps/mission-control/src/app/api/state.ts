@@ -16,6 +16,7 @@
  */
 import { signal } from '@angular/core';
 import { ApiError, McClient, type McBootHints, type McEventHandlers } from './client';
+import { type McChatUploadReply } from '@mission-ui/chat/chat.model';
 import {
   parseActiveSession,
   parseChatEvent,
@@ -356,6 +357,11 @@ export class McState {
     return { ok: true };
   }
 
+  /** Uploads the composer's picked attachments to the desk. */
+  async uploadAttachment(files: File[]): Promise<McChatUploadReply> {
+    return this.client.uploadAttachments(files);
+  }
+
   /** Sends one owner message to the open session (echoed at once). */
   async send(text: string): Promise<McReply> {
     const file = this.chat().active?.file ?? null;
@@ -575,6 +581,55 @@ export class McState {
     if (body !== null) {
       this.diff.set(parseTicketDiff(body));
     }
+  }
+
+  // --- fleet runs (req-64) -----------------------------------------------------
+
+  /**
+   * Answers a run's question: `POST /api/runs/<runId>/answer` with the
+   * answers record the desk's parseAnswer reads — one question's form key
+   * to the chosen wording. The key comes from the need the run waits on
+   * (the needs list the SSE frames keep fresh); without a readable one
+   * the first form key (`q0`) is the default. A `QUESTION:` turn (req-75
+   * W2) carries no form: the desk refuses the answer route, and the
+   * wording then goes the steer route instead — the takeover's own path
+   * for the conversation's question.
+   */
+  async answerRun(runId: string, text: string): Promise<McReply> {
+    const trimmed = text.trim();
+    if (trimmed === '') {
+      return { ok: false, error: 'the answer is empty' };
+    }
+    const key = this.needs().find((need) => need.runId === runId)?.questions?.[0]?.key ?? 'q0';
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', `/api/runs/${encodeURIComponent(runId)}/answer`, {
+        answers: { [key]: trimmed },
+      })
+      .catch(fail);
+    if (isFailure(body)) {
+      if (/asks no question/.test(body.error)) {
+        return this.steerRun(runId, trimmed);
+      }
+      return body;
+    }
+    if (body['ok'] !== true) {
+      return refusal(body, 'the desk did not take the answer');
+    }
+    return { ok: true };
+  }
+
+  /** Steers a waiting run with the owner's wording (`POST /api/runs/<id>/send`). */
+  private async steerRun(runId: string, text: string): Promise<McReply> {
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', `/api/runs/${encodeURIComponent(runId)}/send`, { text })
+      .catch(fail);
+    if (isFailure(body)) {
+      return body;
+    }
+    if (body['ok'] !== true) {
+      return refusal(body, 'the desk did not take the answer');
+    }
+    return { ok: true };
   }
 
   /** The memoized object URL for one attachment; null until `ensureAttachment` fetched it. */

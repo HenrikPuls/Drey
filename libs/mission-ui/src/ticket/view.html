@@ -11,394 +11,595 @@
   }
 } @else {
   <div class="ticket">
-    <header class="hdr">
-      <button type="button" class="back" (click)="vm.onClose()">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.4"
-          stroke-linecap="round"
-          aria-hidden="true"
-        >
-          <path d="M15 5l-7 7 7 7" />
-        </svg>
-        Arbeit
-      </button>
-      <span class="spacer"></span>
-      <span class="tid">{{ id() }}</span>
-      @if (!readOnly()) {
-        <button
-          type="button"
-          class="tedit"
-          [class.on]="editing()"
-          aria-label="Edit ticket"
-          (click)="toggleEdit()"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.9"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M16.5 4.5l3 3L8 19l-4 1 1-4L16.5 4.5z" />
-          </svg>
-        </button>
-      }
-    </header>
+    @switch (mode()) {
+      <!-- ==================== the ticket face ==================== -->
+      @case ('ticket') {
+        <header class="hdr">
+          <button type="button" class="back" (click)="vm.onClose()">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M15 5l-7 7 7 7" />
+            </svg>
+            Arbeit
+          </button>
+          <span class="spacer"></span>
+          <span class="tid">{{ id() }}</span>
+          @if (!readOnly()) {
+            <button
+              type="button"
+              class="tedit"
+              [class.on]="editing()"
+              aria-label="Edit ticket"
+              (click)="toggleEdit()"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M16.5 4.5l3 3L8 19l-4 1 1-4L16.5 4.5z" />
+              </svg>
+            </button>
+          }
+        </header>
 
-    <div class="page">
-      <div class="card-top">
-        <span class="phase" [style.color]="phaseColor()" [style.border-color]="phaseColor()">
-          {{ phaseTitle() }}
-        </span>
-        @if (persona(); as p) {
-          <span class="pchip">
-            <i aria-hidden="true">{{ p.charAt(0).toUpperCase() }}</i>
-            {{ personaTitle(p) }}
-          </span>
-        }
-        @if (cost(); as c) {
-          <span class="tkcost">{{ c }}</span>
-        }
-      </div>
-      <h1 class="tk-title">{{ title() }}</h1>
-      <p class="tk-fm">{{ fmLine() }}</p>
-
-      @if (steps().length > 0) {
-        <button
-          type="button"
-          class="gates gate-tap"
-          [disabled]="readOnly()"
-          aria-label="Gate chain — tap to insert a gate, set a notify rule or return to the standard flow"
-          (click)="openSheet()">
-          @for (step of steps(); track $index) {
-            @if ($index > 0) {
-              <span class="garrow" aria-hidden="true">→</span>
-            }
-            <span
-              class="gate"
-              [class.done]="step.state === 'past'"
-              [class.now]="step.state === 'current'"
-              [class.new]="step.inserted"
-              [class.skipped]="step.skipped"
-              [attr.aria-current]="step.state === 'current' ? 'step' : null">
-              @if (step.state === 'past' || step.state === 'current') {
-                <span class="gs" aria-hidden="true">{{ step.state === 'past' ? '✓' : '●' }}</span>
-              }
-              @if (step.inserted) {
-                <span class="gs" aria-hidden="true">+</span>
-              }
-              <span class="gt">{{ step.title }}</span>
-              @if (step.state === 'current' && step.persona; as p) {
-                <span class="gp">{{ personaTitle(p) }}</span>
-              }
-              @if (step.cost; as c) {
-                <span class="gc">{{ c }}</span>
-              }
-              @if (step.notify) {
-                <span
-                  class="gn"
-                  title="Tells you when this gate completes"
-                  [attr.aria-label]="'Notifies you when ' + step.title + ' completes'">◎</span>
-              }
+        <div class="page">
+          <div class="card-top">
+            <span class="phase" [style.color]="phaseColor()" [style.border-color]="phaseColor()">
+              {{ phaseTitle() }}
             </span>
-          }
-          @if (costTotal(); as total) {
-            <span class="cs-total">{{ total }}</span>
-          }
-        </button>
-        <button type="button" class="chain-hint" [disabled]="readOnly()" (click)="openSheet()">
-          Kette: Standard-Flow + Delta aus dem Frontmatter · antippen zum Anpassen
-        </button>
-      }
+            @if (persona(); as p) {
+              <span class="pchip">
+                <i aria-hidden="true">{{ p.charAt(0).toUpperCase() }}</i>
+                {{ personaTitle(p) }}
+              </span>
+            }
+            @if (cost(); as c) {
+              <span class="tkcost">{{ c }}</span>
+            }
+          </div>
+          <h1 class="tk-title">{{ title() }}</h1>
+          <p class="tk-fm">{{ fmLine() }}</p>
 
-      <div class="body">
-        @for (block of blocks(); track $index) {
-          @switch (block.kind) {
-            @case ('heading') {
-              @if (block.level === 2) {
-                <h3 class="tk-sec">{{ block.text }}</h3>
-              } @else {
-                <h4 class="tk-sub">{{ block.text }}</h4>
-              }
-            }
-            @case ('paragraph') {
-              <p class="tk-p">{{ block.text }}</p>
-            }
-            @case ('list') {
-              <ul class="tk-list">
-                @for (item of block.items; track $index) {
-                  <li class="tk-li" [class.li-done]="item.checked === true">
-                    <span class="box" aria-hidden="true">
-                      {{ item.checked === null ? '–' : item.checked ? '☑' : '☐' }}
-                    </span>
-                    <span>{{ item.text }}</span>
-                  </li>
+          @if (steps().length > 0) {
+            <ng-container [ngTemplateOutlet]="gateBar" [ngTemplateOutletContext]="{ tappable: true }" />
+          }
+
+          <div class="body">
+            @for (block of blocks(); track $index) {
+              @switch (block.kind) {
+                @case ('heading') {
+                  @if (block.level === 2) {
+                    <h3 class="tk-sec">{{ block.text }}</h3>
+                  } @else {
+                    <h4 class="tk-sub">{{ block.text }}</h4>
+                  }
                 }
-              </ul>
-            }
-            @case ('code') {
-              <pre class="tk-yaml">{{ block.text }}</pre>
-            }
-          }
-        }
-      </div>
-
-      @if (verlauf(); as verlauf) {
-        <section class="verlauf" aria-label="Verlauf">
-          <h3 class="tk-sec">Verlauf</h3>
-          <pre class="tk-yaml">{{ verlauf }}</pre>
-        </section>
-      }
-
-      @if (report(); as scoutReport) {
-        <section class="card scout" aria-label="Scout report">
-          <h3 class="tk-sec">Report</h3>
-          @if (scoutReport.writtenAt || scoutReport.by) {
-            <p class="tested">
-              Written on {{ scoutReport.writtenAt === '' ? '…' : scoutReport.writtenAt }} by
-              {{ scoutReport.by === '' ? 'scout' : scoutReport.by }}.
-            </p>
-          }
-          @if (scoutReport.summary) {
-            <p class="scout-summary">{{ scoutReport.summary }}</p>
-          }
-          @if (scoutReport.decisions.length > 0) {
-            <ul class="tk-list scout-decisions">
-              @for (decision of scoutReport.decisions; track $index) {
-                <li class="tk-li" [class.li-done]="decision.resolved">
-                  <span class="box" aria-hidden="true">{{ decision.resolved ? '☑' : '☐' }}</span>
-                  <span class="scout-decision-body">
-                    <span class="scout-decision-question">
-                      @if (decision.key) {
-                        <span class="scout-decision-key">{{ decision.key }}:</span>
-                      }
-                      {{ decision.question }}
-                    </span>
-                    @if (decision.recommendation) {
-                      <span class="scout-decision-rec">Recommendation: {{ decision.recommendation }}</span>
+                @case ('paragraph') {
+                  <p class="tk-p">{{ block.text }}</p>
+                }
+                @case ('list') {
+                  <ul class="tk-list">
+                    @for (item of block.items; track $index) {
+                      <li class="tk-li" [class.li-done]="item.checked === true">
+                        <span class="box" aria-hidden="true">
+                          {{ item.checked === null ? '–' : item.checked ? '☑' : '☐' }}
+                        </span>
+                        <span>{{ item.text }}</span>
+                      </li>
                     }
-                  </span>
-                </li>
+                  </ul>
+                }
+                @case ('code') {
+                  <pre class="tk-yaml">{{ block.text }}</pre>
+                }
               }
-            </ul>
+            }
+          </div>
+
+          @if (verlauf(); as verlauf) {
+            <section class="verlauf" aria-label="Verlauf">
+              <h3 class="tk-sec">Verlauf</h3>
+              <pre class="tk-yaml">{{ verlauf }}</pre>
+            </section>
           }
-        </section>
+
+          @if (report(); as scoutReport) {
+            <section class="card scout" aria-label="Scout report">
+              <h3 class="tk-sec">Report</h3>
+              @if (scoutReport.writtenAt || scoutReport.by) {
+                <p class="tested">
+                  Written on {{ scoutReport.writtenAt === '' ? '…' : scoutReport.writtenAt }} by
+                  {{ scoutReport.by === '' ? 'scout' : scoutReport.by }}.
+                </p>
+              }
+              @if (scoutReport.summary) {
+                <p class="scout-summary">{{ scoutReport.summary }}</p>
+              }
+              @if (scoutReport.decisions.length > 0) {
+                <ul class="tk-list scout-decisions">
+                  @for (decision of scoutReport.decisions; track $index) {
+                    <li class="tk-li" [class.li-done]="decision.resolved">
+                      <span class="box" aria-hidden="true">{{ decision.resolved ? '☑' : '☐' }}</span>
+                      <span class="scout-decision-body">
+                        <span class="scout-decision-question">
+                          @if (decision.key) {
+                            <span class="scout-decision-key">{{ decision.key }}:</span>
+                          }
+                          {{ decision.question }}
+                        </span>
+                        @if (decision.recommendation) {
+                          <span class="scout-decision-rec">Recommendation: {{ decision.recommendation }}</span>
+                        }
+                      </span>
+                    </li>
+                  }
+                </ul>
+              }
+            </section>
+          }
+
+          @if (savedFlash(); as flash) {
+            <p class="result result-note">{{ flash }}</p>
+          }
+          @if (result(); as ticketResult) {
+            <p
+              class="result"
+              [class.result-error]="ticketResult.kind === 'error'"
+              [class.result-note]="ticketResult.kind === 'note'"
+              aria-live="polite"
+            >
+              {{ ticketResult.text }}
+            </p>
+          }
+
+          @if (!readOnly()) {
+            <div class="cta-row">
+              @if (proofCta(); as cta) {
+                <button type="button" class="btn primary" (click)="openProof()">{{ cta }}</button>
+              }
+              @if (threadCta(); as cta) {
+                <button
+                  type="button"
+                  class="btn"
+                  [class.primary]="proofCta() === null && questionNeed() !== null"
+                  [class.ghost]="proofCta() !== null || questionNeed() === null"
+                  (click)="openThread()"
+                >
+                  {{ cta }}
+                </button>
+              }
+              <button type="button" class="btn ghost" (click)="changeByChat()">Per Chat ändern</button>
+            </div>
+          }
+        </div>
       }
 
-      @if (proof(); as report) {
-        <section class="card proof" aria-label="Verification">
-          <h3 class="tk-sec">Verification</h3>
-          @if (verdict(); as v) {
-            <p class="verdict">
-              <b>{{ v.passed }}/{{ v.total }} green.</b>
-              {{ v.stamp }}
-            </p>
-          } @else if (report.testedOn) {
-            <p class="tested">{{ report.testedOn }}</p>
+      <!-- ==================== the proof face ==================== -->
+      @case ('proof') {
+        <header class="hdr">
+          <button type="button" class="back" (click)="backToTicket()">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M15 5l-7 7 7 7" />
+            </svg>
+            Ticket
+          </button>
+          <span class="spacer"></span>
+          <span class="tid">{{ id() }}</span>
+        </header>
+
+        <div class="page">
+          @if (proof(); as report) {
+            <div class="card-top">
+              <span class="phase" [style.color]="phaseColor()" [style.border-color]="phaseColor()">
+                {{ phaseTitle() }}
+              </span>
+              @if (persona(); as p) {
+                <span class="pchip">
+                  <i aria-hidden="true">{{ p.charAt(0).toUpperCase() }}</i>
+                  {{ personaTitle(p) }}
+                </span>
+              }
+              @if (cost(); as c) {
+                <span class="tkcost">{{ c }}</span>
+              }
+            </div>
+            <h1 class="tk-title">{{ title() }}</h1>
+            @if (report.testedOn) {
+              <p class="tk-fm">{{ report.testedOn }}</p>
+            }
           }
-          @if (report.criteria.length > 0) {
-            <div class="checks">
-              @for (criterion of report.criteria; track criterion.command) {
-                <div class="check" [class.check-fail]="!criterion.passed">
-                  <span class="ok" aria-hidden="true">{{ criterion.passed ? '[x]' : '[ ]' }}</span>
-                  <span class="check-body">
-                    {{ criterion.command }}
-                    @if (criterion.note) {
-                      <small class="check-note">{{ criterion.note }}</small>
-                    }
-                  </span>
+
+          @if (steps().length > 0) {
+            <ng-container [ngTemplateOutlet]="gateBar" [ngTemplateOutletContext]="{ tappable: false }" />
+          }
+
+          @if (verdict(); as v) {
+            <div class="verdict" role="status">
+              <b>{{ v.passed }}/{{ v.total }} grün.</b>
+              <span class="verdict-body">
+                @if (v.stamp) {
+                  {{ v.stamp }}
+                }
+                @if (proofRecommendation(); as recommendation) {
+                  {{ recommendation }}
+                }
+              </span>
+            </div>
+          }
+
+          @if (proof(); as report) {
+            @if (report.criteria.length > 0) {
+              <div class="checks">
+                @for (criterion of report.criteria; track criterion.command) {
+                  <div class="check" [class.check-fail]="!criterion.passed">
+                    <span class="ok" aria-hidden="true">{{ criterion.passed ? '[x]' : '[ ]' }}</span>
+                    <span class="check-body">
+                      {{ criterion.command }}
+                      @if (criterion.note; as note) {
+                        <small class="check-note">{{ note }}</small>
+                      } @else if (criterion.screenshot; as screenshot) {
+                        <small class="check-note">Screenshot: {{ screenshot }}</small>
+                      }
+                    </span>
+                  </div>
+                }
+              </div>
+            }
+            @if (shots().length > 0) {
+              <div class="gal" #gal aria-label="Screenshots" (scroll)="onGalScroll(gal)">
+                @for (shot of shots(); track shot.name) {
+                  <button type="button" class="shot" (click)="openViewer(shot)">
+                    <img [src]="shot.url" [alt]="shot.name" loading="lazy" />
+                  </button>
+                }
+              </div>
+              @if (shots().length > 1) {
+                <div class="gal-dots">
+                  @for (shot of shots(); track $index) {
+                    <i [class.on]="$index === galIndex()" (click)="galTo($index, gal)"></i>
+                  }
                 </div>
               }
-            </div>
-          }
-          @if (shots().length > 0) {
-            <div class="gal" #gal aria-label="Screenshots" (scroll)="onGalScroll(gal)">
-              @for (shot of shots(); track shot.name) {
-                <button type="button" class="shot" (click)="openViewer(shot)">
-                  <img [src]="shot.url" [alt]="shot.name" loading="lazy" />
-                </button>
-              }
-            </div>
-            @if (shots().length > 1) {
-              <div class="gal-dots">
-                @for (shot of shots(); track $index) {
-                  <i
-                    [class.on]="$index === galIndex()"
-                    (click)="galTo($index, gal)"></i>
-                }
-              </div>
             }
-          }
-          @if (report.findings.length > 0) {
-            <div class="findings">
-              <h3 class="findings-title">Findings</h3>
-              <ul class="findings-list">
-                @for (finding of report.findings; track $index) {
-                  <li><span>{{ finding }}</span></li>
-                }
-              </ul>
-            </div>
-          }
-          @if (costTotal(); as total) {
-            <p class="proof-total">gesamt <b>{{ total }}</b></p>
-          }
-        </section>
-      }
-
-      @if (diff(); as diff) {
-        <section class="card diff" aria-label="Changes">
-          <h3 class="tk-sec">
-            Changes
-            @if (diff.files.length > 0) {
-              <span class="cnt">· {{ diff.files.length }} files</span>
-            }
-          </h3>
-          @for (file of diff.files; track file.path) {
-            <div class="dfile" [class.open]="isExpanded(file.path)">
-              <div class="dfile-h">
-                <button
-                  type="button"
-                  class="dfile-main"
-                  [attr.aria-expanded]="isExpanded(file.path)"
-                  (click)="toggleExpanded(file.path)"
-                >
-                  <svg
-                    class="chev"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.4"
-                    stroke-linecap="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M9 5l7 7-7 7" />
-                  </svg>
-                  <span class="fp">{{ file.path }}</span>
-                  @if (file.added !== null && file.removed !== null) {
-                    <span class="fs">
-                      <b>+{{ file.added }}</b>
-                      <b class="del">−{{ file.removed }}</b>
-                    </span>
+            @if (report.findings.length > 0) {
+              <div class="findings">
+                <h3 class="findings-title">Findings</h3>
+                <ul class="findings-list">
+                  @for (finding of report.findings; track $index) {
+                    <li><span>{{ finding }}</span></li>
                   }
-                </button>
-                <button
-                  type="button"
-                  class="zmag"
-                  title="Fullscreen"
-                  aria-label="Show the patch fullscreen"
-                  (click)="openFullscreen(file, $event)"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    aria-hidden="true"
-                  >
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="M21 21l-4.3-4.3M8 11h6M11 8v6" />
-                  </svg>
-                </button>
+                </ul>
               </div>
-              @if (isExpanded(file.path) && file.patch !== '') {
-                <div class="dfile-b">
-                  @for (row of patchRows(file.patch); track $index) {
-                    <div
-                      class="dl2"
-                      [class.add]="row.kind === 'add'"
-                      [class.del]="row.kind === 'del'"
-                      [class.hunk]="row.kind === 'hunk'"
+            }
+          }
+
+          @if (diff(); as proofDiff) {
+            <section class="card diff" aria-label="Changes">
+              <h3 class="tk-sec">
+                Changes
+                @if (proofDiff.files.length > 0) {
+                  <span class="cnt">· {{ proofDiff.files.length }} Dateien</span>
+                }
+              </h3>
+              @for (file of proofDiff.files; track file.path) {
+                <div class="dfile" [class.open]="isExpanded(file.path)">
+                  <div class="dfile-h">
+                    <button
+                      type="button"
+                      class="dfile-main"
+                      [attr.aria-expanded]="isExpanded(file.path)"
+                      (click)="toggleExpanded(file.path)"
                     >
-                      <span class="ln">{{ row.oldNo ?? '' }}</span>
-                      <span class="ln">{{ row.newNo ?? '' }}</span>
-                      <span class="sg">{{ row.sign }}</span>
-                      <span class="code">{{ row.text === '' ? ' ' : row.text }}</span>
+                      <svg
+                        class="chev"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.4"
+                        stroke-linecap="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M9 5l7 7-7 7" />
+                      </svg>
+                      <span class="fp">{{ file.path }}</span>
+                      @if (file.added !== null && file.removed !== null) {
+                        <span class="fs">
+                          <b>+{{ file.added }}</b>
+                          <b class="del">−{{ file.removed }}</b>
+                        </span>
+                      }
+                    </button>
+                    <button
+                      type="button"
+                      class="zmag"
+                      title="Fullscreen"
+                      aria-label="Show the patch fullscreen"
+                      (click)="openFullscreen(file, $event)"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        aria-hidden="true"
+                      >
+                        <circle cx="11" cy="11" r="7" />
+                        <path d="M21 21l-4.3-4.3M8 11h6M11 8v6" />
+                      </svg>
+                    </button>
+                  </div>
+                  @if (isExpanded(file.path) && file.patch !== '') {
+                    <div class="dfile-b">
+                      @for (row of patchRows(file.patch); track $index) {
+                        <div
+                          class="dl2"
+                          [class.add]="row.kind === 'add'"
+                          [class.del]="row.kind === 'del'"
+                          [class.hunk]="row.kind === 'hunk'"
+                        >
+                          <span class="ln">{{ row.oldNo ?? '' }}</span>
+                          <span class="ln">{{ row.newNo ?? '' }}</span>
+                          <span class="sg">{{ row.sign }}</span>
+                          <span class="code">{{ row.text === '' ? ' ' : row.text }}</span>
+                        </div>
+                      }
                     </div>
                   }
                 </div>
               }
-            </div>
+              @if (proofDiff.truncated) {
+                <p class="diff-truncated">Diff truncated for size.</p>
+              }
+            </section>
           }
-          @if (diff.truncated) {
-            <p class="diff-truncated">Diff truncated for size.</p>
-          }
-        </section>
-      }
 
-      @if (savedFlash(); as flash) {
-        <p class="result result-note">{{ flash }}</p>
-      }
-      @if (result(); as result) {
-        <p
-          class="result"
-          [class.result-error]="result.kind === 'error'"
-          [class.result-note]="result.kind === 'note'"
-          aria-live="polite"
-        >
-          {{ result.text }}
-        </p>
-      }
-
-      @if (accepted()) {
-        <div class="done-wrap" role="status">
-          <div class="done-ring">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M4 12.5l5 5L20 6.5" />
-            </svg>
-          </div>
-          <h3 class="done-title">Angenommen</h3>
-          @if (result(); as r) {
-            <p class="done-note">{{ r.text }}</p>
+          @if (costTotal(); as total) {
+            <p class="proof-total">gesamt <b>{{ total }}</b></p>
           }
-          <button type="button" class="btn ghost done-back" (click)="vm.onClose()">Zurück zur Arbeit</button>
-        </div>
-      } @else if (!readOnly()) {
-        <div class="actions">
-          @if (sendBackOpen()) {
-            <div class="sendback">
-              <label class="sendback-label" for="sendback-note">What is wrong? A send-back needs a note.</label>
-              <textarea
-                id="sendback-note"
-                class="sendback-text"
-                rows="3"
-                aria-label="Send-back note"
-                [value]="note()"
-                (input)="onNote($event)"
-              ></textarea>
-              <div class="action-row">
-                <button
-                  type="button"
-                  class="btn warn"
-                  [disabled]="note().trim() === '' || sendBackPending()"
-                  (click)="sendBack()"
-                >
-                  {{ sendBackPending() ? 'Sending…' : 'Send back' }}
-                </button>
-                <button type="button" class="btn ghost" (click)="toggleSendBack()">Cancel</button>
+
+          @if (savedFlash(); as flash) {
+            <p class="result result-note">{{ flash }}</p>
+          }
+          @if (result(); as ticketResult) {
+            <p
+              class="result"
+              [class.result-error]="ticketResult.kind === 'error'"
+              [class.result-note]="ticketResult.kind === 'note'"
+              aria-live="polite"
+            >
+              {{ ticketResult.text }}
+            </p>
+          }
+
+          @if (accepted()) {
+            <div class="done-wrap" role="status">
+              <div class="done-ring">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M4 12.5l5 5L20 6.5" />
+                </svg>
               </div>
+              <h3 class="done-title">Angenommen</h3>
+              @if (result(); as r) {
+                <p class="done-note">{{ r.text }}</p>
+              }
+              <button type="button" class="btn ghost done-back" (click)="vm.onClose()">Zurück zur Arbeit</button>
             </div>
-          } @else {
-            <div class="action-row">
-              <button type="button" class="btn ghost" (click)="toggleSendBack()">Send back…</button>
+          } @else if (!readOnly()) {
+            <div class="actions">
+              @if (sendBackOpen()) {
+                <div class="sendback">
+                  <label class="sendback-label" for="sendback-note">What is wrong? A send-back needs a note.</label>
+                  <textarea
+                    id="sendback-note"
+                    class="sendback-text"
+                    rows="3"
+                    aria-label="Send-back note"
+                    [value]="note()"
+                    (input)="onNote($event)"
+                  ></textarea>
+                  <div class="action-row">
+                    <button
+                      type="button"
+                      class="btn warn"
+                      [disabled]="note().trim() === '' || sendBackPending()"
+                      (click)="sendBack()"
+                    >
+                      {{ sendBackPending() ? 'Sending…' : 'Send back' }}
+                    </button>
+                    <button type="button" class="btn ghost" (click)="toggleSendBack()">Cancel</button>
+                  </div>
+                </div>
+              } @else {
+                <div class="action-row">
+                  <button type="button" class="btn ghost" (click)="toggleSendBack()">Zurückschicken…</button>
+                  <button
+                    type="button"
+                    class="btn primary"
+                    [disabled]="acceptPending()"
+                    (click)="acceptTap()">
+                    {{ acceptPending() ? 'Accepting…' : arm().armed ? 'Tap again to accept' : 'Annehmen & mergen' }}
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      <!-- ==================== the thread face ==================== -->
+      @case ('thread') {
+        <header class="hdr">
+          <button type="button" class="back" (click)="backToTicket()">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M15 5l-7 7 7 7" />
+            </svg>
+            Ticket
+          </button>
+          <span class="spacer"></span>
+          @if (threadPersona(); as chip) {
+            <span class="pchip">
+              <i aria-hidden="true" [style.background-color]="chip.color ?? null">
+                {{ chip.title.charAt(0).toUpperCase() }}
+              </i>
+              {{ chip.title }}
+            </span>
+          }
+          <span class="tid">{{ id() }}</span>
+        </header>
+
+        <div class="page thread-page">
+          <h1 class="tk-title">{{ title() }}</h1>
+          <p class="team-hint">gefilterte Sicht auf {{ id() }} — dienstlich sprichst du mit Mission Control</p>
+
+          @if (steps().length > 0) {
+            <ng-container [ngTemplateOutlet]="gateBar" [ngTemplateOutletContext]="{ tappable: false, compact: true }" />
+          }
+
+          <div class="thread-list" role="log" aria-live="polite">
+            @for (item of threadItems(); track $index) {
+              @if (item.kind === 'message') {
+                @if (item.message.role === 'owner') {
+                  <div class="msg me">
+                    <p class="bubble">{{ item.message.text }}</p>
+                  </div>
+                } @else {
+                  <div class="msg agent">
+                    @if (item.message.thought !== null && (item.message.thought ?? '') !== '') {
+                      <details class="think">
+                        <summary>
+                          <span class="chev" aria-hidden="true">▸</span>
+                          Gedacht
+                        </summary>
+                        <div class="step-body">{{ item.message.thought }}</div>
+                      </details>
+                    }
+                    <p class="bubble" [style.border-left-color]="threadPersona()?.color ?? null">
+                      {{ item.message.text }}
+                    </p>
+                  </div>
+                }
+              } @else {
+                <div class="thread-card" [class.done]="item.proposal.state === 'confirmed'" [class.dim]="item.proposal.state === 'dismissed'">
+                  <div class="ck">
+                    {{ item.proposal.state === 'confirmed' ? 'Bestätigt' : item.proposal.state === 'dismissed' ? 'Verworfen' : 'Bestätigung nötig' }}
+                  </div>
+                  <p class="thread-card-summary">{{ item.proposal.summary }}</p>
+                </div>
+              }
+            } @empty {
+              <p class="thread-empty">Noch keine Nachrichten zu {{ id() }}.</p>
+            }
+
+            @if (questionCard(); as card) {
+              <div class="thread-card qcard" [class.done]="threadQDone()">
+                <div class="ck">Frage</div>
+                <p class="thread-card-summary">{{ card.question }}</p>
+                @if (!readOnly() && !threadQDone()) {
+                  <div class="opts" role="radiogroup" [attr.aria-label]="card.question">
+                    @for (option of card.options; track $index) {
+                      <button
+                        type="button"
+                        class="opt"
+                        role="radio"
+                        [attr.aria-checked]="threadQSelected() === $index"
+                        [class.sel]="threadQSelected() === $index"
+                        [disabled]="threadQPending()"
+                        (click)="threadQSelect($index)"
+                      >
+                        <span class="dot" aria-hidden="true"></span>
+                        <span class="opt-body">
+                          {{ option.label }}
+                          @if (option.consequence) {
+                            <small>{{ option.consequence }}</small>
+                          }
+                        </span>
+                        @if (option.recommended) {
+                          <span class="rec">empfohlen</span>
+                        }
+                      </button>
+                    }
+                  </div>
+                  @if (threadQError(); as error) {
+                    <p class="thread-inline-error" role="alert">{{ error }}</p>
+                  }
+                  @if (threadQSelected() !== null) {
+                    <button
+                      type="button"
+                      class="btn primary qsend"
+                      [disabled]="threadQPending()"
+                      (click)="threadQSend()"
+                    >
+                      {{ threadQPending() ? 'Sending…' : threadQSendLabel(card) }}
+                    </button>
+                  }
+                }
+                @if (threadQDone()) {
+                  <p class="qcard-done" role="status">
+                    Antwort gesendet — {{ threadPersonaLabel() }} läuft weiter
+                  </p>
+                }
+              </div>
+            }
+          </div>
+        </div>
+
+        @if (!readOnly()) {
+          <div class="composer">
+            @if (threadError(); as error) {
+              <p class="thread-inline-error">{{ error }}</p>
+            }
+            <div class="composer-row">
+              <textarea
+                class="composer-input"
+                rows="1"
+                [value]="threadDraft()"
+                (input)="onThreadDraft($event)"
+                (keydown)="onThreadKeydown($event)"
+                [attr.aria-label]="'Nachricht zu ' + id()"
+                [attr.placeholder]="id() + ' …'"
+              ></textarea>
               <button
                 type="button"
-                class="btn primary"
-                [disabled]="acceptPending()"
-                (click)="acceptTap()">
-                {{ acceptPending() ? 'Accepting…' : arm().armed ? 'Tap again to accept' : 'Accept' }}
+                class="send"
+                [disabled]="threadSending() || threadDraft().trim() === ''"
+                (click)="threadSend()"
+                aria-label="Senden"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 19V5M5 12l7-7 7 7" />
+                </svg>
               </button>
             </div>
-            <button type="button" class="btn ghost" (click)="changeByChat()">Per Chat ändern</button>
-          }
-        </div>
+          </div>
+        }
       }
-    </div>
+    }
   </div>
 }
 
@@ -506,3 +707,65 @@
     </section>
   </div>
 }
+
+<!-- The merged gate chain's pills, shared by the three faces. -->
+<ng-template #gateBar let-tappable="tappable" let-compact="compact">
+  @if (tappable) {
+    <button
+      type="button"
+      class="gates gate-tap"
+      [disabled]="readOnly()"
+      aria-label="Gate chain — tap to insert a gate, set a notify rule or return to the standard flow"
+      (click)="openSheet()">
+      <ng-container [ngTemplateOutlet]="gatePills" />
+      @if (costTotal(); as total) {
+        <span class="cs-total">{{ total }}</span>
+      }
+    </button>
+    <button type="button" class="chain-hint" [disabled]="readOnly()" (click)="openSheet()">
+      Kette: Standard-Flow + Delta aus dem Frontmatter · antippen zum Anpassen
+    </button>
+  } @else {
+    <div class="gates" [class.gates-compact]="compact">
+      <ng-container [ngTemplateOutlet]="gatePills" />
+      @if (costTotal(); as total) {
+        <span class="cs-total">{{ total }}</span>
+      }
+    </div>
+  }
+</ng-template>
+
+<ng-template #gatePills>
+  @for (step of steps(); track $index) {
+    @if ($index > 0) {
+      <span class="garrow" aria-hidden="true">→</span>
+    }
+    <span
+      class="gate"
+      [class.done]="step.state === 'past'"
+      [class.now]="step.state === 'current'"
+      [class.new]="step.inserted"
+      [class.skipped]="step.skipped"
+      [attr.aria-current]="step.state === 'current' ? 'step' : null">
+      @if (step.state === 'past' || step.state === 'current') {
+        <span class="gs" aria-hidden="true">{{ step.state === 'past' ? '✓' : '●' }}</span>
+      }
+      @if (step.inserted) {
+        <span class="gs" aria-hidden="true">+</span>
+      }
+      <span class="gt">{{ step.title }}</span>
+      @if (step.state === 'current' && step.persona; as p) {
+        <span class="gp">{{ personaTitle(p) }}</span>
+      }
+      @if (step.cost; as c) {
+        <span class="gc">{{ c }}</span>
+      }
+      @if (step.notify) {
+        <span
+          class="gn"
+          title="Tells you when this gate completes"
+          [attr.aria-label]="'Notifies you when ' + step.title + ' completes'">◎</span>
+      }
+    </span>
+  }
+</ng-template>
