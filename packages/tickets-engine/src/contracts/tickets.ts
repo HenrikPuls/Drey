@@ -270,6 +270,19 @@ export interface TicketMeta {
   readonly entered: Readonly<Record<string, string>>;
 }
 
+/**
+ * What a ticket's settled fleet runs consumed, summed over every
+ * `run_settled` ledger line of the ticket (concept §4.3's ticket-level
+ * cost figure): tokens in/out, the summed cost (null when no run of the
+ * ticket reported one — a missing cost is never a 0), and the run count.
+ */
+export interface TicketUsage {
+  readonly tokensIn: number;
+  readonly tokensOut: number;
+  readonly cost: number | null;
+  readonly runs: number;
+}
+
 /** One ticket as the board renders it — meta plus derived/board context. */
 export interface TicketCard {
   readonly id: string;
@@ -280,6 +293,11 @@ export interface TicketCard {
   readonly meta: TicketMeta;
   /** The resolved fleet worker for this card (M84 display resolution). */
   readonly worker: string;
+  /**
+   * The ticket's settled-run usage from the fleet ledger (`run_settled`
+   * lines); absent when the ledger carries none for the ticket.
+   */
+  readonly usage?: TicketUsage;
   /**
    * The OPEN blockers (T-0050): referenced ids that have not reached the
    * terminal phase, unknown ids included; `[]` = unblocked. Derived on

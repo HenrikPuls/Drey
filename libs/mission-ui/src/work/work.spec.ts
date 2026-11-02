@@ -1,10 +1,10 @@
 /**
  * The work tab's specs: the pure group/next-phase logic plus the header's
- * helpers (vault sub, Fleet chip, the card's tolerant cost/ctx/wait
- * slots), then the component class against a fake state object — no DOM
- * (the unit-test builder runs these under jsdom, but nothing here renders
- * a template). The improvements card's tap and the scout report card's
- * promote (E8) close the file.
+ * helpers (vault sub, Fleet chip, the card's tolerant cost/Σ-tokens/ctx/
+ * wait slots), then the component class against a fake state object — no
+ * DOM (the unit-test builder runs these under jsdom, but nothing here
+ * renders a template). The improvements card's tap and the scout report
+ * card's promote (E8) close the file.
  */
 import type { Signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -25,6 +25,7 @@ import {
   nextPhaseOf,
   personaInitialOf,
   personaMapOf,
+  tokensSumLabelOf,
   vaultTitleOf,
   type McBoard,
   type McNeed,
@@ -276,6 +277,49 @@ describe('groupsOf', () => {
     expect(junk.blocked).toBe(false);
   });
 
+  it('reads the cost and Σ slots off the card’s usage — only when the ledger has data', () => {
+    const configured: McBoard = {
+      columns: [
+        {
+          phase: { id: 'build', title: 'Build' },
+          tickets: [
+            ticket('T-0001', { usage: { tokensIn: 48000, tokensOut: 6000, cost: 1.87, runs: 2 } }),
+            ticket('T-0002', { usage: { tokensIn: 4000, tokensOut: 1000, cost: null, runs: 1 } }),
+            ticket('T-0003', { usage: { tokensIn: 0, tokensOut: 0, cost: 0, runs: 1 } }),
+            ticket('T-0004'),
+            ticket('T-0005', { usage: { tokensIn: 'x', tokensOut: null, cost: 'n/a' } as never }),
+            // The legacy cost field stays the fallback when no usage rides along.
+            ticket('T-0006', { cost: 0.44 }),
+            ticket('T-0007', { cost: 0.44, usage: { tokensIn: 1000, tokensOut: 0, cost: 1.17, runs: 1 } }),
+          ],
+        },
+      ],
+    };
+    const build = groupsOf([], configured, []).find((g) => g.kind === 'phase' && g.phaseId === 'build');
+    if (build?.kind !== 'phase') {
+      throw new Error('expected the build group');
+    }
+    const [full, tokensOnly, zero, bare, junk, legacy, both] = build.tickets as TicketVm[];
+    expect(full.costLabel).toBe('1,87 $');
+    expect(full.tokensLabel).toBe('Σ 54k');
+    // A known token count without a cost: the Σ slot shows, the cost slot hides.
+    expect(tokensOnly.costLabel).toBeNull();
+    expect(tokensOnly.tokensLabel).toBe('Σ 5k');
+    // Zero everything: both slots hide — never a 0-fake.
+    expect(zero.costLabel).toBeNull();
+    expect(zero.tokensLabel).toBeNull();
+    expect(bare.costLabel).toBeNull();
+    expect(bare.tokensLabel).toBeNull();
+    // Junk counters read as nothing usable.
+    expect(junk.costLabel).toBeNull();
+    expect(junk.tokensLabel).toBeNull();
+    expect(legacy.costLabel).toBe('0,44 $');
+    expect(legacy.tokensLabel).toBeNull();
+    // Usage wins over the legacy field when both ride along.
+    expect(both.costLabel).toBe('1,17 $');
+    expect(both.tokensLabel).toBe('Σ 1k');
+  });
+
   it('flags cards by the board’s configured vocabulary when mapping the groups', () => {
     const configured: McBoard = {
       priorities: { order: ['meh', 'ok', 'hot'], default: 'ok' },
@@ -443,6 +487,17 @@ describe('header helpers', () => {
     expect(costLabelOf(-3)).toBeNull();
     expect(costLabelOf(Number.NaN)).toBeNull();
     expect(costLabelOf(Number.POSITIVE_INFINITY)).toBeNull();
+  });
+
+  it('labels the Σ token slot off the usage; absent, zero and junk hide it', () => {
+    expect(tokensSumLabelOf({ tokensIn: 48000, tokensOut: 6000, cost: 1.87, runs: 2 })).toBe('Σ 54k');
+    expect(tokensSumLabelOf({ tokensIn: 999, tokensOut: 1, cost: null, runs: 1 })).toBe('Σ 1k');
+    expect(tokensSumLabelOf({ tokensIn: 1_700_000, tokensOut: 0, cost: null, runs: 1 })).toBe('Σ 1.7M');
+    expect(tokensSumLabelOf({ tokensIn: 0, tokensOut: 800, cost: null, runs: 1 })).toBe('Σ 800');
+    expect(tokensSumLabelOf({ tokensIn: 0, tokensOut: 0, cost: 1.17, runs: 1 })).toBeNull();
+    expect(tokensSumLabelOf({ tokensIn: 'x', tokensOut: null, cost: null, runs: 0 } as unknown as Parameters<typeof tokensSumLabelOf>[0])).toBeNull();
+    expect(tokensSumLabelOf(undefined)).toBeNull();
+    expect(tokensSumLabelOf(null)).toBeNull();
   });
 
   it('rounds the ctx slot to a 1–100 percent; 0 and out-of-range junk hide the bar', () => {

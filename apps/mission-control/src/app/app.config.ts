@@ -8,12 +8,22 @@ import {
 } from '@angular/core';
 import { McState } from './api/state';
 import { bootHintsFromLocation } from './api/client';
-import { parsePriorities } from './api/dto';
-import { MC_CHAT_STATE } from './chat/chat';
-import { MC_TEAM_DETAIL, type PersonaFacts, type TeamDetailVm } from './team/detail';
-import { MC_TICKET, type GatePhase, type TicketDoc, type TicketVm } from './ticket/ticket.model';
-import { MC_TEAM_STATE, type McTeamPersona, type McTeamState } from './team/team';
-import { MC_WORK_STATE, type McPersona, type McWorkState } from './work/work.model';
+import { parsePriorities } from '@mission-ui/api/dto';
+import { MC_CHAT_STATE } from '@mission-ui/chat/chat.model';
+import { MC_TEAM_DETAIL, type PersonaFacts, type TeamDetailVm } from '@mission-ui/team/detail';
+import {
+  MC_TICKET,
+  type GatePhase,
+  type TicketDoc,
+  type TicketVm,
+} from '@mission-ui/ticket/ticket.model';
+import {
+  MC_TEAM_STATE,
+  type McTeamPersona,
+  type McTeamState,
+} from '@mission-ui/team/team';
+import { MC_WORK_STATE, type McPersona, type McWorkState } from '@mission-ui/work/work.model';
+import { MC_TOAST_STATE } from '@mission-ui/toast.model';
 
 /**
  * One shared McState for the whole shell: the chat tab consumes it
@@ -26,6 +36,7 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     McState,
     { provide: MC_CHAT_STATE, useExisting: McState },
+    { provide: MC_TOAST_STATE, useExisting: McState },
     {
       provide: MC_WORK_STATE,
       useFactory: (): McWorkState => {
@@ -148,6 +159,8 @@ export const appConfig: ApplicationConfig = {
             priorities: priorities().order,
             blocked: detail.blocked,
             blockedBy: detail.blockedBy,
+            usage: detail.usage,
+            verlauf: detail.verlauf,
           };
         });
         return {

@@ -18,6 +18,7 @@ import {
   parseTeam,
   parseTicketDetail,
   parseTicketDiff,
+  parseVerlaufEntries,
   parseVerification,
   parseWork,
 } from './dto';
@@ -121,6 +122,29 @@ describe('parseWork', () => {
     });
     expect(work.groups.length).toBe(1);
     expect(work.groups[0]!.cards.map((card) => card.id)).toEqual(['T-4']);
+  });
+
+  it('carries the card’s settled-run usage off the ledger, tolerantly', () => {
+    const work = parseWork({
+      columns: [
+        {
+          phase: { id: 'build', title: 'Build' },
+          tickets: [
+            { id: 'T-1', usage: { tokensIn: 48000, tokensOut: 6000, cost: 1.87, runs: 2 } },
+            { id: 'T-2', usage: { tokensIn: 'x', tokensOut: null, cost: 'n/a', runs: true } },
+            { id: 'T-3', usage: 'junk' },
+            { id: 'T-4' },
+          ],
+        },
+      ],
+    });
+    const cards = work.groups[0]!.cards;
+    expect(cards[0]!.usage).toEqual({ tokensIn: 48000, tokensOut: 6000, cost: 1.87, runs: 2 });
+    // Junk counters read as 0, an unreadable cost as null — never a guess.
+    expect(cards[1]!.usage).toEqual({ tokensIn: 0, tokensOut: 0, cost: null, runs: 0 });
+    // Absent or unusable usage stays absent — the cost slots hide.
+    expect(cards[2]!.usage).toBeUndefined();
+    expect(cards[3]!.usage).toBeUndefined();
   });
 
   it('never throws on junk', () => {
@@ -291,6 +315,29 @@ describe('parseTeam', () => {
     expect(parseTeam([], { runs: [] }).personas).toEqual([]);
   });
 
+  it('carries the day-cost figures off the wire, tolerantly (concept §4.3)', () => {
+    const team = parseTeam(
+      [
+        { id: 'pia', budget: 5, dailyCost: 1.4 },
+        { id: 'ben', budget: 5 },
+        { id: 'ralf', dailyCost: 0.19 },
+        { id: 'tessa', budget: 'n/a', dailyCost: -1 },
+        { id: 'noa' },
+      ],
+      null,
+    );
+    expect(team.personas[0]).toMatchObject({ budget: 5, dailyCost: 1.4 });
+    // A budget without a settled cost today: no dailyCost — never a fake 0.
+    expect(team.personas[1]).toMatchObject({ budget: 5 });
+    expect(team.personas[1]!.dailyCost).toBeUndefined();
+    expect(team.personas[2]).toMatchObject({ budget: null, dailyCost: 0.19 });
+    // Junk on either figure reads as none, never a guess.
+    expect(team.personas[3]).toMatchObject({ budget: null });
+    expect(team.personas[3]!.dailyCost).toBeUndefined();
+    expect(team.personas[4]).toMatchObject({ budget: null });
+    expect(team.personas[4]!.dailyCost).toBeUndefined();
+  });
+
   it('never throws on junk', () => {
     expect(parseTeam(null, null)).toEqual({ personas: [], runs: [] });
     expect(parseTeam([null, { title: 'no id' }, 'x'], 'junk')).toEqual({ personas: [], runs: [] });
@@ -331,7 +378,7 @@ describe('parseImprovements', () => {
       frictionCount: 4,
     });
     expect(view).toEqual({
-      persona: { ...PIA, currentRun: null },
+      persona: { ...PIA, currentRun: null, budget: null },
       proposals: [
         {
           id: 'imp-1',
@@ -716,7 +763,68 @@ describe('parseTicketDetail', () => {
       blockedBy: [],
       blocked: [],
       blocks: [],
+      verlauf: [],
     });
+  });
+
+  it('parses the ## Verlauf chapter off the text tolerantly — and the usage off the card', () => {
+    const detail = parseTicketDetail(
+      {
+        ok: true,
+        card: {
+          id: 'T-1',
+          phase: 'verify',
+          usage: { tokensIn: 48000, tokensOut: 6000, cost: 1.87, runs: 2 },
+        },
+        text: [
+          '## Description',
+          '',
+          'why',
+          '',
+          '## Verlauf',
+          '',
+          '- { phase: plan, persona: pia, model: opus, tokens: 48k, cost: 1.17, dauer: 12m, ausgang: handed-over }',
+          '- {phase: verify, persona: tessa, model: sonnet, tokens: 52k, cost: 0.64, dauer: 40m, ausgang: failed}',
+          'prose and torn lines are not entries',
+          '- { phase: build, persona: ben',
+          '',
+          '## Log',
+          '',
+          "- '2026-11-01T14:40:00Z' me — moved",
+          '',
+        ].join('\n'),
+        revision: 'abc123',
+      },
+      phases,
+    );
+    expect(detail!.usage).toEqual({ tokensIn: 48000, tokensOut: 6000, cost: 1.87, runs: 2 });
+    // The chapter ends at the next H2; only the `- {…}` lines are entries.
+    expect(detail!.verlauf).toEqual([
+      {
+        phase: 'plan',
+        persona: 'pia',
+        model: 'opus',
+        tokens: '48k',
+        cost: 1.17,
+        dauer: '12m',
+        ausgang: 'handed-over',
+      },
+      {
+        phase: 'verify',
+        persona: 'tessa',
+        model: 'sonnet',
+        tokens: '52k',
+        cost: 0.64,
+        dauer: '40m',
+        ausgang: 'failed',
+      },
+    ]);
+    // Tolerance: no chapter, no usage, junk — nulls and [], never a throw.
+    const bare = parseTicketDetail({ ok: true, card: { id: 'T-2', usage: 'junk' }, text: '## Verlauf\n\nno lines yet\n', revision: '' }, phases);
+    expect(bare!.verlauf).toEqual([]);
+    expect(bare!.usage).toBeUndefined();
+    expect(parseVerlaufEntries('## Verlaufism\n\n- {phase: plan}\n')).toEqual([]);
+    expect(parseVerlaufEntries(null as unknown as string)).toEqual([]);
   });
 
   it('parses the priority id and the blockedBy/blocked/blocks lists tolerantly', () => {

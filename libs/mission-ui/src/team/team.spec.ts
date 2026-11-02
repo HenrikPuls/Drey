@@ -1,6 +1,14 @@
 import { signal, type Signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { MC_TEAM_STATE, Team, initialsOf, runStateClass, type McTeamPersona, type McTeamState } from './team';
+import {
+  MC_TEAM_STATE,
+  Team,
+  dayCostFootOf,
+  initialsOf,
+  runStateClass,
+  type McTeamPersona,
+  type McTeamState,
+} from './team';
 
 describe('initialsOf', () => {
   it('takes the first letter of each of the first two words', () => {
@@ -82,7 +90,32 @@ const PIA: McTeamPersona = {
   pool: [],
   color: '#ff0000',
   currentRun: null,
+  budget: null,
 };
+
+describe('dayCostFootOf', () => {
+  it('reads the day’s costs against the budget, prototype-style', () => {
+    expect(dayCostFootOf({ budget: 5, dailyCost: 0.42 })).toEqual({ text: '0,42 $ / 5 $ heute', over: false });
+    expect(dayCostFootOf({ budget: 4.5, dailyCost: 1.4 })).toEqual({ text: '1,40 $ / 4,50 $ heute', over: false });
+    // No budget: the day's costs alone.
+    expect(dayCostFootOf({ budget: null, dailyCost: 0.19 })).toEqual({ text: '0,19 $ heute', over: false });
+  });
+
+  it('goes over the budget only against one that exists', () => {
+    expect(dayCostFootOf({ budget: 5, dailyCost: 5.01 })).toEqual({ text: '5,01 $ / 5 $ heute', over: true });
+    // At the budget exactly: not over yet.
+    expect(dayCostFootOf({ budget: 5, dailyCost: 5 })?.over).toBe(false);
+    expect(dayCostFootOf({ budget: null, dailyCost: 99 })?.over).toBe(false);
+  });
+
+  it('drops the slot when the desk carries no day costs — never a fake 0', () => {
+    expect(dayCostFootOf({ budget: 5, dailyCost: undefined })).toBeNull();
+    expect(dayCostFootOf({ budget: 5 })).toBeNull();
+    // Junk on the figure hides the slot too.
+    expect(dayCostFootOf({ budget: 5, dailyCost: Number.NaN })).toBeNull();
+    expect(dayCostFootOf({ budget: null })).toBeNull();
+  });
+});
 
 describe('Team', () => {
   it('the factory default binds an empty, read-only state', () => {

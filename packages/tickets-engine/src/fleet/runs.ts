@@ -24,6 +24,8 @@ import { acceptanceCommands, patchTicketFile, ticketPathParts } from '../core/ti
 import { hasScoutReport } from '../core/scout';
 import { TicketsGit } from '../core/tickets-git';
 import { PERSONAS_DIR } from '../core/persona';
+import { costOf } from '../core/model-prices';
+import { appendVerlaufEntry, renderVerlaufLine, verlaufEntryOf } from '../core/verlauf';
 import { answersFromText, answersText, ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
 import { COMPACT_CAPABILITY, contextCap, HANDOVER_CANDIDATE_STATES, resolveHandover, type HandoverCandidate, type HandoverDecision } from './handover';
 import { killTreeGuarded, listenerPid, processAlive, processStartMs, type ExecFn } from './procs';
@@ -2129,6 +2131,12 @@ export class RunSupervisor {
       state,
       endedAt: stamp,
       pid: null,
+      // Costtracking (concept §4.3): the provider's own cost wins; one that
+      // reports none gets the price-table estimate HERE, at the settle —
+      // every downstream reader (the Log line, the run_settled ledger
+      // line, the reports, the Verlauf) then sees one effective number.
+      // An unknown model stays null: no cost is never a 0 fake.
+      ...(last.costUsd === null ? { costUsd: costOf(last.model ?? null, last.tokensIn, last.tokensOut) } : {}),
     };
     if (TERMINAL.includes(state)) {
       run.handle = null;
@@ -2137,7 +2145,7 @@ export class RunSupervisor {
     }
     this.deps.log(`run ${run.info.id} → ${state}`);
     await this.persist(run);
-    await this.clearRunStamp(run, run.stopNote === undefined ? null : `${run.stopNote}${usageSummary(run.info)}`);
+    await this.clearRunStamp(run, run.stopNote === undefined ? null : `${run.stopNote}${usageSummary(run.info)}`, this.verlaufLineFor(run, state));
     // E3: the run's one-line lesson lands in its persona's memory — the
     // next dispatch of this persona reads it back as the instruction's
     // `## Memory` slice. Best-effort: a memory write never fails the settle.
@@ -2145,6 +2153,35 @@ export class RunSupervisor {
     // The slot is free and the ticket is where it belongs — the chain
     // may dispatch again (M85; a no-op while no chain is configured).
     void this.deps.onRunSettled?.(run.info);
+  }
+
+  /**
+   * The run's one Verlauf line (concept §5.4): phase, persona, model,
+   * tokens, cost (the effective number — the fallback above already ran),
+   * duration (start → settle) and the outcome. Null when the run consumed
+   * nothing — a zero-token, zero-cost run writes no chapter and creates
+   * none. The line rides the SAME ticket patch as the run stamp's
+   * clearing: one read-modify-write, one commit, no second window in
+   * which a concurrent board write could see a half-written file.
+   */
+  private verlaufLineFor(run: LiveRun, state: RunState): string | null {
+    const { tokensIn, tokensOut, costUsd: cost } = run.info;
+    if (tokensIn === 0 && tokensOut === 0 && (cost === null || cost <= 0)) {
+      return null;
+    }
+    return renderVerlaufLine(
+      verlaufEntryOf({
+        phase: run.currentPhase || run.info.phase || null,
+        persona: run.info.persona ?? null,
+        model: run.info.model ?? null,
+        tokensIn,
+        tokensOut,
+        cost,
+        startedAt: run.info.startedAt,
+        endedAt: run.info.endedAt,
+        state,
+      }),
+    );
   }
 
   /**
@@ -2193,20 +2230,23 @@ export class RunSupervisor {
   /**
    * Clears the ticket's `run` map — the board's "at most one live run"
    * invariant. A failed write is logged, never thrown: the run record
-   * itself is already durable.
+   * itself is already durable. An optional Verlauf line rides the same
+   * patch (the settle's single ticket write: stamp cleared, Log line,
+   * history entry, one commit).
    */
-  private async clearRunStamp(run: LiveRun, note: string | null): Promise<void> {
+  private async clearRunStamp(run: LiveRun, note: string | null, verlaufLine: string | null = null): Promise<void> {
     try {
-      await this.patchTicket(run, (text) =>
-        patchTicketFile(text, {
+      await this.patchTicket(run, (text) => {
+        const patched = patchTicketFile(text, {
           to: run.currentPhase,
           from: null,
           now: this.now(),
           actor: this.agentActor(),
           clearRun: true,
           action: note ?? `run ${run.info.state}${usageSummary(run.info)}`,
-        }),
-      );
+        });
+        return verlaufLine === null ? patched : appendVerlaufEntry(patched, verlaufLine);
+      });
     } catch (error) {
       if ((error as { code?: string }).code === 'ENOENT') {
         // The ticket moved on (or was removed) since the run: nothing to clear.

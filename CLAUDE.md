@@ -75,16 +75,20 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   switches to watch mode, anything else passes through to vitest
   (`-t "name"`), and a path fragment instead of an id scopes outside
   `plugins/` (`shared`, `electron/ipc`). `npm run test:plugins` runs
-  the whole out-of-Angular suite, `npm run test:app` the two Angular
-  suites once — drey's renderer, then `mission-control`. `npm run test:all` — lint, the eight typechecks, import cycles,
-  both suites — is the **release gate**: `prepack` runs it before every
+  the whole out-of-Angular suite, `npm run test:app` the three Angular
+  suites once — drey's renderer, then `mission-control`, then `mission-ui` (the
+  `@mission-ui` lib's specs — `ng test mission-control` can't see them: the
+  unit-test builder discovers spec files inside the project's sourceRoot
+  only, and the lib lives outside it). `npm run test:all` — lint, the nine
+  typechecks, import cycles,
+  all three suites — is the **release gate**: `prepack` runs it before every
   `npm run pack` (skip the gate with `npm run pack --ignore-scripts`).
   `pack:dir` stays the fast unpacked smoke build and runs no gate —
   npm fires no pre-hooks for colon-named scripts anyway; run
   `npm run test:all` yourself there when needed.
 - Bash: `export PATH="$PWD/.tools/node:$PATH"`, then invoke tools **by
   script path**, not by bin-shim name:
-  - Typecheck (all eight configs — the plugins' build configs
+  - Typecheck (all nine configs — the plugins' build configs
     `plugins/tsconfig.main.json` / `plugins/tsconfig.renderer.json`
     included, since a type error there only showed in the build; and
     `tsconfig.e2e.json`, added by req-94 after a broken e2e spec had
@@ -93,12 +97,14 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
     at a time: `node node_modules/typescript/bin/tsc -p <config>
     --noEmit` with `electron/tsconfig.json` (main + shared),
     `tsconfig.app.json` (renderer), `apps/mission-control/tsconfig.app.json`
-    (the mission-control app) or `tsconfig.plugins.json`
+    (the mission-control app), `libs/mission-ui/tsconfig.json` (the
+    `@mission-ui` lib, sources + specs) or `tsconfig.plugins.json`
     (plugins; `electron/tsconfig.spec.json` has `noEmit` in the config)
   - Unit tests: `npm run test:app` (scope it with
     `npm run test:app -- --include "src/.../x.spec.ts"`); raw, one app at
     a time: `node node_modules/@angular/cli/bin/ng.js test --watch=false`
-    (drey) or `node node_modules/@angular/cli/bin/ng.js test mission-control --watch=false`
+    (drey), `node node_modules/@angular/cli/bin/ng.js test mission-control --watch=false`
+    or `node node_modules/@angular/cli/bin/ng.js test mission-ui --watch=false`
   - Main-process, shared and plugin tests (`electron/**/*.spec.ts`,
     `shared/**/*.spec.ts`, `plugins/**/*.spec.ts`; plain Node,
     `vi.mock('electron')` where needed, `// @vitest-environment jsdom` at
@@ -108,16 +114,17 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
     `node node_modules/vitest/vitest.mjs run --config vitest.plugins.config.mts plugins/<id>`).
     **A spec sits beside the file it tests** — `src/app/` holds only
     specs of renderer code
-  - Lint: `node node_modules/eslint/bin/eslint.js "electron/**/*.ts" "shared/**/*.ts" "src/**/*.ts apps/**/*.ts" "plugins/**/*.ts" "packages/**/*.ts"`
+  - Lint: `node node_modules/eslint/bin/eslint.js "electron/**/*.ts" "shared/**/*.ts" "src/**/*.ts apps/**/*.ts libs/**/*.ts" "plugins/**/*.ts" "packages/**/*.ts"`
     — module barrels, the dependency rules between `shared/`, `src/`,
-    `electron/`, `plugins/` and `apps/` (docs/05, "The dependency rules"; a
+    `electron/`, `plugins/`, `apps/` and `libs/` (docs/05, "The dependency rules"; a
     type-only import counts) plus `no-floating-promises` /
     `no-misused-promises` (a promise meant to run on its own is marked
     `void`)
   - Runtime import cycles: `node scripts/check-cycles.mjs` — fails with
     the cycle chain if a runtime edge ever closes a loop again
     (`import type` and type-only clauses don't count; the compilers erase
-    them); `apps/` joined the scan roots with the mission-control app
+    them); `apps/` joined the scan roots with the mission-control app,
+    `libs/` with the `@mission-ui` lib
   - Production renderer builds: `node node_modules/@angular/cli/bin/ng.js build --configuration production`
     for drey, `node node_modules/@angular/cli/bin/ng.js build mission-control --configuration production`
     (`npm run build:mission-control`) for the served Mission Control app —

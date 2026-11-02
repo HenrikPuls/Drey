@@ -8,7 +8,7 @@ import { splitFrontmatter } from '../../../../shared/frontmatter';
  *
  *   tickets/_meta/personas/
  *     pia/
- *       persona.md   # frontmatter: title, role, worker, models, color, skills
+ *       persona.md   # frontmatter: title, role, worker, models, color, skills, budget
  *       prompt.md    # the persona prompt (longform, editable, versioned)
  *       memory.md    # curated memory (the write/read paths are E3)
  *       avatar.png   # optional
@@ -53,6 +53,11 @@ export interface Persona {
   readonly color: string;
   /** Reusable skill files under `_meta/skills/` this persona carries. */
   readonly skills: readonly string[];
+  /**
+   * The persona's daily budget in USD (`budget:`, concept §4.3 — the
+   * Team view shows the day's costs against it); null = no budget set.
+   */
+  readonly budget: number | null;
 }
 
 export const PERSONAS_DIR = 'tickets/_meta/personas';
@@ -101,7 +106,12 @@ export function parsePersonaFile(id: string, text: string): Persona {
   const color = asString(get('color')) ?? '#a78bfa';
   const skills = asStringList(get('skills'));
 
-  return { id, title, role, worker, models: { default: defaultModel, pool, router }, color, skills };
+  // `budget:` is USD per day; tolerant — absent, non-numeric or negative reads as null.
+  const budgetRaw = get('budget');
+  const budgetNum = typeof budgetRaw === 'number' ? budgetRaw : typeof budgetRaw === 'string' ? Number(budgetRaw.trim()) : Number.NaN;
+  const budget = Number.isFinite(budgetNum) && budgetNum >= 0 ? budgetNum : null;
+
+  return { id, title, role, worker, models: { default: defaultModel, pool, router }, color, skills, budget };
 }
 
 /** The canonical persona file text (stable key order, byte-stable round trips). */
@@ -118,6 +128,7 @@ export function personaFileText(persona: Persona): string {
     `  router: ${persona.models.router}`,
     `color: '${persona.color}'`,
     `skills: [${persona.skills.join(', ')}]`,
+    ...(persona.budget !== null ? [`budget: ${persona.budget}`] : []),
     '---',
     '',
     `Who ${persona.title} is: role, tone, limits. Edit freely — the next run reads it.`,

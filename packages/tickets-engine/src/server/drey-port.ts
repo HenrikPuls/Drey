@@ -42,6 +42,7 @@ import { IMPROVEMENTS_THRESHOLD } from '../core/improvements';
 import { openStatusItems } from '../core/status-log';
 import type { StatusLine } from '../core/status-log';
 import { parseScoutReportSection } from '../core/scout';
+import { parseLedger, personaDailyCosts } from '../core/ledger';
 import { needsOf, notifyNeedsOf, reportNeedOf } from './needs';
 
 /** How many status-log needs (E7) one needs() pass appends at most. */
@@ -60,6 +61,8 @@ export interface RemoteBoard {
   startRun(input: StartRunCommand): Promise<RunReply>;
   /** The Team tab's cards (E5b). */
   listPersonas(): Promise<readonly import('../core/persona').Persona[]>;
+  /** The fleet ledger's raw text (`tickets/_meta/ledger.jsonl`); null without a vault or ledger. */
+  ledgerText(): Promise<string | null>;
   /** The raw-text save behind the phone edit mode (E5c). */
   saveTicket(input: { id: string; text: string; baseRevision?: string; actor?: string }): Promise<RefineReply>;
   /** The proof card's unified diff (E5c). */
@@ -312,7 +315,11 @@ export class DreyTicketsPort implements TicketsRemotePort {
   }
 
   async personas(): Promise<readonly PersonaView[]> {
-    const personas = await this.boardService.listPersonas();
+    const [personas, ledgerText] = await Promise.all([this.boardService.listPersonas(), this.boardService.ledgerText()]);
+    // The Team view's "Tageskosten gegen Budget" (concept §4.3): today's
+    // settled costs, persona-keyed from the fleet ledger; UTC day — the
+    // same convention the chain's token budgets use.
+    const daily = personaDailyCosts(parseLedger(ledgerText ?? ''), new Date().toISOString().slice(0, 10));
     return personas.map((p) => ({
       id: p.id,
       title: p.title,
@@ -321,6 +328,8 @@ export class DreyTicketsPort implements TicketsRemotePort {
       model: p.models.default,
       pool: p.models.pool,
       color: p.color,
+      budget: p.budget,
+      ...(daily[p.id] !== undefined ? { dailyCost: daily[p.id] } : {}),
     }));
   }
 

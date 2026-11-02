@@ -23,6 +23,16 @@ export interface McPersonaView {
   readonly pool: readonly string[];
   /** `#rrggbb`; drives the avatar background. */
   readonly color: string;
+  /**
+   * The persona's daily budget in dollars (frontmatter `budget:`,
+   * concept §4.3); null = none set (or junk on the wire — never a guess).
+   */
+  readonly budget: number | null;
+  /**
+   * What the persona's runs settled for TODAY, summed off the ledger;
+   * absent when no known cost exists — never a fake 0.
+   */
+  readonly dailyCost?: number;
 }
 
 /** The fleet run states (packages/tickets-engine/src/fleet/protocol.ts), duplicated locally. */
@@ -90,10 +100,53 @@ export function runStateClass(state: McRunState): 'run-live' | 'run-failed' | 'r
   return 'run-dim';
 }
 
+/** The pcard foot's day-cost line: the text and whether the budget is blown. */
+export interface PersonaDayCost {
+  readonly text: string;
+  /** True when today's costs passed the daily budget — the line wears the danger colour. */
+  readonly over: boolean;
+}
+
+/** The dollars German-style with two decimals (`1,4 $` reads `1,40 $`). */
+function usdOf(value: number): string {
+  return `${value.toFixed(2).replace('.', ',')} $`;
+}
+
+/** The budget as the prototype writes it — a whole number stays bare (`5 $`), a fraction takes two decimals. */
+function budgetWordsOf(value: number): string {
+  const dollars = Number.isInteger(value) ? String(value) : value.toFixed(2).replace('.', ',');
+  return `${dollars} $`;
+}
+
+/**
+ * The pcard foot's 'Tageskosten gegen Budget' line (`0,42 $ / 5 $ heute`):
+ * without a budget just the day's costs (`0,42 $ heute`); null when the
+ * desk carries neither figure — the slot drops out, never a 0-fake. The
+ * `over` flag fires only against a budget that exists.
+ */
+export function dayCostFootOf(
+  persona: Pick<McPersonaView, 'budget' | 'dailyCost'>,
+): PersonaDayCost | null {
+  if (typeof persona.dailyCost !== 'number' || !Number.isFinite(persona.dailyCost)) {
+    return null;
+  }
+  const budget =
+    typeof persona.budget === 'number' && Number.isFinite(persona.budget) ? persona.budget : null;
+  return {
+    text:
+      budget === null
+        ? `${usdOf(persona.dailyCost)} heute`
+        : `${usdOf(persona.dailyCost)} / ${budgetWordsOf(budget)} heute`,
+    over: budget !== null && persona.dailyCost > budget,
+  };
+}
+
 /**
  * The team (concept §4.3): one card per persona from `McState.team`,
- * never tickets — avatar, role, worker/model line and the live run chip.
- * The card tap opens the persona's 1:1 (E6) when the bound state offers
+ * never tickets — avatar, role, worker/model line, the live run chip and
+ * the foot's day-cost line against the budget (danger once the day's
+ * costs pass it; hidden while the desk carries neither figure). The card
+ * tap opens the persona's 1:1 (E6) when the bound state offers
  * `openPersona`; the run chip stays informational.
  */
 @Component({
@@ -123,4 +176,5 @@ export class Team {
 
   protected readonly initialsOf = initialsOf;
   protected readonly runStateClass = runStateClass;
+  protected readonly dayCostFootOf = dayCostFootOf;
 }

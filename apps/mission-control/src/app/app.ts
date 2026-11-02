@@ -7,14 +7,15 @@ import {
   type Signal,
 } from '@angular/core';
 import { McState, type McTab } from './api/state';
-import { THEME_LABEL, Theme, type ThemeName } from './theme';
-import { Toast } from './toast';
-import { Work } from './work/work';
-import { Chat } from './chat/chat';
-import { Team } from './team/team';
-import { PersonaDetail } from './team/detail';
-import { TicketView } from './ticket/view';
-import { TicketEdit } from './ticket/edit';
+import { THEME_LABEL, Theme, type ThemeName } from '@mission-ui/theme';
+import { Empty } from '@mission-ui/empty';
+import { Toast } from '@mission-ui/toast';
+import { Work } from '@mission-ui/work/work';
+import { Chat } from '@mission-ui/chat/chat';
+import { Team } from '@mission-ui/team/team';
+import { PersonaDetail } from '@mission-ui/team/detail';
+import { TicketView } from '@mission-ui/ticket/view';
+import { TicketEdit } from '@mission-ui/ticket/edit';
 
 export type { McTab };
 
@@ -25,19 +26,6 @@ function mediaSignal(query: string): Signal<boolean> {
   mql.addEventListener('change', () => value.set(mql.matches));
   return value.asReadonly();
 }
-
-/**
- * The wide layout's idle center pane (the prototype's #v-empty): the
- * shell shows it while no ticket, persona detail, team list or chat
- * claims the middle column.
- */
-@Component({
-  selector: 'mc-empty',
-  templateUrl: './empty.html',
-  styleUrl: './empty.css',
-  changeDetection: ChangeDetectionStrategy.OnPush,
-})
-export class Empty {}
 
 /**
  * The shell (concept §7): one column on the phone; from 768 px the grid

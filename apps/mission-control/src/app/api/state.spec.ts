@@ -896,3 +896,42 @@ describe('persona detail (E6)', () => {
     await waitFor(() => expect(desk.callsOf('GET', '/api/personas/pia/improvements').length).toBe(2));
   });
 });
+
+describe('toast', () => {
+  it('shows the message with the given kind', () => {
+    vi.useFakeTimers();
+    const state = makeState(makeDesk().desk);
+    state.toast('Theme: Cyberpunk', 'ok');
+    expect(state.toastMessage()).toEqual({ message: 'Theme: Cyberpunk', kind: 'ok' });
+  });
+
+  it('defaults the kind to ok', () => {
+    vi.useFakeTimers();
+    const state = makeState(makeDesk().desk);
+    state.toast('plain');
+    expect(state.toastMessage()?.kind).toBe('ok');
+  });
+
+  it('hides itself after 2.2 s', () => {
+    vi.useFakeTimers();
+    const state = makeState(makeDesk().desk);
+    state.toast('Saved');
+    expect(state.toastMessage()).not.toBeNull();
+    vi.advanceTimersByTime(2199);
+    expect(state.toastMessage()).not.toBeNull();
+    vi.advanceTimersByTime(1);
+    expect(state.toastMessage()).toBeNull();
+  });
+
+  it('a newer toast replaces the running one and restarts the hide timer', () => {
+    vi.useFakeTimers();
+    const state = makeState(makeDesk().desk);
+    state.toast('first', 'ok');
+    vi.advanceTimersByTime(1000);
+    state.toast('second', 'warn');
+    vi.advanceTimersByTime(2100); // 3100 ms after the first — only 2.1 s after the second
+    expect(state.toastMessage()).toEqual({ message: 'second', kind: 'warn' });
+    vi.advanceTimersByTime(100);
+    expect(state.toastMessage()).toBeNull();
+  });
+});

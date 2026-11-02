@@ -2,7 +2,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
-  InjectionToken,
   computed,
   effect,
   inject,
@@ -10,7 +9,11 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { McState } from '../api/state';
+import {
+  MC_CHAT_STATE,
+  disconnectedChatState,
+  type McChatState,
+} from './chat.model';
 import { parseBoardCard, type ChatMessageView, type McChainEntry, type SessionMeta } from '../api/dto';
 import {
   chainStepsOf,
@@ -363,11 +366,10 @@ export function thinkFoldLabel(seconds: string | null): string {
 // ---------------------------------------------------------------------------
 
 /**
- * The chat tab's slice of the app state. Provided by the shell once, shared
- * with the other tabs; until the shell wires it, the tab renders against a
- * fresh disconnected `McState` (empty list, honest refusal errors).
+ * The chat tab's slice of the app state lives in `./chat.model` (the
+ * `McChatState` contract and the `MC_CHAT_STATE` token) — this component
+ * consumes the token, never the app's state store directly.
  */
-export const MC_CHAT_STATE = new InjectionToken<McState>('mc-chat-state');
 
 type ChatViewMode = 'empty' | 'composer' | 'session';
 
@@ -408,7 +410,8 @@ interface SheetEntry {
   imports: [NgTemplateOutlet],
 })
 export class Chat {
-  protected readonly state: McState = inject(MC_CHAT_STATE, { optional: true }) ?? new McState();
+  protected readonly state: McChatState =
+    inject(MC_CHAT_STATE, { optional: true }) ?? disconnectedChatState();
 
   /**
    * The report card's promote (E8) fills the one-shot draft prefill and
@@ -672,7 +675,7 @@ export class Chat {
       }
       this.draft.set('');
       if (starting) {
-        // McState opens the fresh session itself; show it — as the live one.
+        // The state opens the fresh session itself; show it — as the live one.
         this.composing.set(false);
         const file = this.active()?.file ?? null;
         if (file !== null) {
@@ -743,7 +746,7 @@ export class Chat {
     this.toast('Verworfen — nichts wurde geändert', 'warn');
   }
 
-  private async decide(id: string, call: (state: McState) => Promise<unknown>): Promise<boolean> {
+  private async decide(id: string, call: (state: McChatState) => Promise<unknown>): Promise<boolean> {
     this.cardErrors.update((current) => ({ ...current, [id]: '' }));
     this.cardBusy.update((current) => ({ ...current, [id]: true }));
     try {
@@ -843,7 +846,7 @@ export class Chat {
   // -- toast ------------------------------------------------------------------
 
   /**
-   * The state's toast pill (Agent A's slice on McState): the message and
+   * The state's toast pill (Agent A's slice on the state store): the message and
    * the kind tint. Errors stay inline on the card/composer — the toast
    * carries the decisions' feedback.
    */

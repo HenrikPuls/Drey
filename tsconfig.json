@@ -12,7 +12,10 @@
     "experimentalDecorators": true,
     "importHelpers": true,
     "target": "ES2022",
-    "module": "preserve"
+    "module": "preserve",
+    "paths": {
+      "@mission-ui/*": ["./libs/mission-ui/src/*"]
+    }
   },
   "angularCompilerOptions": {
     "enableI18nLegacyMessageIdFormat": false,
@@ -38,6 +41,9 @@
     },
     {
       "path": "apps/mission-control/tsconfig.spec.json"
+    },
+    {
+      "path": "libs/mission-ui/tsconfig.json"
     }
   ]
 }

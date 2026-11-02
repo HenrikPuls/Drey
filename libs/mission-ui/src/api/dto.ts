@@ -33,6 +33,20 @@ export interface McPriorityConfig {
   readonly default: string;
 }
 
+/**
+ * What a ticket's settled fleet runs consumed (the engine's TicketUsage,
+ * contracts/tickets.ts — mirrored here tolerantly; the app imports no
+ * engine file): tokens in/out summed over the ledger's `run_settled`
+ * lines, the summed cost (null when no run reported a known one — a
+ * missing cost is never a 0), the run count.
+ */
+export interface McTicketUsage {
+  readonly tokensIn: number;
+  readonly tokensOut: number;
+  readonly cost: number | null;
+  readonly runs: number;
+}
+
 /** One ticket as the Work tab's card renders it (concept §7: one ticket = one card). */
 export interface TicketCardView {
   readonly id: string;
@@ -46,6 +60,8 @@ export interface TicketCardView {
   readonly claimedBy: string | null;
   /** The open blocker ids (`[]` = unblocked). */
   readonly blocked: readonly string[];
+  /** The settled-run usage off the ledger; absent when the desk has none — the cost slots hide. */
+  readonly usage?: McTicketUsage;
 }
 
 /** One board column as a card group. */
@@ -134,6 +150,17 @@ export interface PersonaView {
   readonly color: string;
   /** The newest live run this persona dispatched, if any. */
   readonly currentRun: PersonaRun | null;
+  /**
+   * The persona's daily budget in dollars (frontmatter `budget:`,
+   * concept §4.3 — the team card shows the day's costs against it);
+   * null = none set (or junk on the wire — never a guess).
+   */
+  readonly budget: number | null;
+  /**
+   * What the persona's runs settled for TODAY, summed off the ledger's
+   * `run_settled` costs; absent when no known cost exists — never a fake 0.
+   */
+  readonly dailyCost?: number;
 }
 
 export interface TeamView {
@@ -276,6 +303,77 @@ export interface TicketPhaseOption {
   readonly title: string;
 }
 
+/**
+ * One `## Verlauf` line (concept §5.4 — the engine's VerlaufEntry,
+ * core/verlauf.ts, mirrored here tolerantly; the app imports no engine
+ * file): the machine-maintained record of one COMPLETED run — phase,
+ * persona, model, the short token count, the dollars, the whole minutes
+ * and the outcome.
+ */
+export interface McVerlaufEntry {
+  readonly phase: string | null;
+  readonly persona: string | null;
+  readonly model: string | null;
+  /** The compact token words the Log uses too (`48k`, `3.4M`, `800`); '' when the line lost it. */
+  readonly tokens: string;
+  readonly cost: number | null;
+  /** Whole minutes (`12m`); '' when the line lost it. */
+  readonly dauer: string;
+  /** The settled outcome (`handed-over`/`failed`/`stopped`); null when unreadable. */
+  readonly ausgang: string | null;
+}
+
+/**
+ * Reads the ticket's `## Verlauf` chapter tolerantly — the same
+ * asymmetric-tolerance rule as the engine's `parseVerlaufEntries`: an
+ * absent heading yields no entries, a torn or hand-edited line degrades
+ * to nulls and '' instead of throwing. The chapter ends at the next H2.
+ */
+export function parseVerlaufEntries(fileText: string): readonly McVerlaufEntry[] {
+  if (typeof fileText !== 'string') {
+    return [];
+  }
+  const heading = /^##\s+Verlauf\s*$/m.exec(fileText);
+  if (heading === null) {
+    return [];
+  }
+  const rest = fileText.slice(heading.index);
+  const bodyStart = rest.indexOf('\n') + 1;
+  const next = /^## /gm.exec(rest.slice(bodyStart));
+  const section = next === null ? rest : rest.slice(0, bodyStart + next.index);
+  const entries: McVerlaufEntry[] = [];
+  for (const line of section.split('\n')) {
+    const match = /^- \{(.+)\}\s*$/.exec(line.trim());
+    if (match === null) {
+      continue;
+    }
+    const fields = new Map<string, string>();
+    for (const pair of match[1]!.split(',')) {
+      const at = pair.indexOf(':');
+      if (at === -1) {
+        continue;
+      }
+      fields.set(pair.slice(0, at).trim(), pair.slice(at + 1).trim());
+    }
+    const field = (key: string): string | null => {
+      const value = fields.get(key);
+      return value === undefined || value === '' || value === 'null' ? null : value;
+    };
+    const costRaw = field('cost');
+    const cost = costRaw === null || Number.isNaN(Number(costRaw)) ? null : Number(costRaw);
+    entries.push({
+      phase: field('phase'),
+      persona: field('persona'),
+      model: field('model'),
+      tokens: fields.get('tokens') ?? '',
+      cost,
+      dauer: fields.get('dauer') ?? '',
+      ausgang: field('ausgang'),
+    });
+  }
+  return entries;
+}
+
 /** The loaded ticket document plus what the screen's chrome renders around it. */
 export interface TicketDetail {
   readonly id: string;
@@ -306,6 +404,13 @@ export interface TicketDetail {
   readonly blocked: readonly string[];
   /** The derived inverse: ids this ticket currently blocks; `[]` when omitted. */
   readonly blocks: readonly string[];
+  /** The settled-run usage off the card (the head cost slot's figure); absent when the desk has none. */
+  readonly usage?: McTicketUsage;
+  /**
+   * The `## Verlauf` chapter's entries parsed off the ticket text
+   * (tolerantly, never throwing); empty = the file carries no chapter.
+   */
+  readonly verlauf: readonly McVerlaufEntry[];
 }
 
 /** One file's git patch off `/api/tickets/<id>/diff`. */
@@ -429,10 +534,29 @@ export function chainEntriesOf(raw: unknown): readonly McChainEntry[] {
     .filter((entry): entry is McChainEntry => entry !== null);
 }
 
+/**
+ * The card's usage figure, tolerantly mapped; undefined when the wire
+ * carries none (or nothing usable) — the cost slots hide then, never a
+ * 0-fake. Junk counters read as 0, a missing or non-numeric cost as null.
+ */
+export function usageOf(raw: unknown): McTicketUsage | undefined {
+  const usage = rec(raw);
+  if (usage === null) {
+    return undefined;
+  }
+  return {
+    tokensIn: countOf(usage['tokensIn'], 0),
+    tokensOut: countOf(usage['tokensOut'], 0),
+    cost: typeof usage['cost'] === 'number' && Number.isFinite(usage['cost']) ? usage['cost'] : null,
+    runs: countOf(usage['runs'], 0),
+  };
+}
+
 function cardOf(raw: unknown, phaseFallback: string): TicketCardView {
   const card = rec(raw) ?? {};
   const meta = rec(card['meta']) ?? {};
   const phase = str(card['phase'], phaseFallback) || phaseFallback;
+  const usage = usageOf(card['usage']);
   return {
     id: str(card['id'], str(meta['id'])),
     title: str(card['title'], str(meta['title'])) || str(card['id'], 'untitled'),
@@ -441,6 +565,7 @@ function cardOf(raw: unknown, phaseFallback: string): TicketCardView {
     personaId: strOrNull(meta['persona']),
     claimedBy: strOrNull(meta['claimedBy']),
     blocked: strArray(card['blocked']),
+    ...(usage !== undefined ? { usage } : {}),
   };
 }
 
@@ -553,6 +678,10 @@ const LIVE_RUN_STATES: readonly RunStateView[] = ['starting', 'running', 'stoppi
 const runStateOf = (value: unknown): RunStateView | null =>
   LIVE_RUN_STATES.includes(value as RunStateView) ? (value as RunStateView) : null;
 
+/** A non-negative money figure; junk (absent, mistyped, negative) reads as the fallback. */
+const moneyOf = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+
 /** One persona directory entry, tolerantly mapped; null when the id is missing. */
 function personaOf(raw: unknown): PersonaView | null {
   const persona = rec(raw);
@@ -563,6 +692,7 @@ function personaOf(raw: unknown): PersonaView | null {
   if (id === '') {
     return null;
   }
+  const dailyCost = moneyOf(persona['dailyCost']);
   return {
     id,
     title: str(persona['title'], id),
@@ -571,8 +701,10 @@ function personaOf(raw: unknown): PersonaView | null {
     model: str(persona['model']),
     pool: strArray(persona['pool']),
     color: str(persona['color'], '#7aa2f7'),
+    budget: moneyOf(persona['budget']),
     // A lone directory entry carries no fleet context; parseTeam folds the run in.
     currentRun: null,
+    ...(dailyCost !== null ? { dailyCost } : {}),
   };
 }
 
@@ -903,6 +1035,7 @@ export function parseTicketDetail(json: unknown, phases: readonly TicketPhaseOpt
     return null;
   }
   const text = str(body['text']);
+  const usage = usageOf(card['usage']);
   return {
     id,
     title: str(card['title'], str(meta['title'])) || id,
@@ -916,6 +1049,8 @@ export function parseTicketDetail(json: unknown, phases: readonly TicketPhaseOpt
     blockedBy: strArray(meta['blockedBy']),
     blocked: strArray(card['blocked']),
     blocks: strArray(card['blocks']),
+    ...(usage !== undefined ? { usage } : {}),
+    verlauf: parseVerlaufEntries(text),
   };
 }
 

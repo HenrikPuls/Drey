@@ -1,0 +1,10 @@
+/* The lib's own lint/typecheck config: sources and their specs in one
+   program (the app builds compile the sources through their imports;
+   `ng test mission-ui` compiles the specs through tsconfig.spec.json). */
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["vitest/globals"]
+  },
+  "include": ["src/**/*.ts"]
+}

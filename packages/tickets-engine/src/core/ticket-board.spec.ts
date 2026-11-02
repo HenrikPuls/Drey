@@ -324,6 +324,22 @@ describe('assembleBoard', () => {
     expect(snap.pipelineError).toContain('missing');
     expect(snap.columns).toEqual([]);
   });
+
+  it('attaches the settled-run usage to the matching cards (costtracking, concept §4.3)', () => {
+    const snap = assembleBoard({
+      ...baseInput([
+        { path: 'tickets/build/T-0001.md', text: ticketText('T-0001', 'Costly') },
+        { path: 'tickets/inbox/T-0002.md', text: ticketText('T-0002', 'Untracked') },
+      ]),
+      ticketUsage: {
+        'T-0001': { tokensIn: 98_000, tokensOut: 8_500, cost: 1.283, runs: 2 },
+      },
+    });
+    const costly = snap.columns[2]!.tickets[0]!;
+    expect(costly.usage).toEqual({ tokensIn: 98_000, tokensOut: 8_500, cost: 1.283, runs: 2 });
+    const untracked = snap.columns[0]!.tickets[0]!;
+    expect(untracked.usage).toBeUndefined();
+  });
 });
 
 describe('patchPipelinePhase - the settings dialog writer', () => {

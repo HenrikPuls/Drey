@@ -244,6 +244,9 @@
               </ul>
             </div>
           }
+          @if (costTotal(); as total) {
+            <p class="proof-total">gesamt <b>{{ total }}</b></p>
+          }
         </section>
       }
 

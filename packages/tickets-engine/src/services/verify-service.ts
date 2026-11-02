@@ -212,7 +212,11 @@ export class VerifyService {
     await this.deps.host.write(vaultId, card.path, patched);
     const shotPaths = shots.map((s) => `${ATTACHMENTS_DIR}/${s.file}`);
     const warning = await this.commit(vault, [card.path, ...shotPaths], `tickets: ${id} verified`);
-    // E7: the ledger's proof_ready line rides the persisted proof.
+    // E7: the ledger's proof_ready line rides the persisted proof. It
+    // stays persona/model-null on purpose: the harness (Playwright plus
+    // its judge, here null) runs no persona and no model — attributing
+    // the phase's persona would invent a fact (concept §3.3: the ledger
+    // carries what the mover actually knows).
     this.deps.events?.ledger({ kind: 'proof_ready', ticket: id, persona: null, model: null });
     this.deps.host.announceChanges(vaultId, [card.path, ...shotPaths]);
     this.setStatus(id, 'done', report, null);

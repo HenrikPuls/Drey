@@ -208,6 +208,39 @@ describe('EngineBoardService E7 ledger writes', () => {
   });
 });
 
+describe('EngineBoardService snapshot usage — the ledger settled sums (costtracking)', () => {
+  it('snapshot attaches the run_settled sums of each ticket from tickets/_meta/ledger.jsonl', async () => {
+    await writeTicket('T-0001', 'inbox');
+    await writeTicket('T-0002', 'inbox');
+    await fsp.writeFile(
+      path.join(vaultDir, 'tickets', '_meta', 'ledger.jsonl'),
+      [
+        '{"v":1,"ts":"2026-11-02T09:00:00Z","event":"dispatched","ticket":"T-0001","persona":"pia","model":"opus"}',
+        '{"v":1,"ts":"2026-11-02T09:41:00Z","event":"run_settled","ticket":"T-0001","persona":"pia","model":"opus","tokensIn":48000,"tokensOut":6000,"cost":1.17}',
+        '{"v":1,"ts":"2026-11-02T10:05:00Z","event":"run_settled","ticket":"T-0001","persona":"ben","model":"glm-5.3","tokensIn":50000,"tokensOut":2500}',
+        '{"v":1,"ts":"2026-11-02T10:06:00Z","event":"phase","ticket":"T-0001","from":"inbox","to":"done"}',
+        '{"v":1,"ts":"broken line"}',
+      ].join('\n'),
+      'utf8',
+    );
+    const service = serviceOf();
+
+    const snap = await service.snapshot();
+
+    const card = snap.columns[0]!.tickets.find((t) => t.id === 'T-0001')!;
+    expect(card.usage).toEqual({ tokensIn: 98_000, tokensOut: 8_500, cost: 1.17, runs: 2 });
+    const untracked = snap.columns[0]!.tickets.find((t) => t.id === 'T-0002')!;
+    expect(untracked.usage).toBeUndefined();
+  });
+
+  it('snapshot without a ledger attaches no usage at all', async () => {
+    await writeTicket('T-0001', 'inbox');
+    const service = serviceOf();
+    const snap = await service.snapshot();
+    expect(snap.columns[0]!.tickets[0]!.usage).toBeUndefined();
+  });
+});
+
 describe('EngineBoardService statusOf', () => {
   it('reads the ticket status log beside its card', async () => {
     await writeTicket('T-0001', 'inbox');

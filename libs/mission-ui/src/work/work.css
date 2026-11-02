@@ -349,6 +349,21 @@ button:focus-visible {
   color: var(--warn);
 }
 
+/* the Σ token slot — rides left of the cost slot, dimmer so the dollars lead */
+.tksum {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--text-3);
+}
+
+/* together the pair right-aligns once (the Σ margin carries the push) */
+.tksum + .tkcost {
+  margin-left: 0;
+}
+
 /* question cards: the needs-you group's dress — 2px amber left border */
 
 .qcard {

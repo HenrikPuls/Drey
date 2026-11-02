@@ -15,6 +15,7 @@ import {
   isJumpPriority,
   parsePriorities,
   type McPriorityConfig,
+  type McTicketUsage,
 } from '../api/dto';
 
 // --- the consumed device-state surface ---------------------------------------
@@ -91,6 +92,13 @@ export interface McTicket {
    * number never renders as a 0-fake.
    */
   readonly cost?: number | null;
+  /**
+   * The ticket's settled-run usage off the ledger (the engine's
+   * TicketUsage — tokens, summed cost, run count); absent when the desk
+   * has none. When present it drives the cost slot (`usage.cost`), the
+   * legacy `cost` field above stays the fallback an older desk owes.
+   */
+  readonly usage?: McTicketUsage;
   /**
    * The live run's context fill in percent, when the desk sends it; absent
    * hides the card's ctx bar the same way.
@@ -231,6 +239,8 @@ export interface TicketVm {
   readonly blockers: readonly string[];
   /** The cost slot's label (`0,44 $`); null = the desk sent none — the slot stays hidden. */
   readonly costLabel: string | null;
+  /** The Σ token label (`Σ 173k`); null = no usable usage — the slot stays hidden. */
+  readonly tokensLabel: string | null;
   /** The ctx bar's percent (1–100); null = no data, the slot stays hidden. */
   readonly ctxPercent: number | null;
 }
@@ -318,6 +328,28 @@ export function costLabelOf(cost: number | null | undefined): string | null {
   return typeof cost === 'number' && Number.isFinite(cost) && cost > 0
     ? `${cost.toFixed(2).replace('.', ',')} $`
     : null;
+}
+
+/**
+ * The Σ token label off the card's usage (`Σ 54k` — the Log's short
+ * counts, mirrored from the engine's tokenWords); null when the usage
+ * carries no usable tokens — absent, zero and junk hide the slot, never
+ * a 0-fake.
+ */
+export function tokensSumLabelOf(usage: McTicketUsage | null | undefined): string | null {
+  const side = (value: unknown): number =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+  const sum = side(usage?.tokensIn) + side(usage?.tokensOut);
+  if (sum <= 0) {
+    return null;
+  }
+  const words =
+    sum >= 1_000_000
+      ? `${(sum / 1_000_000).toFixed(1)}M`
+      : sum >= 1_000
+        ? `${Math.round(sum / 1_000)}k`
+        : String(sum);
+  return `Σ ${words}`;
 }
 
 /**
@@ -415,7 +447,8 @@ function ticketVmOf(
     flagged: isFlaggedTicket(ticket, config),
     blocked: isBlockedTicket(ticket),
     blockers: blockerIdsOf(ticket),
-    costLabel: costLabelOf(ticket.cost),
+    costLabel: costLabelOf(ticket.usage?.cost ?? ticket.cost),
+    tokensLabel: tokensSumLabelOf(ticket.usage),
     ctxPercent: ctxPercentOf(ticket.ctx),
   };
 }

@@ -25,6 +25,7 @@ import {
   type TicketCard,
   type TicketIssue,
   type TicketPriority,
+  type TicketUsage,
 } from '../contracts/tickets';
 import { checkpointPhaseIds } from '../fleet/chain';
 import { runDependencyPass } from './blocked';
@@ -718,6 +719,12 @@ export interface AssembleInput {
    * stays time-free. Default: none.
    */
   readonly recentDone?: readonly RecentDone[];
+  /**
+   * The settled-run usage per ticket id, already aggregated by the
+   * caller from the fleet ledger's `run_settled` lines (concept §4.3) —
+   * the pure assembly stays ledger-free. Default: none.
+   */
+  readonly ticketUsage?: Record<string, TicketUsage>;
 }
 
 /** Files under `tickets/` that are neither `_meta` nor ticket-shaped. */
@@ -807,6 +814,7 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
         repoWorker,
         input.defaultWorker,
       ),
+      ...(input.ticketUsage?.[parts.stem] !== undefined ? { usage: input.ticketUsage[parts.stem] } : {}),
       issues: [...parsed.issues],
       blocked: [],
       blocks: [],

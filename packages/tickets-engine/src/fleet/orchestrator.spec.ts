@@ -916,6 +916,44 @@ describe('Orchestrator', () => {
       expect(events.status).toHaveBeenCalledTimes(2); // working + done
     });
 
+    it('a settled run with usage writes the run_settled ledger line; an empty one writes nothing', async () => {
+      await writeMeta();
+      await writeTicket('T-0001', 'plan');
+      const events = fakeEvents();
+      const { orch, fleet } = orchestrator({ events, cardPathOf: async () => null });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+      await orch.setMaster('halted');
+
+      const record = fleet.records[0]!;
+      // The effective cost rides along (the price-table fallback ran at
+      // the settle); a zero-usage run stays off the ledger entirely.
+      const settled = {
+        ...record.info,
+        state: 'done' as const,
+        persona: 'pia',
+        model: 'opus',
+        tokensIn: 48_000,
+        tokensOut: 6_000,
+        costUsd: 1.17,
+      };
+      await orch.onRunSettled(settled);
+      expect(events.ledger).toHaveBeenLastCalledWith({
+        kind: 'run_settled',
+        ticket: 'T-0001',
+        persona: 'pia',
+        model: 'opus',
+        tokensIn: 48_000,
+        tokensOut: 6_000,
+        cost: 1.17,
+      });
+
+      const empty = { ...record.info, state: 'failed' as const, tokensIn: 0, tokensOut: 0, costUsd: null };
+      const callsBefore = events.ledger.mock.calls.length;
+      await orch.onRunSettled(empty);
+      expect(events.ledger).toHaveBeenCalledTimes(callsBefore);
+    });
+
     it('a run that ends done but blocked writes `blocked:` with the worker reason', async () => {
       await writeMeta();
       await writeTicket('T-0001', 'plan');

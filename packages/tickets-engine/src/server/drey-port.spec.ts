@@ -25,6 +25,7 @@ function fakePersona(id: string, title: string): import('../core/persona').Perso
     models: { default: 'opus', pool: ['opus'], router: 'off' },
     color: '#a78bfa',
     skills: [],
+    budget: null,
   };
 }
 
@@ -40,6 +41,7 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
     archive: vi.fn(async () => ok),
     startRun: vi.fn(async () => ({ ok: true, runId: 'r1' })),
     listPersonas: vi.fn(async () => []),
+    ledgerText: vi.fn(async () => null),
     saveTicket: vi.fn(async () => ({ ok: true, revision: '0123456789abcdef' })),
     ticketDiff: vi.fn(async () => ({ files: [], truncated: false })),
     worktreeChangesOf: vi.fn(async () => []),
@@ -77,13 +79,51 @@ describe('DreyTicketsPort', () => {
         models: { default: 'opus', pool: ['opus', 'sonnet'], router: 'off' },
         color: '#a78bfa',
         skills: [],
+        budget: 25,
         body: 'Who Pia is.',
       },
     ] as unknown as Awaited<ReturnType<typeof board.listPersonas>>);
     const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
     await expect(port.personas()).resolves.toEqual([
-      { id: 'pia', title: 'Pia', role: 'planner', worker: 'claude-code', model: 'opus', pool: ['opus', 'sonnet'], color: '#a78bfa' },
+      {
+        id: 'pia',
+        title: 'Pia',
+        role: 'planner',
+        worker: 'claude-code',
+        model: 'opus',
+        pool: ['opus', 'sonnet'],
+        color: '#a78bfa',
+        budget: 25,
+      },
     ]);
+  });
+
+  it('attaches the ledger’s settled costs of today as the persona’s dailyCost (concept §4.3)', async () => {
+    const { board, fleet } = fakes();
+    const day = new Date().toISOString().slice(0, 10);
+    vi.mocked(board.listPersonas).mockResolvedValue([
+      fakePersona('pia', 'Pia'),
+      { ...fakePersona('ben', 'Ben'), budget: 40 },
+    ]);
+    vi.mocked(board.ledgerText).mockResolvedValue(
+      [
+        // Pia spent today (two settled runs) and yesterday (one — not today).
+        `{"v":1,"ts":"${day}T09:00:00Z","event":"run_settled","ticket":"T-0001","persona":"pia","model":"opus","tokensIn":48000,"tokensOut":6000,"cost":1.17}`,
+        `{"v":1,"ts":"${day}T11:00:00Z","event":"run_settled","ticket":"T-0002","persona":"pia","model":"opus","tokensIn":10000,"tokensOut":1000,"cost":0.23}`,
+        `{"v":1,"ts":"2026-01-01T09:00:00Z","event":"run_settled","ticket":"T-0003","persona":"pia","model":"opus","tokensIn":1,"tokensOut":1,"cost":9}`,
+        // Ben settled today, but the run carried no cost: no dailyCost — never a fake 0.
+        `{"v":1,"ts":"${day}T12:00:00Z","event":"run_settled","ticket":"T-0004","persona":"ben","model":"glm-5.3","tokensIn":5000,"tokensOut":500}`,
+        `{"v":1,"ts":"${day}T13:00:00Z","event":"dispatched","ticket":"T-0005","persona":"pia","model":"opus"}`,
+      ].join('\n'),
+    );
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+    const views = await port.personas();
+    const pia = views.find((v) => v.id === 'pia');
+    const ben = views.find((v) => v.id === 'ben');
+    expect(pia?.dailyCost).toBe(1.4); // 1.17 + 0.23, yesterday's 9 excluded
+    expect(pia?.budget).toBeNull();
+    expect(ben?.budget).toBe(40);
+    expect(ben?.dailyCost).toBeUndefined();
   });
 
   it('hands the actor to every board write', async () => {

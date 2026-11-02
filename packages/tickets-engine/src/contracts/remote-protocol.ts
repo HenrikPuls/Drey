@@ -180,6 +180,18 @@ export interface PersonaView {
   readonly pool: readonly string[];
   /** `#rrggbb`; the chips' and avatars' colour. */
   readonly color: string;
+  /**
+   * The persona's daily budget in USD (frontmatter `budget:`, concept
+   * §4.3 — the Team card shows the day's costs against it); null = none.
+   */
+  readonly budget: number | null;
+  /**
+   * What the persona's runs settled for TODAY (UTC day, summed from the
+   * fleet ledger's `run_settled` costs). Present only when a known cost
+   * exists — absent means "nothing settled today or the costs are
+   * unknown", never a fake 0.
+   */
+  readonly dailyCost?: number;
 }
 
 /**

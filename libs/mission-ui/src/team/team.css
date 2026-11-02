@@ -139,6 +139,16 @@
   font-size: 11px;
 }
 
+/* the foot's day-cost line — the budget against it, danger once over */
+.pfoot .cost {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.pfoot .cost.over {
+  color: var(--danger);
+}
+
 .empty {
   margin: 0;
   padding: 24px 0;

@@ -126,6 +126,7 @@ export default tseslint.config(
           'tsconfig.spec.json',
           'apps/mission-control/tsconfig.app.json',
           'apps/mission-control/tsconfig.spec.json',
+          'libs/mission-ui/tsconfig.json',
           'plugins/tsconfig.main.json',
           'plugins/tsconfig.renderer.json',
           'packages/tickets-engine/tsconfig.json',

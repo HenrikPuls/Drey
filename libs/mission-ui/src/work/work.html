@@ -137,7 +137,7 @@
                 }
               </div>
               <h3 class="ticket-title">{{ vm.title }}</h3>
-              @if (vm.blocked || vm.flagged || vm.ctxPercent !== null || vm.costLabel !== null) {
+              @if (vm.blocked || vm.flagged || vm.ctxPercent !== null || vm.costLabel !== null || vm.tokensLabel !== null) {
                 <div class="meta">
                   @if (vm.blocked) {
                     <span class="statline warn">
@@ -157,6 +157,9 @@
                     >
                       <i [style.width.%]="vm.ctxPercent"></i>
                     </span>
+                  }
+                  @if (vm.tokensLabel !== null) {
+                    <span class="tksum">{{ vm.tokensLabel }}</span>
                   }
                   @if (vm.costLabel !== null) {
                     <span class="tkcost">{{ vm.costLabel }}</span>

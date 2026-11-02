@@ -38,7 +38,7 @@ import {
   type TicketDiffView,
   type TicketPhaseOption,
   type WorkView,
-} from './dto';
+} from '@mission-ui/api/dto';
 
 export type PairingPhase = 'needs-code' | 'pairing' | 'ready';
 

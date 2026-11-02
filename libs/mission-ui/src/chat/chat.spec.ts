@@ -3,10 +3,9 @@ import { type Signal, type WritableSignal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { ActiveSession, ChatMessageView, ChatProposalView, ChatStateView, McChainEntry, WorkView } from '../api/dto';
 import { DEFAULT_PRIORITY_CONFIG } from '../api/dto';
-import type { McState } from '../api/state';
+import type { McChatState } from './chat.model';
 import {
   Chat,
-  MC_CHAT_STATE,
   TimelineProposal,
   TimelineSession,
   cardPriorityOf,
@@ -21,6 +20,7 @@ import {
   thinkSecondsLabel,
   timelineOf,
 } from './chat';
+import { MC_CHAT_STATE } from './chat.model';
 
 // -- fixtures ---------------------------------------------------------------
 
@@ -405,7 +405,7 @@ describe('Chat prefill adoption (E8)', () => {
   function setup(fake: FakeChatState): { vm: ChatSurface; fake: FakeChatState } {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [{ provide: MC_CHAT_STATE, useValue: fake as unknown as McState }],
+      providers: [{ provide: MC_CHAT_STATE, useValue: fake as unknown as McChatState }],
     });
     const chat = TestBed.runInInjectionContext(() => new Chat());
     return { vm: chat as unknown as ChatSurface, fake };
@@ -525,7 +525,7 @@ describe('Chat setChain before/after card (E9)', () => {
   function setup(fake: ChainFakeState): ChainSurface {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [{ provide: MC_CHAT_STATE, useValue: fake as unknown as McState }],
+      providers: [{ provide: MC_CHAT_STATE, useValue: fake as unknown as McChatState }],
     });
     return TestBed.runInInjectionContext(() => new Chat()) as unknown as ChainSurface;
   }
@@ -596,7 +596,7 @@ describe('Chat card kickers', () => {
             chat: signal<ChatStateView>(chatView),
             board: signal(null),
             work: signal<WorkView>({ groups: [], priorities: DEFAULT_PRIORITY_CONFIG }),
-          } as unknown as McState,
+          } as unknown as McChatState,
         },
       ],
     });
@@ -742,7 +742,7 @@ describe('Chat card decisions (toasts)', () => {
   function setup(fake: DecisionFakeState, active: ActiveSession): DecisionSurface {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [{ provide: MC_CHAT_STATE, useValue: fake as unknown as McState }],
+      providers: [{ provide: MC_CHAT_STATE, useValue: fake as unknown as McChatState }],
     });
     fake.chat.set({ sessions: [], active });
     const chat = TestBed.runInInjectionContext(() => new Chat());
@@ -857,7 +857,7 @@ describe('Chat sessions sheet (read-only views)', () => {
   function setup(fake: SheetFakeState): SheetSurface {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [{ provide: MC_CHAT_STATE, useValue: fake as unknown as McState }],
+      providers: [{ provide: MC_CHAT_STATE, useValue: fake as unknown as McChatState }],
     });
     const chat = TestBed.runInInjectionContext(() => new Chat()) as unknown as {
       openFromSheet(entry: { file: string; title: string }): Promise<void>;

@@ -25,6 +25,7 @@ describe('parsePersonaFile', () => {
       models: { default: 'opus', pool: ['opus', 'sonnet', 'glm-5.2'], router: 'off' },
       color: '#a78bfa',
       skills: ['repo-recherche', 'fragen-formulieren'],
+      budget: null,
     });
   });
 
@@ -35,6 +36,7 @@ describe('parsePersonaFile', () => {
     expect(persona.models.default).toBe('opus');
     expect(persona.models.pool).toEqual(['opus']);
     expect(persona.models.router).toBe('off');
+    expect(persona.budget).toBeNull();
   });
 
   it('rejects malformed ids', () => {
@@ -44,6 +46,29 @@ describe('parsePersonaFile', () => {
   it('round-trips through personaFileText', () => {
     const persona = parsePersonaFile('pia', PIA);
     expect(parsePersonaFile('pia', personaFileText(persona))).toEqual(persona);
+  });
+});
+
+describe('budget — the daily spend limit (concept §4.3)', () => {
+  it('reads the USD-per-day number', () => {
+    const persona = parsePersonaFile('pia', `---\ntitle: Pia\nbudget: 25\n---\n`);
+    expect(persona.budget).toBe(25);
+  });
+
+  it('tolerates a numeric string and rejects junk, fractions allowed', () => {
+    expect(parsePersonaFile('pia', `---\nbudget: '12.5'\n---\n`).budget).toBe(12.5);
+    expect(parsePersonaFile('pia', `---\nbudget: much\n---\n`).budget).toBeNull();
+    expect(parsePersonaFile('pia', `---\nbudget: -3\n---\n`).budget).toBeNull();
+    expect(parsePersonaFile('pia', `---\n---\n`).budget).toBeNull();
+  });
+
+  it('round-trips a set budget through personaFileText and omits a null one', () => {
+    const rich = parsePersonaFile('pia', `---\ntitle: Pia\nbudget: 25\n---\n`);
+    expect(personaFileText(rich)).toContain('budget: 25');
+    expect(parsePersonaFile('pia', personaFileText(rich))).toEqual(rich);
+    const poor = parsePersonaFile('pia', `---\ntitle: Pia\n---\n`);
+    expect(personaFileText(poor)).not.toContain('budget');
+    expect(parsePersonaFile('pia', personaFileText(poor))).toEqual(poor);
   });
 });
 

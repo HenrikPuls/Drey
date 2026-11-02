@@ -29,6 +29,9 @@
               </div>
               <div class="pfoot">
                 <span>Worker: {{ persona.worker }}</span>
+                @if (dayCostFootOf(persona); as foot) {
+                  <span class="cost" [class.over]="foot.over">{{ foot.text }}</span>
+                }
               </div>
             </button>
           } @else {
@@ -57,6 +60,9 @@
               </div>
               <div class="pfoot">
                 <span>Worker: {{ persona.worker }}</span>
+                @if (dayCostFootOf(persona); as foot) {
+                  <span class="cost" [class.over]="foot.over">{{ foot.text }}</span>
+                }
               </div>
             </div>
           }

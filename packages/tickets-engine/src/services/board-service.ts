@@ -23,7 +23,7 @@ import { detectDrift, recentDoneOf, type DriftDetection } from '../core/normaliz
 import { blockedRefusal } from '../core/blocked';
 import { runTransition, type TransitionIo } from '../core/transition';
 import { parseStatusLog, type StatusLine } from '../core/status-log';
-import type { LedgerWrite } from '../core/ledger';
+import { LEDGER_FILE, parseLedger, settledUsageByTicket, type LedgerWrite } from '../core/ledger';
 import { mergeWorktreeChanges, diffOfOutput, type TicketDiff, type WorktreeFile } from '../core/worktree-changes';
 import { planWorktreeRemoval } from '../core/worktree-removal';
 import { TicketsGit, type RepoLocation } from '../core/tickets-git';
@@ -309,11 +309,12 @@ export class EngineBoardService {
         files: [],
       });
     }
-    const [pipelineText, reposText, mdFiles, location] = await Promise.all([
+    const [pipelineText, reposText, mdFiles, location, ledgerText] = await Promise.all([
       this.readOptional(vault.id, PIPELINE_PATH),
       this.readOptional(vault.id, REPOS_PATH),
       this.host.listMarkdownFiles(vault.id),
       this.locate(vault.path),
+      this.readOptional(vault.id, LEDGER_FILE),
     ]);
     const paths = mdFiles.filter((p) => p.startsWith('tickets/') && !p.startsWith('tickets/_meta/'));
     const files = await Promise.all(
@@ -333,6 +334,9 @@ export class EngineBoardService {
       files,
       // The same file list already carries the archive — no extra reads.
       recentDone: recentDoneOf(files, Date.now()),
+      // The settled runs' usage (concept §4.3): one vault-file read, the
+      // pure assembly only attaches the sums to the matching cards.
+      ticketUsage: settledUsageByTicket(parseLedger(ledgerText ?? '')),
     });
     // The chain follows the pipeline: an automatic column anywhere
     // points the runner at this vault (M85). Cheap and idempotent —
@@ -2243,6 +2247,19 @@ export class EngineBoardService {
   }
 
   /**
+   * The fleet ledger's raw text (`tickets/_meta/ledger.jsonl`); null
+   * without a vault or a ledger — the aggregation happens at the callers
+   * (the port's persona day costs), the service only reads the vault file.
+   */
+  async ledgerText(): Promise<string | null> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return null;
+    }
+    return this.readOptional(vault.id, LEDGER_FILE);
+  }
+
+  /**
    * The confirmed memory entry (E3 acceptance): one owner-confirmed
    * lesson appended to the persona's memory.md — the same store the
    * fleet's settle path writes through. Refuses unknown persona ids;
@@ -2348,6 +2365,7 @@ export class EngineBoardService {
             models: { default: migration.model ?? 'opus', pool: [migration.model ?? 'opus'], router: 'off' },
             color: '#a78bfa',
             skills: [],
+            budget: null,
           };
           const personaPath = `${PERSONAS_DIR}/${migration.id}/persona.md`;
           await this.host.write(vault.id, personaPath, personaFileText(persona));

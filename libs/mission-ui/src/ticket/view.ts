@@ -17,13 +17,17 @@ import {
   chainPrefillOf,
   chainStepsOf,
   diffFontSizeStep,
+  gateCostOf,
   patchRowsOf,
   phaseTitleOf,
   proofOf,
   renderChainEntryViews,
   scoutReportOf,
   splitTicketSections,
-  verlaufTextOf,
+  usdLabelOf,
+  verlaufBoxOf,
+  verlaufCostsOf,
+  verlaufTotalOf,
   type AcceptArmState,
   type GateStep,
   type ProofReport,
@@ -55,8 +59,10 @@ export interface ProofShot {
  * rule rings ◎); tappable into the gate sheet, the chain-hint line under
  * it saying so. The body renders as safe Markdown blocks (section heads
  * in mono caps, checkboxes struck, code fences boxed); the `## Verlauf`
- * chapter surfaces as its own yaml box when the file carries one; the
- * `## Verification` section becomes the proof card (the verdict line,
+ * chapter surfaces as its own yaml box — one entry per line — when the
+ * chapter carries parseable entries, its per-phase sums dress the gate
+ * pills and its total the bar's end slot; the `## Verification` section
+ * becomes the proof card (the verdict line,
  * the criteria checklist, the snap gallery with its scroll-synced dots
  * and the fullscreen viewer, the findings); the diff renders as the
  * git table — file heads with chevron, path and the +/- balance, the
@@ -119,11 +125,11 @@ export class TicketView {
   }
 
   /**
-   * The ticket's accumulated cost for the head card's slot — the engine
-   * does not deliver the stage ledger yet, so this reads null and the
-   * slot renders nothing (tolerant empty until it does).
+   * The ticket's accumulated cost for the head card's slot — the
+   * ledger's settled-run usage the doc carries (`usage.cost`); null when
+   * the desk has none (the slot renders nothing, never a 0-fake).
    */
-  protected readonly cost = computed<string | null>(() => null);
+  protected readonly cost = computed<string | null>(() => usdLabelOf(this.doc()?.usage?.cost ?? null));
 
   /** The mono frontmatter line under the title: `phase: x · persona: y`. */
   protected readonly fmLine = computed(() => {
@@ -137,24 +143,22 @@ export class TicketView {
 
   protected readonly steps = computed<GateStep[]>(() => {
     const doc = this.doc();
-    return doc === null ? [] : chainStepsOf(doc.phases, doc.phase, doc.chain);
+    if (doc === null) {
+      return [];
+    }
+    const costs = verlaufCostsOf(doc.verlauf);
+    return chainStepsOf(doc.phases, doc.phase, doc.chain).map((step) => ({
+      ...step,
+      cost: gateCostOf(costs, step),
+    }));
   });
 
   /**
-   * The chain total for the bar's end slot — the costs the engine has
-   * delivered so far, summed; null while no gate carries one (the slot
-   * renders nothing then, tolerant until the ledger wires up).
+   * The chain total for the bar's end slot — every `## Verlauf` cost the
+   * ticket's chapter carries, summed; null until the runs cost something
+   * (the slot renders nothing then, never a 0-fake).
    */
-  protected readonly costTotal = computed<string | null>(() => {
-    const costs = this.steps()
-      .map((step) => step.cost)
-      .filter((cost) => cost !== null);
-    if (costs.length === 0) {
-      return null;
-    }
-    const sum = costs.reduce((acc, cost) => acc + (Number.parseFloat(cost.replace(',', '.')) || 0), 0);
-    return `${sum.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
-  });
+  protected readonly costTotal = computed<string | null>(() => verlaufTotalOf(this.doc()?.verlauf ?? []));
 
   // --- the gate sheet (E9, concept §5.7) ----------------------------------------
 
@@ -311,14 +315,11 @@ export class TicketView {
   });
 
   /**
-   * The `## Verlauf` chapter as its yaml box reads it — fences stripped,
-   * prose kept; null while the ticket carries no chapter (the engine
-   * does not write one yet).
+   * The `## Verlauf` chapter as its yaml box reads it — one canonical
+   * entry per line; null while the ticket carries no readable entries
+   * (no chapter, or prose alone), the section then renders nothing.
    */
-  protected readonly verlauf = computed<string | null>(() => {
-    const section = this.sections().verlauf;
-    return section === null ? null : verlaufTextOf(section);
-  });
+  protected readonly verlauf = computed<string | null>(() => verlaufBoxOf(this.doc()?.verlauf ?? []));
 
   /** The proof's pass count for the verdict line; null while there is nothing to count. */
   protected readonly verdict = computed<{ passed: number; total: number; stamp: string } | null>(() => {

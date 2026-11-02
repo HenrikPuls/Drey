@@ -23,7 +23,7 @@ import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 
-const ROOTS = ['apps', 'electron', 'shared', 'plugins', 'packages', 'src'];
+const ROOTS = ['apps', 'libs', 'electron', 'shared', 'plugins', 'packages', 'src'];
 
 /** Every .ts source under one root, relative to the repo root, `/`-separated. */
 function tsFiles(root, out = []) {

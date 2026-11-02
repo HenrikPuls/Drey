@@ -18,6 +18,7 @@
  * client.
  */
 import { InjectionToken } from '@angular/core';
+import type { McTicketUsage, McVerlaufEntry } from '../api/dto';
 
 // --- action replies ----------------------------------------------------------
 
@@ -67,8 +68,9 @@ export interface GateStep extends GatePhase {
   /** The persona pinned to this gate; null = the ladder decides. */
   readonly persona: string | null;
   /**
-   * The gate's run cost as the engine's stage ledger reports it, ready to
-   * show; null = not delivered yet — the pill renders no cost slot.
+   * The gate's run cost — the `## Verlauf` entries' sum for this phase
+   * (matched by id, then title); null = the phase's runs cost nothing
+   * readable — the pill renders no cost slot.
    */
   readonly cost: string | null;
 }
@@ -365,7 +367,8 @@ export interface TicketSections {
   readonly log: string | null;
   /**
    * The `## Verlauf` section's text (heading excluded); null when absent —
-   * the engine does not write the chapter yet, the screen stays silent.
+   * the chapter never reaches the generic render; the yaml box renders
+   * the doc's parsed entries instead.
    */
   readonly verlauf: string | null;
 }
@@ -420,20 +423,88 @@ export function splitTicketSections(text: string): TicketSections {
 }
 
 /**
- * The Verlauf section as its yaml box renders it: a fenced block loses
- * its fence (the fence marks stay markup, the run lines stay text), a
- * section without a fence renders as written — the engine may start the
- * chapter with prose before it learns to write the yaml ledger.
+ * The Verlauf chapter's pieces (concept §5.4) — the parsed entries ride
+ * on the doc (`TicketDoc.verlauf`, parsed off the text by the api layer's
+ * tolerant mirror of the engine's parser); these helpers dress them for
+ * the screen: the canonical yaml line, the gate pills' per-phase cost,
+ * the bar's total, the head card's dollars.
  */
-export function verlaufTextOf(sectionText: string): string {
-  const lines = sectionText.split('\n');
-  const open = lines.findIndex((line) => line.trim().startsWith('```'));
-  if (open < 0) {
-    return sectionText.trim();
+
+/** The dollars as the prototype writes them (`1,87 $`); null unless a usable positive number — never a 0-fake. */
+export function usdLabelOf(cost: number | null | undefined): string | null {
+  return typeof cost === 'number' && Number.isFinite(cost) && cost > 0
+    ? `${cost.toFixed(2).replace('.', ',')} $`
+    : null;
+}
+
+/**
+ * One entry as its canonical yaml line (the engine's renderVerlaufLine
+ * grammar, mirrored): `- { phase: plan, persona: pia, … }` — null and
+ * empty fields (a torn line's leavings) write `null`, so every line
+ * carries all seven keys, well-formed, always.
+ */
+export function verlaufLineOf(entry: McVerlaufEntry): string {
+  const part = (key: string, value: string | number | null): string =>
+    ` ${key}: ${value === null || value === '' ? 'null' : value}`;
+  return (
+    `- {${part('phase', entry.phase)},${part('persona', entry.persona)},${part('model', entry.model)},` +
+    `${part('tokens', entry.tokens)},${part('cost', entry.cost)},${part('dauer', entry.dauer)},` +
+    `${part('ausgang', entry.ausgang)} }`
+  );
+}
+
+/**
+ * The chapter as its yaml box renders it: one canonical line per entry —
+ * null when nothing parseable remains (a chapter of prose alone or a
+ * torn line-less body renders no box, never prose).
+ */
+export function verlaufBoxOf(entries: readonly McVerlaufEntry[]): string | null {
+  return entries.length === 0 ? null : entries.map(verlaufLineOf).join('\n');
+}
+
+/**
+ * The Verlauf entries' costs per phase, summed (lowercased phase key →
+ * dollars): a phase's gate pill reads its figure here. Entries without a
+ * phase or without a known cost skip — an unknown cost never counts as 0.
+ */
+export function verlaufCostsOf(entries: readonly McVerlaufEntry[]): ReadonlyMap<string, number> {
+  const costs = new Map<string, number>();
+  for (const entry of entries) {
+    const phase = entry.phase?.trim().toLowerCase();
+    if (phase === undefined || phase === '') {
+      continue;
+    }
+    if (typeof entry.cost !== 'number' || !Number.isFinite(entry.cost) || entry.cost <= 0) {
+      continue;
+    }
+    costs.set(phase, (costs.get(phase) ?? 0) + entry.cost);
   }
-  const close = lines.findIndex((line, at) => at > open && line.trim().startsWith('```'));
-  const body = close < 0 ? lines.slice(open + 1) : lines.slice(open + 1, close);
-  return body.join('\n').trim();
+  return costs;
+}
+
+/**
+ * The gate pill's cost figure for one step (`0,24` — de comma, no sign,
+ * the prototype's pill): the Verlauf sum of the step's phase, matched by
+ * id first, its title as the fallback (a hand-written chapter may carry
+ * `Verlauf`-style titles); null when the phase's runs cost nothing.
+ */
+export function gateCostOf(
+  costs: ReadonlyMap<string, number>,
+  step: { readonly id: string; readonly title: string },
+): string | null {
+  const sum = costs.get(step.id.trim().toLowerCase()) ?? costs.get(step.title.trim().toLowerCase());
+  return sum !== undefined && sum > 0 ? sum.toFixed(2).replace('.', ',') : null;
+}
+
+/** The bar's end slot: every Verlauf cost summed (`1,87 $`); null until the runs cost something. */
+export function verlaufTotalOf(entries: readonly McVerlaufEntry[]): string | null {
+  let sum = 0;
+  for (const entry of entries) {
+    if (typeof entry.cost === 'number' && Number.isFinite(entry.cost) && entry.cost > 0) {
+      sum += entry.cost;
+    }
+  }
+  return usdLabelOf(sum);
 }
 
 // --- the scout report card (E8, concept §5.6) -------------------------------------
@@ -692,6 +763,14 @@ export interface TicketDoc {
   readonly blocked: readonly string[];
   /** The `blocked-by:` ids as written (T-0050); `[]` when the frontmatter has none. */
   readonly blockedBy: readonly string[];
+  /** The settled-run usage off the card (the head cost slot's figure); absent when the desk has none. */
+  readonly usage?: McTicketUsage;
+  /**
+   * The `## Verlauf` chapter's entries parsed off `text` (the api layer's
+   * tolerant mirror of the engine's parser); empty = the file carries no
+   * chapter — the yaml box and the gate pills' costs stay hidden then.
+   */
+  readonly verlauf: readonly McVerlaufEntry[];
 }
 
 // --- the priority chip and the blocker line ---------------------------------------

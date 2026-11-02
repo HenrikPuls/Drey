@@ -1,13 +1,15 @@
 /**
  * The ticket screen's specs (E5c): the pure helpers — the gate-bar step
  * builder, the section splitter, the proof reader, the scout report
- * reader (E8), the armed two-step reducer, the fullscreen font-size
- * steps, the patch line kinds — then the component class against a fake
- * `TicketVm`, no DOM (the unit-test builder runs these under jsdom, but
- * nothing here renders a template). The raw editor's own specs live in
- * `edit.spec.ts`.
+ * reader (E8), the Verlauf dress (canonical lines, the box, the gate
+ * pills' per-phase costs, the totals), the armed two-step reducer, the
+ * fullscreen font-size steps, the patch line kinds — then the component
+ * class against a fake `TicketVm`, no DOM (the unit-test builder runs
+ * these under jsdom, but nothing here renders a template). The raw
+ * editor's own specs live in `edit.spec.ts`.
  */
 import { TestBed } from '@angular/core/testing';
+import type { McVerlaufEntry } from '../api/dto';
 import {
   ACCEPT_DISARMED,
   DEFAULT_DIFF_FONT_SIZE,
@@ -17,6 +19,7 @@ import {
   chainPrefillOf,
   chainStepsOf,
   diffFontSizeStep,
+  gateCostOf,
   gateStepsOf,
   parseChainEntryView,
   patchLineKind,
@@ -27,7 +30,11 @@ import {
   renderChainEntryViews,
   scoutReportOf,
   splitTicketSections,
-  verlaufTextOf,
+  usdLabelOf,
+  verlaufBoxOf,
+  verlaufCostsOf,
+  verlaufLineOf,
+  verlaufTotalOf,
   type GatePhase,
   type TicketActionReply,
   type TicketDiff,
@@ -159,7 +166,14 @@ const DOC: TicketDoc = {
   priorities: ['urgent', 'high', 'normal', 'low'],
   blocked: [],
   blockedBy: [],
+  verlauf: [],
 };
+
+/** The Verlauf chapter's entries as the api layer parses them off FULL_TEXT. */
+const FULL_VERLAUF: readonly McVerlaufEntry[] = [
+  { phase: 'plan', persona: 'pia', model: 'opus', tokens: '12k', cost: 0.14, dauer: '12m', ausgang: 'handed-over' },
+  { phase: 'verify', persona: 'tessa', model: 'sonnet', tokens: '52k', cost: 0.64, dauer: '40m', ausgang: 'proof' },
+];
 
 const FULL_TEXT = `---
 id: T-0042
@@ -216,7 +230,7 @@ State: done
 It works.
 `;
 
-const FULL_DOC: TicketDoc = { ...DOC, text: FULL_TEXT };
+const FULL_DOC: TicketDoc = { ...DOC, text: FULL_TEXT, verlauf: FULL_VERLAUF };
 
 const SCOUT_TEXT = `---
 id: T-0043
@@ -649,29 +663,72 @@ describe('splitTicketSections', () => {
 
 // --- the verlauf box -----------------------------------------------------------------
 
-describe('verlaufTextOf', () => {
-  it('strips the fence from a yaml block and keeps the run lines', () => {
-    expect(verlaufTextOf('```yaml\n- {phase: plan, cost: 0.14}\n- {phase: build}\n```')).toBe(
-      '- {phase: plan, cost: 0.14}\n- {phase: build}',
+describe('the Verlauf dress', () => {
+  const entry: McVerlaufEntry = {
+    phase: 'plan',
+    persona: 'pia',
+    model: 'opus',
+    tokens: '48k',
+    cost: 1.17,
+    dauer: '12m',
+    ausgang: 'handed-over',
+  };
+
+  it('renders one canonical line per entry — all seven keys, nulls for the lost ones', () => {
+    expect(verlaufLineOf(entry)).toBe(
+      '- { phase: plan, persona: pia, model: opus, tokens: 48k, cost: 1.17, dauer: 12m, ausgang: handed-over }',
+    );
+    const torn = { ...entry, phase: null, model: null, tokens: '', cost: null, dauer: '', ausgang: null };
+    expect(verlaufLineOf(torn)).toBe(
+      '- { phase: null, persona: pia, model: null, tokens: null, cost: null, dauer: null, ausgang: null }',
     );
   });
 
-  it('keeps prose sections as written — the engine may start with words', () => {
-    expect(verlaufTextOf('(noch keine Runs — die Idee wartet auf Triage)')).toBe(
-      '(noch keine Runs — die Idee wartet auf Triage)',
+  it('boxes the entries one per line, and hides the box when nothing remains', () => {
+    expect(verlaufBoxOf([entry, { ...entry, phase: 'build' }])).toBe(
+      '- { phase: plan, persona: pia, model: opus, tokens: 48k, cost: 1.17, dauer: 12m, ausgang: handed-over }\n'
+        + '- { phase: build, persona: pia, model: opus, tokens: 48k, cost: 1.17, dauer: 12m, ausgang: handed-over }',
     );
+    expect(verlaufBoxOf([])).toBeNull();
   });
 
-  it('closes an unterminated fence at the end of the section', () => {
-    expect(verlaufTextOf('```yaml\n- {phase: plan}')).toBe('- {phase: plan}');
+  it('sums the entries’ costs per phase, lowercased; phase-less and cost-less lines skip', () => {
+    const costs = verlaufCostsOf([
+      entry, // plan → 1.17
+      { ...entry, phase: 'Plan', cost: 0.23 }, // the same phase, case-insensitive → 1.40
+      { ...entry, phase: 'build', cost: null }, // an unknown cost never counts as 0
+      { ...entry, phase: null }, // no phase to hang the cost on
+      { ...entry, phase: 'build', cost: 0.4 }, // build → 0.40
+    ]);
+    expect(costs.get('plan')).toBeCloseTo(1.4, 10);
+    expect(costs.get('build')).toBeCloseTo(0.4, 10);
+    expect(costs.size).toBe(2);
   });
 
-  it('shows the fenced block when prose rides before it', () => {
-    expect(verlaufTextOf('Vorab eine Notiz.\n\n```yaml\n- {a: 1}\n```')).toBe('- {a: 1}');
+  it('reads the gate pill’s figure off the phase — by id first, then by title', () => {
+    const costs = verlaufCostsOf([
+      { ...entry, phase: 'build', cost: 0.24 },
+      { ...entry, phase: 'Verify', cost: 0.64 },
+    ]);
+    expect(gateCostOf(costs, { id: 'build', title: 'Build' })).toBe('0,24');
+    expect(gateCostOf(costs, { id: 'verify', title: 'Verify' })).toBe('0,64');
+    // The title fallback: a hand-written chapter may carry the display title.
+    expect(gateCostOf(costs, { id: 'check', title: 'Verify' })).toBe('0,64');
+    expect(gateCostOf(costs, { id: 'done', title: 'Done' })).toBeNull();
   });
 
-  it('tolerates whitespace around the fence marks', () => {
-    expect(verlaufTextOf('  ```\n- {a: 1}\n  ```  ')).toBe('- {a: 1}');
+  it('labels the dollars German-style and totals the chapter — never a 0-fake', () => {
+    expect(usdLabelOf(1.87)).toBe('1,87 $');
+    expect(usdLabelOf(0.42)).toBe('0,42 $');
+    expect(usdLabelOf(12)).toBe('12,00 $');
+    expect(usdLabelOf(0)).toBeNull();
+    expect(usdLabelOf(null)).toBeNull();
+    expect(usdLabelOf(undefined)).toBeNull();
+    expect(usdLabelOf(Number.NaN)).toBeNull();
+    expect(usdLabelOf(-1)).toBeNull();
+    expect(verlaufTotalOf([entry, { ...entry, cost: 0.7 }])).toBe('1,87 $');
+    expect(verlaufTotalOf([{ ...entry, cost: null }, { ...entry, cost: 0 }])).toBeNull();
+    expect(verlaufTotalOf([])).toBeNull();
   });
 });
 
@@ -888,12 +945,45 @@ describe('TicketView head card', () => {
     expect(vm.fmLine()).toBe('phase: verify');
   });
 
-  it('keeps the cost slots empty until the engine delivers the ledger', () => {
+  it('keeps the cost slots empty while the doc carries no usage and no Verlauf costs', () => {
     const vm = surface(setup(makeFake({ docValue: DOC })));
     expect(vm.cost()).toBeNull();
     expect(vm.costTotal()).toBeNull();
     // The merged chain ships the cost slot on every step, null until filled.
     expect(vm.steps().every((step) => step.cost === null)).toBe(true);
+    // No readable entries — the Verlauf box stays hidden too.
+    expect(vm.verlauf()).toBeNull();
+  });
+
+  it('wears the ledger’s usage on the head card and the Verlauf costs on the gates', () => {
+    const doc: TicketDoc = {
+      ...FULL_DOC,
+      usage: { tokensIn: 48000, tokensOut: 6000, cost: 0.42, runs: 2 },
+    };
+    const vm = surface(setup(makeFake({ docValue: doc })));
+    // The head slot reads the usage figure; the bar's end slot sums the chapter.
+    expect(vm.cost()).toBe('0,42 $');
+    expect(vm.costTotal()).toBe('0,78 $');
+    // build sits in the past, verify is current: their pills carry their phase's sum.
+    const [build, verify, done] = vm.steps();
+    expect(build!.cost).toBeNull(); // the chapter starts at plan — no build entries yet
+    expect(verify!.cost).toBe('0,64');
+    expect(done!.cost).toBeNull();
+  });
+
+  it('matches a gate’s Verlauf costs by title when the phase id misses', () => {
+    const doc: TicketDoc = {
+      ...DOC,
+      verlauf: [
+        { phase: 'Build', persona: 'ben', model: 'glm-5.3', tokens: '121k', cost: 0.61, dauer: '41m', ausgang: 'failed' },
+        { phase: 'review', persona: 'ralf', model: 'opus', tokens: '9k', cost: 0.38, dauer: '8m', ausgang: 'handed-over' },
+      ],
+    };
+    const vm = surface(setup(makeFake({ docValue: doc })));
+    const [build] = vm.steps();
+    expect(build!.cost).toBe('0,61'); // entry.phase 'Build' matches the step's title, not its id
+    // The total sums every entry, the phase-less review included.
+    expect(vm.costTotal()).toBe('0,99 $');
   });
 });
 
@@ -929,11 +1019,13 @@ describe('TicketView', () => {
     ]);
     expect(vm.proof()?.criteria).toHaveLength(2);
     expect(vm.proof()?.findings).toEqual(['The settings page stayed blank until the reload.']);
-    // The Verlauf chapter left the body and arrives fence-stripped in its box.
+    // The Verlauf chapter left the body and lands one canonical line per entry.
     expect(vm.verlauf()).toBe(
-      '- {phase: plan, persona: pia, model: opus, tokens: 12k, cost: 0.14, ausgang: handed-over}\n'
-        + '- {phase: verify, persona: tessa, model: sonnet, tokens: 52k, cost: 0.64, ausgang: proof}',
+      '- { phase: plan, persona: pia, model: opus, tokens: 12k, cost: 0.14, dauer: 12m, ausgang: handed-over }\n'
+        + '- { phase: verify, persona: tessa, model: sonnet, tokens: 52k, cost: 0.64, dauer: 40m, ausgang: proof }',
     );
+    // The chapter's costs dress the bar's end slot too.
+    expect(vm.costTotal()).toBe('0,78 $');
     expect(vm.verdict()).toEqual({
       passed: 1,
       total: 2,

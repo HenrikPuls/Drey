@@ -2142,6 +2142,128 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
   });
 });
 
+describe('RunSupervisor settled cost and the Verlauf chapter (costtracking, concept §4.3/§5.4)', () => {
+  beforeEach(async () => {
+    vaultDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-vault-'));
+    fleetRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-fleet-'));
+  });
+
+  afterEach(async () => {
+    await fsp.rm(vaultDir, { recursive: true, force: true });
+    await fsp.rm(fleetRoot, { recursive: true, force: true });
+  });
+
+  /** An interactive dialog run: no gate, no move — the settle keeps the
+   *  ticket where it is, which is what these file assertions need. */
+  const dialogRequest = (overrides: Partial<RunRequest> = {}): RunRequest =>
+    request({
+      ticketRelPath: 'tickets/plan/T-0001.md',
+      acceptance: [],
+      gate: 'structural',
+      nextPhase: null,
+      nextPhaseDir: null,
+      interactive: 'plan',
+      ...overrides,
+    });
+
+  /** The settle's record write completed — the test only ends once the
+   *  run.json on disk says done, so no queued write outlives the tmp dir. */
+  const settleDurably = async (id: string): Promise<void> => {
+    await vi.waitFor(async () => {
+      const stored = JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')) as {
+        info: { state?: string };
+      };
+      expect(stored.info.state).toBe('done');
+    });
+  };
+
+  const verlaufLineOf = async (rel: string): Promise<string | null> => {
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    const at = text.indexOf('- { phase:');
+    return at === -1 ? null : text.slice(at, text.indexOf('\n', at));
+  };
+
+  it('a settled run with usage appends its one-line Verlauf entry — the chapter is created, the entry rides the settle', async () => {
+    const rel = await writeTicket();
+    const { sup, adapter } = supervisor();
+    const started = await sup.start(dialogRequest({ model: 'opus' }), { persona: 'pia' });
+    const id = (started as { run: RunInfo }).run.id;
+    adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:10Z', kind: 'usage', tokensIn: 48_000, tokensOut: 6_000, costUsd: 1.17 });
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+
+    await vi.waitFor(async () => {
+      // The fixture's clock is fixed at 12:00, so the run's dauer is 0m.
+      expect(await verlaufLineOf(rel)).toBe(
+        '- { phase: plan, persona: pia, model: opus, tokens: 54k, cost: 1.17, dauer: 0m, ausgang: handed-over }',
+      );
+    });
+    // A second run appends BELOW the first — existing entries stay.
+    const second = await sup.start(dialogRequest({ model: 'opus' }), { persona: 'pia' });
+    const id2 = (second as { run: RunInfo }).run.id;
+    adapter.starts[1]!.onEvent({ ts: '2026-10-17T12:00:10Z', kind: 'usage', tokensIn: 10_000, tokensOut: 500 });
+    adapter.handles[1]!.result();
+    adapter.handles[1]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id2)?.state).toBe('done'));
+    await vi.waitFor(async () => {
+      const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+      const at = text.lastIndexOf('- { phase:');
+      expect(text.slice(at, text.indexOf('\n', at))).toBe(
+        '- { phase: plan, persona: pia, model: opus, tokens: 11k, cost: 0.1875, dauer: 0m, ausgang: handed-over }',
+      );
+    });
+    await settleDurably(id);
+    await settleDurably(id2);
+  });
+
+  it('a zero-usage run writes no Verlauf entry and creates no chapter', async () => {
+    const rel = await writeTicket();
+    const { sup, adapter } = supervisor();
+    const started = await sup.start(dialogRequest());
+    const id = (started as { run: RunInfo }).run.id;
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await expect(fsp.readFile(path.join(vaultDir, rel), 'utf8')).resolves.not.toContain('## Verlauf');
+    await settleDurably(id);
+  });
+
+  it('the settled cost falls back to the price table when the provider reports none — unknown models stay null', async () => {
+    const rel = await writeTicket();
+    const { sup, adapter } = supervisor();
+    const started = await sup.start(dialogRequest({ model: 'opus' }));
+    const id = (started as { run: RunInfo }).run.id;
+    // 48k opus in + 6k out → 0.72 + 0.45 = 1.17 from the table.
+    adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:10Z', kind: 'usage', tokensIn: 48_000, tokensOut: 6_000 });
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await vi.waitFor(() => expect(sup.get(id)?.costUsd).toBe(1.17));
+    await settleDurably(id);
+
+    // A provider-reported cost is never overwritten by the table.
+    const withCost = await sup.start(dialogRequest({ model: 'opus' }));
+    const id2 = (withCost as { run: RunInfo }).run.id;
+    adapter.starts[1]!.onEvent({ ts: '2026-10-17T12:00:10Z', kind: 'usage', tokensIn: 48_000, tokensOut: 6_000, costUsd: 0.5 });
+    adapter.handles[1]!.result();
+    adapter.handles[1]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id2)?.state).toBe('done'));
+    expect(sup.get(id2)?.costUsd).toBe(0.5);
+    await settleDurably(id2);
+
+    // An unknown model and no provider cost: no cost is never a 0 fake.
+    const unknown = await sup.start(dialogRequest({ model: 'mystery-model' }));
+    const id3 = (unknown as { run: RunInfo }).run.id;
+    adapter.starts[2]!.onEvent({ ts: '2026-10-17T12:00:10Z', kind: 'usage', tokensIn: 48_000, tokensOut: 6_000 });
+    adapter.handles[2]!.result();
+    adapter.handles[2]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id3)?.state).toBe('done'));
+    expect(sup.get(id3)?.costUsd).toBeNull();
+    await settleDurably(id3);
+  });
+});
+
 describe('limitExceeded — the per-run ceilings', () => {
   const info = (over: Partial<RunInfo>): RunInfo => ({ ...({} as RunInfo), ...over });
   const limits = { maxTurns: 100, maxWorkMs: 60 * 60_000 };

@@ -498,6 +498,23 @@ export class Orchestrator {
    * trips: the column holds and its next candidate parks in inbox.
    */
   async onRunSettled(info: RunInfo): Promise<void> {
+    // E7/Costtracking (concept §4.3): one ledger line per COMPLETED run
+    // with what it effectively consumed — the aggregation source for the
+    // ticket cards' usage and the personas' day costs. An empty run
+    // (no tokens, no cost) writes nothing; the provider's own cost wins,
+    // the model-prices fallback already ran at the settle (runs.ts).
+    const cost = info.costUsd;
+    if (info.tokensIn > 0 || info.tokensOut > 0 || (cost !== null && cost > 0)) {
+      this.deps.events?.ledger({
+        kind: 'run_settled',
+        ticket: info.ticketId,
+        persona: info.persona ?? null,
+        model: info.model ?? null,
+        tokensIn: info.tokensIn,
+        tokensOut: info.tokensOut,
+        cost: cost !== null && cost > 0 ? cost : null,
+      });
+    }
     if (info.state === 'failed' && isQuotaError(info.lastError)) {
       const untilMs = this.now().getTime() + QUOTA_PAUSE_MS;
       this.quotaPause[info.provider] = untilMs;
