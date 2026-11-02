@@ -1,10 +1,7 @@
 import { promises as fsp } from 'node:fs';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
-import { loadShippedPrompts } from '../core/default-prompts';
 import { createEngine, removeEngineLock, writeEngineLock } from './engine';
-import { initVault } from './init-vault';
-import { TicketsGit } from '../core/tickets-git';
 
 /**
  * The standalone tickets-engine process (ADR-0088, E2b). Started by the
@@ -12,11 +9,6 @@ import { TicketsGit } from '../core/tickets-git';
  * or by hand:
  *
  *   node engine-main.js --vault "E:/notes" [--home "C:/Users/me/.drey-engine"]
- *
- * A tickets repository is set up from nothing with the init subcommand
- * (M112) — the `git init` of the tickets vault: scaffold + one commit:
- *
- *   node engine-main.js init "E:/notes"
  *
  * One engine per machine: the lockfile in the engine home records
  * pid/invoke-port/token; the Drey plugin adopts a live engine instead of
@@ -50,55 +42,8 @@ function parseArgs(argv: readonly string[]): CliOptions {
   return { vault: path.resolve(vault), home: path.resolve(home ?? path.join(homedir(), '.drey-engine')) };
 }
 
-/** The `init <dir>` branch: scaffold a tickets repository, then exit. */
-async function runInit(argv: readonly string[]): Promise<number> {
-  const rest = argv.slice(1).filter((arg) => !arg.startsWith('--'));
-  if (rest.length > 1) {
-    console.error('usage: engine-main.js init <tickets repository directory>');
-    return 1;
-  }
-  const target = path.resolve(rest[0] ?? process.cwd());
-  const log = (message: string, level: 'info' | 'warn' | 'error' = 'info'): void => {
-    const line = `[${new Date().toISOString()}] ${level}: ${message}`;
-    if (level === 'error') {
-      console.error(line);
-    } else {
-      console.log(line);
-    }
-  };
-  const result = await initVault(target, await loadShippedPrompts(), {
-    mkdir: async (dir) => {
-      await fsp.mkdir(dir, { recursive: true });
-    },
-    exists: async (file) => {
-      try {
-        await fsp.stat(file);
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    writeFile: async (file, text) => {
-      await fsp.writeFile(file, text, 'utf8');
-    },
-    git: new TicketsGit(() => 'git'),
-    log,
-  });
-  if (!result.ok) {
-    console.error(`tickets init failed: ${result.error}`);
-    return 1;
-  }
-  log(`initialized tickets repository in ${result.root}`);
-  log(`start the engine: node engine-main.js --vault ${result.root}`);
-  return 0;
-}
-
 async function main(): Promise<void> {
-  const argv = process.argv.slice(2);
-  if (argv[0] === 'init') {
-    process.exit(await runInit(argv));
-  }
-  const opts = parseArgs(argv);
+  const opts = parseArgs(process.argv.slice(2));
   const log = (message: string, level: 'info' | 'warn' | 'error' = 'info'): void => {
     const line = `[${new Date().toISOString()}] ${level}: ${message}`;
     if (level === 'error') {

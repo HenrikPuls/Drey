@@ -149,16 +149,6 @@ the blocked-by chat/edit path: the chat's `setBlockedBy` command and
 the engine's whole-list replacement (an empty list clears the
 blockers), the last board field without a conversational/edit way to
 write it. Built and suite-green but awaiting the owner's round.
-**Milestone 112 opens the door**: the engine CLI's `init <dir>` —
-the `git init` of a tickets repository. One scaffold module
-(`core/init-scaffold`) feeds both doors: the CLI, which creates the
-directory tree from nothing (the `_meta` files — pipeline with the
-priority vocabulary written out beside the phases it governs, repos,
-the shipped prompts —, the numbered phase directories, and git init
-with one initial commit when git answers; an unversioned vault
-works), and the desk's empty-state initialize, which writes the same
-texts into an already-registered vault. Built and suite-green but
-awaiting the owner's round.
 **E9 completes the concept** — all of E0–E9 stands
 built, none of it owner-verified; next is the owner's verification
 round (§4.9's watcher depth now rides on
