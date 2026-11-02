@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { ChatMessageView } from '../api/dto';
+import { type Signal, type WritableSignal, signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import type { ActiveSession, ChatMessageView, ChatStateView } from '../api/dto';
+import type { McState } from '../api/state';
 import {
+  Chat,
+  MC_CHAT_STATE,
   TimelineProposal,
   TimelineSession,
   composerRowsOf,
@@ -227,5 +232,61 @@ describe('errorOf', () => {
     expect(errorOf(null)).toBeNull();
     expect(errorOf('plain string')).toBeNull();
     expect(errorOf({})).toBeNull();
+  });
+});
+
+
+// -- the constructor's prefill adoption (E8) --------------------------------------
+
+describe('Chat prefill adoption (E8)', () => {
+  interface FakeChatState {
+    chatPrefill: WritableSignal<string | null>;
+    chat: Signal<ChatStateView>;
+  }
+
+  function fakeState(prefill: string | null, active: ActiveSession | null = null): FakeChatState {
+    return {
+      chatPrefill: signal(prefill),
+      chat: signal<ChatStateView>({ sessions: [], active }),
+    };
+  }
+
+  // The template-facing surface is protected/private; these specs drive
+  // the class directly, so expose it through one typed lens.
+  interface ChatSurface {
+    draft(): string;
+    viewMode(): 'list' | 'composer' | 'session';
+  }
+
+  function setup(fake: FakeChatState): { vm: ChatSurface; fake: FakeChatState } {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [{ provide: MC_CHAT_STATE, useValue: fake as unknown as McState }],
+    });
+    const chat = TestBed.runInInjectionContext(() => new Chat());
+    return { vm: chat as unknown as ChatSurface, fake };
+  }
+
+  it('opens on the session list when nothing waits', () => {
+    const { vm, fake } = setup(fakeState(null));
+    expect(vm.draft()).toBe('');
+    expect(vm.viewMode()).toBe('list');
+    expect(fake.chatPrefill()).toBeNull();
+  });
+
+  it('adopts the prefill into a fresh composer when no session is open', () => {
+    const { vm, fake } = setup(fakeState('promote T-0004'));
+    expect(vm.draft()).toBe('promote T-0004');
+    expect(vm.viewMode()).toBe('composer');
+    // One-shot: consumed on adoption.
+    expect(fake.chatPrefill()).toBeNull();
+  });
+
+  it("with an open session the prefill sits in that session's composer", () => {
+    const active: ActiveSession = { file: 'f.md', title: 'F', createdAt: '', messages: [], proposals: [] };
+    const { vm, fake } = setup(fakeState('promote T-0004', active));
+    expect(vm.draft()).toBe('promote T-0004');
+    expect(vm.viewMode()).toBe('session');
+    expect(fake.chatPrefill()).toBeNull();
   });
 });

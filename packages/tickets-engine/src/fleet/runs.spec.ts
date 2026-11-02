@@ -2014,6 +2014,132 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
       expect(logs.some((line) => line.includes('persona memory append failed'))).toBe(true);
     });
   });
+
+  // --- scout runs (E8, concept §5.6) --------------------------------
+
+  const scoutRequest = (over: Partial<RunRequest> = {}): RunRequest =>
+    request({
+      form: 'scout',
+      acceptance: [],
+      gate: 'none',
+      nextPhase: null,
+      nextPhaseDir: null,
+      worktreePath: 'W:/kt', // the read ground — the repo checkout itself
+      instruction: 'Scout it.',
+      ...over,
+    });
+
+  it('a scout run starts without a worktree: no preparation, the record and the stamp say scout', async () => {
+    const prepare = vi.fn(async () => ({ outcome: 'created' as const, sessionInvalidated: false, movedTo: null }));
+    const { sup, adapter } = supervisor({ prepareWorktree: prepare });
+    const rel = await writeTicket();
+    const started = await sup.start(scoutRequest({ ticketRelPath: rel }));
+    expect(started.ok).toBe(true);
+    const info = (started as { run: RunInfo }).run;
+    expect(prepare).not.toHaveBeenCalled(); // exploration only — no worktree
+    expect(info.form).toBe('scout');
+    expect(info.worktree).toBeUndefined();
+    expect(info.worktreePath).toBe('W:/kt'); // the read ground
+    expect(adapter.starts[0]!.cwd).toBe('W:/kt'); // the worker spawns there
+    // The ticket carries the live run; the Log line names the read ground.
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    expect(parseTicketFile(text, rel).meta.run?.stream).toBe(info.id);
+    expect(text).toContain('scout run, read ground W:/kt');
+    // The stream's opening note frames the run.
+    const stream = await fsp.readFile(path.join(fleetRoot, 'runs', info.id, 'stream.jsonl'), 'utf8');
+    expect(stream).toContain('scout run, read ground W:/kt (no worktree, no gate, no move)');
+  });
+
+  it('a finished scout run ends done: no gate runs, nothing moves, the report line names the card', async () => {
+    const { sup, adapter, gate } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(scoutRequest({ ticketRelPath: rel }));
+    const id = (started as { run: RunInfo }).run.id;
+
+    // The worker wrote its report into its own ticket file.
+    const live = path.join(vaultDir, rel);
+    await fsp.writeFile(
+      live,
+      (await fsp.readFile(live, 'utf8')).replace(
+        '## Log',
+        '## Report\n\nWritten on 2026-10-17T12:00:00Z by pia.\n\n### Summary\n\nOnly SQLite is wired in.\n\n### Decisions\n\n- [ ] D1: Which storage should back the index? — Recommendation: SQLite\n\n## Log',
+      ),
+      'utf8',
+    );
+
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+
+    expect(gate).toEqual([]); // the machine gate never ran
+    await expect(fsp.access(path.join(vaultDir, 'tickets', 'build', 'T-0001.md'))).rejects.toBeDefined(); // no move
+    const text = await fsp.readFile(live, 'utf8');
+    expect(text).toContain('the ## Report chapter waits for the owner in Needs you');
+    expect(parseTicketFile(text, rel).meta.run).toBeNull(); // the stamp is cleared
+    // The report chapter itself survived the run's bookkeeping.
+    expect(text).toContain('## Report');
+    expect(text).toContain('Only SQLite is wired in.');
+  });
+
+  it('a scout run that ends without a report is still done — the Log line says nothing waits', async () => {
+    const { sup, adapter, gate } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(scoutRequest({ ticketRelPath: rel }));
+    const id = (started as { run: RunInfo }).run.id;
+
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+
+    expect(gate).toEqual([]);
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    expect(text).toContain('scout run finished (exit 0) without a ## Report chapter');
+  });
+
+  it('a scout worker that ends without its turn fails like any run', async () => {
+    const { sup, adapter, gate } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(scoutRequest({ ticketRelPath: rel }));
+    const id = (started as { run: RunInfo }).run.id;
+
+    adapter.handles[0]!.fail(1); // no result — the worker died mid-exploration
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+
+    expect(gate).toEqual([]); // still no gate
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    expect(text).toContain('worker ended without finishing its turn');
+  });
+
+  it('a blocked scout end stays put: done with the blocked reason, no report bookkeeping', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(scoutRequest({ ticketRelPath: rel }));
+    const id = (started as { run: RunInfo }).run.id;
+
+    adapter.handles[0]!.result('the index API needs an owner decision');
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+
+    expect(sup.get(id)?.blocked).toBe('the index API needs an owner decision');
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    expect(text).toContain('blocked — the index API needs an owner decision');
+    expect(text).not.toContain('## Report chapter waits');
+  });
+
+  it('a scout run stores owner attachments in its run dir — the read ground is never written', async () => {
+    const { sup, git } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(scoutRequest({ ticketRelPath: rel }));
+    const id = (started as { run: RunInfo }).run.id;
+
+    const attached = await sup.attachFile(id, 'log.txt', Buffer.from('evidence').toString('base64'));
+    expect(attached.ok).toBe(true);
+    if (attached.ok) {
+      expect(attached.path.startsWith(path.join(fleetRoot, 'runs', id))).toBe(true);
+    }
+    // No worktree exclude dance — nothing in the read ground may be touched.
+    expect(git.calls.some((c) => c.args.includes('--git-path'))).toBe(false);
+  });
 });
 
 describe('limitExceeded — the per-run ceilings', () => {

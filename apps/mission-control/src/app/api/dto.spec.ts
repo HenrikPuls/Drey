@@ -149,6 +149,78 @@ describe('parseNeeds', () => {
     ]);
   });
 
+  it('keeps a report need with its parsed report (E8)', () => {
+    const needs = parseNeeds([
+      {
+        kind: 'report',
+        ticketId: 'T-0004',
+        title: 'Which storage backs the index?',
+        phase: 'ready',
+        runId: null,
+        text: '1 of 2 decisions open — Which storage should back the index?',
+        since: '2026-11-02T14:32:00Z',
+        report: {
+          writtenAt: '2026-11-02T14:32:00Z',
+          by: 'pia',
+          summary: 'The repo carries two index implementations.',
+          decisions: [
+            { key: 'D1', question: 'Which storage should back the index?', recommendation: 'SQLite', resolved: false },
+            { key: 'D2', question: 'Migrate existing data?', recommendation: null, resolved: true },
+          ],
+        },
+      },
+    ]);
+    expect(needs).toEqual([
+      {
+        kind: 'report',
+        ticketId: 'T-0004',
+        title: 'Which storage backs the index?',
+        summary: '1 of 2 decisions open — Which storage should back the index?',
+        report: {
+          writtenAt: '2026-11-02T14:32:00Z',
+          by: 'pia',
+          summary: 'The repo carries two index implementations.',
+          decisions: [
+            { key: 'D1', question: 'Which storage should back the index?', recommendation: 'SQLite', resolved: false },
+            { key: 'D2', question: 'Migrate existing data?', recommendation: null, resolved: true },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('forgives a broken report: junk decisions drop, a missing report reads as headline-only', () => {
+    const needs = parseNeeds([
+      {
+        kind: 'report',
+        ticketId: 'T-0005',
+        title: 'Half there',
+        text: 'the scout report is ready',
+        report: {
+          writtenAt: '2026-11-02T14:32:00Z',
+          summary: 42,
+          decisions: ['junk', null, { key: 'D1', question: 'Which storage?', recommendation: 7, resolved: 'yes' }],
+        },
+      },
+      { kind: 'report', ticketId: 'T-0006', title: 'No detail', text: 'the scout report is ready', report: 'garbage' },
+    ]);
+    expect(needs).toEqual([
+      {
+        kind: 'report',
+        ticketId: 'T-0005',
+        title: 'Half there',
+        summary: 'the scout report is ready',
+        report: {
+          writtenAt: '2026-11-02T14:32:00Z',
+          by: '',
+          summary: '',
+          decisions: [{ key: 'D1', question: 'Which storage?', recommendation: null, resolved: false }],
+        },
+      },
+      { kind: 'report', ticketId: 'T-0006', title: 'No detail', summary: 'the scout report is ready' },
+    ]);
+  });
+
   it('never throws on junk', () => {
     expect(parseNeeds(null)).toEqual([]);
     expect(parseNeeds({ kind: 'question' })).toEqual([]);

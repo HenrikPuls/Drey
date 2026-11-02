@@ -19,6 +19,7 @@ import {
   formatUtcStamp,
   stripPhasePrefix,
   type TicketIssue,
+  type TicketForm,
   type TicketMeta,
   type TicketPriority,
   type TicketRun,
@@ -118,6 +119,16 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
     issues.push({ level: 'warning', message: 'track must be auto or shape' });
   }
 
+  // The ticket form (concept §5.6): only the two words read; an unknown
+  // value warns and leaves the field absent — the ship default.
+  const rawForm = asText(obj['form']);
+  let form: TicketForm | undefined;
+  if (rawForm === 'ship' || rawForm === 'scout') {
+    form = rawForm;
+  } else if (rawForm !== null) {
+    issues.push({ level: 'warning', message: 'form must be ship or scout — read as ship' });
+  }
+
   const rawPriority = asText(obj['priority']);
   let priority: TicketPriority = 'normal';
   if (rawPriority === null) {
@@ -188,6 +199,7 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
       worker,
       persona,
       track,
+      ...(form !== undefined ? { form } : {}),
       priority,
       rank,
       // The rule wins over whatever the file says (ADR-0076).
@@ -502,6 +514,8 @@ export interface HeaderPatch {
   readonly priority?: TicketPriority;
   /** The triage track (req-75 W1b); null removes the key (not triaged). */
   readonly track?: TicketTrack | null;
+  /** The ticket form (concept §5.6); null removes the key (the ship default). */
+  readonly form?: TicketForm | null;
   readonly repo?: string;
   /**
    * The full work-repo list, primary first (req-72). One name (or none)
@@ -549,6 +563,13 @@ export function patchHeaderFields(block: string, patch: HeaderPatch): string {
       removeKey(doc, 'track');
     } else {
       doc.set('track', patch.track);
+    }
+  }
+  if (patch.form !== undefined) {
+    if (patch.form === null) {
+      removeKey(doc, 'form');
+    } else {
+      doc.set('form', patch.form);
     }
   }
   if (patch.repo !== undefined && patch.repos === undefined) {
@@ -603,6 +624,22 @@ export function patchTrack(text: string, track: TicketTrack | null, now: Date, a
   const block = patchHeaderFields(`---\n${yamlText}\n---`, { track });
   const value = track ?? 'none';
   return `${block}\n${appendLogLine(body, formatUtcStamp(now), actor, `track ${value}`)}`;
+}
+
+/**
+ * Sets (or, with null, removes) the ticket's `form` key in a whole
+ * ticket file and appends one Log line naming the value (concept §5.6) —
+ * the scout → ship promotion and its reverse are header patches with the
+ * form's own audit line, exactly like `patchTrack`.
+ */
+export function patchForm(text: string, form: TicketForm | null, now: Date, actor: string): string {
+  const { yamlText, body, hadFence } = splitFrontmatter(text);
+  if (!hadFence || yamlText === null) {
+    throw new Error('ticket has no frontmatter fence');
+  }
+  const block = patchHeaderFields(`---\n${yamlText}\n---`, { form });
+  const value = form ?? 'none';
+  return `${block}\n${appendLogLine(body, formatUtcStamp(now), actor, `form ${value}`)}`;
 }
 
 // ---------------------------------------------------------------------------

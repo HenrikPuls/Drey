@@ -457,6 +457,30 @@ describe('chat', () => {
   });
 });
 
+describe('prefillChat (E8)', () => {
+  it('fills the one-shot prefill and switches to the chat tab', () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+
+    state.prefillChat('promote T-0004');
+
+    expect(state.chatPrefill()).toBe('promote T-0004');
+    expect(state.tab()).toBe('chat');
+  });
+
+  it('trims the text and refuses an empty prefill', () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+
+    state.prefillChat('  ');
+    expect(state.chatPrefill()).toBeNull();
+    expect(state.tab()).toBe('work');
+
+    state.prefillChat('  promote T-0004  ');
+    expect(state.chatPrefill()).toBe('promote T-0004');
+  });
+});
+
 describe('moveTicket', () => {
   it('posts the transition with the card phase from the current view', async () => {
     const { desk, data } = makeDesk();

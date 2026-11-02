@@ -12,7 +12,56 @@
         </h2>
         @if (group.kind === 'needs') {
           @for (vm of group.needs; track vm.key) {
-            @if (needTappable(vm)) {
+            @if (vm.need.kind === 'report') {
+              <article class="card need-card need-report">
+                <div class="card-row">
+                  <span class="chip chip-need">{{ vm.kindLabel }}</span>
+                  @if (vm.need.ticketId) {
+                    <span class="tid">{{ vm.need.ticketId }}</span>
+                  }
+                </div>
+                <div class="need-title">{{ vm.need.title }}</div>
+                @if (vm.need.summary) {
+                  <p class="need-summary">{{ vm.need.summary }}</p>
+                }
+                @if (reportOfNeed(vm); as report) {
+                  @if (report.writtenAt || report.by) {
+                    <p class="report-stamp">
+                      Written on {{ report.writtenAt === '' ? '…' : report.writtenAt }} by
+                      {{ report.by === '' ? 'scout' : report.by }}.
+                    </p>
+                  }
+                  @if (report.summary) {
+                    <p class="report-summary">{{ report.summary }}</p>
+                  }
+                  @if (report.decisions.length > 0) {
+                    <ul class="report-decisions" aria-label="Decisions">
+                      @for (decision of report.decisions; track $index) {
+                        <li [class.decision-open]="!decision.resolved">
+                          <span class="box" aria-hidden="true">{{ decision.resolved ? '☑' : '☐' }}</span>
+                          <span class="decision-body">
+                            <span class="decision-question">
+                              @if (decision.key) {
+                                <span class="decision-key">{{ decision.key }}:</span>
+                              }
+                              {{ decision.question }}
+                            </span>
+                            @if (decision.recommendation) {
+                              <span class="decision-rec">Recommendation: {{ decision.recommendation }}</span>
+                            }
+                          </span>
+                        </li>
+                      }
+                    </ul>
+                  }
+                }
+                @if (canPromote(vm)) {
+                  <button type="button" class="btn btn-primary need-promote" (click)="promoteTicket(vm)">
+                    Promote to ship
+                  </button>
+                }
+              </article>
+            } @else if (needTappable(vm)) {
               <button type="button" class="card need-card need-tappable" (click)="openNeedPersona(vm)">
                 <div class="card-row">
                   <span class="chip chip-need">{{ vm.kindLabel }}</span>

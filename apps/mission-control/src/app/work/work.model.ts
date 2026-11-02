@@ -20,6 +20,34 @@ export interface McNeed {
   readonly title: string;
   /** The question, the tool call, the gate failure — '' for a checkpoint. */
   readonly summary: string;
+  /**
+   * E8 (concept §5.6): the parsed scout report, present exactly on a
+   * 'report' need (the engine's guarantee); absent otherwise.
+   */
+  readonly report?: McScoutReport;
+}
+
+/** One scout decision as the report card renders it. */
+export interface McScoutDecision {
+  /** The decision's short key (`D1`, `D2`, …). */
+  readonly key: string;
+  /** The question in the scout's words — what the owner decides. */
+  readonly question: string;
+  /** The scout's recommendation; null when the line carries none. */
+  readonly recommendation: string | null;
+  /** The owner's check mark; open decisions stay unchecked. */
+  readonly resolved: boolean;
+}
+
+/** The parsed `## Report` riding on a 'report' need — the card's detail body. */
+export interface McScoutReport {
+  /** ISO stamp; '' when the desk omitted it. */
+  readonly writtenAt: string;
+  /** Who wrote it (the persona id); '' when unknown. */
+  readonly by: string;
+  /** The report's free-text summary; '' when absent. */
+  readonly summary: string;
+  readonly decisions: readonly McScoutDecision[];
 }
 
 export type McPriority = 'urgent' | 'high' | 'normal' | 'low' | (string & {});
@@ -101,6 +129,12 @@ export interface McWorkState {
   /** Opens the ticket screen (E5c); absent = the sheet hides the button. */
   openTicket?(ticketId: string): void;
   /**
+   * The report card's promote (E8): fills the chat composer with the
+   * promote command and switches to the chat tab; absent = the report
+   * card renders without the promote action.
+   */
+  promote?(ticketId: string): void;
+  /**
    * Opens the persona's 1:1 detail (E6); absent = an improvements need
    * card renders non-interactive. The caller passes the need item's
    * title — the engine guarantees it IS the persona title — resolved
@@ -164,6 +198,7 @@ export const NEED_KIND_LABELS: Readonly<Record<string, string>> = {
   improvements: 'Improvements',
   'needs-decision': 'Needs decision',
   blocked: 'Blocked',
+  report: 'Scout report',
 };
 
 /** The need card's kind chip; an unknown kind shows itself, never a guess. */

@@ -10,11 +10,11 @@
 import { randomBytes } from 'node:crypto';
 import { promises as fsp, existsSync } from 'node:fs';
 import * as path from 'node:path';
-import { archivedTicketIds, nextTicketId, TICKETS_ARCHIVE_DIR, type BoardSnapshot, FolderStatus, PipelinePhase, ProjectRef, PromptEntry, PromptListing, RepoCandidate, RepoRef, ReposListing, TicketCard, TicketPriority, TicketTrack } from '../contracts/tickets';
+import { archivedTicketIds, nextTicketId, TICKETS_ARCHIVE_DIR, type BoardSnapshot, FolderStatus, PipelinePhase, ProjectRef, PromptEntry, PromptListing, RepoCandidate, RepoRef, ReposListing, TicketCard, TicketForm, TicketPriority, TicketTrack } from '../contracts/tickets';
 import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply } from '../contracts/changes';
 import { type RefineReply, TicketReply, AttachmentReply } from '../contracts/replies';
 import { assembleBoard, parseRepos, addPipelinePhase, patchPipelinePhase, removePipelinePhase, renamePipelinePhase, parsePipeline, reorderPipelinePhases, reposFileText, reposProse } from '../core/ticket-board';
-import { newTicketFileText, parseTicketFile, patchTicketFile, patchTrack, ticketPathParts } from '../core/ticket-files';
+import { newTicketFileText, parseTicketFile, patchTicketFile, patchForm, patchTrack, ticketPathParts } from '../core/ticket-files';
 import { refineTicket, revisionOf } from '../core/ticket-refine';
 import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from '../core/phase-dirs';
 import { detectDrift, recentDoneOf, type DriftDetection } from '../core/normalize';
@@ -592,6 +592,39 @@ export class EngineBoardService {
         return { ok: false, error: messageOf(error) };
       }
       const warning = await this.commit(vault, [card.path], `tickets: ${input.id} track ${input.track ?? 'none'}`);
+      this.host.announceChanges(vault.id, [card.path]);
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The ticket form (concept §5.6): the scout → ship promotion's board
+   * half — one header rewrite (`patchForm`), one Log line, one commit
+   * `tickets: <id> form <value>`. Setting what the file already carries
+   * is a no-op success; a live run refuses like every header edit.
+   */
+  setForm(input: { id: string; form: TicketForm; actor?: string }): Promise<BoardMutationResult> {
+    return this.enqueue(async () => {
+      const found = await this.findCard(input.id);
+      if (found === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const { vault, card, text } = found;
+      if ((card.meta.form ?? 'ship') === input.form) {
+        return { ok: true };
+      }
+      if (card.meta.run !== null) {
+        return { ok: false, error: 'A run is live on this ticket. Change the form when the run has ended.' };
+      }
+      let patched: string;
+      try {
+        patched = patchForm(text, input.form, new Date(), input.actor ?? this.owner);
+        await this.host.write(vault.id, card.path, patched);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const warning = await this.commit(vault, [card.path], `tickets: ${input.id} form ${input.form}`);
       this.host.announceChanges(vault.id, [card.path]);
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };

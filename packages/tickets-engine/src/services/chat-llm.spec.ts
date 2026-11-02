@@ -225,4 +225,37 @@ describe('createChatBridge', () => {
       vi.useRealTimers();
     }
   });
+
+  it('prompts the promote intent — the scout → ship promotion is one of the four intents', async () => {
+    const calls: RecordedCall[] = [];
+    const bridge = createChatBridge({
+      config: chatConfig({ 'chat.baseUrl': 'http://127.0.0.1:1234/v1', 'chat.model': 'glm-5' }),
+      fetch: fakeFetch(calls, [frame('{"say":"Understood."}')]),
+    });
+    await bridge.runTurn({ text: 'promote T-0004', history: [], board: BOARD, emit: () => undefined });
+
+    const body = JSON.parse(String(calls[0]!.init.body)) as { messages: { role: string; content: string }[] };
+    const system = body.messages[0]!.content;
+    expect(system).toContain('exactly four intents');
+    expect(system).toContain('- promote —');
+    expect(system).toContain('scout');
+    expect(system).toMatch(/createTicket, transition, setPriority, promote/);
+  });
+
+  it('round-trips a promote command from the strict envelope', async () => {
+    const calls: RecordedCall[] = [];
+    const bridge = createChatBridge({
+      config: chatConfig({ 'chat.baseUrl': 'http://127.0.0.1:1234/v1', 'chat.model': 'glm-5' }),
+      fetch: fakeFetch(calls, [
+        frame('{"say":"Promoted — the ticket enters the normal pipeline on its next run.","thought":"The scout report on T-0004 is ready and the owner accepted it.","commands":[{"kind":"promote","id":"T-0004"}]}'),
+      ]),
+    });
+    const result = await bridge.runTurn({ text: 'promote T-0004', history: [], board: BOARD, emit: () => undefined });
+
+    expect(result).toEqual({
+      say: 'Promoted — the ticket enters the normal pipeline on its next run.',
+      thought: 'The scout report on T-0004 is ready and the owner accepted it.',
+      commands: [{ kind: 'promote', id: 'T-0004' }],
+    });
+  });
 });

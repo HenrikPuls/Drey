@@ -15,6 +15,7 @@ describe('shipped prompts', () => {
       'qa-default',
       'refine-interactive-default',
       'review-default',
+      'scout-default',
     ]);
   });
 

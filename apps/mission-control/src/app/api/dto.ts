@@ -40,12 +40,35 @@ export interface WorkView {
 
 // --- Needs -----------------------------------------------------------------
 
+/** One scout decision as the report card renders it (E8, concept §5.6). */
+export interface ScoutDecisionView {
+  /** The decision's short key (`D1`, `D2`, …); '' when the desk mangled it. */
+  readonly key: string;
+  readonly question: string;
+  /** The scout's recommendation; null when the decision carries none. */
+  readonly recommendation: string | null;
+  readonly resolved: boolean;
+}
+
+/** The parsed `## Report` riding on a 'report' need — the card's detail body. */
+export interface ScoutReportView {
+  /** ISO stamp; '' when the desk omitted it. */
+  readonly writtenAt: string;
+  /** The persona id; '' when unknown. */
+  readonly by: string;
+  /** The `### Summary` block; '' when absent. */
+  readonly summary: string;
+  readonly decisions: readonly ScoutDecisionView[];
+}
+
 /** One thing that waits on the owner, as the Needs-you list renders it. */
 export interface NeedView {
   readonly kind: string;
   readonly ticketId: string | null;
   readonly title: string;
   readonly summary: string;
+  /** E8: the parsed scout report; present exactly on a 'report' need. */
+  readonly report?: ScoutReportView;
 }
 
 // --- Team ------------------------------------------------------------------
@@ -293,9 +316,58 @@ export function parseWork(json: unknown): WorkView {
   return { groups };
 }
 
+/** One decision's JSON; null when nothing renderable survives (no key and no question). */
+function scoutDecisionOf(raw: unknown): ScoutDecisionView | null {
+  const decision = rec(raw);
+  if (decision === null) {
+    return null;
+  }
+  const key = str(decision['key']);
+  const question = str(decision['question']);
+  if (key === '' && question === '') {
+    return null;
+  }
+  return {
+    key,
+    question,
+    recommendation: strOrNull(decision['recommendation']),
+    resolved: decision['resolved'] === true,
+  };
+}
+
+/**
+ * The `report` field of a 'report' need; undefined when the desk sent
+ * nothing usable — the card then shows the headline line alone (the
+ * asymmetric-tolerance rule: absence reads as "no detail", never a guess).
+ */
+function scoutReportOf(raw: unknown): ScoutReportView | undefined {
+  const report = rec(raw);
+  if (report === null) {
+    return undefined;
+  }
+  return {
+    writtenAt: str(report['writtenAt']),
+    by: str(report['by']),
+    summary: str(report['summary']),
+    decisions: arr(report['decisions'])
+      .map(scoutDecisionOf)
+      .filter((decision): decision is ScoutDecisionView => decision !== null),
+  };
+}
+
 /** The needs JSON (`[{kind, ticketId?, title, summary}]`); junk yields no needs. */
 export function parseNeeds(json: unknown): NeedView[] {
-  const NEED_KINDS = ['question', 'permission', 'red-gate', 'failed', 'checkpoint', 'improvements', 'needs-decision', 'blocked'];
+  const NEED_KINDS = [
+    'question',
+    'permission',
+    'red-gate',
+    'failed',
+    'checkpoint',
+    'improvements',
+    'needs-decision',
+    'blocked',
+    'report',
+  ];
   const needs: NeedView[] = [];
   for (const raw of arr(json)) {
     const item = rec(raw);
@@ -303,12 +375,15 @@ export function parseNeeds(json: unknown): NeedView[] {
       continue;
     }
     const kind = str(item['kind']);
-    needs.push({
+    const report = kind === 'report' ? scoutReportOf(item['report']) : undefined;
+    const need: NeedView = {
       kind: NEED_KINDS.includes(kind) ? kind : 'checkpoint',
       ticketId: strOrNull(item['ticketId']),
       title: str(item['title'], str(item['ticketId'], 'untitled')),
       summary: str(item['summary'], str(item['text'])),
-    });
+      ...(report !== undefined ? { report } : {}),
+    };
+    needs.push(need);
   }
   return needs;
 }

@@ -40,6 +40,7 @@ const CREATE_IN_INBOX: ChatCommand = {
 };
 const CREATE_IN_BUILD: ChatCommand = { ...CREATE_IN_INBOX, phase: 'build' };
 const SET_PRIORITY: ChatCommand = { kind: 'setPriority', id: 'T-0086', priority: 'urgent' };
+const PROMOTE: ChatCommand = { kind: 'promote', id: 'T-0086' };
 
 interface FakeCard {
   id: string;
@@ -76,9 +77,11 @@ let boardSnapshot: FakeSnapshot;
 let boardCreates: unknown[];
 let boardTransitions: unknown[];
 let boardPriorities: unknown[];
+let boardForms: unknown[];
 let boardCreateResult: unknown;
 let boardTransitionResult: unknown;
 let boardSetPriorityResult: unknown;
+let boardSetFormResult: unknown;
 let clock: Date;
 let service: ChatService;
 
@@ -149,9 +152,11 @@ beforeEach(async () => {
   boardCreates = [];
   boardTransitions = [];
   boardPriorities = [];
+  boardForms = [];
   boardCreateResult = { ok: true, id: 'T-0103', path: 'tickets/10-inbox/T-0103.md' };
   boardTransitionResult = { ok: true, path: 'tickets/30-review/T-0086.md' };
   boardSetPriorityResult = { ok: true };
+  boardSetFormResult = { ok: true };
   clock = new Date('2026-11-02T09:00:00Z');
 });
 
@@ -190,6 +195,10 @@ function boot(): ChatService {
     setPriority: async (input: unknown) => {
       boardPriorities.push(input);
       return boardSetPriorityResult;
+    },
+    setForm: async (input: unknown) => {
+      boardForms.push(input);
+      return boardSetFormResult;
     },
   } as unknown as ChatBoardPort;
   const bridge = {
@@ -236,7 +245,9 @@ async function seedSession(
         ? `Move ${command.id} from ${command.from} to ${command.to}`
         : command.kind === 'createTicket'
           ? `Create ticket "${command.title}" in ${command.phase}`
-          : `Set ${command.id} priority to ${command.priority}`;
+          : command.kind === 'promote'
+            ? `Promote ${command.id} to a ship ticket`
+            : `Set ${command.id} priority to ${command.priority}`;
     text = appendProposal(text, new Date('2026-11-02T08:02:00Z'), summary, command).text;
   }
   const file = `tickets/_meta/chat/20261102-080000-${sessionSlug(title)}.md`;
@@ -342,6 +353,31 @@ describe('ChatService start and send', () => {
     // The reader round-trips the whole session.
     const session = parseSessionFile(text, file)!;
     expect(session.proposals.map((p) => p.state)).toEqual(['pending', 'pending']);
+  });
+
+  it('a promote command from the mission renders as the promote proposal card', async () => {
+    service = boot();
+    bridgeReply = { say: 'The scout report is ready — promoting it.', thought: null, commands: [PROMOTE] };
+
+    const result = await service.start({ title: 'Promote', text: 'promote T-0086' });
+
+    expect(result.ok).toBe(true);
+    expect(result.proposals).toEqual([
+      {
+        id: 'p-1',
+        state: 'pending',
+        summary: 'Promote T-0086 to a ship ticket',
+        command: PROMOTE,
+        at: expect.any(String),
+        decidedAt: null,
+        outcome: null,
+      },
+    ]);
+    const text = await readOnDisk(result.file!);
+    expect(text).toContain('- \'2026-11-02T09:00:02.000Z\' proposal p-1 pending — Promote T-0086 to a ship ticket');
+    expect(text).toContain('{"kind":"promote","id":"T-0086"}');
+    // The card is a proposal only — the board port has not been asked yet.
+    expect(boardForms).toEqual([]);
   });
 
   it('hands the bridge the recent history and a board digest of open tickets', async () => {
@@ -561,6 +597,44 @@ describe('ChatService confirm and dismiss', () => {
     expect(await readOnDisk(file)).toContain('proposal p-1 confirmed — Set T-0086 priority to urgent → ok');
   });
 
+  it('confirm on a promote executes setForm(ship) with the actor and records ok as the outcome', async () => {
+    const { file } = await seedSession([PROMOTE]);
+    service = boot();
+
+    const result = await service.confirm({ file, id: 'p-1' });
+
+    expect(result.ok).toBe(true);
+    expect(boardForms).toEqual([{ id: 'T-0086', form: 'ship', actor: ACTOR }]);
+    expect(boardTransitions).toEqual([]);
+    expect(boardCreates).toEqual([]);
+    expect(result.proposal).toMatchObject({
+      id: 'p-1',
+      state: 'confirmed',
+      summary: 'Promote T-0086 to a ship ticket',
+      outcome: 'ok',
+      decidedAt: expect.any(String),
+    });
+    const text = await readOnDisk(file);
+    expect(text).toContain("- '2026-11-02T09:00:00.000Z' proposal p-1 confirmed — Promote T-0086 to a ship ticket → ok");
+    // The pending card and its command block stay as history.
+    expect(text).toContain('proposal p-1 pending — Promote T-0086 to a ship ticket');
+  });
+
+  it('a failed promote execution leaves the proposal pending and writes no decision', async () => {
+    const { file, text } = await seedSession([PROMOTE]);
+    boardSetFormResult = { ok: false, error: 'A run is live on this ticket. Change the form when the run has ended.' };
+    service = boot();
+
+    const result = await service.confirm({ file, id: 'p-1' });
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'A run is live on this ticket. Change the form when the run has ended.',
+    });
+    expect(await readOnDisk(file)).toBe(text);
+    expect(commits).toEqual([]);
+  });
+
   it('a failed execution leaves the proposal pending and writes no decision', async () => {
     const { file, text } = await seedSession([TRANSITION]);
     boardTransitionResult = { ok: false, error: 'T-0086 is not in "build" — it may have moved; refresh the board' };
@@ -583,6 +657,7 @@ describe('ChatService confirm and dismiss', () => {
     expect(boardTransitions).toEqual([]);
     expect(boardCreates).toEqual([]);
     expect(boardPriorities).toEqual([]);
+    expect(boardForms).toEqual([]);
     expect(result.proposal).toMatchObject({ state: 'dismissed', outcome: null });
     const text = await readOnDisk(file);
     expect(text).toContain("'2026-11-02T09:00:00.000Z' proposal p-1 dismissed — Move T-0086 from build to review");

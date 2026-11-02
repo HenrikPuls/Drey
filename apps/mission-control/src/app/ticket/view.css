@@ -220,6 +220,40 @@
   color: var(--mc-dim);
 }
 
+/* The scout report card (E8): stamp, summary, the decision options. */
+
+.scout-summary {
+  margin: 0 0 10px;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.scout-decisions li {
+  align-items: flex-start;
+}
+
+.scout-decision-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.scout-decision-key {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.decision-done .scout-decision-body {
+  color: var(--mc-dim);
+}
+
+.scout-decision-rec {
+  font-size: 12px;
+  color: var(--mc-dim);
+}
+
 .shots {
   display: flex;
   gap: 8px;

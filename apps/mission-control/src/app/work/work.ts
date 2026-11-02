@@ -4,6 +4,7 @@ import {
   groupsOf,
   nextPhaseOf,
   type McMoveResult,
+  type McScoutReport,
   type NeedVm,
   type TicketVm,
   type WorkGroup,
@@ -14,7 +15,9 @@ import {
  * phase groups in order — groups, not kanban columns. One ticket = one
  * card (id, title, phase chip, persona chip, priority flag, blocked
  * marker); the card tap opens the bottom sheet with the move/close
- * actions in the thumb's reach.
+ * actions in the thumb's reach. A scout report need (E8) renders its
+ * report — stamp, summary, the decision options — plus the promote
+ * action that prefills the chat.
  */
 @Component({
   selector: 'mc-work',
@@ -76,6 +79,38 @@ export class Work {
    */
   protected needTappable(vm: NeedVm): boolean {
     return this.state?.openPersona !== undefined && vm.need.kind === 'improvements';
+  }
+
+  /** The report need's parsed report; null = the desk sent the headline only. */
+  protected reportOfNeed(vm: NeedVm): McScoutReport | null {
+    return vm.need.report ?? null;
+  }
+
+  /**
+   * The promote action shows on a report card only when the adapter
+   * offers `promote` and the device may act: a read-only device watches,
+   * it never promotes (the move button's rule).
+   */
+  protected canPromote(vm: NeedVm): boolean {
+    return (
+      !this.readOnly() &&
+      this.state?.promote !== undefined &&
+      vm.need.kind === 'report' &&
+      (vm.need.ticketId ?? '') !== ''
+    );
+  }
+
+  /**
+   * The promote tap: the adapter prefills the chat with the promote
+   * command and switches to the chat tab — the send stays the owner's
+   * (the desk answers with the proposal card the confirmation needs).
+   */
+  protected promoteTicket(vm: NeedVm): void {
+    const ticketId = vm.need.ticketId;
+    if (ticketId === undefined || ticketId === null || ticketId === '' || this.state?.promote === undefined) {
+      return;
+    }
+    this.state.promote(ticketId);
   }
 
   /**

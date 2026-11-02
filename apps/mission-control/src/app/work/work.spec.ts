@@ -2,6 +2,8 @@
  * The work tab's specs: the pure group/next-phase logic, then the
  * component class against a fake state object — no DOM (the unit-test
  * builder runs these under jsdom, but nothing here renders a template).
+ * The improvements card's tap and the scout report card's promote (E8)
+ * close the file.
  */
 import type { Signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -19,6 +21,7 @@ import {
   type McBoard,
   type McNeed,
   type McPersona,
+  type McScoutReport,
   type McTicket,
   type McWorkState,
   type NeedVm,
@@ -260,11 +263,13 @@ describe('card helpers', () => {
       improvements: 'Improvements',
       'needs-decision': 'Needs decision',
       blocked: 'Blocked',
+      report: 'Scout report',
     });
     expect(needKindLabelOf('question')).toBe('Asks you');
     expect(needKindLabelOf('improvements')).toBe('Improvements');
     expect(needKindLabelOf('needs-decision')).toBe('Needs decision');
     expect(needKindLabelOf('blocked')).toBe('Blocked');
+    expect(needKindLabelOf('report')).toBe('Scout report');
     expect(needKindLabelOf('mystery')).toBe('mystery');
   });
 
@@ -479,5 +484,85 @@ describe('improvements needs', () => {
     const group = vm2.groups()[0]!;
     const question = group.kind === 'needs' ? group.needs[0]! : (null as never);
     expect(() => vm2.openNeedPersona(question)).not.toThrow();
+  });
+});
+
+
+// --- the scout report card (E8) -----------------------------------------------------
+
+describe('report needs (E8)', () => {
+  const REPORT: McScoutReport = {
+    writtenAt: '2026-11-02T14:32:00Z',
+    by: 'pia',
+    summary: 'The repo carries two index implementations.',
+    decisions: [
+      { key: 'D1', question: 'Which storage should back the index?', recommendation: 'SQLite', resolved: false },
+      { key: 'D2', question: 'Migrate existing data?', recommendation: null, resolved: true },
+    ],
+  };
+
+  interface ReportSurface {
+    groups: Signal<WorkGroup[]>;
+    readOnly: Signal<boolean>;
+    reportOfNeed(vm: NeedVm): McScoutReport | null;
+    canPromote(vm: NeedVm): boolean;
+    promoteTicket(vm: NeedVm): void;
+  }
+
+  function reportNeedOf(vm: ReportSurface, kind: string): NeedVm {
+    const group = vm.groups()[0];
+    if (group?.kind !== 'needs') {
+      throw new Error('expected the needs group');
+    }
+    return group.needs.find((n) => n.need.kind === kind) ?? group.needs[0]!;
+  }
+
+  function setupReport(patch: Partial<FakeState> = {}): { vm: ReportSurface; promoted: string[] } {
+    const promoted: string[] = [];
+    const { state } = makeFake({
+      needs: [need('report', 'Which storage backs the index?', { ticketId: 'T-0004', summary: '1 of 2 decisions open', report: REPORT })],
+      ...patch,
+    });
+    state.promote = (ticketId: string) => promoted.push(ticketId);
+    const work = setup(state);
+    return { vm: work as unknown as ReportSurface, promoted };
+  }
+
+  it('surfaces the parsed report on the card; a headline-only need renders without one', () => {
+    const { vm } = setupReport();
+    expect(vm.reportOfNeed(reportNeedOf(vm, 'report'))).toEqual(REPORT);
+
+    const { state } = makeFake({ needs: [need('report', 'Bare', { ticketId: 'T-0005' })] });
+    const bare = setup(state) as unknown as ReportSurface;
+    expect(bare.reportOfNeed(reportNeedOf(bare, 'report'))).toBeNull();
+  });
+
+  it('offers promote only on a report card with an adapter, an id and a writable device', () => {
+    const { vm } = setupReport();
+    expect(vm.canPromote(reportNeedOf(vm, 'report'))).toBe(true);
+
+    const withoutAdapter = makeFake({ needs: [need('report', 'R', { ticketId: 'T-1', report: REPORT })] });
+    const noAdapter = setup(withoutAdapter.state) as unknown as ReportSurface;
+    expect(noAdapter.canPromote(reportNeedOf(noAdapter, 'report'))).toBe(false);
+
+    const wrongKind = setupReport({ needs: [need('question', 'Ask away', { ticketId: 'T-1' })] });
+    expect(wrongKind.vm.canPromote(reportNeedOf(wrongKind.vm, 'question'))).toBe(false);
+
+    const readOnly = setupReport({ readOnly: true });
+    expect(readOnly.vm.canPromote(reportNeedOf(readOnly.vm, 'report'))).toBe(false);
+
+    const noId = setupReport({ needs: [need('report', 'R', { report: REPORT })] });
+    expect(noId.vm.canPromote(reportNeedOf(noId.vm, 'report'))).toBe(false);
+  });
+
+  it("promoting hands the ticket id to the adapter — the chat prefill is the shell's job", () => {
+    const { vm, promoted } = setupReport();
+    vm.promoteTicket(reportNeedOf(vm, 'report'));
+    expect(promoted).toEqual(['T-0004']);
+
+    const { state } = makeFake({ needs: [need('report', 'Bare')] });
+    const bare = setup(state) as unknown as ReportSurface;
+    bare.promoteTicket(reportNeedOf(bare, 'report'));
+    expect(promoted).toEqual(['T-0004']);
   });
 });

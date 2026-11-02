@@ -142,6 +142,72 @@
   color: var(--mc-dim);
 }
 
+/* The scout report card (E8, concept §5.6): the report rides on the need —
+   stamp, summary, the decision options — with the promote action below. */
+
+.report-stamp {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--mc-dim);
+}
+
+.report-summary {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--mc-text);
+  white-space: pre-wrap;
+}
+
+.report-decisions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  margin: 8px 0 0;
+  list-style: none;
+}
+
+.report-decisions li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.report-decisions .box {
+  flex: none;
+  color: var(--mc-dim);
+}
+
+.decision-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.decision-key {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.decision-open .decision-question {
+  color: var(--mc-text);
+}
+
+.report-decisions li:not(.decision-open) .decision-body {
+  color: var(--mc-dim);
+}
+
+.decision-rec {
+  font-size: 12px;
+  color: var(--mc-dim);
+}
+
+.need-promote {
+  margin-top: 10px;
+}
+
 /* The bottom sheet: slides up over everything, actions in the thumb's reach. */
 
 .sheet-backdrop {

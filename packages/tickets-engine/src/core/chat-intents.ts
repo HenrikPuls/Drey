@@ -99,6 +99,13 @@ export function validateChatCommand(raw: unknown): ChatCommand | null {
     }
     return { kind: 'setPriority', id, priority };
   }
+  if (kind === 'promote') {
+    const id = ticketIdOf(obj['id']);
+    if (id === null) {
+      return null;
+    }
+    return { kind: 'promote', id };
+  }
   return null;
 }
 

@@ -35,6 +35,41 @@
       </ol>
     }
 
+    @if (report(); as scoutReport) {
+      <section class="card scout" aria-label="Scout report">
+        <h2 class="card-title">Scout report</h2>
+        @if (scoutReport.writtenAt || scoutReport.by) {
+          <p class="tested">
+            Written on {{ scoutReport.writtenAt === '' ? '…' : scoutReport.writtenAt }} by
+            {{ scoutReport.by === '' ? 'scout' : scoutReport.by }}.
+          </p>
+        }
+        @if (scoutReport.summary) {
+          <p class="scout-summary">{{ scoutReport.summary }}</p>
+        }
+        @if (scoutReport.decisions.length > 0) {
+          <ul class="criteria scout-decisions">
+            @for (decision of scoutReport.decisions; track $index) {
+              <li [class.decision-open]="!decision.resolved" [class.decision-done]="decision.resolved">
+                <span class="box" aria-hidden="true">{{ decision.resolved ? '☑' : '☐' }}</span>
+                <span class="scout-decision-body">
+                  <span class="scout-decision-question">
+                    @if (decision.key) {
+                      <span class="scout-decision-key">{{ decision.key }}:</span>
+                    }
+                    {{ decision.question }}
+                  </span>
+                  @if (decision.recommendation) {
+                    <span class="scout-decision-rec">Recommendation: {{ decision.recommendation }}</span>
+                  }
+                </span>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    }
+
     @if (proof(); as report) {
       <section class="card proof" aria-label="Verification">
         <h2 class="card-title">Verification</h2>

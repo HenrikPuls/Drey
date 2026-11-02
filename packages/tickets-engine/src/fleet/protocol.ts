@@ -13,6 +13,7 @@
  */
 import { FLEET_SETTING_DEFAULTS } from '../contracts/fleet-defaults';
 import type { ShapedQuestion } from '../contracts/question-shape';
+import type { TicketForm } from '../contracts/tickets';
 
 /** The workers of milestone 84, in fleet order (the assignment default). */
 export type WorkerProviderId = 'opencode' | 'claude-code';
@@ -44,6 +45,16 @@ export type InteractiveMode = 'plan' | 'refine';
 export interface RunRequest {
   /** The ticket this run works on (schema id = filename stem). */
   readonly ticketId: string;
+  /**
+   * The ticket's form (E8, concept §5.6): `'scout'` dispatches an
+   * exploration, not a build — the runner prepares no worktree
+   * (`worktreePath` then names the read ground, never a prepared
+   * worktree), runs no gate (`gate: 'none'`) and moves nothing. Absent
+   * = `'ship'`, the wire shape every pre-E8 sender produced; the
+   * build-stamp respawn keeps the plugin and the runner in lockstep, so
+   * a runner that predates the field never receives it for long.
+   */
+  readonly form?: TicketForm;
   /** Absolute path of the tickets vault (the runner edits the file there). */
   readonly ticketsVaultPath: string;
   /** Vault-relative path of the ticket file (`tickets/<phase>/<id>.md`). */
@@ -102,8 +113,11 @@ export interface RunRequest {
    * `structural` is the plan phase's gate: the ticket entered without
    * executable criteria (writing them is the plan's job), so the gate
    * instead checks that the run produced at least one.
+   * `none` (E8, concept §5.6) is the scout run's shape: exploration only,
+   * the worker's finished turn is the deliverable's declaration and no
+   * gate ever runs.
    */
-  readonly gate: 'commands' | 'structural';
+  readonly gate: 'commands' | 'structural' | 'none';
   /** Git executable for worktree + ticket commits (the plugin's gitPath or `git`). */
   readonly git: string;
   /** Transition target after a green gate — the pipeline's next phase id. */
@@ -451,6 +465,12 @@ export interface RunInfo {
    * tab shows the dialog's end moves for such a run.
    */
   readonly interactive?: InteractiveMode;
+  /**
+   * A scout run (E8, concept §5.6): exploration only — no worktree, no
+   * gate, no move; the report card in "Needs you" is its endpoint.
+   * Absent = a ship run, like every record written before E8.
+   */
+  readonly form?: TicketForm;
   /**
    * A quiet interactive start (req-75): the worker was spawned WITHOUT
    * its composed brief — nothing runs until the owner's first message,

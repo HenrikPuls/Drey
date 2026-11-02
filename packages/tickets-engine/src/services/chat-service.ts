@@ -32,7 +32,7 @@ import type {
   ChatStreamEvent,
   ChatTurnResult,
 } from '../contracts/chat';
-import { titleFromDescription, type BoardSnapshot, type TicketPriority } from '../contracts/tickets';
+import { titleFromDescription, type BoardSnapshot, type TicketForm, type TicketPriority } from '../contracts/tickets';
 import {
   appendMission,
   appendOwner,
@@ -75,6 +75,8 @@ export interface ChatBoardPort {
   }): Promise<ChatMutationResult>;
   transition(input: { readonly id: string; readonly actor?: string; readonly from: string; readonly to: string }): Promise<ChatMutationResult>;
   setPriority(input: { readonly id: string; readonly priority: TicketPriority; readonly actor?: string }): Promise<ChatMutationResult>;
+  /** E8 (concept §5.6): the scout → ship promotion's form flip. */
+  setForm(input: { readonly id: string; readonly form: TicketForm; readonly actor?: string }): Promise<ChatMutationResult>;
 }
 
 export interface ChatServiceDeps {
@@ -102,6 +104,8 @@ function summaryOf(command: ChatCommand): string {
       return `Create ticket "${command.title}" in ${command.phase}`;
     case 'setPriority':
       return `Set ${command.id} priority to ${command.priority}`;
+    case 'promote':
+      return `Promote ${command.id} to a ship ticket`;
   }
 }
 
@@ -377,7 +381,7 @@ export class ChatService implements ChatServicePort {
 
   /**
    * The confirm's execution — the iron rule in code: the typed command
-   * reaches the board ONLY through these three methods, always with the
+   * reaches the board ONLY through these four methods, always with the
    * acting owner. The outcome line records what happened: a transition's
    * moved path, a create's minted id, `ok` otherwise. A create lands in
    * the pipeline's first phase (the board's capture target); when the
@@ -417,6 +421,10 @@ export class ChatService implements ChatServicePort {
       }
       case 'setPriority': {
         const result = await this.deps.board.setPriority({ id: command.id, priority: command.priority, actor });
+        return result.ok ? { ok: true, outcome: 'ok' } : { ok: false, error: result.error };
+      }
+      case 'promote': {
+        const result = await this.deps.board.setForm({ id: command.id, form: 'ship', actor });
         return result.ok ? { ok: true, outcome: 'ok' } : { ok: false, error: result.error };
       }
     }

@@ -3,6 +3,10 @@
  * one worktree per run, the machine gate after the worker exits, and
  * the ticket-file stamps with the board's exact transition semantics
  * (move + stamp + log + one commit — ADR-0076's single-writer rule).
+ * A scout run (E8, concept §5.6) is the exception: no worktree is
+ * prepared (the request's worktreePath names its read ground), no gate
+ * ever runs and nothing moves — the worker's finished turn ends the
+ * exploration and the report chapter is the deliverable.
  *
  * State lives in files under the fleet root: `runs/<id>/run.json` is
  * the record, `runs/<id>/stream.jsonl` the file-backed stdout anyone
@@ -17,6 +21,7 @@ import { hostname } from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { acceptanceCommands, patchTicketFile, ticketPathParts } from '../core/ticket-files';
+import { hasScoutReport } from '../core/scout';
 import { TicketsGit } from '../core/tickets-git';
 import { PERSONAS_DIR } from '../core/persona';
 import { answersFromText, answersText, ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
@@ -840,26 +845,33 @@ export class RunSupervisor {
     const id = `R-${this.stamp().replaceAll(/[-:.]/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 6)}`;
     const dir = path.join(this.deps.root, 'runs', id);
     // The home rule's path (ADR-0080), computed in `composeRunRequest` and
-    // carried on the request — the runner never derives paths.
+    // carried on the request — the runner never derives paths. For a
+    // scout run it names the read ground instead: no worktree exists.
     const worktreePath = request.worktreePath;
+    const scout = request.form === 'scout';
 
-    let prepared: PreparedWorktree;
+    let prepared: PreparedWorktree | null = null;
     try {
       await fsp.mkdir(dir, { recursive: true });
-      prepared = await this.prepareWorktree(request, worktreePath);
-      // The ticket's further repos (req-72): one worktree each, same
-      // branch, prepared like the primary's — a failure refuses the
-      // start, the primary's worktree stays for the retry.
-      for (const extra of request.extraRepos ?? []) {
-        await this.prepareWorktree(
-          {
-            ...request,
-            repoPath: extra.repoPath,
-            baseRef: extra.baseRef,
-            ...(extra.links !== undefined ? { links: extra.links } : {}),
-          },
-          extra.worktreePath,
-        );
+      // A scout run (E8, concept §5.6) prepares no worktree and links
+      // nothing: it reads the named checkouts in place — no branch, no
+      // tree, nothing to heal or move aside.
+      if (!scout) {
+        prepared = await this.prepareWorktree(request, worktreePath);
+        // The ticket's further repos (req-72): one worktree each, same
+        // branch, prepared like the primary's — a failure refuses the
+        // start, the primary's worktree stays for the retry.
+        for (const extra of request.extraRepos ?? []) {
+          await this.prepareWorktree(
+            {
+              ...request,
+              repoPath: extra.repoPath,
+              baseRef: extra.baseRef,
+              ...(extra.links !== undefined ? { links: extra.links } : {}),
+            },
+            extra.worktreePath,
+          );
+        }
       }
     } catch (error) {
       return { ok: false, error: `worktree failed: ${messageOf(error)}` };
@@ -880,7 +892,7 @@ export class RunSupervisor {
         candidate,
         provider: this.deps.adapter.id,
         model: request.model,
-        sessionInvalidated: prepared.sessionInvalidated,
+        sessionInvalidated: prepared?.sessionInvalidated ?? false,
         sessionInUse: this.sessionInUse(candidate?.sessionRef ?? null),
         capability: COMPACT_CAPABILITY[this.deps.adapter.id],
         config: this.handoverConfig,
@@ -913,10 +925,13 @@ export class RunSupervisor {
       lastSteerRung: null,
       worktreePath,
       branch: request.branch,
-      worktree: prepared.outcome,
+      ...(prepared !== null ? { worktree: prepared.outcome } : {}),
       gateResult: null,
       model: request.model,
       phase: request.phase,
+      // E8: a scout run's record says so — the board's lanes and the
+      // settle hooks read it (absent = a ship run, every older record).
+      ...(scout ? { form: 'scout' as const } : {}),
       usage: { input: null, cacheRead: null, cacheCreation: null, output: null },
       lastTurnContext: null,
       turns: 0,
@@ -949,13 +964,17 @@ export class RunSupervisor {
     const openNote = (text: string): string => `${JSON.stringify({ ts: this.stamp(), kind: 'note', text })}\n`;
     await fsp.writeFile(
       path.join(dir, 'stream.jsonl'),
-      openNote(`run ${id} for ${request.ticketId} on ${request.branch} — worktree ${prepared.outcome}`) +
-        (prepared.outcome === 'moved-aside'
+      openNote(
+        scout
+          ? `run ${id} for ${request.ticketId} — scout run, read ground ${worktreePath} (no worktree, no gate, no move)`
+          : `run ${id} for ${request.ticketId} on ${request.branch} — worktree ${prepared!.outcome}`,
+      ) +
+        (prepared !== null && prepared.outcome === 'moved-aside'
           ? openNote(
               `stale dirty worktree moved aside to ${prepared.movedTo} — kept, not deleted; earlier session context is invalid`,
             )
           : '') +
-        (prepared.links !== undefined ? openNote(linkNote(prepared.links)) : '') +
+        (prepared?.links !== undefined ? openNote(linkNote(prepared.links)) : '') +
         (decision !== null ? openNote(`handover: ${decision.mode} — ${decision.why}`) : ''),
       'utf8',
     );
@@ -1018,7 +1037,9 @@ export class RunSupervisor {
         from: null,
         now: this.now(),
         actor: this.agentActor(),
-        action: `run ${id} started (${request.provider}${request.model !== null ? `, ${request.model}` : ''}) — worktree ${prepared.outcome}${decision !== null ? `, handover ${decision.mode}` : ''}`,
+        action: `run ${id} started (${request.provider}${request.model !== null ? `, ${request.model}` : ''}) — ${
+          scout ? `scout run, read ground ${worktreePath}` : `worktree ${prepared!.outcome}`
+        }${decision !== null ? `, handover ${decision.mode}` : ''}`,
         ...(request.recordWorker !== undefined && request.recordWorker !== '' ? { setWorker: request.recordWorker } : {}),
         ...(interactive !== undefined ? { setInteractive: true } : {}),
         ...(handle.pid !== null
@@ -1408,13 +1429,21 @@ export class RunSupervisor {
     if (bytes.length === 0 || bytes.length > MAX_ATTACHMENT_BYTES) {
       return { ok: false, error: `an attachment is 1 byte to ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB` };
     }
-    const worktree = run.info.worktreePath;
+    // A scout run's `worktreePath` is its read ground — the repo checkout
+    // or the vault, never to be written. Its attachments live in the
+    // run's own directory instead, outside every repo; only a ship run's
+    // attachment lands in its worktree (hidden from git via the exclude).
+    const scout = run.request.form === 'scout';
+    const worktree = scout ? run.dir : run.info.worktreePath;
     const dir = path.join(worktree, ATTACHMENT_DIR);
     const safe = name.replace(/[^\w.\- ]/g, '_').slice(-80) || 'file';
     const target = path.join(dir, `${this.now().getTime()}-${safe}`);
     try {
       await fsp.mkdir(dir, { recursive: true });
       await fsp.writeFile(target, bytes);
+      if (scout) {
+        return { ok: true, path: target };
+      }
       const excludeRel = (await this.git.run(worktree, ['rev-parse', '--git-path', 'info/exclude'])).trim();
       const exclude = path.resolve(worktree, excludeRel);
       const current = await fsp.readFile(exclude, 'utf8').catch(() => '');
@@ -1562,10 +1591,11 @@ export class RunSupervisor {
     if (request.worktreePath.trim() === '') {
       failures.push('the worktree path is empty (a pre-T-0044 sender derived it itself)');
     }
-    // An interactive dialog needs no gate commands — the run never gates
-    // (req-65): the interview itself is the deliverable, the owner moves
-    // the ticket when the dialog ends.
-    if (request.acceptance.length === 0 && request.gate !== 'structural' && request.interactive === undefined) {
+    // A 'commands' gate demands what it runs: an empty command list with
+    // that gate is a refusal. ('structural' writes its own check — the
+    // plan phase; 'none' — a scout run, concept §5.6 — never gates, and
+    // an interactive dialog's deliverable is the conversation, req-65.)
+    if (request.acceptance.length === 0 && request.gate === 'commands') {
       failures.push('the ticket has no acceptance criteria — the machine gate would have nothing to run');
     }
     return failures;
@@ -1947,6 +1977,25 @@ export class RunSupervisor {
       await this.logLine(
         run,
         `blocked — ${(blocked.split('\n')[0] ?? '').slice(0, 200)} — no gate runs, the ticket stays put`,
+      );
+      await this.finish(run, 'done');
+      return;
+    }
+    // A scout run (E8, concept §5.6): the finished turn ends the
+    // exploration — no gate runs and nothing moves; the endpoint is the
+    // report chapter as a card in "Needs you", not a proof. The run's
+    // last word is only whether the file carries one, so the owner
+    // knows what waits (and a report-less end is visible, never silent).
+    if (run.request.form === 'scout') {
+      const text = await fsp
+        .readFile(path.join(run.request.ticketsVaultPath, run.currentRelPath), 'utf8')
+        .catch(() => null);
+      const written = text !== null && hasScoutReport(text);
+      await this.logLine(
+        run,
+        written
+          ? `scout run finished (exit ${code ?? 'signal'}) — the ## Report chapter waits for the owner in Needs you`
+          : `scout run finished (exit ${code ?? 'signal'}) without a ## Report chapter — the ticket file carries no report`,
       );
       await this.finish(run, 'done');
       return;

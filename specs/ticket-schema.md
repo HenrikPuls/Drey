@@ -212,6 +212,7 @@ before the machine takes over; must end with the acceptance criteria.
 | `persona` | string | Optional persona pin (ADR-0088 E3): `persona: pia` — the top of the persona ladder, winning over the phase's `persona:` key and the engine default (`personas.default`). The persona's worker/model/prompt drive the dispatch; when nothing resolves or the persona file is missing the legacy assignment ring runs unchanged. See `_meta/personas/` below. |
 | `priority` | `urgent \| high \| normal \| low` | Required. Default `normal`; machine writers always write it. |
 | `track` | `auto \| shape` | Optional (req-75 W1b, ADR-0087 decision 2). The ticket's triage track: `auto` runs on its own, `shape` goes through the plan-mode dialog with the owner. Absent (or any other value — a warning) reads as not triaged; set from the Work panel's row menu (Track ›) until W5c/W6 fill it from triage. |
+| `form` | `ship \| scout` | Optional (concept §5.6, E8). The ticket's form: `ship` (the default — an absent key reads as ship) is the known way, plan → worktree → gate → move. `scout` is exploration only: a scout run reads repo/history/data and writes the ticket's `## Report` section — no worktree, no diff, no gate, no move; the report surfaces as a card in "Needs you" and the owner promotes the ticket to ship from there. Any other value warns (`form must be ship or scout — read as ship`) and reads as ship. See [The scout form](#the-scout-form-e8-concept-56). |
 | `rank` | integer 0-999999 | Default `5000`. Fine ordering inside derived order. |
 | `branch` | `t/<id>` | Written by machine writers; validated against the rule; rule wins. |
 | `entered-<phase>` | UTC timestamp | One per phase ever entered; holds the **most recent** entry time into that phase (first entry lives in git history). `entered-inbox` exists from creation. |
@@ -285,6 +286,40 @@ the runner rely on:
   starts with a backticked command; the machine gate runs exactly
   these, locally, in the worker's checkout (ADR-0076: validator, not
   CI).
+- `## Report` — the scout run's finding (concept §5.6, E8), an
+  exploration ticket's endpoint; ship tickets never carry one. The
+  **scout run** writes it into its own ticket file, **replaced** on
+  every scout run (never a second section of the name, before `## Log`
+  like every other chapter). The canonical shape:
+
+  ```markdown
+  ## Report
+
+  Written on 2026-11-02T14:32:00Z by pia.
+
+  ### Summary
+
+  The repo carries two index implementations; only SQLite is wired
+  into the build.
+
+  ### Decisions
+
+  - [ ] D1: Which storage should back the index? — Recommendation: SQLite, the repo already ships the helper.
+  - [x] D2: Migrate existing data? — Recommendation: yes, one migration script.
+  ```
+
+  The stamp line names the UTC time (seconds precision) and the
+  writing persona. `### Summary` is the free-text answer; `###
+  Decisions` lists the choices only the owner can make — one line per
+  decision, `- [ ] D1: <question> — Recommendation: <rec>` (em-dash
+  prefix exactly; the recommendation may be absent), keys in order,
+  flipped to `- [x]` by the owner as decisions are made. The whole
+  `### Decisions` block stays absent when nothing is open. The engine
+  reads the section tolerantly (`core/scout.ts`, the asymmetric-
+  tolerance rule): an absent or partially unreadable section means
+  "no report yet", never a guess. The engine raises the parsed report
+  as a card in "Needs you" (`kind: report`); a promoted ticket keeps
+  the section as history.
 - `## Changes` — what the Ready page shows (req-75 W3, ADR-0087
   decision 3). The **build worker** writes or updates it before it
   ends — the section is the contract, no diff parsing on the desk —
@@ -365,6 +400,31 @@ the runner rely on:
   and budget event lands here (ADR-0075). A ticket created from a
   tidied capture (req-75 W5c) carries a `raw capture:` Log line with
   the owner's original words, right after `created in`.
+
+### The scout form (E8, concept §5.6)
+
+A `form: scout` ticket runs **only an exploration**. A scout run
+(the `scout-default` prompt, concept §5.6) sends a persona reading
+repo/history/data — no worktree is prepared, no branch is cut, no
+gate runs, no move happens, and the acceptance-criteria hold (check
+9) is a ship-form requirement: the scout run's only write is the
+`## Report` section into its own ticket file, which the runner
+commits. The run's endpoint is not a proof but the report as a card
+in "Needs you".
+
+**Promotion** is the owner's move from that card — the Mission
+Control chat's `promote` command ("promote T-0004"), proposed as a
+card and executed only on the owner's confirm (concept §6: the chat
+never writes on its own). The board half is one header rewrite
+(`form: scout` → `form: ship`, `patchForm`), one Log line
+`- '<UTC>' <actor> — form ship`, and exactly one commit
+`tickets: <id> form ship`; it refuses while a run is live on the
+ticket and is a no-op success when the file already carries the
+value — the mirror of `track` in every way. Setting a scout ticket
+back to ship by hand is the same header edit; the machine shape
+above is what the board writes. From its next normal run the
+promoted ticket is an ordinary ship ticket: plan, worktree, gate.
+The `## Report` section stays in the file as history.
 
 ### The ticket status log (E7)
 
@@ -776,9 +836,9 @@ line is skipped, never guessed — the asymmetric-tolerance rule):
 - `- '<UTC>' proposal p-<n> pending — <summary>` followed by the command
   in an indented fenced block marked `json` — a **proposal card**:
   `<summary>` is the human sentence the card shows, the block is the
-  typed `ChatCommand` (`createTicket` / `transition` / `setPriority` —
-  the union in `packages/tickets-engine/src/contracts/chat.ts` is the
-  entire write surface). Ids mint per session (`p-1`, `p-2`, …).
+  typed `ChatCommand` (`createTicket` / `transition` / `setPriority` /
+  `promote` — the union in `packages/tickets-engine/src/contracts/chat.ts`
+  is the entire write surface). Ids mint per session (`p-1`, `p-2`, …).
 - `- '<UTC>' proposal p-<n> confirmed|dismissed — <summary>` — the
   owner's decision. The summary repeats the pending card's; a
   ` → <outcome>` tail (the moved path, a refusal) rides when the
@@ -841,6 +901,9 @@ column; the board still renders), the fleet runner before every action
    self-reference and cycles = errors naming the cycle; a
    reference on the board is satisfied only in the terminal phase — a
    blocker in an unknown directory blocks. The archive is never consulted.
+11. `form` (E8): when present, `ship` or `scout` — any other value
+    warns (`form must be ship or scout — read as ship`); the key is
+    preserved on rewrite like every unknown field.
 
 A validation issue never blocks rendering and never blocks a human
 transition (a warning shows); it blocks an agent action.

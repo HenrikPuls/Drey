@@ -397,3 +397,111 @@ describe('persona dispatch (E3, ADR-0088)', () => {
     expect(withPrompt.request.briefDigest).not.toBe(withMemory.request.briefDigest);
   });
 });
+
+describe('scout runs (E8, concept §5.6)', () => {
+  const SCOUT = { ...card().meta, form: 'scout' as const };
+  const NO_CRITERIA = TICKET.replace('- [ ] `npm run verify:unit` — exits 0\n', '');
+
+  function scoutCard(over: Partial<TicketCard> = {}): TicketCard {
+    const { meta, ...rest } = over;
+    return card({ ...rest, meta: { ...SCOUT, ...(meta ?? {}) } });
+  }
+
+  it('a scout ticket composes an exploration: no gate, no move, the repo as the read ground', () => {
+    const result = composeRunRequest(
+      base({
+        card: scoutCard(),
+        ticketText: NO_CRITERIA,
+        workingPhase: phase('prioritized', { handover: 'agent plan-default' }),
+        nextPhaseId: 'plan',
+        nextPhaseClaims: true,
+        dispatchedBy: 'prioritized',
+      }),
+    );
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.form).toBe('scout');
+    expect(result.request.gate).toBe('none');
+    expect(result.request.acceptance).toEqual([]);
+    expect(result.request.nextPhase).toBeNull(); // the ticket stays where it sits
+    expect(result.request.nextPhaseDir).toBeNull();
+    expect(result.request.claimIdentity).toBeNull();
+    expect(result.request.worktreePath).toBe('W:/drey'); // the read ground, no worktree path
+    expect(result.request.repoPath).toBe('W:/drey');
+    expect(result.request.baseRef).toBeNull();
+    expect(result.request.column).toBe('prioritized');
+    expect(result.request.instruction).toContain('Scout discipline');
+    expect(result.request.instruction).toContain('Read ground: W:/drey (the "drey" checkout)');
+    expect(result.request.instruction).not.toContain('Completion discipline');
+    // A ship ticket stays the default everywhere: no form, the normal gate.
+    const ship = composeRunRequest(base({}));
+    if (!ship.ok) {
+      throw new Error(ship.error);
+    }
+    expect(ship.request.form).toBeUndefined();
+    expect(ship.request.gate).toBe('commands');
+  });
+
+  it('no repo is no refusal for a scout — the tickets vault is the read ground', () => {
+    const result = composeRunRequest(
+      base({
+        card: scoutCard({ meta: { ...SCOUT, repo: null, repos: [] } }),
+        repo: null,
+        ticketText: NO_CRITERIA,
+      }),
+    );
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.worktreePath).toBe('V:/tickets');
+    expect(result.request.instruction).toContain('Read ground: V:/tickets (the tickets vault)');
+    // …while a ship ticket without a repo keeps refusing.
+    expect(composeRunRequest(base({ repo: null })).ok).toBe(false);
+  });
+
+  it('a named repo without a checkout still refuses — for a scout too', () => {
+    const result = composeRunRequest(base({ card: scoutCard(), repo: { ...REPO, path: null }, ticketText: NO_CRITERIA }));
+    expect(result.ok).toBe(false);
+    expect((result as { error: string }).error).toContain('no local path');
+  });
+
+  it('a persona scout signs the report and rides provider, model, prompt and memory', () => {
+    const PIA = { id: 'pia', worker: 'claude-code', model: 'sonnet', prompt: 'You are Pia.', memory: '# Memory\n\n- lesson\n' };
+    const result = composeRunRequest(base({ card: scoutCard(), ticketText: NO_CRITERIA, promptText: 'Phase template.', persona: PIA }));
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.provider).toBe('claude-code');
+    expect(result.request.model).toBe('sonnet');
+    expect(result.persona).toBe('pia');
+    expect(result.request.instruction).toContain('by pia.');
+    expect(result.request.instruction).toContain('You are Pia.');
+    expect(result.request.instruction).not.toContain('Phase template.'); // the persona's prompt is the base
+    expect(result.request.instruction).toContain('## Memory');
+  });
+
+  it('extra repos become read-only grounds in the brief — no prepared worktrees on the wire', () => {
+    const EXTRA = {
+      name: 'lariscus',
+      url: 'https://example.invalid/lariscus.git',
+      branch: 'main',
+      path: 'E:/code/lariscus',
+      policy: null,
+      worker: null,
+      worktrees: null,
+      launch: null,
+      instructions: null,
+    };
+    const result = composeRunRequest(
+      base({ card: scoutCard({ meta: { ...SCOUT, repos: ['drey', 'lariscus'] } }), ticketText: NO_CRITERIA, extraRepos: [EXTRA] }),
+    );
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    expect(result.request.extraRepos).toBeUndefined();
+    expect(result.request.instruction).toContain('- lariscus: E:/code/lariscus (read-only)');
+    const refused = composeRunRequest(base({ card: scoutCard(), ticketText: NO_CRITERIA, extraRepos: [{ ...EXTRA, path: null }] }));
+    expect(refused.ok).toBe(false);
+  });
+});

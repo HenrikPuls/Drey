@@ -188,6 +188,28 @@ dispatcher off the ticket between dialogs; a board move drops the
 field. Reopening such a run's session ("Resume session") works as for
 any run — the reopened session is held and belongs to the owner.
 
+### Scout runs (E8, concept §5.6)
+
+A ticket with `form: scout` dispatches a **scout run**, not a build:
+the `scout-default` prompt, and none of the build machinery — no
+worktree is prepared, no branch is cut, no gate runs and nothing
+moves. The run is a read-only exploration (repo, history, data)
+whose one write is its own ticket file's `## Report` section; the
+runner commits the ticket file, as on every run. The
+acceptance-criteria hold (the most common dispatch skip) is a
+ship-form requirement — a scout run has no gate to feed, and a
+scout ticket carries no plan.
+
+The endpoint is the report, not a proof: the engine raises the
+parsed section as a card in "Needs you" (`kind: report`), and the
+owner promotes the ticket to ship from there — the chat's `promote`
+command, a proposal card executed only on confirm. A promoted
+ticket is an ordinary ship ticket from its next normal run
+(worktree, gate, move); the `## Report` section stays as history.
+Diagnose a scout run like any other (`/status`, the stream tail);
+a `gateFailure` never applies to it, and the ticket never moves on
+its own.
+
 ### run.json and stream events
 
 `run.json` = `{request, info}`: the request carries `ticketId`, `repoPath`,

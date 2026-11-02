@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { remoteActorOf } from '../contracts/remote-protocol';
 import type { BoardSnapshot, TicketCard } from '../contracts/tickets';
+import type { ScoutReport } from '../contracts/scout';
+import { renderScoutReportSection } from '../core/scout';
 import { parseStatusLog, type StatusLine } from '../core/status-log';
 import { BYPASS_REFUSAL, ChangeHub, DreyTicketsPort, type RemoteBoard, type RemoteFleet } from './drey-port';
 
@@ -327,6 +329,148 @@ describe('DreyTicketsPort', () => {
       const needs = await port.needs();
       expect(needs).toHaveLength(20);
       expect(needs.every((item) => item.kind === 'needs-decision' && item.ticketId === 'T-0001')).toBe(true);
+    });
+  });
+
+  describe('the E8 report needs', () => {
+    /** A minimal board card — only what needsOf and the sweeps read. */
+    function card(id: string, phase: string, title: string | null, form?: 'scout'): TicketCard {
+      return {
+        id,
+        path: `tickets/${phase}/${id}.md`,
+        phase,
+        meta: { title, entered: {}, run: null, claimedBy: null, form },
+      } as unknown as TicketCard;
+    }
+
+    /** A ticket file around one `## Report` section, as the scout run leaves it. */
+    const ticketFile = (section: string): string => `---\nform: scout\n---\n\n# T-0004\n\n${section}`;
+
+    const report: ScoutReport = {
+      writtenAt: '2026-11-02T14:32:00Z',
+      by: 'pia',
+      summary: 'The repo carries two index implementations.',
+      decisions: [
+        { key: 'D1', question: 'Which storage should back the index?', recommendation: 'SQLite', resolved: false },
+        { key: 'D2', question: 'Migrate existing data?', recommendation: 'yes, one migration script', resolved: true },
+      ],
+    };
+
+    it("surfaces a scout ticket's report section as a report card", async () => {
+      const { board, fleet } = fakes();
+      vi.mocked(board.refresh).mockResolvedValue({
+        columns: [{ phase: { id: 'plan' }, tickets: [card('T-0004', 'plan', 'Explore storage', 'scout')], unknown: false }],
+        checkpoints: [],
+      } as unknown as BoardSnapshot);
+      vi.mocked(board.readTicket).mockResolvedValue({
+        ok: true,
+        card: card('T-0004', 'plan', 'Explore storage', 'scout'),
+        text: ticketFile(renderScoutReportSection(report)),
+        revision: '0123456789abcdef',
+      });
+      const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+
+      expect(await port.needs()).toEqual([
+        {
+          kind: 'report',
+          ticketId: 'T-0004',
+          title: 'Explore storage',
+          phase: 'plan',
+          runId: null,
+          text: '1 of 2 decisions open — Which storage should back the index?',
+          since: '2026-11-02T14:32:00Z',
+          report,
+        },
+      ]);
+    });
+
+    it('skips a promoted ticket even though the report chapter stays in the file', async () => {
+      const { board, fleet } = fakes();
+      vi.mocked(board.refresh).mockResolvedValue({
+        columns: [{ phase: { id: 'plan' }, tickets: [card('T-0004', 'plan', 'Explore storage')], unknown: false }],
+        checkpoints: [],
+      } as unknown as BoardSnapshot);
+      vi.mocked(board.readTicket).mockResolvedValue({
+        ok: true,
+        card: card('T-0004', 'plan', 'Explore storage'),
+        text: ticketFile(renderScoutReportSection(report)),
+        revision: '0123456789abcdef',
+      });
+      const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+
+      expect(await port.needs()).toEqual([]);
+      expect(board.readTicket).not.toHaveBeenCalled();
+    });
+
+    it('a scout ticket without a section, a broken read or a failed read surfaces nothing', async () => {
+      const { board, fleet } = fakes();
+      vi.mocked(board.refresh).mockResolvedValue({
+        columns: [
+          {
+            phase: { id: 'plan' },
+            tickets: [
+              card('T-0001', 'plan', 'No report yet', 'scout'),
+              card('T-0002', 'plan', 'The file is locked', 'scout'),
+              card('T-0003', 'plan', 'Leaves the board mid-read', 'scout'),
+            ],
+            unknown: false,
+          },
+        ],
+        checkpoints: [],
+      } as unknown as BoardSnapshot);
+      vi.mocked(board.readTicket).mockImplementation(async (id: string) => {
+        if (id === 'T-0001') {
+          return { ok: true, card: card('T-0001', 'plan', 'No report yet', 'scout'), text: '---\nform: scout\n---\n\n# T-0001\n\nThe scout has not reported yet.\n', revision: '0123456789abcdef' };
+        }
+        if (id === 'T-0002') {
+          throw new Error('EBUSY: the ticket file is locked');
+        }
+        return { ok: false as const, error: 'T-0003 is not on the board' };
+      });
+      const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+
+      expect(await port.needs()).toEqual([]);
+    });
+
+    it('appends the report cards after the needsOf, improvements and status needs', async () => {
+      const { board, fleet } = fakes();
+      vi.mocked(board.refresh).mockResolvedValue({
+        columns: [
+          {
+            phase: { id: 'plan-review' },
+            tickets: [card('T-0004', 'plan-review', 'Explore storage', 'scout'), card('T-0005', 'plan-review', 'Build it')],
+            unknown: false,
+          },
+        ],
+        checkpoints: ['plan-review'],
+      } as unknown as BoardSnapshot);
+      vi.mocked(board.listPersonas).mockResolvedValue([{ id: 'pia', title: 'Pia' }] as unknown as Awaited<ReturnType<typeof board.listPersonas>>);
+      vi.mocked(board.personaImprovements).mockResolvedValue({
+        ok: true,
+        persona: fakePersona('pia', 'Pia'),
+        proposals: [],
+        openCount: 3,
+        frictionCount: 5,
+      });
+      vi.mocked(board.statusOf).mockImplementation(async (id: string) =>
+        id === 'T-0005' ? parseStatusLog("- '2026-11-02T09:12:00Z' needs-decision: Which colour?") : [],
+      );
+      vi.mocked(board.readTicket).mockResolvedValue({
+        ok: true,
+        card: card('T-0004', 'plan-review', 'Explore storage', 'scout'),
+        text: ticketFile(renderScoutReportSection(report)),
+        revision: '0123456789abcdef',
+      });
+      const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+
+      const items = await port.needs();
+      expect(items.map((i) => [i.kind, i.ticketId])).toEqual([
+        ['checkpoint', 'T-0004'],
+        ['checkpoint', 'T-0005'],
+        ['improvements', ''],
+        ['needs-decision', 'T-0005'],
+        ['report', 'T-0004'],
+      ]);
     });
   });
 });

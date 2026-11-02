@@ -2,9 +2,10 @@
  * The one place a RunRequest is built (M85): Drey's board service (an
  * owner-started run) and the runner's orchestrator (a dispatched run)
  * both come through here, so the request they hand the supervisor —
- * worker ladder, model pin, prompt ref, move target, claim identity —
- * cannot drift. Pure: file reads (the prompt text, the ticket text)
- * stay with the caller.
+ * worker ladder, model pin, prompt ref, move target, claim identity,
+ * and since E8 the ticket's form (a scout ticket composes an
+ * exploration, not a build) — cannot drift. Pure: file reads (the
+ * prompt text, the ticket text) stay with the caller.
  */
 import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
@@ -16,7 +17,7 @@ import {
   type TicketCard,
 } from '../contracts/tickets';
 import { acceptanceCommands, ticketSections } from '../core/ticket-files';
-import { composeInstruction, parseWorkerValue, resolveAssignment, type Truncation } from './assignment';
+import { composeInstruction, composeScoutInstruction, parseWorkerValue, resolveAssignment, type Truncation } from './assignment';
 import { personaMemorySection } from './context-pack';
 import { DEFAULT_FLEET_CAPS, type FleetCaps, type HandoverMode, type InteractiveMode, type PermissionMode, type RunRequest, type WorkerProviderId } from './protocol';
 import { worktreePathFor } from './worktree-home';
@@ -130,20 +131,29 @@ export type ComposeRunResult =
   | { readonly ok: false; readonly error: string };
 
 export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
-  if (input.repo === null) {
+  // A scout ticket (form: scout, E8, concept §5.6) runs an exploration,
+  // not a build: no worktree is prepared — the named repo's checkout
+  // (else the tickets vault itself) is the run's read ground, the gate
+  // is 'none' and nothing moves. A NAMED repo still needs a local path
+  // (a ticket pointing at an unreadable checkout is a refusal, never a
+  // guess); only a ticket naming no repo at all falls back to the vault.
+  const scout = (input.card.meta.form ?? 'ship') === 'scout';
+  const repo = input.repo;
+  if (repo === null && !scout) {
     return {
       ok: false,
       error: `${input.card.id} names no repository — set repo: to a _meta/repos.md entry`,
     };
   }
-  if (input.repo.path === null) {
+  if (repo !== null && repo.path === null) {
     return {
       ok: false,
-      error: `"${input.repo.name}" has no local path: in _meta/repos.md — the worker needs a checkout`,
+      error: `"${repo.name}" has no local path: in _meta/repos.md — the worker needs a checkout`,
     };
   }
   // req-72: every extra repo needs a checkout too — the fleet prepares
-  // one worktree per repo before the run starts.
+  // one worktree per repo before a ship run starts. A scout run reads
+  // them in place instead: named read grounds, never a prepared tree.
   const extraRepos: {
     name: string;
     repoPath: string;
@@ -151,26 +161,33 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     baseRef: string | null;
     links?: readonly string[];
   }[] = [];
+  const extraReadGrounds: { name: string; path: string }[] = [];
   for (const extra of input.extraRepos ?? []) {
-    if (extra.name === input.repo.name) {
+    if (repo !== null && extra.name === repo.name) {
       continue; // the primary twice would prepare one worktree twice
     }
     if (extra.path === null) {
       return {
         ok: false,
-        error: `"${extra.name}" has no local path: in _meta/repos.md — the ticket names it beside ${input.repo.name}`,
+        error: `"${extra.name}" has no local path: in _meta/repos.md — the ticket names it beside ${repo?.name ?? 'no primary repo'}`,
       };
     }
-    extraRepos.push({
-      name: extra.name,
-      repoPath: extra.path,
-      worktreePath: worktreePathFor(input.vaultPath, extra, input.card.id),
-      baseRef: extra.branch,
-      ...(extra.link !== undefined && extra.link.length > 0 ? { links: [...extra.link] } : {}),
-    });
+    if (scout) {
+      extraReadGrounds.push({ name: extra.name, path: extra.path });
+    } else {
+      extraRepos.push({
+        name: extra.name,
+        repoPath: extra.path,
+        worktreePath: worktreePathFor(input.vaultPath, extra, input.card.id),
+        baseRef: extra.branch,
+        ...(extra.link !== undefined && extra.link.length > 0 ? { links: [...extra.link] } : {}),
+      });
+    }
   }
-  const acceptance = acceptanceCommands(input.ticketText);
-  if (acceptance.length === 0 && input.structuralGateAllowed !== true && input.interactive === undefined) {
+  // A scout run has no machine gate (concept §5.6) — no acceptance
+  // commands are demanded, carried or run.
+  const acceptance = scout ? [] : acceptanceCommands(input.ticketText);
+  if (acceptance.length === 0 && !scout && input.structuralGateAllowed !== true && input.interactive === undefined) {
     return {
       ok: false,
       error: `${input.card.id} has no acceptance criteria — the machine gate would have nothing to run`,
@@ -182,7 +199,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     columnWorker: input.workingPhase?.worker ?? null,
     columnModel: input.workingPhase?.model ?? null,
     handover,
-    repoWorker: input.repo.worker,
+    repoWorker: repo?.worker ?? null,
     configuredDefault: input.defaultWorker,
   });
   // E3: a loaded persona beats the legacy ring for provider and model —
@@ -208,45 +225,70 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
   const personaPrompt = persona !== null && persona.prompt !== null && persona.prompt.trim() !== '' ? persona.prompt : null;
   const promptText = personaPrompt ?? input.promptText;
   const branch = input.card.meta.branch ?? branchForTicket(input.card.id);
-  // The worktree's home (ADR-0080): computed here, carried on the
-  // request — the runner never derives paths, and the brief names the
-  // absolute location so the worker never has to find it.
-  const worktreePath = worktreePathFor(input.vaultPath, input.repo, input.card.id);
   const sections = ticketSections(input.ticketText);
-  const instruction = composeInstruction({
-    ticketId: input.card.id,
-    title: input.card.meta.title ?? input.card.id,
-    repo: input.repo.name,
-    branch,
-    worktreePath,
-    phase: input.card.phase,
-    description: sections.description,
-    plan: sections.plan,
-    handover: sections.handover,
-    prompt: promptText,
-    acceptance,
-    ticketFile: path.join(input.vaultPath, input.card.path),
-    ...(input.repo.link !== undefined && input.repo.link.length > 0 ? { links: input.repo.link } : {}),
-    ...(extraRepos.length > 0
-      ? { extraRepos: extraRepos.map((r) => ({ name: r.name, worktreePath: r.worktreePath, base: r.baseRef })) }
-      : {}),
-    repoInstructions: input.repoInstructions,
-    diffStat: input.diffStat,
-    gateFailure: input.gateFailure,
-    caps: input.caps ?? DEFAULT_FLEET_CAPS,
-    ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
-    ...(persona !== null ? { memorySection: personaMemorySection(persona.memory) } : {}),
-  });
+  const ticketFile = path.join(input.vaultPath, input.card.path);
+  // The scout run's directory is its read ground — the named repo's
+  // checkout, else the tickets vault — computed here and carried on the
+  // request like the worktree home (ADR-0080): the runner never derives
+  // paths, and the brief names the absolute location so the worker never
+  // has to find it. No worktree is ever prepared there.
+  const readGround = repo?.path ?? input.vaultPath;
+  const worktreePath = scout ? readGround : worktreePathFor(input.vaultPath, repo!, input.card.id);
+  const instruction = scout
+    ? composeScoutInstruction({
+        ticketId: input.card.id,
+        title: input.card.meta.title ?? input.card.id,
+        readGround,
+        repoName: repo?.name ?? null,
+        ticketFile,
+        phase: input.card.phase,
+        description: sections.description,
+        plan: sections.plan,
+        prompt: promptText,
+        repoInstructions: input.repoInstructions,
+        ...(extraReadGrounds.length > 0 ? { extraRepos: extraReadGrounds } : {}),
+        ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
+        ...(persona !== null ? { memorySection: personaMemorySection(persona.memory), personaId: persona.id } : {}),
+      })
+    : composeInstruction({
+        ticketId: input.card.id,
+        title: input.card.meta.title ?? input.card.id,
+        repo: repo!.name,
+        branch,
+        worktreePath,
+        phase: input.card.phase,
+        description: sections.description,
+        plan: sections.plan,
+        handover: sections.handover,
+        prompt: promptText,
+        acceptance,
+        ticketFile,
+        ...(repo!.link !== undefined && repo!.link.length > 0 ? { links: repo!.link } : {}),
+        ...(extraRepos.length > 0
+          ? { extraRepos: extraRepos.map((r) => ({ name: r.name, worktreePath: r.worktreePath, base: r.baseRef })) }
+          : {}),
+        repoInstructions: input.repoInstructions,
+        diffStat: input.diffStat,
+        gateFailure: input.gateFailure,
+        caps: input.caps ?? DEFAULT_FLEET_CAPS,
+        ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
+        ...(persona !== null ? { memorySection: personaMemorySection(persona.memory) } : {}),
+      });
+  // A scout run never gates and never moves (concept §5.6) — the same
+  // move-target rule as an interactive dialog: the ticket stays where it
+  // sits until the owner promotes it from the report card.
+  const moves = !scout && input.interactive === undefined;
   const request: RunRequest = {
     ticketId: input.card.id,
+    ...(scout ? { form: 'scout' as const } : {}),
     ticketsVaultPath: input.vaultPath,
     ticketRelPath: input.card.path,
     phase: input.card.phase,
-    repoPath: input.repo.path,
+    repoPath: readGround,
     worktreePath,
     branch,
-    baseRef: input.repo.branch,
-    ...(input.repo.link !== undefined && input.repo.link.length > 0 ? { links: input.repo.link } : {}),
+    baseRef: scout ? null : repo!.branch,
+    ...(repo !== null && !scout && repo.link !== undefined && repo.link.length > 0 ? { links: repo.link } : {}),
     ...(extraRepos.length > 0 ? { extraRepos } : {}),
     provider,
     model,
@@ -255,14 +297,12 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     continuationInstruction: instruction.continuation,
     briefDigest: createHash('sha256').update(instruction.stable).digest('hex'),
     acceptance,
-    gate: acceptance.length > 0 ? 'commands' : 'structural',
+    gate: scout ? 'none' : acceptance.length > 0 ? 'commands' : 'structural',
     git: input.gitPath.trim() === '' ? 'git' : input.gitPath.trim(),
-    // An interactive dialog never moves: the move target stays null even
-    // if a caller passed one — the owner moves the ticket (req-65).
-    nextPhase: input.interactive !== undefined ? null : input.nextPhaseId,
-    nextPhaseDir: input.interactive !== undefined || input.nextPhaseId === null ? null : input.nextPhaseDir,
+    nextPhase: moves ? input.nextPhaseId : null,
+    nextPhaseDir: !moves || input.nextPhaseId === null ? null : input.nextPhaseDir,
     pushRemote: input.pushRemote,
-    claimIdentity: input.nextPhaseClaims && input.nextPhaseId !== null && input.interactive === undefined ? agentIdentity() : null,
+    claimIdentity: moves && input.nextPhaseClaims && input.nextPhaseId !== null ? agentIdentity() : null,
     ...(limitsOf(input.workingPhase) !== null ? { limits: limitsOf(input.workingPhase)! } : {}),
     ...(input.workerChoice !== null ? { recordWorker: input.workerChoice } : {}),
     ...(input.dispatchedBy !== undefined ? { column: input.dispatchedBy } : {}),

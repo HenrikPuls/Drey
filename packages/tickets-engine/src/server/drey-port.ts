@@ -41,7 +41,8 @@ import type { ChatDecisionResult, ChatServicePort, ChatSession, ChatSessionMeta,
 import { IMPROVEMENTS_THRESHOLD } from '../core/improvements';
 import { openStatusItems } from '../core/status-log';
 import type { StatusLine } from '../core/status-log';
-import { needsOf } from './needs';
+import { parseScoutReportSection } from '../core/scout';
+import { needsOf, reportNeedOf } from './needs';
 
 /** How many status-log needs (E7) one needs() pass appends at most. */
 const STATUS_NEEDS_CAP = 20;
@@ -167,6 +168,9 @@ export class DreyTicketsPort implements TicketsRemotePort {
     // E7: the tickets' status logs — every open decision or blocker is a
     // needs-you line (capped; a broken read appends nothing).
     items.push(...(await this.statusNeeds(board)));
+    // E8: the scout tickets' report cards — a `form: scout` ticket whose
+    // file carries a `## Report` waits for the owner's promotion decision.
+    items.push(...(await this.reportNeeds(board)));
     return items;
   }
 
@@ -198,6 +202,35 @@ export class DreyTicketsPort implements TicketsRemotePort {
             since: item.since,
           });
         }
+      }
+    }
+    return items;
+  }
+
+  /**
+   * The E8 report needs (concept §5.6): one board sweep, every
+   * `form: scout` ticket's `## Report` section read from its own file and
+   * parsed tolerant. A scout ticket without a section contributes
+   * nothing — its run has not written one yet; a broken read neither —
+   * never a failed needs() for one file. The form filter keeps promoted
+   * tickets (form: ship, the chapter kept as history) off the list.
+   */
+  private async reportNeeds(board: BoardSnapshot): Promise<readonly NeedItem[]> {
+    const items: NeedItem[] = [];
+    for (const column of board.columns) {
+      for (const card of column.tickets) {
+        if ((card.meta.form ?? 'ship') !== 'scout') {
+          continue;
+        }
+        const reply = await this.boardService.readTicket(card.id).catch(() => null);
+        if (reply === null || !reply.ok) {
+          continue;
+        }
+        const report = parseScoutReportSection(reply.text);
+        if (report === null) {
+          continue;
+        }
+        items.push(reportNeedOf(card, column.phase.id, report));
       }
     }
     return items;

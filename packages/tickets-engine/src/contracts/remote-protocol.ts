@@ -25,6 +25,7 @@ import type { ShapedQuestion } from './question-shape';
 import type { BoardSnapshot, CreateResult, MutationResult, TicketCard } from './tickets';
 import type { ImprovementProposal, ImprovementState } from '../core/improvements';
 import type { Persona } from '../core/persona';
+import type { ScoutReport } from './scout';
 
 /** What the "Needs you" list holds, in the order it shows them. */
 export type NeedKind =
@@ -37,7 +38,9 @@ export type NeedKind =
   /** E7: an open decision key in the ticket's status log. */
   | 'needs-decision'
   /** E7: an open blocker in the ticket's status log. */
-  | 'blocked';
+  | 'blocked'
+  /** E8 (concept §5.6): a scout ticket's report waits for the owner. */
+  | 'report';
 
 /** One thing that waits on the owner. */
 export interface NeedItem {
@@ -56,6 +59,8 @@ export interface NeedItem {
   readonly questions?: readonly WaitQuestion[];
   /** A `QUESTION:` turn's parsed fixed shape (req-75 W2); absent when the text does not follow it. */
   readonly shaped?: ShapedQuestion;
+  /** E8 (concept §5.6): the parsed scout report; present exactly on a 'report' need. */
+  readonly report?: ScoutReport;
 }
 
 export type RunReply = { readonly ok: boolean; readonly error?: string; readonly runId?: string };

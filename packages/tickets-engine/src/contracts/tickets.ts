@@ -85,6 +85,15 @@ export type TicketPriority = 'urgent' | 'high' | 'normal' | 'low';
  */
 export type TicketTrack = 'auto' | 'shape';
 
+/**
+ * The ticket's form (concept §5.6): `ship` (default) is the known way —
+ * plan, worktree, gate, move. `scout` is exploration only: a run reads
+ * repo/history/data and writes `## Report` plus a decision list into the
+ * ticket — no worktree, no gate, no move; the report card waits in
+ * "Needs you" and the owner promotes the ticket to ship from there.
+ */
+export type TicketForm = 'ship' | 'scout';
+
 export const TICKET_PRIORITIES: readonly TicketPriority[] = [
   'urgent',
   'high',
@@ -160,6 +169,13 @@ export interface TicketMeta {
   readonly persona: string | null;
   /** The ticket's track, ADR-0087 decision 2 — null = not triaged yet. */
   readonly track: TicketTrack | null;
+  /**
+   * The ticket's form (concept §5.6): `scout` marks an exploration ticket
+   * (scout run, `## Report`, promotable to ship). Absent = `ship` — the
+   * reader only sets the field when the file names a valid value, so an
+   * untouched ticket stays the default everywhere.
+   */
+  readonly form?: TicketForm;
   readonly priority: TicketPriority;
   readonly rank: number;
   readonly branch: string | null;

@@ -56,4 +56,10 @@ describe('validateChatCommand', () => {
     expect(validateChatCommand(null)).toBeNull();
     expect(validateChatCommand('transition')).toBeNull();
   });
+
+  it('validates promote with a schema ticket id', () => {
+    expect(validateChatCommand({ kind: 'promote', id: 'T-0086' })).toEqual({ kind: 'promote', id: 'T-0086' });
+    expect(validateChatCommand({ kind: 'promote', id: 'T-1' })).toBeNull();
+    expect(validateChatCommand({ kind: 'promote' })).toBeNull();
+  });
 });

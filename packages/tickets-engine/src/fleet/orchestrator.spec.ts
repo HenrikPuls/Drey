@@ -1007,6 +1007,163 @@ describe('Orchestrator', () => {
     });
   });
 
+  describe('scout dispatch (E8, concept §5.6)', () => {
+    /** A scout ticket: `form: scout`, no acceptance criteria. */
+    async function writeScoutTicket(id: string, phase: string, over: { repo?: string } = {}): Promise<void> {
+      const rel = path.join(vaultDir, 'tickets', phase, `${id}.md`);
+      await fsp.mkdir(path.dirname(rel), { recursive: true });
+      const text = ticketText(id, phase)
+        .replace('repo: drey', `repo: ${over.repo ?? 'drey'}\nform: scout`)
+        .replace('- [ ] `npm run verify:unit` — exits 0\n', '');
+      await fsp.writeFile(rel, text, 'utf8');
+    }
+
+    const SCOUT_PLAN_LINE =
+      '  - { id: plan, title: Plan, handover: agent scout-default, worker: opencode, model: zai/glm-5.3 }';
+    const PLAN_LINE =
+      '  - { id: plan, title: Plan, handover: agent plan-default, worker: opencode, model: zai/glm-5.3 }';
+
+    /** The plan column runs scout tickets on the shipped scout template. */
+    async function writeScoutMeta(scoutPrompt = 'You are the scout of the pipeline.'): Promise<void> {
+      await writeMeta();
+      await fsp.writeFile(
+        path.join(vaultDir, 'tickets', '_meta', 'pipeline.md'),
+        PIPELINE.replace(PLAN_LINE, SCOUT_PLAN_LINE),
+        'utf8',
+      );
+      await fsp.writeFile(path.join(vaultDir, 'tickets', '_meta', 'prompts', 'scout-default.md'), scoutPrompt, 'utf8');
+    }
+
+    it('a scout ticket dispatches an exploration: the column template in the brief, no gate, no move', async () => {
+      await writeScoutMeta();
+      await writeScoutTicket('T-0004', 'plan');
+      const logs: string[] = [];
+      const events = { ledger: vi.fn(), status: vi.fn() };
+      const { orch, fleet } = orchestrator({ log: (message) => logs.push(message), events, cardPathOf: async () => null });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      expect(fleet.records).toHaveLength(1);
+      const started = fleet.records[0]!;
+      expect(started.request.form).toBe('scout');
+      expect(started.request.gate).toBe('none');
+      expect(started.request.acceptance).toEqual([]);
+      expect(started.request.nextPhase).toBeNull();
+      expect(started.request.nextPhaseDir).toBeNull();
+      expect(started.request.worktreePath).toBe('W:/drey'); // the read ground
+      // The column's scout template rides the brief, the built-in
+      // exploration frame around it.
+      expect(started.request.instruction).toContain('You are the scout of the pipeline.');
+      expect(started.request.instruction).toContain('Scout discipline');
+      expect(started.request.instruction).toContain('Read ground: W:/drey (the "drey" checkout)');
+      expect(started.request.instruction).not.toContain('Completion discipline');
+      expect(logs.some((line) => line.startsWith('dispatched T-0004') && line.includes('scout'))).toBe(true);
+      // The E7 writes fire like for any dispatch.
+      expect(events.ledger).toHaveBeenCalledWith({ kind: 'dispatched', ticket: 'T-0004', persona: null, model: 'zai/glm-5.3' });
+    });
+
+    it('a missing scout template skips the dispatch like any missing phase prompt', async () => {
+      await writeScoutMeta();
+      await fsp.rm(path.join(vaultDir, 'tickets', '_meta', 'prompts', 'scout-default.md'));
+      await writeScoutTicket('T-0004', 'plan');
+      const logs: string[] = [];
+      const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      expect(fleet.records).toHaveLength(0);
+      expect(logs.some((line) => line.includes('dispatch skips T-0004') && line.includes('scout-default'))).toBe(true);
+    });
+
+    it('a scout ticket naming no repo explores the tickets vault itself', async () => {
+      await writeMeta();
+      await writeScoutTicket('T-0005', 'plan', { repo: '' });
+      const { orch, fleet } = orchestrator();
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      expect(fleet.records).toHaveLength(1);
+      const started = fleet.records[0]!;
+      expect(started.request.worktreePath).toBe(vaultDir);
+      expect(started.request.instruction).toContain(`Read ground: ${vaultDir} (the tickets vault)`);
+    });
+
+    it('a scout ticket with an unknown named repo is skipped, never guessed', async () => {
+      await writeMeta();
+      await writeScoutTicket('T-0006', 'plan', { repo: 'ghost' });
+      const logs: string[] = [];
+      const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      expect(fleet.records).toHaveLength(0);
+      expect(logs.some((line) => line.includes('dispatch skips T-0006') && line.includes('ghost'))).toBe(true);
+    });
+
+    it('a persona scout signs the report and rides the dispatch like everywhere', async () => {
+      await writeMeta();
+      await fsp.writeFile(
+        path.join(vaultDir, 'tickets', '_meta', 'pipeline.md'),
+        PIPELINE.replace(PLAN_LINE, `${PLAN_LINE.slice(0, -2)}, persona: pia }`),
+        'utf8',
+      );
+      const dir = path.join(vaultDir, 'tickets', '_meta', 'personas', 'pia');
+      await fsp.mkdir(dir, { recursive: true });
+      await fsp.writeFile(
+        path.join(dir, 'persona.md'),
+        [
+          '---',
+          'title: pia',
+          'role: explorer',
+          'worker: claude-code',
+          'models:',
+          '  default: sonnet',
+          '  pool: [sonnet]',
+          '  router: off',
+          "color: '#a78bfa'",
+          'skills: []',
+          '---',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+      await fsp.writeFile(path.join(dir, 'prompt.md'), 'You are Pia — explore thoroughly.', 'utf8');
+      await writeScoutTicket('T-0007', 'plan');
+      const { orch, fleet } = orchestrator();
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      const started = fleet.records[0]!;
+      expect(started.request.provider).toBe('claude-code'); // the persona's harness
+      expect(started.request.form).toBe('scout');
+      expect(started.request.instruction).toContain('You are Pia — explore thoroughly.');
+      expect(started.request.instruction).toContain('by pia.');
+      expect(fleet.start.mock.calls[0]![1]).toEqual({ persona: 'pia' });
+    });
+
+    it('a settled scout run writes the done line that names the report card', async () => {
+      await writeMeta();
+      await writeScoutTicket('T-0004', 'plan');
+      const events = { ledger: vi.fn(), status: vi.fn() };
+      const { orch, fleet } = orchestrator({ events, cardPathOf: async () => 'tickets/plan/T-0004.md' });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+      await orch.setMaster('halted'); // no re-dispatch on the settle pass
+
+      const record = fleet.records[0]!;
+      const settled = { ...record.info, state: 'done' as const, form: 'scout' as const };
+      fleet.records[0] = { ...record, info: settled };
+      await orch.onRunSettled(settled);
+
+      expect(events.status).toHaveBeenLastCalledWith(
+        'tickets/plan/T-0004.md',
+        expect.any(String),
+        'done',
+        'scout report ready — the owner promotes from Needs you',
+      );
+    });
+  });
+
   describe('persona dispatch (E3, ADR-0088)', () => {
     const PLAN_LINE =
       '  - { id: plan, title: Plan, handover: agent plan-default, worker: opencode, model: zai/glm-5.3 }';

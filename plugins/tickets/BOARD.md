@@ -121,6 +121,30 @@ Discipline that keeps the repo clean:
 - The board picks the moves up on its next refresh; the chain
   daemon's master switch is irrelevant for manual columns.
 
+## The scout track (E8, concept §5.6)
+
+A `form: scout` ticket is an exploration ticket: its run writes the
+`## Report` chapter + decision list into the ticket file and nothing
+moves — while it is a scout, the commit → done recipe above never
+applies to it. The work starts only at the **promotion**:
+`form: scout` → `form: ship`, from the report card in "Needs you"
+or the chat's `promote` command ("promote T-0004") — a proposal
+card the owner confirms, like every chat mutation (concept §6: the
+chat never writes on its own).
+
+The board half is a header rewrite, not a move — one frontmatter
+patch, one Log line `- '<UTC>' <actor> — form ship`, exactly one
+commit `tickets: <id> form ship`. It refuses while a run is live on
+the ticket, and it is a no-op success when the file already carries
+the value (a missing `form:` key reads as `ship`). Setting it by
+hand is the same edit — frontmatter plus the Log line; the machine
+shape above is what the board service writes.
+
+From its next normal run the promoted ticket is an ordinary ship
+ticket: plan, worktree, gate — and this guide's recipe applies from
+then on. The `## Report` section stays in the file as history; the
+promotion commit never deletes it.
+
 ## What is — and is not — automated
 
 - Whether a column runs itself is the **pipeline's call**

@@ -18,10 +18,12 @@ import {
   patchLineKind,
   phaseTitleOf,
   proofOf,
+  scoutReportOf,
   splitTicketSections,
   type AcceptArmState,
   type GateStep,
   type ProofReport,
+  type ScoutReport,
   type TicketDiffFile,
 } from './ticket.model';
 
@@ -42,13 +44,15 @@ export interface ProofShot {
  * points to. Header with the back arrow, id, title and phase chip; the
  * gate bar over the pipeline's phases; the ticket body as safe Markdown
  * blocks; the `## Verification` section as the proof card (criteria
- * checklist, the swipeable screenshot gallery, findings); below it the
- * diff as git rendered — collapsible files, the +/- balance, a
- * fullscreen patch viewer with stepped font size. The actions row sits
- * at the bottom in the thumb's reach: the armed two-step Accept, the
- * send-back panel with its mandatory note, and the Edit toggle that
- * hands the raw file to `mc-ticket-edit` (the exception path, §5.5).
- * Read-only paired devices watch: their actions hide entirely.
+ * checklist, the swipeable screenshot gallery, findings); the `## Report`
+ * section as the scout report card (E8: the stamp, the summary, the
+ * decision options — a scout ticket's endpoint); below it the diff as
+ * git rendered — collapsible files, the +/- balance, a fullscreen patch
+ * viewer with stepped font size. The actions row sits at the bottom in
+ * the thumb's reach: the armed two-step Accept, the send-back panel with
+ * its mandatory note, and the Edit toggle that hands the raw file to
+ * `mc-ticket-edit` (the exception path, §5.5). Read-only paired devices
+ * watch: their actions hide entirely.
  */
 @Component({
   selector: 'mc-ticket',
@@ -102,6 +106,12 @@ export class TicketView {
   protected readonly proof = computed<ProofReport | null>(() => {
     const verification = this.sections().verification;
     return verification === null ? null : proofOf(verification);
+  });
+
+  /** The scout report card's data (E8); null = the ticket carries no Report section. */
+  protected readonly report = computed<ScoutReport | null>(() => {
+    const section = this.sections().report;
+    return section === null ? null : scoutReportOf(section);
   });
 
   /** The criteria's screenshot attachments resolvable to a URL, for the gallery. */

@@ -5,8 +5,13 @@
  *
  * Order: questions, permissions, red gates, failed runs, then the
  * tickets sitting in a checkpoint column; oldest first within a kind.
+ * The E8 report card is not derived here — it needs the ticket files'
+ * `## Report` sections, so the port sweeps those (drey-port.ts) and packs
+ * each item through `reportNeedOf` below.
  */
 import type { NeedItem, NeedKind } from '../contracts/remote-protocol';
+import type { ScoutReport } from '../contracts/scout';
+import { scoutNeedText } from '../contracts/scout';
 import type { BoardSnapshot, TicketCard } from '../contracts/tickets';
 import type { RunInfo, RunState } from '../fleet/protocol';
 
@@ -91,6 +96,28 @@ export function needsOf(board: BoardSnapshot, runs: readonly RunInfo[]): readonl
     }
     return (a.since ?? '￿').localeCompare(b.since ?? '￿');
   });
+}
+
+/**
+ * E8 (concept §5.6): the report card's pure shape — one scout ticket's
+ * parsed `## Report` as a "Needs you" line, the report itself riding
+ * along for the card's detail view. The caller sweeps the board for
+ * `form: scout` tickets, reads each file and parses the section; this
+ * builder only packs the item. A promoted ticket never reaches here —
+ * the caller filters on the form, since the chapter stays in the file
+ * as history after the flip to ship.
+ */
+export function reportNeedOf(card: TicketCard, phase: string, report: ScoutReport): NeedItem {
+  return {
+    kind: 'report',
+    ticketId: card.id,
+    title: titleOf(card),
+    phase,
+    runId: null,
+    text: scoutNeedText(report),
+    since: report.writtenAt === '' ? null : report.writtenAt,
+    report,
+  };
 }
 
 function titleOf(card: TicketCard): string {

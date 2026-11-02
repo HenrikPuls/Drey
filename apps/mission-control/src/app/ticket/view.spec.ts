@@ -1,10 +1,11 @@
 /**
  * The ticket screen's specs (E5c): the pure helpers — the gate-bar step
- * builder, the section splitter, the proof reader, the armed two-step
- * reducer, the fullscreen font-size steps, the patch line kinds — then
- * the component class against a fake `TicketVm`, no DOM (the unit-test
- * builder runs these under jsdom, but nothing here renders a template).
- * The raw editor's own specs live in `edit.spec.ts`.
+ * builder, the section splitter, the proof reader, the scout report
+ * reader (E8), the armed two-step reducer, the fullscreen font-size
+ * steps, the patch line kinds — then the component class against a fake
+ * `TicketVm`, no DOM (the unit-test builder runs these under jsdom, but
+ * nothing here renders a template). The raw editor's own specs live in
+ * `edit.spec.ts`.
  */
 import { TestBed } from '@angular/core/testing';
 import {
@@ -17,6 +18,7 @@ import {
   patchLineKind,
   phaseTitleOf,
   proofOf,
+  scoutReportOf,
   splitTicketSections,
   type GatePhase,
   type TicketActionReply,
@@ -188,6 +190,36 @@ It works.
 
 const FULL_DOC: TicketDoc = { ...DOC, text: FULL_TEXT };
 
+const SCOUT_TEXT = `---
+id: T-0043
+title: 'Which storage backs the index?'
+form: scout
+---
+
+## Description
+
+Read the repo, the history and the data; recommend a storage.
+
+## Report
+
+Written on 2026-11-02T14:32:00Z by pia.
+
+### Summary
+
+The repo carries two index implementations; only SQLite is wired into the build.
+
+### Decisions
+
+- [ ] D1: Which storage should back the index? — Recommendation: SQLite, the repo already ships the helper.
+- [x] D2: Migrate existing data? — Recommendation: yes, one migration script.
+
+## Log
+
+- '2026-11-02T14:00:00Z' pia — scouted the index question
+`;
+
+const SCOUT_DOC: TicketDoc = { ...DOC, id: 'T-0043', title: 'Which storage backs the index?', text: SCOUT_TEXT };
+
 // The template-facing surface is protected; these specs drive the class
 // directly, so expose it through one typed lens.
 interface TicketSurface {
@@ -199,6 +231,7 @@ interface TicketSurface {
   steps(): ReturnType<typeof gateStepsOf>;
   blocks(): readonly unknown[];
   proof(): ReturnType<typeof proofOf> | null;
+  report(): ReturnType<typeof scoutReportOf> | null;
   shots(): readonly { name: string; url: string }[];
   diff(): unknown;
   result(): { kind: 'error' | 'note'; text: string } | null;
@@ -325,6 +358,7 @@ describe('splitTicketSections', () => {
   it('reports absent sections as null and an all-generic file whole in the body', () => {
     const sections = splitTicketSections('## Description\n\nOnly this.\n');
     expect(sections.verification).toBeNull();
+    expect(sections.report).toBeNull();
     expect(sections.changes).toBeNull();
     expect(sections.handover).toBeNull();
     expect(sections.log).toBeNull();
@@ -335,6 +369,17 @@ describe('splitTicketSections', () => {
     const sections = splitTicketSections('## Verification notes\n\nStays.');
     expect(sections.verification).toBeNull();
     expect(sections.body).toContain('## Verification notes');
+  });
+
+  it('pulls the Report out of the generic render (E8)', () => {
+    const sections = splitTicketSections(SCOUT_TEXT);
+    expect(sections.report).toContain('Written on 2026-11-02T14:32:00Z by pia.');
+    expect(sections.report).toContain('### Decisions');
+    expect(sections.report).not.toContain('## Report');
+    expect(sections.body).toContain('## Description');
+    expect(sections.body).not.toContain('Written on');
+    expect(sections.body).not.toContain('D1: Which storage');
+    expect(sections.log).toContain('scouted the index question');
   });
 });
 
@@ -370,6 +415,48 @@ describe('proofOf', () => {
     );
     expect(proof.criteria).toHaveLength(1);
     expect(proof.findings).toEqual(['one', 'two']);
+  });
+});
+
+// --- the scout report reader (E8) ------------------------------------------------------
+
+describe('scoutReportOf', () => {
+  it('reads the stamp, the summary and the decisions with their recommendations', () => {
+    const report = scoutReportOf(splitTicketSections(SCOUT_TEXT).report!);
+    expect(report).toEqual({
+      writtenAt: '2026-11-02T14:32:00Z',
+      by: 'pia',
+      summary: 'The repo carries two index implementations; only SQLite is wired into the build.',
+      decisions: [
+        {
+          key: 'D1',
+          question: 'Which storage should back the index?',
+          recommendation: 'SQLite, the repo already ships the helper.',
+          resolved: false,
+        },
+        { key: 'D2', question: 'Migrate existing data?', recommendation: 'yes, one migration script.', resolved: true },
+      ],
+    });
+  });
+
+  it('degrades honestly on half-readable sections', () => {
+    expect(scoutReportOf('')).toEqual({ writtenAt: '', by: '', summary: '', decisions: [] });
+    const loose = scoutReportOf(
+      'Written by nobody.\n\n### Decisions\n\n- [x] not a decision line\n- [ ] D1: Only a question?\n- [x] D9: Both — Recommendation: ship it',
+    );
+    expect(loose.writtenAt).toBe('');
+    expect(loose.by).toBe('');
+    expect(loose.summary).toBe('');
+    expect(loose.decisions).toEqual([
+      { key: 'D1', question: 'Only a question?', recommendation: null, resolved: false },
+      { key: 'D9', question: 'Both', recommendation: 'ship it', resolved: true },
+    ]);
+  });
+
+  it('stops the summary at the Decisions head and keeps a recommendation-less decision', () => {
+    const report = scoutReportOf('### Summary\n\nFirst line.\nMore.\n\n### Decisions\n\n- [ ] D1: Bare?');
+    expect(report.summary).toBe('First line.\nMore.');
+    expect(report.decisions).toEqual([{ key: 'D1', question: 'Bare?', recommendation: null, resolved: false }]);
   });
 });
 
@@ -448,6 +535,7 @@ describe('TicketView', () => {
     expect(vm.title()).toBe('');
     expect(vm.steps()).toEqual([]);
     expect(vm.proof()).toBeNull();
+    expect(vm.report()).toBeNull();
     expect(vm.savedFlash()).toBeNull();
   });
 
@@ -480,6 +568,31 @@ describe('TicketView', () => {
   it('resolves no shots when the vm cannot serve attachments', () => {
     const vm = surface(setup(makeFake({ docValue: FULL_DOC })));
     expect(vm.shots()).toEqual([]);
+  });
+
+  it('renders no scout report on a ticket without the chapter', () => {
+    const vm = surface(setup(makeFake({ docValue: FULL_DOC })));
+    expect(vm.report()).toBeNull();
+  });
+
+  it('derives the scout report card from the Report chapter (E8)', () => {
+    const vm = surface(setup(makeFake({ docValue: SCOUT_DOC })));
+    const report = vm.report();
+    expect(report?.writtenAt).toBe('2026-11-02T14:32:00Z');
+    expect(report?.by).toBe('pia');
+    expect(report?.summary).toBe('The repo carries two index implementations; only SQLite is wired into the build.');
+    expect(report?.decisions).toEqual([
+      {
+        key: 'D1',
+        question: 'Which storage should back the index?',
+        recommendation: 'SQLite, the repo already ships the helper.',
+        resolved: false,
+      },
+      { key: 'D2', question: 'Migrate existing data?', recommendation: 'yes, one migration script.', resolved: true },
+    ]);
+    // The chapter left the generic body; the Log never reaches it either way.
+    const headings = vm.blocks().filter((block) => (block as { kind: string }).kind === 'heading');
+    expect(headings.map((block) => (block as { text: string }).text)).toEqual(['Description']);
   });
 
   it('resolves the screenshots the vm serves and opens the viewer', () => {

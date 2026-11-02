@@ -1,20 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import type { RunInfo } from '../fleet/protocol';
 import type { BoardColumn, BoardSnapshot, PipelinePhase, TicketCard } from '../contracts/tickets';
-import { needsOf } from './needs';
+import type { ScoutReport } from '../contracts/scout';
+import { needsOf, reportNeedOf } from './needs';
 
 /**
  * req-66: the remote's "Needs you" list — waiting runs, red gates and
  * failed runs whose ticket has not moved on, and checkpoint tickets
- * without a live run, in that order.
+ * without a live run, in that order. E8 adds the pure report-card packer
+ * the port builds a scout ticket's parsed `## Report` into.
  */
 
-const card = (id: string, phase: string, entered: string | null = null): TicketCard =>
+const card = (id: string, phase: string, entered: string | null = null, form?: 'scout'): TicketCard =>
   ({
     id,
     path: `tickets/${phase}/${id}.md`,
     phase,
-    meta: { title: `Ticket ${id}`, entered: entered === null ? {} : { [phase]: entered } },
+    meta: { title: `Ticket ${id}`, entered: entered === null ? {} : { [phase]: entered }, form },
   }) as unknown as TicketCard;
 
 const column = (id: string, tickets: readonly TicketCard[]): BoardColumn => ({
@@ -109,5 +111,41 @@ describe('needsOf', () => {
       ['checkpoint', 'T-0004', '2026-10-30T08:00:00Z'],
       ['checkpoint', 'T-0003', '2026-10-30T12:00:00Z'],
     ]);
+  });
+
+  it('still lists a scout ticket in a checkpoint column — the port adds the report card on top', () => {
+    const snap = board([column('plan-review', [card('T-0004', 'plan-review', '2026-10-30T08:00:00Z', 'scout')])], ['plan-review']);
+    expect(needsOf(snap, []).map((i) => [i.kind, i.ticketId])).toEqual([['checkpoint', 'T-0004']]);
+  });
+});
+
+describe('reportNeedOf', () => {
+  const report: ScoutReport = {
+    writtenAt: '2026-11-02T14:32:00Z',
+    by: 'pia',
+    summary: 'The repo carries two index implementations.',
+    decisions: [
+      { key: 'D1', question: 'Which storage should back the index?', recommendation: 'SQLite', resolved: false },
+      { key: 'D2', question: 'Migrate existing data?', recommendation: 'yes, one migration script', resolved: true },
+    ],
+  };
+
+  it('packs a parsed report as a report need, the report riding along', () => {
+    expect(reportNeedOf(card('T-0004', 'plan'), 'plan', report)).toEqual({
+      kind: 'report',
+      ticketId: 'T-0004',
+      title: 'Ticket T-0004',
+      phase: 'plan',
+      runId: null,
+      text: '1 of 2 decisions open — Which storage should back the index?',
+      since: '2026-11-02T14:32:00Z',
+      report,
+    });
+  });
+
+  it('maps a report whose written stamp did not parse to a null since', () => {
+    const item = reportNeedOf(card('T-0004', 'plan'), 'plan', { ...report, writtenAt: '' });
+    expect(item.since).toBeNull();
+    expect(item.text).toBe('1 of 2 decisions open — Which storage should back the index?');
   });
 });

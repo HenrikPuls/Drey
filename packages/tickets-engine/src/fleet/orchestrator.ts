@@ -597,10 +597,11 @@ export class Orchestrator {
 
   /**
    * The E7 status line a settled run appends to its ticket's log: `done`
-   * hands over on the column, a blocked end is a `blocked` line with the
-   * worker's reason, a `failed` end carries the short gate line or the
-   * last error's first line. Only when both seams are wired — the events
-   * sink and the card-path resolver; the path's absence is silent.
+   * hands over on the column (a scout run stays put — its `done` line
+   * names the report card, E8), a blocked end is a `blocked` line with
+   * the worker's reason, a `failed` end carries the short gate line or
+   * the last error's first line. Only when both seams are wired — the
+   * events sink and the card-path resolver; the path's absence is silent.
    */
   private async noteSettledStatus(info: RunInfo, column: string): Promise<void> {
     const events = this.deps.events;
@@ -620,6 +621,10 @@ export class Orchestrator {
       const blocked = info.blocked ?? null;
       if (blocked !== null) {
         events.status(cardPath, at, 'blocked', blocked);
+      } else if (info.form === 'scout') {
+        // E8: a scout run hands nothing over — it stays put; the report
+        // card in "Needs you" is the endpoint the status line names.
+        events.status(cardPath, at, 'done', 'scout report ready — the owner promotes from Needs you');
       } else {
         events.status(cardPath, at, 'done', `handed over on ${column}`);
       }
@@ -1394,7 +1399,11 @@ export class Orchestrator {
     const workingPhase = snap.pipeline.find((p) => p.id === workingPhaseId) ?? null;
     const repo =
       card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card.meta.repo) ?? null);
-    if (workingPhase === null || repo === null) {
+    const scout = (card.meta.form ?? 'ship') === 'scout';
+    // A scout ticket may name no repo at all — the run explores with the
+    // tickets vault as its read ground (E8, concept §5.6). A NAMED repo
+    // must still resolve: a typo'd name is a skip, never a guess.
+    if (workingPhase === null || (repo === null && !scout)) {
       this.noteSkip(
         card.id,
         `dispatch skips ${card.id}: ${repo === null ? `repo "${card.meta.repo ?? ''}" is not in repos.md` : 'unknown working phase'}`,
@@ -1405,7 +1414,7 @@ export class Orchestrator {
     // an unknown name skips the dispatch (the board badges it already).
     const extraRepos: RepoRef[] = [];
     for (const name of card.meta.repos) {
-      if (name === repo.name) {
+      if (repo !== null && name === repo.name) {
         continue;
       }
       const extra = snap.repos.find((r) => r.name === name) ?? null;
@@ -1433,7 +1442,12 @@ export class Orchestrator {
     const personaPrompt = persona !== null ? ((entry?.prompt ?? '').trim() !== '' ? entry!.prompt : null) : null;
     if (personaPrompt !== null) {
       promptText = personaPrompt;
-    } else {
+    } else if (promptRef !== null) {
+      // E8: a scout ticket takes its template from its column like any
+      // ticket — a scout column names `agent scout-default`; the scout
+      // composer frames it with the exploration's read-only discipline,
+      // exactly like the ship composer's disciplines frame a step
+      // template.
       if (persona !== null && entry?.resolution.persona !== null) {
         this.noteSkip(card.id, `dispatch: ${card.id}'s persona "${persona.id}" has no prompt.md — the phase prompt stands`);
       }
@@ -1464,19 +1478,20 @@ export class Orchestrator {
     }
     // The context pack (T-0048): the repo's agent instructions and the
     // worktree's diff stat are read here, outside the pure composer; a
-    // retry also carries the ticket's most recent gate failure. A repo
-    // without a checkout lets the request builder refuse below.
-    const repoInstructions = repo.path === null ? null : await readRepoInstructions(repo.path, repo.instructions);
-    const gateFailure = this.lastGateFailure(card.id, workingPhaseId);
+    // retry also carries the ticket's most recent gate failure. A scout
+    // run (E8) has no worktree — no diff stat — and no gate — no gate
+    // failure; the repo's instructions still ground the exploration.
+    const repoInstructions = repo !== null && repo.path !== null ? await readRepoInstructions(repo.path, repo.instructions) : null;
+    const gateFailure = scout ? null : this.lastGateFailure(card.id, workingPhaseId);
     const diffStat =
-      repo.path === null
+      scout || repo === null || repo.path === null
         ? null
         : await worktreeDiffStat(
             new TicketsGit(() => config.git),
             worktreePathFor(config.ticketsVaultPath, repo, card.id),
             repo.branch,
           );
-    if (gateFailure !== null && diffStat === null) {
+    if (!scout && gateFailure !== null && diffStat === null) {
       // A first run has nothing to show (silent); a retry expects to
       // continue existing work, so a missing stat is worth a line.
       this.deps.log(`instruction: ${card.id} diff stat unavailable (no worktree yet)`);
@@ -1548,7 +1563,8 @@ export class Orchestrator {
       this.deps.log(
         `dispatched ${card.id} (${workingPhaseId} pool, ${composed.request.provider}` +
           `${composed.request.model !== null ? `/${composed.request.model}` : ''}` +
-          `${composed.persona !== null ? `, persona ${composed.persona}` : ''}) as ${outcome.run.id}`,
+          `${composed.persona !== null ? `, persona ${composed.persona}` : ''}` +
+          `${composed.request.form === 'scout' ? ', scout' : ''}) as ${outcome.run.id}`,
       );
       // E7: the ledger's dispatched line and the ticket's `working` line.
       this.deps.events?.ledger({

@@ -60,7 +60,14 @@ export type ChatCommand =
       readonly phase: string;
     }
   | { readonly kind: 'transition'; readonly id: string; readonly from: string; readonly to: string }
-  | { readonly kind: 'setPriority'; readonly id: string; readonly priority: TicketPriority };
+  | { readonly kind: 'setPriority'; readonly id: string; readonly priority: TicketPriority }
+  /**
+   * E8 (concept §5.6): promote a scout ticket to ship — `form: scout`
+   * flips to `form: ship`, the ticket enters the normal pipeline (plan,
+   * worktree, gate) on its next run. The report chapter stays in the
+   * file as history.
+   */
+  | { readonly kind: 'promote'; readonly id: string };
 
 /** One chat session = one file under `tickets/_meta/chat/`. */
 export interface ChatSession {

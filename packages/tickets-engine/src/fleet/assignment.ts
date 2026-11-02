@@ -415,3 +415,154 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
   ]);
   return { text: parts.join('\n\n'), truncations, continuation, stable };
 }
+
+// ---------------------------------------------------------------------------
+// The scout run's brief (E8, concept §5.6): exploration only — no worktree,
+// no branch, no gate, no move. Where the ship brief names a writable
+// checkout and a machine gate, the scout brief names a READ ground, the
+// ticket file as the one writable place, and the exact `## Report` shape
+// the engine reads back for the "Needs you" report card.
+
+/**
+ * The scout discipline: the deliverable is the `## Report` chapter in the
+ * ticket file plus the decision list the owner decides over; the run's end
+ * declares the exploration done, nothing gates and nothing moves.
+ */
+const SCOUT_DISCIPLINE =
+  'Scout discipline: you are on an exploration, not a build — change nothing in any repo: no edits, no commits, no branch, no installs. ' +
+  'Read freely: the read ground, its git history, the tickets vault. Your ONE writable place is your own ticket file — the report ' +
+  'chapter goes there, nowhere else. End your turn when the exploration is done: the runner runs no gate and moves nothing; the ' +
+  'report card waits for the owner in "Needs you", and they promote the ticket to a build ticket from there. When you cannot ' +
+  `complete the exploration — a decision only the owner can make, a place you may not read — end your final message with \`${BLOCKED_MARKER} ` +
+  '<reason in one line>`: nothing moves, the ticket waits for the owner. Never report what you did not verify.';
+
+/**
+ * The report chapter's exact shape — the strict writer's grammar of
+ * `core/scout.ts`, spelled out for the worker. The reader forgives, so
+ * the writer must not improvise: headings verbatim, decisions numbered
+ * D1, D2, …, every line left `- [ ]` for the owner to check.
+ */
+function scoutReportShape(by: string): string {
+  return (
+    'The report chapter — replace the ticket file\'s whole `## Report` section with exactly this shape (headings verbatim):\n\n' +
+    `## Report\n\nWritten on <UTC stamp, YYYY-MM-DDTHH:mm:ssZ> by ${by}.\n\n### Summary\n\n` +
+    '<what you found: the facts, the options, the trade-offs — what the owner must know to decide>\n\n### Decisions\n\n' +
+    '- [ ] D1: <the question the owner must decide> — Recommendation: <your recommendation>\n' +
+    '- [ ] D2: <the next decision, in the order the owner should decide them> — Recommendation: <…>\n\n' +
+    'Every decision line stays `- [ ]` unchecked — the owner checks them when deciding; a line without a recommendation ' +
+    'omits the ` — Recommendation: …` tail. No decisions open is a legitimate report: omit the whole `### Decisions` ' +
+    'heading when nothing stays open.'
+  );
+}
+
+export interface ScoutInstructionInput {
+  readonly ticketId: string;
+  readonly title: string;
+  /**
+   * The read ground's absolute path — the named repo's checkout, or the
+   * tickets vault itself when the ticket names no repo. Read-only; the
+   * brief forbids writing there.
+   */
+  readonly readGround: string;
+  /** The read ground's repo name (`drey`); null = the tickets vault. */
+  readonly repoName: string | null;
+  /** Absolute path of the ticket file — the one writable place. */
+  readonly ticketFile: string;
+  readonly phase: string;
+  readonly description: string;
+  readonly plan: string | null;
+  /** A resolved persona's prompt; null = the built-in scout brief only. */
+  readonly prompt: string | null;
+  /** The read ground's agent instructions, verbatim like the ship brief. */
+  readonly repoInstructions: string | null;
+  /** The ticket's further repos: read-only grounds, never write there. */
+  readonly extraRepos?: readonly { readonly name: string; readonly path: string }[];
+  /** The resolved persona's `## Memory` slice (E3); absent = no section. */
+  readonly memorySection?: string | null;
+  /** The persona id the Written-on line signs with; null/'' = `scout`. */
+  readonly personaId?: string | null;
+  /**
+   * An interactive dialog on a scout ticket: the dialog discipline
+   * replaces the scout discipline, everything else stands.
+   */
+  readonly interactive?: InteractiveMode;
+}
+
+/**
+ * Composes the scout run's brief in the context-pack order — stable
+ * first (repo instructions, the persona prompt, `## Plan`), then the
+ * variable parts (who/where, the read ground, the ticket file, the
+ * description, the persona's memory, the report's shape, the
+ * discipline, how to ask). No gate commands, no diff stat, no gate
+ * failure: a scout run has no branch and no gate to fail.
+ */
+export function composeScoutInstruction(input: ScoutInstructionInput): ComposedInstruction {
+  const parts: string[] = [];
+  const truncations: Truncation[] = [];
+
+  const repoInstructions = input.repoInstructions?.trim();
+  if (repoInstructions != null && repoInstructions !== '') {
+    parts.push(repoInstructions);
+  }
+  const prompt = input.prompt?.trim();
+  if (prompt != null && prompt !== '') {
+    parts.push(prompt);
+  }
+  const plan = input.plan?.trim();
+  if (plan != null && plan !== '') {
+    parts.push(`## Plan\n\n${plan}`);
+  }
+
+  parts.push(
+    `You are scouting ticket ${input.ticketId} — ${input.title}. Exploration only: you change nothing in any repo — ` +
+      'no edits, no commits, no branch.',
+  );
+  parts.push(
+    `Read ground: ${input.readGround}` +
+      (input.repoName !== null ? ` (the "${input.repoName}" checkout)` : ' (the tickets vault)') +
+      ' — read-only; never write there. Its git history and every data file in it are fair game.',
+  );
+  if (input.extraRepos !== undefined && input.extraRepos.length > 0) {
+    const lines = input.extraRepos.map((r) => `- ${r.name}: ${r.path} (read-only)`);
+    parts.push(`Further repositories this ticket names — read-only grounds, never write there:\n${lines.join('\n')}`);
+  }
+  parts.push(`The ticket sits in the "${input.phase}" phase of the owner's board — it stays there; this run moves nothing.`);
+  parts.push(
+    `The ticket file: ${input.ticketFile} — the ONE file you may edit. The report chapter goes into it; ` +
+      'nothing else in the vault or any repo is yours to write.',
+  );
+  const description = input.description.trim();
+  if (description !== '') {
+    parts.push(`What and why:\n${description}`);
+  }
+  const changing: string[] = [];
+  const memorySection = input.memorySection != null && input.memorySection.trim() !== '' ? input.memorySection : null;
+  if (memorySection !== null) {
+    changing.push(memorySection);
+  }
+  const by = input.personaId !== undefined && input.personaId !== null && input.personaId.trim() !== '' ? input.personaId.trim() : 'scout';
+  const discipline = input.interactive !== undefined ? INTERACTIVE_DISCIPLINE : SCOUT_DISCIPLINE;
+  parts.push(...changing);
+  parts.push(scoutReportShape(by));
+  parts.push(discipline);
+  parts.push(ASKING);
+
+  const continuation = [
+    `You are resuming the exploration of ticket ${input.ticketId} — ${input.title}, the scout run, in this same session. ` +
+      `Your full brief for this exploration is earlier in this conversation and still holds — do not re-read what it already ` +
+      `told you. Read ground: ${input.readGround} (read-only). Your one writable place stays the ticket file: ${input.ticketFile}.`,
+    ...changing,
+    'The report\'s shape stands: `## Report` with the Written-on line, `### Summary`, `### Decisions` of ' +
+      '`- [ ] Dn: <question> — Recommendation: <yours>` — unchecked, in the order the owner should decide them.',
+    discipline,
+  ].join('\n\n');
+  const stable = JSON.stringify([
+    repoInstructions ?? '',
+    prompt ?? '',
+    plan ?? '',
+    description,
+    'scout',
+    input.readGround,
+  ]);
+  return { text: parts.join('\n\n'), truncations, continuation, stable };
+}

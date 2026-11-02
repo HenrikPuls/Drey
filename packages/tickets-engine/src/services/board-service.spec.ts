@@ -14,7 +14,11 @@ import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools } from 
  * real temp vault — a successful move writes the phase line, a terminal
  * Accept writes archived + merged, an archive writes archived, a refused
  * mutation writes nothing, and `statusOf` reads the ticket's status log
- * tolerant. No git (every commit degrades to the unversioned warning).
+ * tolerant. E8 adds `setForm` (concept §5.6): the scout → ship
+ * promotion's board half — the `form:` header flip, the `form <value>`
+ * Log line, the no-op when the file already carries the form, the
+ * live-run refusal. No git (every commit degrades to the unversioned
+ * warning).
  */
 
 const PIPELINE = `---
@@ -128,6 +132,14 @@ async function writeTicket(id: string, phase: string): Promise<void> {
   await fsp.writeFile(path.join(vaultDir, 'tickets', phase, `${id}.md`), text, 'utf8');
 }
 
+/** The same ticket with `form: scout` added to the frontmatter. */
+async function writeScoutTicket(id: string, phase: string): Promise<void> {
+  await writeTicket(id, phase);
+  const file = path.join(vaultDir, 'tickets', phase, `${id}.md`);
+  const text = await fsp.readFile(file, 'utf8');
+  await fsp.writeFile(file, text.replace('priority: normal\n', 'priority: normal\nform: scout\n'), 'utf8');
+}
+
 describe('EngineBoardService E7 ledger writes', () => {
   it('a successful move writes the phase line with from and to', async () => {
     await writeTicket('T-0001', 'inbox');
@@ -220,5 +232,83 @@ describe('EngineBoardService statusOf', () => {
     const service = serviceOf();
     await expect(service.statusOf('T-0001')).resolves.toEqual([]);
     await expect(service.statusOf('T-0099')).resolves.toEqual([]);
+  });
+});
+
+describe('EngineBoardService setForm (E8)', () => {
+  it('promoting a scout ticket writes form: ship with the form Log line — the commit degrades to the unversioned warning here', async () => {
+    await writeScoutTicket('T-0001', 'inbox');
+    const service = serviceOf();
+
+    const outcome = await service.setForm({ id: 'T-0001', form: 'ship', actor: 'owner@test' });
+
+    expect(outcome).toMatchObject({
+      ok: true,
+      warning: 'the tickets vault is not a git repository — the change is not versioned',
+    });
+    const text = await fsp.readFile(path.join(vaultDir, 'tickets', 'inbox', 'T-0001.md'), 'utf8');
+    expect(text).toContain('form: ship');
+    expect(text).not.toContain('form: scout');
+    expect(text).toMatch(/- '\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z' owner@test — form ship/);
+    // The rest of the file is untouched — description and the creation line stand.
+    expect(text).toContain('## Description');
+    expect(text).toContain("- '2026-11-02T10:00:00Z' owner@test — created in inbox");
+  });
+
+  it('demoting a ship ticket back to scout writes form: scout with the form Log line', async () => {
+    await writeTicket('T-0001', 'inbox');
+    const service = serviceOf();
+
+    const outcome = await service.setForm({ id: 'T-0001', form: 'scout' });
+
+    expect(outcome.ok).toBe(true);
+    const text = await fsp.readFile(path.join(vaultDir, 'tickets', 'inbox', 'T-0001.md'), 'utf8');
+    expect(text).toContain('form: scout');
+    expect(text).toMatch(/- '\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z' owner@test — form scout/);
+  });
+
+  it('setting the form the file already carries is a no-op success — no write, no Log line', async () => {
+    await writeTicket('T-0001', 'inbox'); // no form key — the ship default
+    const file = path.join(vaultDir, 'tickets', 'inbox', 'T-0001.md');
+    const before = await fsp.readFile(file, 'utf8');
+    const service = serviceOf();
+
+    const outcome = await service.setForm({ id: 'T-0001', form: 'ship' });
+
+    expect(outcome).toEqual({ ok: true });
+    expect(await fsp.readFile(file, 'utf8')).toBe(before);
+  });
+
+  it('a live run refuses the form change and leaves the file untouched', async () => {
+    await writeScoutTicket('T-0001', 'inbox');
+    const file = path.join(vaultDir, 'tickets', 'inbox', 'T-0001.md');
+    const text = await fsp.readFile(file, 'utf8');
+    await fsp.writeFile(
+      file,
+      text.replace(
+        'branch:',
+        "run:\n  pid: 42\n  started-at: '2026-11-02T10:00:00Z'\n  stream: run-1\nbranch:",
+      ),
+      'utf8',
+    );
+    const service = serviceOf();
+
+    const outcome = await service.setForm({ id: 'T-0001', form: 'ship' });
+
+    expect(outcome).toEqual({
+      ok: false,
+      error: 'A run is live on this ticket. Change the form when the run has ended.',
+    });
+    const after = await fsp.readFile(file, 'utf8');
+    expect(after).toContain('form: scout');
+    expect(after).not.toMatch(/— form ship/);
+  });
+
+  it('refuses a ticket that is not on the board', async () => {
+    const service = serviceOf();
+
+    const outcome = await service.setForm({ id: 'T-0099', form: 'ship' });
+
+    expect(outcome).toEqual({ ok: false, error: 'T-0099 is not on the board' });
   });
 });

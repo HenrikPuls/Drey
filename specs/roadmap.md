@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-02):** version 0.8.1, milestones 1–108 built — 1–83
+**Status (2026-11-02):** version 0.8.1, milestones 1–109 built — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -63,16 +63,18 @@ process, ADR-0088 E2b) and 102 (personas, ADR-0088 E3) and 103
 ADR-0088 E5a) and 105 (the Mission Control app, ADR-0088 E5b) and 106
 (the ticket screen + proof card + Drey hosting, ADR-0088 E5c) and 107
 (the self-improvement loop, ADR-0088 E6) and 108 (the status log +
-fleet ledger surface, ADR-0088 E7) are built
+fleet ledger surface, ADR-0088 E7) and 109 (the Scout track,
+ADR-0088 E8 — concept §5.6) are built
 and suite-green but await the owner's
-rounds** — with E7 the whole E0–E7 migration stands built, caveat:
+rounds** — with E8 the whole E0–E8 arc stands built, caveat:
 none of it is owner-verified yet; the next step is the owner's
 verification round before anything further. The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 108 = the status log + fleet ledger
+highest used (latest: milestone 109 = the Scout track (E8, concept §5.6);
+milestone 108 = the status log + fleet ledger
 surface (E7); milestone 107 = the self-improvement loop (E6);
 milestone 106 = the ticket screen + proof card + Drey hosting (E5c); milestone 105 = the Mission Control app (E5b); milestone 104 = the Mission Control chat engine (E5a); milestone 103 = verify/proof (E4); milestone 102 = personas (E3); milestone 101 = the standalone tickets engine (E2b); milestone 100 = gateway + fleet client in the engine (E2b-1); milestone 99 = the host-agnostic service layer (E2a); milestone 98 = one transition machine + the two data forms; milestone 97 = the tickets-engine package cut; milestone 96 = fleet stability, the rest (limits, prompt versions, edit counts, Tell/Nudge, soft pause); milestone 95 = fleet stability part 4 (the run view); milestone 94 = fleet stability part 2; milestone 93 = fleet stability part 1b; milestone 92 = fleet stability part 1; milestone 91 = ticket T-0084; latest requirement id: req-94
 (req-94 = CI green again: the e2e suite rewritten for req-84/W4a and typechecked via tsconfig.e2e.json, the Ready-card fold CSS bug fixed; req-93 = JIT planning: the plan columns leave the default pipeline, the build step derives file-level detail itself; req-92 = BLOCKED keeps an incomplete step put; req-86 = the step card follows the pipeline, column editor, Settings tidied; req-81–85 see the changelog; req-80 = fleet token economy; req-75–78 added 2026-10-31: the Work panel, STRIDE, TARA, the red-gate
@@ -123,10 +125,16 @@ fleet ledger — milestone 108: concept §3.3, the per-ticket
 `<id>.status.log` with its verb grammar and keyed open decisions, the
 `_meta/ledger.jsonl` fleet events behind optional writer seams, the
 two new Needs-you kinds; built and suite-green but awaiting the
+owner's round) and E8 (the Scout track, concept §5.6 — milestone
+109: the scout form `form: scout` for exploration-only tickets, the
+`## Report` chapter + decision list a scout run writes into its own
+ticket file — no worktree, no gate, no move —, the report card in
+Needs you and the chat's `promote` command with confirmation
+flipping the ticket to ship; built and suite-green but awaiting the
 owner's round). **E7 is done-with-caveat** — all of E0–E7 stands
 built, none of it owner-verified; next is the owner's verification
-round, then the concept's remaining items (the scout track §5.6, the
-chain delta §5.7 — not yet built; §4.9's watcher depth now rides on
+round, then the concept's remaining items (the chain delta §5.7 —
+not yet built; §4.9's watcher depth now rides on
 the status log in place). Drey keeps its
 native Work panel/thread/editor throughout. Supersedes req-75 W6–W8 (E3/E5 replace the Shape
 dialog, the rules-file orchestrator and the phone-client rebuild); W9 stays.

@@ -144,7 +144,7 @@ export function proofOf(sectionText: string): ProofReport {
 // --- the section splitter --------------------------------------------------------
 
 /** The section titles the screen treats specially (lowercased, exact). */
-const SPECIAL_TITLES = ['verification', 'changes', 'handover', 'log'] as const;
+const SPECIAL_TITLES = ['verification', 'report', 'changes', 'handover', 'log'] as const;
 
 function isSpecialTitle(title: string): title is (typeof SPECIAL_TITLES)[number] {
   return (SPECIAL_TITLES as readonly string[]).includes(title);
@@ -152,14 +152,17 @@ function isSpecialTitle(title: string): title is (typeof SPECIAL_TITLES)[number]
 
 /**
  * The ticket body, split for the screen (concept §5.3/§5.5): the generic
- * sections render as Markdown; Verification feeds the proof card;
- * Changes/Handover/Log get their special treatment and never render raw.
+ * sections render as Markdown; Verification feeds the proof card; Report
+ * feeds the scout report card (E8); Changes/Handover/Log get their
+ * special treatment and never render raw.
  */
 export interface TicketSections {
   /** The frontmatter-stripped text minus the special sections, for the generic render. */
   readonly body: string;
   /** The `## Verification` section's text (heading excluded); null when absent or empty. */
   readonly verification: string | null;
+  /** The `## Report` section's text (heading excluded); null when absent or empty. */
+  readonly report: string | null;
   /** The `## Changes` section's text (heading excluded); null when absent or empty. */
   readonly changes: string | null;
   /** The `## Handover` section's text (heading excluded); null when absent or empty. */
@@ -174,14 +177,16 @@ const H2 = /^##[ \t]+(.*?)[ \t]*$/;
 /**
  * Splits the file text at its `##` headings. The leading frontmatter
  * fence never reaches the render; headings below H2 (`### …`) stay inside
- * their section (the Verification subheads ride along); section titles
- * match case-insensitively; everything before the first H2 is body.
+ * their section (the Verification and Report subheads ride along);
+ * section titles match case-insensitively; everything before the first
+ * H2 is body.
  */
 export function splitTicketSections(text: string): TicketSections {
   const source = text.replace(/\r\n?/g, '\n').replace(FRONTMATTER, '');
   const bodyLines: string[] = [];
   const buckets: Record<(typeof SPECIAL_TITLES)[number], string[]> = {
     verification: [],
+    report: [],
     changes: [],
     handover: [],
     log: [],
@@ -206,10 +211,84 @@ export function splitTicketSections(text: string): TicketSections {
   return {
     body: bodyLines.join('\n').replace(/\n{3,}/g, '\n\n').trim(),
     verification: sectionOf(buckets.verification),
+    report: sectionOf(buckets.report),
     changes: sectionOf(buckets.changes),
     handover: sectionOf(buckets.handover),
     log: sectionOf(buckets.log),
   };
+}
+
+// --- the scout report card (E8, concept §5.6) -------------------------------------
+
+/** One decision option as the report card renders it. */
+export interface ScoutDecision {
+  /** The decision's short key (`D1`, `D2`, …); '' when the line carried none. */
+  readonly key: string;
+  /** The question in the scout's words — what the owner decides. */
+  readonly question: string;
+  /** The scout's recommendation; null when the line carries none. */
+  readonly recommendation: string | null;
+  /** The owner's check mark; open decisions stay unchecked. */
+  readonly resolved: boolean;
+}
+
+/** The `## Report` section as the report card renders it. */
+export interface ScoutReport {
+  /** The 'Written on … by …' stamp's parts ('' when the section carries none). */
+  readonly writtenAt: string;
+  readonly by: string;
+  /** The `### Summary` block; '' when absent. */
+  readonly summary: string;
+  readonly decisions: readonly ScoutDecision[];
+}
+
+const REPORT_STAMP = /^Written on (\S+) by (.+?)\.?$/m;
+const REPORT_DECISION = /^- \[([ xX])\] (\S+?): (.*?)(?: — Recommendation: (.*))?$/;
+const SUMMARY_HEAD = /^###\s+summary\s*$/im;
+const DECISIONS_HEAD = /^###\s+decisions\s*$/im;
+
+/**
+ * The Report section's text (heading excluded) as the report card reads
+ * it, tolerantly — the same asymmetric-tolerance rule as `proofOf`: the
+ * stamp's parts degrade to '', a decision line the strict shape misses is
+ * skipped, half-readable input degrades, never throws. The `### Summary`
+ * block ends at the next H3; decisions collect under `### Decisions`.
+ */
+export function scoutReportOf(sectionText: string): ScoutReport {
+  const stamp = REPORT_STAMP.exec(sectionText);
+  const decisions: ScoutDecision[] = [];
+  const decisionsAt = sectionText.search(DECISIONS_HEAD);
+  if (decisionsAt >= 0) {
+    for (const line of sectionText.slice(decisionsAt).split('\n')) {
+      const decision = REPORT_DECISION.exec(line.trim());
+      if (decision !== null) {
+        decisions.push({
+          key: decision[2]!,
+          question: decision[3]!.trim(),
+          recommendation: decision[4] !== undefined && decision[4].trim() !== '' ? decision[4].trim() : null,
+          resolved: decision[1]!.toLowerCase() === 'x',
+        });
+      }
+    }
+  }
+  return {
+    writtenAt: stamp?.[1] ?? '',
+    by: stamp?.[2]?.trim() ?? '',
+    summary: summaryBlockOf(sectionText),
+    decisions,
+  };
+}
+
+/** The `### Summary` block's text without the heading; '' when absent. */
+function summaryBlockOf(sectionText: string): string {
+  const head = SUMMARY_HEAD.exec(sectionText);
+  if (head === null) {
+    return '';
+  }
+  const rest = sectionText.slice(head.index + head[0].length);
+  const next = /^### /m.exec(rest);
+  const block = next === null ? rest : rest.slice(0, next.index);
+  return block.trim();
 }
 
 // --- the diff card ------------------------------------------------------------

@@ -188,8 +188,9 @@ const NO_MESSAGES: readonly ChatMessageView[] = [];
  * a dim `thought …` line expandable on tap, pending proposals as cards
  * between the messages with Confirm/Dismiss, decisions as dim history —
  * and the composer below: Enter sends, Shift+Enter newline, the send
- * button idles while the mission's turn runs. The attach button is a
- * placeholder wired to nothing until E5c.
+ * button idles while the mission's turn runs. A one-shot prefill (the
+ * report card's promote, E8) lands in the constructor-opened composer.
+ * The attach button is a placeholder wired to nothing until E5c.
  */
 @Component({
   selector: 'mc-chat',
@@ -199,6 +200,25 @@ const NO_MESSAGES: readonly ChatMessageView[] = [];
 })
 export class Chat {
   protected readonly state: McState = inject(MC_CHAT_STATE, { optional: true }) ?? new McState();
+
+  /**
+   * The report card's promote (E8) fills the one-shot draft prefill and
+   * switches to this tab — the tab switch mounts this component, and the
+   * constructor adopts what waits: the draft carries the command, and a
+   * fresh composer opens when no session is open (with one, the draft
+   * sits in that session's composer — the send routes there).
+   */
+  constructor() {
+    const prefill = this.state.chatPrefill();
+    if (prefill !== null) {
+      this.state.chatPrefill.set(null);
+      this.draft.set(prefill);
+      if (this.active() === null) {
+        this.composing.set(true);
+        this.closed.set(true);
+      }
+    }
+  }
 
   /** The session view suppresses the state's active session (back to the list). */
   private readonly closed = signal(false);

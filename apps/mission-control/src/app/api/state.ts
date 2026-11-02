@@ -10,7 +10,9 @@
  * frame applies its stream delta to the open session (the `done` delta
  * re-fetches the session, which canonicalises proposals and thought).
  * Every reconnect re-fetches everything — the catch-up the missed frames
- * owe us.
+ * owe us. The shell's visible tab and the chat's one-shot draft prefill
+ * (the report card's promote) live here too, so any surface can switch
+ * to the chat without the components knowing each other.
  */
 import { signal } from '@angular/core';
 import { ApiError, McClient, type McBootHints, type McEventHandlers } from './client';
@@ -39,6 +41,9 @@ import {
 
 export type PairingPhase = 'needs-code' | 'pairing' | 'ready';
 
+/** The shell's visible tab — owned here so any surface can switch to it (E8: the report card's promote drops into the chat). */
+export type McTab = 'work' | 'chat' | 'team';
+
 /** What every mutation hands back so the UI can surface a failure. */
 export type McReply = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
@@ -65,6 +70,14 @@ interface StreamTail {
 export class McState {
   readonly connected = signal(false);
   readonly pairing = signal<PairingPhase>('needs-code');
+  /** The shell's visible tab; the tabbar writes it, features switch it. */
+  readonly tab = signal<McTab>('work');
+  /**
+   * The one-shot chat draft prefill (E8): the report card's promote fills
+   * it and switches to the chat tab; the chat consumes it on construction.
+   * null = nothing waiting.
+   */
+  readonly chatPrefill = signal<string | null>(null);
   readonly work = signal<WorkView>({ groups: [] });
   readonly needs = signal<readonly NeedView[]>([]);
   readonly team = signal<TeamView>({ personas: [] });
@@ -274,6 +287,21 @@ export class McState {
   }
 
   // --- chat mutations -------------------------------------------------------
+
+  /**
+   * The report card's promote (E8): fills the chat draft — the owner
+   * reviews the command and sends it, the desk answers with the proposal
+   * card the confirmation needs — and switches to the chat tab, where the
+   * freshly constructed composer adopts the one-shot prefill.
+   */
+  prefillChat(text: string): void {
+    const trimmed = text.trim();
+    if (trimmed === '') {
+      return;
+    }
+    this.chatPrefill.set(trimmed);
+    this.tab.set('chat');
+  }
 
   /** Starts a session with the first owner message and opens it. */
   async newSession(text: string): Promise<McReply> {
