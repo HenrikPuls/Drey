@@ -60,9 +60,9 @@ export type ChatMutationResult =
 
 /**
  * The board surface the chat composes (ADR-0088, E5a): the snapshot for
- * the digest and the vault lookup, plus exactly the three mutation
- * methods a proposal card can carry — no second write path. The board
- * service fits this port unchanged.
+ * the digest and the vault lookup, plus exactly the mutation methods a
+ * proposal card can carry — no second write path. The board service fits
+ * this port unchanged.
  */
 export interface ChatBoardPort {
   snapshot(): Promise<BoardSnapshot>;
@@ -79,6 +79,8 @@ export interface ChatBoardPort {
   setForm(input: { readonly id: string; readonly form: TicketForm; readonly actor?: string }): Promise<ChatMutationResult>;
   /** E9 (concept §5.7): the chain-delta replacement. */
   setChain(input: { readonly id: string; readonly chain: readonly string[]; readonly actor?: string }): Promise<ChatMutationResult>;
+  /** T-0050: the whole `blocked-by:` list replacement (empty = cleared). */
+  setBlockedBy(input: { readonly id: string; readonly blockedBy: readonly string[]; readonly actor?: string }): Promise<ChatMutationResult>;
 }
 
 export interface ChatServiceDeps {
@@ -112,6 +114,10 @@ function summaryOf(command: ChatCommand): string {
       return command.chain.length === 0
         ? `Return ${command.id} to the standard flow`
         : `Set ${command.id} chain to ${command.chain.length} ${command.chain.length === 1 ? 'entry' : 'entries'}`;
+    case 'setBlockedBy':
+      return command.blockedBy.length === 0
+        ? `Clear ${command.id} blockers`
+        : `Block ${command.id} by ${command.blockedBy.join(', ')}`;
   }
 }
 
@@ -123,6 +129,11 @@ function summaryOf(command: ChatCommand): string {
  */
 function boardDigest(snap: BoardSnapshot): string {
   const lines: string[] = [];
+  // The configured priority vocabulary (weight order) — the model never
+  // invents a priority word, it picks one from here.
+  if (snap.priorities.order.length > 0) {
+    lines.push(`priorities (weight order): ${snap.priorities.order.join(' → ')}`);
+  }
   if (snap.columns.length > 0) {
     lines.push(`columns: ${snap.columns.map((c) => `${c.phase.id} (${c.tickets.length})`).join(' → ')}`);
   }
@@ -168,10 +179,11 @@ export class ChatService implements ChatServicePort {
 
   /** The chat sessions, newest first, each with its pending card count. */
   async sessions(): Promise<readonly ChatSessionMeta[]> {
-    const vault = await this.vault();
-    if (vault === null) {
+    const found = await this.boardAndVault();
+    if (found === null) {
       return [];
     }
+    const { vault, snap } = found;
     const files = (await this.deps.host.listMarkdownFiles(vault.id)).filter((f) => CHAT_FILE_PATTERN.test(f));
     const metas: ChatSessionMeta[] = [];
     for (const file of files) {
@@ -179,7 +191,7 @@ export class ChatService implements ChatServicePort {
       if (text === null) {
         continue;
       }
-      const session = parseSessionFile(text, file);
+      const session = parseSessionFile(text, file, snap.priorities);
       if (session === null) {
         continue;
       }
@@ -197,12 +209,13 @@ export class ChatService implements ChatServicePort {
 
   /** One session parsed from disk; null when the file is gone or holds no session. */
   async open(file: string): Promise<ChatSession | null> {
-    const vault = await this.vault();
-    if (vault === null) {
+    const found = await this.boardAndVault();
+    if (found === null) {
       return null;
     }
+    const { vault, snap } = found;
     const text = await this.deps.host.read(vault.id, file).catch(() => null);
-    return text === null ? null : parseSessionFile(text, file);
+    return text === null ? null : parseSessionFile(text, file, snap.priorities);
   }
 
   async send(input: { readonly file: string; readonly text: string }): Promise<ChatTurnResult> {
@@ -273,8 +286,9 @@ export class ChatService implements ChatServicePort {
     // The reader forgives a hand-edited file: history degrades to empty
     // rather than refusing the owner their turn. The session is parsed
     // BEFORE the owner line lands — the just-sent message arrives as
-    // `text`, it must not double into the continuity history.
-    const session = parseSessionFile(current, file);
+    // `text`, it must not double into the continuity history. The board's
+    // priority vocabulary validates the proposal blocks with it.
+    const session = parseSessionFile(current, file, snap.priorities);
     const history = (session?.messages ?? []).slice(-HISTORY_LIMIT).map((m: ChatMessage) => ({ role: m.role, text: m.text }));
 
     current = appendOwner(current, this.now(), text.trim());
@@ -292,6 +306,7 @@ export class ChatService implements ChatServicePort {
         text,
         history,
         board: boardDigest(snap),
+        priorities: snap.priorities,
         emit: (event) => this.deps.onEvent(file, event),
       });
       say = reply.say;
@@ -354,7 +369,7 @@ export class ChatService implements ChatServicePort {
     } catch {
       return { ok: false, error: `${input.file} does not exist` };
     }
-    const session = parseSessionFile(text, input.file);
+    const session = parseSessionFile(text, input.file, snap.priorities);
     if (session === null) {
       return { ok: false, error: `${input.file} is not a chat session` };
     }
@@ -381,7 +396,7 @@ export class ChatService implements ChatServicePort {
     await this.commit(vault, [input.file], `tickets: chat ${input.file}`);
     this.deps.host.announceChanges(vault.id, [input.file]);
     // The file is the truth — hand the caller back exactly what it now holds.
-    const reread = parseSessionFile(decided, input.file);
+    const reread = parseSessionFile(decided, input.file, snap.priorities);
     return { ok: true, proposal: reread!.proposals.find((p) => p.id === input.id)! };
   }
 
@@ -437,6 +452,10 @@ export class ChatService implements ChatServicePort {
         const result = await this.deps.board.setChain({ id: command.id, chain: command.chain, actor });
         return result.ok ? { ok: true, outcome: 'ok' } : { ok: false, error: result.error };
       }
+      case 'setBlockedBy': {
+        const result = await this.deps.board.setBlockedBy({ id: command.id, blockedBy: command.blockedBy, actor });
+        return result.ok ? { ok: true, outcome: 'ok' } : { ok: false, error: result.error };
+      }
     }
   }
 
@@ -451,12 +470,6 @@ export class ChatService implements ChatServicePort {
     }
     const vault = (await this.deps.host.listVaults()).find((v) => v.id === vaultId) ?? null;
     return vault === null ? null : { snap, vault };
-  }
-
-  /** The vault alone — for reads that need no board data. */
-  private async vault(): Promise<EngineVault | null> {
-    const found = await this.boardAndVault();
-    return found === null ? null : found.vault;
   }
 
   /** The file's mtime as an ISO stamp — null when the stat fails. */

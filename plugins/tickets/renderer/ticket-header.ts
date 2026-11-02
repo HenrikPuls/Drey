@@ -18,8 +18,8 @@ import type {
 } from '../../../shared/plugin-api/renderer';
 import {
   branchForTicket,
+  DEFAULT_PRIORITY_CONFIG,
   stripPhasePrefix,
-  TICKET_PRIORITIES,
   type BoardSnapshot,
   type TicketCard,
   type TicketIssue,
@@ -230,9 +230,12 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
       chips.append(phaseChip);
 
       if (meta !== null) {
+        // The vault's vocabulary (pipeline.md's `priorities:`); an id
+        // outside the label map shows as itself.
+        const priorities = snapshot?.priorities ?? DEFAULT_PRIORITY_CONFIG;
         const priority = select(
           'Priority',
-          TICKET_PRIORITIES.map((p) => [p, PRIORITY_LABEL[p]] as const),
+          priorities.order.map((p) => [p, PRIORITY_LABEL[p] ?? p] as const),
           meta.priority,
           'priority',
         );

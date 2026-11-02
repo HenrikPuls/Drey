@@ -591,6 +591,41 @@ export interface TicketDoc {
    * frontmatter entries; empty = the standard flow applies silently.
    */
   readonly chain: readonly ChainEntryView[];
+  /**
+   * The ticket's priority id as the vault configures it — the id IS the
+   * chip's label (no fixed four); null when the card carries none.
+   */
+  readonly priority: string | null;
+  /** The vault's priority vocabulary in weight order (first = highest). */
+  readonly priorities: readonly string[];
+  /** The OPEN blockers, derived on the desk; `[]` = unblocked (or omitted). */
+  readonly blocked: readonly string[];
+  /** The `blocked-by:` ids as written (T-0050); `[]` when the frontmatter has none. */
+  readonly blockedBy: readonly string[];
+}
+
+// --- the priority chip and the blocker line ---------------------------------------
+
+/**
+ * The one compact line under the header: open blockers warn ('Blocked
+ * by …'), declared-but-open `blocked-by:` ids read neutral ('Depends on
+ * …'); null = nothing to show. The derived list wins — it is what the
+ * desk computed; the raw list is the fallback a desk that does not
+ * derive blockers yet still owes the screen.
+ */
+export interface TicketBlockerNote {
+  readonly kind: 'blocked' | 'depends';
+  readonly ids: readonly string[];
+}
+
+export function blockerNoteOf(blocked: readonly string[], blockedBy: readonly string[]): TicketBlockerNote | null {
+  if (blocked.length > 0) {
+    return { kind: 'blocked', ids: blocked };
+  }
+  if (blockedBy.length > 0) {
+    return { kind: 'depends', ids: blockedBy };
+  }
+  return null;
 }
 
 /**

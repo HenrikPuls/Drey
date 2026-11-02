@@ -260,7 +260,10 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
     return fail(405, 'only GET and POST are served');
   }
   if (req.path === '/api/tickets') {
-    return write('create', parseCreate(body), (cmd) => port.create(cmd, actor));
+    // The create's priority reads against the board's configured
+    // vocabulary (unknown ids fall back to its default, as always).
+    const priorities = (await port.board()).priorities;
+    return write('create', parseCreate(body, priorities), (cmd) => port.create(cmd, actor));
   }
   if (req.path === '/api/attachments') {
     return write('attachment', parseAttachment(body), (cmd) => port.saveAttachment(cmd, actor));
@@ -277,8 +280,12 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
         return write(`move ${id}`, parseTransition(withId), (cmd) => port.move(cmd, actor));
       case 'claim':
         return write(`claim ${id}`, parseClaim(withId), (cmd) => port.claim(cmd, actor));
-      case 'refine':
-        return write(`refine ${id}`, parseRefine(withId), (cmd) => port.refine(cmd, actor));
+      case 'refine': {
+        // The header's priority validates against the board's configured
+        // vocabulary, not a hard-coded list.
+        const priorities = (await port.board()).priorities;
+        return write(`refine ${id}`, parseRefine(withId, priorities), (cmd) => port.refine(cmd, actor));
+      }
       case 'save':
         return write(`save ${id}`, parseTicketSave(withId), (cmd) => port.ticketSave(cmd, actor));
       case 'accept':

@@ -15,8 +15,17 @@
         <span class="tid">{{ id() }}</span>
         <h1 class="title">{{ title() }}</h1>
       </div>
+      @if (priority(); as p) {
+        <span class="chip chip-priority" [class.chip-priority-jump]="priorityJump()">{{ p }}</span>
+      }
       <span class="chip chip-phase" [style.background-color]="phaseColor()">{{ phaseTitle() }}</span>
     </header>
+
+    @if (blockers(); as note) {
+      <p class="blockers" [class.blockers-open]="note.kind === 'blocked'">
+        {{ note.kind === 'blocked' ? 'Blocked by' : 'Depends on' }} {{ note.ids.join(', ') }}
+      </p>
+    }
 
     @if (steps().length > 0) {
       <button

@@ -10,11 +10,11 @@
 import { randomBytes } from 'node:crypto';
 import { promises as fsp, existsSync } from 'node:fs';
 import * as path from 'node:path';
-import { archivedTicketIds, nextTicketId, TICKETS_ARCHIVE_DIR, type BoardSnapshot, FolderStatus, PipelinePhase, ProjectRef, PromptEntry, PromptListing, RepoCandidate, RepoRef, ReposListing, TicketCard, TicketForm, TicketPriority, TicketTrack } from '../contracts/tickets';
+import { archivedTicketIds, nextTicketId, TICKETS_ARCHIVE_DIR, TICKET_ID_PATTERN, type BoardSnapshot, FolderStatus, PipelinePhase, ProjectRef, PromptEntry, PromptListing, RepoCandidate, RepoRef, ReposListing, TicketCard, TicketForm, TicketPriority, TicketTrack } from '../contracts/tickets';
 import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply } from '../contracts/changes';
 import { type RefineReply, TicketReply, AttachmentReply } from '../contracts/replies';
 import { assembleBoard, parseRepos, addPipelinePhase, patchPipelinePhase, removePipelinePhase, renamePipelinePhase, parsePipeline, reorderPipelinePhases, reposFileText, reposProse } from '../core/ticket-board';
-import { newTicketFileText, parseTicketFile, patchTicketFile, patchChain, patchForm, patchTrack, ticketPathParts } from '../core/ticket-files';
+import { newTicketFileText, parseTicketFile, patchTicketFile, patchBlockedBy, patchChain, patchForm, patchTrack, ticketPathParts } from '../core/ticket-files';
 import { parseChainEntry, renderChainEntries, validateChain } from '../core/chain-delta';
 import type { ChainEntry } from '../contracts/chain';
 import { refineTicket, revisionOf } from '../core/ticket-refine';
@@ -437,9 +437,11 @@ export class EngineBoardService {
       if (card.meta.run !== null) {
         return { ok: false, error: 'A run is live on this ticket. Refine it when the run has ended.' };
       }
+      // The header's priority field validates against the vault's vocabulary.
+      const snap = await this.snapshot();
       let refined: string;
       try {
-        refined = refineTicket(text, { sections: input.sections, header: input.header }, input.actor ?? this.owner, new Date());
+        refined = refineTicket(text, { sections: input.sections, header: input.header }, input.actor ?? this.owner, new Date(), snap.priorities);
       } catch (error) {
         return { ok: false, error: messageOf(error) };
       }
@@ -475,8 +477,11 @@ export class EngineBoardService {
       if (card.meta.run !== null) {
         return { ok: false, error: 'A run is live on this ticket. Edit it when the run has ended.' };
       }
+      // The text is read with the vault's priority vocabulary, so an
+      // unknown id is judged against what the board actually accepts.
+      const snap = await this.snapshot();
       try {
-        const parsed = parseTicketFile(input.text, card.path);
+        const parsed = parseTicketFile(input.text, card.path, snap.priorities);
         if (parsed.issues.some((issue) => issue.level === 'error')) {
           return { ok: false, error: `the text is not a valid ticket file: ${parsed.issues.find((i) => i.level === 'error')!.message}` };
         }
@@ -547,6 +552,9 @@ export class EngineBoardService {
         return { ok: false, error: `${input.id} is not on the board` };
       }
       const { vault, card, text } = found;
+      // The vocabulary is the vault's (`priorities:` in pipeline.md) — an
+      // id outside it refuses through the patcher's guard.
+      const snap = await this.snapshot();
       if (card.meta.priority === input.priority) {
         return { ok: true };
       }
@@ -555,7 +563,7 @@ export class EngineBoardService {
       }
       let refined: string;
       try {
-        refined = refineTicket(text, { sections: {}, header: { priority: input.priority } }, input.actor ?? this.owner, new Date());
+        refined = refineTicket(text, { sections: {}, header: { priority: input.priority } }, input.actor ?? this.owner, new Date(), snap.priorities);
         await this.host.write(vault.id, card.path, refined);
       } catch (error) {
         return { ok: false, error: messageOf(error) };
@@ -685,6 +693,51 @@ export class EngineBoardService {
       }
       const value = canonical === null ? 'standard' : `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`;
       const warning = await this.commit(vault, [card.path], `tickets: ${input.id} chain ${value}`);
+      this.host.announceChanges(vault.id, [card.path]);
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The dependency list (T-0050): the chat's setBlockedBy execution — the
+   * whole `blocked-by:` list is replaced (an empty list clears it, the
+   * key leaves the file), one header rewrite (`patchBlockedBy`), one Log
+   * line, one commit `tickets: <id> blocked-by <n ids|none>`. An
+   * unchanged list is a no-op success; a live run refuses like every
+   * header edit. The ids carry the ticket grammar (checked here and in
+   * the patcher); whether an id resolves on the board stays the
+   * dependency pass's business — an unknown id is written and simply
+   * never blocks (the pass's tolerance, never a guess).
+   */
+  setBlockedBy(input: { id: string; blockedBy: readonly string[]; actor?: string }): Promise<BoardMutationResult> {
+    return this.enqueue(async () => {
+      const found = await this.findCard(input.id);
+      if (found === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const { vault, card, text } = found;
+      for (const id of input.blockedBy) {
+        if (!TICKET_ID_PATTERN.test(id)) {
+          return { ok: false, error: `blocked-by: "${id}" is not a ticket id` };
+        }
+      }
+      const current = card.meta.blockedBy;
+      if (current.length === input.blockedBy.length && input.blockedBy.every((id, i) => id === current[i])) {
+        return { ok: true };
+      }
+      if (card.meta.run !== null) {
+        return { ok: false, error: 'A run is live on this ticket. Change the blockers when the run has ended.' };
+      }
+      let patched: string;
+      try {
+        patched = patchBlockedBy(text, input.blockedBy, new Date(), input.actor ?? this.owner);
+        await this.host.write(vault.id, card.path, patched);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const value = input.blockedBy.length === 0 ? 'none' : `${input.blockedBy.length} ${input.blockedBy.length === 1 ? 'id' : 'ids'}`;
+      const warning = await this.commit(vault, [card.path], `tickets: ${input.id} blocked-by ${value}`);
       this.host.announceChanges(vault.id, [card.path]);
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };
@@ -929,6 +982,15 @@ export class EngineBoardService {
       const snap = await this.snapshot();
       if (snap.pipeline.length === 0) {
         return { ok: false, error: snap.pipelineError ?? 'the pipeline is empty' };
+      }
+      // The created file's priority must carry a word of the vault's own
+      // vocabulary — an unknown id would read as the default with a
+      // warning forever, so it refuses here instead.
+      if (!snap.priorities.order.includes(input.priority)) {
+        return {
+          ok: false,
+          error: `unknown priority "${input.priority}" — this board's vocabulary is ${snap.priorities.order.join(', ')}`,
+        };
       }
       // Archived ids count too: an id is never reused, even after the
       // ticket with the highest one was archived.

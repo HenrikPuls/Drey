@@ -7,7 +7,7 @@
  * refuses when the ticket changed meanwhile.
  */
 import type { RefineReply } from '../shared/remote-protocol';
-import { TICKET_PRIORITIES, type TicketPriority } from '../shared/tickets';
+import { DEFAULT_PRIORITY_CONFIG, type TicketPriority } from '../shared/tickets';
 import type { Ctx, View } from './context';
 import { bindImagePaste, imageControls } from './attachments';
 import { button, empty, h, present, toast } from './dom';
@@ -97,10 +97,11 @@ export function refineView(ctx: Ctx, id: string, tab: RefineTab): View {
     const titleInput = h('input', { attrs: { id: 'ref-title', type: 'text', 'aria-label': 'Title' } });
     titleInput.value = card.meta.title ?? '';
     let priority: TicketPriority = card.meta.priority;
+    const priorities = board?.priorities ?? DEFAULT_PRIORITY_CONFIG;
     const prio = h(
       'div',
       { class: 'seg', attrs: { role: 'radiogroup', 'aria-label': 'Priority' } },
-      ...TICKET_PRIORITIES.map((p) => {
+      ...priorities.order.map((p) => {
         const node = h('button', { class: p === priority ? 'on' : '', text: p, attrs: { type: 'button', role: 'radio', 'aria-checked': String(p === priority) } });
         node.addEventListener('click', () => {
           priority = p;

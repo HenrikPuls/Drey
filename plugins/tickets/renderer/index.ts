@@ -15,8 +15,8 @@ import { chainAlertsOf, newChainAlerts, type ChainAlert } from './chain-alerts';
 import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
 import {
   branchForTicket,
+  DEFAULT_PRIORITY_CONFIG,
   openTicketCount,
-  TICKET_PRIORITIES,
   type BoardSnapshot,
   type CreateResult,
   type MutationResult,
@@ -808,10 +808,13 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot, opts?: { dicta
     const row = el('div', 'tickets-form-row');
     const priority = el('select') as HTMLSelectElement;
     priority.setAttribute('aria-label', 'Priority');
-    for (const [value, label] of Object.entries(PRIORITY_LABEL)) {
-      const option = el('option', undefined, label) as HTMLOptionElement;
+    // The vault's vocabulary (pipeline.md's `priorities:`); an id outside
+    // the label map shows as itself. The config's own default preselects.
+    const vocabulary = snap.priorities ?? DEFAULT_PRIORITY_CONFIG;
+    for (const value of vocabulary.order) {
+      const option = el('option', undefined, PRIORITY_LABEL[value] ?? value) as HTMLOptionElement;
       option.value = value;
-      if (value === 'normal') {
+      if (value === vocabulary.default) {
         option.selected = true;
       }
       priority.append(option);
@@ -2940,9 +2943,9 @@ function openCardMenu(
     appendSubmenu(
       menu,
       'Priority',
-      TICKET_PRIORITIES.map((priority) => ({
-        content: menuRadioRow(PRIORITY_LABEL[priority], priority === card.meta.priority),
-        title: `Priority ${PRIORITY_LABEL[priority]}`,
+      (snapshot?.priorities ?? DEFAULT_PRIORITY_CONFIG).order.map((priority) => ({
+        content: menuRadioRow(PRIORITY_LABEL[priority] ?? priority, priority === card.meta.priority),
+        title: `Priority ${PRIORITY_LABEL[priority] ?? priority}`,
         onClick: () => actions.setPriority(card, priority),
       })),
       close,

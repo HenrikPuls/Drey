@@ -10,6 +10,7 @@
 import { createHash } from 'node:crypto';
 import { splitFrontmatter } from '../../../../shared/frontmatter';
 import { patchHeaderFields, withLogLine, type HeaderPatch } from './ticket-files';
+import { DEFAULT_PRIORITY_CONFIG, type PriorityConfig } from '../contracts/tickets';
 
 export const REFINE_SECTIONS = {
   description: { title: 'Description', level: 2 },
@@ -75,8 +76,17 @@ export function replaceSection(body: string, section: RefineSection, content: st
   return [...before, '', heading, ...block, ...lines.slice(insertAt)].join('\n');
 }
 
-/** The refined file: header fields, sections, then one Log line naming what changed. */
-export function refineTicket(text: string, patch: RefinePatch, actor: string, now: Date): string {
+/** The refined file: header fields, sections, then one Log line naming what changed.
+ *  `priorities` is the vault's configured vocabulary — the header's
+ *  `priority` field validates against it (the board service passes the
+ *  snapshot's config; the default keeps every existing caller). */
+export function refineTicket(
+  text: string,
+  patch: RefinePatch,
+  actor: string,
+  now: Date,
+  priorities: PriorityConfig = DEFAULT_PRIORITY_CONFIG,
+): string {
   const { yamlText, body, hadFence } = splitFrontmatter(text);
   if (!hadFence || yamlText === null) {
     throw new Error('ticket has no frontmatter fence');
@@ -84,7 +94,7 @@ export function refineTicket(text: string, patch: RefinePatch, actor: string, no
   const changed: string[] = [];
   let block = `---\n${yamlText}\n---`;
   if (Object.keys(patch.header).length > 0) {
-    block = patchHeaderFields(block, patch.header);
+    block = patchHeaderFields(block, patch.header, priorities);
     changed.push(...Object.keys(patch.header));
   }
   let next = body;

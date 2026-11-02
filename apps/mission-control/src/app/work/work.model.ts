@@ -10,6 +10,7 @@
  * guess.
  */
 import { InjectionToken } from '@angular/core';
+import { DEFAULT_PRIORITY_CONFIG, isJumpPriority, parsePriorities, type McPriorityConfig } from '../api/dto';
 
 // --- the consumed device-state surface ---------------------------------------
 
@@ -50,7 +51,12 @@ export interface McScoutReport {
   readonly decisions: readonly McScoutDecision[];
 }
 
-export type McPriority = 'urgent' | 'high' | 'normal' | 'low' | (string & {});
+/**
+ * A priority id from the vault's configured vocabulary — the board's
+ * `priorities` names it (`urgent` in the default list, or `p0`,
+ * `critical`, …); the id IS the label and the order IS the weight.
+ */
+export type McPriority = string;
 
 /** The frontmatter slice a work card renders. */
 export interface McTicketMeta {
@@ -98,6 +104,11 @@ export interface McColumn {
 export interface McBoard {
   readonly columns: readonly McColumn[];
   readonly checkpoints?: readonly string[];
+  /**
+   * The board's priority vocabulary (`/api/board` `priorities`) — read
+   * tolerantly when the groups map; the default list when absent or junk.
+   */
+  readonly priorities?: McPriorityConfig;
 }
 
 /** The team tab's persona slice; work cards only need id/title/color. */
@@ -214,10 +225,15 @@ export function displayTitleOf(ticket: McTicket): string {
   return title === '' ? ticket.id : title;
 }
 
-/** The urgent/high priority flag. */
-export function isFlaggedTicket(ticket: McTicket): boolean {
-  const priority = ticket.meta.priority;
-  return priority === 'urgent' || priority === 'high';
+/**
+ * The jump-class flag: the configured vocabulary's upper half (the order
+ * IS the weight — first is highest, the split sits at `floor(len/2)`).
+ * The default vocabulary flags `urgent` and `high`; a configured one
+ * flags whatever the vault puts before its own middle — and an unknown
+ * id never flags.
+ */
+export function isFlaggedTicket(ticket: McTicket, config: McPriorityConfig = DEFAULT_PRIORITY_CONFIG): boolean {
+  return isJumpPriority(ticket.meta.priority ?? null, config.order);
 }
 
 /** The blocked marker: open blockers as derived, else the raw `blocked-by` list. */
@@ -247,6 +263,7 @@ function ticketVmOf(
   ticket: McTicket,
   column: McColumn,
   personas: ReadonlyMap<string, McPersona>,
+  config: McPriorityConfig,
 ): TicketVm {
   const personaId = ticket.meta.persona ?? null;
   return {
@@ -257,7 +274,7 @@ function ticketVmOf(
     phaseTitle: column.phase.title,
     phaseColor: column.phase.color ?? null,
     persona: personaId === null ? null : (personas.get(personaId) ?? null),
-    flagged: isFlaggedTicket(ticket),
+    flagged: isFlaggedTicket(ticket, config),
     blocked: isBlockedTicket(ticket),
   };
 }
@@ -274,6 +291,7 @@ export function groupsOf(
   personas: readonly McPersona[],
 ): WorkGroup[] {
   const personaMap = personaMapOf(personas);
+  const priorities = parsePriorities(board?.priorities);
   const groups: WorkGroup[] = [];
   if (needs.length > 0) {
     groups.push({
@@ -295,7 +313,7 @@ export function groupsOf(
         phaseId: column.phase.id,
         title: column.phase.title,
         unknown: column.unknown === true,
-        tickets: column.tickets.map((ticket) => ticketVmOf(ticket, column, personaMap)),
+        tickets: column.tickets.map((ticket) => ticketVmOf(ticket, column, personaMap, priorities)),
       });
     }
   }

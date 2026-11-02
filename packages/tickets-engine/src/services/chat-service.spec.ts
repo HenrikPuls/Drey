@@ -47,6 +47,8 @@ const SET_CHAIN: ChatCommand = {
   chain: ['insert design(pia, notify) after review', 'skip verify'],
 };
 const RETURN_TO_STANDARD: ChatCommand = { kind: 'setChain', id: 'T-0086', chain: [] };
+const SET_BLOCKERS: ChatCommand = { kind: 'setBlockedBy', id: 'T-0086', blockedBy: ['T-0001', 'T-0003'] };
+const CLEAR_BLOCKERS: ChatCommand = { kind: 'setBlockedBy', id: 'T-0086', blockedBy: [] };
 
 interface FakeCard {
   id: string;
@@ -58,6 +60,7 @@ interface FakeCard {
 interface FakeSnapshot {
   vaultId: string | null;
   pipeline: { id: string }[];
+  priorities: { order: string[]; default: string };
   columns: { phase: { id: string }; tickets: FakeCard[]; unknown: boolean }[];
 }
 
@@ -65,6 +68,7 @@ interface BridgeInput {
   text: string;
   history: readonly { role: 'owner' | 'mission'; text: string }[];
   board: string;
+  priorities?: { order: string[]; default: string };
 }
 
 type BridgeReply = { readonly say: string; readonly thought: string | null; readonly commands: readonly ChatCommand[] };
@@ -85,11 +89,13 @@ let boardTransitions: unknown[];
 let boardPriorities: unknown[];
 let boardForms: unknown[];
 let boardChains: unknown[];
+let boardBlockers: unknown[];
 let boardCreateResult: unknown;
 let boardTransitionResult: unknown;
 let boardSetPriorityResult: unknown;
 let boardSetFormResult: unknown;
 let boardSetChainResult: unknown;
+let boardSetBlockedByResult: unknown;
 let clock: Date;
 let service: ChatService;
 
@@ -112,6 +118,7 @@ function makeSnapshot(patch: Partial<FakeSnapshot> = {}): FakeSnapshot {
   return {
     vaultId: 'vault',
     pipeline: [{ id: 'inbox' }, { id: 'build' }, { id: 'review' }, { id: 'done' }],
+    priorities: { order: ['urgent', 'high', 'normal', 'low'], default: 'normal' },
     columns: [
       { phase: { id: 'inbox' }, tickets: [], unknown: false },
       {
@@ -162,11 +169,13 @@ beforeEach(async () => {
   boardPriorities = [];
   boardForms = [];
   boardChains = [];
+  boardBlockers = [];
   boardCreateResult = { ok: true, id: 'T-0103', path: 'tickets/10-inbox/T-0103.md' };
   boardTransitionResult = { ok: true, path: 'tickets/30-review/T-0086.md' };
   boardSetPriorityResult = { ok: true };
   boardSetFormResult = { ok: true };
   boardSetChainResult = { ok: true };
+  boardSetBlockedByResult = { ok: true };
   clock = new Date('2026-11-02T09:00:00Z');
 });
 
@@ -214,11 +223,15 @@ function boot(): ChatService {
       boardChains.push(input);
       return boardSetChainResult;
     },
+    setBlockedBy: async (input: unknown) => {
+      boardBlockers.push(input);
+      return boardSetBlockedByResult;
+    },
   } as unknown as ChatBoardPort;
   const bridge = {
     runTurn: async (input: BridgeInput & { emit: (event: ChatStreamEvent) => void }) => {
       bridgeRuns += 1;
-      bridgeInputs.push({ text: input.text, history: input.history, board: input.board });
+      bridgeInputs.push({ text: input.text, history: input.history, board: input.board, priorities: input.priorities });
       for (const event of scriptedEvents) {
         input.emit(event);
       }
@@ -265,7 +278,11 @@ async function seedSession(
               ? command.chain.length === 0
                 ? `Return ${command.id} to the standard flow`
                 : `Set ${command.id} chain to ${command.chain.length} ${command.chain.length === 1 ? 'entry' : 'entries'}`
-              : `Set ${command.id} priority to ${command.priority}`;
+              : command.kind === 'setBlockedBy'
+                ? command.blockedBy.length === 0
+                  ? `Clear ${command.id} blockers`
+                  : `Block ${command.id} by ${command.blockedBy.join(', ')}`
+                : `Set ${command.id} priority to ${command.priority}`;
     text = appendProposal(text, new Date('2026-11-02T08:02:00Z'), summary, command).text;
   }
   const file = `tickets/_meta/chat/20261102-080000-${sessionSlug(title)}.md`;
@@ -446,6 +463,34 @@ describe('ChatService start and send', () => {
     );
   });
 
+  it('a setBlockedBy command from the mission renders as the blockers card', async () => {
+    service = boot();
+    bridgeReply = { say: 'T-0086 waits for its blockers now.', thought: null, commands: [SET_BLOCKERS] };
+
+    const result = await service.start({ title: 'Blockers', text: 'T-0086 waits for T-0001 and T-0003' });
+
+    expect(result.ok).toBe(true);
+    expect(result.proposals).toEqual([
+      {
+        id: 'p-1',
+        state: 'pending',
+        summary: 'Block T-0086 by T-0001, T-0003',
+        command: SET_BLOCKERS,
+        at: expect.any(String),
+        decidedAt: null,
+        outcome: null,
+      },
+    ]);
+    expect(await readOnDisk(result.file!)).toContain(
+      'proposal p-1 pending — Block T-0086 by T-0001, T-0003',
+    );
+    expect(await readOnDisk(result.file!)).toContain(
+      '{"kind":"setBlockedBy","id":"T-0086","blockedBy":["T-0001","T-0003"]}',
+    );
+    // The card is a proposal only — the board port has not been asked yet.
+    expect(boardBlockers).toEqual([]);
+  });
+
   it('hands the bridge the recent history and a board digest of open tickets', async () => {
     service = boot();
 
@@ -456,9 +501,12 @@ describe('ChatService start and send', () => {
     expect(bridgeInputs[0]!.text).toBe('What needs attention?');
     expect(bridgeInputs[0]!.history).toEqual([]);
     const digest = bridgeInputs[0]!.board;
+    expect(digest).toContain('priorities (weight order): urgent → high → normal → low');
     expect(digest).toContain('columns: inbox (0) → build (1) → review (0) → done (1)');
     expect(digest).toContain('- T-0086 "Fix the CSV export" — build');
     expect(digest).not.toContain('T-0071');
+    // The bridge parses the reply against the board's own vocabulary.
+    expect(bridgeInputs[0]!.priorities).toEqual({ order: ['urgent', 'high', 'normal', 'low'], default: 'normal' });
 
     await service.send({ file, text: 'And now?' });
     expect(bridgeInputs[1]!.history).toEqual([
@@ -718,6 +766,64 @@ describe('ChatService confirm and dismiss', () => {
     expect(boardChains).toEqual([{ id: 'T-0086', chain: [], actor: ACTOR }]);
     expect(result.proposal).toMatchObject({ state: 'confirmed', outcome: 'ok' });
     expect(await readOnDisk(file)).toContain('proposal p-1 confirmed — Return T-0086 to the standard flow → ok');
+  });
+
+  it('confirm on a setBlockedBy executes the whole list with the actor', async () => {
+    const { file } = await seedSession([SET_BLOCKERS]);
+    service = boot();
+
+    const result = await service.confirm({ file, id: 'p-1' });
+
+    expect(result.ok).toBe(true);
+    expect(boardBlockers).toEqual([{ id: 'T-0086', blockedBy: ['T-0001', 'T-0003'], actor: ACTOR }]);
+    expect(boardTransitions).toEqual([]);
+    expect(result.proposal).toMatchObject({
+      id: 'p-1',
+      state: 'confirmed',
+      summary: 'Block T-0086 by T-0001, T-0003',
+      outcome: 'ok',
+      decidedAt: expect.any(String),
+    });
+    const text = await readOnDisk(file);
+    expect(text).toContain("- '2026-11-02T09:00:00.000Z' proposal p-1 confirmed — Block T-0086 by T-0001, T-0003 → ok");
+    // The pending card and its command block stay as history.
+    expect(text).toContain('proposal p-1 pending — Block T-0086 by T-0001, T-0003');
+  });
+
+  it('confirm on an empty setBlockedBy clears the blockers', async () => {
+    const { file } = await seedSession([CLEAR_BLOCKERS]);
+    service = boot();
+
+    const result = await service.confirm({ file, id: 'p-1' });
+
+    expect(result.ok).toBe(true);
+    expect(boardBlockers).toEqual([{ id: 'T-0086', blockedBy: [], actor: ACTOR }]);
+    expect(result.proposal).toMatchObject({ state: 'confirmed', summary: 'Clear T-0086 blockers', outcome: 'ok' });
+    expect(await readOnDisk(file)).toContain('proposal p-1 confirmed — Clear T-0086 blockers → ok');
+  });
+
+  it('a pending custom-priority proposal survives the file round-trip — the board vocabulary reads it', async () => {
+    const { file } = await seedSession([{ kind: 'setPriority', id: 'T-0086', priority: 'p0' }]);
+    boardSnapshot = makeSnapshot({ priorities: { order: ['p0', 'p1', 'p2'], default: 'p1' } });
+    service = boot();
+
+    const result = await service.confirm({ file, id: 'p-1' });
+
+    expect(result.ok).toBe(true);
+    expect(boardPriorities).toEqual([{ id: 'T-0086', priority: 'p0', actor: ACTOR }]);
+    expect(result.proposal).toMatchObject({ state: 'confirmed', outcome: 'ok' });
+  });
+
+  it('a failed setBlockedBy execution leaves the proposal pending and writes no decision', async () => {
+    const { file, text } = await seedSession([SET_BLOCKERS]);
+    boardSetBlockedByResult = { ok: false, error: 'A run is live on this ticket. Change the blockers when the run has ended.' };
+    service = boot();
+
+    const result = await service.confirm({ file, id: 'p-1' });
+
+    expect(result).toEqual({ ok: false, error: 'A run is live on this ticket. Change the blockers when the run has ended.' });
+    expect(await readOnDisk(file)).toBe(text);
+    expect(commits).toEqual([]);
   });
 
   it('a failed setChain execution leaves the proposal pending and writes no decision', async () => {

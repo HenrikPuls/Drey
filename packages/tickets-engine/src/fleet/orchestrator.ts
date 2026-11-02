@@ -1126,6 +1126,9 @@ export class Orchestrator {
         busyTickets,
         cooldownUntil: this.cooldownUntil,
         nowMs: this.now().getTime(),
+        // The dispatch classes split at the vault's configured vocabulary,
+        // not at a hard-coded list.
+        priorities: snap.priorities,
       });
       this.lastPhases = snap.pipeline;
       await this.prunePhaseState();

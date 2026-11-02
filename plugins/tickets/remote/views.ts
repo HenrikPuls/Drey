@@ -9,7 +9,7 @@ import type { NeedKind, RunReply } from '../shared/remote-protocol';
 import {
   ageOf,
   parseHandover,
-  TICKET_PRIORITIES,
+  DEFAULT_PRIORITY_CONFIG,
   type BoardColumn,
   type BoardSnapshot,
   type CreateResult,
@@ -565,11 +565,12 @@ function moreSheet(ctx: Ctx, card: TicketCard): void {
 export function captureView(ctx: Ctx): View {
   const board = ctx.state.board;
   const title = h('input', { attrs: { id: 'cap-title', type: 'text', autocomplete: 'off', enterkeyhint: 'next', 'aria-label': 'Title' } });
-  let priority: TicketPriority = 'normal';
+  const priorities = board?.priorities ?? DEFAULT_PRIORITY_CONFIG;
+  let priority: TicketPriority = priorities.default;
   const prio = h(
     'div',
     { class: 'seg', attrs: { role: 'radiogroup', 'aria-label': 'Priority' } },
-    ...TICKET_PRIORITIES.map((p) => {
+    ...priorities.order.map((p) => {
       const node = h('button', {
         class: p === priority ? 'on' : '',
         text: p,

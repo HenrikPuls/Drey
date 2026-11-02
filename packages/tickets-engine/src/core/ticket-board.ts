@@ -9,7 +9,9 @@
 import { isCollection, isMap, parseDocument, stringify, type Document, type YAMLMap, type YAMLSeq } from 'yaml';
 import { splitFrontmatter } from '../../../../shared/frontmatter';
 import {
+  DEFAULT_PRIORITY_CONFIG,
   parseHandover,
+  parsePriorityConfig,
   priorityWeight,
   phaseWithoutPoolKeys,
   resolveCardWorker,
@@ -17,6 +19,7 @@ import {
   type BoardColumn,
   type BoardSnapshot,
   type PipelinePhase,
+  type PriorityConfig,
   type RecentDone,
   type RepoRef,
   type TicketCard,
@@ -37,6 +40,8 @@ export interface PipelineParse {
   readonly phases: readonly PipelinePhase[];
   /** The optional top-level `push:` remote (T-0041); null = never push. */
   readonly pushRemote: string | null;
+  /** The vault's priority vocabulary (`priorities:`); the default list when absent or unreadable. */
+  readonly priorities: PriorityConfig;
   readonly error: string | null;
   /** Noise findings the parse forgave (a non-string `push:`). */
   readonly issues: readonly TicketIssue[];
@@ -45,11 +50,11 @@ export interface PipelineParse {
 export function parsePipeline(text: string): PipelineParse {
   const { yamlText, hadFence } = splitFrontmatter(text);
   if (!hadFence || yamlText === null) {
-    return { phases: [], pushRemote: null, error: 'pipeline.md has no frontmatter fence', issues: [] };
+    return { phases: [], pushRemote: null, priorities: DEFAULT_PRIORITY_CONFIG, error: 'pipeline.md has no frontmatter fence', issues: [] };
   }
   const doc = parseDocument(yamlText);
   if (doc.errors.length > 0) {
-    return { phases: [], pushRemote: null, error: `pipeline.md does not parse: ${doc.errors[0]!.message}`, issues: [] };
+    return { phases: [], pushRemote: null, priorities: DEFAULT_PRIORITY_CONFIG, error: `pipeline.md does not parse: ${doc.errors[0]!.message}`, issues: [] };
   }
   const parsed = doc.toJS() as unknown;
   const root = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
@@ -57,10 +62,13 @@ export function parsePipeline(text: string): PipelineParse {
     : {};
   const rawPhases = root['phases'];
   if (!Array.isArray(rawPhases) || rawPhases.length === 0) {
-    return { phases: [], pushRemote: null, error: 'pipeline.md needs a non-empty phases list', issues: [] };
+    return { phases: [], pushRemote: null, priorities: DEFAULT_PRIORITY_CONFIG, error: 'pipeline.md needs a non-empty phases list', issues: [] };
   }
 
   const issues: TicketIssue[] = [];
+  const priorityParse = parsePriorityConfig(root['priorities']);
+  issues.push(...priorityParse.issues);
+  const priorities = priorityParse.config;
   const rawPush = root['push'];
   let pushRemote: string | null = null;
   if (rawPush !== undefined && rawPush !== null) {
@@ -76,15 +84,15 @@ export function parsePipeline(text: string): PipelineParse {
   const seen = new Set<string>();
   for (const entry of rawPhases) {
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-      return { phases: [], pushRemote: null, error: 'every pipeline phase must be a mapping', issues };
+      return { phases: [], pushRemote: null, priorities: DEFAULT_PRIORITY_CONFIG, error: 'every pipeline phase must be a mapping', issues };
     }
     const map = entry as Record<string, unknown>;
     const id = typeof map['id'] === 'string' ? map['id'] : '';
     if (!PHASE_ID.test(id)) {
-      return { phases: [], pushRemote: null, error: `phase id "${id}" must match ${PHASE_ID.source}`, issues };
+      return { phases: [], pushRemote: null, priorities: DEFAULT_PRIORITY_CONFIG, error: `phase id "${id}" must match ${PHASE_ID.source}`, issues };
     }
     if (seen.has(id)) {
-      return { phases: [], pushRemote: null, error: `duplicate phase id "${id}"`, issues };
+      return { phases: [], pushRemote: null, priorities: DEFAULT_PRIORITY_CONFIG, error: `duplicate phase id "${id}"`, issues };
     }
     seen.add(id);
     const wipRaw = map['wip'];
@@ -158,7 +166,7 @@ export function parsePipeline(text: string): PipelineParse {
       color,
     });
   }
-  return { phases, pushRemote, error: null, issues };
+  return { phases, pushRemote, priorities, error: null, issues };
 }
 
 // --- pipeline.md patching (the settings dialog's writer, M85) ----------------
@@ -658,9 +666,9 @@ export interface OrderKey {
 }
 
 /** Derived order: priority, then rank, then `entered-<phase>`, then id. */
-export function derivedOrder(keys: readonly OrderKey[]): OrderKey[] {
+export function derivedOrder(keys: readonly OrderKey[], config: PriorityConfig = DEFAULT_PRIORITY_CONFIG): OrderKey[] {
   return [...keys].sort((a, b) => {
-    const pri = priorityWeight(a.priority) - priorityWeight(b.priority);
+    const pri = priorityWeight(a.priority, config) - priorityWeight(b.priority, config);
     if (pri !== 0) {
       return pri;
     }
@@ -678,10 +686,11 @@ export function derivedOrder(keys: readonly OrderKey[]): OrderKey[] {
 export function orderColumn<T extends { readonly id: string }>(
   tickets: readonly T[],
   keyOf: (ticket: T) => OrderKey,
+  config: PriorityConfig = DEFAULT_PRIORITY_CONFIG,
 ): T[] {
   const byId = new Map(tickets.map((t) => [t.id, t]));
   // Keys were built from byId itself, so every lookup lands.
-  return derivedOrder([...byId.values()].map(keyOf)).map((k) => byId.get(k.id) as T);
+  return derivedOrder([...byId.values()].map(keyOf), config).map((k) => byId.get(k.id) as T);
 }
 
 // --- snapshot assembly --------------------------------------------------------
@@ -720,7 +729,7 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
   const issues: TicketIssue[] = [];
 
   const pipelineParse = input.pipelineText === null
-    ? { phases: [], pushRemote: null, error: 'tickets/_meta/pipeline.md is missing', issues: [] }
+    ? { phases: [], pushRemote: null, priorities: DEFAULT_PRIORITY_CONFIG, error: 'tickets/_meta/pipeline.md is missing', issues: [] }
     : parsePipeline(input.pipelineText);
   if (pipelineParse.error !== null) {
     issues.push({ level: 'error', message: pipelineParse.error });
@@ -769,7 +778,7 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     if (parts.phase === '_meta') {
       continue; // a ticket-stemmed file inside _meta: ignore, don't column it.
     }
-    const parsed = parseTicketFile(file.text, file.path);
+    const parsed = parseTicketFile(file.text, file.path, pipelineParse.priorities);
     // req-72: every named repo must be known — the primary and the extra
     // ones alike (a typo in the second entry would silently lose a repo).
     for (const name of parsed.meta.repos) {
@@ -883,6 +892,7 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     pipeline: phases,
     pipelineError: pipelineParse.error,
     pushRemote: pipelineParse.pushRemote,
+    priorities: pipelineParse.priorities,
     repos: reposParse.repos,
     reposError: reposParse.error,
     columns,

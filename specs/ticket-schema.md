@@ -210,7 +210,7 @@ before the machine takes over; must end with the acceptance criteria.
 | `repos` | list of names | Optional (req-72). Every work repo the ticket touches, **primary first** — `repos: [drey, lariscus]`. When set, the list is the truth and `repo:` repeats its first entry (a mismatch is a noise finding, the list wins). One worktree per named repo, all on the ticket's branch; a run refuses while any named repo lacks a local `path:` in `_meta/repos.md`. One or zero names write no `repos:` line. |
 | `worker` | string | Optional pin for the fleet worker (M84): `opencode`, `claude-code`, or `<provider>/<model>`. Wins over the column's `worker:` key, the phase handover's `@worker` pin, the repo's `worker:` and the configured default (M85's assignment ring). An unknown value badges the card; a run start with it refuses. |
 | `persona` | string | Optional persona pin (ADR-0088 E3): `persona: pia` — the top of the persona ladder, winning over the phase's `persona:` key and the engine default (`personas.default`). The persona's worker/model/prompt drive the dispatch; when nothing resolves or the persona file is missing the legacy assignment ring runs unchanged. See `_meta/personas/` below. |
-| `priority` | `urgent \| high \| normal \| low` | Required. Default `normal`; machine writers always write it. |
+| `priority` | one id of the board's configured vocabulary | Required. The vocabulary is the vault's own — `_meta/pipeline.md`'s `priorities:` list (default `urgent \| high \| normal \| low`); the list's order IS the weight, first = highest. An omitted or unknown id reads as the vocabulary's default (its middle entry) with a warning badge; machine writers always write a vocabulary word. See [Priorities](#priorities-priorities-in-pipelinemd). |
 | `track` | `auto \| shape` | Optional (req-75 W1b, ADR-0087 decision 2). The ticket's triage track: `auto` runs on its own, `shape` goes through the plan-mode dialog with the owner. Absent (or any other value — a warning) reads as not triaged; set from the Work panel's row menu (Track ›) until W5c/W6 fill it from triage. |
 | `form` | `ship \| scout` | Optional (concept §5.6, E8). The ticket's form: `ship` (the default — an absent key reads as ship) is the known way, plan → worktree → gate → move. `scout` is exploration only: a scout run reads repo/history/data and writes the ticket's `## Report` section — no worktree, no diff, no gate, no move; the report surfaces as a card in "Needs you" and the owner promotes the ticket to ship from there. Any other value warns (`form must be ship or scout — read as ship`) and reads as ship. See [The scout form](#the-scout-form-e8-concept-56). |
 | `chain` | list of strings | Optional (concept §5.7, E9). The ticket's **delta** against the pipeline's standard flow — the standard flow itself is team configuration in `_meta/pipeline.md` and applies to every ticket silently; the ticket stores only the deviations, one declarative entry per item in the strict grammar: `insert <phase>[(<persona>[, notify] \| notify)] after\|before <anchor>` (add a gate at the anchor — a standard-flow phase may be revisited this way, at most once), `skip <phase>` (bypass a gate), `notify <phase>` (the Bescheid rule: a card lands in "Needs you" when the gate completes). Absent (or empty) reads as the standard flow. An entry outside the grammar warns and drops (`chain entry "<raw>" is not readable — expected e.g. "insert design after review"`). See [The chain delta](#the-chain-delta-e9-concept-57). |
@@ -234,9 +234,7 @@ what does not is a badge.
 
 A first-class dependency field (T-0050): "do not start before X is
 done". The order it replaces used to live in prose, invisible to the
-board and the fleet.
-
-- **Canonical syntax**: flow list with comma + space —
+board and the fleet.- **Canonical syntax**: flow list with comma + space —
   `blocked-by: [T-0048]`, `blocked-by: [T-0048, T-0049]`. The parser
   accepts every YAML list shape (block style, any spacing); a
   hand-written no-space list (`[T-0048,T-0049]`) is normalized
@@ -271,6 +269,34 @@ board and the fleet.
   ordering is never touched. The drift
   pass (normalization) never enforces blocked-ness — a file move is an
   owner move.
+- **Editing** (the chat/edit path): the whole list is replaced in one
+  step, never a partial edit — the chat's `setBlockedBy` command (a
+  proposal card like every chat mutation, concept §6; an **empty list
+  clears the blockers**) and the engine's `setBlockedBy` write both run
+  one header rewrite, one Log line (`blocked-by <n> ids`, or
+  `blocked-by none` when the list empties and the key leaves the file)
+  and one commit `tickets: <id> blocked-by <n ids|none>`. An unchanged
+  list is a no-op; a live run refuses, like every header edit. Ids are
+  checked against the ticket grammar at write time; whether they
+  resolve on the board stays the dependency pass's business — an
+  unknown id is written and simply never blocks.
+
+### Priorities (`priorities:` in pipeline.md)
+
+The vocabulary is the vault's own (weight order, first = highest):
+`_meta/pipeline.md`'s top-level `priorities:` list, defaulting to
+`urgent | high | normal | low` when absent or unreadable. Every
+`priority:` in a ticket carries one of its words; an omitted or unknown
+id reads as the vocabulary's **middle entry** (the default) with a
+warning. The split rule everywhere is the middle's (`floor(len/2)`):
+the entries before it are the fleet dispatch's **jump class** (req-63),
+the entry at it is the **default**, the entries after it are the calm
+half. The same list drives the board's derived column order, the
+dispatch classes, the chat (the digest names it; the mission's
+`setPriority`/`createTicket` priority fields validate against it) and
+every header edit's priority guard (`setPriority`, the remote refine,
+the raw-edit save, `createTicket` — a foreign word refuses with a
+readable error instead of being written).
 
 ### Body sections
 
@@ -582,6 +608,20 @@ Prose for humans. The board follows this file on refresh.
   replace the assignment ring's resolution and the persona's `prompt.md`
   becomes the instruction base instead of the phase handover prompt.
   See `_meta/personas/` below.
+- `priorities:` optional top-level list — the board's priority
+  vocabulary, in weight order (first = highest). Every ticket's
+  `priority:` must carry one of its words; an omitted or unknown id
+  reads as the list's **middle entry** (the default) with a warning.
+  The split rule is the middle's, everywhere (`floor(len/2)`): the
+  entries **before** it are the fleet's jump class (req-63), the entry
+  **at** it is the default, the entries **after** it are the calm half.
+  Unreadable entries (not an id, a duplicate) drop with a noise badge;
+  an empty or unreadable list falls back to the shipped
+  `urgent | high | normal | low`. The vocabulary drives everything that
+  reads a priority — the board's derived column order, the dispatch
+  classes, the chat (the digest names it, the mission's priority fields
+  are validated against it) and every header edit's priority guard —
+  there is no hard-coded list left in the paths.
 - Editing this file is the owner's; the board re-reads it on every
   refresh. Unknown keys in a phase entry are ignored.
 
@@ -648,8 +688,9 @@ implement / park). Backward moves are human moves — the one exception
 is the circuit breaker's park into inbox, always logged.
 
 **Dispatch order** (req-63): one candidate list over every playing
-automatic column, ordered by priority class (`urgent` / `high` before
-`normal` / `low`), then column rank — the rightmost column first, so
+automatic column, ordered by priority class (the configured
+vocabulary's first half before its second — see `priorities:` above),
+then column rank — the rightmost column first, so
 finishing beats starting — then the column's derived order. Each candidate takes a slot of the provider pool its
 assignment resolves to; a full pool makes it wait, a running run is
 never preempted.

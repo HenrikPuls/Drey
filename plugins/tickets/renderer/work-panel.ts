@@ -11,6 +11,8 @@
  */
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import {
+  DEFAULT_PRIORITY_CONFIG,
+  priorityClass,
   TICKETS_ARCHIVE_DIR,
   type BoardSnapshot,
   type RecentDone,
@@ -302,7 +304,7 @@ function groupNode(
   if (!folded) {
     const body = el('div', 'work-group-rows');
     if (id === 'ideas') {
-      appendIdeas(deps, body, group.rows, group.total, folds, rerender, filterActive);
+      appendIdeas(deps, snap, body, group.rows, group.total, folds, rerender, filterActive);
     } else {
       for (const row of group.rows) {
         body.append(id === 'shaping' ? shapingRowNode(deps, row) : id === 'running' ? runningRowNode(deps, snap, row) : rowNode(deps, snap, row));
@@ -355,6 +357,7 @@ function groupHead(
 /** Ideas: the first five rows, then "<n> more" unfolds the rest (remembered). */
 function appendIdeas(
   deps: WorkPanelDeps,
+  snap: BoardSnapshot,
   body: HTMLElement,
   rows: readonly WorkRow[],
   total: number,
@@ -381,7 +384,7 @@ function appendIdeas(
   const allOpen = !folds.isFolded(IDEAS_ALL);
   const shown = allOpen ? rows : rows.slice(0, IDEAS_SHOWN);
   for (const row of shown) {
-    body.append(ideaRowNode(deps, row));
+    body.append(ideaRowNode(deps, snap, row));
   }
   if (rows.length > IDEAS_SHOWN) {
     const more = el('button', 'work-ideas-more');
@@ -547,12 +550,15 @@ function runningRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow):
 }
 
 /** An Idea row: one line — priority chip when it matters, title, track chip. */
-function ideaRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
+function ideaRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLElement {
   const { card } = row;
   const { node, more } = baseRow(deps, card);
   node.classList.add('work-row-idea');
-  if (card.meta.priority === 'urgent' || card.meta.priority === 'high') {
-    node.append(el('span', `work-prio-mini work-prio-mini-${card.meta.priority}`, PRIORITY_LABEL[card.meta.priority]));
+  // The vocabulary's jump class earns the chip (`urgent`/`high` in the
+  // default list); an id outside the label map shows as itself.
+  if (priorityClass(card.meta.priority, snap.priorities ?? DEFAULT_PRIORITY_CONFIG) === 0) {
+    const label = PRIORITY_LABEL[card.meta.priority] ?? card.meta.priority;
+    node.append(el('span', `work-prio-mini work-prio-mini-${card.meta.priority}`, label));
   }
   node.append(idNode(card.id), el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
   if (row.queued) {

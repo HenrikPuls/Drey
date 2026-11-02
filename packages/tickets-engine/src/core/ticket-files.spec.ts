@@ -456,3 +456,61 @@ describe('multi-repo tickets (req-72)', () => {
     expect(single).not.toContain('repos:');
   });
 });
+
+describe('priority against the vault vocabulary (M111)', () => {
+  const CONFIG = { order: ['critical', 'high', 'medium', 'low'], default: 'medium' };
+  const file = (priority: string | null): string => `---
+id: T-0042
+title: "One"
+${priority === null ? '' : `priority: ${priority}\n`}---
+`;
+
+  it('a configured value parses as written', () => {
+    expect(parseTicketFile(file('critical'), 'tickets/inbox/T-0042.md', CONFIG).meta.priority).toBe('critical');
+  });
+
+  it('a value outside the vocabulary warns and reads as the configured default', () => {
+    const parsed = parseTicketFile(file('urgent'), 'tickets/inbox/T-0042.md', CONFIG);
+    expect(parsed.meta.priority).toBe('medium');
+    expect(parsed.issues).toContainEqual({ level: 'warning', message: 'unknown priority "urgent" — read as medium' });
+  });
+
+  it('a missing priority warns and reads as the configured default', () => {
+    const parsed = parseTicketFile(file(null), 'tickets/inbox/T-0042.md', CONFIG);
+    expect(parsed.meta.priority).toBe('medium');
+    expect(parsed.issues).toContainEqual({ level: 'warning', message: 'priority missing — read as medium' });
+  });
+
+  it('without a configuration the four-word list applies unchanged', () => {
+    const parsed = parseTicketFile(file('urgent'), 'tickets/inbox/T-0042.md');
+    expect(parsed.meta.priority).toBe('urgent');
+    expect(parsed.issues).toEqual([]);
+  });
+});
+
+describe('patchHeaderFields blocked-by (M111)', () => {
+  const BLOCK = CANONICAL.slice(0, CANONICAL.indexOf('---\n\n') + 3);
+
+  it('writes the id list and the reparse reads it back', () => {
+    const out = patchHeaderFields(BLOCK, { blockedBy: ['T-0001', 'T-0003'] });
+    expect(out).toContain('blocked-by:');
+    expect(parseTicketFile(`${out}\n`, 'tickets/inbox/T-0042.md').meta.blockedBy).toEqual(['T-0001', 'T-0003']);
+  });
+
+  it('null and the empty list remove the key', () => {
+    const withList = patchHeaderFields(BLOCK, { blockedBy: ['T-0001'] });
+    expect(patchHeaderFields(withList, { blockedBy: null })).not.toContain('blocked-by');
+    expect(patchHeaderFields(withList, { blockedBy: [] })).not.toContain('blocked-by');
+  });
+
+  it('an id outside the grammar throws and changes nothing', () => {
+    expect(() => patchHeaderFields(BLOCK, { blockedBy: ['T-1'] })).toThrow('is not a ticket id');
+    expect(() => patchHeaderFields(BLOCK, { blockedBy: ['t-T-0001'] })).toThrow('is not a ticket id');
+  });
+
+  it('the priority validates against the configured vocabulary', () => {
+    const CONFIG = { order: ['critical', 'high', 'medium', 'low'], default: 'medium' };
+    expect(patchHeaderFields(BLOCK, { priority: 'critical' }, CONFIG)).toContain('priority: critical');
+    expect(() => patchHeaderFields(BLOCK, { priority: 'urgent' }, CONFIG)).toThrow('unknown priority');
+  });
+});

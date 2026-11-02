@@ -27,6 +27,7 @@ import {
   parseTicketDetail,
   parseTicketDiff,
   parseWork,
+  DEFAULT_PRIORITY_CONFIG,
   type ChatProposalView,
   type ChatStateView,
   type ChatStreamView,
@@ -78,7 +79,7 @@ export class McState {
    * null = nothing waiting.
    */
   readonly chatPrefill = signal<string | null>(null);
-  readonly work = signal<WorkView>({ groups: [] });
+  readonly work = signal<WorkView>({ groups: [], priorities: DEFAULT_PRIORITY_CONFIG });
   readonly needs = signal<readonly NeedView[]>([]);
   readonly team = signal<TeamView>({ personas: [] });
   readonly chat = signal<ChatStateView>({ sessions: [], active: null });

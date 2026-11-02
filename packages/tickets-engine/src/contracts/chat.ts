@@ -10,7 +10,7 @@
  * the owner's explicit confirm executes it — through the same board
  * methods the invoke channel exposes, never a second write path.
  */
-import type { TicketPriority } from './tickets';
+import type { PriorityConfig, TicketPriority } from './tickets';
 
 export type ChatRole = 'owner' | 'mission';
 export type ChatProposalState = 'pending' | 'confirmed' | 'dismissed';
@@ -76,7 +76,18 @@ export type ChatCommand =
    * validation run at execution — the proposal card shows the chain
    * before/after before the owner confirms.
    */
-  | { readonly kind: 'setChain'; readonly id: string; readonly chain: readonly string[] };
+  | { readonly kind: 'setChain'; readonly id: string; readonly chain: readonly string[] }
+  /**
+   * T-0050 (T0): replace the ticket's whole `blocked-by:` list with the
+   * given ticket ids — the ticket waits until every one of them reaches
+   * the pipeline's terminal phase. An empty list clears the blockers (the
+   * key leaves the file). Full replacement like setChain: the card shows
+   * the whole new list before the owner confirms; the ids are checked
+   * against the ticket-id grammar at parse time and their existence on
+   * the board at execution (an unknown id stays written — it simply never
+   * resolves, per the dependency pass's tolerance).
+   */
+  | { readonly kind: 'setBlockedBy'; readonly id: string; readonly blockedBy: readonly string[] };
 
 /** One chat session = one file under `tickets/_meta/chat/`. */
 export interface ChatSession {
@@ -153,6 +164,12 @@ export interface ChatBridge {
     readonly history: readonly { readonly role: 'owner' | 'mission'; readonly text: string }[];
     /** The board digest the prompt embeds (columns, open tickets). */
     readonly board: string;
+    /**
+     * The board's priority vocabulary — what the reply's priority fields
+     * are validated against (the chat service passes the snapshot's
+     * config). Absent = the shipped default vocabulary.
+     */
+    readonly priorities?: PriorityConfig;
     /** Receives the live stream: thought and text deltas. */
     emit(event: ChatStreamEvent): void;
   }): Promise<{

@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { McState } from './api/state';
 import { bootHintsFromLocation } from './api/client';
+import { parsePriorities } from './api/dto';
 import { MC_CHAT_STATE } from './chat/chat';
 import { MC_TEAM_DETAIL, type PersonaFacts, type TeamDetailVm } from './team/detail';
 import { MC_TICKET, type GatePhase, type TicketDoc, type TicketVm } from './ticket/ticket.model';
@@ -116,6 +117,10 @@ export const appConfig: ApplicationConfig = {
           }
           return map;
         });
+        /** The vault's priority vocabulary — the raw board's `priorities`, tolerantly read. */
+        const priorities = computed(() =>
+          parsePriorities((state.board() as { priorities?: unknown } | null)?.priorities),
+        );
         const doc = computed((): TicketDoc | null => {
           const detail = state.ticketDetail();
           if (detail === null) {
@@ -135,6 +140,10 @@ export const appConfig: ApplicationConfig = {
             phase: detail.phase,
             phases,
             chain: detail.chain,
+            priority: detail.priority,
+            priorities: priorities().order,
+            blocked: detail.blocked,
+            blockedBy: detail.blockedBy,
           };
         });
         return {

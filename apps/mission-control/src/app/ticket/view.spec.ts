@@ -13,6 +13,7 @@ import {
   DEFAULT_DIFF_FONT_SIZE,
   MC_TICKET,
   acceptArmReduce,
+  blockerNoteOf,
   chainPrefillOf,
   chainStepsOf,
   diffFontSizeStep,
@@ -27,6 +28,7 @@ import {
   splitTicketSections,
   type GatePhase,
   type TicketActionReply,
+  type TicketBlockerNote,
   type TicketDiff,
   type TicketDoc,
   type TicketSaveReply,
@@ -148,6 +150,10 @@ const DOC: TicketDoc = {
   phase: 'verify',
   phases: PHASES,
   chain: [],
+  priority: 'high',
+  priorities: ['urgent', 'high', 'normal', 'low'],
+  blocked: [],
+  blockedBy: [],
 };
 
 const FULL_TEXT = `---
@@ -237,6 +243,9 @@ interface TicketSurface {
   id(): string;
   title(): string;
   phaseTitle(): string;
+  priority(): string | null;
+  priorityJump(): boolean;
+  blockers(): TicketBlockerNote | null;
   readOnly(): boolean;
   steps(): ReturnType<typeof gateStepsOf>;
   blocks(): readonly unknown[];
@@ -751,6 +760,56 @@ describe('patchLineKind', () => {
   });
 });
 
+// --- the priority chip and the blocker line --------------------------------------
+
+describe('blockerNoteOf', () => {
+  it('warns on open blockers, reads declared deps neutral, and stays silent on none', () => {
+    expect(blockerNoteOf(['T-0001', 'T-0003'], ['T-0001'])).toEqual({ kind: 'blocked', ids: ['T-0001', 'T-0003'] });
+    expect(blockerNoteOf([], ['T-0007'])).toEqual({ kind: 'depends', ids: ['T-0007'] });
+    expect(blockerNoteOf([], [])).toBeNull();
+  });
+});
+
+describe('TicketView priority chip and blocker line', () => {
+  it('surfaces the priority id as the label and accents the jump class', () => {
+    // The default order: high sits before the middle, so it jumps.
+    const vm = surface(setup(makeFake({ docValue: DOC })));
+    expect(vm.priority()).toBe('high');
+    expect(vm.priorityJump()).toBe(true);
+
+    const calm = surface(setup(makeFake({ docValue: { ...DOC, priority: 'normal' } })));
+    expect(calm.priority()).toBe('normal');
+    expect(calm.priorityJump()).toBe(false);
+  });
+
+  it('reads the jump class off the configured vocabulary, never a fixed four', () => {
+    const flipped = surface(
+      setup(makeFake({ docValue: { ...DOC, priority: 'low', priorities: ['low', 'normal', 'high', 'urgent'] } })),
+    );
+    expect(flipped.priority()).toBe('low');
+    expect(flipped.priorityJump()).toBe(true);
+
+    const odd = surface(setup(makeFake({ docValue: { ...DOC, priority: 'p0', priorities: ['p0', 'p1', 'p2'] } })));
+    expect(odd.priorityJump()).toBe(true);
+    const mid = surface(setup(makeFake({ docValue: { ...DOC, priority: 'p1', priorities: ['p0', 'p1', 'p2'] } })));
+    expect(mid.priorityJump()).toBe(false);
+    // An id the vocabulary does not know never jumps.
+    const unknown = surface(setup(makeFake({ docValue: { ...DOC, priority: 'zzz' } })));
+    expect(unknown.priorityJump()).toBe(false);
+  });
+
+  it('warns on open blockers and falls back to the declared deps, neutral', () => {
+    const open = surface(setup(makeFake({ docValue: { ...DOC, blocked: ['T-0001', 'T-0003'], blockedBy: ['T-0001'] } })));
+    expect(open.blockers()).toEqual({ kind: 'blocked', ids: ['T-0001', 'T-0003'] });
+
+    const declared = surface(setup(makeFake({ docValue: { ...DOC, blockedBy: ['T-0007'] } })));
+    expect(declared.blockers()).toEqual({ kind: 'depends', ids: ['T-0007'] });
+
+    const none = surface(setup(makeFake({ docValue: DOC })));
+    expect(none.blockers()).toBeNull();
+  });
+});
+
 // --- the component class ------------------------------------------------------------------------
 
 describe('TicketView', () => {
@@ -762,6 +821,9 @@ describe('TicketView', () => {
     expect(vm.steps()).toEqual([]);
     expect(vm.proof()).toBeNull();
     expect(vm.report()).toBeNull();
+    expect(vm.priority()).toBeNull();
+    expect(vm.priorityJump()).toBe(false);
+    expect(vm.blockers()).toBeNull();
     expect(vm.savedFlash()).toBeNull();
   });
 

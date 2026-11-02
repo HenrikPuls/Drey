@@ -7,12 +7,14 @@ import {
   signal,
 } from '@angular/core';
 import { renderMarkdown, type MdBlock } from './markdown';
+import { isJumpPriority } from '../api/dto';
 import {
   ACCEPT_ARM_WINDOW_MS,
   ACCEPT_DISARMED,
   DEFAULT_DIFF_FONT_SIZE,
   MC_TICKET,
   acceptArmReduce,
+  blockerNoteOf,
   chainPrefillOf,
   chainStepsOf,
   diffFontSizeStep,
@@ -26,6 +28,7 @@ import {
   type GateStep,
   type ProofReport,
   type ScoutReport,
+  type TicketBlockerNote,
   type TicketDiffFile,
 } from './ticket.model';
 
@@ -96,6 +99,22 @@ export class TicketView {
   protected readonly phaseColor = computed(() => this.vm.phaseColor());
 
   protected readonly readOnly = computed(() => this.vm.readOnly());
+
+  // --- the priority chip and the blocker line ---------------------------------
+
+  /** The ticket's priority id — the chip's label; null = no chip. */
+  protected readonly priority = computed(() => this.doc()?.priority ?? null);
+
+  /** True when the priority sits in the configured vocabulary's jump class. */
+  protected readonly priorityJump = computed(() =>
+    isJumpPriority(this.priority(), this.doc()?.priorities ?? []),
+  );
+
+  /** The blocker line's note; null = the ticket names no dependencies. */
+  protected readonly blockers = computed<TicketBlockerNote | null>(() => {
+    const doc = this.doc();
+    return doc === null ? null : blockerNoteOf(doc.blocked, doc.blockedBy);
+  });
 
   protected readonly steps = computed<GateStep[]>(() => {
     const doc = this.doc();

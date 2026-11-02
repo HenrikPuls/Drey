@@ -226,7 +226,7 @@ describe('createChatBridge', () => {
     }
   });
 
-  it('prompts the promote intent — the scout → ship promotion is one of the five intents', async () => {
+  it('prompts the promote intent — the scout → ship promotion is one of the six intents', async () => {
     const calls: RecordedCall[] = [];
     const bridge = createChatBridge({
       config: chatConfig({ 'chat.baseUrl': 'http://127.0.0.1:1234/v1', 'chat.model': 'glm-5' }),
@@ -236,10 +236,28 @@ describe('createChatBridge', () => {
 
     const body = JSON.parse(String(calls[0]!.init.body)) as { messages: { role: string; content: string }[] };
     const system = body.messages[0]!.content;
-    expect(system).toContain('exactly five intents');
+    expect(system).toContain('exactly six intents');
     expect(system).toContain('- promote —');
     expect(system).toContain('scout');
-    expect(system).toMatch(/createTicket, transition, setPriority, promote, setChain/);
+    expect(system).toMatch(/createTicket, transition, setPriority, promote, setChain, setBlockedBy/);
+  });
+
+  it('prompts the blocked intent with the setBlockedBy grammar — the sixth intent', async () => {
+    const calls: RecordedCall[] = [];
+    const bridge = createChatBridge({
+      config: chatConfig({ 'chat.baseUrl': 'http://127.0.0.1:1234/v1', 'chat.model': 'glm-5' }),
+      fetch: fakeFetch(calls, [frame('{"say":"Understood."}')]),
+    });
+    await bridge.runTurn({ text: 'T-0002 waits until T-0001 and T-0003 are done', history: [], board: BOARD, emit: () => undefined });
+
+    const body = JSON.parse(String(calls[0]!.init.body)) as { messages: { role: string; content: string }[] };
+    const system = body.messages[0]!.content;
+    expect(system).toContain('- blocked —');
+    expect(system).toContain("setBlockedBy replaces the ticket's whole blocked-by list");
+    expect(system).toContain('An empty list clears the blockers');
+    expect(system).toContain('{"kind":"setBlockedBy","id":"T-0002","blockedBy":["T-0001","T-0003"]}');
+    // Priorities come from the board's configured vocabulary, never a hard-coded list.
+    expect(system).toContain('the digest\'s "priorities (weight order)" line is the whole vocabulary');
   });
 
   it('prompts the chain intent with the setChain grammar — the fifth intent', async () => {
@@ -297,6 +315,33 @@ describe('createChatBridge', () => {
           id: 'T-0086',
           chain: ['insert design(pia, notify) after review', 'skip verify'],
         },
+      ],
+    });
+  });
+
+  it('round-trips a setBlockedBy command and validates priorities against the vocabulary the turn carries', async () => {
+    const calls: RecordedCall[] = [];
+    const bridge = createChatBridge({
+      config: chatConfig({ 'chat.baseUrl': 'http://127.0.0.1:1234/v1', 'chat.model': 'glm-5' }),
+      fetch: fakeFetch(calls, [
+        frame('{"say":"T-0002 waits for T-0001 and T-0003 now.","thought":"The owner wants the dependency, and p0 as the class.","commands":[{"kind":"setBlockedBy","id":"T-0002","blockedBy":["T-0001","T-0003"]},{"kind":"setPriority","id":"T-0002","priority":"p0"},{"kind":"setPriority","id":"T-0002","priority":"low"}]}'),
+      ]),
+    });
+    const result = await bridge.runTurn({
+      text: 'block T-0002 behind T-0001 and T-0003',
+      history: [],
+      board: BOARD,
+      priorities: { order: ['p0', 'p1', 'p2'], default: 'p1' },
+      emit: () => undefined,
+    });
+
+    expect(result).toEqual({
+      say: 'T-0002 waits for T-0001 and T-0003 now.',
+      thought: 'The owner wants the dependency, and p0 as the class.',
+      commands: [
+        { kind: 'setBlockedBy', id: 'T-0002', blockedBy: ['T-0001', 'T-0003'] },
+        // `p0` is the vault's word; the default vocabulary's `low` drops.
+        { kind: 'setPriority', id: 'T-0002', priority: 'p0' },
       ],
     });
   });

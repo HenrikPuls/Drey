@@ -5,11 +5,14 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_PRIORITY_CONFIG,
+  isJumpPriority,
   parseActiveSession,
   parseBoardCard,
   parseChatEvent,
   parseImprovements,
   parseNeeds,
+  parsePriorities,
   parseProposal,
   parseSessions,
   parseTeam,
@@ -74,14 +77,38 @@ describe('parseWork', () => {
         },
         { id: 'done', title: 'Done', cards: [] },
       ],
+      priorities: DEFAULT_PRIORITY_CONFIG,
     });
   });
 
-  it('forgives a missing card phase (falls back to the column id) and an unknown priority', () => {
-    const work = parseWork({
-      columns: [{ phase: { id: 'plan' }, tickets: [{ id: 'T-3', meta: { priority: 'yesterday', title: 'Odd' } }] }],
+  it('parses the board priorities tolerantly — default vocabulary when absent or junk', () => {
+    expect(parseWork({ columns: [], priorities: { order: ['p0', 'p1', 'p2'], default: 'p1' } }).priorities).toEqual({
+      order: ['p0', 'p1', 'p2'],
+      default: 'p1',
     });
-    expect(work.groups[0]!.cards[0]).toMatchObject({ phase: 'plan', priority: 'normal', title: 'Odd' });
+    // A missing `default` derives from the split point: floor(3/2) = 1.
+    expect(parseWork({ columns: [], priorities: { order: ['p0', 'p1', 'p2'] } }).priorities).toEqual({
+      order: ['p0', 'p1', 'p2'],
+      default: 'p1',
+    });
+    // Junk entries and duplicates drop, an empty or unreadable list takes the default.
+    expect(parseWork({ columns: [], priorities: { order: [1, null, 'p0', 'p0', ''] } }).priorities).toEqual({
+      order: ['p0'],
+      default: 'p0',
+    });
+    expect(parseWork({ columns: [], priorities: 'junk' }).priorities).toEqual(DEFAULT_PRIORITY_CONFIG);
+    expect(parseWork({ columns: [], priorities: { order: [] } }).priorities).toEqual(DEFAULT_PRIORITY_CONFIG);
+    expect(parseWork({ columns: [] }).priorities).toEqual(DEFAULT_PRIORITY_CONFIG);
+  });
+
+  it('forgives a missing card phase and keeps an unknown priority id as written', () => {
+    const work = parseWork({
+      columns: [{ phase: { id: 'plan' }, tickets: [{ id: 'T-3', meta: { priority: 'yesterday', title: 'Odd' } }, { id: 'T-4', meta: {} }] }],
+    });
+    // The vocabulary is the vault's: the id IS the label, never coerced;
+    // a missing priority reads as none.
+    expect(work.groups[0]!.cards[0]).toMatchObject({ phase: 'plan', priority: 'yesterday', title: 'Odd' });
+    expect(work.groups[0]!.cards[1]).toMatchObject({ priority: null });
   });
 
   it('skips columns without an id and cards without an id', () => {
@@ -97,11 +124,12 @@ describe('parseWork', () => {
   });
 
   it('never throws on junk', () => {
-    expect(parseWork(null)).toEqual({ groups: [] });
-    expect(parseWork(undefined)).toEqual({ groups: [] });
-    expect(parseWork('board')).toEqual({ groups: [] });
-    expect(parseWork([1, 2, 3])).toEqual({ groups: [] });
-    expect(parseWork({})).toEqual({ groups: [] });
+    const bare = { groups: [], priorities: DEFAULT_PRIORITY_CONFIG };
+    expect(parseWork(null)).toEqual(bare);
+    expect(parseWork(undefined)).toEqual(bare);
+    expect(parseWork('board')).toEqual(bare);
+    expect(parseWork([1, 2, 3])).toEqual(bare);
+    expect(parseWork({})).toEqual(bare);
   });
 });
 
@@ -494,6 +522,56 @@ describe('parseProposal', () => {
       outcome: null,
     });
   });
+
+  it('carries a setBlockedBy proposal by its summary alone — no compare payload', () => {
+    expect(
+      parseProposal({
+        id: 'p-6',
+        summary: 'Block T-0002 by T-0001',
+        state: 'pending',
+        command: { kind: 'setBlockedBy', id: 'T-0002', blockedBy: ['T-0001'] },
+      }),
+    ).toEqual({
+      id: 'p-6',
+      state: 'pending',
+      summary: 'Block T-0002 by T-0001',
+      at: '',
+      decidedAt: null,
+      outcome: null,
+    });
+  });
+});
+
+describe('parsePriorities', () => {
+  it('reads order and default, derives the default from the split when absent', () => {
+    expect(parsePriorities({ order: ['a', 'b', 'c', 'd'], default: 'b' })).toEqual({ order: ['a', 'b', 'c', 'd'], default: 'b' });
+    expect(parsePriorities({ order: ['a', 'b', 'c'] })).toEqual({ order: ['a', 'b', 'c'], default: 'b' });
+    // A default the order does not hold derives from the split point.
+    expect(parsePriorities({ order: ['a', 'b', 'c'], default: 'zzz' })).toEqual({ order: ['a', 'b', 'c'], default: 'b' });
+  });
+
+  it('falls back to the default vocabulary on absent, junk or empty input', () => {
+    expect(parsePriorities(undefined)).toEqual(DEFAULT_PRIORITY_CONFIG);
+    expect(parsePriorities(null)).toEqual(DEFAULT_PRIORITY_CONFIG);
+    expect(parsePriorities('priorities')).toEqual(DEFAULT_PRIORITY_CONFIG);
+    expect(parsePriorities({})).toEqual(DEFAULT_PRIORITY_CONFIG);
+    expect(parsePriorities({ order: 'a,b' })).toEqual(DEFAULT_PRIORITY_CONFIG);
+    expect(parsePriorities({ order: [42, {}, '  '] })).toEqual(DEFAULT_PRIORITY_CONFIG);
+  });
+
+  it('is the default vocabulary the jump-class rule reads', () => {
+    expect(DEFAULT_PRIORITY_CONFIG).toEqual({ order: ['urgent', 'high', 'normal', 'low'], default: 'normal' });
+    // floor(4/2) = 2: urgent and high sit in the jump class, the rest not.
+    expect(isJumpPriority('urgent', DEFAULT_PRIORITY_CONFIG.order)).toBe(true);
+    expect(isJumpPriority('high', DEFAULT_PRIORITY_CONFIG.order)).toBe(true);
+    expect(isJumpPriority('normal', DEFAULT_PRIORITY_CONFIG.order)).toBe(false);
+    expect(isJumpPriority('low', DEFAULT_PRIORITY_CONFIG.order)).toBe(false);
+    expect(isJumpPriority('p0', DEFAULT_PRIORITY_CONFIG.order)).toBe(false);
+    expect(isJumpPriority(null, DEFAULT_PRIORITY_CONFIG.order)).toBe(false);
+    // Odd lengths: floor(3/2) = 1 — only the first entry jumps.
+    expect(isJumpPriority('a', ['a', 'b', 'c'])).toBe(true);
+    expect(isJumpPriority('b', ['a', 'b', 'c'])).toBe(false);
+  });
 });
 
 describe('parseChatEvent', () => {
@@ -634,7 +712,32 @@ describe('parseTicketDetail', () => {
       phases,
       phase: 'verify',
       chain: [],
+      priority: 'high',
+      blockedBy: [],
+      blocked: [],
+      blocks: [],
     });
+  });
+
+  it('parses the priority id and the blockedBy/blocked/blocks lists tolerantly', () => {
+    const detail = parseTicketDetail(
+      {
+        ok: true,
+        card: {
+          id: 'T-1',
+          phase: 'build',
+          meta: { priority: 'p0', blockedBy: ['T-0002', 7, null, 'T-0003'] },
+          blocked: ['T-0002'],
+          blocks: ['T-0009'],
+        },
+        text: 'x',
+        revision: '',
+      },
+      phases,
+    );
+    expect(detail).toMatchObject({ priority: 'p0', blockedBy: ['T-0002', 'T-0003'], blocked: ['T-0002'], blocks: ['T-0009'] });
+    const bare = parseTicketDetail({ ok: true, card: { id: 'T-2', meta: {} }, text: '', revision: '' }, phases);
+    expect(bare).toMatchObject({ priority: null, blockedBy: [], blocked: [], blocks: [] });
   });
 
   it('maps the chain delta off the card meta tolerantly', () => {

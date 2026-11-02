@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { type Signal, type WritableSignal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { ActiveSession, ChatMessageView, ChatStateView, McChainEntry, WorkView } from '../api/dto';
+import { DEFAULT_PRIORITY_CONFIG } from '../api/dto';
 import type { McState } from '../api/state';
 import {
   Chat,
@@ -363,6 +364,7 @@ describe('Chat setChain before/after card (E9)', () => {
       { id: 'verify', title: 'Verify', cards: [] },
       { id: 'done', title: 'Done', cards: [] },
     ],
+    priorities: DEFAULT_PRIORITY_CONFIG,
   };
 
   function fakeState(board: unknown, work: WorkView): ChainFakeState {
@@ -407,6 +409,27 @@ describe('Chat setChain before/after card (E9)', () => {
     const vm = setup(fakeState(BOARD, WORK));
     const other: TimelineProposal = { id: 'p-2', state: 'pending', summary: 'Move T-1', outcome: null };
     expect(vm.chainCompareFor(other)).toBeNull();
+  });
+
+  it('renders a setBlockedBy proposal by its summary alone — no chain compare', () => {
+    // The card's compare strips exist for setChain only; a setBlockedBy
+    // command (the block/unblock proposal) carries no gate delta, so the
+    // generic rendering shows the summary line alone.
+    const vm = setup(fakeState(BOARD, WORK));
+    const setBlockedBy: TimelineProposal = {
+      id: 'p-3',
+      state: 'pending',
+      summary: 'Block T-0002 by T-0001',
+      outcome: null,
+    };
+    expect(vm.chainCompareFor(setBlockedBy)).toBeNull();
+    const cleared: TimelineProposal = {
+      id: 'p-4',
+      state: 'pending',
+      summary: 'Clear T-0002 blockers',
+      outcome: null,
+    };
+    expect(vm.chainCompareFor(cleared)).toBeNull();
   });
 
   it('degrades to an all-future "before" when the board holds no such card', () => {

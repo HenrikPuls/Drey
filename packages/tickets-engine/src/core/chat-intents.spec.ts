@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_PRIORITY_CONFIG, type PriorityConfig } from '../contracts/tickets';
 import { parseEnvelope, validateChatCommand } from './chat-intents';
+
+/** A three-word custom vocabulary (`p0` jumps, `p1` is the default, `p2` waits). */
+const CUSTOM: PriorityConfig = { order: ['p0', 'p1', 'p2'], default: 'p1' };
 
 describe('parseEnvelope', () => {
   it('reads the strict envelope the bridge prompts for', () => {
@@ -77,5 +81,56 @@ describe('validateChatCommand', () => {
     expect(validateChatCommand({ kind: 'setChain', id: 'T-0086', chain: ['ok', 4] })).toBeNull();
     expect(validateChatCommand({ kind: 'setChain', id: 'T-0086' })).toBeNull();
     expect(validateChatCommand({ kind: 'setChain', id: 'T-1', chain: [] })).toBeNull();
+  });
+
+  it('validates setBlockedBy with a ticket-id list — an empty list clears', () => {
+    expect(validateChatCommand({ kind: 'setBlockedBy', id: 'T-0002', blockedBy: ['T-0001', 'T-0003'] })).toEqual({
+      kind: 'setBlockedBy',
+      id: 'T-0002',
+      blockedBy: ['T-0001', 'T-0003'],
+    });
+    expect(validateChatCommand({ kind: 'setBlockedBy', id: 'T-0002', blockedBy: [] })).toEqual({
+      kind: 'setBlockedBy',
+      id: 'T-0002',
+      blockedBy: [],
+    });
+    expect(validateChatCommand({ kind: 'setBlockedBy', id: 'T-0002' })).toBeNull();
+    expect(validateChatCommand({ kind: 'setBlockedBy', id: 'T-0002', blockedBy: 'T-0001' })).toBeNull();
+    expect(validateChatCommand({ kind: 'setBlockedBy', id: 'T-0002', blockedBy: ['T-1'] })).toBeNull();
+    expect(validateChatCommand({ kind: 'setBlockedBy', id: 'T-0002', blockedBy: ['T-0001', 4] })).toBeNull();
+    expect(validateChatCommand({ kind: 'setBlockedBy', id: 'T-1', blockedBy: [] })).toBeNull();
+  });
+
+  it('validates priorities against the vocabulary handed in, not a hard-coded list', () => {
+    // The custom vocabulary accepts its own words and refuses the defaults.
+    expect(validateChatCommand({ kind: 'setPriority', id: 'T-0002', priority: 'p0' }, CUSTOM)).toEqual({
+      kind: 'setPriority',
+      id: 'T-0002',
+      priority: 'p0',
+    });
+    expect(validateChatCommand({ kind: 'setPriority', id: 'T-0002', priority: 'urgent' }, CUSTOM)).toBeNull();
+    expect(
+      validateChatCommand({ kind: 'createTicket', title: 'X', phase: 'inbox', priority: 'p2' }, CUSTOM),
+    ).toEqual({ kind: 'createTicket', title: 'X', description: '', priority: 'p2', phase: 'inbox' });
+    // The default vocabulary stays the default parameter.
+    expect(validateChatCommand({ kind: 'setPriority', id: 'T-0002', priority: 'urgent' })).toEqual({
+      kind: 'setPriority',
+      id: 'T-0002',
+      priority: 'urgent',
+    });
+    expect(DEFAULT_PRIORITY_CONFIG.order).toEqual(['urgent', 'high', 'normal', 'low']);
+  });
+
+  it('parseEnvelope threads the vocabulary into the commands it keeps', () => {
+    const reply =
+      '{"say":"Blocked.","commands":[{"kind":"setBlockedBy","id":"T-0002","blockedBy":["T-0001"]},{"kind":"setPriority","id":"T-0002","priority":"p0"},{"kind":"setPriority","id":"T-0002","priority":"low"}]}';
+    expect(parseEnvelope(reply, CUSTOM)).toEqual({
+      say: 'Blocked.',
+      thought: null,
+      commands: [
+        { kind: 'setBlockedBy', id: 'T-0002', blockedBy: ['T-0001'] },
+        { kind: 'setPriority', id: 'T-0002', priority: 'p0' },
+      ],
+    });
   });
 });

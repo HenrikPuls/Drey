@@ -14,7 +14,7 @@ import {
   type PermissionMode,
   type QuestionAnswers,
 } from '../fleet/protocol';
-import { TICKET_PRIORITIES, titleFromDescription, type TicketPriority, type TicketTrack } from '../contracts/tickets';
+import { DEFAULT_PRIORITY_CONFIG, titleFromDescription, type PriorityConfig, type TicketPriority, type TicketTrack } from '../contracts/tickets';
 
 export type Parsed<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: string };
 
@@ -43,7 +43,14 @@ export interface CreateCommand {
   readonly raw?: string;
 }
 
-export function parseCreate(payload: unknown): Parsed<CreateCommand> {
+/**
+ * Parses a create payload. `priorities` is the board's configured
+ * vocabulary (the snapshot's `priorities`): a priority outside it is not
+ * refused but falls back to the vocabulary's default, exactly as the
+ * shipped parser fell back to `normal` — the board's own validation
+ * still guards the write.
+ */
+export function parseCreate(payload: unknown, priorities: PriorityConfig = DEFAULT_PRIORITY_CONFIG): Parsed<CreateCommand> {
   const p = record(payload);
   const given = typeof p['title'] === 'string' ? p['title'].trim() : '';
   const description = typeof p['description'] === 'string' ? p['description'] : '';
@@ -54,9 +61,9 @@ export function parseCreate(payload: unknown): Parsed<CreateCommand> {
   if (title === '') {
     return refuse('the title is empty');
   }
-  const priority = TICKET_PRIORITIES.includes(p['priority'] as TicketPriority)
+  const priority = priorities.order.includes(p['priority'] as TicketPriority)
     ? (p['priority'] as TicketPriority)
-    : 'normal';
+    : priorities.default;
   const repo = typeof p['repo'] === 'string' && p['repo'].trim() !== '' ? p['repo'].trim() : null;
   const repos = p['repos'];
   // The raw words travel with a tidied create (req-75 W5c) — kept
@@ -333,7 +340,7 @@ export interface RefineCommand {
   readonly header: { readonly title?: string; readonly priority?: TicketPriority; readonly repo?: string };
 }
 
-export function parseRefine(payload: unknown): Parsed<RefineCommand> {
+export function parseRefine(payload: unknown, priorities: PriorityConfig = DEFAULT_PRIORITY_CONFIG): Parsed<RefineCommand> {
   const p = record(payload);
   if (typeof p['id'] !== 'string' || typeof p['baseRevision'] !== 'string' || !/^[0-9a-f]{16}$/.test(p['baseRevision'])) {
     return refuse('bad refine payload');
@@ -360,7 +367,7 @@ export function parseRefine(payload: unknown): Parsed<RefineCommand> {
     header.title = title;
   }
   if (rawHeader['priority'] !== undefined) {
-    if (!TICKET_PRIORITIES.includes(rawHeader['priority'] as TicketPriority)) {
+    if (!priorities.order.includes(rawHeader['priority'] as TicketPriority)) {
       return refuse('unknown priority');
     }
     header.priority = rawHeader['priority'] as TicketPriority;

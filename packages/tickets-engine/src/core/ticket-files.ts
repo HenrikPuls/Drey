@@ -12,12 +12,13 @@
 import { Document, isScalar, parseDocument, Scalar } from 'yaml';
 import { splitFrontmatter } from '../../../../shared/frontmatter';
 import {
+  DEFAULT_PRIORITY_CONFIG,
   DEFAULT_RANK,
   TICKET_ID_PATTERN,
-  TICKET_PRIORITIES,
   branchForTicket,
   formatUtcStamp,
   stripPhasePrefix,
+  type PriorityConfig,
   type TicketIssue,
   type TicketForm,
   type TicketMeta,
@@ -59,7 +60,7 @@ export function ticketPathParts(
 }
 
 /** Reads one ticket file into normalized meta + the issues found. */
-export function parseTicketFile(text: string, relPath: string): ParsedTicket {
+export function parseTicketFile(text: string, relPath: string, priorities: PriorityConfig = DEFAULT_PRIORITY_CONFIG): ParsedTicket {
   const issues: TicketIssue[] = [];
   const parts = ticketPathParts(relPath);
   if (parts === null) {
@@ -145,13 +146,13 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
   }
 
   const rawPriority = asText(obj['priority']);
-  let priority: TicketPriority = 'normal';
+  let priority: TicketPriority = priorities.default;
   if (rawPriority === null) {
-    issues.push({ level: 'warning', message: 'priority missing — read as normal' });
-  } else if ((TICKET_PRIORITIES as readonly string[]).includes(rawPriority)) {
-    priority = rawPriority as TicketPriority;
+    issues.push({ level: 'warning', message: `priority missing — read as ${priorities.default}` });
+  } else if (priorities.order.includes(rawPriority)) {
+    priority = rawPriority;
   } else {
-    issues.push({ level: 'warning', message: `unknown priority "${rawPriority}" — read as normal` });
+    issues.push({ level: 'warning', message: `unknown priority "${rawPriority}" — read as ${priorities.default}` });
   }
 
   const rawRank = obj['rank'];
@@ -537,6 +538,12 @@ export interface HeaderPatch {
    * the key (back to the standard flow).
    */
   readonly chain?: readonly string[] | null;
+  /**
+   * The `blocked-by:` dependency list (T-0050) as ticket ids, kept as
+   * written; null or an empty list removes the key. Blocked state itself
+   * stays derived — this only edits the references.
+   */
+  readonly blockedBy?: readonly string[] | null;
   readonly repo?: string;
   /**
    * The full work-repo list, primary first (req-72). One name (or none)
@@ -548,7 +555,7 @@ export interface HeaderPatch {
 }
 
 /** Rewrites the header's keys in a frontmatter block; every other key, comment and style survives. */
-export function patchHeaderFields(block: string, patch: HeaderPatch): string {
+export function patchHeaderFields(block: string, patch: HeaderPatch, priorities: PriorityConfig = DEFAULT_PRIORITY_CONFIG): string {
   const { yamlText, hadFence } = splitFrontmatter(`${block}\n`);
   if (!hadFence || yamlText === null) {
     throw new Error('ticket has no frontmatter fence');
@@ -574,10 +581,22 @@ export function patchHeaderFields(block: string, patch: HeaderPatch): string {
     doc.set('title', scalar);
   }
   if (patch.priority !== undefined) {
-    if (!TICKET_PRIORITIES.includes(patch.priority)) {
+    if (!priorities.order.includes(patch.priority)) {
       throw new Error(`unknown priority "${String(patch.priority)}"`);
     }
     doc.set('priority', patch.priority);
+  }
+  if (patch.blockedBy !== undefined) {
+    if (patch.blockedBy === null || patch.blockedBy.length === 0) {
+      removeKey(doc, 'blocked-by');
+    } else {
+      for (const id of patch.blockedBy) {
+        if (!TICKET_ID_PATTERN.test(id)) {
+          throw new Error(`blocked-by: "${id}" is not a ticket id`);
+        }
+      }
+      doc.set('blocked-by', [...patch.blockedBy]);
+    }
   }
   if (patch.track !== undefined) {
     if (patch.track === null) {
@@ -687,6 +706,24 @@ export function patchChain(text: string, chain: readonly string[] | null, now: D
   const count = chain?.length ?? 0;
   const value = normalized === null ? 'standard' : `${count} ${count === 1 ? 'entry' : 'entries'}`;
   return `${block}\n${appendLogLine(body, formatUtcStamp(now), actor, `chain ${value}`)}`;
+}
+
+/**
+ * Rewrites the ticket's whole `blocked-by:` list (T-0050) in a ticket
+ * file and appends one Log line — `blocked-by none` when the list empties
+ * (the key leaves the file), else `blocked-by <n> id(s)`. The header
+ * patch carries the ids as written; blocked state itself stays derived.
+ */
+export function patchBlockedBy(text: string, blockedBy: readonly string[] | null, now: Date, actor: string): string {
+  const { yamlText, body, hadFence } = splitFrontmatter(text);
+  if (!hadFence || yamlText === null) {
+    throw new Error('ticket has no frontmatter fence');
+  }
+  const normalized = blockedBy === null || blockedBy.length === 0 ? null : blockedBy;
+  const block = patchHeaderFields(`---\n${yamlText}\n---`, { blockedBy: normalized });
+  const count = normalized?.length ?? 0;
+  const value = normalized === null ? 'none' : `${count} ${count === 1 ? 'id' : 'ids'}`;
+  return `${block}\n${appendLogLine(body, formatUtcStamp(now), actor, `blocked-by ${value}`)}`;
 }
 
 // ---------------------------------------------------------------------------

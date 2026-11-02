@@ -95,6 +95,13 @@ const run = (patch: Partial<RunInfo>): RunInfo =>
 
 const ids = (rows: readonly { card: TicketCard }[]): string[] => rows.map((r) => r.card.id);
 
+/** A configured four-id vocabulary (M111) layered over a board — p0/p1 jump, p2 reads as default. */
+const configured = (base: BoardSnapshot): BoardSnapshot =>
+  ({
+    ...base,
+    priorities: { order: ['p0', 'p1', 'p2', 'p3'], default: 'p2' },
+  }) as BoardSnapshot;
+
 describe('ideaPhaseIds / queueTargetOf', () => {
   it('ideas are the first phase plus the manual phases before the first machine phase', () => {
     expect(ideaPhaseIds(PIPELINE)).toEqual(['inbox', 'prioritized']);
@@ -153,6 +160,30 @@ describe('workGroups', () => {
     const groups = workGroups(snap, []);
     expect(ids(groups.ideas)).toEqual(['T-0004', 'T-0002', 'T-0001', 'T-0003']);
     expect(groups.ideas.map((r) => r.queued)).toEqual([true, false, false, false]);
+  });
+
+  it('orders by the vault\'s configured vocabulary, not the default words (M111)', () => {
+    const base = board({
+      inbox: [
+        card('T-0030', 'inbox', { priority: 'low', created: '2026-10-01T00:00:00Z' }),
+        card('T-0031', 'inbox', { priority: 'p2', created: '2026-10-02T00:00:00Z' }),
+        card('T-0032', 'inbox', { priority: 'p0', created: '2026-10-03T00:00:00Z' }),
+      ],
+    });
+    // p0 then p2 by weight; 'low' sits outside the vocabulary and sorts
+    // last. Under the default list the same board reads low first — the
+    // two configured ids weigh in as unknown there.
+    expect(ids(workGroups(configured(base), []).ideas)).toEqual(['T-0032', 'T-0031', 'T-0030']);
+    expect(ids(workGroups(base, []).ideas)).toEqual(['T-0030', 'T-0032', 'T-0031']);
+  });
+
+  it('the live runs on top sort by the configured vocabulary too', () => {
+    const base = board({
+      build: [card('T-0040', 'build', { priority: 'p2' }), card('T-0041', 'build', { priority: 'low' })],
+    });
+    const runs = [run({ id: 'a', ticketId: 'T-0040' }), run({ id: 'b', ticketId: 'T-0041' })];
+    expect(ids(workGroups(configured(base), runs).running)).toEqual(['T-0040', 'T-0041']);
+    expect(ids(workGroups(base, runs).running)).toEqual(['T-0041', 'T-0040']);
   });
 
   it('Running: live runs on top, then the queue — dependencies before priority', () => {

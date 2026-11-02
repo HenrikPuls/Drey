@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { phaseWithoutPoolKeys, type BoardColumn, type PipelinePhase, type TicketCard } from '../contracts/tickets';
+import {
+  phaseWithoutPoolKeys,
+  priorityClass,
+  type BoardColumn,
+  type PipelinePhase,
+  type PriorityConfig,
+  type TicketCard,
+} from '../contracts/tickets';
 import {
   checkpointPhaseIds,
   columnPromptRef,
@@ -7,7 +14,6 @@ import {
   isAutoPhase,
   nextPhaseIdOf,
   planDispatch,
-  priorityClass,
   type PlanDispatchInput,
 } from './chain';
 
@@ -294,5 +300,22 @@ describe('planDispatch — provider pools and column priority (req-63)', () => {
     expect([priorityClass('urgent'), priorityClass('high'), priorityClass('normal'), priorityClass('low')]).toEqual([
       0, 0, 1, 1,
     ]);
+  });
+
+  it('priorityClass follows the handed vocabulary — the middle is the default class, unknown ids wait', () => {
+    const vocab: PriorityConfig = { order: ['p0', 'p1', 'p2'], default: 'p1' };
+    expect([priorityClass('p0', vocab), priorityClass('p1', vocab), priorityClass('p2', vocab)]).toEqual([0, 1, 1]);
+    expect(priorityClass('p9', vocab)).toBe(1);
+  });
+
+  it('the dispatch classes split at the configured vocabulary, not a hard-coded list', () => {
+    const columns = board([inPlan('T-0181', 'p0')], [inBuild('T-0182', 'p1')]);
+    const vocab: PriorityConfig = { order: ['p0', 'p1', 'p2'], default: 'p1' };
+    // The vault's three-word vocabulary: p0 jumps, p1 waits — the earlier
+    // column's p0 wins over the rightmost column's p1.
+    expect(ids(input({ columns, poolSize: one, priorities: vocab }))).toEqual(['T-0181']);
+    // Without the vocabulary both are unknown words — one class, the
+    // rightmost column's ticket goes first as always.
+    expect(ids(input({ columns, poolSize: one }))).toEqual(['T-0182']);
   });
 });

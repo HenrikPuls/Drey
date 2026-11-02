@@ -9,9 +9,29 @@
 
 // --- Work ------------------------------------------------------------------
 
-export type McPriority = 'urgent' | 'high' | 'normal' | 'low';
+/**
+ * A priority id from the vault's configured vocabulary — `urgent` in the
+ * default list, or whatever pipeline.md's `priorities:` names (`p0`,
+ * `critical`, …). The vocabulary is the desk's, never a fixed four: the
+ * id IS the label. The order of the list IS the weight: first is highest.
+ */
+export type McPriority = string;
 
-const PRIORITIES: readonly McPriority[] = ['urgent', 'high', 'normal', 'low'];
+/** The default vocabulary — what a board without `priorities:` gets. */
+export const DEFAULT_PRIORITY_CONFIG: McPriorityConfig = {
+  order: ['urgent', 'high', 'normal', 'low'],
+  default: 'normal',
+};
+
+/**
+ * The board's priority vocabulary (`/api/board` `priorities`, the desk's
+ * PriorityConfig): `order` in weight order (first = highest), `default`
+ * is what a ticket without `priority:` reads as.
+ */
+export interface McPriorityConfig {
+  readonly order: readonly string[];
+  readonly default: string;
+}
 
 /** One ticket as the Work tab's card renders it (concept §7: one ticket = one card). */
 export interface TicketCardView {
@@ -19,7 +39,8 @@ export interface TicketCardView {
   readonly title: string;
   /** The pipeline phase the card currently sits in. */
   readonly phase: string;
-  readonly priority: McPriority;
+  /** The configured priority id; null when the card carries none. */
+  readonly priority: McPriority | null;
   /** The persona pin (`null` = the ladder decides). */
   readonly personaId: string | null;
   readonly claimedBy: string | null;
@@ -36,6 +57,8 @@ export interface GroupView {
 
 export interface WorkView {
   readonly groups: readonly GroupView[];
+  /** The board's priority vocabulary; the default list when the desk omits or junks it. */
+  readonly priorities: McPriorityConfig;
 }
 
 // --- Needs -----------------------------------------------------------------
@@ -269,6 +292,18 @@ export interface TicketDetail {
    * empty = the standard flow applies silently.
    */
   readonly chain: readonly McChainEntry[];
+  /**
+   * The ticket's priority id as the vault configures it — the id IS the
+   * label (the vocabulary is the desk's, never a fixed four); null when
+   * the card carries none.
+   */
+  readonly priority: McPriority | null;
+  /** The `blocked-by:` ids as written (T-0050); `[]` when absent. */
+  readonly blockedBy: readonly string[];
+  /** The OPEN blockers, derived on the desk; `[]` = unblocked or omitted. */
+  readonly blocked: readonly string[];
+  /** The derived inverse: ids this ticket currently blocks; `[]` when omitted. */
+  readonly blocks: readonly string[];
 }
 
 /** One file's git patch off `/api/tickets/<id>/diff`. */
@@ -299,8 +334,59 @@ const strArray = (value: unknown): readonly string[] => arr(value).filter((item)
 
 const isoNow = (): string => new Date().toISOString();
 
-function priorityOf(value: unknown): McPriority {
-  return PRIORITIES.includes(value as McPriority) ? (value as McPriority) : 'normal';
+/**
+ * The card's priority id as written — the vocabulary is the vault's, so
+ * any non-empty string passes; anything else (missing, junk) reads as
+ * none, never a guess.
+ */
+function priorityOf(value: unknown): McPriority | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/**
+ * The board's `priorities` read tolerantly: the order keeps its readable
+ * strings (trimmed; junk and duplicates drop, first wins), an unreadable
+ * or empty list takes the default vocabulary, and a `default` the order
+ * does not hold derives from the split point (`floor(len/2)` — the
+ * desk's own rule).
+ */
+export function parsePriorities(raw: unknown): McPriorityConfig {
+  const body = rec(raw);
+  if (body === null) {
+    return DEFAULT_PRIORITY_CONFIG;
+  }
+  const order: string[] = [];
+  for (const entry of arr(body['order'])) {
+    const id = typeof entry === 'string' ? entry.trim() : '';
+    if (id !== '' && !order.includes(id)) {
+      order.push(id);
+    }
+  }
+  if (order.length === 0) {
+    return DEFAULT_PRIORITY_CONFIG;
+  }
+  const named = typeof body['default'] === 'string' ? body['default'].trim() : '';
+  return {
+    order,
+    default:
+      named !== '' && order.includes(named)
+        ? named
+        : (order[Math.floor(order.length / 2)] ?? DEFAULT_PRIORITY_CONFIG.default),
+  };
+}
+
+/**
+ * The jump class (the desk's req-63 split, mirrored): the vocabulary
+ * divides at `floor(len/2)` — the entries before it jump the queue (the
+ * work card's flag accent), the entry at it is the default reading, the
+ * rest is the calm half. An id the order does not know never jumps.
+ */
+export function isJumpPriority(priority: string | null, order: readonly string[]): boolean {
+  if (priority === null) {
+    return false;
+  }
+  const at = order.indexOf(priority);
+  return at >= 0 && at < Math.floor(order.length / 2);
 }
 
 /** One chain entry's wire JSON; null when nothing renderable survives (no kind or no phase). */
@@ -360,7 +446,7 @@ function cardOf(raw: unknown, phaseFallback: string): TicketCardView {
 export function parseWork(json: unknown): WorkView {
   const board = rec(json);
   if (board === null) {
-    return { groups: [] };
+    return { groups: [], priorities: DEFAULT_PRIORITY_CONFIG };
   }
   const groups: GroupView[] = [];
   for (const raw of arr(board['columns'])) {
@@ -379,7 +465,10 @@ export function parseWork(json: unknown): WorkView {
       cards,
     });
   }
-  return { groups };
+  return {
+    groups,
+    priorities: parsePriorities(board['priorities']),
+  };
 }
 
 /** One decision's JSON; null when nothing renderable survives (no key and no question). */
@@ -816,6 +905,10 @@ export function parseTicketDetail(json: unknown, phases: readonly TicketPhaseOpt
     phases,
     phase: str(card['phase']),
     chain: chainEntriesOf(meta['chain']),
+    priority: priorityOf(meta['priority']),
+    blockedBy: strArray(meta['blockedBy']),
+    blocked: strArray(card['blocked']),
+    blocks: strArray(card['blocks']),
   };
 }
 

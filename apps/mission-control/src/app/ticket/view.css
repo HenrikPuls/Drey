@@ -97,6 +97,30 @@
   color: var(--mc-text);
 }
 
+/* The priority chip: the configured id IS the label; the jump class
+   (the vocabulary's upper half) wears the work card's flag accent. */
+.chip-priority {
+  flex: none;
+  margin-top: 2px;
+}
+
+.chip-priority-jump {
+  color: var(--mc-danger);
+  border-color: var(--mc-danger);
+}
+
+/* One compact line under the header: the open blockers warn, the
+   declared `blocked-by:` deps read dim. */
+.blockers {
+  margin: -8px 0 0;
+  font-size: 12px;
+  color: var(--mc-dim);
+}
+
+.blockers-open {
+  color: var(--mc-danger);
+}
+
 /* The gate bar: the pipeline as a horizontal step strip. */
 
 .gate {

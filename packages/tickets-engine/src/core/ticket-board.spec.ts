@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addPipelinePhase,
   assembleBoard,
+  derivedOrder,
   orderColumn,
   parsePipeline,
   parseRepos,
@@ -485,5 +486,51 @@ describe('repos.md writer (req-72)', () => {
     const { repos: parsed, error } = parseRepos(text);
     expect(error).toBeNull();
     expect(parsed).toEqual(repos);
+  });
+});
+
+describe('parsePipeline priorities (M111)', () => {
+  it('absent priorities: ride the default vocabulary silently', () => {
+    const parsed = parsePipeline(PIPELINE);
+    expect(parsed.priorities.order).toEqual(['urgent', 'high', 'normal', 'low']);
+    expect(parsed.priorities.default).toBe('normal');
+  });
+
+  it('a configured list rides in weight order with noise findings surfaced', () => {
+    const text = PIPELINE.replace(/^---/, '---\npriorities: [critical, high, medium, low]');
+    const parsed = parsePipeline(text);
+    expect(parsed.priorities.order).toEqual(['critical', 'high', 'medium', 'low']);
+    expect(parsed.priorities.default).toBe('medium');
+    expect(parsed.issues).toEqual([]);
+  });
+
+  it('an unreadable list degrades to the default vocabulary with a noise finding', () => {
+    const parsed = parsePipeline(PIPELINE.replace(/^---/, '---\npriorities: urgent'));
+    expect(parsed.priorities).toEqual({
+      order: ['urgent', 'high', 'normal', 'low'],
+      default: 'normal',
+    });
+    expect(parsed.issues).toEqual([
+      { level: 'noise', message: 'priorities must be a list of ids — the default vocabulary applies' },
+    ]);
+  });
+});
+
+describe('derivedOrder with a configured vocabulary (M111)', () => {
+  const CONFIG = {
+    order: ['critical', 'high', 'medium', 'low'],
+    default: 'medium',
+  };
+
+  const key = (id: string, priority: string, rank = 0) => ({ id, priority, rank, entered: '' });
+
+  it('sorts by the configured index, not the word list', () => {
+    const order = derivedOrder([key('a', 'low'), key('b', 'critical'), key('c', 'high')], CONFIG);
+    expect(order.map((k) => k.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('an id outside the vocabulary sorts after every configured one', () => {
+    const order = derivedOrder([key('a', 'urgent'), key('b', 'low'), key('c', 'high')], CONFIG);
+    expect(order.map((k) => k.id)).toEqual(['c', 'b', 'a']);
   });
 });

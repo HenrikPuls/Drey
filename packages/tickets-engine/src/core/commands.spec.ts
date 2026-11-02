@@ -140,6 +140,26 @@ describe('parseRefine', () => {
     expect(parseRefine({ ...base, header: { priority: 'asap' } })).toEqual({ ok: false, error: 'unknown priority' });
     expect(parseRefine({ ...base, sections: { plan: 'x'.repeat(20_001) } })).toMatchObject({ ok: false });
   });
+
+  it('judges the header priority against the handed vocabulary', () => {
+    const vocab = { order: ['p0', 'p1', 'p2'], default: 'p1' };
+    expect(parseRefine({ ...base, header: { priority: 'p0' } }, vocab)).toEqual({
+      ok: true,
+      value: { ...base, sections: {}, header: { priority: 'p0' } },
+    });
+    expect(parseRefine({ ...base, header: { priority: 'high' } }, vocab)).toEqual({ ok: false, error: 'unknown priority' });
+  });
+});
+
+describe('parseCreate with a configured vocabulary', () => {
+  it('falls back to the vocabulary default instead of `normal`', () => {
+    const vocab = { order: ['p0', 'p1', 'p2'], default: 'p1' };
+    expect(parseCreate({ title: 'X', priority: 'p0' }, vocab)).toMatchObject({ value: { priority: 'p0' } });
+    expect(parseCreate({ title: 'X', priority: 'urgent' }, vocab)).toMatchObject({ value: { priority: 'p1' } });
+    expect(parseCreate({ title: 'X' }, vocab)).toMatchObject({ value: { priority: 'p1' } });
+    // The shipped vocabulary stays the default parameter.
+    expect(parseCreate({ title: 'X', priority: 'huge' })).toMatchObject({ value: { priority: 'normal' } });
+  });
 });
 
 describe('parseAttachment', () => {

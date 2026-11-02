@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_PRIORITY_CONFIG,
   ageOf,
   branchForTicket,
   archivedTicketIds,
   nextTicketId,
   openTicketCount,
+  parsePriorityConfig,
   phaseDirectoryName,
+  priorityClass,
+  priorityWeight,
   stripPhasePrefix,
   ticketOfBranch,
   titleFromDescription,
@@ -147,3 +151,63 @@ describe('titleFromDescription (req-75 W5b)', () => {
   });
 });
 
+
+describe('priority vocabulary (M111)', () => {
+  it('defaults to the four-word list with normal as the default read', () => {
+    expect(DEFAULT_PRIORITY_CONFIG.order).toEqual(['urgent', 'high', 'normal', 'low']);
+    expect(DEFAULT_PRIORITY_CONFIG.default).toBe('normal');
+  });
+
+  it('absent priorities read silently as the default vocabulary', () => {
+    expect(parsePriorityConfig(undefined)).toEqual({ config: DEFAULT_PRIORITY_CONFIG, issues: [] });
+    expect(parsePriorityConfig(null)).toEqual({ config: DEFAULT_PRIORITY_CONFIG, issues: [] });
+  });
+
+  it('parses a configured list in weight order; the middle entry is the default read', () => {
+    const { config, issues } = parsePriorityConfig(['critical', 'high', 'medium', 'low']);
+    expect(issues).toEqual([]);
+    expect(config.order).toEqual(['critical', 'high', 'medium', 'low']);
+    expect(config.default).toBe('medium');
+    const odd = parsePriorityConfig(['p0', 'p1', 'p2']).config;
+    expect(odd.default).toBe('p1');
+  });
+
+  it('forgives a non-list and an empty list with a noise finding and the default vocabulary', () => {
+    expect(parsePriorityConfig('urgent')).toEqual({
+      config: DEFAULT_PRIORITY_CONFIG,
+      issues: [{ level: 'noise', message: 'priorities must be a list of ids — the default vocabulary applies' }],
+    });
+    const empty = parsePriorityConfig([]);
+    expect(empty.config).toEqual(DEFAULT_PRIORITY_CONFIG);
+    expect(empty.issues).toEqual([{ level: 'noise', message: 'priorities is empty — the default vocabulary applies' }]);
+  });
+
+  it('drops unreadable ids and duplicates with a noise finding each', () => {
+    const { config, issues } = parsePriorityConfig(['critical', 'Critical', 3, 'critical', 'low']);
+    expect(config.order).toEqual(['critical', 'low']);
+    expect(issues.map((i) => i.level)).toEqual(['noise', 'noise', 'noise']);
+    expect(issues[0]!.message).toContain('"Critical"');
+    expect(issues[2]!.message).toContain('twice');
+  });
+
+  it('weights by configured index; an unknown id sorts last', () => {
+    const config = parsePriorityConfig(['critical', 'high', 'medium', 'low']).config;
+    expect(priorityWeight('critical', config)).toBe(0);
+    expect(priorityWeight('low', config)).toBe(3);
+    expect(priorityWeight('urgent', config)).toBe(4);
+    expect(priorityWeight('whatever', config)).toBe(4);
+    expect(priorityWeight('low')).toBe(3);
+  });
+
+  it('the jump class is the upper half of the vocabulary — urgent/high in the default list', () => {
+    expect(priorityClass('urgent')).toBe(0);
+    expect(priorityClass('high')).toBe(0);
+    expect(priorityClass('normal')).toBe(1);
+    expect(priorityClass('low')).toBe(1);
+    const three = parsePriorityConfig(['p0', 'p1', 'p2']).config;
+    expect(priorityClass('p0', three)).toBe(0);
+    expect(priorityClass('p1', three)).toBe(1);
+    expect(priorityClass('p2', three)).toBe(1);
+    expect(priorityClass('unknown')).toBe(1);
+  });
+});

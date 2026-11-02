@@ -216,6 +216,28 @@ describe('groupsOf', () => {
     expect(second.blocked).toBe(true);
     expect(second.persona?.color).toBe('#ff8800');
   });
+
+  it('flags cards by the board’s configured vocabulary when mapping the groups', () => {
+    const configured: McBoard = {
+      priorities: { order: ['meh', 'ok', 'hot'], default: 'ok' },
+      columns: [
+        {
+          phase: { id: 'build', title: 'Build' },
+          tickets: [
+            ticket('T-0001', { meta: { priority: 'meh' } }), // index 0 — before the split: flag
+            ticket('T-0002', { meta: { priority: 'ok' } }), // index 1 — the default slot: calm
+            ticket('T-0003', { meta: { priority: 'hot' } }), // not in the vocabulary: never flags
+          ],
+        },
+      ],
+    };
+    const groups = groupsOf([], configured, []);
+    const build = groups.find((g) => g.kind === 'phase' && g.phaseId === 'build');
+    if (build?.kind !== 'phase') {
+      throw new Error('expected the build group');
+    }
+    expect(build.tickets.map((vm) => vm.flagged)).toEqual([true, false, false]);
+  });
 });
 
 describe('nextPhaseOf', () => {
@@ -281,11 +303,32 @@ describe('card helpers', () => {
     expect(displayTitleOf(ticket('T-0001', { title: 'Ship it' }))).toBe('Ship it');
   });
 
-  it('flags only urgent and high priorities', () => {
+  it('flags the default vocabulary’s jump class (urgent, high)', () => {
     expect(isFlaggedTicket(ticket('a', { meta: { priority: 'urgent' } }))).toBe(true);
     expect(isFlaggedTicket(ticket('b', { meta: { priority: 'high' } }))).toBe(true);
     expect(isFlaggedTicket(ticket('c', { meta: { priority: 'normal' } }))).toBe(false);
+    expect(isFlaggedTicket(ticket('e', { meta: { priority: 'low' } }))).toBe(false);
     expect(isFlaggedTicket(ticket('d'))).toBe(false);
+  });
+
+  it('flags by the configured vocabulary — a configured order flips the flag', () => {
+    const flipped = { order: ['low', 'normal', 'high', 'urgent'], default: 'normal' };
+    expect(isFlaggedTicket(ticket('a', { meta: { priority: 'low' } }), flipped)).toBe(true);
+    expect(isFlaggedTicket(ticket('b', { meta: { priority: 'urgent' } }), flipped)).toBe(false);
+    const custom = { order: ['p0', 'p1', 'p2', 'p3'], default: 'p2' };
+    expect(isFlaggedTicket(ticket('c', { meta: { priority: 'p1' } }), custom)).toBe(true);
+    expect(isFlaggedTicket(ticket('d', { meta: { priority: 'p2' } }), custom)).toBe(false);
+    // Odd lengths split at floor(len/2): only the entries before it jump.
+    const odd = { order: ['a', 'b', 'c'], default: 'b' };
+    expect(isFlaggedTicket(ticket('e', { meta: { priority: 'a' } }), odd)).toBe(true);
+    expect(isFlaggedTicket(ticket('f', { meta: { priority: 'b' } }), odd)).toBe(false);
+  });
+
+  it('never flags an unknown or missing priority, in any vocabulary', () => {
+    const config = { order: ['p0', 'p1', 'p2', 'p3'], default: 'p2' };
+    expect(isFlaggedTicket(ticket('a', { meta: { priority: 'zzz' } }), config)).toBe(false);
+    expect(isFlaggedTicket(ticket('b', { meta: { priority: 'urgent' } }), config)).toBe(false);
+    expect(isFlaggedTicket(ticket('c'), config)).toBe(false);
   });
 
   it('marks blocked from the derived list or the raw blocked-by list', () => {

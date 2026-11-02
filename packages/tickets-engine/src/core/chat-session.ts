@@ -22,6 +22,7 @@
  *     - '2026-11-02T09:02:10Z' proposal p-1 confirmed — Move T-0086 from build to review → ok
  */
 import { splitFrontmatter } from '../../../../shared/frontmatter';
+import { DEFAULT_PRIORITY_CONFIG, type PriorityConfig } from '../contracts/tickets';
 import type { ChatCommand, ChatMessage, ChatProposal, ChatSession } from '../contracts/chat';
 import { validateChatCommand } from './chat-intents';
 
@@ -99,8 +100,15 @@ export function decideProposal(
   return `${text.endsWith('\n') ? text : `${text}\n`}${line}`;
 }
 
-/** Reads a session file back; null when the frontmatter is unreadable. */
-export function parseSessionFile(text: string, file: string): ChatSession | null {
+/** Reads a session file back; null when the frontmatter is unreadable.
+ *  `priorities` is the board's vocabulary — a proposal's priority field
+ *  validates against it, so a custom-vocabulary card survives the file
+ *  round-trip (the chat service passes the snapshot's config). */
+export function parseSessionFile(
+  text: string,
+  file: string,
+  priorities: PriorityConfig = DEFAULT_PRIORITY_CONFIG,
+): ChatSession | null {
   const { yamlText, body, hadFence } = splitFrontmatter(text);
   if (!hadFence || yamlText === null) {
     return null;
@@ -137,7 +145,7 @@ export function parseSessionFile(text: string, file: string): ChatSession | null
         .join('')
         .trim();
       const json = /^```json\s*(.+?)\s*```$/.exec(block)?.[1] ?? null;
-      const command = json === null ? null : validateChatCommand(safeJson(json));
+      const command = json === null ? null : validateChatCommand(safeJson(json), priorities);
       if (command !== null) {
         proposals.push({ id: id!, state: 'pending', summary: summary!, command, at: at!, decidedAt: null, outcome: null });
       }

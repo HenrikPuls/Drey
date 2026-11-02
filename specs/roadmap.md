@@ -139,7 +139,17 @@ standard flow, the insert/skip/notify grammar with its semantic
 write-guard, the merge that feeds the gate bar and the Bescheid
 "Needs you" cards, and the chat's `setChain` command with
 confirmation; built and suite-green but awaiting the owner's
-round). **E9 completes the concept** — all of E0–E9 stands
+round). **Milestone 111 completes the board itself**: configurable
+priorities — pipeline.md's top-level `priorities:` names the vault's
+own vocabulary (weight order, its middle entry the default, its first
+half the dispatch's jump class), and every priority path — board
+order, dispatch classes, chat digest + envelope validation, header
+edits, `createTicket` — reads it instead of a hard-coded list — plus
+the blocked-by chat/edit path: the chat's `setBlockedBy` command and
+the engine's whole-list replacement (an empty list clears the
+blockers), the last board field without a conversational/edit way to
+write it. Built and suite-green but awaiting the owner's round.
+**E9 completes the concept** — all of E0–E9 stands
 built, none of it owner-verified; next is the owner's verification
 round (§4.9's watcher depth now rides on
 the status log in place). Drey keeps its

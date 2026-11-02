@@ -16,11 +16,13 @@
  */
 import type { NeedItem } from '../shared/remote-protocol';
 import {
+  DEFAULT_PRIORITY_CONFIG,
   parseHandover,
   priorityWeight,
   type BoardColumn,
   type BoardSnapshot,
   type PipelinePhase,
+  type PriorityConfig,
   type TicketCard,
 } from '../shared/tickets';
 import type { RunInfo, RunState } from '../../../packages/tickets-engine/src/fleet/protocol';
@@ -145,12 +147,15 @@ function ideaRecency(firstPhaseId: string): (a: WorkRow, b: WorkRow) => number {
  * above an open blocker in the same list, and a blocker carries the most
  * urgent priority of everything it holds up, so a low ticket that blocks
  * an urgent one moves up with it — its own lower priority no longer
- * counts. Within one effective priority, `tieBreak` decides. A
- * dependency cycle cannot be ordered; its rows fall back to the key.
+ * counts. Weights read the vault's vocabulary (`priorities`, the
+ * snapshot's config; the default list when omitted). Within one effective
+ * priority, `tieBreak` decides. A dependency cycle cannot be ordered; its
+ * rows fall back to the key.
  */
 export function dependencyOrder<T extends { readonly card: TicketCard }>(
   rows: readonly T[],
   tieBreak: (a: T, b: T) => number,
+  priorities: PriorityConfig = DEFAULT_PRIORITY_CONFIG,
 ): T[] {
   const byId = new Map(rows.map((row) => [row.card.id, row]));
   const blockersOf = (row: T): string[] => row.card.blocked.filter((id) => id !== row.card.id && byId.has(id));
@@ -162,7 +167,7 @@ export function dependencyOrder<T extends { readonly card: TicketCard }>(
       return known;
     }
     const row = byId.get(id)!;
-    let best = priorityWeight(row.card.meta.priority);
+    let best = priorityWeight(row.card.meta.priority, priorities);
     seen.add(id);
     for (const dependent of row.card.blocks) {
       if (byId.has(dependent) && !seen.has(dependent)) {
@@ -288,22 +293,25 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
     a.position !== b.position ? b.position - a.position : a.index - b.index;
   shaping.sort(byProgress);
   // Running (owner, 2026-10-31): the tickets with a live run on top, then
-  // the queue — dependencies first, then priority, then closest to done.
+  // the queue — dependencies first, then priority (the vault's vocabulary),
+  // then closest to done.
   type Placed = { row: WorkRow; card: TicketCard; position: number; index: number };
   const placedRunning: Placed[] = running.map((entry) => ({ ...entry, card: entry.row.card }));
+  const weightOf = (card: TicketCard): number => priorityWeight(card.meta.priority, board.priorities);
   const live = placedRunning
     .filter((entry) => entry.row.run !== null)
-    .sort((a, b) => priorityWeight(a.card.meta.priority) - priorityWeight(b.card.meta.priority) || byProgress(a, b));
+    .sort((a, b) => weightOf(a.card) - weightOf(b.card) || byProgress(a, b));
   const queued = dependencyOrder(
     placedRunning.filter((entry) => entry.row.run === null),
     byProgress,
+    board.priorities,
   );
 
   return {
     needs,
     shaping: shaping.map((entry) => entry.row),
     running: [...live, ...queued].map((entry) => entry.row),
-    ideas: dependencyOrder(ideas, ideaRecency(firstPhaseId)),
+    ideas: dependencyOrder(ideas, ideaRecency(firstPhaseId), board.priorities),
   };
 }
 

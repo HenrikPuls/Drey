@@ -21,11 +21,13 @@
  *   the failure is logged).
  */
 import {
+  DEFAULT_PRIORITY_CONFIG,
   parseHandover,
+  priorityClass,
   type BoardColumn,
   type PipelinePhase,
+  type PriorityConfig,
   type TicketCard,
-  type TicketPriority,
 } from '../contracts/tickets';
 import { WORKER_PROVIDERS, type ChainMaster, type ColumnMode, type WorkerProviderId } from './protocol';
 
@@ -101,6 +103,12 @@ export interface PlanDispatchInput {
   readonly cooldownUntil?: Readonly<Record<string, string>>;
   /** Now, for the cooldown comparison (epoch ms). */
   readonly nowMs?: number;
+  /**
+   * The vault's priority vocabulary (the board snapshot's `priorities`) —
+   * what splits the dispatch classes (req-63's jump class is the
+   * vocabulary's first half). Absent = the shipped vocabulary.
+   */
+  readonly priorities?: PriorityConfig;
 }
 
 export interface PlannedDispatch {
@@ -133,20 +141,18 @@ export function dispatchable(card: TicketCard, busyTickets: ReadonlySet<string>)
 }
 
 /**
- * The dispatch class of a priority (req-63): `urgent` and `high` jump
- * every column's `normal` / `low` tickets; inside a class the column
- * rank decides.
+ * The dispatch class of a priority (req-63) lives in the contracts
+ * (`priorityClass`, config-aware — the vocabulary's first half jumps,
+ * its middle is the default, the rest waits).
  */
-export function priorityClass(priority: TicketPriority): 0 | 1 {
-  return priority === 'urgent' || priority === 'high' ? 0 : 1;
-}
 
 /**
  * What to dispatch right now, in dispatch order (req-63). The slots
  * belong to the provider pools, not to the columns: one candidate list
  * across every automatic, playing column with a move target, ordered by
- * priority class (urgent/high first), then column rank — the rightmost
- * column first, finishing work beats starting it — then column order.
+ * priority class (the configured vocabulary's jump class first), then
+ * column rank — the rightmost column first, finishing work beats
+ * starting it — then column order.
  * Each candidate takes a slot of its provider's pool while one is free;
  * a running run is never preempted. The machine never pulls from a
  * manual column: `prioritized` is the owner's queue, and he moves
@@ -184,7 +190,8 @@ export function planDispatch(input: PlanDispatchInput): readonly PlannedDispatch
   }
   candidates.sort(
     (a, b) =>
-      priorityClass(a.card.meta.priority) - priorityClass(b.card.meta.priority) ||
+      priorityClass(a.card.meta.priority, input.priorities ?? DEFAULT_PRIORITY_CONFIG) -
+        priorityClass(b.card.meta.priority, input.priorities ?? DEFAULT_PRIORITY_CONFIG) ||
       b.columnIndex - a.columnIndex ||
       a.position - b.position,
   );

@@ -6,7 +6,12 @@
  * schema library). The chat proposes only what the board already does;
  * the union in contracts/chat.ts is the entire write surface.
  */
-import { TICKET_PRIORITIES, type TicketPriority } from '../contracts/tickets';
+import {
+  DEFAULT_PRIORITY_CONFIG,
+  TICKET_ID_PATTERN,
+  type PriorityConfig,
+  type TicketPriority,
+} from '../contracts/tickets';
 import type { ChatCommand } from '../contracts/chat';
 
 /** The parsed envelope — what a mission turn amounted to. */
@@ -24,8 +29,16 @@ export interface ChatEnvelope {
  * holds no JSON object at all — the caller then answers with an honest
  * fallback instead of guessing. Commands that fail validation are
  * dropped; a say line mentioning them keeps the owner informed.
+ *
+ * `priorities` is the board's configured vocabulary (the snapshot's
+ * `priorities`) — priority fields validate against it, not against a
+ * hard-coded list. Defaults to the shipped vocabulary, so every existing
+ * caller keeps working.
  */
-export function parseEnvelope(reply: string): ChatEnvelope | null {
+export function parseEnvelope(
+  reply: string,
+  priorities: PriorityConfig = DEFAULT_PRIORITY_CONFIG,
+): ChatEnvelope | null {
   const start = reply.indexOf('{');
   const end = reply.lastIndexOf('}');
   if (start < 0 || end <= start) {
@@ -47,7 +60,7 @@ export function parseEnvelope(reply: string): ChatEnvelope | null {
   const commands: ChatCommand[] = [];
   if (Array.isArray(obj['commands'])) {
     for (const entry of obj['commands'] as unknown[]) {
-      const command = validateChatCommand(entry);
+      const command = validateChatCommand(entry, priorities);
       if (command !== null) {
         commands.push(command);
       }
@@ -60,8 +73,12 @@ export function parseEnvelope(reply: string): ChatEnvelope | null {
  * The one validator every command passes — the session reader reuses
  * it, so a hand-edited command block reads exactly like a model's.
  * Unknown kinds, wrong field types and bad priorities refuse to null.
+ * `priorities` names the vocabulary priority fields must come from.
  */
-export function validateChatCommand(raw: unknown): ChatCommand | null {
+export function validateChatCommand(
+  raw: unknown,
+  priorities: PriorityConfig = DEFAULT_PRIORITY_CONFIG,
+): ChatCommand | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return null;
   }
@@ -70,7 +87,7 @@ export function validateChatCommand(raw: unknown): ChatCommand | null {
   if (kind === 'createTicket') {
     const title = textOf(obj['title']);
     const phase = textOf(obj['phase']);
-    const priority = priorityOf(obj['priority']);
+    const priority = priorityOf(obj['priority'], priorities);
     if (title === null || phase === null || priority === null) {
       return null;
     }
@@ -93,7 +110,7 @@ export function validateChatCommand(raw: unknown): ChatCommand | null {
   }
   if (kind === 'setPriority') {
     const id = ticketIdOf(obj['id']);
-    const priority = priorityOf(obj['priority']);
+    const priority = priorityOf(obj['priority'], priorities);
     if (id === null || priority === null) {
       return null;
     }
@@ -114,6 +131,14 @@ export function validateChatCommand(raw: unknown): ChatCommand | null {
     }
     return { kind: 'setChain', id, chain };
   }
+  if (kind === 'setBlockedBy') {
+    const id = ticketIdOf(obj['id']);
+    const blockedBy = blockersOf(obj['blockedBy']);
+    if (id === null || blockedBy === null) {
+      return null;
+    }
+    return { kind: 'setBlockedBy', id, blockedBy };
+  }
   return null;
 }
 
@@ -133,6 +158,26 @@ function chainOf(value: unknown): readonly string[] | null {
   return chain;
 }
 
+/**
+ * The setBlockedBy payload's shape check (T-0050): a list of ticket ids
+ * against the id grammar; an empty list is legal — it clears the
+ * blockers. Existence on the board is NOT checked here (an unknown id is
+ * the dependency pass's honest no-blocker), only the shape is.
+ */
+function blockersOf(value: unknown): readonly string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const ids: string[] = [];
+  for (const entry of value as unknown[]) {
+    if (typeof entry !== 'string' || !TICKET_ID_PATTERN.test(entry.trim())) {
+      return null;
+    }
+    ids.push(entry.trim());
+  }
+  return ids;
+}
+
 function textOf(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
 }
@@ -142,8 +187,8 @@ function ticketIdOf(value: unknown): string | null {
   return text !== null && /^T-\d{4,}$/.test(text) ? text : null;
 }
 
-function priorityOf(value: unknown): TicketPriority | null {
-  return typeof value === 'string' && (TICKET_PRIORITIES as readonly string[]).includes(value)
+function priorityOf(value: unknown, priorities: PriorityConfig): TicketPriority | null {
+  return typeof value === 'string' && (priorities.order as readonly string[]).includes(value)
     ? (value as TicketPriority)
     : null;
 }

@@ -184,6 +184,36 @@ phase ("strike the gate or revisit it, not both"); or skips,
 anchors on, or notifies a current or past gate — the delta only
 reaches future gates.
 
+## Priorities and blockers
+
+**Priorities are the vault's own vocabulary** (M111):
+`_meta/pipeline.md`'s top-level `priorities:` list, in weight order —
+first is highest. Default when the key is absent:
+`urgent | high | normal | low`. Every ticket's `priority:` carries
+one of its words; an omitted or unknown id reads as the list's
+**middle entry** (the default) with a warning badge. The same list
+splits the fleet's dispatch classes at its middle
+(`floor(len/2)`): the entries before it jump the queue, the entry
+at it waits as the default, the rest is the calm half. The chat
+names the vocabulary in its board digest and may only propose its
+words; `setPriority`, `createTicket` and every header edit refuse a
+foreign word with a readable error. (The Work panel's priority chip
+and the phone client still offer the shipped four words — teaching
+them the vault's list is open work.)
+
+**Blockers are one edit away** (T-0050): besides the frontmatter
+hand edit, the chat's `setBlockedBy` command ("T-0002 waits for
+T-0001 and T-0003", or "clear T-0002's blockers") replaces the
+ticket's whole `blocked-by:` list — a proposal card the owner
+confirms, like every chat mutation (concept §6). The engine's
+`setBlockedBy` runs the same treatment: one frontmatter patch, one
+Log line `- '<UTC>' <actor> — blocked-by 2 ids` (or
+`blocked-by none` when the list empties and the key is removed),
+exactly one commit `tickets: <id> blocked-by <n ids|none>`. It
+refuses while a run is live and is a no-op success on an unchanged
+list. Ids are grammar-checked at write time; an id that names no
+board ticket simply never blocks (the dependency pass's tolerance).
+
 ## What is — and is not — automated
 
 - Whether a column runs itself is the **pipeline's call**

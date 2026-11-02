@@ -474,3 +474,170 @@ The pipeline.
     expect(outcome).toEqual({ ok: false, error: 'T-0099 is not on the board' });
   });
 });
+
+// `setBlockedBy` follows the setChain pattern: the pipeline read runs
+// through the non-enqueueing `snapshot()` (inside findCard) — the
+// single-writer queue is never re-entered from inside an op.
+describe('EngineBoardService setBlockedBy (T-0050)', () => {
+  it('setting blockers writes the whole list with the blocked-by Log line — the commit degrades to the unversioned warning here', async () => {
+    await writeTicket('T-0002', 'build');
+    const service = serviceOf();
+
+    const outcome = await service.setBlockedBy({ id: 'T-0002', blockedBy: ['T-0001', 'T-0003'], actor: 'owner@test' });
+
+    expect(outcome).toMatchObject({
+      ok: true,
+      warning: 'the tickets vault is not a git repository — the change is not versioned',
+    });
+    const text = await fsp.readFile(path.join(vaultDir, 'tickets', 'build', 'T-0002.md'), 'utf8');
+    expect(text).toContain('blocked-by:\n  - T-0001\n  - T-0003');
+    expect(text).toMatch(/- '\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z' owner@test — blocked-by 2 ids/);
+    // The rest of the file is untouched — description and the creation line stand.
+    expect(text).toContain('## Description');
+    expect(text).toContain("- '2026-11-02T10:00:00Z' owner@test — created in build");
+  });
+
+  it('an empty list removes the blocked-by key with the blocked-by none Log line', async () => {
+    await writeTicket('T-0002', 'build');
+    const file = path.join(vaultDir, 'tickets', 'build', 'T-0002.md');
+    const before = await fsp.readFile(file, 'utf8');
+    await fsp.writeFile(file, before.replace('priority: normal\n', 'priority: normal\nblocked-by: [T-0001]\n'), 'utf8');
+    const service = serviceOf();
+
+    const outcome = await service.setBlockedBy({ id: 'T-0002', blockedBy: [] });
+
+    expect(outcome.ok).toBe(true);
+    const text = await fsp.readFile(file, 'utf8');
+    expect(text).not.toContain('blocked-by:');
+    expect(text).toMatch(/- '\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z' owner@test — blocked-by none/);
+  });
+
+  it('setting the list the file already carries is a no-op success — no write, no Log line', async () => {
+    await writeTicket('T-0002', 'build');
+    const file = path.join(vaultDir, 'tickets', 'build', 'T-0002.md');
+    const before = await fsp.readFile(file, 'utf8');
+    await fsp.writeFile(file, before.replace('priority: normal\n', 'priority: normal\nblocked-by: [T-0001, T-0003]\n'), 'utf8');
+    const service = serviceOf();
+
+    const outcome = await service.setBlockedBy({ id: 'T-0002', blockedBy: ['T-0001', 'T-0003'] });
+
+    expect(outcome).toEqual({ ok: true });
+    const after = await fsp.readFile(file, 'utf8');
+    expect(after).toBe(before.replace('priority: normal\n', 'priority: normal\nblocked-by: [T-0001, T-0003]\n'));
+    expect(after).not.toMatch(/— blocked-by /);
+  });
+
+  it('an id outside the ticket grammar refuses and touches nothing', async () => {
+    await writeTicket('T-0002', 'build');
+    const file = path.join(vaultDir, 'tickets', 'build', 'T-0002.md');
+    const before = await fsp.readFile(file, 'utf8');
+    const service = serviceOf();
+
+    const outcome = await service.setBlockedBy({ id: 'T-0002', blockedBy: ['T-1'] });
+
+    expect(outcome).toEqual({ ok: false, error: 'blocked-by: "T-1" is not a ticket id' });
+    expect(await fsp.readFile(file, 'utf8')).toBe(before);
+  });
+
+  it('a live run refuses the blocker change and leaves the file untouched', async () => {
+    await writeTicket('T-0002', 'build');
+    const file = path.join(vaultDir, 'tickets', 'build', 'T-0002.md');
+    const text = await fsp.readFile(file, 'utf8');
+    await fsp.writeFile(
+      file,
+      text.replace(
+        'branch:',
+        "run:\n  pid: 42\n  started-at: '2026-11-02T10:00:00Z'\n  stream: run-1\nbranch:",
+      ),
+      'utf8',
+    );
+    const service = serviceOf();
+
+    const outcome = await service.setBlockedBy({ id: 'T-0002', blockedBy: ['T-0001'] });
+
+    expect(outcome).toEqual({
+      ok: false,
+      error: 'A run is live on this ticket. Change the blockers when the run has ended.',
+    });
+    const after = await fsp.readFile(file, 'utf8');
+    expect(after).not.toContain('blocked-by');
+    expect(after).not.toMatch(/— blocked-by /);
+  });
+
+  it('refuses a ticket that is not on the board', async () => {
+    const service = serviceOf();
+
+    const outcome = await service.setBlockedBy({ id: 'T-0099', blockedBy: ['T-0001'] });
+
+    expect(outcome).toEqual({ ok: false, error: 'T-0099 is not on the board' });
+  });
+});
+
+describe('EngineBoardService configurable priorities (T0)', () => {
+  const VOCAB_PIPELINE = `---
+priorities: [p0, p1, p2]
+phases:
+  - { id: inbox, title: Inbox, handover: manual }
+  - { id: done, title: Done, handover: none }
+---
+The pipeline.
+`;
+
+  beforeEach(async () => {
+    await fsp.writeFile(path.join(vaultDir, 'tickets', '_meta', 'pipeline.md'), VOCAB_PIPELINE, 'utf8');
+  });
+
+  it('setPriority accepts a word of the vault vocabulary and writes it', async () => {
+    await writeTicket('T-0001', 'inbox');
+    const service = serviceOf();
+
+    const outcome = await service.setPriority({ id: 'T-0001', priority: 'p0' });
+
+    expect(outcome).toMatchObject({ ok: true });
+    const text = await fsp.readFile(path.join(vaultDir, 'tickets', 'inbox', 'T-0001.md'), 'utf8');
+    expect(text).toContain('priority: p0');
+  });
+
+  it('setPriority refuses a word outside the vault vocabulary', async () => {
+    await writeTicket('T-0001', 'inbox');
+    const file = path.join(vaultDir, 'tickets', 'inbox', 'T-0001.md');
+    const before = await fsp.readFile(file, 'utf8');
+    const service = serviceOf();
+
+    const outcome = await service.setPriority({ id: 'T-0001', priority: 'urgent' });
+
+    expect(outcome).toEqual({ ok: false, error: 'unknown priority "urgent"' });
+    expect(await fsp.readFile(file, 'utf8')).toBe(before);
+  });
+
+  it('createTicket refuses a priority the vocabulary does not carry', async () => {
+    const service = serviceOf();
+
+    const outcome = await service.createTicket({
+      title: 'Off-vocabulary',
+      description: 'Do the thing.',
+      priority: 'high',
+      repo: null,
+    });
+
+    expect(outcome).toEqual({
+      ok: false,
+      error: 'unknown priority "high" — this board\'s vocabulary is p0, p1, p2',
+    });
+  });
+
+  it('createTicket writes a vocabulary priority into the new file', async () => {
+    const service = serviceOf();
+
+    const outcome = await service.createTicket({
+      title: 'On-vocabulary',
+      description: 'Do the thing.',
+      priority: 'p0',
+      repo: null,
+    });
+
+    expect(outcome).toMatchObject({ ok: true, id: 'T-0001' });
+    const text = await fsp.readFile(path.join(vaultDir, 'tickets', 'inbox', 'T-0001.md'), 'utf8');
+    expect(text).toContain('priority: p0');
+  });
+});

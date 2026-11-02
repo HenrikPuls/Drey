@@ -9,7 +9,12 @@
  */
 import { execFile } from 'node:child_process';
 import type { MainPluginContext, MainPluginModule } from '../../../shared/plugin-api';
-import { TICKET_PRIORITIES, type RepoRef, type TicketPriority } from '../shared/tickets';
+import {
+  DEFAULT_PRIORITY_CONFIG,
+  type PriorityConfig,
+  type RepoRef,
+  type TicketPriority,
+} from '../shared/tickets';
 import {
   chainResult,
   parseAnswer,
@@ -70,6 +75,19 @@ const plugin: MainPluginModule = {
     const fleet = client.fleet();
     const remoteService = client.remote();
     const defaultWorker = ((await ctx.config.get<string>('defaultWorker')) ?? '').trim() || 'opencode';
+    // The vault's priority vocabulary (pipeline.md's `priorities:`), as
+    // the engine's board service reads it. The header/headerEdit parsers
+    // and setPriority need it without rebuilding the board, so it is
+    // cached here: prefetched once at activation, then refreshed from
+    // every board fetch the renderer makes (a pipeline.md change always
+    // announces `board-changed` first, so the next fetch re-arms the cache).
+    let priorities: PriorityConfig = DEFAULT_PRIORITY_CONFIG;
+    void board
+      .snapshot()
+      .then((snap) => {
+        priorities = snap.priorities;
+      })
+      .catch(() => undefined);
     engineEvents = client.onEvent((what) => {
       ctx.ipc.emit(what === 'board' ? 'board-changed' : what === 'fleet' ? 'fleet-changed' : 'remote-changed');
     });
@@ -109,7 +127,11 @@ const plugin: MainPluginModule = {
     missionControl = mcHost;
     ctx.ipc.handle('openMissionControl', () => mcHost.open());
 
-    ctx.ipc.handle('board', () => board.refresh());
+    ctx.ipc.handle('board', async () => {
+      const snap = await board.refresh();
+      priorities = snap.priorities;
+      return snap;
+    });
 
     ctx.ipc.handle('create', async (payload) => {
       const cmd = parseCreate(payload);
@@ -158,7 +180,7 @@ const plugin: MainPluginModule = {
       if (typeof p.path !== 'string' || typeof p.frontmatter !== 'string') {
         return { ok: false, error: 'bad header payload' };
       }
-      return { ok: true, ...parseTicketFile(`${p.frontmatter}\n`, p.path) };
+      return { ok: true, ...parseTicketFile(`${p.frontmatter}\n`, p.path, priorities) };
     });
 
     ctx.ipc.handle('headerEdit', (payload) => {
@@ -177,8 +199,8 @@ const plugin: MainPluginModule = {
         ...(typeof raw['worker'] === 'string' ? { worker: raw['worker'] } : {}),
       };
       try {
-        const frontmatter = patchHeaderFields(p.frontmatter, patch);
-        return { ok: true, frontmatter, ...parseTicketFile(`${frontmatter}\n`, p.path) };
+        const frontmatter = patchHeaderFields(p.frontmatter, patch, priorities);
+        return { ok: true, frontmatter, ...parseTicketFile(`${frontmatter}\n`, p.path, priorities) };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }
@@ -191,7 +213,7 @@ const plugin: MainPluginModule = {
 
     ctx.ipc.handle('setPriority', async (payload) => {
       const p = (payload ?? {}) as { id?: unknown; priority?: unknown };
-      if (typeof p.id !== 'string' || !TICKET_PRIORITIES.includes(p.priority as TicketPriority)) {
+      if (typeof p.id !== 'string' || !priorities.order.includes(p.priority as TicketPriority)) {
         return { ok: false, error: 'bad priority payload' };
       }
       return board.setPriority({ id: p.id, priority: p.priority as TicketPriority });
