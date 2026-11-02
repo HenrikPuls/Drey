@@ -869,7 +869,7 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     return {
       phase,
       unknown: false,
-      tickets: orderColumn(tickets, columnKey(phase.id)),
+      tickets: orderColumn(tickets, columnKey(phase.id), pipelineParse.priorities),
     };
   });
   for (const dir of [...byPhase.keys()].sort()) {
@@ -878,7 +878,7 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
       columns.push({
         phase: phaseWithoutPoolKeys({ id: dir, title: dir, wip: null, claim: false, handover: 'manual' }),
         unknown: true,
-        tickets: orderColumn(byPhase.get(dir)!, columnKey(dir)),
+        tickets: orderColumn(byPhase.get(dir)!, columnKey(dir), pipelineParse.priorities),
       });
     }
   }

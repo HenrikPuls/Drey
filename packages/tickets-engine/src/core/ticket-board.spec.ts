@@ -534,3 +534,34 @@ describe('derivedOrder with a configured vocabulary (M111)', () => {
     expect(order.map((k) => k.id)).toEqual(['c', 'b', 'a']);
   });
 });
+
+describe('assembleBoard column order with a configured vocabulary (M111 regression, M112)', () => {
+  const VOCAB_PIPELINE = `---
+priorities: [critical, high, medium, low]
+phases:
+  - { id: inbox, title: Inbox, handover: manual }
+  - { id: done, title: Done, handover: none }
+---
+`;
+
+  const ticket = (id: string, priority: string): { path: string; text: string } => ({
+    path: `tickets/10-inbox/${id}.md`,
+    text: `---\nid: ${id}\ntitle: "One"\npriority: ${priority}\n---\n`,
+  });
+
+  it('the columns sort by the configured weight — critical before low, though critical is foreign to the default list', () => {
+    const snap = assembleBoard({
+      vaultId: 'v',
+      vaultName: 'V',
+      activeVaultName: null,
+      isGitRepo: false,
+      pipelineText: VOCAB_PIPELINE,
+      reposText: null,
+      files: [ticket('T-0002', 'low'), ticket('T-0001', 'critical')],
+      defaultWorker: 'x',
+    });
+    const inbox = snap.columns.find((column) => column.phase.id === 'inbox')!;
+    expect(inbox.tickets.map((card) => card.id)).toEqual(['T-0001', 'T-0002']);
+    expect(snap.priorities.order).toEqual(['critical', 'high', 'medium', 'low']);
+  });
+});
