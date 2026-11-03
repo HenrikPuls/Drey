@@ -161,7 +161,7 @@ canvas "Drey Tickets — Workflow redesign" is binding for the UI;
 [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
 "Later changes" records the decisions). Worked in this order, one
 milestone at a time, a pause after each; milestone numbers are taken
-when an item ships (next free: 122; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, 116 = proof mode + videos, 117 = diff review, 118 = line comments, 119 = cost table + estimate, 120 = parts schema, 121 = plan delta; E12-1 – E12-4, E11, E10-1 and E10-2 shipped). Nothing here creates tickets — the
+when an item ships (next free: 123; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, 116 = proof mode + videos, 117 = diff review, 118 = line comments, 119 = cost table + estimate, 120 = parts schema, 121 = plan delta, 122 = shape mode; E12-1 – E12-4, E11, E10-1 – E10-3 shipped). Nothing here creates tickets — the
 owner builds without the tickets system.
 
 - **E12-3b — Settings pages still missing.** Chat (thinking trace, new
@@ -177,9 +177,11 @@ owner builds without the tickets system.
   split (file list left, one file's diff right) and the viewed marks on
   the desk instead of per device; E11-2 shipped both inside the proof
   card's accordion.
-- **E10-3 — Shape mode.** The idea is shaped with Paul, relayed through
-  Mission Control (Pia — the one central contact, D7); recut of
-  T-0063.
+- **E10-3b — Shape mode follow-ups.** Tinted line marks inside the
+  rendered plan and a line-level "tap a line to edit" on the phone sheet
+  (both want the Markdown surface, E12-6); the iPad board's formatting
+  strip over the plan; Paul on his own persona model instead of the chat
+  model.
 - **E10-4 — Plan to approve.** One card per part with the builder
   persona, flow row, move / delete (second press), running parts
   locked, the start rule, the estimate, Mission Control's proposal

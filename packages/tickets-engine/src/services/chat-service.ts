@@ -27,6 +27,9 @@ import type {
   ChatMessage,
   ChatProposal,
   ChatServicePort,
+  ChatShapeContext,
+  ChatShapeResult,
+  ChatSplitChoice,
   ChatSession,
   ChatSessionMeta,
   ChatStreamEvent,
@@ -35,12 +38,17 @@ import type {
   ChatTurnResult,
 } from '../contracts/chat';
 import { titleFromDescription, type BoardSnapshot, type TicketForm, type TicketPriority } from '../contracts/tickets';
+import { parsePlanParts } from '../core/plan-parts';
 import { changedLinesOf, editsSummary, planDelta, planDeltaForModel, planSectionOf } from '../core/plan-delta';
 import type { PlanShadowStore } from './plan-shadow';
 import {
   appendMission,
   appendOwner,
   appendPlanEdit,
+  appendQuestion,
+  appendSources,
+  appendSplit,
+  decideSplit,
   appendProposal,
   CHAT_DIR,
   chatFileName,
@@ -57,6 +65,8 @@ const CHAT_FILE_PATTERN = /^tickets\/_meta\/chat\/[^/]+\.md$/;
 const HISTORY_LIMIT = 20;
 /** The board digest's rough ceiling — the prompt stays small and cheap. */
 const DIGEST_CAP = 2_000;
+/** The ticket text a shape turn embeds in the prompt, ceiling in characters. */
+const TICKET_TEXT_CAP = 30_000;
 
 /** The result shape of a board mutation the confirm path executes. */
 export type ChatMutationResult =
@@ -86,6 +96,16 @@ export interface ChatBoardPort {
   setChain(input: { readonly id: string; readonly chain: readonly string[]; readonly actor?: string }): Promise<ChatMutationResult>;
   /** E10-2: a ticket's file text (the shared plan lives in it); optional so plain chats need nothing. */
   readTicket?(id: string): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly error: string }>;
+  /**
+   * E10-3: replaces the ticket's `## Plan` chapter — the one write a shape
+   * turn lets the model make, and nothing else of the ticket changes.
+   */
+  setPlan?(input: { readonly id: string; readonly plan: string; readonly actor?: string }): Promise<ChatMutationResult>;
+  /** E10-3: a read-only look into the ticket's repository (a trailing `/` lists a directory). */
+  readRepoFile?(
+    id: string,
+    path: string,
+  ): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly error: string }>;
   /** T-0050: the whole `blocked-by:` list replacement (empty = cleared). */
   setBlockedBy(input: { readonly id: string; readonly blockedBy: readonly string[]; readonly actor?: string }): Promise<ChatMutationResult>;
 }
@@ -106,6 +126,8 @@ export interface ChatServiceDeps {
   readonly git?: TicketsGit;
   /** E10-2: the plan shadow copies; absent = shape sessions carry no plan delta. */
   readonly shadows?: PlanShadowStore;
+  /** E10-3: the model a shape turn runs on (the chat model), shown in the context line. */
+  readonly modelName?: () => Promise<string | undefined>;
 }
 
 /** The card's human sentence — what the proposal line and the UI show. */
@@ -210,6 +232,7 @@ export class ChatService implements ChatServicePort {
         createdAt: session.createdAt,
         updatedAt: (await this.mtimeOf(vault, file)) ?? session.createdAt,
         pending: session.proposals.filter((p) => p.state === 'pending').length,
+        ...(session.ticket == null ? {} : { ticket: session.ticket }),
       });
     }
     metas.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.file.localeCompare(a.file));
@@ -224,7 +247,12 @@ export class ChatService implements ChatServicePort {
     }
     const { vault, snap } = found;
     const text = await this.deps.host.read(vault.id, file).catch(() => null);
-    return text === null ? null : parseSessionFile(text, file, snap.priorities);
+    const session = text === null ? null : parseSessionFile(text, file, snap.priorities);
+    if (session === null || session.ticket == null || this.deps.modelName === undefined) {
+      return session;
+    }
+    const model = await this.deps.modelName().catch(() => undefined);
+    return model === undefined || model === '' ? session : { ...session, model };
   }
 
   async send(input: { readonly file: string; readonly text: string; readonly planEdits?: boolean }): Promise<ChatTurnResult> {
@@ -326,17 +354,36 @@ export class ChatService implements ChatServicePort {
     let thought: string | null;
     let proposals: ChatProposal[];
     try {
+      const shape = ticket === null ? undefined : await this.shapeContext(ticket);
       const reply = await this.deps.bridge.runTurn({
         text,
         history,
         board: boardDigest(snap),
         priorities: snap.priorities,
         ...(delta === null ? {} : { planDelta: planDeltaForModel(delta) }),
+        ...(shape === undefined ? {} : { shape }),
         emit: (event) => this.deps.onEvent(file, event),
       });
       say = reply.say;
       thought = reply.thought;
-      block = appendMission(block, stamp, reply.say, reply.thought);
+      let wrote = true;
+      if (ticket !== null && reply.shape?.plan != null) {
+        const saved = await this.deps.board.setPlan?.({ id: ticket, plan: reply.shape.plan, actor: this.deps.actor });
+        if (saved === undefined || !saved.ok) {
+          wrote = false;
+          say = `${say}\n\nThe plan could not be saved: ${saved === undefined ? 'this desk cannot write plans' : saved.error}`;
+        }
+      }
+      block = appendMission(block, stamp, say, reply.thought);
+      if (ticket !== null && reply.shape !== undefined) {
+        block = appendSources(block, stamp, reply.shape.sources);
+        if (reply.shape.question !== null) {
+          block = appendQuestion(block, stamp, reply.shape.question.text, reply.shape.question.options);
+        }
+        if (reply.shape.splitReason !== null && wrote) {
+          block = appendSplit(block, stamp, reply.shape.splitReason, await this.partCount(ticket));
+        }
+      }
       proposals = [];
       for (const command of reply.commands) {
         const summary = summaryOf(command);
@@ -378,6 +425,91 @@ export class ChatService implements ChatServicePort {
       ...(thought === null ? {} : { thought }),
       proposals,
     };
+  }
+
+  // --- shape mode (E10-3) -----------------------------------------------------
+
+  /** What a shape turn hands the bridge: the ticket's file text and the read-only repository access. */
+  private async shapeContext(ticket: string): Promise<ChatShapeContext | undefined> {
+    const reader = this.deps.board.readTicket;
+    const reply = reader === undefined ? null : await reader.call(this.deps.board, ticket).catch(() => null);
+    if (reply === null || !reply.ok) {
+      return undefined;
+    }
+    const readRepo = this.deps.board.readRepoFile;
+    return {
+      ticket,
+      ticketText: reply.text.length > TICKET_TEXT_CAP ? `${reply.text.slice(0, TICKET_TEXT_CAP)}\n… (cut)` : reply.text,
+      readFile: async (path) =>
+        readRepo === undefined
+          ? { ok: false, error: 'this ticket has no repository to read' }
+          : readRepo.call(this.deps.board, ticket, path),
+    };
+  }
+
+  /** How many parts the ticket's plan lists now (never fewer than one) — the "N" of "Split into N tickets". */
+  private async partCount(ticket: string): Promise<number> {
+    const reader = this.deps.board.readTicket;
+    const reply = reader === undefined ? null : await reader.call(this.deps.board, ticket).catch(() => null);
+    return reply !== null && reply.ok ? Math.max(1, parsePlanParts(reply.text).parts.length) : 1;
+  }
+
+  /**
+   * The owner's tap on Paul's split proposal. `keep` moves the ticket from
+   * its phase into the build queue through the board's own transition —
+   * the same path a confirmed card takes; `split` only records the choice
+   * (the plan to approve, E10-4, picks it up). Either way the decision
+   * line lands in the session file.
+   */
+  async shapeDecide(input: { readonly file: string; readonly choice: ChatSplitChoice }): Promise<ChatShapeResult> {
+    const found = await this.boardAndVault();
+    if (found === null) {
+      return { ok: false, error: 'no tickets vault detected' };
+    }
+    const { vault, snap } = found;
+    let text: string;
+    try {
+      text = await this.deps.host.read(vault.id, input.file);
+    } catch {
+      return { ok: false, error: `${input.file} does not exist` };
+    }
+    const session = parseSessionFile(text, input.file, snap.priorities);
+    if (session === null || session.ticket === undefined || session.ticket === null) {
+      return { ok: false, error: `${input.file} is not a shape session` };
+    }
+    const open = [...session.messages].reverse().find((m) => m.kind === 'split');
+    if (open === undefined || (open.decision ?? null) !== null) {
+      return { ok: false, error: 'there is no open split proposal' };
+    }
+    const ticket = session.ticket;
+    let outcome = 'split';
+    let summary = `Split into ${open.parts ?? 1} tickets`;
+    if (input.choice === 'keep') {
+      const column = snap.columns.find((c) => c.tickets.some((t) => t.id === ticket));
+      if (column === undefined) {
+        return { ok: false, error: `${ticket} is not on the board` };
+      }
+      const phases = snap.pipeline.map((p) => p.id);
+      const from = column.phase.id;
+      const to = phases.includes('build') ? 'build' : (phases[phases.indexOf(from) + 1] ?? null);
+      if (to === null || phases.indexOf(to) <= phases.indexOf(from)) {
+        return { ok: false, error: `${ticket} is already past the build queue` };
+      }
+      const moved = await this.deps.board.transition({ id: ticket, from, to, actor: this.deps.actor });
+      if (!moved.ok) {
+        return { ok: false, error: moved.error };
+      }
+      outcome = moved.path ?? 'ok';
+      summary = 'Keep as one ticket';
+    }
+    const decided = decideSplit(text, this.now(), input.choice, summary);
+    if (decided === null) {
+      return { ok: false, error: 'there is no open split proposal' };
+    }
+    await this.deps.host.write(vault.id, input.file, decided);
+    await this.commit(vault, [input.file], `tickets: chat ${input.file}`);
+    this.deps.host.announceChanges(vault.id, [input.file]);
+    return { ok: true, outcome };
   }
 
   // --- the shared plan (E10-2) ------------------------------------------------

@@ -18,6 +18,7 @@ import { Team } from '@mission-ui/team/team';
 import { PersonaDetail } from '@mission-ui/team/detail';
 import { TicketView } from '@mission-ui/ticket/view';
 import { TicketEdit } from '@mission-ui/ticket/edit';
+import { PlanPane } from '@mission-ui/plan/plan-pane';
 
 export type { McTab };
 
@@ -56,6 +57,7 @@ function mediaSignal(query: string): Signal<boolean> {
     PersonaDetail,
     TicketView,
     TicketEdit,
+    PlanPane,
     Empty,
     Toast,
     Pairing,
@@ -101,7 +103,7 @@ export class App {
    * list, settings, the chat (tablet only; with the dock it sits right),
    * or the empty pane.
    */
-  protected readonly detail = computed<'ticket' | 'persona' | 'team' | 'settings' | 'chat' | 'empty'>(
+  protected readonly detail = computed<'ticket' | 'persona' | 'plan' | 'team' | 'settings' | 'chat' | 'empty'>(
     () => {
       if (this.ticketOpen() !== null) {
         return 'ticket';
@@ -112,6 +114,12 @@ export class App {
       const tab = this.tab();
       if (tab === 'team' || tab === 'settings') {
         return tab;
+      }
+      // Shape mode (E10-3, board "iPad: Shape the plan"): with the chat docked
+      // beside it, the shared plan takes the center. Narrower, it is a sheet
+      // inside the chat.
+      if (this.docked() && this.showDock() && this.dockTab() === 'chat' && this.state.shapedTicket() !== null) {
+        return 'plan';
       }
       if (tab === 'chat' && !this.docked()) {
         return 'chat';
@@ -143,6 +151,9 @@ export class App {
   protected readonly showSettings = computed(() =>
     this.wide() ? this.detail() === 'settings' : this.tab() === 'settings',
   );
+
+  /** The shared plan: the center column while a shape session is open beside the docked chat. */
+  protected readonly showPlan = computed(() => this.wide() && this.detail() === 'plan');
 
   /** The empty pane: only on the wide grid, while nothing else claims the center. */
   protected readonly showEmpty = computed(() => this.wide() && this.detail() === 'empty');

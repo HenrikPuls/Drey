@@ -1,0 +1,215 @@
+/*
+ * The shared plan (E10-3): a column beside the shape dialog on the wide
+ * layout, a bottom sheet on the phone. Chapters are a collapsed list;
+ * the split decision sits in the footer. Shared tokens only.
+ */
+
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
+
+.pp {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  min-height: 0;
+  padding: 12px 16px 14px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.pp.sheet {
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  border-radius: 20px 20px 0 0;
+}
+
+.grab {
+  align-self: center;
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--text-3);
+}
+
+.pp-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pp-title {
+  font-size: calc(15px * var(--mc-text, 1));
+}
+
+.grow {
+  flex: 1;
+}
+
+.pp-edit,
+.pp-btn {
+  min-height: 44px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: calc(14px * var(--mc-text, 1));
+  color: var(--text-2);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.pp-edit[aria-pressed='true'],
+.pp-btn.primary {
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.pp-edit:disabled,
+.pp-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.pp-status {
+  margin: 0;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+.pp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pp-note {
+  margin: 0;
+  color: var(--text-3);
+}
+
+.pp-text {
+  flex: 1;
+  min-height: 240px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text);
+  resize: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.chap-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 4px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.chev {
+  width: 14px;
+  color: var(--text-3);
+}
+
+.chap-count {
+  margin-left: auto;
+  font-size: calc(13px * var(--mc-text, 1));
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.chap-body {
+  padding: 0 4px 10px 22px;
+  font-size: calc(15px * var(--mc-text, 1));
+  line-height: 1.5;
+}
+
+.md-p,
+.md-h {
+  margin: 0 0 6px;
+}
+
+.md-h {
+  font-weight: 600;
+}
+
+.md-ul,
+.parts {
+  margin: 0 0 6px;
+  padding-left: 20px;
+}
+
+.parts li {
+  margin-bottom: 6px;
+}
+
+.part-sub {
+  display: block;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+.part-who {
+  margin-right: 6px;
+  font-family: var(--mono);
+}
+
+.md-code {
+  margin: 0 0 6px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: calc(13px * var(--mc-text, 1));
+  background: var(--panel);
+  border-radius: 8px;
+}
+
+.pp-error {
+  margin: 0;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--err, var(--accent));
+}
+
+.pp-split {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.pp-reason {
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+.pp-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.pp-actions .pp-btn {
+  flex: 1;
+  min-height: 48px;
+}

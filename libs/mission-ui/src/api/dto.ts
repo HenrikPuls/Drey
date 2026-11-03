@@ -435,6 +435,8 @@ export interface SessionMeta {
   readonly updatedAt: string;
   /** Pending proposal cards — the sessions list bolds it. */
   readonly pending: number;
+  /** The ticket a shape session shapes (E10-3); absent on a plain chat. */
+  readonly ticket?: string;
 }
 
 export interface ChatMessageView {
@@ -444,10 +446,25 @@ export interface ChatMessageView {
   readonly thought: string | null;
   /** ISO stamp. */
   readonly at: string;
-  /** `plan-edit` = the "You edited the plan" card (E10-2); `text` is its summary. */
-  readonly kind?: 'plan-edit';
+  /**
+   * `plan-edit` = the "You edited the plan" card (E10-2), `text` its summary;
+   * `question` = Paul's answer card (E10-3), `text` the question; `split` =
+   * his split proposal, `text` the reason.
+   */
+  readonly kind?: 'plan-edit' | 'question' | 'split';
   /** The diff the model read; only on a plan-edit card. */
   readonly diff?: string | null;
+  /** The answer card's choices; only on a question. */
+  readonly options?: readonly ChatQuestionOptionView[];
+  /** How many tickets the plan's parts would make; only on a split proposal. */
+  readonly parts?: number;
+  /** The owner's choice on a split proposal; null while open. */
+  readonly decision?: 'keep' | 'split' | null;
+}
+
+export interface ChatQuestionOptionView {
+  readonly label: string;
+  readonly recommended: boolean;
 }
 
 export interface ChatProposalView {
@@ -476,6 +493,10 @@ export interface ActiveSession {
   readonly proposals: readonly ChatProposalView[];
   /** The ticket whose plan this session shapes (E10); null = a plain chat. */
   readonly ticket?: string | null;
+  /** The repository files Paul read in this shape session (E10-3). */
+  readonly sources?: readonly string[];
+  /** The model that answers a shape session, for the context line. */
+  readonly model?: string;
 }
 
 export interface ChatStateView {
@@ -1229,6 +1250,7 @@ function sessionMetaOf(raw: unknown): SessionMeta | null {
     createdAt: str(session['createdAt']),
     updatedAt: str(session['updatedAt']),
     pending,
+    ...(/^T-\d{4,}$/.test(str(session['ticket'])) ? { ticket: str(session['ticket']) } : {}),
   };
 }
 
@@ -1249,8 +1271,33 @@ function messageOf(raw: unknown): ChatMessageView | null {
     text: str(message['text']),
     thought: strOrNull(message['thought']),
     at: str(message['at']),
-    ...(message['kind'] === 'plan-edit' ? { kind: 'plan-edit' as const, diff: strOrNull(message['diff']) } : {}),
+    ...shapeCardOf(message),
   };
+}
+
+/** The kind-specific fields of the plan-edit, answer and split cards (E10-2/E10-3); nothing for a plain message. */
+function shapeCardOf(message: Record<string, unknown>): Partial<ChatMessageView> {
+  switch (message['kind']) {
+    case 'plan-edit':
+      return { kind: 'plan-edit', diff: strOrNull(message['diff']) };
+    case 'question': {
+      const options = arr(message['options'])
+        .map((raw) => {
+          const option = rec(raw);
+          const label = option === null ? '' : str(option['label']);
+          return label === '' ? null : { label, recommended: option?.['recommended'] === true };
+        })
+        .filter((option): option is ChatQuestionOptionView => option !== null);
+      return options.length >= 2 ? { kind: 'question', options } : {};
+    }
+    case 'split': {
+      const parts = typeof message['parts'] === 'number' && message['parts'] >= 1 ? Math.floor(message['parts']) : 1;
+      const decision = message['decision'] === 'keep' || message['decision'] === 'split' ? message['decision'] : null;
+      return { kind: 'split', parts, decision };
+    }
+    default:
+      return {};
+  }
 }
 
 function proposalOf(raw: unknown): ChatProposalView | null {
@@ -1317,6 +1364,8 @@ export function parseActiveSession(json: unknown): ActiveSession | null {
       .map(proposalOf)
       .filter((proposal): proposal is ChatProposalView => proposal !== null),
     ...(/^T-\d{4,}$/.test(str(session['ticket'])) ? { ticket: str(session['ticket']) } : {}),
+    ...(strArray(session['sources']).length > 0 ? { sources: strArray(session['sources']) } : {}),
+    ...(str(session['model']) !== '' ? { model: str(session['model']) } : {}),
   };
 }
 

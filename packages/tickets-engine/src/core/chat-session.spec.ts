@@ -3,6 +3,10 @@ import {
   appendMission,
   appendOwner,
   appendProposal,
+  appendQuestion,
+  appendSources,
+  appendSplit,
+  decideSplit,
   chatFileName,
   decideProposal,
   newSessionText,
@@ -90,5 +94,37 @@ describe('append and parse round-trip', () => {
     const text = `${newSessionText('x', AT)}- '2026-11-02T09:01:00Z' proposal p-1 pending — Sneaky\n  \`\`\`json\n  {"kind":"archive","id":"T-0086"}\n  \`\`\`\n`;
     const session = parseSessionFile(text, 'f')!;
     expect(session.proposals).toEqual([]);
+  });
+});
+
+describe('shape cards (E10-3)', () => {
+  it('round-trips an answer card, a split proposal, its decision and the sources', () => {
+    const at = new Date('2026-11-04T09:00:00Z');
+    let text = newSessionText('Shape', at, 'T-0130');
+    text = appendQuestion(text, at, 'Where should the report live?', [
+      { label: 'docs/security/', recommended: true },
+      { label: 'Tickets repo', recommended: false },
+    ]);
+    text = appendSources(text, at, ['CLAUDE.md', 'src/capture.ts']);
+    text = appendSources(text, at, ['CLAUDE.md', 'ADR-0073.md']);
+    text = appendSplit(text, at, 'Each part ships on its own', 3);
+    const open = parseSessionFile(text, 'x.md')!;
+    expect(open.sources).toEqual(['CLAUDE.md', 'src/capture.ts', 'ADR-0073.md']);
+    expect(open.messages.map((m) => m.kind)).toEqual(['question', 'split']);
+    expect(open.messages[0]!.options).toEqual([
+      { label: 'docs/security/', recommended: true },
+      { label: 'Tickets repo', recommended: false },
+    ]);
+    expect(open.messages[1]).toMatchObject({ text: 'Each part ships on its own', parts: 3, decision: null });
+
+    const decided = decideSplit(text, at, 'keep', 'Keep as one ticket')!;
+    expect(parseSessionFile(decided, 'x.md')!.messages[1]!.decision).toBe('keep');
+    expect(decideSplit(decided, at, 'split', 'Split into 3 tickets')).toBeNull();
+    expect(decideSplit(newSessionText('Plain', at), at, 'keep', 'x')).toBeNull();
+  });
+
+  it('skips a question with fewer than two readable choices', () => {
+    const text = `---\ntitle: "x"\ncreated: '2026-11-04T09:00:00Z'\n---\n\n- '2026-11-04T09:00:01Z' question — Which?\n  \`\`\`json\n  {"options":[{"label":"A"}]}\n  \`\`\`\n`;
+    expect(parseSessionFile(text, 'x.md')!.messages).toEqual([]);
   });
 });

@@ -79,6 +79,9 @@
   @if (showWork()) {
     <mc-work class="pane pane-work" />
   }
+  @if (showPlan()) {
+    <mc-plan-pane class="pane pane-center" />
+  }
   @if (showEmpty()) {
     <mc-empty class="pane pane-center" />
   }

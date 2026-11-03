@@ -71,7 +71,7 @@ const BOARD_METHODS = [
   'restoreShippedPrompts', 'listRepos', 'saveRepos', 'pickFolder', 'scanRepos', 'listProjects',
   'switchProject', 'openTicketsFolder', 'folderStatus', 'numberFolders', 'reorderPhases', 'editPhase',
   'personaLearn', 'listPersonas', 'verifyTicket', 'verifyStatus',
-  'chatSessions', 'chatOpen', 'chatSend', 'chatStart', 'chatConfirm', 'chatDismiss',
+  'chatSessions', 'chatOpen', 'chatSend', 'chatStart', 'chatConfirm', 'chatDismiss', 'chatShapeDecide',
   'initialize', 'onVaultEvent',
 ] as const;
 
@@ -153,6 +153,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     git,
     bridge: opts.chatBridge ?? createChatBridge({ config }),
     shadows: new FilePlanShadowStore(path.join(opts.home, 'plan-shadow.json')),
+    modelName: () => config.get<string>('chat.model'),
     actor: `chat@${hostname().toLowerCase()}`,
     log,
     onEvent: (file, event) => hub.emit('chat', { file, event }),
@@ -253,6 +254,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   table.set('chatStart', (payload) => chat.start(payload as { readonly title?: string; readonly text: string }));
   table.set('chatConfirm', (payload) => chat.confirm(payload as { readonly file: string; readonly id: string }));
   table.set('chatDismiss', (payload) => chat.dismiss(payload as { readonly file: string; readonly id: string }));
+  table.set('chatShapeDecide', (payload) => chat.shapeDecide(payload as { readonly file: string; readonly choice: 'keep' | 'split' }));
   // The plugin's config sync: Drey's settings keys the engine reads.
   table.set('configSet', (payload) => {
     const message = payload as { key?: unknown; value?: unknown };

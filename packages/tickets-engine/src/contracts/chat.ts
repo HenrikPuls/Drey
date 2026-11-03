@@ -28,9 +28,24 @@ export interface ChatMessage {
    * plan changes that went along with the next message, `text` the
    * summary and `diff` the diff the model read. Absent = a plain message.
    */
-  readonly kind?: 'plan-edit';
+  readonly kind?: 'plan-edit' | 'question' | 'split';
   readonly diff?: string | null;
+  /** The answer card's choices (kind `question`, E10-3); answered by the owner's next message. */
+  readonly options?: readonly ChatQuestionOption[];
+  /** The split card (kind `split`, E10-3): how many tickets the plan's parts would make. */
+  readonly parts?: number;
+  /** The owner's choice on a split card; null/absent while open. */
+  readonly decision?: ChatSplitChoice | null;
 }
+
+/** One choice of an answer card (E10-3). */
+export interface ChatQuestionOption {
+  readonly label: string;
+  readonly recommended: boolean;
+}
+
+/** The owner's choice on Paul's split proposal. */
+export type ChatSplitChoice = 'keep' | 'split';
 
 /**
  * A proposed mutation awaiting the owner's tap. `command` is the typed
@@ -107,6 +122,10 @@ export interface ChatSession {
   readonly proposals: readonly ChatProposal[];
   /** The ticket whose plan is shaped in this session (E10); null = a plain chat. */
   readonly ticket?: string | null;
+  /** The repository files Paul has read in this shape session (E10-3), in reading order, distinct. */
+  readonly sources?: readonly string[];
+  /** The model that answers in a shape session (the chat model), for the context line. */
+  readonly model?: string;
 }
 
 /** The streaming unit the UI renders (thought dim, then text, cards). */
@@ -133,6 +152,12 @@ export interface ChatServicePort {
   start(input: { readonly title?: string; readonly text: string; readonly ticket?: string }): Promise<ChatTurnResult>;
   /** Where the shared plan of a ticket stands: version, the owner's edits since the model's last turn, the line marks (E10-2). */
   planStatus(ticket: string): Promise<PlanStatus>;
+  /**
+   * The owner's tap on Paul's split proposal (E10-3): `keep` moves the
+   * ticket into the build queue, `split` records the choice for the plan
+   * to approve (E10-4). Either way the decision line lands in the file.
+   */
+  shapeDecide(input: { readonly file: string; readonly choice: ChatSplitChoice }): Promise<ChatShapeResult>;
   confirm(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult>;
   dismiss(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult>;
 }
@@ -167,6 +192,8 @@ export interface ChatSessionMeta {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly pending: number;
+  /** The ticket a shape session shapes (E10-3); absent on a plain chat. */
+  readonly ticket?: string;
 }
 
 /** What send/start return: the appended mission text and its proposals. */
@@ -177,6 +204,13 @@ export interface ChatTurnResult {
   readonly say?: string;
   readonly thought?: string;
   readonly proposals?: readonly ChatProposal[];
+}
+
+export interface ChatShapeResult {
+  readonly ok: boolean;
+  readonly error?: string;
+  /** What the choice did: the ticket's new path for `keep`, `split` otherwise. */
+  readonly outcome?: string;
 }
 
 export interface ChatDecisionResult {
@@ -209,11 +243,39 @@ export interface ChatBridge {
      * turn (E10-2), ready to read; absent = nothing went along.
      */
     readonly planDelta?: string;
+    /**
+     * Present on a shape turn (E10-3): the ticket Paul shapes, its file
+     * text (description and the current plan, the owner's edits in) and
+     * the read-only access to the ticket's repository.
+     */
+    readonly shape?: ChatShapeContext;
     /** Receives the live stream: thought and text deltas. */
     emit(event: ChatStreamEvent): void;
   }): Promise<{
     readonly say: string;
     readonly thought: string | null;
     readonly commands: readonly ChatCommand[];
+    /** Shape turns only: Paul's new Plan chapter (the whole body), the open question, the split reason, the files read. */
+    readonly shape?: ChatShapeReply;
   }>;
+}
+
+/** What a shape turn hands the bridge. */
+export interface ChatShapeContext {
+  readonly ticket: string;
+  readonly ticketText: string;
+  /** Reads one repository file (or lists a directory when `path` ends in `/`); read-only, bounded. */
+  readFile(path: string): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly error: string }>;
+}
+
+/** What Paul answered beyond the spoken reply. */
+export interface ChatShapeReply {
+  /** The whole new Plan chapter body; null = the plan stays as it is. */
+  readonly plan: string | null;
+  /** One question with choices, shown as an answer card above the composer. */
+  readonly question: { readonly text: string; readonly options: readonly ChatQuestionOption[] } | null;
+  /** Paul's reason for the split (or keep) proposal; null = no proposal this turn. */
+  readonly splitReason: string | null;
+  /** Repository paths read during the turn. */
+  readonly sources: readonly string[];
 }

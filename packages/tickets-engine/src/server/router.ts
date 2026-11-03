@@ -513,6 +513,20 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
     );
   }
 
+  // E10-3: the owner's tap on Paul's split proposal — keep as one ticket or split.
+  const shapeDecision = /^\/api\/chat\/sessions\/(.+)\/split\/(keep|split)$/.exec(req.path);
+  if (shapeDecision !== null) {
+    const file = decodeURIComponent(shapeDecision[1]!);
+    if (!CHAT_FILE_PATTERN.test(file)) {
+      return fail(404, 'no such chat session');
+    }
+    return write(
+      `shape ${shapeDecision[2]}`,
+      { ok: true, value: { file, choice: shapeDecision[2] as 'keep' | 'split' } },
+      (cmd) => port.chatShapeDecide(cmd),
+    );
+  }
+
   // E6: the 1:1's decision — apply/dismiss one open proposal of one
   // persona; the path pins both ids (personaRef grammar, imp-<n>).
   const improvement = /^\/api\/personas\/([a-z0-9][a-z0-9-]{0,63})\/improvements\/(imp-\d+)\/(apply|dismiss)$/.exec(req.path);

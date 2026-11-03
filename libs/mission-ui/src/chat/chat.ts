@@ -9,6 +9,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
+import { PlanPane } from '../plan/plan-pane';
+import { MC_PLAN_STATE, planRowSubtitleOf, planSectionOf, splitLabelOf } from '../plan/plan.model';
 import {
   MC_CHAT_STATE,
   disconnectedChatState,
@@ -496,7 +498,7 @@ interface SheetEntry {
   templateUrl: './chat.html',
   styleUrl: './chat.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, PlanPane],
 })
 export class Chat {
   protected readonly state: McChatState =
@@ -793,6 +795,7 @@ export class Chat {
     this.sheetOpen.set(false);
     this.attachSheetOpen.set(false);
     this.composing.set(true);
+    this.state.shapeTicket?.set(null);
     this.draft.set('');
     this.composerError.set(null);
     this.clearAttachments();
@@ -916,7 +919,8 @@ export class Chat {
     this.priorReply = this.latestMission();
     try {
       const starting = this.viewMode() !== 'session';
-      const reply = starting ? await this.state.newSession(text) : await this.state.send(text);
+      const shaped = starting ? (this.state.shapeTicket?.() ?? null) : null;
+      const reply = starting ? await this.state.newSession(text, shaped ?? undefined) : await this.state.send(text);
       const error = errorOf(reply);
       if (error !== null) {
         this.composerError.set(error);
@@ -948,6 +952,122 @@ export class Chat {
 
   protected togglePlanEdits(): void {
     this.state.planEdits?.update((on) => !on);
+  }
+
+  // -- shape mode (E10-3) ------------------------------------------------------
+
+  private readonly planState = inject(MC_PLAN_STATE, { optional: true });
+
+  /**
+   * The shape session in view: the open session's ticket, or — before the
+   * first message — the ticket the entry point asked to shape. The context
+   * line reads "Shaping T-0130 with Paul · opus · reads only" and, once
+   * Paul has read files, the sources.
+   */
+  protected readonly shape = computed(() => {
+    const active = this.active();
+    const ticket = active !== null ? (active.ticket ?? null) : (this.state.shapeTicket?.() ?? null);
+    if (ticket === null) {
+      return null;
+    }
+    const sources = active?.sources ?? [];
+    const shown = sources.slice(0, 3).join(' · ');
+    return {
+      ticket,
+      line: `Shaping ${ticket} with Paul${active?.model === undefined ? '' : ` · ${active.model}`} · reads only`,
+      context: sources.length === 0 ? null : `Context: ${shown}${sources.length > 3 ? ` · +${sources.length - 3}` : ''}`,
+    };
+  });
+
+  /** Paul's unanswered question: the last thing in the thread is his answer card. */
+  protected readonly openQuestion = computed(() => {
+    const last = this.messages()[this.messages().length - 1];
+    return last !== undefined && last.kind === 'question' && (last.options?.length ?? 0) >= 2 && !this.readOnly() ? last : null;
+  });
+  /** The choice picked on the answer card; sent by the button, never by the pick itself. */
+  protected readonly picked = signal<string | null>(null);
+  protected readonly pickedLabel = computed(() => {
+    const question = this.openQuestion();
+    const pick = this.picked();
+    return question !== null && pick !== null && (question.options ?? []).some((o) => o.label === pick) ? pick : null;
+  });
+
+  protected pick(label: string): void {
+    this.picked.update((current) => (current === label ? null : label));
+  }
+
+  protected async sendPicked(): Promise<void> {
+    const label = this.pickedLabel();
+    if (label === null || this.sending()) {
+      return;
+    }
+    this.composerError.set(null);
+    this.sending.set(true);
+    this.priorReply = this.latestMission();
+    try {
+      const error = errorOf(await this.state.send(label));
+      if (error !== null) {
+        this.composerError.set(error);
+        return;
+      }
+      this.picked.set(null);
+    } catch (err) {
+      this.composerError.set(errorText(err));
+    } finally {
+      this.sending.set(false);
+    }
+  }
+
+  /** The split proposal that still waits for the owner: the latest split card, undecided. */
+  protected readonly openSplit = computed(() => {
+    const split = [...this.messages()].reverse().find((m) => m.kind === 'split');
+    return split !== undefined && (split.decision ?? null) === null && !this.readOnly() ? split : null;
+  });
+  protected readonly splitBusy = signal(false);
+  protected readonly splitError = signal<string | null>(null);
+
+  protected isOpenSplit(message: ChatMessageView): boolean {
+    return message === this.openSplit();
+  }
+
+  protected splitLabel(message: ChatMessageView): string {
+    return splitLabelOf(message.parts ?? 1);
+  }
+
+  protected async decideSplit(choice: 'keep' | 'split'): Promise<void> {
+    const file = this.active()?.file ?? null;
+    if (file === null || this.splitBusy() || this.state.shapeDecide === undefined) {
+      return;
+    }
+    this.splitBusy.set(true);
+    this.splitError.set(null);
+    try {
+      const error = errorOf(await this.state.shapeDecide(file, choice));
+      if (error !== null) {
+        this.splitError.set(error);
+      }
+    } catch (err) {
+      this.splitError.set(errorText(err));
+    } finally {
+      this.splitBusy.set(false);
+    }
+  }
+
+  /** The phone's plan row and its sheet (the wide layout shows the plan beside the chat). */
+  protected readonly planSheetOpen = signal(false);
+  protected readonly planRow = computed(() => {
+    const doc = this.planState?.doc() ?? null;
+    return this.shape() === null || this.planState === null
+      ? null
+      : { subtitle: doc === null ? null : planRowSubtitleOf(planSectionOf(doc.text)) };
+  });
+
+  protected openPlanSheet(): void {
+    this.planSheetOpen.set(true);
+  }
+
+  protected closePlanSheet(): void {
+    this.planSheetOpen.set(false);
   }
 
   protected isLive(item: ChatTimelineItem): boolean {

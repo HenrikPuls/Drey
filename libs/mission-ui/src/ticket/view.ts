@@ -837,6 +837,27 @@ export class TicketView {
     prefill.call(this.vm, `${doc.id}: `);
   }
 
+  // --- shape mode (E10-3) ---------------------------------------------------------
+
+  /** Shaping fits a ticket that has not reached the build queue yet; read-only devices never start one. */
+  protected readonly canShape = computed(() => {
+    const doc = this.doc();
+    if (doc === null || this.readOnly() || this.vm.shape === undefined) {
+      return false;
+    }
+    const at = doc.phases.findIndex((phase) => phase.id === doc.phase);
+    const build = doc.phases.findIndex((phase) => phase.id === 'build');
+    return at >= 0 && (build < 0 ? at <= 1 : at < build);
+  });
+
+  /** 'Shape with Paul': the chat opens on this ticket's shape session (or a fresh one). */
+  protected shapeWithPaul(): void {
+    const doc = this.doc();
+    if (doc !== null) {
+      this.vm.shape?.(doc.id);
+    }
+  }
+
   // --- the gallery dots ------------------------------------------------------------
 
   /** The gallery's snap position — the dot wearing the accent. */

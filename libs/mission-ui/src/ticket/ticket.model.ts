@@ -1024,6 +1024,12 @@ export interface TicketVm {
    * the view falls back to `proposeChain`, the same one prefill path.
    */
   prefillChat?(text: string): void;
+  /**
+   * The ticket face's 'Shape with Paul' (E10-3): opens the chat on this
+   * ticket's shape session. Optional — an adapter without shape sessions
+   * leaves it off and the button hides.
+   */
+  shape?(ticketId: string): void;
   /** The raw edit's save; one commit on the desk, the refusal inline. */
   save(text: string): Promise<TicketSaveReply>;
   accept(): Promise<TicketActionReply>;

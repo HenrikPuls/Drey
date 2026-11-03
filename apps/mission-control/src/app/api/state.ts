@@ -408,6 +408,7 @@ export class McState {
     this.chat.update((chat) => ({ ...chat, active: session }));
     if (session?.ticket !== undefined && session.ticket !== null) {
       void this.refreshPlan(session.ticket);
+      void this.loadShapeDoc(session.ticket);
     }
   }
 
@@ -431,10 +432,10 @@ export class McState {
     this.tab.set('chat');
   }
 
-  /** Starts a session with the first owner message and opens it. */
-  async newSession(text: string): Promise<McReply> {
+  /** Starts a session with the first owner message and opens it; `ticket` makes it a shape session. */
+  async newSession(text: string, ticket?: string): Promise<McReply> {
     const body = await this.client
-      .request<Record<string, unknown>>('POST', '/api/chat/sessions', { text })
+      .request<Record<string, unknown>>('POST', '/api/chat/sessions', { text, ...(ticket === undefined ? {} : { ticket }) })
       .catch(fail);
     if (isFailure(body)) {
       return body;
@@ -447,6 +448,111 @@ export class McState {
     // The start ran the whole turn server-side, so the fresh session the
     // GET returns already holds the owner message, the reply and any cards.
     await this.openSession(file);
+    this.shapeTicket.set(null);
+    return { ok: true };
+  }
+
+  // --- shape mode (E10-3) ---------------------------------------------------
+
+  /** The ticket the composer will start a shape session for with its first message; null = a plain chat. */
+  readonly shapeTicket = signal<string | null>(null);
+  /** The shaped ticket's file as the desk holds it — the plan pane's document. */
+  readonly shapeDoc = signal<{ readonly id: string; readonly text: string; readonly revision: string } | null>(null);
+  /** The plan pane's pending edit, saved before the next message goes out; false = the save failed. */
+  private planFlush: (() => Promise<boolean>) | null = null;
+  /** True while a shape turn runs (the pane dims its editing). */
+  readonly shapeBusy = signal(false);
+
+  /** The ticket in view in the chat: the open shape session's, or the one a fresh composer was asked to shape. */
+  readonly shapedTicket = computed<string | null>(() => {
+    const active = this.chat().active;
+    return active === null ? this.shapeTicket() : (active.ticket ?? null);
+  });
+
+  /** Paul's open split proposal in the open session: the latest `split` card, still undecided. */
+  readonly splitProposal = computed(() => {
+    const split = [...(this.chat().active?.messages ?? [])].reverse().find((m) => m.kind === 'split');
+    return split === undefined || (split.decision ?? null) !== null ? null : { parts: split.parts ?? 1, reason: split.text };
+  });
+
+  /**
+   * The entry point (E10-3): shaping a ticket with Paul. A session that
+   * already shapes it opens again; otherwise a fresh composer waits for the
+   * first message — the chat tab, the ticket screen closed.
+   */
+  beginShape(ticket: string): void {
+    this.closeTicket();
+    const existing = this.chat().sessions.find((s) => s.ticket === ticket) ?? null;
+    this.tab.set('chat');
+    if (existing !== null) {
+      this.shapeTicket.set(null);
+      void this.openSession(existing.file);
+      return;
+    }
+    this.tail = null;
+    this.chat.update((chat) => ({ ...chat, active: null }));
+    this.shapeTicket.set(ticket);
+    void this.loadShapeDoc(ticket);
+  }
+
+  /** Fetches the shaped ticket's file; a failed GET keeps the last good one. */
+  async loadShapeDoc(id: string): Promise<void> {
+    const body = await this.client.raw(`/api/tickets/${encodeURIComponent(id)}`);
+    const record = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : null;
+    if (record !== null && typeof record['text'] === 'string' && typeof record['revision'] === 'string') {
+      if (this.shapedTicket() === id) {
+        this.shapeDoc.set({ id, text: record['text'], revision: record['revision'] });
+      }
+    }
+  }
+
+  /** The pane's save: the whole ticket text against the loaded revision. */
+  async saveShapeDoc(text: string): Promise<McReply> {
+    const doc = this.shapeDoc();
+    if (doc === null) {
+      return { ok: false, error: 'the plan is not loaded yet' };
+    }
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', `/api/tickets/${encodeURIComponent(doc.id)}/save`, { text, baseRevision: doc.revision })
+      .catch(fail);
+    if ((body as Record<string, unknown>)['conflict'] === true) {
+      await this.loadShapeDoc(doc.id);
+      return { ok: false, error: 'The plan changed since you opened it. It was reloaded — edit again.' };
+    }
+    if (isFailure(body)) {
+      return body;
+    }
+    if (body['ok'] !== true) {
+      return refusal(body, 'the desk did not save the plan');
+    }
+    await this.loadShapeDoc(doc.id);
+    void this.refreshPlan(doc.id);
+    return { ok: true };
+  }
+
+  setPlanFlush(flush: (() => Promise<boolean>) | null): void {
+    this.planFlush = flush;
+  }
+
+  /** The owner's tap on Paul's split proposal. */
+  async shapeDecide(file: string, choice: 'keep' | 'split'): Promise<McReply> {
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', `/api/chat/sessions/${encodeURIComponent(file)}/split/${choice}`)
+      .catch(fail);
+    if (isFailure(body)) {
+      return body;
+    }
+    if (body['ok'] !== true) {
+      return refusal(body, 'the desk could not take the decision');
+    }
+    const canonical = await this.client
+      .request('GET', `/api/chat/sessions/${encodeURIComponent(file)}`)
+      .then(parseActiveSession)
+      .catch(() => null);
+    if (canonical !== null && this.chat().active?.file === file) {
+      this.chat.update((chat) => ({ ...chat, active: canonical }));
+    }
+    void this.refreshWork();
     return { ok: true };
   }
 
@@ -461,7 +567,12 @@ export class McState {
     if (file === null) {
       return { ok: false, error: 'no chat session is open' };
     }
+    // The plan pane saves an edit still in its field first, so the model reads the same text.
+    if (this.planFlush !== null && !(await this.planFlush())) {
+      return { ok: false, error: 'Save the plan edit first — it did not go through.' };
+    }
     this.appendMessage({ role: 'owner', text, thought: null, at: new Date().toISOString() });
+    this.shapeBusy.set(this.chat().active?.ticket != null);
     const shaped = this.chat().active?.ticket ?? null;
     const withEdits = this.planEdits();
     const body = await this.client
@@ -471,6 +582,7 @@ export class McState {
         { text, ...(shaped !== null && !withEdits ? { planEdits: false } : {}) },
       )
       .catch(fail);
+    this.shapeBusy.set(false);
     if (isFailure(body)) {
       return body;
     }
@@ -491,6 +603,7 @@ export class McState {
         this.chat.update((chat) => ({ ...chat, active: canonical }));
       }
       void this.refreshPlan(shaped);
+      void this.loadShapeDoc(shaped);
     }
     return { ok: true };
   }

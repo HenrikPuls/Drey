@@ -16,6 +16,27 @@
     </button>
   </header>
 
+  @if (shape(); as sh) {
+    <div class="shapectx" aria-label="Shape session">
+      <span class="via-dot" aria-hidden="true"></span>
+      <span class="shapeline">{{ sh.line }}</span>
+      @if (sh.context; as context) {
+        <span class="shapesrc">{{ context }}</span>
+      }
+    </div>
+    @if (planRow(); as row) {
+      <button type="button" class="planrow" (click)="openPlanSheet()">
+        <span class="planrow-t">
+          <span class="planrow-name">Plan</span>
+          @if (row.subtitle; as subtitle) {
+            <span class="planrow-sub">{{ subtitle }}</span>
+          }
+        </span>
+        <span class="chev" aria-hidden="true">›</span>
+      </button>
+    }
+  }
+
   @if (viewMode() === 'session') {
     <div class="thread" role="log" aria-live="polite" #thread (scroll)="onThreadScroll()">
       @for (item of timeline(); track trackOf(item, $index)) {
@@ -29,12 +50,49 @@
                   <pre class="planedit-diff">{{ diff }}</pre>
                 }
               </div>
+            } @else if (item.message.kind === 'question') {
+              <div class="msg mission">
+                @if (shape()) {
+                  <span class="via"><span class="via-dot" aria-hidden="true"></span>Paul, via Mission Control</span>
+                }
+                <p class="bubble">{{ item.message.text }}</p>
+              </div>
+            } @else if (item.message.kind === 'split') {
+              <div class="confirm splitcard" [class.done]="item.message.decision !== null" [attr.aria-busy]="splitBusy()">
+                <div class="ck">
+                  @if (item.message.decision === 'keep') {
+                    Kept as one ticket
+                  } @else if (item.message.decision === 'split') {
+                    {{ splitLabel(item.message) }}
+                  } @else {
+                    Paul suggests
+                    {{ (item.message.parts ?? 1) > 1 ? (item.message.parts ?? 1) + ' tickets' : 'one ticket' }}
+                  }
+                </div>
+                <p class="card-summary">{{ item.message.text }}</p>
+                @if (isOpenSplit(item.message)) {
+                  @if (splitError(); as error) {
+                    <p class="inline-error">{{ error }}</p>
+                  }
+                  <div class="row">
+                    <button type="button" class="btn ghost" [disabled]="splitBusy()" (click)="decideSplit('keep')">Keep as one ticket</button>
+                    @if ((item.message.parts ?? 1) > 1) {
+                      <button type="button" class="btn primary" [disabled]="splitBusy()" (click)="decideSplit('split')">
+                        {{ splitLabel(item.message) }}
+                      </button>
+                    }
+                  </div>
+                }
+              </div>
             } @else if (item.message.role === 'owner') {
               <div class="msg owner">
                 <p class="bubble">{{ item.message.text }}</p>
               </div>
             } @else if (isLive(item)) {
               <div class="msg mission live">
+                @if (shape()) {
+                  <span class="via"><span class="via-dot" aria-hidden="true"></span>Paul, via Mission Control</span>
+                }
                 @if ((item.message.thought ?? '') !== '') {
                   <div class="thinklive" aria-label="Mission Control is thinking">
                     <span class="th">{{ item.message.thought }}</span><span class="cursor" aria-hidden="true"></span>
@@ -46,6 +104,9 @@
               </div>
             } @else {
               <div class="msg mission">
+                @if (shape()) {
+                  <span class="via"><span class="via-dot" aria-hidden="true"></span>Paul, via Mission Control</span>
+                }
                 @if (item.message.thought !== null && (item.message.thought ?? '') !== '') {
                   <details class="think">
                     <summary>
@@ -117,6 +178,27 @@
       @if (viewMode() === 'composer') {
         <p class="empty">Earlier chats are in the menu (top left).</p>
       }
+    </div>
+  }
+
+  @if (openQuestion(); as question) {
+    <div class="answers" role="group" aria-label="Answer">
+      <span class="answers-hint">Pick an answer, then send it. Or write your own below.</span>
+      @for (option of question.options; track option.label) {
+        <button type="button" class="answer" [attr.aria-pressed]="pickedLabel() === option.label" (click)="pick(option.label)">
+          {{ option.label }}
+          @if (option.recommended) {
+            <span class="answer-rec">recommended</span>
+          }
+        </button>
+      }
+      <button type="button" class="btn primary answer-send" [disabled]="pickedLabel() === null || sending()" (click)="sendPicked()">
+        @if (pickedLabel(); as label) {
+          Send “{{ label }}”
+        } @else {
+          Send
+        }
+      </button>
     </div>
   }
 
@@ -232,6 +314,14 @@
           <p class="sheet-hint">No chat yet.</p>
         }
       </div>
+    </div>
+  }
+
+  @if (planSheetOpen()) {
+    <div class="sheet-backdrop" (click)="closePlanSheet()"></div>
+    <div class="plansheet" role="dialog" aria-label="Plan">
+      <mc-plan-pane mode="sheet" />
+      <button type="button" class="sheet-close plansheet-close" (click)="closePlanSheet()" aria-label="Close">×</button>
     </div>
   }
 

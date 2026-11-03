@@ -42,7 +42,7 @@ import type { BoardSnapshot, CreateResult, MutationResult } from '../contracts/t
 import type { EstimateKey, RunEstimate } from '../core/estimate';
 import type { ReviewComment } from '../core/review-feedback';
 import type { TicketDiff, TicketFileReply, WorktreeFile } from '../core/worktree-changes';
-import type { ChatDecisionResult, ChatServicePort, ChatSession, ChatSessionMeta, ChatTurnResult, PlanStatus } from '../contracts/chat';
+import type { ChatDecisionResult, ChatServicePort, ChatShapeResult, ChatSplitChoice, ChatSession, ChatSessionMeta, ChatTurnResult, PlanStatus } from '../contracts/chat';
 import { IMPROVEMENTS_THRESHOLD } from '../core/improvements';
 import { openStatusItems } from '../core/status-log';
 import type { StatusLine } from '../core/status-log';
@@ -520,6 +520,10 @@ export class DreyTicketsPort implements TicketsRemotePort {
 
   chatConfirm(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult> {
     return this.chat().confirm(input);
+  }
+
+  chatShapeDecide(input: { readonly file: string; readonly choice: ChatSplitChoice }): Promise<ChatShapeResult> {
+    return this.chat().shapeDecide(input);
   }
 
   chatDismiss(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult> {

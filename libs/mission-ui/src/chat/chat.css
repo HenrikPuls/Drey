@@ -943,3 +943,142 @@ details.think .step-body {
   opacity: 0.6;
   text-decoration: line-through;
 }
+
+/* ---------- shape mode (E10-3) ---------- */
+
+.shapectx {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 8px 18px;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.shapesrc {
+  flex-basis: 100%;
+}
+
+.via {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+.via-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* the phone's plan row: the plan lives in a sheet there; from 1024px it sits beside the dock */
+.planrow {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin: 8px 14px 0;
+  padding: 8px 12px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.planrow-t {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.planrow-sub {
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+@media (min-width: 1024px) {
+  .planrow {
+    display: none;
+  }
+}
+
+.plansheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 31;
+  height: min(70dvh, 560px);
+  animation: mc-chat-sheet 0.2s ease-out;
+}
+
+.plansheet-close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Paul's answer card, above the composer: pick, then send */
+.answers {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px 0;
+  border-top: 1px solid var(--line);
+}
+
+.answers-hint {
+  padding: 0 4px;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+.answer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: calc(15px * var(--mc-text, 1));
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+}
+
+.answer[aria-pressed='true'] {
+  background: var(--panel-3);
+  border-color: var(--accent);
+}
+
+.answer-rec {
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--accent);
+}
+
+.answer-send {
+  min-height: 48px;
+  border-radius: 12px;
+}
+
+.splitcard .card-summary {
+  margin-bottom: 10px;
+}

@@ -15,6 +15,7 @@ import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply }
 import { type RefineReply, TicketReply, AttachmentReply } from '../contracts/replies';
 import { assembleBoard, parseRepos, addPipelinePhase, patchPipelinePhase, removePipelinePhase, renamePipelinePhase, parsePipeline, reorderPipelinePhases, reposFileText, reposProse } from '../core/ticket-board';
 import { newTicketFileText, parseTicketFile, patchTicketFile, patchBlockedBy, patchChain, patchForm, patchTrack, ticketPathParts } from '../core/ticket-files';
+import { withPlanSection } from '../core/plan-section';
 import { parseChainEntry, renderChainEntries, validateChain } from '../core/chain-delta';
 import type { ChainEntry } from '../contracts/chain';
 import { refineTicket, revisionOf } from '../core/ticket-refine';
@@ -55,6 +56,8 @@ import { scanRepoFolder } from './repos-scan';
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
 const REPOS_PATH = 'tickets/_meta/repos.md';
 const ATTACHMENTS_DIR = 'tickets/attachments';
+/** Names a shape turn's repository read never opens: git internals, dependency folders, secrets. */
+const REPO_READ_DENIED = /^(\.git|node_modules|\.env.*|\.ssh|.*\.(pem|key))$/i;
 const PROMPTS_DIR = 'tickets/_meta/prompts';
 const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PLAN_INTERACTIVE_PROMPT = 'plan-interactive-default';
@@ -741,6 +744,89 @@ export class EngineBoardService {
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };
     });
+  }
+
+  /**
+   * The shared plan (E10-3, concept v2 §5.8): replaces the ticket's
+   * `## Plan` chapter — and nothing else of the file — with the shape
+   * turn's text. One commit `tickets: <id> plan`. A live run refuses; an
+   * unchanged plan is a no-op success.
+   */
+  setPlan(input: { id: string; plan: string; actor?: string }): Promise<BoardMutationResult> {
+    return this.enqueue(async () => {
+      const found = await this.findCard(input.id);
+      if (found === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const { vault, card, text } = found;
+      if (card.meta.run !== null) {
+        return { ok: false, error: 'A run is live on this ticket. Change the plan when the run has ended.' };
+      }
+      const patched = withPlanSection(text, input.plan);
+      if (patched === text.replace(/\r\n/g, '\n')) {
+        return { ok: true };
+      }
+      try {
+        await this.host.write(vault.id, card.path, patched);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const warning = await this.commit(vault, [card.path], `tickets: ${input.id} plan`);
+      this.host.announceChanges(vault.id, [card.path]);
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * A shape turn's read-only look into the ticket's repository (E10-3):
+   * a file's text (cut at the view cap) or, for a path ending in `/` (or
+   * empty), the directory's entries. Only the ticket's own repo, only
+   * inside it; `.git`, dependency folders and secret files stay shut.
+   */
+  async readRepoFile(
+    id: string,
+    relPath: string,
+  ): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly error: string }> {
+    const found = await this.findCard(id);
+    if (found === null) {
+      return { ok: false, error: `${id} is not on the board` };
+    }
+    const snap = await this.snapshot();
+    const repoName = found.card.meta.repo ?? found.card.meta.repos[0] ?? null;
+    const repo = repoName === null ? null : snap.repos.find((r) => r.name === repoName) ?? null;
+    if (repo === null || repo.path === null) {
+      return { ok: false, error: `${id} names no repository with a local path` };
+    }
+    const isDir = relPath === '' || relPath === '.' || relPath.endsWith('/');
+    const clean = relPath === '' || relPath === '.' ? '' : relPath.replace(/\/+$/, '');
+    if (clean !== '' && !isSafeRepoPath(clean)) {
+      return { ok: false, error: `"${relPath}" is not a path inside the repository` };
+    }
+    const segments = clean === '' ? [] : clean.split('/');
+    if (segments.some((s) => REPO_READ_DENIED.test(s))) {
+      return { ok: false, error: `"${relPath}" is not readable` };
+    }
+    const abs = path.join(repo.path, ...segments);
+    try {
+      if (isDir) {
+        const entries = await fsp.readdir(abs, { withFileTypes: true });
+        const names = entries
+          .filter((e) => !REPO_READ_DENIED.test(e.name))
+          .map((e) => (e.isDirectory() ? `${e.name}/` : e.name))
+          .sort()
+          .slice(0, 200);
+        return { ok: true, text: names.join('\n') };
+      }
+      const buffer = await fsp.readFile(abs);
+      if (buffer.includes(0)) {
+        return { ok: false, error: `"${relPath}" is a binary file` };
+      }
+      const cut = buffer.length > MAX_FILE_VIEW_BYTES;
+      return { ok: true, text: `${buffer.subarray(0, MAX_FILE_VIEW_BYTES).toString('utf8')}${cut ? '\n… (cut)' : ''}` };
+    } catch {
+      return { ok: false, error: `"${relPath}" does not exist` };
+    }
   }
 
   /**

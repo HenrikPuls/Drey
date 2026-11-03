@@ -55,9 +55,17 @@ export interface McChatState {
   /** Opens a session file as the pane's live one. */
   openSession(file: string): Promise<void>;
   /** Starts a fresh session with `text` as the owner's first message. */
-  newSession(text: string): Promise<McChatReply>;
+  newSession(text: string, ticket?: string): Promise<McChatReply>;
   /** Sends `text` into the open session. */
   send(text: string): Promise<McChatReply>;
+  /**
+   * Shape mode (E10-3): the ticket whose shape session the composer starts
+   * with its first message; null = a plain chat. Optional — a host without
+   * shape sessions leaves it off.
+   */
+  readonly shapeTicket?: WritableSignal<string | null>;
+  /** The owner's tap on Paul's split proposal: keep as one ticket, or split. */
+  shapeDecide?(file: string, choice: 'keep' | 'split'): Promise<McChatReply>;
   confirm(file: string, id: string): Promise<McChatReply>;
   dismiss(file: string, id: string): Promise<McChatReply>;
   /**

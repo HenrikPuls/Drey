@@ -339,5 +339,25 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     similar runs of the owner's own history (D9). The product name
     "Drey Crew" needs a name check before rollout; code is not renamed
     (D11).
+  - **Shape mode (E10-3, milestone 122) — the one write the chat makes
+    on its own.** A chat session may name a ticket (`ticket:` in its
+    frontmatter, E10-2); its turns then run on Paul's prompt instead of
+    the mission prompt (`SHAPE_SYSTEM_PROMPT`), Mission Control relaying
+    him. Paul may read the ticket's repository — `readRepoFile` on the
+    board, the ticket's own `repo`, inside it, no `.git`, dependency
+    folders, secrets or binaries, a bounded few request rounds per turn —
+    and writes **only the ticket's `## Plan` chapter** (`setPlan`, one
+    commit `tickets: <id> plan`, refused while a run is live). That is
+    a deliberate, narrow exception to the iron rule "the chat never
+    writes on its own": the plan is the shared document the owner reads
+    and edits beside the dialog, every write is a commit, and nothing
+    else of the ticket changes. Everything that moves a ticket stays a
+    tap — Paul's split proposal is a card in the session
+    (`POST …/split/keep|split`): "Keep as one ticket" moves the ticket
+    into the build queue through the board's own transition, "Split into
+    N tickets" records the choice for the plan to approve (E10-4); N is
+    counted from the plan's `### Parts`, never fixed. Questions are
+    answer cards above the composer (pick, then send; the pick is never
+    the action).
   Not yet manually verified by the owner; the etappen land one
   milestone at a time (roadmap, "Mission Control redesign").

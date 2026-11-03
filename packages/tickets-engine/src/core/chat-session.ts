@@ -23,7 +23,7 @@
  */
 import { splitFrontmatter } from '../../../../shared/frontmatter';
 import { DEFAULT_PRIORITY_CONFIG, type PriorityConfig } from '../contracts/tickets';
-import type { ChatCommand, ChatMessage, ChatProposal, ChatSession } from '../contracts/chat';
+import type { ChatCommand, ChatMessage, ChatProposal, ChatQuestionOption, ChatSession, ChatSplitChoice } from '../contracts/chat';
 import { validateChatCommand } from './chat-intents';
 
 export const CHAT_DIR = 'tickets/_meta/chat';
@@ -61,6 +61,41 @@ export function appendPlanEdit(text: string, now: Date, summary: string, diff: s
   const base = text.endsWith('\n') ? text : `${text}\n`;
   const body = diff.split('\n').map((line) => `  ${line}`).join('\n');
   return `${base}- '${now.toISOString()}' plan-edit — ${summary}\n  \`\`\`diff\n${body}\n  \`\`\`\n`;
+}
+
+/** Appends Paul's answer card (E10-3): the question and its choices. Answered by the owner's next message. */
+export function appendQuestion(text: string, now: Date, question: string, options: readonly ChatQuestionOption[]): string {
+  const base = text.endsWith('\n') ? text : `${text}\n`;
+  const body = JSON.stringify({ options: options.map((o) => ({ label: o.label, recommended: o.recommended })) });
+  return `${base}- '${now.toISOString()}' question — ${oneLine(question)}\n  \`\`\`json\n  ${body}\n  \`\`\`\n`;
+}
+
+/** Appends Paul's split proposal (E10-3): the reason and the number of parts the plan holds. */
+export function appendSplit(text: string, now: Date, reason: string, parts: number): string {
+  const base = text.endsWith('\n') ? text : `${text}\n`;
+  return `${base}- '${now.toISOString()}' split — ${oneLine(reason)}\n  \`\`\`json\n  ${JSON.stringify({ parts })}\n  \`\`\`\n`;
+}
+
+/** Appends the owner's choice on the open split proposal; null when none is open. */
+export function decideSplit(text: string, now: Date, choice: ChatSplitChoice, summary: string): string | null {
+  const session = parseSessionFile(text, '');
+  const open = [...(session?.messages ?? [])].reverse().find((m) => m.kind === 'split');
+  if (open === undefined || (open.decision ?? null) !== null) {
+    return null;
+  }
+  return `${text.endsWith('\n') ? text : `${text}\n`}- '${now.toISOString()}' split-decision ${choice} — ${oneLine(summary)}\n`;
+}
+
+/** Appends the repository files Paul read in a turn (E10-3), `; `-separated. */
+export function appendSources(text: string, now: Date, sources: readonly string[]): string {
+  if (sources.length === 0) {
+    return text;
+  }
+  return `${text.endsWith('\n') ? text : `${text}\n`}- '${now.toISOString()}' sources — ${sources.map(oneLine).join('; ')}\n`;
+}
+
+function oneLine(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
 }
 
 export function appendOwner(text: string, now: Date, message: string): string {
@@ -125,6 +160,7 @@ export function parseSessionFile(
   const createdAt = /^created:\s*'([^']+)'/m.exec(yamlText)?.[1] ?? '';
   const messages: ChatMessage[] = [];
   const proposals: ChatProposal[] = [];
+  const sources: string[] = [];
   let pendingThought: { at: string; text: string } | null = null;
   const lines = body.split('\n');
   for (let i = 0; i < lines.length; i++) {
@@ -140,6 +176,46 @@ export function parseSessionFile(
         i = j;
       }
       messages.push({ role: 'owner', text: planEdit[2]!, at: planEdit[1]!, thought: null, kind: 'plan-edit', diff: diffLines.join('\n') });
+      continue;
+    }
+    const card = /^- '([^']+)' (question|split) — (.*)$/.exec(line);
+    if (card !== null) {
+      const block = lines
+        .slice(i + 1, i + 4)
+        .join('')
+        .trim();
+      const json = rec(safeJson(/^```json\s*(.+?)\s*```$/.exec(block)?.[1] ?? ''));
+      if (card[2] === 'question') {
+        const options = questionOptionsOf(json?.['options']);
+        if (options.length >= 2) {
+          messages.push({ role: 'mission', text: card[3]!, at: card[1]!, thought: null, kind: 'question', options });
+        }
+      } else {
+        const parts = typeof json?.['parts'] === 'number' && json['parts'] >= 1 ? Math.floor(json['parts']) : 1;
+        messages.push({ role: 'mission', text: card[3]!, at: card[1]!, thought: null, kind: 'split', parts, decision: null });
+      }
+      continue;
+    }
+    const splitDecision = /^- '([^']+)' split-decision (keep|split) — (.*)$/.exec(line);
+    if (splitDecision !== null) {
+      for (let k = messages.length - 1; k >= 0; k--) {
+        const m = messages[k]!;
+        if (m.kind === 'split') {
+          if ((m.decision ?? null) === null) {
+            messages[k] = { ...m, decision: splitDecision[2] as ChatSplitChoice };
+          }
+          break;
+        }
+      }
+      continue;
+    }
+    const read = /^- '([^']+)' sources — (.*)$/.exec(line);
+    if (read !== null) {
+      for (const path of read[2]!.split(';').map((p) => p.trim())) {
+        if (path !== '' && !sources.includes(path)) {
+          sources.push(path);
+        }
+      }
       continue;
     }
     const basic = /^- '([^']+)' (owner|mission|thought) — (.*)$/.exec(line);
@@ -188,7 +264,25 @@ export function parseSessionFile(
     }
   }
   const ticket = /^ticket:\s*(T-\d{4,})\s*$/m.exec(yamlText)?.[1] ?? null;
-  return { file, title, createdAt, messages, proposals, ticket };
+  return { file, title, createdAt, messages, proposals, ticket, ...(sources.length > 0 ? { sources } : {}) };
+}
+
+function rec(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function questionOptionsOf(value: unknown): ChatQuestionOption[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const options: ChatQuestionOption[] = [];
+  for (const entry of value as unknown[]) {
+    const item = rec(entry);
+    if (item !== null && typeof item['label'] === 'string' && item['label'].trim() !== '') {
+      options.push({ label: item['label'].trim(), recommended: item['recommended'] === true });
+    }
+  }
+  return options;
 }
 
 function safeJson(raw: string): unknown {

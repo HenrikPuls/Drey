@@ -1110,6 +1110,21 @@ line is skipped, never guessed — the asymmetric-tolerance rule):
   belongs to. `<summary>` reads `2 edits · +3 −1`; the diff has an
   `@@ line <n>` header per group and `- old` / `+ new` lines. Plan-edit
   cards are not part of the history handed to the model.
+- `- '<UTC>' question — <text>` followed by an indented `json` block
+  `{"options":[{"label":"…","recommended":true}]}` (2–4 choices) — Paul's
+  **answer card** in a shape session (E10-3). It is answered by the
+  owner's next `owner` line (the picked label or their own words); there
+  is no decision line.
+- `- '<UTC>' split — <reason>` followed by a `json` block `{"parts":3}` —
+  Paul's **split proposal** (E10-3): the reason, and N counted from the
+  plan's `### Parts` (one when there are none). The owner's tap adds
+  `- '<UTC>' split-decision keep|split — <summary>` (`Keep as one
+  ticket` / `Split into 3 tickets`); a decided proposal stays as history.
+  `keep` also moves the ticket from its phase into the pipeline's `build`
+  phase (the phase after its own when there is none) in the same step.
+- `- '<UTC>' sources — a; b; c` — the repository files Paul read in a
+  turn (E10-3), `;`-separated; the session's distinct sources are the
+  "Context:" line of the screen.
 - `- '<UTC>' proposal p-<n> pending — <summary>` followed by the command
   in an indented fenced block marked `json` — a **proposal card**:
   `<summary>` is the human sentence the card shows, the block is the
@@ -1123,8 +1138,17 @@ line is skipped, never guessed — the asymmetric-tolerance rule):
   execution reported one. Proposals are append-only history — a
   decision adds a line, never rewrites one.
 
+**The one exception — the shared plan (E10-3).** In a shape session
+Paul's turn may carry a new `## Plan` chapter, which the engine writes
+into the ticket right away (`tickets: <id> plan`): only that chapter
+changes (`core/plan-section.ts`; a `## ` line inside the text is demoted
+to `###` so it cannot swallow the next chapter), and a live run on the
+ticket refuses the write. The plan is the document the owner edits beside
+the dialog; the next message carries only the owner's own edits back
+(E10-2). Nothing else a shape turn does touches the board without a tap.
+
 The grammar exists for the chat's iron rule (concept §6): **the chat
-never writes on its own.** The session file is the only thing the chat
+never writes on its own** (bar the plan chapter above). The session file is the only thing the chat
 writes; a ticket mutation exists only as a proposal's command block and
 runs on the owner's explicit confirm, through the same board methods
 the invoke channel exposes — never a second write path. The file is the

@@ -1,4 +1,63 @@
 
+### Milestone 122 — Mission Control shape mode (E10-3)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(concept v2 §5.8; design boards "iPad: Shape the plan", "Phone: shape
+thread", "Phone: shape with the plan sheet"; ADR-0088 E10 – E12). Not
+visually checked in a running app — the specs and the production build
+are what ran. "Split into N tickets" only records the choice; the plan to
+approve (E10-4) picks it up.
+
+- **Entry.** The ticket face of a ticket that has not reached the build
+  queue offers **Shape with Paul**: the chat opens on that ticket's shape
+  session (an existing one reopens, otherwise a fresh composer waits for
+  the first message, which starts the session with `ticket:`).
+- **The dialog.** Context line `Shaping T-0130 with Paul · opus · reads
+  only` and, once he has read files, `Context: CLAUDE.md · roadmap.md ·
+  +2`; Paul's messages carry `Paul, via Mission Control`. The model is
+  the chat model (`GET` session → `model`).
+- **Paul's turn** (`SHAPE_SYSTEM_PROMPT`, `chat-llm.ts`). One JSON
+  envelope with optional `plan`, `question`, `split`, `read`. He reads the
+  ticket's repository through `readRepoFile` (read-only, the ticket's own
+  `repo`, no `.git` / dependency folders / secrets / binaries, 6 paths and
+  3 rounds at most) and writes **only the `## Plan` chapter** through
+  `setPlan` (`core/plan-section.ts`; one commit `tickets: <id> plan`;
+  refused while a run is live). The shape reply never streams as raw
+  JSON — the screen shows what he reads and waits. The shadow copy and
+  the delta of milestone 121 are unchanged.
+- **Answer cards.** A `question` lands as a `question` line in the
+  session file and, while it is the last thing in the thread, as the
+  block above the composer: the choices as pills (`recommended` tagged),
+  "Pick an answer, then send it. Or write your own below.", and a
+  `Send “…”` button — the pick is never the action.
+- **Split proposal.** `split` lands as a card: Paul's reason and **N
+  counted from the plan's `### Parts`** (never fixed; one part or none
+  offers only "Keep as one ticket"). "Keep as one ticket" moves the
+  ticket into `build` through the board's transition; "Split into N
+  tickets" records `split-decision split`. Both are in the chat card and
+  in the plan pane's foot.
+- **The plan beside the dialog.** `mc-plan-pane` (`libs/mission-ui/src/plan`):
+  the Plan as a list of collapsed chapters (Goal and Parts open, the
+  parts with persona and reason), the E10-2 status line, an **Edit**
+  toggle swapping in a text field (the Markdown surface arrives with
+  E12-6), saved on Done and — through `setFlush` — before the next
+  message goes out; a refused save keeps the message back. Wide
+  layout (≥ 1024 px, chat docked): the pane takes the center column. On
+  a phone / tablet: a **Plan** row in the thread (`3 parts · 1 open
+  question`) opens it as a bottom sheet.
+- **Specs added:** the Plan-section writer (replace, add before Log,
+  demotion, CRLF), the envelope's shape fields and bounds, the bridge's
+  shape prompt, read rounds, round cap and silent stream, the session
+  file's question / split / decision / sources lines, the chat service's
+  plan write, failure note, N from parts, keep / split decisions and
+  refusals, the board's `setPlan` and `readRepoFile` (path guards), the
+  route, the DTO readers, the chat's context line / answer block / split
+  card / plan row, the plan pane (chapters, edit and save, refusal,
+  decision), the state's begin / start / decide / save / flush.
+- **Not done:** tinted marks and line-level editing inside the plan, the
+  formatting strip (E12-6), Paul on his own persona model, the plan to
+  approve (E10-4), the flow editor (E10-5). Roadmap: E10-3b.
+
 ### Milestone 121 — Mission Control plan delta (E10-2)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04

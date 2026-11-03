@@ -18,7 +18,7 @@ import type {
   TicketIdCommand,
   TransitionCommand,
 } from '../core/commands';
-import type { ChatDecisionResult, ChatSession, ChatSessionMeta, ChatStreamEvent, ChatTurnResult, PlanStatus } from './chat';
+import type { ChatDecisionResult, ChatShapeResult, ChatSession, ChatSplitChoice, ChatSessionMeta, ChatStreamEvent, ChatTurnResult, PlanStatus } from './chat';
 import type { FleetSnapshot } from '../services/fleet-client';
 import type { ChainMaster, ChainStatus, ColumnMode, WaitQuestion } from '../fleet/protocol';
 import type { ShapedQuestion } from './question-shape';
@@ -222,6 +222,7 @@ export interface TicketsRemotePort {
   planStatus(ticket: string): Promise<PlanStatus>;
   chatConfirm(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult>;
   chatDismiss(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult>;
+  chatShapeDecide(input: { readonly file: string; readonly choice: ChatSplitChoice }): Promise<ChatShapeResult>;
 
   /** Board, fleet, remote or chat changed; returns the unsubscribe. Chat changes carry their stream payload. */
   onChanged(listener: (what: RemoteChange, payload?: ChatChangePayload) => void): () => void;

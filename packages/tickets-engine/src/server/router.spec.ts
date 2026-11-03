@@ -63,6 +63,7 @@ function port(): TicketsRemotePort {
     chatStart: vi.fn(ok),
     chatConfirm: vi.fn(ok),
     chatDismiss: vi.fn(ok),
+    chatShapeDecide: vi.fn(ok),
     onChanged: () => () => undefined,
   } as unknown as TicketsRemotePort;
 }
@@ -296,6 +297,12 @@ describe('route', () => {
     expect(remote.chatConfirm).toHaveBeenCalledWith({ file, id: 'p-1' });
     await route(req({ method: 'POST', path: `/api/chat/sessions/${file}/proposals/p-1/dismiss`, origin, authorization: auth }), deps);
     expect(remote.chatDismiss).toHaveBeenCalledWith({ file, id: 'p-1' });
+    // E10-3: the tap on Paul's split proposal.
+    await route(req({ method: 'POST', path: `/api/chat/sessions/${file}/split/keep`, origin, authorization: auth }), deps);
+    expect(remote.chatShapeDecide).toHaveBeenLastCalledWith({ file, choice: 'keep' });
+    await route(req({ method: 'POST', path: `/api/chat/sessions/${file}/split/split`, origin, authorization: auth }), deps);
+    expect(remote.chatShapeDecide).toHaveBeenLastCalledWith({ file, choice: 'split' });
+    expect((await route(req({ method: 'POST', path: '/api/chat/sessions/tickets/evil.md/split/keep', origin, authorization: auth }), deps)).status).toBe(404);
 
     // A session file outside tickets/_meta/chat/ is not a route; a blank
     // message is a refused command, not a transport error.

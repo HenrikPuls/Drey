@@ -904,3 +904,85 @@ describe('EngineBoardService estimateOf (E11-4)', () => {
     expect(await service.estimateOf({ ...key, gate: 'review' })).toBeNull();
   });
 });
+
+// E10-3: the shape turn's two board seams — the plan chapter write and the
+// read-only look into the ticket's repository.
+describe('EngineBoardService shape seams (E10-3)', () => {
+  let repoDir: string;
+
+  beforeEach(async () => {
+    repoDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'shape-repo-'));
+    await fsp.mkdir(path.join(repoDir, 'src'), { recursive: true });
+    await fsp.mkdir(path.join(repoDir, '.git'), { recursive: true });
+    await fsp.writeFile(path.join(repoDir, 'CLAUDE.md'), 'rules', 'utf8');
+    await fsp.writeFile(path.join(repoDir, 'src', 'a.ts'), 'export const a = 1;', 'utf8');
+    await fsp.writeFile(path.join(repoDir, '.env'), 'SECRET=1', 'utf8');
+    await fsp.writeFile(path.join(repoDir, '.git', 'config'), 'x', 'utf8');
+    await fsp.writeFile(path.join(repoDir, 'logo.bin'), Buffer.from([1, 0, 2]));
+    await fsp.writeFile(
+      path.join(vaultDir, 'tickets', '_meta', 'repos.md'),
+      `---\nrepos:\n  demo:\n    url: https://example.com/demo.git\n    path: '${repoDir.replace(/\\/g, '/')}'\n---\n`,
+      'utf8',
+    );
+  });
+
+  afterEach(async () => {
+    await fsp.rm(repoDir, { recursive: true, force: true });
+  });
+
+  async function writeRepoTicket(id: string, phase: string): Promise<string> {
+    await writeTicket(id, phase);
+    const file = path.join(vaultDir, 'tickets', phase, `${id}.md`);
+    const text = await fsp.readFile(file, 'utf8');
+    await fsp.writeFile(file, text.replace(/^repo:.*$/m, 'repo: demo'), 'utf8');
+    return file;
+  }
+
+  it('setPlan replaces only the Plan chapter and keeps the rest of the file', async () => {
+    await writeTicket('T-0001', 'inbox');
+    const file = path.join(vaultDir, 'tickets', 'inbox', 'T-0001.md');
+    const service = serviceOf();
+
+    expect((await service.setPlan({ id: 'T-0001', plan: '### Goal\n\nOne thing.' })).ok).toBe(true);
+    const text = await fsp.readFile(file, 'utf8');
+    expect(text).toContain('## Plan\n\n### Goal\n\nOne thing.');
+    expect(text).toContain('Do the thing.');
+    expect(text).toContain('created in inbox');
+
+    // The same plan again is a no-op success.
+    const before = await fsp.readFile(file, 'utf8');
+    expect(await service.setPlan({ id: 'T-0001', plan: '### Goal\n\nOne thing.' })).toEqual({ ok: true });
+    expect(await fsp.readFile(file, 'utf8')).toBe(before);
+  });
+
+  it('setPlan refuses an unknown ticket', async () => {
+    expect(await serviceOf().setPlan({ id: 'T-0999', plan: 'x' })).toEqual({ ok: false, error: 'T-0999 is not on the board' });
+  });
+
+  it('reads a file and lists a directory of the ticket’s repository', async () => {
+    await writeRepoTicket('T-0001', 'inbox');
+    const service = serviceOf();
+
+    expect(await service.readRepoFile('T-0001', 'src/a.ts')).toEqual({ ok: true, text: 'export const a = 1;' });
+    const listing = await service.readRepoFile('T-0001', '');
+    expect(listing).toMatchObject({ ok: true });
+    expect((listing as { text: string }).text.split('\n')).toEqual(['CLAUDE.md', 'logo.bin', 'src/']);
+    expect(await service.readRepoFile('T-0001', 'src/')).toEqual({ ok: true, text: 'a.ts' });
+  });
+
+  it('keeps git internals, secrets, escapes and binaries shut', async () => {
+    await writeRepoTicket('T-0001', 'inbox');
+    const service = serviceOf();
+
+    for (const bad of ['.git/config', '.env', '../outside.txt', '/etc/passwd', 'src//a.ts']) {
+      expect((await service.readRepoFile('T-0001', bad)).ok, bad).toBe(false);
+    }
+    expect(await service.readRepoFile('T-0001', 'logo.bin')).toEqual({ ok: false, error: '"logo.bin" is a binary file' });
+    expect(await service.readRepoFile('T-0001', 'missing.ts')).toEqual({ ok: false, error: '"missing.ts" does not exist' });
+  });
+
+  it('refuses without a repository', async () => {
+    await writeTicket('T-0001', 'inbox');
+    expect((await serviceOf().readRepoFile('T-0001', 'CLAUDE.md')).ok).toBe(false);
+  });
+});

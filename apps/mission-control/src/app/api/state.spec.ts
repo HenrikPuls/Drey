@@ -1755,3 +1755,113 @@ describe('McState shape sessions (E10-2)', () => {
     expect(desk.callsOf('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`)[0]!.body).toEqual({ text: 'hi' });
   });
 });
+
+describe('McState shape mode (E10-3)', () => {
+  const ticketFor = (plan: string) => ({ ok: true, card: { id: 'T-0130', phase: 'inbox', meta: {} }, text: `---\nid: T-0130\n---\n\n## Plan\n\n${plan}\n`, revision: 'r1' });
+
+  it('begins a shape on a fresh composer when no session shapes the ticket yet', async () => {
+    const { desk, data } = makeDesk();
+    desk.on('GET', '/api/tickets/T-0130', () => ticketFor('### Goal'));
+    desk.on('GET', '/api/tickets/T-0130/plan', () => ({ ok: true, version: null, edits: 0, summary: null, marks: [] }));
+    data.sessionA = { file: FILE_A, title: 'A', createdAt: '', messages: [], proposals: [] };
+    const state = makeState(desk);
+    await state.openSession(FILE_A);
+
+    state.beginShape('T-0130');
+
+    expect(state.tab()).toBe('chat');
+    expect(state.chat().active).toBeNull();
+    expect(state.shapeTicket()).toBe('T-0130');
+    expect(state.shapedTicket()).toBe('T-0130');
+    await waitFor(() => expect(state.shapeDoc()?.id).toBe('T-0130'));
+  });
+
+  it('opens the existing shape session of the ticket instead', async () => {
+    const { desk, data } = makeDesk();
+    data.sessions = [{ file: FILE_A, title: 'Shape', createdAt: '', updatedAt: '', pending: 0, ticket: 'T-0130' }];
+    data.sessionA = { file: FILE_A, title: 'Shape', ticket: 'T-0130', createdAt: '', messages: [], proposals: [] };
+    desk.on('GET', '/api/tickets/T-0130', () => ticketFor('### Goal'));
+    desk.on('GET', '/api/tickets/T-0130/plan', () => ({ ok: true, version: 2, edits: 0, summary: null, marks: [] }));
+    const state = makeState(desk);
+    await (state as unknown as { refreshSessions(): Promise<void> }).refreshSessions();
+
+    state.beginShape('T-0130');
+    await waitFor(() => expect(state.chat().active?.file).toBe(FILE_A));
+    expect(state.shapeTicket()).toBeNull();
+  });
+
+  it('starts the session for the ticket with its first message', async () => {
+    const { desk, data } = makeDesk();
+    desk.on('POST', '/api/chat/sessions', () => ({ ok: true, file: FILE_A, say: 'Hello' }));
+    desk.on('GET', '/api/tickets/T-0130', () => ticketFor('### Goal'));
+    desk.on('GET', '/api/tickets/T-0130/plan', () => ({ ok: true, version: 1, edits: 0, summary: null, marks: [] }));
+    data.sessionA = { file: FILE_A, title: 'Shape', ticket: 'T-0130', createdAt: '', messages: [], proposals: [] };
+    const state = makeState(desk);
+    state.shapeTicket.set('T-0130');
+
+    expect(await state.newSession('Voice capture', 'T-0130')).toEqual({ ok: true });
+
+    expect(desk.callsOf('POST', '/api/chat/sessions')[0]!.body).toEqual({ text: 'Voice capture', ticket: 'T-0130' });
+    expect(state.shapeTicket()).toBeNull();
+    expect(state.chat().active?.ticket).toBe('T-0130');
+  });
+
+  it('finds Paul’s open split proposal and closes it after the decision', async () => {
+    const { desk, data } = makeDesk();
+    const split = (decision: string | null) => ({ role: 'mission', text: 'Parts ship alone', at: 'b', thought: null, kind: 'split', parts: 3, decision });
+    data.sessionA = { file: FILE_A, title: 'Shape', ticket: 'T-0130', createdAt: '', messages: [split(null)], proposals: [] };
+    desk.on('GET', '/api/tickets/T-0130/plan', () => ({ ok: true, version: 1, edits: 0, summary: null, marks: [] }));
+    desk.on('GET', '/api/tickets/T-0130', () => ticketFor('### Goal'));
+    desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/split/keep`, () => {
+      data.sessionA = { file: FILE_A, title: 'Shape', ticket: 'T-0130', createdAt: '', messages: [split('keep')], proposals: [] };
+      return { ok: true, outcome: 'tickets/30-build/T-0130.md' };
+    });
+    const state = makeState(desk);
+    await state.openSession(FILE_A);
+    expect(state.splitProposal()).toEqual({ parts: 3, reason: 'Parts ship alone' });
+
+    expect(await state.shapeDecide(FILE_A, 'keep')).toEqual({ ok: true });
+    expect(state.splitProposal()).toBeNull();
+  });
+
+  it('saves the plan against the loaded revision and reports a stale base honestly', async () => {
+    const { desk } = makeDesk();
+    desk.on('GET', '/api/tickets/T-0130', () => ticketFor('### Goal'));
+    desk.on('GET', '/api/tickets/T-0130/plan', () => ({ ok: true, version: 1, edits: 1, summary: null, marks: [] }));
+    const state = makeState(desk);
+    state.shapeTicket.set('T-0130');
+    await state.loadShapeDoc('T-0130');
+    desk.on('POST', '/api/tickets/T-0130/save', () => ({ ok: true }));
+
+    expect(await state.saveShapeDoc('new text')).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/tickets/T-0130/save')[0]!.body).toEqual({ text: 'new text', baseRevision: 'r1' });
+
+    desk.on('POST', '/api/tickets/T-0130/save', () => ({ ok: false, conflict: true }));
+    const stale = await state.saveShapeDoc('again');
+    expect(stale.ok).toBe(false);
+  });
+
+  it('waits for the plan pane’s save before a message goes out, and stops when that save fails', async () => {
+    const { desk, data } = makeDesk();
+    data.sessionA = { file: FILE_A, title: 'Shape', ticket: 'T-0130', createdAt: '', messages: [], proposals: [] };
+    desk.on('GET', '/api/tickets/T-0130/plan', () => ({ ok: true, version: 1, edits: 0, summary: null, marks: [] }));
+    desk.on('GET', '/api/tickets/T-0130', () => ticketFor('### Goal'));
+    desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`, () => ({ ok: true, say: 'Done', proposals: [] }));
+    const state = makeState(desk);
+    await state.openSession(FILE_A);
+
+    const order: string[] = [];
+    state.setPlanFlush(async () => {
+      order.push('flush');
+      return true;
+    });
+    await state.send('go');
+    expect(order).toEqual(['flush']);
+    expect(desk.callsOf('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`)).toHaveLength(1);
+
+    state.setPlanFlush(async () => false);
+    const refused = await state.send('again');
+    expect(refused).toEqual({ ok: false, error: 'Save the plan edit first — it did not go through.' });
+    expect(desk.callsOf('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`)).toHaveLength(1);
+  });
+});

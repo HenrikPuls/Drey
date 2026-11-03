@@ -12,7 +12,7 @@ import {
   type PriorityConfig,
   type TicketPriority,
 } from '../contracts/tickets';
-import type { ChatCommand } from '../contracts/chat';
+import type { ChatCommand, ChatQuestionOption } from '../contracts/chat';
 
 /** The parsed envelope — what a mission turn amounted to. */
 export interface ChatEnvelope {
@@ -22,7 +22,17 @@ export interface ChatEnvelope {
   readonly thought: string | null;
   /** The validated commands (proposal cards), in order. */
   readonly commands: readonly ChatCommand[];
+  /** A shape turn's extra fields (E10-3); every one absent on a plain turn. */
+  readonly plan?: string;
+  readonly question?: { readonly text: string; readonly options: readonly ChatQuestionOption[] };
+  readonly splitReason?: string;
+  /** Repository paths the model wants to read before it answers. */
+  readonly read?: readonly string[];
 }
+
+/** At most this many files are read per round, and this many choices a question keeps. */
+export const MAX_READ_PATHS = 6;
+const MAX_OPTIONS = 4;
 
 /**
  * Reads the envelope from the model's reply. Returns null when the text
@@ -66,7 +76,64 @@ export function parseEnvelope(
       }
     }
   }
-  return { say, thought, commands };
+  const plan = typeof obj['plan'] === 'string' && obj['plan'].trim() !== '' ? obj['plan'] : null;
+  const question = questionOf(obj['question']);
+  const splitReason = splitReasonOf(obj['split']);
+  const read = readPathsOf(obj['read']);
+  return {
+    say,
+    thought,
+    commands,
+    ...(plan === null ? {} : { plan }),
+    ...(question === null ? {} : { question }),
+    ...(splitReason === null ? {} : { splitReason }),
+    ...(read.length === 0 ? {} : { read }),
+  };
+}
+
+/** The shape turn's question: text plus 2–4 labelled choices (one may be `recommended`); null when unusable. */
+function questionOf(value: unknown): { readonly text: string; readonly options: readonly ChatQuestionOption[] } | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const obj = value as Record<string, unknown>;
+  const text = textOf(obj['text']);
+  if (text === null || !Array.isArray(obj['options'])) {
+    return null;
+  }
+  const options: ChatQuestionOption[] = [];
+  for (const entry of obj['options'] as unknown[]) {
+    const record = typeof entry === 'object' && entry !== null ? (entry as Record<string, unknown>) : null;
+    const label = typeof entry === 'string' ? textOf(entry) : record === null ? null : textOf(record['label']);
+    if (label === null || options.some((o) => o.label === label)) {
+      continue;
+    }
+    const recommended = record !== null && record['recommended'] === true && !options.some((o) => o.recommended);
+    options.push({ label, recommended });
+  }
+  return options.length < 2 ? null : { text, options: options.slice(0, MAX_OPTIONS) };
+}
+
+/** `{"split": {"reason": "…"}}` — Paul is ready to settle; the reason is required. */
+function splitReasonOf(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return textOf((value as Record<string, unknown>)['reason']);
+}
+
+function readPathsOf(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const paths: string[] = [];
+  for (const entry of value as unknown[]) {
+    const path = typeof entry === 'string' ? entry.trim() : '';
+    if (path !== '' && !paths.includes(path)) {
+      paths.push(path);
+    }
+  }
+  return paths.slice(0, MAX_READ_PATHS);
 }
 
 /**

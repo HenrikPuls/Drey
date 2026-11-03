@@ -21,6 +21,7 @@ import { MC_TEAM_STATE, type McTeamPersona, type McTeamState } from '@mission-ui
 import { MC_WORK_STATE, type McPersona, type McWorkState } from '@mission-ui/work/work.model';
 import { MC_SETTINGS_STATE } from '@mission-ui/settings/settings.model';
 import { MC_TOAST_STATE } from '@mission-ui/toast.model';
+import { MC_PLAN_STATE, type McPlanState } from '@mission-ui/plan/plan.model';
 
 /**
  * One shared McState for the whole shell: the chat tab consumes it
@@ -35,6 +36,37 @@ export const appConfig: ApplicationConfig = {
     { provide: MC_CHAT_STATE, useExisting: McState },
     { provide: MC_TOAST_STATE, useExisting: McState },
     { provide: MC_SETTINGS_STATE, useExisting: McState },
+    {
+      provide: MC_PLAN_STATE,
+      useFactory: (): McPlanState => {
+        const state = inject(McState);
+        return {
+          ticket: () => state.shapedTicket(),
+          doc: () => {
+            const doc = state.shapeDoc();
+            return doc !== null && doc.id === state.shapedTicket() ? doc : null;
+          },
+          status: () => {
+            const ticket = state.shapedTicket();
+            return ticket === null ? null : state.planOf(ticket);
+          },
+          proposal: () => state.splitProposal(),
+          decide: async (choice) => {
+            const file = state.chat().active?.file ?? null;
+            return file === null ? { ok: false, error: 'no chat session is open' } : state.shapeDecide(file, choice);
+          },
+          save: (text) => state.saveShapeDoc(text),
+          reload: async () => {
+            const ticket = state.shapedTicket();
+            if (ticket !== null) {
+              await state.loadShapeDoc(ticket);
+            }
+          },
+          setFlush: (flush) => state.setPlanFlush(flush),
+          busy: state.shapeBusy,
+        };
+      },
+    },
     {
       provide: MC_WORK_STATE,
       useFactory: (): McWorkState => {
@@ -266,6 +298,7 @@ export const appConfig: ApplicationConfig = {
             return url;
           },
           onClose: () => state.closeTicket(),
+          shape: (ticketId) => state.beginShape(ticketId),
           proposeChain: (text) => state.prefillChat(text),
           prefillChat: (text) => state.prefillChat(text),
           save: async (text) => {

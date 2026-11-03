@@ -215,6 +215,9 @@
                 </button>
               }
               <button type="button" class="btn ghost" (click)="changeByChat()">Change by chat</button>
+              @if (canShape()) {
+                <button type="button" class="btn ghost" (click)="shapeWithPaul()">Shape with Paul</button>
+              }
             </div>
           }
         </div>
