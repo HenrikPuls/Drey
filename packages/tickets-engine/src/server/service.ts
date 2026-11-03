@@ -67,6 +67,12 @@ export interface RemotePatch {
 export interface RemoteServiceDeps {
   /** Videos in `tickets/videos/` for the settings count; absent = 0. */
   readonly countVideos?: () => Promise<number>;
+  /** The standing video notice ("The limit no longer frees space."); null = none. */
+  readonly videoNotice?: () => Promise<string | null>;
+  /** E11-1: `videos.inGit` flipped — the ignore rule follows; `includeExisting` commits what is there. */
+  readonly videosChanged?: (includeExisting: boolean) => Promise<void>;
+  /** The vault's walkthrough videos for the Range route; null = no such video. */
+  readonly videos?: (name: string) => Promise<{ file: string; bytes: number } | null>;
   readonly config: {
     get<T>(key: string): Promise<T | undefined>;
     set<T>(key: string, value: T): Promise<void>;
@@ -98,6 +104,7 @@ export class RemoteService {
     this.gateway = new RemoteGateway({
       clientDir: deps.clientDir,
       attachments: deps.attachments,
+      videos: deps.videos,
       log: deps.log,
       router: {
         port: deps.port,
@@ -132,6 +139,7 @@ export class RemoteService {
           videos: normalizeVideoSettings(
             { inGit: await get(SETTINGS_KEYS.videosInGit), limitMb: await get(SETTINGS_KEYS.videosLimitMb) },
             existing,
+            this.deps.videoNotice === undefined ? null : await this.deps.videoNotice().catch(() => null),
           ),
         },
       };
@@ -148,6 +156,9 @@ export class RemoteService {
         }
         if (patch.limitMb !== undefined) {
           await this.deps.config.set(SETTINGS_KEYS.videosLimitMb, patch.limitMb);
+        }
+        if (patch.inGit !== undefined || patch.limitMb !== undefined) {
+          await this.deps.videosChanged?.(patch.includeExisting === true).catch(() => undefined);
         }
         this.deps.onChanged();
         return reply(asking);

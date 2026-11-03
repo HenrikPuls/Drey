@@ -1,7 +1,10 @@
+import { promises as fsp } from 'node:fs';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { RemoteChange, TicketsRemotePort } from '../contracts/remote-protocol';
 import { DeviceRegistry, FailureLimiter, PairingCodes } from './auth';
-import { RemoteGateway } from './gateway';
+import { parseByteRange, RemoteGateway } from './gateway';
 
 /**
  * req-66: the HTTP server on a real loopback socket — security headers,
@@ -15,7 +18,7 @@ afterEach(async () => {
   gateway = null;
 });
 
-async function start(): Promise<{ base: string; emit: (what: RemoteChange) => void; token: string; calls: { patch?: unknown; pause?: unknown; thread?: unknown } }> {
+async function start(videos?: (name: string) => Promise<{ file: string; bytes: number } | null>): Promise<{ base: string; emit: (what: RemoteChange) => void; token: string; calls: { patch?: unknown; pause?: unknown; thread?: unknown } }> {
   const listeners = new Set<(what: RemoteChange) => void>();
   const devices = new DeviceRegistry([], async () => undefined);
   const { token } = await devices.add('Test', false, new Date());
@@ -24,6 +27,7 @@ async function start(): Promise<{ base: string; emit: (what: RemoteChange) => vo
   gateway = new RemoteGateway({
     clientDir: '/nonexistent-client-dir',
     log: () => undefined,
+    videos,
     router: {
       port: {
         needs: async () => [],
@@ -127,5 +131,58 @@ describe('RemoteGateway', () => {
     }
     expect(text).toContain('retry: 3000');
     await reader.cancel();
+  });
+});
+
+describe('parseByteRange', () => {
+  it('reads closed, open-ended and suffix windows', () => {
+    expect(parseByteRange('bytes=0-9', 100)).toEqual({ start: 0, end: 9 });
+    expect(parseByteRange('bytes=90-', 100)).toEqual({ start: 90, end: 99 });
+    expect(parseByteRange('bytes=-10', 100)).toEqual({ start: 90, end: 99 });
+    expect(parseByteRange('bytes=50-500', 100)).toEqual({ start: 50, end: 99 });
+  });
+
+  it('flags a window outside the file and ignores what is not a single range', () => {
+    expect(parseByteRange('bytes=100-', 100)).toBe('unsatisfiable');
+    expect(parseByteRange('bytes=9-2', 100)).toBe('unsatisfiable');
+    expect(parseByteRange('bytes=0-1,5-6', 100)).toBeNull();
+    expect(parseByteRange(undefined, 100)).toBeNull();
+  });
+});
+
+describe('GET /api/videos/<name> (E11-1)', () => {
+  it('needs the bearer token, answers Range with 206 and pins the name', async () => {
+    const dir = await fsp.mkdtemp(path.join(tmpdir(), 'gateway-videos-'));
+    try {
+      const file = path.join(dir, 'verify-20261101-143200-T-0042.webm');
+      await fsp.writeFile(file, Buffer.from('0123456789'));
+      const { base, token } = await start(async (name) =>
+        name === 'verify-20261101-143200-T-0042.webm' ? { file, bytes: 10 } : null,
+      );
+      const url = `${base}/api/videos/verify-20261101-143200-T-0042.webm`;
+
+      expect((await fetch(url)).status).toBe(401);
+
+      const whole = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      expect(whole.status).toBe(200);
+      expect(whole.headers.get('content-type')).toBe('video/webm');
+      expect(whole.headers.get('accept-ranges')).toBe('bytes');
+      expect(await whole.text()).toBe('0123456789');
+
+      const part = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Range: 'bytes=2-5' } });
+      expect(part.status).toBe(206);
+      expect(part.headers.get('content-range')).toBe('bytes 2-5/10');
+      expect(await part.text()).toBe('2345');
+
+      const past = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Range: 'bytes=20-' } });
+      expect(past.status).toBe(416);
+
+      const auth = { Authorization: `Bearer ${token}` };
+      expect((await fetch(`${base}/api/videos/other.webm`, { headers: auth })).status).toBe(404);
+      expect((await fetch(`${base}/api/videos/..%2Fsecret.webm`, { headers: auth })).status).toBe(404);
+      expect((await fetch(`${base}/api/videos/clip.avi`, { headers: auth })).status).toBe(404);
+    } finally {
+      await fsp.rm(dir, { recursive: true, force: true });
+    }
   });
 });

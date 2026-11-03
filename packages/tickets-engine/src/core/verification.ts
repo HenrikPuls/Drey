@@ -24,7 +24,7 @@
  * The screenshot link is relative from `tickets/<phase>/<id>.md`, so
  * `../attachments/<name>` resolves to the vault's `tickets/attachments/`.
  */
-import type { VerificationCriterionProof, VerificationReport } from '../contracts/verify';
+import type { VerificationCriterionProof, VerificationReport, VideoChapter } from '../contracts/verify';
 
 export const VERIFICATION_HEADING = '## Verification';
 
@@ -49,6 +49,18 @@ export function renderVerificationSection(report: VerificationReport): string {
       line += ` — ${criterion.note}`;
     }
     lines.push(line);
+  }
+  if (report.video !== undefined && report.video !== null) {
+    lines.push('', '### Video', '', `![](../videos/${report.video})`);
+    const chapters = report.videoChapters ?? [];
+    if (chapters.length > 0) {
+      lines.push('');
+      for (const chapter of chapters) {
+        lines.push(`- ${formatOffset(chapter.atMs)} ${chapter.label}`);
+      }
+    }
+  } else if (report.videoRemoved === true) {
+    lines.push('', '### Video', '', VIDEO_REMOVED_NOTE);
   }
   if (report.findings.length > 0) {
     lines.push('', '### Findings', '');
@@ -91,12 +103,14 @@ export function parseVerificationSection(text: string): VerificationReport | nul
       }
     }
   }
+  const video = parseVideoChapter(section);
   return {
     testedAt: tested?.[1] ?? '',
     tester: tested?.[2]?.trim() ?? '',
     environment: tested?.[3]?.trim() ?? '',
     criteria,
     findings,
+    ...video,
   };
 }
 
@@ -119,6 +133,37 @@ export function upsertVerificationSection(fileText: string, section: string): st
     return `${fileText.slice(0, logAt.index)}${normalized}\n${fileText.slice(logAt.index)}`;
   }
   return `${fileText.replace(/\n*$/, '')}\n\n${normalized}`;
+}
+
+/** The note that replaces the player once the size limit freed the video. */
+export const VIDEO_REMOVED_NOTE = 'Video removed (size limit).';
+
+function formatOffset(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** The `### Video` chapter's pieces; empty when the chapter is absent. */
+function parseVideoChapter(section: string): { video?: string; videoRemoved?: boolean; videoChapters?: VideoChapter[] } {
+  const at = section.indexOf('### Video');
+  if (at < 0) {
+    return {};
+  }
+  const rest = section.slice(at + '### Video'.length);
+  const end = /^### /m.exec(rest);
+  const body = end === null ? rest : rest.slice(0, end.index);
+  const player = /!\[\]\(\.\.\/videos\/([^)]+)\)/.exec(body);
+  if (player === null) {
+    return body.includes(VIDEO_REMOVED_NOTE) ? { videoRemoved: true } : {};
+  }
+  const videoChapters: VideoChapter[] = [];
+  for (const line of body.split(/\r?\n/)) {
+    const match = /^- (\d+):(\d{2}) (.+)$/.exec(line.trim());
+    if (match !== null) {
+      videoChapters.push({ atMs: (Number(match[1]) * 60 + Number(match[2])) * 1000, label: match[3]! });
+    }
+  }
+  return { video: player[1]!, ...(videoChapters.length > 0 ? { videoChapters } : {}) };
 }
 
 /** The section's text without the heading's neighbours; null when absent. */

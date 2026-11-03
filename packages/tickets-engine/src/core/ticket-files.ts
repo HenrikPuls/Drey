@@ -28,6 +28,7 @@ import {
 } from '../contracts/tickets';
 import { rawCaptureLogText } from '../contracts/capture-tidy';
 import { parseChainEntry } from './chain-delta';
+import { parseProofMode } from './proof-mode';
 import type { ChainEntry } from '../contracts/chain';
 
 /** `entered-<phase>` key grammar (phase ids: lowercase, digits, dashes). */
@@ -111,6 +112,12 @@ export function parseTicketFile(text: string, relPath: string, priorities: Prior
   }
   const worker = asText(obj['worker']);
   const persona = asText(obj['persona']);
+  // E11-1: the proof pin; only the two words read, anything else is no pin.
+  const rawProof = asText(obj['proof']);
+  const proof = parseProofMode(rawProof);
+  if (rawProof !== null && proof === null) {
+    issues.push({ level: 'warning', message: 'proof must be ui or tests' });
+  }
 
   // req-75 W1b: the triage track. Only the two words read; anything
   // else is visibly not triaged (ADR-0087 decision 2).
@@ -214,6 +221,7 @@ export function parseTicketFile(text: string, relPath: string, priorities: Prior
       repos,
       worker,
       persona,
+      ...(proof !== null ? { proof } : {}),
       track,
       ...(form !== undefined ? { form } : {}),
       ...(chain.length > 0 ? { chain } : {}),

@@ -26,12 +26,13 @@ const req = (patch: Partial<RemoteRequest>): RemoteRequest => ({
 
 describe('settings parsers', () => {
   it('folds stored video settings into valid ones', () => {
-    expect(normalizeVideoSettings({}, 0)).toEqual({ inGit: false, limitMb: DEFAULT_VIDEO_LIMIT_MB, existing: 0 });
-    expect(normalizeVideoSettings({ inGit: true, limitMb: 500 }, 3)).toEqual({ inGit: true, limitMb: 500, existing: 3 });
+    expect(normalizeVideoSettings({}, 0)).toEqual({ inGit: false, limitMb: DEFAULT_VIDEO_LIMIT_MB, existing: 0, notice: null });
+    expect(normalizeVideoSettings({ inGit: true, limitMb: 500 }, 3)).toEqual({ inGit: true, limitMb: 500, existing: 3, notice: null });
     expect(normalizeVideoSettings({ inGit: 'yes', limitMb: 5 }, 0)).toEqual({
       inGit: false,
       limitMb: DEFAULT_VIDEO_LIMIT_MB,
       existing: 0,
+      notice: null,
     });
   });
 
@@ -81,7 +82,7 @@ describe('the settings routes', () => {
 
   it('reads, patches and revokes through the access, naming the asking device', async () => {
     const access: SettingsAccess = {
-      read: vi.fn(async () => ({ ok: true as const, devices: [], engine: { videos: { inGit: false, limitMb: 2000, existing: 0 } } })),
+      read: vi.fn(async () => ({ ok: true as const, devices: [], engine: { videos: { inGit: false, limitMb: 2000, existing: 0, notice: null } } })),
       patch: vi.fn(async () => ({ ok: false as const, error: 'nope' })),
       revoke: vi.fn(async () => ({ ok: false as const, error: 'nope' })),
     };

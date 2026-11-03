@@ -241,9 +241,22 @@ export class McClient {
    * file. The caller owns the handle: `release` revokes it.
    */
   async attachment(name: string): Promise<string | null> {
+    return this.blobUrl(`/api/attachments/${encodeURIComponent(name)}`);
+  }
+
+  /**
+   * One walkthrough video's bytes (`GET /api/videos/<name>`, bearer) as an
+   * object URL. A `<video>` element cannot send the bearer header, so the
+   * file is fetched whole; the desk still answers Range for other clients.
+   */
+  async video(name: string): Promise<string | null> {
+    return this.blobUrl(`/api/videos/${encodeURIComponent(name)}`);
+  }
+
+  private async blobUrl(path: string): Promise<string | null> {
     let res: Response;
     try {
-      res = await this.fetchFn(`/api/attachments/${encodeURIComponent(name)}`, {
+      res = await this.fetchFn(path, {
         headers: this.bearerHeaders(),
         cache: 'no-store',
       });

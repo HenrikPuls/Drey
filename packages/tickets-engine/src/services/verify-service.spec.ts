@@ -256,6 +256,46 @@ describe('VerifyService.verifyTicket', () => {
     });
   });
 
+  it('records the walkthrough video and its chapters for a ui proof (E11-1)', async () => {
+    harnessResult = {
+      ...OK_RESULT,
+      shots: [{ file: 'verify-01.png', criterion: 'npm run build', atMs: 12_000 }],
+      video: 'verify-20261101-143200-T-0102.webm',
+    };
+    service = boot();
+
+    await service.verifyTicket({ id: TICKET_ID });
+
+    expect(harnessRuns[0]).toMatchObject({ ticket: TICKET_ID, proof: 'ui' });
+    const text = files.get(TICKET_PATH)!;
+    expect(text).toContain('### Video\n\n![](../videos/verify-20261101-143200-T-0102.webm)\n\n- 0:12 npm run build');
+  });
+
+  it('asks the harness for a tests proof when the Handover declares one, and records no shots', async () => {
+    files.set(TICKET_PATH, TICKET_TEXT.replace('## Log', '## Handover\n\nproof: tests — a parser change\n\n## Log'));
+    harnessResult = { ...OK_RESULT, shots: [], video: null, environment: 'tests only — no app started' };
+    service = boot();
+
+    await service.verifyTicket({ id: TICKET_ID });
+
+    expect(harnessRuns[0]).toMatchObject({ proof: 'tests' });
+    const text = files.get(TICKET_PATH)!;
+    expect(text).toContain('- [x] `npm run build` — checked by the machine gate');
+    expect(text).not.toContain('![](');
+    expect(text).not.toContain('### Video');
+  });
+
+  it('lets the ticket pin beat the Handover declaration (E11-1)', async () => {
+    files.set(TICKET_PATH, TICKET_TEXT.replace('## Log', '## Handover\n\nproof: tests — x\n\n## Log'));
+    card = makeCard({ meta: { repo: 'demo', proof: 'ui' } });
+    boardSnapshot = makeSnapshot([card], ['inbox', 'verify', 'needs-owner']);
+    service = boot();
+
+    await service.verifyTicket({ id: TICKET_ID });
+
+    expect(harnessRuns[0]).toMatchObject({ proof: 'ui' });
+  });
+
   it('writes the ledger proof_ready line after the persisted proof (E7)', async () => {
     service = boot();
 

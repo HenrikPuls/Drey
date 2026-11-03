@@ -436,6 +436,23 @@ export class TicketView {
     return out;
   });
 
+  /** The walkthrough video once its bytes are fetched; null = none, removed, or still loading. */
+  protected readonly video = computed<{ name: string; url: string } | null>(() => {
+    const name = this.proof()?.video ?? null;
+    const url = name === null ? null : (this.vm.videoUrl?.(name) ?? null);
+    return name === null || url === null ? null : { name, url };
+  });
+
+  protected clock(sec: number): string {
+    return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  }
+
+  /** A chapter button seeks the player to its offset. */
+  protected seekTo(player: HTMLVideoElement, atSec: number): void {
+    player.currentTime = atSec;
+    void player.play?.();
+  }
+
   protected readonly diff = computed(() => this.vm.diff());
 
   // --- the CTA row: proof, thread, per chat -------------------------------------

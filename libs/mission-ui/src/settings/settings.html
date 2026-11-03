@@ -132,7 +132,7 @@
                 <label class="row">
                   <span class="grow">
                     Size limit
-                    <small class="sub">{{ v.videos.inGit ? 'The limit no longer frees space.' : 'Oldest videos of done tickets go first.' }}</small>
+                    <small class="sub">{{ v.videos.notice ?? (v.videos.inGit ? 'The limit no longer frees space.' : 'Oldest videos of done tickets go first.') }}</small>
                   </span>
                   <input
                     type="number"
@@ -160,6 +160,14 @@
       <div class="dialog" role="alertdialog" aria-modal="true" aria-label="Keep videos in git?">
         <h3 class="dialog-title">Keep videos in git?</h3>
         <p class="dialog-text">{{ warning }}</p>
+        @if (view(); as v) {
+          @if (v.videos.existing > 0) {
+            <label class="row">
+              <input type="checkbox" [checked]="includeExisting()" (change)="onIncludeExisting($event)" />
+              <span class="grow">Include the {{ v.videos.existing }} existing videos</span>
+            </label>
+          }
+        }
         <div class="dialog-actions">
           <button type="button" class="btn ghost" (click)="cancelConfirm()">Cancel</button>
           <button type="button" class="btn" (click)="confirmInGit()">Keep videos in git</button>

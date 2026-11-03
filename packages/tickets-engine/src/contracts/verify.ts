@@ -37,6 +37,18 @@ export interface VerificationReport {
   readonly criteria: readonly VerificationCriterionProof[];
   /** Auffälligkeiten — what the runner noticed beyond the criteria. */
   readonly findings: readonly string[];
+  /** The walkthrough video's file name in `tickets/videos/` (`ui` proof); null = none. */
+  readonly video?: string | null;
+  /** The size limit freed the video (`Video removed (size limit).`); the player is replaced by the note. */
+  readonly videoRemoved?: boolean;
+  /** The video's chapters, one per shot criterion: the offset and the criterion. */
+  readonly videoChapters?: readonly VideoChapter[];
+}
+
+export interface VideoChapter {
+  /** Milliseconds from the video's start. */
+  readonly atMs: number;
+  readonly label: string;
 }
 
 /**
@@ -59,6 +71,12 @@ export interface VerifyRunInput {
   /** The repo's launch command (repos.md `launch:`) — the driver's
    *  documentation and its shell fallback; null = the Electron default. */
   readonly command: string | null;
+  /** The ticket the run proves — the video's file name carries its id. */
+  readonly ticket: string;
+  /** Proof mode (E11-1): the app is launched, shot and recorded for `ui` only. */
+  readonly proof: 'ui' | 'tests';
+  /** Where the walkthrough video goes — the vault's `tickets/videos/` folder. */
+  readonly videoDir: string;
   /** The ticket's acceptance commands, in order. */
   readonly criteria: readonly string[];
   /** Where the screenshots go — the vault's `tickets/attachments/` folder. */
@@ -73,6 +91,8 @@ export interface VerifyShot {
   readonly file: string;
   /** The criterion the shot proves; null = an unpaired overview shot. */
   readonly criterion: string | null;
+  /** Milliseconds from the recording's start to this shot — the video chapter's offset. */
+  readonly atMs?: number;
 }
 
 /** The harness's result — what the service persists. */
@@ -80,7 +100,7 @@ export interface VerifyRunResult {
   readonly environment: string;
   readonly shots: readonly VerifyShot[];
   readonly findings: readonly string[];
-  /** A failure recording (Playwright video), file name in attachDir; null. */
+  /** The walkthrough recording (Playwright video), file name in `videoDir`; null (always null for `tests`). */
   readonly video: string | null;
   /** The run's error — a refused launch, a never-ready app; null = fine. */
   readonly error: string | null;

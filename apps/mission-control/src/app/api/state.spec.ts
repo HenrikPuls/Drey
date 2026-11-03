@@ -1338,7 +1338,7 @@ describe('the chain master and persona pause (prototype convergence)', () => {
     desk.on('GET', '/api/settings', () => SETTINGS_REPLY);
     await state.load();
     expect(state.settings()?.devices.map((d) => d.name)).toEqual(['Phone', 'Tablet']);
-    expect(state.settings()?.videos).toEqual({ inGit: false, limitMb: 2000, existing: 0 });
+    expect(state.settings()?.videos).toEqual({ inGit: false, limitMb: 2000, existing: 0, notice: null });
     expect(state.settingsError()).toBeNull();
 
     desk.on('GET', '/api/settings', () => ({ ok: false }));
@@ -1358,7 +1358,7 @@ describe('the chain master and persona pause (prototype convergence)', () => {
     expect(await state.setVideoLimit(600)).toEqual({ ok: true });
     expect(desk.callsOf('POST', '/api/settings/engine')[0]!.body).toEqual({ limitMb: 600 });
     expect(await state.setVideosInGit(true, true)).toEqual({ ok: true });
-    expect(desk.callsOf('POST', '/api/settings/engine')[1]!.body).toEqual({ inGit: true, confirm: true });
+    expect(desk.callsOf('POST', '/api/settings/engine')[1]!.body).toEqual({ inGit: true, confirm: true, includeExisting: false });
     expect(state.settings()?.videos.inGit).toBe(true);
 
     expect(await state.revokeDevice('d2')).toEqual({ ok: true });

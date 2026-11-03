@@ -252,6 +252,13 @@ export const appConfig: ApplicationConfig = {
             }
             return url;
           },
+          videoUrl: (name) => {
+            const url = state.videoUrl(name);
+            if (url === null) {
+              void state.ensureVideo(name);
+            }
+            return url;
+          },
           onClose: () => state.closeTicket(),
           proposeChain: (text) => state.prefillChat(text),
           prefillChat: (text) => state.prefillChat(text),

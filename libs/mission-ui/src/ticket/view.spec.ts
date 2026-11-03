@@ -765,13 +765,33 @@ describe('proofOf', () => {
   });
 
   it('degrades honestly on half-readable sections', () => {
-    expect(proofOf('')).toEqual({ testedOn: '', tester: '', criteria: [], findings: [] });
+    expect(proofOf('')).toEqual({ testedOn: '', tester: '', criteria: [], findings: [], video: null, videoRemoved: false, chapters: [] });
     const loose = proofOf('- [x] checked by hand\n- [ ] `npm run build`\ngarbage line');
     expect(loose.criteria).toEqual([
       { command: 'checked by hand', passed: true, screenshot: null, note: null },
       { command: 'npm run build', passed: false, screenshot: null, note: null },
     ]);
     expect(loose.findings).toEqual([]);
+  });
+
+  it('reads the walkthrough video with its chapters, or the removal note (E11-1)', () => {
+    const withVideo = proofOf(
+      '### Criteria\n\n- [x] `a`\n\n### Video\n\n![](../videos/verify-1-T-0001.webm)\n\n- 0:03 a\n- 1:05 b\n\n### Findings\n\n- one',
+    );
+    expect(withVideo.video).toBe('verify-1-T-0001.webm');
+    expect(withVideo.chapters).toEqual([
+      { atSec: 3, label: 'a' },
+      { atSec: 65, label: 'b' },
+    ]);
+    expect(withVideo.criteria).toHaveLength(1);
+    expect(withVideo.findings).toEqual(['one']);
+    const removed = proofOf('### Criteria\n\n- [x] `a`\n\n### Video\n\nVideo removed (size limit).\n');
+    expect(removed.video).toBeNull();
+    expect(removed.videoRemoved).toBe(true);
+    // A tests proof carries neither: nothing for the card to show.
+    const tests = proofOf('### Criteria\n\n- [x] `a` — checked by the machine gate\n');
+    expect(tests.video).toBeNull();
+    expect(tests.videoRemoved).toBe(false);
   });
 
   it('collects every bullet under Findings and ignores prose lines', () => {
@@ -1423,6 +1443,9 @@ describe('proofRecommendationOf', () => {
     tester,
     criteria: [{ command: 'npm test', passed: true, screenshot: null, note: null }],
     findings: [],
+    video: null,
+    videoRemoved: false,
+    chapters: [],
   });
 
   it('names the tester with its first letter raised', () => {

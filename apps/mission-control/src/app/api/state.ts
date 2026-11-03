@@ -738,6 +738,26 @@ export class McState {
     return url;
   }
 
+  /** The memoized object URL for one walkthrough video; null until `ensureVideo` fetched it. */
+  videoUrl(name: string): string | null {
+    return this.attachmentUrls().get(`videos/${name}`) ?? null;
+  }
+
+  /** Fetches one video on demand (it shares the attachment memo under a `videos/` key). */
+  async ensureVideo(name: string): Promise<string | null> {
+    const key = `videos/${name}`;
+    const known = this.attachmentUrls().get(key);
+    if (known !== undefined) {
+      return known;
+    }
+    const url = await this.client.video(name).catch(() => null);
+    if (url === null) {
+      return null;
+    }
+    this.attachmentUrls.update((map) => new Map(map).set(key, url));
+    return url;
+  }
+
   // --- the persona detail (E6) -------------------------------------------------
 
   /**
@@ -1043,8 +1063,8 @@ export class McState {
     return this.settingsWrite('/api/settings/engine', { limitMb });
   }
 
-  setVideosInGit(inGit: boolean, confirm: boolean): Promise<McReply> {
-    return this.settingsWrite('/api/settings/engine', { inGit, confirm });
+  setVideosInGit(inGit: boolean, confirm: boolean, includeExisting = false): Promise<McReply> {
+    return this.settingsWrite('/api/settings/engine', { inGit, confirm, includeExisting });
   }
 
   revokeDevice(id: string): Promise<McReply> {

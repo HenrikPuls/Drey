@@ -24,6 +24,7 @@ import {
   type VerifyStatus,
 } from '../contracts/verify';
 import type { BoardSnapshot, TicketCard } from '../contracts/tickets';
+import { resolveProofMode } from '../core/proof-mode';
 import { parseVerificationSection, renderVerificationSection, upsertVerificationSection } from '../core/verification';
 import { acceptanceCommands, withLogLine } from '../core/ticket-files';
 import { TicketsGit } from '../core/tickets-git';
@@ -31,6 +32,7 @@ import { nextPhaseIdOf } from '../fleet/chain';
 import { worktreePathFor } from '../fleet/worktree-home';
 import type { EngineBoardService, LedgerEvents } from './board-service';
 import type { EngineHost, EngineVault } from './host';
+import type { VideoService } from './video-service';
 
 /** The vault's attachment folder — the `verify-…` file names are ours (`img-…` stays the phone's). */
 const ATTACHMENTS_DIR = 'tickets/attachments';
@@ -55,6 +57,8 @@ export interface VerifyServiceDeps {
   readonly log?: (message: string, level?: 'info' | 'warn' | 'error') => void;
   /** E7: the fleet ledger writes; absent = the proof persists without a ledger line. */
   readonly events?: LedgerEvents;
+  /** E11-1: the videos folder and its size limit; absent = the proof keeps no video. */
+  readonly videos?: VideoService;
 }
 
 export type VerifyTriggerResult = { readonly ok: true; readonly warning?: string } | { readonly ok: false; readonly error: string };
@@ -183,7 +187,19 @@ export class VerifyService {
       return this.refuse(vault, card, text, `verify refused — ${ATTACHMENTS_DIR} escapes the vault`);
     }
     await fsp.mkdir(attachDir, { recursive: true });
-    const result = await this.deps.harness.run({ worktree, command, criteria, attachDir, judge: null });
+    // E11-1: a `ui` proof records a walkthrough, a `tests` proof shows no UI at all.
+    const proof = resolveProofMode(card.meta.proof ?? null, text);
+    const videoDir = (await this.deps.videos?.prepare()) ?? attachDir;
+    const result = await this.deps.harness.run({
+      worktree,
+      command,
+      criteria,
+      attachDir,
+      ticket: id,
+      proof: proof.mode,
+      videoDir,
+      judge: null,
+    });
     if (result.error !== null) {
       return this.refuse(vault, card, text, `verify failed — ${result.error}`);
     }
@@ -192,12 +208,18 @@ export class VerifyService {
     const shots = result.shots.slice(0, MAX_VERIFY_SHOTS);
     const remaining = [...shots];
     const proofs: VerificationCriterionProof[] = criteria.map((criterion) => {
+      if (proof.mode === 'tests') {
+        // No UI to shoot: the criterion stands on the machine gate that
+        // let the ticket reach the verify phase.
+        return { command: criterion, passed: true, screenshot: null, note: 'checked by the machine gate' };
+      }
       const at = remaining.findIndex((s) => s.criterion === criterion);
       const shot = at >= 0 ? remaining.splice(at, 1)[0]! : null;
       return shot !== null
         ? { command: criterion, passed: true, screenshot: shot.file, note: null }
         : { command: criterion, passed: false, screenshot: null, note: 'no screenshot' };
     });
+    const videoChapters = shots.flatMap((s) => (s.criterion === null ? [] : [{ atMs: s.atMs ?? 0, label: s.criterion }]));
     const passed = proofs.filter((p) => p.passed).length;
     const report: VerificationReport = {
       testedAt: now.toISOString(),
@@ -205,6 +227,7 @@ export class VerifyService {
       environment: result.environment,
       criteria: proofs,
       findings: [...result.findings],
+      ...(proof.mode === 'ui' && result.video !== null ? { video: result.video, videoChapters } : {}),
     };
 
     let patched = upsertVerificationSection(text, renderVerificationSection(report));
@@ -220,6 +243,8 @@ export class VerifyService {
     this.deps.events?.ledger({ kind: 'proof_ready', ticket: id, persona: null, model: null });
     this.deps.host.announceChanges(vaultId, [card.path, ...shotPaths]);
     this.setStatus(id, 'done', report, null);
+    // A new video may push the folder over its limit (finished tickets' oldest go first).
+    void this.deps.videos?.sweep();
 
     const next = nextPhaseIdOf(snap.columns, card.phase);
     if (next !== null) {

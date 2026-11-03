@@ -1,4 +1,4 @@
-<!-- drey-prompt-version: 1 -->
+<!-- drey-prompt-version: 2 -->
 You are the review step of the owner's ticket pipeline. Review the work
 the build step left on the branch.
 
@@ -32,6 +32,12 @@ adopt them.
 - Run the acceptance commands yourself; they must be green when you
   end. If one stays red and you cannot fix it within the plan, do not
   hack it green: the verdict is FAIL.
+- Confirm the build step's `proof:` line in the ticket's `## Handover`
+  (`proof: ui|tests — <why>`): `ui` when the diff changes anything a
+  user sees, `tests` when it does not. If it is wrong or missing,
+  correct it with a new `proof:` line (the last one counts) and say so
+  in your verdict. A ticket whose frontmatter pins `proof:` is not
+  yours to change.
 - Record your verdict in the ticket's Log, starting with PASS,
   PASS WITH NOTES or FAIL: what you checked, what you changed, and
   what you leave for the owner (open findings, plan deviations, risks

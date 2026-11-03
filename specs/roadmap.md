@@ -161,22 +161,18 @@ canvas "Drey Tickets — Workflow redesign" is binding for the UI;
 [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
 "Later changes" records the decisions). Worked in this order, one
 milestone at a time, a pause after each; milestone numbers are taken
-when an item ships (next free: 116; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, E12-1 – E12-4, shipped). Nothing here creates tickets — the
+when an item ships (next free: 117; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, 116 = proof mode + videos; E12-1 – E12-4 and E11-1 shipped). Nothing here creates tickets — the
 owner builds without the tickets system.
 
 - **E12-3b — Settings pages still missing.** Chat (thinking trace, new
   chat, attachments), Repositories (launch command for verify, default
   branch) and "Away and alerts" — each needs a desk setting behind it
-  first; away posture itself is out of scope. E11-1 adds "Include the n
-  existing videos" to the `videos.inGit` confirmation.
-- **E11-1 — Proof mode + videos** (D12). `proof: ui|tests` declared by
-  the builder in the Handover (prompt paragraph), confirmed or corrected
-  by the review prompt, pinned by the frontmatter `proof:`, missing =
-  `ui`; the verify harness starts the app only for `ui`; walkthrough
-  video ≤ 60 s chaptered + ≤ 6 screenshots with a caption per
-  criterion; `tickets/videos/` (reserved, gitignored by the engine),
-  `videos.inGit` / `videos.limitMb`, the Range-capable
-  `/api/videos/<name>` route. Supersedes E4's failure-only video.
+  first; away posture itself is out of scope.
+- **E11-1b — Proof video follow-ups.** The 60-second cap is not
+  enforced (the walk is short; Playwright cannot trim), the phone client
+  fetches the whole video through the bearer header instead of
+  streaming (a `<video>` tag cannot send it; the route itself answers
+  Range), and the Drey-hosted Work panel shows no player.
 - **E11-2 — Diff review.** File list with viewed marks, "Whole file",
   "Change n of m".
 - **E11-3 — Line comments.** Line and range comments on the diff go as

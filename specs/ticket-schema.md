@@ -504,7 +504,15 @@ the runner rely on:
   `→ ![](../attachments/<name>)`; `### Findings` (Auffälligkeiten) lists
   what the runner noticed beyond the criteria and is omitted when empty.
   The screenshot files live in `tickets/attachments/` (the `verify-…`
-  names are the runner's; `img-…` stays the phone's). The proof card
+  names are the runner's; `img-…` stays the phone's). A `ui` proof
+  (see [Proof mode](#proof-mode-e11)) adds a `### Video` chapter between
+  Criteria and Findings: the player `![](../videos/<name>)` and one
+  `- m:ss <criterion>` chapter line per shot (the offset is seconds from
+  the recording's start); after the size limit freed the file the
+  chapter reads `Video removed (size limit).` instead. A `tests` proof
+  has no shot, no `### Video` and marks every criterion
+  `- [x] \`cmd\` — checked by the machine gate` (no app was started; the
+  gate that let the ticket reach the verify phase stands in). The proof card
   reads the section tolerantly (`core/verification.ts`); an absent
   section means "not verified yet". The engine's verify step is a
   machine step, not an agent run: it launches the ticket worktree's

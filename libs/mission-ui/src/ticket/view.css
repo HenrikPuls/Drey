@@ -1512,3 +1512,39 @@ details.think .step-body {
   cursor: default;
   opacity: 0.5;
 }
+
+.clip {
+  margin-top: 10px;
+}
+
+.clip-player {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  border-radius: 10px;
+  background: #000;
+}
+
+.clip-chapters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.clip-chapter {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border, currentColor);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2, inherit);
+  font: inherit;
+  font-size: calc(13px * var(--mc-text, 1));
+}
+
+.clip-removed {
+  margin: 10px 0 0;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}

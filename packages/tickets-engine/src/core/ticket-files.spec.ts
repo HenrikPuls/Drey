@@ -514,3 +514,19 @@ describe('patchHeaderFields blocked-by (M111)', () => {
     expect(() => patchHeaderFields(BLOCK, { priority: 'urgent' }, CONFIG)).toThrow('unknown priority');
   });
 });
+
+describe('the proof pin (E11-1)', () => {
+  const withProof = (line: string): string => CANONICAL.replace(/^title:.*$/m, (m) => `${m}\n${line}`);
+
+  it('reads ui and tests', () => {
+    expect(parseTicketFile(withProof('proof: tests'), 'tickets/inbox/T-0042.md').meta.proof).toBe('tests');
+    expect(parseTicketFile(withProof('proof: ui'), 'tickets/inbox/T-0042.md').meta.proof).toBe('ui');
+  });
+
+  it('treats a missing pin as none and an unknown word as a warning', () => {
+    expect(parseTicketFile(CANONICAL, 'tickets/inbox/T-0042.md').meta.proof).toBeUndefined();
+    const odd = parseTicketFile(withProof('proof: both'), 'tickets/inbox/T-0042.md');
+    expect(odd.meta.proof).toBeUndefined();
+    expect(odd.issues.some((i) => i.level === 'warning' && i.message.includes('proof must be'))).toBe(true);
+  });
+});

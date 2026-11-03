@@ -25,6 +25,8 @@ export interface VideoSettings {
   readonly limitMb: number;
   /** Videos currently in `tickets/videos/` (the "Include the n existing videos" count). */
   readonly existing: number;
+  /** A standing notice the screen shows under the limit (E11-1); null = none. */
+  readonly notice: string | null;
 }
 
 export interface EngineSettings {
@@ -47,6 +49,8 @@ export interface SettingsPatch {
   readonly limitMb?: number;
   /** Turning `inGit` on is a confirmed act (the warning dialog); the flag carries the confirmation. */
   readonly confirm?: boolean;
+  /** With the confirmation: also commit the videos already in the folder ("Include the n existing videos"). */
+  readonly includeExisting?: boolean;
 }
 
 /** The engine side the router calls; the remote service implements it over its config store. */
@@ -57,7 +61,11 @@ export interface SettingsAccess {
 }
 
 /** Folds stored values into valid settings; anything odd is the default. */
-export function normalizeVideoSettings(raw: { inGit?: unknown; limitMb?: unknown }, existing: number): VideoSettings {
+export function normalizeVideoSettings(
+  raw: { inGit?: unknown; limitMb?: unknown },
+  existing: number,
+  notice: string | null = null,
+): VideoSettings {
   const limit = raw.limitMb;
   return {
     inGit: raw.inGit === true,
@@ -66,6 +74,7 @@ export function normalizeVideoSettings(raw: { inGit?: unknown; limitMb?: unknown
         ? limit
         : DEFAULT_VIDEO_LIMIT_MB,
     existing,
+    notice,
   };
 }
 
@@ -74,12 +83,15 @@ export function parseSettingsPatch(body: unknown): Parsed<SettingsPatch> {
     return { ok: false, error: 'bad settings payload' };
   }
   const obj = body as Record<string, unknown>;
-  const { inGit, limitMb, confirm } = obj;
+  const { inGit, limitMb, confirm, includeExisting } = obj;
   if (inGit !== undefined && typeof inGit !== 'boolean') {
     return { ok: false, error: 'inGit is true or false' };
   }
   if (confirm !== undefined && typeof confirm !== 'boolean') {
     return { ok: false, error: 'confirm is true or false' };
+  }
+  if (includeExisting !== undefined && typeof includeExisting !== 'boolean') {
+    return { ok: false, error: 'includeExisting is true or false' };
   }
   if (
     limitMb !== undefined &&
@@ -90,7 +102,7 @@ export function parseSettingsPatch(body: unknown): Parsed<SettingsPatch> {
   if (inGit === undefined && limitMb === undefined) {
     return { ok: false, error: 'nothing to change' };
   }
-  return { ok: true, value: { inGit, limitMb, confirm } };
+  return { ok: true, value: { inGit, limitMb, confirm, includeExisting } };
 }
 
 export function parseRevoke(body: unknown): Parsed<{ id: string }> {

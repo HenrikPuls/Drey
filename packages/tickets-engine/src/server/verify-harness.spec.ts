@@ -181,6 +181,9 @@ describe('createPlaywrightVerifyHarness (fake driver)', () => {
     command: 'powershell -File dev.ps1 -Built -Multi',
     criteria,
     attachDir,
+    ticket: 'T-0042',
+    proof: 'ui',
+    videoDir: attachDir,
     judge,
   });
 
@@ -206,8 +209,8 @@ describe('createPlaywrightVerifyHarness (fake driver)', () => {
     expect(result.error).toBeNull();
     expect(result.environment).toBe('Electron 34.2.0 on win32');
     expect(result.shots).toEqual([
-      { file: 'verify-20261101-143200-01.png', criterion: 'npm run build' },
-      { file: 'verify-20261101-143200-02.png', criterion: 'npm test' },
+      { file: 'verify-20261101-143200-01.png', criterion: 'npm run build', atMs: 0 },
+      { file: 'verify-20261101-143200-02.png', criterion: 'npm test', atMs: 0 },
     ]);
     expect(result.verdicts).toEqual([
       { criterion: 'npm run build', passed: true, note: null },
@@ -221,9 +224,10 @@ describe('createPlaywrightVerifyHarness (fake driver)', () => {
     expect(path.normalize(app.launched.exe)).toBe(path.normalize(path.join(exeDir, 'drey.exe')));
     expect(app.launched.command).toBe('powershell -File dev.ps1 -Built -Multi');
     expect(app.launched.attachDir).toBe(attachDir);
-    // A green run discards the failure video.
-    expect(app.finishedWith).toBe(false);
-    expect(result.video).toBeNull();
+    // E11-1: a ui proof always keeps its walkthrough, green or not.
+    expect(app.finishedWith).toBe(true);
+    expect(result.video).toBe('verify-run.webm');
+    expect(app.launched.videoName).toBe('verify-20261101-143200-T-0042.webm');
     expect(result.findings).toEqual(['ready in 0.0 s — first window plus 0.0 s settle']);
   });
 
@@ -244,7 +248,7 @@ describe('createPlaywrightVerifyHarness (fake driver)', () => {
       path.normalize(path.join(attachDir, 'verify-20261101-143200-01.png')),
     );
     expect(result.error).toBeNull();
-    expect(result.shots).toEqual([{ file: 'verify-20261101-143200-01.png', criterion: 'npm run build' }]);
+    expect(result.shots).toEqual([{ file: 'verify-20261101-143200-01.png', criterion: 'npm run build', atMs: 0 }]);
     expect(result.verdicts).toEqual([
       { criterion: 'npm run build', passed: true, note: null },
       { criterion: 'npm test', passed: false, note: 'the settings page is blank' },
@@ -268,7 +272,6 @@ describe('createPlaywrightVerifyHarness (fake driver)', () => {
 
     expect(result.verdicts).toEqual([{ criterion: 'npm run build', passed: true, note: 'a reload flash at startup' }]);
     expect(result.findings).toContain('judge note on `npm run build`: a reload flash at startup');
-    expect(result.video).toBeNull();
   });
 
   it('waits the settle delay after the first window and reports the readiness duration', async () => {
@@ -289,7 +292,7 @@ describe('createPlaywrightVerifyHarness (fake driver)', () => {
     const result = (await harness.run(input(['one', 'two']))) as VerifyRunOutcome;
 
     expect(result.error).toBeNull();
-    expect(result.shots).toEqual([{ file: 'verify-20261101-143200-01.png', criterion: 'one' }]);
+    expect(result.shots).toEqual([{ file: 'verify-20261101-143200-01.png', criterion: 'one', atMs: 0 }]);
     expect(result.verdicts).toEqual([
       { criterion: 'one', passed: true, note: null },
       { criterion: 'two', passed: false, note: 'the page refused the screenshot' },
@@ -312,8 +315,19 @@ describe('createPlaywrightVerifyHarness (fake driver)', () => {
       { criterion: 'check 8', passed: false, note: `no screenshot: past the ${MAX_VERIFY_SHOTS}-shot cap` },
     ]);
     expect(result.findings).toContain('no screenshot past the 6-shot cap: `check 7`, `check 8`');
-    // No judge ran: the captured six pass, so the video still goes.
-    expect(driver.apps[0]!.finishedWith).toBe(false);
+    expect(driver.apps[0]!.finishedWith).toBe(true);
+  });
+
+  it('starts no app for a tests proof: no shots, no video', async () => {
+    const driver = makeDriver();
+    const harness = createPlaywrightVerifyHarness({ driver, now: () => NOW, settleMs: 0 });
+    const result = (await harness.run({ ...input(['npm test']), proof: 'tests' })) as VerifyRunOutcome;
+
+    expect(driver.apps).toHaveLength(0);
+    expect(result.error).toBeNull();
+    expect(result.shots).toEqual([]);
+    expect(result.video).toBeNull();
+    expect(result.environment).toBe('tests only — no app started');
   });
 
   it('refuses with an error when no built exe exists', async () => {

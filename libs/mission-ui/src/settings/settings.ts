@@ -63,6 +63,8 @@ export class Settings {
 
   /** The "Videos in git" confirmation dialog is up. */
   protected readonly confirming = signal(false);
+  /** The dialog's "Include the n existing videos" tick. */
+  protected readonly includeExisting = signal(false);
   /** The device whose revoke button was pressed once. */
   protected readonly armed = signal<string | null>(null);
   protected readonly limitDraft = signal<string | null>(null);
@@ -170,10 +172,15 @@ export class Settings {
     const box = event.target as HTMLInputElement;
     if (box.checked) {
       box.checked = false;
+      this.includeExisting.set(false);
       this.confirming.set(true);
       return;
     }
     void this.state?.setVideosInGit(false, false);
+  }
+
+  protected onIncludeExisting(event: Event): void {
+    this.includeExisting.set((event.target as HTMLInputElement).checked);
   }
 
   protected cancelConfirm(): void {
@@ -182,7 +189,7 @@ export class Settings {
 
   protected async confirmInGit(): Promise<void> {
     this.confirming.set(false);
-    await this.state?.setVideosInGit(true, true);
+    await this.state?.setVideosInGit(true, true, this.includeExisting());
   }
 
   protected onLimitInput(event: Event): void {

@@ -125,8 +125,11 @@ export interface VerifyDriverLaunch {
   /** The repo's `launch:` from repos.md — the driver's documentation and
    *  its shell fallback; null = the Electron default. */
   readonly command: string | null;
-  /** Where the screenshots (and the failure video) go. */
+  /** Where the screenshots go. */
   readonly attachDir: string;
+  /** Where the walkthrough video goes, and the name it ends up with. */
+  readonly videoDir: string;
+  readonly videoName: string;
 }
 
 /** The launched app behind the seam. */
@@ -138,8 +141,9 @@ export interface VerifyDriverApp {
   firstWindow(): Promise<void>;
   /** Captures one screenshot into `<attachDir>/<file>`. */
   shot(file: string): Promise<void>;
-  /** Closes the app; keeps the failure video when asked, deletes it
-   *  otherwise. Returns the kept video's file name in attachDir. */
+  /** Closes the app; keeps the walkthrough video as `videoName` in
+   *  `videoDir` when asked, deletes it otherwise. Returns the kept
+   *  video's file name. */
   finish(keepVideo: boolean): Promise<{ video: string | null }>;
 }
 
@@ -214,12 +218,12 @@ async function withTimeout(promise: Promise<void>, ms: number, message: string):
  *  the built exe through `_electron.launch`, video recording on. */
 function realPlaywrightDriver(): VerifyDriver {
   return {
-    async launch({ exe, attachDir }): Promise<VerifyDriverApp> {
+    async launch({ exe, attachDir, videoDir, videoName }): Promise<VerifyDriverApp> {
       const module = await loadPlaywright();
       let raw: unknown;
       let recordsVideo = true;
       try {
-        raw = await module._electron.launch({ executablePath: exe, recordVideo: { dir: attachDir } });
+        raw = await module._electron.launch({ executablePath: exe, recordVideo: { dir: videoDir } });
       } catch (first) {
         // Some builds refuse recordVideo on Electron: retry without it.
         try {
@@ -263,18 +267,24 @@ function realPlaywrightDriver(): VerifyDriver {
           if (!recordsVideo || videoPath === null) {
             return { video: null };
           }
-          // recordVideo's dir IS attachDir; when a build put it elsewhere,
-          // copy it over so the file name lives where the contract says.
-          const name = path.basename(videoPath);
-          const inAttachDir = path.join(attachDir, name);
-          if (path.normalize(videoPath) !== path.normalize(inAttachDir)) {
-            await fsp.copyFile(videoPath, inAttachDir).catch(() => null);
+          // Playwright names the file itself; the walkthrough is renamed to
+          // the contract's `verify-<stamp>-<ticket>.webm` inside videoDir.
+          if (!keepVideo) {
+            await fsp.rm(videoPath, { force: true }).catch(() => undefined);
+            return { video: null };
           }
-          if (keepVideo) {
-            return { video: name };
+          const target = path.join(videoDir, videoName);
+          if (path.normalize(videoPath) !== path.normalize(target)) {
+            const moved = await fsp
+              .rename(videoPath, target)
+              .then(() => true)
+              .catch(() => false);
+            if (!moved) {
+              await fsp.copyFile(videoPath, target).catch(() => null);
+              await fsp.rm(videoPath, { force: true }).catch(() => undefined);
+            }
           }
-          await fsp.rm(inAttachDir, { force: true }).catch(() => undefined);
-          return { video: null };
+          return { video: await fsp.stat(target).then(() => videoName).catch(() => null) };
         },
       };
     },
@@ -339,16 +349,35 @@ export function createPlaywrightVerifyHarness(deps: PlaywrightVerifyHarnessDeps 
         verdicts: [],
       });
 
+      if (input.proof === 'tests') {
+        // E11-1: no UI change — the app is not started, nothing is shot or recorded.
+        return {
+          environment: 'tests only — no app started',
+          shots: [],
+          findings,
+          video: null,
+          error: null,
+          verdicts: [],
+        };
+      }
       const exe = await findElectronExe(input.worktree).catch(() => null);
       if (exe === null) {
         return refuse(`no built app exe under ${path.join(input.worktree, 'release')} — pack the app before verifying`);
       }
       let app: VerifyDriverApp;
       try {
-        app = await driver.launch({ worktree: input.worktree, exe, command: input.command, attachDir: input.attachDir });
+        app = await driver.launch({
+          worktree: input.worktree,
+          exe,
+          command: input.command,
+          attachDir: input.attachDir,
+          videoDir: input.videoDir,
+          videoName: `verify-${stamp}-${input.ticket}.webm`,
+        });
       } catch (error) {
         return refuse(messageOf(error));
       }
+      const launchedAt = now().getTime();
 
       // Readiness: the first window, then the settle delay.
       const readyStart = now();
@@ -407,7 +436,7 @@ export function createPlaywrightVerifyHarness(deps: PlaywrightVerifyHarnessDeps 
           }
         }
         if (passed) {
-          shots.push({ file: planned.file, criterion: planned.criterion });
+          shots.push({ file: planned.file, criterion: planned.criterion, atMs: Math.max(0, now().getTime() - launchedAt) });
         }
         verdicts.push({ criterion: planned.criterion, passed, note });
         if (!passed) {
@@ -417,9 +446,9 @@ export function createPlaywrightVerifyHarness(deps: PlaywrightVerifyHarnessDeps 
           findings.push(`judge note on \`${planned.criterion}\`: ${note}`);
         }
       }
-      // A failed shot keeps the failure video; a fully green run (cap
-      // overflow is a plan limit, not an app failure) deletes it.
-      const keepVideo = verdicts.some((v) => !v.passed);
+      // A `ui` proof always keeps its walkthrough video (D12; E4's
+      // failure-only rule is superseded).
+      const keepVideo = true;
       // Capped criteria are verdicts too — the report shows one checkbox
       // per acceptance criterion, shot or no shot.
       for (const criterion of plan.capped) {

@@ -16,6 +16,7 @@ import { AGGREGATOR_SYSTEM_PROMPT, createChatBridge } from '../services/chat-llm
 import { FleetClient } from '../services/fleet-client';
 import { ImprovementsService } from '../services/improvements-service';
 import { VerifyService } from '../services/verify-service';
+import { VideoService } from '../services/video-service';
 import { FleetEventWriter, statusPathFor } from '../fleet/event-writer';
 import type { FleetEvents } from '../fleet/orchestrator';
 import { ChangeHub, DreyTicketsPort } from './drey-port';
@@ -122,6 +123,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   // E4: the machine verification step — the harness runs the ticket
   // worktree's built app headless; the service persists the proofs and
   // moves the ticket to the owner's checkpoint.
+  const videos = new VideoService({ board, host, git, config, log });
   const verify = new VerifyService({
     board,
     host,
@@ -130,11 +132,14 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     git,
     actor: `verify@${hostname().toLowerCase()}`,
     events,
+    videos,
     log,
   });
   // The engine listens only after the board was checked for verify
   // candidates (and the scan's startup IO has settled).
   await verify.initialScan;
+  // E11-1: the videos folder and its ignore rule exist from the start; an over-limit folder is trimmed.
+  void videos.prepare().then(() => videos.sweep());
 
   // E5a: the Mission Control chat — sessions under `tickets/_meta/chat/`,
   // one mission turn per owner message, every mutation a proposal card
@@ -169,13 +174,12 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
       }
     },
     // E12-3: the settings screen's "Include the n existing videos" count.
-    countVideos: async () => {
-      const vault = await board.detect();
-      if (vault === null) {
-        return 0;
-      }
-      const names = await fsp.readdir(path.join(vault.path, 'tickets', 'videos')).catch(() => [] as string[]);
-      return names.filter((name) => /\.(mp4|webm)$/.test(name)).length;
+    countVideos: async () => (await videos.status()).count,
+    videoNotice: async () => (await videos.status()).notice,
+    videos: (name) => videos.stat(name),
+    videosChanged: async (includeExisting) => {
+      await videos.applyInGit(includeExisting);
+      await videos.sweep();
     },
     log,
     onChanged: () => hub.emit('remote'),

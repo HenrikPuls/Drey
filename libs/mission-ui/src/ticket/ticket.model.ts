@@ -289,7 +289,24 @@ export interface ProofReport {
   readonly tester: string;
   readonly criteria: readonly ProofCriterion[];
   readonly findings: readonly string[];
+  /** The walkthrough video's file name (`tickets/videos/<name>`); null = none (a `tests` proof, or removed). */
+  readonly video: string | null;
+  /** The size limit freed the video: the card says so instead of showing a player. */
+  readonly videoRemoved: boolean;
+  /** The video's chapters, one per criterion shot: seconds from the start and the label. */
+  readonly chapters: readonly ProofChapter[];
 }
+
+export interface ProofChapter {
+  readonly atSec: number;
+  readonly label: string;
+}
+
+const VIDEO_HEAD = /^###\s+video\s*$/i;
+const VIDEO_PLAYER = /!\[\]\(\.\.\/videos\/([^)]+)\)/;
+const VIDEO_CHAPTER = /^- (\d+):(\d{2}) (.+)$/;
+const VIDEO_REMOVED = /^Video removed \(size limit\)\.$/;
+const OTHER_HEAD = /^###\s+/;
 
 const TESTED_ON = /^Tested on .+$/m;
 const TESTED_BY = /^Tested on \S+ by (\S+)/m;
@@ -310,10 +327,35 @@ export function proofOf(sectionText: string): ProofReport {
   const criteria: ProofCriterion[] = [];
   const findings: string[] = [];
   let inFindings = false;
+  let inVideo = false;
+  let video: string | null = null;
+  let videoRemoved = false;
+  const chapters: ProofChapter[] = [];
   for (const line of sectionText.split('\n')) {
     if (FINDINGS_HEAD.test(line)) {
       inFindings = true;
+      inVideo = false;
       continue;
+    }
+    if (VIDEO_HEAD.test(line)) {
+      inVideo = true;
+      continue;
+    }
+    if (inVideo) {
+      if (OTHER_HEAD.test(line)) {
+        inVideo = false;
+      } else {
+        const player = VIDEO_PLAYER.exec(line);
+        const chapter = VIDEO_CHAPTER.exec(line.trim());
+        if (player !== null) {
+          video = player[1]!;
+        } else if (chapter !== null) {
+          chapters.push({ atSec: Number(chapter[1]) * 60 + Number(chapter[2]), label: chapter[3]! });
+        } else if (VIDEO_REMOVED.test(line.trim())) {
+          videoRemoved = true;
+        }
+        continue;
+      }
     }
     if (inFindings) {
       const finding = FINDINGS_ITEM.exec(line.trim());
@@ -337,7 +379,15 @@ export function proofOf(sectionText: string): ProofReport {
       criteria.push({ command: loose[2]!.trim(), passed: loose[1]!.toLowerCase() === 'x', screenshot: null, note: null });
     }
   }
-  return { testedOn, tester: TESTED_BY.exec(sectionText)?.[1]?.trim() ?? '', criteria, findings };
+  return {
+    testedOn,
+    tester: TESTED_BY.exec(sectionText)?.[1]?.trim() ?? '',
+    criteria,
+    findings,
+    video,
+    videoRemoved,
+    chapters,
+  };
 }
 
 /**
@@ -938,6 +988,8 @@ export interface TicketVm {
   readOnly(): boolean;
   /** The URL an attachment `<img>` fetches (`GET /api/attachments/<name>`); null until it can serve it. */
   attachmentUrl(name: string): string | null;
+  /** The URL a walkthrough `<video>` plays (`GET /api/videos/<name>`); null until it can serve it. Optional: an adapter without it shows no player. */
+  videoUrl?(name: string): string | null;
 
   /** The back arrow: the shell closes the screen. */
   onClose(): void;

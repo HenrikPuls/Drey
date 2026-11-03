@@ -134,3 +134,35 @@ describe('upsertVerificationSection', () => {
     expect(once.slice(at).startsWith('- The settings page stayed blank until the reload.\n\n## Log')).toBe(true);
   });
 });
+
+describe('the Video chapter (E11-1)', () => {
+  const WITH_VIDEO: VerificationReport = {
+    ...FULL,
+    video: 'verify-20261101-143200-T-0102.webm',
+    videoChapters: [
+      { atMs: 3_000, label: 'npm run build' },
+      { atMs: 75_000, label: 'npm run lint' },
+    ],
+  };
+
+  it('writes the player and the chapters between Criteria and Findings and reads them back', () => {
+    const text = renderVerificationSection(WITH_VIDEO);
+    expect(text).toContain(
+      '### Video\n\n![](../videos/verify-20261101-143200-T-0102.webm)\n\n- 0:03 npm run build\n- 1:15 npm run lint\n\n### Findings',
+    );
+    const back = parseVerificationSection(text)!;
+    expect(back.video).toBe('verify-20261101-143200-T-0102.webm');
+    expect(back.videoChapters).toEqual(WITH_VIDEO.videoChapters);
+    expect(back.findings).toEqual(FULL.findings);
+    expect(back.criteria).toEqual(FULL.criteria);
+  });
+
+  it('writes nothing for a tests proof and keeps the removal note after the limit freed the video', () => {
+    expect(renderVerificationSection(FULL)).not.toContain('### Video');
+    const removed = renderVerificationSection({ ...FULL, videoRemoved: true });
+    expect(removed).toContain('### Video\n\nVideo removed (size limit).');
+    const back = parseVerificationSection(removed)!;
+    expect(back.videoRemoved).toBe(true);
+    expect(back.video).toBeUndefined();
+  });
+});

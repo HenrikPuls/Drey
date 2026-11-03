@@ -229,6 +229,8 @@ export interface TicketMeta {
   readonly worker: string | null;
   /** The ticket's persona pin (`persona: tessa`, ADR-0088 E3); null = ladder. */
   readonly persona: string | null;
+  /** The ticket's proof pin (`proof: ui|tests`, E11-1); absent/null = not pinned — the Handover declares, `ui` is the default. */
+  readonly proof?: 'ui' | 'tests' | null;
   /** The ticket's track, ADR-0087 decision 2 — null = not triaged yet. */
   readonly track: TicketTrack | null;
   /**

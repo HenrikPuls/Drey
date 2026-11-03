@@ -1,4 +1,51 @@
 
+### Milestone 116 — Mission Control proof mode + videos (E11-1)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-03
+(concept v2 §5.3, decision D12; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
+E10 – E12). Supersedes E4's "video on failure only" rule.
+
+- **Proof mode.** A ticket's proof is `ui` or `tests`
+  (`core/proof-mode.ts`): the frontmatter pin `proof:` wins, then the
+  builder's Handover line `proof: ui|tests — <reason>` (the last such
+  line wins, so the reviewer's correction counts), else `ui`. The build
+  prompt (version 4) asks for the line, the review prompt (version 2)
+  confirms or corrects it. `TicketMeta.proof` carries the pin; an
+  unknown word is a warning, not a pin.
+- **Verify.** The harness starts the app only for `ui`: it records the
+  walkthrough (always kept now, named
+  `verify-<yyyyMMdd>-<HHmmss>-<ticket id>.webm`), at most six shots, and
+  the report gets a `### Video` chapter with one `m:ss` chapter per shot.
+  A `tests` proof starts nothing, records nothing and marks the criteria
+  `checked by the machine gate`.
+- **Videos.** `VideoService` owns `tickets/videos/`: the engine-written
+  `.gitignore` (`*`, `!.gitignore`) while `videos.inGit` is off, removed
+  when it is on (a hand-edited file is left alone); the size limit
+  deletes the oldest videos of done tickets (terminal column, or a ticket
+  no longer on the board) until the folder fits and swaps the player for
+  `Video removed (size limit).`; with `inGit` on nothing is deleted and
+  the settings screen shows "The limit no longer frees space." A limit
+  that only unfinished tickets keep exceeded is reported too. The sweep
+  runs at engine start, after each verify run and when the keys change.
+  `GET /api/videos/<name>` is bearer-authenticated, name-pinned and
+  answers `Range` (206/416).
+- **Mission Control.** The proof card plays the video with chapter
+  buttons that seek, shows the removal note, and hides the gallery and
+  the player when a ticket carries none. The `videos.inGit` dialog offers
+  "Include the n existing videos" (commits them; without the tick they
+  stay untracked). The ticket diff card's two leftover German words
+  ("Dateien", "gesamt") are English now.
+- **Specs added:** proof resolution and declaration parsing, the pin in
+  the ticket reader, the Video chapter round trip, harness tests mode and
+  always-kept video, verify service ui/tests/pin paths, the video
+  service (names, oldest-first pick, note swap, folder/ignore rule,
+  sweep, inGit notice, existing-video commit), the Range parser and
+  route, the proof reader's video block, the settings dialog tick and
+  notice.
+- **Not done:** see the roadmap's E11-1b — the 60-second cap, streaming
+  in the phone client, a player in the Drey-hosted panel. Not run
+  against a real Playwright/Electron session.
+
 ### Milestone 115 — Mission Control team states (E12-4)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-03

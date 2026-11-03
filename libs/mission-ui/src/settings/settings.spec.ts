@@ -10,7 +10,7 @@ const VIEW: McSettingsView = {
     { id: 'd1', name: 'Phone', readOnly: false, pairedAt: '2026-11-01T10:00:00Z', lastSeen: null, current: true },
     { id: 'd2', name: 'Tablet', readOnly: true, pairedAt: '2026-11-01T11:00:00Z', lastSeen: '2026-11-02T08:00:00Z', current: false },
   ],
-  videos: { inGit: false, limitMb: 2000, existing: 0 },
+  videos: { inGit: false, limitMb: 2000, existing: 0, notice: null },
 };
 
 function mount(view: McSettingsView | null = VIEW) {
@@ -56,7 +56,7 @@ describe('parseSettings', () => {
   it('reads the desk answer tolerantly', () => {
     expect(parseSettings({ ok: true, devices: [{ id: 'a', name: 'A' }, 5], engine: { videos: { inGit: true } } })).toEqual({
       devices: [{ id: 'a', name: 'A', readOnly: false, pairedAt: '', lastSeen: null, current: false }],
-      videos: { inGit: true, limitMb: 2000, existing: 0 },
+      videos: { inGit: true, limitMb: 2000, existing: 0, notice: null },
     });
     expect(parseSettings({ ok: false })).toBeNull();
     expect(parseSettings(null)).toBeNull();
@@ -117,11 +117,32 @@ describe('Settings', () => {
     sw.dispatchEvent(new Event('change'));
     fixture.detectChanges();
     click(el.querySelector('.dialog .btn:not(.ghost)'));
-    expect(fake.setVideosInGit).toHaveBeenCalledWith(true, true);
+    expect(fake.setVideosInGit).toHaveBeenCalledWith(true, true, false);
+  });
+
+  it('offers to include the existing videos and sends the tick with the confirmation', () => {
+    const { el, go, fake, fixture } = mount({ ...VIEW, videos: { inGit: false, limitMb: 2000, existing: 3, notice: null } });
+    go('engine');
+    const sw = el.querySelectorAll<HTMLInputElement>('.sw')[0]!;
+    sw.checked = true;
+    sw.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect(el.querySelector('.dialog')!.textContent).toContain('Include the 3 existing videos');
+    const tick = el.querySelector<HTMLInputElement>('.dialog input[type="checkbox"]')!;
+    tick.checked = true;
+    tick.dispatchEvent(new Event('change'));
+    click(el.querySelector('.dialog .btn:not(.ghost)'));
+    expect(fake.setVideosInGit).toHaveBeenCalledWith(true, true, true);
+  });
+
+  it('shows the engine notice under the limit', () => {
+    const { el, go } = mount({ ...VIEW, videos: { inGit: true, limitMb: 2000, existing: 0, notice: 'The limit no longer frees space.' } });
+    go('engine');
+    expect(el.textContent).toContain('The limit no longer frees space.');
   });
 
   it('turns videos in git off at once, without a dialog', () => {
-    const { el, go, fake, fixture } = mount({ ...VIEW, videos: { inGit: true, limitMb: 2000, existing: 0 } });
+    const { el, go, fake, fixture } = mount({ ...VIEW, videos: { inGit: true, limitMb: 2000, existing: 0, notice: null } });
     go('engine');
     const sw = el.querySelectorAll<HTMLInputElement>('.sw')[0]!;
     sw.checked = false;

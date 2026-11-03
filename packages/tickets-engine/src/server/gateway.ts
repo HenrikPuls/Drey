@@ -4,7 +4,7 @@
  * Events, and the phone client's static files under a strict CSP. It
  * moves bytes only — every rule lives in `router.ts`.
  */
-import { promises as fsp } from 'node:fs';
+import { createReadStream, promises as fsp } from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
 import type { ChatChangePayload, RemoteChange } from '../contracts/remote-protocol';
@@ -47,12 +47,46 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
 /** The attachment names the proof card's gallery asks for (`verify-…`, `img-…`). */
 const ATTACHMENT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(png|jpg|jpeg|webp|mp4|webm)$/;
 
+/** The video names the proof card's player asks for (E11-1). */
+const VIDEO_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(mp4|webm)$/;
+
+/**
+ * One `Range: bytes=a-b` header against a file of `size` bytes: the
+ * inclusive byte window, `'unsatisfiable'` for a window outside the
+ * file, null for a header that is absent or not a single byte range
+ * (the whole file is then served). Safari streams video through
+ * ranges, so this route must answer them.
+ */
+export function parseByteRange(header: string | undefined, size: number): { start: number; end: number } | 'unsatisfiable' | null {
+  const match = header === undefined ? null : /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (match === null || (match[1] === '' && match[2] === '')) {
+    return null;
+  }
+  let start: number;
+  let end: number;
+  if (match[1] === '') {
+    // A suffix range: the last n bytes.
+    const suffix = Number(match[2]);
+    if (suffix === 0) {
+      return 'unsatisfiable';
+    }
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] === '' ? size - 1 : Math.min(Number(match[2]), size - 1);
+  }
+  return start >= size || start > end ? 'unsatisfiable' : { start, end };
+}
+
 export interface GatewayOptions {
   readonly router: RouterDeps;
   /** The built phone client (R3); missing = the built-in pairing page. */
   readonly clientDir: string;
   /** The vault's attachment bytes (E5c); null = no such file. */
   readonly attachments?: (name: string) => Promise<Uint8Array | null>;
+  /** The vault's walkthrough videos (E11-1): the file and its size; null = no such video. */
+  readonly videos?: (name: string) => Promise<{ file: string; bytes: number } | null>;
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
 }
 
@@ -136,6 +170,11 @@ export class RemoteGateway {
     }
     if (method === 'GET' && url.pathname.startsWith('/api/attachments/')) {
       await this.serveAttachment(base, decodeURIComponent(url.pathname.slice('/api/attachments/'.length)), res);
+      return;
+    }
+
+    if (method === 'GET' && url.pathname.startsWith('/api/videos/')) {
+      await this.serveVideo({ ...base, range: req.headers.range }, decodeURIComponent(url.pathname.slice('/api/videos/'.length)), res);
       return;
     }
 
@@ -224,6 +263,49 @@ export class RemoteGateway {
       this.options.log(`remote: attachment ${name} failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
       send(res, 500, { ok: false, error: 'reading the attachment failed' });
     }
+  }
+
+  private async serveVideo(
+    req: Pick<RemoteRequest, 'method' | 'host' | 'origin' | 'authorization' | 'remote'> & { range?: string },
+    name: string,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const auth = authorize({ ...req, path: '/api/videos', body: undefined }, this.options.router);
+    if ('response' in auth) {
+      send(res, auth.response.status, auth.response.body);
+      return;
+    }
+    const find = this.options.videos;
+    const found = find === undefined || !VIDEO_NAME.test(name) ? null : await find(name).catch(() => null);
+    if (found === null) {
+      send(res, 404, { ok: false, error: 'no such video' });
+      return;
+    }
+    const range = parseByteRange(req.range, found.bytes);
+    if (range === 'unsatisfiable') {
+      res.writeHead(416, { 'content-range': `bytes */${found.bytes}` });
+      res.end();
+      return;
+    }
+    const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
+    const window = range ?? { start: 0, end: found.bytes - 1 };
+    res.writeHead(range === null ? 200 : 206, {
+      'content-type': CONTENT_TYPES[ext] ?? 'application/octet-stream',
+      'accept-ranges': 'bytes',
+      'cache-control': 'private, max-age=60',
+      'content-length': found.bytes === 0 ? 0 : window.end - window.start + 1,
+      ...(range === null ? {} : { 'content-range': `bytes ${window.start}-${window.end}/${found.bytes}` }),
+    });
+    if (found.bytes === 0) {
+      res.end();
+      return;
+    }
+    const stream = createReadStream(found.file, { start: window.start, end: window.end });
+    stream.on('error', (error) => {
+      this.options.log(`remote: video ${name} failed: ${error.message}`, 'error');
+      res.destroy();
+    });
+    stream.pipe(res);
   }
 
   private async serveStatic(method: string, pathname: string, res: http.ServerResponse): Promise<void> {

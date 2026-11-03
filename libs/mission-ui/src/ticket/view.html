@@ -279,6 +279,22 @@
                 </div>
               }
             }
+            @if (video(); as clip) {
+              <div class="clip">
+                <video #player class="clip-player" controls playsinline preload="metadata" [src]="clip.url" [attr.aria-label]="'Walkthrough ' + clip.name"></video>
+                @if (report.chapters.length > 0) {
+                  <div class="clip-chapters">
+                    @for (chapter of report.chapters; track $index) {
+                      <button type="button" class="clip-chapter" (click)="seekTo(player, chapter.atSec)">
+                        {{ clock(chapter.atSec) }} · {{ chapter.label }}
+                      </button>
+                    }
+                  </div>
+                }
+              </div>
+            } @else if (report.videoRemoved) {
+              <p class="clip-removed">Video removed (size limit).</p>
+            }
             @if (report.findings.length > 0) {
               <div class="findings">
                 <h3 class="findings-title">Findings</h3>
@@ -296,7 +312,7 @@
               <h3 class="tk-sec">
                 Changes
                 @if (proofDiff.files.length > 0) {
-                  <span class="cnt">· {{ proofDiff.files.length }} Dateien</span>
+                  <span class="cnt">· {{ proofDiff.files.length }} files</span>
                 }
               </h3>
               @for (file of proofDiff.files; track file.path) {
@@ -373,7 +389,7 @@
           }
 
           @if (costTotal(); as total) {
-            <p class="proof-total">gesamt <b>{{ total }}</b></p>
+            <p class="proof-total">total <b>{{ total }}</b></p>
           }
 
           @if (savedFlash(); as flash) {
