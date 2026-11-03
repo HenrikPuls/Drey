@@ -1,0 +1,25 @@
+<div class="wrap">
+  <div class="card">
+    <div class="logo" aria-hidden="true">D</div>
+    <h1 class="title">Pair this device</h1>
+    <p class="hint">Enter the one-time code from Drey's tickets settings.</p>
+    <input
+      class="code"
+      type="text"
+      autocomplete="one-time-code"
+      autocapitalize="characters"
+      spellcheck="false"
+      placeholder="One-time code"
+      aria-label="One-time pairing code"
+      [value]="code()"
+      (input)="onCode($any($event.target).value)"
+      (keydown.enter)="submit()"
+    />
+    @if (error(); as message) {
+      <p class="error">{{ message }}</p>
+    }
+    <button type="button" class="btn" [disabled]="!canPair" (click)="submit()">
+      {{ busy ? 'Pairing…' : 'Pair' }}
+    </button>
+  </div>
+</div>

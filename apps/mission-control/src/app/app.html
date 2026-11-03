@@ -1,3 +1,6 @@
+@if (pairing() !== 'ready') {
+  <mc-pairing class="pairing" [phase]="pairing()" [pair]="pairCode" />
+} @else {
 <div class="shell">
   @if (showWork()) {
     <mc-work class="pane pane-work" />
@@ -99,3 +102,4 @@
     </button>
   </nav>
 </div>
+}

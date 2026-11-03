@@ -10,6 +10,7 @@ import { McState, type McTab } from './api/state';
 import { THEME_LABEL, Theme, type ThemeName } from '@mission-ui/theme';
 import { Empty } from '@mission-ui/empty';
 import { Toast } from '@mission-ui/toast';
+import { Pairing } from '@mission-ui/pairing/pairing';
 import { Work } from '@mission-ui/work/work';
 import { Chat } from '@mission-ui/chat/chat';
 import { Team } from '@mission-ui/team/team';
@@ -42,7 +43,7 @@ function mediaSignal(query: string): Signal<boolean> {
   selector: 'mc-root',
   templateUrl: './app.html',
   styleUrl: './app.css',
-  imports: [Work, Chat, Team, PersonaDetail, TicketView, TicketEdit, Empty, Toast],
+  imports: [Work, Chat, Team, PersonaDetail, TicketView, TicketEdit, Empty, Toast, Pairing],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App {
@@ -60,6 +61,12 @@ export class App {
 
   /** The theme's name (the toggle's title reads it). */
   protected readonly theme = this.themeService.name;
+
+  /** The pairing gate: 'ready' = the app; anything else = the pairing screen. */
+  protected readonly pairing = this.state.pairing;
+
+  /** The pairing screen's exchange binding (the state owns the token store). */
+  protected readonly pairCode = (code: string) => this.state.pair(code);
 
   /** The two layout steps (the prototype's go()): tablet from 768, desktop from 1280. */
   protected readonly wide = mediaSignal('(min-width: 768px)');
