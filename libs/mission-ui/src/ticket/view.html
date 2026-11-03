@@ -110,6 +110,21 @@
             }
           </div>
 
+          @if (planState(); as plan) {
+            <section class="planmarks" aria-label="Plan edits">
+              @if (plan.line; as line) {
+                <p class="planline">{{ line }}</p>
+              }
+              @for (mark of plan.marks; track mark.no) {
+                <div class="pmark" [class.by-you]="mark.by === 'you'">
+                  <span class="pmark-who">{{ mark.by === 'you' ? 'you' : 'model' }}</span>
+                  <span class="pmark-no">{{ mark.no }}</span>
+                  <span class="pmark-text">{{ mark.text }}</span>
+                </div>
+              }
+            </section>
+          }
+
           @if (costTable(); as table) {
             <section class="verlauf" aria-label="Cost">
               <h3 class="tk-sec">Cost</h3>

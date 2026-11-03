@@ -444,6 +444,10 @@ export interface ChatMessageView {
   readonly thought: string | null;
   /** ISO stamp. */
   readonly at: string;
+  /** `plan-edit` = the "You edited the plan" card (E10-2); `text` is its summary. */
+  readonly kind?: 'plan-edit';
+  /** The diff the model read; only on a plan-edit card. */
+  readonly diff?: string | null;
 }
 
 export interface ChatProposalView {
@@ -470,6 +474,8 @@ export interface ActiveSession {
   readonly createdAt: string;
   readonly messages: readonly ChatMessageView[];
   readonly proposals: readonly ChatProposalView[];
+  /** The ticket whose plan this session shapes (E10); null = a plain chat. */
+  readonly ticket?: string | null;
 }
 
 export interface ChatStateView {
@@ -1243,6 +1249,7 @@ function messageOf(raw: unknown): ChatMessageView | null {
     text: str(message['text']),
     thought: strOrNull(message['thought']),
     at: str(message['at']),
+    ...(message['kind'] === 'plan-edit' ? { kind: 'plan-edit' as const, diff: strOrNull(message['diff']) } : {}),
   };
 }
 
@@ -1309,6 +1316,7 @@ export function parseActiveSession(json: unknown): ActiveSession | null {
     proposals: arr(session['proposals'])
       .map(proposalOf)
       .filter((proposal): proposal is ChatProposalView => proposal !== null),
+    ...(/^T-\d{4,}$/.test(str(session['ticket'])) ? { ticket: str(session['ticket']) } : {}),
   };
 }
 
@@ -1549,4 +1557,40 @@ export function parseEstimate(json: unknown): McEstimate | null {
     return null;
   }
   return { gate: e['gate'], persona: e['persona'], model: e['model'], runs, cost, minutes: num(e['minutes']), tokens: num(e['tokens']) };
+}
+
+// --- the shared plan (E10-2) -----------------------------------------------------------
+
+export interface McPlanMark {
+  readonly no: number;
+  readonly text: string;
+  readonly by: 'you' | 'model';
+}
+
+/** Where a ticket's shared plan stands (`GET /api/tickets/<id>/plan`). */
+export interface McPlanStatus {
+  /** The model's turns that ended on this plan; null = it has not worked on it yet. */
+  readonly version: number | null;
+  /** The owner's edit groups since the model's last turn. */
+  readonly edits: number;
+  readonly summary: string | null;
+  readonly marks: readonly McPlanMark[];
+}
+
+/** Reads the plan answer tolerantly; null = the desk has no readable plan. */
+export function parsePlanStatus(json: unknown): McPlanStatus | null {
+  const body = rec(json);
+  if (body === null || body['ok'] !== true) {
+    return null;
+  }
+  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null);
+  const marks: McPlanMark[] = [];
+  for (const raw of arr(body['marks'])) {
+    const mark = rec(raw);
+    const no = mark === null ? null : num(mark['no']);
+    if (mark !== null && no !== null && no >= 1 && (mark['by'] === 'you' || mark['by'] === 'model')) {
+      marks.push({ no, text: str(mark['text']), by: mark['by'] });
+    }
+  }
+  return { version: num(body['version']), edits: num(body['edits']) ?? 0, summary: strOrNull(body['summary']), marks };
 }

@@ -21,7 +21,15 @@
       @for (item of timeline(); track trackOf(item, $index)) {
         @switch (item.kind) {
           @case ('message') {
-            @if (item.message.role === 'owner') {
+            @if (item.message.kind === 'plan-edit') {
+              <div class="planedit" aria-label="You edited the plan">
+                <b>You edited the plan</b>
+                <span class="planedit-sum">{{ item.message.text }}</span>
+                @if (item.message.diff; as diff) {
+                  <pre class="planedit-diff">{{ diff }}</pre>
+                }
+              </div>
+            } @else if (item.message.role === 'owner') {
               <div class="msg owner">
                 <p class="bubble">{{ item.message.text }}</p>
               </div>
@@ -115,6 +123,13 @@
   <div class="composer" [class.ro]="readOnly()">
     @if (composerError(); as error) {
       <p class="inline-error">{{ error }}</p>
+    }
+    @if (planChip(); as chip) {
+      <div class="chips" aria-label="Plan edits">
+        <button type="button" class="chip planchip" [attr.aria-pressed]="planOn()" (click)="togglePlanEdits()">
+          {{ planOn() ? chip : 'Leave out ' + chip }}
+        </button>
+      </div>
     }
     @if (attachments().length > 0) {
       <div class="chips" aria-label="Attached files">

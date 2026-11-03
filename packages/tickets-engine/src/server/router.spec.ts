@@ -28,6 +28,7 @@ function port(): TicketsRemotePort {
     estimate: vi.fn(async (key: { gate: string }) =>
       key.gate === 'build' ? { gate: 'build', persona: 'ben', model: 'a/b', runs: 3, cost: 0.3, minutes: 9, tokens: 48000 } : null,
     ),
+    planStatus: vi.fn(async () => ({ ok: true as const, version: 2, edits: 1, summary: '1 edit · +1 −0', marks: [] })),
     ticketFile: vi.fn(async (_id: string, path: string) =>
       path === 'src/a.ts' ? { ok: true as const, text: 'a\nb\n', truncated: false } : { ok: false as const, error: 'nope' },
     ),
@@ -216,6 +217,9 @@ describe('route', () => {
     expect(remote.estimate).toHaveBeenCalledWith({ gate: 'build', persona: 'ben', model: 'a/b' });
     expect(est.body).toMatchObject({ ok: true, estimate: { runs: 3, cost: 0.3 } });
     expect((await route(req({ path: '/api/estimate/plan/ben/x', authorization: auth }), deps)).body).toEqual({ ok: true, estimate: null });
+    const planRes = await route(req({ path: '/api/tickets/T-0052/plan', authorization: auth }), deps);
+    expect(remote.planStatus).toHaveBeenCalledWith('T-0052');
+    expect(planRes.body).toMatchObject({ ok: true, version: 2, edits: 1 });
     const whole = await route(req({ path: '/api/tickets/T-0052/file/src%2Fa.ts', authorization: auth }), deps);
     expect(whole.status).toBe(200);
     expect(whole.body).toEqual({ ok: true, text: 'a\nb\n', truncated: false });
@@ -278,6 +282,15 @@ describe('route', () => {
 
     await route(req({ method: 'POST', path: `/api/chat/sessions/${file}/messages`, origin, authorization: auth, body: { text: 'And more' } }), deps);
     expect(remote.chatSend).toHaveBeenCalledWith({ file, text: 'And more' });
+
+    // E10-2: a shape session names its ticket; a message may leave the plan edits out.
+    await route(req({ method: 'POST', path: '/api/chat/sessions', origin, authorization: auth, body: { text: 'Shape it', ticket: 'T-0130' } }), deps);
+    expect(remote.chatStart).toHaveBeenLastCalledWith({ title: undefined, text: 'Shape it', ticket: 'T-0130' });
+    expect(
+      (await route(req({ method: 'POST', path: '/api/chat/sessions', origin, authorization: auth, body: { text: 'x', ticket: 'soon' } }), deps)).body,
+    ).toEqual({ ok: false, error: 'ticket must be a ticket id' });
+    await route(req({ method: 'POST', path: `/api/chat/sessions/${file}/messages`, origin, authorization: auth, body: { text: 'Quiet', planEdits: false } }), deps);
+    expect(remote.chatSend).toHaveBeenLastCalledWith({ file, text: 'Quiet', planEdits: false });
 
     await route(req({ method: 'POST', path: `/api/chat/sessions/${file}/proposals/p-1/confirm`, origin, authorization: auth }), deps);
     expect(remote.chatConfirm).toHaveBeenCalledWith({ file, id: 'p-1' });

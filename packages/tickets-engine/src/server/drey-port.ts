@@ -42,7 +42,7 @@ import type { BoardSnapshot, CreateResult, MutationResult } from '../contracts/t
 import type { EstimateKey, RunEstimate } from '../core/estimate';
 import type { ReviewComment } from '../core/review-feedback';
 import type { TicketDiff, TicketFileReply, WorktreeFile } from '../core/worktree-changes';
-import type { ChatDecisionResult, ChatServicePort, ChatSession, ChatSessionMeta, ChatTurnResult } from '../contracts/chat';
+import type { ChatDecisionResult, ChatServicePort, ChatSession, ChatSessionMeta, ChatTurnResult, PlanStatus } from '../contracts/chat';
 import { IMPROVEMENTS_THRESHOLD } from '../core/improvements';
 import { openStatusItems } from '../core/status-log';
 import type { StatusLine } from '../core/status-log';
@@ -506,12 +506,16 @@ export class DreyTicketsPort implements TicketsRemotePort {
     return this.chat().open(file);
   }
 
-  chatSend(input: { readonly file: string; readonly text: string }): Promise<ChatTurnResult> {
+  chatSend(input: { readonly file: string; readonly text: string; readonly planEdits?: boolean }): Promise<ChatTurnResult> {
     return this.chat().send(input);
   }
 
-  chatStart(input: { readonly title?: string; readonly text: string }): Promise<ChatTurnResult> {
+  chatStart(input: { readonly title?: string; readonly text: string; readonly ticket?: string }): Promise<ChatTurnResult> {
     return this.chat().start(input);
+  }
+
+  planStatus(ticket: string): Promise<PlanStatus> {
+    return this.chat().planStatus(ticket);
   }
 
   chatConfirm(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult> {

@@ -1746,3 +1746,43 @@ details.think .step-body {
   font-size: calc(13px * var(--mc-text, 1));
   color: var(--text-3);
 }
+
+.planmarks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+}
+
+.planline {
+  margin: 0 0 4px;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+.pmark {
+  display: grid;
+  grid-template-columns: 52px 28px minmax(0, 1fr);
+  gap: 8px;
+  font-size: calc(13px * var(--mc-text, 1));
+  line-height: 1.5;
+}
+
+.pmark-who {
+  color: var(--text-3);
+  text-transform: lowercase;
+}
+
+.pmark.by-you .pmark-who {
+  color: var(--accent, inherit);
+}
+
+.pmark-no {
+  color: var(--text-3);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pmark-text {
+  overflow-wrap: anywhere;
+}

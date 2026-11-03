@@ -14,7 +14,7 @@
  * (the report card's promote) live here too, so any surface can switch
  * to the chat without the components knowing each other.
  */
-import { signal } from '@angular/core';
+import { computed, signal } from '@angular/core';
 import { ApiError, McClient, type McBootHints, type McEventHandlers } from './client';
 import { type McChatUploadReply } from '@mission-ui/chat/chat.model';
 import { parseSettings, type McSettingsView } from '@mission-ui/settings/settings.model';
@@ -30,6 +30,7 @@ import {
   parseTeam,
   parseTicketDetail,
   parseEstimate,
+  parsePlanStatus,
   parseTicketDiff,
   parseWork,
   DEFAULT_PRIORITY_CONFIG,
@@ -37,6 +38,7 @@ import {
   type ChatStateView,
   type ChatStreamView,
   type McEstimate,
+  type McPlanStatus,
   type NeedView,
   type PersonaImprovementsView,
   type PersonaMemoryView,
@@ -290,6 +292,7 @@ export class McState {
       case 'board':
       case 'needs':
         void this.refreshWork();
+        this.refreshOpenPlans();
         break;
       case 'fleet':
       case 'remote':
@@ -359,6 +362,40 @@ export class McState {
    * reply is newer than the persisted file — the pane keeps it (the
    * stream's `done` re-fetches the canonical session).
    */
+  /** The shared plans' states by ticket id (E10-2): the chip, the status line and the line marks. */
+  private readonly plans = signal<ReadonlyMap<string, McPlanStatus>>(new Map());
+  /** The chip's switch: the owner's plan edits go along with the next message (reset after each send). */
+  readonly planEdits = signal(true);
+  /** The open shape session's plan; null for a plain chat. */
+  readonly chatPlan = computed<McPlanStatus | null>(() => {
+    const ticket = this.chat().active?.ticket ?? null;
+    return ticket === null ? null : (this.plans().get(ticket) ?? null);
+  });
+
+  /** The plan of one ticket as last fetched; null before the first answer. */
+  planOf(id: string): McPlanStatus | null {
+    return this.plans().get(id) ?? null;
+  }
+
+  /** Fetches one ticket's plan state; a failed GET keeps the last good one. */
+  async refreshPlan(id: string): Promise<void> {
+    const body = await this.client.raw(`/api/tickets/${encodeURIComponent(id)}/plan`);
+    const status = body === null ? null : parsePlanStatus(body);
+    if (status !== null) {
+      this.plans.update((map) => new Map(map).set(id, status));
+    }
+  }
+
+  private refreshOpenPlans(): void {
+    const shaped = this.chat().active?.ticket ?? null;
+    const open = this.ticketOpen()?.id ?? null;
+    for (const id of new Set([shaped, open])) {
+      if (id !== null) {
+        void this.refreshPlan(id);
+      }
+    }
+  }
+
   async openSession(file: string): Promise<void> {
     const session = await this.client
       .request('GET', `/api/chat/sessions/${encodeURIComponent(file)}`)
@@ -369,6 +406,9 @@ export class McState {
     }
     this.tail = null;
     this.chat.update((chat) => ({ ...chat, active: session }));
+    if (session?.ticket !== undefined && session.ticket !== null) {
+      void this.refreshPlan(session.ticket);
+    }
   }
 
   // --- chat mutations -------------------------------------------------------
@@ -422,11 +462,13 @@ export class McState {
       return { ok: false, error: 'no chat session is open' };
     }
     this.appendMessage({ role: 'owner', text, thought: null, at: new Date().toISOString() });
+    const shaped = this.chat().active?.ticket ?? null;
+    const withEdits = this.planEdits();
     const body = await this.client
       .request<Record<string, unknown>>(
         'POST',
         `/api/chat/sessions/${encodeURIComponent(file)}/messages`,
-        { text },
+        { text, ...(shaped !== null && !withEdits ? { planEdits: false } : {}) },
       )
       .catch(fail);
     if (isFailure(body)) {
@@ -436,6 +478,20 @@ export class McState {
       return refusal(body, 'the desk did not take the message');
     }
     this.applyTurn(body);
+    if (shaped !== null) {
+      // The desk wrote the "You edited the plan" card into the session file:
+      // read the canonical session back, and the chip starts afresh.
+      this.planEdits.set(true);
+      const canonical = await this.client
+        .request('GET', `/api/chat/sessions/${encodeURIComponent(file)}`)
+        .then(parseActiveSession)
+        .catch(() => null);
+      if (canonical !== null && this.chat().active?.file === file) {
+        this.tail = null;
+        this.chat.update((chat) => ({ ...chat, active: canonical }));
+      }
+      void this.refreshPlan(shaped);
+    }
     return { ok: true };
   }
 
@@ -578,6 +634,7 @@ export class McState {
     const phase = detail.phase === '' ? (this.phaseOf(detail.id) ?? '') : detail.phase;
     this.ticketError.set(null);
     this.ticketDetail.set({ ...detail, phase });
+    void this.refreshPlan(id);
   }
 
   /** The current board view's phases, for the ticket screen's phase rail. */

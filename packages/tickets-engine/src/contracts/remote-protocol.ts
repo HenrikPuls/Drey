@@ -18,7 +18,7 @@ import type {
   TicketIdCommand,
   TransitionCommand,
 } from '../core/commands';
-import type { ChatDecisionResult, ChatSession, ChatSessionMeta, ChatStreamEvent, ChatTurnResult } from './chat';
+import type { ChatDecisionResult, ChatSession, ChatSessionMeta, ChatStreamEvent, ChatTurnResult, PlanStatus } from './chat';
 import type { FleetSnapshot } from '../services/fleet-client';
 import type { ChainMaster, ChainStatus, ColumnMode, WaitQuestion } from '../fleet/protocol';
 import type { ShapedQuestion } from './question-shape';
@@ -216,8 +216,10 @@ export interface TicketsRemotePort {
   /** The Mission Control chat surface (E5a) — the service's port verbatim. */
   chatSessions(): Promise<readonly ChatSessionMeta[]>;
   chatOpen(file: string): Promise<ChatSession | null>;
-  chatSend(input: { readonly file: string; readonly text: string }): Promise<ChatTurnResult>;
-  chatStart(input: { readonly title?: string; readonly text: string }): Promise<ChatTurnResult>;
+  chatSend(input: { readonly file: string; readonly text: string; readonly planEdits?: boolean }): Promise<ChatTurnResult>;
+  chatStart(input: { readonly title?: string; readonly text: string; readonly ticket?: string }): Promise<ChatTurnResult>;
+  /** The shared plan's state: version, the owner's edits since the model's last turn, the line marks (E10-2). */
+  planStatus(ticket: string): Promise<PlanStatus>;
   chatConfirm(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult>;
   chatDismiss(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult>;
 

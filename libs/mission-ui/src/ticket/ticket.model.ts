@@ -18,7 +18,7 @@
  * client.
  */
 import { InjectionToken } from '@angular/core';
-import type { McEstimate, McTicketUsage, McVerlaufEntry } from '../api/dto';
+import type { McEstimate, McPlanStatus, McTicketUsage, McVerlaufEntry } from '../api/dto';
 
 // --- action replies ----------------------------------------------------------
 
@@ -996,6 +996,12 @@ export interface TicketVm {
    */
   wholeFile?(path: string): WholeFile | null;
   /**
+   * The ticket's shared plan state (E10-2): the version the model saw, the
+   * owner's edits since and the marked lines; null until the desk answers.
+   * Optional.
+   */
+  plan?(): McPlanStatus | null;
+  /**
    * The run estimate for a gate by a persona, from the owner's own
    * history; null while it loads, when the persona's model is unknown or
    * when fewer than three similar runs exist (E11-4). Optional.
@@ -1251,4 +1257,27 @@ export function estimateLineOf(estimate: McEstimate, gateTitle: string): string 
     ...(estimate.tokens === null ? [] : [`${tokenWordsOf(estimate.tokens)} tokens`]),
   ].join(' · ');
   return `${figures} — median of ${estimate.runs} earlier ${gateTitle} runs by ${titleCase(estimate.persona)} on ${estimate.model}.`;
+}
+
+// --- the shared plan (E10-2) ---------------------------------------------------------
+
+/**
+ * The status line over the plan: `The model saw plan v7 · 1 edit of yours
+ * since`; null when the model has not worked on the plan (nothing to
+ * compare against).
+ */
+export function planStatusLineOf(plan: McPlanStatus): string | null {
+  if (plan.version === null) {
+    return null;
+  }
+  const since = plan.edits === 0 ? 'no edits of yours since' : `${plan.edits} ${plan.edits === 1 ? 'edit' : 'edits'} of yours since`;
+  return `The model saw plan v${plan.version} · ${since}`;
+}
+
+/** The chip over the composer: `1 new edit of yours goes along`; null when there is nothing to send. */
+export function planChipOf(plan: McPlanStatus | null): string | null {
+  if (plan === null || plan.edits === 0) {
+    return null;
+  }
+  return `${plan.edits} new ${plan.edits === 1 ? 'edit' : 'edits'} of yours ${plan.edits === 1 ? 'goes' : 'go'} along`;
 }

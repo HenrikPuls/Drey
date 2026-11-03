@@ -914,3 +914,32 @@ details.think .step-body {
   }
 
 }
+
+.planedit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-self: flex-end;
+  max-width: 92%;
+  padding: 10px 12px;
+  border: 1px solid var(--border, currentColor);
+  border-radius: 12px;
+  font-size: calc(13px * var(--mc-text, 1));
+}
+
+.planedit-sum {
+  color: var(--text-3);
+}
+
+.planedit-diff {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: calc(12px * var(--mc-text, 1));
+}
+
+.planchip[aria-pressed='false'] {
+  opacity: 0.6;
+  text-decoration: line-through;
+}

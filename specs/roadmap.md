@@ -161,7 +161,7 @@ canvas "Drey Tickets — Workflow redesign" is binding for the UI;
 [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
 "Later changes" records the decisions). Worked in this order, one
 milestone at a time, a pause after each; milestone numbers are taken
-when an item ships (next free: 121; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, 116 = proof mode + videos, 117 = diff review, 118 = line comments, 119 = cost table + estimate, 120 = parts schema; E12-1 – E12-4, E11 and E10-1 shipped). Nothing here creates tickets — the
+when an item ships (next free: 122; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, 116 = proof mode + videos, 117 = diff review, 118 = line comments, 119 = cost table + estimate, 120 = parts schema, 121 = plan delta; E12-1 – E12-4, E11, E10-1 and E10-2 shipped). Nothing here creates tickets — the
 owner builds without the tickets system.
 
 - **E12-3b — Settings pages still missing.** Chat (thinking trace, new
@@ -177,9 +177,6 @@ owner builds without the tickets system.
   split (file list left, one file's diff right) and the viewed marks on
   the desk instead of per device; E11-2 shipped both inside the proof
   card's accordion.
-- **E10-2 — Plan delta.** Shadow copy of the plan at the end of the
-  persona's last turn, only the owner's delta goes back, the chip, the
-  "You edited the plan" card, line marks (recut of W-ticket T-0078).
 - **E10-3 — Shape mode.** The idea is shaped with Paul, relayed through
   Mission Control (Pia — the one central contact, D7); recut of
   T-0063.

@@ -11,6 +11,7 @@ import {
   parseBoardCard,
   parseChatEvent,
   parseEstimate,
+  parsePlanStatus,
   parseImprovements,
   parseNeeds,
   parsePersonaMemory,
@@ -1563,5 +1564,42 @@ describe('parseEstimate (E11-4)', () => {
     expect(parseEstimate(null)).toBeNull();
     expect(parseEstimate({ estimate: { ...good, runs: 2 } })).toBeNull();
     expect(parseEstimate({ estimate: { ...good, cost: 'free' } })).toBeNull();
+  });
+});
+
+describe('the shared plan (E10-2)', () => {
+  it('reads the plan answer: version, edits, the marked lines — junk dropped', () => {
+    expect(
+      parsePlanStatus({
+        ok: true,
+        version: 7,
+        edits: 1,
+        summary: '1 edit · +1 −0',
+        marks: [{ no: 3, text: '- two', by: 'you' }, { no: 0, text: 'bad', by: 'you' }, { no: 2, text: 'x', by: 'robot' }, 'junk'],
+      }),
+    ).toEqual({ version: 7, edits: 1, summary: '1 edit · +1 −0', marks: [{ no: 3, text: '- two', by: 'you' }] });
+    expect(parsePlanStatus({ ok: true, version: null })).toEqual({ version: null, edits: 0, summary: null, marks: [] });
+  });
+
+  it('reads nothing from a refusal or junk', () => {
+    expect(parsePlanStatus({ ok: false, error: 'no plan' })).toBeNull();
+    expect(parsePlanStatus(null)).toBeNull();
+  });
+
+  it('carries the plan-edit card and the shaped ticket through the session reader', () => {
+    const session = parseActiveSession({
+      file: 'f.md',
+      title: 'Shape',
+      ticket: 'T-0130',
+      messages: [
+        { role: 'owner', text: '1 edit · +1 −0', at: 't1', thought: null, kind: 'plan-edit', diff: '@@ line 3\n+ x' },
+        { role: 'owner', text: 'hi', at: 't2', thought: null },
+      ],
+      proposals: [],
+    })!;
+    expect(session.ticket).toBe('T-0130');
+    expect(session.messages[0]).toMatchObject({ kind: 'plan-edit', diff: '@@ line 3\n+ x' });
+    expect(session.messages[1]!.kind).toBeUndefined();
+    expect(parseActiveSession({ file: 'f.md', ticket: 'soon' })!.ticket).toBeUndefined();
   });
 });

@@ -17,6 +17,7 @@ import { FleetClient } from '../services/fleet-client';
 import { ImprovementsService } from '../services/improvements-service';
 import { VerifyService } from '../services/verify-service';
 import { VideoService } from '../services/video-service';
+import { FilePlanShadowStore } from '../services/plan-shadow';
 import { FleetEventWriter, statusPathFor } from '../fleet/event-writer';
 import type { FleetEvents } from '../fleet/orchestrator';
 import { ChangeHub, DreyTicketsPort } from './drey-port';
@@ -151,6 +152,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     host,
     git,
     bridge: opts.chatBridge ?? createChatBridge({ config }),
+    shadows: new FilePlanShadowStore(path.join(opts.home, 'plan-shadow.json')),
     actor: `chat@${hostname().toLowerCase()}`,
     log,
     onEvent: (file, event) => hub.emit('chat', { file, event }),

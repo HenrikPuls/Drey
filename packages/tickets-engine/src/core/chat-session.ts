@@ -49,10 +49,18 @@ export function sessionSlug(title: string): string {
 }
 
 /** The strict canonical shape of a fresh session file. */
-export function newSessionText(title: string, now: Date): string {
+export function newSessionText(title: string, now: Date, ticket?: string): string {
   const stamp = now.toISOString();
   const name = title.trim() === '' ? 'Chat' : title.trim();
-  return `---\ntitle: "${name.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"\ncreated: '${stamp}'\n---\n\n`;
+  const shaped = ticket !== undefined && /^T-\d{4,}$/.test(ticket) ? `ticket: ${ticket}\n` : '';
+  return `---\ntitle: "${name.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"\ncreated: '${stamp}'\n${shaped}---\n\n`;
+}
+
+/** Appends the "You edited the plan" card: the summary line and the fenced diff the model read. */
+export function appendPlanEdit(text: string, now: Date, summary: string, diff: string): string {
+  const base = text.endsWith('\n') ? text : `${text}\n`;
+  const body = diff.split('\n').map((line) => `  ${line}`).join('\n');
+  return `${base}- '${now.toISOString()}' plan-edit — ${summary}\n  \`\`\`diff\n${body}\n  \`\`\`\n`;
 }
 
 export function appendOwner(text: string, now: Date, message: string): string {
@@ -121,6 +129,19 @@ export function parseSessionFile(
   const lines = body.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
+    const planEdit = /^- '([^']+)' plan-edit — (.*)$/.exec(line);
+    if (planEdit !== null) {
+      const diffLines: string[] = [];
+      let j = i + 1;
+      if (lines[j]?.trim() === '```diff') {
+        for (j++; j < lines.length && lines[j]!.trim() !== '```'; j++) {
+          diffLines.push(lines[j]!.replace(/^ {2}/, ''));
+        }
+        i = j;
+      }
+      messages.push({ role: 'owner', text: planEdit[2]!, at: planEdit[1]!, thought: null, kind: 'plan-edit', diff: diffLines.join('\n') });
+      continue;
+    }
     const basic = /^- '([^']+)' (owner|mission|thought) — (.*)$/.exec(line);
     if (basic !== null) {
       const [, at, role, payload] = basic;
@@ -166,7 +187,8 @@ export function parseSessionFile(
       }
     }
   }
-  return { file, title, createdAt, messages, proposals };
+  const ticket = /^ticket:\s*(T-\d{4,})\s*$/m.exec(yamlText)?.[1] ?? null;
+  return { file, title, createdAt, messages, proposals, ticket };
 }
 
 function safeJson(raw: string): unknown {

@@ -140,7 +140,7 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
                 role: message.role === 'owner' ? 'user' : 'assistant',
                 content: message.text,
               })),
-              { role: 'user', content: input.text },
+              { role: 'user', content: input.planDelta === undefined ? input.text : `${input.planDelta}\n\n${input.text}` },
             ],
           }),
           signal: controller.signal,

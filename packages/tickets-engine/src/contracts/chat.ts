@@ -23,6 +23,13 @@ export interface ChatMessage {
   readonly at: string;
   /** The mission's thinking trace, folded away after completion. */
   readonly thought: string | null;
+  /**
+   * `plan-edit` marks the "You edited the plan" card (E10-2): the owner's
+   * plan changes that went along with the next message, `text` the
+   * summary and `diff` the diff the model read. Absent = a plain message.
+   */
+  readonly kind?: 'plan-edit';
+  readonly diff?: string | null;
 }
 
 /**
@@ -98,6 +105,8 @@ export interface ChatSession {
   readonly createdAt: string;
   readonly messages: readonly ChatMessage[];
   readonly proposals: readonly ChatProposal[];
+  /** The ticket whose plan is shaped in this session (E10); null = a plain chat. */
+  readonly ticket?: string | null;
 }
 
 /** The streaming unit the UI renders (thought dim, then text, cards). */
@@ -119,12 +128,37 @@ export interface ChatServicePort {
    * stream → events), appends the reply, and returns the finished
    * session slice. The stream arrives through `onEvent`.
    */
-  send(input: { readonly file: string; readonly text: string }): Promise<ChatTurnResult>;
-  /** Starts a fresh session and sends the first message. */
-  start(input: { readonly title?: string; readonly text: string }): Promise<ChatTurnResult>;
+  send(input: { readonly file: string; readonly text: string; readonly planEdits?: boolean }): Promise<ChatTurnResult>;
+  /** Starts a fresh session and sends the first message; `ticket` makes it a shape session for that ticket's plan. */
+  start(input: { readonly title?: string; readonly text: string; readonly ticket?: string }): Promise<ChatTurnResult>;
+  /** Where the shared plan of a ticket stands: version, the owner's edits since the model's last turn, the line marks (E10-2). */
+  planStatus(ticket: string): Promise<PlanStatus>;
   confirm(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult>;
   dismiss(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult>;
 }
+
+/** One marked line of the shared plan. */
+export interface PlanMark {
+  /** 1-based line of the current Plan section. */
+  readonly no: number;
+  readonly text: string;
+  /** Who changed it last: the owner since the model's last turn, or the model in its last turn. */
+  readonly by: 'you' | 'model';
+}
+
+/** The shared plan's state for the composer chip, the status line and the line marks. */
+export type PlanStatus =
+  | {
+      readonly ok: true;
+      /** The model's turns that ended on this plan; null = it has not worked on the plan yet. */
+      readonly version: number | null;
+      /** The owner's edit groups since the model's last turn (what the chip counts). */
+      readonly edits: number;
+      /** `2 edits · +3 −1`; null when nothing changed. */
+      readonly summary: string | null;
+      readonly marks: readonly PlanMark[];
+    }
+  | { readonly ok: false; readonly error: string };
 
 /** The listing entry — the UI shows title, age and pending cards. */
 export interface ChatSessionMeta {
@@ -170,6 +204,11 @@ export interface ChatBridge {
      * config). Absent = the shipped default vocabulary.
      */
     readonly priorities?: PriorityConfig;
+    /**
+     * What the owner changed in the shared plan since the model's last
+     * turn (E10-2), ready to read; absent = nothing went along.
+     */
+    readonly planDelta?: string;
     /** Receives the live stream: thought and text deltas. */
     emit(event: ChatStreamEvent): void;
   }): Promise<{

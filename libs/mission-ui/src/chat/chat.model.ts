@@ -9,6 +9,7 @@ import { InjectionToken, type Signal, type WritableSignal, signal } from '@angul
 import {
   DEFAULT_PRIORITY_CONFIG,
   type ChatStateView,
+  type McPlanStatus,
   type WorkView,
 } from '../api/dto';
 
@@ -44,6 +45,13 @@ export interface McChatState {
   readonly board: Signal<unknown>;
   /** The work view; the phase directory and group titles resolve from it. */
   readonly work: Signal<WorkView>;
+  /**
+   * The open session's shared plan (E10-2): what the chip counts. Optional —
+   * a host without shape sessions leaves it off and no chip shows.
+   */
+  readonly chatPlan?: Signal<McPlanStatus | null>;
+  /** The chip's switch: true = the owner's plan edits go along with the next message. */
+  readonly planEdits?: WritableSignal<boolean>;
   /** Opens a session file as the pane's live one. */
   openSession(file: string): Promise<void>;
   /** Starts a fresh session with `text` as the owner's first message. */

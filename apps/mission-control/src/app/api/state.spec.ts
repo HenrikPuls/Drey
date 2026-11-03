@@ -1711,3 +1711,47 @@ describe('the persona thread, memory and patch (prototype convergence)', () => {
     ).toBe(0);
   });
 });
+
+describe('McState shape sessions (E10-2)', () => {
+  const PLAN = { ok: true, version: 3, edits: 2, summary: '2 edits · +2 −0', marks: [{ no: 4, text: '- x', by: 'you' }] };
+
+  it('reads the shared plan of the open shape session for the chip', async () => {
+    const { desk, data } = makeDesk();
+    data.sessionA = { file: FILE_A, title: 'Shape', ticket: 'T-0130', createdAt: '', messages: [], proposals: [] };
+    desk.on('GET', '/api/tickets/T-0130/plan', () => PLAN);
+    const state = makeState(desk);
+
+    expect(state.chatPlan()).toBeNull();
+    await state.openSession(FILE_A);
+    await waitFor(() => expect(state.chatPlan()).toMatchObject({ version: 3, edits: 2 }));
+    expect(state.planOf('T-0130')?.marks).toHaveLength(1);
+  });
+
+  it('asks the desk to leave the plan edits out when the chip is deselected, then resets the chip', async () => {
+    const { desk, data } = makeDesk();
+    data.sessionA = { file: FILE_A, title: 'Shape', ticket: 'T-0130', createdAt: '', messages: [], proposals: [] };
+    desk.on('GET', '/api/tickets/T-0130/plan', () => PLAN);
+    desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`, () => ({ ok: true, say: 'Done', proposals: [] }));
+    const state = makeState(desk);
+    await state.openSession(FILE_A);
+
+    state.planEdits.set(false);
+    await state.send('quiet');
+    expect(desk.callsOf('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`)[0]!.body).toEqual({ text: 'quiet', planEdits: false });
+    expect(state.planEdits()).toBe(true);
+
+    await state.send('loud');
+    expect(desk.callsOf('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`)[1]!.body).toEqual({ text: 'loud' });
+  });
+
+  it('sends a plain chat without any plan field', async () => {
+    const { desk, data } = makeDesk();
+    data.sessionA = { file: FILE_A, title: 'A', createdAt: '', messages: [], proposals: [] };
+    desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`, () => ({ ok: true, say: 'Hi', proposals: [] }));
+    const state = makeState(desk);
+    await state.openSession(FILE_A);
+    state.planEdits.set(false);
+    await state.send('hi');
+    expect(desk.callsOf('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`)[0]!.body).toEqual({ text: 'hi' });
+  });
+});

@@ -82,7 +82,7 @@ function asObject(body: unknown): Record<string, unknown> | null {
   return typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
 }
 
-function parseChatStart(body: unknown): Parsed<{ title?: string; text: string }> {
+function parseChatStart(body: unknown): Parsed<{ title?: string; text: string; ticket?: string }> {
   const obj = asObject(body);
   const text = typeof obj?.['text'] === 'string' ? obj['text'].trim() : '';
   const title = obj?.['title'];
@@ -93,10 +93,14 @@ function parseChatStart(body: unknown): Parsed<{ title?: string; text: string }>
     return { ok: false, error: 'a chat start needs text' };
   }
   const name = typeof title === 'string' ? title.trim() : '';
-  return { ok: true, value: { title: name === '' ? undefined : name, text } };
+  const ticket = obj['ticket'];
+  if (ticket !== undefined && !(typeof ticket === 'string' && TICKET_ID_PATTERN.test(ticket))) {
+    return { ok: false, error: 'ticket must be a ticket id' };
+  }
+  return { ok: true, value: { title: name === '' ? undefined : name, text, ...(ticket === undefined ? {} : { ticket: ticket as string }) } };
 }
 
-function parseChatSend(file: string, body: unknown): Parsed<{ file: string; text: string }> {
+function parseChatSend(file: string, body: unknown): Parsed<{ file: string; text: string; planEdits?: boolean }> {
   const obj = asObject(body);
   const text = typeof obj?.['text'] === 'string' ? obj['text'].trim() : '';
   if (obj === null) {
@@ -105,7 +109,11 @@ function parseChatSend(file: string, body: unknown): Parsed<{ file: string; text
   if (text === '') {
     return { ok: false, error: 'a chat message needs text' };
   }
-  return { ok: true, value: { file, text } };
+  const planEdits = obj['planEdits'];
+  if (planEdits !== undefined && typeof planEdits !== 'boolean') {
+    return { ok: false, error: 'planEdits is true or false' };
+  }
+  return { ok: true, value: { file, text, ...(planEdits === undefined ? {} : { planEdits }) } };
 }
 
 /** The phone edit mode's raw save: the text must be a whole ticket file (E5c). */
@@ -383,6 +391,11 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
     if (diff !== null) {
       const id = decodeURIComponent(diff[1]!);
       return TICKET_ID_PATTERN.test(id) ? json(await port.ticketDiff(id)) : fail(404, 'no such ticket id');
+    }
+    const planStatus = /^\/api\/tickets\/([^/]+)\/plan$/.exec(req.path);
+    if (planStatus !== null) {
+      const id = decodeURIComponent(planStatus[1]!);
+      return TICKET_ID_PATTERN.test(id) ? json(await port.planStatus(id)) : fail(404, 'no such ticket id');
     }
     const estimate = /^\/api\/estimate\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(req.path);
     if (estimate !== null) {

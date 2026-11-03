@@ -18,6 +18,7 @@ import { parseBoardCard, type ChatMessageView, type McChainEntry, type SessionMe
 import {
   chainStepsOf,
   parseChainEntryView,
+  planChipOf,
   type ChainEntryView,
   type GatePhase,
   type GateStep,
@@ -941,6 +942,14 @@ export class Chat {
   // -- the merged timeline --------------------------------------------------
 
   /** True on the reply that is streaming in right now (think-live face). */
+  /** The chip over the composer: the owner's plan edits that would go along (E10-2). */
+  protected readonly planChip = computed(() => planChipOf(this.state.chatPlan?.() ?? null));
+  protected readonly planOn = computed(() => this.state.planEdits?.() ?? true);
+
+  protected togglePlanEdits(): void {
+    this.state.planEdits?.update((on) => !on);
+  }
+
   protected isLive(item: ChatTimelineItem): boolean {
     const latest = this.latestMission();
     return (

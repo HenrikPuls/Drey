@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { type Signal, type WritableSignal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { ActiveSession, ChatMessageView, ChatProposalView, ChatStateView, McChainEntry, WorkView } from '../api/dto';
+import type { ActiveSession, ChatMessageView, ChatProposalView, ChatStateView, McChainEntry, McPlanStatus, WorkView } from '../api/dto';
 import { DEFAULT_PRIORITY_CONFIG } from '../api/dto';
 import type { McChatState, McChatUploadReply } from './chat.model';
 import {
@@ -403,6 +403,9 @@ describe('Chat prefill adoption (E8)', () => {
   interface ChatSurface {
     draft(): string;
     viewMode(): 'empty' | 'composer' | 'session';
+    planChip(): string | null;
+    planOn(): boolean;
+    togglePlanEdits(): void;
   }
 
   function setup(fake: FakeChatState): { vm: ChatSurface; fake: FakeChatState } {
@@ -413,6 +416,22 @@ describe('Chat prefill adoption (E8)', () => {
     const chat = TestBed.runInInjectionContext(() => new Chat());
     return { vm: chat as unknown as ChatSurface, fake };
   }
+
+  it('shows the plan chip while edits wait, lets the owner leave them out, and shows none without a plan', () => {
+    const plan = signal<McPlanStatus | null>({ version: 3, edits: 2, summary: '2 edits', marks: [] });
+    const planEdits = signal(true);
+    const fake = { ...fakeState(null), chatPlan: plan, planEdits };
+    const { vm } = setup(fake as unknown as FakeChatState);
+    expect(vm.planChip()).toBe('2 new edits of yours go along');
+    expect(vm.planOn()).toBe(true);
+    vm.togglePlanEdits();
+    expect(planEdits()).toBe(false);
+    expect(vm.planOn()).toBe(false);
+    plan.set({ version: 3, edits: 0, summary: null, marks: [] });
+    expect(vm.planChip()).toBeNull();
+
+    expect(setup(fakeState(null)).vm.planChip()).toBeNull();
+  });
 
   it('opens empty when nothing waits', () => {
     const { vm, fake } = setup(fakeState(null));

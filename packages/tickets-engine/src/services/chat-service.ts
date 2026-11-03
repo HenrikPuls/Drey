@@ -30,12 +30,17 @@ import type {
   ChatSession,
   ChatSessionMeta,
   ChatStreamEvent,
+  PlanMark,
+  PlanStatus,
   ChatTurnResult,
 } from '../contracts/chat';
 import { titleFromDescription, type BoardSnapshot, type TicketForm, type TicketPriority } from '../contracts/tickets';
+import { changedLinesOf, editsSummary, planDelta, planDeltaForModel, planSectionOf } from '../core/plan-delta';
+import type { PlanShadowStore } from './plan-shadow';
 import {
   appendMission,
   appendOwner,
+  appendPlanEdit,
   appendProposal,
   CHAT_DIR,
   chatFileName,
@@ -79,6 +84,8 @@ export interface ChatBoardPort {
   setForm(input: { readonly id: string; readonly form: TicketForm; readonly actor?: string }): Promise<ChatMutationResult>;
   /** E9 (concept §5.7): the chain-delta replacement. */
   setChain(input: { readonly id: string; readonly chain: readonly string[]; readonly actor?: string }): Promise<ChatMutationResult>;
+  /** E10-2: a ticket's file text (the shared plan lives in it); optional so plain chats need nothing. */
+  readTicket?(id: string): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly error: string }>;
   /** T-0050: the whole `blocked-by:` list replacement (empty = cleared). */
   setBlockedBy(input: { readonly id: string; readonly blockedBy: readonly string[]; readonly actor?: string }): Promise<ChatMutationResult>;
 }
@@ -97,6 +104,8 @@ export interface ChatServiceDeps {
   readonly now?: () => Date;
   /** The git seam — the engine passes its shared TicketsGit, the specs a fake. */
   readonly git?: TicketsGit;
+  /** E10-2: the plan shadow copies; absent = shape sessions carry no plan delta. */
+  readonly shadows?: PlanShadowStore;
 }
 
 /** The card's human sentence — what the proposal line and the UI show. */
@@ -218,7 +227,7 @@ export class ChatService implements ChatServicePort {
     return text === null ? null : parseSessionFile(text, file, snap.priorities);
   }
 
-  async send(input: { readonly file: string; readonly text: string }): Promise<ChatTurnResult> {
+  async send(input: { readonly file: string; readonly text: string; readonly planEdits?: boolean }): Promise<ChatTurnResult> {
     if (input.text.trim() === '') {
       return { ok: false, error: 'the message is empty' };
     }
@@ -227,13 +236,13 @@ export class ChatService implements ChatServicePort {
     }
     this.inFlight.add(input.file);
     try {
-      return await this.turn(input.file, input.text);
+      return await this.turn(input.file, input.text, input.planEdits !== false);
     } finally {
       this.inFlight.delete(input.file);
     }
   }
 
-  async start(input: { readonly title?: string; readonly text: string }): Promise<ChatTurnResult> {
+  async start(input: { readonly title?: string; readonly text: string; readonly ticket?: string }): Promise<ChatTurnResult> {
     if (input.text.trim() === '') {
       return { ok: false, error: 'the message is empty' };
     }
@@ -247,7 +256,7 @@ export class ChatService implements ChatServicePort {
     const title = (input.title ?? '').trim() !== '' ? input.title!.trim() : titleFromDescription(input.text);
     const stamp = this.now();
     const file = `${CHAT_DIR}/${chatFileName(stamp, title)}`;
-    await this.deps.host.write(vault.id, file, newSessionText(title, stamp));
+    await this.deps.host.write(vault.id, file, newSessionText(title, stamp, input.ticket));
     await this.commit(vault, [file], `tickets: chat started ${file}`);
     this.deps.host.announceChanges(vault.id, [file]);
     return this.turn(file, input.text);
@@ -270,7 +279,7 @@ export class ChatService implements ChatServicePort {
    * as one write and one commit. A crashed bridge leaves the owner line
    * as the honest record and reports the error through the stream.
    */
-  private async turn(file: string, text: string): Promise<ChatTurnResult> {
+  private async turn(file: string, text: string, planEdits = true): Promise<ChatTurnResult> {
     const found = await this.boardAndVault();
     if (found === null) {
       return { ok: false, error: 'no tickets vault detected', file };
@@ -289,7 +298,22 @@ export class ChatService implements ChatServicePort {
     // `text`, it must not double into the continuity history. The board's
     // priority vocabulary validates the proposal blocks with it.
     const session = parseSessionFile(current, file, snap.priorities);
-    const history = (session?.messages ?? []).slice(-HISTORY_LIMIT).map((m: ChatMessage) => ({ role: m.role, text: m.text }));
+    const history = (session?.messages ?? [])
+      .filter((m: ChatMessage) => m.kind !== 'plan-edit')
+      .slice(-HISTORY_LIMIT)
+      .map((m: ChatMessage) => ({ role: m.role, text: m.text }));
+
+    // E10-2: a shape session shares one plan with the model. Only what the
+    // owner changed since the model's last turn goes along — as a diff for
+    // the model and a "You edited the plan" card in the history. Switched
+    // off (the chip deselected), the edits are acknowledged but never sent.
+    const ticket = session?.ticket ?? null;
+    const planBefore = ticket === null ? null : await this.planOf(ticket);
+    const shadow = ticket === null || this.deps.shadows === undefined ? null : await this.deps.shadows.get(ticket);
+    const delta = planEdits && planBefore !== null && shadow !== null ? planDelta(shadow.text, planBefore) : null;
+    if (delta !== null) {
+      current = appendPlanEdit(current, this.now(), delta.summary, delta.diff);
+    }
 
     current = appendOwner(current, this.now(), text.trim());
     await this.deps.host.write(vault.id, file, current);
@@ -307,6 +331,7 @@ export class ChatService implements ChatServicePort {
         history,
         board: boardDigest(snap),
         priorities: snap.priorities,
+        ...(delta === null ? {} : { planDelta: planDeltaForModel(delta) }),
         emit: (event) => this.deps.onEvent(file, event),
       });
       say = reply.say;
@@ -336,12 +361,66 @@ export class ChatService implements ChatServicePort {
     await this.deps.host.write(vault.id, file, block);
     await this.commit(vault, [file], `tickets: chat ${file}`);
     this.deps.host.announceChanges(vault.id, [file]);
+    // The shadow is the plan at the end of the model's turn: its own edits
+    // are in it and never come back as the owner's delta.
+    if (ticket !== null && planBefore !== null && this.deps.shadows !== undefined) {
+      const planAfter = (await this.planOf(ticket)) ?? planBefore;
+      await this.deps.shadows.set(ticket, {
+        version: (shadow?.version ?? 0) + 1,
+        text: planAfter,
+        modelLines: changedLinesOf(planBefore, planAfter),
+      });
+    }
     return {
       ok: true,
       file,
       say,
       ...(thought === null ? {} : { thought }),
       proposals,
+    };
+  }
+
+  // --- the shared plan (E10-2) ------------------------------------------------
+
+  /** The ticket's Plan section; null when the ticket cannot be read. */
+  private async planOf(ticket: string): Promise<string | null> {
+    const reader = this.deps.board.readTicket;
+    if (reader === undefined) {
+      return null;
+    }
+    const reply = await reader.call(this.deps.board, ticket).catch(() => null);
+    return reply !== null && reply.ok ? planSectionOf(reply.text) : null;
+  }
+
+  /**
+   * Where the shared plan stands: the version the model last saw, the
+   * owner's edit groups since, and the marked lines — the owner's changed
+   * lines against the shadow, the model's lines from its last turn.
+   */
+  async planStatus(ticket: string): Promise<PlanStatus> {
+    const plan = await this.planOf(ticket);
+    if (plan === null) {
+      return { ok: false, error: `${ticket} has no readable plan` };
+    }
+    const shadow = this.deps.shadows === undefined ? null : await this.deps.shadows.get(ticket);
+    const delta = shadow === null ? null : planDelta(shadow.text, plan);
+    const lines = plan.split('\n');
+    const marks: PlanMark[] = [];
+    for (const no of shadow === null ? [] : shadow.modelLines) {
+      if (no >= 1 && no <= lines.length && !(delta?.lines.includes(no) ?? false)) {
+        marks.push({ no, text: lines[no - 1]!, by: 'model' });
+      }
+    }
+    for (const no of delta?.lines ?? []) {
+      marks.push({ no, text: lines[no - 1]!, by: 'you' });
+    }
+    marks.sort((a, b) => a.no - b.no);
+    return {
+      ok: true,
+      version: shadow?.version ?? null,
+      edits: delta?.edits ?? 0,
+      summary: delta === null ? null : editsSummary(delta.edits, delta.added, delta.removed),
+      marks: marks.slice(0, 60),
     };
   }
 

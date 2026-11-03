@@ -1063,7 +1063,7 @@ transcript the owner reads in the chat is the file itself. The filename
 minted at start is `<stamp>-<slug>.md` (`20261102-090100-costs-export.md`):
 the UTC stamp keeps names unique, the slug — the title lowercased to
 `[a-z0-9-]`, cut on a word boundary, `chat` when empty — keeps them
-readable. The frontmatter is exactly two keys:
+readable. The frontmatter is two keys, plus a third on a shape session:
 
 ```markdown
 ---
@@ -1071,6 +1071,18 @@ title: "Costs export"
 created: '2026-11-02T09:00:00Z'
 ---
 ```
+
+`ticket: T-0130` (optional, E10-2) marks a **shape session**: the chat
+shares that ticket's `## Plan` with the model. The engine keeps a shadow
+copy of the plan per ticket (machine-local, `<engine home>/plan-shadow.json`
+— never in the repository): the plan at the end of the model's last turn,
+a turn counter (the "v7") and the lines the model itself changed in that
+turn. A message sent in a shape session carries only the change shadow →
+current (the owner's edits) to the model, as a summary and a diff; the
+model's own edits are never mirrored back. The first turn has no shadow
+and sends no delta (the model reads the plan itself). The owner can leave
+the edits out for one message (`planEdits: false`): they are then
+acknowledged but never sent.
 
 The body is the transcript, one strict line shape per event. The writer
 is strict (exactly these shapes), the reader tolerant (an unreadable
@@ -1092,6 +1104,12 @@ line is skipped, never guessed — the asymmetric-tolerance rule):
   directly before its `mission` line; folded away in the UI once the
   turn completes.
 - `- '<UTC>' mission — <text>` — the mission's spoken reply.
+- `- '<UTC>' plan-edit — <summary>` followed by the diff the model read
+  in an indented fenced block marked `diff` — the **"You edited the
+  plan" card** (E10-2), written directly before the owner line it
+  belongs to. `<summary>` reads `2 edits · +3 −1`; the diff has an
+  `@@ line <n>` header per group and `- old` / `+ new` lines. Plan-edit
+  cards are not part of the history handed to the model.
 - `- '<UTC>' proposal p-<n> pending — <summary>` followed by the command
   in an indented fenced block marked `json` — a **proposal card**:
   `<summary>` is the human sentence the card shows, the block is the

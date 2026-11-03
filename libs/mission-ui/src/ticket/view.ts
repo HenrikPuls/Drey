@@ -36,6 +36,7 @@ import {
   diffFontSizeStep,
   gateCostOf,
   patchRowsOf,
+  planStatusLineOf,
   phaseTitleOf,
   proofOf,
   proofRecommendationOf,
@@ -409,6 +410,16 @@ export class TicketView {
    * (no chapter, or prose alone), the section then renders nothing.
    */
   protected readonly verlauf = computed<string | null>(() => verlaufBoxOf(this.doc()?.verlauf ?? []));
+
+  /** The shared plan's status line and marked lines (E10-2); null while the desk has no plan state. */
+  protected readonly planState = computed(() => {
+    const plan = this.vm.plan?.() ?? null;
+    if (plan === null) {
+      return null;
+    }
+    const line = planStatusLineOf(plan);
+    return line === null && plan.marks.length === 0 ? null : { line, marks: plan.marks };
+  });
 
   /** The cost table at the ticket's end (E11-4); null while no run has settled. */
   protected readonly costTable = computed(() => {

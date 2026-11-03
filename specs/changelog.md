@@ -1,4 +1,43 @@
 
+### Milestone 121 — Mission Control plan delta (E10-2)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(concept v2 §5.8; ADR-0088 E10 – E12). The mechanism is complete on the
+engine and in the app; E10-3 (Shape mode) adds the entry point that
+starts a shape session for a ticket — until then the chip, the card and
+the marks appear only for a session the desk was told to shape
+(`POST /api/chat/sessions` with `ticket`).
+
+- **Shadow copy.** Per shaped ticket the engine keeps the plan as it was
+  at the end of the model's last turn plus a turn counter and the lines
+  the model changed (`services/plan-shadow.ts`, machine-local file
+  beside the engine config). The first turn sends no delta.
+- **Only your delta goes back.** A message in a shape session carries
+  the change shadow → current plan as a summary and a line diff
+  (`core/plan-delta.ts`, LCS) ahead of the owner's words
+  (`ChatBridge.runTurn` → `planDelta`); the model's own edits are never
+  mirrored back, and the history handed to the model skips the card.
+- **Chip and card.** Over the composer a chip reads `2 new edits of
+  yours go along`; tapping it leaves them out for the next message
+  (shown struck through; reset after sending — the edits are then
+  acknowledged but never sent). The history gets a **You edited the
+  plan** card with the summary and the diff, written into the session
+  file directly before the owner line (`- '<UTC>' plan-edit — …`).
+- **Marks.** The ticket face shows `The model saw plan v7 · 1 edit of
+  yours since` and, under it, the changed lines with their number and
+  who changed them last (`you` since the shadow, `model` in its last
+  turn) — `GET /api/tickets/<id>/plan`. These are listed lines, not
+  tints inside the rendered plan.
+- **Specs added:** the plan section reader, the line diff and delta
+  (groups, numbering, pure deletion, model-facing text), the shadow
+  stores, the chat flow (first turn, delta as card and as model input,
+  model edits not mirrored, deselected chip, status and marks), the
+  session file's card and `ticket:` key, the routes, the DTO readers,
+  the chip and status-line wording, the state's payload and refresh.
+- **Not done:** tinted marks inside the rendered plan and the editor,
+  the "editor saves before sending" step (the Markdown surface arrives
+  with E12-6), and per-run shadows (one shadow per ticket).
+
 ### Milestone 120 — Plan parts schema + parser (E10-1)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04

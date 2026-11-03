@@ -253,6 +253,10 @@ export const appConfig: ApplicationConfig = {
             return url;
           },
           wholeFile: (path) => state.wholeFile(path),
+          plan: () => {
+            const id = state.ticketOpen()?.id ?? null;
+            return id === null ? null : state.planOf(id);
+          },
           estimate: (gate, persona) => state.estimateFor(gate, persona),
           videoUrl: (name) => {
             const url = state.videoUrl(name);

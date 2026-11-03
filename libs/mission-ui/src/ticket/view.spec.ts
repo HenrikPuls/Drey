@@ -50,6 +50,8 @@ import {
   verlaufTotalOf,
   commentLabelOf,
   costTableOf,
+  planChipOf,
+  planStatusLineOf,
   estimateLineOf,
   sendBackLabelOf,
   tokenWordsOf,
@@ -312,6 +314,7 @@ interface TicketSurface {
   verdict(): { passed: number; total: number; stamp: string } | null;
   shots(): readonly { name: string; url: string }[];
   diff(): unknown;
+  planState(): { line: string | null; marks: readonly unknown[] } | null;
   comments(): readonly ReviewComment[];
   draft(): { file: string; line: number; endLine: number | null; index: number | null } | null;
   draftText(): string;
@@ -2092,5 +2095,40 @@ describe('the estimate sentence', () => {
     expect(tokenWordsOf(800)).toBe('800');
     expect(tokenWordsOf(48_000)).toBe('48k');
     expect(tokenWordsOf(3_400_000)).toBe('3.4M');
+  });
+});
+
+// --- the shared plan (E10-2) ----------------------------------------------------------------
+
+describe('planStatusLineOf / planChipOf', () => {
+  const plan = (edits: number, version: number | null = 7) => ({ version, edits, summary: null, marks: [] });
+
+  it('says which plan version the model saw and how many edits of yours came since', () => {
+    expect(planStatusLineOf(plan(1))).toBe('The model saw plan v7 · 1 edit of yours since');
+    expect(planStatusLineOf(plan(3))).toBe('The model saw plan v7 · 3 edits of yours since');
+    expect(planStatusLineOf(plan(0))).toBe('The model saw plan v7 · no edits of yours since');
+    expect(planStatusLineOf(plan(2, null))).toBeNull();
+  });
+
+  it('words the chip, and has none when nothing would go along', () => {
+    expect(planChipOf(plan(1))).toBe('1 new edit of yours goes along');
+    expect(planChipOf(plan(2))).toBe('2 new edits of yours go along');
+    expect(planChipOf(plan(0))).toBeNull();
+    expect(planChipOf(null)).toBeNull();
+  });
+});
+
+describe('TicketView plan marks', () => {
+  it('shows the status line and marks from the adapter, nothing without them', () => {
+    const none = surface(setup(makeFake({ docValue: DOC })));
+    expect(none.planState()).toBeNull();
+
+    const fake = makeFake({ docValue: DOC });
+    fake.plan = () => ({ version: 2, edits: 1, summary: '1 edit', marks: [{ no: 3, text: '- two', by: 'you' as const }] });
+    const vm = surface(setup(fake));
+    expect(vm.planState()).toEqual({ line: 'The model saw plan v2 · 1 edit of yours since', marks: [{ no: 3, text: '- two', by: 'you' }] });
+
+    fake.plan = () => ({ version: null, edits: 0, summary: null, marks: [] });
+    expect(surface(setup(fake)).planState()).toBeNull();
   });
 });
