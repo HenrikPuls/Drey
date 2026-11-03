@@ -77,7 +77,8 @@ export function createRemoteSection(api: DreyPluginApi): RemoteSection {
   deviceName.id = 'tset-remote-device-name';
   deviceName.type = 'text';
   deviceName.maxLength = 40;
-  deviceName.value = 'Phone'; // the engine's default — visible, editable, never autofilled over
+  // The ghost shows the engine's fallback name; it disappears on the first keystroke.
+  deviceName.placeholder = 'Phone';
   deviceName.autocomplete = 'off';
   deviceName.setAttribute('aria-label', 'Device name');
   deviceName.title = 'Device name — the ticket Log names it (owner@<name>)';
@@ -209,6 +210,8 @@ export function createRemoteSection(api: DreyPluginApi): RemoteSection {
   publicUrl.addEventListener('change', () => configure({ publicUrl: publicUrl.value.trim() === '' ? null : publicUrl.value.trim() }));
   bypass.addEventListener('change', () => configure({ allowBypass: bypass.checked }));
   pairButton.addEventListener('click', () => {
+    // The plugin main's contract is `name`; an empty field means the
+    // engine's fallback name.
     const name = deviceName.value.trim() === '' ? 'Phone' : deviceName.value.trim();
     void call('remotePair', { name, readOnly: readOnly.checked });
   });

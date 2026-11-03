@@ -107,7 +107,9 @@ const plugin: MainPluginModule = {
     });
     ctx.ipc.handle('remotePair', (payload) => {
       const p = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
-      return remoteService.pair(typeof p['name'] === 'string' ? p['name'] : '', p['readOnly'] === true);
+      // `name` is the renderer's key; `deviceName` kept for older callers.
+      const name = typeof p['name'] === 'string' && p['name'] !== '' ? p['name'] : typeof p['deviceName'] === 'string' ? p['deviceName'] : '';
+      return remoteService.pair(name, p['readOnly'] === true);
     });
     ctx.ipc.handle('remotePairCancel', () => remoteService.cancelPairing());
     ctx.ipc.handle('remoteRevoke', async (payload) => {
