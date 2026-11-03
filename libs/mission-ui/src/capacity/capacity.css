@@ -8,7 +8,7 @@
 
 .line {
   margin: 0;
-  font-size: 15px;
+  font-size: calc(15px * var(--mc-text, 1));
   color: var(--text-2);
 }
 

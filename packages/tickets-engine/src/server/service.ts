@@ -18,6 +18,12 @@ import {
 } from './config';
 import { RemoteGateway } from './gateway';
 import { qrMatrix } from './qr';
+import {
+  normalizeVideoSettings,
+  SETTINGS_KEYS,
+  type SettingsAccess,
+  type SettingsReply,
+} from './settings';
 
 export interface NetworkAddress {
   readonly name: string;
@@ -59,6 +65,8 @@ export interface RemotePatch {
 }
 
 export interface RemoteServiceDeps {
+  /** Videos in `tickets/videos/` for the settings count; absent = 0. */
+  readonly countVideos?: () => Promise<number>;
   readonly config: {
     get<T>(key: string): Promise<T | undefined>;
     set<T>(key: string, value: T): Promise<void>;
@@ -105,8 +113,56 @@ export class RemoteService {
         now: this.now,
         log: (message) => deps.log(message),
         onPaired: () => deps.onChanged(),
+        settings: this.settingsAccess(),
       },
     });
+  }
+
+  /** The settings screen's engine half: devices and the `videos.*` keys (E12-3). */
+  private settingsAccess(): SettingsAccess {
+    const reply = async (asking: string): Promise<SettingsReply> => {
+      const get = this.deps.config.get.bind(this.deps.config);
+      const existing = this.deps.countVideos === undefined ? 0 : await this.deps.countVideos().catch(() => 0);
+      return {
+        ok: true,
+        devices: this.registry()
+          .list()
+          .map((device) => ({ ...device, current: device.id === asking })),
+        engine: {
+          videos: normalizeVideoSettings(
+            { inGit: await get(SETTINGS_KEYS.videosInGit), limitMb: await get(SETTINGS_KEYS.videosLimitMb) },
+            existing,
+          ),
+        },
+      };
+    };
+    return {
+      read: reply,
+      patch: async (patch, asking) => {
+        const current = (await reply(asking)).engine.videos;
+        if (patch.inGit === true && !current.inGit && patch.confirm !== true) {
+          return { ok: false, error: 'turning on videos in git needs the confirmation' };
+        }
+        if (patch.inGit !== undefined) {
+          await this.deps.config.set(SETTINGS_KEYS.videosInGit, patch.inGit);
+        }
+        if (patch.limitMb !== undefined) {
+          await this.deps.config.set(SETTINGS_KEYS.videosLimitMb, patch.limitMb);
+        }
+        this.deps.onChanged();
+        return reply(asking);
+      },
+      revoke: async (id, asking) => {
+        if (id === asking) {
+          return { ok: false, error: 'this device cannot revoke itself — use another device or Drey' };
+        }
+        if (!(await this.registry().revoke(id))) {
+          return { ok: false, error: 'no such device' };
+        }
+        this.deps.onChanged();
+        return reply(asking);
+      },
+    };
   }
 
   /** Whether a device may start bypass runs — the port asks per run. */

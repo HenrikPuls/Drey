@@ -19,6 +19,7 @@ import {
 } from '@mission-ui/ticket/ticket.model';
 import { MC_TEAM_STATE, type McTeamPersona, type McTeamState } from '@mission-ui/team/team';
 import { MC_WORK_STATE, type McPersona, type McWorkState } from '@mission-ui/work/work.model';
+import { MC_SETTINGS_STATE } from '@mission-ui/settings/settings.model';
 import { MC_TOAST_STATE } from '@mission-ui/toast.model';
 
 /**
@@ -33,6 +34,7 @@ export const appConfig: ApplicationConfig = {
     McState,
     { provide: MC_CHAT_STATE, useExisting: McState },
     { provide: MC_TOAST_STATE, useExisting: McState },
+    { provide: MC_SETTINGS_STATE, useExisting: McState },
     {
       provide: MC_WORK_STATE,
       useFactory: (): McWorkState => {

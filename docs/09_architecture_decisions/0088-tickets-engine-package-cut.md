@@ -306,7 +306,9 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     history list). Chat history is a screen over the `_meta/chat/` files
     (old sessions read-only). Persona detail Chat and 1:1 merge into one
     conversation (D8).
-  - **Settings screen (D10).** Appearance (themes, highlight colour,
+  - **Settings screen (D10; shipped as E12-3, milestone 114).** The engine
+    half is `GET /api/settings`, `POST /api/settings/engine` and
+    `POST /api/settings/devices/revoke` (engine `src/server/settings.ts`). Appearance (themes, highlight colour,
     text size S–XXL, Compact lists, Reduce motion) is per *device*;
     everything else — Chat, Away and alerts, Devices, Repositories,
     Engine — is per *vault*.

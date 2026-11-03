@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-02):** version 0.8.1, milestones 1–113 built — 1–83
+**Status (2026-11-02):** version 0.8.1, milestones 1–114 built — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -161,14 +161,14 @@ canvas "Drey Tickets — Workflow redesign" is binding for the UI;
 [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
 "Later changes" records the decisions). Worked in this order, one
 milestone at a time, a pause after each; milestone numbers are taken
-when an item ships (next free: 114; 112 = specs + the English pass, E12-1, and 113 = navigation, E12-2, shipped). Nothing here creates tickets — the
+when an item ships (next free: 115; 112 = specs + the English pass, 113 = navigation, 114 = settings, E12-1 – E12-3, shipped). Nothing here creates tickets — the
 owner builds without the tickets system.
 
-- **E12-3 — Settings screen.** Appearance (per device: themes
-  Anthrazit / Drey / Cyberpunk, highlight colour, text size S–XXL with a
-  live preview, Compact lists, Reduce motion); everything else per
-  vault: Chat, Away and alerts, Devices, Repositories, Engine incl.
-  `videos.inGit` / `videos.limitMb` with the warning dialog.
+- **E12-3b — Settings pages still missing.** Chat (thinking trace, new
+  chat, attachments), Repositories (launch command for verify, default
+  branch) and "Away and alerts" — each needs a desk setting behind it
+  first; away posture itself is out of scope. E11-1 adds "Include the n
+  existing videos" to the `videos.inGit` confirmation.
 - **E12-4 — Team states.** A stuck worker (`RunInfo.stuck` into the DTO)
   with Nudge / Hand to Claude Code / Stop; the capacity line; Pause all
   after this step / Stop all; daily cost + header sum; the persona

@@ -1,10 +1,170 @@
-<section class="settings" aria-label="Settings">
-  <h1 class="ttl">Settings</h1>
-  <div class="group">
-    <button type="button" class="row" (click)="switchTheme()">
-      <span class="grow">Theme</span>
-      <span class="val">{{ themeLabel() }}</span>
-    </button>
-  </div>
-  <p class="note">Appearance is saved on this device only.</p>
-</section>
+<div class="settings" [class.on-page]="shown() !== null">
+  <section class="cats" aria-label="Settings categories">
+    <h1 class="ttl">Settings</h1>
+    <div class="group">
+      @for (p of pages; track p.id) {
+        <button
+          type="button"
+          class="row"
+          [class.cur]="shown() === p.id"
+          [attr.aria-current]="shown() === p.id ? 'page' : null"
+          (click)="open(p.id)"
+        >
+          <span class="grow">
+            <b>{{ p.label }}</b>
+            <small class="sub">{{ p.sub }}</small>
+          </span>
+          <span class="val">{{ summaryOf(p.id) }}</span>
+          <span class="chev" aria-hidden="true">›</span>
+        </button>
+      }
+    </div>
+  </section>
+
+  @if (shown(); as current) {
+    <section class="page" [attr.aria-label]="labelOf(current)">
+      <header class="page-head">
+        <button type="button" class="back" aria-label="Back to Settings" (click)="back()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 5l-7 7 7 7" />
+          </svg>
+          Settings
+        </button>
+        <h2 class="page-title">{{ labelOf(current) }}</h2>
+      </header>
+
+      <div class="page-body">
+        @switch (current) {
+          @case ('appearance') {
+            <p class="note">Saved on this device only. Changes apply at once.</p>
+
+            <h3 class="cap">Theme</h3>
+            <div class="themes">
+              @for (t of themes; track t) {
+                <button type="button" class="tile" [class.on]="theme.name() === t" [attr.aria-pressed]="theme.name() === t" (click)="pickTheme(t)">
+                  <span class="chip">
+                    <span class="s3" [style.background]="swatch(t).bg"></span>
+                    <span class="s2" [style.background]="swatch(t).panel"></span>
+                    <span class="s1" [style.background]="swatch(t).accent"></span>
+                  </span>
+                  <b>{{ themeLabel(t) }}</b>
+                </button>
+              }
+            </div>
+
+            <h3 class="cap">Highlight color</h3>
+            <div class="dots" role="group" aria-label="Highlight color">
+              @for (a of accents; track a) {
+                <button
+                  type="button"
+                  class="dot"
+                  [class.on]="theme.accent() === a"
+                  [attr.aria-pressed]="theme.accent() === a"
+                  [attr.aria-label]="accentLabel(a)"
+                  [style.background]="accentColor(a)"
+                  (click)="pickAccent(a)"
+                ></button>
+              }
+            </div>
+            <p class="note">{{ accentLabel(theme.accent()) }}. Status colors stay fixed.</p>
+
+            <h3 class="cap">Text size</h3>
+            <div class="sizes" role="group" aria-label="Text size">
+              @for (s of sizes; track s) {
+                <button type="button" class="size" [class.on]="theme.textSize() === s" [attr.aria-pressed]="theme.textSize() === s" (click)="pickSize(s)">{{ s }}</button>
+              }
+            </div>
+            <div class="preview" [style.background]="previewSwatch().panel">
+              <span class="pv-accent" [style.color]="previewAccent()">Needs you</span>
+              <b [style.font-size.px]="scaled(theme.textSize(), 16)">Which storage should back the backlinks index?</b>
+              <span [style.font-size.px]="scaled(theme.textSize(), 14)" class="pv-sub">2 of 3 decisions open. Pia recommends SQLite.</span>
+            </div>
+
+            <div class="group">
+              <label class="row sw-row">
+                <span class="grow">Compact lists</span>
+                <input type="checkbox" role="switch" class="sw" [checked]="theme.compact()" (change)="onCompact($event)" />
+              </label>
+              <label class="row sw-row">
+                <span class="grow">Reduce motion</span>
+                <input type="checkbox" role="switch" class="sw" [checked]="theme.reduceMotion()" (change)="onMotion($event)" />
+              </label>
+            </div>
+          }
+          @case ('devices') {
+            <p class="note">Everything on this page applies to all your devices.</p>
+            @if (error(); as message) {
+              <p class="inline-error">{{ message }}</p>
+            }
+            @if (view(); as v) {
+              <div class="group">
+                @for (d of v.devices; track d.id) {
+                  <div class="row dev">
+                    <span class="grow">
+                      <b>{{ d.name }}</b>
+                      <small class="sub">{{ d.current ? 'This device' : seenOf(d) }}{{ d.readOnly ? ' · read-only' : '' }}</small>
+                    </span>
+                    @if (!d.current) {
+                      <button type="button" class="act" [class.armed]="armed() === d.id" (click)="revoke(d)">
+                        {{ armed() === d.id ? 'Confirm revoke' : 'Revoke' }}
+                      </button>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          }
+          @case ('engine') {
+            <p class="note">Everything on this page applies to all your devices.</p>
+            @if (error(); as message) {
+              <p class="inline-error">{{ message }}</p>
+            }
+            @if (view(); as v) {
+              <h3 class="cap">Videos</h3>
+              <div class="group">
+                <label class="row sw-row">
+                  <span class="grow">
+                    Keep videos in git
+                    <small class="sub">{{ v.videos.inGit ? 'Committed with the repository' : 'Kept out of the repository' }}</small>
+                  </span>
+                  <input type="checkbox" role="switch" class="sw" [checked]="v.videos.inGit" (change)="onVideosInGit($event)" />
+                </label>
+                <label class="row">
+                  <span class="grow">
+                    Size limit
+                    <small class="sub">{{ v.videos.inGit ? 'The limit no longer frees space.' : 'Oldest videos of done tickets go first.' }}</small>
+                  </span>
+                  <input
+                    type="number"
+                    class="num"
+                    min="100"
+                    step="100"
+                    aria-label="Video size limit in MB"
+                    [value]="limitDraft() ?? v.videos.limitMb"
+                    (input)="onLimitInput($event)"
+                    (blur)="commitLimit()"
+                    (keydown.enter)="commitLimit()"
+                  />
+                  <span class="val">MB</span>
+                </label>
+              </div>
+            }
+          }
+        }
+      </div>
+    </section>
+  }
+
+  @if (confirming()) {
+    <div class="scrim">
+      <div class="dialog" role="alertdialog" aria-modal="true" aria-label="Keep videos in git?">
+        <h3 class="dialog-title">Keep videos in git?</h3>
+        <p class="dialog-text">{{ warning }}</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn ghost" (click)="cancelConfirm()">Cancel</button>
+          <button type="button" class="btn" (click)="confirmInGit()">Keep videos in git</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

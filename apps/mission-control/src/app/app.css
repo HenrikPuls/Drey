@@ -121,7 +121,7 @@
 }
 
 .chev {
-  font-size: 22px;
+  font-size: calc(22px * var(--mc-text, 1));
   line-height: 22px;
   color: var(--text-3);
 }
@@ -130,7 +130,7 @@
   min-width: 22px;
   height: 22px;
   padding: 0 5px;
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   line-height: 22px;
   text-align: center;
   color: var(--bg);
@@ -172,7 +172,7 @@
   height: 36px;
   padding: 0 12px;
   font: inherit;
-  font-size: 15px;
+  font-size: calc(15px * var(--mc-text, 1));
   color: var(--text-2);
   cursor: pointer;
   background: transparent;
@@ -207,7 +207,7 @@
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   font-weight: 700;
   color: var(--bg);
   background: var(--warn);
@@ -233,7 +233,7 @@
   height: 32px;
   padding: 0 12px;
   font: inherit;
-  font-size: 14px;
+  font-size: calc(14px * var(--mc-text, 1));
   color: var(--text-2);
   cursor: pointer;
   background: transparent;

@@ -36,7 +36,7 @@
   gap: 6px;
   padding: 6px 2px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   color: var(--text-2);
   cursor: pointer;
   background: transparent;
@@ -55,7 +55,7 @@
 
 .tid {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   letter-spacing: 0.06em;
   color: var(--text-3);
 }
@@ -113,7 +113,7 @@
 .phase {
   padding: 3px 8px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--mc-text, 1));
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-2);
@@ -127,7 +127,7 @@
   gap: 6px;
   padding: 3px 9px 3px 5px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--mc-text, 1));
   font-weight: 500;
   letter-spacing: 0.04em;
   color: var(--text-2);
@@ -142,7 +142,7 @@
   width: 16px;
   height: 16px;
   font-style: normal;
-  font-size: 9px;
+  font-size: calc(9px * var(--mc-text, 1));
   font-weight: 700;
   color: var(--bg);
   background: var(--panel-3);
@@ -152,14 +152,14 @@
 .tkcost {
   margin-left: auto;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   white-space: nowrap;
   color: var(--warn);
 }
 
 .tk-title {
   margin: 6px 0 2px;
-  font-size: 18px;
+  font-size: calc(18px * var(--mc-text, 1));
   font-weight: 700;
   line-height: 1.35;
 }
@@ -167,7 +167,7 @@
 .tk-fm {
   margin: 2px 0 4px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--mc-text, 1));
   line-height: 1.7;
   color: var(--text-3);
 }
@@ -210,7 +210,7 @@
   gap: 6px;
   padding: 5px 10px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--mc-text, 1));
   letter-spacing: 0.06em;
   color: var(--text-3);
   opacity: 0.55;
@@ -219,7 +219,7 @@
 }
 
 .gate .gs {
-  font-size: 9px;
+  font-size: calc(9px * var(--mc-text, 1));
 }
 
 .gate.done {
@@ -259,7 +259,7 @@
 
 .gates .garrow {
   flex: none;
-  font-size: 9px;
+  font-size: calc(9px * var(--mc-text, 1));
   color: var(--line);
 }
 
@@ -276,7 +276,7 @@
   flex: none;
   margin-left: auto;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   color: var(--warn);
 }
 
@@ -284,7 +284,7 @@
 .proof-total {
   margin: 12px 0 0;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   color: var(--text-3);
 }
 
@@ -297,7 +297,7 @@
   margin: -10px 0 10px;
   padding: 0;
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--mc-text, 1));
   letter-spacing: 0.08em;
   color: var(--text-3);
   text-align: left;
@@ -329,7 +329,7 @@
 .tk-sec {
   margin: 16px 0 6px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--accent);
@@ -346,14 +346,14 @@
 
 .tk-sub {
   margin: 10px 0 2px;
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   font-weight: 600;
   color: var(--text-2);
 }
 
 .tk-p {
   margin: 4px 0;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--mc-text, 1));
   line-height: 1.6;
   color: var(--text-2);
   overflow-wrap: anywhere;
@@ -373,14 +373,14 @@
   align-items: baseline;
   gap: 8px;
   padding: 2px 0 2px 4px;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--mc-text, 1));
   line-height: 1.6;
   color: var(--text-2);
 }
 
 .tk-li .box {
   flex: none;
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   color: var(--text-3);
 }
 
@@ -395,7 +395,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   line-height: 1.8;
   white-space: pre-wrap;
   color: var(--text-2);
@@ -416,7 +416,7 @@
 
 .tested {
   margin: 0 0 10px;
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   color: var(--text-3);
 }
 
@@ -426,7 +426,7 @@
   align-items: center;
   margin: 12px 0;
   padding: 12px 14px;
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   color: var(--text-2);
   background: color-mix(in srgb, var(--ok) 7%, transparent);
   border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
@@ -456,7 +456,7 @@
 
 .scout-summary {
   margin: 0 0 10px;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--mc-text, 1));
   white-space: pre-wrap;
 }
 
@@ -473,11 +473,11 @@
 
 .scout-decision-key {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
 }
 
 .scout-decision-rec {
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   color: var(--text-3);
 }
 
@@ -494,7 +494,7 @@
   align-items: flex-start;
   gap: 11px;
   padding: 10px 2px;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--mc-text, 1));
   border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
 }
 
@@ -522,7 +522,7 @@
   display: block;
   margin-top: 2px;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--mc-text, 1));
   color: var(--text-3);
 }
 
@@ -588,7 +588,7 @@
 .findings-title {
   margin: 0 0 4px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--danger);
@@ -607,7 +607,7 @@
   display: flex;
   gap: 8px;
   padding: 2px 0;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--mc-text, 1));
   line-height: 1.6;
   color: var(--text-2);
 }
@@ -662,7 +662,7 @@
   flex: 1;
   min-width: 0;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--mc-text, 1));
   line-height: 1.4;
   word-break: break-all;
 }
@@ -670,7 +670,7 @@
 .dfile-h .fs {
   margin-left: auto;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--mc-text, 1));
   white-space: nowrap;
   color: var(--text-3);
 }
@@ -719,7 +719,7 @@
   min-width: max-content;
   padding-right: 14px;
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--mc-text, 1));
   line-height: 1.7;
 }
 
@@ -773,7 +773,7 @@
 
 .diff-truncated {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   color: var(--text-3);
 }
 
@@ -781,7 +781,7 @@
 
 .result {
   margin: 8px 0 0;
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
 }
 
 .result-error {
@@ -823,14 +823,14 @@
 
 .done-title {
   margin: 0 0 8px;
-  font-size: 19px;
+  font-size: calc(19px * var(--mc-text, 1));
   font-weight: 700;
 }
 
 .done-note {
   max-width: 30ch;
   margin: 0 0 14px;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--mc-text, 1));
   color: var(--text-2);
 }
 
@@ -860,7 +860,7 @@
   flex: 1;
   min-height: 44px;
   padding: 12px;
-  font-size: 14px;
+  font-size: calc(14px * var(--mc-text, 1));
   font-weight: 600;
   color: var(--text);
   cursor: pointer;
@@ -902,7 +902,7 @@
 }
 
 .sendback-label {
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   color: var(--text-2);
 }
 
@@ -910,7 +910,7 @@
   width: 100%;
   padding: 10px 12px;
   resize: vertical;
-  font-size: 14px;
+  font-size: calc(14px * var(--mc-text, 1));
   line-height: 1.5;
   color: var(--text);
   background: var(--bg);
@@ -927,7 +927,7 @@
 
 .ticket-empty {
   margin: 24px 16px;
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   color: var(--text-3);
 }
 
@@ -974,7 +974,7 @@
   right: 12px;
   width: 44px;
   height: 44px;
-  font-size: 26px;
+  font-size: calc(26px * var(--mc-text, 1));
   line-height: 1;
   color: var(--text);
   cursor: pointer;
@@ -1002,7 +1002,7 @@
   min-width: 0;
   overflow: hidden;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   color: var(--text-2);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1020,7 +1020,7 @@
   padding: 0 8px;
   place-items: center;
   font-family: var(--mono);
-  font-size: 16px;
+  font-size: calc(16px * var(--mc-text, 1));
   color: var(--text-2);
   cursor: pointer;
   background: var(--panel-2);
@@ -1033,7 +1033,7 @@
   flex: none;
   width: 36px;
   height: 36px;
-  font-size: 22px;
+  font-size: calc(22px * var(--mc-text, 1));
 }
 
 .fs-patch {
@@ -1044,7 +1044,7 @@
 }
 
 .fs-patch .dl2 {
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   line-height: 1.75;
 }
 
@@ -1100,12 +1100,12 @@
 .sheet-title {
   flex: 1;
   margin: 0;
-  font-size: 17px;
+  font-size: calc(17px * var(--mc-text, 1));
 }
 
 .sheet-close {
   padding: 0 4px;
-  font-size: 22px;
+  font-size: calc(22px * var(--mc-text, 1));
   line-height: 1;
   color: var(--text-3);
   cursor: pointer;
@@ -1115,7 +1115,7 @@
 
 .sheet-note {
   margin: 0;
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   color: var(--text-2);
 }
 
@@ -1130,7 +1130,7 @@
 .sheet-label {
   margin: 0;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -1148,7 +1148,7 @@
   min-width: 0;
   min-height: 40px;
   padding: 0 8px;
-  font-size: 14px;
+  font-size: calc(14px * var(--mc-text, 1));
   color: var(--text);
   background: var(--panel-2);
   border: 1px solid var(--line);
@@ -1161,7 +1161,7 @@
 
 .sheet-static {
   flex: none;
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   color: var(--text-3);
 }
 
@@ -1169,7 +1169,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: calc(14px * var(--mc-text, 1));
   color: var(--text);
 }
 
@@ -1190,7 +1190,7 @@
 .team-hint {
   margin: 0 0 4px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   line-height: 1.6;
   color: var(--text-3);
 }
@@ -1204,7 +1204,7 @@
 
 .msg {
   max-width: 88%;
-  font-size: 14px;
+  font-size: calc(14px * var(--mc-text, 1));
 }
 
 .msg.me {
@@ -1218,7 +1218,7 @@
 .msg .bubble {
   margin: 0;
   padding: 10px 13px;
-  font-size: 14px;
+  font-size: calc(14px * var(--mc-text, 1));
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: break-word;
@@ -1247,7 +1247,7 @@ details.think summary {
   gap: 6px;
   padding: 3px 2px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   color: var(--text-3);
   cursor: pointer;
   list-style: none;
@@ -1264,7 +1264,7 @@ details.think summary:hover {
 
 details.think .chev {
   flex: none;
-  font-size: 9px;
+  font-size: calc(9px * var(--mc-text, 1));
   transition: transform 0.2s ease;
 }
 
@@ -1275,7 +1275,7 @@ details.think[open] summary .chev {
 details.think .step-body {
   padding: 4px 2px 6px 12px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   line-height: 1.7;
   color: var(--text-3);
   white-space: pre-wrap;
@@ -1286,7 +1286,7 @@ details.think .step-body {
 .thread-empty {
   margin: 6px 0;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   color: var(--text-3);
 }
 
@@ -1300,7 +1300,7 @@ details.think .step-body {
 .thread-card .ck {
   margin-bottom: 6px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--mc-text, 1));
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--accent);
@@ -1331,7 +1331,7 @@ details.think .step-body {
 
 .thread-card-summary {
   margin: 0;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--mc-text, 1));
   line-height: 1.55;
   color: var(--text-2);
   white-space: pre-wrap;
@@ -1340,7 +1340,7 @@ details.think .step-body {
 
 .thread-inline-error {
   margin: 8px 0 0;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--mc-text, 1));
   color: var(--danger);
 }
 
@@ -1358,7 +1358,7 @@ details.think .step-body {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--mc-text, 1));
   font-weight: 500;
   color: inherit;
   text-align: left;
@@ -1413,7 +1413,7 @@ details.think .step-body {
 .opt small {
   display: block;
   margin-top: 1px;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--mc-text, 1));
   font-weight: 400;
   color: var(--text-3);
 }
@@ -1422,7 +1422,7 @@ details.think .step-body {
   flex: none;
   margin-left: auto;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: calc(9px * var(--mc-text, 1));
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ok);
@@ -1435,7 +1435,7 @@ details.think .step-body {
 .qcard-done {
   margin: 10px 0 0;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   color: var(--ok);
 }
 
@@ -1464,7 +1464,7 @@ details.think .step-body {
   min-width: 0;
   padding: 10px 13px;
   font: inherit;
-  font-size: 14px;
+  font-size: calc(14px * var(--mc-text, 1));
   line-height: 1.45;
   color: var(--text);
   resize: none;

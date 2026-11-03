@@ -17,6 +17,7 @@
 import { signal } from '@angular/core';
 import { ApiError, McClient, type McBootHints, type McEventHandlers } from './client';
 import { type McChatUploadReply } from '@mission-ui/chat/chat.model';
+import { parseSettings, type McSettingsView } from '@mission-ui/settings/settings.model';
 import {
   parseActiveSession,
   parseChatEvent,
@@ -112,6 +113,9 @@ export class McState {
    * chat tab with this set; the chat opens its history (the menu) on mount.
    */
   readonly chatMenu = signal(false);
+  /** The per-vault settings (E12-3); null until the first load or after a failure. */
+  readonly settings = signal<McSettingsView | null>(null);
+  readonly settingsError = signal<string | null>(null);
   readonly work = signal<WorkView>({ groups: [], priorities: DEFAULT_PRIORITY_CONFIG });
   readonly needs = signal<readonly NeedView[]>([]);
   readonly team = signal<TeamView>({ personas: [], runs: [] });
@@ -1020,6 +1024,48 @@ export class McState {
     }
     await this.refreshTeam();
     this.toast(paused ? 'Chain halted — running runs finish' : 'Chain runs again', 'ok');
+    return { ok: true };
+  }
+
+  // --- settings (E12-3) --------------------------------------------------------
+
+  /** Loads the desk's per-vault settings; a failure is surfaced, never thrown. */
+  async load(): Promise<void> {
+    const body = await this.client.request<unknown>('GET', '/api/settings').catch(fail);
+    const view = isFailure(body) ? null : parseSettings(body);
+    this.settings.set(view);
+    this.settingsError.set(
+      view !== null ? null : isFailure(body) ? body.error : 'This desk has no settings to show.',
+    );
+  }
+
+  setVideoLimit(limitMb: number): Promise<McReply> {
+    return this.settingsWrite('/api/settings/engine', { limitMb });
+  }
+
+  setVideosInGit(inGit: boolean, confirm: boolean): Promise<McReply> {
+    return this.settingsWrite('/api/settings/engine', { inGit, confirm });
+  }
+
+  revokeDevice(id: string): Promise<McReply> {
+    return this.settingsWrite('/api/settings/devices/revoke', { id });
+  }
+
+  /** One settings write: the desk answers with the fresh view, a refusal toasts why. */
+  private async settingsWrite(path: string, payload: unknown): Promise<McReply> {
+    const body = await this.client.request<Record<string, unknown>>('POST', path, payload).catch(fail);
+    if (isFailure(body)) {
+      this.toast(body.error, 'error');
+      return body;
+    }
+    const view = body['ok'] === true ? parseSettings(body) : null;
+    if (view === null) {
+      const refused = refusal(body, 'the desk did not take the change');
+      this.toast(refused.error, 'error');
+      return refused;
+    }
+    this.settings.set(view);
+    this.settingsError.set(null);
     return { ok: true };
   }
 

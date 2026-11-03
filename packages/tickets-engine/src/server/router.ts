@@ -26,6 +26,7 @@ import {
 import { remoteActorOf, type ImprovementDecision, type TicketsRemotePort } from '../contracts/remote-protocol';
 import type { PersonaRouter } from '../core/persona';
 import { TICKET_ID_PATTERN } from '../contracts/tickets';
+import { parseRevoke, parseSettingsPatch, type SettingsAccess } from './settings';
 import type { DeviceRegistry, DeviceView, FailureLimiter, PairingCodes, RemoteDevice } from './auth';
 
 /** The registry's part the router uses (`DeviceRegistry` fits it). */
@@ -62,6 +63,8 @@ export interface RouterDeps {
   readonly log: (message: string) => void;
   /** A device paired — Settings refreshes its list. */
   readonly onPaired: (device: DeviceView) => void;
+  /** The settings screen's engine half (E12-3); absent on a host without one (404). */
+  readonly settings?: SettingsAccess;
 }
 
 const fail = (status: number, error: string): RemoteResponse => ({ status, body: { ok: false, error } });
@@ -334,6 +337,8 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
         return json(await port.personas());
       case '/api/chat/sessions':
         return json(await port.chatSessions());
+      case '/api/settings':
+        return deps.settings === undefined ? fail(404, 'no such route') : json(await deps.settings.read(device.id));
     }
     const ticket = /^\/api\/tickets\/([^/]+)$/.exec(req.path);
     if (ticket !== null) {
@@ -498,6 +503,14 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
   if (memory !== null) {
     const id = memory[1]!;
     return write(`persona ${id} memory`, parseMemoryAppend(body), (value) => port.personaMemoryAppend({ persona: id, text: value.text }));
+  }
+
+  if ((req.path === '/api/settings/engine' || req.path === '/api/settings/devices/revoke') && deps.settings !== undefined) {
+    const settings = deps.settings;
+    if (req.path === '/api/settings/engine') {
+      return write('settings engine', parseSettingsPatch(body), (value) => settings.patch(value, device.id));
+    }
+    return write('settings device revoke', parseRevoke(body), (value) => settings.revoke(value.id, device.id));
   }
 
   switch (req.path) {

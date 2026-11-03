@@ -43,7 +43,7 @@
 .ttl {
   margin: 0;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -104,14 +104,14 @@
 
 .empty {
   margin: 24px 4px;
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   line-height: 1.7;
   color: var(--text-3);
 }
 
 .msg {
   max-width: 88%;
-  font-size: 14px;
+  font-size: calc(14px * var(--mc-text, 1));
 }
 
 .msg.owner {
@@ -125,7 +125,7 @@
 .bubble {
   margin: 0;
   padding: 10px 13px;
-  font-size: 14px;
+  font-size: calc(14px * var(--mc-text, 1));
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: break-word;
@@ -149,7 +149,7 @@
 .thinklive {
   padding: 2px 2px 6px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   line-height: 1.7;
   color: var(--text-3);
   white-space: pre-wrap;
@@ -182,7 +182,7 @@ details.think summary {
   gap: 6px;
   padding: 3px 2px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   color: var(--text-3);
   cursor: pointer;
   list-style: none;
@@ -199,7 +199,7 @@ details.think summary:hover {
 
 details.think .chev {
   flex: none;
-  font-size: 9px;
+  font-size: calc(9px * var(--mc-text, 1));
   transition: transform 0.2s ease;
 }
 
@@ -210,7 +210,7 @@ details.think[open] summary .chev {
 details.think .step-body {
   padding: 4px 2px 6px 12px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   line-height: 1.7;
   color: var(--text-3);
   white-space: pre-wrap;
@@ -230,7 +230,7 @@ details.think .step-body {
 .confirm .ck {
   margin-bottom: 8px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--mc-text, 1));
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--accent);
@@ -259,7 +259,7 @@ details.think .step-body {
   flex: 1;
   min-height: 40px;
   padding: 10px;
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   border-radius: 10px;
 }
 
@@ -292,7 +292,7 @@ details.think .step-body {
 
 .card-summary {
   margin: 0;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--mc-text, 1));
   line-height: 1.5;
   color: var(--text-2);
 }
@@ -300,13 +300,13 @@ details.think .step-body {
 .outcome {
   margin: 10px 0 0;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   color: var(--text-3);
 }
 
 .inline-error {
   margin: 6px 0 0;
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   color: var(--danger);
 }
 
@@ -318,7 +318,7 @@ details.think .step-body {
   align-items: center;
   gap: 9px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
 }
 
 .arrowx .p1 {
@@ -343,7 +343,7 @@ details.think .step-body {
 .cmdline {
   margin: 0;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   color: var(--text-2);
 }
 
@@ -353,7 +353,7 @@ details.think .step-body {
   padding: 9px 11px;
   margin-bottom: 2px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   line-height: 1.75;
   background: var(--bg);
   border: 1px solid var(--line);
@@ -363,7 +363,7 @@ details.think .step-body {
 .diffbox .dl-file {
   display: block;
   margin-bottom: 4px;
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--mc-text, 1));
   letter-spacing: 0.08em;
   color: var(--text-3);
 }
@@ -390,7 +390,7 @@ details.think .step-body {
 
 .cmp-label {
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: calc(9.5px * var(--mc-text, 1));
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-3);
@@ -414,7 +414,7 @@ details.think .step-body {
   gap: 4px;
   padding: 4px 9px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--mc-text, 1));
   letter-spacing: 0.04em;
   color: var(--text-3);
   border: 1px solid var(--line);
@@ -451,7 +451,7 @@ details.think .step-body {
 
 .garrow {
   flex: none;
-  font-size: 9px;
+  font-size: calc(9px * var(--mc-text, 1));
   color: var(--text-3);
 }
 
@@ -525,7 +525,7 @@ details.think .step-body {
   max-width: 100%;
   padding: 4px 10px 4px 4px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   color: var(--text-2);
   background: var(--panel-2);
   border: 1px solid var(--line);
@@ -557,7 +557,7 @@ details.think .step-body {
   min-width: 0;
   padding: 10px 13px;
   font: inherit;
-  font-size: 14px;
+  font-size: calc(14px * var(--mc-text, 1));
   line-height: 1.45;
   color: var(--text);
   resize: none;
@@ -653,7 +653,7 @@ details.think .step-body {
 .history-title {
   margin: 0;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -692,7 +692,7 @@ details.think .step-body {
   min-width: 0;
   padding: 0;
   font: inherit;
-  font-size: 16px;
+  font-size: calc(16px * var(--mc-text, 1));
   color: var(--text);
   background: transparent;
   border: 0;
@@ -722,7 +722,7 @@ details.think .step-body {
 .history-group {
   margin: 12px 4px 0;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   font-weight: 400;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -731,7 +731,7 @@ details.think .step-body {
 
 .when {
   flex: none;
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   color: var(--text-3);
 }
 
@@ -789,7 +789,7 @@ details.think .step-body {
   flex: 1;
   margin: 0;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -798,7 +798,7 @@ details.think .step-body {
 
 .sheet-close {
   padding: 0 4px;
-  font-size: 22px;
+  font-size: calc(22px * var(--mc-text, 1));
   line-height: 1;
   color: var(--text-3);
   cursor: pointer;
@@ -851,7 +851,7 @@ details.think .step-body {
 .sess-row .st b {
   display: block;
   overflow: hidden;
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   font-weight: 600;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -859,7 +859,7 @@ details.think .step-body {
 
 .sess-row .st small {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--mc-text, 1));
   color: var(--text-3);
 }
 
@@ -871,7 +871,7 @@ details.think .step-body {
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   font-weight: 700;
   color: var(--bg);
   background: var(--warn);
@@ -881,7 +881,7 @@ details.think .step-body {
 .tag {
   flex: none;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: calc(9px * var(--mc-text, 1));
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--accent);
@@ -889,14 +889,14 @@ details.think .step-body {
 
 .sheet-hint {
   margin: 4px 2px 2px;
-  font-size: 11px;
+  font-size: calc(11px * var(--mc-text, 1));
   line-height: 1.55;
   color: var(--text-3);
 }
 
 .sheet-hint code {
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--mc-text, 1));
   color: var(--accent);
 }
 

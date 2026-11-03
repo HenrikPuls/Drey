@@ -9,7 +9,7 @@
   margin: auto;
   padding: 24px;
   color: var(--text-3);
-  font-size: 13px;
+  font-size: calc(13px * var(--mc-text, 1));
   line-height: 1.9;
   text-align: center;
 }
@@ -29,7 +29,7 @@
   border-radius: 12px;
   color: var(--accent);
   font-family: var(--mono);
-  font-size: 17px;
+  font-size: calc(17px * var(--mc-text, 1));
   font-weight: 700;
 }
 
@@ -37,5 +37,5 @@
   margin: 10px 0 0;
   color: var(--text-3);
   font-family: var(--mono);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--mc-text, 1));
 }

@@ -27,7 +27,7 @@
   background: var(--accent);
   color: var(--bg);
   font-family: var(--mono);
-  font-size: 22px;
+  font-size: calc(22px * var(--mc-text, 1));
   font-weight: 700;
   display: grid;
   place-items: center;
@@ -35,14 +35,14 @@
 
 .title {
   margin: 0;
-  font-size: 18px;
+  font-size: calc(18px * var(--mc-text, 1));
   font-weight: 700;
   color: var(--text);
 }
 
 .hint {
   margin: 0;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--mc-text, 1));
   line-height: 1.5;
   color: var(--text-2);
 }
@@ -55,7 +55,7 @@
   border-radius: 10px;
   color: var(--text);
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: calc(14px * var(--mc-text, 1));
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 12px 14px;
@@ -73,7 +73,7 @@
   border-radius: 10px;
   background: var(--accent);
   color: var(--bg);
-  font-size: 14px;
+  font-size: calc(14px * var(--mc-text, 1));
   font-weight: 600;
   cursor: pointer;
 }
@@ -90,7 +90,7 @@
 
 .error {
   margin: 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--mc-text, 1));
   line-height: 1.45;
   color: var(--danger);
 }

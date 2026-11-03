@@ -168,6 +168,15 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
         return null;
       }
     },
+    // E12-3: the settings screen's "Include the n existing videos" count.
+    countVideos: async () => {
+      const vault = await board.detect();
+      if (vault === null) {
+        return 0;
+      }
+      const names = await fsp.readdir(path.join(vault.path, 'tickets', 'videos')).catch(() => [] as string[]);
+      return names.filter((name) => /\.(mp4|webm)$/.test(name)).length;
+    },
     log,
     onChanged: () => hub.emit('remote'),
   });

@@ -1,4 +1,56 @@
 
+### Milestone 114 — Mission Control settings (E12-3)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-03
+(concept v2, design boards 5f, 5g and 6c; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
+E10 – E12; owner decision D10: Appearance per device, everything else per
+vault).
+
+- **Appearance (per device, localStorage, applies at once).** Three
+  themes — **Anthrazit** (the default; the first build's `anthracite`
+  reads as it), **Drey** (terracotta) and **Cyberpunk** (violet-black,
+  neon pink) — with the canvas' token values; a highlight colour (theme
+  default, blue, teal, violet, pink, orange, yellow) overriding
+  `--accent` while status colours stay fixed; text size S / M / L / XL /
+  XXL (0.9 – 1.5×) with a live preview card — every `font-size` in the
+  lib and the app multiplies `--mc-text`; **Compact lists** (tighter
+  Work cards); **Reduce motion** (starts from the OS preference).
+- **Screen.** A list of pages, then one page with a back button on the
+  phone; the list left and the page right from 768 px. Pages: Appearance,
+  Devices (paired devices, last seen, read-only mark, revoke with a
+  second press, never the asking device) and Engine (Videos: *Keep
+  videos in git* — turning it on opens the warning dialog with the
+  specified text, turning it off is immediate — and the size limit in
+  MB, committed when the field is left or on Enter; with the switch on
+  the page says "The limit no longer frees space.").
+- **Engine.** New routes behind the existing bearer auth:
+  `GET /api/settings` (devices + `videos.inGit` / `videos.limitMb` + the
+  count of videos in `tickets/videos/`), `POST /api/settings/engine`
+  (`{inGit?, limitMb?, confirm?}`, 100 – 100000 MB, enabling `inGit`
+  without `confirm: true` is refused), `POST /api/settings/devices/revoke`
+  (`{id}`). A read-only device cannot write; a host without the settings
+  half (the Drey plugin's gateway) answers 404 and the pages say so. The
+  keys live in the engine config; **what they do** — the `.gitignore`, the
+  limit sweep, the Range route — is E11-1.
+- **Code.** `Theme` owns the five settings (`set`, `setAccent`,
+  `setTextSize`, `setCompact`, `setReduceMotion`); `MC_SETTINGS_STATE`
+  is the screen's per-vault slice, implemented by `McState`;
+  `packages/tickets-engine/src/server/settings.ts` is the engine half.
+  The toolbar theme toggle and the bottom-bar token (`--tabbar-h`) are gone.
+- **Specs added:** theme (all five settings, fallbacks, OS motion
+  default), Settings screen, McState settings calls, engine settings
+  parsers + router + the remote service half.
+
+**Left out, on the roadmap:** the Chat, Away and alerts, and Repositories
+pages — none has a desk API or a setting behind it yet (away posture is
+out of scope); "Include the n existing videos" in the confirmation
+arrives with E11-1, when there are videos to commit.
+
+Verified: typecheck, lint, cycles, `test:app` (1196 + 123 + 465),
+`test:plugins` (3200 of 3201 — the CRLF `default-prompts.spec` artefact),
+the language guard and the production build. Not run in a browser against
+a desk; the text-size scale and Compact lists are CSS-only and unseen.
+
 ### Milestone 113 — Mission Control navigation (E12-2)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-03
