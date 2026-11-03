@@ -299,6 +299,9 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     central contact; the planner persona formerly called Pia is **Paul**,
     the design persona is dropped. The default team is Paul, Ben, Ralf,
     Tessa.
+  - **Team states (E12-4, milestone 115).** `POST /api/runs/<id>/handoff`
+    (stop, wait, restart on Claude Code, fresh) and `ChainStatus.poolSize`
+    join the engine surface; the persona detail's Chat and 1:1 are one tab.
   - **Navigation supersedes E5b's bottom tab bar.** On a phone a menu
     replaces it (chat with its history is home; Work, Team, Settings
     behind the menu); from 768 px a top tab bar (Work with a needs-you

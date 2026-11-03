@@ -150,6 +150,11 @@ export interface DreyPortOptions {
   readonly allowBypass: () => boolean;
 }
 
+/** The run states that still hold the ticket (the hand-off waits them out). */
+const LIVE_RUN_STATES: readonly string[] = ['starting', 'running', 'stopping', 'detached'];
+const HANDOFF_WAIT_MS = 30_000;
+const HANDOFF_POLL_MS = 500;
+
 export const BYPASS_REFUSAL = 'bypass runs are not allowed from a remote device';
 
 export class DreyTicketsPort implements TicketsRemotePort {
@@ -310,6 +315,44 @@ export class DreyTicketsPort implements TicketsRemotePort {
 
   stopRun(cmd: StopRunCommand): Promise<RunReply> {
     return this.fleetClient.stop(cmd.runId, cmd.reason);
+  }
+
+  /**
+   * Hands a run to Claude Code (E12-4): stop it, wait for the runner to
+   * let go of the ticket, start the ticket again with the worker pinned
+   * to `claude-code` and a fresh brief (the provider session of the old
+   * run cannot be resumed by another provider).
+   */
+  async handoffRun(cmd: { readonly runId: string }): Promise<RunReply> {
+    const run = (await this.fleetClient.runs()).find((candidate) => candidate.id === cmd.runId);
+    if (run === undefined) {
+      return { ok: false, error: 'no such run' };
+    }
+    if (run.provider === 'claude-code') {
+      return { ok: false, error: 'this run is already on Claude Code' };
+    }
+    const stopped = await this.fleetClient.stop(cmd.runId, 'handed to Claude Code');
+    if (!stopped.ok) {
+      return stopped;
+    }
+    const deadline = Date.now() + HANDOFF_WAIT_MS;
+    for (;;) {
+      const current = (await this.fleetClient.runs()).find((candidate) => candidate.id === cmd.runId);
+      if (current === undefined || !LIVE_RUN_STATES.includes(current.state)) {
+        break;
+      }
+      if (Date.now() > deadline) {
+        return { ok: false, error: 'the run did not stop in time — try again in a moment' };
+      }
+      await new Promise((resolve) => setTimeout(resolve, HANDOFF_POLL_MS));
+    }
+    return this.boardService.startRun({
+      ticketId: run.ticketId,
+      workerChoice: 'claude-code',
+      permissionMode: 'accept-edits',
+      handover: 'fresh',
+      interactive: null,
+    });
   }
 
   send(cmd: SendCommand): Promise<RunReply> {

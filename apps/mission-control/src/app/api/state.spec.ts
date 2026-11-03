@@ -1374,6 +1374,31 @@ describe('the chain master and persona pause (prototype convergence)', () => {
     expect(state.toastMessage()).toEqual({ message: 'turning on videos in git needs the confirmation', kind: 'error' });
   });
 
+  it('nudges, stops and hands a run over through the desk, toasting each', async () => {
+    const { desk, state } = await bootState();
+    desk.on('POST', '/api/runs/r1/send', () => ({ ok: true }));
+    desk.on('POST', '/api/runs/r1/stop', () => ({ ok: true }));
+    desk.on('POST', '/api/runs/r1/handoff', () => ({ ok: true }));
+
+    expect(await state.nudgeRun('r1')).toEqual({ ok: true });
+    expect((desk.callsOf('POST', '/api/runs/r1/send')[0]!.body as { text: string }).text).toContain('stuck');
+    expect(state.toastMessage()?.message).toBe('Nudged the worker');
+    expect(await state.stopRun('r1')).toEqual({ ok: true });
+    expect(await state.handToClaude('r1')).toEqual({ ok: true });
+    expect(state.toastMessage()?.message).toBe('Handed to Claude Code');
+  });
+
+  it('shows the desk refusal of a run control and Stop all', async () => {
+    const { desk, state } = await bootState();
+    desk.on('POST', '/api/runs/r9/handoff', () => ({ ok: false, error: 'this run is already on Claude Code' }));
+    expect(await state.handToClaude('r9')).toEqual({ ok: false, error: 'this run is already on Claude Code' });
+    expect(state.toastMessage()).toEqual({ message: 'this run is already on Claude Code', kind: 'error' });
+
+    desk.on('POST', '/api/chain/abort', () => ({ ok: true, status: { master: 'halted' } }));
+    expect(await state.stopAll()).toEqual({ ok: true });
+    expect(state.toastMessage()?.message).toBe('Stopped everything — the chain is halted');
+  });
+
   it('chainMaster posts the halted mode and toasts the wording', async () => {
     const { desk, state } = await bootState();
     desk.on('POST', '/api/chain/master', () => ({ ok: true, status: { master: 'halted' } }));

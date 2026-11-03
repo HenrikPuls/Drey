@@ -666,6 +666,44 @@ describe('DreyTicketsPort', () => {
   });
 });
 
+describe('handoffRun (E12-4)', () => {
+  const run = (patch: Record<string, unknown>) =>
+    ({ id: 'r1', ticketId: 'T-0007', provider: 'opencode', state: 'running', ...patch }) as never;
+
+  it('stops the run, waits it out and restarts the ticket on Claude Code, fresh', async () => {
+    const { board, fleet } = fakes();
+    vi.mocked(fleet.runs)
+      .mockResolvedValueOnce([run({})])
+      .mockResolvedValueOnce([run({ state: 'stopping' })])
+      .mockResolvedValue([run({ state: 'stopped' })]);
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+    await expect(port.handoffRun({ runId: 'r1' })).resolves.toEqual({ ok: true, runId: 'r1' });
+    expect(fleet.stop).toHaveBeenCalledWith('r1', 'handed to Claude Code');
+    expect(board.startRun).toHaveBeenCalledWith({
+      ticketId: 'T-0007',
+      workerChoice: 'claude-code',
+      permissionMode: 'accept-edits',
+      handover: 'fresh',
+      interactive: null,
+    });
+  });
+
+  it('refuses an unknown run and a run already on Claude Code, and starts nothing when the stop fails', async () => {
+    const { board, fleet } = fakes();
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+    await expect(port.handoffRun({ runId: 'nope' })).resolves.toMatchObject({ ok: false, error: 'no such run' });
+
+    vi.mocked(fleet.runs).mockResolvedValue([run({ provider: 'claude-code' })]);
+    await expect(port.handoffRun({ runId: 'r1' })).resolves.toMatchObject({ ok: false });
+    expect(fleet.stop).not.toHaveBeenCalled();
+
+    vi.mocked(fleet.runs).mockResolvedValue([run({})]);
+    vi.mocked(fleet.stop).mockResolvedValue({ ok: false, error: 'cannot stop' });
+    await expect(port.handoffRun({ runId: 'r1' })).resolves.toEqual({ ok: false, error: 'cannot stop' });
+    expect(board.startRun).not.toHaveBeenCalled();
+  });
+});
+
 describe('remoteActorOf', () => {
   it('fits a device name into the <who>@<host> grammar', () => {
     expect(remoteActorOf('iPad')).toBe('owner@ipad');

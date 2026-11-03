@@ -203,6 +203,33 @@ export interface PersonaRun {
 /** The persona's routing policy inside its pool (the engine's PersonaRouter). */
 export type PersonaRouterView = 'off' | 'budget' | 'escalate-on-fail';
 
+/** One live run of a persona, as the Team card's run rows render it (E12-4). */
+export interface LiveRunView {
+  readonly runId: string;
+  readonly ticketId: string;
+  readonly state: RunStateView;
+  /** The worker provider (`opencode`, `claude-code`). */
+  readonly provider: string;
+  /** ISO stamp of the start; '' when the desk omits it. */
+  readonly startedAt: string;
+  /** ISO stamp of the last worker event; '' when the desk omits it. */
+  readonly lastActivity: string;
+  /** What the worker is doing right now, in one short line; null when unknown. */
+  readonly activity: string | null;
+  /** The hang watchdog flagged the run ("looks stuck"). */
+  readonly stuck: boolean;
+  /** The context window's fill, 0 – 100; null while the provider reported none. */
+  readonly contextPct: number | null;
+}
+
+/** One provider pool's load: running runs against the pool's effective size. */
+export interface CapacityView {
+  readonly provider: string;
+  readonly label: string;
+  readonly running: number;
+  readonly size: number;
+}
+
 /** One team card: the persona directory slice plus what it is running now. */
 export interface PersonaView {
   readonly id: string;
@@ -216,6 +243,8 @@ export interface PersonaView {
   readonly color: string;
   /** The newest live run this persona dispatched, if any. */
   readonly currentRun: PersonaRun | null;
+  /** Every live run of this persona (a builder may carry several); absent = none known. */
+  readonly liveRuns?: readonly LiveRunView[];
   /**
    * The persona's daily budget in dollars (frontmatter `budget:`,
    * concept §4.3 — the team card shows the day's costs against it);
@@ -263,6 +292,8 @@ export interface TeamView {
   readonly chainMaster?: 'run' | 'halted' | null;
   /** The persona ids the owner paused in the chain; `[]` when the desk sends none. */
   readonly pausedPersonas?: readonly string[];
+  /** Per provider pool: running against effective size; absent when the desk sends no pool sizes. */
+  readonly capacity?: readonly CapacityView[];
 }
 
 // --- Persona improvements (E6) ------------------------------------------------
@@ -1025,6 +1056,7 @@ export function parseTeam(personasJson: unknown, fleetJson: unknown): TeamView {
   const master = chain?.['master'];
   const chainMaster = master === 'run' || master === 'halted' ? master : null;
   const pausedPersonas = strArray(fleet['pausedPersonas']);
+  const capacity = capacityOf(chain, runs);
   const personas: PersonaView[] = [];
   for (const raw of arr(personasJson)) {
     const persona = personaOf(raw);
@@ -1038,8 +1070,17 @@ export function parseTeam(personasJson: unknown, fleetJson: unknown): TeamView {
           run !== null && str(run['persona']) === persona.id && runStateOf(run['state']) !== null,
       );
     const state = liveRun === null || liveRun === undefined ? null : runStateOf(liveRun['state']);
+    const liveRuns = runs.flatMap((run): LiveRunView[] => {
+      const r = rec(run);
+      const runState = r === null ? null : runStateOf(r['state']);
+      if (r === null || runState === null || str(r['persona']) !== persona.id) {
+        return [];
+      }
+      return [liveRunOf(r, runState)];
+    });
     personas.push({
       ...persona,
+      ...(liveRuns.length > 0 ? { liveRuns } : {}),
       currentRun:
         liveRun === null || liveRun === undefined || state === null
           ? null
@@ -1055,7 +1096,53 @@ export function parseTeam(personasJson: unknown, fleetJson: unknown): TeamView {
       })),
     ...(chainMaster !== null ? { chainMaster } : {}),
     ...(pausedPersonas.length > 0 ? { pausedPersonas } : {}),
+    ...(capacity.length > 0 ? { capacity } : {}),
   };
+}
+
+const PROVIDER_LABEL: Readonly<Record<string, string>> = { opencode: 'Local', 'claude-code': 'Claude Code' };
+
+/** One live run, tolerantly mapped (the caller checked the state). */
+function liveRunOf(run: Record<string, unknown>, state: RunStateView): LiveRunView {
+  const tokens = run['contextTokens'];
+  const window = run['contextWindow'];
+  const pct =
+    typeof tokens === 'number' && typeof window === 'number' && Number.isFinite(tokens) && window > 0
+      ? Math.min(100, Math.round((tokens / window) * 100))
+      : null;
+  const activity = str(run['activity']);
+  return {
+    runId: str(run['id']),
+    ticketId: str(run['ticketId']),
+    state,
+    provider: str(run['provider']),
+    startedAt: str(run['startedAt']),
+    lastActivity: str(run['lastActivity']),
+    activity: activity === '' ? null : activity,
+    stuck: run['stuck'] === true,
+    contextPct: pct,
+  };
+}
+
+/** The pools' load off the chain block's `poolSize` and the live runs per provider. */
+function capacityOf(chain: Record<string, unknown> | null, runs: readonly unknown[]): CapacityView[] {
+  const sizes = rec(chain?.['poolSize']);
+  if (sizes === null) {
+    return [];
+  }
+  const out: CapacityView[] = [];
+  for (const provider of Object.keys(PROVIDER_LABEL)) {
+    const size = sizes[provider];
+    if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) {
+      continue;
+    }
+    const running = runs.filter((run) => {
+      const r = rec(run);
+      return r !== null && str(r['provider']) === provider && runStateOf(r['state']) !== null;
+    }).length;
+    out.push({ provider, label: PROVIDER_LABEL[provider]!, running, size });
+  }
+  return out;
 }
 
 /** The proposal's state; anything the desk got wrong degrades to open, never a guess. */

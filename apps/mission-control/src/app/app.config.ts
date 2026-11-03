@@ -82,6 +82,12 @@ export const appConfig: ApplicationConfig = {
           openTicket: (ticketId) => state.openTicket(ticketId),
           toggleChainMaster: (paused) => state.chainMaster(paused),
           personaPause: (id, paused) => state.personaPause(id, paused),
+          capacity: computed(() => state.team().capacity ?? []),
+          ticketTitleOf: (id) => state.ticketTitleOf(id),
+          nudgeRun: (runId) => state.nudgeRun(runId),
+          handToClaude: (runId) => state.handToClaude(runId),
+          stopRun: (runId) => state.stopRun(runId),
+          stopAll: () => state.stopAll(),
         };
       },
     },

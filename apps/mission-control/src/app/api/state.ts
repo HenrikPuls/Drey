@@ -1093,6 +1093,72 @@ export class McState {
     return { ok: true };
   }
 
+  // --- run controls and the all-switches (E12-4) -------------------------------
+
+  /** The default steer a Nudge sends (see the Team view). */
+  private static readonly NUDGE_TEXT =
+    'You seem stuck. Say in one line what you have tried, then take a different approach.';
+
+  /** The title of a ticket off the board, for the Team card's run rows; null = unknown. */
+  ticketTitleOf(id: string): string | null {
+    for (const group of this.work().groups) {
+      const card = group.cards.find((candidate) => candidate.id === id);
+      if (card !== undefined) {
+        return card.title;
+      }
+    }
+    return null;
+  }
+
+  /** A stuck run's Nudge: one steering message. */
+  nudgeRun(runId: string): Promise<McReply> {
+    return this.runControl(`/api/runs/${encodeURIComponent(runId)}/send`, { text: McState.NUDGE_TEXT }, 'Nudged the worker');
+  }
+
+  /** A stuck run's Stop. */
+  stopRun(runId: string): Promise<McReply> {
+    return this.runControl(`/api/runs/${encodeURIComponent(runId)}/stop`, {}, 'Run stopped');
+  }
+
+  /** A stuck run's Hand to Claude Code: stop, wait, restart the ticket there. */
+  handToClaude(runId: string): Promise<McReply> {
+    return this.runControl(`/api/runs/${encodeURIComponent(runId)}/handoff`, {}, 'Handed to Claude Code');
+  }
+
+  /** "Stop all": every live run aborted and the chain halted. */
+  async stopAll(): Promise<McReply> {
+    const body = await this.client.request<Record<string, unknown>>('POST', '/api/chain/abort', {}).catch(fail);
+    if (isFailure(body)) {
+      this.toast(body.error, 'error');
+      return body;
+    }
+    if (body['ok'] !== true) {
+      const refused = refusal(body, 'the desk did not stop everything');
+      this.toast(refused.error, 'error');
+      return refused;
+    }
+    await this.refreshTeam();
+    this.toast('Stopped everything — the chain is halted', 'ok');
+    return { ok: true };
+  }
+
+  /** One run control: POST, toast the outcome, re-fold the team. */
+  private async runControl(path: string, payload: unknown, done: string): Promise<McReply> {
+    const body = await this.client.request<Record<string, unknown>>('POST', path, payload).catch(fail);
+    if (isFailure(body)) {
+      this.toast(body.error, 'error');
+      return body;
+    }
+    if (body['ok'] !== true) {
+      const refused = refusal(body, 'the desk did not take that');
+      this.toast(refused.error, 'error');
+      return refused;
+    }
+    await this.refreshTeam();
+    this.toast(done, 'ok');
+    return { ok: true };
+  }
+
   // --- the chat stream ------------------------------------------------------
 
   private applyChatStream(file: string, event: ChatStreamView): void {

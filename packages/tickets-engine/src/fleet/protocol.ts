@@ -680,6 +680,13 @@ export interface ChainStatus {
    * before the persona pause existed — readers treat that as none.
    */
   readonly pausedPersonas?: readonly string[];
+  /**
+   * Per provider: the effective parallel runs its pool carries right now
+   * (configured size, capped by a probe, minus a rate-limit shrink) — the
+   * Team tab's capacity line reads it against the live runs. Absent on
+   * older runners.
+   */
+  readonly poolSize?: Readonly<Record<string, number>>;
 }
 
 /** One circuit-breaker trip (the chain alerts fix). */

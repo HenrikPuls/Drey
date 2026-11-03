@@ -8,6 +8,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import type {
   ImprovementProposalView,
   PersonaImprovementsView,
@@ -176,8 +177,8 @@ export interface PersonaFacts {
   readonly router?: PersonaRouterView;
 }
 
-/** The persona detail's tabs. */
-export type PersonaTab = 'chat' | 'improve' | 'mem' | 'setup';
+/** The persona detail's tabs — the conversation (`chat`, labelled 1:1) carries the improvement drafts, the thread and the composer in one place (D8). */
+export type PersonaTab = 'chat' | 'mem' | 'setup';
 
 /**
  * One coaching card the chat pane derived from the owner's wording:
@@ -279,6 +280,7 @@ export const MC_TEAM_DETAIL = new InjectionToken<TeamDetailVm>('mc-team-detail',
   templateUrl: './detail.html',
   styleUrl: './detail.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [NgTemplateOutlet],
 })
 export class PersonaDetail {
   private readonly vm = inject(MC_TEAM_DETAIL);

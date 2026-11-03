@@ -436,12 +436,14 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
   if (req.path === '/api/runs') {
     return write('run start', parseStartRun(body), (cmd) => port.startRun(cmd));
   }
-  const run = /^\/api\/runs\/([A-Za-z0-9_.-]+)\/(stop|send|answer|permission)$/.exec(req.path);
+  const run = /^\/api\/runs\/([A-Za-z0-9_.-]+)\/(stop|send|answer|permission|handoff)$/.exec(req.path);
   if (run !== null) {
     const withRun = { ...(body as object), runId: run[1]! };
     switch (run[2]) {
       case 'stop':
         return write(`stop ${run[1]}`, parseStopRun(withRun), (cmd) => port.stopRun(cmd));
+      case 'handoff':
+        return write(`hand off ${run[1]}`, { ok: true, value: { runId: run[1]! } }, (cmd) => port.handoffRun(cmd));
       case 'send':
         return write(`steer ${run[1]}`, parseSend(withRun), (cmd) => port.send(cmd));
       case 'answer':

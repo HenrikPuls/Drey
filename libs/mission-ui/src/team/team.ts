@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -7,7 +8,7 @@ import {
   signal,
   type Signal,
 } from '@angular/core';
-import type { PersonaRouterView } from '../api/dto';
+import type { CapacityView, LiveRunView, PersonaRouterView } from '../api/dto';
 
 /**
  * The wire DTO of `GET /api/personas` — duplicated from the engine's
@@ -57,6 +58,8 @@ export interface McPersonaRun {
 /** One team card: the persona wire view plus its live run (null while idle). */
 export interface McTeamPersona extends McPersonaView {
   readonly currentRun: McPersonaRun | null;
+  /** Every live run the persona carries (E12-4); absent = none known. */
+  readonly liveRuns?: readonly LiveRunView[];
 }
 
 /**
@@ -94,6 +97,18 @@ export interface McTeamState {
    * fresh snapshot and the toast; absent = the ghost hides.
    */
   personaPause?(id: string, paused: boolean): void | Promise<unknown>;
+  /** Per provider pool: running against effective size (the capacity chips); absent = none. */
+  readonly capacity?: Signal<readonly CapacityView[]>;
+  /** The title of a ticket for the run rows; absent or null = the id stands alone. */
+  ticketTitleOf?(ticketId: string): string | null;
+  /** A stuck run's Nudge: steers the worker with a short prompt to change course. */
+  nudgeRun?(runId: string): void | Promise<unknown>;
+  /** A stuck run's Hand to Claude Code: stop it and start the ticket on Claude Code. */
+  handToClaude?(runId: string): void | Promise<unknown>;
+  /** A run's Stop. */
+  stopRun?(runId: string): void | Promise<unknown>;
+  /** "Stop all": aborts every live run and halts the chain. */
+  stopAll?(): void | Promise<unknown>;
   /** A transient status note (the prototype's toast pill); absent = silent. */
   toast?(message: string, kind?: 'ok' | 'warn' | 'error'): void;
 }
@@ -136,15 +151,9 @@ export interface PersonaDayCost {
   readonly over: boolean;
 }
 
-/** The dollars German-style with two decimals (`1,4 $` reads `1,40 $`). */
-function usdOf(value: number): string {
-  return `${value.toFixed(2).replace('.', ',')} $`;
-}
-
-/** The budget as the prototype writes it — a whole number stays bare (`5 $`), a fraction takes two decimals. */
-function budgetWordsOf(value: number): string {
-  const dollars = Number.isInteger(value) ? String(value) : value.toFixed(2).replace('.', ',');
-  return `${dollars} $`;
+/** Dollars with two decimals (`$1.40`). */
+export function usdOf(value: number): string {
+  return `$${value.toFixed(2)}`;
 }
 
 /**
@@ -165,7 +174,7 @@ export function dayCostFootOf(
     text:
       budget === null
         ? `${usdOf(persona.dailyCost)} today`
-        : `${usdOf(persona.dailyCost)} / ${budgetWordsOf(budget)} today`,
+        : `${usdOf(persona.dailyCost)} of ${usdOf(budget)} today`,
     over: budget !== null && persona.dailyCost > budget,
   };
 }
@@ -241,7 +250,7 @@ export function dailySumOf(personas: readonly Pick<McPersonaView, 'dailyCost'>[]
 }
 
 /**
- * The header sub ('4 personas · today 2,41 $'): the count always (once
+ * The header sub ('4 personas · today $2.41'): the count always (once
  * the list is loaded), the day sum only when at least one persona
  * settled a known cost today.
  */
@@ -255,6 +264,85 @@ export function headerSubOf(
   const sum = dailySumOf(personas);
   const noun = count === 1 ? 'persona' : 'personas';
   return sum === null ? `${count} ${noun}` : `${count} ${noun} · today ${usdOf(sum)}`;
+}
+
+/** The default steer a Nudge sends to a stuck worker. */
+export const NUDGE_TEXT =
+  'You seem stuck. Say in one line what you have tried, then take a different approach.';
+
+/** A run is "stuck" for the card once the watchdog flagged it. */
+export interface RunRowVm {
+  readonly runId: string;
+  readonly ticketId: string;
+  readonly title: string;
+  readonly age: string;
+  readonly line: string;
+  readonly stuck: boolean;
+  /** The warning under a stuck row; '' otherwise. */
+  readonly stuckText: string;
+}
+
+/** Minutes between two instants, whole and non-negative. */
+function minutesBetween(fromIso: string, nowMs: number): number | null {
+  const at = Date.parse(fromIso);
+  return Number.isNaN(at) ? null : Math.max(0, Math.floor((nowMs - at) / 60_000));
+}
+
+/** `12 min`, `1 h 05 min`; '' while the start is unknown. */
+export function ageWordsOf(startedAt: string, nowMs: number): string {
+  const min = minutesBetween(startedAt, nowMs);
+  if (min === null) {
+    return '';
+  }
+  return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min`;
+}
+
+/** The context fill from which the stuck warning mentions it. */
+const CONTEXT_WARN_PCT = 60;
+
+/**
+ * The run row of a persona's card: title (or the id), age, the worker's
+ * activity line (`looks stuck` leads the line of a flagged run) and the
+ * stuck warning — minutes of silence, plus the context fill when it is
+ * getting full.
+ */
+export function runRowOf(run: LiveRunView, title: string | null, nowMs: number): RunRowVm {
+  const silent = minutesBetween(run.lastActivity, nowMs);
+  const activity = run.activity ?? run.state;
+  let stuckText = '';
+  if (run.stuck) {
+    const minutes = silent === null ? '' : ` for ${silent} minute${silent === 1 ? '' : 's'}`;
+    const context =
+      run.contextPct !== null && run.contextPct >= CONTEXT_WARN_PCT
+        ? ` and the context is filling up (${run.contextPct}%)`
+        : '';
+    stuckText = `No progress${minutes}${context}.`;
+  }
+  return {
+    runId: run.runId,
+    ticketId: run.ticketId,
+    title: title ?? run.ticketId,
+    age: ageWordsOf(run.startedAt, nowMs),
+    line: run.stuck ? `looks stuck · ${activity}` : activity,
+    stuck: run.stuck,
+    stuckText,
+  };
+}
+
+/** The card's state words: `2 running`, `paused`, `idle`. */
+export function stateWordsOf(liveRuns: number, paused: boolean): string {
+  if (paused) {
+    return 'paused';
+  }
+  return liveRuns === 0 ? 'idle' : liveRuns === 1 ? 'running' : `${liveRuns} running`;
+}
+
+/** The share of the day's budget spent, 0 – 100 (capped); null without both figures. */
+export function budgetPctOf(persona: Pick<McPersonaView, 'budget' | 'dailyCost'>): number | null {
+  if (typeof persona.budget !== 'number' || persona.budget <= 0 || typeof persona.dailyCost !== 'number') {
+    return null;
+  }
+  return Math.min(100, Math.round((persona.dailyCost / persona.budget) * 100));
 }
 
 /**
@@ -274,6 +362,7 @@ export function headerSubOf(
   templateUrl: './team.html',
   styleUrl: './team.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [NgTemplateOutlet],
 })
 export class Team {
   private readonly state = inject(MC_TEAM_STATE);
@@ -302,8 +391,76 @@ export class Team {
   /** True when the bound state can open a ticket — the run ghost shows for live runs. */
   protected readonly canOpenTicket = computed(() => this.state.openTicket !== undefined);
 
+  protected readonly canPauseAll = computed(() => this.state.toggleChainMaster !== undefined);
+  protected readonly canNudge = computed(() => this.state.nudgeRun !== undefined);
+  protected readonly canHand = computed(() => this.state.handToClaude !== undefined);
+  protected readonly canStopRun = computed(() => this.state.stopRun !== undefined);
+
   /** True when the bound state can pause a persona — the pause ghost shows. */
   protected readonly canPause = computed(() => this.state.personaPause !== undefined);
+
+  /** The capacity chips (`Local 2/2`); absent or empty hides the row. */
+  protected readonly capacity = computed(() => this.state.capacity?.() ?? []);
+
+  /** The master is halted: the pause button offers to resume instead. */
+  protected readonly halted = computed(() => this.state.chainMaster?.() === 'halted');
+
+  /** The first press of Stop all arms it; the second aborts. */
+  protected readonly stopAllArmed = signal(false);
+
+  /** The run whose action is in flight — its buttons stand still. */
+  protected readonly busyRun = signal<string | null>(null);
+
+  protected pauseAll(): void {
+    void this.state.toggleChainMaster?.(!this.halted());
+  }
+
+  protected stopAll(): void {
+    if (!this.stopAllArmed()) {
+      this.stopAllArmed.set(true);
+      return;
+    }
+    this.stopAllArmed.set(false);
+    void this.state.stopAll?.();
+  }
+
+  protected rowsOf(persona: McTeamPersona): readonly RunRowVm[] {
+    const now = Date.now();
+    return (persona.liveRuns ?? []).map((run) =>
+      runRowOf(run, this.state.ticketTitleOf?.(run.ticketId) ?? null, now),
+    );
+  }
+
+  protected liveCountOf(persona: McTeamPersona): number {
+    return persona.liveRuns?.length ?? (persona.currentRun === null ? 0 : 1);
+  }
+
+  protected stateWords(persona: McTeamPersona): string {
+    return stateWordsOf(this.liveCountOf(persona), this.isPaused(persona));
+  }
+
+  protected dotClass(persona: McTeamPersona): string {
+    if (this.isPaused(persona)) {
+      return 'run-dim';
+    }
+    return persona.currentRun === null ? 'run-dim' : runStateClass(persona.currentRun.state);
+  }
+
+  protected openRow(row: RunRowVm): void {
+    this.state.openTicket?.(row.ticketId);
+  }
+
+  protected async act(runId: string, action: 'nudgeRun' | 'handToClaude' | 'stopRun'): Promise<void> {
+    if (this.busyRun() !== null) {
+      return;
+    }
+    this.busyRun.set(runId);
+    try {
+      await this.state[action]?.(runId);
+    } finally {
+      this.busyRun.set(null);
+    }
+  }
 
   protected open(persona: McTeamPersona): void {
     this.state.openPersona?.(persona.id);
@@ -332,4 +489,6 @@ export class Team {
   protected readonly runStateClass = runStateClass;
   protected readonly dayCostFootOf = dayCostFootOf;
   protected readonly phasesFootOf = phasesFootOf;
+  protected readonly budgetPctOf = budgetPctOf;
+  protected readonly usdOf = usdOf;
 }

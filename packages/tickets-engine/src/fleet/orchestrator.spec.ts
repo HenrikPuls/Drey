@@ -371,6 +371,9 @@ describe('Orchestrator', () => {
     expect(fleet.records).toHaveLength(2);
     // The board reads the pause off the status (chain alerts fix).
     expect(Object.keys(orch.status().quotaPausedUntil ?? {})).toEqual(['opencode']);
+    // The capacity line (E12-4): a provider paused for its quota carries no pool; the other keeps its size.
+    expect(orch.status().poolSize?.['opencode']).toBe(0);
+    expect(orch.status().poolSize?.['claude-code']).toBeGreaterThanOrEqual(1);
   });
 
   it('a rate-limited run shrinks its provider pool for a while (req-63)', async () => {

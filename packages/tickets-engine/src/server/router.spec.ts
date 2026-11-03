@@ -34,6 +34,7 @@ function port(): TicketsRemotePort {
     saveAttachment: vi.fn(async () => ({ ok: true, file: 'tickets/attachments/img-test.png' })),
     startRun: vi.fn(ok),
     stopRun: vi.fn(ok),
+    handoffRun: vi.fn(ok),
     send: vi.fn(ok),
     answer: vi.fn(ok),
     permission: vi.fn(ok),
@@ -150,6 +151,17 @@ describe('route', () => {
       'owner@iphone-15',
     );
     expect(remote.answer).toHaveBeenCalledWith({ runId: 'r-1', answers: { q0: 'Yes' } });
+  });
+
+  it('routes the E12-4 hand-off to the port with the run id from the path', async () => {
+    const { deps, devices, remote } = setup();
+    const { token } = await devices.add('iPad', false, new Date());
+    const handed = await route(
+      req({ method: 'POST', path: '/api/runs/r-9/handoff', authorization: `Bearer ${token}`, body: {} }),
+      deps,
+    );
+    expect(handed.status).toBe(200);
+    expect(remote.handoffRun).toHaveBeenCalledWith({ runId: 'r-9' });
   });
 
   it('routes the E5c ticket screen: save, accept, send-back, diff and worktree-changes', async () => {

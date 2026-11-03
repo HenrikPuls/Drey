@@ -1,6 +1,5 @@
 <section class="team" aria-label="Team">
   <header class="hdr">
-    <div class="logo" aria-hidden="true">D</div>
     <div class="hd">
       <div class="ttl">Team</div>
       @if (headerSub(); as sub) {
@@ -29,91 +28,97 @@
     </button>
   </div>
 
+  @if (capacity().length > 0) {
+    <div class="caps">
+      @for (cap of capacity(); track cap.provider) {
+        <span class="cap">{{ cap.label }} <b>{{ cap.running }}/{{ cap.size }}</b></span>
+      }
+    </div>
+  }
+  @if (canPauseAll()) {
+    <div class="allbar">
+      <button type="button" class="btn ghost" (click)="pauseAll()">
+        {{ halted() ? 'Resume all' : 'Pause all after this step' }}
+      </button>
+      <button type="button" class="btn ghost danger" [class.armed]="stopAllArmed()" (click)="stopAll()">
+        {{ stopAllArmed() ? 'Confirm stop all' : 'Stop all' }}
+      </button>
+    </div>
+  }
+
   @if (personas(); as list) {
     <ul class="cards">
       @for (persona of list; track persona.id) {
         <li class="card">
+          <ng-template #head>
+            <div class="ptop">
+              <span class="pava" [style.background-color]="persona.color" aria-hidden="true">{{
+                initialsOf(persona.title)
+              }}</span>
+              <span class="pwho">
+                <span class="pname">{{ persona.title }}</span>
+                <span class="prole">{{ persona.role }}{{ phasesFootOf(persona) ? ' · ' + phasesFootOf(persona) : '' }}</span>
+              </span>
+              <span class="pstat">
+                <span class="led" [class]="'led ' + dotClass(persona)" aria-hidden="true"></span>
+                <span class="pstat-label">{{ stateWords(persona) }}</span>
+              </span>
+            </div>
+            @if (dayCostFootOf(persona); as foot) {
+              <div class="budget">
+                <div class="budget-line">
+                  <span>Today</span>
+                  <span class="cost" [class.over]="foot.over">{{ foot.text.replace(' today', '') }}</span>
+                </div>
+                @if (budgetPctOf(persona); as pct) {
+                  <div class="bar"><div class="fill" [style.width.%]="pct" [style.background-color]="persona.color"></div></div>
+                }
+              </div>
+            }
+          </ng-template>
           @if (canOpen()) {
             <button type="button" class="card-btn" (click)="open(persona)">
-              <div class="ptop">
-                <span class="pava" [style.background-color]="persona.color" aria-hidden="true">{{
-                  initialsOf(persona.title)
-                }}</span>
-                <span class="pwho">
-                  <span class="pname">{{ persona.title }}</span>
-                  <span class="prole">{{ persona.role }} · {{ persona.model }}</span>
-                </span>
-                <span class="pstat">
-                  @if (persona.currentRun; as run) {
-                    <span
-                      class="led"
-                      [class]="'led ' + runStateClass(run.state)"
-                      aria-hidden="true"
-                    ></span>
-                    <span class="pstat-label">on {{ run.ticketId }}</span>
-                  } @else {
-                    <span class="led run-dim" aria-hidden="true"></span>
-                    <span class="pstat-label">idle</span>
-                  }
-                </span>
-              </div>
-              <div class="pfoot">
-                @if (phasesFootOf(persona); as phases) {
-                  <span class="phases">Phases: {{ phases }}</span>
-                }
-                <span>Worker: {{ persona.worker }}</span>
-                @if (dayCostFootOf(persona); as foot) {
-                  <span class="cost" [class.over]="foot.over">{{ foot.text }}</span>
-                }
-              </div>
+              <ng-container [ngTemplateOutlet]="head" />
             </button>
           } @else {
             <div class="card-body">
-              <div class="ptop">
-                <span class="pava" [style.background-color]="persona.color" aria-hidden="true">{{
-                  initialsOf(persona.title)
-                }}</span>
-                <span class="pwho">
-                  <span class="pname">{{ persona.title }}</span>
-                  <span class="prole">{{ persona.role }} · {{ persona.model }}</span>
-                </span>
-                <span class="pstat">
-                  @if (persona.currentRun; as run) {
-                    <span
-                      class="led"
-                      [class]="'led ' + runStateClass(run.state)"
-                      aria-hidden="true"
-                    ></span>
-                    <span class="pstat-label">on {{ run.ticketId }}</span>
-                  } @else {
-                    <span class="led run-dim" aria-hidden="true"></span>
-                    <span class="pstat-label">idle</span>
-                  }
-                </span>
-              </div>
-              <div class="pfoot">
-                @if (phasesFootOf(persona); as phases) {
-                  <span class="phases">Phases: {{ phases }}</span>
-                }
-                <span>Worker: {{ persona.worker }}</span>
-                @if (dayCostFootOf(persona); as foot) {
-                  <span class="cost" [class.over]="foot.over">{{ foot.text }}</span>
-                }
-              </div>
+              <ng-container [ngTemplateOutlet]="head" />
             </div>
           }
-          @if ((canOpenTicket() && persona.currentRun !== null) || canPause()) {
+
+          @for (row of rowsOf(persona); track row.runId) {
+            <div class="run" [class.stuck]="row.stuck">
+              <div class="run-top">
+                @if (canOpenTicket()) {
+                  <button type="button" class="run-title" (click)="openRow(row)">{{ row.title }}</button>
+                } @else {
+                  <span class="run-title">{{ row.title }}</span>
+                }
+                <span class="run-age">{{ row.age }}</span>
+              </div>
+              <span class="run-line">{{ row.line }}</span>
+              @if (row.stuck) {
+                <p class="stuck-text">{{ row.stuckText }}</p>
+                <div class="run-actions">
+                  @if (canNudge()) {
+                    <button type="button" class="btn ghost" [disabled]="busyRun() !== null" (click)="act(row.runId, 'nudgeRun')">Nudge</button>
+                  }
+                  @if (canHand()) {
+                    <button type="button" class="btn ghost" [disabled]="busyRun() !== null" (click)="act(row.runId, 'handToClaude')">Hand to Claude Code</button>
+                  }
+                  @if (canStopRun()) {
+                    <button type="button" class="btn ghost danger" [disabled]="busyRun() !== null" (click)="act(row.runId, 'stopRun')">Stop</button>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+          @if (canPause()) {
             <div class="pacts">
-              @if (canOpenTicket() && persona.currentRun; as run) {
-                <button type="button" class="btn ghost" (click)="openRunTicket(persona)">
-                  → {{ run.ticketId }}
-                </button>
-              }
-              @if (canPause()) {
-                <button type="button" class="btn ghost" (click)="togglePause(persona)">
-                  {{ isPaused(persona) ? 'Resume' : 'Pause' }}
-                </button>
-              }
+              <button type="button" class="btn ghost" (click)="togglePause(persona)">
+                {{ isPaused(persona) ? 'Resume' : 'Pause' }}
+              </button>
             </div>
           }
         </li>

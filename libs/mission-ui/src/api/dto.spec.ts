@@ -499,6 +499,35 @@ describe('parseNeeds', () => {
   });
 });
 
+describe('parseTeam — live runs and capacity (E12-4)', () => {
+  const personas = [{ id: 'ben', title: 'Ben' }, { id: 'ralf', title: 'Ralf' }];
+  const fleet = {
+    runs: [
+      { id: 'r1', ticketId: 'T-1', persona: 'ben', provider: 'opencode', state: 'running', startedAt: '2026-11-03T10:00:00Z', lastActivity: '2026-11-03T10:30:00Z', activity: 'edit a.ts', contextTokens: 78_000, contextWindow: 100_000, stuck: true },
+      { id: 'r2', ticketId: 'T-2', persona: 'ben', provider: 'claude-code', state: 'starting' },
+      { id: 'r3', ticketId: 'T-3', persona: 'ben', provider: 'opencode', state: 'done' },
+    ],
+    chain: { master: 'run', poolSize: { opencode: 2, 'claude-code': 3, other: 9 } },
+  };
+
+  it('keeps every live run of a persona with its stuck flag and context fill', () => {
+    const team = parseTeam(personas, fleet);
+    const ben = team.personas.find((p) => p.id === 'ben');
+    expect(ben?.liveRuns?.map((r) => r.runId)).toEqual(['r1', 'r2']);
+    expect(ben?.liveRuns?.[0]).toMatchObject({ stuck: true, contextPct: 78, activity: 'edit a.ts', provider: 'opencode' });
+    expect(ben?.liveRuns?.[1]).toMatchObject({ stuck: false, contextPct: null, activity: null });
+    expect(team.personas.find((p) => p.id === 'ralf')?.liveRuns).toBeUndefined();
+  });
+
+  it('reads the pool sizes as capacity chips against the live runs per provider', () => {
+    expect(parseTeam(personas, fleet).capacity).toEqual([
+      { provider: 'opencode', label: 'Local', running: 1, size: 2 },
+      { provider: 'claude-code', label: 'Claude Code', running: 1, size: 3 },
+    ]);
+    expect(parseTeam(personas, { runs: [], chain: { master: 'run' } }).capacity).toBeUndefined();
+  });
+});
+
 describe('parseTeam', () => {
   const personas = [
     {

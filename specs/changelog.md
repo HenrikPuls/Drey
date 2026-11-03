@@ -1,4 +1,53 @@
 
+### Milestone 115 — Mission Control team states (E12-4)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-03
+(concept v2, design boards 5d and 6d; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
+E10 – E12; owner decision D8: the persona's Chat and 1:1 are one
+conversation).
+
+- **Team tab.** The header reads `4 personas · today $1.59`; money is
+  written `$1.59` now (the German comma format is gone from this tab —
+  the ticket view's cost slots follow with E11-4). Above the cards: the
+  **capacity chips** (`Local 2/2`, `Claude Code 2/3` — running runs against
+  the pool's effective size), **Pause all after this step** (the chain
+  master halted; reads **Resume all** while halted) and **Stop all** (armed
+  by a first press, then aborts every live run and halts the chain).
+- **Cards.** Avatar, role · phases, a state word (`idle`, `running`,
+  `2 running`, `paused`), the day's cost against the budget as a line and a
+  bar in the persona's colour, then **one row per live run**: ticket title,
+  age, the worker's activity line. A run the hang watchdog flagged
+  (`RunInfo.stuck`) turns amber and says `No progress for 9 minutes and the
+  context is filling up (78%).` (the context part from 60 % fill) with
+  **Nudge** (a steering message to change course), **Hand to Claude Code**
+  and **Stop**.
+- **Engine.** `POST /api/runs/<id>/handoff` → `TicketsRemotePort.handoffRun`:
+  stops the run, waits (≤ 30 s) until the runner lets go, then starts the
+  ticket again with the worker pinned to `claude-code` and a fresh brief;
+  refused for an unknown run, a run already on Claude Code, or a failed
+  stop. `ChainStatus.poolSize` (the effective pool per provider) feeds
+  the capacity chips. Nudge and Stop ride the existing `send` / `stop`
+  routes, Pause all / Stop all the existing `chain/master` / `chain/abort`.
+- **Persona detail.** Chat and 1:1 merged: three tabs — **1:1**
+  (improvement drafts, the coaching thread and the composer in one pane,
+  badge = open drafts), Memory, Setup.
+- **Code.** `LiveRunView` / `CapacityView` in the wire DTOs, `runRowOf`,
+  `stateWordsOf`, `budgetPctOf` in `team.ts`; `McState.nudgeRun` /
+  `stopRun` / `handToClaude` / `stopAll` / `ticketTitleOf`.
+- **Specs added:** run rows, state words, budget share, the controls, DTO
+  live runs + capacity, McState run controls, engine hand-off (port +
+  route), pool sizes in the orchestrator status, the merged tab.
+
+**Not done:** the design's "Local · qwen3-coder" chip names the pool's
+model; the chips carry the provider label only. Daily cost is the sum of
+the personas' ledger figures — a cost for runs of no persona is not in
+it.
+
+Verified: typecheck, lint, cycles, `test:app` (1196 + 125 + 477),
+`test:plugins` (3203 of 3204 — the CRLF `default-prompts.spec` artefact),
+the language guard and the production build. Not run in a browser against
+a desk.
+
 ### Milestone 114 — Mission Control settings (E12-3)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-03

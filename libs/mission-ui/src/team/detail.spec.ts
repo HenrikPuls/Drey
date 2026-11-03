@@ -1037,3 +1037,35 @@ describe('the setup tab', () => {
 afterEach(() => {
   vi.useRealTimers();
 });
+
+// --- E12-4 / D8: Chat and 1:1 are one conversation -------------------------------------
+
+describe('the merged 1:1 tab', () => {
+  function render(vm: FakeVm): HTMLElement {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [{ provide: MC_TEAM_DETAIL, useValue: vm }] });
+    const fixture = TestBed.createComponent(PersonaDetail);
+    fixture.detectChanges();
+    TestBed.flushEffects();
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('has three tabs — 1:1, Memory, Setup — with the open drafts as the 1:1 badge', () => {
+    const el = render(makeVm({ view: view({ proposals: [proposal('imp-1')], openCount: 1 }) }));
+    const tabs = Array.from(el.querySelectorAll('[role="tab"]')).map((t) => (t.textContent ?? '').replace(/\s+/g, ' ').trim());
+    expect(tabs).toEqual(['1:1 · 1', 'Memory', 'Setup']);
+  });
+
+  it('shows the improvement drafts, the thread and the composer in the one pane', () => {
+    const el = render(
+      makeVm({
+        view: view({ proposals: [proposal('imp-1')], openCount: 1 }),
+        threadValue: { messages: [{ role: 'owner', text: 'Why the ranks?', at: '' }] },
+      }),
+    );
+    expect(el.querySelectorAll('.imp')).toHaveLength(1);
+    expect(el.querySelector('.thread .bubble')?.textContent).toContain('Why the ranks?');
+    expect(el.querySelector('.composer input')).not.toBeNull();
+  });
+});

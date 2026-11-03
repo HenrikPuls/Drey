@@ -1,8 +1,11 @@
 import { signal, type Signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import type { LiveRunView } from '../api/dto';
 import {
   MC_TEAM_STATE,
   Team,
+  ageWordsOf,
+  budgetPctOf,
   chainStripOf,
   dailySumOf,
   dayCostFootOf,
@@ -10,7 +13,9 @@ import {
   initialsOf,
   isPersonaPaused,
   phasesFootOf,
+  runRowOf,
   runStateClass,
+  stateWordsOf,
   type ChainStripVm,
   type McTeamPersona,
   type McTeamState,
@@ -111,23 +116,23 @@ const PIA: McTeamPersona = {
 describe('dayCostFootOf', () => {
   it('reads the day’s costs against the budget, prototype-style', () => {
     expect(dayCostFootOf({ budget: 5, dailyCost: 0.42 })).toEqual({
-      text: '0,42 $ / 5 $ today',
+      text: '$0.42 of $5.00 today',
       over: false,
     });
     expect(dayCostFootOf({ budget: 4.5, dailyCost: 1.4 })).toEqual({
-      text: '1,40 $ / 4,50 $ today',
+      text: '$1.40 of $4.50 today',
       over: false,
     });
     // No budget: the day's costs alone.
     expect(dayCostFootOf({ budget: null, dailyCost: 0.19 })).toEqual({
-      text: '0,19 $ today',
+      text: '$0.19 today',
       over: false,
     });
   });
 
   it('goes over the budget only against one that exists', () => {
     expect(dayCostFootOf({ budget: 5, dailyCost: 5.01 })).toEqual({
-      text: '5,01 $ / 5 $ today',
+      text: '$5.01 of $5.00 today',
       over: true,
     });
     // At the budget exactly: not over yet.
@@ -225,13 +230,13 @@ describe('dailySumOf and headerSubOf', () => {
 
   it('the header sub counts the personas and adds the day sum when known', () => {
     expect(headerSubOf([PIA, PIA, PIA, PIA])).toBe('4 personas');
-    expect(headerSubOf([{ ...PIA, dailyCost: 2.41 }])).toBe('1 persona · today 2,41 $');
+    expect(headerSubOf([{ ...PIA, dailyCost: 2.41 }])).toBe('1 persona · today $2.41');
     expect(
       headerSubOf([
         { ...PIA, dailyCost: 0.42 },
         { ...PIA, dailyCost: 1.99 },
       ]),
-    ).toBe('2 personas · today 2,41 $');
+    ).toBe('2 personas · today $2.41');
   });
 
   it('the header sub hides while the list is still loading', () => {
@@ -265,7 +270,7 @@ describe('Team', () => {
 
   it('the header sub counts and sums; the strip shows the idle face without a chain signal', () => {
     const vm = surface(setup({ team: signal([{ ...PIA, dailyCost: 2.41 }]) }));
-    expect(vm.headerSub()).toBe('1 persona · today 2,41 $');
+    expect(vm.headerSub()).toBe('1 persona · today $2.41');
     expect(vm.chainStrip()).toEqual({ label: 'Chain', mono: null, on: false, checked: false });
     expect(vm.pausedPersonas()).toEqual([]);
   });
@@ -366,5 +371,127 @@ describe('Team', () => {
     const vm = surface(setup({ team: signal([PIA]) }));
     expect(vm.canPause()).toBe(false);
     expect(() => vm.togglePause(PIA)).not.toThrow();
+  });
+});
+
+// -- E12-4: stuck workers, run rows, capacity, the all-controls -----------------------------
+
+const NOW = Date.parse('2026-11-03T12:00:00Z');
+const RUN: LiveRunView = {
+  runId: 'r1',
+  ticketId: 'T-0007',
+  state: 'running',
+  provider: 'opencode',
+  startedAt: '2026-11-03T11:33:00Z',
+  lastActivity: '2026-11-03T11:51:00Z',
+  activity: 'edit electron/capture-hotkey.ts',
+  stuck: false,
+  contextPct: 40,
+};
+
+describe('run rows', () => {
+  it('words the age in minutes, then hours', () => {
+    expect(ageWordsOf('2026-11-03T11:48:00Z', NOW)).toBe('12 min');
+    expect(ageWordsOf('2026-11-03T10:55:00Z', NOW)).toBe('1 h 05 min');
+    expect(ageWordsOf('', NOW)).toBe('');
+  });
+
+  it('shows a working run plainly', () => {
+    expect(runRowOf(RUN, 'Capture hotkey', NOW)).toEqual({
+      runId: 'r1',
+      ticketId: 'T-0007',
+      title: 'Capture hotkey',
+      age: '27 min',
+      line: 'edit electron/capture-hotkey.ts',
+      stuck: false,
+      stuckText: '',
+    });
+    expect(runRowOf(RUN, null, NOW).title).toBe('T-0007');
+  });
+
+  it('words the warning of a stuck run, with the context only once it fills up', () => {
+    const stuck = { ...RUN, stuck: true, contextPct: 78 };
+    const row = runRowOf(stuck, 'x', NOW);
+    expect(row.line).toBe('looks stuck · edit electron/capture-hotkey.ts');
+    expect(row.stuckText).toBe('No progress for 9 minutes and the context is filling up (78%).');
+    expect(runRowOf({ ...stuck, contextPct: 20 }, 'x', NOW).stuckText).toBe('No progress for 9 minutes.');
+  });
+});
+
+describe('state words and budget share', () => {
+  it('reads idle, running, n running and paused', () => {
+    expect(stateWordsOf(0, false)).toBe('idle');
+    expect(stateWordsOf(1, false)).toBe('running');
+    expect(stateWordsOf(2, false)).toBe('2 running');
+    expect(stateWordsOf(2, true)).toBe('paused');
+  });
+
+  it('shares the budget, capped, null without both figures', () => {
+    expect(budgetPctOf({ budget: 2, dailyCost: 0.31 })).toBe(16);
+    expect(budgetPctOf({ budget: 2, dailyCost: 9 })).toBe(100);
+    expect(budgetPctOf({ budget: null, dailyCost: 1 })).toBeNull();
+    expect(budgetPctOf({ budget: 2 })).toBeNull();
+  });
+});
+
+describe('Team controls (E12-4)', () => {
+  interface ControlsSurface {
+    capacity(): readonly unknown[];
+    halted(): boolean;
+    stopAllArmed(): boolean;
+    pauseAll(): void;
+    stopAll(): void;
+    rowsOf(p: McTeamPersona): readonly { runId: string; stuck: boolean }[];
+    stateWords(p: McTeamPersona): string;
+    act(runId: string, a: 'nudgeRun' | 'handToClaude' | 'stopRun'): Promise<void>;
+  }
+  const ben: McTeamPersona = {
+    ...PIA,
+    id: 'ben',
+    title: 'Ben',
+    liveRuns: [RUN, { ...RUN, runId: 'r2', stuck: true }],
+    currentRun: { ticketId: 'T-0007', state: 'running' },
+  };
+
+  it('shows the capacity and pauses all toward the opposite of the master', () => {
+    const toggles: boolean[] = [];
+    const vm = setup({
+      team: signal([ben]),
+      chainMaster: signal<'run' | 'halted' | null>('run'),
+      capacity: signal([{ provider: 'opencode', label: 'Local', running: 2, size: 2 }]),
+      toggleChainMaster: (paused) => {
+        toggles.push(paused);
+      },
+    }) as unknown as ControlsSurface;
+    expect(vm.capacity()).toHaveLength(1);
+    vm.pauseAll();
+    expect(toggles).toEqual([true]);
+  });
+
+  it('arms Stop all on the first press and aborts on the second', () => {
+    let stopped = 0;
+    const vm = setup({ team: signal([ben]), stopAll: () => void (stopped += 1) }) as unknown as ControlsSurface;
+    vm.stopAll();
+    expect(stopped).toBe(0);
+    expect(vm.stopAllArmed()).toBe(true);
+    vm.stopAll();
+    expect(stopped).toBe(1);
+    expect(vm.stopAllArmed()).toBe(false);
+  });
+
+  it('counts the live runs and rows of a persona and routes the three run actions', async () => {
+    const calls: string[] = [];
+    const vm = setup({
+      team: signal([ben]),
+      nudgeRun: (id) => void calls.push(`nudge ${id}`),
+      handToClaude: (id) => void calls.push(`hand ${id}`),
+      stopRun: (id) => void calls.push(`stop ${id}`),
+    }) as unknown as ControlsSurface;
+    expect(vm.stateWords(ben)).toBe('2 running');
+    expect(vm.rowsOf(ben).map((r) => [r.runId, r.stuck])).toEqual([['r1', false], ['r2', true]]);
+    await vm.act('r2', 'nudgeRun');
+    await vm.act('r2', 'handToClaude');
+    await vm.act('r2', 'stopRun');
+    expect(calls).toEqual(['nudge r2', 'hand r2', 'stop r2']);
   });
 });

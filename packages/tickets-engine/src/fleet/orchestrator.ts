@@ -392,7 +392,23 @@ export class Orchestrator {
       tripped: { ...this.tripped },
       quotaPausedUntil: this.quotaPausedUntil(),
       pausedPersonas: [...this.pausedPersonas].sort(),
+      poolSize: this.poolSizeNow(),
     };
+  }
+
+  /** The pools' effective sizes as the next dispatch pass would plan with them. */
+  private poolSizeNow(): Record<string, number> {
+    const probed: Partial<Record<WorkerProviderId, number | null>> = {};
+    for (const provider of WORKER_PROVIDERS) {
+      probed[provider] = this.probed[provider]?.slots ?? null;
+    }
+    return effectivePoolSizes(
+      this.config?.pools ?? normalizeFleetPools(undefined),
+      probed,
+      this.poolShrink,
+      this.now().getTime(),
+      this.quotaPause,
+    );
   }
 
   /** The quota pauses still running, as ISO instants. */

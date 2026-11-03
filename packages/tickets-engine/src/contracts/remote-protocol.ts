@@ -146,6 +146,11 @@ export interface TicketsRemotePort {
 
   startRun(cmd: StartRunCommand): Promise<RunReply>;
   stopRun(cmd: StopRunCommand): Promise<RunReply>;
+  /**
+   * The Team tab's "Hand to Claude Code" (E12-4): stops a stuck run and starts
+   * the same ticket again on the Claude Code worker, fresh.
+   */
+  handoffRun(cmd: { readonly runId: string }): Promise<RunReply>;
   send(cmd: SendCommand): Promise<RunReply>;
   answer(cmd: AnswerCommand): Promise<RunReply>;
   permission(cmd: PermissionCommand): Promise<RunReply>;

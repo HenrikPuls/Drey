@@ -21,15 +21,6 @@
         [attr.aria-selected]="tab() === 'chat'"
         (click)="setTab('chat')"
       >
-        Chat
-      </button>
-      <button
-        type="button"
-        role="tab"
-        [class.on]="tab() === 'improve'"
-        [attr.aria-selected]="tab() === 'improve'"
-        (click)="setTab('improve')"
-      >
         1:1
         @if (improveCount() > 0) {
           <span class="cnt">· {{ improveCount() }}</span>
@@ -58,14 +49,117 @@
       </button>
     </div>
 
+  <ng-template #improvementsBlock>
+  @if (frictionLine(); as line) {
+    <p class="friction">{{ line }}</p>
+  }
+  @if (loading()) {
+    <p class="pane-empty">Loading…</p>
+  } @else if (loadError(); as error) {
+    <div class="detail-error-state">
+      <p class="pane-error" role="alert">{{ error }}</p>
+      <button type="button" class="btn" (click)="reload()">Retry</button>
+    </div>
+  } @else if (empty()) {
+    <p class="pane-empty">
+      No improvement proposals yet — the loop aggregates friction into drafts.
+    </p>
+  } @else {
+    <div class="imp-list">
+      @for (proposal of split().open; track proposal.id) {
+        <article class="imp">
+          <div class="imp-top">
+            <span class="imp-k">{{ proposal.target }}</span>
+            <span class="imp-src">{{ evidenceWords(proposal) }}</span>
+          </div>
+          <h2 class="imp-title">{{ proposal.title }}</h2>
+          @let evidence = evidencePreviewOf(proposal.evidence);
+          @if (evidence.shown.length > 0) {
+            <ul class="evidence">
+              @for (item of evidence.shown; track item) {
+                <li>{{ item }}</li>
+              }
+            </ul>
+            @if (evidence.more > 0) {
+              <p class="evidence-more">+{{ evidence.more }} more</p>
+            }
+          }
+          <button
+            type="button"
+            class="content-preview"
+            (click)="toggleExpanded(proposal.id)"
+          >
+            <span class="content-label">Content</span>
+            @if (isExpanded(proposal.id)) {
+              <pre class="content-text">{{ proposal.content }}</pre>
+            } @else {
+              <pre class="content-text">{{ contentPreviewOf(proposal.content) }}</pre>
+            }
+          </button>
+          @if (proposal.lesson; as lesson) {
+            <p class="lesson">{{ lesson }}</p>
+          }
+          @if (errorFor(proposal); as error) {
+            <p class="pane-error" role="alert">{{ error }}</p>
+          }
+          @if (!readOnly()) {
+            <div class="imp-acts">
+              <button
+                type="button"
+                class="btn"
+                [disabled]="busy(proposal)"
+                (click)="applyTap(proposal)"
+              >
+                @if (busy(proposal)) {
+                  Applying…
+                } @else if (arm().armed && armTarget() === proposal.id) {
+                  Tap again to apply
+                } @else {
+                  Apply (commit)
+                }
+              </button>
+              <button
+                type="button"
+                class="btn ghost"
+                [disabled]="busy(proposal)"
+                (click)="dismiss(proposal)"
+              >
+                Dismiss
+              </button>
+            </div>
+          }
+        </article>
+      }
+      @if (split().history.length > 0) {
+        <ul class="history">
+          @for (proposal of split().history; track proposal.id) {
+            <li class="history-line">
+              <span class="history-state">{{ proposal.state }}</span>
+              <span class="history-title">{{ proposal.title }}</span>
+              @if (proposal.decidedAt) {
+                <span class="history-decided">· {{ proposal.decidedAt }}</span>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </div>
+    <p class="mem-note">
+      Threshold: from 3 open proposals the card appears in »Needs you«. Below that the
+      loop keeps collecting silently.
+    </p>
+  }
+  </ng-template>
+
     @switch (tab()) {
       <!-- ============ PANE: CHAT ============ -->
       @case ('chat') {
         <div class="pane">
           <div class="pane-body">
+            <ng-container [ngTemplateOutlet]="improvementsBlock" />
             <p class="hint">
-              This chat steers the persona. What you teach it becomes a memory proposal — applied
-              only after your confirmation. “New ticket: …” hands it to Mission Control.
+              What you teach {{ title() }} becomes a memory proposal — applied only after your
+              confirmation. “New ticket: …” hands it to Mission Control.
             </p>
             @if (threadError(); as error) {
               <p class="pane-error" role="alert">{{ error }}</p>
@@ -179,116 +273,6 @@
               </button>
             </div>
           }
-        </div>
-      }
-      <!-- ============ PANE: 1:1 ============ -->
-      @case ('improve') {
-        <div class="pane">
-          <div class="pane-body">
-            <p class="hint">
-              Distilled from {{ title() }}'s friction reports — every proposal with its evidence.
-              Only what you confirm is applied; every apply is one commit.
-            </p>
-            @if (frictionLine(); as line) {
-              <p class="friction">{{ line }}</p>
-            }
-            @if (loading()) {
-              <p class="pane-empty">Loading…</p>
-            } @else if (loadError(); as error) {
-              <div class="detail-error-state">
-                <p class="pane-error" role="alert">{{ error }}</p>
-                <button type="button" class="btn" (click)="reload()">Retry</button>
-              </div>
-            } @else if (empty()) {
-              <p class="pane-empty">
-                No improvement proposals yet — the loop aggregates friction into drafts.
-              </p>
-            } @else {
-              <div class="imp-list">
-                @for (proposal of split().open; track proposal.id) {
-                  <article class="imp">
-                    <div class="imp-top">
-                      <span class="imp-k">{{ proposal.target }}</span>
-                      <span class="imp-src">{{ evidenceWords(proposal) }}</span>
-                    </div>
-                    <h2 class="imp-title">{{ proposal.title }}</h2>
-                    @let evidence = evidencePreviewOf(proposal.evidence);
-                    @if (evidence.shown.length > 0) {
-                      <ul class="evidence">
-                        @for (item of evidence.shown; track item) {
-                          <li>{{ item }}</li>
-                        }
-                      </ul>
-                      @if (evidence.more > 0) {
-                        <p class="evidence-more">+{{ evidence.more }} more</p>
-                      }
-                    }
-                    <button
-                      type="button"
-                      class="content-preview"
-                      (click)="toggleExpanded(proposal.id)"
-                    >
-                      <span class="content-label">Content</span>
-                      @if (isExpanded(proposal.id)) {
-                        <pre class="content-text">{{ proposal.content }}</pre>
-                      } @else {
-                        <pre class="content-text">{{ contentPreviewOf(proposal.content) }}</pre>
-                      }
-                    </button>
-                    @if (proposal.lesson; as lesson) {
-                      <p class="lesson">{{ lesson }}</p>
-                    }
-                    @if (errorFor(proposal); as error) {
-                      <p class="pane-error" role="alert">{{ error }}</p>
-                    }
-                    @if (!readOnly()) {
-                      <div class="imp-acts">
-                        <button
-                          type="button"
-                          class="btn"
-                          [disabled]="busy(proposal)"
-                          (click)="applyTap(proposal)"
-                        >
-                          @if (busy(proposal)) {
-                            Applying…
-                          } @else if (arm().armed && armTarget() === proposal.id) {
-                            Tap again to apply
-                          } @else {
-                            Apply (commit)
-                          }
-                        </button>
-                        <button
-                          type="button"
-                          class="btn ghost"
-                          [disabled]="busy(proposal)"
-                          (click)="dismiss(proposal)"
-                        >
-                          Dismiss
-                        </button>
-                      </div>
-                    }
-                  </article>
-                }
-                @if (split().history.length > 0) {
-                  <ul class="history">
-                    @for (proposal of split().history; track proposal.id) {
-                      <li class="history-line">
-                        <span class="history-state">{{ proposal.state }}</span>
-                        <span class="history-title">{{ proposal.title }}</span>
-                        @if (proposal.decidedAt) {
-                          <span class="history-decided">· {{ proposal.decidedAt }}</span>
-                        }
-                      </li>
-                    }
-                  </ul>
-                }
-              </div>
-              <p class="mem-note">
-                Threshold: from 3 open proposals the card appears in »Needs you«. Below that the
-                loop keeps collecting silently.
-              </p>
-            }
-          </div>
         </div>
       }
       <!-- ============ PANE: MEMORY ============ -->
