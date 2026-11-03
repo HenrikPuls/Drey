@@ -73,6 +73,9 @@
 
           @if (steps().length > 0) {
             <ng-container [ngTemplateOutlet]="gateBar" [ngTemplateOutletContext]="{ tappable: true }" />
+            @if (estimateLine(); as line) {
+              <p class="estimate">{{ line }}</p>
+            }
           }
 
           <div class="body">
@@ -107,10 +110,27 @@
             }
           </div>
 
-          @if (verlauf(); as verlauf) {
-            <section class="verlauf" aria-label="History">
-              <h3 class="tk-sec">History</h3>
-              <pre class="tk-yaml">{{ verlauf }}</pre>
+          @if (costTable(); as table) {
+            <section class="verlauf" aria-label="Cost">
+              <h3 class="tk-sec">Cost</h3>
+              <div class="ctable" role="table" aria-label="Cost per run">
+                @for (row of table.rows; track $index) {
+                  <div class="crow" role="row">
+                    <span class="cstep" role="cell">{{ row.step }}</span>
+                    <span class="cwho" role="cell">{{ row.who }}</span>
+                    <span class="cmeta" role="cell">{{ row.time }}{{ row.time && row.tokens ? ' · ' : '' }}{{ row.tokens ? row.tokens + ' tokens' : '' }}</span>
+                    <span class="ccost" role="cell">{{ row.cost }}</span>
+                  </div>
+                }
+                @if (table.total; as total) {
+                  <div class="crow ctotal" role="row">
+                    <span class="cstep" role="cell">Total</span>
+                    <span class="cwho" role="cell"></span>
+                    <span class="cmeta" role="cell">{{ table.totalTime ?? '' }}</span>
+                    <span class="ccost" role="cell">{{ total }}</span>
+                  </div>
+                }
+              </div>
             </section>
           }
 

@@ -1517,3 +1517,36 @@ export function parseTicketDiff(json: unknown): TicketDiffView {
     truncated: body['truncated'] === true,
   };
 }
+
+// --- the run estimate (E11-4) ---------------------------------------------------------
+
+/** What the desk's `GET /api/estimate/<gate>/<persona>/<model>` answers when it has a basis. */
+export interface McEstimate {
+  readonly gate: string;
+  readonly persona: string;
+  readonly model: string;
+  /** How many earlier runs the figures rest on (at least three). */
+  readonly runs: number;
+  readonly cost: number;
+  readonly minutes: number | null;
+  readonly tokens: number | null;
+}
+
+/** Reads the estimate answer tolerantly; null = no estimate (fewer than three similar runs, or junk). */
+export function parseEstimate(json: unknown): McEstimate | null {
+  if (typeof json !== 'object' || json === null) {
+    return null;
+  }
+  const raw = (json as Record<string, unknown>)['estimate'];
+  if (typeof raw !== 'object' || raw === null) {
+    return null;
+  }
+  const e = raw as Record<string, unknown>;
+  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+  const runs = num(e['runs']);
+  const cost = num(e['cost']);
+  if (typeof e['gate'] !== 'string' || typeof e['persona'] !== 'string' || typeof e['model'] !== 'string' || runs === null || cost === null || runs < 3) {
+    return null;
+  }
+  return { gate: e['gate'], persona: e['persona'], model: e['model'], runs, cost, minutes: num(e['minutes']), tokens: num(e['tokens']) };
+}

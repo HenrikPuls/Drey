@@ -157,8 +157,8 @@ export function usdOf(value: number): string {
 }
 
 /**
- * The pcard foot's 'day costs against budget' line (`0,42 $ / 5 $ today`):
- * without a budget just the day's costs (`0,42 $ today`); null when the
+ * The pcard foot's 'day costs against budget' line (`$0.42 / $5.00 today`):
+ * without a budget just the day's costs (`$0.42 today`); null when the
  * desk carries neither figure — the slot drops out, never a 0-fake. The
  * `over` flag fires only against a budget that exists.
  */
@@ -376,7 +376,7 @@ export class Team {
     return team !== null && team.length === 0;
   });
 
-  /** The header sub ('4 personas · today 2,41 $'); null while loading — the slot hides. */
+  /** The header sub ('4 personas · today $2.41'); null while loading — the slot hides. */
   protected readonly headerSub = computed(() => headerSubOf(this.state.team()));
 
   /** The master strip's face off the fleet snapshot; unknown reads as the idle face. */

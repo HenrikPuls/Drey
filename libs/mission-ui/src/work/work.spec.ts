@@ -315,7 +315,7 @@ describe('groupsOf', () => {
       throw new Error('expected the build group');
     }
     const [rich, waiting, junk] = build.tickets as [TicketVm, TicketVm, TicketVm];
-    expect(rich.costLabel).toBe('0,44 $');
+    expect(rich.costLabel).toBe('$0.44');
     expect(rich.ctxPercent).toBe(58);
     expect(rich.blocked).toBe(false);
     expect(waiting.costLabel).toBeNull();
@@ -349,7 +349,7 @@ describe('groupsOf', () => {
       throw new Error('expected the build group');
     }
     const [full, tokensOnly, zero, bare, junk, legacy, both] = build.tickets as TicketVm[];
-    expect(full.costLabel).toBe('1,87 $');
+    expect(full.costLabel).toBe('$1.87');
     expect(full.tokensLabel).toBe('Σ 54k');
     // A known token count without a cost: the Σ slot shows, the cost slot hides.
     expect(tokensOnly.costLabel).toBeNull();
@@ -362,10 +362,10 @@ describe('groupsOf', () => {
     // Junk counters read as nothing usable.
     expect(junk.costLabel).toBeNull();
     expect(junk.tokensLabel).toBeNull();
-    expect(legacy.costLabel).toBe('0,44 $');
+    expect(legacy.costLabel).toBe('$0.44');
     expect(legacy.tokensLabel).toBeNull();
     // Usage wins over the legacy field when both ride along.
-    expect(both.costLabel).toBe('1,17 $');
+    expect(both.costLabel).toBe('$1.17');
     expect(both.tokensLabel).toBe('Σ 1k');
   });
 
@@ -546,9 +546,9 @@ describe('header helpers', () => {
   });
 
   it('formats the cost slot German-style; absent, zero and junk hide the slot', () => {
-    expect(costLabelOf(0.44)).toBe('0,44 $');
-    expect(costLabelOf(1.87)).toBe('1,87 $');
-    expect(costLabelOf(12)).toBe('12,00 $');
+    expect(costLabelOf(0.44)).toBe('$0.44');
+    expect(costLabelOf(1.87)).toBe('$1.87');
+    expect(costLabelOf(12)).toBe('$12.00');
     expect(costLabelOf(null)).toBeNull();
     expect(costLabelOf(undefined)).toBeNull();
     expect(costLabelOf(0)).toBeNull();

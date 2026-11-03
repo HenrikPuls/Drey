@@ -29,6 +29,8 @@ import {
   chainPrefillOf,
   chainStepsOf,
   changeCountOf,
+  costTableOf,
+  estimateLineOf,
   changeRowsOf,
   commentLabelOf,
   diffFontSizeStep,
@@ -57,6 +59,8 @@ import {
   type ThreadItem,
   type TicketDiffFile,
 } from './ticket.model';
+
+const titleCaseOf = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1);
 
 /** One inline action result: an error line, or the dim confirmation that closes nothing. */
 export interface TicketScreenResult {
@@ -405,6 +409,30 @@ export class TicketView {
    * (no chapter, or prose alone), the section then renders nothing.
    */
   protected readonly verlauf = computed<string | null>(() => verlaufBoxOf(this.doc()?.verlauf ?? []));
+
+  /** The cost table at the ticket's end (E11-4); null while no run has settled. */
+  protected readonly costTable = computed(() => {
+    const doc = this.doc();
+    if (doc === null || doc.verlauf.length === 0) {
+      return null;
+    }
+    const titles = new Map(doc.phases.map((phase) => [phase.id.toLowerCase(), phase.title]));
+    return costTableOf(doc.verlauf, (id) => titles.get(id.trim().toLowerCase()) ?? titleCaseOf(id));
+  });
+
+  /**
+   * The estimate for the gate now running: only from the owner's own
+   * history and only with at least three similar runs (the desk answers
+   * null otherwise), the basis stated in the sentence.
+   */
+  protected readonly estimateLine = computed<string | null>(() => {
+    const current = this.steps().find((step) => step.state === 'current');
+    if (current === undefined || current.persona === null || current.persona === undefined) {
+      return null;
+    }
+    const estimate = this.vm.estimate?.(current.id, current.persona) ?? null;
+    return estimate === null ? null : estimateLineOf(estimate, current.title);
+  });
 
   /** The proof's pass count for the verdict line; null while there is nothing to count. */
   protected readonly verdict = computed<{ passed: number; total: number; stamp: string } | null>(() => {

@@ -1697,3 +1697,52 @@ details.think .step-body {
   height: 1px;
   overflow: hidden;
 }
+
+.ctable {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.crow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'step cost' 'who meta';
+  gap: 2px 12px;
+  font-size: calc(15px * var(--mc-text, 1));
+}
+
+.cstep {
+  grid-area: step;
+  font-weight: 600;
+}
+
+.cwho {
+  grid-area: who;
+  color: var(--text-3);
+  font-size: calc(13px * var(--mc-text, 1));
+}
+
+.cmeta {
+  grid-area: meta;
+  color: var(--text-3);
+  font-size: calc(13px * var(--mc-text, 1));
+  text-align: right;
+}
+
+.ccost {
+  grid-area: cost;
+  font-variant-numeric: tabular-nums;
+}
+
+.ctotal {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border, currentColor);
+}
+
+.estimate {
+  margin: 8px 0 0;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}

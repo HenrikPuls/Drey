@@ -123,6 +123,7 @@ export interface ChatChangePayload {
 // re-export keeps every existing import path working.
 export type { RefineReply, TicketReply, AttachmentReply } from './replies';
 import type { RefineReply, TicketReply, AttachmentReply } from './replies';
+import type { EstimateKey, RunEstimate } from '../core/estimate';
 import type { ReviewComment } from '../core/review-feedback';
 import type { TicketDiff, TicketFileReply, WorktreeFile } from '../core/worktree-changes';
 
@@ -209,6 +210,8 @@ export interface TicketsRemotePort {
   ticketDiff(id: string): Promise<TicketDiff>;
   /** A file on the ticket's branch for the diff's "Whole file" view (E11-2). */
   ticketFile(id: string, path: string): Promise<TicketFileReply>;
+  /** The run estimate from the owner's own history; null below three similar runs (E11-4). */
+  estimate(key: EstimateKey): Promise<RunEstimate | null>;
 
   /** The Mission Control chat surface (E5a) — the service's port verbatim. */
   chatSessions(): Promise<readonly ChatSessionMeta[]>;

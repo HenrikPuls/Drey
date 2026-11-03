@@ -1,4 +1,33 @@
 
+### Milestone 119 — Mission Control cost table + estimate (E11-4)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(concept v2, decision D9, design board "Ready to try" — "How it got here").
+
+- **Cost table.** The ticket face ends in a **Cost** card instead of the
+  raw History YAML: one row per settled run from the ticket's
+  `## Verlauf` — gate (by its pipeline title), `Ben · sonnet`, minutes ·
+  tokens, dollars — and a total row with the summed cost and time. A
+  cost or time the line does not carry reads `—` / is left out and never
+  counts as zero. The raw lines stay in the file and the raw editor.
+- **Estimate.** Under the gate bar, for the gate now running: `About
+  $0.30 · 9 min · 48k tokens — median of 6 earlier Build runs by Ben on
+  sonnet.` The figures are medians over the owner's own history — the
+  `## Verlauf` lines of every ticket under `tickets/`, archive included
+  (`core/estimate.ts`, `GET /api/estimate/<gate>/<persona>/<model>`) — for
+  runs of exactly that gate + persona + model that were handed over and
+  carry a cost. **With fewer than three such runs there is no estimate**,
+  nothing is shown. The model is the one the persona is set to.
+- **Money.** Every ticket/work cost slot writes `$1.87` now (the German
+  `1,87 $` is gone; the Team tab changed in milestone 115).
+- **Specs added:** token/minute words, the median rules (minimum, even
+  count, filters, missing figures), the board read over live and archived
+  tickets, the route, the estimate DTO reader, the cost table rows and
+  totals, the estimate sentence.
+- **Not done:** size classes (decision D9 puts them later); the plan
+  card's per-part estimate arrives with E10-4; the state's estimate memo
+  has no spec of its own.
+
 ### Milestone 118 — Mission Control line comments (E11-3)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-03

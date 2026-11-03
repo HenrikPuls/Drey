@@ -299,7 +299,7 @@ export interface TicketVm {
   readonly blocked: boolean;
   /** The blocker ids the statline names (`wartet auf …`); non-empty exactly when blocked. */
   readonly blockers: readonly string[];
-  /** The cost slot's label (`0,44 $`); null = the desk sent none — the slot stays hidden. */
+  /** The cost slot's label (`$0.44`); null = the desk sent none — the slot stays hidden. */
   readonly costLabel: string | null;
   /** The Σ token label (`Σ 173k`); null = no usable usage — the slot stays hidden. */
   readonly tokensLabel: string | null;
@@ -490,7 +490,7 @@ export function blockerIdsOf(ticket: McTicket): readonly string[] {
  */
 export function costLabelOf(cost: number | null | undefined): string | null {
   return typeof cost === 'number' && Number.isFinite(cost) && cost > 0
-    ? `${cost.toFixed(2).replace('.', ',')} $`
+    ? `$${cost.toFixed(2)}`
     : null;
 }
 

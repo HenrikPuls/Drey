@@ -39,6 +39,7 @@ import type {
   TicketsRemotePort,
 } from '../contracts/remote-protocol';
 import type { BoardSnapshot, CreateResult, MutationResult } from '../contracts/tickets';
+import type { EstimateKey, RunEstimate } from '../core/estimate';
 import type { ReviewComment } from '../core/review-feedback';
 import type { TicketDiff, TicketFileReply, WorktreeFile } from '../core/worktree-changes';
 import type { ChatDecisionResult, ChatServicePort, ChatSession, ChatSessionMeta, ChatTurnResult } from '../contracts/chat';
@@ -73,6 +74,8 @@ export interface RemoteBoard {
   ticketDiff(id: string): Promise<TicketDiff>;
   /** A file on the ticket's branch for the diff's "Whole file" view (E11-2). */
   ticketFile(id: string, path: string): Promise<TicketFileReply>;
+  /** The run estimate from the owner's own history; null below three similar runs (E11-4). */
+  estimateOf(key: EstimateKey): Promise<RunEstimate | null>;
   /** The proof card's file stat list (E5c). */
   worktreeChangesOf(id: string): Promise<readonly WorktreeFile[]>;
   /** The Ready card's accept (E5c). */
@@ -489,6 +492,10 @@ export class DreyTicketsPort implements TicketsRemotePort {
 
   ticketFile(id: string, path: string): Promise<TicketFileReply> {
     return this.boardService.ticketFile(id, path);
+  }
+
+  estimate(key: EstimateKey): Promise<RunEstimate | null> {
+    return this.boardService.estimateOf(key);
   }
 
   chatSessions(): Promise<readonly ChatSessionMeta[]> {

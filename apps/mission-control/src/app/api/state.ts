@@ -29,12 +29,14 @@ import {
   parseSessions,
   parseTeam,
   parseTicketDetail,
+  parseEstimate,
   parseTicketDiff,
   parseWork,
   DEFAULT_PRIORITY_CONFIG,
   type ChatProposalView,
   type ChatStateView,
   type ChatStreamView,
+  type McEstimate,
   type NeedView,
   type PersonaImprovementsView,
   type PersonaMemoryView,
@@ -740,6 +742,38 @@ export class McState {
     }
     this.attachmentUrls.update((map) => new Map(map).set(name, url));
     return url;
+  }
+
+  /** Run estimates by `gate|persona|model` (E11-4); null = asked, no basis. */
+  private readonly estimates = signal<ReadonlyMap<string, McEstimate | null>>(new Map());
+  private readonly estimatesAsked = new Set<string>();
+
+  /**
+   * The estimate for a gate by a persona, on the model the persona is
+   * set to; null until the desk answers and when it has no basis (fewer
+   * than three similar runs). The first call starts the fetch.
+   */
+  estimateFor(gate: string, persona: string): McEstimate | null {
+    const model = this.team().personas.find((p) => p.id === persona)?.model ?? '';
+    if (model === '') {
+      return null;
+    }
+    const key = `${gate}|${persona}|${model}`;
+    if (!this.estimatesAsked.has(key)) {
+      this.estimatesAsked.add(key);
+      void this.fetchEstimate(key, gate, persona, model);
+    }
+    return this.estimates().get(key) ?? null;
+  }
+
+  private async fetchEstimate(key: string, gate: string, persona: string, model: string): Promise<void> {
+    const path = `/api/estimate/${encodeURIComponent(gate)}/${encodeURIComponent(persona)}/${encodeURIComponent(model)}`;
+    const body = await this.client.raw(path);
+    if (body === null) {
+      this.estimatesAsked.delete(key);
+      return;
+    }
+    this.estimates.update((map) => new Map(map).set(key, parseEstimate(body)));
   }
 
   /** Whole-file texts for the diff's "Whole file" view, by repo path. */

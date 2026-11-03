@@ -10,6 +10,7 @@ import {
   parseActiveSession,
   parseBoardCard,
   parseChatEvent,
+  parseEstimate,
   parseImprovements,
   parseNeeds,
   parsePersonaMemory,
@@ -1546,5 +1547,21 @@ describe('parseTeam: the chain slice (prototype convergence)', () => {
       budget: null,
       currentRun: null,
     });
+  });
+});
+
+describe('parseEstimate (E11-4)', () => {
+  const good = { gate: 'build', persona: 'ben', model: 'sonnet', runs: 3, cost: 0.3, minutes: 9, tokens: 48000 };
+
+  it('reads an estimate with a basis of at least three runs', () => {
+    expect(parseEstimate({ ok: true, estimate: good })).toEqual(good);
+    expect(parseEstimate({ ok: true, estimate: { ...good, minutes: undefined, tokens: 'x' } })).toMatchObject({ minutes: null, tokens: null });
+  });
+
+  it('reads no estimate from null, junk or a thin basis', () => {
+    expect(parseEstimate({ ok: true, estimate: null })).toBeNull();
+    expect(parseEstimate(null)).toBeNull();
+    expect(parseEstimate({ estimate: { ...good, runs: 2 } })).toBeNull();
+    expect(parseEstimate({ estimate: { ...good, cost: 'free' } })).toBeNull();
   });
 });

@@ -253,6 +253,7 @@ export const appConfig: ApplicationConfig = {
             return url;
           },
           wholeFile: (path) => state.wholeFile(path),
+          estimate: (gate, persona) => state.estimateFor(gate, persona),
           videoUrl: (name) => {
             const url = state.videoUrl(name);
             if (url === null) {

@@ -24,7 +24,9 @@ import { blockedRefusal } from '../core/blocked';
 import { runTransition, type TransitionIo } from '../core/transition';
 import { parseStatusLog, type StatusLine } from '../core/status-log';
 import { LEDGER_FILE, parseLedger, settledUsageByTicket, type LedgerWrite } from '../core/ledger';
+import { estimateFrom, type EstimateKey, type RunEstimate } from '../core/estimate';
 import { withReviewFeedback, type ReviewComment } from '../core/review-feedback';
+import { parseVerlaufEntries, type VerlaufEntry } from '../core/verlauf';
 import { mergeWorktreeChanges, diffOfOutput, isSafeRepoPath, MAX_FILE_VIEW_BYTES, type TicketDiff, type TicketFileReply, type WorktreeFile } from '../core/worktree-changes';
 import { planWorktreeRemoval } from '../core/worktree-removal';
 import { TicketsGit, type RepoLocation } from '../core/tickets-git';
@@ -558,6 +560,30 @@ export class EngineBoardService {
    * its base, one capped unified diff. No worktree/no repo → an empty
    * diff (the card shows the Changes section alone, honestly).
    */
+  /**
+   * The run estimate for a (gate, persona, model) triple from the owner's
+   * own history (E11-4): the `## Verlauf` lines of every ticket under
+   * `tickets/`, archive included. Null below three matching runs.
+   */
+  async estimateOf(key: EstimateKey): Promise<RunEstimate | null> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return null;
+    }
+    const history: VerlaufEntry[] = [];
+    for (const file of await this.host.listMarkdownFiles(vault.id)) {
+      if (!file.startsWith('tickets/') || file.startsWith('tickets/_meta/')) {
+        continue;
+      }
+      try {
+        history.push(...parseVerlaufEntries(await this.host.read(vault.id, file)));
+      } catch {
+        // An unreadable file adds nothing to the history.
+      }
+    }
+    return estimateFrom(history, key);
+  }
+
   /** A ticket's file on its branch (`git show HEAD:<path>`), for the diff's "Whole file" view. */
   async ticketFile(id: string, filePath: string): Promise<TicketFileReply> {
     if (!isSafeRepoPath(filePath)) {

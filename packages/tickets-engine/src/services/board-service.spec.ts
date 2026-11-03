@@ -877,3 +877,30 @@ The pipeline.
     expect(text).not.toContain('Review feedback');
   });
 });
+
+describe('EngineBoardService estimateOf (E11-4)', () => {
+  const entry = (cost: number, phase = 'build'): string =>
+    `- { phase: ${phase}, persona: ben, model: sonnet, tokens: 40k, cost: ${cost}, dauer: 8m, ausgang: handed-over }`;
+
+  async function withHistory(id: string, folder: string, lines: readonly string[]): Promise<void> {
+    await writeTicket(id, 'inbox');
+    const from = path.join(vaultDir, 'tickets', 'inbox', `${id}.md`);
+    const text = await fsp.readFile(from, 'utf8');
+    const to = path.join(vaultDir, 'tickets', folder, `${id}.md`);
+    await fsp.mkdir(path.dirname(to), { recursive: true });
+    await fsp.writeFile(to, [text.trimEnd(), '', '## Verlauf', '', ...lines, ''].join(String.fromCharCode(10)), 'utf8');
+    await fsp.rm(from);
+  }
+
+  it('reads the history of every ticket, the archive included, and needs three similar runs', async () => {
+    const key = { gate: 'build', persona: 'ben', model: 'sonnet' };
+    const service = serviceOf();
+    await withHistory('T-0001', 'done', [entry(0.2)]);
+    await withHistory('T-0002', 'archive', [entry(0.4), entry(0.9, 'review')]);
+    expect(await service.estimateOf(key)).toBeNull();
+
+    await withHistory('T-0003', 'done', [entry(0.3)]);
+    expect(await service.estimateOf(key)).toEqual({ ...key, runs: 3, cost: 0.3, minutes: 8, tokens: 40_000 });
+    expect(await service.estimateOf({ ...key, gate: 'review' })).toBeNull();
+  });
+});

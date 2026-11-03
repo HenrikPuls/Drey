@@ -25,6 +25,9 @@ function port(): TicketsRemotePort {
     ticketSendBack: vi.fn(ok),
     ticketWorktreeChanges: vi.fn(async () => []),
     ticketDiff: vi.fn(async () => ({ files: [], truncated: false })),
+    estimate: vi.fn(async (key: { gate: string }) =>
+      key.gate === 'build' ? { gate: 'build', persona: 'ben', model: 'a/b', runs: 3, cost: 0.3, minutes: 9, tokens: 48000 } : null,
+    ),
     ticketFile: vi.fn(async (_id: string, path: string) =>
       path === 'src/a.ts' ? { ok: true as const, text: 'a\nb\n', truncated: false } : { ok: false as const, error: 'nope' },
     ),
@@ -209,6 +212,10 @@ describe('route', () => {
 
     expect((await route(req({ path: '/api/tickets/T-0052/diff', authorization: auth }), deps)).status).toBe(200);
     expect(remote.ticketDiff).toHaveBeenCalledWith('T-0052');
+    const est = await route(req({ path: '/api/estimate/build/ben/a%2Fb', authorization: auth }), deps);
+    expect(remote.estimate).toHaveBeenCalledWith({ gate: 'build', persona: 'ben', model: 'a/b' });
+    expect(est.body).toMatchObject({ ok: true, estimate: { runs: 3, cost: 0.3 } });
+    expect((await route(req({ path: '/api/estimate/plan/ben/x', authorization: auth }), deps)).body).toEqual({ ok: true, estimate: null });
     const whole = await route(req({ path: '/api/tickets/T-0052/file/src%2Fa.ts', authorization: auth }), deps);
     expect(whole.status).toBe(200);
     expect(whole.body).toEqual({ ok: true, text: 'a\nb\n', truncated: false });

@@ -44,6 +44,7 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
     ledgerText: vi.fn(async () => null),
     saveTicket: vi.fn(async () => ({ ok: true, revision: '0123456789abcdef' })),
     ticketDiff: vi.fn(async () => ({ files: [], truncated: false })),
+    estimateOf: vi.fn(async () => null),
     ticketFile: vi.fn(async () => ({ ok: false as const, error: 'nope' })),
     worktreeChangesOf: vi.fn(async () => []),
     acceptTicket: vi.fn(async () => ok),

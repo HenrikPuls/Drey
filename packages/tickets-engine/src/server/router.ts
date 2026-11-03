@@ -384,6 +384,11 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
       const id = decodeURIComponent(diff[1]!);
       return TICKET_ID_PATTERN.test(id) ? json(await port.ticketDiff(id)) : fail(404, 'no such ticket id');
     }
+    const estimate = /^\/api\/estimate\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(req.path);
+    if (estimate !== null) {
+      const [gate, persona, model] = [1, 2, 3].map((i) => decodeURIComponent(estimate[i]!));
+      return json({ ok: true, estimate: await port.estimate({ gate: gate!, persona: persona!, model: model! }) });
+    }
     const file = /^\/api\/tickets\/([^/]+)\/file\/(.+)$/.exec(req.path);
     if (file !== null) {
       const id = decodeURIComponent(file[1]!);

@@ -18,7 +18,7 @@
  * client.
  */
 import { InjectionToken } from '@angular/core';
-import type { McTicketUsage, McVerlaufEntry } from '../api/dto';
+import type { McEstimate, McTicketUsage, McVerlaufEntry } from '../api/dto';
 
 // --- action replies ----------------------------------------------------------
 
@@ -583,10 +583,10 @@ export function splitTicketSections(text: string): TicketSections {
  * the bar's total, the head card's dollars.
  */
 
-/** The dollars as the prototype writes them (`1,87 $`); null unless a usable positive number — never a 0-fake. */
+/** The dollars as the cost slots write them (`$1.87`); null unless a usable positive number — never a 0-fake. */
 export function usdLabelOf(cost: number | null | undefined): string | null {
   return typeof cost === 'number' && Number.isFinite(cost) && cost > 0
-    ? `${cost.toFixed(2).replace('.', ',')} $`
+    ? `$${cost.toFixed(2)}`
     : null;
 }
 
@@ -636,7 +636,7 @@ export function verlaufCostsOf(entries: readonly McVerlaufEntry[]): ReadonlyMap<
 }
 
 /**
- * The gate pill's cost figure for one step (`0,24` — de comma, no sign,
+ * The gate pill's cost figure for one step (`0.24`, no sign,
  * the prototype's pill): the Verlauf sum of the step's phase, matched by
  * id first, its title as the fallback (a hand-written chapter may carry
  * `Verlauf`-style titles); null when the phase's runs cost nothing.
@@ -646,10 +646,10 @@ export function gateCostOf(
   step: { readonly id: string; readonly title: string },
 ): string | null {
   const sum = costs.get(step.id.trim().toLowerCase()) ?? costs.get(step.title.trim().toLowerCase());
-  return sum !== undefined && sum > 0 ? sum.toFixed(2).replace('.', ',') : null;
+  return sum !== undefined && sum > 0 ? sum.toFixed(2) : null;
 }
 
-/** The bar's end slot: every Verlauf cost summed (`1,87 $`); null until the runs cost something. */
+/** The bar's end slot: every Verlauf cost summed (`$1.87`); null until the runs cost something. */
 export function verlaufTotalOf(entries: readonly McVerlaufEntry[]): string | null {
   let sum = 0;
   for (const entry of entries) {
@@ -995,6 +995,12 @@ export interface TicketVm {
    * offers no whole-file view.
    */
   wholeFile?(path: string): WholeFile | null;
+  /**
+   * The run estimate for a gate by a persona, from the owner's own
+   * history; null while it loads, when the persona's model is unknown or
+   * when fewer than three similar runs exist (E11-4). Optional.
+   */
+  estimate?(gate: string, persona: string): McEstimate | null;
   /** The URL a walkthrough `<video>` plays (`GET /api/videos/<name>`); null until it can serve it. Optional: an adapter without it shows no player. */
   videoUrl?(name: string): string | null;
 
@@ -1171,4 +1177,78 @@ export function commentLabelOf(comment: { line: number; endLine: number | null }
 /** The send-back button's wording: with comments it names how many. */
 export function sendBackLabelOf(count: number): string {
   return count === 0 ? 'Send back…' : `Send back with ${count} ${count === 1 ? 'comment' : 'comments'}…`;
+}
+
+// --- the cost table and the estimate (E11-4) ----------------------------------------
+
+/** One run of the cost table. */
+export interface CostRow {
+  /** The gate, by its pipeline title when the pipeline knows it. */
+  readonly step: string;
+  /** `Ben · sonnet`; '' when the line carries neither. */
+  readonly who: string;
+  /** `9 min`; '' when unknown. */
+  readonly time: string;
+  /** The Log's short token words (`48k`); '' when unknown. */
+  readonly tokens: string;
+  /** `$0.30`, or `—` when the run recorded no cost. */
+  readonly cost: string;
+  /** `handed over` / `failed` / `stopped`; '' when unreadable. */
+  readonly outcome: string;
+}
+
+export interface CostTable {
+  readonly rows: readonly CostRow[];
+  /** The sum of every known cost; null until some run cost something. */
+  readonly total: string | null;
+  /** Whole minutes over the runs that recorded one; null when none did. */
+  readonly totalTime: string | null;
+}
+
+const titleCase = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1);
+
+/**
+ * The ticket's `## Verlauf` as the cost table at its end: one row per
+ * settled run, oldest first as written, and the total under it. An
+ * unknown cost reads `—` and never counts as zero.
+ */
+export function costTableOf(entries: readonly McVerlaufEntry[], phaseTitle: (id: string) => string): CostTable {
+  let minutes: number | null = null;
+  const rows: CostRow[] = entries.map((entry) => {
+    const mins = /^(\d+)m$/.exec(entry.dauer.trim());
+    if (mins !== null) {
+      minutes = (minutes ?? 0) + Number(mins[1]);
+    }
+    const who = [entry.persona === null ? '' : titleCase(entry.persona), entry.model ?? ''].filter((p) => p !== '').join(' · ');
+    return {
+      step: entry.phase === null ? '—' : phaseTitle(entry.phase),
+      who,
+      time: mins === null ? '' : `${mins[1]} min`,
+      tokens: entry.tokens,
+      cost: usdLabelOf(entry.cost) ?? '—',
+      outcome: entry.ausgang === 'handed-over' ? 'handed over' : (entry.ausgang ?? ''),
+    };
+  });
+  return { rows, total: verlaufTotalOf(entries), totalTime: minutes === null ? null : `${minutes} min` };
+}
+
+/** 48000 → `48k`, 3400000 → `3.4M`: the Log's token words. */
+export function tokenWordsOf(n: number): string {
+  if (n >= 1_000_000) {
+    return `${(n / 1_000_000).toFixed(1)}M`;
+  }
+  return n >= 1_000 ? `${Math.round(n / 1_000)}k` : String(n);
+}
+
+/**
+ * The estimate sentence with its basis stated:
+ * `About $0.30 · 9 min · 48k tokens — median of 6 earlier Build runs by Ben on sonnet.`
+ */
+export function estimateLineOf(estimate: McEstimate, gateTitle: string): string {
+  const figures = [
+    `About ${usdLabelOf(estimate.cost) ?? `$${estimate.cost.toFixed(2)}`}`,
+    ...(estimate.minutes === null ? [] : [`${estimate.minutes} min`]),
+    ...(estimate.tokens === null ? [] : [`${tokenWordsOf(estimate.tokens)} tokens`]),
+  ].join(' · ');
+  return `${figures} — median of ${estimate.runs} earlier ${gateTitle} runs by ${titleCase(estimate.persona)} on ${estimate.model}.`;
 }
