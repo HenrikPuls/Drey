@@ -78,7 +78,7 @@ const FLEET_METHODS = ['runs', 'start', 'chainStatus', 'stop', 'send', 'answerPe
 // pair/revoke take primitive args; the invoke channel carries one object
 // payload, so both get explicit adapters below (the generic register would
 // hand the whole payload where a string is expected).
-const REMOTE_METHODS = ['status', 'configure', 'init', 'localClient'] as const;
+const REMOTE_METHODS = ['status', 'configure', 'init', 'localClient', 'cancelPairing'] as const;
 
 export async function createEngine(opts: EngineOptions): Promise<Engine> {
   const log = opts.log ?? (() => undefined);
