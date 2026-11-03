@@ -281,6 +281,29 @@ follows the plan and is never fixed; one part means no `### Parts`
 chapter at all ("Keep as one"). The parser is tolerant (an unreadable
 line is skipped with a warning, never a guess).
 
+The canonical shape (`core/plan-parts.ts`):
+
+```markdown
+### Parts
+
+- [ ] Split a file diff into hunks
+  persona: ben
+  reason: pure logic first, so the panel can build on it
+  chain: insert security(ralf, notify) after review; skip qa
+- [x] Hunk rows in the Source control panel
+  persona: ben
+```
+
+`[x]` marks a part whose ticket was accepted. Detail keys are `persona`
+(a persona id), `reason` (one line) and `chain` (entries of the
+[chain delta](#the-chain-delta-e9-concept-57) grammar separated by `;`
+— a `;` never occurs inside an entry). An unknown key, a bad persona or a
+chain entry outside the grammar warns and drops. Moving a part is
+`movePlanPart`, deleting `deletePlanPart`: both refuse a running part,
+and `movePlanPart` refuses to put a part ahead of one that runs. Writing
+the chapter (`withPlanParts`) replaces it in place or adds it at the end
+of the Plan and removes it for fewer than two parts.
+
 ### Frontmatter fields
 
 | Field | Shape | Rules |
@@ -295,7 +318,7 @@ line is skipped with a warning, never a guess).
 | `track` | `auto \| shape` | Optional (req-75 W1b, ADR-0087 decision 2). The ticket's triage track: `auto` runs on its own, `shape` goes through the plan-mode dialog with the owner. Absent (or any other value — a warning) reads as not triaged; set from the Work panel's row menu (Track ›) until W5c/W6 fill it from triage. |
 | `form` | `ship \| scout` | Optional (concept §5.6, E8). The ticket's form: `ship` (the default — an absent key reads as ship) is the known way, plan → worktree → gate → move. `scout` is exploration only: a scout run reads repo/history/data and writes the ticket's `## Report` section — no worktree, no diff, no gate, no move; the report surfaces as a card in "Needs you" and the owner promotes the ticket to ship from there. Any other value warns (`form must be ship or scout — read as ship`) and reads as ship. See [The scout form](#the-scout-form-e8-concept-56). |
 | `chain` | list of strings | Optional (concept §5.7, E9). The ticket's **delta** against the pipeline's standard flow — the standard flow itself is team configuration in `_meta/pipeline.md` and applies to every ticket silently; the ticket stores only the deviations, one declarative entry per item in the strict grammar: `insert <phase>[(<persona>[, notify] \| notify)] after\|before <anchor>` (add a gate at the anchor — a standard-flow phase may be revisited this way, at most once), `skip <phase>` (bypass a gate), `notify <phase>` (the Bescheid rule: a card lands in "Needs you" when the gate completes). Absent (or empty) reads as the standard flow. An entry outside the grammar warns and drops (`chain entry "<raw>" is not readable — expected e.g. "insert design after review"`). See [The chain delta](#the-chain-delta-e9-concept-57). |
-| `parent` | ticket id | Optional (E10, concept v2 §5.9). Set on a ticket that is one **part** of a split plan: `parent: T-0130` names the ticket whose `### Parts` list produced it. The parent keeps the plan; the part carries its own description, builder persona and `chain:` delta (a per-part scope — the parent's `chain:` never leaks into a part). An unknown or self-referencing id warns and reads as no parent. |
+| `parent` | ticket id | Optional (E10, concept v2 §5.9). Set on a ticket that is one **part** of a split plan: `parent: T-0130` names the ticket whose `### Parts` list produced it. The parent keeps the plan; the part carries its own description, builder persona and `chain:` delta (a per-part scope — the parent's `chain:` never leaks into a part). A value that is no ticket id, or the ticket's own id, warns and reads as no parent; whether the parent still exists is not checked (a finished parent is archived). |
 | `proof` | `ui \| tests` | Optional pin (E11, concept v2 §5.3). Overrides the Handover's proof declaration (see [Proof mode](#proof-mode-e11)). Absent, or any other value (a warning), means no pin; with no pin and no readable declaration the mode reads as `ui`. |
 | `rank` | integer 0-999999 | Default `5000`. Fine ordering inside derived order. |
 | `branch` | `t/<id>` | Written by machine writers; validated against the rule; rule wins. |

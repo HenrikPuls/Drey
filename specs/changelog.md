@@ -1,4 +1,29 @@
 
+### Milestone 120 — Plan parts schema + parser (E10-1)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(concept v2 §5.9; ADR-0088 E10 – E12). Engine only — nothing on screen
+changes yet; E10-2 – E10-5 build on it.
+
+- **`### Parts`.** `core/plan-parts.ts` reads and writes the optional
+  chapter under `## Plan`: one `- [ ] <title>` per part in execution order
+  with indented `persona:`, `reason:` and `chain:` details (the chain
+  entries in the chain-delta grammar, `;`-separated). The reader is
+  tolerant — stray lines, unknown keys, a bad persona and unreadable
+  chain entries warn and drop; `withPlanParts` replaces the chapter in
+  place or appends it to the Plan and removes it for fewer than two parts
+  ("Keep as one"). `movePlanPart` / `deletePlanPart` are list edits that
+  refuse a running part and any move ahead of one.
+- **`parent:`.** The frontmatter key naming the ticket a part belongs to
+  (`TicketMeta.parent`); a value that is no ticket id or the ticket's own
+  id warns and reads as no parent.
+- **Specs:** the round trip, tolerance cases, CRLF, chapter boundaries,
+  replace/add/remove placement, move/delete incl. the running-part lock,
+  the `parent:` reader. Spec text: `specs/ticket-schema.md`, "Parts".
+- **Not done:** per-part scope in the chain machinery (a part's `chain:`
+  is parsed, the dispatcher reads only the ticket's own until E10-4
+  creates the part tickets).
+
 ### Milestone 119 — Mission Control cost table + estimate (E11-4)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04

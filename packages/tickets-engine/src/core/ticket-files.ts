@@ -113,6 +113,19 @@ export function parseTicketFile(text: string, relPath: string, priorities: Prior
   const worker = asText(obj['worker']);
   const persona = asText(obj['persona']);
   // E11-1: the proof pin; only the two words read, anything else is no pin.
+  // E10: the parent of a part. Only a ticket id other than the ticket's
+  // own reads; anything else warns and reads as no parent.
+  const rawParent = asText(obj['parent']);
+  let parent: string | null = null;
+  if (rawParent !== null) {
+    if (!/^T-\d{4,}$/.test(rawParent)) {
+      issues.push({ level: 'warning', message: 'parent must be a ticket id (T-0042) — read as no parent' });
+    } else if (rawParent === parts.stem) {
+      issues.push({ level: 'warning', message: 'a ticket cannot be its own parent — read as no parent' });
+    } else {
+      parent = rawParent;
+    }
+  }
   const rawProof = asText(obj['proof']);
   const proof = parseProofMode(rawProof);
   if (rawProof !== null && proof === null) {
@@ -222,6 +235,7 @@ export function parseTicketFile(text: string, relPath: string, priorities: Prior
       worker,
       persona,
       ...(proof !== null ? { proof } : {}),
+      ...(parent !== null ? { parent } : {}),
       track,
       ...(form !== undefined ? { form } : {}),
       ...(chain.length > 0 ? { chain } : {}),

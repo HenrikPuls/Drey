@@ -530,3 +530,22 @@ describe('the proof pin (E11-1)', () => {
     expect(odd.issues.some((i) => i.level === 'warning' && i.message.includes('proof must be'))).toBe(true);
   });
 });
+
+describe('the parent of a part (E10)', () => {
+  const withParent = (line: string): string => CANONICAL.replace(/^title:.*$/m, (m) => `${m}
+${line}`);
+
+  it('reads a ticket id', () => {
+    expect(parseTicketFile(withParent('parent: T-0130'), 'tickets/inbox/T-0042.md').meta.parent).toBe('T-0130');
+  });
+
+  it('is absent without the key, and warns on a bad or own id', () => {
+    expect(parseTicketFile(CANONICAL, 'tickets/inbox/T-0042.md').meta.parent).toBeUndefined();
+    const bad = parseTicketFile(withParent('parent: soon'), 'tickets/inbox/T-0042.md');
+    expect(bad.meta.parent).toBeUndefined();
+    expect(bad.issues.some((i) => i.level === 'warning' && i.message.includes('parent must be a ticket id'))).toBe(true);
+    const own = parseTicketFile(withParent('parent: T-0042'), 'tickets/inbox/T-0042.md');
+    expect(own.meta.parent).toBeUndefined();
+    expect(own.issues.some((i) => i.message.includes('its own parent'))).toBe(true);
+  });
+});
