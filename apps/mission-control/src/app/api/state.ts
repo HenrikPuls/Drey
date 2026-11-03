@@ -144,6 +144,14 @@ export class McState {
   // --- the ticket screen's slice (E5c) --------------------------------------
   /** The ticket the screen shows; null = the board, not one ticket. */
   readonly ticketOpen = signal<{ id: string } | null>(null);
+  /**
+   * The ticket a card back-swipe parked its Send-back on: the screen
+   * answers by opening its Send-back panel (on the proof face) for this
+   * ticket and consumes the flag. Every fresh open, the panel's dismiss,
+   * an accept, a landed send-back and the screen's close clear it —
+   * null = nothing waiting.
+   */
+  readonly sendBackPending = signal<string | null>(null);
   /** The loaded ticket; null while the first fetch runs or it failed. */
   readonly ticketDetail = signal<TicketDetail | null>(null);
   /** The last load/save failure the ticket screen surfaces; null when all is well. */
@@ -490,14 +498,30 @@ export class McState {
   /**
    * Opens one ticket: the screen shows it, the detail and the diff start
    * loading. The board view supplies the phase list; the card's own
-   * phase is the highlighted entry.
+   * phase is the highlighted entry. A pending send-back never survives
+   * an open — only the swipe's own call re-parks one, right after.
    */
   openTicket(id: string): void {
     this.ticketOpen.set({ id });
+    this.sendBackPending.set(null);
     this.ticketDetail.set(null);
     this.ticketError.set(null);
     this.diff.set(null);
     void this.loadTicket(id);
+  }
+
+  /**
+   * The card back-swipe's one call: opens the ticket AND parks the
+   * send-back, so the screen lands straight on its Send-back panel.
+   */
+  openTicketSendBack(id: string): void {
+    this.openTicket(id);
+    this.sendBackPending.set(id);
+  }
+
+  /** The screen consumed the parked send-back (panel opened or dismissed). */
+  clearSendBack(): void {
+    this.sendBackPending.set(null);
   }
 
   /** Back to the board: drops the detail and revokes every object URL the memo holds. */
@@ -507,6 +531,7 @@ export class McState {
     }
     this.attachmentUrls.set(new Map());
     this.ticketOpen.set(null);
+    this.sendBackPending.set(null);
     this.ticketDetail.set(null);
     this.ticketError.set(null);
     this.diff.set(null);
@@ -592,6 +617,7 @@ export class McState {
     if (body['ok'] !== true) {
       return refusal(body, 'the desk did not accept the ticket');
     }
+    this.sendBackPending.set(null);
     await this.loadTicket(open.id);
     return { ok: true };
   }
@@ -616,6 +642,7 @@ export class McState {
     if (body['ok'] !== true) {
       return refusal(body, 'the desk did not send the ticket back');
     }
+    this.sendBackPending.set(null);
     await this.loadTicket(open.id);
     return { ok: true };
   }

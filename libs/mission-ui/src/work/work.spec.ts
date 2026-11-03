@@ -1,17 +1,25 @@
 /**
- * The work tab's specs: the pure group/next-phase logic plus the header's
- * helpers (vault sub, Fleet chip, the card's tolerant cost/Σ-tokens/ctx/
- * wait slots), then the component class against a fake state object — no
- * DOM (the unit-test builder runs these under jsdom, but nothing here
- * renders a template). The improvements card's tap and the scout report
- * card's promote (E8) close the file.
+ * The work tab's specs: the pure group/next-phase logic in the owner's
+ * reading order (Needs you first, closest-to-done first, the terminal
+ * phase last, empty groups gone), the card swipe's pure helpers, the
+ * header's helpers (vault sub, Fleet chip, the card's tolerant
+ * cost/Σ-tokens/ctx/wait slots), then the component class against a fake
+ * state object — no DOM (the unit-test builder runs these under jsdom,
+ * but nothing here renders a template): tap straight into the ticket,
+ * the pointer-driven action layer, the fired move/send-back. The
+ * improvements card's tap and the scout report card's promote (E8) close
+ * the file.
  */
 import type { Signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { describe, expect, it, vi } from 'vitest';
 import { Work } from './work';
 import {
   MC_WORK_STATE,
   NEED_KIND_LABELS,
+  SWIPE_FLASH_MS,
+  SWIPE_REACH_PX,
+  SWIPE_TRIGGER_PX,
   blockerIdsOf,
   costLabelOf,
   ctxPercentOf,
@@ -27,6 +35,8 @@ import {
   personaMapOf,
   questionCardOf,
   questionNeedOf,
+  swipeActionOf,
+  swipeProgressOf,
   ticketPersonaOf,
   tokensSumLabelOf,
   vaultTitleOf,
@@ -104,13 +114,21 @@ interface WorkSurface {
   liveRuns: Signal<number | null>;
   fleetLabel: Signal<string>;
   fleetLive: Signal<boolean>;
-  openCard: Signal<TicketVm | null>;
-  moveError: Signal<string | null>;
-  movePending: Signal<boolean>;
-  moveTarget: Signal<{ phaseId: string; title: string } | null>;
-  openSheet(card: TicketVm): void;
-  closeSheet(): void;
-  moveOn(): Promise<void>;
+  swipe: Signal<{ id: string; deltaX: number } | null>;
+  swipeFlash: Signal<{ id: string; action: 'forward' | 'back' } | null>;
+  openTicketCard(vm: TicketVm): void;
+  onCardPointerDown(event: PointerEvent, vm: TicketVm): void;
+  onCardPointerMove(event: PointerEvent): void;
+  onCardPointerUp(event: PointerEvent, vm: TicketVm): void;
+  onCardPointerCancel(): void;
+  onCardTap(vm: TicketVm): void;
+  swipeLayerOf(vm: TicketVm): {
+    side: 'forward' | 'back';
+    label: string;
+    progress: number;
+    widthPercent: number;
+  } | null;
+  isFlashing(vm: TicketVm, action: 'forward' | 'back'): boolean;
   needTappable(vm: NeedVm): boolean;
   openNeedPersona(vm: NeedVm): void;
   onFleetTap(): void;
@@ -120,9 +138,18 @@ function surface(work: Work): WorkSurface {
   return work as unknown as WorkSurface;
 }
 
-/** The group's first card, when it is a phase group (template-free specs). */
-function firstCard(group: WorkGroup | undefined): TicketVm | null {
-  return group?.kind === 'phase' ? (group.tickets[0] ?? null) : null;
+/** The phase group's first card (template-free specs); throws when absent. */
+function phaseCardOf(vm: WorkSurface, phaseId: string): TicketVm {
+  const group = vm.groups().find((g) => g.kind === 'phase' && g.phaseId === phaseId);
+  if (group?.kind !== 'phase' || group.tickets[0] === undefined) {
+    throw new Error(`expected a card in ${phaseId}`);
+  }
+  return group.tickets[0];
+}
+
+/** A plain pointer the handlers can read — jsdom ships no PointerEvent. */
+function pointerAt(x: number): PointerEvent {
+  return { clientX: x, button: 0, pointerType: 'touch' } as PointerEvent;
 }
 
 function setup(fake: FakeState | null): Work {
@@ -136,6 +163,8 @@ function setup(fake: FakeState | null): Work {
 // --- the pure group logic ----------------------------------------------------------
 
 describe('groupsOf', () => {
+  // Pipeline order: inbox → build → verify → done, plus a directory the
+  // pipeline lost. Inbox is empty — the render drops it.
   const board: McBoard = {
     checkpoints: ['verify'],
     columns: [
@@ -150,6 +179,8 @@ describe('groupsOf', () => {
           }),
         ],
       },
+      { phase: { id: 'verify', title: 'Verify' }, tickets: [ticket('T-0003')] },
+      { phase: { id: 'done', title: 'Done' }, tickets: [ticket('T-0004')] },
       {
         phase: { id: 'lost', title: 'lost' },
         tickets: [ticket('T-0009')],
@@ -158,10 +189,29 @@ describe('groupsOf', () => {
     ],
   };
 
-  it('puts the needs-you group first, then the board groups in order', () => {
+  it("puts 'Needs you' on top, then closest-to-done first, done last, unknowns after", () => {
     const groups = groupsOf([need('question', 'Pick a lane')], board, []);
-    expect(groups.map((g) => g.kind)).toEqual(['needs', 'phase', 'phase', 'phase']);
-    expect(groups.map((g) => g.title)).toEqual(['Braucht dich', 'Inbox', 'Build', 'lost']);
+    expect(groups.map((g) => g.title)).toEqual([
+      'Needs you',
+      'Verify',
+      'Build',
+      'Done',
+      'lost',
+    ]);
+    const first = groups[0];
+    expect(first?.kind).toBe('needs');
+    expect(first?.kind === 'needs' ? first.title : null).toBe('Needs you');
+  });
+
+  it('never renders an empty phase group — the dropped column leaves no group', () => {
+    const groups = groupsOf([], board, []);
+    expect(groups.filter((g) => g.kind === 'phase').map((g) => g.title)).toEqual([
+      'Verify',
+      'Build',
+      'Done',
+      'lost',
+    ]);
+    expect(groups.some((g) => g.kind === 'phase' && g.phaseId === 'inbox')).toBe(false);
   });
 
   it('omits the needs group when nothing waits', () => {
@@ -173,13 +223,8 @@ describe('groupsOf', () => {
     const groups = groupsOf([need('failed', 'Run died')], null, []);
     expect(groups).toHaveLength(1);
     expect(groups[0]?.kind).toBe('needs');
+    expect(groups[0]?.kind === 'needs' ? groups[0].title : null).toBe('Needs you');
     expect(groupsOf([], null, [])).toEqual([]);
-  });
-
-  it('keeps empty columns as groups with an empty ticket list', () => {
-    const groups = groupsOf([], board, []);
-    const inbox = groups.find((g) => g.kind === 'phase' && g.phaseId === 'inbox');
-    expect(inbox && inbox.kind === 'phase' ? inbox.tickets : null).toEqual([]);
   });
 
   it('marks unknown columns but still renders their tickets', () => {
@@ -348,36 +393,55 @@ describe('groupsOf', () => {
 });
 
 describe('nextPhaseOf', () => {
+  // Pipeline order (the board's own order — the render reads the other
+  // way round): inbox → build → lost(unknown) → verify → done. Verify is
+  // empty: a move into it is exactly how it fills, so it stays a target.
   const board: McBoard = {
     columns: [
       { phase: { id: 'inbox', title: 'Inbox' }, tickets: [] },
-      { phase: { id: 'build', title: 'Build' }, tickets: [] },
+      { phase: { id: 'build', title: 'Build' }, tickets: [ticket('T-0001')] },
       { phase: { id: 'lost', title: 'lost' }, tickets: [], unknown: true },
       { phase: { id: 'verify', title: 'Verify' }, tickets: [] },
-      { phase: { id: 'done', title: 'Done' }, tickets: [] },
+      { phase: { id: 'done', title: 'Done' }, tickets: [ticket('T-0002')] },
     ],
   };
-  const groups = groupsOf([need('question', 'waiting')], board, []);
 
-  it('returns the next phase group in board order', () => {
-    const next = nextPhaseOf(groups, 'build');
-    expect(next?.phaseId).toBe('verify');
-    expect(next?.title).toBe('Verify');
-  });
-
-  it('skips the needs group — it is not a phase', () => {
-    expect(nextPhaseOf(groups, 'inbox')?.phaseId).toBe('build');
+  it('returns the next column in pipeline order — an empty one included', () => {
+    expect(nextPhaseOf(board, 'build')).toEqual({ phaseId: 'verify', title: 'Verify' });
+    expect(nextPhaseOf(board, 'inbox')).toEqual({ phaseId: 'build', title: 'Build' });
   });
 
   it('skips unknown columns in both directions', () => {
-    expect(nextPhaseOf(groups, 'build')?.phaseId).toBe('verify');
-    expect(nextPhaseOf(groups, 'verify')?.phaseId).toBe('done');
+    expect(nextPhaseOf(board, 'build')?.phaseId).toBe('verify');
+    expect(nextPhaseOf(board, 'lost')).toBeNull();
   });
 
-  it('returns null on the last phase, an unknown phase or an absent one', () => {
-    expect(nextPhaseOf(groups, 'done')).toBeNull();
-    expect(nextPhaseOf(groups, 'lost')).toBeNull();
-    expect(nextPhaseOf(groups, 'nope')).toBeNull();
+  it('returns null on the terminal phase or an absent one', () => {
+    expect(nextPhaseOf(board, 'done')).toBeNull();
+    expect(nextPhaseOf(board, 'nope')).toBeNull();
+    expect(nextPhaseOf(null, 'build')).toBeNull();
+  });
+});
+
+// --- the card swipe's pure helpers --------------------------------------------------
+
+describe('swipe helpers', () => {
+  it('verdicts the release: forward past +72, back past −72, between neither', () => {
+    expect(swipeActionOf(SWIPE_TRIGGER_PX)).toBe('forward');
+    expect(swipeActionOf(SWIPE_TRIGGER_PX + 200)).toBe('forward');
+    expect(swipeActionOf(-SWIPE_TRIGGER_PX)).toBe('back');
+    expect(swipeActionOf(-SWIPE_TRIGGER_PX - 200)).toBe('back');
+    expect(swipeActionOf(SWIPE_TRIGGER_PX - 1)).toBeNull();
+    expect(swipeActionOf(-(SWIPE_TRIGGER_PX - 1))).toBeNull();
+    expect(swipeActionOf(0)).toBeNull();
+  });
+
+  it('grows the action layer with the distance, sign-blind, clamped at the reach', () => {
+    expect(swipeProgressOf(0)).toBe(0);
+    expect(swipeProgressOf(SWIPE_REACH_PX / 2)).toBe(0.5);
+    expect(swipeProgressOf(-SWIPE_REACH_PX / 2)).toBe(0.5);
+    expect(swipeProgressOf(SWIPE_REACH_PX)).toBe(1);
+    expect(swipeProgressOf(-SWIPE_REACH_PX * 4)).toBe(1);
   });
 });
 
@@ -542,13 +606,12 @@ describe('header helpers', () => {
 // --- the component class -----------------------------------------------------------
 
 describe('Work', () => {
+  // Pipeline order: inbox → build → done. Render order reads the other
+  // way round: build, inbox (done is empty — no group at all).
   const board: McBoard = {
     columns: [
       { phase: { id: 'inbox', title: 'Inbox' }, tickets: [ticket('T-0001', { title: 'An idea' })] },
-      {
-        phase: { id: 'build', title: 'Build' },
-        tickets: [ticket('T-0002', { title: 'Build it', summary: 'The what and the why' })],
-      },
+      { phase: { id: 'build', title: 'Build' }, tickets: [ticket('T-0002', { title: 'Build it' })] },
       { phase: { id: 'done', title: 'Done' }, tickets: [] },
     ],
   };
@@ -560,10 +623,10 @@ describe('Work', () => {
     expect(vm.readOnly()).toBe(false);
   });
 
-  it('derives the groups from the fake state, Braucht dich first', () => {
+  it('derives the groups from the fake state, Needs you first', () => {
     const { state } = makeFake({ needs: [need('permission', 'Allow deploy?')], board });
     const vm = surface(setup(state));
-    expect(vm.groups().map((g) => g.title)).toEqual(['Braucht dich', 'Inbox', 'Build', 'Done']);
+    expect(vm.groups().map((g) => g.title)).toEqual(['Needs you', 'Build', 'Inbox']);
   });
 
   it('reads the header sub tolerantly from the board payload', () => {
@@ -629,98 +692,213 @@ describe('Work', () => {
     expect(surface(setup(state)).readOnly()).toBe(true);
   });
 
-  it('opens the sheet on card tap and closes it again', () => {
+  // --- the cards: tap straight through, swipe acts in place ----------------------
+
+  it('the card tap opens the ticket screen straight away', () => {
     const { state } = makeFake({ board });
+    const opened: string[] = [];
+    state.openTicket = (id: string) => opened.push(id);
     const vm = surface(setup(state));
-    const buildGroup = vm.groups().find((g) => g.kind === 'phase' && g.phaseId === 'build')!;
-    const card = firstCard(buildGroup);
-    expect(card).not.toBeNull();
 
-    vm.openSheet(card!);
-    expect(vm.openCard()?.id).toBe('T-0002');
-    expect(vm.moveTarget()?.phaseId).toBe('done');
-    expect(vm.moveError()).toBeNull();
+    vm.onCardTap(phaseCardOf(vm, 'build'));
 
-    vm.closeSheet();
-    expect(vm.openCard()).toBeNull();
-    expect(vm.moveTarget()).toBeNull();
+    expect(opened).toEqual(['T-0002']);
   });
 
-  it('offers no move from the last phase', () => {
-    const { state } = makeFake({
+  it('the tap is a no-op when the adapter offers no openTicket', () => {
+    const { state } = makeFake({ board });
+    const vm = surface(setup(state));
+    expect(() => vm.onCardTap(phaseCardOf(vm, 'build'))).not.toThrow();
+  });
+
+  it('the action layer grows in place while the pointer drags — forward, back, quiet at rest', () => {
+    const { state } = makeFake({ board });
+    state.openTicketSendBack = () => undefined;
+    const vm = surface(setup(state));
+    const card = phaseCardOf(vm, 'build');
+
+    vm.onCardPointerDown(pointerAt(100), card);
+    expect(vm.swipeLayerOf(card)).toBeNull(); // deltaX 0 — nothing shows yet
+
+    vm.onCardPointerMove(pointerAt(140));
+    const forward = vm.swipeLayerOf(card);
+    expect(forward?.side).toBe('forward');
+    expect(forward?.label).toBe('Move to Done →');
+    expect(forward?.progress).toBeCloseTo(40 / SWIPE_REACH_PX);
+    expect(forward?.widthPercent).toBe(Math.round((40 / SWIPE_REACH_PX) * 38));
+
+    vm.onCardPointerMove(pointerAt(30));
+    const back = vm.swipeLayerOf(card);
+    expect(back?.side).toBe('back');
+    expect(back?.label).toBe('← Send back');
+
+    vm.onCardPointerCancel();
+    expect(vm.swipeLayerOf(card)).toBeNull();
+    expect(vm.swipe()).toBeNull();
+  });
+
+  it('the forward release fires the move along the pipeline order, not the render order', async () => {
+    const { state, calls } = makeFake({ board });
+    state.openTicket = () => undefined;
+    const vm = surface(setup(state));
+    const card = phaseCardOf(vm, 'build');
+
+    vm.onCardPointerDown(pointerAt(100), card);
+    vm.onCardPointerMove(pointerAt(190)); // delta 90 ≥ the trigger
+    vm.onCardPointerUp(pointerAt(190), card);
+    await Promise.resolve();
+
+    // The render puts Inbox next to Build; the pipeline's next is Done.
+    expect(calls).toEqual([{ ticketId: 'T-0002', phaseId: 'done' }]);
+    expect(vm.isFlashing(card, 'forward')).toBe(true);
+    expect(vm.isFlashing(card, 'back')).toBe(false);
+  });
+
+  it('the release below the trigger fires nothing and swallows the trailing tap', () => {
+    const { state, calls } = makeFake({ board });
+    const opened: string[] = [];
+    state.openTicket = (id: string) => opened.push(id);
+    const vm = surface(setup(state));
+    const card = phaseCardOf(vm, 'build');
+
+    vm.onCardPointerDown(pointerAt(100), card);
+    vm.onCardPointerMove(pointerAt(140)); // delta 40 — a gesture, no trigger
+    vm.onCardPointerUp(pointerAt(140), card);
+
+    expect(calls).toEqual([]);
+    expect(vm.isFlashing(card, 'forward')).toBe(false);
+
+    vm.onCardTap(card); // the click the drag leaves behind
+    expect(opened).toEqual([]);
+
+    vm.onCardTap(card); // the next genuine tap opens
+    expect(opened).toEqual(['T-0002']);
+  });
+
+  it('the back release opens the ticket with the send-back parked', () => {
+    const { state } = makeFake({ board });
+    const parked: string[] = [];
+    state.openTicketSendBack = (id: string) => parked.push(id);
+    const vm = surface(setup(state));
+    const card = phaseCardOf(vm, 'build');
+
+    vm.onCardPointerDown(pointerAt(200), card);
+    vm.onCardPointerMove(pointerAt(100)); // delta −100 ≥ −trigger
+    vm.onCardPointerUp(pointerAt(100), card);
+
+    expect(parked).toEqual(['T-0002']);
+    expect(vm.isFlashing(card, 'back')).toBe(true);
+  });
+
+  it('without the adapter’s send-back parking, the back side shows no layer and fires nothing', () => {
+    const { state } = makeFake({ board });
+    const vm = surface(setup(state));
+    const card = phaseCardOf(vm, 'build');
+
+    vm.onCardPointerDown(pointerAt(200), card);
+    vm.onCardPointerMove(pointerAt(100));
+    expect(vm.swipeLayerOf(card)).toBeNull();
+
+    vm.onCardPointerUp(pointerAt(100), card);
+    expect(vm.swipe()).toBeNull();
+  });
+
+  it('the terminal phase’s card offers no forward layer and fires no move', () => {
+    const { state, calls } = makeFake({
       board: { columns: [{ phase: { id: 'done', title: 'Done' }, tickets: [ticket('T-0009')] }] },
     });
+    state.openTicketSendBack = () => undefined;
     const vm = surface(setup(state));
-    const card = firstCard(vm.groups()[0]);
-    vm.openSheet(card!);
-    expect(vm.moveTarget()).toBeNull();
+    const card = phaseCardOf(vm, 'done');
+
+    vm.onCardPointerDown(pointerAt(100), card);
+    vm.onCardPointerMove(pointerAt(200));
+    expect(vm.swipeLayerOf(card)).toBeNull();
+
+    vm.onCardPointerUp(pointerAt(200), card);
+    expect(calls).toEqual([]);
   });
 
-  it('moves the card to the next phase and closes the sheet on success', async () => {
-    const { state, calls } = makeFake({ board });
-    const vm = surface(setup(state));
-    const buildGroup = vm.groups().find((g) => g.kind === 'phase' && g.phaseId === 'build')!;
-    vm.openSheet(buildGroup.kind === 'phase' ? buildGroup.tickets[0]! : (null as never));
-
-    await vm.moveOn();
-    expect(calls).toEqual([{ ticketId: 'T-0002', phaseId: 'done' }]);
-    expect(vm.openCard()).toBeNull();
-    expect(vm.movePending()).toBe(false);
-  });
-
-  it('shows the refusal inline and keeps the sheet open on failure', async () => {
-    const { state, calls } = makeFake({
-      board,
-      moveResults: [{ ok: false, error: 'the gate is red' }],
-    });
-    const vm = surface(setup(state));
-    const buildGroup = vm.groups().find((g) => g.kind === 'phase' && g.phaseId === 'build')!;
-    vm.openSheet(buildGroup.kind === 'phase' ? buildGroup.tickets[0]! : (null as never));
-
-    await vm.moveOn();
-    expect(calls).toHaveLength(1);
-    expect(vm.moveError()).toBe('the gate is red');
-    expect(vm.openCard()?.id).toBe('T-0002');
-  });
-
-  it('falls back to a generic message when the refusal carries none', async () => {
-    const { state } = makeFake({ board, moveResults: [{ ok: false }] });
-    const vm = surface(setup(state));
-    const buildGroup = vm.groups().find((g) => g.kind === 'phase' && g.phaseId === 'build')!;
-    vm.openSheet(buildGroup.kind === 'phase' ? buildGroup.tickets[0]! : (null as never));
-
-    await vm.moveOn();
-    expect(vm.moveError()).toBe('The move failed.');
-  });
-
-  it('reports a generic error when the call itself rejects', async () => {
-    const { state } = makeFake({ board });
-    state.moveTicket = () => Promise.reject(new Error('offline'));
-    const vm = surface(setup(state));
-    const buildGroup = vm.groups().find((g) => g.kind === 'phase' && g.phaseId === 'build')!;
-    vm.openSheet(buildGroup.kind === 'phase' ? buildGroup.tickets[0]! : (null as never));
-
-    await vm.moveOn();
-    expect(vm.moveError()).toBe('The move failed.');
-    expect(vm.openCard()?.id).toBe('T-0002');
-  });
-
-  it('never moves on a read-only device', async () => {
+  it('a read-only device never gestures — but the tap still opens', () => {
     const { state, calls } = makeFake({ board, readOnly: true });
+    const opened: string[] = [];
+    state.openTicket = (id: string) => opened.push(id);
     const vm = surface(setup(state));
-    const buildGroup = vm.groups().find((g) => g.kind === 'phase' && g.phaseId === 'build')!;
-    vm.openSheet(buildGroup.kind === 'phase' ? buildGroup.tickets[0]! : (null as never));
+    const card = phaseCardOf(vm, 'build');
 
-    await vm.moveOn();
+    vm.onCardPointerDown(pointerAt(100), card);
+    vm.onCardPointerMove(pointerAt(190));
+    expect(vm.swipeLayerOf(card)).toBeNull();
+
+    vm.onCardPointerUp(pointerAt(190), card);
     expect(calls).toEqual([]);
-    expect(vm.openCard()?.id).toBe('T-0002');
+
+    vm.onCardTap(card);
+    expect(opened).toEqual(['T-0002']);
   });
 
-  it('is a no-op with no card open', async () => {
-    const { state, calls } = makeFake({ board });
+  it('a refused move toasts the desk’s wording, a thrown one the fallback', async () => {
+    const refused = makeFake({ board, moveResults: [{ ok: false, error: 'the gate is red' }] });
+    const toasts: { message: string; kind?: 'ok' | 'warn' | 'error' }[] = [];
+    refused.state.toast = (message: string, kind?: 'ok' | 'warn' | 'error') =>
+      toasts.push({ message, kind });
+    const vm = surface(setup(refused.state));
+    const card = phaseCardOf(vm, 'build');
+    vm.onCardPointerDown(pointerAt(100), card);
+    vm.onCardPointerUp(pointerAt(190), card);
+    await Promise.resolve();
+    expect(toasts).toEqual([{ message: 'the gate is red', kind: 'error' }]);
+
+    const offline = makeFake({ board });
+    offline.state.moveTicket = () => Promise.reject(new Error('offline'));
+    const offlineToasts: string[] = [];
+    offline.state.toast = (message: string) => offlineToasts.push(message);
+    const vm2 = surface(setup(offline.state));
+    const card2 = phaseCardOf(vm2, 'build');
+    vm2.onCardPointerDown(pointerAt(100), card2);
+    vm2.onCardPointerUp(pointerAt(190), card2);
+    await Promise.resolve();
+    expect(offlineToasts).toEqual(['The move failed.']);
+  });
+
+  it('the fired card’s flash plays for a beat, then goes out', () => {
+    vi.useFakeTimers();
+    try {
+      const { state } = makeFake({ board });
+      state.openTicketSendBack = () => undefined;
+      const vm = surface(setup(state));
+      const card = phaseCardOf(vm, 'build');
+
+      vm.onCardPointerDown(pointerAt(200), card);
+      vm.onCardPointerUp(pointerAt(100), card);
+      expect(vm.isFlashing(card, 'back')).toBe(true);
+
+      vi.advanceTimersByTime(SWIPE_FLASH_MS);
+      expect(vm.isFlashing(card, 'back')).toBe(false);
+      expect(vm.swipeFlash()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('the click a fired swipe leaves behind stays silent', () => {
+    const { state } = makeFake({ board });
+    const parked: string[] = [];
+    const opened: string[] = [];
+    state.openTicket = (id: string) => opened.push(id);
+    state.openTicketSendBack = (id: string) => parked.push(id);
     const vm = surface(setup(state));
-    await vm.moveOn();
-    expect(calls).toEqual([]);
+    const card = phaseCardOf(vm, 'build');
+
+    vm.onCardPointerDown(pointerAt(200), card);
+    vm.onCardPointerUp(pointerAt(100), card); // fired back
+    vm.onCardTap(card); // the browser's trailing click
+
+    expect(parked).toEqual(['T-0002']);
+    expect(opened).toEqual([]);
+
+    vm.onCardTap(card);
+    expect(opened).toEqual(['T-0002']);
   });
 });
 

@@ -2,7 +2,6 @@
   <header class="hdr">
     <div class="hd">
       <h1 class="ttl">Mission Control</h1>
-      <p class="sub">anlegen · steuern · berichten · konfigurieren</p>
     </div>
     <span class="hspace" aria-hidden="true"></span>
     <button type="button" class="hbtn" (click)="openSessions()" aria-label="Sitzungen" title="Sitzungen">
@@ -18,7 +17,7 @@
   </header>
 
   @if (viewMode() === 'session') {
-    <div class="thread" role="log" aria-live="polite" #thread>
+    <div class="thread" role="log" aria-live="polite" #thread (scroll)="onThreadScroll()">
       @for (item of timeline(); track trackOf(item, $index)) {
         @switch (item.kind) {
           @case ('message') {
@@ -108,9 +107,7 @@
   } @else {
     <div class="body">
       @if (viewMode() === 'composer') {
-        <p class="empty">Neues Gespräch — frischer Kontext. Die alten Sitzungen liegen im Sheet (oben rechts).</p>
-      } @else {
-        <p class="empty">Ein Gespräch fürs Board — anlegen, steuern, fragen. Nichts schreibt ohne deine Bestätigung.</p>
+        <p class="empty">Die alten Sitzungen liegen im Sheet (oben rechts).</p>
       }
     </div>
   }

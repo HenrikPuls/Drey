@@ -283,6 +283,7 @@ interface TicketSurface {
   id(): string;
   title(): string;
   phaseTitle(): string;
+  mode(): 'ticket' | 'proof' | 'thread';
   persona(): string | null;
   personaTitle(persona: string): string;
   cost(): string | null;
@@ -1182,6 +1183,90 @@ describe('TicketView', () => {
     await vm.sendBack();
     expect(vm.sendBackOpen()).toBe(true);
     expect(vm.result()).toEqual({ kind: 'error', text: 'no agent phase to send back to' });
+  });
+
+  // --- the parked send-back (the work tab's card back-swipe) --------------------
+
+  it('the parked send-back lands on the proof face with the panel open, once', () => {
+    let dismissed = 0;
+    // Real signals feed the vm reads — the consumption must behave like
+    // the app's state (a plain-function fake would leave the effect
+    // dependence-free and its flushes undetermined).
+    const parked = signal(true);
+    const fake = makeFake({
+      docValue: FULL_DOC,
+      sendBackOpen: () => parked(),
+      dismissSendBack: () => {
+        dismissed += 1;
+        parked.set(false);
+      },
+    });
+    const vm = surface(setup(fake));
+    TestBed.flushEffects();
+
+    expect(vm.mode()).toBe('proof');
+    expect(vm.sendBackOpen()).toBe(true);
+    expect(vm.note()).toBe('');
+    expect(dismissed).toBe(1);
+
+    TestBed.flushEffects();
+    expect(vm.sendBackOpen()).toBe(true); // the panel stays open (local state)
+    expect(dismissed).toBe(1); // consumed exactly once — no re-arm
+  });
+
+  it('a parked send-back waits for the doc; the panel opens when it lands', () => {
+    let dismissed = 0;
+    const docValue = signal<TicketDoc | null>(null);
+    const parked = signal(true);
+    const fake = makeFake({
+      sendBackOpen: () => parked(),
+      dismissSendBack: () => {
+        dismissed += 1;
+        parked.set(false);
+      },
+    });
+    fake.doc = () => docValue();
+    const vm = surface(setup(fake));
+    TestBed.flushEffects();
+    expect(vm.sendBackOpen()).toBe(false);
+    expect(dismissed).toBe(0);
+
+    docValue.set(FULL_DOC);
+    TestBed.flushEffects();
+    expect(vm.mode()).toBe('proof');
+    expect(vm.sendBackOpen()).toBe(true);
+    expect(dismissed).toBe(1);
+  });
+
+  it('a view-only vm without the sendBackOpen input never auto-opens', () => {
+    const fake = makeFake({ docValue: FULL_DOC });
+    const vm = surface(setup(fake));
+    TestBed.flushEffects();
+    expect(vm.sendBackOpen()).toBe(false);
+    expect(vm.mode()).toBe('ticket');
+  });
+
+  it('dismissing the auto-opened panel keeps it closed — the flag was consumed', () => {
+    let dismissed = 0;
+    const parked = signal(true);
+    const fake = makeFake({
+      docValue: FULL_DOC,
+      sendBackOpen: () => parked(),
+      dismissSendBack: () => {
+        dismissed += 1;
+        parked.set(false);
+      },
+    });
+    const vm = surface(setup(fake));
+    TestBed.flushEffects();
+    expect(vm.sendBackOpen()).toBe(true);
+
+    vm.toggleSendBack(); // the panel's Cancel
+    expect(vm.sendBackOpen()).toBe(false);
+
+    TestBed.flushEffects();
+    expect(vm.sendBackOpen()).toBe(false);
+    expect(dismissed).toBe(1);
   });
 
   it('hands the raw file to the editor: enter on the toggle, exit when it is open', () => {

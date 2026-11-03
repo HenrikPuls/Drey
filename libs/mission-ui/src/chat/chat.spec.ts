@@ -1176,3 +1176,161 @@ describe('Chat attach sheet (composer uploads)', () => {
     expect(vm.attachments()).toEqual([]);
   });
 });
+
+// -- the fixed column: header / messages / composer (owner ruling 2026-11-03) -----
+
+/**
+ * A fake state rich enough to render the session template: the chat view
+ * signal, the prefill and the two lazy computed sources (board, work).
+ * Everything else the template touches degrades to optional/undefined.
+ */
+function renderChat(active: ActiveSession | null, prefill: string | null = null): {
+  fixture: ReturnType<typeof TestBed.createComponent<Chat>>;
+  chat: WritableSignal<ChatStateView>;
+  el: HTMLElement;
+} {
+  const chat = signal<ChatStateView>({ sessions: [], active });
+  TestBed.resetTestingModule();
+  TestBed.configureTestingModule({
+    providers: [
+      {
+        provide: MC_CHAT_STATE,
+        useValue: {
+          chat,
+          chatPrefill: signal(prefill),
+          board: signal(null),
+          work: signal({ groups: [], priorities: DEFAULT_PRIORITY_CONFIG }),
+          toast: () => undefined,
+        } as unknown as McChatState,
+      },
+    ],
+  });
+  const fixture = TestBed.createComponent(Chat);
+  fixture.detectChanges();
+  return { fixture, chat, el: fixture.nativeElement as HTMLElement };
+}
+
+function activeSession(): ActiveSession {
+  return {
+    file: 'chat-a.md',
+    title: 'A',
+    createdAt: '',
+    messages: [msg('owner', 'one', '2026-11-02T09:00:00Z'), msg('mission', 'two', '2026-11-02T09:01:00Z')],
+    proposals: [],
+  };
+}
+
+/** jsdom has no layout — the thread element gets explicit scroll geometry. */
+function withScrollGeometry(el: HTMLElement, scrollHeight: number, clientHeight: number): HTMLElement {
+  Object.defineProperty(el, 'scrollHeight', { value: scrollHeight, configurable: true });
+  Object.defineProperty(el, 'clientHeight', { value: clientHeight, configurable: true });
+  return el;
+}
+
+describe('Chat column structure (header / messages / composer)', () => {
+  it('renders the fixed column: header first, the scrolling thread in the middle, the composer last', () => {
+    const { el } = renderChat(activeSession());
+    const column = el.querySelector('.chat');
+    expect(column).not.toBeNull();
+    const faces = Array.from(column!.children).map((child) => child.classList[0]);
+    expect(faces).toEqual(['hdr', 'thread', 'composer']);
+  });
+
+  it('carries the title and the two icon buttons in the header — and no sub line', () => {
+    const { el } = renderChat(activeSession());
+    const hdr = el.querySelector('.chat > .hdr')!;
+    expect(hdr.querySelector('.ttl')!.textContent).toContain('Mission Control');
+    expect(hdr.querySelectorAll('button.hbtn').length).toBe(2);
+    expect(hdr.querySelector('.sub')).toBeNull();
+    expect(el.querySelector('.sub')).toBeNull();
+  });
+
+  it('keeps the empty-state body to the functional sheet pointer only', () => {
+    const { el } = renderChat(null, 'promote T-0004');
+    const empties = Array.from(el.querySelectorAll('.body .empty')).map((p) => p.textContent ?? '');
+    expect(empties).toEqual(['Die alten Sitzungen liegen im Sheet (oben rechts).']);
+  });
+});
+
+describe('Chat thread auto-scroll (follow gate)', () => {
+  const geometry = { scrollHeight: 937, clientHeight: 700 };
+
+  function setup(): {
+    fixture: ReturnType<typeof TestBed.createComponent<Chat>>;
+    chat: WritableSignal<ChatStateView>;
+    thread: HTMLElement;
+  } {
+    const { fixture, chat, el } = renderChat(activeSession());
+    const thread = withScrollGeometry(
+      el.querySelector('.chat > .thread')!,
+      geometry.scrollHeight,
+      geometry.clientHeight,
+    );
+    // Re-announce the session as a fresh object — what the app does when
+    // the desk's session lands or a delta grows the timeline — and flush
+    // the pin effect against it.
+    const active = chat().active;
+    chat.set({ sessions: [], active: active === null ? null : { ...active } });
+    fixture.detectChanges();
+    return { fixture, chat, thread };
+  }
+
+  function scroll(thread: HTMLElement, top: number): void {
+    thread.scrollTop = top;
+    thread.dispatchEvent(new Event('scroll'));
+  }
+
+  it('pins to the newest line when the session lands', () => {
+    const { thread } = setup();
+    expect(thread.scrollTop).toBe(geometry.scrollHeight);
+  });
+
+  it('keeps following while the user sits at the bottom', () => {
+    const { fixture, chat, thread } = setup();
+    scroll(thread, geometry.scrollHeight - geometry.clientHeight);
+    const session = chat().active!;
+    chat.set({
+      sessions: [],
+      active: { ...session, messages: [...session.messages, msg('mission', 'three', '2026-11-02T09:02:00Z')] },
+    });
+    fixture.detectChanges();
+    expect(thread.scrollTop).toBe(geometry.scrollHeight);
+  });
+
+  it('stops the yank once the user scrolled away to read history', () => {
+    const { fixture, chat, thread } = setup();
+    scroll(thread, 50);
+    const session = chat().active!;
+    chat.set({
+      sessions: [],
+      active: { ...session, messages: [...session.messages, msg('mission', 'three', '2026-11-02T09:02:00Z')] },
+    });
+    fixture.detectChanges();
+    expect(thread.scrollTop).toBe(50);
+  });
+
+  it('re-arms when the user scrolls back to the bottom', () => {
+    const { fixture, chat, thread } = setup();
+    scroll(thread, 50);
+    scroll(thread, geometry.scrollHeight - geometry.clientHeight);
+    const session = chat().active!;
+    chat.set({
+      sessions: [],
+      active: { ...session, messages: [...session.messages, msg('mission', 'three', '2026-11-02T09:02:00Z')] },
+    });
+    fixture.detectChanges();
+    expect(thread.scrollTop).toBe(geometry.scrollHeight);
+  });
+
+  it('always shows the latest line of a newly opened session', () => {
+    const { fixture, chat, thread } = setup();
+    scroll(thread, 50);
+    expect(thread.scrollTop).toBe(50);
+    chat.set({
+      sessions: [],
+      active: { ...activeSession(), file: 'chat-b.md', title: 'B' },
+    });
+    fixture.detectChanges();
+    expect(thread.scrollTop).toBe(geometry.scrollHeight);
+  });
+});

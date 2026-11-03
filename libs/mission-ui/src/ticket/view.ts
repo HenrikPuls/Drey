@@ -689,6 +689,24 @@ export class TicketView {
     this.note.set('');
   }
 
+  /**
+   * The work tab's card back-swipe: when the state parks a send-back on
+   * the open ticket, the screen lands straight on the proof face with
+   * the Send-back panel open — the swipe's whole point. Opening consumes
+   * the flag, so a dismissed panel stays dismissed; with the doc still
+   * loading the effect waits for it (it re-runs when the doc lands).
+   */
+  private readonly openPendingSendBack = effect(() => {
+    const doc = this.doc();
+    if (this.vm.sendBackOpen?.() !== true || doc === null || this.readOnly()) {
+      return;
+    }
+    this.mode.set('proof');
+    this.sendBackOpen.set(true);
+    this.note.set('');
+    this.vm.dismissSendBack?.();
+  });
+
   protected onNote(event: Event): void {
     this.note.set((event.target as HTMLTextAreaElement).value);
   }

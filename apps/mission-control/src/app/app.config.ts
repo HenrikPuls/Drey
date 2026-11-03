@@ -56,6 +56,7 @@ export const appConfig: ApplicationConfig = {
           toast: (message, kind) => state.toast(message, kind),
           moveTicket: (ticketId, phaseId) => state.moveTicket(ticketId, phaseId),
           openTicket: (ticketId) => state.openTicket(ticketId),
+          openTicketSendBack: (ticketId) => state.openTicketSendBack(ticketId),
           promote: (ticketId) => state.prefillChat(`promote ${ticketId}`),
           answer: (runId, text) => state.answerRun(runId, text),
           openPersona: (titleOrId) => {
@@ -252,6 +253,11 @@ export const appConfig: ApplicationConfig = {
           },
           accept: () => state.acceptTicket(),
           sendBack: (note) => state.sendBack(note),
+          sendBackOpen: () => {
+            const pending = state.sendBackPending();
+            return pending !== null && pending === state.ticketOpen()?.id;
+          },
+          dismissSendBack: () => state.clearSendBack(),
         };
       },
     },

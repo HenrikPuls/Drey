@@ -2,7 +2,8 @@
  * The work tab in the prototype's dress (#v-arbeit): header with logo,
  * title, vault sub and Fleet chip, mono group heads, full-width cards —
  * phase chips, persona pills, the amber wait-line, the tolerant cost and
- * ctx slots — and the bottom sheet with handle and dim. Component styles
+ * ctx slots — and the card swipe's action layer (a side label that grows
+ * with the distance; the card itself never translates). Component styles
  * read only the shared tokens (no component-invented colours).
  */
 
@@ -162,7 +163,6 @@
   color: var(--danger);
 }
 
-.group-empty,
 .work-note {
   margin: 4px 0 0;
   font-size: 13px;
@@ -198,6 +198,60 @@ button.card:hover {
 button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* the ticket card's swipe: the card never translates — vertical scroll
+   stays the browser's (pan-y), a horizontal gesture grows the action
+   layer's side label in place; the fired card's edge flashes its colour */
+
+.ticket-card {
+  position: relative;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.swipe-layer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.swipe-layer.forward {
+  right: 0;
+  justify-content: flex-end;
+  padding-right: 14px;
+  color: var(--ok);
+  background: linear-gradient(to left, color-mix(in srgb, var(--ok) 16%, transparent), transparent);
+  border-right: 3px solid var(--ok);
+}
+
+.swipe-layer.back {
+  left: 0;
+  justify-content: flex-start;
+  padding-left: 14px;
+  color: var(--warn);
+  background: linear-gradient(to right, color-mix(in srgb, var(--warn) 16%, transparent), transparent);
+  border-left: 3px solid var(--warn);
+}
+
+.ticket-card.flash-forward {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 1px var(--ok);
+}
+
+.ticket-card.flash-back {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 1px var(--warn);
 }
 
 .card-top {
@@ -556,136 +610,7 @@ button:focus-visible {
   color: var(--danger);
 }
 
-/* ---------- bottom sheet: slides up over everything, handle + dim ---------- */
-
-.sheet-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  background: rgb(3 6 12 / 60%);
-}
-
-.sheet {
-  position: fixed;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 31;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-height: 80dvh;
-  padding: 8px 16px calc(14px + env(safe-area-inset-bottom));
-  overflow-y: auto;
-  background: var(--panel-2);
-  border-top: 1px solid var(--line);
-  border-radius: 18px 18px 0 0;
-  animation: sheet-up 0.2s ease-out;
-}
-
-@keyframes sheet-up {
-  from {
-    transform: translateY(24px);
-    opacity: 0.6;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sheet {
-    animation: none;
-  }
-}
-
-.grab {
-  width: 36px;
-  height: 4px;
-  margin: 6px auto 10px;
-  background: var(--line);
-  border-radius: 99px;
-}
-
-.sheet-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.sheet-title {
-  flex: 1;
-  margin: 0;
-  font-size: 17px;
-  line-height: 1.35;
-}
-
-.sheet-close {
-  padding: 0 4px;
-  font-size: 22px;
-  line-height: 1;
-  color: var(--text-3);
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-}
-
-.sheet-summary {
-  margin: 0;
-  font-size: 13.5px;
-  color: var(--text-2);
-  white-space: pre-wrap;
-}
-
-.sheet-phase {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-3);
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 40vw;
-  padding: 1px 8px;
-  overflow: hidden;
-  font-size: 11px;
-  color: var(--text-2);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  background: var(--panel-3);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-}
-
-.chip.tinted {
-  color: var(--pc);
-  border-color: color-mix(in srgb, var(--pc) 35%, transparent);
-}
-
-.sheet-blocked {
-  margin: 0;
-  font-size: 13px;
-  color: var(--warn);
-}
-
-.sheet-error {
-  margin: 0;
-  font-size: 13px;
-  color: var(--danger);
-}
-
-.sheet-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 4px;
-}
+/* ---------- buttons (the report card's promote) ----------------------------- */
 
 .btn {
   width: 100%;
@@ -714,12 +639,4 @@ button:focus-visible {
 .btn:disabled {
   cursor: default;
   opacity: 0.6;
-}
-
-@media (min-width: 768px) {
-  .sheet {
-    left: 50%;
-    max-width: 480px;
-    translate: -50% 0;
-  }
 }

@@ -128,8 +128,6 @@ export interface McTicket {
   readonly title?: string | null;
   /** Vault-relative path (`tickets/<phase>/<id>.md`). */
   readonly path?: string;
-  /** The ticket's blurb; the wire list may omit it — the sheet shows it when there. */
-  readonly summary?: string | null;
   /** The OPEN blockers (derived); non-empty drives the blocked marker. */
   readonly blocked?: readonly string[];
   /**
@@ -234,8 +232,16 @@ export interface McWorkState {
    */
   readonly runs?: readonly McRun[] | null;
   moveTicket(ticketId: string, phaseId: string): Promise<McMoveResult>;
-  /** Opens the ticket screen (E5c); absent = the sheet hides the button. */
+  /** Opens the ticket screen (E5c) — the card tap's destination. */
   openTicket?(ticketId: string): void;
+  /**
+   * Opens the ticket screen with the Send-back panel waiting — the card
+   * back-swipe's one call: the state parks the ticket id and the ticket
+   * screen opens its Send-back panel for it. Optional; absent = the
+   * back-swipe offers no layer (a plain open would promise less than
+   * the gesture's label says).
+   */
+  openTicketSendBack?(ticketId: string): void;
   /**
    * The report card's promote (E8): fills the chat composer with the
    * promote command and switches to the chat tab; absent = the report
@@ -302,14 +308,16 @@ export interface TicketVm {
 }
 
 /**
- * One render group: the needs-you group first, then one group per board
- * column, in board order — groups, not kanban columns (concept §7).
+ * One render group: the needs-you group first, then one group per
+ * non-empty board column, in the owner's reading order (concept §7) —
+ * closest-to-done first, the terminal phase last (the archive), the
+ * unknown directories after it (`groupsOf`).
  */
 export type WorkGroup =
   | {
       readonly kind: 'needs';
       readonly key: 'needs';
-      readonly title: 'Braucht dich';
+      readonly title: 'Needs you';
       readonly needs: readonly NeedVm[];
     }
   | {
@@ -610,10 +618,14 @@ function ticketVmOf(
 }
 
 /**
- * The groups in render order: the needs-you group first (only when
- * something waits), then one group per board column, in board order.
- * Empty columns keep their group; `board` null (nothing fetched yet)
- * yields just the needs group.
+ * The groups in render order — the owner's reading order, not the
+ * pipeline's: the needs-you group first (only when something waits),
+ * then the board's phase groups with the phases closest to done first
+ * (what a move pushes toward done leads the list), the terminal phase —
+ * the pipeline's last column — as the last phase group (the archive),
+ * and the unknown directories after it. Empty phase groups (0 tickets)
+ * render nothing at all; `board` null (nothing fetched yet) yields just
+ * the needs group.
  */
 export function groupsOf(
   needs: readonly McNeed[],
@@ -627,7 +639,7 @@ export function groupsOf(
     groups.push({
       kind: 'needs',
       key: 'needs',
-      title: 'Braucht dich',
+      title: 'Needs you',
       needs: needs.map((need, index) => ({
         key: needKeyOf(need, index),
         need,
@@ -636,7 +648,15 @@ export function groupsOf(
     });
   }
   if (board !== null) {
-    for (const column of board.columns) {
+    const known = board.columns.filter((column) => column.unknown !== true);
+    const terminal = known.length > 0 ? (known[known.length - 1] ?? null) : null;
+    const leading = known.slice(0, -1).reverse();
+    const trailing = board.columns.filter((column) => column.unknown === true);
+    const ordered = [...leading, ...(terminal === null ? [] : [terminal]), ...trailing];
+    for (const column of ordered) {
+      if (column.tickets.length === 0) {
+        continue;
+      }
       groups.push({
         kind: 'phase',
         key: `phase:${column.phase.id}`,
@@ -650,22 +670,64 @@ export function groupsOf(
   return groups;
 }
 
-type PhaseGroup = Extract<WorkGroup, { readonly kind: 'phase' }>;
+/**
+ * The phase a card in `phaseId` moves on to: the next column in
+ * PIPELINE order — the board's own order, not the render order (which
+ * reads closest-to-done first). Unknown directories never take a move;
+ * the result may name an empty column: moving into one is exactly how
+ * it fills, so the empty filter on the render says nothing here.
+ */
+export function nextPhaseOf(board: McBoard | null, phaseId: string): McMoveTarget | null {
+  const known = (board?.columns ?? []).filter((column) => column.unknown !== true);
+  const index = known.findIndex((column) => column.phase.id === phaseId);
+  const next = index < 0 ? null : (known[index + 1] ?? null);
+  return next === null ? null : { phaseId: next.phase.id, title: next.phase.title };
+}
 
-function isPhaseGroup(group: WorkGroup): group is PhaseGroup {
-  return group.kind === 'phase';
+/** The move a forward swipe fires: the next pipeline phase, titled. */
+export interface McMoveTarget {
+  readonly phaseId: string;
+  readonly title: string;
+}
+
+// --- the card swipe ('die Headline bleibt stehen') --------------------------------
+
+/** The swipe's trigger distance (px) — a release past it fires the action. */
+export const SWIPE_TRIGGER_PX = 72;
+
+/**
+ * The action layer's full reach (px) — the optics grow toward it and
+ * clamp; the card itself never translates, under the trigger nothing
+ * snaps back because nothing ever moved.
+ */
+export const SWIPE_REACH_PX = 96;
+
+/** Movement past this (px) reads as a gesture, not a tap — the tap stays silent. */
+export const SWIPE_TAP_SLOP_PX = 8;
+
+/** How long the fired card's done-optic (the edge flash) stays on (ms). */
+export const SWIPE_FLASH_MS = 500;
+
+/** What a released swipe fires: right = forward (move on), left = back (send back). */
+export type SwipeAction = 'forward' | 'back';
+
+/** The release's verdict: `forward` past +trigger, `back` past −trigger, null between. */
+export function swipeActionOf(deltaX: number): SwipeAction | null {
+  if (deltaX >= SWIPE_TRIGGER_PX) {
+    return 'forward';
+  }
+  if (deltaX <= -SWIPE_TRIGGER_PX) {
+    return 'back';
+  }
+  return null;
 }
 
 /**
- * The group a card in `phaseId` moves on to: the next phase group in
- * render order. The needs group is not a phase; unknown phase groups
- * render but never take a move, so a ticket sitting in one — or in the
- * last phase — has nothing to advance to (null).
+ * The action layer's intensity 0..1 for the live |deltaX| — the optics'
+ * alpha and width grow with the distance and clamp at the reach; the
+ * sign never matters here (each side styles itself).
  */
-export function nextPhaseOf(groups: readonly WorkGroup[], phaseId: string): PhaseGroup | null {
-  const phases = groups.filter(
-    (group): group is PhaseGroup => isPhaseGroup(group) && !group.unknown,
-  );
-  const index = phases.findIndex((group) => group.phaseId === phaseId);
-  return index < 0 || index + 1 >= phases.length ? null : phases[index + 1]!;
+export function swipeProgressOf(deltaX: number): number {
+  const progress = Math.abs(deltaX) / SWIPE_REACH_PX;
+  return Math.min(Math.max(progress, 0), 1);
 }

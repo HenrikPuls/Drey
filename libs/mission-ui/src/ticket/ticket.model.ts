@@ -958,6 +958,16 @@ export interface TicketVm {
   accept(): Promise<TicketActionReply>;
   /** The note is mandatory — an empty one refuses on the desk and here. */
   sendBack(note: string): Promise<TicketActionReply>;
+  /**
+   * The work tab's card back-swipe parked a send-back on this ticket
+   * (`McState.sendBackPending`): true names the OPEN ticket — the view
+   * lands on its Send-back panel and consumes the flag through
+   * `dismissSendBack`. Optional: an adapter without it never auto-opens
+   * the panel.
+   */
+  sendBackOpen?(): boolean;
+  /** The view consumed the parked send-back (panel opened, or the owner dismissed). */
+  dismissSendBack?(): void;
 }
 
 const EMPTY_TICKET: TicketVm = {

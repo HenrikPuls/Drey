@@ -925,6 +925,66 @@ describe('ticket screen', () => {
     });
   });
 
+  it('openTicketSendBack parks the send-back; a plain open clears it', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+
+    state.openTicketSendBack('T-1');
+    expect(state.ticketOpen()).toEqual({ id: 'T-1' });
+    expect(state.sendBackPending()).toBe('T-1');
+    await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
+
+    state.openTicket('T-1');
+    expect(state.ticketOpen()).toEqual({ id: 'T-1' });
+    expect(state.sendBackPending()).toBeNull();
+  });
+
+  it('clearSendBack (the panel dismiss) clears the parked send-back', () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.openTicketSendBack('T-1');
+    expect(state.sendBackPending()).toBe('T-1');
+
+    state.clearSendBack();
+    expect(state.sendBackPending()).toBeNull();
+    expect(state.ticketOpen()).toEqual({ id: 'T-1' });
+  });
+
+  it('closeTicket clears the parked send-back', () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.openTicketSendBack('T-1');
+
+    state.closeTicket();
+
+    expect(state.ticketOpen()).toBeNull();
+    expect(state.sendBackPending()).toBeNull();
+  });
+
+  it('a successful accept clears the parked send-back', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.openTicketSendBack('T-1');
+    await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
+    desk.on('POST', '/api/tickets/T-1/accept', () => ({ ok: true }));
+
+    await state.acceptTicket();
+
+    expect(state.sendBackPending()).toBeNull();
+  });
+
+  it('a landed send-back clears the parked send-back', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.openTicketSendBack('T-1');
+    await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
+    desk.on('POST', '/api/tickets/T-1/send-back', () => ({ ok: true }));
+
+    await state.sendBack('the palette races');
+
+    expect(state.sendBackPending()).toBeNull();
+  });
+
   it('loadDiff loads the proof card diff and keeps the last good view on a failed GET', async () => {
     const { desk } = makeDesk();
     const state = makeState(desk);

@@ -1,11 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import {
   MC_WORK_STATE,
+  SWIPE_FLASH_MS,
+  SWIPE_TAP_SLOP_PX,
   fleetLabelOf,
   groupsOf,
   liveRunCountOf,
   nextPhaseOf,
   questionCardOf,
+  swipeActionOf,
+  swipeProgressOf,
   ticketPersonaOf,
   vaultTitleOf,
   type McAnswerReply,
@@ -15,6 +19,7 @@ import {
   type McScoutReport,
   type NeedVm,
   type QuestionCardVm,
+  type SwipeAction,
   type TicketVm,
   type WorkGroup,
 } from './work.model';
@@ -22,14 +27,19 @@ import {
 /**
  * The work tab (concept §7): the header — logo, "Arbeit" title, the
  * vault's name as the mono sub, the Fleet chip (live-run count, idle
- * face without run data) — then the Braucht-dich group first and the
- * board's phase groups in order: groups, not kanban columns. One ticket
- * = one card in the prototype's dress (id, phase chip, persona pill,
- * amber wait-line when blocked, priority flag; the cost and ctx slots
- * appear only when the desk sends data). The card tap opens the bottom
- * sheet with the move/close actions in the thumb's reach. A scout
- * report need (E8) renders its report — stamp, summary, the decision
- * options — plus the promote action that prefills the chat.
+ * face without run data) — then the Needs-you group first and the
+ * board's phase groups in the owner's reading order (closest to done
+ * first, the terminal phase last, empty groups gone): groups, not
+ * kanban columns. One ticket = one card in the prototype's dress (id,
+ * phase chip, persona pill, amber wait-line when blocked, priority
+ * flag; the cost and ctx slots appear only when the desk sends data).
+ * The card tap opens the ticket screen straight away; a horizontal
+ * swipe acts without the card ever moving — an action layer (mint
+ * "Move to <next>" right, amber "Send back" left) grows with the
+ * distance, past the trigger the release fires the move (the desk's
+ * moveOn path) or opens the ticket with its Send-back panel waiting.
+ * A scout report need (E8) renders its report — stamp, summary, the
+ * decision options — plus the promote action that prefills the chat.
  */
 @Component({
   selector: 'mc-work',
@@ -68,41 +78,178 @@ export class Work {
     }
   }
 
-  /** The card whose bottom sheet is open. */
-  protected readonly openCard = signal<TicketVm | null>(null);
-  protected readonly moveError = signal<string | null>(null);
-  protected readonly movePending = signal(false);
+  // --- the ticket cards: tap straight through, swipe acts in place ----------
 
-  /** The sheet's primary action: the next phase group, null when there is none. */
-  protected readonly moveTarget = computed(() => {
-    const card = this.openCard();
-    if (card === null) {
-      return null;
-    }
-    const next = nextPhaseOf(this.groups(), card.phaseId);
-    return next === null ? null : { phaseId: next.phaseId, title: next.title };
-  });
-
-  protected openSheet(card: TicketVm): void {
-    this.openCard.set(card);
-    this.moveError.set(null);
-    this.movePending.set(false);
-  }
-
-  protected closeSheet(): void {
-    this.openCard.set(null);
-    this.moveError.set(null);
-    this.movePending.set(false);
-  }
-
-  /** The sheet's "Open ticket": the ticket screen takes over (E5c). */
-  protected openTicket(): void {
-    const card = this.openCard();
-    if (card === null || this.state?.openTicket === undefined) {
+  /**
+   * The card tap: straight into the ticket screen — the status lives
+   * there now, the old bottom sheet is gone.
+   */
+  protected openTicketCard(vm: TicketVm): void {
+    if (this.state?.openTicket === undefined) {
       return;
     }
-    this.state.openTicket(card.id);
-    this.closeSheet();
+    this.state.openTicket(vm.id);
+  }
+
+  /** The card the pointer is swiping, with its live deltaX; null = no gesture. */
+  protected readonly swipe = signal<{ id: string; deltaX: number } | null>(null);
+
+  /** The fired card's done-optic: the edge flash that plays for a beat after the action. */
+  protected readonly swipeFlash = signal<{ id: string; action: SwipeAction } | null>(null);
+
+  private swipeStartX = 0;
+  /** A release past the slop was a gesture — the click it leaves behind stays silent. */
+  private swallowTap = false;
+  private flashTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** The back-swipe's send-back: only where the adapter parks the panel. */
+  private canSendBack(): boolean {
+    return this.state?.openTicketSendBack !== undefined;
+  }
+
+  /** The forward-swipe's target: the next pipeline phase; null = the card has none. */
+  private forwardTargetOf(vm: TicketVm): { phaseId: string; title: string } | null {
+    return nextPhaseOf((this.state?.board ?? null) as McBoard | null, vm.phaseId);
+  }
+
+  /** Whether the card takes swipes at all: writable, and one side has an action. */
+  private swipeable(vm: TicketVm): boolean {
+    return !this.readOnly() && (this.canSendBack() || this.forwardTargetOf(vm) !== null);
+  }
+
+  protected onCardPointerDown(event: PointerEvent, vm: TicketVm): void {
+    if (event.pointerType === 'mouse' && event.button !== 0) {
+      return;
+    }
+    if (!this.swipeable(vm)) {
+      return;
+    }
+    this.swipeStartX = event.clientX;
+    this.swipe.set({ id: vm.id, deltaX: 0 });
+  }
+
+  protected onCardPointerMove(event: PointerEvent): void {
+    const current = this.swipe();
+    if (current === null) {
+      return;
+    }
+    this.swipe.set({ id: current.id, deltaX: event.clientX - this.swipeStartX });
+  }
+
+  protected onCardPointerUp(event: PointerEvent, vm: TicketVm): void {
+    const current = this.swipe();
+    this.swipe.set(null);
+    if (current === null || current.id !== vm.id) {
+      return;
+    }
+    const deltaX = event.clientX - this.swipeStartX;
+    if (Math.abs(deltaX) > SWIPE_TAP_SLOP_PX) {
+      this.swallowTap = true;
+    }
+    const action = swipeActionOf(deltaX);
+    if (action !== null) {
+      void this.fireSwipe(action, vm);
+    }
+  }
+
+  /** A gesture the browser took over (a scroll) or a pointer that left: quiet reset. */
+  protected onCardPointerCancel(): void {
+    this.swipe.set(null);
+  }
+
+  /** The card's click: a tap after a real gesture does nothing, else the ticket opens. */
+  protected onCardTap(vm: TicketVm): void {
+    if (this.swallowTap) {
+      this.swallowTap = false;
+      return;
+    }
+    this.openTicketCard(vm);
+  }
+
+  /**
+   * The action layer while the pointer is down: the swiped side's label
+   * and how far it has grown (0..1); null at rest, on the wrong side or
+   * where that side has no action (no next phase → no mint layer).
+   */
+  protected swipeLayerOf(vm: TicketVm): {
+    side: SwipeAction;
+    label: string;
+    progress: number;
+    widthPercent: number;
+  } | null {
+    const current = this.swipe();
+    if (current === null || current.id !== vm.id || current.deltaX === 0) {
+      return null;
+    }
+    const progress = swipeProgressOf(current.deltaX);
+    if (current.deltaX > 0) {
+      const target = this.forwardTargetOf(vm);
+      if (target === null) {
+        return null;
+      }
+      return {
+        side: 'forward',
+        label: `Move to ${target.title} →`,
+        progress,
+        widthPercent: Math.round(progress * 38),
+      };
+    }
+    if (!this.canSendBack()) {
+      return null;
+    }
+    return { side: 'back', label: '← Send back', progress, widthPercent: Math.round(progress * 38) };
+  }
+
+  /** The release flash's class: the fired card's edge lights its side's colour. */
+  protected isFlashing(vm: TicketVm, action: SwipeAction): boolean {
+    const flash = this.swipeFlash();
+    return flash !== null && flash.id === vm.id && flash.action === action;
+  }
+
+  /**
+   * The fired swipe: the flash plays at once; back opens the ticket with
+   * the Send-back panel waiting, forward moves the card on through the
+   * desk's move path — a refusal surfaces on the toast (the sheet that
+   * used to show it inline is gone).
+   */
+  private async fireSwipe(action: SwipeAction, vm: TicketVm): Promise<void> {
+    const state = this.state;
+    if (state === null || this.readOnly()) {
+      return;
+    }
+    if (action === 'back') {
+      if (state.openTicketSendBack === undefined) {
+        return;
+      }
+      this.flashSwipe(vm.id, action);
+      state.openTicketSendBack(vm.id);
+      return;
+    }
+    const target = this.forwardTargetOf(vm);
+    if (target === null) {
+      return;
+    }
+    this.flashSwipe(vm.id, action);
+    let result: McMoveResult;
+    try {
+      result = await state.moveTicket(vm.id, target.phaseId);
+    } catch {
+      result = { ok: false, error: 'The move failed.' };
+    }
+    if (!result.ok) {
+      state.toast?.(result.error ?? 'The move failed.', 'error');
+    }
+  }
+
+  private flashSwipe(id: string, action: SwipeAction): void {
+    if (this.flashTimer !== null) {
+      clearTimeout(this.flashTimer);
+    }
+    this.swipeFlash.set({ id, action });
+    this.flashTimer = setTimeout(() => {
+      this.flashTimer = null;
+      this.swipeFlash.set(null);
+    }, SWIPE_FLASH_MS);
   }
 
   /** A need card whose ticket is on the board opens it (the prototype's
@@ -173,6 +320,14 @@ export class Work {
     }
     const persona = state.personas.find((known) => known.title === vm.need.title);
     state.openPersona(persona?.id ?? vm.need.title);
+  }
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => {
+      if (this.flashTimer !== null) {
+        clearTimeout(this.flashTimer);
+      }
+    });
   }
 
   // --- the question option card ('Auswahl nie = Aktion') -------------------------
@@ -269,30 +424,6 @@ export class Work {
       state.toast?.(`Antwort gesendet — ${this.personaLabelOf(vm)} läuft weiter`, 'ok');
     } else {
       this.qError.update((current) => ({ ...current, [vm.key]: reply.error }));
-    }
-  }
-
-  /** "Move to next phase": the card on to the next group; the error shows inline. */
-  protected async moveOn(): Promise<void> {
-    const state = this.state;
-    const card = this.openCard();
-    const target = this.moveTarget();
-    if (state === null || card === null || target === null || this.readOnly()) {
-      return;
-    }
-    this.movePending.set(true);
-    this.moveError.set(null);
-    let result: McMoveResult;
-    try {
-      result = await state.moveTicket(card.id, target.phaseId);
-    } catch {
-      result = { ok: false, error: 'The move failed.' };
-    }
-    this.movePending.set(false);
-    if (result.ok) {
-      this.closeSheet();
-    } else {
-      this.moveError.set(result.error ?? 'The move failed.');
     }
   }
 }

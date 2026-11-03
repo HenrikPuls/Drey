@@ -32,6 +32,12 @@ interactive rules below do not apply to it) and opens this file by section.
   content is German — a German mockup or a German feature request is a
   description of the layout and behaviour, **not** an instruction to write
   German labels. Translate them.
+- **No unnecessary UI text.** Every visible string must earn its place:
+  no subtitles, taglines, hint lines or explanatory prose a screen doesn't
+  need to be understood (owner ruling 2026-11-03 — e.g. the chat header
+  carries the title only, no „anlegen · steuern · berichten ·
+  konfigurieren" sub). When a German request describes text, translate it
+  AND cut it if it is decoration.
 - **Screenshots are English throughout.** Menus and pickers list names
   that come from vault files or the config — prompt titles and
   descriptions (`templates/prompts/`), template and snippet names, Action

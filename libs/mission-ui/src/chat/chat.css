@@ -1,12 +1,14 @@
 /*
- * The chat tab in the prototype's dress (#v-chat): the Mission Control
- * header with the two icon buttons, the merged timeline (owner right,
- * mission left with the thinking trace — live as a dim mono stream with
- * the blinking accent cursor, folded to `▸ Gedacht` afterwards), the
- * proposal cards (.confirm with the rich bodies: chain strips, transition
- * arrow, create diffbox, blocker/priority lines), the composer with the
- * circle send, and the sessions sheet (.sess-row). Component styles read
- * only the shared tokens (no component-invented colours).
+ * The chat tab in the prototype's dress (#v-chat): a fixed column in the
+ * Claude/ChatGPT shape — header (flex none), the scrolling message list
+ * (flex 1 1 auto, min-height 0, overflow-y auto), the composer (flex
+ * none) — with the merged timeline (owner right, mission left with the
+ * thinking trace — live as a dim mono stream with the blinking accent
+ * cursor, folded to `▸ Gedacht` afterwards), the proposal cards (.confirm
+ * with the rich bodies: chain strips, transition arrow, create diffbox,
+ * blocker/priority lines), the composer with the circle send, and the
+ * sessions sheet (.sess-row). Component styles read only the shared
+ * tokens (no component-invented colours).
  */
 
 :host {
@@ -47,16 +49,6 @@
   text-transform: uppercase;
 }
 
-.sub {
-  margin: 0;
-  overflow: hidden;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--text-3);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .hspace {
   flex: 1;
 }
@@ -93,7 +85,7 @@
 /* ---------- the merged timeline ---------- */
 
 .thread {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 14px;

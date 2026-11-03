@@ -412,6 +412,9 @@ export function thinkFoldLabel(seconds: string | null): string {
 
 type ChatViewMode = 'empty' | 'composer' | 'session';
 
+/** Distance from the bottom inside which the pin still counts as "at the end". */
+const FOLLOW_SLACK_PX = 32;
+
 const NO_MESSAGES: readonly ChatMessageView[] = [];
 
 /** One sheet row the sessions sheet renders. */
@@ -421,9 +424,10 @@ interface SheetEntry {
 }
 
 /**
- * Mission Control's chat in the prototype's dress (#v-chat): the header
- * with the title, the mono sub and the two 34 px icon buttons (sessions
- * sheet, new chat), the merged timeline — owner bubbles right, mission
+ * Mission Control's chat in the prototype's dress (#v-chat): a fixed
+ * column — header with the title and the two 34 px icon buttons (sessions
+ * sheet, new chat) on top, the merged timeline scrolling alone in the
+ * middle, the composer pinned below — the owner bubbles right, mission
  * left with the thinking trace, live as a dim mono stream with a blinking
  * accent cursor and folded to a `▸ Gedacht` details after the turn
  * (measured first-thought → first-text when measurable) — pending
@@ -591,15 +595,40 @@ export class Chat {
 
   private readonly thread = viewChild<ElementRef<HTMLElement>>('thread');
 
+  /**
+   * True while the pin follows the newest line: the thread sits at (or
+   * near) the bottom. A deliberate scroll up stops the yank — stream
+   * deltas then land below the fold without moving the view; scrolling
+   * back to the bottom re-arms the pin.
+   */
+  private readonly follow = signal(true);
+
+  /** The thread's scroll listener: keeps the follow flag honest. */
+  protected onThreadScroll(): void {
+    const el = this.thread()?.nativeElement;
+    if (el === undefined) {
+      return;
+    }
+    this.follow.set(el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_SLACK_PX);
+  }
+
   /** Keep the thread pinned to the newest line while it grows or streams. */
   private readonly pinToNewest = effect(() => {
     this.timeline();
     this.streaming();
+    const file = this.active()?.file ?? null;
+    if (file !== this.lastPinnedFile) {
+      // A session switch (or the thread's first mount) always shows the
+      // latest line — the follow gate is only for reading history.
+      this.lastPinnedFile = file;
+      this.follow.set(true);
+    }
     const el = this.thread()?.nativeElement;
-    if (el !== undefined) {
+    if (el !== undefined && this.follow()) {
       el.scrollTop = el.scrollHeight;
     }
   });
+  private lastPinnedFile: string | null = null;
 
   /** The pane's first session is its live one (a booted state may carry one). */
   private readonly adoptLive = effect(() => {

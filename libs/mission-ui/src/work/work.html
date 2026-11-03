@@ -192,7 +192,28 @@
           }
         } @else {
           @for (vm of group.tickets; track vm.id) {
-            <button type="button" class="card ticket-card" (click)="openSheet(vm)">
+            <button
+              type="button"
+              class="card ticket-card"
+              [class.flash-forward]="isFlashing(vm, 'forward')"
+              [class.flash-back]="isFlashing(vm, 'back')"
+              (pointerdown)="onCardPointerDown($event, vm)"
+              (pointermove)="onCardPointerMove($event)"
+              (pointerup)="onCardPointerUp($event, vm)"
+              (pointercancel)="onCardPointerCancel()"
+              (click)="onCardTap(vm)"
+            >
+              @if (swipeLayerOf(vm); as layer) {
+                <span
+                  class="swipe-layer"
+                  [class.forward]="layer.side === 'forward'"
+                  [class.back]="layer.side === 'back'"
+                  [style.width.%]="layer.widthPercent"
+                  [style.opacity]="layer.progress"
+                  aria-hidden="true"
+                  >{{ layer.label }}</span
+                >
+              }
               <div class="card-top">
                 <span class="tid">{{ vm.id }}</span>
                 <span
@@ -242,8 +263,6 @@
                 </div>
               }
             </button>
-          } @empty {
-            <p class="group-empty">No tickets here.</p>
           }
         }
       </section>
@@ -253,46 +272,3 @@
   </div>
 }
 
-@if (openCard(); as card) {
-  <div class="sheet-backdrop" (click)="closeSheet()"></div>
-  <div class="sheet" role="dialog" aria-modal="true" [attr.aria-label]="card.title">
-    <div class="grab" aria-hidden="true"></div>
-    <div class="sheet-head">
-      <span class="tid">{{ card.id }}</span>
-      <h2 class="sheet-title">{{ card.title }}</h2>
-      <button type="button" class="sheet-close" aria-label="Close" (click)="closeSheet()">×</button>
-    </div>
-    @if (card.ticket.summary) {
-      <p class="sheet-summary">{{ card.ticket.summary }}</p>
-    }
-    <p class="sheet-phase">
-      Phase:
-      <span
-        class="chip chip-phase"
-        [class.tinted]="card.phaseColor !== null"
-        [style.--pc]="card.phaseColor ?? null"
-        >{{ card.phaseTitle }}</span
-      >
-    </p>
-    @if (card.blocked) {
-      <p class="sheet-blocked">
-        Blocked — waiting on
-        {{ card.ticket.blocked?.join(', ') || (card.ticket.meta.blockedBy ?? []).join(', ') }}.
-      </p>
-    }
-    @if (moveError(); as error) {
-      <p class="sheet-error" role="alert">{{ error }}</p>
-    }
-    <div class="sheet-actions">
-      @if (state?.openTicket) {
-        <button type="button" class="btn" (click)="openTicket()">Open ticket</button>
-      }
-      @if (!readOnly() && moveTarget(); as target) {
-        <button type="button" class="btn btn-primary" [disabled]="movePending()" (click)="moveOn()">
-          {{ movePending() ? 'Moving…' : 'Move to ' + target.title }}
-        </button>
-      }
-      <button type="button" class="btn" (click)="closeSheet()">Close</button>
-    </div>
-  </div>
-}
