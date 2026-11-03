@@ -107,8 +107,9 @@ const plugin: MainPluginModule = {
     });
     ctx.ipc.handle('remotePair', (payload) => {
       const p = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
-      // `name` is the renderer's key; `deviceName` kept for older callers.
-      const name = typeof p['name'] === 'string' && p['name'] !== '' ? p['name'] : typeof p['deviceName'] === 'string' ? p['deviceName'] : '';
+      const name = typeof p['name'] === 'string' && p['name'] !== '' ? p['name'] : 'Phone';
+      // The proxy passes the FIRST argument only — the name travels as the
+      // bare string the engine's 'pair' tolerates.
       return remoteService.pair(name, p['readOnly'] === true);
     });
     ctx.ipc.handle('remotePairCancel', () => remoteService.cancelPairing());

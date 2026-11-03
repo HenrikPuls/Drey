@@ -39,6 +39,9 @@ beforeEach(async () => {
   await fsp.mkdir(home, { recursive: true });
   await fsp.writeFile(path.join(vault, 'tickets/_meta/pipeline.md'), PIPELINE, 'utf8');
   await gitInitVault();
+  // The pair-status specs read `pairing.deviceName` — the remote must be
+  // on (or the status hides the pairing view behind `config.enabled`).
+  await fsp.writeFile(path.join(home, 'config.json'), JSON.stringify({ 'remote.enabled': true }), 'utf8');
   engine = await createEngine({ vaultPath: vault, home, clientDir: path.join(root, 'client'), log: () => undefined });
 });
 
@@ -593,5 +596,26 @@ describe('chat (E5a)', () => {
     const card = snapshot.columns.flatMap((c) => c.tickets).find((t) => t.id === seeded.id)!;
     expect(card.meta.priority).toBe('normal');
     expect(snapshot.columns.find((c) => c.phase.id === 'inbox')!.tickets.map((t) => t.id)).toContain(seeded.id);
+  });
+});
+
+describe('invoke pair (M111/UX follow-up)', () => {
+  it('a bare-string payload names the device — the proxy passes the first argument only', async () => {
+    await engine.invoke('configSet', { key: 'remote.enabled', value: true });
+    const status = (await engine.invoke('pair', 'ClaudeCode')) as {
+      pairing: { deviceName: string | null } | null;
+    };
+    expect(status.pairing?.deviceName).toBe('ClaudeCode');
+    await engine.invoke('cancelPairing');
+  });
+
+  it('an object payload carries deviceName and readOnly', async () => {
+    await engine.invoke('configSet', { key: 'remote.enabled', value: true });
+    const status = (await engine.invoke('pair', { deviceName: 'Pad', readOnly: true })) as {
+      pairing: { deviceName: string | null; readOnly: boolean | null } | null;
+    };
+    expect(status.pairing?.deviceName).toBe('Pad');
+    expect(status.pairing?.readOnly).toBe(true);
+    await engine.invoke('cancelPairing');
   });
 });

@@ -213,7 +213,12 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   register(fleet, FLEET_METHODS);
   register(remoteService, REMOTE_METHODS);
   table.set('pair', (payload) => {
-    const message = (payload ?? {}) as { deviceName?: unknown; readOnly?: unknown };
+    // Tolerant on the wire: `{ deviceName, readOnly }` from a proper caller,
+    // or a bare string when a proxy passes the first positional argument.
+    const message =
+      typeof payload === 'string'
+        ? ({ deviceName: payload } as { deviceName?: unknown; readOnly?: unknown })
+        : ((payload ?? {}) as { deviceName?: unknown; readOnly?: unknown });
     return Promise.resolve(remoteService.pair(typeof message.deviceName === 'string' ? message.deviceName : '', message.readOnly === true));
   });
   table.set('revoke', (payload) => {
