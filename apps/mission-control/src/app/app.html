@@ -1,7 +1,81 @@
 @if (pairing() !== 'ready') {
   <mc-pairing class="pairing" [phase]="pairing()" [pair]="pairCode" />
 } @else {
-<div class="shell">
+<div class="shell" [class.docked]="showDock()">
+  @if (wide()) {
+    <nav class="topnav" aria-label="Main">
+      <span class="logo" aria-hidden="true">D</span>
+      <button
+        type="button"
+        class="nt"
+        [class.on]="tab() === 'work'"
+        [attr.aria-current]="tab() === 'work' ? 'page' : null"
+        (click)="goTab('work')"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <rect x="4" y="4" width="16" height="16" rx="3" />
+          <path d="M4 10h16M10 10v10" />
+        </svg>
+        Work
+        @if (needsCount() > 0) {
+          <span class="bdg">{{ needsCount() }}</span>
+        }
+      </button>
+      <button
+        type="button"
+        class="nt"
+        [class.on]="docked() ? showDock() : tab() === 'chat'"
+        [attr.aria-pressed]="docked() ? showDock() : null"
+        [attr.aria-current]="!docked() && tab() === 'chat' ? 'page' : null"
+        [attr.aria-label]="docked() ? 'Chat, docked on the right, press to fold' : 'Chat'"
+        (click)="onChatTab()"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5z" />
+        </svg>
+        Chat
+      </button>
+      <button
+        type="button"
+        class="nt"
+        [class.on]="tab() === 'team'"
+        [attr.aria-current]="tab() === 'team' ? 'page' : null"
+        (click)="goTab('team')"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <circle cx="9" cy="8" r="3.2" />
+          <path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" />
+          <circle cx="17" cy="9" r="2.4" />
+          <path d="M15.5 14.7c2.4.2 4.3 1.7 4.9 4.3" />
+        </svg>
+        Team
+      </button>
+      <span class="spacer"></span>
+      <button
+        type="button"
+        class="nt icon"
+        [class.on]="tab() === 'settings'"
+        [attr.aria-current]="tab() === 'settings' ? 'page' : null"
+        aria-label="Settings"
+        title="Settings"
+        (click)="goTab('settings')"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+          <circle cx="16" cy="7" r="2" />
+          <circle cx="8" cy="17" r="2" />
+        </svg>
+      </button>
+    </nav>
+  } @else if (showPhoneBar()) {
+    <div class="phonebar">
+      <button type="button" class="menu-btn" aria-label="Menu and chat history" (click)="openMenu()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16" />
+        </svg>
+      </button>
+    </div>
+  }
   @if (showWork()) {
     <mc-work class="pane pane-work" />
   }
@@ -11,95 +85,54 @@
   @if (showTeam()) {
     <mc-team class="pane pane-center" />
   }
+  @if (showSettings()) {
+    <mc-settings class="pane pane-center" />
+  }
   @if (personaOpen() !== null) {
     <div class="persona-layer">
       <mc-persona-detail />
     </div>
   }
-  @if (showChat()) {
-    <mc-chat class="pane pane-chat" />
+  @if (showDock()) {
+    <aside class="dock" aria-label="Dock">
+      <div class="dock-tabs" role="tablist" aria-label="Dock content">
+        <button type="button" role="tab" [attr.aria-selected]="dockTab() === 'chat'" (click)="dockTab.set('chat')">Chat</button>
+        <button type="button" role="tab" [attr.aria-selected]="dockTab() === 'capacity'" (click)="dockTab.set('capacity')">Capacity</button>
+      </div>
+      @if (showChat()) {
+        <mc-chat class="dock-body" />
+      }
+      @if (showCapacity()) {
+        <mc-capacity class="dock-body" />
+      }
+    </aside>
+  } @else if (showChat()) {
+    <mc-chat class="pane pane-chat">
+      @if (!wide()) {
+        <div chat-nav class="menu-nav">
+          <button type="button" class="menu-row" (click)="goTab('work')">
+            <span class="grow">Work</span>
+            @if (needsCount() > 0) {
+              <span class="bdg-inline">{{ needsCount() }}</span>
+            }
+            <span class="chev" aria-hidden="true">›</span>
+          </button>
+          <button type="button" class="menu-row" (click)="goTab('team')">
+            <span class="grow">Team</span>
+            <span class="chev" aria-hidden="true">›</span>
+          </button>
+          <button type="button" class="menu-row" (click)="goTab('settings')">
+            <span class="grow">Settings</span>
+            <span class="chev" aria-hidden="true">›</span>
+          </button>
+        </div>
+      }
+    </mc-chat>
   }
   <div class="ticket-layer" [class.open]="ticketOpen() !== null">
     <mc-ticket />
     <mc-ticket-edit />
   </div>
   <mc-toast />
-  <nav class="tabbar" aria-label="Primary">
-    <button type="button" class="tab" [class.on]="tab() === 'work'" (click)="tab.set('work')">
-      <svg
-        class="tab-icon"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        aria-hidden="true"
-      >
-        <rect x="4" y="4" width="16" height="16" rx="3" />
-        <path d="M4 10h16M10 10v10" />
-      </svg>
-      Work
-      @if (needsCount() > 0) {
-        <span class="bdg">{{ needsCount() }}</span>
-      }
-    </button>
-    <button
-      type="button"
-      class="tab center"
-      [class.on]="tab() === 'chat'"
-      (click)="tab.set('chat')"
-    >
-      <span class="cbtn" aria-hidden="true">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5z" />
-          <path d="M9 11.5h6M9 14.5h3.5" />
-        </svg>
-      </span>
-      Chat
-    </button>
-    <button type="button" class="tab" [class.on]="tab() === 'team'" (click)="tab.set('team')">
-      <svg
-        class="tab-icon"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        aria-hidden="true"
-      >
-        <circle cx="9" cy="8" r="3.2" />
-        <path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6" />
-        <circle cx="17" cy="9" r="2.4" />
-        <path d="M15.5 14.7c2.4.2 4.3 1.7 4.9 4.3" />
-      </svg>
-      Team
-    </button>
-    <button
-      type="button"
-      class="theme-btn"
-      (click)="toggleTheme()"
-      [attr.aria-label]="'Switch theme (current: ' + theme() + ')'"
-      [attr.title]="'Switch theme (current: ' + theme() + ')'"
-    >
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.8"
-        stroke-linecap="round"
-        aria-hidden="true"
-      >
-        <circle cx="12" cy="12" r="8" />
-        <path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none" />
-      </svg>
-    </button>
-  </nav>
 </div>
 }

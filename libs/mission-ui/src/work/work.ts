@@ -64,7 +64,7 @@ export class Work {
   /** The fleet's live-run count; null = no run data in the state. */
   protected readonly liveRuns = computed(() => liveRunCountOf(this.state?.runs ?? null));
 
-  /** The chip's label: `<n> aktiv` with data, the bare word without. */
+  /** The chip's label: `<n> active` with data, the bare word without. */
   protected readonly fleetLabel = computed(() => fleetLabelOf(this.liveRuns()));
 
   /** The chip's LED face: mint and pulsing while runs are live, idle otherwise. */

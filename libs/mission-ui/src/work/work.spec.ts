@@ -597,8 +597,8 @@ describe('header helpers', () => {
   });
 
   it('labels the Fleet chip: the count when data exist, the bare word without', () => {
-    expect(fleetLabelOf(3)).toBe('3 aktiv');
-    expect(fleetLabelOf(0)).toBe('0 aktiv');
+    expect(fleetLabelOf(3)).toBe('3 active');
+    expect(fleetLabelOf(0)).toBe('0 active');
     expect(fleetLabelOf(null)).toBe('Fleet');
   });
 });
@@ -644,12 +644,12 @@ describe('Work', () => {
     const live = makeFake({ board, runs: [{ state: 'running' }, { state: 'starting' }] });
     const liveVm = surface(setup(live.state));
     expect(liveVm.liveRuns()).toBe(2);
-    expect(liveVm.fleetLabel()).toBe('2 aktiv');
+    expect(liveVm.fleetLabel()).toBe('2 active');
     expect(liveVm.fleetLive()).toBe(true);
 
     const quiet = makeFake({ board, runs: [{ state: 'done' }] });
     const quietVm = surface(setup(quiet.state));
-    expect(quietVm.fleetLabel()).toBe('0 aktiv');
+    expect(quietVm.fleetLabel()).toBe('0 active');
     expect(quietVm.fleetLive()).toBe(false);
 
     const blind = makeFake({ board });

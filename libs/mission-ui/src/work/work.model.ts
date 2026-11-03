@@ -570,7 +570,7 @@ export function liveRunCountOf(runs: readonly McRun[] | null | undefined): numbe
 
 /** The chip's label: the count when run data exist, the bare word when not. */
 export function fleetLabelOf(count: number | null): string {
-  return count === null ? 'Fleet' : `${count} aktiv`;
+  return count === null ? 'Fleet' : `${count} active`;
 }
 
 /** Persona id → persona; the ticket's persona pin resolves here. */

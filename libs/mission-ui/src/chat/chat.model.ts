@@ -32,6 +32,12 @@ export type McChatUploadReply =
 export interface McChatState {
   /** The report card's one-shot draft prefill; the tab consumes and clears it. */
   readonly chatPrefill: WritableSignal<string | null>;
+  /**
+   * One-shot: the phone's menu button on another screen sets it and
+   * switches to the chat tab; the chat opens its history on mount.
+   * Optional — a host without a menu leaves it off.
+   */
+  readonly chatMenu?: WritableSignal<boolean>;
   /** The session list and the open session — the merged timeline's source. */
   readonly chat: Signal<ChatStateView>;
   /** The raw board snapshot; the proposal cards read it tolerantly. */

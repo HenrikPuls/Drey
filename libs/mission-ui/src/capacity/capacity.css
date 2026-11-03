@@ -1,0 +1,17 @@
+:host {
+  display: block;
+}
+
+.capacity {
+  padding: 16px;
+}
+
+.line {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-2);
+}
+
+.line b {
+  color: var(--text);
+}

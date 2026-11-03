@@ -233,6 +233,43 @@ export function relativeAge(iso: string, nowMs: number): string {
   return `${days} d`;
 }
 
+/** One history group: a day label and the sessions updated on it. */
+export interface HistoryGroup {
+  readonly label: 'Today' | 'Yesterday' | 'Earlier';
+  readonly entries: readonly SessionMeta[];
+}
+
+/**
+ * The history list's groups (phone menu, desktop dock): sessions newest
+ * first, grouped by the calendar day of their last update, narrowed by a
+ * case-insensitive title filter. Empty groups are left out.
+ */
+export function historyGroupsOf(
+  sessions: readonly SessionMeta[],
+  nowMs: number,
+  query: string,
+): readonly HistoryGroup[] {
+  const needle = query.trim().toLowerCase();
+  const startOfDay = (t: number): number => {
+    const d = new Date(t);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+  const today = startOfDay(nowMs);
+  const buckets: Record<HistoryGroup['label'], SessionMeta[]> = { Today: [], Yesterday: [], Earlier: [] };
+  const sorted = [...sessions]
+    .filter((session) => needle === '' || session.title.toLowerCase().includes(needle))
+    .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+  for (const session of sorted) {
+    const at = Date.parse(session.updatedAt);
+    const days = Number.isNaN(at) ? 2 : Math.round((today - startOfDay(at)) / 86_400_000);
+    buckets[days <= 0 ? 'Today' : days === 1 ? 'Yesterday' : 'Earlier'].push(session);
+  }
+  return (['Today', 'Yesterday', 'Earlier'] as const)
+    .filter((label) => buckets[label].length > 0)
+    .map((label) => ({ label, entries: buckets[label] }));
+}
+
 /**
  * The error sentence of a send/confirm/dismiss reply, for inline display.
  * `McReply` is `{ ok: true } | { ok: false; error }`; anything else without
@@ -472,6 +509,10 @@ export class Chat {
    * sits in that session's composer — the send routes there).
    */
   constructor() {
+    if (this.state.chatMenu?.() === true) {
+      this.state.chatMenu.set(false);
+      this.sheetOpen.set(true);
+    }
     const prefill = this.state.chatPrefill();
     if (prefill !== null) {
       this.state.chatPrefill.set(null);
@@ -494,6 +535,8 @@ export class Chat {
   private readonly dimmedCards = signal<Readonly<Record<string, boolean>>>({});
   /** Whether the sessions sheet is up. */
   protected readonly sheetOpen = signal(false);
+  /** The history list's search text. */
+  protected readonly historyQuery = signal('');
   /** Whether the attach sheet is up. */
   protected readonly attachSheetOpen = signal(false);
   /** True while the picked files are still on their way to the desk. */
@@ -524,6 +567,21 @@ export class Chat {
     const live = this.liveFile();
     const active = this.active();
     return this.viewMode() === 'session' && live !== null && active !== null && active.file !== live;
+  });
+  /** The history list below the live row: the other sessions by day, filtered. */
+  protected readonly historyGroups = computed<readonly HistoryGroup[]>(() => {
+    const live = this.liveEntry()?.file ?? null;
+    return historyGroupsOf(
+      this.sessions().filter((session) => session.file !== live),
+      Date.now(),
+      this.historyQuery(),
+    );
+  });
+  /** The live row shows unless the search filters it out. */
+  protected readonly liveVisible = computed(() => {
+    const live = this.liveEntry();
+    const needle = this.historyQuery().trim().toLowerCase();
+    return live !== null && (needle === '' || live.title.toLowerCase().includes(needle));
   });
   /** The sheet's first row: the pane's live session, whatever it is named. */
   protected readonly liveEntry = computed<SheetEntry | null>(() => {
@@ -692,6 +750,11 @@ export class Chat {
 
   protected closeSheet(): void {
     this.sheetOpen.set(false);
+    this.historyQuery.set('');
+  }
+
+  protected onHistoryQuery(event: Event): void {
+    this.historyQuery.set((event.target as HTMLInputElement).value);
   }
 
   /**

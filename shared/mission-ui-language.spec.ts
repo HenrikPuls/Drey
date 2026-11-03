@@ -13,7 +13,7 @@ import { join } from 'node:path';
 const ROOTS = ['libs/mission-ui/src', 'apps/mission-control/src'];
 const UMLAUT = /[äöüßÄÖÜ]/;
 const GERMAN_WORDS =
-  /\b(und|oder|nicht|nichts|eine|einen|wird|werden|für|Datei|Sitzung|Antwort|Zurück|Nachricht|Schließen|Senden|Verwerfen|Bestätig\w*|Neuer|Neues|Anhang|Arbeit|Gerät|Kette|jetzt|noch|keine|läuft)\b/;
+  /\b(und|oder|nicht|nichts|eine|einen|wird|werden|für|Datei|Sitzung|Antwort|Zurück|Nachricht|Schließen|Senden|Verwerfen|Bestätig\w*|Neuer|Neues|Anhang|Arbeit|Gerät|Kette|jetzt|noch|keine|läuft|aktiv|warten|Karten)\b/;
 
 function sourcesUnder(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {

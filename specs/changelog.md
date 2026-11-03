@@ -1,4 +1,38 @@
 
+### Milestone 113 — Mission Control navigation (E12-2)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-03
+(concept v2, design boards 5a and 6a–6d; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
+E10 – E12). The bottom tab bar of E5b is gone.
+
+- **Phone.** The chat is home (the app opens on it). Its menu button
+  (three lines, top left) opens the **history panel**: search, New chat,
+  the places Work (with the needs count), Team and Settings, then the
+  sessions grouped Today / Yesterday / Earlier, the live one on top. Work,
+  Team and Settings carry a menu button in a slim top bar that leads back
+  to that panel. Sessions are still the `_meta/chat/` files; a session
+  other than the live one opens read-only, as before.
+- **From 768 px.** A top tab bar — Work (needs counter), Chat, Team,
+  Settings. Work stays in column 1, the active detail in column 2.
+  **From 1024 px** the right dock holds Chat | Capacity; the Chat tab
+  folds and unfolds the dock (`aria-pressed`), and the chat's menu button
+  opens the history list inside the dock (no places there). Between 768
+  and 1023 px the Chat tab shows the chat in the center column.
+- **New screens.** Settings (first cut: the theme switch that sat beside
+  the tab bar; E12-3 fills it) and the dock's Capacity tab (the live
+  worker count; E12-4 extends it).
+- **Code.** `McTab` gains `settings`; `McState.chatMenu` is the one-shot
+  that makes the chat open its history on mount (`McChatState.chatMenu`,
+  optional); `historyGroupsOf` is the pure grouping/filter; the old
+  bottom sessions sheet became the history panel (the attach sheet stays).
+  Two German leftovers found on the way (`aktiv`, `Karten warten`) are
+  translated and the language guard learned them.
+- **Specs added:** `historyGroupsOf`, the menu request, Capacity.
+
+Verified: typecheck, lint, cycles, `test:app` (1196 + 120 + 457), the
+language guard, and `ng build mission-control --configuration production`.
+Not run in a browser against a desk.
+
 ### Milestone 112 — Mission Control redesign, specs + English pass (E10–E12 groundwork, E12-1)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-03

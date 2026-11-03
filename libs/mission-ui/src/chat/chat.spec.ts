@@ -14,6 +14,7 @@ import {
   chainCompareOf,
   composerRowsOf,
   errorOf,
+  historyGroupsOf,
   isTurnStreaming,
   phaseDirOf,
   proposalDetailOf,
@@ -1245,10 +1246,10 @@ describe('Chat column structure (header / messages / composer)', () => {
     expect(el.querySelector('.sub')).toBeNull();
   });
 
-  it('keeps the empty-state body to the functional sheet pointer only', () => {
+  it('keeps the empty-state body to the functional menu pointer only', () => {
     const { el } = renderChat(null, 'promote T-0004');
     const empties = Array.from(el.querySelectorAll('.body .empty')).map((p) => p.textContent ?? '');
-    expect(empties).toEqual(['Earlier sessions are in the sheet (top right).']);
+    expect(empties).toEqual(['Earlier chats are in the menu (top left).']);
   });
 });
 
@@ -1332,5 +1333,83 @@ describe('Chat thread auto-scroll (follow gate)', () => {
     });
     fixture.detectChanges();
     expect(thread.scrollTop).toBe(geometry.scrollHeight);
+  });
+});
+
+// -- the history list (E12-2) -------------------------------------------------------
+
+describe('historyGroupsOf', () => {
+  const meta = (file: string, title: string, updatedAt: string) => ({
+    file,
+    title,
+    createdAt: updatedAt,
+    updatedAt,
+    pending: 0,
+  });
+  const now = new Date(2026, 10, 3, 15, 0).getTime();
+  const at = (daysAgo: number, hour: number): string => new Date(2026, 10, 3 - daysAgo, hour, 0).toISOString();
+
+  it('groups by calendar day, newest first, empty groups left out', () => {
+    const groups = historyGroupsOf(
+      [
+        meta('old.md', 'Cost export', at(6, 9)),
+        meta('a.md', 'Morning', at(0, 8)),
+        meta('y.md', 'Yesterday chat', at(1, 20)),
+        meta('b.md', 'Noon', at(0, 12)),
+      ],
+      now,
+      '',
+    );
+    expect(groups.map((g) => g.label)).toEqual(['Today', 'Yesterday', 'Earlier']);
+    expect(groups[0]!.entries.map((e) => e.file)).toEqual(['b.md', 'a.md']);
+    const onlyOld = historyGroupsOf([meta('old.md', 'Cost export', at(6, 9))], now, '');
+    expect(onlyOld.map((g) => g.label)).toEqual(['Earlier']);
+  });
+
+  it('filters by title, case-insensitively', () => {
+    const groups = historyGroupsOf(
+      [meta('a.md', 'What did the week cost?', at(0, 8)), meta('b.md', 'Away until 18:00', at(0, 9))],
+      now,
+      ' COST ',
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.entries.map((e) => e.file)).toEqual(['a.md']);
+  });
+
+  it('puts an unreadable timestamp under Earlier', () => {
+    expect(historyGroupsOf([meta('x.md', 'X', 'not a date')], now, '')[0]!.label).toBe('Earlier');
+  });
+});
+
+describe('Chat menu request (E12-2)', () => {
+  function chatWith(menu: WritableSignal<boolean> | undefined): { sheetOpen(): boolean } {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: MC_CHAT_STATE,
+          useValue: {
+            chatPrefill: signal(null),
+            ...(menu === undefined ? {} : { chatMenu: menu }),
+            chat: signal<ChatStateView>({ sessions: [], active: null }),
+            board: signal(null),
+            work: signal<WorkView>({ groups: [], priorities: DEFAULT_PRIORITY_CONFIG }),
+            toast: () => undefined,
+          } as unknown as McChatState,
+        },
+      ],
+    });
+    return TestBed.runInInjectionContext(() => new Chat()) as unknown as { sheetOpen(): boolean };
+  }
+
+  it('opens the history on mount and consumes the one-shot', () => {
+    const menu = signal(true);
+    expect(chatWith(menu).sheetOpen()).toBe(true);
+    expect(menu()).toBe(false);
+  });
+
+  it('stays closed without the request, and without the signal', () => {
+    expect(chatWith(signal(false)).sheetOpen()).toBe(false);
+    expect(chatWith(undefined).sheetOpen()).toBe(false);
   });
 });

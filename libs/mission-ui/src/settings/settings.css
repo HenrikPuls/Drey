@@ -1,0 +1,55 @@
+:host {
+  display: block;
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+}
+
+.ttl {
+  margin: 0 0 8px;
+  font-size: 34px;
+  line-height: 41px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+
+.group {
+  overflow: hidden;
+  background: var(--panel);
+  border-radius: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.grow {
+  flex: 1;
+}
+
+.val {
+  font-size: 15px;
+  color: var(--text-3);
+}
+
+.note {
+  margin: 4px 16px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text-3);
+}

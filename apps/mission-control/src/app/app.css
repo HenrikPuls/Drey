@@ -1,8 +1,9 @@
 /*
  * The shell's layout skeleton (concept §7, the prototype's grid):
- * phone — one column, tab bar at the bottom; ≥768px — Work permanently
- * in column 1, the active detail view in column 2; ≥1280px — the chat
- * permanently in column 3. The views stay mounted and are placed by
+ * phone — one column, no tab bar (the chat menu leads to the places);
+ * ≥768px — a top tab bar, Work permanently in column 1, the active
+ * detail view in column 2; ≥1024px — the dock (Chat | Capacity) in
+ * column 3. The views stay mounted and are placed by
  * this grid; tab()/ticketOpen() only steer what mounts where.
  */
 :host {
@@ -59,118 +60,196 @@
   display: flex;
 }
 
-/* The tab bar sits in the thumb's reach; the chat tab is raised because
-   it is the regular intervention (concept §7, the prototype's .tabbar). */
-.tabbar {
+/* The phone has no tab bar: a 44 pt menu button leads back to the chat
+   menu (history + Work, Team, Settings). */
+.phonebar {
   flex: none;
   display: flex;
-  align-items: stretch;
-  min-height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel) 90%, transparent);
-  backdrop-filter: blur(10px);
-  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  align-items: center;
+  min-height: 44px;
+  padding: env(safe-area-inset-top) 8px 0;
 }
 
-.tab {
-  position: relative;
-  flex: 1;
+.menu-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: var(--text);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.menu-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* The places, projected into the chat's history panel on the phone. */
+.menu-nav {
   display: flex;
+  flex: none;
   flex-direction: column;
+  margin: 4px 0 8px;
+  overflow: hidden;
+  background: var(--panel);
+  border-radius: 12px;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 16px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.menu-row:last-child {
+  border-bottom: 0;
+}
+
+.grow {
+  flex: 1;
+}
+
+.chev {
+  font-size: 22px;
+  line-height: 22px;
+  color: var(--text-3);
+}
+
+.bdg-inline {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  font-size: 13px;
+  line-height: 22px;
+  text-align: center;
+  color: var(--bg);
+  background: var(--warn);
+  border-radius: 11px;
+}
+
+/* The top tab bar (≥768): Work with the needs counter, Chat, Team, Settings. */
+.topnav {
+  display: flex;
   align-items: center;
   gap: 4px;
-  padding: 12px 0 8px;
-  border: 0;
-  background: transparent;
-  color: var(--text-3);
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: color 0.15s ease;
+  min-height: 48px;
+  padding: 0 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
 }
 
-.tab-icon {
+.logo {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 8px;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 8px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.nt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--text-2);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+}
+
+.nt svg {
   width: 20px;
   height: 20px;
 }
 
-.tab.on {
-  color: var(--accent);
+.nt:hover {
+  color: var(--text);
 }
 
-/* The amber needs badge on the work tab. */
+.nt.on {
+  color: var(--accent);
+  background: var(--panel-2);
+}
+
+.nt.icon {
+  justify-content: center;
+  width: 44px;
+  padding: 0;
+}
+
+/* The amber needs badge on the Work tab. */
 .bdg {
-  position: absolute;
-  top: 7px;
-  right: calc(50% - 22px);
   display: grid;
   place-items: center;
-  min-width: 15px;
-  height: 15px;
-  padding: 0 4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--bg);
   background: var(--warn);
   border-radius: 99px;
-  color: var(--bg);
-  font-size: 9px;
-  font-weight: 700;
 }
 
-/* The raised chat button (the prototype's .cbtn). */
-.tab.center {
-  overflow: visible;
+/* The right dock: Chat | Capacity. */
+.dock {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
-.cbtn {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  margin-top: -26px;
-  background: var(--accent);
-  border: 4px solid var(--bg);
-  border-radius: 50%;
-  color: var(--bg);
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 30%, transparent);
-  transition:
-    transform 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
-.cbtn svg {
-  width: 23px;
-  height: 23px;
-}
-
-.tab.center.on .cbtn {
-  transform: scale(1.07);
-  box-shadow: 0 8px 26px color-mix(in srgb, var(--accent) 50%, transparent);
-}
-
-/* The small theme toggle beside the tabs. */
-.theme-btn {
+.dock-tabs {
+  display: flex;
   flex: none;
-  align-self: center;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  margin: 0 8px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  gap: 4px;
+  padding: 8px 12px 0;
+}
+
+.dock-tabs button {
+  height: 32px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 14px;
   color: var(--text-2);
   cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
 }
 
-.theme-btn svg {
-  width: 16px;
-  height: 16px;
+.dock-tabs button[aria-selected='true'] {
+  color: var(--text);
+  background: var(--panel-2);
 }
 
-.theme-btn:active {
-  transform: scale(0.93);
+.dock-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* -- tablet: Work permanently left, the detail view center --------------- */
@@ -180,7 +259,12 @@
     display: grid;
     /* Fixed side columns — the boundaries never move with the window width. */
     grid-template-columns: 360px minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .topnav {
+    grid-column: 1 / -1;
+    grid-row: 1;
   }
 
   .pane {
@@ -189,14 +273,14 @@
 
   .pane-work {
     grid-column: 1;
-    grid-row: 1;
+    grid-row: 2;
     border-right: 1px solid var(--line);
   }
 
   .pane-center,
   .pane-chat {
     grid-column: 2;
-    grid-row: 1;
+    grid-row: 2;
     min-height: 0;
   }
 
@@ -206,27 +290,23 @@
     inset: auto;
     z-index: auto;
     grid-column: 2;
-    grid-row: 1;
+    grid-row: 2;
     min-height: 0;
     min-width: 0;
     overflow-x: hidden;
   }
-
-  .tabbar {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
 }
 
-/* -- desktop: the chat docks permanently right --------------------------- */
+/* -- the dock (>=1024): the chat / capacity column on the right ----------- */
 
-@media (min-width: 1280px) {
-  .shell {
-    grid-template-columns: 340px minmax(0, 1fr) 400px;
+@media (min-width: 1024px) {
+  .shell.docked {
+    grid-template-columns: 340px minmax(0, 1fr) 380px;
   }
 
-  .pane-chat {
+  .dock {
     grid-column: 3;
+    grid-row: 2;
     border-left: 1px solid var(--line);
   }
 }

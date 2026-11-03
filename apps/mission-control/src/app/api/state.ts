@@ -49,7 +49,7 @@ import {
 export type PairingPhase = 'needs-code' | 'pairing' | 'ready';
 
 /** The shell's visible tab — owned here so any surface can switch to it (E8: the report card's promote drops into the chat). */
-export type McTab = 'work' | 'chat' | 'team';
+export type McTab = 'work' | 'chat' | 'team' | 'settings';
 
 /** The colour a toast carries: ok (green), warn (amber), error (red). */
 export type ToastKind = 'ok' | 'warn' | 'error';
@@ -107,6 +107,11 @@ export class McState {
    * null = nothing waiting.
    */
   readonly chatPrefill = signal<string | null>(null);
+  /**
+   * One-shot: the phone's menu button on another screen switches to the
+   * chat tab with this set; the chat opens its history (the menu) on mount.
+   */
+  readonly chatMenu = signal(false);
   readonly work = signal<WorkView>({ groups: [], priorities: DEFAULT_PRIORITY_CONFIG });
   readonly needs = signal<readonly NeedView[]>([]);
   readonly team = signal<TeamView>({ personas: [], runs: [] });

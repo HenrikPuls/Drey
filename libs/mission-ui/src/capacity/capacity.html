@@ -1,0 +1,7 @@
+<section class="capacity" aria-label="Capacity">
+  @if (live(); as n) {
+    <p class="line"><b>{{ n }}</b> {{ n === 1 ? 'worker' : 'workers' }} running</p>
+  } @else {
+    <p class="line">{{ live() === 0 ? 'No worker running' : 'No run data' }}</p>
+  }
+</section>
