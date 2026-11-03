@@ -8,7 +8,7 @@ import { PERSONAS_DIR } from './persona';
  * (core/chat-session.ts) so it stays openable in Drey's editor:
  *
  *     ---
- *     title: "Pia"
+ *     title: "Paul"
  *     created: '2026-11-03T09:00:00.000Z'
  *     ---
  *

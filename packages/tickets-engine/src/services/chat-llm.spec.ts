@@ -276,7 +276,7 @@ describe('createChatBridge', () => {
     expect(system).toContain('skip <phase>');
     expect(system).toContain('notify <phase>');
     expect(system).toContain('An empty list returns the ticket to the standard flow');
-    expect(system).toContain('{"kind":"setChain","id":"T-0086","chain":["insert design(pia, notify) after review","skip verify"]}');
+    expect(system).toContain('{"kind":"setChain","id":"T-0086","chain":["insert security(ralf, notify) after review","skip verify"]}');
   });
 
   it('round-trips a promote command from the strict envelope', async () => {
@@ -301,7 +301,7 @@ describe('createChatBridge', () => {
     const bridge = createChatBridge({
       config: chatConfig({ 'chat.baseUrl': 'http://127.0.0.1:1234/v1', 'chat.model': 'glm-5' }),
       fetch: fakeFetch(calls, [
-        frame('{"say":"The chain now skips verify and notifies you after design.","thought":"The owner wants verify bypassed and a Bescheid on the inserted design gate.","commands":[{"kind":"setChain","id":"T-0086","chain":["insert design(pia, notify) after review","skip verify"]}]}'),
+        frame('{"say":"The chain now skips verify and notifies you after design.","thought":"The owner wants verify bypassed and a Bescheid on the inserted design gate.","commands":[{"kind":"setChain","id":"T-0086","chain":["insert security(ralf, notify) after review","skip verify"]}]}'),
       ]),
     });
     const result = await bridge.runTurn({ text: 'skip verify and tell me when design is done', history: [], board: BOARD, emit: () => undefined });
@@ -313,7 +313,7 @@ describe('createChatBridge', () => {
         {
           kind: 'setChain',
           id: 'T-0086',
-          chain: ['insert design(pia, notify) after review', 'skip verify'],
+          chain: ['insert security(ralf, notify) after review', 'skip verify'],
         },
       ],
     });

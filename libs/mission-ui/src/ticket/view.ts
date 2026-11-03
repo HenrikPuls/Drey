@@ -69,7 +69,7 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
  * The ticket screen (concept §5.3–5.5) in the prototype's look, in three
  * modes the CTA row switches between (the prototype's Ticket→Proof/Thread
  * screens, no routes of their own): the **ticket** mode — the header with
- * the 'Arbeit' back label, the mono id and the edit pencil (the raw-edit
+ * the 'Work' back label, the mono id and the edit pencil (the raw-edit
  * exception path toggles to `mc-ticket-edit`); the head card with the
  * phase chip, the persona chip and the cost slot (tolerant empty until
  * the engine's stage ledger delivers); the gate bar as pills over the
@@ -77,18 +77,18 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
  * chain-hint line under it saying so; the body renders as safe Markdown
  * blocks (section heads in mono caps, checkboxes struck, code fences
  * boxed); the `## Verlauf` chapter surfaces as its own yaml box; the CTA
- * row carries 'Proof ansehen — <n/n> grün' (when the Verification
- * criteria exist), 'Frage von <persona> beantworten' (when a question
- * need waits for the ticket) or the ghost 'Thread öffnen', plus 'Per
- * Chat ändern' prefilling the composer.
+ * row carries 'View proof — <n/n> green' (when the Verification
+ * criteria exist), 'Answer <persona>'s question' (when a question
+ * need waits for the ticket) or the ghost 'Open thread', plus 'Change by
+ * chat' prefilling the composer.
  *
  * The **proof** mode (prototype screen 03) gathers what accepting needs:
  * the gate bar with its per-gate costs and the total, the mint verdict
- * box (`<n/n> grün.` + the tester's recommendation when the stamp names
+ * box (`<n/n> green.` + the tester's recommendation when the stamp names
  * one), the criteria checklist with their evidence lines, the screenshot
  * gallery with its scroll-synced dots and the fullscreen viewer, the git
  * diff with the magnifier into the fullscreen zoom, and the two owner
- * actions — 'Zurückschicken…' with its mandatory note, the armed
+ * actions — 'Send back…' with its mandatory note, the armed
  * 'Annehmen & mergen' whose mint done ring takes over once accepted.
  *
  * The **thread** mode (prototype screen 04) is the ticket's filtered
@@ -440,10 +440,10 @@ export class TicketView {
 
   // --- the CTA row: proof, thread, per chat -------------------------------------
 
-  /** 'Proof ansehen — <n/n> grün'; null = the ticket carries no criteria (no CTA). */
+  /** 'View proof — <n/n> green'; null = the ticket carries no criteria (no CTA). */
   protected readonly proofCta = computed<string | null>(() => {
     const verdict = this.verdict();
-    return verdict === null ? null : `Proof ansehen — ${verdict.passed}/${verdict.total} grün`;
+    return verdict === null ? null : `View proof — ${verdict.passed}/${verdict.total} green`;
   });
 
   /** The tester's recommendation for the verdict box; null when the stamp names none. */
@@ -488,17 +488,17 @@ export class TicketView {
     return gate === null ? null : { title: this.personaTitle(gate), color: null };
   });
 
-  /** The thread CTA: 'Frage von <persona> beantworten' or the ghost 'Thread öffnen'. */
+  /** The thread CTA: 'Answer <persona>'s question' or the ghost 'Open thread'. */
   protected readonly threadCta = computed<string | null>(() => {
     if (this.doc() === null) {
       return null;
     }
     const need = this.questionNeed();
     if (need === null) {
-      return 'Thread öffnen';
+      return 'Open thread';
     }
     const persona = this.questionPersona()?.title ?? this.threadPersona()?.title ?? null;
-    return persona === null ? 'Frage beantworten' : `Frage von ${persona} beantworten`;
+    return persona === null ? 'Answer the question' : `Answer ${persona}'s question`;
   });
 
   // --- the thread face -------------------------------------------------------------
@@ -567,7 +567,7 @@ export class TicketView {
   /** The send row's dynamic label: `"<Option>" senden`. */
   protected threadQSendLabel(card: QuestionCardVm): string {
     const option = card.options[this.threadQSelected() ?? -1];
-    return option === undefined ? 'Antwort senden' : `„${option.label}“ senden`;
+    return option === undefined ? 'Send answer' : `Send “${option.label}”`;
   }
 
   /** Marks the tapped option; nothing sends until the send row's button fires. */
@@ -603,7 +603,7 @@ export class TicketView {
       const reply = await answer(runId, option.answerText);
       if (reply.ok) {
         this.threadQDone.set(true);
-        this.work?.toast?.(`Antwort gesendet — ${this.threadPersonaLabel()} läuft weiter`, 'ok');
+        this.work?.toast?.(`Answer sent — ${this.threadPersonaLabel()} keeps running`, 'ok');
       } else {
         this.threadQError.set(reply.error);
       }
@@ -757,7 +757,7 @@ export class TicketView {
   // --- the chat CTA -------------------------------------------------------------
 
   /**
-   * 'Per Chat ändern': the composer inherits the ticket context as the
+   * 'Change by chat': the composer inherits the ticket context as the
    * `<id>:` prefix and the owner words the change — the one safe path,
    * nothing writes from here.
    */

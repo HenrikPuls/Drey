@@ -70,7 +70,7 @@ export type ChatCommand =
   | { readonly kind: 'promote'; readonly id: string }
   /**
    * E9 (concept §5.7): replace the ticket's chain delta with the given
-   * canonical entries (`insert design(pia, notify) after review`,
+   * canonical entries (`insert security(ralf, notify) after review`,
    * `skip verify`, `notify build`); an empty list returns the ticket
    * to the pipeline's standard flow. The grammar and the semantic
    * validation run at execution — the proposal card shows the chain

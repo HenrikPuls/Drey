@@ -7,7 +7,7 @@ import { splitFrontmatter } from '../../../../shared/frontmatter';
  * the tickets repo:
  *
  *   tickets/_meta/personas/
- *     pia/
+ *     paul/
  *       persona.md   # frontmatter: title, role, worker, models, color, skills, budget
  *       prompt.md    # the persona prompt (longform, editable, versioned)
  *       memory.md    # curated memory (the write/read paths are E3)
@@ -115,7 +115,7 @@ export function parsePersonaFile(id: string, text: string): Persona {
 }
 
 /** The canonical persona file text (stable key order, byte-stable round trips).
- *  `body` is the owner's prose below the fence ("Who Pia is, tone, limits",
+ *  `body` is the owner's prose below the fence ("Who Paul is, tone, limits",
  *  concept §4.1); a patch passes the existing file's body through, a fresh
  *  persona gets the default line. */
 export function personaFileText(persona: Persona, body?: string): string {

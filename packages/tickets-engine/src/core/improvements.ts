@@ -10,7 +10,7 @@
  *
  * improvements.md sketch:
  *
- *     # Improvements — pia
+ *     # Improvements — paul
  *
  *     - aggregate: '2026-11-02T10:00:00Z'
  *     - imp-1 open prompt.md — Order the context pack by name

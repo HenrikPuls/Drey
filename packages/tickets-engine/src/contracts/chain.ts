@@ -10,7 +10,7 @@
  * A ticket stores only its DELTA — declarative entries in the
  * frontmatter's `chain:` list, e.g.
  *
- *     chain: [insert design(pia, notify) after review, skip verify]
+ *     chain: [insert security(ralf, notify) after review, skip verify]
  *
  * The engine merges standard + delta into the ticket's concrete chain,
  * from which the gate bar, the notify cards and the chat's before/after

@@ -606,30 +606,30 @@ describe('Dismiss', () => {
 // --- the chat's client-side intents (pure logic) -------------------------------------
 
 describe('chatIntentOf', () => {
-  it('reads a "Neues Ticket:" line as the create intent', () => {
-    expect(chatIntentOf('Neues Ticket: Spalten-Editor')).toBe('ticket');
-    expect(chatIntentOf('please neues   ticket: something')).toBe('ticket');
+  it('reads a "New ticket:" line as the create intent', () => {
+    expect(chatIntentOf('New ticket: Column editor')).toBe('ticket');
+    expect(chatIntentOf('please new   ticket: something')).toBe('ticket');
   });
 
-  it('reads prompt coaching from prompt, regel or anweisung', () => {
-    expect(chatIntentOf('Merk dir diese Regel für den Prompt')).toBe('prompt');
-    expect(chatIntentOf('neue Anweisung: erst messen')).toBe('prompt');
+  it('reads prompt coaching from prompt, rule or instruction', () => {
+    expect(chatIntentOf('Remember this rule for the prompt')).toBe('prompt');
+    expect(chatIntentOf('new instruction: measure first')).toBe('prompt');
   });
 
-  it('reads memory coaching from merk dir, gedaechtnis, gedächtnis or memory', () => {
-    expect(chatIntentOf('merk dir: rank fields win')).toBe('memory');
-    expect(chatIntentOf('gedaechtnis: read history first')).toBe('memory');
-    expect(chatIntentOf('ins Gedächtnis damit')).toBe('memory');
+  it('reads memory coaching from remember or memory', () => {
+    expect(chatIntentOf('remember: rank fields win')).toBe('memory');
+    expect(chatIntentOf('memory: read history first')).toBe('memory');
+    expect(chatIntentOf('put it in memory')).toBe('memory');
     expect(chatIntentOf('that goes into memory')).toBe('memory');
   });
 
   it('everything else is a plain message', () => {
-    expect(chatIntentOf('Warum wolltest du die Ranks übernehmen?')).toBe('plain');
+    expect(chatIntentOf('Why did you want to take the ranks over?')).toBe('plain');
     expect(chatIntentOf('')).toBe('plain');
   });
 
   it('the ticket intent wins over prompt and memory', () => {
-    expect(chatIntentOf('Neues Ticket: mit einer Regel im Prompt')).toBe('ticket');
+    expect(chatIntentOf('New ticket: with a rule in the prompt')).toBe('ticket');
   });
 });
 
@@ -749,8 +749,8 @@ describe('the chat tab’s pattern cards', () => {
   it('a plain line sends without a card', async () => {
     const fake = makeVm();
     const vm = surface(setup(fake));
-    await sendText(vm, 'Warum die Ranks?');
-    expect(fake.sent).toEqual(['Warum die Ranks?']);
+    await sendText(vm, 'Why the ranks?');
+    expect(fake.sent).toEqual(['Why the ranks?']);
     expect(vm.cards()).toEqual([]);
     expect(vm.sendError()).toBeNull();
   });
@@ -758,15 +758,15 @@ describe('the chat tab’s pattern cards', () => {
   it('a prompt line offers the patch card; applying PATCHes the prompt and toasts the commit', async () => {
     const fake = makeVm();
     const vm = surface(setup(fake));
-    await sendText(vm, 'Neue Regel: erst Repo-Historie lesen');
+    await sendText(vm, 'New rule: read the repo history first');
     const cards = vm.cards();
     expect(cards).toHaveLength(1);
     expect(cards[0]!.kind).toBe('prompt');
     expect(cards[0]!.decided).toBeNull();
-    expect(vm.snippet(cards[0]!)).toContain('Neue Regel');
+    expect(vm.snippet(cards[0]!)).toContain('New rule');
 
     await vm.applyCard(cards[0]!);
-    expect(fake.patched).toEqual([{ prompt: 'Neue Regel: erst Repo-Historie lesen' }]);
+    expect(fake.patched).toEqual([{ prompt: 'New rule: read the repo history first' }]);
     expect(vm.cards()[0]!.decided).toBe('applied');
     expect(fake.toasts).toEqual([{ message: 'Prompt updated (commit)', kind: 'ok' }]);
   });
@@ -774,21 +774,21 @@ describe('the chat tab’s pattern cards', () => {
   it('a memory line offers the proposal card; applying appends the whole line as the entry', async () => {
     const fake = makeVm();
     const vm = surface(setup(fake));
-    await sendText(vm, 'merk dir: rank fields win over derived order');
+    await sendText(vm, 'remember: rank fields win over derived order');
     const cards = vm.cards();
     expect(cards[0]!.kind).toBe('memory');
 
     await vm.applyCard(cards[0]!);
-    expect(fake.addedMemory).toEqual(['merk dir: rank fields win over derived order']);
+    expect(fake.addedMemory).toEqual(['remember: rank fields win over derived order']);
     expect(fake.patched).toEqual([]);
     expect(fake.toasts).toEqual([{ message: 'Memory entry added (commit)', kind: 'ok' }]);
   });
 
-  it('a "Neues Ticket:" line hands through to Mission Control instead of patching', async () => {
+  it('a "New ticket:" line hands through to Mission Control instead of patching', async () => {
     const fake = makeVm();
     const vm = surface(setup(fake));
-    await sendText(vm, 'Neues Ticket: Spalten-Editor mit Vorschau');
-    expect(fake.prefilled).toEqual(['Neues Ticket: Spalten-Editor mit Vorschau']);
+    await sendText(vm, 'New ticket: Column editor with preview');
+    expect(fake.prefilled).toEqual(['New ticket: Column editor with preview']);
     expect(fake.patched).toEqual([]);
     expect(fake.addedMemory).toEqual([]);
     expect(vm.cards().map((card) => card.kind)).toEqual(['ticket']);

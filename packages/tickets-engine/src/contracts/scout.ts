@@ -29,7 +29,7 @@ export interface ScoutDecision {
 export interface ScoutReport {
   /** When the report was written, ISO-8601. */
   readonly writtenAt: string;
-  /** Who wrote it (the persona id, `pia`). */
+  /** Who wrote it (the persona id, `paul`). */
   readonly by: string;
   /** The report's free-text body under `### Summary`. */
   readonly summary: string;

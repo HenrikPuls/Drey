@@ -190,3 +190,5 @@ one means moving it back to the roadmap with a new justification.
   the same text; main asks the renderer at the moment of the call
   instead. *Keeping the `doc_*` live-edit tools*: a second edit tool for
   the same operation.
+
+- **Mission Control redesign, concept v2 (2026-11-03).** *An overlap guard, `touches:` paths and rules-file routing between parallel tickets* (req-75 W7, with W8's phone-client rebuild): dropped — the chain delta (E9) and Mission Control (E5b) cover what they were for; their tickets are closed. *A separate design persona*: dropped, it was only an example. *Proof video on failure only* (E4) and *a video always* (concept v2): replaced by the per-ticket proof mode `ui|tests` — a UI change always gets a video and screenshots, a non-UI change gets neither. *Videos in git by default*: off — the engine ignores `tickets/videos/` unless `videos.inGit` is on. *A bottom tab bar on the phone* (E5b): superseded by a menu (E12-2). *A separate persona Chat beside the 1:1*: merged into one conversation (D8).

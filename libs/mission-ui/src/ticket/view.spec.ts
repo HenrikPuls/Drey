@@ -1426,7 +1426,7 @@ describe('proofRecommendationOf', () => {
   });
 
   it('names the tester with its first letter raised', () => {
-    expect(proofRecommendationOf(report('tessa'))).toBe('Tessa empfiehlt die Annahme.');
+    expect(proofRecommendationOf(report('tessa'))).toBe('Tessa recommends accepting.');
   });
 
   it('stays silent when the stamp names no tester', () => {
@@ -1452,9 +1452,9 @@ describe('threadItemsOf', () => {
   });
 
   it('keeps the messages whose text names the ticket and drops the rest', () => {
-    const items = threadItemsOf('T-0091', [message('T-0091: wie weiter?'), message('unrelated')], []);
+    const items = threadItemsOf('T-0091', [message('T-0091: what next?'), message('unrelated')], []);
     expect(items).toHaveLength(1);
-    expect(items[0]!.kind === 'message' && items[0]!.message.text).toBe('T-0091: wie weiter?');
+    expect(items[0]!.kind === 'message' && items[0]!.message.text).toBe('T-0091: what next?');
   });
 
   it('keeps the proposal cards whose command names the ticket (tolerantly serialized)', () => {
@@ -1577,8 +1577,8 @@ describe('TicketView faces', () => {
   it('a fresh ticket starts on its ticket face; the proof CTA names the count, the verdict the tester', () => {
     const vm = setupFaces(makeFake({ docValue: { ...FULL_DOC, text: PROOF_TEXT } }));
     expect(vm.mode()).toBe('ticket');
-    expect(vm.proofCta()).toBe('Proof ansehen — 2/2 grün');
-    expect(vm.proofRecommendation()).toBe('Tessa empfiehlt die Annahme.');
+    expect(vm.proofCta()).toBe('View proof — 2/2 green');
+    expect(vm.proofRecommendation()).toBe('Tessa recommends accepting.');
 
     vm.openProof();
     expect(vm.mode()).toBe('proof');
@@ -1620,14 +1620,14 @@ describe('TicketView faces', () => {
         personas: [{ id: 'pia', title: 'Pia', color: '#a78bfa' }],
       }),
     });
-    expect(asking.threadCta()).toBe('Frage von Pia beantworten');
+    expect(asking.threadCta()).toBe("Answer Pia's question");
     expect(asking.questionNeed()).not.toBeNull();
     expect(asking.questionCard()).not.toBeNull();
     expect(asking.threadPersona()).toEqual({ title: 'Pia', color: '#a78bfa' });
     expect(asking.threadPersonaLabel()).toBe('Pia');
 
     const ghost = setupFaces(makeFake({ docValue: FULL_DOC }), { work: workState() });
-    expect(ghost.threadCta()).toBe('Thread öffnen');
+    expect(ghost.threadCta()).toBe('Open thread');
     expect(ghost.questionCard()).toBeNull();
     // No board pin and no gate persona — the chip and the label degrade honestly.
     expect(ghost.threadPersona()).toBeNull();
@@ -1699,16 +1699,16 @@ describe('TicketView faces', () => {
     });
     const card = vm.questionCard()!;
     expect(card.options[1]!.recommended).toBe(true);
-    expect(vm.threadQSendLabel(card)).toBe('Antwort senden');
+    expect(vm.threadQSendLabel(card)).toBe('Send answer');
 
     vm.threadQSelect(1);
     expect(vm.threadQSelected()).toBe(1);
-    expect(vm.threadQSendLabel(card)).toBe('„Right“ senden');
+    expect(vm.threadQSendLabel(card)).toBe('Send “Right”');
     await vm.threadQSend();
     expect(answers).toEqual([{ runId: 'r-1', text: '2. Right' }]);
     expect(vm.threadQDone()).toBe(true);
     // No pin, no gate persona: the done line names the ticket.
-    expect(toasts).toEqual(['Antwort gesendet — T-0042 läuft weiter']);
+    expect(toasts).toEqual(['Answer sent — T-0042 keeps running']);
 
     // A refusal lands inline and leaves the card answerable.
     const refusing = setupFaces(makeFake({ docValue: FULL_DOC }), {

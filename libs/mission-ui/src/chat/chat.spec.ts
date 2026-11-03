@@ -377,8 +377,8 @@ describe('think fold labels', () => {
   });
 
   it('folds with the duration when measured, else without seconds', () => {
-    expect(thinkFoldLabel(null)).toBe('Gedacht');
-    expect(thinkFoldLabel('2,4 s')).toBe('Gedacht · 2,4 s');
+    expect(thinkFoldLabel(null)).toBe('Thought');
+    expect(thinkFoldLabel('2,4 s')).toBe('Thought · 2,4 s');
   });
 });
 
@@ -612,23 +612,23 @@ describe('Chat card kickers', () => {
 
   it('labels each kind’s pending card', () => {
     const { vm } = setup({ sessions: [], active: null });
-    expect(vm.ckOf(proposal('p-1', 'pending', undefined, { chain: { id: 'T-1', chain: [] } }))).toBe('T-1 · Kette');
+    expect(vm.ckOf(proposal('p-1', 'pending', undefined, { chain: { id: 'T-1', chain: [] } }))).toBe('T-1 · Chain');
     expect(vm.ckOf(proposal('p-2', 'pending', undefined, { summary: 'Move T-0086 from build to verify' }))).toBe(
-      'Übergang · Bestätigung',
+      'Transition · confirmation',
     );
     expect(vm.ckOf(proposal('p-3', 'pending', undefined, { summary: 'Create ticket "CSV" in ideas' }))).toBe(
-      'Neues Ticket · Bestätigung',
+      'New ticket · confirmation',
     );
     expect(vm.ckOf(proposal('p-4', 'pending', undefined, { summary: 'Block T-0002 by T-0001' }))).toBe(
-      'Blocker · Bestätigung',
+      'Blocker · confirmation',
     );
     expect(vm.ckOf(proposal('p-5', 'pending', undefined, { summary: 'Set T-0086 priority to urgent' }))).toBe(
-      'Priorität · Bestätigung',
+      'Priority · confirmation',
     );
     expect(vm.ckOf(proposal('p-6', 'pending', undefined, { summary: 'Promote T-0090 to a ship ticket' }))).toBe(
-      'Promote · Bestätigung',
+      'Promote · confirmation',
     );
-    expect(vm.ckOf(proposal('p-7', 'pending'))).toBe('Bestätigung nötig');
+    expect(vm.ckOf(proposal('p-7', 'pending'))).toBe('Needs confirmation');
   });
 
   it('labels the done card — the create announces itself as angelegt', () => {
@@ -637,7 +637,7 @@ describe('Chat card kickers', () => {
       'Angelegt',
     );
     expect(vm.ckDoneOf(proposal('p-2', 'confirmed', undefined, { summary: 'Move T-1 from build to verify' }))).toBe(
-      'Bestätigt',
+      'Confirmed',
     );
   });
 });
@@ -764,7 +764,7 @@ describe('Chat card decisions (toasts)', () => {
     const vm = setup(fake, activeOf('s.md', [view({ id: 'p-1' })]));
     await vm.dismiss('p-1');
     expect(vm.isDimmed('p-1')).toBe(true);
-    expect(vm.toasts()).toContainEqual(['Verworfen — nichts wurde geändert', 'warn']);
+    expect(vm.toasts()).toContainEqual(['Discarded — nothing was changed', 'warn']);
   });
 
   it('a refused dismiss lifts the dim and stays on the card, without the toast', async () => {
@@ -796,14 +796,14 @@ describe('Chat card decisions (toasts)', () => {
     });
     const vm = setup(fake, activeOf('s.md', [view({ id: 'p-1' })]));
     await vm.confirm('p-1');
-    expect(vm.toasts()).toContainEqual(['Bestätigt — tickets/40-verify/T-0086-plan.md (Commit)', 'ok']);
+    expect(vm.toasts()).toContainEqual(['Confirmed — tickets/40-verify/T-0086-plan.md (Commit)', 'ok']);
   });
 
   it('confirm without an outcome toasts plain', async () => {
     const fake = fakeState(null);
     const vm = setup(fake, activeOf('s.md', [view({ id: 'p-1' })]));
     await vm.confirm('p-1');
-    expect(vm.toasts()).toContainEqual(['Bestätigt', 'ok']);
+    expect(vm.toasts()).toContainEqual(['Confirmed', 'ok']);
   });
 });
 
@@ -905,7 +905,7 @@ describe('Chat sessions sheet (read-only views)', () => {
     await vm.openFromSheet({ file: 'a.md', title: 'A' });
     await vm.openFromSheet({ file: 'b.md', title: 'B' });
     expect(vm.readOnly()).toBe(true);
-    expect(vm.toasts()).toContainEqual(['Sitzung geöffnet: B — nur Lesezugriff', 'warn']);
+    expect(vm.toasts()).toContainEqual(['Session opened: B — read-only', 'warn']);
   });
 
   it('the read-only view refuses sends', async () => {
@@ -931,7 +931,7 @@ describe('Chat sessions sheet (read-only views)', () => {
     const live = vm.liveEntry()!;
     await vm.openFromSheet(live);
     expect(vm.readOnly()).toBe(false);
-    expect(vm.toasts()).toContainEqual(['Zurück im aktuellen Gespräch', 'ok']);
+    expect(vm.toasts()).toContainEqual(['Back in the current conversation', 'ok']);
     await vm.send();
     expect(fake.send).toHaveBeenCalledWith('hello');
   });
@@ -945,7 +945,7 @@ describe('Chat sessions sheet (read-only views)', () => {
     const vm = setup(fake);
     await vm.openFromSheet({ file: 'gone.md', title: 'Gone' });
     expect(vm.readOnly()).toBe(false);
-    expect(vm.sheetError()).toBe('Die Sitzung ließ sich nicht öffnen: Gone');
+    expect(vm.sheetError()).toBe('The session could not be opened: Gone');
     expect(vm.sheetOpen()).toBe(true);
   });
 });
@@ -962,14 +962,14 @@ describe('basenameOf', () => {
 describe('attachmentToastOf', () => {
   it('names one stored file in the singular', () => {
     expect(attachmentToastOf(['tickets/attachments/img-a.png'])).toEqual({
-      message: 'Anhang abgelegt: img-a.png',
+      message: 'File attached: img-a.png',
       kind: 'warn',
     });
   });
 
   it('counts several stored files and keeps only their names', () => {
     const note = attachmentToastOf(['tickets/attachments/img-a.png', 'img-b.jpeg']);
-    expect(note.message).toBe('2 Anhänge abgelegt: img-a.png, img-b.jpeg');
+    expect(note.message).toBe('2 files attached: img-a.png, img-b.jpeg');
     expect(note.kind).toBe('warn');
   });
 });
@@ -1104,7 +1104,7 @@ describe('Chat attach sheet (composer uploads)', () => {
     // The thumbnail rides the platform's object URLs — where there are none the chip keeps the name alone.
     expect(vm.attachments().map((chip) => chip.name)).toEqual(['shot.png', 'notiz.md']);
     expect(vm.attachments().every((chip) => chip.url === null || chip.url.startsWith('blob:'))).toBe(true);
-    expect(fake.toasts).toEqual([['Anhang abgelegt: img-x.png', 'warn']]);
+    expect(fake.toasts).toEqual([['File attached: img-x.png', 'warn']]);
   });
 
   it('surfaces a refusal inline at the composer and as an error toast, no chips', async () => {
@@ -1248,7 +1248,7 @@ describe('Chat column structure (header / messages / composer)', () => {
   it('keeps the empty-state body to the functional sheet pointer only', () => {
     const { el } = renderChat(null, 'promote T-0004');
     const empties = Array.from(el.querySelectorAll('.body .empty')).map((p) => p.textContent ?? '');
-    expect(empties).toEqual(['Die alten Sitzungen liegen im Sheet (oben rechts).']);
+    expect(empties).toEqual(['Earlier sessions are in the sheet (top right).']);
   });
 });
 

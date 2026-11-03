@@ -8,7 +8,7 @@
  *
  * The grammar (one entry per `chain:` list line):
  *
- *     insert design(pia, notify) after review
+ *     insert security(ralf, notify) after review
  *     skip verify
  *     notify build
  *

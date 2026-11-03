@@ -77,14 +77,14 @@ export function contentPreviewOf(content: string): string {
  */
 export type ChatIntent = 'ticket' | 'prompt' | 'memory' | 'plain';
 
-/** "Neues Ticket: …" — the create intent the persona hands through. */
-export const TICKET_INTENT_RE = /neues\s+ticket\s*:/i;
+/** "New ticket: …" — the create intent the persona hands through. */
+export const TICKET_INTENT_RE = /new\s+ticket\s*:/i;
 
 /** Coaching for the persona's own prompt.md. */
-export const PROMPT_INTENT_RE = /prompt|regel|anweisung/i;
+export const PROMPT_INTENT_RE = /prompt|rule|instruction/i;
 
 /** Coaching for the persona's memory. */
-export const MEMORY_INTENT_RE = /merk dir|gedaechtnis|gedächtnis|memory/i;
+export const MEMORY_INTENT_RE = /remember|memory/i;
 
 /** The ticket intent wins (it hands through, nothing patches locally), then prompt, then memory. */
 export function chatIntentOf(text: string): ChatIntent {
@@ -443,7 +443,7 @@ export class PersonaDetail {
     }
   }
 
-  /** The Verwerfen: the card folds, nothing was sent, nothing changed. */
+  /** The Discard: the card folds, nothing was sent, nothing changed. */
   protected dismissCard(card: CoachingCardVm): void {
     if (card.decided !== null || card.kind === 'ticket') {
       return;

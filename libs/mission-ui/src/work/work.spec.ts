@@ -1228,11 +1228,11 @@ describe('question option cards', () => {
     vm.qSelect(vmNeed, 0);
     expect(vm.qSelectedIndex(vmNeed)).toBe(0);
     expect(vm.qHasSelection(vmNeed)).toBe(true);
-    expect(vm.qSendLabel(card, vmNeed)).toBe('„Keep the deviations“ senden');
+    expect(vm.qSendLabel(card, vmNeed)).toBe('Send “Keep the deviations”');
 
     vm.qSelect(vmNeed, 2);
     expect(vm.qSelectedIndex(vmNeed)).toBe(2);
-    expect(vm.qSendLabel(card, vmNeed)).toBe('„Show the list first“ senden');
+    expect(vm.qSendLabel(card, vmNeed)).toBe('Send “Show the list first”');
   });
 
   it('sending acts once: the answer carries the run id and the option wording, the card turns done', async () => {
@@ -1245,7 +1245,7 @@ describe('question option cards', () => {
     expect(vm.qIsDone(vmNeed)).toBe(true);
     expect(vm.qIsPending(vmNeed)).toBe(false);
     expect(vm.qErrorOf(vmNeed)).toBeNull();
-    expect(toasts).toEqual(['Antwort gesendet — Pia läuft weiter']);
+    expect(toasts).toEqual(['Answer sent — Pia keeps running']);
     expect(vm.personaLabelOf(vmNeed)).toBe('Pia');
   });
 

@@ -69,7 +69,7 @@ export const MC_CHAT_STATE = new InjectionToken<McChatState>('mc-chat-state');
  * that refuse honestly instead of pretending a desk answered.
  */
 export function disconnectedChatState(): McChatState {
-  const refuse = (): McChatReply => ({ ok: false, error: 'Nicht verbunden.' });
+  const refuse = (): McChatReply => ({ ok: false, error: 'Not connected.' });
   return {
     chatPrefill: signal<string | null>(null),
     chat: signal<ChatStateView>({ sessions: [], active: null }),

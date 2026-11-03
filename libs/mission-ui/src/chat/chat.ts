@@ -185,7 +185,7 @@ export function basenameOf(path: string): string {
 export function attachmentToastOf(stored: readonly string[]): { message: string; kind: 'warn' } {
   const names = stored.map(basenameOf).join(', ');
   return {
-    message: stored.length === 1 ? `Anhang abgelegt: ${names}` : `${stored.length} Anhänge abgelegt: ${names}`,
+    message: stored.length === 1 ? `File attached: ${names}` : `${stored.length} files attached: ${names}`,
     kind: 'warn',
   };
 }
@@ -397,7 +397,7 @@ export function thinkSecondsLabel(startMs: number | null, endMs: number | null):
 
 /** The fold's summary line: with the measured duration, else without. */
 export function thinkFoldLabel(seconds: string | null): string {
-  return seconds === null ? 'Gedacht' : `Gedacht · ${seconds}`;
+  return seconds === null ? 'Thought' : `Thought · ${seconds}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -429,15 +429,15 @@ interface SheetEntry {
  * sheet, new chat) on top, the merged timeline scrolling alone in the
  * middle, the composer pinned below — the owner bubbles right, mission
  * left with the thinking trace, live as a dim mono stream with a blinking
- * accent cursor and folded to a `▸ Gedacht` details after the turn
+ * accent cursor and folded to a `▸ Thought` details after the turn
  * (measured first-thought → first-text when measurable) — pending
  * proposals as rich confirmation cards between the messages
  * (chain before/after strips, transition arrow, create diffbox, blocker
- * and priority lines) with Verwerfen/Bestätigen and the toast feedback,
+ * and priority lines) with Discard/Confirm and the toast feedback,
  * decided ones as mint done-cards with the engine's outcome line, and the
  * composer below: Enter sends, Shift+Enter newline, the circle send idles
- * while the mission's turn runs, and the attach circle opens the 'Anhang'
- * sheet — 'Foto oder Kamera' and 'Datei wählen' — whose picks upload
+ * while the mission's turn runs, and the attach circle opens the 'Attachment'
+ * sheet — 'Photo or camera' and 'Choose a file' — whose picks upload
  * through the state's `uploadAttachment` (a host without it keeps the
  * button disabled). Success lays chips (name, thumbnail) above the
  * composer until the next send and fires the warn toast naming what the
@@ -532,7 +532,7 @@ export class Chat {
       return null;
     }
     const meta = this.sessions().find((session) => session.file === live);
-    return { file: live, title: meta?.title ?? 'Aktuelles Gespräch' };
+    return { file: live, title: meta?.title ?? 'Current conversation' };
   });
 
   /**
@@ -707,24 +707,24 @@ export class Chat {
     this.sheetOpen.set(false);
     this.sheetError.set(null);
     if (!goingLive) {
-      this.toast(`Sitzung geöffnet: ${entry.title} — nur Lesezugriff`, 'warn');
+      this.toast(`Session opened: ${entry.title} — read-only`, 'warn');
     }
     await this.state.openSession(entry.file);
     if (this.active()?.file !== entry.file) {
       // openSession clears the pane when the desk has no such file.
-      this.sheetError.set(`Die Sitzung ließ sich nicht öffnen: ${entry.title}`);
+      this.sheetError.set(`The session could not be opened: ${entry.title}`);
       this.sheetOpen.set(true);
       return;
     }
     if (goingLive) {
       this.liveFile.set(entry.file);
       if (live !== null && viewed !== live) {
-        this.toast('Zurück im aktuellen Gespräch');
+        this.toast('Back in the current conversation');
       }
     }
   }
 
-  /** The header's `Neuer Chat`: a fresh session's composer. */
+  /** The header's `New chat`: a fresh session's composer. */
   protected newChat(): void {
     this.sheetOpen.set(false);
     this.attachSheetOpen.set(false);
@@ -910,7 +910,7 @@ export class Chat {
       return;
     }
     const outcome = this.active()?.proposals.find((proposal) => proposal.id === id)?.outcome ?? null;
-    this.toast(outcome !== null && outcome !== '' ? `Bestätigt — ${outcome} (Commit)` : 'Bestätigt');
+    this.toast(outcome !== null && outcome !== '' ? `Confirmed — ${outcome} (Commit)` : 'Confirmed');
   }
 
   protected async dismiss(id: string): Promise<void> {
@@ -929,7 +929,7 @@ export class Chat {
       });
       return;
     }
-    this.toast('Verworfen — nichts wurde geändert', 'warn');
+    this.toast('Discarded — nothing was changed', 'warn');
   }
 
   private async decide(id: string, call: (state: McChatState) => Promise<unknown>): Promise<boolean> {
@@ -1004,21 +1004,21 @@ export class Chat {
   /** The card's mono kicker while it waits. */
   protected ckOf(proposal: TimelineProposal): string {
     if (proposal.chain !== undefined) {
-      return `${proposal.chain.id} · Kette`;
+      return `${proposal.chain.id} · Chain`;
     }
     switch (proposalDetailOf(proposal.summary)?.kind) {
       case 'create':
-        return 'Neues Ticket · Bestätigung';
+        return 'New ticket · confirmation';
       case 'transition':
-        return 'Übergang · Bestätigung';
+        return 'Transition · confirmation';
       case 'blocked':
-        return 'Blocker · Bestätigung';
+        return 'Blocker · confirmation';
       case 'priority':
-        return 'Priorität · Bestätigung';
+        return 'Priority · confirmation';
       case 'promote':
-        return 'Promote · Bestätigung';
+        return 'Promote · confirmation';
       default:
-        return 'Bestätigung nötig';
+        return 'Needs confirmation';
     }
   }
 
@@ -1026,7 +1026,7 @@ export class Chat {
   protected ckDoneOf(proposal: TimelineProposal): string {
     return proposal.chain === undefined && proposalDetailOf(proposal.summary)?.kind === 'create'
       ? 'Angelegt'
-      : 'Bestätigt';
+      : 'Confirmed';
   }
 
   // -- toast ------------------------------------------------------------------

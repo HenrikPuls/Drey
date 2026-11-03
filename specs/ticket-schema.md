@@ -72,6 +72,9 @@ Top-level rules, once, up front:
     attachments/      # reserved (req-66 R8): images a paired device
                       #   uploaded — binary only, never a column, never
                       #   a ticket
+    videos/           # reserved (E11, ADR-0088 later change): the proof
+                      #   walkthrough videos — binary only, never a
+                      #   column, not in git by default (see Videos)
 ```
 
 The phase folders are exactly the phases configured in `pipeline.md`
@@ -145,6 +148,43 @@ attachment` line and the commit). Notes and ticket files embed the
 image with `![](../attachments/<name>)` — a phase folder moves on every
 transition, so only this fixed folder keeps the links intact.
 
+### Videos (E11, concept v2 §5.3)
+
+`tickets/videos/` is the third reserved folder beside `_meta`,
+`archive` and `attachments`: **binary video files only** — the proof
+walkthrough of a ticket whose proof mode is `ui` (see
+[Proof mode](#proof-mode-e11)). The board, the validator and the drift
+pass treat it exactly like `attachments/`: skipped as ticket data,
+never a column, never reported as a stray file.
+
+- **Name:** `verify-<yyyyMMdd>-<HHmmss>-<ticket id>.<mp4|webm>`; the
+  ticket's `## Verification` section references the video by name
+  (a `### Video` chapter with `![](../videos/<name>)`), never by a path
+  a phase move could break.
+- **Not in git by default.** The engine maintains
+  `tickets/videos/.gitignore` with exactly `*` and `!.gitignore`, so a
+  video never enters a commit. Engine config key `videos.inGit`
+  (default `false`) lifts that: the engine then removes the ignore
+  rule. Turning it on is a confirmed act (Settings → Engine) carrying
+  the warning "Videos are large binary files. Once committed they stay
+  in the history even if you delete them later, and the repository
+  grows with every one. Keep this off unless you have a plan for the
+  size (for example Git LFS)." Existing videos are **not** committed
+  retroactively unless the owner ticks "Include the n existing videos"
+  in that dialog.
+- **Size limit.** Engine config key `videos.limitMb` (default `2000`).
+  When the folder exceeds it and `videos.inGit` is `false`, the engine
+  deletes the **oldest videos of `done` tickets** until it is under
+  the limit — never the video of a ticket that is not done — and the
+  ticket's `## Verification` keeps a `Video removed (size limit).` note
+  in place of the player. When `videos.inGit` is `true` nothing is
+  deleted automatically; the engine only raises the notice "The limit
+  no longer frees space."
+- **Served** by the engine's bearer-authenticated
+  `GET /api/videos/<name>` with HTTP `Range` support (Safari needs it
+  to stream), the name pinned like `/api/attachments/<name>` to
+  `[A-Za-z0-9._-]+.(mp4|webm)` with no slashes.
+
 ### Id minting
 
 `T-` + at least four digits, zero-padded to four (`T-0042`, `T-1327`,
@@ -200,6 +240,47 @@ before the machine takes over; must end with the acceptance criteria.
 - '2026-10-17T15:04:00Z' owner — claimed (build)
 ```
 
+### Proof mode (E11)
+
+A ticket's proof is **either** a UI walkthrough **or** test results —
+never both, never neither:
+
+- `ui` (the ticket changes what a user sees): the verify run records
+  one walkthrough video (at most 60 seconds, chaptered per criterion)
+  and at most six screenshots (`MAX_VERIFY_SHOTS`, a caption per
+  criterion). The proof card shows the gallery and the player.
+- `tests` (no UI change): no video and no screenshots — the test
+  results alone stand in `## Verification`; the proof card hides the
+  gallery and the player.
+
+Who decides: the **builder** declares `proof: ui|tests` plus a
+one-sentence reason in its `## Handover` (a fixed field; the build
+prompt carries a paragraph asking for it). The **review** step
+(Ralf's prompt) confirms or corrects the declaration. The ticket
+frontmatter pin `proof:` (see Frontmatter fields) overrides both. A
+missing or unreadable declaration reads as `ui` — the expensive, safe
+default. The verify harness starts the app only for `ui`. This
+supersedes the E4 "video on failure only" rule and concept v2's
+"always".
+
+### Parts (E10, concept v2 §5.9)
+
+A plan that splits into parts lists them in an optional `### Parts`
+chapter under `## Plan`, one `- [ ] <title>` checkbox per part in
+execution order (the order IS the plan's order; moving a part is a
+list edit). Each part's detail lines indent under its item: the
+builder persona (`persona: ben`), the reason, and an optional
+per-part `chain:` entry list in the chain delta grammar. The parts
+become **their own tickets** when the owner approves the plan
+("Start" in the Plan-to-approve card): each carries `parent: <id>`,
+its own description, its own `persona:` pin and its own `chain:`
+delta — the parent's `chain:` never leaks into a part. A part that
+already runs is **locked**: the parts list refuses to move or delete
+it, and no part may move ahead of a running one. The number of parts
+follows the plan and is never fixed; one part means no `### Parts`
+chapter at all ("Keep as one"). The parser is tolerant (an unreadable
+line is skipped with a warning, never a guess).
+
 ### Frontmatter fields
 
 | Field | Shape | Rules |
@@ -209,11 +290,13 @@ before the machine takes over; must end with the acceptance criteria.
 | `repo` | string | Name from `_meta/repos.md`: the ticket's **primary** work repo (req-72) — where the fleet's gate runs and whose worktree is the run's home. May be empty until the ticket leaves inbox for a work phase; entering one without a known repo is an issue. |
 | `repos` | list of names | Optional (req-72). Every work repo the ticket touches, **primary first** — `repos: [drey, lariscus]`. When set, the list is the truth and `repo:` repeats its first entry (a mismatch is a noise finding, the list wins). One worktree per named repo, all on the ticket's branch; a run refuses while any named repo lacks a local `path:` in `_meta/repos.md`. One or zero names write no `repos:` line. |
 | `worker` | string | Optional pin for the fleet worker (M84): `opencode`, `claude-code`, or `<provider>/<model>`. Wins over the column's `worker:` key, the phase handover's `@worker` pin, the repo's `worker:` and the configured default (M85's assignment ring). An unknown value badges the card; a run start with it refuses. |
-| `persona` | string | Optional persona pin (ADR-0088 E3): `persona: pia` — the top of the persona ladder, winning over the phase's `persona:` key and the engine default (`personas.default`). The persona's worker/model/prompt drive the dispatch; when nothing resolves or the persona file is missing the legacy assignment ring runs unchanged. See `_meta/personas/` below. |
+| `persona` | string | Optional persona pin (ADR-0088 E3): `persona: paul` — the top of the persona ladder, winning over the phase's `persona:` key and the engine default (`personas.default`). The persona's worker/model/prompt drive the dispatch; when nothing resolves or the persona file is missing the legacy assignment ring runs unchanged. See `_meta/personas/` below. |
 | `priority` | one id of the board's configured vocabulary | Required. The vocabulary is the vault's own — `_meta/pipeline.md`'s `priorities:` list (default `urgent \| high \| normal \| low`); the list's order IS the weight, first = highest. An omitted or unknown id reads as the vocabulary's default (its middle entry) with a warning badge; machine writers always write a vocabulary word. See [Priorities](#priorities-priorities-in-pipelinemd). |
 | `track` | `auto \| shape` | Optional (req-75 W1b, ADR-0087 decision 2). The ticket's triage track: `auto` runs on its own, `shape` goes through the plan-mode dialog with the owner. Absent (or any other value — a warning) reads as not triaged; set from the Work panel's row menu (Track ›) until W5c/W6 fill it from triage. |
 | `form` | `ship \| scout` | Optional (concept §5.6, E8). The ticket's form: `ship` (the default — an absent key reads as ship) is the known way, plan → worktree → gate → move. `scout` is exploration only: a scout run reads repo/history/data and writes the ticket's `## Report` section — no worktree, no diff, no gate, no move; the report surfaces as a card in "Needs you" and the owner promotes the ticket to ship from there. Any other value warns (`form must be ship or scout — read as ship`) and reads as ship. See [The scout form](#the-scout-form-e8-concept-56). |
 | `chain` | list of strings | Optional (concept §5.7, E9). The ticket's **delta** against the pipeline's standard flow — the standard flow itself is team configuration in `_meta/pipeline.md` and applies to every ticket silently; the ticket stores only the deviations, one declarative entry per item in the strict grammar: `insert <phase>[(<persona>[, notify] \| notify)] after\|before <anchor>` (add a gate at the anchor — a standard-flow phase may be revisited this way, at most once), `skip <phase>` (bypass a gate), `notify <phase>` (the Bescheid rule: a card lands in "Needs you" when the gate completes). Absent (or empty) reads as the standard flow. An entry outside the grammar warns and drops (`chain entry "<raw>" is not readable — expected e.g. "insert design after review"`). See [The chain delta](#the-chain-delta-e9-concept-57). |
+| `parent` | ticket id | Optional (E10, concept v2 §5.9). Set on a ticket that is one **part** of a split plan: `parent: T-0130` names the ticket whose `### Parts` list produced it. The parent keeps the plan; the part carries its own description, builder persona and `chain:` delta (a per-part scope — the parent's `chain:` never leaks into a part). An unknown or self-referencing id warns and reads as no parent. |
+| `proof` | `ui \| tests` | Optional pin (E11, concept v2 §5.3). Overrides the Handover's proof declaration (see [Proof mode](#proof-mode-e11)). Absent, or any other value (a warning), means no pin; with no pin and no readable declaration the mode reads as `ui`. |
 | `rank` | integer 0-999999 | Default `5000`. Fine ordering inside derived order. |
 | `branch` | `t/<id>` | Written by machine writers; validated against the rule; rule wins. |
 | `entered-<phase>` | UTC timestamp | One per phase ever entered; holds the **most recent** entry time into that phase (first entry lives in git history). `entered-inbox` exists from creation. |
@@ -313,6 +396,13 @@ the runner rely on:
   starts with a backticked command; the machine gate runs exactly
   these, locally, in the worker's checkout (ADR-0076: validator, not
   CI).
+- `### Parts` — under Plan, optional (E10): the split plan's parts as
+  checkboxes; see [Parts](#parts-e10-concept-v2-59).
+- Handover `proof:` — the builder's one-line declaration
+  `proof: ui|tests — <one-sentence reason>` (E11); see
+  [Proof mode](#proof-mode-e11). A `## Verification` section of a `ui`
+  ticket may carry a `### Video` chapter (`![](../videos/<name>)`) and a
+  caption per screenshot; a `tests` ticket carries neither.
 - `## Report` — the scout run's finding (concept §5.6, E8), an
   exploration ticket's endpoint; ship tickets never carry one. The
   **scout run** writes it into its own ticket file, **replaced** on
@@ -322,7 +412,7 @@ the runner rely on:
   ```markdown
   ## Report
 
-  Written on 2026-11-02T14:32:00Z by pia.
+  Written on 2026-11-02T14:32:00Z by paul.
 
   ### Summary
 
@@ -462,7 +552,7 @@ frontmatter's `chain:` list:
 
 ```markdown
 chain:
-  - insert design(pia, notify) after review
+  - insert security(ralf, notify) after review
   - skip verify
 ```
 
@@ -487,6 +577,9 @@ The grammar, one entry per list item:
   from the gate's completion until the ticket leaves the following
   gate or the freshness window (`NOTIFY_WINDOW_MS`, 24 h) runs out,
   whichever comes first.
+
+A split ticket's **parts** each carry their own `chain:` delta (E10): the
+scope is the part, never the parent.
 
 Phase ids are the pipeline's id grammar (`[a-z][a-z0-9-]*`),
 persona names bare lowercase words.
@@ -703,7 +796,7 @@ directory (ADR-0088 E3). One folder per persona, directly under
 
 ```text
 tickets/_meta/personas/
-  pia/
+  paul/
     persona.md        # frontmatter: title, role, worker, models, color, skills
     prompt.md         # the persona prompt — the run's instruction base when present
     memory.md         # curated memory (format and cap below)
@@ -714,7 +807,7 @@ tickets/_meta/personas/
 ```
 
 - The persona id **is** the folder name: lowercase letters, digits and
-  dashes, at most 64 characters (`pia`, `build-opus-1m`).
+  dashes, at most 64 characters (`paul`, `build-opus-1m`).
 - `persona.md` frontmatter fields (tolerant parse — what parses reads,
   the rest falls back to these defaults):
 
@@ -800,7 +893,7 @@ E6 record):
   = 8 KiB per proposal) keep a phone review small. The shape:
 
   ```markdown
-  # Improvements — pia
+  # Improvements — paul
 
   - aggregate: '2026-11-02T10:00:00Z'
 

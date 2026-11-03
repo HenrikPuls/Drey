@@ -334,7 +334,7 @@ export interface PipelinePhase {
    */
   readonly interactive: string | null;
   /**
-   * The phase's persona (`persona: pia`, ADR-0088 E3) — the ladder's
+   * The phase's persona (`persona: paul`, ADR-0088 E3) — the ladder's
    * middle level; null = the ticket pin or the default decides.
    */
   readonly persona: string | null;

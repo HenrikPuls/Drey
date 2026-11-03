@@ -1,4 +1,42 @@
 
+### Milestone 112 — Mission Control redesign, specs + English pass (E10–E12 groundwork, E12-1)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-03
+(outside the list; concept v2, owner decisions D5–D12;
+[ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
+"Later changes", E10 – E12). The first stretch of the redesign:
+
+- **Specs.** Roadmap: the E10 / E11 / E12 items in the owner's work
+  order; req-75 W6 recut (E10-2 – E10-4), W7 and W8 dropped (D5).
+  ADR-0088: decision 8 replaced, sections for E8, E9 and the redesign
+  (navigation, settings, proof rule, videos, language, schema).
+  `ticket-schema.md`: the reserved `tickets/videos/` folder with its
+  engine-maintained `.gitignore`, `videos.inGit` / `videos.limitMb`,
+  the Range-served `/api/videos/<name>`; Proof mode (`proof: ui|tests`,
+  builder declares, review confirms, frontmatter pin, missing = `ui`);
+  `### Parts`, `parent:` and the per-part `chain:` scope.
+  `decisions.md`: what was dropped.
+- **Pia → Paul (D7).** The planner persona is Paul; Pia is Mission
+  Control. Doc comments, the chat prompt's `setChain` example
+  (`insert security(ralf, notify) after review`) and the schema
+  examples renamed; no engine default persona or prompt carried the
+  name. Test fixtures that use `pia` as an opaque persona id stay.
+  The concept text was recut in a copy (`Drey Tickets – Architekturkonzept v2.md`
+  in the shared notes folder).
+- **English pass (E12-1).** All German UI text in `libs/mission-ui`
+  (chat, ticket view, team detail, work) translated, including the
+  composer placeholder, toasts, aria-labels and the persona-chat
+  intent patterns (`remember`, `rule|instruction`, `new ticket:`).
+  `## Verlauf` and its `dauer` / `ausgang` keys are file format and
+  stay; the box's visible heading reads "History".
+- **Guard.** `shared/mission-ui-language.spec.ts` scans the lib's and
+  the app's sources for `[äöüßÄÖÜ]` and a list of German UI words.
+
+Verified: typecheck (nine configs), lint, import cycles, `test:app`
+(1196 + 120 + 450), `test:plugins` (3194 of 3195 — the one failure,
+`default-prompts.spec`, is a CRLF checkout artefact of the shipped
+prompt files and predates this change). Not verified in the running app.
+
 ### Milestone 108 — the status log + fleet ledger surface (Mission-Control migration E7)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-02

@@ -65,10 +65,11 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
    becomes its own process and serves the web app (etappe E2), but Drey
    keeps rendering the Work panel, ticket threads and the editor natively
    against the same engine API — the webview is optional, not the product.
-8. **Roadmap honesty.** The migration supersedes req-75 W6–W8 (personas and
-   the chat surface replace the Shape dialog and the phone-client rebuild);
-   W9 (audit runs) stays. `apps/mission-control` arrives with E5, when
-   there is real content — no empty skeleton in E0.
+8. **Roadmap honesty** (replaced 2026-11-03, concept v2). Req-75 W6 (the
+   Shape track) is recut as E10-2 – E10-4; W7 (orchestrator, overlap
+   guard, routing) and W8 (phone as chat client) are dropped; W9 (audit
+   runs) stays. `apps/mission-control` arrived with E5 — see "Later
+   changes" below, E10 – E12.
 
 ## Consequences
 
@@ -272,5 +273,66 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   review / qa prompts carry the status-log paragraph asking the worker
   to keep the log current before the run ends. Not yet manually
   verified by the owner.
-
-
+- **E8 (milestone 109):** the Scout track (concept §5.6) — `form: scout`
+  for exploration-only tickets: a scout run writes the ticket's
+  `## Report` chapter and decision list into its own file, with no
+  worktree, no gate and no move; the report surfaces as a card in
+  Needs you and the chat's `promote` command (with confirmation) flips
+  the ticket to ship. Not yet manually verified by the owner.
+- **E9 (milestone 110):** the chain delta (concept §5.7) — a ticket's
+  `chain:` stores only its deviations from the pipeline's standard flow
+  (`insert` / `skip` / `notify`), the engine merges both, a semantic
+  write guard (`validateChain`) refuses unreachable edits, and the
+  chat's `setChain` command executes only on confirmation. Milestone 111
+  adds the configurable priority vocabulary and the chat's
+  `setBlockedBy`. Not yet manually verified by the owner.
+- **E10 – E12 (concept v2, 2026-11-03):** the owner redesigned the UI in
+  the design canvas and updated the concept; owner decisions D5–D12 are
+  closed. What this changes in the record above:
+  - **Decision 8 is replaced.** Req-75 W6 (the Shape track) is *recut*
+    — E10-2 – E10-4 carry it as Shape mode with Paul, Plan to approve
+    and the plan delta; W7 (orchestrator: overlap guard, `touches:`,
+    rules-file routing) and W8 (the phone as a chat client) are
+    *dropped* (D5), the chain delta and Mission Control being what they
+    were for; W9 (audit runs) stays.
+  - **Names (D7).** *Pia* is the name of Mission Control, the one
+    central contact; the planner persona formerly called Pia is **Paul**,
+    the design persona is dropped. The default team is Paul, Ben, Ralf,
+    Tessa.
+  - **Navigation supersedes E5b's bottom tab bar.** On a phone a menu
+    replaces it (chat with its history is home; Work, Team, Settings
+    behind the menu); from 768 px a top tab bar (Work with a needs-you
+    counter, Chat, Team, Settings) and a right dock (Chat | Capacity |
+    history list). Chat history is a screen over the `_meta/chat/` files
+    (old sessions read-only). Persona detail Chat and 1:1 merge into one
+    conversation (D8).
+  - **Settings screen (D10).** Appearance (themes, highlight colour,
+    text size S–XXL, Compact lists, Reduce motion) is per *device*;
+    everything else — Chat, Away and alerts, Devices, Repositories,
+    Engine — is per *vault*.
+  - **Proof rule (D12) supersedes E4's failure-only video.** A ticket's
+    proof is a UI walkthrough video (≤ 60 s, chaptered) plus ≤ 6
+    captioned screenshots when it changes the UI, and only test results
+    in `## Verification` otherwise. The builder declares
+    `proof: ui|tests` in the Handover, the review prompt confirms or
+    corrects it, the ticket frontmatter `proof:` pins it, missing means
+    `ui`; the verify harness starts the app only for `ui`.
+  - **Videos.** Reserved folder `tickets/videos/`, not in git by default
+    (the engine maintains the `.gitignore`); engine keys `videos.inGit`
+    (default false, turning it on is a warned and confirmed act) and
+    `videos.limitMb` (default 2000, oldest videos of `done` tickets are
+    deleted when exceeded and `inGit` is off); served by a
+    bearer-authenticated, Range-capable `GET /api/videos/<name>`.
+  - **Schema deltas** (`specs/ticket-schema.md`): `### Parts`,
+    `parent:`, `proof:`, `videos/`, a per-part `chain:` scope.
+  - **Language.** Every UI string in `libs/mission-ui` is English
+    (E12-1, guarded by a spec that greps for `[äöüß]`); the `## Verlauf`
+    keys `dauer` / `ausgang` are file format and stay.
+  - **Review.** Line and range comments on the diff travel as
+    structured feedback (file, line, text) into the Handover to the
+    responsible persona (D6); the cost estimate is shown only with ≥ 3
+    similar runs of the owner's own history (D9). The product name
+    "Drey Crew" needs a name check before rollout; code is not renamed
+    (D11).
+  Not yet manually verified by the owner; the etappen land one
+  milestone at a time (roadmap, "Mission Control redesign").

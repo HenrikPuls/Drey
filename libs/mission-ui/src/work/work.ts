@@ -25,7 +25,7 @@ import {
 } from './work.model';
 
 /**
- * The work tab (concept §7): the header — logo, "Arbeit" title, the
+ * The work tab (concept §7): the header — logo, "Work" title, the
  * vault's name as the mono sub, the Fleet chip (live-run count, idle
  * face without run data) — then the Needs-you group first and the
  * board's phase groups in the owner's reading order (closest to done
@@ -349,7 +349,7 @@ export class Work {
 
   /** The done line's persona label: the persona title, the ticket id as fallback. */
   protected personaLabelOf(vm: NeedVm): string {
-    return this.needPersona(vm)?.title ?? vm.need.ticketId ?? 'die Persona';
+    return this.needPersona(vm)?.title ?? vm.need.ticketId ?? 'the persona';
   }
 
   /** The selected option per need key — a tap only marks ('Auswahl nie = Aktion'). */
@@ -380,7 +380,7 @@ export class Work {
   protected qSendLabel(card: QuestionCardVm, vm: NeedVm): string {
     const at = this.qSelectedIndex(vm);
     const option = at === null ? null : card.options[at];
-    return option === null || option === undefined ? 'Antwort senden' : `„${option.label}“ senden`;
+    return option === null || option === undefined ? 'Send answer' : `Send “${option.label}”`;
   }
 
   /** Marks the tapped option; nothing sends until the send row's button fires. */
@@ -421,7 +421,7 @@ export class Work {
     this.qPending.update((current) => ({ ...current, [vm.key]: false }));
     if (reply.ok) {
       this.qDone.update((current) => ({ ...current, [vm.key]: true }));
-      state.toast?.(`Antwort gesendet — ${this.personaLabelOf(vm)} läuft weiter`, 'ok');
+      state.toast?.(`Answer sent — ${this.personaLabelOf(vm)} keeps running`, 'ok');
     } else {
       this.qError.update((current) => ({ ...current, [vm.key]: reply.error }));
     }

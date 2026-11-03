@@ -26,7 +26,7 @@
             >
               <path d="M15 5l-7 7 7 7" />
             </svg>
-            Arbeit
+            Work
           </button>
           <span class="spacer"></span>
           <span class="tid">{{ id() }}</span>
@@ -108,8 +108,8 @@
           </div>
 
           @if (verlauf(); as verlauf) {
-            <section class="verlauf" aria-label="Verlauf">
-              <h3 class="tk-sec">Verlauf</h3>
+            <section class="verlauf" aria-label="History">
+              <h3 class="tk-sec">History</h3>
               <pre class="tk-yaml">{{ verlauf }}</pre>
             </section>
           }
@@ -179,7 +179,7 @@
                   {{ cta }}
                 </button>
               }
-              <button type="button" class="btn ghost" (click)="changeByChat()">Per Chat ändern</button>
+              <button type="button" class="btn ghost" (click)="changeByChat()">Change by chat</button>
             </div>
           }
         </div>
@@ -233,7 +233,7 @@
 
           @if (verdict(); as v) {
             <div class="verdict" role="status">
-              <b>{{ v.passed }}/{{ v.total }} grün.</b>
+              <b>{{ v.passed }}/{{ v.total }} green.</b>
               <span class="verdict-body">
                 @if (v.stamp) {
                   {{ v.stamp }}
@@ -397,11 +397,11 @@
                   <path d="M4 12.5l5 5L20 6.5" />
                 </svg>
               </div>
-              <h3 class="done-title">Angenommen</h3>
+              <h3 class="done-title">Accepted</h3>
               @if (result(); as r) {
                 <p class="done-note">{{ r.text }}</p>
               }
-              <button type="button" class="btn ghost done-back" (click)="vm.onClose()">Zurück zur Arbeit</button>
+              <button type="button" class="btn ghost done-back" (click)="vm.onClose()">Back to work</button>
             </div>
           } @else if (!readOnly()) {
             <div class="actions">
@@ -430,7 +430,7 @@
                 </div>
               } @else {
                 <div class="action-row">
-                  <button type="button" class="btn ghost" (click)="toggleSendBack()">Zurückschicken…</button>
+                  <button type="button" class="btn ghost" (click)="toggleSendBack()">Send back…</button>
                   <button
                     type="button"
                     class="btn primary"
@@ -475,7 +475,7 @@
 
         <div class="page thread-page">
           <h1 class="tk-title">{{ title() }}</h1>
-          <p class="team-hint">gefilterte Sicht auf {{ id() }} — dienstlich sprichst du mit Mission Control</p>
+          <p class="team-hint">filtered view of {{ id() }} — for work you talk to Mission Control</p>
 
           @if (steps().length > 0) {
             <ng-container [ngTemplateOutlet]="gateBar" [ngTemplateOutletContext]="{ tappable: false, compact: true }" />
@@ -494,7 +494,7 @@
                       <details class="think">
                         <summary>
                           <span class="chev" aria-hidden="true">▸</span>
-                          Gedacht
+                          Thought
                         </summary>
                         <div class="step-body">{{ item.message.thought }}</div>
                       </details>
@@ -507,18 +507,18 @@
               } @else {
                 <div class="thread-card" [class.done]="item.proposal.state === 'confirmed'" [class.dim]="item.proposal.state === 'dismissed'">
                   <div class="ck">
-                    {{ item.proposal.state === 'confirmed' ? 'Bestätigt' : item.proposal.state === 'dismissed' ? 'Verworfen' : 'Bestätigung nötig' }}
+                    {{ item.proposal.state === 'confirmed' ? 'Confirmed' : item.proposal.state === 'dismissed' ? 'Discarded' : 'Needs confirmation' }}
                   </div>
                   <p class="thread-card-summary">{{ item.proposal.summary }}</p>
                 </div>
               }
             } @empty {
-              <p class="thread-empty">Noch keine Nachrichten zu {{ id() }}.</p>
+              <p class="thread-empty">No messages about {{ id() }}.</p>
             }
 
             @if (questionCard(); as card) {
               <div class="thread-card qcard" [class.done]="threadQDone()">
-                <div class="ck">Frage</div>
+                <div class="ck">Question</div>
                 <p class="thread-card-summary">{{ card.question }}</p>
                 @if (!readOnly() && !threadQDone()) {
                   <div class="opts" role="radiogroup" [attr.aria-label]="card.question">
@@ -540,7 +540,7 @@
                           }
                         </span>
                         @if (option.recommended) {
-                          <span class="rec">empfohlen</span>
+                          <span class="rec">recommended</span>
                         }
                       </button>
                     }
@@ -561,7 +561,7 @@
                 }
                 @if (threadQDone()) {
                   <p class="qcard-done" role="status">
-                    Antwort gesendet — {{ threadPersonaLabel() }} läuft weiter
+                    Answer sent — {{ threadPersonaLabel() }} keeps running
                   </p>
                 }
               </div>
@@ -581,7 +581,7 @@
                 [value]="threadDraft()"
                 (input)="onThreadDraft($event)"
                 (keydown)="onThreadKeydown($event)"
-                [attr.aria-label]="'Nachricht zu ' + id()"
+                [attr.aria-label]="'Message about ' + id()"
                 [attr.placeholder]="id() + ' …'"
               ></textarea>
               <button
@@ -589,7 +589,7 @@
                 class="send"
                 [disabled]="threadSending() || threadDraft().trim() === ''"
                 (click)="threadSend()"
-                aria-label="Senden"
+                aria-label="Send"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M12 19V5M5 12l7-7 7 7" />
@@ -723,7 +723,7 @@
       }
     </button>
     <button type="button" class="chain-hint" [disabled]="readOnly()" (click)="openSheet()">
-      Kette: Standard-Flow + Delta aus dem Frontmatter · antippen zum Anpassen
+      Chain: standard flow + the frontmatter delta · tap to adjust
     </button>
   } @else {
     <div class="gates" [class.gates-compact]="compact">

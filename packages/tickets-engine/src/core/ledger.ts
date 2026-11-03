@@ -4,12 +4,12 @@
  * the reports, without parsing Markdown. Append-only; the git log
  * stays the history of contents, the ledger is the events' fast lane.
  *
- *     {"v":1,"ts":"2026-11-02T09:00:00Z","event":"dispatched","ticket":"T-0002","persona":"pia","model":"opus"}
+ *     {"v":1,"ts":"2026-11-02T09:00:00Z","event":"dispatched","ticket":"T-0002","persona":"paul","model":"opus"}
  *     {"v":1,"ts":"2026-11-02T09:40:00Z","event":"phase","ticket":"T-0002","from":"build","to":"review"}
  *     {"v":1,"ts":"2026-11-02T09:45:00Z","event":"proof_ready","ticket":"T-0001"}
  *     {"v":1,"ts":"2026-11-02T10:00:00Z","event":"merged","ticket":"T-0001","persona":"tessa"}
  *     {"v":1,"ts":"2026-11-02T10:05:00Z","event":"archived","ticket":"T-0001"}
- *     {"v":1,"ts":"2026-11-02T09:41:00Z","event":"run_settled","ticket":"T-0002","persona":"pia","model":"opus","tokensIn":48000,"tokensOut":6000,"cost":1.17}
+ *     {"v":1,"ts":"2026-11-02T09:41:00Z","event":"run_settled","ticket":"T-0002","persona":"paul","model":"opus","tokensIn":48000,"tokensOut":6000,"cost":1.17}
  *
  * Cost rides the events that know it (`cost` in USD cents? No — the
  * house telemetry reports tokens; `cost` is the fractional dollar the

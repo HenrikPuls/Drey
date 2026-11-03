@@ -99,7 +99,7 @@ export function gateStepsOf(phases: readonly GatePhase[], currentPhaseId: string
  * One declarative `chain:` entry as this screen renders it — the local
  * mirror of the engine's ChainEntry (contracts/chain.ts). The app never
  * imports engine code; the grammar below is the same strict writer the
- * desk parses (`insert design(pia, notify) after review`, `skip verify`,
+ * desk parses (`insert security(ralf, notify) after review`, `skip verify`,
  * `notify build`) and the merge mirrors core/chain-delta.ts, tolerant by
  * design: unknown phases render with their id as title, an unknown
  * anchor appends.
@@ -349,7 +349,7 @@ export function proofOf(sectionText: string): ProofReport {
  */
 export function proofRecommendationOf(report: ProofReport): string | null {
   const tester = report.tester.trim();
-  return tester === '' ? null : `${tester.charAt(0).toUpperCase()}${tester.slice(1)} empfiehlt die Annahme.`;
+  return tester === '' ? null : `${tester.charAt(0).toUpperCase()}${tester.slice(1)} recommends accepting.`;
 }
 
 // --- the thread (prototype screen 04) ---------------------------------------------
@@ -409,7 +409,7 @@ function threadProposalOf(raw: unknown): ThreadProposal | null {
  * items interleave by their ISO stamps (equal stamps keep the session's
  * message-before-proposal order), unstamped ones degrade to file order
  * — messages first, then proposals. An empty result renders the
- * 'Noch keine Nachrichten' line; an empty id never matches.
+ * 'No messages about' line; an empty id never matches.
  */
 export function threadItemsOf(
   id: string,
@@ -542,7 +542,7 @@ export function usdLabelOf(cost: number | null | undefined): string | null {
 
 /**
  * One entry as its canonical yaml line (the engine's renderVerlaufLine
- * grammar, mirrored): `- { phase: plan, persona: pia, … }` — null and
+ * grammar, mirrored): `- { phase: plan, persona: paul, … }` — null and
  * empty fields (a torn line's leavings) write `null`, so every line
  * carries all seven keys, well-formed, always.
  */
@@ -948,7 +948,7 @@ export interface TicketVm {
    */
   proposeChain(text: string): void;
   /**
-   * The ticket view's 'Per Chat ändern' CTA: prefill the composer with a
+   * The ticket view's 'Change by chat' CTA: prefill the composer with a
    * free command (`<id>: …`). Optional while the parent wires the name —
    * the view falls back to `proposeChain`, the same one prefill path.
    */

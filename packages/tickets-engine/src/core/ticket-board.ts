@@ -185,7 +185,7 @@ export interface PhasePoolPatch {
    *  by a worker clear. */
   readonly color?: string | null;
   /**
-   * The phase's persona (`persona: pia`, ADR-0088 E3) — an empty string
+   * The phase's persona (`persona: paul`, ADR-0088 E3) — an empty string
    *  or null removes the key. Setting a persona REPLACES the column-level
    *  agent configuration: the legacy `worker:`/`workers:`/`model:`/
    *  `prompt:` keys go (they are the persona's job now); the `handover:`

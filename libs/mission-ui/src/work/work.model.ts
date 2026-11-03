@@ -421,7 +421,7 @@ export function questionCardOf(need: McNeed): QuestionCardVm | null {
 /**
  * The open question need for one ticket: the first 'question' item whose
  * ticket id matches; null = none waits (the thread CTA degrades to the
- * ghost 'Thread öffnen').
+ * ghost 'Open thread').
  */
 export function questionNeedOf(needs: readonly McNeed[], ticketId: string): McNeed | null {
   return needs.find((need) => need.kind === 'question' && (need.ticketId ?? '') === ticketId) ?? null;

@@ -1458,14 +1458,14 @@ describe('the persona thread, memory and patch (prototype convergence)', () => {
       };
     });
 
-    const reply = await state.sendPersonaThread('pia', '  merk dir: cite tickets  ');
+    const reply = await state.sendPersonaThread('pia', '  remember: cite tickets  ');
 
     expect(reply).toEqual({ ok: true });
     expect(desk.callsOf('POST', '/api/personas/pia/thread')[0]!.body).toEqual({
-      text: 'merk dir: cite tickets',
+      text: 'remember: cite tickets',
     });
     expect(state.personaThread()?.messages.map((m) => m.text)).toEqual([
-      'merk dir: cite tickets',
+      'remember: cite tickets',
       'noted',
     ]);
     expect(state.personaThread()?.messages[1]!.role).toBe('persona');

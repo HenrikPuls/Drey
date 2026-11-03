@@ -6,7 +6,7 @@
  *
  *     ## Verlauf
  *
- *     - { phase: plan, persona: pia, model: opus, tokens: 48k, cost: 1.17, dauer: 12m, ausgang: handed-over }
+ *     - { phase: plan, persona: paul, model: opus, tokens: 48k, cost: 1.17, dauer: 12m, ausgang: handed-over }
  *     - { phase: build, persona: ben, model: glm-5.3, tokens: 121k, cost: 0.427, dauer: 41m, ausgang: failed }
  *
  * Newest entries at the bottom; existing lines are never rewritten. A

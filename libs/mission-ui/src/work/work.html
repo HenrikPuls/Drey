@@ -4,13 +4,13 @@
   <header class="hdr">
     <div class="logo" aria-hidden="true">D</div>
     <div class="hd">
-      <div class="ttl">Arbeit</div>
+      <div class="ttl">Work</div>
       @if (vaultTitle(); as vault) {
         <div class="sub">{{ vault }}</div>
       }
     </div>
     <div class="hspace"></div>
-    <button type="button" class="fleet" title="Chain-Status" (click)="onFleetTap()">
+    <button type="button" class="fleet" title="Chain status" (click)="onFleetTap()">
       <span class="led" [class.idle]="!fleetLive()" aria-hidden="true"></span>{{ fleetLabel() }}
     </button>
   </header>
@@ -126,7 +126,7 @@
                             }
                           </span>
                           @if (option.recommended) {
-                            <span class="rec">empfohlen</span>
+                            <span class="rec">recommended</span>
                           }
                         </button>
                       }
@@ -151,7 +151,7 @@
                   }
                   @if (qIsDone(vm)) {
                     <p class="qcard-done" role="status">
-                      Antwort gesendet — {{ personaLabelOf(vm) }} läuft weiter
+                      Answer sent — {{ personaLabelOf(vm) }} keeps running
                     </p>
                   }
                 } @else if (vm.need.summary) {
@@ -237,7 +237,7 @@
                 <div class="meta">
                   @if (vm.blocked) {
                     <span class="statline warn">
-                      <span class="led amber" aria-hidden="true"></span>wartet auf
+                      <span class="led amber" aria-hidden="true"></span>waiting for
                       {{ vm.blockers.join(', ') }}
                     </span>
                   }

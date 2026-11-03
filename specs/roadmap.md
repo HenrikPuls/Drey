@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-02):** version 0.8.1, milestones 1–109 built — 1–83
+**Status (2026-11-02):** version 0.8.1, milestones 1–112 built — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -155,6 +155,76 @@ round (§4.9's watcher depth now rides on
 the status log in place). Drey keeps its
 native Work panel/thread/editor throughout. Supersedes req-75 W6–W8 (E3/E5 replace the Shape
 dialog, the rules-file orchestrator and the phone-client rebuild); W9 stays.
+**Mission Control redesign — concept v2 (E10, E11, E12)** (owner request,
+outside the list, 2026-11-03; owner decisions D5–D12 closed; the design
+canvas "Drey Tickets — Workflow redesign" is binding for the UI;
+[ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
+"Later changes" records the decisions). Worked in this order, one
+milestone at a time, a pause after each; milestone numbers are taken
+when an item ships (next free: 113; 112 = specs + the English pass, E12-1, shipped). Nothing here creates tickets — the
+owner builds without the tickets system.
+
+- **E12-2 — Navigation.** Phone: a menu replaces the bottom tab bar
+  (E5b's), chat with its history is the home screen, Work / Team /
+  Settings behind the menu. ≥ 768 px: top tab bar Work (with a
+  needs-you counter) / Chat / Team / Settings; the right dock holds
+  Chat | Capacity | the history list. Chat history is a screen: sessions
+  are the files in `_meta/chat/`, old ones read-only.
+- **E12-3 — Settings screen.** Appearance (per device: themes
+  Anthrazit / Drey / Cyberpunk, highlight colour, text size S–XXL with a
+  live preview, Compact lists, Reduce motion); everything else per
+  vault: Chat, Away and alerts, Devices, Repositories, Engine incl.
+  `videos.inGit` / `videos.limitMb` with the warning dialog.
+- **E12-4 — Team states.** A stuck worker (`RunInfo.stuck` into the DTO)
+  with Nudge / Hand to Claude Code / Stop; the capacity line; Pause all
+  after this step / Stop all; daily cost + header sum; the persona
+  detail's Chat and 1:1 merged into one conversation (D8).
+- **E11-1 — Proof mode + videos** (D12). `proof: ui|tests` declared by
+  the builder in the Handover (prompt paragraph), confirmed or corrected
+  by the review prompt, pinned by the frontmatter `proof:`, missing =
+  `ui`; the verify harness starts the app only for `ui`; walkthrough
+  video ≤ 60 s chaptered + ≤ 6 screenshots with a caption per
+  criterion; `tickets/videos/` (reserved, gitignored by the engine),
+  `videos.inGit` / `videos.limitMb`, the Range-capable
+  `/api/videos/<name>` route. Supersedes E4's failure-only video.
+- **E11-2 — Diff review.** File list with viewed marks, "Whole file",
+  "Change n of m".
+- **E11-3 — Line comments.** Line and range comments on the diff go as
+  structured feedback (file, line, text) into the Handover to the
+  responsible persona (D6); "Send back with n comments".
+- **E11-4 — Cost table + estimator.** Cost table at the ticket's end;
+  an estimate from the owner's own history, shown only with ≥ 3 similar
+  runs (same gate + persona + model), basis stated (D9).
+- **E10-1 — Plan / Parts schema + parser** (`### Parts`, `parent:`, the
+  per-part `chain:` scope — `specs/ticket-schema.md`).
+- **E10-2 — Plan delta.** Shadow copy of the plan at the end of the
+  persona's last turn, only the owner's delta goes back, the chip, the
+  "You edited the plan" card, line marks (recut of W-ticket T-0078).
+- **E10-3 — Shape mode.** The idea is shaped with Paul, relayed through
+  Mission Control (Pia — the one central contact, D7); recut of
+  T-0063.
+- **E10-4 — Plan to approve.** One card per part with the builder
+  persona, flow row, move / delete (second press), running parts
+  locked, the start rule, the estimate, Mission Control's proposal
+  (recut of T-0079).
+- **E10-5 — Flow editor.** Chain-grammar extension (`before` / `after`,
+  move, per-part scope), Paul drafts a flow, "Save flow".
+- **E12-5 — Device rules audit.** 47/34 pt insets, 44 pt targets,
+  17/15/13 type scale, 16 px inputs, switches, large titles, pointer
+  hover, focus ring.
+- **E12-6 — Markdown surface extraction.** CodeMirror 6 + formatting
+  strip from `src/app/editor` into `libs/mission-ui` (large; its own
+  milestone).
+
+Decided against and not on the list: an overlap guard, touches or file
+routing between parallel tickets (D5 — req-75 W7 and W8 dropped; their
+tickets closed); a separate design persona (dropped, it was only an
+example). The default team is Paul (plans), Ben (builds), Ralf
+(reviews), Tessa (tests); **Pia is the name of Mission Control itself**.
+The product name "Drey Crew" needs a name check before any rollout (the
+code is not renamed). Out of scope: away posture / return briefing,
+report intent, photo markup.
+
 
 The assistant tool rework (owner request, outside the list, 2026-10-13)
 shipped as milestones 76–79, the removal of the embedding retrieval
@@ -208,7 +278,7 @@ changelog).
   and suggests the track. W5a shipped: the system-wide New ticket chord.
   W5b shipped: Windows dictation in the New ticket dialog.
   W5c shipped: the tidy-up; W5 is complete.
-- **W6 — Shape track.** The plan-mode dialog with the project context
+- **W6 — Shape track (recut, 2026-11-03: carried by E10-2 – E10-4).** The plan-mode dialog with the project context
   assembled automatically and shown as chips (CLAUDE.md, specs, ADRs,
   related tickets — over the existing context pack); read-only on the
   work repo; the plan grows beside the dialog in the ticket file;
@@ -221,12 +291,14 @@ changelog).
   summary, shown in the thread and as a removable composer chip, for
   discussion; gutter marks show who changed which block (ADR-0087
   decision 8).
-- **W7 — Orchestrator.** Phase tickets with gates between phases;
+- **W7 — Orchestrator (dropped, owner decision D5, 2026-11-03: no overlap guard, no
+  touches, no routing; the chain delta of E9 replaced the gates).** Phase tickets with gates between phases;
   routing by a rules file in the tickets repository (first match wins:
   worker, model, review); `touches:` paths per ticket and an overlap
   guard that holds a ticket while a running one touches the same
   paths; rebase on the integration branch and re-test before Ready.
-- **W8 — The phone as a chat client.** The req-66 client rebuilt: each
+- **W8 — The phone as a chat client (dropped, D5: Mission Control, E5b, is that
+  client).** The req-66 client rebuilt: each
   ticket a conversation, one composer for capture, answers and
   shaping, compact chips for options, the Needs-you list as home.
   Push notifications stay R7's own decision.
