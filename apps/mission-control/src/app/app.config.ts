@@ -252,6 +252,7 @@ export const appConfig: ApplicationConfig = {
             }
             return url;
           },
+          wholeFile: (path) => state.wholeFile(path),
           videoUrl: (name) => {
             const url = state.videoUrl(name);
             if (url === null) {

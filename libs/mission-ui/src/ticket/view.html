@@ -312,11 +312,11 @@
               <h3 class="tk-sec">
                 Changes
                 @if (proofDiff.files.length > 0) {
-                  <span class="cnt">· {{ proofDiff.files.length }} files</span>
+                  <span class="cnt">· {{ proofDiff.files.length }} files · {{ viewedCount() }} of {{ proofDiff.files.length }} viewed</span>
                 }
               </h3>
               @for (file of proofDiff.files; track file.path) {
-                <div class="dfile" [class.open]="isExpanded(file.path)">
+                <div class="dfile" [class.open]="isExpanded(file.path)" [class.viewed]="isViewed(file)" #dfile>
                   <div class="dfile-h">
                     <button
                       type="button"
@@ -343,6 +343,10 @@
                         </span>
                       }
                     </button>
+                    <label class="dviewed">
+                      <input type="checkbox" [checked]="isViewed(file)" (change)="toggleViewed(file)" />
+                      Viewed
+                    </label>
                     <button
                       type="button"
                       class="zmag"
@@ -364,18 +368,43 @@
                     </button>
                   </div>
                   @if (isExpanded(file.path) && file.patch !== '') {
+                    <div class="dbar">
+                      @if (canShowWhole()) {
+                        <div class="dmode" role="group" aria-label="View">
+                          <button type="button" [attr.aria-pressed]="!isWhole(file.path)" (click)="setWhole(file.path, false)">Changes</button>
+                          <button type="button" [attr.aria-pressed]="isWhole(file.path)" (click)="setWhole(file.path, true)">Whole file</button>
+                        </div>
+                      }
+                      <span class="grow"></span>
+                      @if (changeCount(file) > 0) {
+                        <span class="dpos">Change {{ changeIndex(file) + 1 }} of {{ changeCount(file) }}</span>
+                        <button type="button" class="dnav" aria-label="Previous change" (click)="stepChange(file, -1, dfile)">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6" /></svg>
+                        </button>
+                        <button type="button" class="dnav" aria-label="Next change" (click)="stepChange(file, 1, dfile)">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+                        </button>
+                      }
+                    </div>
+                    @if (loadingWhole(file)) {
+                      <p class="dnote">Loading the whole file…</p>
+                    } @else if (wholeTruncated(file)) {
+                      <p class="dnote">The file is long; only its first part is shown.</p>
+                    }
                     <div class="dfile-b">
-                      @for (row of patchRows(file.patch); track $index) {
+                      @for (item of rowsOf(file); track $index) {
                         <div
                           class="dl2"
-                          [class.add]="row.kind === 'add'"
-                          [class.del]="row.kind === 'del'"
-                          [class.hunk]="row.kind === 'hunk'"
+                          [class.add]="item.row.kind === 'add'"
+                          [class.del]="item.row.kind === 'del'"
+                          [class.hunk]="item.row.kind === 'hunk'"
+                          [class.cur]="item.change !== null && item.change === changeIndex(file)"
+                          [attr.data-chg]="item.first ? file.path + '|' + item.change : null"
                         >
-                          <span class="ln">{{ row.oldNo ?? '' }}</span>
-                          <span class="ln">{{ row.newNo ?? '' }}</span>
-                          <span class="sg">{{ row.sign }}</span>
-                          <span class="code">{{ row.text === '' ? ' ' : row.text }}</span>
+                          <span class="ln">{{ item.row.oldNo ?? '' }}</span>
+                          <span class="ln">{{ item.row.newNo ?? '' }}</span>
+                          <span class="sg">{{ item.row.sign }}</span>
+                          <span class="code">{{ item.row.text === '' ? ' ' : item.row.text }}</span>
                         </div>
                       }
                     </div>

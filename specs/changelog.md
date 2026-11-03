@@ -1,4 +1,31 @@
 
+### Milestone 117 — Mission Control diff review (E11-2)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-03
+(concept v2, design board "iPad: Review a file"; ADR-0088 E10 – E12).
+
+- **Viewed marks.** Every file in the proof card's Changes list has a
+  **Viewed** checkbox (44 pt target); the heading reads
+  `Changes · 3 files · 1 of 3 viewed`. The mark is stored per device and
+  ticket and keyed by the path plus a hash of its patch, so a file that
+  changed after the owner looked reads as not viewed again.
+- **Changes / Whole file.** An open file has a two-way switch. *Whole
+  file* fetches the file as it stands on the ticket branch
+  (`GET /api/tickets/<id>/file/<path>` → `git show HEAD:<path>`, 200 KB
+  cap, repo-relative paths only) and lays the patch over it: the lines
+  between and around the hunks become context, removed lines stay in
+  place, hunk headers drop out. A long file says it is cut.
+- **Change n of m.** Contiguous runs of added/removed lines are the
+  changes; `Change 2 of 5` with previous/next buttons scrolls to the run
+  and outlines it. Past the last (first) change of a file the neighbouring
+  file opens at its first (last).
+- **Specs added:** the whole-file overlay, the change runs, the viewed
+  key, the viewed marks across a remount, the whole-file availability and
+  loading state, change stepping across files, the safe-path rule, the
+  file route.
+- **Not done:** the board's wide master-detail layout and desk-side viewed
+  marks (roadmap E11-2b); line comments are E11-3.
+
 ### Milestone 116 — Mission Control proof mode + videos (E11-1)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-03

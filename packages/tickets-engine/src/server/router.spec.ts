@@ -25,6 +25,9 @@ function port(): TicketsRemotePort {
     ticketSendBack: vi.fn(ok),
     ticketWorktreeChanges: vi.fn(async () => []),
     ticketDiff: vi.fn(async () => ({ files: [], truncated: false })),
+    ticketFile: vi.fn(async (_id: string, path: string) =>
+      path === 'src/a.ts' ? { ok: true as const, text: 'a\nb\n', truncated: false } : { ok: false as const, error: 'nope' },
+    ),
     ticket: vi.fn(async (id: string) => ({ ok: true, card: { id }, text: '# x' })),
     create: vi.fn(ok),
     move: vi.fn(ok),
@@ -186,6 +189,11 @@ describe('route', () => {
 
     expect((await route(req({ path: '/api/tickets/T-0052/diff', authorization: auth }), deps)).status).toBe(200);
     expect(remote.ticketDiff).toHaveBeenCalledWith('T-0052');
+    const whole = await route(req({ path: '/api/tickets/T-0052/file/src%2Fa.ts', authorization: auth }), deps);
+    expect(whole.status).toBe(200);
+    expect(whole.body).toEqual({ ok: true, text: 'a\nb\n', truncated: false });
+    expect(remote.ticketFile).toHaveBeenCalledWith('T-0052', 'src/a.ts');
+    expect((await route(req({ path: '/api/tickets/T-0052/file/missing.ts', authorization: auth }), deps)).status).toBe(404);
     expect((await route(req({ path: '/api/tickets/T-0052/worktree-changes', authorization: auth }), deps)).status).toBe(200);
     expect(remote.ticketWorktreeChanges).toHaveBeenCalledWith('T-0052');
   });

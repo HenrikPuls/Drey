@@ -136,6 +136,28 @@ export interface TicketDiff {
   readonly truncated: boolean;
 }
 
+/** One file as it stands on the ticket branch (E11-2, the "Whole file" view). */
+export type TicketFileReply =
+  | { readonly ok: true; readonly text: string; readonly truncated: boolean }
+  | { readonly ok: false; readonly error: string };
+
+/** The whole-file view stops here; a bigger file shows its head and says so. */
+export const MAX_FILE_VIEW_BYTES = 200 * 1024;
+
+/**
+ * A repo-relative path the file route may hand to `git show HEAD:<path>`:
+ * no empty or absolute path, no `..` segment, no backslash, colon or NUL
+ * (git would read a colon as a revision separator).
+ */
+export function isSafeRepoPath(path: string): boolean {
+  return (
+    path !== '' &&
+    !path.startsWith('/') &&
+    !/[\\:\0]/.test(path) &&
+    !path.split('/').some((segment) => segment === '..' || segment === '')
+  );
+}
+
 /** The caps keep one diff phone-sized and the route's body bounded. */
 export const MAX_DIFF_FILES = 20;
 export const MAX_DIFF_PATCH_BYTES = 24 * 1024;

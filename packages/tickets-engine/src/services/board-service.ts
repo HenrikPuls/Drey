@@ -24,7 +24,7 @@ import { blockedRefusal } from '../core/blocked';
 import { runTransition, type TransitionIo } from '../core/transition';
 import { parseStatusLog, type StatusLine } from '../core/status-log';
 import { LEDGER_FILE, parseLedger, settledUsageByTicket, type LedgerWrite } from '../core/ledger';
-import { mergeWorktreeChanges, diffOfOutput, type TicketDiff, type WorktreeFile } from '../core/worktree-changes';
+import { mergeWorktreeChanges, diffOfOutput, isSafeRepoPath, MAX_FILE_VIEW_BYTES, type TicketDiff, type TicketFileReply, type WorktreeFile } from '../core/worktree-changes';
 import { planWorktreeRemoval } from '../core/worktree-removal';
 import { TicketsGit, type RepoLocation } from '../core/tickets-git';
 import { loadShippedPrompts } from '../core/default-prompts';
@@ -557,10 +557,42 @@ export class EngineBoardService {
    * its base, one capped unified diff. No worktree/no repo → an empty
    * diff (the card shows the Changes section alone, honestly).
    */
+  /** A ticket's file on its branch (`git show HEAD:<path>`), for the diff's "Whole file" view. */
+  async ticketFile(id: string, filePath: string): Promise<TicketFileReply> {
+    if (!isSafeRepoPath(filePath)) {
+      return { ok: false, error: 'not a path inside the repository' };
+    }
+    const where = await this.diffWorktree(id);
+    if (where === null) {
+      return { ok: false, error: `${id} has no worktree to read from` };
+    }
+    try {
+      const output = await this.git.run(where.worktreePath, ['show', `HEAD:${filePath}`]);
+      const truncated = Buffer.byteLength(output, 'utf8') > MAX_FILE_VIEW_BYTES;
+      return { ok: true, text: truncated ? output.slice(0, MAX_FILE_VIEW_BYTES) : output, truncated };
+    } catch {
+      return { ok: false, error: `${filePath} is not on the ticket branch` };
+    }
+  }
+
   async ticketDiff(id: string): Promise<TicketDiff> {
+    const where = await this.diffWorktree(id);
+    if (where === null) {
+      return { files: [], truncated: false };
+    }
+    try {
+      const output = await this.git.run(where.worktreePath, ['diff', '--unified=3', `${where.base}...HEAD`]);
+      return diffOfOutput(output);
+    } catch {
+      return { files: [], truncated: false };
+    }
+  }
+
+  /** The ticket's worktree and the base its diff runs against; null when there is none yet. */
+  private async diffWorktree(id: string): Promise<{ worktreePath: string; base: string } | null> {
     const vault = await this.detect();
     if (vault === null) {
-      return { files: [], truncated: false };
+      return null;
     }
     const snap = await this.snapshot();
     let card: TicketCard | null = null;
@@ -574,20 +606,11 @@ export class EngineBoardService {
     const repoName = card !== null && card.meta.repo !== null ? card.meta.repo : null;
     const repo = repoName === null ? null : snap.repos.find((r) => r.name === repoName) ?? null;
     if (card === null || repo === null || repo.path === null) {
-      return { files: [], truncated: false };
+      return null;
     }
     const record = this.newestRecordFor(await this.fleetRecords(), card.id);
     const worktreePath = record !== null ? record.worktreePath : worktreePathFor(vault.path, repo, card.id);
-    if (!existsSync(worktreePath)) {
-      return { files: [], truncated: false };
-    }
-    const base = repo.branch ?? 'main';
-    try {
-      const output = await this.git.run(worktreePath, ['diff', '--unified=3', `${base}...HEAD`]);
-      return diffOfOutput(output);
-    } catch {
-      return { files: [], truncated: false };
-    }
+    return existsSync(worktreePath) ? { worktreePath, base: repo.branch ?? 'main' } : null;
   }
 
   /**

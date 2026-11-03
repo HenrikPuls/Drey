@@ -28,6 +28,8 @@ import {
   acceptArmReduce,
   chainPrefillOf,
   chainStepsOf,
+  changeCountOf,
+  changeRowsOf,
   diffFontSizeStep,
   gateCostOf,
   patchRowsOf,
@@ -42,7 +44,10 @@ import {
   verlaufBoxOf,
   verlaufCostsOf,
   verlaufTotalOf,
+  viewedKeyOf,
+  wholeFileRowsOf,
   type AcceptArmState,
+  type ChangeRow,
   type GateStep,
   type ProofReport,
   type ScoutReport,
@@ -836,6 +841,126 @@ export class TicketView {
     const base = !this.touched() && first !== undefined ? [first] : [...this.expanded()];
     this.touched.set(true);
     this.expanded.set(base.includes(path) ? base.filter((known) => known !== path) : [...base, path]);
+  }
+
+  // --- diff review (E11-2): viewed marks, whole file, change n of m ------------
+
+  /** Viewed marks changed in this session, by ticket id (`path#patch-hash` keys); the rest read from storage. */
+  private readonly viewedEdits = signal<Readonly<Record<string, readonly string[]>>>({});
+  private readonly viewed = computed<ReadonlySet<string>>(() => {
+    const id = this.id();
+    return new Set(this.viewedEdits()[id] ?? this.loadViewed(id));
+  });
+  /** Paths shown as the whole file instead of the changed lines. */
+  protected readonly wholeFiles = signal<readonly string[]>([]);
+  /** The current change run per path (0-based); absent = the first. */
+  protected readonly changeAt = signal<Readonly<Record<string, number>>>({});
+
+  private loadViewed(id: string): readonly string[] {
+    try {
+      const raw = localStorage.getItem(`mc.viewed.${id}`);
+      const parsed: unknown = raw === null ? [] : JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
+  protected isViewed(file: TicketDiffFile): boolean {
+    return this.viewed().has(viewedKeyOf(file.path, file.patch));
+  }
+
+  protected toggleViewed(file: TicketDiffFile): void {
+    const next = new Set(this.viewed());
+    const key = viewedKeyOf(file.path, file.patch);
+    if (!next.delete(key)) {
+      next.add(key);
+    }
+    const id = this.id();
+    this.viewedEdits.update((edits) => ({ ...edits, [id]: [...next] }));
+    try {
+      localStorage.setItem(`mc.viewed.${id}`, JSON.stringify([...next]));
+    } catch {
+      // The mark lives for this session only.
+    }
+  }
+
+  protected readonly viewedCount = computed(() => {
+    const files = this.diff()?.files ?? [];
+    return files.filter((file) => this.isViewed(file)).length;
+  });
+
+  protected isWhole(path: string): boolean {
+    return this.wholeFiles().includes(path);
+  }
+
+  /** Whether the whole-file view is available at all (the adapter can fetch a file). */
+  protected readonly canShowWhole = computed(() => this.vm.wholeFile !== undefined);
+
+  protected setWhole(path: string, whole: boolean): void {
+    const rest = this.wholeFiles().filter((known) => known !== path);
+    this.wholeFiles.set(whole ? [...rest, path] : rest);
+    this.changeAt.update((at) => ({ ...at, [path]: 0 }));
+  }
+
+  /** The rows a file shows: its changed lines, or — once fetched — the whole file with the patch laid over it. */
+  protected rowsOf(file: TicketDiffFile): readonly ChangeRow[] {
+    if (this.isWhole(file.path)) {
+      const whole = this.vm.wholeFile?.(file.path) ?? null;
+      if (whole !== null) {
+        return changeRowsOf(wholeFileRowsOf(file.patch, whole.text));
+      }
+    }
+    return changeRowsOf(patchRowsOf(file.patch));
+  }
+
+  /** True while the whole file was asked for and has not arrived. */
+  protected loadingWhole(file: TicketDiffFile): boolean {
+    return this.isWhole(file.path) && (this.vm.wholeFile?.(file.path) ?? null) === null;
+  }
+
+  protected wholeTruncated(file: TicketDiffFile): boolean {
+    return this.isWhole(file.path) && (this.vm.wholeFile?.(file.path)?.truncated ?? false);
+  }
+
+  protected changeCount(file: TicketDiffFile): number {
+    return changeCountOf(this.rowsOf(file));
+  }
+
+  protected changeIndex(file: TicketDiffFile): number {
+    return Math.min(this.changeAt()[file.path] ?? 0, Math.max(this.changeCount(file) - 1, 0));
+  }
+
+  /**
+   * Previous/next change: within the file first; past its last (first)
+   * change the neighbouring file opens at its first (last) one.
+   */
+  protected stepChange(file: TicketDiffFile, direction: -1 | 1, host: HTMLElement): void {
+    const files = this.diff()?.files ?? [];
+    const count = this.changeCount(file);
+    const target = this.changeIndex(file) + direction;
+    let path = file.path;
+    let index = target;
+    if (target < 0 || target >= count) {
+      const neighbour = files[files.findIndex((f) => f.path === file.path) + direction];
+      if (neighbour === undefined) {
+        return;
+      }
+      path = neighbour.path;
+      const neighbourCount = this.changeCount(neighbour);
+      index = direction === 1 ? 0 : Math.max(neighbourCount - 1, 0);
+      this.touched.set(true);
+      if (!this.expanded().includes(path)) {
+        this.expanded.set([...this.expanded(), path]);
+      }
+    }
+    this.changeAt.update((at) => ({ ...at, [path]: index }));
+    // The row exists after this change detection pass.
+    setTimeout(() => {
+      const wanted = `${path}|${index}`;
+      const row = [...host.querySelectorAll('[data-chg]')].find((el) => el.getAttribute('data-chg') === wanted);
+      row?.scrollIntoView?.({ block: 'center' });
+    });
   }
 
   protected readonly fullscreen = signal<TicketDiffFile | null>(null);

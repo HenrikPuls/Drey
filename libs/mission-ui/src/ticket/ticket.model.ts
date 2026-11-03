@@ -988,6 +988,13 @@ export interface TicketVm {
   readOnly(): boolean;
   /** The URL an attachment `<img>` fetches (`GET /api/attachments/<name>`); null until it can serve it. */
   attachmentUrl(name: string): string | null;
+  /**
+   * One file as it stands on the ticket branch, for the diff's "Whole
+   * file" view (`GET /api/tickets/<id>/file/<path>`); null until it is
+   * fetched or when the desk has none. Optional: an adapter without it
+   * offers no whole-file view.
+   */
+  wholeFile?(path: string): WholeFile | null;
   /** The URL a walkthrough `<video>` plays (`GET /api/videos/<name>`); null until it can serve it. Optional: an adapter without it shows no player. */
   videoUrl?(name: string): string | null;
 
@@ -1046,3 +1053,101 @@ const EMPTY_TICKET: TicketVm = {
 export const MC_TICKET = new InjectionToken<TicketVm>('mc-ticket', {
   factory: () => EMPTY_TICKET,
 });
+
+// --- diff review (E11-2) ----------------------------------------------------------
+
+/** A file's full text on the ticket branch; `truncated` when the desk cut a very large one. */
+export interface WholeFile {
+  readonly text: string;
+  readonly truncated: boolean;
+}
+
+/**
+ * The patch laid over the whole file: every line of the new file in
+ * order, the patch's added/removed rows in place, the lines between and
+ * around the hunks as context. Hunk headers drop out (the file is
+ * continuous); a patch that skips its hunk header just lays over the
+ * start. A shorter file than the patch claims ends the fill early.
+ */
+export function wholeFileRowsOf(patch: string, content: string): PatchRow[] {
+  const lines = content.split('\n');
+  if (lines.length > 1 && lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+  const out: PatchRow[] = [];
+  let oldNo = 1;
+  let newNo = 1;
+  const fillTo = (until: number): void => {
+    while (newNo < until && newNo <= lines.length) {
+      out.push({ kind: 'context', oldNo: oldNo++, newNo, sign: '', text: lines[newNo - 1]! });
+      newNo++;
+    }
+  };
+  for (const row of patchRowsOf(patch)) {
+    if (row.kind === 'hunk') {
+      const head = HUNK_HEAD.exec(row.text);
+      if (head !== null) {
+        const newStart = parseInt(head[2]!, 10);
+        fillTo(newStart);
+        oldNo = Math.max(parseInt(head[1]!, 10), 1);
+        newNo = Math.max(newStart, 1);
+      }
+      continue;
+    }
+    if (row.kind === 'meta') {
+      continue;
+    }
+    out.push(row);
+    if (row.oldNo !== null) {
+      oldNo = row.oldNo + 1;
+    }
+    if (row.newNo !== null) {
+      newNo = row.newNo + 1;
+    }
+  }
+  fillTo(lines.length + 1);
+  return out;
+}
+
+/** A row with the change group it belongs to (null for unchanged rows). */
+export interface ChangeRow {
+  readonly row: PatchRow;
+  /** 0-based index of the contiguous run of added/removed rows; null = unchanged. */
+  readonly change: number | null;
+  /** True on the first row of a run — the row "Previous/Next change" scrolls to. */
+  readonly first: boolean;
+}
+
+/** Marks the contiguous runs of added/removed rows, numbering them from 0. */
+export function changeRowsOf(rows: readonly PatchRow[]): ChangeRow[] {
+  const out: ChangeRow[] = [];
+  let group = -1;
+  let inRun = false;
+  for (const row of rows) {
+    const changed = row.kind === 'add' || row.kind === 'del';
+    if (changed && !inRun) {
+      group++;
+    }
+    out.push({ row, change: changed ? group : null, first: changed && !inRun });
+    inRun = changed;
+  }
+  return out;
+}
+
+/** How many change runs the rows hold. */
+export function changeCountOf(rows: readonly ChangeRow[]): number {
+  return rows.reduce((max, r) => (r.change !== null && r.change + 1 > max ? r.change + 1 : max), 0);
+}
+
+/**
+ * The key a "viewed" mark is stored under: the path plus a short hash of
+ * its patch, so a file that changed after the owner looked at it reads
+ * as not viewed again.
+ */
+export function viewedKeyOf(path: string, patch: string): string {
+  let hash = 5381;
+  for (let i = 0; i < patch.length; i++) {
+    hash = ((hash << 5) + hash + patch.charCodeAt(i)) | 0;
+  }
+  return `${path}#${(hash >>> 0).toString(36)}`;
+}

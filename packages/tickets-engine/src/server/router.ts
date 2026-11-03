@@ -375,6 +375,15 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
       const id = decodeURIComponent(diff[1]!);
       return TICKET_ID_PATTERN.test(id) ? json(await port.ticketDiff(id)) : fail(404, 'no such ticket id');
     }
+    const file = /^\/api\/tickets\/([^/]+)\/file\/(.+)$/.exec(req.path);
+    if (file !== null) {
+      const id = decodeURIComponent(file[1]!);
+      if (!TICKET_ID_PATTERN.test(id)) {
+        return fail(404, 'no such ticket id');
+      }
+      const reply = await port.ticketFile(id, decodeURIComponent(file[2]!));
+      return reply.ok ? json(reply) : fail(404, reply.error);
+    }
     const chatSession = /^\/api\/chat\/sessions\/(.+)$/.exec(req.path);
     if (chatSession !== null) {
       const file = decodeURIComponent(chatSession[1]!);

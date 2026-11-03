@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_WORKTREE_FILES, mergeWorktreeChanges, parseNameStatus, parseNumstat, parseUnifiedDiff } from './worktree-changes';
+import { isSafeRepoPath, MAX_WORKTREE_FILES, mergeWorktreeChanges, parseNameStatus, parseNumstat, parseUnifiedDiff } from './worktree-changes';
 
 describe('parseNumstat', () => {
   it('reads added, removed and the path; CRLF tolerantly', () => {
@@ -125,5 +125,18 @@ describe('parseUnifiedDiff', () => {
       files: [],
       truncated: false,
     });
+  });
+});
+
+describe('isSafeRepoPath', () => {
+  it('accepts repo-relative paths only', () => {
+    expect(isSafeRepoPath('src/app/a.ts')).toBe(true);
+    expect(isSafeRepoPath('')).toBe(false);
+    expect(isSafeRepoPath('/etc/passwd')).toBe(false);
+    expect(isSafeRepoPath('../x')).toBe(false);
+    expect(isSafeRepoPath('a/../b')).toBe(false);
+    expect(isSafeRepoPath('a//b')).toBe(false);
+    expect(isSafeRepoPath('a\\b')).toBe(false);
+    expect(isSafeRepoPath('main:secret')).toBe(false);
   });
 });

@@ -161,7 +161,7 @@ canvas "Drey Tickets — Workflow redesign" is binding for the UI;
 [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
 "Later changes" records the decisions). Worked in this order, one
 milestone at a time, a pause after each; milestone numbers are taken
-when an item ships (next free: 117; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, 116 = proof mode + videos; E12-1 – E12-4 and E11-1 shipped). Nothing here creates tickets — the
+when an item ships (next free: 118; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, 116 = proof mode + videos, 117 = diff review; E12-1 – E12-4, E11-1 and E11-2 shipped). Nothing here creates tickets — the
 owner builds without the tickets system.
 
 - **E12-3b — Settings pages still missing.** Chat (thinking trace, new
@@ -173,8 +173,10 @@ owner builds without the tickets system.
   fetches the whole video through the bearer header instead of
   streaming (a `<video>` tag cannot send it; the route itself answers
   Range), and the Drey-hosted Work panel shows no player.
-- **E11-2 — Diff review.** File list with viewed marks, "Whole file",
-  "Change n of m".
+- **E11-2b — Diff review, wide layout.** The iPad board's master-detail
+  split (file list left, one file's diff right) and the viewed marks on
+  the desk instead of per device; E11-2 shipped both inside the proof
+  card's accordion.
 - **E11-3 — Line comments.** Line and range comments on the diff go as
   structured feedback (file, line, text) into the Handover to the
   responsible persona (D6); "Send back with n comments".

@@ -39,7 +39,7 @@ import type {
   TicketsRemotePort,
 } from '../contracts/remote-protocol';
 import type { BoardSnapshot, CreateResult, MutationResult } from '../contracts/tickets';
-import type { TicketDiff, WorktreeFile } from '../core/worktree-changes';
+import type { TicketDiff, TicketFileReply, WorktreeFile } from '../core/worktree-changes';
 import type { ChatDecisionResult, ChatServicePort, ChatSession, ChatSessionMeta, ChatTurnResult } from '../contracts/chat';
 import { IMPROVEMENTS_THRESHOLD } from '../core/improvements';
 import { openStatusItems } from '../core/status-log';
@@ -70,6 +70,8 @@ export interface RemoteBoard {
   saveTicket(input: { id: string; text: string; baseRevision?: string; actor?: string }): Promise<RefineReply>;
   /** The proof card's unified diff (E5c). */
   ticketDiff(id: string): Promise<TicketDiff>;
+  /** A file on the ticket's branch for the diff's "Whole file" view (E11-2). */
+  ticketFile(id: string, path: string): Promise<TicketFileReply>;
   /** The proof card's file stat list (E5c). */
   worktreeChangesOf(id: string): Promise<readonly WorktreeFile[]>;
   /** The Ready card's accept (E5c). */
@@ -482,6 +484,10 @@ export class DreyTicketsPort implements TicketsRemotePort {
 
   ticketDiff(id: string): Promise<TicketDiff> {
     return this.boardService.ticketDiff(id);
+  }
+
+  ticketFile(id: string, path: string): Promise<TicketFileReply> {
+    return this.boardService.ticketFile(id, path);
   }
 
   chatSessions(): Promise<readonly ChatSessionMeta[]> {

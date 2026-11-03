@@ -516,6 +516,8 @@ export class McState {
     this.ticketDetail.set(null);
     this.ticketError.set(null);
     this.diff.set(null);
+    this.wholeFiles.set(new Map());
+    this.wholeFilesAsked.clear();
     void this.loadTicket(id);
   }
 
@@ -544,6 +546,8 @@ export class McState {
     this.ticketDetail.set(null);
     this.ticketError.set(null);
     this.diff.set(null);
+    this.wholeFiles.set(new Map());
+    this.wholeFilesAsked.clear();
   }
 
   /**
@@ -736,6 +740,35 @@ export class McState {
     }
     this.attachmentUrls.update((map) => new Map(map).set(name, url));
     return url;
+  }
+
+  /** Whole-file texts for the diff's "Whole file" view, by repo path. */
+  private readonly wholeFiles = signal<ReadonlyMap<string, { text: string; truncated: boolean }>>(new Map());
+  private readonly wholeFilesAsked = new Set<string>();
+
+  /** A file on the ticket branch; null until fetched (the first call starts the fetch). */
+  wholeFile(path: string): { text: string; truncated: boolean } | null {
+    const known = this.wholeFiles().get(path);
+    if (known === undefined && !this.wholeFilesAsked.has(path)) {
+      this.wholeFilesAsked.add(path);
+      void this.fetchWholeFile(path);
+    }
+    return known ?? null;
+  }
+
+  private async fetchWholeFile(path: string): Promise<void> {
+    const open = this.ticketOpen();
+    if (open === null) {
+      return;
+    }
+    const encoded = encodeURIComponent(path);
+    const body = await this.client.raw<Record<string, unknown>>(`/api/tickets/${encodeURIComponent(open.id)}/file/${encoded}`);
+    if (body !== null && body['ok'] === true && typeof body['text'] === 'string') {
+      const entry = { text: body['text'], truncated: body['truncated'] === true };
+      this.wholeFiles.update((map) => new Map(map).set(path, entry));
+    } else {
+      this.wholeFilesAsked.delete(path);
+    }
   }
 
   /** The memoized object URL for one walkthrough video; null until `ensureVideo` fetched it. */

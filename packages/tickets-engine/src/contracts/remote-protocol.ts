@@ -123,7 +123,7 @@ export interface ChatChangePayload {
 // re-export keeps every existing import path working.
 export type { RefineReply, TicketReply, AttachmentReply } from './replies';
 import type { RefineReply, TicketReply, AttachmentReply } from './replies';
-import type { TicketDiff, WorktreeFile } from '../core/worktree-changes';
+import type { TicketDiff, TicketFileReply, WorktreeFile } from '../core/worktree-changes';
 
 /**
  * The host's remote surface. Every writing call carries the actor the
@@ -206,6 +206,8 @@ export interface TicketsRemotePort {
   ticketWorktreeChanges(id: string): Promise<readonly WorktreeFile[]>;
   /** The proof card's unified diff (E5c). */
   ticketDiff(id: string): Promise<TicketDiff>;
+  /** A file on the ticket's branch for the diff's "Whole file" view (E11-2). */
+  ticketFile(id: string, path: string): Promise<TicketFileReply>;
 
   /** The Mission Control chat surface (E5a) — the service's port verbatim. */
   chatSessions(): Promise<readonly ChatSessionMeta[]>;

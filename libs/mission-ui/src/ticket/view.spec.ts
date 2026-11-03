@@ -27,6 +27,8 @@ import {
   blockerNoteOf,
   chainPrefillOf,
   chainStepsOf,
+  changeCountOf,
+  changeRowsOf,
   diffFontSizeStep,
   gateCostOf,
   gateStepsOf,
@@ -46,12 +48,15 @@ import {
   verlaufCostsOf,
   verlaufLineOf,
   verlaufTotalOf,
+  viewedKeyOf,
+  wholeFileRowsOf,
   type GatePhase,
   type ProofReport,
   type ThreadItem,
   type ThreadMessage,
   type TicketActionReply,
   type TicketDiff,
+  type TicketDiffFile,
   type TicketDoc,
   type TicketSaveReply,
   type TicketVm,
@@ -298,6 +303,17 @@ interface TicketSurface {
   verdict(): { passed: number; total: number; stamp: string } | null;
   shots(): readonly { name: string; url: string }[];
   diff(): unknown;
+  viewedCount(): number;
+  isViewed(file: TicketDiffFile): boolean;
+  toggleViewed(file: TicketDiffFile): void;
+  canShowWhole(): boolean;
+  setWhole(path: string, whole: boolean): void;
+  isWhole(path: string): boolean;
+  loadingWhole(file: TicketDiffFile): boolean;
+  rowsOf(file: TicketDiffFile): readonly unknown[];
+  changeCount(file: TicketDiffFile): number;
+  changeIndex(file: TicketDiffFile): number;
+  stepChange(file: TicketDiffFile, direction: -1 | 1, host: HTMLElement): void;
   result(): { kind: 'error' | 'note'; text: string } | null;
   savedFlash(): string | null;
   arm(): { armed: boolean; since: number };
@@ -1762,3 +1778,137 @@ function cardQuestionShaped(): McShapedQuestion {
     recommendationWhy: null,
   };
 }
+
+// --- diff review (E11-2) ------------------------------------------------------------------
+
+const REVIEW_PATCH = [
+  '--- a/src/a.ts',
+  '+++ b/src/a.ts',
+  '@@ -3,3 +3,4 @@',
+  ' three',
+  '-four',
+  '+FOUR',
+  '+FOUR-B',
+  ' five',
+  '@@ -9,2 +10,2 @@',
+  ' nine',
+  '-ten',
+  '+TEN',
+].join('\n');
+const REVIEW_FILE = Array.from({ length: 12 }, (_, i) => `line${i + 1}`).join('\n') + '\n';
+
+describe('wholeFileRowsOf', () => {
+  it('lays the patch over the whole file: gaps become context, hunk headers drop out', () => {
+    const rows = wholeFileRowsOf(REVIEW_PATCH, REVIEW_FILE);
+    // The new file has 12 lines; the removed ones come in on top.
+    expect(rows.filter((r) => r.kind !== 'del').map((r) => r.newNo)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(rows.some((r) => r.kind === 'hunk')).toBe(false);
+    expect(rows.slice(0, 2)).toEqual([
+      { kind: 'context', oldNo: 1, newNo: 1, sign: '', text: 'line1' },
+      { kind: 'context', oldNo: 2, newNo: 2, sign: '', text: 'line2' },
+    ]);
+    const changed = rows.filter((r) => r.kind === 'add' || r.kind === 'del').map((r) => `${r.sign}${r.text}`);
+    expect(changed).toEqual(['−four', '+FOUR', '+FOUR-B', '−ten', '+TEN']);
+    // After the first hunk the old numbering runs one behind the new one.
+    expect(rows.find((r) => r.newNo === 6)!.oldNo).toBe(5);
+    expect(rows.find((r) => r.newNo === 11)!.oldNo).toBeNull(); // the added TEN
+    expect(rows.find((r) => r.newNo === 12)!.oldNo).toBe(11);
+  });
+
+  it('survives a file shorter than the patch claims', () => {
+    expect(() => wholeFileRowsOf(REVIEW_PATCH, 'only\n')).not.toThrow();
+    expect(wholeFileRowsOf('', 'a\nb\n').map((r) => r.text)).toEqual(['a', 'b']);
+  });
+});
+
+describe('changeRowsOf', () => {
+  it('numbers the contiguous runs of added/removed rows and marks their first row', () => {
+    const rows = changeRowsOf(patchRowsOf(REVIEW_PATCH));
+    expect(changeCountOf(rows)).toBe(2);
+    expect(rows.filter((r) => r.first).map((r) => [r.change, r.row.text])).toEqual([
+      [0, 'four'],
+      [1, 'ten'],
+    ]);
+    expect(rows.filter((r) => r.change === 0)).toHaveLength(3);
+  });
+
+  it('reports none for an unchanged or empty list', () => {
+    expect(changeCountOf(changeRowsOf([]))).toBe(0);
+  });
+});
+
+describe('viewedKeyOf', () => {
+  it('changes with the patch, so an edited file reads as not viewed again', () => {
+    expect(viewedKeyOf('a.ts', 'x')).toBe(viewedKeyOf('a.ts', 'x'));
+    expect(viewedKeyOf('a.ts', 'x')).not.toBe(viewedKeyOf('a.ts', 'y'));
+    expect(viewedKeyOf('a.ts', 'x')).not.toBe(viewedKeyOf('b.ts', 'x'));
+  });
+});
+
+describe('TicketView diff review', () => {
+  const files = [
+    { status: 'M', path: 'src/a.ts', patch: REVIEW_PATCH, added: 3, removed: 2 },
+    { status: 'M', path: 'src/b.ts', patch: '@@ -1 +1 @@\n-x\n+y', added: 1, removed: 1 },
+  ];
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('counts viewed files per device and keeps the marks across a remount', () => {
+    const fake = makeFake({ docValue: DOC, diffValue: { files, truncated: false } });
+    const vm = surface(setup(fake));
+    expect(vm.viewedCount()).toBe(0);
+    vm.toggleViewed(files[0]);
+    expect(vm.isViewed(files[0])).toBe(true);
+    expect(vm.viewedCount()).toBe(1);
+    vm.toggleViewed(files[0]);
+    expect(vm.viewedCount()).toBe(0);
+
+    vm.toggleViewed(files[1]);
+    const again = surface(setup(makeFake({ docValue: DOC, diffValue: { files, truncated: false } })));
+    expect(again.viewedCount()).toBe(1);
+    // A changed patch is a different file to review.
+    expect(again.isViewed({ ...files[1], patch: '@@ -1 +1 @@\n-x\n+z' })).toBe(false);
+  });
+
+  it('offers the whole file only when the adapter can fetch it, and shows it once it arrives', () => {
+    const plain = surface(setup(makeFake({ docValue: DOC, diffValue: { files, truncated: false } })));
+    expect(plain.canShowWhole()).toBe(false);
+
+    const fake = makeFake({ docValue: DOC, diffValue: { files, truncated: false } });
+    let arrived = false;
+    fake.wholeFile = () => (arrived ? { text: REVIEW_FILE, truncated: false } : null);
+    const vm = surface(setup(fake));
+    expect(vm.canShowWhole()).toBe(true);
+    expect(vm.rowsOf(files[0])).toHaveLength(changeRowsOf(patchRowsOf(REVIEW_PATCH)).length);
+
+    vm.setWhole('src/a.ts', true);
+    expect(vm.loadingWhole(files[0])).toBe(true);
+    arrived = true;
+    expect(vm.loadingWhole(files[0])).toBe(false);
+    expect(vm.rowsOf(files[0]).length).toBeGreaterThan(12);
+    vm.setWhole('src/a.ts', false);
+    expect(vm.isWhole('src/a.ts')).toBe(false);
+  });
+
+  it('steps through the changes and crosses into the next file', () => {
+    const fake = makeFake({ docValue: DOC, diffValue: { files, truncated: false } });
+    const vm = surface(setup(fake));
+    const host = document.createElement('div');
+    expect(vm.changeCount(files[0])).toBe(2);
+    expect(vm.changeIndex(files[0])).toBe(0);
+    vm.stepChange(files[0], 1, host);
+    expect(vm.changeIndex(files[0])).toBe(1);
+    vm.stepChange(files[0], 1, host);
+    // Past the last change of a.ts the next file opens at its first.
+    expect(vm.isExpanded('src/b.ts')).toBe(true);
+    expect(vm.changeIndex(files[1])).toBe(0);
+    vm.stepChange(files[1], -1, host);
+    expect(vm.changeIndex(files[0])).toBe(1);
+    // No file before the first one: nothing moves.
+    vm.stepChange(files[0], -1, host);
+    vm.stepChange(files[0], -1, host);
+    expect(vm.changeIndex(files[0])).toBe(0);
+  });
+});

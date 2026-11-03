@@ -1548,3 +1548,86 @@ details.think .step-body {
   font-size: calc(13px * var(--mc-text, 1));
   color: var(--text-3);
 }
+
+.dviewed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 8px;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-2, inherit);
+}
+
+.dfile.viewed .fp {
+  opacity: 0.6;
+}
+
+.dbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+.dbar .grow {
+  flex-grow: 1;
+}
+
+.dmode {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--surface-2, rgba(128, 128, 128, 0.15));
+}
+
+.dmode button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-2, inherit);
+  font: inherit;
+  font-size: calc(13px * var(--mc-text, 1));
+}
+
+.dmode button[aria-pressed='true'] {
+  background: var(--surface-3, rgba(128, 128, 128, 0.3));
+  color: var(--text-1, inherit);
+}
+
+.dpos {
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+.dnav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border, currentColor);
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+}
+
+.dnav svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dnote {
+  margin: 0;
+  padding: 0 12px 6px;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+.dl2.cur {
+  outline: 1px solid var(--accent, currentColor);
+  outline-offset: -1px;
+}
