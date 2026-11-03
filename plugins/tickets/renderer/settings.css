@@ -677,6 +677,17 @@
   gap: 10px;
 }
 
+/* The device-name field reads as a normal value, not an autofill ghost. */
+.tset-remote-pairform > input {
+  width: 220px;
+  min-width: 0;
+  padding: 7px 10px;
+  background: var(--bg-input, transparent);
+  border: 1px solid var(--field-border, var(--border));
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+}
+
 .tset-remote-check {
   display: inline-flex;
   align-items: center;
