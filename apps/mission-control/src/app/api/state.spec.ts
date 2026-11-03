@@ -44,12 +44,21 @@ const makeDesk = () => {
     piaImprovements: unknown;
     tessaImprovements: unknown;
   } = {
-    board: { columns: [{ phase: { id: 'inbox', title: 'Inbox' }, tickets: [] }], checkpoints: [] as string[] },
+    board: {
+      columns: [{ phase: { id: 'inbox', title: 'Inbox' }, tickets: [] }],
+      checkpoints: [] as string[],
+    },
     needs: [] as unknown[],
     personas: [] as unknown[],
     fleet: { runs: [] as unknown[], chain: null },
     sessions: [] as unknown[],
-    sessionA: { file: FILE_A, title: 'A', createdAt: '2026-11-01', messages: [] as unknown[], proposals: [] as unknown[] },
+    sessionA: {
+      file: FILE_A,
+      title: 'A',
+      createdAt: '2026-11-01',
+      messages: [] as unknown[],
+      proposals: [] as unknown[],
+    },
     ticket: {
       ok: true,
       card: { id: 'T-1', title: 'One', phase: 'verify', meta: { priority: 'high' } },
@@ -57,7 +66,15 @@ const makeDesk = () => {
       revision: 'r1',
     },
     piaImprovements: {
-      persona: { id: 'pia', title: 'Pia', role: 'Planner', worker: 'opencode', model: 'zai/glm-5.3', pool: [], color: '#ff0000' },
+      persona: {
+        id: 'pia',
+        title: 'Pia',
+        role: 'Planner',
+        worker: 'opencode',
+        model: 'zai/glm-5.3',
+        pool: [],
+        color: '#ff0000',
+      },
       proposals: [
         {
           id: 'imp-1',
@@ -74,7 +91,12 @@ const makeDesk = () => {
       openCount: 1,
       frictionCount: 4,
     },
-    tessaImprovements: { persona: { id: 'tessa', title: 'Tessa' }, proposals: [], openCount: 0, frictionCount: 0 },
+    tessaImprovements: {
+      persona: { id: 'tessa', title: 'Tessa' },
+      proposals: [],
+      openCount: 0,
+      frictionCount: 0,
+    },
   };
   desk.on('GET', '/api/me', () => ({ ok: true, device: { name: 'phone', readOnly: false } }));
   desk.on('GET', '/api/board', () => data.board);
@@ -89,13 +111,28 @@ const makeDesk = () => {
   return { desk, data };
 };
 
-const makeState = (desk: FakeDesk): McState => new McState(new McClient({ fetch: desk.fetch, storage: desk.storage }));
+const makeState = (desk: FakeDesk): McState =>
+  new McState(new McClient({ fetch: desk.fetch, storage: desk.storage }));
 
 describe('boot', () => {
   it('pairs a code from the URL, stores the token and becomes ready', async () => {
     const { desk, data } = makeDesk();
-    data.board = { columns: [{ phase: { id: 'inbox', title: 'Inbox' }, tickets: [{ id: 'T-1', title: 'One', phase: 'inbox', blocked: [], meta: { priority: 'high' } }] }], checkpoints: [] };
-    desk.on('POST', '/api/pair', () => ({ ok: true, token: 'fresh-token', device: { name: 'phone' } }));
+    data.board = {
+      columns: [
+        {
+          phase: { id: 'inbox', title: 'Inbox' },
+          tickets: [
+            { id: 'T-1', title: 'One', phase: 'inbox', blocked: [], meta: { priority: 'high' } },
+          ],
+        },
+      ],
+      checkpoints: [],
+    };
+    desk.on('POST', '/api/pair', () => ({
+      ok: true,
+      token: 'fresh-token',
+      device: { name: 'phone' },
+    }));
     const state = makeState(desk);
 
     await state.boot({ pairCode: '  1234-5678  ', token: null });
@@ -114,9 +151,24 @@ describe('boot', () => {
     const { desk, data } = makeDesk();
     desk.storage.setItem('drey.remote.token', 'old-token');
     data.needs = [{ kind: 'question', ticketId: 'T-1', title: 'One', summary: 'which way?' }];
-    data.personas = [{ id: 'pia', title: 'Pia', role: 'Planner', worker: 'opencode', model: 'zai/glm-5.3', pool: [], color: '#ff0000' }];
-    data.fleet = { runs: [{ id: 'r1', ticketId: 'T-1', state: 'running', persona: 'pia' }], chain: null };
-    data.sessions = [{ file: FILE_A, title: 'A', createdAt: '2026-11-01', updatedAt: '2026-11-02', pending: 1 }];
+    data.personas = [
+      {
+        id: 'pia',
+        title: 'Pia',
+        role: 'Planner',
+        worker: 'opencode',
+        model: 'zai/glm-5.3',
+        pool: [],
+        color: '#ff0000',
+      },
+    ];
+    data.fleet = {
+      runs: [{ id: 'r1', ticketId: 'T-1', state: 'running', persona: 'pia' }],
+      chain: null,
+    };
+    data.sessions = [
+      { file: FILE_A, title: 'A', createdAt: '2026-11-01', updatedAt: '2026-11-02', pending: 1 },
+    ];
     const state = makeState(desk);
 
     await state.boot();
@@ -181,7 +233,10 @@ describe('boot', () => {
 
   it('a pairing failure surfaces the error and stays on needs-code', async () => {
     const { desk } = makeDesk();
-    desk.on('POST', '/api/pair', () => ({ __status: 401, __body: { ok: false, error: 'the pairing code is wrong or has expired' } }));
+    desk.on('POST', '/api/pair', () => ({
+      __status: 401,
+      __body: { ok: false, error: 'the pairing code is wrong or has expired' },
+    }));
     const state = makeState(desk);
     const reply = await state.pair('0000-0000');
     expect(reply).toEqual({ ok: false, error: 'the pairing code is wrong or has expired' });
@@ -216,7 +271,17 @@ describe('event-driven refreshes', () => {
     await waitFor(() => expect(state.connected()).toBe(true));
     const before = desk.callsOf('GET', '/api/board').length;
 
-    data.board = { columns: [{ phase: { id: 'plan', title: 'Plan' }, tickets: [{ id: 'T-9', title: 'Nine', phase: 'plan', blocked: [], meta: { priority: 'low' } }] }], checkpoints: [] };
+    data.board = {
+      columns: [
+        {
+          phase: { id: 'plan', title: 'Plan' },
+          tickets: [
+            { id: 'T-9', title: 'Nine', phase: 'plan', blocked: [], meta: { priority: 'low' } },
+          ],
+        },
+      ],
+      checkpoints: [],
+    };
     desk.pushEvent('board', {});
 
     await waitFor(() => expect(state.work().groups[0]!.id).toBe('plan'));
@@ -226,24 +291,45 @@ describe('event-driven refreshes', () => {
   it('a fleet frame re-folds the Team runs', async () => {
     const { desk, data } = makeDesk();
     desk.storage.setItem('drey.remote.token', 'tok');
-    data.personas = [{ id: 'pia', title: 'Pia', role: 'Planner', worker: 'opencode', model: 'zai/glm-5.3', pool: [], color: '#ff0000' }];
+    data.personas = [
+      {
+        id: 'pia',
+        title: 'Pia',
+        role: 'Planner',
+        worker: 'opencode',
+        model: 'zai/glm-5.3',
+        pool: [],
+        color: '#ff0000',
+      },
+    ];
     const state = makeState(desk);
     await state.boot();
     await waitFor(() => expect(state.team().personas.length).toBe(1));
     await waitFor(() => expect(desk.eventsOpen).toBe(true));
     expect(state.team().personas[0]!.currentRun).toBeNull();
 
-    data.fleet = { runs: [{ id: 'r1', ticketId: 'T-5', state: 'running', persona: 'pia' }], chain: null };
+    data.fleet = {
+      runs: [{ id: 'r1', ticketId: 'T-5', state: 'running', persona: 'pia' }],
+      chain: null,
+    };
     desk.pushEvent('fleet', {});
 
-    await waitFor(() => expect(state.team().personas[0]!.currentRun).toEqual({ ticketId: 'T-5', state: 'running' }));
+    await waitFor(() =>
+      expect(state.team().personas[0]!.currentRun).toEqual({ ticketId: 'T-5', state: 'running' }),
+    );
   });
 
   it('a chat frame for another session refreshes the list but leaves the pane alone', async () => {
     const { desk, data } = makeDesk();
     desk.storage.setItem('drey.remote.token', 'tok');
     data.sessions = [{ file: FILE_B, title: 'B', createdAt: '', updatedAt: '', pending: 1 }];
-    data.sessionA = { file: FILE_A, title: 'A', createdAt: '', messages: [{ role: 'owner', text: 'hello A', at: 't1', thought: null }], proposals: [] };
+    data.sessionA = {
+      file: FILE_A,
+      title: 'A',
+      createdAt: '',
+      messages: [{ role: 'owner', text: 'hello A', at: 't1', thought: null }],
+      proposals: [],
+    };
     const state = makeState(desk);
     await state.boot();
     await state.openSession(FILE_A);
@@ -253,7 +339,9 @@ describe('event-driven refreshes', () => {
 
     desk.pushEvent('chat', { file: FILE_B, event: { kind: 'text', text: 'for B' } });
 
-    await waitFor(() => expect(desk.callsOf('GET', '/api/chat/sessions').length).toBeGreaterThan(before));
+    await waitFor(() =>
+      expect(desk.callsOf('GET', '/api/chat/sessions').length).toBeGreaterThan(before),
+    );
     expect(state.chat().active?.messages.map((m) => m.text)).toEqual(['hello A']);
   });
 });
@@ -261,7 +349,13 @@ describe('event-driven refreshes', () => {
 describe('chat', () => {
   it('opens a session', async () => {
     const { desk, data } = makeDesk();
-    data.sessionA = { file: FILE_A, title: 'A', createdAt: '2026-11-01', messages: [{ role: 'owner', text: 'hi', at: 't1', thought: null }], proposals: [] };
+    data.sessionA = {
+      file: FILE_A,
+      title: 'A',
+      createdAt: '2026-11-01',
+      messages: [{ role: 'owner', text: 'hi', at: 't1', thought: null }],
+      proposals: [],
+    };
     const state = makeState(desk);
     await state.openSession(FILE_A);
     expect(desk.callsOf('GET', `/api/chat/sessions/${enc(FILE_A)}`).length).toBe(1);
@@ -277,7 +371,13 @@ describe('chat', () => {
   it('applies streamed text and thought to the open session, then re-fetches on done', async () => {
     const { desk, data } = makeDesk();
     desk.storage.setItem('drey.remote.token', 'tok');
-    data.sessionA = { file: FILE_A, title: 'A', createdAt: '', messages: [{ role: 'owner', text: 'hi', at: 't1', thought: null }], proposals: [] };
+    data.sessionA = {
+      file: FILE_A,
+      title: 'A',
+      createdAt: '',
+      messages: [{ role: 'owner', text: 'hi', at: 't1', thought: null }],
+      proposals: [],
+    };
     const state = makeState(desk);
     await state.boot();
     await state.openSession(FILE_A);
@@ -320,7 +420,16 @@ describe('chat', () => {
       ok: true,
       say: 'Hi there',
       thought: 'hmm',
-      proposals: [{ id: 'p-1', state: 'pending', summary: 'Create T-9', at: 't3', decidedAt: null, outcome: null }],
+      proposals: [
+        {
+          id: 'p-1',
+          state: 'pending',
+          summary: 'Create T-9',
+          at: 't3',
+          decidedAt: null,
+          outcome: null,
+        },
+      ],
     }));
     const state = makeState(desk);
     await state.openSession(FILE_A);
@@ -335,7 +444,14 @@ describe('chat', () => {
     ]);
     expect(active.messages[1]!.thought).toBe('hmm');
     expect(active.proposals).toEqual([
-      { id: 'p-1', state: 'pending', summary: 'Create T-9', at: 't3', decidedAt: null, outcome: null },
+      {
+        id: 'p-1',
+        state: 'pending',
+        summary: 'Create T-9',
+        at: 't3',
+        decidedAt: null,
+        outcome: null,
+      },
     ]);
     const call = desk.callsOf('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`)[0]!;
     expect(call.body).toEqual({ text: 'hi' });
@@ -351,7 +467,10 @@ describe('chat', () => {
   it('send surfaces a desk refusal', async () => {
     const { desk, data } = makeDesk();
     data.sessionA = { file: FILE_A, title: 'A', createdAt: '', messages: [], proposals: [] };
-    desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`, () => ({ ok: false, error: 'a chat message needs text' }));
+    desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`, () => ({
+      ok: false,
+      error: 'a chat message needs text',
+    }));
     const state = makeState(desk);
     await state.openSession(FILE_A);
     const reply = await state.send('   ');
@@ -361,7 +480,13 @@ describe('chat', () => {
   it('newSession starts, lists and opens the session with the finished turn', async () => {
     const { desk } = makeDesk();
     const FILE_NEW = 'tickets/_meta/chat/new.md';
-    desk.on('POST', '/api/chat/sessions', () => ({ ok: true, file: FILE_NEW, say: 'Started', thought: null, proposals: [] }));
+    desk.on('POST', '/api/chat/sessions', () => ({
+      ok: true,
+      file: FILE_NEW,
+      say: 'Started',
+      thought: null,
+      proposals: [],
+    }));
     desk.on('GET', `/api/chat/sessions/${enc(FILE_NEW)}`, () => ({
       file: FILE_NEW,
       title: 'New',
@@ -391,11 +516,27 @@ describe('chat', () => {
       title: 'A',
       createdAt: '',
       messages: [],
-      proposals: [{ id: 'p-1', state: 'pending', summary: 'Create T-9', at: 't3', decidedAt: null, outcome: null }],
+      proposals: [
+        {
+          id: 'p-1',
+          state: 'pending',
+          summary: 'Create T-9',
+          at: 't3',
+          decidedAt: null,
+          outcome: null,
+        },
+      ],
     };
     desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/proposals/p-1/confirm`, () => ({
       ok: true,
-      proposal: { id: 'p-1', state: 'confirmed', summary: 'Create T-9', at: 't3', decidedAt: 't4', outcome: 'created tickets/inbox/T-9.md' },
+      proposal: {
+        id: 'p-1',
+        state: 'confirmed',
+        summary: 'Create T-9',
+        at: 't3',
+        decidedAt: 't4',
+        outcome: 'created tickets/inbox/T-9.md',
+      },
     }));
     const state = makeState(desk);
     await state.openSession(FILE_A);
@@ -404,7 +545,14 @@ describe('chat', () => {
 
     expect(reply).toEqual({ ok: true });
     expect(state.chat().active!.proposals).toEqual([
-      { id: 'p-1', state: 'confirmed', summary: 'Create T-9', at: 't3', decidedAt: 't4', outcome: 'created tickets/inbox/T-9.md' },
+      {
+        id: 'p-1',
+        state: 'confirmed',
+        summary: 'Create T-9',
+        at: 't3',
+        decidedAt: 't4',
+        outcome: 'created tickets/inbox/T-9.md',
+      },
     ]);
   });
 
@@ -415,11 +563,27 @@ describe('chat', () => {
       title: 'A',
       createdAt: '',
       messages: [],
-      proposals: [{ id: 'p-2', state: 'pending', summary: 'Move T-1', at: 't3', decidedAt: null, outcome: null }],
+      proposals: [
+        {
+          id: 'p-2',
+          state: 'pending',
+          summary: 'Move T-1',
+          at: 't3',
+          decidedAt: null,
+          outcome: null,
+        },
+      ],
     };
     desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/proposals/p-2/dismiss`, () => ({
       ok: true,
-      proposal: { id: 'p-2', state: 'dismissed', summary: 'Move T-1', at: 't3', decidedAt: 't4', outcome: null },
+      proposal: {
+        id: 'p-2',
+        state: 'dismissed',
+        summary: 'Move T-1',
+        at: 't3',
+        decidedAt: 't4',
+        outcome: null,
+      },
     }));
     const state = makeState(desk);
     await state.openSession(FILE_A);
@@ -444,9 +608,21 @@ describe('chat', () => {
       title: 'A',
       createdAt: '',
       messages: [],
-      proposals: [{ id: 'p-1', state: 'pending', summary: 'Create T-9', at: 't3', decidedAt: null, outcome: null }],
+      proposals: [
+        {
+          id: 'p-1',
+          state: 'pending',
+          summary: 'Create T-9',
+          at: 't3',
+          decidedAt: null,
+          outcome: null,
+        },
+      ],
     };
-    desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/proposals/p-1/confirm`, () => ({ ok: false, error: 'no such proposal' }));
+    desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/proposals/p-1/confirm`, () => ({
+      ok: false,
+      error: 'no such proposal',
+    }));
     const state = makeState(desk);
     await state.openSession(FILE_A);
 
@@ -499,7 +675,17 @@ describe('prefillChat (E8, E9)', () => {
 describe('moveTicket', () => {
   it('posts the transition with the card phase from the current view', async () => {
     const { desk, data } = makeDesk();
-    data.board = { columns: [{ phase: { id: 'inbox', title: 'Inbox' }, tickets: [{ id: 'T-1', title: 'One', phase: 'inbox', blocked: [], meta: { priority: 'high' } }] }], checkpoints: [] };
+    data.board = {
+      columns: [
+        {
+          phase: { id: 'inbox', title: 'Inbox' },
+          tickets: [
+            { id: 'T-1', title: 'One', phase: 'inbox', blocked: [], meta: { priority: 'high' } },
+          ],
+        },
+      ],
+      checkpoints: [],
+    };
     desk.on('POST', '/api/tickets/T-1/move', () => ({ ok: true }));
     desk.storage.setItem('drey.remote.token', 'tok');
     const state = makeState(desk);
@@ -509,13 +695,28 @@ describe('moveTicket', () => {
     const reply = await state.moveTicket('T-1', 'plan');
 
     expect(reply).toEqual({ ok: true });
-    expect(desk.callsOf('POST', '/api/tickets/T-1/move')[0]!.body).toEqual({ id: 'T-1', from: 'inbox', to: 'plan' });
+    expect(desk.callsOf('POST', '/api/tickets/T-1/move')[0]!.body).toEqual({
+      id: 'T-1',
+      from: 'inbox',
+      to: 'plan',
+    });
   });
 
   it('surfaces a board refusal', async () => {
     const { desk, data } = makeDesk();
-    data.board = { columns: [{ phase: { id: 'inbox', title: 'Inbox' }, tickets: [{ id: 'T-1', title: 'One', phase: 'inbox', blocked: [], meta: {} }] }], checkpoints: [] };
-    desk.on('POST', '/api/tickets/T-1/move', () => ({ ok: false, error: 'the target phase is unknown' }));
+    data.board = {
+      columns: [
+        {
+          phase: { id: 'inbox', title: 'Inbox' },
+          tickets: [{ id: 'T-1', title: 'One', phase: 'inbox', blocked: [], meta: {} }],
+        },
+      ],
+      checkpoints: [],
+    };
+    desk.on('POST', '/api/tickets/T-1/move', () => ({
+      ok: false,
+      error: 'the target phase is unknown',
+    }));
     desk.storage.setItem('drey.remote.token', 'tok');
     const state = makeState(desk);
     await state.boot();
@@ -528,7 +729,10 @@ describe('moveTicket', () => {
 
   it('fails fast for a ticket it has not seen, without posting', async () => {
     const { desk, data } = makeDesk();
-    data.board = { columns: [{ phase: { id: 'inbox', title: 'Inbox' }, tickets: [] }], checkpoints: [] };
+    data.board = {
+      columns: [{ phase: { id: 'inbox', title: 'Inbox' }, tickets: [] }],
+      checkpoints: [],
+    };
     desk.storage.setItem('drey.remote.token', 'tok');
     const state = makeState(desk);
     await state.boot();
@@ -545,7 +749,10 @@ describe('ticket screen', () => {
   const TWO_PHASES = {
     columns: [
       { phase: { id: 'inbox', title: 'Inbox' }, tickets: [] },
-      { phase: { id: 'verify', title: 'Verify' }, tickets: [{ id: 'T-1', title: 'One', phase: 'verify', blocked: [], meta: {} }] },
+      {
+        phase: { id: 'verify', title: 'Verify' },
+        tickets: [{ id: 'T-1', title: 'One', phase: 'verify', blocked: [], meta: {} }],
+      },
     ],
     checkpoints: [] as string[],
   };
@@ -645,11 +852,18 @@ describe('ticket screen', () => {
     const state = makeState(desk);
     state.openTicket('T-1');
     await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
-    desk.on('POST', '/api/tickets/T-1/save', () => ({ ok: false, conflict: true, error: 'base revision r0 is stale' }));
+    desk.on('POST', '/api/tickets/T-1/save', () => ({
+      ok: false,
+      conflict: true,
+      error: 'base revision r0 is stale',
+    }));
 
     const reply = await state.saveTicket('edited markdown');
 
-    expect(reply).toEqual({ ok: false, error: 'The ticket changed since you opened it. Reload it and edit again.' });
+    expect(reply).toEqual({
+      ok: false,
+      error: 'The ticket changed since you opened it. Reload it and edit again.',
+    });
     expect(state.ticketDetail()!.revision).toBe('r1');
   });
 
@@ -658,7 +872,10 @@ describe('ticket screen', () => {
     const state = makeState(desk);
     state.openTicket('T-1');
     await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
-    desk.on('POST', '/api/tickets/T-1/save', () => ({ ok: false, error: 'the file no longer parses as a ticket' }));
+    desk.on('POST', '/api/tickets/T-1/save', () => ({
+      ok: false,
+      error: 'the file no longer parses as a ticket',
+    }));
 
     const reply = await state.saveTicket('broken');
 
@@ -703,7 +920,9 @@ describe('ticket screen', () => {
     desk.on('POST', '/api/tickets/T-1/send-back', () => ({ ok: true }));
     const reply = await state.sendBack('  The button still misaligns  ');
     expect(reply).toEqual({ ok: true });
-    expect(desk.callsOf('POST', '/api/tickets/T-1/send-back')[0]!.body).toEqual({ note: 'The button still misaligns' });
+    expect(desk.callsOf('POST', '/api/tickets/T-1/send-back')[0]!.body).toEqual({
+      note: 'The button still misaligns',
+    });
   });
 
   it('loadDiff loads the proof card diff and keeps the last good view on a failed GET', async () => {
@@ -711,7 +930,10 @@ describe('ticket screen', () => {
     const state = makeState(desk);
     state.openTicket('T-1');
     await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
-    const view = { files: [{ status: 'M', path: 'src/a.ts', patch: '@@ -1 +1 @@\n-old\n+new' }], truncated: false };
+    const view = {
+      files: [{ status: 'M', path: 'src/a.ts', patch: '@@ -1 +1 @@\n-old\n+new' }],
+      truncated: false,
+    };
     desk.on('GET', '/api/tickets/T-1/diff', () => view);
 
     await state.loadDiff();
@@ -728,7 +950,8 @@ describe('ticket screen', () => {
     await state.loadDiff();
     expect(state.diff()).toBeNull();
     expect(desk.callsOf('GET', '/api/tickets/T-1/diff').length).toBe(0);
-  });  it('attachments memoize per name and closeTicket revokes them', async () => {
+  });
+  it('attachments memoize per name and closeTicket revokes them', async () => {
     const desk = new FakeDesk();
     const created: string[] = [];
     const revoked: string[] = [];
@@ -749,7 +972,10 @@ describe('ticket screen', () => {
       text: '# One',
       revision: 'r1',
     }));
-    desk.on('GET', '/api/attachments/shot.png', () => ({ __bytes: new Uint8Array([1, 2, 3]), __contentType: 'image/png' }));
+    desk.on('GET', '/api/attachments/shot.png', () => ({
+      __bytes: new Uint8Array([1, 2, 3]),
+      __contentType: 'image/png',
+    }));
     state.openTicket('T-1');
     await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
 
@@ -777,7 +1003,10 @@ describe('ticket screen', () => {
       revokeObjectUrl: () => undefined,
     });
     const state = new McState(client);
-    desk.on('GET', '/api/attachments/missing.png', () => ({ __status: 404, __body: { ok: false, error: 'no such attachment' } }));
+    desk.on('GET', '/api/attachments/missing.png', () => ({
+      __status: 404,
+      __body: { ok: false, error: 'no such attachment' },
+    }));
 
     expect(await state.ensureAttachment('missing.png')).toBeNull();
     expect(state.attachmentUrl('missing.png')).toBeNull();
@@ -805,7 +1034,15 @@ describe('fleet answers (req-64)', () => {
         title: 'One',
         text: 'QUESTION: Which way?',
         runId: 'r-12',
-        questions: [{ key: 'q0', header: null, question: 'Which way?', options: [{ label: 'Left' }, { label: 'Right' }], multiple: false }],
+        questions: [
+          {
+            key: 'q0',
+            header: null,
+            question: 'Which way?',
+            options: [{ label: 'Left' }, { label: 'Right' }],
+            multiple: false,
+          },
+        ],
       },
     ]);
     desk.on('POST', '/api/runs/r-12/answer', () => ({ ok: true }));
@@ -813,7 +1050,9 @@ describe('fleet answers (req-64)', () => {
     const reply = await state.answerRun('r-12', '  Right  ');
 
     expect(reply).toEqual({ ok: true });
-    expect(desk.callsOf('POST', '/api/runs/r-12/answer')[0]!.body).toEqual({ answers: { q0: 'Right' } });
+    expect(desk.callsOf('POST', '/api/runs/r-12/answer')[0]!.body).toEqual({
+      answers: { q0: 'Right' },
+    });
   });
 
   it('refuses an empty answer locally and surfaces the desk’s refusal', async () => {
@@ -822,15 +1061,30 @@ describe('fleet answers (req-64)', () => {
     expect(silent).toEqual({ ok: false, error: 'the answer is empty' });
     expect(desk.callsOf('POST', '/api/runs/r-12/answer').length).toBe(0);
 
-    desk.on('POST', '/api/runs/r-12/answer', () => ({ ok: false, error: 'the worker took no answer' }));
-    expect(await state.answerRun('r-12', 'Left')).toEqual({ ok: false, error: 'the worker took no answer' });
+    desk.on('POST', '/api/runs/r-12/answer', () => ({
+      ok: false,
+      error: 'the worker took no answer',
+    }));
+    expect(await state.answerRun('r-12', 'Left')).toEqual({
+      ok: false,
+      error: 'the worker took no answer',
+    });
   });
 
   it("a QUESTION: turn carries no form: the desk's refusal reroutes the wording through the steer route", async () => {
     const { desk, state } = await makeWaiting([
-      { kind: 'question', ticketId: 'T-1', title: 'One', text: 'QUESTION: Which way?', runId: 'r-13' },
+      {
+        kind: 'question',
+        ticketId: 'T-1',
+        title: 'One',
+        text: 'QUESTION: Which way?',
+        runId: 'r-13',
+      },
     ]);
-    desk.on('POST', '/api/runs/r-13/answer', () => ({ ok: false, error: 'run r-13 asks no question' }));
+    desk.on('POST', '/api/runs/r-13/answer', () => ({
+      ok: false,
+      error: 'run r-13 asks no question',
+    }));
     desk.on('POST', '/api/runs/r-13/send', () => ({ ok: true }));
 
     const reply = await state.answerRun('r-13', '2. Right');
@@ -878,7 +1132,9 @@ describe('persona detail (E6)', () => {
 
     state.openPersona('ghost');
 
-    await waitFor(() => expect(state.improvementsError()).toBe('no route GET /api/personas/ghost/improvements'));
+    await waitFor(() =>
+      expect(state.improvementsError()).toBe('no route GET /api/personas/ghost/improvements'),
+    );
     expect(state.improvements()).toBeNull();
     expect(state.personaDetail()).toEqual({ id: 'ghost' });
   });
@@ -906,7 +1162,9 @@ describe('persona detail (E6)', () => {
       const before = data.piaImprovements as { proposals: Array<Record<string, unknown>> };
       data.piaImprovements = {
         ...(data.piaImprovements as Record<string, unknown>),
-        proposals: [{ ...before.proposals[0]!, state: 'accepted', decidedAt: '2026-11-02T12:00:00Z' }],
+        proposals: [
+          { ...before.proposals[0]!, state: 'accepted', decidedAt: '2026-11-02T12:00:00Z' },
+        ],
         openCount: 0,
       };
       return { ok: true };
@@ -928,7 +1186,10 @@ describe('persona detail (E6)', () => {
     state.openPersona('pia');
     await waitFor(() => expect(state.improvements()).not.toBeNull());
     const gets = desk.callsOf('GET', '/api/personas/pia/improvements').length;
-    desk.on('POST', '/api/personas/pia/improvements/imp-1/apply', () => ({ ok: false, error: 'the proposal is already decided' }));
+    desk.on('POST', '/api/personas/pia/improvements/imp-1/apply', () => ({
+      ok: false,
+      error: 'the proposal is already decided',
+    }));
 
     const reply = await state.applyImprovement('pia', 'imp-1');
 
@@ -948,7 +1209,9 @@ describe('persona detail (E6)', () => {
 
     expect(reply).toEqual({ ok: true });
     expect(desk.callsOf('POST', '/api/personas/pia/improvements/imp-1/dismiss').length).toBe(1);
-    await waitFor(() => expect(desk.callsOf('GET', '/api/personas/pia/improvements').length).toBe(2));
+    await waitFor(() =>
+      expect(desk.callsOf('GET', '/api/personas/pia/improvements').length).toBe(2),
+    );
   });
 });
 
@@ -988,5 +1251,315 @@ describe('toast', () => {
     expect(state.toastMessage()).toEqual({ message: 'second', kind: 'warn' });
     vi.advanceTimersByTime(100);
     expect(state.toastMessage()).toBeNull();
+  });
+});
+
+describe('the chain master and persona pause (prototype convergence)', () => {
+  const bootState = async () => {
+    const { desk } = makeDesk();
+    desk.storage.setItem('drey.remote.token', 'tok');
+    const state = makeState(desk);
+    await state.boot();
+    await waitFor(() => expect(state.connected()).toBe(true));
+    return { desk, state };
+  };
+
+  it('chainMaster posts the halted mode and toasts the wording', async () => {
+    const { desk, state } = await bootState();
+    desk.on('POST', '/api/chain/master', () => ({ ok: true, status: { master: 'halted' } }));
+
+    const reply = await state.chainMaster(true);
+
+    expect(reply).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/chain/master')[0]!.body).toEqual({ mode: 'halted' });
+    expect(state.toastMessage()).toEqual({
+      message: 'Chain halted — running runs finish',
+      kind: 'ok',
+    });
+  });
+
+  it('chainMaster posts run when resuming', async () => {
+    const { desk, state } = await bootState();
+    desk.on('POST', '/api/chain/master', () => ({ ok: true, status: { master: 'run' } }));
+
+    await state.chainMaster(false);
+
+    expect(desk.callsOf('POST', '/api/chain/master')[0]!.body).toEqual({ mode: 'run' });
+    expect(state.toastMessage()).toEqual({ message: 'Chain runs again', kind: 'ok' });
+  });
+
+  it('a chain refusal toasts the desk wording and returns the error', async () => {
+    const { desk, state } = await bootState();
+    desk.on('POST', '/api/chain/master', () => ({
+      ok: false,
+      error: 'the fleet runner is not running',
+    }));
+
+    const reply = await state.chainMaster(true);
+
+    expect(reply).toEqual({ ok: false, error: 'the fleet runner is not running' });
+    expect(state.toastMessage()).toEqual({
+      message: 'the fleet runner is not running',
+      kind: 'error',
+    });
+  });
+
+  it('personaPause posts the persona with the target and toasts it', async () => {
+    const { desk, state } = await bootState();
+    desk.on('POST', '/api/chain/persona-pause', () => ({ ok: true }));
+
+    const reply = await state.personaPause('pia', true);
+
+    expect(reply).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/chain/persona-pause')[0]!.body).toEqual({
+      persona: 'pia',
+      paused: true,
+    });
+    expect(state.toastMessage()).toEqual({ message: 'Persona pia paused', kind: 'ok' });
+
+    await state.personaPause('pia', false);
+    expect(desk.callsOf('POST', '/api/chain/persona-pause')[1]!.body).toEqual({
+      persona: 'pia',
+      paused: false,
+    });
+    expect(state.toastMessage()).toEqual({ message: 'Persona pia resumed', kind: 'ok' });
+  });
+
+  it('a paused-persona refusal toasts why', async () => {
+    const { desk, state } = await bootState();
+    desk.on('POST', '/api/chain/persona-pause', () => ({ ok: false, error: 'unknown persona' }));
+
+    const reply = await state.personaPause('ghost', true);
+
+    expect(reply).toEqual({ ok: false, error: 'unknown persona' });
+    expect(state.toastMessage()).toEqual({ message: 'unknown persona', kind: 'error' });
+  });
+});
+
+describe('the persona thread, memory and patch (prototype convergence)', () => {
+  const bootOpen = async (routes: (desk: FakeDesk) => void) => {
+    const { desk } = makeDesk();
+    desk.storage.setItem('drey.remote.token', 'tok');
+    routes(desk);
+    const state = makeState(desk);
+    await state.boot();
+    await waitFor(() => expect(state.connected()).toBe(true));
+    state.openPersona('pia');
+    await waitFor(() => expect(state.personaThread()).not.toBeNull());
+    await waitFor(() => expect(state.personaMemory()).not.toBeNull());
+    return { desk, state };
+  };
+
+  it('openPersona loads the thread and the memory beside the improvements', async () => {
+    const { state } = await bootOpen((desk) => {
+      desk.on('GET', '/api/personas/pia/thread', () => ({
+        messages: [{ at: 't1', role: 'owner', text: 'hello' }],
+      }));
+      desk.on('GET', '/api/personas/pia/memory', () => ({
+        entries: [{ text: 'read history first', pinned: true }],
+      }));
+    });
+    expect(state.personaThread()).toEqual({
+      messages: [{ at: 't1', role: 'owner', text: 'hello' }],
+    });
+    expect(state.personaMemory()).toEqual({
+      entries: [{ text: 'read history first', pinned: true }],
+    });
+    expect(state.personaThreadError()).toBeNull();
+    expect(state.personaMemoryError()).toBeNull();
+  });
+
+  it('a torn thread or memory answer degrades to the empty view, never a throw', async () => {
+    const { state } = await bootOpen((desk) => {
+      desk.on('GET', '/api/personas/pia/thread', () => ({
+        messages: [null, 'x', { text: 'kept' }],
+      }));
+      desk.on('GET', '/api/personas/pia/memory', () => 'junk');
+    });
+    expect(state.personaThread()).toEqual({
+      messages: [{ role: 'persona', text: 'kept', at: '' }],
+    });
+    expect(state.personaMemory()).toEqual({ entries: [] });
+  });
+
+  it('sendPersonaThread echoes the owner at once, posts the text and applies the canonical reply', async () => {
+    const { desk, state } = await bootOpen((desk) => {
+      desk.on('GET', '/api/personas/pia/thread', () => ({ messages: [] }));
+      desk.on('GET', '/api/personas/pia/memory', () => ({ entries: [] }));
+    });
+    desk.on('POST', '/api/personas/pia/thread', (body) => {
+      const text = (body as { text?: string })['text'] ?? '';
+      return {
+        ok: true,
+        messages: [
+          { at: 't2', role: 'owner', text },
+          { at: 't3', role: 'persona', text: 'noted' },
+        ],
+      };
+    });
+
+    const reply = await state.sendPersonaThread('pia', '  merk dir: cite tickets  ');
+
+    expect(reply).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/personas/pia/thread')[0]!.body).toEqual({
+      text: 'merk dir: cite tickets',
+    });
+    expect(state.personaThread()?.messages.map((m) => m.text)).toEqual([
+      'merk dir: cite tickets',
+      'noted',
+    ]);
+    expect(state.personaThread()?.messages[1]!.role).toBe('persona');
+  });
+
+  it('a send refusal keeps the echo and lands on the error signal', async () => {
+    const { desk, state } = await bootOpen((desk) => {
+      desk.on('GET', '/api/personas/pia/thread', () => ({ messages: [] }));
+      desk.on('GET', '/api/personas/pia/memory', () => ({ entries: [] }));
+    });
+    desk.on('POST', '/api/personas/pia/thread', () => ({
+      __status: 500,
+      __body: { ok: false, error: 'desk down' },
+    }));
+
+    const reply = await state.sendPersonaThread('pia', 'hello');
+
+    expect(reply).toEqual({ ok: false, error: 'desk down' });
+    expect(state.personaThread()?.messages.map((m) => m.text)).toEqual(['hello']);
+    expect(state.personaThreadError()).toBe('desk down');
+  });
+
+  it('appendPersonaMemory optimistically appends and applies the desk answer', async () => {
+    const { desk, state } = await bootOpen((desk) => {
+      desk.on('GET', '/api/personas/pia/thread', () => ({ messages: [] }));
+      desk.on('GET', '/api/personas/pia/memory', () => ({
+        entries: [{ text: 'old', pinned: true }],
+      }));
+    });
+    desk.on('POST', '/api/personas/pia/memory', (body) => ({
+      ok: true,
+      entries: [
+        { text: 'old', pinned: true },
+        { text: (body as { text?: string })['text'] ?? '', pinned: false },
+      ],
+    }));
+
+    const reply = await state.appendPersonaMemory('pia', 'cite tickets');
+
+    expect(reply).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/personas/pia/memory')[0]!.body).toEqual({
+      text: 'cite tickets',
+    });
+    expect(state.personaMemory()?.entries.map((entry) => entry.text)).toEqual([
+      'old',
+      'cite tickets',
+    ]);
+  });
+
+  it('an append refusal drops the optimistic line', async () => {
+    const { desk, state } = await bootOpen((desk) => {
+      desk.on('GET', '/api/personas/pia/thread', () => ({ messages: [] }));
+      desk.on('GET', '/api/personas/pia/memory', () => ({
+        entries: [{ text: 'old', pinned: false }],
+      }));
+    });
+    desk.on('POST', '/api/personas/pia/memory', () => ({
+      __status: 500,
+      __body: { ok: false, error: 'desk down' },
+    }));
+
+    const reply = await state.appendPersonaMemory('pia', 'cite tickets');
+
+    expect(reply).toEqual({ ok: false, error: 'desk down' });
+    expect(state.personaMemory()?.entries.map((entry) => entry.text)).toEqual(['old']);
+    expect(state.personaMemoryError()).toBe('desk down');
+  });
+
+  it('pinPersonaMemory flips the entry at once and posts the index; a refusal reverts', async () => {
+    const { desk, state } = await bootOpen((desk) => {
+      desk.on('GET', '/api/personas/pia/thread', () => ({ messages: [] }));
+      desk.on('GET', '/api/personas/pia/memory', () => ({
+        entries: [
+          { text: 'a', pinned: false },
+          { text: 'b', pinned: false },
+        ],
+      }));
+    });
+    desk.on('POST', '/api/personas/pia/memory/pin', () => ({ ok: true }));
+
+    const reply = await state.pinPersonaMemory('pia', 1, true);
+
+    expect(reply).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/personas/pia/memory/pin')[0]!.body).toEqual({
+      index: 1,
+      pinned: true,
+    });
+    expect(state.personaMemory()?.entries[1]!.pinned).toBe(true);
+
+    desk.on('POST', '/api/personas/pia/memory/pin', () => ({
+      __status: 500,
+      __body: { ok: false, error: 'desk down' },
+    }));
+    const refused = await state.pinPersonaMemory('pia', 1, false);
+    expect(refused).toEqual({ ok: false, error: 'desk down' });
+    expect(state.personaMemory()?.entries[1]!.pinned).toBe(true);
+  });
+
+  it('personaPatch PATCHes the persona and re-folds the team on success', async () => {
+    const { desk } = makeDesk();
+    desk.storage.setItem('drey.remote.token', 'tok');
+    const data = {
+      fleet: { runs: [], chain: { master: 'run' } },
+      personas: [] as unknown[],
+    };
+    desk.on('GET', '/api/personas', () => data.personas);
+    desk.on('GET', '/api/fleet', () => data.fleet);
+    const state = makeState(desk);
+    await state.boot();
+    await waitFor(() => expect(state.connected()).toBe(true));
+    desk.on('PATCH', '/api/personas/pia', () => ({ ok: true }));
+
+    const reply = await state.personaPatch('pia', { model: 'sonnet' });
+
+    expect(reply).toEqual({ ok: true });
+    const patchCall = desk.calls.find(
+      (call) => call.method === 'PATCH' && call.path === '/api/personas/pia',
+    );
+    expect(patchCall?.body).toEqual({ model: 'sonnet' });
+  });
+
+  it('a patch refusal returns the error and never throws', async () => {
+    const { desk, state } = await bootOpen((desk) => {
+      desk.on('GET', '/api/personas/pia/thread', () => ({ messages: [] }));
+      desk.on('GET', '/api/personas/pia/memory', () => ({ entries: [] }));
+    });
+    desk.on('PATCH', '/api/personas/pia', () => ({ ok: false, error: 'bad persona payload' }));
+
+    const reply = await state.personaPatch('pia', { prompt: 'You are the planner.' });
+
+    expect(reply).toEqual({ ok: false, error: 'bad persona payload' });
+  });
+
+  it('sendPersonaThread and the memory mutations refuse without an open persona', async () => {
+    const { desk } = makeDesk();
+    desk.storage.setItem('drey.remote.token', 'tok');
+    const state = makeState(desk);
+    await state.boot();
+    await waitFor(() => expect(state.connected()).toBe(true));
+
+    expect(await state.sendPersonaThread('pia', 'hi')).toEqual({
+      ok: false,
+      error: 'no persona thread is open',
+    });
+    expect(await state.appendPersonaMemory('pia', 'hi')).toEqual({
+      ok: false,
+      error: 'no persona memory is open',
+    });
+    expect(await state.pinPersonaMemory('pia', 0, true)).toEqual({
+      ok: false,
+      error: 'no such memory entry',
+    });
+    expect(
+      desk.calls.filter((call) => call.path.includes('/thread') && call.method === 'POST').length,
+    ).toBe(0);
   });
 });

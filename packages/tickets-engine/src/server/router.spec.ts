@@ -42,6 +42,13 @@ function port(): TicketsRemotePort {
     chainColumn: vi.fn(ok),
     chainColumnStop: vi.fn(ok),
     chainAbort: vi.fn(ok),
+    personaThread: vi.fn(async () => ({ ok: true, messages: [{ at: '2026-11-03T09:00:00.000Z', role: 'owner' as const, text: 'hi' }] })),
+    personaThreadAppend: vi.fn(async () => ({ ok: true, messages: [{ at: '2026-11-03T09:00:00.000Z', role: 'owner' as const, text: 'hi' }] })),
+    personaMemory: vi.fn(async () => ({ ok: true, entries: [{ text: 'lesson', pinned: false }] })),
+    personaMemoryAppend: vi.fn(async () => ({ ok: true, entries: [{ text: 'lesson', pinned: false }] })),
+    personaMemoryPin: vi.fn(async () => ({ ok: true, entries: [{ text: 'lesson', pinned: true }] })),
+    personaPatch: vi.fn(ok),
+    chainPersonaPause: vi.fn(async (cmd: { persona: string; paused: boolean }) => ({ ok: true, persona: cmd.persona, paused: cmd.paused })),
     chatSessions: vi.fn(async () => []),
     chatOpen: vi.fn(async () => null),
     chatSend: vi.fn(ok),
@@ -268,5 +275,99 @@ describe('route', () => {
     const readOnly = await route(req({ method: 'POST', path: '/api/personas/pia/improvements/imp-1/apply', origin, authorization: `Bearer ${ro}` }), deps);
     expect(readOnly).toEqual({ status: 403, body: { ok: false, error: 'this device is paired read-only' } });
     expect((await route(req({ path: '/api/personas/pia/improvements', authorization: `Bearer ${ro}` }), deps)).status).toBe(200);
+  });
+
+  it('routes the persona thread and memory (U4): GET reads, POST writes with validated bodies', async () => {
+    const { deps, devices, remote } = setup();
+    const { token } = await devices.add('iPhone 15', false, new Date());
+    const auth = `Bearer ${token}`;
+    const origin = `http://${HOST}`;
+
+    const thread = await route(req({ path: '/api/personas/pia/thread', authorization: auth }), deps);
+    expect(thread).toEqual({ status: 200, body: { ok: true, messages: [{ at: '2026-11-03T09:00:00.000Z', role: 'owner', text: 'hi' }] } });
+    expect(remote.personaThread).toHaveBeenCalledWith('pia');
+    const memory = await route(req({ path: '/api/personas/pia/memory', authorization: auth }), deps);
+    expect(memory).toEqual({ status: 200, body: { ok: true, entries: [{ text: 'lesson', pinned: false }] } });
+    expect(remote.personaMemory).toHaveBeenCalledWith('pia');
+
+    await route(req({ method: 'POST', path: '/api/personas/pia/thread', origin, authorization: auth, body: { text: '  teach this  ' } }), deps);
+    expect(remote.personaThreadAppend).toHaveBeenCalledWith({ persona: 'pia', text: 'teach this' });
+    await route(req({ method: 'POST', path: '/api/personas/pia/memory', origin, authorization: auth, body: { text: 'a lesson' } }), deps);
+    expect(remote.personaMemoryAppend).toHaveBeenCalledWith({ persona: 'pia', text: 'a lesson' });
+    await route(req({ method: 'POST', path: '/api/personas/pia/memory/pin', origin, authorization: auth, body: { index: 1, pinned: true } }), deps);
+    expect(remote.personaMemoryPin).toHaveBeenCalledWith({ persona: 'pia', index: 1, pinned: true });
+
+    // a blank message, a bad pin index, a non-boolean pinned flag and an
+    // unknown persona grammar are refused before the port sees them
+    expect(await route(req({ method: 'POST', path: '/api/personas/pia/thread', origin, authorization: auth, body: { text: '  ' } }), deps)).toEqual({
+      status: 200,
+      body: { ok: false, error: 'a thread message needs text' },
+    });
+    expect((await route(req({ method: 'POST', path: '/api/personas/pia/memory/pin', origin, authorization: auth, body: { index: 'one', pinned: true } }), deps)).body).toMatchObject({ ok: false });
+    expect((await route(req({ method: 'POST', path: '/api/personas/pia/memory/pin', origin, authorization: auth, body: { index: 0, pinned: 'yes' } }), deps)).body).toMatchObject({ ok: false });
+    expect((await route(req({ path: '/api/personas/Pia%2Fx/thread', authorization: auth }), deps)).status).toBe(404);
+    const { token: ro } = await devices.add('Viewer', true, new Date());
+    const readOnly = await route(req({ method: 'POST', path: '/api/personas/pia/thread', origin, authorization: `Bearer ${ro}`, body: { text: 'Hi' } }), deps);
+    expect(readOnly).toEqual({ status: 403, body: { ok: false, error: 'this device is paired read-only' } });
+    expect((await route(req({ path: '/api/personas/pia/thread', authorization: `Bearer ${ro}` }), deps)).status).toBe(200);
+  });
+
+  it('routes the persona PATCH (U4): only the sent keys ride, the id is pinned by the path', async () => {
+    const { deps, devices, remote } = setup();
+    const { token } = await devices.add('iPhone 15', false, new Date());
+    const auth = `Bearer ${token}`;
+    const origin = `http://${HOST}`;
+
+    const patched = await route(
+      req({
+        method: 'PATCH',
+        path: '/api/personas/pia',
+        origin,
+        authorization: auth,
+        body: { model: 'sonnet', pool: ['sonnet', 'haiku'], router: 'budget', color: '#ff8800', prompt: 'You are Pia.\n' },
+      }),
+      deps,
+    );
+    expect(patched.status).toBe(200);
+    expect(remote.personaPatch).toHaveBeenCalledWith({
+      persona: 'pia',
+      model: 'sonnet',
+      pool: ['sonnet', 'haiku'],
+      router: 'budget',
+      color: '#ff8800',
+      prompt: 'You are Pia.\n',
+    });
+
+    // a body with none of the writable keys, a non-list pool and a
+    // non-string title refuse; a PATCH on any other path is a 405
+    expect((await route(req({ method: 'PATCH', path: '/api/personas/pia', origin, authorization: auth, body: { budget: 25 } }), deps)).body).toMatchObject({ ok: false });
+    expect((await route(req({ method: 'PATCH', path: '/api/personas/pia', origin, authorization: auth, body: { pool: 'sonnet' } }), deps)).body).toMatchObject({ ok: false });
+    expect((await route(req({ method: 'PATCH', path: '/api/personas/pia', origin, authorization: auth, body: { title: 5 } }), deps)).body).toMatchObject({ ok: false });
+    expect((await route(req({ method: 'PATCH', path: '/api/tickets/T-0001', origin, authorization: auth, body: { title: 'x' } }), deps)).status).toBe(405);
+    expect((await route(req({ method: 'PATCH', path: '/api/personas/Pia%2Fx', origin, authorization: auth, body: { title: 'x' } }), deps)).status).toBe(405);
+    // a PATCH from another site and from a read-only device refuses like every write
+    expect((await route(req({ method: 'PATCH', path: '/api/personas/pia', origin: 'http://evil.example', authorization: auth, body: { title: 'x' } }), deps)).status).toBe(403);
+    const { token: ro } = await devices.add('Viewer', true, new Date());
+    const readOnly = await route(req({ method: 'PATCH', path: '/api/personas/pia', origin, authorization: `Bearer ${ro}`, body: { title: 'x' } }), deps);
+    expect(readOnly).toEqual({ status: 403, body: { ok: false, error: 'this device is paired read-only' } });
+    // other methods still refuse with the updated wording
+    expect((await route(req({ method: 'PUT', path: '/api/personas/pia', origin, authorization: auth, body: { title: 'x' } }), deps)).body).toEqual({ ok: false, error: 'only GET, POST and PATCH are served' });
+  });
+
+  it('routes the chain persona pause (U4): persona and boolean paused pinned by the parser', async () => {
+    const { deps, devices, remote } = setup();
+    const { token } = await devices.add('iPhone 15', false, new Date());
+    const auth = `Bearer ${token}`;
+    const origin = `http://${HOST}`;
+
+    const paused = await route(req({ method: 'POST', path: '/api/chain/persona-pause', origin, authorization: auth, body: { persona: ' pia ', paused: true } }), deps);
+    expect(paused).toEqual({ status: 200, body: { ok: true, persona: 'pia', paused: true } });
+    expect(remote.chainPersonaPause).toHaveBeenCalledWith({ persona: 'pia', paused: true });
+
+    expect((await route(req({ method: 'POST', path: '/api/chain/persona-pause', origin, authorization: auth, body: { paused: true } }), deps)).body).toMatchObject({ ok: false });
+    expect((await route(req({ method: 'POST', path: '/api/chain/persona-pause', origin, authorization: auth, body: { persona: 'pia', paused: 'yes' } }), deps)).body).toMatchObject({ ok: false });
+    const { token: ro } = await devices.add('Viewer', true, new Date());
+    const readOnly = await route(req({ method: 'POST', path: '/api/chain/persona-pause', origin, authorization: `Bearer ${ro}`, body: { persona: 'pia', paused: true } }), deps);
+    expect(readOnly.status).toBe(403);
   });
 });

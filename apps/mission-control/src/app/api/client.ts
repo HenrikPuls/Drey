@@ -187,7 +187,7 @@ export class McClient {
     return token === null ? {} : { Authorization: `Bearer ${token}` };
   }
 
-  async request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+  async request<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown): Promise<T> {
     let res: Response;
     try {
       res = await this.fetchFn(path, {

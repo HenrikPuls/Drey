@@ -14,6 +14,8 @@ export interface PersonaLoader {
   prompt(id: string): Promise<string | null>;
   /** The curated memory file text; '' when absent. */
   memory(id: string): Promise<string>;
+  /** The coaching thread file text (U4); '' when absent. */
+  thread(id: string): Promise<string>;
 }
 
 export function personaLoader(read: (rel: string) => Promise<string>): PersonaLoader {
@@ -31,6 +33,7 @@ export function personaLoader(read: (rel: string) => Promise<string>): PersonaLo
     },
     prompt: (id) => safe(`tickets/_meta/personas/${id}/prompt.md`),
     memory: async (id) => (await safe(`tickets/_meta/personas/${id}/memory.md`)) ?? '',
+    thread: async (id) => (await safe(`tickets/_meta/personas/${id}/thread.md`)) ?? '',
   };
 }
 

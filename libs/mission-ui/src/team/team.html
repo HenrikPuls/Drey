@@ -1,4 +1,34 @@
 <section class="team" aria-label="Team">
+  <header class="hdr">
+    <div class="logo" aria-hidden="true">D</div>
+    <div class="hd">
+      <div class="ttl">Team</div>
+      @if (headerSub(); as sub) {
+        <div class="sub">{{ sub }}</div>
+      }
+    </div>
+    <div class="hspace"></div>
+  </header>
+
+  <div class="chain-strip">
+    <span class="strip-led" [class.on]="chainStrip().on" aria-hidden="true"></span>
+    <span class="strip-label">{{ chainStrip().label }}</span>
+    @if (chainStrip().mono; as mono) {
+      <span class="strip-mono">{{ mono }}</span>
+    }
+    <button
+      type="button"
+      class="switch"
+      [class.on]="chainStrip().on"
+      role="switch"
+      [attr.aria-checked]="chainStrip().checked"
+      aria-label="Toggle the chain master"
+      (click)="toggleMaster()"
+    >
+      <i aria-hidden="true"></i>
+    </button>
+  </div>
+
   @if (personas(); as list) {
     <ul class="cards">
       @for (persona of list; track persona.id) {
@@ -28,6 +58,9 @@
                 </span>
               </div>
               <div class="pfoot">
+                @if (phasesFootOf(persona); as phases) {
+                  <span class="phases">Phases: {{ phases }}</span>
+                }
                 <span>Worker: {{ persona.worker }}</span>
                 @if (dayCostFootOf(persona); as foot) {
                   <span class="cost" [class.over]="foot.over">{{ foot.text }}</span>
@@ -59,11 +92,28 @@
                 </span>
               </div>
               <div class="pfoot">
+                @if (phasesFootOf(persona); as phases) {
+                  <span class="phases">Phases: {{ phases }}</span>
+                }
                 <span>Worker: {{ persona.worker }}</span>
                 @if (dayCostFootOf(persona); as foot) {
                   <span class="cost" [class.over]="foot.over">{{ foot.text }}</span>
                 }
               </div>
+            </div>
+          }
+          @if ((canOpenTicket() && persona.currentRun !== null) || canPause()) {
+            <div class="pacts">
+              @if (canOpenTicket() && persona.currentRun; as run) {
+                <button type="button" class="btn ghost" (click)="openRunTicket(persona)">
+                  → {{ run.ticketId }}
+                </button>
+              }
+              @if (canPause()) {
+                <button type="button" class="btn ghost" (click)="togglePause(persona)">
+                  {{ isPaused(persona) ? 'Resume' : 'Pause' }}
+                </button>
+              }
             </div>
           }
         </li>

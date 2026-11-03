@@ -360,9 +360,13 @@ handover thresholds) · `master` (`run` / `halted`) · `columns`
 column ISO instant) · `tokensDay` + `tokensUsed` (the per-column token
 budget) · `ciBackoff` · `tripped` (per column `{reason, at}` while the
 breaker holds it; playing the column clears it and resets the
-column's `redStreak`) · `handoverAt` (written by a runner retiring for a
-newer build; a successor booting within five minutes keeps the master
-switch as it stood — any other boot starts halted).
+column's `redStreak`) · `ownerHold` (per ticket the phase whose run the
+owner stopped; the ticket holds until it moves or a newer run starts) ·
+`pausedPersonas` (the personas the owner paused from the Team view; their
+tickets hold until the persona is played again — U4) · `handoverAt`
+(written by a runner retiring for a newer build; a successor booting
+within five minutes keeps the master switch as it stood — any other boot
+starts halted).
 
 `GET /chain` reports the same plus `quotaPausedUntil` (per provider,
 the ISO instant its quota pause ends — not persisted). The Work panel

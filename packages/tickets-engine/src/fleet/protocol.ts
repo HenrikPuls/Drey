@@ -674,6 +674,12 @@ export interface ChainStatus {
   readonly tripped?: Readonly<Record<string, ChainTrip>>;
   /** Per provider: its quota is spent, no new run before this ISO instant (absent on older runners). */
   readonly quotaPausedUntil?: Readonly<Record<string, string>>;
+  /**
+   * The personas the owner paused (U4, concept §4.3): the dispatcher
+   * holds their tickets until each is played again. Absent on runners
+   * before the persona pause existed — readers treat that as none.
+   */
+  readonly pausedPersonas?: readonly string[];
 }
 
 /** One circuit-breaker trip (the chain alerts fix). */

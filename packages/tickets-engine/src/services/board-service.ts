@@ -30,7 +30,7 @@ import { TicketsGit, type RepoLocation } from '../core/tickets-git';
 import { loadShippedPrompts } from '../core/default-prompts';
 import { type AttachmentCommand, RefineCommand } from '../core/commands';
 import { nextImprovementId, parseFriction, parseImprovements, renderImprovements, type FrictionLine, type ImprovementDraft, type ImprovementProposal } from '../core/improvements';
-import type { ImprovementDecision, PersonaImprovementsReply } from '../contracts/remote-protocol';
+import type { ImprovementDecision, PersonaImprovementsReply, PersonaMemoryReply, PersonaThreadReply } from '../contracts/remote-protocol';
 import { isMap, isScalar, parseDocument } from 'yaml';
 import { splitFrontmatter } from '../../../../shared/frontmatter';
 import { composeRunRequest, type PersonaDispatch } from '../fleet/request';
@@ -44,8 +44,9 @@ import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } f
 import { type ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, InteractiveMode, PermissionMode, RunInfo, FleetPools } from '../fleet/protocol';
 import { type EngineHost, type EngineVaultChangeEvent, EngineVault, FleetPort } from './host';
 import { handoverFromConfig, handoverOverrideKeys } from './handover-config';
-import { appendMemory, memoryPathFor } from './persona-store';
-import { personaFileText, personaMigrationFor, personaRef, PERSONAS_DIR, type Persona, type PersonaMigration } from '../core/persona';
+import { appendMemory, memoryPathFor, parseMemoryEntries, toggleMemoryPin } from './persona-store';
+import { personaFileText, personaMigrationFor, parsePersonaFile, personaRef, PERSONAS_DIR, PERSONA_ROLES, type Persona, type PersonaMigration, type PersonaRouter } from '../core/persona';
+import { appendThreadOwner, newThreadText, parseThread, threadPathFor } from '../core/persona-thread';
 import { scanRepoFolder } from './repos-scan';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
@@ -113,6 +114,53 @@ function frictionPathFor(id: string): string {
 /** One memory entry is always one line, bounded (the personaLearn shape). */
 function oneMemoryLine(text: string): string {
   return text.trim().replace(/\s*\n\s*/g, ' ').slice(0, 500);
+}
+
+/** The readable refusal every persona-scoped method shares. */
+function personaMissing(id: string): string {
+  return `persona "${id}" does not exist — create tickets/_meta/personas/${id}/persona.md first`;
+}
+
+/** The PATCH body's validation (U4): only the listed rules reject; null = the patch is writable. */
+function personaPatchError(input: {
+  title?: string;
+  role?: string;
+  worker?: string;
+  model?: string;
+  pool?: readonly string[];
+  router?: string;
+  color?: string;
+  skills?: readonly string[];
+  prompt?: string;
+}): string | null {
+  if (input.title !== undefined && input.title.trim() === '') {
+    return 'the title is not empty';
+  }
+  if (input.role !== undefined && !(PERSONA_ROLES as readonly string[]).includes(input.role)) {
+    return `the role is one of ${PERSONA_ROLES.join(', ')}`;
+  }
+  if (input.worker !== undefined && input.worker.trim() === '') {
+    return 'the worker is not empty ("opencode", "claude-code" or "api")';
+  }
+  if (input.model !== undefined && input.model.trim() === '') {
+    return 'the default model is not empty';
+  }
+  if (input.pool !== undefined && (input.pool.length === 0 || input.pool.some((m) => typeof m !== 'string' || m.trim() === ''))) {
+    return 'the model pool is a non-empty list of model names';
+  }
+  if (input.router !== undefined && !(['off', 'budget', 'escalate-on-fail'] as const).includes(input.router as PersonaRouter)) {
+    return 'the router is "off", "budget" or "escalate-on-fail"';
+  }
+  if (input.color !== undefined && !/^#[0-9a-f]{6}$/i.test(input.color.trim())) {
+    return 'the color is a #rrggbb hex value';
+  }
+  if (input.skills !== undefined && input.skills.some((s) => typeof s !== 'string')) {
+    return 'the skills are a list of skill names';
+  }
+  if (input.prompt !== undefined && typeof input.prompt !== 'string') {
+    return 'the prompt is markdown text';
+  }
+  return null;
 }
 
 /**
@@ -1595,6 +1643,7 @@ export class EngineBoardService {
           model: derived.model ?? '',
           prompt: await loader.prompt(personaResolution.persona.id),
           memory: await loader.memory(personaResolution.persona.id),
+          coaching: await loader.thread(personaResolution.persona.id),
         };
       }
       const composed = composeRunRequest({
@@ -2300,6 +2349,269 @@ export class EngineBoardService {
       }
       const warning = await this.commit(vault, [path], `personas: ${id} memory +1`);
       this.host.announceChanges(vault.id, [path]);
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  // --- persona chat, memory read/pin, setup patch (U4, concept §4.4/§4.5) ---
+
+  /**
+   * The persona chat's read (U4, concept §4.5): the coaching thread's
+   * owner messages, file order. A thread that does not exist yet reads as
+   * no messages — the persona exists, the conversation just never started.
+   */
+  async personaThread(personaId: string): Promise<PersonaThreadReply> {
+    let id: string;
+    try {
+      id = personaRef(personaId);
+    } catch (error) {
+      return { ok: false, error: messageOf(error) };
+    }
+    const vault = await this.detect();
+    if (vault === null) {
+      return { ok: false, error: 'no tickets vault detected' };
+    }
+    if ((await this.personaLoaderFor(vault).load(id)) === null) {
+      return { ok: false, error: personaMissing(id) };
+    }
+    const text = await this.readOptional(vault.id, threadPathFor(id));
+    return { ok: true, messages: parseThread(text ?? '') };
+  }
+
+  /**
+   * One owner message into the coaching thread (U4): appended as exactly
+   * one line (a file is created chat-session style when absent), one
+   * commit `personas: <id> thread` — the next run's `## Coaching` slice
+   * reads it back.
+   */
+  personaThreadAppend(input: { id: string; text: string; actor?: string }): Promise<PersonaThreadReply> {
+    return this.enqueue(async () => {
+      let id: string;
+      try {
+        id = personaRef(input.id);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const persona = await this.personaLoaderFor(vault).load(id);
+      if (persona === null) {
+        return { ok: false, error: personaMissing(id) };
+      }
+      const path = threadPathFor(id);
+      let updated: string;
+      try {
+        const existing = await this.readOptional(vault.id, path);
+        const base = existing ?? newThreadText(persona.title, new Date());
+        updated = appendThreadOwner(base, new Date(), input.text);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      try {
+        await this.host.write(vault.id, path, updated);
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, [path], `personas: ${id} thread`);
+      this.host.announceChanges(vault.id, [path]);
+      this.announceChanged();
+      return { ok: true, messages: parseThread(updated), ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The persona memory's read (U4, concept §4.4): the curated entries in
+   * file order, each with its pin state — the same lines the context
+   * pack's `## Memory` slice picks from, so an index here is the index
+   * everywhere.
+   */
+  async personaMemory(personaId: string): Promise<PersonaMemoryReply> {
+    let id: string;
+    try {
+      id = personaRef(personaId);
+    } catch (error) {
+      return { ok: false, error: messageOf(error) };
+    }
+    const vault = await this.detect();
+    if (vault === null) {
+      return { ok: false, error: 'no tickets vault detected' };
+    }
+    if ((await this.personaLoaderFor(vault).load(id)) === null) {
+      return { ok: false, error: personaMissing(id) };
+    }
+    const text = await this.readOptional(vault.id, memoryPathFor(id));
+    return { ok: true, entries: parseMemoryEntries(text ?? '') };
+  }
+
+  /**
+   * One owner-taught memory entry (U4): appended through the persona
+   * store's path (the one writer), flattened to one line, one commit
+   * `personas: <id> memory entry`.
+   */
+  personaMemoryAppend(input: { id: string; text: string }): Promise<PersonaMemoryReply> {
+    return this.enqueue(async () => {
+      let id: string;
+      try {
+        id = personaRef(input.id);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      if ((await this.personaLoaderFor(vault).load(id)) === null) {
+        return { ok: false, error: personaMissing(id) };
+      }
+      const entry = oneMemoryLine(input.text);
+      if (entry === '') {
+        return { ok: false, error: 'a memory entry is one non-empty line' };
+      }
+      const path = memoryPathFor(id);
+      try {
+        await appendMemory(
+          (rel) => this.host.read(vault.id, rel),
+          (rel, text) => this.host.write(vault.id, rel, text),
+          id,
+          entry,
+        );
+      } catch (error) {
+        return { ok: false, error: `memory write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, [path], `personas: ${id} memory entry`);
+      this.host.announceChanges(vault.id, [path]);
+      this.announceChanged();
+      const text = await this.readOptional(vault.id, path);
+      return { ok: true, entries: parseMemoryEntries(text ?? ''), ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The pin toggle (U4, concept §4.4 — "gepflegtes Asset"): the entry at
+   * `index` (its position in {@link personaMemory}'s list) gains or loses
+   * its trailing ` [pinned]` marker, one commit
+   * `personas: <id> memory pinned|unpinned`. An out-of-range index
+   * refuses with a readable error — never a silent no-op.
+   */
+  personaMemoryPin(input: { id: string; index: number; pinned: boolean }): Promise<PersonaMemoryReply> {
+    return this.enqueue(async () => {
+      let id: string;
+      try {
+        id = personaRef(input.id);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      if ((await this.personaLoaderFor(vault).load(id)) === null) {
+        return { ok: false, error: personaMissing(id) };
+      }
+      if (!Number.isInteger(input.index) || input.index < 0) {
+        return { ok: false, error: "the index is the entry's position in the GET list (0-based)" };
+      }
+      const path = memoryPathFor(id);
+      const text = await this.readOptional(vault.id, path);
+      if (text === null || text.trim() === '') {
+        return { ok: false, error: `persona "${id}" has no memory entries yet` };
+      }
+      const updated = toggleMemoryPin(text, input.index, input.pinned);
+      if (updated === null) {
+        return { ok: false, error: `no memory entry at index ${input.index}` };
+      }
+      try {
+        await this.host.write(vault.id, path, updated);
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, [path], `personas: ${id} memory ${input.pinned ? 'pinned' : 'unpinned'}`);
+      this.host.announceChanges(vault.id, [path]);
+      this.announceChanged();
+      return { ok: true, entries: parseMemoryEntries(updated), ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The persona setup's PATCH (U4, concept §4.5 — the mirror to check,
+   * the chat stays the primary way): only the sent keys are written onto
+   * the parsed persona, the file rebuilt over `personaFileText` (the
+   * owner's prose below the fence rides along), `prompt` additionally to
+   * prompt.md — exactly one commit `personas: <id> updated` for both.
+   */
+  personaPatch(input: {
+    id: string;
+    title?: string;
+    role?: string;
+    worker?: string;
+    model?: string;
+    pool?: readonly string[];
+    router?: string;
+    color?: string;
+    skills?: readonly string[];
+    prompt?: string;
+  }): Promise<BoardMutationResult> {
+    return this.enqueue(async () => {
+      let id: string;
+      try {
+        id = personaRef(input.id);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      if ((await this.personaLoaderFor(vault).load(id)) === null) {
+        return { ok: false, error: personaMissing(id) };
+      }
+      const refusal = personaPatchError(input);
+      if (refusal !== null) {
+        return { ok: false, error: refusal };
+      }
+      const sent = (key: string): boolean =>
+        input[key as 'title' | 'role' | 'worker' | 'model' | 'pool' | 'router' | 'color' | 'skills' | 'prompt'] !== undefined;
+      if (!['title', 'role', 'worker', 'model', 'pool', 'router', 'color', 'skills', 'prompt'].some(sent)) {
+        return { ok: true }; // nothing to change
+      }
+      const personaPath = `${PERSONAS_DIR}/${id}/persona.md`;
+      const current = await this.host.read(vault.id, personaPath);
+      const { body, hadFence } = splitFrontmatter(current);
+      const persona = parsePersonaFile(id, current);
+      const next: Persona = {
+        ...persona,
+        ...(input.title !== undefined ? { title: input.title.trim() } : {}),
+        ...(input.role !== undefined ? { role: input.role as Persona['role'] } : {}),
+        ...(input.worker !== undefined ? { worker: input.worker.trim() } : {}),
+        ...(input.model !== undefined || input.pool !== undefined || input.router !== undefined
+          ? {
+              models: {
+                default: input.model !== undefined ? input.model.trim() : persona.models.default,
+                pool: input.pool !== undefined ? input.pool.map((m) => m.trim()) : persona.models.pool,
+                router: input.router !== undefined ? (input.router as PersonaRouter) : persona.models.router,
+              },
+            }
+          : {}),
+        ...(input.color !== undefined ? { color: input.color.trim() } : {}),
+        ...(input.skills !== undefined ? { skills: input.skills.map((s) => s.trim()) } : {}),
+      };
+      const patched = personaFileText(next, hadFence ? body : undefined);
+      const touched = [personaPath];
+      try {
+        await this.host.write(vault.id, personaPath, patched);
+        if (input.prompt !== undefined) {
+          const promptPath = `${PERSONAS_DIR}/${id}/prompt.md`;
+          await this.host.write(vault.id, promptPath, input.prompt);
+          touched.push(promptPath);
+        }
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, touched, `personas: ${id} updated`);
+      this.host.announceChanges(vault.id, touched);
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };
     });

@@ -18,7 +18,7 @@ import {
 } from '../contracts/tickets';
 import { acceptanceCommands, ticketSections } from '../core/ticket-files';
 import { composeInstruction, composeScoutInstruction, parseWorkerValue, resolveAssignment, type Truncation } from './assignment';
-import { personaMemorySection } from './context-pack';
+import { personaCoachingSection, personaMemorySection } from './context-pack';
 import { DEFAULT_FLEET_CAPS, type FleetCaps, type HandoverMode, type InteractiveMode, type PermissionMode, type RunRequest, type WorkerProviderId } from './protocol';
 import { worktreePathFor } from './worktree-home';
 
@@ -114,6 +114,8 @@ export interface PersonaDispatch {
   readonly prompt: string | null;
   /** The persona's memory text ('' when the file is absent). */
   readonly memory: string;
+  /** The persona's coaching thread text ('' when thread.md is absent) — U4. */
+  readonly coaching: string;
 }
 
 export type ComposeRunResult =
@@ -248,7 +250,9 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
         repoInstructions: input.repoInstructions,
         ...(extraReadGrounds.length > 0 ? { extraRepos: extraReadGrounds } : {}),
         ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
-        ...(persona !== null ? { memorySection: personaMemorySection(persona.memory), personaId: persona.id } : {}),
+        ...(persona !== null
+          ? { memorySection: personaMemorySection(persona.memory), coachingSection: personaCoachingSection(persona.coaching), personaId: persona.id }
+          : {}),
       })
     : composeInstruction({
         ticketId: input.card.id,
@@ -272,7 +276,9 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
         gateFailure: input.gateFailure,
         caps: input.caps ?? DEFAULT_FLEET_CAPS,
         ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
-        ...(persona !== null ? { memorySection: personaMemorySection(persona.memory) } : {}),
+        ...(persona !== null
+          ? { memorySection: personaMemorySection(persona.memory), coachingSection: personaCoachingSection(persona.coaching) }
+          : {}),
       });
   // A scout run never gates and never moves (concept §5.6) — the same
   // move-target rule as an interactive dialog: the ticket stays where it

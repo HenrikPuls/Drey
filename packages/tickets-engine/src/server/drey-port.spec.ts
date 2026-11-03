@@ -50,6 +50,13 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
     personaImprovements: vi.fn(async () => ({ ok: false as const, error: 'persona "pia" does not exist' })),
     decideImprovement: vi.fn(async () => ok),
     statusOf: vi.fn(async () => [] as readonly StatusLine[]),
+    snapshot: vi.fn(async () => ({ columns: [], checkpoints: [], pipeline: [] }) as unknown as BoardSnapshot),
+    personaThread: vi.fn(async () => ({ ok: true as const, messages: [] })),
+    personaThreadAppend: vi.fn(async () => ({ ok: true as const, messages: [] })),
+    personaMemory: vi.fn(async () => ({ ok: true as const, entries: [] })),
+    personaMemoryAppend: vi.fn(async () => ({ ok: true as const, entries: [] })),
+    personaMemoryPin: vi.fn(async () => ({ ok: true as const, entries: [] })),
+    personaPatch: vi.fn(async () => ok),
   };
   const fleet: RemoteFleet = {
     runs: vi.fn(async () => []),
@@ -63,6 +70,7 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
     setColumn: vi.fn(async () => null),
     stopColumn: vi.fn(async () => null),
     abortAll: vi.fn(async () => null),
+    setPersonaPaused: vi.fn(async () => null),
   };
   return { board, fleet };
 }
@@ -124,6 +132,60 @@ describe('DreyTicketsPort', () => {
     expect(pia?.budget).toBeNull();
     expect(ben?.budget).toBe(40);
     expect(ben?.dailyCost).toBeUndefined();
+  });
+
+  it('carries the persona’s phase assignment and the chain’s pause state (U4)', async () => {
+    const { board, fleet } = fakes();
+    vi.mocked(board.listPersonas).mockResolvedValue([fakePersona('pia', 'Pia'), fakePersona('ben', 'Ben')]);
+    vi.mocked(board.snapshot).mockResolvedValue({
+      columns: [],
+      checkpoints: [],
+      pipeline: [
+        { id: 'plan', persona: 'pia' },
+        { id: 'review', persona: 'pia' },
+        { id: 'build', persona: null },
+      ],
+    } as unknown as BoardSnapshot);
+    vi.mocked(fleet.chainStatus).mockResolvedValue({
+      configured: true,
+      master: 'run',
+      columns: {},
+      redStreak: {},
+      cooldownUntil: {},
+      pausedPersonas: ['pia'],
+    });
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+    const views = await port.personas();
+    const pia = views.find((v) => v.id === 'pia');
+    const ben = views.find((v) => v.id === 'ben');
+    expect(pia?.phases).toEqual(['plan', 'review']);
+    expect(pia?.paused).toBe(true);
+    expect(ben?.paused).toBe(false);
+    expect(ben?.phases).toBeUndefined(); // no pipeline entry names Ben
+    // The runner is down: the pause state is unknown — absent, never a fake false.
+    vi.mocked(fleet.chainStatus).mockResolvedValue(null);
+    const down = await (port.personas() as Promise<readonly { id: string; paused?: boolean }[]>);
+    expect(down.find((v) => v.id === 'pia')?.paused).toBeUndefined();
+  });
+
+  it('chainPersonaPause delegates to the runner and refuses honestly when it is down (U4)', async () => {
+    const { board, fleet } = fakes();
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+    vi.mocked(fleet.setPersonaPaused).mockResolvedValue({
+      configured: true,
+      master: 'run',
+      columns: {},
+      redStreak: {},
+      cooldownUntil: {},
+      pausedPersonas: ['pia'],
+    });
+    await expect(port.chainPersonaPause({ persona: 'pia', paused: true })).resolves.toEqual({ ok: true, persona: 'pia', paused: true });
+    expect(fleet.setPersonaPaused).toHaveBeenCalledWith('pia', true);
+    vi.mocked(fleet.setPersonaPaused).mockResolvedValue(null);
+    await expect(port.chainPersonaPause({ persona: 'pia', paused: true })).resolves.toEqual({
+      ok: false,
+      error: 'the fleet runner is not running',
+    });
   });
 
   it('hands the actor to every board write', async () => {

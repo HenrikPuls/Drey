@@ -47,6 +47,18 @@ describe('parsePersonaFile', () => {
     const persona = parsePersonaFile('pia', PIA);
     expect(parsePersonaFile('pia', personaFileText(persona))).toEqual(persona);
   });
+
+  it("personaFileText keeps the owner's prose below the fence when the patch passes it (U4)", () => {
+    const persona = parsePersonaFile('pia', PIA);
+    const withBody = personaFileText(persona, 'Pia plans carefully; no dependency bumps without asking.');
+    expect(withBody).toContain('Pia plans carefully; no dependency bumps without asking.');
+    expect(withBody).not.toContain(`Who ${persona.title} is: role, tone, limits`);
+    // the frontmatter round-trips byte-for-byte above the prose
+    expect(withBody.split('---\n')[1]).toBe(personaFileText(persona).split('---\n')[1]);
+    expect(parsePersonaFile('pia', withBody)).toEqual(persona);
+    // a fresh persona keeps the default prose line
+    expect(personaFileText(persona)).toContain(`Who ${persona.title} is: role, tone, limits`);
+  });
 });
 
 describe('budget — the daily spend limit (concept §4.3)', () => {

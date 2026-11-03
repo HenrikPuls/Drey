@@ -24,6 +24,7 @@ import {
   type Parsed,
 } from '../core/commands';
 import { remoteActorOf, type ImprovementDecision, type TicketsRemotePort } from '../contracts/remote-protocol';
+import type { PersonaRouter } from '../core/persona';
 import { TICKET_ID_PATTERN } from '../contracts/tickets';
 import type { DeviceRegistry, DeviceView, FailureLimiter, PairingCodes, RemoteDevice } from './auth';
 
@@ -127,6 +128,117 @@ function parseSendBack(body: unknown): Parsed<{ id: string; note: string }> {
   return { ok: true, value: { ...(obj as { id: string }), note } };
 }
 
+/** One owner message into a persona's coaching thread (U4, concept §4.5). */
+function parseThreadSend(body: unknown): Parsed<{ text: string }> {
+  const obj = asObject(body);
+  const text = typeof obj?.['text'] === 'string' ? obj['text'].trim() : '';
+  if (obj === null) {
+    return { ok: false, error: 'bad thread message payload' };
+  }
+  if (text === '') {
+    return { ok: false, error: 'a thread message needs text' };
+  }
+  return { ok: true, value: { text } };
+}
+
+/** One owner-taught memory entry (U4, concept §4.4). */
+function parseMemoryAppend(body: unknown): Parsed<{ text: string }> {
+  const obj = asObject(body);
+  const text = typeof obj?.['text'] === 'string' ? obj['text'].trim() : '';
+  if (obj === null) {
+    return { ok: false, error: 'bad memory entry payload' };
+  }
+  if (text === '') {
+    return { ok: false, error: 'a memory entry needs text' };
+  }
+  return { ok: true, value: { text } };
+}
+
+/** The pin toggle: one entry's index in the GET list, and the wanted state. */
+function parseMemoryPin(body: unknown): Parsed<{ index: number; pinned: boolean }> {
+  const obj = asObject(body);
+  const index = obj?.['index'];
+  const pinned = obj?.['pinned'];
+  if (obj === null || typeof index !== 'number' || !Number.isInteger(index) || index < 0) {
+    return { ok: false, error: 'the pin needs the entry index (a 0-based integer)' };
+  }
+  if (typeof pinned !== 'boolean') {
+    return { ok: false, error: 'the pin needs pinned: true or false' };
+  }
+  return { ok: true, value: { index, pinned } };
+}
+
+/** The persona PATCH's writable keys (U4, concept §4.5) — only sent keys are written. */
+export interface PersonaPatchInput {
+  title?: string;
+  role?: string;
+  worker?: string;
+  model?: string;
+  pool?: string[];
+  router?: PersonaRouter;
+  color?: string;
+  skills?: string[];
+  prompt?: string;
+}
+
+const PERSONA_PATCH_KEYS: readonly (keyof PersonaPatchInput)[] = [
+  'title',
+  'role',
+  'worker',
+  'model',
+  'pool',
+  'router',
+  'color',
+  'skills',
+  'prompt',
+];
+
+function parsePersonaPatch(body: unknown): Parsed<PersonaPatchInput> {
+  const obj = asObject(body);
+  if (obj === null) {
+    return { ok: false, error: 'bad persona patch payload' };
+  }
+  const out: PersonaPatchInput = {};
+  let any = false;
+  for (const key of PERSONA_PATCH_KEYS) {
+    const value = obj[key];
+    if (value === undefined) {
+      continue;
+    }
+    if (key === 'pool' || key === 'skills') {
+      if (!Array.isArray(value) || value.some((v) => typeof v !== 'string')) {
+        return { ok: false, error: `${key} is a list of names` };
+      }
+      out[key] = value.map((v) => (v as string).trim());
+    } else if (typeof value !== 'string') {
+      return { ok: false, error: `${key} is a string` };
+    } else if (key === 'router') {
+      out[key] = value as PersonaRouter;
+    } else {
+      out[key] = value;
+    }
+    any = true;
+  }
+  if (!any) {
+    return { ok: false, error: `the patch carries none of the writable keys: ${PERSONA_PATCH_KEYS.join(', ')}` };
+  }
+  return { ok: true, value: out };
+}
+
+/** The chain's persona pause (U4): which persona, and whether it is paused. */
+function parseChainPersonaPause(body: unknown): Parsed<{ persona: string; paused: boolean }> {
+  const obj = asObject(body);
+  const persona = typeof obj?.['persona'] === 'string' ? obj['persona'].trim() : '';
+  const paused = obj?.['paused'];
+  if (obj === null || persona === '') {
+    return { ok: false, error: 'the persona pause needs a persona id' };
+  }
+  if (typeof paused !== 'boolean') {
+    return { ok: false, error: 'the paused flag is true or false' };
+  }
+  return { ok: true, value: { persona, paused } };
+}
+
 /** The Host check every request passes first — API, events and static files alike. */
 export function hostRefusal(req: Pick<RemoteRequest, 'host'>, deps: Pick<RouterDeps, 'allowedHosts'>): RemoteResponse | null {
   return hostAllowed(req.host, deps.allowedHosts()) ? null : fail(421, 'this address is not served here');
@@ -156,7 +268,7 @@ export async function route(req: RemoteRequest, deps: RouterDeps): Promise<Remot
   if (req.method === 'GET' && req.path === '/api/health') {
     return json({ ok: true, version: REMOTE_API_VERSION });
   }
-  if (req.method === 'POST' && !originAllowed(req.origin, deps.allowedHosts())) {
+  if ((req.method === 'POST' || req.method === 'PATCH') && !originAllowed(req.origin, deps.allowedHosts())) {
     return fail(403, 'this request comes from another site');
   }
   if (req.method === 'POST' && req.path === '/api/pair') {
@@ -167,7 +279,7 @@ export async function route(req: RemoteRequest, deps: RouterDeps): Promise<Remot
     return auth.response;
   }
   const device = auth.device;
-  if (req.method === 'POST' && device.readOnly) {
+  if ((req.method === 'POST' || req.method === 'PATCH') && device.readOnly) {
     return fail(403, 'this device is paired read-only');
   }
   try {
@@ -234,6 +346,16 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
     if (improvements !== null) {
       return json(await port.personaImprovements(improvements[1]!));
     }
+    // U4: the persona chat and memory reads; the persona id is pinned by
+    // the personaRef grammar before it reaches the port.
+    const thread = /^\/api\/personas\/([a-z0-9][a-z0-9-]{0,63})\/thread$/.exec(req.path);
+    if (thread !== null) {
+      return json(await port.personaThread(thread[1]!));
+    }
+    const memory = /^\/api\/personas\/([a-z0-9][a-z0-9-]{0,63})\/memory$/.exec(req.path);
+    if (memory !== null) {
+      return json(await port.personaMemory(memory[1]!));
+    }
     const stream = /^\/api\/runs\/([A-Za-z0-9_.-]+)\/stream$/.exec(req.path);
     if (stream !== null) {
       return json({ text: await port.stream(stream[1]!) });
@@ -256,8 +378,18 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
     return fail(404, 'no such route');
   }
 
+  if (req.method === 'PATCH') {
+    // U4: the persona setup's PATCH — the only PATCH route; the path pins
+    // the persona id, the body carries only the keys being written.
+    const persona = /^\/api\/personas\/([a-z0-9][a-z0-9-]{0,63})$/.exec(req.path);
+    if (persona !== null) {
+      return write(`persona patch ${persona[1]}`, parsePersonaPatch(body), (value) =>
+        port.personaPatch({ persona: persona[1]!, ...value }));
+    }
+    return fail(405, 'only GET, POST and PATCH are served');
+  }
   if (req.method !== 'POST') {
-    return fail(405, 'only GET and POST are served');
+    return fail(405, 'only GET, POST and PATCH are served');
   }
   if (req.path === '/api/tickets') {
     // The create's priority reads against the board's configured
@@ -349,6 +481,25 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
       (cmd) => port.personaImprovementDecide(cmd),
     );
   }
+
+  // U4: the persona chat's append, the memory's append and pin toggle —
+  // the id pinned by the personaRef grammar in the path.
+  const thread = /^\/api\/personas\/([a-z0-9][a-z0-9-]{0,63})\/thread$/.exec(req.path);
+  if (thread !== null) {
+    const id = thread[1]!;
+    return write(`persona ${id} thread`, parseThreadSend(body), (value) => port.personaThreadAppend({ persona: id, text: value.text }));
+  }
+  const memoryPin = /^\/api\/personas\/([a-z0-9][a-z0-9-]{0,63})\/memory\/pin$/.exec(req.path);
+  if (memoryPin !== null) {
+    const id = memoryPin[1]!;
+    return write(`persona ${id} memory pin`, parseMemoryPin(body), (value) => port.personaMemoryPin({ persona: id, ...value }));
+  }
+  const memory = /^\/api\/personas\/([a-z0-9][a-z0-9-]{0,63})\/memory$/.exec(req.path);
+  if (memory !== null) {
+    const id = memory[1]!;
+    return write(`persona ${id} memory`, parseMemoryAppend(body), (value) => port.personaMemoryAppend({ persona: id, text: value.text }));
+  }
+
   switch (req.path) {
     case '/api/chain/master':
       return write('chain master', parseChainMaster(body), (cmd) => port.chainMaster(cmd.mode));
@@ -356,6 +507,8 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
       return write('chain column', parseChainColumn(body), (cmd) => port.chainColumn(cmd.phase, cmd.mode));
     case '/api/chain/column-stop':
       return write('chain column stop', parseChainColumnStop(body), (cmd) => port.chainColumnStop(cmd.phase));
+    case '/api/chain/persona-pause':
+      return write('chain persona pause', parseChainPersonaPause(body), (cmd) => port.chainPersonaPause(cmd));
     case '/api/chain/abort':
       return write('chain abort', { ok: true, value: null }, () => port.chainAbort());
   }

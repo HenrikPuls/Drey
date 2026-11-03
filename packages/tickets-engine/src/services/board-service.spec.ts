@@ -674,3 +674,162 @@ The pipeline.
     expect(text).toContain('priority: p0');
   });
 });
+
+describe('persona thread, memory pin and patch (U4, concept §4.4/§4.5)', () => {
+  const PERSONA_DIR = ['tickets', '_meta', 'personas', 'pia'];
+
+  async function writePia(): Promise<void> {
+    await fsp.mkdir(path.join(vaultDir, ...PERSONA_DIR), { recursive: true });
+    await fsp.writeFile(
+      path.join(vaultDir, ...PERSONA_DIR, 'persona.md'),
+      "---\ntitle: Pia\nrole: builder\nworker: claude-code\nmodels:\n  default: opus\n  pool: [opus]\n  router: off\ncolor: '#a78bfa'\nskills: []\n---\n\nPia plans carefully.\n",
+      'utf8',
+    );
+  }
+
+  it('personaThreadAppend creates the thread chat-session style and appends one line per message', async () => {
+    await writePia();
+    const service = serviceOf();
+
+    const first = await service.personaThreadAppend({ id: 'pia', text: 'Treat rank fields as the word of the owner' });
+    if (!first.ok) {
+      throw new Error(first.error);
+    }
+    const file = await fsp.readFile(path.join(vaultDir, ...PERSONA_DIR, 'thread.md'), 'utf8');
+    expect(file).toContain('title: "Pia"');
+    expect(file).toMatch(/- '\d{4}-\d{2}-\d{2}T.*' owner — Treat rank fields as the word of the owner\n$/);
+    expect(first.messages).toHaveLength(1);
+    expect(first.messages[0]).toMatchObject({ role: 'owner', text: 'Treat rank fields as the word of the owner' });
+
+    const second = await service.personaThreadAppend({ id: 'pia', text: 'second line' });
+    if (!second.ok) {
+      throw new Error(second.error);
+    }
+    expect(second.messages).toHaveLength(2);
+
+    // a multi-line message flattens to one line
+    await service.personaThreadAppend({ id: 'pia', text: 'a\nb' });
+    const file2 = await fsp.readFile(path.join(vaultDir, ...PERSONA_DIR, 'thread.md'), 'utf8');
+    expect(file2).toContain('owner — a b\n');
+  });
+
+  it('personaThread reads the messages back and a thread-less persona reads as none', async () => {
+    await writePia();
+    const service = serviceOf();
+    expect(await service.personaThread('pia')).toEqual({ ok: true, messages: [] });
+    await service.personaThreadAppend({ id: 'pia', text: 'hello' });
+    const read = await service.personaThread('pia');
+    expect(read.ok && read.messages).toHaveLength(1);
+  });
+
+  it('personaMemoryAppend appends through the persona store and personaMemory reads entries with pins', async () => {
+    await writePia();
+    const service = serviceOf();
+
+    const appended = await service.personaMemoryAppend({ id: 'pia', text: 'gate red on lint means fix lint first' });
+    if (!appended.ok) {
+      throw new Error(appended.error);
+    }
+    expect(appended.entries).toEqual([{ text: 'gate red on lint means fix lint first', pinned: false }]);
+    const file = await fsp.readFile(path.join(vaultDir, ...PERSONA_DIR, 'memory.md'), 'utf8');
+    expect(file).toBe('# Memory\n\ngate red on lint means fix lint first\n');
+
+    const pinned = await service.personaMemoryPin({ id: 'pia', index: 0, pinned: true });
+    if (!pinned.ok) {
+      throw new Error(pinned.error);
+    }
+    expect(pinned.entries).toEqual([{ text: 'gate red on lint means fix lint first', pinned: true }]);
+    expect(await fsp.readFile(path.join(vaultDir, ...PERSONA_DIR, 'memory.md'), 'utf8')).toBe(
+      '# Memory\n\n- gate red on lint means fix lint first [pinned]\n',
+    );
+    const unpinned = await service.personaMemoryPin({ id: 'pia', index: 0, pinned: false });
+    if (!unpinned.ok) {
+      throw new Error(unpinned.error);
+    }
+    expect(unpinned.entries).toEqual([{ text: 'gate red on lint means fix lint first', pinned: false }]);
+    expect(await service.personaMemory('pia')).toMatchObject({ ok: true, entries: [{ text: 'gate red on lint means fix lint first', pinned: false }] });
+  });
+
+  it('the pin toggle refuses out-of-range indexes and memory-less personas with a readable error', async () => {
+    await writePia();
+    const service = serviceOf();
+    expect(await service.personaMemoryPin({ id: 'pia', index: 0, pinned: true })).toEqual({
+      ok: false,
+      error: 'persona "pia" has no memory entries yet',
+    });
+    await service.personaMemoryAppend({ id: 'pia', text: 'one' });
+    expect(await service.personaMemoryPin({ id: 'pia', index: 3, pinned: true })).toEqual({
+      ok: false,
+      error: 'no memory entry at index 3',
+    });
+    expect(await service.personaMemoryPin({ id: 'pia', index: -1, pinned: true })).toMatchObject({ ok: false });
+  });
+
+  it('every persona-scoped method refuses an unknown persona id', async () => {
+    const service = serviceOf();
+    const missing = { ok: false, error: 'persona "ghost" does not exist — create tickets/_meta/personas/ghost/persona.md first' };
+    expect(await service.personaThread('ghost')).toEqual(missing);
+    expect(await service.personaThreadAppend({ id: 'ghost', text: 'x' })).toEqual(missing);
+    expect(await service.personaMemory('ghost')).toEqual(missing);
+    expect(await service.personaMemoryAppend({ id: 'ghost', text: 'x' })).toEqual(missing);
+    expect(await service.personaMemoryPin({ id: 'ghost', index: 0, pinned: true })).toEqual(missing);
+    expect(await service.personaPatch({ id: 'ghost', title: 'X' })).toEqual(missing);
+  });
+
+  it('personaPatch writes only the sent keys over personaFileText and keeps the prose', async () => {
+    await writePia();
+    const service = serviceOf();
+
+    const outcome = await service.personaPatch({
+      id: 'pia',
+      model: 'sonnet',
+      pool: ['sonnet', 'haiku'],
+      router: 'budget',
+      color: '#ff8800',
+      skills: ['diff-review'],
+      prompt: 'You are Pia, the careful planner.\n',
+    });
+    expect(outcome.ok).toBe(true);
+    const personaMd = await fsp.readFile(path.join(vaultDir, ...PERSONA_DIR, 'persona.md'), 'utf8');
+    expect(personaMd).toContain('default: sonnet');
+    expect(personaMd).toContain('pool: [sonnet, haiku]');
+    expect(personaMd).toContain('router: budget');
+    expect(personaMd).toContain("color: '#ff8800'");
+    expect(personaMd).toContain('skills: [diff-review]');
+    expect(personaMd).toContain('role: builder'); // not sent — untouched
+    expect(personaMd).toContain('worker: claude-code'); // not sent — untouched
+    expect(personaMd).toContain('Pia plans carefully.'); // the owner's prose survives
+    expect(personaMd).not.toContain('Who Pia is: role, tone, limits');
+    const promptMd = await fsp.readFile(path.join(vaultDir, ...PERSONA_DIR, 'prompt.md'), 'utf8');
+    expect(promptMd).toBe('You are Pia, the careful planner.\n');
+    // the rewritten file parses back to the same persona plus the changes
+    const parsed = await service.listPersonas();
+    const pia = parsed.find((p) => p.id === 'pia');
+    expect(pia?.models).toEqual({ default: 'sonnet', pool: ['sonnet', 'haiku'], router: 'budget' });
+    expect(pia?.skills).toEqual(['diff-review']);
+  });
+
+  it('personaPatch validates the listed rules and changes nothing on a refusal', async () => {
+    await writePia();
+    const service = serviceOf();
+    const before = await fsp.readFile(path.join(vaultDir, ...PERSONA_DIR, 'persona.md'), 'utf8');
+
+    expect(await service.personaPatch({ id: 'pia', router: 'chaos' })).toEqual({ ok: false, error: 'the router is "off", "budget" or "escalate-on-fail"' });
+    expect(await service.personaPatch({ id: 'pia', color: 'red' })).toEqual({ ok: false, error: 'the color is a #rrggbb hex value' });
+    expect(await service.personaPatch({ id: 'pia', pool: [] })).toEqual({ ok: false, error: 'the model pool is a non-empty list of model names' });
+    expect(await service.personaPatch({ id: 'pia', title: '  ' })).toEqual({ ok: false, error: 'the title is not empty' });
+    expect(await service.personaPatch({ id: 'pia', role: 'wizard' })).toMatchObject({ ok: false });
+    expect(await fsp.readFile(path.join(vaultDir, ...PERSONA_DIR, 'persona.md'), 'utf8')).toBe(before);
+  });
+
+  it('personaPatch treats a patch without any writable key as a no-op and a multi-key patch as one commit shape', async () => {
+    await writePia();
+    const service = serviceOf();
+    expect(await service.personaPatch({ id: 'pia' })).toEqual({ ok: true });
+    const outcome = await service.personaPatch({ id: 'pia', title: 'Pia P.', model: 'gpt-5' });
+    expect(outcome.ok).toBe(true);
+    const personaMd = await fsp.readFile(path.join(vaultDir, ...PERSONA_DIR, 'persona.md'), 'utf8');
+    expect(personaMd).toContain('title: Pia P.');
+    expect(personaMd).toContain('default: gpt-5');
+  });
+});

@@ -140,7 +140,7 @@ export class RemoteGateway {
     }
 
     let body: unknown;
-    if (method === 'POST') {
+    if (method === 'POST' || method === 'PATCH') {
       const cap = url.pathname === '/api/attachments' ? ATTACHMENT_BODY : MAX_BODY;
       const raw = await readBody(req, cap);
       if (raw === null) {

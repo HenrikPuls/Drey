@@ -1383,6 +1383,81 @@ describe('Orchestrator', () => {
       expect(waits[0]).toContain('T-0105');
       expect(waits[0]).toContain('no free claude-code pool slot yet');
     });
+
+    it('a paused persona holds its tickets until it is played again (U4)', async () => {
+      await writePersonaPipeline();
+      await writePersona('pia', { worker: 'claude-code', model: 'sonnet' });
+      await writeTicket('T-0110', 'plan'); // the persona column
+      await writeTicket('T-0111', 'build'); // the ring — not the persona's business
+      const logs: string[] = [];
+      const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
+      await orch.configure(CONFIG);
+      await orch.setPersonaPaused('pia', true);
+      await orch.setMaster('run');
+
+      expect(fleet.records.some((r) => r.info.ticketId === 'T-0110')).toBe(false);
+      expect(logs.some((line) => line.includes('dispatch holds T-0110: persona "pia" is paused'))).toBe(true);
+      expect(orch.status().pausedPersonas).toEqual(['pia']);
+      // persisted in chain.json like every control state
+      const file = JSON.parse(await fsp.readFile(path.join(fleetRoot, 'chain.json'), 'utf8')) as { pausedPersonas?: string[] };
+      expect(file.pausedPersonas).toEqual(['pia']);
+      // the ring's ticket dispatches normally while pia is paused
+      await orch.setColumn('build', 'playing'); // triggers a pass
+      expect(fleet.records.some((r) => r.info.ticketId === 'T-0111')).toBe(true);
+      // played again → the held ticket dispatches on the next pass
+      const status = await orch.setPersonaPaused('pia', false);
+      expect(status.pausedPersonas).toEqual([]);
+      expect(fleet.records.some((r) => r.info.ticketId === 'T-0110')).toBe(true);
+    });
+
+    it('the pause survives a runner restart (chain.json round-trip)', async () => {
+      await writeMeta();
+      const first = orchestrator();
+      await first.orch.configure(CONFIG);
+      await first.orch.setPersonaPaused('pia', true);
+      await first.orch.setPersonaPaused('ben', true);
+      await first.orch.setPersonaPaused('ben', false);
+
+      const second = new Orchestrator({
+        root: fleetRoot,
+        log: () => undefined,
+        supervisorOf: () => fakePort().port,
+        scanIntervalMs: 60_000,
+      });
+      await second.load();
+      expect(second.status().pausedPersonas).toEqual(['pia']);
+      second.dispose();
+    });
+
+    it('the coaching thread rides the instruction as the ## Coaching slice (U4)', async () => {
+      await writePersonaPipeline();
+      await writePersona('pia', {
+        worker: 'claude-code',
+        model: 'sonnet',
+        prompt: 'You are Pia.',
+        memory: '# Memory\n\n- lesson\n',
+      });
+      const dir = path.join(vaultDir, 'tickets', '_meta', 'personas', 'pia');
+      const threadLines = Array.from({ length: 6 }, (_, i) => `- '2026-11-03T0${i + 1}:00:00.000Z' owner — teach ${i + 1}`);
+      await fsp.writeFile(
+        path.join(dir, 'thread.md'),
+        `---\ntitle: "pia"\ncreated: '2026-11-03T09:00:00.000Z'\n---\n\n${threadLines.join('\n')}\n`,
+        'utf8',
+      );
+      await writeTicket('T-0112', 'plan');
+      const { orch, fleet } = orchestrator();
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      const started = fleet.records[0]!;
+      expect(started.request.instruction).toContain('## Coaching');
+      expect(started.request.instruction).toContain('Coaching (owner, letzter zuerst)');
+      expect(started.request.instruction).toContain('owner — teach 6'); // the newest correction first
+      expect(started.request.instruction).not.toContain('teach 1'); // only the last five ride
+      expect(started.request.instruction.indexOf('teach 6')).toBeLessThan(started.request.instruction.indexOf('teach 2'));
+      // the coaching is a variable part — it rides the resume continuation, not the digest
+      expect(started.request.continuationInstruction).toContain('## Coaching');
+    });
   });
 });
 

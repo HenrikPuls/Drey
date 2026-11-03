@@ -2,7 +2,7 @@ import { promises as fsp } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { FALLBACK_INSTRUCTIONS_CAP, personaMemorySection, personaMemorySlice, readPersonaMemory, readRepoInstructions, worktreeDiffStat } from './context-pack';
+import { FALLBACK_INSTRUCTIONS_CAP, PERSONA_COACHING_MAX_LINES, personaCoachingSection, personaMemorySection, personaMemorySlice, readPersonaMemory, readRepoInstructions, worktreeDiffStat } from './context-pack';
 
 /**
  * Which file opens a run's brief (T-0048, req-79): the repo's
@@ -142,5 +142,32 @@ describe('readPersonaMemory — the vault-side read', () => {
   it('refuses ids that are no persona ids before they reach the path', async () => {
     expect(await readPersonaMemory(repoDir, '../escape')).toBeNull();
     expect(await readPersonaMemory(repoDir, 'a/b')).toBeNull();
+  });
+});
+
+describe("personaCoachingSection — the thread's slice (U4, concept §4.5)", () => {
+  const AT = (h: number): string => `2026-11-03T0${h}:00:00.000Z`;
+  const line = (h: number, text: string): string => `- '${AT(h)}' owner — ${text}`;
+
+  it('takes the last 5 thread messages, newest FIRST, under the ## Coaching heading', () => {
+    const lines = Array.from({ length: 8 }, (_, i) => line(i + 1, `lesson ${i + 1}`));
+    const section = personaCoachingSection(`---\ntitle: "Pia"\n---\n\n${lines.join('\n')}\n`);
+    expect(section).toContain('## Coaching');
+    expect(section).toContain('Coaching (owner, letzter zuerst)');
+    expect(section).toContain(`- '${AT(8)}' owner — lesson 8`);
+    expect(section).toContain(`- '${AT(4)}' owner — lesson 4`);
+    expect(section).not.toContain('lesson 3');
+    // newest first — 8 opens the block, the oldest carried line closes it
+    const order = section!.indexOf('lesson 8');
+    expect(order).toBeLessThan(section!.indexOf('lesson 4'));
+    const carried = section!.split('\n\n')[2]!.split('\n');
+    expect(carried).toHaveLength(PERSONA_COACHING_MAX_LINES);
+  });
+
+  it('keeps a short thread whole and is null without messages — byte-identical persona-less briefs', () => {
+    expect(personaCoachingSection(`---\ntitle: "Pia"\n---\n\n${line(1, 'only lesson')}\n`)).toContain('only lesson');
+    // broken lines are skipped, never guessed
+    expect(personaCoachingSection('---\n---\n\nbroken prose\n- no stamp here\n')).toBeNull();
+    expect(personaCoachingSection('')).toBeNull();
   });
 });

@@ -23,11 +23,14 @@ import type { FleetSnapshot } from '../services/fleet-client';
 import type { ChainMaster, ChainStatus, ColumnMode, PermissionDecision, QuestionAnswers, RunInfo } from '../fleet/protocol';
 import type {
   AttachmentReply,
+  ChainPersonaPauseReply,
   ChainReply,
   ChatChangePayload,
   ImprovementDecision,
   NeedItem,
   PersonaImprovementsReply,
+  PersonaMemoryReply,
+  PersonaThreadReply,
   PersonaView,
   RemoteChange,
   RefineReply,
@@ -77,8 +80,33 @@ export interface RemoteBoard {
   personaImprovements(personaId: string): Promise<PersonaImprovementsReply>;
   /** The E6 1:1 decision; the apply lands in exactly one commit on the desk. */
   decideImprovement(input: { id: string; proposalId: string; decision: ImprovementDecision; now?: string }): Promise<MutationResult>;
-  /** E7: the ticket's status-log lines (`<card>.status.log`); [] when absent or broken. */
+  /** The E7 status read: the ticket's status-log lines; [] when absent or broken. */
   statusOf(ticketId: string): Promise<readonly StatusLine[]>;
+  /** The assembled board from the files (a read — no normalize, no migration). */
+  snapshot(): Promise<BoardSnapshot>;
+  /** The persona chat's read (U4, concept §4.5). */
+  personaThread(personaId: string): Promise<PersonaThreadReply>;
+  /** One owner message into the coaching thread; one commit. */
+  personaThreadAppend(input: { id: string; text: string }): Promise<PersonaThreadReply>;
+  /** The persona memory's read (U4, concept §4.4). */
+  personaMemory(personaId: string): Promise<PersonaMemoryReply>;
+  /** One owner-taught memory entry; one commit. */
+  personaMemoryAppend(input: { id: string; text: string }): Promise<PersonaMemoryReply>;
+  /** One memory entry's pin toggle (index = GET-list position); one commit. */
+  personaMemoryPin(input: { id: string; index: number; pinned: boolean }): Promise<PersonaMemoryReply>;
+  /** The persona setup's PATCH (U4): only sent keys written; one commit. */
+  personaPatch(input: {
+    id: string;
+    title?: string;
+    role?: string;
+    worker?: string;
+    model?: string;
+    pool?: readonly string[];
+    router?: string;
+    color?: string;
+    skills?: readonly string[];
+    prompt?: string;
+  }): Promise<MutationResult>;
 }
 
 /** The fleet client's part the remote uses (`FleetClient` fits it). */
@@ -94,6 +122,8 @@ export interface RemoteFleet {
   setColumn(phase: string, mode: ColumnMode): Promise<ChainStatus | null>;
   stopColumn(phase: string): Promise<ChainStatus | null>;
   abortAll(): Promise<ChainStatus | null>;
+  /** The persona pause (U4): a paused persona's tickets hold until played again. */
+  setPersonaPaused(persona: string, paused: boolean): Promise<ChainStatus | null>;
 }
 
 /** Fan-out of board/fleet/remote/chat changes to the remote's listeners. */
@@ -315,11 +345,26 @@ export class DreyTicketsPort implements TicketsRemotePort {
   }
 
   async personas(): Promise<readonly PersonaView[]> {
-    const [personas, ledgerText] = await Promise.all([this.boardService.listPersonas(), this.boardService.ledgerText()]);
+    const [personas, ledgerText, snapshot, chain] = await Promise.all([
+      this.boardService.listPersonas(),
+      this.boardService.ledgerText(),
+      this.boardService.snapshot(),
+      this.fleetClient.chainStatus().catch(() => null),
+    ]);
     // The Team view's "Tageskosten gegen Budget" (concept §4.3): today's
     // settled costs, persona-keyed from the fleet ledger; UTC day — the
     // same convention the chain's token budgets use.
     const daily = personaDailyCosts(parseLedger(ledgerText ?? ''), new Date().toISOString().slice(0, 10));
+    // U4: the phases each persona owns (`persona:` in pipeline.md), from
+    // the same snapshot; and the chain's persona pause — absent while the
+    // chain state is unknown (the runner is down), never a guessed false.
+    const phases: Record<string, string[]> = {};
+    for (const phase of snapshot.pipeline) {
+      if (phase.persona !== null && phase.persona !== '') {
+        (phases[phase.persona] ??= []).push(phase.id);
+      }
+    }
+    const paused = chain?.pausedPersonas;
     return personas.map((p) => ({
       id: p.id,
       title: p.title,
@@ -330,6 +375,8 @@ export class DreyTicketsPort implements TicketsRemotePort {
       color: p.color,
       budget: p.budget,
       ...(daily[p.id] !== undefined ? { dailyCost: daily[p.id] } : {}),
+      ...(phases[p.id] !== undefined ? { phases: phases[p.id] } : {}),
+      ...(paused !== undefined ? { paused: paused.includes(p.id) } : {}),
     }));
   }
 
@@ -339,6 +386,39 @@ export class DreyTicketsPort implements TicketsRemotePort {
 
   personaImprovementDecide(cmd: { readonly persona: string; readonly proposal: string; readonly decision: ImprovementDecision }): Promise<MutationResult> {
     return this.boardService.decideImprovement({ id: cmd.persona, proposalId: cmd.proposal, decision: cmd.decision });
+  }
+
+  personaThread(personaId: string): Promise<PersonaThreadReply> {
+    return this.boardService.personaThread(personaId);
+  }
+
+  personaThreadAppend(cmd: { readonly persona: string; readonly text: string }): Promise<PersonaThreadReply> {
+    return this.boardService.personaThreadAppend({ id: cmd.persona, text: cmd.text });
+  }
+
+  personaMemory(personaId: string): Promise<PersonaMemoryReply> {
+    return this.boardService.personaMemory(personaId);
+  }
+
+  personaMemoryAppend(cmd: { readonly persona: string; readonly text: string }): Promise<PersonaMemoryReply> {
+    return this.boardService.personaMemoryAppend({ id: cmd.persona, text: cmd.text });
+  }
+
+  personaMemoryPin(cmd: { readonly persona: string; readonly index: number; readonly pinned: boolean }): Promise<PersonaMemoryReply> {
+    return this.boardService.personaMemoryPin({ id: cmd.persona, index: cmd.index, pinned: cmd.pinned });
+  }
+
+  personaPatch(cmd: Parameters<TicketsRemotePort['personaPatch']>[0]): Promise<MutationResult> {
+    const { persona, ...patch } = cmd;
+    return this.boardService.personaPatch({ id: persona, ...patch });
+  }
+
+  async chainPersonaPause(cmd: { readonly persona: string; readonly paused: boolean }): Promise<ChainPersonaPauseReply> {
+    const status = await this.fleetClient.setPersonaPaused(cmd.persona, cmd.paused);
+    if (status === null) {
+      return { ok: false, error: 'the fleet runner is not running' };
+    }
+    return { ok: true, persona: cmd.persona.trim(), paused: cmd.paused };
   }
 
   ticketSave(cmd: { id: string; text: string; baseRevision?: string }, actor: string): Promise<RefineReply> {

@@ -173,6 +173,13 @@ export interface InstructionInput {
    * Null/absent = no section, byte-identical persona-less briefs.
    */
   readonly memorySection?: string | null;
+  /**
+   * The resolved persona's coaching, already sliced by `context-pack`'s
+   * `personaCoachingSection` (U4, concept §4.5): rides directly after the
+   * memory in the variable parts — the owner's corrections reach the next
+   * run. Null/absent = no section.
+   */
+  readonly coachingSection?: string | null;
 }
 
 /** One capped section of the instruction — the caller logs each application. */
@@ -347,6 +354,10 @@ export function composeInstruction(input: InstructionInput): ComposedInstruction
   if (memorySection !== null) {
     changing.push(memorySection);
   }
+  const coachingSection = input.coachingSection != null && input.coachingSection.trim() !== '' ? input.coachingSection : null;
+  if (coachingSection !== null) {
+    changing.push(coachingSection);
+  }
   const handover = input.handover?.trim();
   if (handover != null && handover !== '') {
     changing.push(
@@ -479,6 +490,8 @@ export interface ScoutInstructionInput {
   readonly extraRepos?: readonly { readonly name: string; readonly path: string }[];
   /** The resolved persona's `## Memory` slice (E3); absent = no section. */
   readonly memorySection?: string | null;
+  /** The resolved persona's `## Coaching` slice (U4); absent = no section. */
+  readonly coachingSection?: string | null;
   /** The persona id the Written-on line signs with; null/'' = `scout`. */
   readonly personaId?: string | null;
   /**
@@ -539,6 +552,10 @@ export function composeScoutInstruction(input: ScoutInstructionInput): ComposedI
   const memorySection = input.memorySection != null && input.memorySection.trim() !== '' ? input.memorySection : null;
   if (memorySection !== null) {
     changing.push(memorySection);
+  }
+  const coachingSection = input.coachingSection != null && input.coachingSection.trim() !== '' ? input.coachingSection : null;
+  if (coachingSection !== null) {
+    changing.push(coachingSection);
   }
   const by = input.personaId !== undefined && input.personaId !== null && input.personaId.trim() !== '' ? input.personaId.trim() : 'scout';
   const discipline = input.interactive !== undefined ? INTERACTIVE_DISCIPLINE : SCOUT_DISCIPLINE;

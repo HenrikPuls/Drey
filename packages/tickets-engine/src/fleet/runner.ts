@@ -371,6 +371,19 @@ async function main(): Promise<void> {
         respond(200, await orchestrator.abortAll());
         return;
       }
+      if (req.method === 'POST' && pathname === '/chain/persona-pause') {
+        const body = (await readBody(req)) as { persona?: unknown; paused?: unknown };
+        if (typeof body.persona !== 'string' || body.persona.trim() === '') {
+          respond(422, { ok: false, error: 'the persona pause needs a persona id' });
+          return;
+        }
+        if (typeof body.paused !== 'boolean') {
+          respond(422, { ok: false, error: 'the persona pause needs paused: true or false' });
+          return;
+        }
+        respond(200, await orchestrator.setPersonaPaused(body.persona, body.paused));
+        return;
+      }
       if (req.method === 'GET' && pathname === '/status') {
         const runs = [...supervisors.values()].flatMap((s) => s.list());
         respond(200, { runs });

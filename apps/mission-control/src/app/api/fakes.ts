@@ -49,7 +49,7 @@ export class FakeDesk {
   private readonly encoder = new TextEncoder();
 
   /** Registers the JSON responder for one `METHOD path`. */
-  on(method: 'GET' | 'POST', path: string, respond: (body: unknown) => unknown): void {
+  on(method: 'GET' | 'POST' | 'PATCH', path: string, respond: (body: unknown) => unknown): void {
     this.routes.set(`${method} ${path}`, respond);
   }
 

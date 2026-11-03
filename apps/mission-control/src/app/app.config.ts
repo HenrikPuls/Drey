@@ -17,11 +17,7 @@ import {
   type TicketDoc,
   type TicketVm,
 } from '@mission-ui/ticket/ticket.model';
-import {
-  MC_TEAM_STATE,
-  type McTeamPersona,
-  type McTeamState,
-} from '@mission-ui/team/team';
+import { MC_TEAM_STATE, type McTeamPersona, type McTeamState } from '@mission-ui/team/team';
 import { MC_WORK_STATE, type McPersona, type McWorkState } from '@mission-ui/work/work.model';
 import { MC_TOAST_STATE } from '@mission-ui/toast.model';
 
@@ -63,9 +59,9 @@ export const appConfig: ApplicationConfig = {
           promote: (ticketId) => state.prefillChat(`promote ${ticketId}`),
           answer: (runId, text) => state.answerRun(runId, text),
           openPersona: (titleOrId) => {
-            const byTitle = (state.personas() as unknown as readonly { id: string; title: string }[]).find(
-              (p) => p.title === titleOrId || p.id === titleOrId,
-            );
+            const byTitle = (
+              state.personas() as unknown as readonly { id: string; title: string }[]
+            ).find((p) => p.title === titleOrId || p.id === titleOrId);
             state.openPersona(byTitle?.id ?? titleOrId);
           },
         };
@@ -77,7 +73,12 @@ export const appConfig: ApplicationConfig = {
         const state = inject(McState);
         return {
           team: computed(() => state.team().personas as unknown as readonly McTeamPersona[] | null),
+          chainMaster: computed(() => state.team().chainMaster ?? null),
+          pausedPersonas: computed(() => state.team().pausedPersonas ?? []),
           openPersona: (id) => state.openPersona(id),
+          openTicket: (ticketId) => state.openTicket(ticketId),
+          toggleChainMaster: (paused) => state.chainMaster(paused),
+          personaPause: (id, paused) => state.personaPause(id, paused),
         };
       },
     },
@@ -90,9 +91,19 @@ export const appConfig: ApplicationConfig = {
           if (open === null) {
             return null;
           }
-          const found = (state.personas() as unknown as readonly { id: string; title: string; role: string; color: string }[]).find(
-            (p) => p.id === open.id,
-          );
+          const found = (
+            state.team().personas as unknown as readonly {
+              id: string;
+              title: string;
+              role: string;
+              color: string;
+              worker?: string;
+              model?: string;
+              pool?: readonly string[];
+              skills?: readonly string[];
+              router?: PersonaFacts['router'];
+            }[]
+          ).find((p) => p.id === open.id);
           return found ?? { id: open.id, title: open.id, role: '', color: '' };
         });
         return {
@@ -109,7 +120,43 @@ export const appConfig: ApplicationConfig = {
           },
           close: () => state.closePersona(),
           apply: (proposal) => state.applyImprovement(state.personaDetail()?.id ?? '', proposal.id),
-          dismiss: (proposal) => state.dismissImprovement(state.personaDetail()?.id ?? '', proposal.id),
+          dismiss: (proposal) =>
+            state.dismissImprovement(state.personaDetail()?.id ?? '', proposal.id),
+          thread: () => state.personaThread(),
+          threadError: () => state.personaThreadError(),
+          sendThread: async (text) => {
+            const open = state.personaDetail();
+            if (open === null) {
+              return { ok: false, error: 'no persona is open' };
+            }
+            const reply = await state.sendPersonaThread(open.id, text);
+            return reply;
+          },
+          memory: () => state.personaMemory(),
+          memoryError: () => state.personaMemoryError(),
+          addMemory: async (text) => {
+            const open = state.personaDetail();
+            if (open === null) {
+              return { ok: false, error: 'no persona is open' };
+            }
+            return state.appendPersonaMemory(open.id, text);
+          },
+          pinMemory: async (index, pinned) => {
+            const open = state.personaDetail();
+            if (open === null) {
+              return { ok: false, error: 'no persona is open' };
+            }
+            return state.pinPersonaMemory(open.id, index, pinned);
+          },
+          patchPersona: async (patch) => {
+            const open = state.personaDetail();
+            if (open === null) {
+              return { ok: false, error: 'no persona is open' };
+            }
+            return state.personaPatch(open.id, patch);
+          },
+          prefillChat: (text) => state.prefillChat(text),
+          toast: (message, kind) => state.toast(message, kind),
         };
       },
     },
@@ -124,7 +171,9 @@ export const appConfig: ApplicationConfig = {
           return new Set(raw?.checkpoints ?? []);
         });
         const phaseColors = computed(() => {
-          const raw = state.board() as { columns?: readonly { phase: { id: string; color?: string | null } }[] } | null;
+          const raw = state.board() as {
+            columns?: readonly { phase: { id: string; color?: string | null } }[];
+          } | null;
           const map = new Map<string, string>();
           for (const column of raw?.columns ?? []) {
             if (typeof column.phase.color === 'string' && column.phase.color !== '') {

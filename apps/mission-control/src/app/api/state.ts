@@ -22,6 +22,8 @@ import {
   parseChatEvent,
   parseImprovements,
   parseNeeds,
+  parsePersonaMemory,
+  parsePersonaThread,
   parseProposal,
   parseSessions,
   parseTeam,
@@ -34,6 +36,9 @@ import {
   type ChatStreamView,
   type NeedView,
   type PersonaImprovementsView,
+  type PersonaMemoryView,
+  type PersonaPatch,
+  type PersonaThreadView,
   type TeamView,
   type TicketDetail,
   type TicketDiffView,
@@ -63,7 +68,12 @@ export type McReply = { readonly ok: true } | { readonly ok: false; readonly err
 
 const fail = (error: unknown): { readonly ok: false; readonly error: string } => ({
   ok: false,
-  error: error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'The desk does not answer.',
+  error:
+    error instanceof ApiError
+      ? error.message
+      : error instanceof Error
+        ? error.message
+        : 'The desk does not answer.',
 });
 
 /** A caught request error (an McReply) versus a 200 body the desk may still have refused. */
@@ -71,8 +81,13 @@ const isFailure = (value: unknown): value is { readonly ok: false; readonly erro
   typeof value === 'object' && value !== null && (value as { ok?: unknown }).ok === false;
 
 /** The `{ok:false, error}` the desk's refusal (or the fallback) becomes — always the false variant. */
-const refusal = (body: unknown, fallback: string): { readonly ok: false; readonly error: string } => {
-  const error = (typeof body === 'object' && body !== null ? (body as { error?: unknown }) : {})['error'];
+const refusal = (
+  body: unknown,
+  fallback: string,
+): { readonly ok: false; readonly error: string } => {
+  const error = (typeof body === 'object' && body !== null ? (body as { error?: unknown }) : {})[
+    'error'
+  ];
   return { ok: false, error: typeof error === 'string' && error !== '' ? error : fallback };
 };
 
@@ -145,6 +160,14 @@ export class McState {
   readonly improvements = signal<PersonaImprovementsView | null>(null);
   /** The last load failure the 1:1 surfaces; null when all is well. */
   readonly improvementsError = signal<string | null>(null);
+  /** The 1:1's coaching thread; null while the first fetch runs or it failed. */
+  readonly personaThread = signal<PersonaThreadView | null>(null);
+  /** Why the thread load failed; null when all is well. */
+  readonly personaThreadError = signal<string | null>(null);
+  /** The 1:1's curated memory; null while the first fetch runs or it failed. */
+  readonly personaMemory = signal<PersonaMemoryView | null>(null);
+  /** Why the memory load failed; null when all is well. */
+  readonly personaMemoryError = signal<string | null>(null);
 
   private stopListen: (() => void) | null = null;
   private booted = false;
@@ -210,7 +233,10 @@ export class McState {
     const me = await this.client
       .request<{ ok?: unknown; device?: unknown }>('GET', '/api/me')
       .catch(() => null);
-    const device = typeof me?.device === 'object' && me.device !== null ? (me.device as { readOnly?: unknown }) : null;
+    const device =
+      typeof me?.device === 'object' && me.device !== null
+        ? (me.device as { readOnly?: unknown })
+        : null;
     this.readOnly.set(device?.readOnly === true);
   }
 
@@ -273,7 +299,10 @@ export class McState {
   private async refreshWork(): Promise<void> {
     const [board, needs] = await Promise.all([
       this.client.request('GET', '/api/board').catch(() => null),
-      this.client.request('GET', '/api/needs').then(parseNeeds).catch(() => null),
+      this.client
+        .request('GET', '/api/needs')
+        .then(parseNeeds)
+        .catch(() => null),
     ]);
     if (board !== null) {
       this.board.set(board);
@@ -296,7 +325,10 @@ export class McState {
   }
 
   private async refreshSessions(): Promise<void> {
-    const sessions = await this.client.request('GET', '/api/chat/sessions').then(parseSessions).catch(() => null);
+    const sessions = await this.client
+      .request('GET', '/api/chat/sessions')
+      .then(parseSessions)
+      .catch(() => null);
     if (sessions !== null) {
       this.chat.update((chat) => ({ ...chat, sessions }));
     }
@@ -342,7 +374,9 @@ export class McState {
 
   /** Starts a session with the first owner message and opens it. */
   async newSession(text: string): Promise<McReply> {
-    const body = await this.client.request<Record<string, unknown>>('POST', '/api/chat/sessions', { text }).catch(fail);
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', '/api/chat/sessions', { text })
+      .catch(fail);
     if (isFailure(body)) {
       return body;
     }
@@ -370,7 +404,11 @@ export class McState {
     }
     this.appendMessage({ role: 'owner', text, thought: null, at: new Date().toISOString() });
     const body = await this.client
-      .request<Record<string, unknown>>('POST', `/api/chat/sessions/${encodeURIComponent(file)}/messages`, { text })
+      .request<Record<string, unknown>>(
+        'POST',
+        `/api/chat/sessions/${encodeURIComponent(file)}/messages`,
+        { text },
+      )
       .catch(fail);
     if (isFailure(body)) {
       return body;
@@ -421,7 +459,11 @@ export class McState {
       return { ok: false, error: `ticket ${id} is not on the board` };
     }
     const body = await this.client
-      .request<Record<string, unknown>>('POST', `/api/tickets/${encodeURIComponent(id)}/move`, { id, from, to })
+      .request<Record<string, unknown>>('POST', `/api/tickets/${encodeURIComponent(id)}/move`, {
+        id,
+        from,
+        to,
+      })
       .catch(fail);
     if (isFailure(body)) {
       return body;
@@ -476,7 +518,9 @@ export class McState {
    * newer `openTicket` racing this fetch wins — the stale answer is dropped.
    */
   async loadTicket(id: string): Promise<void> {
-    const body = await this.client.request('GET', `/api/tickets/${encodeURIComponent(id)}`).catch(fail);
+    const body = await this.client
+      .request('GET', `/api/tickets/${encodeURIComponent(id)}`)
+      .catch(fail);
     if (this.ticketOpen()?.id !== id) {
       return;
     }
@@ -519,7 +563,10 @@ export class McState {
     // A stale base rides a 200 `{ok:false, conflict:true}` — the refine
     // sentence covers it before the plain isFailure pass below.
     if ((body as Record<string, unknown>)['conflict'] === true) {
-      return { ok: false, error: 'The ticket changed since you opened it. Reload it and edit again.' };
+      return {
+        ok: false,
+        error: 'The ticket changed since you opened it. Reload it and edit again.',
+      };
     }
     if (isFailure(body)) {
       return body;
@@ -560,7 +607,9 @@ export class McState {
       return { ok: false, error: 'a send-back needs a note' };
     }
     const path = `/api/tickets/${encodeURIComponent(open.id)}/send-back`;
-    const body = await this.client.request<Record<string, unknown>>('POST', path, { note: text }).catch(fail);
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', path, { note: text })
+      .catch(fail);
     if (isFailure(body)) {
       return body;
     }
@@ -621,7 +670,9 @@ export class McState {
   /** Steers a waiting run with the owner's wording (`POST /api/runs/<id>/send`). */
   private async steerRun(runId: string, text: string): Promise<McReply> {
     const body = await this.client
-      .request<Record<string, unknown>>('POST', `/api/runs/${encodeURIComponent(runId)}/send`, { text })
+      .request<Record<string, unknown>>('POST', `/api/runs/${encodeURIComponent(runId)}/send`, {
+        text,
+      })
       .catch(fail);
     if (isFailure(body)) {
       return body;
@@ -655,21 +706,32 @@ export class McState {
 
   /**
    * Opens one persona's 1:1 (concept §4.8): the screen shows it and the
-   * improvements start loading. The persona's directory facts ride along
-   * in the answer's `persona` field — the Team tab's list needs nothing.
+   * improvements, the thread and the memory start loading. The persona's
+   * directory facts ride along in the improvements answer's `persona`
+   * field — the Team tab's list needs nothing.
    */
   openPersona(id: string): void {
     this.personaDetail.set({ id });
     this.improvements.set(null);
     this.improvementsError.set(null);
+    this.personaThread.set(null);
+    this.personaThreadError.set(null);
+    this.personaMemory.set(null);
+    this.personaMemoryError.set(null);
     void this.loadPersona(id);
+    void this.loadPersonaThread(id);
+    void this.loadPersonaMemory(id);
   }
 
-  /** Back to the team list: drops the loaded improvements and any failure. */
+  /** Back to the team list: drops the loaded views and any failure. */
   closePersona(): void {
     this.personaDetail.set(null);
     this.improvements.set(null);
     this.improvementsError.set(null);
+    this.personaThread.set(null);
+    this.personaThreadError.set(null);
+    this.personaMemory.set(null);
+    this.personaMemoryError.set(null);
   }
 
   /**
@@ -679,7 +741,9 @@ export class McState {
    * the stale answer is dropped (the ticket screen's load pattern).
    */
   async loadPersona(id: string): Promise<void> {
-    const body = await this.client.request('GET', `/api/personas/${encodeURIComponent(id)}/improvements`).catch(fail);
+    const body = await this.client
+      .request('GET', `/api/personas/${encodeURIComponent(id)}/improvements`)
+      .catch(fail);
     if (this.personaDetail()?.id !== id) {
       return;
     }
@@ -712,10 +776,17 @@ export class McState {
     return this.decideImprovement(personaId, proposalId, 'dismiss');
   }
 
-  private async decideImprovement(personaId: string, proposalId: string, which: 'apply' | 'dismiss'): Promise<McReply> {
+  private async decideImprovement(
+    personaId: string,
+    proposalId: string,
+    which: 'apply' | 'dismiss',
+  ): Promise<McReply> {
     const base = `/api/personas/${encodeURIComponent(personaId)}/improvements`;
     const body = await this.client
-      .request<Record<string, unknown>>('POST', `${base}/${encodeURIComponent(proposalId)}/${which}`)
+      .request<Record<string, unknown>>(
+        'POST',
+        `${base}/${encodeURIComponent(proposalId)}/${which}`,
+      )
       .catch(fail);
     if (isFailure(body)) {
       return body;
@@ -724,6 +795,223 @@ export class McState {
       return refusal(body, `the desk could not ${which} the proposal`);
     }
     await this.loadPersona(personaId);
+    return { ok: true };
+  }
+
+  // --- the 1:1's thread, memory and setup (prototype convergence) ------------
+
+  /**
+   * Loads one persona's thread (`GET /api/personas/<id>/thread`) and its
+   * memory (`GET /api/personas/<id>/memory`) — both tolerant: a torn
+   * answer degrades to an empty view, a dropped desk lands on the error
+   * signal. A newer `openPersona` racing these fetches wins — stale
+   * answers are dropped (the improvements load's pattern).
+   */
+  private async loadPersonaThread(id: string): Promise<void> {
+    const body = await this.client
+      .request('GET', `/api/personas/${encodeURIComponent(id)}/thread`)
+      .catch(fail);
+    if (this.personaDetail()?.id !== id) {
+      return;
+    }
+    if (isFailure(body)) {
+      this.personaThread.set(null);
+      this.personaThreadError.set(body.error);
+      return;
+    }
+    this.personaThreadError.set(null);
+    this.personaThread.set(parsePersonaThread(body));
+  }
+
+  private async loadPersonaMemory(id: string): Promise<void> {
+    const body = await this.client
+      .request('GET', `/api/personas/${encodeURIComponent(id)}/memory`)
+      .catch(fail);
+    if (this.personaDetail()?.id !== id) {
+      return;
+    }
+    if (isFailure(body)) {
+      this.personaMemory.set(null);
+      this.personaMemoryError.set(body.error);
+      return;
+    }
+    this.personaMemoryError.set(null);
+    this.personaMemory.set(parsePersonaMemory(body));
+  }
+
+  /**
+   * Sends one owner line into the open persona's thread: the echo lands
+   * at once (optimistic append), then the POST runs; the desk's own
+   * answer — when the reply carries `messages` — replaces the echo's
+   * tail canonical. A refusal keeps the echo and lands on the error
+   * signal (the pane surfaces it inline).
+   */
+  async sendPersonaThread(id: string, text: string): Promise<McReply> {
+    const trimmed = text.trim();
+    if (trimmed === '' || this.personaDetail()?.id !== id) {
+      return { ok: false, error: 'no persona thread is open' };
+    }
+    this.personaThread.update((thread) => ({
+      messages: [
+        ...(thread?.messages ?? []),
+        { role: 'owner', text: trimmed, at: new Date().toISOString() },
+      ],
+    }));
+    const body = await this.client
+      .request('POST', `/api/personas/${encodeURIComponent(id)}/thread`, { text: trimmed })
+      .catch(fail);
+    if (this.personaDetail()?.id !== id) {
+      return { ok: false, error: 'the persona thread closed' };
+    }
+    if (isFailure(body)) {
+      this.personaThreadError.set(body.error);
+      return body;
+    }
+    // The reply may carry the canonical thread — apply it when readable;
+    // anything else keeps the optimistic echo (tolerant, never a throw).
+    const messages = (body as Record<string, unknown>)['messages'];
+    if (Array.isArray(messages)) {
+      this.personaThread.set(parsePersonaThread({ messages }));
+    }
+    this.personaThreadError.set(null);
+    return { ok: true };
+  }
+
+  /**
+   * Appends one manual memory entry: the unpinned line lands at once
+   * (optimistic), then the POST; a refusal drops the optimistic line and
+   * lands on the error signal.
+   */
+  async appendPersonaMemory(id: string, text: string): Promise<McReply> {
+    const trimmed = text.trim();
+    if (trimmed === '' || this.personaDetail()?.id !== id) {
+      return { ok: false, error: 'no persona memory is open' };
+    }
+    const before = this.personaMemory();
+    this.personaMemory.set({
+      entries: [...(before?.entries ?? []), { text: trimmed, pinned: false }],
+    });
+    const body = await this.client
+      .request('POST', `/api/personas/${encodeURIComponent(id)}/memory`, { text: trimmed })
+      .catch(fail);
+    if (this.personaDetail()?.id !== id) {
+      return { ok: false, error: 'the persona memory closed' };
+    }
+    if (isFailure(body)) {
+      this.personaMemory.set(before);
+      this.personaMemoryError.set(body.error);
+      return body;
+    }
+    const entries = (body as Record<string, unknown>)['entries'];
+    if (Array.isArray(entries)) {
+      this.personaMemory.set(parsePersonaMemory({ entries }));
+    }
+    this.personaMemoryError.set(null);
+    return { ok: true };
+  }
+
+  /**
+   * Pins or unpins the memory entry at `index` (`POST …/memory/pin` with
+   * `{index, pinned}` — the wire pins by position): the flag flips at
+   * once (optimistic) and reverts when the desk refuses.
+   */
+  async pinPersonaMemory(id: string, index: number, pinned: boolean): Promise<McReply> {
+    const before = this.personaMemory();
+    if (before === null || this.personaDetail()?.id !== id || before.entries[index] === undefined) {
+      return { ok: false, error: 'no such memory entry' };
+    }
+    const flipped: PersonaMemoryView = {
+      entries: before.entries.map((entry, at) => (at === index ? { ...entry, pinned } : entry)),
+    };
+    this.personaMemory.set(flipped);
+    const body = await this.client
+      .request('POST', `/api/personas/${encodeURIComponent(id)}/memory/pin`, { index, pinned })
+      .catch(fail);
+    if (this.personaDetail()?.id !== id) {
+      return { ok: false, error: 'the persona memory closed' };
+    }
+    if (isFailure(body)) {
+      this.personaMemory.set(before);
+      this.personaMemoryError.set(body.error);
+      return body;
+    }
+    if ((body as Record<string, unknown>)['ok'] !== true) {
+      this.personaMemory.set(before);
+      const refused = refusal(body, 'the desk did not take the pin');
+      this.personaMemoryError.set(refused.error);
+      return refused;
+    }
+    this.personaMemoryError.set(null);
+    return { ok: true };
+  }
+
+  /**
+   * Patches the persona (`PATCH /api/personas/<id>` — the setup tab's
+   * every change, one commit each); a success re-folds the team so the
+   * directory's fresh fields ride the next render.
+   */
+  async personaPatch(id: string, patch: PersonaPatch): Promise<McReply> {
+    const body = await this.client
+      .request<Record<string, unknown>>('PATCH', `/api/personas/${encodeURIComponent(id)}`, patch)
+      .catch(fail);
+    if (isFailure(body)) {
+      return body;
+    }
+    if (body['ok'] !== true) {
+      return refusal(body, 'the desk did not take the change');
+    }
+    await this.refreshTeam();
+    return { ok: true };
+  }
+
+  // --- the chain's switches (the team tab's strip and cards) -------------------
+
+  /**
+   * The chain master's toggle (`POST /api/chain/master` with the new
+   * mode): a success re-folds the team (the fresh snapshot reports the
+   * position) and toasts the prototype's wording; a refusal toasts why.
+   */
+  async chainMaster(paused: boolean): Promise<McReply> {
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', '/api/chain/master', {
+        mode: paused ? 'halted' : 'run',
+      })
+      .catch(fail);
+    if (isFailure(body)) {
+      this.toast(body.error, 'error');
+      return body;
+    }
+    if (body['ok'] !== true) {
+      const refused = refusal(body, 'the desk did not take the switch');
+      this.toast(refused.error, 'error');
+      return refused;
+    }
+    await this.refreshTeam();
+    this.toast(paused ? 'Chain halted — running runs finish' : 'Chain runs again', 'ok');
+    return { ok: true };
+  }
+
+  /**
+   * One persona's pause/resume (`POST /api/chain/persona-pause` with
+   * `{persona, paused}`): a success re-folds the team and toasts; a
+   * refusal toasts why. The paused persona finishes its running work —
+   * the chain just stops dispatching to it.
+   */
+  async personaPause(id: string, paused: boolean): Promise<McReply> {
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', '/api/chain/persona-pause', { persona: id, paused })
+      .catch(fail);
+    if (isFailure(body)) {
+      this.toast(body.error, 'error');
+      return body;
+    }
+    if (body['ok'] !== true) {
+      const refused = refusal(body, `the desk did not ${paused ? 'pause' : 'resume'} ${id}`);
+      this.toast(refused.error, 'error');
+      return refused;
+    }
+    await this.refreshTeam();
+    this.toast(paused ? `Persona ${id} paused` : `Persona ${id} resumed`, 'ok');
     return { ok: true };
   }
 
@@ -780,13 +1068,25 @@ export class McState {
       return;
     }
     this.tail = { file };
-    this.appendMessage({ role: 'mission', text: delta.text, thought: delta.thought, at: new Date().toISOString() });
+    this.appendMessage({
+      role: 'mission',
+      text: delta.text,
+      thought: delta.thought,
+      at: new Date().toISOString(),
+    });
   }
 
-  private appendMessage(message: { role: 'owner' | 'mission'; text: string; thought: string | null; at: string }): void {
+  private appendMessage(message: {
+    role: 'owner' | 'mission';
+    text: string;
+    thought: string | null;
+    at: string;
+  }): void {
     this.chat.update((chat) => {
       const active = chat.active;
-      return active === null ? chat : { ...chat, active: { ...active, messages: [...active.messages, message] } };
+      return active === null
+        ? chat
+        : { ...chat, active: { ...active, messages: [...active.messages, message] } };
     });
   }
 
@@ -805,8 +1105,15 @@ export class McState {
             return chat;
           }
           const last = active.messages[active.messages.length - 1]!;
-          const grown = { ...last, text: say === '' ? last.text : say, thought: thought ?? last.thought };
-          return { ...chat, active: { ...active, messages: [...active.messages.slice(0, -1), grown] } };
+          const grown = {
+            ...last,
+            text: say === '' ? last.text : say,
+            thought: thought ?? last.thought,
+          };
+          return {
+            ...chat,
+            active: { ...active, messages: [...active.messages.slice(0, -1), grown] },
+          };
         });
       } else if (say !== '') {
         this.appendMessage({ role: 'mission', text: say, thought, at: new Date().toISOString() });

@@ -192,12 +192,16 @@ export interface McChainEntry {
 // --- Team ------------------------------------------------------------------
 
 /** A persona's live run, folded in from the fleet snapshot. */
-export type RunStateView = 'starting' | 'running' | 'stopping' | 'done' | 'stopped' | 'failed' | 'detached';
+export type RunStateView =
+  'starting' | 'running' | 'stopping' | 'done' | 'stopped' | 'failed' | 'detached';
 
 export interface PersonaRun {
   readonly ticketId: string;
   readonly state: RunStateView;
 }
+
+/** The persona's routing policy inside its pool (the engine's PersonaRouter). */
+export type PersonaRouterView = 'off' | 'budget' | 'escalate-on-fail';
 
 /** One team card: the persona directory slice plus what it is running now. */
 export interface PersonaView {
@@ -223,12 +227,42 @@ export interface PersonaView {
    * `run_settled` costs; absent when no known cost exists — never a fake 0.
    */
   readonly dailyCost?: number;
+  /**
+   * The chain phases the persona serves (the assignment's `phases:`),
+   * in chain order; absent when the desk omits them — the team card's
+   * phases slot hides then, never a fake empty line.
+   */
+  readonly phases?: readonly string[];
+  /**
+   * True while the owner paused this persona in the chain; absent when
+   * the desk does not report it (the fleet's `pausedPersonas` list is
+   * the fallback the card consults then).
+   */
+  readonly paused?: boolean;
+  /**
+   * The skill files under `_meta/skills/` the persona carries; absent
+   * when the desk omits them — the setup tab's skills group hides then.
+   */
+  readonly skills?: readonly string[];
+  /**
+   * The routing policy inside the pool; absent when the desk omits it —
+   * the setup tab reads that as the `off` its cycle starts from.
+   */
+  readonly router?: PersonaRouterView;
 }
 
 export interface TeamView {
   readonly personas: readonly PersonaView[];
   /** The fleet's runs with their raw state — the work tab counts the live ones. */
   readonly runs: readonly { readonly state: string | null }[];
+  /**
+   * The chain master switch off the fleet snapshot (`run` dispatches,
+   * `halted` lets running work finish); null = unknown — the team's
+   * master strip shows its idle face instead of guessing.
+   */
+  readonly chainMaster?: 'run' | 'halted' | null;
+  /** The persona ids the owner paused in the chain; `[]` when the desk sends none. */
+  readonly pausedPersonas?: readonly string[];
 }
 
 // --- Persona improvements (E6) ------------------------------------------------
@@ -263,6 +297,102 @@ export interface PersonaImprovementsView {
   readonly proposals: readonly ImprovementProposalView[];
   readonly openCount: number;
   readonly frictionCount: number;
+}
+
+// --- Persona thread & memory (the 1:1's chat and memory tabs) -----------------
+
+/**
+ * One message of a persona's 1:1 thread (`GET /api/personas/<id>/thread`):
+ * the sender's role ('owner' = the device owner, anything else reads as
+ * the persona), the text, the ISO stamp — '' when the desk omitted it.
+ */
+export interface PersonaThreadMessageView {
+  readonly role: 'owner' | 'persona';
+  readonly text: string;
+  readonly at: string;
+}
+
+export interface PersonaThreadView {
+  readonly messages: readonly PersonaThreadMessageView[];
+}
+
+/**
+ * One memory entry (`GET /api/personas/<id>/memory`): the line's text
+ * itself and whether it is pinned (pinned entries sort first desk-side
+ * and carry the accent border here).
+ */
+export interface PersonaMemoryEntryView {
+  readonly text: string;
+  readonly pinned: boolean;
+}
+
+export interface PersonaMemoryView {
+  readonly entries: readonly PersonaMemoryEntryView[];
+}
+
+/**
+ * The persona fields a setup change rewrites in one commit
+ * (`PATCH /api/personas/<id>`): every field optional — the desk applies
+ * only what the patch carries.
+ */
+export interface PersonaPatch {
+  readonly title?: string;
+  readonly role?: string;
+  readonly worker?: string;
+  readonly model?: string;
+  readonly pool?: readonly string[];
+  readonly router?: PersonaRouterView;
+  readonly color?: string;
+  readonly skills?: readonly string[];
+  readonly prompt?: string;
+}
+
+/** One thread message off the wire; null when the desk sent no usable text. */
+function threadMessageOf(raw: unknown): PersonaThreadMessageView | null {
+  const message = rec(raw);
+  if (message === null) {
+    return null;
+  }
+  const text = str(message['text']);
+  if (text === '') {
+    return null;
+  }
+  return {
+    role: message['role'] === 'owner' ? 'owner' : 'persona',
+    text,
+    at: str(message['at']),
+  };
+}
+
+/**
+ * The persona thread answer (`{messages}`) tolerantly mapped; junk yields
+ * an empty thread — a torn message drops out instead of throwing.
+ */
+export function parsePersonaThread(json: unknown): PersonaThreadView {
+  return {
+    messages: arr(rec(json)?.['messages'])
+      .map(threadMessageOf)
+      .filter((message): message is PersonaThreadMessageView => message !== null),
+  };
+}
+
+/**
+ * The persona memory answer (`{entries}`) tolerantly mapped; junk yields
+ * no entries — the memory tab then shows its empty state.
+ */
+export function parsePersonaMemory(json: unknown): PersonaMemoryView {
+  return {
+    entries: arr(rec(json)?.['entries'])
+      .map((raw) => {
+        const entry = rec(raw);
+        if (entry === null) {
+          return null;
+        }
+        const text = str(entry['text']);
+        return text === '' ? null : { text, pinned: entry['pinned'] === true };
+      })
+      .filter((entry): entry is PersonaMemoryEntryView => entry !== null),
+  };
 }
 
 // --- Chat ------------------------------------------------------------------
@@ -491,15 +621,20 @@ export interface TicketDiffView {
 // --- the mappers ------------------------------------------------------------
 
 const rec = (value: unknown): Record<string, unknown> | null =>
-  typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 
 const arr = (value: unknown): readonly unknown[] => (Array.isArray(value) ? value : []);
 
-const str = (value: unknown, fallback = ''): string => (typeof value === 'string' ? value : fallback);
+const str = (value: unknown, fallback = ''): string =>
+  typeof value === 'string' ? value : fallback;
 
-const strOrNull = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null);
+const strOrNull = (value: unknown): string | null =>
+  typeof value === 'string' && value !== '' ? value : null;
 
-const strArray = (value: unknown): readonly string[] => arr(value).filter((item): item is string => typeof item === 'string');
+const strArray = (value: unknown): readonly string[] =>
+  arr(value).filter((item): item is string => typeof item === 'string');
 
 const isoNow = (): string => new Date().toISOString();
 
@@ -609,7 +744,8 @@ export function usageOf(raw: unknown): McTicketUsage | undefined {
   return {
     tokensIn: countOf(usage['tokensIn'], 0),
     tokensOut: countOf(usage['tokensOut'], 0),
-    cost: typeof usage['cost'] === 'number' && Number.isFinite(usage['cost']) ? usage['cost'] : null,
+    cost:
+      typeof usage['cost'] === 'number' && Number.isFinite(usage['cost']) ? usage['cost'] : null,
     runs: countOf(usage['runs'], 0),
   };
 }
@@ -721,7 +857,9 @@ function waitQuestionOf(raw: unknown): WaitQuestionView | null {
     options: arr(item['options'])
       .map((option) => {
         const body = rec(option);
-        return body === null ? null : { label: str(body['label']), description: strOrNull(body['description']) };
+        return body === null
+          ? null
+          : { label: str(body['label']), description: strOrNull(body['description']) };
       })
       .filter((option): option is WaitOptionView => option !== null && option.label !== ''),
     multiple: item['multiple'] === true,
@@ -757,7 +895,9 @@ function shapedQuestionOf(raw: unknown): ShapedQuestionView | null {
     return null;
   }
   const recommended =
-    typeof item['recommended'] === 'number' && Number.isFinite(item['recommended']) ? item['recommended'] : null;
+    typeof item['recommended'] === 'number' && Number.isFinite(item['recommended'])
+      ? item['recommended']
+      : null;
   return {
     question,
     context: strOrNull(item['context']),
@@ -794,7 +934,12 @@ export function parseNeeds(json: unknown): NeedView[] {
     }
     const kind = str(item['kind']);
     const report = kind === 'report' ? scoutReportOf(item['report']) : undefined;
-    const questions = kind === 'question' ? arr(item['questions']).map(waitQuestionOf).filter((q): q is WaitQuestionView => q !== null) : [];
+    const questions =
+      kind === 'question'
+        ? arr(item['questions'])
+            .map(waitQuestionOf)
+            .filter((q): q is WaitQuestionView => q !== null)
+        : [];
     const shaped = kind === 'question' ? shapedQuestionOf(item['shaped']) : null;
     const runId = strOrNull(item['runId']);
     const need: NeedView = {
@@ -833,6 +978,10 @@ function personaOf(raw: unknown): PersonaView | null {
     return null;
   }
   const dailyCost = moneyOf(persona['dailyCost']);
+  const phases = strArray(persona['phases']);
+  const skills = strArray(persona['skills']);
+  const router = routerOf(persona['router']);
+  const paused = personasPausedOf(persona['paused']);
   return {
     id,
     title: str(persona['title'], id),
@@ -845,15 +994,37 @@ function personaOf(raw: unknown): PersonaView | null {
     // A lone directory entry carries no fleet context; parseTeam folds the run in.
     currentRun: null,
     ...(dailyCost !== null ? { dailyCost } : {}),
+    ...(phases.length > 0 ? { phases } : {}),
+    ...(paused !== undefined ? { paused } : {}),
+    ...(skills.length > 0 ? { skills } : {}),
+    ...(router !== null ? { router } : {}),
   };
+}
+
+/** The persona's `paused` flag; undefined when the desk omits it or junks it. */
+function personasPausedOf(value: unknown): boolean | undefined {
+  return value === true ? true : value === false ? false : undefined;
+}
+
+/** The routing policy off the wire; anything unknown reads as omitted. */
+function routerOf(value: unknown): PersonaRouterView | null {
+  return value === 'budget' || value === 'escalate-on-fail' || value === 'off' ? value : null;
 }
 
 /**
  * The personas list with the fleet's live runs folded in: a persona's
- * `currentRun` is the newest run it dispatched that is still live.
+ * `currentRun` is the newest run it dispatched that is still live. The
+ * fleet snapshot's chain block rides along tolerantly — the master
+ * switch's position and the paused-persona ids; a snapshot without them
+ * leaves both unknown (`null` / `[]`).
  */
 export function parseTeam(personasJson: unknown, fleetJson: unknown): TeamView {
-  const runs = arr(rec(fleetJson)?.['runs']);
+  const fleet = rec(fleetJson) ?? {};
+  const runs = arr(fleet['runs']);
+  const chain = rec(fleet['chain']);
+  const master = chain?.['master'];
+  const chainMaster = master === 'run' || master === 'halted' ? master : null;
+  const pausedPersonas = strArray(fleet['pausedPersonas']);
   const personas: PersonaView[] = [];
   for (const raw of arr(personasJson)) {
     const persona = personaOf(raw);
@@ -862,18 +1033,28 @@ export function parseTeam(personasJson: unknown, fleetJson: unknown): TeamView {
     }
     const liveRun = runs
       .map((run) => rec(run))
-      .find((run) => run !== null && str(run['persona']) === persona.id && runStateOf(run['state']) !== null);
+      .find(
+        (run) =>
+          run !== null && str(run['persona']) === persona.id && runStateOf(run['state']) !== null,
+      );
     const state = liveRun === null || liveRun === undefined ? null : runStateOf(liveRun['state']);
     personas.push({
       ...persona,
-      currentRun: liveRun === null || liveRun === undefined || state === null ? null : { ticketId: str(liveRun['ticketId']), state },
+      currentRun:
+        liveRun === null || liveRun === undefined || state === null
+          ? null
+          : { ticketId: str(liveRun['ticketId']), state },
     });
   }
   return {
     personas,
     runs: runs
       .map((run) => rec(run))
-      .map((run) => ({ state: run !== null && typeof run['state'] === 'string' ? run['state'] : null })),
+      .map((run) => ({
+        state: run !== null && typeof run['state'] === 'string' ? run['state'] : null,
+      })),
+    ...(chainMaster !== null ? { chainMaster } : {}),
+    ...(pausedPersonas.length > 0 ? { pausedPersonas } : {}),
   };
 }
 
@@ -906,7 +1087,9 @@ function improvementProposalOf(raw: unknown): ImprovementProposalView | null {
 
 /** A non-negative integer counter; anything else takes the fallback. */
 function countOf(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.trunc(value))
+    : fallback;
 }
 
 /**
@@ -926,7 +1109,10 @@ export function parseImprovements(json: unknown): PersonaImprovementsView | null
   return {
     persona: personaOf(body['persona']),
     proposals,
-    openCount: countOf(body['openCount'], proposals.filter((proposal) => proposal.state === 'open').length),
+    openCount: countOf(
+      body['openCount'],
+      proposals.filter((proposal) => proposal.state === 'open').length,
+    ),
     frictionCount: countOf(body['frictionCount'], 0),
   };
 }
@@ -940,7 +1126,10 @@ function sessionMetaOf(raw: unknown): SessionMeta | null {
   if (file === '') {
     return null;
   }
-  const pending = typeof session['pending'] === 'number' && Number.isFinite(session['pending']) ? Math.max(0, Math.trunc(session['pending'])) : 0;
+  const pending =
+    typeof session['pending'] === 'number' && Number.isFinite(session['pending'])
+      ? Math.max(0, Math.trunc(session['pending']))
+      : 0;
   return {
     file,
     title: str(session['title'], file),
@@ -994,7 +1183,9 @@ function proposalOf(raw: unknown): ChatProposalView | null {
  * command is absent or another kind (the card then renders the summary
  * line alone — the asymmetric-tolerance rule).
  */
-function chainCommandOf(raw: unknown): { readonly id: string; readonly chain: readonly string[] } | undefined {
+function chainCommandOf(
+  raw: unknown,
+): { readonly id: string; readonly chain: readonly string[] } | undefined {
   const command = rec(raw);
   if (command === null || str(command['kind']) !== 'setChain') {
     return undefined;
@@ -1104,7 +1295,8 @@ function verificationBoundsOf(text: string): { start: number; end: number } | nu
   }
   const rest = text.slice(heading.index);
   const next = /^## /gm.exec(rest.slice(VERIFICATION_HEADING.length));
-  const end = next === null ? text.length : heading.index + VERIFICATION_HEADING.length + next.index;
+  const end =
+    next === null ? text.length : heading.index + VERIFICATION_HEADING.length + next.index;
   return { start: heading.index, end };
 }
 
@@ -1126,7 +1318,8 @@ export function parseVerification(text: string): VerificationView | null {
   const section = text.slice(bounds.start, bounds.end);
   const tested = /^Tested on (\S+) by ([^—]+?)(?: — (.+?))?\.?$/m.exec(section);
   const criteria: VerificationCriterionView[] = [];
-  const criterionRe = /^- \[([ xX])\] `([^`]+)`(?: → !\[\]\(\.\.\/attachments\/([^)]+)\))?(?: — (.+))?$/gm;
+  const criterionRe =
+    /^- \[([ xX])\] `([^`]+)`(?: → !\[\]\(\.\.\/attachments\/([^)]+)\))?(?: — (.+))?$/gm;
   for (let match = criterionRe.exec(section); match !== null; match = criterionRe.exec(section)) {
     criteria.push({
       command: match[2]!,
@@ -1160,7 +1353,10 @@ export function parseVerification(text: string): VerificationView | null {
  * Verification section is parsed out of the full markdown; `phases` rides
  * along from the caller's current board view.
  */
-export function parseTicketDetail(json: unknown, phases: readonly TicketPhaseOption[]): TicketDetail | null {
+export function parseTicketDetail(
+  json: unknown,
+  phases: readonly TicketPhaseOption[],
+): TicketDetail | null {
   const body = rec(json);
   if (body === null || body['ok'] === false) {
     return null;
@@ -1225,7 +1421,11 @@ export function parseTicketDiff(json: unknown): TicketDiffView {
     files: arr(body['files'])
       .map((raw) => rec(raw))
       .filter((file): file is Record<string, unknown> => file !== null)
-      .map((file) => ({ status: str(file['status']), path: str(file['path']), patch: str(file['patch']) }))
+      .map((file) => ({
+        status: str(file['status']),
+        path: str(file['path']),
+        patch: str(file['patch']),
+      }))
       .filter((file) => file.path !== ''),
     truncated: body['truncated'] === true,
   };

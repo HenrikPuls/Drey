@@ -297,7 +297,7 @@ describe('multi-repo runs (req-72)', () => {
 
 
 describe('persona dispatch (E3, ADR-0088)', () => {
-  const PIA = { id: 'pia', worker: 'claude-code', model: 'sonnet', prompt: 'You are Pia.', memory: '' };
+  const PIA = { id: 'pia', worker: 'claude-code', model: 'sonnet', prompt: 'You are Pia.', memory: '', coaching: '' };
 
   it('a persona beats the assignment ring for provider and model', () => {
     const result = composeRunRequest(
@@ -467,7 +467,7 @@ describe('scout runs (E8, concept §5.6)', () => {
   });
 
   it('a persona scout signs the report and rides provider, model, prompt and memory', () => {
-    const PIA = { id: 'pia', worker: 'claude-code', model: 'sonnet', prompt: 'You are Pia.', memory: '# Memory\n\n- lesson\n' };
+    const PIA = { id: 'pia', worker: 'claude-code', model: 'sonnet', prompt: 'You are Pia.', memory: '# Memory\n\n- lesson\n', coaching: '' };
     const result = composeRunRequest(base({ card: scoutCard(), ticketText: NO_CRITERIA, promptText: 'Phase template.', persona: PIA }));
     if (!result.ok) {
       throw new Error(result.error);

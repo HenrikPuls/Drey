@@ -15,17 +15,30 @@ afterEach(async () => {
   gateway = null;
 });
 
-async function start(): Promise<{ base: string; emit: (what: RemoteChange) => void; token: string }> {
+async function start(): Promise<{ base: string; emit: (what: RemoteChange) => void; token: string; calls: { patch?: unknown; pause?: unknown; thread?: unknown } }> {
   const listeners = new Set<(what: RemoteChange) => void>();
   const devices = new DeviceRegistry([], async () => undefined);
   const { token } = await devices.add('Test', false, new Date());
   let allowed = new Set<string>();
+  const calls: { patch?: unknown; pause?: unknown; thread?: unknown } = {};
   gateway = new RemoteGateway({
     clientDir: '/nonexistent-client-dir',
     log: () => undefined,
     router: {
       port: {
         needs: async () => [],
+        personaPatch: async (cmd: unknown) => {
+          calls.patch = cmd;
+          return { ok: true };
+        },
+        chainPersonaPause: async (cmd: { persona: string; paused: boolean }) => {
+          calls.pause = cmd;
+          return { ok: true, persona: cmd.persona, paused: cmd.paused };
+        },
+        personaThread: async (id: string) => {
+          calls.thread = id;
+          return { ok: true, messages: [] };
+        },
         onChanged: (l: (what: RemoteChange) => void) => {
           listeners.add(l);
           return () => listeners.delete(l);
@@ -43,7 +56,7 @@ async function start(): Promise<{ base: string; emit: (what: RemoteChange) => vo
   await gateway.start('127.0.0.1', 0);
   const address = gateway.listening!;
   allowed = new Set([address]);
-  return { base: `http://${address}`, emit: (what) => listeners.forEach((l) => l(what)), token };
+  return { base: `http://${address}`, emit: (what) => listeners.forEach((l) => l(what)), token, calls };
 }
 
 describe('RemoteGateway', () => {
@@ -71,6 +84,33 @@ describe('RemoteGateway', () => {
     expect(bad.status).toBe(400);
     const needs = await fetch(`${base}/api/needs`, { headers: { Authorization: `Bearer ${token}` } });
     expect(await needs.json()).toEqual([]);
+  });
+
+  it('carries a PATCH body through to the port — the U4 persona patch (U4)', async () => {
+    const { base, token, calls } = await start();
+    const patched = await fetch(`${base}/api/personas/pia`, {
+      method: 'PATCH',
+      body: JSON.stringify({ model: 'sonnet', router: 'budget' }),
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(patched.status).toBe(200);
+    expect(await patched.json()).toEqual({ ok: true });
+    expect(calls.patch).toEqual({ persona: 'pia', model: 'sonnet', router: 'budget' });
+
+    // a body-less PATCH is a refused command, not a transport error
+    const empty = await fetch(`${base}/api/personas/pia`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } });
+    expect(empty.status).toBe(200);
+    expect(((await empty.json()) as { ok: boolean }).ok).toBe(false);
+
+    const paused = await fetch(`${base}/api/chain/persona-pause`, {
+      method: 'POST',
+      body: JSON.stringify({ persona: 'pia', paused: true }),
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(await paused.json()).toEqual({ ok: true, persona: 'pia', paused: true });
+    expect(calls.pause).toEqual({ persona: 'pia', paused: true });
+    expect((await fetch(`${base}/api/personas/pia/thread`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(200);
+    expect(calls.thread).toBe('pia');
   });
 
   it('streams board and fleet changes to a paired device only', async () => {

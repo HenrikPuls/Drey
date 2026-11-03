@@ -4,19 +4,35 @@
  * DOM (the unit-test builder runs these under jsdom, but nothing here
  * renders a template).
  */
-import type { Signal } from '@angular/core';
+import { signal, type Signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ImprovementProposalView, PersonaImprovementsView } from '../api/dto';
+import type {
+  ImprovementProposalView,
+  PersonaImprovementsView,
+  PersonaMemoryView,
+  PersonaPatch,
+  PersonaThreadView,
+} from '../api/dto';
 import { ACCEPT_ARM_WINDOW_MS, type AcceptArmState } from '../ticket/ticket.model';
 import {
+  CARD_SNIPPET_CAP,
   CONTENT_PREVIEW_LINES,
   EVIDENCE_PREVIEW_CAP,
   MC_TEAM_DETAIL,
   PersonaDetail,
+  ROUTER_CYCLE,
+  WORKER_OPTIONS,
+  chatIntentOf,
   contentPreviewOf,
   evidencePreviewOf,
+  nextRouterOf,
+  poolWordsOf,
   proposalsSplitOf,
+  skillsToggled,
+  snippetOf,
+  timeWordsOf,
+  type CoachingCardVm,
   type PersonaFacts,
   type ProposalSplit,
   type TeamDetailVm,
@@ -26,7 +42,10 @@ const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 
 
 // --- fakes -------------------------------------------------------------------------
 
-function proposal(id: string, extra: Partial<ImprovementProposalView> = {}): ImprovementProposalView {
+function proposal(
+  id: string,
+  extra: Partial<ImprovementProposalView> = {},
+): ImprovementProposalView {
   return {
     id,
     state: 'open',
@@ -45,7 +64,15 @@ function view(extra: Partial<PersonaImprovementsView> = {}): PersonaImprovements
   return { persona: null, proposals: [], openCount: 0, frictionCount: 0, ...extra };
 }
 
-const PIA_FACTS: PersonaFacts = { id: 'pia', title: 'Pia', role: 'Planner', color: '#ff0000' };
+const PIA_FACTS: PersonaFacts = {
+  id: 'pia',
+  title: 'Pia',
+  role: 'Planner',
+  color: '#ff0000',
+  worker: 'claude-code',
+  model: 'zai/glm-5.3',
+  pool: ['zai/glm-5.3', 'sonnet'],
+};
 
 type ActionReply = { ok: boolean; error?: string };
 
@@ -55,12 +82,27 @@ interface FakeVm extends TeamDetailVm {
   view: PersonaImprovementsView | null;
   error: string | null;
   readonly: boolean;
+  threadValue: PersonaThreadView | null;
+  threadErrorValue: string | null;
+  memoryValue: PersonaMemoryView | null;
+  memoryErrorValue: string | null;
   applied: ImprovementProposalView[];
   dismissed: ImprovementProposalView[];
   applyReplies: ActionReply[];
   dismissReplies: ActionReply[];
   reloads: number;
   closes: number;
+  sent: string[];
+  sendReplies: ActionReply[];
+  threadErrorSet: string | null;
+  addedMemory: string[];
+  addReplies: ActionReply[];
+  pins: { index: number; pinned: boolean }[];
+  pinReplies: ActionReply[];
+  patched: PersonaPatch[];
+  patchReplies: ActionReply[];
+  prefilled: string[];
+  toasts: { message: string; kind?: 'ok' | 'warn' | 'error' }[];
 }
 
 function makeVm(patch: Partial<FakeVm> = {}): FakeVm {
@@ -70,12 +112,27 @@ function makeVm(patch: Partial<FakeVm> = {}): FakeVm {
     view: view(),
     error: null,
     readonly: false,
+    threadValue: { messages: [] },
+    threadErrorValue: null,
+    memoryValue: { entries: [] },
+    memoryErrorValue: null,
     applied: [],
     dismissed: [],
     applyReplies: [{ ok: true }],
     dismissReplies: [{ ok: true }],
     reloads: 0,
     closes: 0,
+    sent: [],
+    sendReplies: [{ ok: true }],
+    threadErrorSet: null,
+    addedMemory: [],
+    addReplies: [{ ok: true }],
+    pins: [],
+    pinReplies: [{ ok: true }],
+    patched: [],
+    patchReplies: [{ ok: true }],
+    prefilled: [],
+    toasts: [],
     open() {
       return this.openState;
     },
@@ -105,6 +162,40 @@ function makeVm(patch: Partial<FakeVm> = {}): FakeVm {
       this.dismissed.push(p);
       return this.dismissReplies.shift() ?? { ok: true };
     },
+    thread() {
+      return this.threadValue;
+    },
+    threadError() {
+      return this.threadErrorValue;
+    },
+    async sendThread(text) {
+      this.sent.push(text);
+      return this.sendReplies.shift() ?? { ok: true };
+    },
+    memory() {
+      return this.memoryValue;
+    },
+    memoryError() {
+      return this.memoryErrorValue;
+    },
+    async addMemory(text) {
+      this.addedMemory.push(text);
+      return this.addReplies.shift() ?? { ok: true };
+    },
+    async pinMemory(index, pinned) {
+      this.pins.push({ index, pinned });
+      return this.pinReplies.shift() ?? { ok: true };
+    },
+    async patchPersona(p) {
+      this.patched.push(p);
+      return this.patchReplies.shift() ?? { ok: true };
+    },
+    prefillChat(text) {
+      this.prefilled.push(text);
+    },
+    toast(message, kind) {
+      this.toasts.push({ message, kind });
+    },
     ...patch,
   };
 }
@@ -115,9 +206,26 @@ interface DetailSurface {
   title: Signal<string>;
   role: Signal<string>;
   color: Signal<string>;
+  openId: Signal<string>;
+  readOnly: Signal<boolean>;
+  tab: WritableSignal<string>;
+  setTab(tab: string): void;
+  improveCount: Signal<number>;
+  memCount: Signal<number>;
+  thread: Signal<PersonaThreadView | null>;
+  threadError: Signal<string | null>;
+  draft: WritableSignal<string>;
+  sending: Signal<boolean>;
+  sendError: Signal<string | null>;
+  cards: Signal<readonly CoachingCardVm[]>;
+  onDraftInput(event: Event): void;
+  send(): Promise<void>;
+  snippet(card: CoachingCardVm): string;
+  applyCard(card: CoachingCardVm): Promise<void>;
+  dismissCard(card: CoachingCardVm): void;
+  errorForCard(card: CoachingCardVm): string | null;
   improvements: Signal<PersonaImprovementsView | null>;
   loadError: Signal<string | null>;
-  readOnly: Signal<boolean>;
   loading: Signal<boolean>;
   empty: Signal<boolean>;
   frictionLine: Signal<string | null>;
@@ -133,8 +241,39 @@ interface DetailSurface {
   errorFor(proposal: ImprovementProposalView): string | null;
   applyTap(proposal: ImprovementProposalView): void;
   dismiss(proposal: ImprovementProposalView): Promise<void>;
+  evidenceWords(proposal: ImprovementProposalView): string;
   reload(): void;
   close(): void;
+  memory: Signal<PersonaMemoryView | null>;
+  memoryError: Signal<string | null>;
+  memDraft: WritableSignal<string>;
+  memError: Signal<string | null>;
+  pinBusy: Signal<number | null>;
+  pinError: Signal<string | null>;
+  onMemDraftInput(event: Event): void;
+  addMemory(): Promise<void>;
+  togglePin(index: number, pinned: boolean): Promise<void>;
+  routerLocal: WritableSignal<string | null>;
+  routerValue: Signal<string>;
+  skillsLocal: WritableSignal<readonly string[] | null>;
+  skillsValue: Signal<readonly string[]>;
+  promptDraft: WritableSignal<string>;
+  promptError: Signal<string | null>;
+  setupBusy: Signal<string | null>;
+  setupError: Signal<string | null>;
+  sheet: WritableSignal<'model' | 'worker' | null>;
+  modelOptions: Signal<readonly string[]>;
+  poolWords: Signal<string>;
+  workerOptions: Signal<readonly string[]>;
+  skillOn(name: string): boolean;
+  onPromptInput(event: Event): void;
+  openSheet(which: 'model' | 'worker'): void;
+  closeSheet(): void;
+  pick(kind: 'model' | 'worker', value: string): Promise<void>;
+  cycleRouter(): Promise<void>;
+  toggleSkill(name: string): Promise<void>;
+  savePrompt(): Promise<void>;
+  poolTap(): void;
 }
 
 function surface(detail: PersonaDetail): DetailSurface {
@@ -146,7 +285,11 @@ function setup(vm: TeamDetailVm | null): PersonaDetail {
   TestBed.configureTestingModule({
     providers: vm === null ? [] : [{ provide: MC_TEAM_DETAIL, useValue: vm }],
   });
-  return TestBed.runInInjectionContext(() => new PersonaDetail());
+  const detail = TestBed.runInInjectionContext(() => new PersonaDetail());
+  // The open-reset effect schedules on the microtask queue — flush it so
+  // the fresh-1:1 state is in place before the test acts.
+  TestBed.flushEffects();
+  return detail;
 }
 
 // --- the pure logic ------------------------------------------------------------------
@@ -170,7 +313,10 @@ describe('proposalsSplitOf', () => {
 
 describe('evidencePreviewOf', () => {
   it('caps at three lines and counts the rest honestly', () => {
-    expect(evidencePreviewOf(['a', 'b', 'c', 'd', 'e'])).toEqual({ shown: ['a', 'b', 'c'], more: 2 });
+    expect(evidencePreviewOf(['a', 'b', 'c', 'd', 'e'])).toEqual({
+      shown: ['a', 'b', 'c'],
+      more: 2,
+    });
     expect(evidencePreviewOf(['a'])).toEqual({ shown: ['a'], more: 0 });
     expect(evidencePreviewOf([])).toEqual({ shown: [], more: 0 });
   });
@@ -192,7 +338,10 @@ describe('contentPreviewOf', () => {
   });
 
   it('previews exactly CONTENT_PREVIEW_LINES lines', () => {
-    const content = Array.from({ length: CONTENT_PREVIEW_LINES + 2 }, (_, i) => `line ${i + 1}`).join('\n');
+    const content = Array.from(
+      { length: CONTENT_PREVIEW_LINES + 2 },
+      (_, i) => `line ${i + 1}`,
+    ).join('\n');
     expect(contentPreviewOf(content).split('\n')).toHaveLength(CONTENT_PREVIEW_LINES);
   });
 });
@@ -236,7 +385,9 @@ describe('PersonaDetail', () => {
   it('a populated view splits into open cards and dim history', () => {
     const open = proposal('imp-1');
     const done = proposal('imp-2', { state: 'accepted', decidedAt: 't5' });
-    const vm = surface(setup(makeVm({ view: view({ proposals: [open, done], openCount: 1, frictionCount: 2 }) })));
+    const vm = surface(
+      setup(makeVm({ view: view({ proposals: [open, done], openCount: 1, frictionCount: 2 }) })),
+    );
     expect(vm.loading()).toBe(false);
     expect(vm.empty()).toBe(false);
     expect(vm.split().open.map((p) => p.id)).toEqual(['imp-1']);
@@ -360,7 +511,9 @@ describe('the armed two-step Apply', () => {
   });
 
   it('a refusal lands inline on the proposal', async () => {
-    const fake = makeVm({ applyReplies: [{ ok: false, error: 'the proposal is already decided' }] });
+    const fake = makeVm({
+      applyReplies: [{ ok: false, error: 'the proposal is already decided' }],
+    });
     const vm = surface(setup(fake));
     const p = proposal('imp-1');
 
@@ -447,6 +600,437 @@ describe('Dismiss', () => {
     const vm = surface(setup(fake));
     await vm.dismiss(proposal('imp-1'));
     expect(fake.dismissed).toEqual([]);
+  });
+});
+
+// --- the chat's client-side intents (pure logic) -------------------------------------
+
+describe('chatIntentOf', () => {
+  it('reads a "Neues Ticket:" line as the create intent', () => {
+    expect(chatIntentOf('Neues Ticket: Spalten-Editor')).toBe('ticket');
+    expect(chatIntentOf('please neues   ticket: something')).toBe('ticket');
+  });
+
+  it('reads prompt coaching from prompt, regel or anweisung', () => {
+    expect(chatIntentOf('Merk dir diese Regel für den Prompt')).toBe('prompt');
+    expect(chatIntentOf('neue Anweisung: erst messen')).toBe('prompt');
+  });
+
+  it('reads memory coaching from merk dir, gedaechtnis, gedächtnis or memory', () => {
+    expect(chatIntentOf('merk dir: rank fields win')).toBe('memory');
+    expect(chatIntentOf('gedaechtnis: read history first')).toBe('memory');
+    expect(chatIntentOf('ins Gedächtnis damit')).toBe('memory');
+    expect(chatIntentOf('that goes into memory')).toBe('memory');
+  });
+
+  it('everything else is a plain message', () => {
+    expect(chatIntentOf('Warum wolltest du die Ranks übernehmen?')).toBe('plain');
+    expect(chatIntentOf('')).toBe('plain');
+  });
+
+  it('the ticket intent wins over prompt and memory', () => {
+    expect(chatIntentOf('Neues Ticket: mit einer Regel im Prompt')).toBe('ticket');
+  });
+});
+
+describe('snippetOf and timeWordsOf', () => {
+  it('clips long wording at 90 characters with an ellipsis', () => {
+    const long = 'a'.repeat(120);
+    expect(snippetOf(long)).toBe(`${'a'.repeat(CARD_SNIPPET_CAP)}…`);
+    expect(snippetOf('short')).toBe('short');
+    expect(CARD_SNIPPET_CAP).toBe(90);
+  });
+
+  it('formats a readable ` · HH:MM` stamp and reads junk as none', () => {
+    expect(timeWordsOf('2026-11-01T13:58:00')).toBe(' · 13:58');
+    expect(timeWordsOf('')).toBe('');
+    expect(timeWordsOf('not a date')).toBe('');
+  });
+});
+
+describe('the setup tab’s pure moves', () => {
+  it('the router cycle walks off → budget → escalate-on-fail → off', () => {
+    expect(ROUTER_CYCLE).toEqual(['off', 'budget', 'escalate-on-fail']);
+    expect(nextRouterOf('off')).toBe('budget');
+    expect(nextRouterOf('budget')).toBe('escalate-on-fail');
+    expect(nextRouterOf('escalate-on-fail')).toBe('off');
+  });
+
+  it('the skill toggle drops a carried name and adds a missing one', () => {
+    expect(skillsToggled(['a', 'b'], 'a')).toEqual(['b']);
+    expect(skillsToggled(['b'], 'a')).toEqual(['b', 'a']);
+  });
+
+  it('the pool words join the models and read empty as none', () => {
+    expect(poolWordsOf(['opus', 'sonnet', 'glm-5.2'])).toBe('opus · sonnet · glm-5.2');
+    expect(poolWordsOf([])).toBe('');
+    expect(poolWordsOf(['', 'opus'])).toBe('opus');
+  });
+
+  it('the worker sheet offers the desk’s harnesses', () => {
+    expect(WORKER_OPTIONS).toEqual(['claude-code', 'opencode']);
+  });
+});
+
+// --- the four tabs ----------------------------------------------------------------------
+
+describe('the four tabs', () => {
+  it('a fresh 1:1 opens on the chat tab with the local state cleared', () => {
+    const openSignal = signal<{ id: string } | null>({ id: 'pia' });
+    const fake = makeVm();
+    fake.open = () => openSignal();
+    const vm = surface(setup(fake));
+    expect(vm.isOpen()).toBe(true);
+    expect(vm.tab()).toBe('chat');
+
+    vm.setTab('setup');
+    vm.draft.set('leftover');
+    vm.promptDraft.set('leftover prompt');
+    expect(vm.tab()).toBe('setup');
+    expect(vm.draft()).toBe('leftover');
+
+    // The same persona re-opened: everything resets to the chat tab.
+    openSignal.set({ id: 'pia' });
+    TestBed.flushEffects();
+    expect(vm.tab()).toBe('chat');
+    expect(vm.draft()).toBe('');
+    expect(vm.promptDraft()).toBe('');
+    expect(vm.cards()).toEqual([]);
+  });
+
+  it('the closed vm renders nothing; the header falls back to the facts or the open id', () => {
+    const vm = surface(setup(makeVm({ openState: null })));
+    expect(vm.isOpen()).toBe(false);
+    // The facts still ride along harmlessly — the template gates on isOpen.
+    expect(vm.title()).toBe('Pia');
+
+    const ghost = surface(setup(makeVm({ facts: null, openState: { id: 'ghost' } })));
+    expect(ghost.openId()).toBe('ghost');
+    expect(ghost.title()).toBe('ghost');
+  });
+
+  it('the tab badges count open proposals and memory entries, hiding at zero', () => {
+    const open = proposal('imp-1');
+    const vm = surface(
+      setup(
+        makeVm({ view: view({ proposals: [open, proposal('imp-2', { state: 'accepted' })] }) }),
+      ),
+    );
+    expect(vm.improveCount()).toBe(1);
+    expect(vm.memCount()).toBe(0);
+
+    const withMemory = surface(
+      setup(
+        makeVm({
+          memoryValue: {
+            entries: [
+              { text: 'a', pinned: false },
+              { text: 'b', pinned: true },
+            ],
+          },
+        }),
+      ),
+    );
+    expect(withMemory.memCount()).toBe(2);
+  });
+});
+
+// --- the chat tab: the pattern cards -----------------------------------------------------
+
+describe('the chat tab’s pattern cards', () => {
+  const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+  async function sendText(vm: DetailSurface, text: string): Promise<void> {
+    vm.draft.set(text);
+    await vm.send();
+    await flush();
+  }
+
+  it('a plain line sends without a card', async () => {
+    const fake = makeVm();
+    const vm = surface(setup(fake));
+    await sendText(vm, 'Warum die Ranks?');
+    expect(fake.sent).toEqual(['Warum die Ranks?']);
+    expect(vm.cards()).toEqual([]);
+    expect(vm.sendError()).toBeNull();
+  });
+
+  it('a prompt line offers the patch card; applying PATCHes the prompt and toasts the commit', async () => {
+    const fake = makeVm();
+    const vm = surface(setup(fake));
+    await sendText(vm, 'Neue Regel: erst Repo-Historie lesen');
+    const cards = vm.cards();
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.kind).toBe('prompt');
+    expect(cards[0]!.decided).toBeNull();
+    expect(vm.snippet(cards[0]!)).toContain('Neue Regel');
+
+    await vm.applyCard(cards[0]!);
+    expect(fake.patched).toEqual([{ prompt: 'Neue Regel: erst Repo-Historie lesen' }]);
+    expect(vm.cards()[0]!.decided).toBe('applied');
+    expect(fake.toasts).toEqual([{ message: 'Prompt updated (commit)', kind: 'ok' }]);
+  });
+
+  it('a memory line offers the proposal card; applying appends the whole line as the entry', async () => {
+    const fake = makeVm();
+    const vm = surface(setup(fake));
+    await sendText(vm, 'merk dir: rank fields win over derived order');
+    const cards = vm.cards();
+    expect(cards[0]!.kind).toBe('memory');
+
+    await vm.applyCard(cards[0]!);
+    expect(fake.addedMemory).toEqual(['merk dir: rank fields win over derived order']);
+    expect(fake.patched).toEqual([]);
+    expect(fake.toasts).toEqual([{ message: 'Memory entry added (commit)', kind: 'ok' }]);
+  });
+
+  it('a "Neues Ticket:" line hands through to Mission Control instead of patching', async () => {
+    const fake = makeVm();
+    const vm = surface(setup(fake));
+    await sendText(vm, 'Neues Ticket: Spalten-Editor mit Vorschau');
+    expect(fake.prefilled).toEqual(['Neues Ticket: Spalten-Editor mit Vorschau']);
+    expect(fake.patched).toEqual([]);
+    expect(fake.addedMemory).toEqual([]);
+    expect(vm.cards().map((card) => card.kind)).toEqual(['ticket']);
+  });
+
+  it('a card refusal lands inline on the card and the card stays waiting', async () => {
+    const fake = makeVm({ patchReplies: [{ ok: false, error: 'the desk refused' }] });
+    const vm = surface(setup(fake));
+    await sendText(vm, 'prompt: always cite the ticket');
+    const card = vm.cards()[0]!;
+    await vm.applyCard(card);
+    expect(vm.errorForCard(card)).toBe('the desk refused');
+    expect(card.decided).toBeNull();
+    expect(fake.toasts).toEqual([]);
+  });
+
+  it('discarding folds the card and toasts that nothing changed', async () => {
+    const fake = makeVm();
+    const vm = surface(setup(fake));
+    await sendText(vm, 'prompt: always cite the ticket');
+    const card = vm.cards()[0]!;
+    vm.dismissCard(card);
+    expect(vm.cards()[0]!.decided).toBe('dismissed');
+    expect(fake.patched).toEqual([]);
+    expect(fake.toasts).toEqual([{ message: 'Discarded — nothing changed', kind: 'ok' }]);
+  });
+
+  it('a send refusal surfaces inline and never throws', async () => {
+    const fake = makeVm({ sendReplies: [{ ok: false, error: 'the desk did not take it' }] });
+    const vm = surface(setup(fake));
+    await sendText(vm, 'plain hello');
+    expect(vm.sendError()).toBe('the desk did not take it');
+    expect(vm.sending()).toBe(false);
+
+    const throwing = makeVm();
+    throwing.sendThread = () => Promise.reject(new Error('offline'));
+    const vm2 = surface(setup(throwing));
+    await sendText(vm2, 'plain hello');
+    expect(vm2.sendError()).toBe('The message did not go through.');
+  });
+
+  it('read-only devices never send and never offer cards', async () => {
+    const fake = makeVm({ readonly: true });
+    const vm = surface(setup(fake));
+    vm.draft.set('prompt: something');
+    await vm.send();
+    expect(fake.sent).toEqual([]);
+    expect(vm.cards()).toEqual([]);
+  });
+});
+
+// --- the memory tab ----------------------------------------------------------------------
+
+describe('the memory tab', () => {
+  it('pins and unpins route through the vm with the flipped value and the index', async () => {
+    const fake = makeVm();
+    const vm = surface(setup(fake));
+    await vm.togglePin(1, true);
+    await vm.togglePin(2, false);
+    expect(fake.pins).toEqual([
+      { index: 1, pinned: false },
+      { index: 2, pinned: true },
+    ]);
+    expect(vm.pinBusy()).toBeNull();
+    expect(vm.pinError()).toBeNull();
+  });
+
+  it('a pin refusal lands inline and never throws', async () => {
+    const fake = makeVm({ pinReplies: [{ ok: false, error: 'the desk refused' }] });
+    const vm = surface(setup(fake));
+    await vm.togglePin(0, false);
+    expect(vm.pinError()).toBe('the desk refused');
+
+    const throwing = makeVm();
+    throwing.pinMemory = () => Promise.reject(new Error('offline'));
+    const vm2 = surface(setup(throwing));
+    await vm2.togglePin(0, false);
+    expect(vm2.pinError()).toBe('The pin did not take.');
+  });
+
+  it('the manual add trims and refuses an empty draft silently', async () => {
+    const fake = makeVm();
+    const vm = surface(setup(fake));
+    vm.memDraft.set('   ');
+    await vm.addMemory();
+    expect(fake.addedMemory).toEqual([]);
+    expect(vm.memError()).toBeNull();
+
+    vm.memDraft.set('  read history first  ');
+    await vm.addMemory();
+    expect(fake.addedMemory).toEqual(['read history first']);
+    expect(vm.memDraft()).toBe('');
+  });
+
+  it('an add refusal lands inline', async () => {
+    const fake = makeVm({ addReplies: [{ ok: false, error: 'no such persona' }] });
+    const vm = surface(setup(fake));
+    vm.memDraft.set('one line');
+    await vm.addMemory();
+    expect(vm.memError()).toBe('no such persona');
+  });
+
+  it('read-only devices never add or pin', async () => {
+    const fake = makeVm({ readonly: true });
+    const vm = surface(setup(fake));
+    vm.memDraft.set('one line');
+    await vm.addMemory();
+    await vm.togglePin(0, false);
+    expect(fake.addedMemory).toEqual([]);
+    expect(fake.pins).toEqual([]);
+  });
+});
+
+// --- the setup tab -----------------------------------------------------------------------
+
+describe('the setup tab', () => {
+  const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('the router row cycles off → budget → escalate-on-fail → off with one PATCH per tap', async () => {
+    const fake = makeVm();
+    const vm = surface(setup(fake));
+    expect(vm.routerValue()).toBe('off');
+
+    await vm.cycleRouter();
+    expect(vm.routerValue()).toBe('budget');
+    await vm.cycleRouter();
+    expect(vm.routerValue()).toBe('escalate-on-fail');
+    await vm.cycleRouter();
+    expect(vm.routerValue()).toBe('off');
+    expect(fake.patched).toEqual([
+      { router: 'budget' },
+      { router: 'escalate-on-fail' },
+      { router: 'off' },
+    ]);
+    await flush();
+  });
+
+  it('the router commit toasts the commit words; a refusal reverts the local mirror', async () => {
+    const fake = makeVm();
+    const vm = surface(setup(fake));
+    await vm.cycleRouter();
+    expect(fake.toasts[0]?.message).toBe('personas: pia router → budget (commit)');
+
+    const refused = makeVm({ patchReplies: [{ ok: false, error: 'the desk refused' }] });
+    const vm2 = surface(setup(refused));
+    await vm2.cycleRouter();
+    expect(vm2.routerValue()).toBe('off');
+    expect(vm2.setupError()).toBe('the desk refused');
+  });
+
+  it('the model sheet offers the pool (the current model as the fallback) and picks with a PATCH', async () => {
+    const fake = makeVm();
+    const vm = surface(setup(fake));
+    expect(vm.modelOptions()).toEqual(['zai/glm-5.3', 'sonnet']);
+
+    vm.openSheet('model');
+    expect(vm.sheet()).toBe('model');
+    await vm.pick('model', 'sonnet');
+    expect(fake.patched).toEqual([{ model: 'sonnet' }]);
+    expect(vm.sheet()).toBeNull();
+
+    const bare = makeVm({ facts: { ...PIA_FACTS, pool: [], model: 'opus' } });
+    const vm2 = surface(setup(bare));
+    expect(vm2.modelOptions()).toEqual(['opus']);
+    await vm2.pick('model', 'opus');
+    expect(bare.patched).toEqual([{ model: 'opus' }]);
+  });
+
+  it('the worker sheet offers the harnesses and picks with a PATCH', async () => {
+    const fake = makeVm();
+    const vm = surface(setup(fake));
+    await vm.pick('worker', 'opencode');
+    expect(fake.patched).toEqual([{ worker: 'opencode' }]);
+    expect(vm.workerOptions()).toEqual(['claude-code', 'opencode']);
+  });
+
+  it('the skill switch PATCHes the new list and toggles at once', async () => {
+    const fake = makeVm({
+      facts: { ...PIA_FACTS, skills: ['repo-recherche.md', 'diff-review.md'] },
+    });
+    const vm = surface(setup(fake));
+    expect(vm.skillsValue()).toEqual(['repo-recherche.md', 'diff-review.md']);
+    expect(vm.skillOn('diff-review.md')).toBe(true);
+
+    await vm.toggleSkill('diff-review.md');
+    expect(vm.skillsValue()).toEqual(['repo-recherche.md']);
+    expect(fake.patched).toEqual([{ skills: ['repo-recherche.md'] }]);
+
+    await vm.toggleSkill('diff-review.md');
+    expect(vm.skillsValue()).toEqual(['repo-recherche.md', 'diff-review.md']);
+    expect(fake.patched[1]).toEqual({ skills: ['repo-recherche.md', 'diff-review.md'] });
+    await flush();
+  });
+
+  it('the prompt editor refuses an empty draft and saves with one PATCH plus the toast', async () => {
+    const fake = makeVm();
+    const vm = surface(setup(fake));
+    await vm.savePrompt();
+    expect(fake.patched).toEqual([]);
+
+    vm.promptDraft.set('You are the planner.');
+    await vm.savePrompt();
+    expect(fake.patched).toEqual([{ prompt: 'You are the planner.' }]);
+    expect(vm.promptDraft()).toBe('');
+    expect(fake.toasts).toEqual([{ message: 'Prompt updated (commit)', kind: 'ok' }]);
+  });
+
+  it('a prompt refusal lands inline and never throws', async () => {
+    const fake = makeVm({ patchReplies: [{ ok: false, error: 'the desk refused' }] });
+    const vm = surface(setup(fake));
+    vm.promptDraft.set('New text');
+    await vm.savePrompt();
+    expect(vm.promptError()).toBe('the desk refused');
+
+    const throwing = makeVm();
+    throwing.patchPersona = () => Promise.reject(new Error('offline'));
+    const vm2 = surface(setup(throwing));
+    vm2.promptDraft.set('New text');
+    await vm2.savePrompt();
+    expect(vm2.promptError()).toBe('The prompt did not save.');
+  });
+
+  it('the pool row toasts the follow-up and patches nothing', () => {
+    const fake = makeVm();
+    const vm = surface(setup(fake));
+    vm.poolTap();
+    expect(fake.patched).toEqual([]);
+    expect(fake.toasts).toEqual([{ message: 'Pool editing — to come', kind: 'ok' }]);
+    expect(vm.poolWords()).toBe('zai/glm-5.3 · sonnet');
+  });
+
+  it('read-only devices never patch: the sheets stay closed and the rows stay still', async () => {
+    const fake = makeVm({ readonly: true });
+    const vm = surface(setup(fake));
+    vm.openSheet('model');
+    await vm.cycleRouter();
+    await vm.toggleSkill('diff-review.md');
+    vm.promptDraft.set('New text');
+    await vm.savePrompt();
+    expect(fake.patched).toEqual([]);
+    expect(vm.sheet()).toBeNull();
+    expect(vm.routerValue()).toBe('off');
   });
 });
 

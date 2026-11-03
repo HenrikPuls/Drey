@@ -2,7 +2,9 @@
   <section class="detail" role="dialog" aria-modal="true" [attr.aria-label]="title()">
     <header class="detail-head">
       <button type="button" class="detail-close" aria-label="Close" (click)="close()">×</button>
-      <span class="avatar" [style.background-color]="color()" aria-hidden="true">{{ initialsOf(title()) }}</span>
+      <span class="avatar" [style.background-color]="color()" aria-hidden="true">{{
+        initialsOf(title())
+      }}</span>
       <div class="who">
         <h1 class="title">{{ title() }}</h1>
         @if (role()) {
@@ -11,87 +13,499 @@
       </div>
     </header>
 
-    @if (frictionLine(); as line) {
-      <p class="friction">{{ line }}</p>
-    }
+    <div class="seg" role="tablist" aria-label="Persona tabs">
+      <button
+        type="button"
+        role="tab"
+        [class.on]="tab() === 'chat'"
+        [attr.aria-selected]="tab() === 'chat'"
+        (click)="setTab('chat')"
+      >
+        Chat
+      </button>
+      <button
+        type="button"
+        role="tab"
+        [class.on]="tab() === 'improve'"
+        [attr.aria-selected]="tab() === 'improve'"
+        (click)="setTab('improve')"
+      >
+        1:1
+        @if (improveCount() > 0) {
+          <span class="cnt">· {{ improveCount() }}</span>
+        }
+      </button>
+      <button
+        type="button"
+        role="tab"
+        [class.on]="tab() === 'mem'"
+        [attr.aria-selected]="tab() === 'mem'"
+        (click)="setTab('mem')"
+      >
+        Memory
+        @if (memCount() > 0) {
+          <span class="cnt">· {{ memCount() }}</span>
+        }
+      </button>
+      <button
+        type="button"
+        role="tab"
+        [class.on]="tab() === 'setup'"
+        [attr.aria-selected]="tab() === 'setup'"
+        (click)="setTab('setup')"
+      >
+        Setup
+      </button>
+    </div>
 
-    @if (loading()) {
-      <p class="detail-note">Loading…</p>
-    } @else if (loadError(); as error) {
-      <div class="detail-error-state">
-        <p class="detail-error" role="alert">{{ error }}</p>
-        <button type="button" class="btn" (click)="reload()">Retry</button>
-      </div>
-    } @else if (empty()) {
-      <p class="detail-empty">No improvement proposals yet — the loop aggregates friction into drafts.</p>
-    } @else {
-      <div class="proposals">
-        @for (proposal of split().open; track proposal.id) {
-          <article class="card proposal-card">
-            <div class="card-row">
-              <span class="chip chip-target">{{ proposal.target }}</span>
-            </div>
-            <h2 class="proposal-title">{{ proposal.title }}</h2>
-            @let evidence = evidencePreviewOf(proposal.evidence);
-            @if (evidence.shown.length > 0) {
-              <ul class="evidence">
-                @for (item of evidence.shown; track item) {
-                  <li>{{ item }}</li>
+    @switch (tab()) {
+      <!-- ============ PANE: CHAT ============ -->
+      @case ('chat') {
+        <div class="pane">
+          <div class="pane-body">
+            <p class="hint">
+              This chat steers the persona. What you teach it becomes a memory proposal — applied
+              only after your confirmation. “New ticket: …” hands it to Mission Control.
+            </p>
+            @if (threadError(); as error) {
+              <p class="pane-error" role="alert">{{ error }}</p>
+            }
+            @if (thread(); as loaded) {
+              <div class="thread">
+                @for (message of loaded.messages; track $index) {
+                  <div class="msg" [class.me]="message.role === 'owner'">
+                    <div class="msg-who">
+                      <span class="t">
+                        @if (message.role === 'owner') {
+                          You{{ timeWordsOf(message.at) }}
+                        } @else {
+                          {{ title() }}{{ timeWordsOf(message.at) }}
+                        }
+                      </span>
+                    </div>
+                    <div class="bubble">{{ message.text }}</div>
+                  </div>
                 }
-              </ul>
-              @if (evidence.more > 0) {
-                <p class="evidence-more">+{{ evidence.more }} more</p>
+                @for (card of cards(); track card.id) {
+                  <div class="msg me">
+                    @if (card.kind === 'ticket') {
+                      <div class="bubble">
+                        {{ card.text }}
+                        <div class="handoff">
+                          Handed to Mission Control — confirm the ticket in the chat tab.
+                        </div>
+                      </div>
+                    } @else {
+                      <div class="confirm">
+                        @if (card.kind === 'prompt') {
+                          <div class="ck">Prompt change · prompt.md</div>
+                          <div class="diffbox">
+                            <span class="dl-file">personas/{{ openId() }}/prompt.md</span>
+                            <span class="dl-add">+ {{ snippet(card) }}</span>
+                          </div>
+                        } @else {
+                          <div class="ck">Memory proposal</div>
+                          <p class="confirm-ask">Shall I keep this as a memory entry?</p>
+                          <div class="mem-quote">{{ snippet(card) }}</div>
+                        }
+                        @if (errorForCard(card); as error) {
+                          <p class="pane-error" role="alert">{{ error }}</p>
+                        }
+                        @if (card.decided === null) {
+                          <div class="row">
+                            <button type="button" class="btn" (click)="dismissCard(card)">
+                              Discard
+                            </button>
+                            <button type="button" class="btn primary" (click)="applyCard(card)">
+                              {{ card.kind === 'prompt' ? 'Apply' : 'Into memory' }}
+                            </button>
+                          </div>
+                        } @else if (card.decided === 'applied') {
+                          <div class="res">
+                            {{
+                              card.kind === 'prompt'
+                                ? 'applied — personas: ' + openId() + ' prompt updated'
+                                : 'applied — personas: ' + openId() + ' memory grew'
+                            }}
+                          </div>
+                        } @else {
+                          <div class="res">discarded — nothing changed</div>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            } @else {
+              <p class="pane-empty">Loading…</p>
+            }
+            @if (sendError(); as error) {
+              <p class="pane-error" role="alert">{{ error }}</p>
+            }
+          </div>
+          @if (!readOnly()) {
+            <div class="composer">
+              <input
+                type="text"
+                [value]="draft()"
+                (input)="onDraftInput($event)"
+                (keydown.enter)="send()"
+                placeholder="Teach {{ title() }} something…"
+                autocomplete="off"
+                aria-label="Message"
+              />
+              <button
+                type="button"
+                class="send"
+                aria-label="Send"
+                [disabled]="sending()"
+                (click)="send()"
+              >
+                @if (sending()) {
+                  …
+                } @else {
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 19V5M5 12l7-7 7 7" />
+                  </svg>
+                }
+              </button>
+            </div>
+          }
+        </div>
+      }
+      <!-- ============ PANE: 1:1 ============ -->
+      @case ('improve') {
+        <div class="pane">
+          <div class="pane-body">
+            <p class="hint">
+              Distilled from {{ title() }}'s friction reports — every proposal with its evidence.
+              Only what you confirm is applied; every apply is one commit.
+            </p>
+            @if (frictionLine(); as line) {
+              <p class="friction">{{ line }}</p>
+            }
+            @if (loading()) {
+              <p class="pane-empty">Loading…</p>
+            } @else if (loadError(); as error) {
+              <div class="detail-error-state">
+                <p class="pane-error" role="alert">{{ error }}</p>
+                <button type="button" class="btn" (click)="reload()">Retry</button>
+              </div>
+            } @else if (empty()) {
+              <p class="pane-empty">
+                No improvement proposals yet — the loop aggregates friction into drafts.
+              </p>
+            } @else {
+              <div class="imp-list">
+                @for (proposal of split().open; track proposal.id) {
+                  <article class="imp">
+                    <div class="imp-top">
+                      <span class="imp-k">{{ proposal.target }}</span>
+                      <span class="imp-src">{{ evidenceWords(proposal) }}</span>
+                    </div>
+                    <h2 class="imp-title">{{ proposal.title }}</h2>
+                    @let evidence = evidencePreviewOf(proposal.evidence);
+                    @if (evidence.shown.length > 0) {
+                      <ul class="evidence">
+                        @for (item of evidence.shown; track item) {
+                          <li>{{ item }}</li>
+                        }
+                      </ul>
+                      @if (evidence.more > 0) {
+                        <p class="evidence-more">+{{ evidence.more }} more</p>
+                      }
+                    }
+                    <button
+                      type="button"
+                      class="content-preview"
+                      (click)="toggleExpanded(proposal.id)"
+                    >
+                      <span class="content-label">Content</span>
+                      @if (isExpanded(proposal.id)) {
+                        <pre class="content-text">{{ proposal.content }}</pre>
+                      } @else {
+                        <pre class="content-text">{{ contentPreviewOf(proposal.content) }}</pre>
+                      }
+                    </button>
+                    @if (proposal.lesson; as lesson) {
+                      <p class="lesson">{{ lesson }}</p>
+                    }
+                    @if (errorFor(proposal); as error) {
+                      <p class="pane-error" role="alert">{{ error }}</p>
+                    }
+                    @if (!readOnly()) {
+                      <div class="imp-acts">
+                        <button
+                          type="button"
+                          class="btn"
+                          [disabled]="busy(proposal)"
+                          (click)="applyTap(proposal)"
+                        >
+                          @if (busy(proposal)) {
+                            Applying…
+                          } @else if (arm().armed && armTarget() === proposal.id) {
+                            Tap again to apply
+                          } @else {
+                            Apply (commit)
+                          }
+                        </button>
+                        <button
+                          type="button"
+                          class="btn ghost"
+                          [disabled]="busy(proposal)"
+                          (click)="dismiss(proposal)"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    }
+                  </article>
+                }
+                @if (split().history.length > 0) {
+                  <ul class="history">
+                    @for (proposal of split().history; track proposal.id) {
+                      <li class="history-line">
+                        <span class="history-state">{{ proposal.state }}</span>
+                        <span class="history-title">{{ proposal.title }}</span>
+                        @if (proposal.decidedAt) {
+                          <span class="history-decided">· {{ proposal.decidedAt }}</span>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+              <p class="mem-note">
+                Threshold: from 3 open proposals the card appears in »Needs you«. Below that the
+                loop keeps collecting silently.
+              </p>
+            }
+          </div>
+        </div>
+      }
+      <!-- ============ PANE: MEMORY ============ -->
+      @case ('mem') {
+        <div class="pane">
+          <div class="pane-body">
+            <p class="hint">
+              Curated, not a log: the top entries flow into every run, pinned ones first. Deleting
+              and pinning is your upkeep.
+            </p>
+            @if (memoryError(); as error) {
+              <p class="pane-error" role="alert">{{ error }}</p>
+            }
+            @if (memory(); as view) {
+              @if (view.entries.length === 0) {
+                <p class="pane-empty">
+                  No memory entries yet — teach them in the chat or add one below.
+                </p>
               }
+              <div class="mem-list">
+                @for (entry of view.entries; track $index) {
+                  <div class="mem-entry" [class.pinned]="entry.pinned">
+                    <div class="mt">
+                      <span>{{ entry.pinned ? 'pinned' : 'entry' }}</span>
+                      @if (!readOnly()) {
+                        <button
+                          type="button"
+                          class="pin"
+                          [disabled]="pinBusy() === $index"
+                          (click)="togglePin($index, entry.pinned)"
+                        >
+                          {{ entry.pinned ? 'Pinned' : 'Pin' }}
+                        </button>
+                      }
+                    </div>
+                    <div class="mem-text">{{ entry.text }}</div>
+                  </div>
+                }
+              </div>
+            } @else if (memoryError() === null) {
+              <p class="pane-empty">Loading…</p>
             }
-            <button type="button" class="content-preview" (click)="toggleExpanded(proposal.id)">
-              <span class="content-label">Content</span>
-              @if (isExpanded(proposal.id)) {
-                <pre class="content-text">{{ proposal.content }}</pre>
-              } @else {
-                <pre class="content-text">{{ contentPreviewOf(proposal.content) }}</pre>
-              }
-            </button>
-            @if (proposal.lesson; as lesson) {
-              <p class="lesson">{{ lesson }}</p>
+            @if (pinError(); as error) {
+              <p class="pane-error" role="alert">{{ error }}</p>
             }
-            @if (errorFor(proposal); as error) {
-              <p class="proposal-error" role="alert">{{ error }}</p>
-            }
+            <p class="mem-note">Curated, not a log: the top entries flow into every run.</p>
             @if (!readOnly()) {
-              <div class="proposal-actions">
+              <div class="mem-add">
+                <textarea
+                  rows="2"
+                  [value]="memDraft()"
+                  (input)="onMemDraftInput($event)"
+                  placeholder="Add a memory entry…"
+                  aria-label="New memory entry"
+                ></textarea>
                 <button
                   type="button"
-                  class="btn btn-primary"
-                  [disabled]="busy(proposal)"
-                  (click)="applyTap(proposal)"
+                  class="btn"
+                  [disabled]="memDraft().trim() === ''"
+                  (click)="addMemory()"
                 >
-                  @if (busy(proposal)) {
-                    Applying…
-                  } @else if (arm().armed && armTarget() === proposal.id) {
-                    Tap again to apply
-                  } @else {
-                    Apply
-                  }
-                </button>
-                <button type="button" class="btn" [disabled]="busy(proposal)" (click)="dismiss(proposal)">
-                  Dismiss
+                  Add
                 </button>
               </div>
             }
-          </article>
-        }
-        @if (split().history.length > 0) {
-          <ul class="history">
-            @for (proposal of split().history; track proposal.id) {
-              <li class="history-line">
-                <span class="history-state">{{ proposal.state }}</span>
-                <span class="history-title">{{ proposal.title }}</span>
-                @if (proposal.decidedAt) {
-                  <span class="history-decided">· {{ proposal.decidedAt }}</span>
-                }
-              </li>
+          </div>
+        </div>
+      }
+      <!-- ============ PANE: SETUP ============ -->
+      @case ('setup') {
+        <div class="pane">
+          <div class="pane-body">
+            <p class="hint">
+              The mirror to check — changing also works through the chat, always with a diff and
+              your confirmation.
+            </p>
+            <div class="set-row avatar-row">
+              <span class="pava big" [style.background-color]="color()" aria-hidden="true">{{
+                initialsOf(title())
+              }}</span>
+              <div class="sl">
+                <span class="lt">{{ title() }}</span>
+                <span class="ls"
+                  >{{ role() }}{{ persona()?.model ? ' · ' + persona()?.model : ''
+                  }}{{ persona()?.worker ? ' · ' + persona()?.worker : '' }}</span
+                >
+              </div>
+            </div>
+
+            <div class="ghead">Model &amp; Worker</div>
+            <button
+              type="button"
+              class="set-row"
+              (click)="openSheet('model')"
+              [disabled]="readOnly() || modelOptions().length === 0"
+            >
+              <div class="sl">
+                <span class="lt">Default model</span>
+                <span class="ls">Resolution: ticket pin &gt; default &gt; router</span>
+              </div>
+              <span class="val">{{ persona()?.model || '—' }}</span>
+            </button>
+            <button type="button" class="set-row" (click)="poolTap()">
+              <div class="sl">
+                <span class="lt">Pool</span>
+                <span class="ls">Allowed models, order = fallback</span>
+              </div>
+              <span class="val muted">{{ poolWords() || '—' }}</span>
+            </button>
+            <button type="button" class="set-row" (click)="cycleRouter()" [disabled]="readOnly()">
+              <div class="sl">
+                <span class="lt">Router</span>
+                <span class="ls">Picks only within the pool</span>
+              </div>
+              <span class="val">{{ routerValue() }}</span>
+            </button>
+            <button
+              type="button"
+              class="set-row"
+              (click)="openSheet('worker')"
+              [disabled]="readOnly()"
+            >
+              <div class="sl">
+                <span class="lt">Worker</span>
+                <span class="ls">Harness (repo) or direct call</span>
+              </div>
+              <span class="val">{{ persona()?.worker || '—' }}</span>
+            </button>
+
+            <div class="ghead">Prompt</div>
+            <textarea
+              class="promptedit"
+              rows="8"
+              [value]="promptDraft()"
+              (input)="onPromptInput($event)"
+              placeholder="A new prompt text replaces prompt.md."
+              aria-label="Prompt text"
+              [disabled]="readOnly()"
+            ></textarea>
+            @if (promptError(); as error) {
+              <p class="pane-error" role="alert">{{ error }}</p>
             }
-          </ul>
+            @if (!readOnly()) {
+              <div class="pacts-inline">
+                <button
+                  type="button"
+                  class="btn"
+                  [disabled]="promptDraft().trim() === '' || setupBusy() === 'prompt'"
+                  (click)="savePrompt()"
+                >
+                  {{ setupBusy() === 'prompt' ? 'Saving…' : 'Save' }}
+                </button>
+              </div>
+            }
+
+            @if (skillsValue().length > 0) {
+              <div class="ghead">Skills</div>
+              @for (skill of skillsValue(); track skill) {
+                <div class="set-row">
+                  <div class="sl">
+                    <span class="lt">{{ skill }}</span>
+                    <span class="ls">_meta/skills/</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="switch"
+                    [class.on]="skillOn(skill)"
+                    role="switch"
+                    [attr.aria-checked]="skillOn(skill)"
+                    [attr.aria-label]="'Toggle skill ' + skill"
+                    [disabled]="readOnly()"
+                    (click)="toggleSkill(skill)"
+                  >
+                    <i aria-hidden="true"></i>
+                  </button>
+                </div>
+              }
+            }
+
+            @if (setupError(); as error) {
+              <p class="pane-error" role="alert">{{ error }}</p>
+            }
+            <p class="mem-note">
+              Every change here is one commit in the tickets repo — e.g.
+              <span class="mono-accent">personas: {{ openId() }} … updated</span>.
+            </p>
+          </div>
+        </div>
+      }
+    }
+
+    @if (sheet(); as which) {
+      <div class="sheet-backdrop" (click)="closeSheet()"></div>
+      <div
+        class="sheet"
+        role="dialog"
+        aria-modal="true"
+        [attr.aria-label]="which === 'model' ? 'Default model' : 'Worker'"
+      >
+        <div class="grab" aria-hidden="true"></div>
+        <div class="sheet-head">
+          <h2 class="sheet-title">{{ which === 'model' ? 'Default model' : 'Worker' }}</h2>
+          <button type="button" class="sheet-close" aria-label="Close" (click)="closeSheet()">
+            ×
+          </button>
+        </div>
+        @for (option of sheetOptions(); track option) {
+          <button
+            type="button"
+            class="opt"
+            [class.sel]="
+              which === 'model' ? option === persona()?.model : option === persona()?.worker
+            "
+            (click)="pick(which, option)"
+          >
+            <span class="dot" aria-hidden="true"></span>{{ option }}
+          </button>
         }
       </div>
     }

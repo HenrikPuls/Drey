@@ -12,6 +12,8 @@ import {
   parseChatEvent,
   parseImprovements,
   parseNeeds,
+  parsePersonaMemory,
+  parsePersonaThread,
   parsePriorities,
   parseProposal,
   parseSessions,
@@ -83,32 +85,55 @@ describe('parseWork', () => {
   });
 
   it('parses the board priorities tolerantly — default vocabulary when absent or junk', () => {
-    expect(parseWork({ columns: [], priorities: { order: ['p0', 'p1', 'p2'], default: 'p1' } }).priorities).toEqual({
+    expect(
+      parseWork({ columns: [], priorities: { order: ['p0', 'p1', 'p2'], default: 'p1' } })
+        .priorities,
+    ).toEqual({
       order: ['p0', 'p1', 'p2'],
       default: 'p1',
     });
     // A missing `default` derives from the split point: floor(3/2) = 1.
-    expect(parseWork({ columns: [], priorities: { order: ['p0', 'p1', 'p2'] } }).priorities).toEqual({
+    expect(
+      parseWork({ columns: [], priorities: { order: ['p0', 'p1', 'p2'] } }).priorities,
+    ).toEqual({
       order: ['p0', 'p1', 'p2'],
       default: 'p1',
     });
     // Junk entries and duplicates drop, an empty or unreadable list takes the default.
-    expect(parseWork({ columns: [], priorities: { order: [1, null, 'p0', 'p0', ''] } }).priorities).toEqual({
+    expect(
+      parseWork({ columns: [], priorities: { order: [1, null, 'p0', 'p0', ''] } }).priorities,
+    ).toEqual({
       order: ['p0'],
       default: 'p0',
     });
-    expect(parseWork({ columns: [], priorities: 'junk' }).priorities).toEqual(DEFAULT_PRIORITY_CONFIG);
-    expect(parseWork({ columns: [], priorities: { order: [] } }).priorities).toEqual(DEFAULT_PRIORITY_CONFIG);
+    expect(parseWork({ columns: [], priorities: 'junk' }).priorities).toEqual(
+      DEFAULT_PRIORITY_CONFIG,
+    );
+    expect(parseWork({ columns: [], priorities: { order: [] } }).priorities).toEqual(
+      DEFAULT_PRIORITY_CONFIG,
+    );
     expect(parseWork({ columns: [] }).priorities).toEqual(DEFAULT_PRIORITY_CONFIG);
   });
 
   it('forgives a missing card phase and keeps an unknown priority id as written', () => {
     const work = parseWork({
-      columns: [{ phase: { id: 'plan' }, tickets: [{ id: 'T-3', meta: { priority: 'yesterday', title: 'Odd' } }, { id: 'T-4', meta: {} }] }],
+      columns: [
+        {
+          phase: { id: 'plan' },
+          tickets: [
+            { id: 'T-3', meta: { priority: 'yesterday', title: 'Odd' } },
+            { id: 'T-4', meta: {} },
+          ],
+        },
+      ],
     });
     // The vocabulary is the vault's: the id IS the label, never coerced;
     // a missing priority reads as none.
-    expect(work.groups[0]!.cards[0]).toMatchObject({ phase: 'plan', priority: 'yesterday', title: 'Odd' });
+    expect(work.groups[0]!.cards[0]).toMatchObject({
+      phase: 'plan',
+      priority: 'yesterday',
+      title: 'Odd',
+    });
     expect(work.groups[0]!.cards[1]).toMatchObject({ priority: null });
   });
 
@@ -183,26 +208,68 @@ describe('parseNeeds', () => {
   });
 
   it('keeps the improvements kind (E6) with its empty ticket id', () => {
-    const needs = parseNeeds([{ kind: 'improvements', ticketId: '', title: 'Pia', text: '3 improvement proposals wait for the 1:1' }]);
-    expect(needs).toEqual([{ kind: 'improvements', ticketId: null, title: 'Pia', summary: '3 improvement proposals wait for the 1:1' }]);
+    const needs = parseNeeds([
+      {
+        kind: 'improvements',
+        ticketId: '',
+        title: 'Pia',
+        text: '3 improvement proposals wait for the 1:1',
+      },
+    ]);
+    expect(needs).toEqual([
+      {
+        kind: 'improvements',
+        ticketId: null,
+        title: 'Pia',
+        summary: '3 improvement proposals wait for the 1:1',
+      },
+    ]);
   });
 
   it('keeps the notify kind (E9) — a Bescheid card, not a checkpoint', () => {
-    const needs = parseNeeds([{ kind: 'notify', ticketId: 'T-9', title: 'The build gate', text: 'verify completed' }]);
-    expect(needs).toEqual([{ kind: 'notify', ticketId: 'T-9', title: 'The build gate', summary: 'verify completed' }]);
+    const needs = parseNeeds([
+      { kind: 'notify', ticketId: 'T-9', title: 'The build gate', text: 'verify completed' },
+    ]);
+    expect(needs).toEqual([
+      { kind: 'notify', ticketId: 'T-9', title: 'The build gate', summary: 'verify completed' },
+    ]);
   });
 
   it('accepts the E7 kinds, keyed and keyless, with their text untouched', () => {
     const needs = parseNeeds([
-      { kind: 'needs-decision', ticketId: 'T-7', title: 'Palette shortcut', text: '[palette-shortcut] Which shortcut should open the palette?' },
+      {
+        kind: 'needs-decision',
+        ticketId: 'T-7',
+        title: 'Palette shortcut',
+        text: '[palette-shortcut] Which shortcut should open the palette?',
+      },
       { kind: 'blocked', ticketId: 'T-8', title: 'The build', text: '[ci] waiting for the build' },
-      { kind: 'needs-decision', title: 'Palette shortcut', text: 'Which shortcut should open the palette?' },
+      {
+        kind: 'needs-decision',
+        title: 'Palette shortcut',
+        text: 'Which shortcut should open the palette?',
+      },
       { kind: 'blocked', title: 'The build', text: 'waiting for the build' },
     ]);
     expect(needs).toEqual([
-      { kind: 'needs-decision', ticketId: 'T-7', title: 'Palette shortcut', summary: '[palette-shortcut] Which shortcut should open the palette?' },
-      { kind: 'blocked', ticketId: 'T-8', title: 'The build', summary: '[ci] waiting for the build' },
-      { kind: 'needs-decision', ticketId: null, title: 'Palette shortcut', summary: 'Which shortcut should open the palette?' },
+      {
+        kind: 'needs-decision',
+        ticketId: 'T-7',
+        title: 'Palette shortcut',
+        summary: '[palette-shortcut] Which shortcut should open the palette?',
+      },
+      {
+        kind: 'blocked',
+        ticketId: 'T-8',
+        title: 'The build',
+        summary: '[ci] waiting for the build',
+      },
+      {
+        kind: 'needs-decision',
+        ticketId: null,
+        title: 'Palette shortcut',
+        summary: 'Which shortcut should open the palette?',
+      },
       { kind: 'blocked', ticketId: null, title: 'The build', summary: 'waiting for the build' },
     ]);
   });
@@ -222,7 +289,12 @@ describe('parseNeeds', () => {
           by: 'pia',
           summary: 'The repo carries two index implementations.',
           decisions: [
-            { key: 'D1', question: 'Which storage should back the index?', recommendation: 'SQLite', resolved: false },
+            {
+              key: 'D1',
+              question: 'Which storage should back the index?',
+              recommendation: 'SQLite',
+              resolved: false,
+            },
             { key: 'D2', question: 'Migrate existing data?', recommendation: null, resolved: true },
           ],
         },
@@ -239,7 +311,12 @@ describe('parseNeeds', () => {
           by: 'pia',
           summary: 'The repo carries two index implementations.',
           decisions: [
-            { key: 'D1', question: 'Which storage should back the index?', recommendation: 'SQLite', resolved: false },
+            {
+              key: 'D1',
+              question: 'Which storage should back the index?',
+              recommendation: 'SQLite',
+              resolved: false,
+            },
             { key: 'D2', question: 'Migrate existing data?', recommendation: null, resolved: true },
           ],
         },
@@ -257,10 +334,20 @@ describe('parseNeeds', () => {
         report: {
           writtenAt: '2026-11-02T14:32:00Z',
           summary: 42,
-          decisions: ['junk', null, { key: 'D1', question: 'Which storage?', recommendation: 7, resolved: 'yes' }],
+          decisions: [
+            'junk',
+            null,
+            { key: 'D1', question: 'Which storage?', recommendation: 7, resolved: 'yes' },
+          ],
         },
       },
-      { kind: 'report', ticketId: 'T-0006', title: 'No detail', text: 'the scout report is ready', report: 'garbage' },
+      {
+        kind: 'report',
+        ticketId: 'T-0006',
+        title: 'No detail',
+        text: 'the scout report is ready',
+        report: 'garbage',
+      },
     ]);
     expect(needs).toEqual([
       {
@@ -272,10 +359,17 @@ describe('parseNeeds', () => {
           writtenAt: '2026-11-02T14:32:00Z',
           by: '',
           summary: '',
-          decisions: [{ key: 'D1', question: 'Which storage?', recommendation: null, resolved: false }],
+          decisions: [
+            { key: 'D1', question: 'Which storage?', recommendation: null, resolved: false },
+          ],
         },
       },
-      { kind: 'report', ticketId: 'T-0006', title: 'No detail', summary: 'the scout report is ready' },
+      {
+        kind: 'report',
+        ticketId: 'T-0006',
+        title: 'No detail',
+        summary: 'the scout report is ready',
+      },
     ]);
   });
 
@@ -306,7 +400,11 @@ describe('parseNeeds', () => {
           where: 'in the plan phase',
           why: 'the manual ranks look deliberate',
           options: [
-            { n: 1, label: 'Keep the deviations', consequence: 'the manual ranks become the order' },
+            {
+              n: 1,
+              label: 'Keep the deviations',
+              consequence: 'the manual ranks become the order',
+            },
             { n: 2, label: 'Discard all', consequence: null },
           ],
           recommended: 1,
@@ -340,7 +438,11 @@ describe('parseNeeds', () => {
           where: 'in the plan phase',
           why: 'the manual ranks look deliberate',
           options: [
-            { n: 1, label: 'Keep the deviations', consequence: 'the manual ranks become the order' },
+            {
+              n: 1,
+              label: 'Keep the deviations',
+              consequence: 'the manual ranks become the order',
+            },
             { n: 2, label: 'Discard all', consequence: null },
           ],
           recommended: 1,
@@ -358,7 +460,16 @@ describe('parseNeeds', () => {
         title: 'Half a shape',
         text: 'QUESTION: Which way?',
         runId: null,
-        questions: ['junk', null, { key: 'q0' }, { key: 'q1', question: 'Which way?', options: [{ label: '' }, 'junk', { label: 'Keep' }] }],
+        questions: [
+          'junk',
+          null,
+          { key: 'q0' },
+          {
+            key: 'q1',
+            question: 'Which way?',
+            options: [{ label: '' }, 'junk', { label: 'Keep' }],
+          },
+        ],
         shaped: { question: '', options: [{ n: 1, label: 'Keep' }] },
       },
     ]);
@@ -368,7 +479,15 @@ describe('parseNeeds', () => {
         ticketId: 'T-0091',
         title: 'Half a shape',
         summary: 'QUESTION: Which way?',
-        questions: [{ key: 'q1', header: null, question: 'Which way?', options: [{ label: 'Keep', description: null }], multiple: false }],
+        questions: [
+          {
+            key: 'q1',
+            header: null,
+            question: 'Which way?',
+            options: [{ label: 'Keep', description: null }],
+            multiple: false,
+          },
+        ],
       },
     ]);
   });
@@ -382,8 +501,23 @@ describe('parseNeeds', () => {
 
 describe('parseTeam', () => {
   const personas = [
-    { id: 'pia', title: 'Pia', role: 'Planner', worker: 'opencode', model: 'zai/glm-5.3', pool: ['a', 'b'], color: '#ff0000' },
-    { id: 'tessa', title: 'Tessa', role: 'Tester', worker: 'codex', model: 'gpt-5', color: '#00ff00' },
+    {
+      id: 'pia',
+      title: 'Pia',
+      role: 'Planner',
+      worker: 'opencode',
+      model: 'zai/glm-5.3',
+      pool: ['a', 'b'],
+      color: '#ff0000',
+    },
+    {
+      id: 'tessa',
+      title: 'Tessa',
+      role: 'Tester',
+      worker: 'codex',
+      model: 'gpt-5',
+      color: '#00ff00',
+    },
   ];
 
   it('folds the newest live run into the persona that dispatched it', () => {
@@ -405,7 +539,10 @@ describe('parseTeam', () => {
 
   it('keeps currentRun null when the fleet is missing or the persona dispatched nothing', () => {
     expect(parseTeam(personas, null).personas.every((p) => p.currentRun === null)).toBe(true);
-    expect(parseTeam(personas, { runs: [{ state: 'running', persona: null, ticketId: 'T-9' }] }).personas[0]!.currentRun).toBeNull();
+    expect(
+      parseTeam(personas, { runs: [{ state: 'running', persona: null, ticketId: 'T-9' }] })
+        .personas[0]!.currentRun,
+    ).toBeNull();
     expect(parseTeam([], { runs: [] }).personas).toEqual([]);
   });
 
@@ -439,7 +576,15 @@ describe('parseTeam', () => {
 });
 
 describe('parseImprovements', () => {
-  const PIA = { id: 'pia', title: 'Pia', role: 'Planner', worker: 'opencode', model: 'zai/glm-5.3', pool: ['a'], color: '#ff0000' };
+  const PIA = {
+    id: 'pia',
+    title: 'Pia',
+    role: 'Planner',
+    worker: 'opencode',
+    model: 'zai/glm-5.3',
+    pool: ['a'],
+    color: '#ff0000',
+  };
 
   it('maps the answer with the persona, the proposals and the counters', () => {
     const view = parseImprovements({
@@ -520,29 +665,63 @@ describe('parseImprovements', () => {
       proposals: [
         { target: 'memory', title: 'no id', content: 'x' },
         null,
-        { id: 'imp-9', state: 'weird', target: 'prompt.md', title: 'Odd', evidence: ['a', 2, 'b'], content: 'c' },
+        {
+          id: 'imp-9',
+          state: 'weird',
+          target: 'prompt.md',
+          title: 'Odd',
+          evidence: ['a', 2, 'b'],
+          content: 'c',
+        },
       ],
     });
     expect(view?.proposals).toEqual([
-      { id: 'imp-9', state: 'open', target: 'prompt.md', title: 'Odd', evidence: ['a', 'b'], content: 'c', lesson: null, at: '', decidedAt: null },
+      {
+        id: 'imp-9',
+        state: 'open',
+        target: 'prompt.md',
+        title: 'Odd',
+        evidence: ['a', 'b'],
+        content: 'c',
+        lesson: null,
+        at: '',
+        decidedAt: null,
+      },
     ]);
   });
 
   it('never throws on junk', () => {
     expect(parseImprovements(null)).toBeNull();
     expect(parseImprovements('junk')).toBeNull();
-    expect(parseImprovements({})).toEqual({ persona: null, proposals: [], openCount: 0, frictionCount: 0 });
+    expect(parseImprovements({})).toEqual({
+      persona: null,
+      proposals: [],
+      openCount: 0,
+      frictionCount: 0,
+    });
   });
 });
 
 describe('parseSessions', () => {
   it('maps the sessions listing', () => {
     const sessions = parseSessions([
-      { file: 'tickets/_meta/chat/a.md', title: 'A', createdAt: '2026-11-01', updatedAt: '2026-11-02', pending: 2 },
+      {
+        file: 'tickets/_meta/chat/a.md',
+        title: 'A',
+        createdAt: '2026-11-01',
+        updatedAt: '2026-11-02',
+        pending: 2,
+      },
       { file: 'tickets/_meta/chat/b.md', title: 'B', createdAt: '', updatedAt: '', pending: -3 },
     ]);
     expect(sessions).toEqual([
-      { file: 'tickets/_meta/chat/a.md', title: 'A', createdAt: '2026-11-01', updatedAt: '2026-11-02', pending: 2 },
+      {
+        file: 'tickets/_meta/chat/a.md',
+        title: 'A',
+        createdAt: '2026-11-01',
+        updatedAt: '2026-11-02',
+        pending: 2,
+      },
       { file: 'tickets/_meta/chat/b.md', title: 'B', createdAt: '', updatedAt: '', pending: 0 },
     ]);
   });
@@ -568,8 +747,22 @@ describe('parseActiveSession', () => {
         { role: 'ghost', text: 'junk role' },
       ],
       proposals: [
-        { id: 'p-1', state: 'pending', summary: 'Create T-9', at: 't3', decidedAt: null, outcome: null },
-        { id: 'p-2', state: 'confirmed', summary: 'Move T-1', at: 't4', decidedAt: 't5', outcome: 'moved to plan' },
+        {
+          id: 'p-1',
+          state: 'pending',
+          summary: 'Create T-9',
+          at: 't3',
+          decidedAt: null,
+          outcome: null,
+        },
+        {
+          id: 'p-2',
+          state: 'confirmed',
+          summary: 'Move T-1',
+          at: 't4',
+          decidedAt: 't5',
+          outcome: 'moved to plan',
+        },
         'junk',
       ],
     });
@@ -583,8 +776,22 @@ describe('parseActiveSession', () => {
         { role: 'mission', text: 'junk role', thought: null, at: '' },
       ],
       proposals: [
-        { id: 'p-1', state: 'pending', summary: 'Create T-9', at: 't3', decidedAt: null, outcome: null },
-        { id: 'p-2', state: 'confirmed', summary: 'Move T-1', at: 't4', decidedAt: 't5', outcome: 'moved to plan' },
+        {
+          id: 'p-1',
+          state: 'pending',
+          summary: 'Create T-9',
+          at: 't3',
+          decidedAt: null,
+          outcome: null,
+        },
+        {
+          id: 'p-2',
+          state: 'confirmed',
+          summary: 'Move T-1',
+          at: 't4',
+          decidedAt: 't5',
+          outcome: 'moved to plan',
+        },
       ],
     });
   });
@@ -605,7 +812,16 @@ describe('parseActiveSession', () => {
 
 describe('parseProposal', () => {
   it('maps a proposal and defaults a missing state to pending', () => {
-    expect(parseProposal({ id: 'p-1', state: 'dismissed', summary: 's', at: 't1', decidedAt: 't2', outcome: null })).toEqual({
+    expect(
+      parseProposal({
+        id: 'p-1',
+        state: 'dismissed',
+        summary: 's',
+        at: 't1',
+        decidedAt: 't2',
+        outcome: null,
+      }),
+    ).toEqual({
       id: 'p-1',
       state: 'dismissed',
       summary: 's',
@@ -645,7 +861,11 @@ describe('parseProposal', () => {
       chain: { id: 'T-0042', chain: ['skip verify', 'notify build'] },
     });
     expect(
-      parseProposal({ id: 'p-4', summary: 'Move T-1 from a to b', command: { kind: 'transition', id: 'T-1', from: 'a', to: 'b' } }),
+      parseProposal({
+        id: 'p-4',
+        summary: 'Move T-1 from a to b',
+        command: { kind: 'transition', id: 'T-1', from: 'a', to: 'b' },
+      }),
     ).toEqual({
       id: 'p-4',
       state: 'pending',
@@ -654,7 +874,9 @@ describe('parseProposal', () => {
       decidedAt: null,
       outcome: null,
     });
-    expect(parseProposal({ id: 'p-5', summary: 's', command: { kind: 'setChain', id: '', chain: [] } })).toEqual({
+    expect(
+      parseProposal({ id: 'p-5', summary: 's', command: { kind: 'setChain', id: '', chain: [] } }),
+    ).toEqual({
       id: 'p-5',
       state: 'pending',
       summary: 's',
@@ -685,10 +907,19 @@ describe('parseProposal', () => {
 
 describe('parsePriorities', () => {
   it('reads order and default, derives the default from the split when absent', () => {
-    expect(parsePriorities({ order: ['a', 'b', 'c', 'd'], default: 'b' })).toEqual({ order: ['a', 'b', 'c', 'd'], default: 'b' });
-    expect(parsePriorities({ order: ['a', 'b', 'c'] })).toEqual({ order: ['a', 'b', 'c'], default: 'b' });
+    expect(parsePriorities({ order: ['a', 'b', 'c', 'd'], default: 'b' })).toEqual({
+      order: ['a', 'b', 'c', 'd'],
+      default: 'b',
+    });
+    expect(parsePriorities({ order: ['a', 'b', 'c'] })).toEqual({
+      order: ['a', 'b', 'c'],
+      default: 'b',
+    });
     // A default the order does not hold derives from the split point.
-    expect(parsePriorities({ order: ['a', 'b', 'c'], default: 'zzz' })).toEqual({ order: ['a', 'b', 'c'], default: 'b' });
+    expect(parsePriorities({ order: ['a', 'b', 'c'], default: 'zzz' })).toEqual({
+      order: ['a', 'b', 'c'],
+      default: 'b',
+    });
   });
 
   it('falls back to the default vocabulary on absent, junk or empty input', () => {
@@ -701,7 +932,10 @@ describe('parsePriorities', () => {
   });
 
   it('is the default vocabulary the jump-class rule reads', () => {
-    expect(DEFAULT_PRIORITY_CONFIG).toEqual({ order: ['urgent', 'high', 'normal', 'low'], default: 'normal' });
+    expect(DEFAULT_PRIORITY_CONFIG).toEqual({
+      order: ['urgent', 'high', 'normal', 'low'],
+      default: 'normal',
+    });
     // floor(4/2) = 2: urgent and high sit in the jump class, the rest not.
     expect(isJumpPriority('urgent', DEFAULT_PRIORITY_CONFIG.order)).toBe(true);
     expect(isJumpPriority('high', DEFAULT_PRIORITY_CONFIG.order)).toBe(true);
@@ -729,19 +963,31 @@ describe('parseChatEvent', () => {
       file: 'f.md',
       event: { kind: 'text', text: 'Hel' },
     });
-    expect(parseChatEvent('chat', '{"file":"f.md","event":{"kind":"thought","text":"hm"}}')).toEqual({
+    expect(
+      parseChatEvent('chat', '{"file":"f.md","event":{"kind":"thought","text":"hm"}}'),
+    ).toEqual({
       kind: 'chat',
       file: 'f.md',
       event: { kind: 'thought', text: 'hm' },
     });
     expect(
-      parseChatEvent('chat', '{"file":"f.md","event":{"kind":"proposal","proposal":{"id":"p-1","state":"pending","summary":"Create T-9","at":"t3","decidedAt":null}}}'),
+      parseChatEvent(
+        'chat',
+        '{"file":"f.md","event":{"kind":"proposal","proposal":{"id":"p-1","state":"pending","summary":"Create T-9","at":"t3","decidedAt":null}}}',
+      ),
     ).toEqual({
       kind: 'chat',
       file: 'f.md',
       event: {
         kind: 'proposal',
-        proposal: { id: 'p-1', state: 'pending', summary: 'Create T-9', at: 't3', decidedAt: null, outcome: null },
+        proposal: {
+          id: 'p-1',
+          state: 'pending',
+          summary: 'Create T-9',
+          at: 't3',
+          decidedAt: null,
+          outcome: null,
+        },
       },
     });
     expect(parseChatEvent('chat', '{"file":"f.md","event":{"kind":"done"}}')).toEqual({
@@ -749,7 +995,12 @@ describe('parseChatEvent', () => {
       file: 'f.md',
       event: { kind: 'done' },
     });
-    expect(parseChatEvent('chat', '{"file":"f.md","event":{"kind":"error","message":"the model gave up"}}')).toEqual({
+    expect(
+      parseChatEvent(
+        'chat',
+        '{"file":"f.md","event":{"kind":"error","message":"the model gave up"}}',
+      ),
+    ).toEqual({
       kind: 'chat',
       file: 'f.md',
       event: { kind: 'error', message: 'the model gave up' },
@@ -758,8 +1009,14 @@ describe('parseChatEvent', () => {
 
   it('lands broken chat payloads and unknown names on unknown', () => {
     expect(parseChatEvent('chat', 'not json')).toEqual({ kind: 'unknown', name: 'chat' });
-    expect(parseChatEvent('chat', '{"event":{"kind":"done"}}')).toEqual({ kind: 'unknown', name: 'chat' });
-    expect(parseChatEvent('chat', '{"file":"f.md","event":{"kind":"mystery"}}')).toEqual({ kind: 'unknown', name: 'chat' });
+    expect(parseChatEvent('chat', '{"event":{"kind":"done"}}')).toEqual({
+      kind: 'unknown',
+      name: 'chat',
+    });
+    expect(parseChatEvent('chat', '{"file":"f.md","event":{"kind":"mystery"}}')).toEqual({
+      kind: 'unknown',
+      name: 'chat',
+    });
     expect(parseChatEvent('board-extra', '{}')).toEqual({ kind: 'unknown', name: 'board-extra' });
   });
 });
@@ -787,8 +1044,18 @@ describe('parseVerification', () => {
       tester: 'verify@engine',
       environment: 'Electron 34.2.0 on win32',
       criteria: [
-        { command: 'npm run build', passed: true, screenshot: 'verify-20261101-143200-01.png', note: null },
-        { command: 'npm test', passed: false, screenshot: null, note: 'no screenshot: the app never became ready' },
+        {
+          command: 'npm run build',
+          passed: true,
+          screenshot: 'verify-20261101-143200-01.png',
+          note: null,
+        },
+        {
+          command: 'npm test',
+          passed: false,
+          screenshot: null,
+          note: 'no screenshot: the app never became ready',
+        },
       ],
       findings: ['The settings page stayed blank until the reload.'],
     });
@@ -826,7 +1093,18 @@ describe('parseTicketDetail', () => {
     { id: 'inbox', title: 'Inbox' },
     { id: 'verify', title: 'Verify' },
   ];
-  const TICKET_TEXT = ['---', 'id: T-1', '---', '', '# One', '', '## Verification', '', '- [x] `npm test`', ''].join('\n');
+  const TICKET_TEXT = [
+    '---',
+    'id: T-1',
+    '---',
+    '',
+    '# One',
+    '',
+    '## Verification',
+    '',
+    '- [x] `npm test`',
+    '',
+  ].join('\n');
 
   it('maps the ticket reply with the verification parsed out of the markdown', () => {
     const detail = parseTicketDetail(
@@ -914,7 +1192,15 @@ describe('parseTicketDetail', () => {
       },
     ]);
     // Tolerance: no chapter, no usage, junk — nulls and [], never a throw.
-    const bare = parseTicketDetail({ ok: true, card: { id: 'T-2', usage: 'junk' }, text: '## Verlauf\n\nno lines yet\n', revision: '' }, phases);
+    const bare = parseTicketDetail(
+      {
+        ok: true,
+        card: { id: 'T-2', usage: 'junk' },
+        text: '## Verlauf\n\nno lines yet\n',
+        revision: '',
+      },
+      phases,
+    );
     expect(bare!.verlauf).toEqual([]);
     expect(bare!.usage).toBeUndefined();
     expect(parseVerlaufEntries('## Verlaufism\n\n- {phase: plan}\n')).toEqual([]);
@@ -937,8 +1223,16 @@ describe('parseTicketDetail', () => {
       },
       phases,
     );
-    expect(detail).toMatchObject({ priority: 'p0', blockedBy: ['T-0002', 'T-0003'], blocked: ['T-0002'], blocks: ['T-0009'] });
-    const bare = parseTicketDetail({ ok: true, card: { id: 'T-2', meta: {} }, text: '', revision: '' }, phases);
+    expect(detail).toMatchObject({
+      priority: 'p0',
+      blockedBy: ['T-0002', 'T-0003'],
+      blocked: ['T-0002'],
+      blocks: ['T-0009'],
+    });
+    const bare = parseTicketDetail(
+      { ok: true, card: { id: 'T-2', meta: {} }, text: '', revision: '' },
+      phases,
+    );
     expect(bare).toMatchObject({ priority: null, blockedBy: [], blocked: [], blocks: [] });
   });
 
@@ -951,7 +1245,14 @@ describe('parseTicketDetail', () => {
           phase: 'build',
           meta: {
             chain: [
-              { kind: 'insert', phase: 'design', anchor: 'review', position: 'after', persona: 'pia', notify: true },
+              {
+                kind: 'insert',
+                phase: 'design',
+                anchor: 'review',
+                position: 'after',
+                persona: 'pia',
+                notify: true,
+              },
               { kind: 'skip', phase: 'verify' },
               { kind: 'notify', phase: 'build' },
               { kind: 'mystery', phase: 'x' },
@@ -966,14 +1267,31 @@ describe('parseTicketDetail', () => {
       phases,
     );
     expect(detail?.chain).toEqual([
-      { kind: 'insert', phase: 'design', anchor: 'review', position: 'after', persona: 'pia', notify: true },
+      {
+        kind: 'insert',
+        phase: 'design',
+        anchor: 'review',
+        position: 'after',
+        persona: 'pia',
+        notify: true,
+      },
       { kind: 'skip', phase: 'verify', anchor: null, position: null, persona: null, notify: false },
-      { kind: 'notify', phase: 'build', anchor: null, position: null, persona: null, notify: false },
+      {
+        kind: 'notify',
+        phase: 'build',
+        anchor: null,
+        position: null,
+        persona: null,
+        notify: false,
+      },
     ]);
   });
 
   it('falls back to the meta title and an empty phase, and rides the given phases along', () => {
-    const detail = parseTicketDetail({ ok: true, card: { id: 'T-2', meta: { title: 'Two' } }, text: 'x', revision: '' }, phases);
+    const detail = parseTicketDetail(
+      { ok: true, card: { id: 'T-2', meta: { title: 'Two' } }, text: 'x', revision: '' },
+      phases,
+    );
     expect(detail).toMatchObject({ id: 'T-2', title: 'Two', phase: '', phases });
   });
 
@@ -999,14 +1317,26 @@ describe('parseBoardCard (E9)', () => {
           },
         ],
       },
-      { phase: { id: 'verify', title: 'Verify' }, tickets: [{ id: 'T-2', phase: 'verify', meta: {} }] },
+      {
+        phase: { id: 'verify', title: 'Verify' },
+        tickets: [{ id: 'T-2', phase: 'verify', meta: {} }],
+      },
     ],
   };
 
   it('finds the card and reads its phase and chain delta', () => {
     expect(parseBoardCard(BOARD, 'T-1')).toEqual({
       phase: 'build',
-      chain: [{ kind: 'skip', phase: 'verify', anchor: null, position: null, persona: null, notify: false }],
+      chain: [
+        {
+          kind: 'skip',
+          phase: 'verify',
+          anchor: null,
+          position: null,
+          persona: null,
+          notify: false,
+        },
+      ],
     });
     expect(parseBoardCard(BOARD, 'T-2')).toEqual({ phase: 'verify', chain: [] });
   });
@@ -1015,7 +1345,10 @@ describe('parseBoardCard (E9)', () => {
     expect(parseBoardCard(BOARD, 'T-9')).toBeNull();
     expect(parseBoardCard(null, 'T-1')).toBeNull();
     expect(parseBoardCard('board', 'T-1')).toBeNull();
-    expect(parseBoardCard({ columns: [{ tickets: [null, 'x', { id: 'T-3' }] }] }, 'T-3')).toEqual({ phase: '', chain: [] });
+    expect(parseBoardCard({ columns: [{ tickets: [null, 'x', { id: 'T-3' }] }] }, 'T-3')).toEqual({
+      phase: '',
+      chain: [],
+    });
   });
 });
 
@@ -1039,11 +1372,150 @@ describe('parseTicketDiff', () => {
   });
 
   it('drops file entries without a path and never throws on junk', () => {
-    expect(parseTicketDiff({ files: [{ status: 'M' }, null, { status: 'D', path: 'gone.ts' }], truncated: 'yes' })).toEqual({
+    expect(
+      parseTicketDiff({
+        files: [{ status: 'M' }, null, { status: 'D', path: 'gone.ts' }],
+        truncated: 'yes',
+      }),
+    ).toEqual({
       files: [{ status: 'D', path: 'gone.ts', patch: '' }],
       truncated: false,
     });
     expect(parseTicketDiff(null)).toEqual({ files: [], truncated: false });
     expect(parseTicketDiff('diff')).toEqual({ files: [], truncated: false });
+  });
+});
+
+// --- the persona detail's thread, memory and chain slice (prototype convergence) ---
+
+describe('parsePersonaThread', () => {
+  it('maps the messages with their roles and stamps', () => {
+    expect(
+      parsePersonaThread({
+        messages: [
+          { at: '2026-11-01T13:58:00Z', role: 'owner', text: 'Why the manual ranks?' },
+          { at: '2026-11-01T13:59:00Z', role: 'persona', text: 'Because they have handwriting.' },
+        ],
+      }),
+    ).toEqual({
+      messages: [
+        { at: '2026-11-01T13:58:00Z', role: 'owner', text: 'Why the manual ranks?' },
+        { at: '2026-11-01T13:59:00Z', role: 'persona', text: 'Because they have handwriting.' },
+      ],
+    });
+  });
+
+  it('reads any non-owner role as the persona, and a missing stamp as empty', () => {
+    const view = parsePersonaThread({
+      messages: [{ text: 'plain line' }, { at: 't1', role: 'assistant', text: 'hi' }],
+    });
+    expect(view.messages[0]).toEqual({ role: 'persona', text: 'plain line', at: '' });
+    expect(view.messages[1]).toEqual({ at: 't1', role: 'persona', text: 'hi' });
+  });
+
+  it('drops torn messages and never throws on junk', () => {
+    expect(parsePersonaThread({ messages: [null, { role: 'owner' }, { text: '' }, 'x'] })).toEqual({
+      messages: [],
+    });
+    expect(parsePersonaThread(null)).toEqual({ messages: [] });
+    expect(parsePersonaThread({ messages: 'nope' })).toEqual({ messages: [] });
+    expect(parsePersonaThread(42)).toEqual({ messages: [] });
+  });
+});
+
+describe('parsePersonaMemory', () => {
+  it('maps the entries with their pinned flags', () => {
+    expect(
+      parsePersonaMemory({
+        entries: [
+          { text: 'rank fields win over derived order', pinned: true },
+          { text: 'read the repo history first', pinned: false },
+        ],
+      }),
+    ).toEqual({
+      entries: [
+        { text: 'rank fields win over derived order', pinned: true },
+        { text: 'read the repo history first', pinned: false },
+      ],
+    });
+  });
+
+  it('reads a missing pinned flag as unpinned and drops empty lines', () => {
+    expect(
+      parsePersonaMemory({
+        entries: [{ text: 'one' }, { pinned: true }, { text: '', pinned: true }],
+      }),
+    ).toEqual({
+      entries: [{ text: 'one', pinned: false }],
+    });
+  });
+
+  it('never throws on junk', () => {
+    expect(parsePersonaMemory(null)).toEqual({ entries: [] });
+    expect(parsePersonaMemory({ entries: [null, 'x', {}] })).toEqual({ entries: [] });
+    expect(parsePersonaMemory('memory')).toEqual({ entries: [] });
+  });
+});
+
+describe('parseTeam: the chain slice (prototype convergence)', () => {
+  it('carries the master switch and the paused personas off the fleet snapshot', () => {
+    const team = parseTeam([{ id: 'pia', title: 'Pia' }], {
+      runs: [],
+      chain: { configured: true, master: 'halted', columns: {} },
+      pausedPersonas: ['pia', 'ralf'],
+    });
+    expect(team.chainMaster).toBe('halted');
+    expect(team.pausedPersonas).toEqual(['pia', 'ralf']);
+  });
+
+  it('leaves the master unknown when the snapshot has none or junks it', () => {
+    expect(parseTeam([], { runs: [], chain: { master: 'sideways' } }).chainMaster).toBeUndefined();
+    expect(parseTeam([], { runs: [] }).chainMaster).toBeUndefined();
+    expect(parseTeam([], null).chainMaster).toBeUndefined();
+    expect(parseTeam([], { runs: [], chain: { master: 'run' } }).chainMaster).toBe('run');
+  });
+
+  it('reads a missing pausedPersonas list as none', () => {
+    expect(parseTeam([], { runs: [] }).pausedPersonas).toBeUndefined();
+    expect(parseTeam([], { runs: [], pausedPersonas: 'nope' }).pausedPersonas).toBeUndefined();
+    expect(parseTeam([], { runs: [], pausedPersonas: ['pia', 5, 'ralf'] }).pausedPersonas).toEqual([
+      'pia',
+      'ralf',
+    ]);
+  });
+
+  it('carries the persona phases, paused, skills and router tolerantly', () => {
+    const team = parseTeam(
+      [
+        {
+          id: 'pia',
+          title: 'Pia',
+          phases: ['plan', 'shape'],
+          paused: true,
+          skills: ['repo-recherche.md', 'fragen-formulieren.md'],
+          router: 'budget',
+        },
+        { id: 'ben', phases: [], skills: [], router: 'sideways', paused: 'yes' },
+      ],
+      null,
+    );
+    expect(team.personas[0]).toMatchObject({
+      phases: ['plan', 'shape'],
+      paused: true,
+      skills: ['repo-recherche.md', 'fragen-formulieren.md'],
+      router: 'budget',
+    });
+    // Absent or junk on the wire reads as omitted — the slots hide, never a guess.
+    expect(team.personas[1]).toEqual({
+      id: 'ben',
+      title: 'ben',
+      role: '',
+      worker: '',
+      model: '',
+      pool: [],
+      color: '#7aa2f7',
+      budget: null,
+      currentRun: null,
+    });
   });
 });

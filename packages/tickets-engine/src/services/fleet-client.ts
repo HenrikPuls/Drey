@@ -272,6 +272,18 @@ export class FleetClient {
     }
   }
 
+  /** The persona pause (U4): a paused persona's tickets hold until played again. */
+  async setPersonaPaused(persona: string, paused: boolean): Promise<ChainStatus | null> {
+    if (!(await this.ensureRunner())) {
+      return null;
+    }
+    try {
+      return await this.post<ChainStatus>('/chain/persona-pause', { persona, paused });
+    } catch {
+      return null;
+    }
+  }
+
   dispose(): void {
     if (this.pollTimer !== null) {
       clearInterval(this.pollTimer);

@@ -24,7 +24,7 @@ import type { ChainMaster, ChainStatus, ColumnMode, WaitQuestion } from '../flee
 import type { ShapedQuestion } from './question-shape';
 import type { BoardSnapshot, CreateResult, MutationResult, TicketCard } from './tickets';
 import type { ImprovementProposal, ImprovementState } from '../core/improvements';
-import type { Persona } from '../core/persona';
+import type { Persona, PersonaRouter } from '../core/persona';
 import type { ScoutReport } from './scout';
 
 /** What the "Needs you" list holds, in the order it shows them. */
@@ -88,6 +88,28 @@ export type PersonaImprovementsReply =
 export type RemoteChange = 'board' | 'fleet' | 'remote' | 'chat';
 
 /**
+ * The persona thread's read (U4, concept §4.5): the coaching protocol's
+ * messages, file order (oldest first). Only owner messages exist today.
+ */
+export type PersonaThreadReply =
+  | { readonly ok: true; readonly messages: readonly { readonly at: string; readonly role: 'owner'; readonly text: string }[] }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * The persona memory's read (U4, concept §4.4): the curated entries in
+ * file order (oldest first), each with its pin state. The pin toggle's
+ * `index` addresses this list.
+ */
+export type PersonaMemoryReply =
+  | { readonly ok: true; readonly entries: readonly { readonly text: string; readonly pinned: boolean }[] }
+  | { readonly ok: false; readonly error: string };
+
+/** The chain's persona pause (U4): applied, with the state echoed back. */
+export type ChainPersonaPauseReply =
+  | { readonly ok: true; readonly persona: string; readonly paused: boolean }
+  | { readonly ok: false; readonly error: string };
+
+/**
  * What a `chat` change carries to the subscribers (and the `/api/events`
  * SSE payload): the session file the stream event belongs to and the
  * event itself. Board/fleet/remote changes carry no payload.
@@ -137,6 +159,32 @@ export interface TicketsRemotePort {
 
   /** The team: every persona, read-only (the Team tab's cards). */
   personas(): Promise<readonly PersonaView[]>;
+
+  /** The persona chat's read (U4, concept §4.5): the coaching thread's owner messages. */
+  personaThread(personaId: string): Promise<PersonaThreadReply>;
+  /** Appends one owner message to the coaching thread; one commit. */
+  personaThreadAppend(cmd: { readonly persona: string; readonly text: string }): Promise<PersonaThreadReply>;
+  /** The persona memory's read (U4, concept §4.4): entries with their pin state. */
+  personaMemory(personaId: string): Promise<PersonaMemoryReply>;
+  /** Appends one owner-taught memory entry; one commit. */
+  personaMemoryAppend(cmd: { readonly persona: string; readonly text: string }): Promise<PersonaMemoryReply>;
+  /** Flips one memory entry's pin (index = its position in the GET list); one commit. */
+  personaMemoryPin(cmd: { readonly persona: string; readonly index: number; readonly pinned: boolean }): Promise<PersonaMemoryReply>;
+  /** The persona setup's PATCH (U4, concept §4.5): only sent keys are written; one commit. */
+  personaPatch(cmd: {
+    readonly persona: string;
+    readonly title?: string;
+    readonly role?: string;
+    readonly worker?: string;
+    readonly model?: string;
+    readonly pool?: readonly string[];
+    readonly router?: PersonaRouter;
+    readonly color?: string;
+    readonly skills?: readonly string[];
+    readonly prompt?: string;
+  }): Promise<MutationResult>;
+  /** The chain's persona pause (U4): a paused persona's tickets hold until played again. */
+  chainPersonaPause(cmd: { readonly persona: string; readonly paused: boolean }): Promise<ChainPersonaPauseReply>;
 
   /** The E6 improvements card: one persona's proposals, open count and friction count. */
   personaImprovements(personaId: string): Promise<PersonaImprovementsReply>;
@@ -192,6 +240,19 @@ export interface PersonaView {
    * unknown", never a fake 0.
    */
   readonly dailyCost?: number;
+  /**
+   * The phase ids whose pipeline entry names this persona (`persona:` in
+   * pipeline.md, U4) — the Team card's phase assignment, derived from the
+   * board snapshot at read time. Present even when empty once a board
+   * exists; absent on older servers.
+   */
+  readonly phases?: readonly string[];
+  /**
+   * The chain's persona pause (U4, concept §4.3 "Pausieren"): true while
+   * the dispatcher holds this persona's tickets. Absent when the chain
+   * state is unknown (the runner is down) — never a guessed false.
+   */
+  readonly paused?: boolean;
 }
 
 /**

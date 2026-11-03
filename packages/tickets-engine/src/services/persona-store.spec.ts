@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendMemory, MEMORY_HEADER, MEMORY_LINE_CAP, memoryPathFor } from './persona-store';
+import { appendMemory, MEMORY_HEADER, MEMORY_LINE_CAP, memoryPathFor, parseMemoryEntries, toggleMemoryPin } from './persona-store';
 
 /**
  * The persona memory store (ADR-0088, E3): one append = one line, the
@@ -95,5 +95,46 @@ describe('appendMemory', () => {
 describe('memoryPathFor', () => {
   it('addresses the persona memory file under the personas dir', () => {
     expect(memoryPathFor('pia')).toBe('tickets/_meta/personas/pia/memory.md');
+  });
+});
+
+describe('parseMemoryEntries + toggleMemoryPin (U4, concept §4.4)', () => {
+  it('reads the entries back in file order, bullet and marker stripped', () => {
+    const text = '# Memory\n\n- 2026-11-01 · T-0102 · rank fields win [pinned]\n- 2026-11-02 · T-0107 · gate red on lint\n';
+    expect(parseMemoryEntries(text)).toEqual([
+      { text: '2026-11-01 · T-0102 · rank fields win', pinned: true },
+      { text: '2026-11-02 · T-0107 · gate red on lint', pinned: false },
+    ]);
+  });
+
+  it('reads a headerless hand-written file and an empty one', () => {
+    expect(parseMemoryEntries('- hand note\n')).toEqual([{ text: 'hand note', pinned: false }]);
+    expect(parseMemoryEntries('')).toEqual([]);
+    expect(parseMemoryEntries('   \n\n')).toEqual([]);
+  });
+
+  it('toggling the pin appends the marker at the line and strips it again — one entry changes', () => {
+    const text = '# Memory\n\n- first\n- second\n- third\n';
+    const pinned = toggleMemoryPin(text, 1, true);
+    expect(pinned).toBe('# Memory\n\n- first\n- second [pinned]\n- third\n');
+    expect(parseMemoryEntries(pinned!)).toEqual([
+      { text: 'first', pinned: false },
+      { text: 'second', pinned: true },
+      { text: 'third', pinned: false },
+    ]);
+    expect(toggleMemoryPin(pinned!, 1, false)).toBe(text);
+  });
+
+  it('normalizes a hand-written bullet-less line to the canonical shape when pinning', () => {
+    const text = 'hand note without a bullet\n';
+    expect(toggleMemoryPin(text, 0, true)).toBe('- hand note without a bullet [pinned]\n');
+    expect(parseMemoryEntries(toggleMemoryPin(text, 0, true)!)).toEqual([{ text: 'hand note without a bullet', pinned: true }]);
+  });
+
+  it('refuses an out-of-range index with null — never a silent no-op', () => {
+    const text = '# Memory\n\n- only\n';
+    expect(toggleMemoryPin(text, 1, true)).toBeNull();
+    expect(toggleMemoryPin(text, -1, true)).toBeNull();
+    expect(toggleMemoryPin('', 0, true)).toBeNull();
   });
 });

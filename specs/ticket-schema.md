@@ -707,6 +707,7 @@ tickets/_meta/personas/
     persona.md        # frontmatter: title, role, worker, models, color, skills
     prompt.md         # the persona prompt — the run's instruction base when present
     memory.md         # curated memory (format and cap below)
+    thread.md         # the coaching thread — the owner's chat with the persona (U4)
     friction.md       # the worker's findings (E6 — format below)
     improvements.md   # the aggregation's proposals (E6 — format below)
     avatar.png        # optional
@@ -727,6 +728,7 @@ tickets/_meta/personas/
   | `models.router` | `off \| budget \| escalate-on-fail` — a router only ever picks inside the pool | `off` |
   | `color` | `#rrggbb`, the chips and avatars | `#a78bfa` |
   | `skills` | reusable skill files under `_meta/skills/` the persona carries | `[]` |
+  | `budget` | USD per day — the Team card shows the day's costs against it | unset (null) |
 
 - `prompt.md` — the longform persona prompt, free Markdown. When a
   persona resolves at dispatch, this file is the run's instruction base,
@@ -749,6 +751,28 @@ tickets/_meta/personas/
   ~20 lines / ~500 tokens, whichever is smaller, under a `## Memory`
   heading with a one-line explanation; an absent file adds no section at
   all.
+
+  A pinned entry (U4 — the owner keeps the asset curated) carries a
+  trailing ` [pinned]` marker on its line; the pin toggle adds or strips
+  exactly that marker, one commit `personas: <id> memory
+  pinned|unpinned`. An entry's index in `GET /api/personas/<id>/memory`
+  is its position in the file's entry list (oldest first).
+
+- `thread.md` — the coaching thread (U4, concept §4.5): the owner's chat
+  with the persona, one file, shaped like a `_meta/chat/` session —
+  created on first append with `title`/`created` frontmatter, one message
+  per line below:
+
+  ```markdown
+  - '<ISO-8601>' owner — <one line of coaching>
+  ```
+
+  The writer is strict (a multi-line message flattens to one line); the
+  reader forgives — an unparseable line is skipped, never guessed. Every
+  append is one commit `personas: <id> thread`. The run brief's context
+  pack carries the last 5 messages, newest first, under a `## Coaching`
+  heading, so what the owner taught in conversation reaches the next
+  dispatch; an absent or empty thread adds no section at all.
 
 **The improvement loop (E6).** Two more files may live in the persona
 directory — the worker's findings and the aggregation's proposals (the

@@ -82,6 +82,8 @@ interface TicketPersona {
   readonly prompt: string | null;
   /** The persona's memory.md text ('' when absent). */
   readonly memory: string;
+  /** The persona's thread.md text ('' when absent) — the coaching slice's source. */
+  readonly coaching: string;
 }
 
 /**
@@ -141,6 +143,8 @@ interface ChainFile {
   readonly ticketFailures?: Record<string, TicketFailure>;
   /** Per ticket: the owner stopped its run — no auto-dispatch until it moves or the owner starts it again. */
   readonly ownerHold?: Record<string, OwnerHold>;
+  /** The personas the owner paused (U4, concept §4.3): their tickets hold until played again. */
+  readonly pausedPersonas?: string[];
 }
 
 interface TicketFailure {
@@ -261,6 +265,8 @@ export class Orchestrator {
   private readonly tripped: Record<string, ChainTrip> = {};
   private readonly ticketFailures: Record<string, TicketFailure> = {};
   private readonly ownerHold: Record<string, OwnerHold> = {};
+  /** The personas the owner paused (U4): their tickets hold until played again. */
+  private readonly pausedPersonas = new Set<string>();
   /** Prompts already reported as older than the shipped default. */
   private readonly promptDriftNoted = new Set<string>();
   /** Run ids the chain itself stopped (column brake, Notaus) — only an
@@ -362,6 +368,11 @@ export class Orchestrator {
           this.ownerHold[ticket] = { phase: hold.phase, at: hold.at };
         }
       }
+      for (const persona of parsed.pausedPersonas ?? []) {
+        if (typeof persona === 'string' && persona.trim() !== '') {
+          this.pausedPersonas.add(persona.trim());
+        }
+      }
     } catch {
       // a torn chain.json is noise; the plugin re-configures on the next board round
     }
@@ -380,6 +391,7 @@ export class Orchestrator {
       cooldownUntil: { ...this.cooldownUntil },
       tripped: { ...this.tripped },
       quotaPausedUntil: this.quotaPausedUntil(),
+      pausedPersonas: [...this.pausedPersonas].sort(),
     };
   }
 
@@ -487,6 +499,32 @@ export class Orchestrator {
       (record) => LIVE.includes(record.info.state) && (record.request.column ?? null) === phaseId,
       `column ${phaseId} stopped`,
     );
+    return this.status();
+  }
+
+  /**
+   * The persona pause (U4, concept §4.3 "Pausieren" / Team-Master): a
+   * paused persona's tickets hold — the dispatch pass marks them busy
+   * until the persona is played again. Persisted in chain.json like every
+   * control state, so the pause survives a runner restart. A live run is
+   * not stopped; it finishes its step.
+   */
+  async setPersonaPaused(persona: string, paused: boolean): Promise<ChainStatus> {
+    const id = persona.trim();
+    const known = this.pausedPersonas.has(id);
+    if (paused && !known) {
+      this.pausedPersonas.add(id);
+      this.deps.log(`persona "${id}" paused — its tickets hold until the persona is played again`);
+    } else if (!paused && known) {
+      this.pausedPersonas.delete(id);
+      this.deps.log(`persona "${id}" played again — its tickets dispatch normally`);
+    }
+    if (this.pausedPersonas.has(id) !== known) {
+      await this.persist();
+      if (this.master === 'run') {
+        await this.dispatchPass();
+      }
+    }
     return this.status();
   }
 
@@ -1017,6 +1055,7 @@ export class Orchestrator {
       tripped: { ...this.tripped },
       ticketFailures: { ...this.ticketFailures },
       ownerHold: { ...this.ownerHold },
+      pausedPersonas: [...this.pausedPersonas].sort(),
       ...(handoverAt !== undefined ? { handoverAt } : {}),
     };
     // Temp file + rename: a torn chain.json would lose all control state.
@@ -1114,6 +1153,14 @@ export class Orchestrator {
       // default) resolves before the assignment ring, so a persona run
       // takes its persona's pool slot — not the ring provider's.
       const personas = this.master === 'run' ? await this.resolveBoardPersonas(config, snap) : new Map<string, TicketPersona>();
+      // U4 (persona pause): a ticket whose resolved persona is paused is
+      // busy for this pass — the plan never picks it and the wait notes
+      // stay honest (the persona hold has its own note below).
+      for (const [cardId, entry] of personas) {
+        if (entry.resolution.persona !== null && this.pausedPersonas.has(entry.resolution.persona)) {
+          busyTickets.add(cardId);
+        }
+      }
       const poolOf = (card: BoardColumn['tickets'][number], phase: PipelinePhase): WorkerProviderId | null => {
         const persona = personas.get(card.id)?.persona ?? null;
         if (persona !== null) {
@@ -1150,6 +1197,16 @@ export class Orchestrator {
       this.lastPhases = snap.pipeline;
       await this.prunePhaseState();
       this.notedThisPass = new Set();
+      // U4: say once per ticket why a paused persona holds it — the chain
+      // log must say WHY nothing moves.
+      for (const [cardId, entry] of personas) {
+        if (entry.resolution.persona !== null && this.pausedPersonas.has(entry.resolution.persona)) {
+          this.noteSkip(
+            cardId,
+            `dispatch holds ${cardId}: persona "${entry.resolution.persona}" is paused — play the persona again to release its tickets`,
+          );
+        }
+      }
       const dispatched = new Set<string>(plan.map((item) => item.card.id));
       const refusedByColumn = new Map<string, string>();
       for (const item of plan) {
@@ -1387,6 +1444,7 @@ export class Orchestrator {
         let persona: Persona | null = null;
         let prompt: string | null = null;
         let memory = '';
+        let coaching = '';
         if (resolution.persona !== null) {
           const text = await fileOf(`${PERSONAS_DIR}/${resolution.persona}/persona.md`);
           if (text !== null) {
@@ -1399,9 +1457,10 @@ export class Orchestrator {
           if (persona !== null) {
             prompt = await fileOf(`${PERSONAS_DIR}/${persona.id}/prompt.md`);
             memory = (await fileOf(`${PERSONAS_DIR}/${persona.id}/memory.md`)) ?? '';
+            coaching = (await fileOf(`${PERSONAS_DIR}/${persona.id}/thread.md`)) ?? '';
           }
         }
-        personas.set(card.id, { resolution, persona, prompt, memory });
+        personas.set(card.id, { resolution, persona, prompt, memory, coaching });
       }
     }
     return personas;
@@ -1563,6 +1622,7 @@ export class Orchestrator {
               model: personaModelFor(persona, null).model,
               prompt: personaPrompt,
               memory: entry?.memory ?? '',
+              coaching: entry?.coaching ?? '',
             },
           }
         : {}),

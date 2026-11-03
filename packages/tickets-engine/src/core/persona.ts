@@ -114,9 +114,13 @@ export function parsePersonaFile(id: string, text: string): Persona {
   return { id, title, role, worker, models: { default: defaultModel, pool, router }, color, skills, budget };
 }
 
-/** The canonical persona file text (stable key order, byte-stable round trips). */
-export function personaFileText(persona: Persona): string {
+/** The canonical persona file text (stable key order, byte-stable round trips).
+ *  `body` is the owner's prose below the fence ("Who Pia is, tone, limits",
+ *  concept §4.1); a patch passes the existing file's body through, a fresh
+ *  persona gets the default line. */
+export function personaFileText(persona: Persona, body?: string): string {
   personaRef(persona.id);
+  const prose = body !== undefined && body.trim() !== '' ? body.trimStart() : `Who ${persona.title} is: role, tone, limits. Edit freely — the next run reads it.`;
   const lines = [
     '---',
     `title: ${persona.title}`,
@@ -131,7 +135,7 @@ export function personaFileText(persona: Persona): string {
     ...(persona.budget !== null ? [`budget: ${persona.budget}`] : []),
     '---',
     '',
-    `Who ${persona.title} is: role, tone, limits. Edit freely — the next run reads it.`,
+    prose,
     '',
   ];
   return lines.join('\n');

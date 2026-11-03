@@ -7,6 +7,132 @@
   padding: 16px;
 }
 
+/* ---------- header (the prototype's .hdr) ---------- */
+
+.hdr {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -6px 0 12px;
+}
+
+.logo {
+  display: grid;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 8px;
+}
+
+.hd {
+  min-width: 0;
+}
+
+.ttl {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.sub {
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hspace {
+  flex: 1;
+}
+
+/* ---------- the chain master strip (the prototype's .chain-strip) ---------- */
+
+.chain-strip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  margin-bottom: 14px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.strip-led {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  background: var(--text-3);
+  border-radius: 50%;
+}
+
+.strip-led.on {
+  background: var(--ok);
+  box-shadow: 0 0 8px var(--ok);
+  animation: mc-led-pulse 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .strip-led.on {
+    animation: none;
+  }
+}
+
+.strip-mono {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  cursor: pointer;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  transition: background 0.15s ease;
+}
+
+.switch i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--text-3);
+  border-radius: 50%;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease;
+}
+
+.switch.on {
+  background: color-mix(in srgb, var(--ok) 25%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+}
+
+.switch.on i {
+  transform: translateX(14px);
+  background: var(--ok);
+}
+
 .cards {
   list-style: none;
   margin: 0;
@@ -139,6 +265,13 @@
   font-size: 11px;
 }
 
+/* the foot's phases slot — leftmost, before the worker word */
+.pfoot .phases {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* the foot's day-cost line — the budget against it, danger once over */
 .pfoot .cost {
   margin-left: auto;
@@ -147,6 +280,36 @@
 
 .pfoot .cost.over {
   color: var(--danger);
+}
+
+/* ---------- the card actions (the prototype's .pacts) ---------- */
+
+.pacts {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.btn {
+  flex: 1;
+  min-height: 0;
+  padding: 9px;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--text-2);
+}
+
+.btn:hover {
+  border-color: var(--text-2);
+}
+
+.btn:active {
+  transform: scale(0.97);
 }
 
 .empty {
