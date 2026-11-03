@@ -39,6 +39,7 @@ import type {
   TicketsRemotePort,
 } from '../contracts/remote-protocol';
 import type { BoardSnapshot, CreateResult, MutationResult } from '../contracts/tickets';
+import type { ReviewComment } from '../core/review-feedback';
 import type { TicketDiff, TicketFileReply, WorktreeFile } from '../core/worktree-changes';
 import type { ChatDecisionResult, ChatServicePort, ChatSession, ChatSessionMeta, ChatTurnResult } from '../contracts/chat';
 import { IMPROVEMENTS_THRESHOLD } from '../core/improvements';
@@ -77,7 +78,7 @@ export interface RemoteBoard {
   /** The Ready card's accept (E5c). */
   acceptTicket(input: { id: string; actor?: string }): Promise<MutationResult>;
   /** The proof card's send-back with a mandatory note (E5c). */
-  sendBack(input: { id: string; note: string; actor?: string }): Promise<MutationResult>;
+  sendBack(input: { id: string; note: string; actor?: string; comments?: readonly ReviewComment[] }): Promise<MutationResult>;
   /** The E6 improvements card: one persona's proposals and counts. */
   personaImprovements(personaId: string): Promise<PersonaImprovementsReply>;
   /** The E6 1:1 decision; the apply lands in exactly one commit on the desk. */
@@ -474,7 +475,7 @@ export class DreyTicketsPort implements TicketsRemotePort {
     return this.boardService.acceptTicket({ ...cmd, actor });
   }
 
-  ticketSendBack(cmd: { id: string; note: string }, actor: string): Promise<MutationResult> {
+  ticketSendBack(cmd: { id: string; note: string; comments?: readonly ReviewComment[] }, actor: string): Promise<MutationResult> {
     return this.boardService.sendBack({ ...cmd, actor });
   }
 

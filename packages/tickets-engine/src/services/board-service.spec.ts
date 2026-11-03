@@ -833,3 +833,47 @@ describe('persona thread, memory pin and patch (U4, concept §4.4/§4.5)', () =>
     expect(personaMd).toContain('default: gpt-5');
   });
 });
+
+describe('EngineBoardService sendBack with review comments (E11-3)', () => {
+  const REVIEW_PIPELINE = `---
+phases:
+  - { id: inbox, title: Inbox, handover: manual }
+  - { id: build, title: Build, handover: agent build-default }
+  - { id: ready, title: Ready, handover: manual }
+---
+The pipeline.
+`;
+
+  it('moves the ticket back and writes the comments into its Handover', async () => {
+    await fsp.writeFile(path.join(vaultDir, 'tickets', '_meta', 'pipeline.md'), REVIEW_PIPELINE, 'utf8');
+    await writeTicket('T-0001', 'ready');
+    const service = serviceOf();
+
+    const outcome = await service.sendBack({
+      id: 'T-0001',
+      note: '2 review comments',
+      comments: [
+        { file: 'src/a.ts', line: 27, endLine: null, text: 'Why here?' },
+        { file: 'src/a.ts', line: 30, endLine: 33, text: 'Rename.' },
+      ],
+    });
+
+    expect(outcome.ok).toBe(true);
+    const text = await fsp.readFile(path.join(vaultDir, 'tickets', '20-build', 'T-0001.md'), 'utf8');
+    expect(text).toContain('## Handover');
+    expect(text).toContain('### Review feedback');
+    expect(text).toContain('- `src/a.ts:27` — Why here?');
+    expect(text).toContain('- `src/a.ts:30-33` — Rename.');
+    expect(text).toContain('sent back: 2 review comments');
+    await expect(fsp.access(path.join(vaultDir, 'tickets', 'ready', 'T-0001.md'))).rejects.toBeDefined();
+  });
+
+  it('leaves the ticket text alone when no comments ride along', async () => {
+    await fsp.writeFile(path.join(vaultDir, 'tickets', '_meta', 'pipeline.md'), REVIEW_PIPELINE, 'utf8');
+    await writeTicket('T-0001', 'ready');
+    const outcome = await serviceOf().sendBack({ id: 'T-0001', note: 'Fix the colour' });
+    expect(outcome.ok).toBe(true);
+    const text = await fsp.readFile(path.join(vaultDir, 'tickets', '20-build', 'T-0001.md'), 'utf8');
+    expect(text).not.toContain('Review feedback');
+  });
+});

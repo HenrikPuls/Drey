@@ -30,6 +30,7 @@ import {
   chainStepsOf,
   changeCountOf,
   changeRowsOf,
+  commentLabelOf,
   diffFontSizeStep,
   gateCostOf,
   patchRowsOf,
@@ -38,6 +39,7 @@ import {
   proofRecommendationOf,
   renderChainEntryViews,
   scoutReportOf,
+  sendBackLabelOf,
   splitTicketSections,
   threadItemsOf,
   usdLabelOf,
@@ -50,6 +52,7 @@ import {
   type ChangeRow,
   type GateStep,
   type ProofReport,
+  type ReviewComment,
   type ScoutReport,
   type ThreadItem,
   type TicketDiffFile,
@@ -94,7 +97,7 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
  * gallery with its scroll-synced dots and the fullscreen viewer, the git
  * diff with the magnifier into the fullscreen zoom, and the two owner
  * actions — 'Send back…' with its mandatory note, the armed
- * 'Annehmen & mergen' whose mint done ring takes over once accepted.
+ * 'Accept and merge' whose mint done ring takes over once accepted.
  *
  * The **thread** mode (prototype screen 04) is the ticket's filtered
  * view of the active chat session: the messages whose text names the
@@ -735,14 +738,17 @@ export class TicketView {
 
   protected async sendBack(): Promise<void> {
     const note = this.note().trim();
-    if (note === '' || this.sendBackPending() || this.readOnly()) {
+    const comments = this.comments();
+    if ((note === '' && comments.length === 0) || this.sendBackPending() || this.readOnly()) {
       return;
     }
     this.sendBackPending.set(true);
     this.result.set(null);
     try {
-      const reply = await this.vm.sendBack(note);
+      const reply = await this.vm.sendBack(note, comments);
       if (reply.ok) {
+        this.storeComments([]);
+        this.cancelDraft();
         this.sendBackOpen.set(false);
         this.note.set('');
         this.result.set({ kind: 'note', text: 'Sent back.' });
@@ -841,6 +847,138 @@ export class TicketView {
     const base = !this.touched() && first !== undefined ? [first] : [...this.expanded()];
     this.touched.set(true);
     this.expanded.set(base.includes(path) ? base.filter((known) => known !== path) : [...base, path]);
+  }
+
+  // --- line comments (E11-3) -----------------------------------------------------
+
+  /** Comments changed in this session, by ticket id; the rest read from storage. */
+  private readonly commentEdits = signal<Readonly<Record<string, readonly ReviewComment[]>>>({});
+  protected readonly comments = computed<readonly ReviewComment[]>(() => {
+    const id = this.id();
+    return this.commentEdits()[id] ?? this.loadComments(id);
+  });
+  /** The composer: a new comment (index null) or an edit of pending comment `index`. */
+  protected readonly draft = signal<{ file: string; line: number; endLine: number | null; index: number | null } | null>(null);
+  protected readonly draftText = signal('');
+
+  protected readonly commentLabel = commentLabelOf;
+  protected readonly sendBackLabel = computed(() => sendBackLabelOf(this.comments().length));
+
+  private loadComments(id: string): readonly ReviewComment[] {
+    try {
+      const raw = localStorage.getItem(`mc.comments.${id}`);
+      const parsed: unknown = raw === null ? [] : JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? parsed.filter(
+            (c): c is ReviewComment =>
+              typeof c === 'object' &&
+              c !== null &&
+              typeof (c as ReviewComment).file === 'string' &&
+              typeof (c as ReviewComment).text === 'string' &&
+              Number.isInteger((c as ReviewComment).line),
+          )
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private storeComments(next: readonly ReviewComment[]): void {
+    const id = this.id();
+    this.commentEdits.update((edits) => ({ ...edits, [id]: next }));
+    try {
+      localStorage.setItem(`mc.comments.${id}`, JSON.stringify(next));
+    } catch {
+      // The comments live for this session only.
+    }
+  }
+
+  /**
+   * A tap on a changed-or-context line of the new file: the first tap
+   * opens the composer there, a tap on another line of the same file
+   * stretches the range from the first to it.
+   */
+  protected pickLine(file: TicketDiffFile, line: number | null): void {
+    if (line === null || this.readOnly()) {
+      return;
+    }
+    const open = this.draft();
+    if (open === null || open.file !== file.path) {
+      this.draft.set({ file: file.path, line, endLine: null, index: null });
+      this.draftText.set('');
+      return;
+    }
+    if (open.index !== null) {
+      return; // an edit keeps the range it has
+    }
+    const first = Math.min(open.line, open.endLine ?? open.line, line);
+    const last = Math.max(open.line, open.endLine ?? open.line, line);
+    this.draft.set({ ...open, line: first, endLine: last > first ? last : null });
+  }
+
+  protected onDraftText(event: Event): void {
+    this.draftText.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  protected cancelDraft(): void {
+    this.draft.set(null);
+    this.draftText.set('');
+  }
+
+  protected addDraft(): void {
+    const open = this.draft();
+    const text = this.draftText().replace(/\s+/g, ' ').trim();
+    if (open === null || text === '') {
+      return;
+    }
+    const comment: ReviewComment = { file: open.file, line: open.line, endLine: open.endLine, text };
+    const list = [...this.comments()];
+    if (open.index === null) {
+      list.push(comment);
+    } else {
+      list[open.index] = comment;
+    }
+    this.storeComments(list);
+    this.cancelDraft();
+  }
+
+  protected editComment(index: number): void {
+    const comment = this.comments()[index];
+    if (comment === undefined) {
+      return;
+    }
+    this.draft.set({ file: comment.file, line: comment.line, endLine: comment.endLine, index });
+    this.draftText.set(comment.text);
+  }
+
+  protected deleteComment(index: number): void {
+    this.storeComments(this.comments().filter((_, i) => i !== index));
+    if (this.draft()?.index === index) {
+      this.cancelDraft();
+    }
+  }
+
+  /** Whether the composer sits under this line of this file (its last line). */
+  protected draftAfter(path: string, newNo: number | null): boolean {
+    const open = this.draft();
+    return open !== null && newNo !== null && open.file === path && (open.endLine ?? open.line) === newNo;
+  }
+
+  /** The pending comments whose last line is this one (the composer replaces the one being edited). */
+  protected commentsAfter(path: string, newNo: number | null): readonly { comment: ReviewComment; index: number }[] {
+    if (newNo === null) {
+      return [];
+    }
+    const editing = this.draft()?.index ?? null;
+    return this.comments()
+      .map((comment, index) => ({ comment, index }))
+      .filter(({ comment, index }) => comment.file === path && (comment.endLine ?? comment.line) === newNo && index !== editing);
+  }
+
+  /** The tapped range is highlighted while the composer is open. */
+  protected inDraft(path: string, newNo: number | null): boolean {
+    const open = this.draft();
+    return open !== null && newNo !== null && open.file === path && newNo >= open.line && newNo <= (open.endLine ?? open.line);
   }
 
   // --- diff review (E11-2): viewed marks, whole file, change n of m ------------

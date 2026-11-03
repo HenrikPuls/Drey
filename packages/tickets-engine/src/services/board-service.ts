@@ -24,6 +24,7 @@ import { blockedRefusal } from '../core/blocked';
 import { runTransition, type TransitionIo } from '../core/transition';
 import { parseStatusLog, type StatusLine } from '../core/status-log';
 import { LEDGER_FILE, parseLedger, settledUsageByTicket, type LedgerWrite } from '../core/ledger';
+import { withReviewFeedback, type ReviewComment } from '../core/review-feedback';
 import { mergeWorktreeChanges, diffOfOutput, isSafeRepoPath, MAX_FILE_VIEW_BYTES, type TicketDiff, type TicketFileReply, type WorktreeFile } from '../core/worktree-changes';
 import { planWorktreeRemoval } from '../core/worktree-removal';
 import { TicketsGit, type RepoLocation } from '../core/tickets-git';
@@ -1138,6 +1139,7 @@ export class EngineBoardService {
     to: string,
     actor: string,
     extraLog?: string,
+    text?: string,
   ): Promise<BoardMutationResult> {
     const from = card.phase;
     const toPhase = snap.pipeline.find((p) => p.id === to) ?? null;
@@ -1163,6 +1165,7 @@ export class EngineBoardService {
     const result = await runTransition(this.transitionIo(vault), {
       id: card.id,
       fromPath: card.path,
+      ...(text !== undefined ? { text } : {}),
       patch: { to, from, now: new Date(), actor },
       ...(extraLog !== undefined ? { extraLog } : {}),
       toPath: `tickets/${toDir}/${card.id}.md`,
@@ -1352,7 +1355,13 @@ export class EngineBoardService {
    * pipeline), the Log line `<from> -> <to>` followed by `sent back:
    * <note>`, one commit.
    */
-  sendBack(input: { id: string; note: string; actor?: string }): Promise<BoardMutationResult> {
+  sendBack(input: {
+    id: string;
+    note: string;
+    actor?: string;
+    /** E11-3: line comments of the review; they land in the ticket's Handover as structured feedback. */
+    comments?: readonly ReviewComment[];
+  }): Promise<BoardMutationResult> {
     return this.enqueue(async () => {
       const vault = await this.detect();
       if (vault === null) {
@@ -1374,7 +1383,11 @@ export class EngineBoardService {
       if (to === null) {
         return { ok: false, error: `there is no agent phase before "${card.phase}" to send ${input.id} back to` };
       }
-      return this.moveCard(vault, snap, card, to, input.actor ?? this.owner, `sent back: ${input.note.trim().slice(0, 500)}`);
+      let text: string | undefined;
+      if (input.comments !== undefined && input.comments.length > 0) {
+        text = withReviewFeedback(await this.host.read(vault.id, card.path), input.comments);
+      }
+      return this.moveCard(vault, snap, card, to, input.actor ?? this.owner, `sent back: ${input.note.trim().slice(0, 500)}`, text);
     });
   }
 

@@ -48,10 +48,13 @@ import {
   verlaufCostsOf,
   verlaufLineOf,
   verlaufTotalOf,
+  commentLabelOf,
+  sendBackLabelOf,
   viewedKeyOf,
   wholeFileRowsOf,
   type GatePhase,
   type ProofReport,
+  type ReviewComment,
   type ThreadItem,
   type ThreadMessage,
   type TicketActionReply,
@@ -76,6 +79,7 @@ interface FakeTicket extends TicketVm {
   attachmentUrls: ReadonlyMap<string, string>;
   calls: { accept: number; sendBack: string[]; save: string[]; onClose: number; enterEdit: number; exitEdit: number; reload: number; proposeChain: string[]; prefillChat: string[] };
   acceptReply: TicketActionReply;
+  sentComments: readonly ReviewComment[];
   sendBackReply: TicketActionReply;
   saveReply: TicketSaveReply;
 }
@@ -102,6 +106,7 @@ function makeFake(patch: Partial<FakeTicket> = {}): FakeTicket {
       prefillChat: [] as string[],
     },
     acceptReply: { ok: true } as TicketActionReply,
+    sentComments: [] as readonly ReviewComment[],
     sendBackReply: { ok: true } as TicketActionReply,
     saveReply: { ok: true, revision: 'rev-2' } as TicketSaveReply,
     doc(): TicketDoc | null {
@@ -158,8 +163,9 @@ function makeFake(patch: Partial<FakeTicket> = {}): FakeTicket {
       this.calls.accept += 1;
       return Promise.resolve(this.acceptReply);
     },
-    sendBack(note: string): Promise<TicketActionReply> {
+    sendBack(note: string, comments?: readonly ReviewComment[]): Promise<TicketActionReply> {
       this.calls.sendBack.push(note);
+      this.sentComments = comments ?? [];
       return Promise.resolve(this.sendBackReply);
     },
     ...patch,
@@ -303,6 +309,19 @@ interface TicketSurface {
   verdict(): { passed: number; total: number; stamp: string } | null;
   shots(): readonly { name: string; url: string }[];
   diff(): unknown;
+  comments(): readonly ReviewComment[];
+  draft(): { file: string; line: number; endLine: number | null; index: number | null } | null;
+  draftText(): string;
+  sendBackLabel(): string;
+  pickLine(file: TicketDiffFile, line: number | null): void;
+  onDraftText(event: Event): void;
+  addDraft(): void;
+  cancelDraft(): void;
+  editComment(index: number): void;
+  deleteComment(index: number): void;
+  draftAfter(path: string, newNo: number | null): boolean;
+  commentsAfter(path: string, newNo: number | null): readonly { comment: ReviewComment; index: number }[];
+  inDraft(path: string, newNo: number | null): boolean;
   viewedCount(): number;
   isViewed(file: TicketDiffFile): boolean;
   toggleViewed(file: TicketDiffFile): void;
@@ -1910,5 +1929,112 @@ describe('TicketView diff review', () => {
     vm.stepChange(files[0], -1, host);
     vm.stepChange(files[0], -1, host);
     expect(vm.changeIndex(files[0])).toBe(0);
+  });
+});
+
+// --- line comments (E11-3) ----------------------------------------------------------------
+
+describe('comment wording', () => {
+  it('names a line, a range and the send-back button', () => {
+    expect(commentLabelOf({ line: 27, endLine: null })).toBe('Line 27');
+    expect(commentLabelOf({ line: 30, endLine: 33 })).toBe('Lines 30–33');
+    expect(sendBackLabelOf(0)).toBe('Send back…');
+    expect(sendBackLabelOf(1)).toBe('Send back with 1 comment…');
+    expect(sendBackLabelOf(2)).toBe('Send back with 2 comments…');
+  });
+});
+
+describe('TicketView line comments', () => {
+  const file = { status: 'M', path: 'src/a.ts', patch: REVIEW_PATCH, added: 3, removed: 2 };
+  const other = { status: 'M', path: 'src/b.ts', patch: '@@ -1 +1 @@\n-x\n+y', added: 1, removed: 1 };
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  function mountReview(): { fake: FakeTicket; vm: TicketSurface } {
+    const fake = makeFake({ docValue: DOC, diffValue: { files: [file, other], truncated: false } });
+    return { fake, vm: surface(setup(fake)) };
+  }
+
+  it('opens the composer on a tapped line and stretches it into a range on a second tap', () => {
+    const { vm } = mountReview();
+    vm.pickLine(file, 27);
+    expect(vm.draft()).toEqual({ file: 'src/a.ts', line: 27, endLine: null, index: null });
+    expect(vm.draftAfter('src/a.ts', 27)).toBe(true);
+    vm.pickLine(file, 30);
+    expect(vm.draft()).toEqual({ file: 'src/a.ts', line: 27, endLine: 30, index: null });
+    expect(vm.draftAfter('src/a.ts', 30)).toBe(true);
+    expect(vm.draftAfter('src/a.ts', 27)).toBe(false);
+    expect(vm.inDraft('src/a.ts', 28)).toBe(true);
+    expect(vm.inDraft('src/a.ts', 31)).toBe(false);
+    // Tapping above the start moves the start up.
+    vm.pickLine(file, 25);
+    expect(vm.draft()).toMatchObject({ line: 25, endLine: 30 });
+    // A tap in another file starts a fresh comment there.
+    vm.pickLine(other, 1);
+    expect(vm.draft()).toEqual({ file: 'src/b.ts', line: 1, endLine: null, index: null });
+    // A deleted line has no number in the new file: nothing happens.
+    vm.cancelDraft();
+    vm.pickLine(file, null);
+    expect(vm.draft()).toBeNull();
+  });
+
+  it('adds, edits and deletes comments, keeping them across a remount', () => {
+    const { vm } = mountReview();
+    vm.pickLine(file, 27);
+    vm.addDraft();
+    expect(vm.comments()).toEqual([]); // an empty text adds nothing
+    vm.onDraftText(noteEvent('  Why   here?  '));
+    vm.addDraft();
+    expect(vm.comments()).toEqual([{ file: 'src/a.ts', line: 27, endLine: null, text: 'Why here?' }]);
+    expect(vm.draft()).toBeNull();
+    expect(vm.commentsAfter('src/a.ts', 27).map((c) => c.comment.text)).toEqual(['Why here?']);
+    expect(vm.sendBackLabel()).toBe('Send back with 1 comment…');
+
+    vm.editComment(0);
+    expect(vm.draftText()).toBe('Why here?');
+    expect(vm.commentsAfter('src/a.ts', 27)).toEqual([]); // the card gives way to the composer
+    vm.onDraftText(noteEvent('Move it into the caller.'));
+    vm.addDraft();
+    expect(vm.comments()[0]!.text).toBe('Move it into the caller.');
+
+    const again = surface(setup(makeFake({ docValue: DOC, diffValue: { files: [file, other], truncated: false } })));
+    expect(again.comments()).toHaveLength(1);
+
+    vm.deleteComment(0);
+    expect(vm.comments()).toEqual([]);
+    expect(vm.sendBackLabel()).toBe('Send back…');
+  });
+
+  it('sends the comments along, lets them stand in for the note and clears them afterwards', async () => {
+    const { fake, vm } = mountReview();
+    vm.pickLine(file, 30);
+    vm.pickLine(file, 33);
+    vm.onDraftText(noteEvent('Rename.'));
+    vm.addDraft();
+
+    vm.toggleSendBack();
+    await vm.sendBack(); // no note, one comment
+    expect(fake.calls.sendBack).toEqual(['']);
+    expect(fake.sentComments).toEqual([{ file: 'src/a.ts', line: 30, endLine: 33, text: 'Rename.' }]);
+    expect(vm.comments()).toEqual([]);
+    expect(vm.sendBackOpen()).toBe(false);
+  });
+
+  it('keeps the comments when the send-back is refused', async () => {
+    const fake = makeFake({
+      docValue: DOC,
+      diffValue: { files: [file], truncated: false },
+      sendBackReply: { ok: false, error: 'no agent phase' },
+    });
+    const vm = surface(setup(fake));
+    vm.pickLine(file, 27);
+    vm.onDraftText(noteEvent('Why?'));
+    vm.addDraft();
+    vm.toggleSendBack();
+    await vm.sendBack();
+    expect(vm.comments()).toHaveLength(1);
+    expect(vm.sendBackOpen()).toBe(true);
   });
 });

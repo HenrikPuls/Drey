@@ -395,6 +395,7 @@
                       @for (item of rowsOf(file); track $index) {
                         <div
                           class="dl2"
+                          [class.sel]="inDraft(file.path, item.row.newNo)"
                           [class.add]="item.row.kind === 'add'"
                           [class.del]="item.row.kind === 'del'"
                           [class.hunk]="item.row.kind === 'hunk'"
@@ -402,10 +403,41 @@
                           [attr.data-chg]="item.first ? file.path + '|' + item.change : null"
                         >
                           <span class="ln">{{ item.row.oldNo ?? '' }}</span>
-                          <span class="ln">{{ item.row.newNo ?? '' }}</span>
+                          @if (item.row.newNo !== null && !readOnly()) {
+                            <button type="button" class="ln lnb" [attr.aria-label]="'Comment on line ' + item.row.newNo" (click)="pickLine(file, item.row.newNo)">{{ item.row.newNo }}</button>
+                          } @else {
+                            <span class="ln">{{ item.row.newNo ?? '' }}</span>
+                          }
                           <span class="sg">{{ item.row.sign }}</span>
                           <span class="code">{{ item.row.text === '' ? ' ' : item.row.text }}</span>
                         </div>
+                        @for (pending of commentsAfter(file.path, item.row.newNo); track pending.index) {
+                          <div class="ccard">
+                            <span class="ccard-h">{{ commentLabel(pending.comment) }} · you · pending</span>
+                            <span>{{ pending.comment.text }}</span>
+                            <div class="ccard-actions">
+                              <button type="button" class="btn ghost" (click)="editComment(pending.index)">Edit</button>
+                              <button type="button" class="btn ghost" (click)="deleteComment(pending.index)">Delete</button>
+                            </div>
+                          </div>
+                        }
+                        @if (draftAfter(file.path, item.row.newNo); as _open) {
+                          <div class="ccard ccard-new">
+                            <span class="ccard-h">
+                              {{ draft()?.index === null ? 'New comment on' : 'Editing' }}
+                              {{ commentLabel({ line: draft()!.line, endLine: draft()!.endLine }).toLowerCase() }}
+                            </span>
+                            <label class="vh" for="draft-note">Comment</label>
+                            <textarea id="draft-note" rows="2" [value]="draftText()" (input)="onDraftText($event)"></textarea>
+                            @if (draft()?.index === null) {
+                              <span class="ccard-hint">Tap another line to extend the range.</span>
+                            }
+                            <div class="ccard-actions">
+                              <button type="button" class="btn ghost" (click)="cancelDraft()">Cancel</button>
+                              <button type="button" class="btn primary" [disabled]="draftText().trim() === ''" (click)="addDraft()">Add to review</button>
+                            </div>
+                          </div>
+                        }
                       }
                     </div>
                   }
@@ -452,7 +484,9 @@
             <div class="actions">
               @if (sendBackOpen()) {
                 <div class="sendback">
-                  <label class="sendback-label" for="sendback-note">What is wrong? A send-back needs a note.</label>
+                  <label class="sendback-label" for="sendback-note">
+                    {{ comments().length > 0 ? 'Add a note if you like. Your comments go along.' : 'What is wrong? A send-back needs a note.' }}
+                  </label>
                   <textarea
                     id="sendback-note"
                     class="sendback-text"
@@ -465,7 +499,7 @@
                     <button
                       type="button"
                       class="btn warn"
-                      [disabled]="note().trim() === '' || sendBackPending()"
+                      [disabled]="(note().trim() === '' && comments().length === 0) || sendBackPending()"
                       (click)="sendBack()"
                     >
                       {{ sendBackPending() ? 'Sending…' : 'Send back' }}
@@ -475,13 +509,13 @@
                 </div>
               } @else {
                 <div class="action-row">
-                  <button type="button" class="btn ghost" (click)="toggleSendBack()">Send back…</button>
+                  <button type="button" class="btn ghost" (click)="toggleSendBack()">{{ sendBackLabel() }}</button>
                   <button
                     type="button"
                     class="btn primary"
                     [disabled]="acceptPending()"
                     (click)="acceptTap()">
-                    {{ acceptPending() ? 'Accepting…' : arm().armed ? 'Tap again to accept' : 'Annehmen & mergen' }}
+                    {{ acceptPending() ? 'Accepting…' : arm().armed ? 'Tap again to accept' : 'Accept and merge' }}
                   </button>
                 </div>
               }

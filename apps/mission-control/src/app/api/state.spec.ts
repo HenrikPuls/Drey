@@ -925,6 +925,19 @@ describe('ticket screen', () => {
     });
   });
 
+  it('sendBack lets line comments stand in for the note and posts them along (E11-3)', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.openTicket('T-1');
+    await waitFor(() => expect(state.ticketDetail()).not.toBeNull());
+    desk.on('POST', '/api/tickets/T-1/send-back', () => ({ ok: true }));
+
+    const comments = [{ file: 'src/a.ts', line: 27, endLine: null, text: 'Why here?' }];
+    const reply = await state.sendBack('', comments);
+    expect(reply).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/tickets/T-1/send-back')[0]!.body).toEqual({ note: '', comments });
+  });
+
   it('openTicketSendBack parks the send-back; a plain open clears it', async () => {
     const { desk } = makeDesk();
     const state = makeState(desk);

@@ -636,18 +636,18 @@ export class McState {
   }
 
   /** Sends the open ticket back to the agent; the note is mandatory (an empty one refuses). */
-  async sendBack(note: string): Promise<McReply> {
+  async sendBack(note: string, comments: readonly { file: string; line: number; endLine: number | null; text: string }[] = []): Promise<McReply> {
     const open = this.ticketOpen();
     if (open === null) {
       return { ok: false, error: 'no ticket is open' };
     }
     const text = note.trim();
-    if (text === '') {
+    if (text === '' && comments.length === 0) {
       return { ok: false, error: 'a send-back needs a note' };
     }
     const path = `/api/tickets/${encodeURIComponent(open.id)}/send-back`;
     const body = await this.client
-      .request<Record<string, unknown>>('POST', path, { note: text })
+      .request<Record<string, unknown>>('POST', path, { note: text, ...(comments.length > 0 ? { comments } : {}) })
       .catch(fail);
     if (isFailure(body)) {
       return body;

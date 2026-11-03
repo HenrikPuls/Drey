@@ -187,6 +187,26 @@ describe('route', () => {
     await route(req({ method: 'POST', path: '/api/tickets/T-0052/send-back', authorization: auth, body: { note: 'The button still misaligns' } }), deps);
     expect(remote.ticketSendBack).toHaveBeenCalledWith({ id: 'T-0052', note: 'The button still misaligns' }, 'owner@iphone-15');
 
+    // E11-3: line comments stand in for the note, and bad ones are dropped.
+    await route(
+      req({
+        method: 'POST',
+        path: '/api/tickets/T-0052/send-back',
+        authorization: auth,
+        body: { comments: [{ file: 'src/a.ts', line: 27, text: 'Why here?' }, { file: '', line: 1, text: 'x' }] },
+      }),
+      deps,
+    );
+    expect(remote.ticketSendBack).toHaveBeenLastCalledWith(
+      { id: 'T-0052', note: '1 review comment', comments: [{ file: 'src/a.ts', line: 27, endLine: null, text: 'Why here?' }] },
+      'owner@iphone-15',
+    );
+    const onlyJunk = await route(
+      req({ method: 'POST', path: '/api/tickets/T-0052/send-back', authorization: auth, body: { comments: [{ file: '', line: 1, text: 'x' }] } }),
+      deps,
+    );
+    expect(onlyJunk.body).toEqual({ ok: false, error: 'a send-back needs a note' });
+
     expect((await route(req({ path: '/api/tickets/T-0052/diff', authorization: auth }), deps)).status).toBe(200);
     expect(remote.ticketDiff).toHaveBeenCalledWith('T-0052');
     const whole = await route(req({ path: '/api/tickets/T-0052/file/src%2Fa.ts', authorization: auth }), deps);

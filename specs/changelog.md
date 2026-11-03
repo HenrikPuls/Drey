@@ -1,4 +1,35 @@
 
+### Milestone 118 — Mission Control line comments (E11-3)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-03
+(concept v2, decision D6, design board "iPad: Review a file").
+
+- **Commenting.** On the proof card's diff the new file's line numbers
+  are buttons: a tap opens a composer under the line, a tap on another
+  line of the same file stretches it into a range (`Lines 30–33`); the
+  selected lines are tinted. **Add to review** turns it into a pending
+  card (`Line 27 · you · pending`) with **Edit** / **Delete**. Removed
+  lines carry no number in the new file and take no comment. Comments are
+  kept per ticket on the device until they are sent.
+- **Send back.** The button reads `Send back with n comments…`; the note
+  is optional once comments exist (they stand in for it). The desk
+  (`POST /api/tickets/<id>/send-back`, `comments: [{file, line, endLine,
+  text}]`) validates and caps them (50, 1000 characters each), moves the
+  ticket to the earlier agent phase as before and writes a
+  `### Review feedback` block into the ticket's `## Handover` in the same
+  commit (`core/review-feedback.ts`); a second send-back replaces the
+  block. Build prompt version 5 tells the persona to answer every line.
+- **English.** The leftover button label `Annehmen & mergen` is now
+  `Accept and merge`.
+- **Specs added:** comment parsing and capping, the block's render/parse
+  round trip and its replacement, the Handover placement (existing,
+  missing, last section), the route (comments as note, junk refused), the
+  board's send-back with and without comments, the composer's range
+  logic, add/edit/delete and persistence, the send-back hand-over, the
+  state's payload.
+- **Not done:** dictation in the composer, drag-to-select ranges (a
+  second tap does it), comments on removed lines.
+
 ### Milestone 117 — Mission Control diff review (E11-2)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-03

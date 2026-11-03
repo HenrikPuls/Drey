@@ -268,7 +268,7 @@ export const appConfig: ApplicationConfig = {
             return reply.ok ? { ok: true } : { ok: false, error: reply.error };
           },
           accept: () => state.acceptTicket(),
-          sendBack: (note) => state.sendBack(note),
+          sendBack: (note, comments) => state.sendBack(note, comments),
           sendBackOpen: () => {
             const pending = state.sendBackPending();
             return pending !== null && pending === state.ticketOpen()?.id;

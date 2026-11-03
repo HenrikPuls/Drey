@@ -1016,7 +1016,7 @@ export interface TicketVm {
   save(text: string): Promise<TicketSaveReply>;
   accept(): Promise<TicketActionReply>;
   /** The note is mandatory — an empty one refuses on the desk and here. */
-  sendBack(note: string): Promise<TicketActionReply>;
+  sendBack(note: string, comments?: readonly ReviewComment[]): Promise<TicketActionReply>;
   /**
    * The work tab's card back-swipe parked a send-back on this ticket
    * (`McState.sendBackPending`): true names the OPEN ticket — the view
@@ -1150,4 +1150,25 @@ export function viewedKeyOf(path: string, patch: string): string {
     hash = ((hash << 5) + hash + patch.charCodeAt(i)) | 0;
   }
   return `${path}#${(hash >>> 0).toString(36)}`;
+}
+
+// --- line comments (E11-3) ----------------------------------------------------------
+
+/** One review comment on the diff; the line numbers are the NEW file's. */
+export interface ReviewComment {
+  readonly file: string;
+  readonly line: number;
+  /** The range's last line; null = a single line. */
+  readonly endLine: number | null;
+  readonly text: string;
+}
+
+/** `Line 27` or `Lines 30–33`, as the cards and the composer say it. */
+export function commentLabelOf(comment: { line: number; endLine: number | null }): string {
+  return comment.endLine === null ? `Line ${comment.line}` : `Lines ${comment.line}–${comment.endLine}`;
+}
+
+/** The send-back button's wording: with comments it names how many. */
+export function sendBackLabelOf(count: number): string {
+  return count === 0 ? 'Send back…' : `Send back with ${count} ${count === 1 ? 'comment' : 'comments'}…`;
 }

@@ -1631,3 +1631,69 @@ details.think .step-body {
   outline: 1px solid var(--accent, currentColor);
   outline-offset: -1px;
 }
+
+.dl2.sel {
+  background: color-mix(in srgb, var(--accent, #8ecbef) 18%, transparent);
+}
+
+.lnb {
+  min-height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
+.lnb:hover {
+  text-decoration: underline;
+}
+
+.ccard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 12px 8px 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border, currentColor);
+  border-radius: 12px;
+  background: var(--surface-2, rgba(128, 128, 128, 0.12));
+  font-size: calc(15px * var(--mc-text, 1));
+  white-space: normal;
+}
+
+.ccard-new {
+  border-color: var(--accent, currentColor);
+}
+
+.ccard-h,
+.ccard-hint {
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+.ccard textarea {
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, currentColor);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+  resize: none;
+}
+
+.ccard-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}

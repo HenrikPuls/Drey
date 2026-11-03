@@ -398,6 +398,14 @@ the runner rely on:
   CI).
 - `### Parts` — under Plan, optional (E10): the split plan's parts as
   checkboxes; see [Parts](#parts-e10-concept-v2-59).
+- Handover `### Review feedback` — the owner's line comments from a
+  send-back (E11-3, owner decision D6): one line per comment,
+  `- \`<path>:<line>\` — <text>` (a range reads `<path>:<first>-<last>`;
+  lines are the NEW file's). The engine writes the block into
+  `## Handover` in the same commit as the send-back move and replaces an
+  earlier block; the build prompt tells the persona to treat each line
+  as a requirement of the round. A send-back may carry comments instead
+  of a note (the Log line then reads `sent back: n review comments`).
 - Handover `proof:` — the builder's one-line declaration
   `proof: ui|tests — <one-sentence reason>` (E11); see
   [Proof mode](#proof-mode-e11). A `## Verification` section of a `ui`

@@ -123,6 +123,7 @@ export interface ChatChangePayload {
 // re-export keeps every existing import path working.
 export type { RefineReply, TicketReply, AttachmentReply } from './replies';
 import type { RefineReply, TicketReply, AttachmentReply } from './replies';
+import type { ReviewComment } from '../core/review-feedback';
 import type { TicketDiff, TicketFileReply, WorktreeFile } from '../core/worktree-changes';
 
 /**
@@ -201,7 +202,7 @@ export interface TicketsRemotePort {
   /** The proof card's accept — merges/archives per the pipeline (E5c). */
   ticketAccept(cmd: TicketIdCommand, actor: string): Promise<MutationResult>;
   /** The proof card's send-back; the note is mandatory (E5c). */
-  ticketSendBack(cmd: { id: string; note: string }, actor: string): Promise<MutationResult>;
+  ticketSendBack(cmd: { id: string; note: string; comments?: readonly ReviewComment[] }, actor: string): Promise<MutationResult>;
   /** The proof card's file stat list (E5c). */
   ticketWorktreeChanges(id: string): Promise<readonly WorktreeFile[]>;
   /** The proof card's unified diff (E5c). */

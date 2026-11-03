@@ -24,6 +24,7 @@ import {
   type Parsed,
 } from '../core/commands';
 import { remoteActorOf, type ImprovementDecision, type TicketsRemotePort } from '../contracts/remote-protocol';
+import { parseReviewComments, type ReviewComment } from '../core/review-feedback';
 import type { PersonaRouter } from '../core/persona';
 import { TICKET_ID_PATTERN } from '../contracts/tickets';
 import { parseRevoke, parseSettingsPatch, type SettingsAccess } from './settings';
@@ -121,14 +122,22 @@ function parseTicketSave(body: unknown): Parsed<{ id: string; text: string; base
   return { ok: true, value: { ...(obj as { id: string }), text, ...(typeof base === 'string' ? { baseRevision: base } : {}) } };
 }
 
-/** Send-back: the note is mandatory — a send-back never goes without why (E5c). */
-function parseSendBack(body: unknown): Parsed<{ id: string; note: string }> {
+/**
+ * Send-back: a send-back never goes without why (E5c) — a note, or (E11-3)
+ * line comments, which then stand in for the note.
+ */
+function parseSendBack(body: unknown): Parsed<{ id: string; note: string; comments?: readonly ReviewComment[] }> {
   const obj = asObject(body);
-  const note = typeof obj?.['note'] === 'string' ? obj['note'].trim() : '';
-  if (obj === null || note === '') {
+  const comments = parseReviewComments(obj?.['comments']);
+  let note = typeof obj?.['note'] === 'string' ? obj['note'].trim() : '';
+  if (obj === null || (note === '' && comments.length === 0)) {
     return { ok: false, error: 'a send-back needs a note' };
   }
-  return { ok: true, value: { ...(obj as { id: string }), note } };
+  if (note === '') {
+    note = comments.length === 1 ? '1 review comment' : `${comments.length} review comments`;
+  }
+  const { comments: _raw, ...rest } = obj as { id: string; comments?: unknown };
+  return { ok: true, value: { ...rest, note, ...(comments.length > 0 ? { comments } : {}) } };
 }
 
 /** One owner message into a persona's coaching thread (U4, concept §4.5). */
