@@ -1,7 +1,10 @@
 # 0088 — Tickets engine: the package cut (Mission-Control migration, E0)
 
 - Status: accepted (2026-11-01, E0 of the owner-approved migration plan; the
-  later etappen E1–E7 amend this record as they land)
+  later etappen amend this record as they land — E1–E9 and the redesign
+  E10–E12 are recorded under "Later changes", up to milestone 132 (E10-6) and
+  the chat-model fix D-1 (milestone 131); the desktop integration E13 is
+  [ADR-0089](0089-views-saved-layouts-with-their-own-tabs.md))
 - Relates: [ADR-0075](0075-agent-fleet-architecture-governance-and-run-control.md)
   (the fleet runner — its code moves, its behaviour does not),
   [ADR-0076](0076-ticket-repository-format-and-coordination.md) (the format
@@ -51,8 +54,9 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
 5. **Plugin reaches the engine by relative import; renderer/remote keep
    their paths.** Staying plugin files import engine modules directly
    (`../../../packages/tickets-engine/src/...`); renderer and remote code
-   keep importing `plugins/tickets/shared/*`, where the four moved
-   contracts leave thin `export *` re-export shims (the esbuild guard
+   keep importing `plugins/tickets/shared/*`, where the moved
+   contracts (four at E0; by E13 six: `capture-tidy`, `changes`,
+   `fleet-defaults`, `question-shape`, `remote-protocol`, `tickets`) leave thin `export *` re-export shims (the esbuild guard
    admits `packages/tickets-engine/src/` like it admits `shared/`).
    The shims are an E0 compatibility seam — E2/E5 collapse them as the
    API/client split lands.
@@ -261,7 +265,8 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   open-decisions fold; strict writer, tolerant reader). The fleet
   ledger (`core/ledger.ts`) writes `tickets/_meta/ledger.jsonl` — one
   strict JSON line per `dispatched` / `phase` / `proof_ready` /
-  `merged` / `archived` event, swept into git by the next regular
+  `merged` / `archived` / `run_settled` event (the format is in
+  `specs/ticket-schema.md`, "The fleet ledger"), swept into git by the next regular
   commit, never committed per line. The writers are optional seams:
   the orchestrator's deps carry a runner-side event-writer
   (dispatched / working / done / blocked / failed), the board service
@@ -426,3 +431,20 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   never a reply. The engine config keys stay Drey's mirror, not a second
   source of truth. Rejected for now: an engine-side CLI bridge (roadmap
   follow-up); the Chat page shows only whether a key is set, never the key.
+- **Shared UI lib and the desktop surfaces (E12 – E13, milestones 112 – 130).**
+  The Mission Control screens (Work, Chat, Ticket, Plan, Flow, Team, Capacity,
+  Settings, Pairing) live in `libs/mission-ui` (`@mission-ui/*`), which
+  `apps/mission-control` composes; the lib has its own spec project, so the
+  `test:app` chain runs three Angular suites (drey, mission-control,
+  mission-ui). Drey does not import the lib (it is Angular; the plugin
+  renderers are plain DOM): the desktop surfaces of E13 (ticket document,
+  Board, Team, Capacity band) read the same engine surface and re-implement the
+  few word helpers. The engine's invoke allowlist gained `estimateOf`
+  (E13-6) and `TEAM_METHODS` (E13-8: the remote port's `personas`,
+  `handoffRun`, `chainPersonaPause`, persona thread and memory reads,
+  `planParts`) so the desk shows what the phone shows. Because the engine
+  hosts the vault as `standalone`, its vault id never equals Drey's;
+  `plugins/tickets/main/host-vault-id.ts` maps it in the `board` answer.
+  The engine's `announceChanges` only emits the `board` event, so Drey's own
+  vault layer learns of an engine write through its vault round or the
+  opt-in watcher.

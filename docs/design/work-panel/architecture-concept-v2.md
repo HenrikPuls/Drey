@@ -464,7 +464,7 @@ SHIP shows a gate bar per mission, agent run monitoring (sandbox, CPU, tokens) a
    ```
 
    The gate sequence and timestamps are already derivable from the Git log (one transition = one commit) — only what Git does not know is written: tokens, cost, duration, outcome (`handed-over | failed | stopped`). Data source: the existing `/report` telemetry.
-3. **Mermaid gate diagram (auto-generated, regenerated on every transition):** a ```mermaid``` block in the ticket shows the pipeline with cost per edge — nicely rendered in the Drey editor, still readable as text. Rule: no hand-editable block; the block is marked and regenerated completely. *(**Not built** as of milestone 132: no code writes a Mermaid block into tickets; only Plan sections may contain Mermaid. See the gap list, G-C-07.)*
+3. **Mermaid gate diagram (auto-generated, regenerated on every transition):** a ```mermaid``` block in the ticket shows the pipeline with cost per edge — nicely rendered in the Drey editor, still readable as text. Rule: no hand-editable block; the block is marked and regenerated completely. *(**Not built** as of milestone 132: no code writes a Mermaid block into tickets; only Plan sections may contain Mermaid. See the gap list, G-07.)*
 4. **Derived views:** gate bar in ticket screen / thread / proof (phone), wide bar on the desktop, cost sums in Work and Team — all renderings of the same history. No timeline and no monitoring view as a separate UI feature (the interface stays: whoever wants depth opens the ticket or `git log`).
 
 **Costs visible (v2, mandatory):** the owner must always see what each phase cost and what a ticket costs in total. Fixed places:

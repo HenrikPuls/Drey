@@ -62,6 +62,7 @@ Top-level rules, once, up front:
                       #   improvements.md (+ avatar.png) — see Personas below
       chat/           # the Mission Control chat sessions (E5a): one file per
                       #   session — see _meta/chat/ below
+      ledger.jsonl    # the fleet event ledger (E7) — see The fleet ledger
     10-inbox/
       T-0042.md       # one ticket per file, in its current phase's folder
     20-prioritized/
@@ -333,7 +334,7 @@ of the Plan and removes it for fewer than two parts.
 | `priority` | one id of the board's configured vocabulary | Required. The vocabulary is the vault's own — `_meta/pipeline.md`'s `priorities:` list (default `urgent \| high \| normal \| low`); the list's order IS the weight, first = highest. An omitted or unknown id reads as the vocabulary's default (its middle entry) with a warning badge; machine writers always write a vocabulary word. See [Priorities](#priorities-priorities-in-pipelinemd). |
 | `track` | `auto \| shape` | Optional (req-75 W1b, ADR-0087 decision 2). The ticket's triage track: `auto` runs on its own, `shape` goes through the plan-mode dialog with the owner. Absent (or any other value — a warning) reads as not triaged; set from the Work panel's row menu (Track ›) until W5c/W6 fill it from triage. |
 | `form` | `ship \| scout` | Optional (concept §5.6, E8). The ticket's form: `ship` (the default — an absent key reads as ship) is the known way, plan → worktree → gate → move. `scout` is exploration only: a scout run reads repo/history/data and writes the ticket's `## Report` section — no worktree, no diff, no gate, no move; the report surfaces as a card in "Needs you" and the owner promotes the ticket to ship from there. Any other value warns (`form must be ship or scout — read as ship`) and reads as ship. See [The scout form](#the-scout-form-e8-concept-56). |
-| `chain` | list of strings | Optional (concept §5.7, E9). The ticket's **delta** against the pipeline's standard flow — the standard flow itself is team configuration in `_meta/pipeline.md` and applies to every ticket silently; the ticket stores only the deviations, one declarative entry per item in the strict grammar: `insert <phase>[(<persona>[, notify] \| notify)] after\|before <anchor>` (add a gate at the anchor — a standard-flow phase may be revisited this way, at most once), `skip <phase>` (bypass a gate), `notify <phase>` (the Bescheid rule: a card lands in "Needs you" when the gate completes). Absent (or empty) reads as the standard flow. An entry outside the grammar warns and drops (`chain entry "<raw>" is not readable — expected e.g. "insert design after review"`). See [The chain delta](#the-chain-delta-e9-concept-57). |
+| `chain` | list of strings | Optional (concept §5.7, E9). The ticket's **delta** against the pipeline's standard flow — the standard flow itself is team configuration in `_meta/pipeline.md` and applies to every ticket silently; the ticket stores only the deviations, one declarative entry per item in the strict grammar: `insert <phase>[(<persona>[, notify] \| notify)] after\|before <anchor>` (add a gate at the anchor — a standard-flow phase may be revisited this way, at most once), `skip <phase>` (bypass a gate), `notify <phase>` (the notify rule: a card lands in "Needs you" when the gate completes), `move <phase> after\|before <anchor>` (a standard gate runs elsewhere, E10-5), `assign <phase> <persona>` (a standard gate's persona, E10-5); an inserted gate may be the manual step `manual` / `manual-<word>` (E10-6, see "The manual step"). Absent (or empty) reads as the standard flow. An entry outside the grammar warns and drops (`chain entry "<raw>" is not readable — expected e.g. "insert design after review"`). See [The chain delta](#the-chain-delta-e9-concept-57). |
 | `parent` | ticket id | Optional (E10, concept v2 §5.9). Set on a ticket that is one **part** of a split plan: `parent: T-0130` names the ticket whose `### Parts` list produced it. The parent keeps the plan; the part carries its own description, builder persona and `chain:` delta (a per-part scope — the parent's `chain:` never leaks into a part). A value that is no ticket id, or the ticket's own id, warns and reads as no parent; whether the parent still exists is not checked (a finished parent is archived). |
 | `proof` | `ui \| tests` | Optional pin (E11, concept v2 §5.3). Overrides the Handover's proof declaration (see [Proof mode](#proof-mode-e11)). Absent, or any other value (a warning), means no pin; with no pin and no readable declaration the mode reads as `ui`. |
 | `rank` | integer 0-999999 | Default `5000`. Fine ordering inside derived order. |
@@ -487,7 +488,7 @@ the runner rely on:
 - `## Changes` — what the Ready page shows (req-75 W3, ADR-0087
   decision 3). The **build worker** writes or updates it before it
   ends — the section is the contract, no diff parsing on the desk —
-  and the page (`plugins/tickets/shared/changes.ts`) reads it
+  and the page (`packages/tickets-engine/src/contracts/changes.ts`, re-exported by `plugins/tickets/shared/changes.ts`) reads it
   tolerantly: labels case-insensitive, `-`/`*` bullets, missing parts
   simply left out. The exact format the worker keeps:
 
@@ -548,7 +549,7 @@ the runner rely on:
   `### Criteria` carries one `- [x]` / `- [ ]` checkbox per acceptance
   criterion — the backticked command exactly as written under the Plan —
   and, when the run captured one, the screenshot proof as
-  `→ ![](../attachments/<name>)`; `### Findings` (Auffälligkeiten) lists
+  `→ ![](../attachments/<name>)`; `### Findings` lists
   what the runner noticed beyond the criteria and is omitted when empty.
   The screenshot files live in `tickets/attachments/` (the `verify-…`
   names are the runner's; `img-…` stays the phone's). A `ui` proof
@@ -624,10 +625,10 @@ The grammar, one entry per list item:
   <anchor>` — adds a gate at the anchor phase. A phase the standard
   flow already contains may be inserted — a **front-loaded revisit**
   — at most once per phase. The persona pins who works the gate
-  (absent = the ladder decides); `notify` is the Bescheid rule (see
+  (absent = the ladder decides); `notify` is the notify rule (see
   below).
 - `skip <phase>` — the ticket bypasses the gate (rendered struck).
-- `notify <phase>` — the **Bescheid rule** on a standard gate: a
+- `notify <phase>` — the **notify rule** on a standard gate: a
   card lands in "Needs you" when the gate completes. The card shows
   from the gate's completion until the ticket leaves the following
   gate or the freshness window (`NOTIFY_WINDOW_MS`, 24 h) runs out,
@@ -728,6 +729,21 @@ when the file already carries the delta — the mirror of `track` in
 every way. Setting the delta by hand is the same edit — frontmatter
 plus the Log line; the machine shape above is what the board
 service writes.
+
+### The fleet ledger (E7)
+
+`tickets/_meta/ledger.jsonl` — the fleet's events as one strict JSON line
+each, append-only, swept into git by the next regular commit (never
+committed per line). The reader skips a line it cannot parse. Shape:
+`{"v":1,"ts":"<UTC>","event":"<kind>","ticket":"T-0002", …}` with
+`persona`, `model`, `cost` (USD, four digits), `tokensIn`, `tokensOut`,
+`from`, `to` present only where the event knows them. Kinds:
+`dispatched` (persona and model the dispatch resolved), `phase`
+(`from`/`to`), `proof_ready`, `merged`, `archived` and `run_settled`
+(one line per completed run with its effective tokens and cost — the
+source of the ticket cards' cost and the persona day budgets).
+`phase`, `merged` and `archived` carry no persona, model or cost.
+The code is `core/ledger.ts` (`LEDGER_FILE`).
 
 ### The ticket status log (E7)
 
@@ -919,7 +935,7 @@ directory (ADR-0088 E3). One folder per persona, directly under
 ```text
 tickets/_meta/personas/
   paul/
-    persona.md        # frontmatter: title, role, worker, models, color, skills
+    persona.md        # frontmatter: title, kind, role, worker, models, color, skills, budget
     prompt.md         # the persona prompt — the run's instruction base when present
     memory.md         # curated memory (format and cap below)
     thread.md         # the coaching thread — the owner's chat with the persona (U4)
@@ -1270,7 +1286,10 @@ column; the board still renders), the fleet runner before every action
 8. (Removed with req-75 W1: `order.md` is no longer read.)
 9. A ticket without backticked acceptance criteria cannot be worked:
    the fleet refuses to start an agent run for it (the most common
-   dispatch hold — the gate would have nothing to run).
+   dispatch hold — the gate would have nothing to run). The one exception
+   is a run in the pipeline's first automatic column (req-93): its plan
+   writes the criteria, so that run gates structurally and the gate
+   checks that they came into existence.
 10. `blocked-by` resolution (T-0050): ids resolve against the board's
     columns only — never `tickets/archive/` — and a satisfied reference
     is one sitting in the terminal phase **or no longer on the board**:
@@ -1291,7 +1310,7 @@ column; the board still renders), the fleet runner before every action
     warns (`form must be ship or scout — read as ship`); the key is
     preserved on rewrite like every unknown field.
 12. `chain` (E9): each entry parses in the delta grammar (`insert …
-    after|before …`, `skip …`, `notify …`) — an unreadable entry
+    after|before …`, `skip …`, `notify …`, `move …`, `assign …`) — an unreadable entry
     warns and drops, never guessed; the semantic guard (unknown
     phases, past-gate references, skip/insert conflicts) runs where a
     write is decided, not on render (see

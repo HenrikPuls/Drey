@@ -3134,7 +3134,7 @@ sequenceDiagram
     GH-->>EU: version + sha512 + file list
     alt no newer x.y.z version / check failed
         EU-->>US: not-available / error
-        Note over US: startup: silent � log only (ADR-0074);<br/>a manual check's "up to date" is green<br/>inline text instead of a dialog (req-45)
+        Note over US: startup: silent — log only (ADR-0074);<br/>a manual check's "up to date" is green<br/>inline text instead of a dialog (req-45)
     else newer version, not `updates.skippedVersion`
         EU-->>US: update-available (0.7.0)
         US-->>User: native dialog: Download / Skip this version / Remind me later
@@ -3148,13 +3148,13 @@ sequenceDiagram
             EU-->>US: update-downloaded
             US-->>User: native dialog: Install and restart / Later
             opt Install and restart
-                US->>WH: window.close() � the ordinary path
+                US->>WH: window.close() — the ordinary path
                 WH->>R: exit:confirm-request (bug-5)
                 R-->>WH: save / discard (a cancel leaves everything as it was)
                 WH->>Main: window closed -> app.quit()
                 Main->>US: finishQuit() at will-quit (one-shot)
                 US->>EU: quitAndInstall(false, true)
-                EU->>User: NSIS installer (assisted, per-user) � installs + relaunches Drey
+                EU->>User: NSIS installer (assisted, per-user) — installs + relaunches Drey
                 Note over Main: the fresh instance takes the single-instance lock
             end
         end
@@ -3164,7 +3164,7 @@ sequenceDiagram
 The renderer never touches the network: it triggers (`update:check`,
 `update:download`, `update:install`) and displays the pushed status over
 `shared/ipc/updates.ts`. A dev run, a non-Windows platform and the
-portable exe never construct the updater at all � they report
+portable exe never construct the updater at all — they report
 `unsupported` and offer the releases page instead.
 
 ## 6.64 A ticket moves: board snapshot, an owner move, the one-commit transition (milestone 83, [ADR-0075](09_architecture_decisions/0075-agent-fleet-architecture-governance-and-run-control.md), [ADR-0076](09_architecture_decisions/0076-ticket-repository-format-and-coordination.md))
@@ -3172,32 +3172,41 @@ portable exe never construct the updater at all � they report
 ```mermaid
 sequenceDiagram
     participant P as Tickets panel (renderer)
-    participant B as BoardService (plugin main)
+    participant B as BoardService (engine process)
     participant V as VaultManager (base)
     participant G as installed git
 
-    Note over P,B: mount / vault round / ticket save � all three end in the same pull
+    Note over P,B: mount / vault round / ticket save — all three end in the same pull
     P->>B: invoke("board")
-    B->>V: listVaults() � find the vault with tickets/_meta/pipeline.md
+    B->>V: listVaults() — find the vault with tickets/_meta/pipeline.md
     B->>V: read pipeline.md, repos.md, listMarkdownFiles()
     B->>V: read every tickets/<phase>/<id>.md
-    B-->>P: BoardSnapshot (columns, order, issues � derived, nothing stored)
+    B-->>P: BoardSnapshot (columns, order, issues — derived, nothing stored)
 
     Note over P,G: the Work row menu: Move to > Build on T-0042
     P->>B: invoke("transition", {id, from: inbox, to: build})
-    B->>B: queue � re-resolve: T-0042 still in inbox?
+    B->>B: queue — re-resolve: T-0042 still in inbox?
     B->>V: read the ticket file
-    B->>B: patch � stamp entered-build, claim owner@host, Log line, clear parked
+    B->>B: patch — stamp entered-build, claim owner@host, Log line, clear parked
     B->>V: fs.rename old → new (tickets/build/), write patched content
-    B->>V: announceChanges (changed + deleted paths � tree, indexes, tabs reload)
-    B->>G: add -- <old> <new> � commit -m "tickets: T-0042 inbox -> build" -- <paths>
-    B-->>P: { ok } � board-changed (debounced) � the panel re-pulls
+    B->>V: announceChanges (changed + deleted paths — tree, indexes, tabs reload)
+    B->>G: add -- <old> <new> — commit -m "tickets: T-0042 inbox -> build" -- <paths>
+    B-->>P: { ok } — board-changed (debounced) — the panel re-pulls
 ```
+
+Since ADR-0088 E2b the `BoardService` runs in the tickets engine process, not
+in the plugin: the panel's `invoke("…")` reaches the plugin main, which proxies
+it over the loopback invoke channel (`EngineClient`), and the engine's change
+events come back as `board-changed`. The vault reads and writes in the diagram
+are the engine's own (`FsEngineHost`); there its `announceChanges` only emits
+the `board` event (no changed paths), so Drey's Files tree, indexes and open
+tabs learn of the file move through the vault round or the opt-in watcher
+(ADR-0045), not through `announceChanges`.
 
 The claim fields and the WIP count are consequences of the same file
 move: entering a `claim: true` phase stamps `claimed-by`/`claimed-at`
 (the push compare-and-swap of ADR-0076 is plain git once the tickets
-repo has a remote � the losing pusher re-reads and picks the next
+repo has a remote — the losing pusher re-reads and picks the next
 ticket). The order inside a phase is derived (priority, rank, age) —
 the `order.md` pins went with req-75 W1. No git repository → the move still happens, the
 board warns "not versioned", and the commit step is skipped.
@@ -3207,7 +3216,7 @@ board warns "not versioned", and the commit step is skipped.
 ```mermaid
 sequenceDiagram
     participant P as Tickets panel (renderer)
-    participant B as BoardService (plugin main)
+    participant B as BoardService (engine process)
     participant F as FleetClient
     participant R as fleet runner (standalone)
     participant W as worker (opencode / claude-code)
@@ -3234,8 +3243,8 @@ sequenceDiagram
 ```
 
 The runner is a plain Node process (spawned detached under
-`ELECTRON_RUN_AS_NODE` from the plugin bundle), so it survives Drey
-closing and restarting; Drey re-adopts it through
+`ELECTRON_RUN_AS_NODE` by the engine's `FleetClient` from the packaged bundle),
+so it survives Drey closing and restarting (the engine does too); the client re-adopts it through
 `<userRoot>/fleet/runner.json` instead of spawning a second one. A
 rebuild of Drey replaces the runner only when the fleet code itself
 changed, and then by a handover that keeps the runs going (req-51, the
@@ -3283,7 +3292,7 @@ first fleet snapshot.
 
 ```mermaid
 sequenceDiagram
-    participant B as BoardService (plugin main)
+    participant B as BoardService (engine process)
     participant F as FleetClient
     participant R as fleet runner — orchestrator
     participant V as tickets vault (files)
@@ -3313,7 +3322,7 @@ sequenceDiagram
 The pass is event-driven — configure, a control change, a run settle —
 with a 15-second safety-net rescan, so external board moves are picked
 up even with Drey closed (a running chain also keeps the runner's idle
-shutdown off). Master An/Aus/Notaus and the per-column brakes are
+shutdown off). Master on / off / emergency stop and the per-column brakes are
 runner state under `<userRoot>/fleet/chain.json`, never in the tickets
 repo (ADR-0076). The lease reaper (a 60 s sweep) fails runs whose
 worker process is provably dead; a `ci` handover column runs its `ci:`
@@ -3327,7 +3336,7 @@ worker before the move.
 sequenceDiagram
     actor O as Owner
     participant P as Settings → Tickets (settings-columns.ts)
-    participant B as BoardService (plugin main)
+    participant B as BoardService (engine process)
     participant V as tickets vault (files)
     participant G as git (tickets repo)
 
@@ -3363,7 +3372,7 @@ sequenceDiagram
     participant Ops as FileOperationsService
     participant R as FilesOperationsRegistryService
     participant T as tickets plugin (renderer bridge)
-    participant B as BoardService (plugin main, single-writer queue)
+    participant B as BoardService (engine process, single-writer queue)
     participant V as tickets vault (files)
     participant G as git (tickets repo)
     participant E as EditorService
@@ -3576,7 +3585,7 @@ sequenceDiagram
     participant W as Work panel (renderer)
     participant E as Editor (base)
     participant T as Ticket thread (doc kind tickets-thread)
-    participant B as BoardService (plugin main)
+    participant B as BoardService (engine process)
     participant R as Fleet runner
 
     R-->>B: fleet-changed {runs} (T-0104 waits: question, shaped)
@@ -3633,7 +3642,7 @@ own commands (§6.74); the decision bar's Approve remains the ordinary
 sequenceDiagram
     actor U as Owner
     participant T as Ticket thread (renderer)
-    participant B as BoardService (plugin main)
+    participant B as BoardService (engine process)
     participant C as New console (runInNewConsole)
     participant G as git (tickets repo / repo checkout)
 
@@ -3777,7 +3786,7 @@ sequenceDiagram
     G-->>H: names / estimate or null (< 3 runs)
     H-->>U: strip repaints with names and estimate
     E->>X: StateField.create(state)
-    X->>X: parseVerificationSection + sectionBodyRange,<br/>parseVerlauf -> cost table
+    X->>X: parseVerificationSection + sectionBodyRange,<br/>parseVerlaufEntries -> cost table
     X-->>E: block replace (proof) + block widget at the end
     U->>X: caret into the proof section
     X-->>E: no replace decoration: the Markdown shows

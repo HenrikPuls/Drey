@@ -5,7 +5,11 @@
 Accepted (2026-11-04) and built as E13-1, milestone 123 -- the base half
 (views, switching, tabs per view, session) -- and E13-2, milestone 127 --
 plugin-contributed presets and `homeView` (decision 2, 7; see "Later change:
-presets and home views"). The direction was
+presets and home views"). Not built yet (roadmap): the Work view itself, i.e.
+the tickets plugin registering its preset and naming a home view for its doc
+kinds (E13-13; until then only the `sample` plugin uses the calls), the
+Assistant's default target per view (E13-5; `ViewService.assistantTarget()`
+exists, nothing reads it), and the reverse home rule of decision 7. The direction was
 confirmed by the owner on 2026-11-04 (a view switcher, tabs per view, hidden
 elsewhere but addable). The owner made saved layouts mandatory and first in
 the build order: without them the agent system and the note app are unusable
@@ -78,7 +82,9 @@ Constraints that shape the answer:
 8. **Signals cross views.** The status bar, the Assistant history and
    notifications are global. A change in another view shows as a status item
    ("3 need you in Work"), which needs plugin status bar items in the SDK (a
-   companion change, not part of this ADR).
+   companion change, not part of this ADR; shipped as SDK 1.38,
+   `ui.createStatusItem`, E13-3, milestone 124 -- the tickets plugin's item
+   reads "2 running · 3 need you" and reveals the Work panel).
 9. **Persistence.** `localStorage['drey.dock']` and the pane layout in the
    session snapshot become a map keyed by view id plus the active view id. The
    snapshot version stays 1 and the new fields are additive, as ADR-0038 did for
@@ -151,7 +157,7 @@ Constraints that shape the answer:
   moves the document into Notes).
 - **UI.** The switcher is in the title bar (`src/app/titlebar/view-switcher.*`):
   a segmented control up to four views, a menu above that, nothing at all with
-  Notes alone. Right-click on a user view: Rename, Delete. `Ctrl+1`-`Ctrl+9`
+  Notes alone. Right-click on a user view: "Rename…", "Delete view". `Ctrl+1`-`Ctrl+9`
   (commands `view.switch.1`-`9`), "Switch view" (next, wrapping),
   "Save current layout as a view…" are commands and View-menu rows. A tab's
   context menu ticks the views it shows in ("Show this tab in"); the last tick
@@ -165,10 +171,10 @@ Constraints that shape the answer:
   view shows brings it into the active view. Hidden views cost nothing at rest:
   their pane components are not mounted.
 
-- Open for the implementation: whether the quick switcher gets an "include other
-  views" toggle; how many views the title bar shows before it folds into a menu;
-  how a plugin preset is versioned when its layout changes; whether user views
-  can be exported.
+- Open questions as answered by the build: the quick switcher lists vault files,
+  not tabs, so it needs no toggle; the title bar shows up to four views before it
+  folds into a menu; a plugin preset is not versioned (the owner's arrangement
+  wins, see "Later change"). Still open: whether user views can be exported.
 
 ## Later change: presets and home views (E13-2, milestone 127, SDK 1.39)
 
