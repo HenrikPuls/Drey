@@ -52,6 +52,14 @@ title bar (Ctrl+1, Ctrl+2, a Views menu; board 7h).
   switches to Work. Opening a note from Work switches to Notes. The status bar
   and the Assistant history are global; a signal from the other view shows as
   "3 need you in Work".
+- **Tabs belong to views (owner, 2026-11-04).** Each view has its own tab set.
+  Tabs of other views are fully hidden: not in the tab bar, not in the quick
+  switcher. A tab can still be brought into a view on purpose, and it may belong
+  to several views: the tab's context menu ticks the views it appears in
+  ("Show this tab in: Notes, Work"), and the Open windows panel lists "In other
+  views" with a **Show here** button (board 7i). A tab is not duplicated: it is
+  one document in several views. Closing it in one view removes it from that
+  view only; it closes for good when no view holds it.
 - Later: user-defined views ("Save current layout as a view…").
 - Base work: `DockService` state and the `PaneService` tree move from one global
   slot to one slot per view; the session snapshot (ADR-0043) stores the active
