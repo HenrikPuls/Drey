@@ -379,8 +379,13 @@ export interface ConversationTarget {
   readonly description?: string;
   /** The current thread (the newest one on first call). */
   thread(): Promise<ConversationThread>;
-  /** One owner message; resolves with the thread after the answer. Never rejects: a failure is an `error` message. */
-  send(text: string): Promise<ConversationThread>;
+  /**
+   * One owner message; resolves with the thread after the answer. Never rejects: a failure is an `error` message.
+   * `options.context` (SDK 1.43) is reference text the Assistant gathered for this message (the Vault
+   * chip's note sections): the target may hand it to its model as read-only background; it is never
+   * the owner's words and not part of the thread.
+   */
+  send(text: string, options?: { readonly context?: string }): Promise<ConversationThread>;
   /** A button on a card. */
   act(cardId: string, actionId: string): Promise<ConversationThread>;
   /** Starts a fresh thread. */

@@ -262,8 +262,8 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     }
     return chat.open(payload);
   });
-  table.set('chatSend', (payload) => chat.send(payload as { readonly file: string; readonly text: string }));
-  table.set('chatStart', (payload) => chat.start(payload as { readonly title?: string; readonly text: string; readonly ticket?: string }));
+  table.set('chatSend', (payload) => chat.send(payload as { readonly file: string; readonly text: string; readonly context?: string }));
+  table.set('chatStart', (payload) => chat.start(payload as { readonly title?: string; readonly text: string; readonly ticket?: string; readonly context?: string }));
   table.set('chatPlanStatus', (payload) => {
     // A ticket id, or { ticket, text } to mark the open buffer instead of the file (E13-9).
     if (typeof payload === 'string') {

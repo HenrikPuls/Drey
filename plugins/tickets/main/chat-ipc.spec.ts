@@ -27,6 +27,7 @@ describe('registerChatIpc', () => {
     await call('mcShapeDecide', { file: FILE, choice: 'split' });
     await call('mcStart', { text: 'Shape', ticket: 'T-0130' });
     await call('mcPlanStatus', { ticket: 'T-0130' });
+    await call('mcSend', { file: FILE, text: 'With notes', context: 'VAULT CONTEXT' });
     expect(calls.map((c) => c.method)).toEqual([
       'chatSessions',
       'chatOpen',
@@ -36,7 +37,9 @@ describe('registerChatIpc', () => {
       'chatShapeDecide',
       'chatStart',
       'chatPlanStatus',
+      'chatSend',
     ]);
+    expect(calls[8]?.payload).toEqual({ file: FILE, text: 'With notes', context: 'VAULT CONTEXT' });
     expect(calls[6]?.payload).toEqual({ text: 'Shape', ticket: 'T-0130' });
     expect(calls[7]?.payload).toBe('T-0130');
     expect(calls[1]?.payload).toBe(FILE);

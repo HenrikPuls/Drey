@@ -490,6 +490,12 @@ repository and rewrites **only the `## Plan` chapter** of the open file.
   one* moves the ticket into the build queue; *Split* records the choice and
   leads to the plan to approve.
 
+On a target the composer keeps the **Vault** chip (off by default; the same
+picker as on Model) and **Prompts**. With the chip on, the note sections that
+contain words of your message ride along as read-only reference — pick an
+architecture-docs vault and Mission Control or Paul can draw on it. Attachments,
+live edit and the model row belong to the Model target only.
+
 Switching to another document switches the conversation with it; a note
 shows the latest Mission Control chat as before.
 

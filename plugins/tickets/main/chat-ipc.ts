@@ -15,6 +15,13 @@ const CHAT_FILE_PATTERN = /^tickets\/_meta\/chat\/[A-Za-z0-9][A-Za-z0-9._-]*\.md
 const PROPOSAL_ID_PATTERN = /^p-\d+$/;
 const TICKET_ID_PATTERN = /^T-\d{4,}$/;
 
+/** The reference text of the Vault chip: bounded, the engine adds it to the model's prompt only. */
+const CONTEXT_MAX = 12_000;
+const contextOf = (payload: unknown): { context?: string } => {
+  const value = (payload as Record<string, unknown> | null)?.['context'];
+  return typeof value === 'string' && value.trim() !== '' ? { context: value.slice(0, CONTEXT_MAX) } : {};
+};
+
 const bad = (what: string): { ok: false; error: string } => ({ ok: false, error: `bad ${what} payload` });
 
 function field(payload: unknown, key: string): string | null {
@@ -39,7 +46,7 @@ export function registerChatIpc(ctx: Pick<MainPluginContext, 'ipc'>, invoke: Inv
     if (ticket !== null && !TICKET_ID_PATTERN.test(ticket)) {
       return bad('ticket');
     }
-    return invoke('chatStart', ticket === null ? { text } : { text, ticket });
+    return invoke('chatStart', { text, ...(ticket === null ? {} : { ticket }), ...contextOf(payload) });
   });
   ctx.ipc.handle('mcPlanStatus', (payload) => {
     const ticket = field(payload, 'ticket');
@@ -55,7 +62,7 @@ export function registerChatIpc(ctx: Pick<MainPluginContext, 'ipc'>, invoke: Inv
     const text = field(payload, 'text');
     return file === null || text === null || !CHAT_FILE_PATTERN.test(file)
       ? bad('message')
-      : invoke('chatSend', { file, text });
+      : invoke('chatSend', { file, text, ...contextOf(payload) });
   });
   ctx.ipc.handle('mcDecide', (payload) => {
     const file = field(payload, 'file');

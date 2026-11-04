@@ -60,6 +60,19 @@ ends it. **The "Refine with agent" button is gone everywhere.**
   menu and `POST …/refine` (a field / section rewrite) are another thing and
   stay. The Shaping dialog ("Plan with agent") is *not* superseded for the
   first automatic column; for the Ideas phase, shaping is this item.
+- **The composer stays whole on a target; the Vault chip works there.**
+  Owner feedback after the first cut (the target composer had shrunk to the
+  field and the mic). On Mission Control / 1:1 the composer now keeps the
+  **Vault chip** (off by default, the same scope and picker as on Model, so an
+  architecture-docs vault can be picked) and **Prompts**; attachments, note
+  chips, Live edit and the model row stay Model-only. With the chip on, the
+  Assistant asks its main side (`vault:context`, the same ranked note sections
+  as an ask turn, ADR-0072) and hands the block to the target as
+  `send(text, { context })` (SDK 1.43); the Mission Control target passes it
+  through `mcSend` / `mcStart` to the engine (`context`, bounded to 12 000
+  characters), where it is appended to the model's system prompt for that turn
+  only — never written to the session file. Reading only: Pia and Paul get
+  the sections, no vault tools. Switching back to Model changes nothing there.
 - **Specs added.** `ticket-document/shape.spec.ts` (target of a document, ago
   words, the two marks, heading offset), `shape-state.spec.ts` (the status
   store), `conversation/shape-target.spec.ts` (thread per ticket, save → lock →

@@ -12,6 +12,7 @@ import type {
   ConversationThreadMeta,
   DreyPluginApi,
 } from '../../../shared/plugin-api/renderer';
+import type { VaultScope } from '../shared/vault-context.js';
 import { MODEL_TARGET, resolveViewDefault, segmentsOf, type TargetSegment } from './targets-model.js';
 
 export interface TargetController {
@@ -27,7 +28,8 @@ export interface TargetController {
   busy(): boolean;
   /** An open answer card (the last message's `choices`), or null. */
   choices(): ConversationCard | null;
-  send(text: string): Promise<boolean>;
+  /** `vault`: the Vault chip as it stands; a scope other than `off` gathers note sections for this message. */
+  send(text: string, vault?: { readonly scope: VaultScope; readonly vaultIds: readonly string[] }): Promise<boolean>;
   act(cardId: string, actionId: string): Promise<void>;
   newThread(): Promise<void>;
   history(): Promise<readonly ConversationThreadMeta[]>;
@@ -191,14 +193,28 @@ export function createTargetController(api: DreyPluginApi): TargetController {
       const last = thread?.messages[thread.messages.length - 1];
       return last?.cards?.find((card) => card.kind === 'choices') ?? null;
     },
-    send: async (text) => {
+    send: async (text, vault) => {
       const id = active;
       if (id === MODEL_TARGET || working.has(id)) {
         return false;
       }
       working.set(id, text);
       notify();
-      await run(id, (target) => target.send(text));
+      // The Vault chip: note sections that contain words of the message ride along as reference.
+      let context = '';
+      if (vault !== undefined && vault.scope !== 'off') {
+        try {
+          const found = (await api.backend.invoke('vault:context', {
+            question: text,
+            scope: vault.scope,
+            vaultIds: vault.vaultIds,
+          })) as { block?: unknown };
+          context = typeof found.block === 'string' ? found.block : '';
+        } catch {
+          context = '';
+        }
+      }
+      await run(id, (target) => target.send(text, context === '' ? undefined : { context }));
       working.delete(id);
       notify();
       return true;

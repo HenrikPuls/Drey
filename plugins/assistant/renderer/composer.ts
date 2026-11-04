@@ -299,7 +299,7 @@ export function mountComposer(
     }
     setText('');
     if (targets.activeId() !== MODEL_TARGET) {
-      void targets.send(question).then((sent) => {
+      void targets.send(question, { scope: state.vaultScope(), vaultIds: state.customVaultIds() }).then((sent) => {
         if (!sent) {
           setText(question);
         }
@@ -399,17 +399,19 @@ export function mountComposer(
 
   return {
     render: () => {
-      // A conversation target (E13-5) has no vault chips, live edit,
-      // prompts or model row: only the words and the mic.
+      // A conversation target (E13-5) keeps the composer as it is, minus what only
+      // the Assistant's own model can do: attachments and note chips, live edit and the
+      // model row. The Vault chip (its notes ride along as reference) and the prompts stay.
       const onTarget = targets.activeId() !== MODEL_TARGET;
-      for (const tool of [chipsRow, plusButton, liveButton, vaultButton, promptsButton, modelButton]) {
+      for (const tool of [chipsRow, plusButton, liveButton, modelButton]) {
         tool.hidden = onTarget;
       }
+      vaultButton.hidden = false;
+      promptsButton.hidden = false;
       sendButton.disabled = onTarget ? targets.busy() : state.asking();
       sendButton.setAttribute('aria-label', onTarget ? 'Send message' : 'Send question');
-      if (!onTarget) {
-        renderChips();
-      } else {
+      renderChips();
+      if (onTarget) {
         webButton.hidden = true;
       }
     },

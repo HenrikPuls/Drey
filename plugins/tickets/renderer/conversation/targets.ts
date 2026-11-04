@@ -148,8 +148,9 @@ export function createMissionControlTarget(deps: ConversationDeps): Conversation
     label: 'Mission Control',
     description: 'Talk to Mission Control: it knows the board and proposes changes you confirm',
     thread: read,
-    send: async (text) => {
+    send: async (text, options) => {
       lastError = null;
+      const reference = options?.context === undefined || options.context === '' ? {} : { context: options.context };
       const shape = deps.shape?.current() ?? null;
       if (shape !== null && deps.shape !== undefined) {
         // Paul reads the file: whatever the owner typed into the plan goes to disk first.
@@ -168,8 +169,8 @@ export function createMissionControlTarget(deps: ConversationDeps): Conversation
         let result: ChatTurnResult;
         try {
           result = (await (file === null
-            ? deps.invoke('mcStart', shape === null ? { text } : { text, ticket: shape.id })
-            : deps.invoke('mcSend', { file, text }))) as ChatTurnResult;
+            ? deps.invoke('mcStart', shape === null ? { text, ...reference } : { text, ticket: shape.id, ...reference })
+            : deps.invoke('mcSend', { file, text, ...reference }))) as ChatTurnResult;
         } catch (error) {
           lastError = errorMessageOf(undefined, messageOf(error));
           return read();

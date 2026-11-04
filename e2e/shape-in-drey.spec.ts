@@ -201,6 +201,11 @@ test.describe('Shape in Drey (E13-9)', () => {
     await switcher.locator('.assistant-target', { hasText: 'Mission Control' }).click();
     await expect(panel.locator('.target-tray-attached .target-chip')).toHaveText('T-0130.md attached', { timeout: 15_000 });
 
+    // The composer keeps its Vault chip (off by default) and prompts on a target.
+    await expect(panel.locator('.assistant-composer .icon-btn.vault')).toBeVisible();
+    await expect(panel.locator('.assistant-composer .icon-btn.vault')).not.toHaveClass(/\bon\b/);
+    await expect(panel.locator('.assistant-composer .icon-btn.live')).toBeHidden();
+    await page.screenshot({ path: testInfo.outputPath('shape-composer-chips.png') });
     const input = panel.locator('.composer-input .cm-content');
     await input.click();
     await page.keyboard.type('Shape this: dictate a note from the capture box');

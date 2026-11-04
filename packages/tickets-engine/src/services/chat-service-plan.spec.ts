@@ -23,7 +23,7 @@ const plan = (body: string): string => `---\nid: ${TICKET}\n---\n\n## Descriptio
 let root: string;
 let vaultPath: string;
 let ticketText: string;
-let bridgeInputs: { text: string; planDelta?: string }[];
+let bridgeInputs: { text: string; planDelta?: string; reference?: string }[];
 let onTurn: (() => void) | null;
 let shadows: MemoryPlanShadowStore;
 let clock: number;
@@ -83,8 +83,8 @@ function boot(): ChatService {
     readTicket: async (id: string) => (id === TICKET ? { ok: true as const, text: ticketText } : { ok: false as const, error: 'nope' }),
   } as unknown as ChatBoardPort;
   const bridge = {
-    runTurn: async (input: { text: string; planDelta?: string; emit: (e: ChatStreamEvent) => void }) => {
-      bridgeInputs.push({ text: input.text, ...(input.planDelta === undefined ? {} : { planDelta: input.planDelta }) });
+    runTurn: async (input: { text: string; planDelta?: string; reference?: string; emit: (e: ChatStreamEvent) => void }) => {
+      bridgeInputs.push({ text: input.text, ...(input.planDelta === undefined ? {} : { planDelta: input.planDelta }), ...(input.reference === undefined ? {} : { reference: input.reference }) });
       onTurn?.();
       return { say: 'Done.', thought: null, commands: [] };
     },
@@ -109,6 +109,15 @@ describe('the shared plan in a shape session', () => {
     const session = parseSessionFile(await fsp.readFile(path.join(vaultPath, started.file!), 'utf8'), started.file!);
     expect(session?.ticket).toBe(TICKET);
     expect(parseSessionFile(newSessionText('Plain', new Date()), 'x.md')?.ticket).toBeNull();
+  });
+
+  it('hands the desktop reference text to the model for that turn only', async () => {
+    const started = await service.start({ text: 'Start', ticket: TICKET, context: 'VAULT CONTEXT [1] arch/doc.md' });
+    expect(bridgeInputs[0]!.reference).toBe('VAULT CONTEXT [1] arch/doc.md');
+    await service.send({ file: started.file!, text: 'Next' });
+    expect(bridgeInputs[1]!.reference).toBeUndefined();
+    const session = await fsp.readFile(path.join(vaultPath, started.file!), 'utf8');
+    expect(session).not.toContain('VAULT CONTEXT');
   });
 
   it('sends nothing on the first turn (no shadow) and keeps a shadow of the plan after it', async () => {

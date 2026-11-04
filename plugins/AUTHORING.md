@@ -114,7 +114,8 @@ leaves the app on the previous build. Verify with
   1.43 added two optional parts to conversation targets: `onThreadChange(cb)`
   (the thread changed without a call from the Assistant -- the Assistant reads
   `thread()` again) and `ConversationThread.attached` (labels of what the
-  target reads along, drawn as chips above the composer). The tickets plugin
+  target reads along, drawn as chips above the composer) and `send(text, { context })` (reference
+  text for this message from the Vault chip). The tickets plugin
   uses them to follow the open ticket document in Shape.
   1.42 added `documents.registerHomeViewRule({ homeView, matches(path,
   vaultId) })`: opening a vault file the rule matches switches to that view
