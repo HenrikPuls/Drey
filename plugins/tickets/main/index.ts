@@ -45,6 +45,7 @@ import { createFleetMcpTools } from './mcp-tools';
 import { listWorkerModels } from './worker-models';
 import { EngineClient } from './engine-client';
 import { ensureEngine, syncChatConfig } from './engine-lifecycle';
+import { registerChatIpc } from './chat-ipc';
 import { MissionControlHost, createMissionControlView } from './mission-control';
 
 function messageOf(error: unknown): string {
@@ -593,6 +594,7 @@ const plugin: MainPluginModule = {
         ? { ok: false, error: 'bad persona message payload' }
         : client.invoke('personaThreadAppend', { persona, text });
     });
+    registerChatIpc(ctx, (method, payload) => client.invoke(method, payload));
     ctx.ipc.handle('personaMemory', (payload) => {
       const persona = str(payload, 'persona');
       return persona === null ? { ok: false, error: 'bad persona payload' } : client.invoke('personaMemory', persona);

@@ -14,12 +14,15 @@ import type { EditorView } from '@codemirror/view';
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import { STAGE_IMAGE_EXTENSIONS } from '../shared/stage.js';
 import { createStager } from './composer-staging.js';
+import { createDictation, recognitionCtorOf, type Dictation } from './dictate.js';
 import { baseName, dirName, el, icon } from './dom.js';
 import { openFilePicker } from './picker-file.js';
 import { createModelSetting, openModelPicker } from './picker-model.js';
 import { openPromptPicker } from './picker-prompt.js';
 import { openVaultPicker } from './picker-vault.js';
 import type { AssistantState } from './state.js';
+import type { TargetController } from './targets.js';
+import { MODEL_TARGET } from './targets-model.js';
 import { vaultScopeTitle } from './tool-format.js';
 import { createVaultFileCache, type VaultFileCache } from './vault-files.js';
 
@@ -52,6 +55,7 @@ export function mountComposer(
   panel: HTMLElement,
   api: DreyPluginApi,
   state: AssistantState,
+  targets: TargetController,
 ): Composer {
   const composer = el('footer', 'assistant-composer');
   const chipsRow = el('div', 'composer-chips');
@@ -89,8 +93,18 @@ export function mountComposer(
   const webButton = toolButton('web', 'globe');
   webButton.setAttribute('aria-label', 'Toggle web access');
   webButton.hidden = true;
+  // Dictation (E13-5): the Web Speech API where the page has it, hidden
+  // otherwise. Voice is input to the assistant -- the words land in the
+  // composer, the owner sends them.
+  const recognitionCtor = recognitionCtorOf(window);
+  const micButton = toolButton('mic', 'mic');
+  micButton.title = 'Dictate';
+  micButton.setAttribute('aria-label', 'Dictate');
+  micButton.hidden = recognitionCtor === null;
+  const dictationLine = el('p', 'composer-dictation');
+  dictationLine.hidden = true;
   const row = el('div', 'composer-row');
-  row.append(composerHost, sendButton);
+  row.append(composerHost, micButton, sendButton);
   const modelButton = el('button', 'model-btn', '…') as HTMLButtonElement;
   modelButton.type = 'button';
   modelButton.title = 'Pick the model';
@@ -101,7 +115,7 @@ export function mountComposer(
   const meta = el('div', 'composer-meta');
   meta.append(plusButton, liveButton, vaultButton, webButton, promptsButton, modelButton);
   const box = el('div', 'composer-box');
-  box.append(chipsRow, row);
+  box.append(chipsRow, row, dictationLine);
   composer.append(box, meta);
   panel.appendChild(composer);
 
@@ -284,6 +298,14 @@ export function mountComposer(
       return;
     }
     setText('');
+    if (targets.activeId() !== MODEL_TARGET) {
+      void targets.send(question).then((sent) => {
+        if (!sent) {
+          setText(question);
+        }
+      });
+      return;
+    }
     void state.ask(question).then((sent) => {
       if (!sent) {
         setText(question); // keep what the user typed when it failed
@@ -292,6 +314,37 @@ export function mountComposer(
   };
 
   sendButton.addEventListener('click', sendQuestion);
+
+  let dictation: Dictation | null = null;
+  let dictationBase = '';
+  micButton.addEventListener('click', () => {
+    if (recognitionCtor === null || composerView === null) {
+      return;
+    }
+    dictation ??= createDictation(recognitionCtor, navigator.language || 'en-US');
+    if (dictation.listening) {
+      dictation.stop();
+      return;
+    }
+    const current = composerView.state.doc.toString();
+    dictationBase = current === '' || /s$/.test(current) ? current : `${current} `;
+    dictationLine.hidden = true;
+    micButton.classList.add('on');
+    micButton.setAttribute('aria-pressed', 'true');
+    dictation.start(
+      (transcript) => {
+        setText(`${dictationBase}${transcript}`);
+        sizeComposer();
+      },
+      (error) => {
+        micButton.classList.remove('on');
+        micButton.setAttribute('aria-pressed', 'false');
+        dictationLine.textContent = error;
+        dictationLine.hidden = error === null;
+        composerView?.focus();
+      },
+    );
+  });
 
   const stageFromEvent = createStager(api, state);
 
@@ -346,12 +399,24 @@ export function mountComposer(
 
   return {
     render: () => {
-      sendButton.disabled = state.asking();
-      renderChips();
+      // A conversation target (E13-5) has no vault chips, live edit,
+      // prompts or model row: only the words and the mic.
+      const onTarget = targets.activeId() !== MODEL_TARGET;
+      for (const tool of [chipsRow, plusButton, liveButton, vaultButton, promptsButton, modelButton]) {
+        tool.hidden = onTarget;
+      }
+      sendButton.disabled = onTarget ? targets.busy() : state.asking();
+      sendButton.setAttribute('aria-label', onTarget ? 'Send message' : 'Send question');
+      if (!onTarget) {
+        renderChips();
+      } else {
+        webButton.hidden = true;
+      }
     },
     setText,
     focus: () => composerView?.focus(),
     destroy: () => {
+      dictation?.stop();
       resizeObserver.disconnect();
       composerView?.destroy();
       composerView = null;

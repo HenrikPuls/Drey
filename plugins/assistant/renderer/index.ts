@@ -22,6 +22,7 @@ import {
 } from './settings-pages.js';
 import { promptEntriesFrom, promptsDirFor } from './prompts.js';
 import { createSelectionButton } from './selection-button.js';
+import { createTargetController } from './targets.js';
 import { closeSelectionPopover, openSelectionPopover } from './selection-popover.js';
 import { createVaultFileCache } from './vault-files.js';
 
@@ -157,6 +158,9 @@ const plugin: PluginRendererModule = {
     };
 
     const state = createAssistantState(ports, tasks);
+    // Conversation targets (E13-5, SDK 1.41): the model, plus whatever other
+    // plugins registered; the active view's preset names its default.
+    const targets = createTargetController(api);
     void state.refreshWeb();
     // Vault writes elsewhere (or our own chat-note appends) stale the
     // picker cache; the lazy cache reloads on the next open. The same
@@ -374,7 +378,7 @@ const plugin: PluginRendererModule = {
       // showed recomputed only on shell change detection — stale and wrong
       // after a switch — and said nothing the picker below doesn't.
       mount: (body) => {
-        panel = mountPanel(body, api, state, tasks);
+        panel = mountPanel(body, api, state, tasks, targets);
         return () => {
           panel?.cleanup();
           panel = null;

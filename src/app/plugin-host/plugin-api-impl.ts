@@ -41,6 +41,7 @@ import { HOST_CODEMIRROR } from './runtime-exports';
 import { highlightCode } from './code-highlight';
 import { mountMarkdownView } from './markdown-view';
 import { StatusItemsService } from './status-items.service';
+import { ConversationTargetsService } from './conversation-targets.service';
 import { browserNotificationApi, showOsNotification } from './os-notify';
 import { dreyHighlightStyle } from '@markdown-surface/editor-theme';
 import type { HighlightStyle } from '@codemirror/language';
@@ -103,6 +104,7 @@ export class PluginApiFactory {
   private readonly contextMenuItems = inject(EditorContextMenuRegistry);
   private readonly toolbarButtons = inject(ToolbarContributionsService);
   private readonly statusItems = inject(StatusItemsService);
+  private readonly conversationTargets = inject(ConversationTargetsService);
   private readonly log = inject(LogService);
   private readonly decorations = inject(FileDecorationService);
   private readonly filesOperations = inject(FilesOperationsRegistryService);
@@ -317,6 +319,13 @@ export class PluginApiFactory {
         registerOperations: (handler) => track(this.filesOperations.register(pluginId, handler)),
         registerContextMenuItems: (items) =>
           track(this.filesCommands.register(pluginId, items)),
+      },
+      conversations: {
+        registerTargets: (provider) => track(this.conversationTargets.register(pluginId, provider)),
+        targets: () => this.conversationTargets.targets(),
+        onTargetsChange: (listener) => track(this.conversationTargets.onTargetsChange(listener)),
+        viewTarget: () => this.conversationTargets.viewTarget(),
+        onViewTargetChange: (listener) => track(this.conversationTargets.onViewTargetChange(listener)),
       },
       commands: {
         register: (command: PluginCommand) => {

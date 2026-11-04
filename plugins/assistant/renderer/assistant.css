@@ -1207,3 +1207,198 @@
   font-size: 11px;
   color: var(--text-faint);
 }
+
+/* -- Conversation targets (E13-5) ------------------------------------------ */
+
+.assistant-targets {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  padding: 6px 14px 0;
+}
+
+.assistant-targets[hidden],
+.assistant-thread[hidden],
+.target-tray[hidden],
+.composer-dictation[hidden] {
+  display: none;
+}
+
+.assistant-target {
+  padding: 3px 10px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-5);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.assistant-target:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.assistant-target.on {
+  color: var(--text-primary);
+  background: var(--hover-bg-loud);
+}
+
+.assistant-target-menu {
+  position: absolute;
+  top: 100%;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-bar);
+}
+
+.assistant-target-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.assistant-target-item:hover,
+.assistant-target-item.on {
+  background: var(--hover-bg);
+}
+
+.assistant-target-history {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 320px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.assistant-thread .relay-chip,
+.assistant-target-item .relay-chip {
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-surface);
+  color: var(--accent-text);
+  font-size: 10px;
+}
+
+.target-thought summary {
+  color: var(--text-6);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.target-card {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+}
+
+.target-card p {
+  margin: 0;
+}
+
+.target-card-note {
+  margin-top: 4px;
+  color: var(--text-5);
+  font-size: 11.5px;
+}
+
+.target-card-actions,
+.target-tray-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.target-card-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.target-card-btn:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.target-card-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.target-card-btn.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.target-tray {
+  flex: 0 0 auto;
+  margin: 0 14px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+}
+
+.target-tray-question {
+  margin: 0;
+  color: var(--text-3);
+}
+
+.target-error {
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+}
+
+.target-error-title {
+  margin: 0 0 2px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.target-error-line {
+  margin: 0;
+  color: var(--text-5);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.target-notice {
+  margin-top: 4px;
+}
+
+.assistant-composer .mic.on {
+  color: var(--accent-fg);
+  background: var(--hover-bg-loud);
+}
+
+.assistant-composer .composer-dictation {
+  margin: 4px 0 0;
+  color: var(--text-5);
+  font-size: 11.5px;
+}

@@ -60,7 +60,7 @@ leaves the app on the previous build. Verify with
 
 - `apiVersion` is a **major gate**: a manifest whose major differs from
   `PLUGIN_API_VERSION.major` (`shared/plugin-api/versions.ts`, currently
-  `{ major: 1, minor: 40 }`) is never imported — the plugin shows up in
+  `{ major: 1, minor: 41 }`) is never imported — the plugin shows up in
   Settings → Panels & plugins as incompatible. Minor bumps are additive;
   1.9 added `commands.run(id, payload?)`, `ui.createTagField` (the shared
   tag chip field — prefer it over a hand-rolled chip row), the main-side

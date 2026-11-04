@@ -21,6 +21,9 @@ import { el, icon } from './dom.js';
 import { openChatPicker } from './picker-chat.js';
 import type { RunningTasks } from './running-tasks.js';
 import type { AssistantState } from './state.js';
+import { createTargetSwitcher, createTargetThread, openTargetHistory } from './target-view.js';
+import type { TargetController } from './targets.js';
+import { MODEL_TARGET } from './targets-model.js';
 import { createThread } from './thread.js';
 
 export interface PanelHandle {
@@ -32,6 +35,7 @@ export function mountPanel(
   api: DreyPluginApi,
   state: AssistantState,
   tasks: RunningTasks,
+  targets: TargetController,
 ): PanelHandle {
   body.classList.add('assistant-panel');
 
@@ -46,13 +50,22 @@ export function mountPanel(
   chatSwitchButton.title = 'Switch chat';
   chatSwitchButton.setAttribute('aria-label', 'Switch chat');
   chatSwitchButton.appendChild(icon('list', 13));
-  chatSwitchButton.addEventListener('click', () => openChatPicker(api, state));
+  chatSwitchButton.addEventListener('click', () =>
+    targets.activeId() === MODEL_TARGET ? openChatPicker(api, state) : openTargetHistory(api, targets),
+  );
   const chatNewButton = el('button', 'chat-new') as HTMLButtonElement;
   chatNewButton.type = 'button';
   chatNewButton.title = 'Start a new chat';
   chatNewButton.setAttribute('aria-label', 'Start a new chat');
   chatNewButton.appendChild(icon('plus', 13));
-  chatNewButton.addEventListener('click', () => state.newChat());
+  chatNewButton.addEventListener('click', () =>
+    targets.activeId() === MODEL_TARGET ? state.newChat() : void targets.newThread(),
+  );
+
+  // The conversation target switcher (E13-5): Model | Mission Control | 1:1 …,
+  // present only while a plugin registered a target.
+  const switcher = createTargetSwitcher(targets);
+  body.appendChild(switcher.node);
 
   const head = el('header', 'assistant-head');
   const chatHead = el('div', 'chat-head');
@@ -67,7 +80,10 @@ export function mountPanel(
     composer.focus();
   });
   body.appendChild(thread.node);
-  const composer = mountComposer(body, api, state);
+  const targetThread = createTargetThread(api, targets);
+  body.appendChild(targetThread.node);
+  body.appendChild(targetThread.tray);
+  const composer = mountComposer(body, api, state, targets);
 
   // -- render loop -----------------------------------------------------------
   const render = (): void => {
@@ -75,8 +91,10 @@ export function mountPanel(
     // change round), the loaded view's frontmatter is the fallback for
     // a just-created chat the list has not re-read yet.
     const activePath = state.activeChatPath();
-    const chatTitle =
-      activePath === null
+    const onTarget = targets.activeId() !== MODEL_TARGET;
+    const chatTitle = onTarget
+      ? (targets.thread()?.title ?? null)
+      : activePath === null
         ? null
         : (state.chats().find((chat) => chat.path === activePath)?.title ??
           state.view()?.frontmatter.title ??
@@ -84,17 +102,23 @@ export function mountPanel(
     chatLabel.textContent = chatTitle ?? 'New chat';
     chatLabel.title = chatTitle ?? 'New chat';
 
+    switcher.render();
+    thread.node.hidden = onTarget;
+    chatSwitchButton.hidden = onTarget && targets.active()?.history === undefined;
     composer.render();
     thread.render();
+    targetThread.render();
   };
   render();
   const unsubState = state.subscribe(render);
   const unsubTasks = tasks.subscribe(render);
+  const unsubTargets = targets.subscribe(render);
 
   return {
     cleanup: () => {
       unsubState();
       unsubTasks();
+      unsubTargets();
       composer.destroy();
     },
   };
