@@ -290,6 +290,16 @@ interface LiveRun {
    * reads.
    */
   writeQueue: Promise<void>;
+  /**
+   * The in-flight "looks stuck" log line + persist (fire-and-forget from the
+   * synchronous watchdog). The settle and the end of a reap wait for it: it
+   * is a read-modify-write of the ticket, and two of those at once lose one.
+   */
+  stuckLog?: Promise<void>;
+  /** The run's one settle, once begun (see `finish`). */
+  settling?: Promise<void>;
+  /** The run's ticket writes, one at a time (see `patchTicket`). */
+  ticketQueue?: Promise<void>;
 }
 
 /** The telemetry a persisted record carries, for restoring a fold (an adopted run). */
@@ -1843,6 +1853,8 @@ export class RunSupervisor {
         await this.finish(run, 'failed');
       }
     }
+    // The watchdog's fire-and-forget writes are part of this sweep.
+    await Promise.all([...this.runs.values()].map((run) => run.stuckLog));
   }
 
   private silenceMs(run: LiveRun): number {
@@ -1875,7 +1887,9 @@ export class RunSupervisor {
     }
     if (silence > STUCK_FLAG_MS && run.info.stuck !== true) {
       run.info = { ...run.info, stuck: true };
-      void this.logLine(run, `looks stuck: no output for ${Math.round(silence / 60_000)} min`).then(() => this.persist(run));
+      run.stuckLog = this.logLine(run, `looks stuck: no output for ${Math.round(silence / 60_000)} min`)
+        .then(() => this.persist(run))
+        .catch((error: unknown) => this.deps.log(`run ${run.info.id}: flagging the run stuck failed — ${messageOf(error)}`));
     }
     return false;
   }
@@ -2175,7 +2189,23 @@ export class RunSupervisor {
     }
   }
 
-  private async finish(run: LiveRun, state: RunState): Promise<void> {
+  /**
+   * A run settles ONCE. The reaper stops the worker and then finishes the
+   * run itself, but the stop resolves the worker's `exited` promise, so the
+   * exit handler can reach `finish` first with the state still non-terminal:
+   * two settles then read-modify-write the ticket at once (a lost update
+   * leaves the run stamp on the ticket), commit twice and fire
+   * `onRunSettled` twice. A second caller waits for the first settle
+   * instead and returns when it is done.
+   */
+  private finish(run: LiveRun, state: RunState): Promise<void> {
+    run.settling ??= this.settle(run, state);
+    return run.settling;
+  }
+
+  private async settle(run: LiveRun, state: RunState): Promise<void> {
+    // A "looks stuck" write still in flight would race the settle's ticket write.
+    await run.stuckLog;
     const stamp = this.stamp();
     // req-67: the clock freezes at the run's end — a busy state the provider
     // never reported counts from the run's start, an open span from its stamp.
@@ -2311,7 +2341,20 @@ export class RunSupervisor {
     }
   }
 
-  private async patchTicket(run: LiveRun, patch: (text: string) => string): Promise<void> {
+  /**
+   * One read-modify-write of the run's ticket. The writes of one run are
+   * serialized: the settle's stamp clearing, a log line from the exit
+   * handler and the watchdog's stuck flag all patch the same file, and
+   * two of them in flight at once let the later write overwrite the
+   * earlier one with a stale text (the cleared run stamp came back).
+   */
+  private patchTicket(run: LiveRun, patch: (text: string) => string): Promise<void> {
+    const result = (run.ticketQueue ?? Promise.resolve()).then(() => this.patchTicketNow(run, patch));
+    run.ticketQueue = result.catch(() => undefined); // the queue survives a failed write
+    return result;
+  }
+
+  private async patchTicketNow(run: LiveRun, patch: (text: string) => string): Promise<void> {
     let abs = path.join(run.request.ticketsVaultPath, run.currentRelPath);
     let text: string;
     try {

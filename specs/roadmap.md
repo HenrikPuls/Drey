@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–141 and 143 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–143 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -93,7 +93,7 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 _None open._ (D-1, Mission Control chat reaching no model, shipped as
 milestone 131; D-2, the paired-devices list and pairing from Mission
 Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
-views, as milestone 140; D-5, the page moving on iPhone/iPad scroll
+views, as milestone 140; D-4, runs.spec flaking under full-suite load, as milestone 142; D-5, the page moving on iPhone/iPad scroll
 (owner report 2026-11-04), as milestone 143 — see the changelog.)
 
 ### Now (small, daily value)

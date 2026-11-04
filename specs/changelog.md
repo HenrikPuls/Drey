@@ -28,6 +28,33 @@ content instead of leaving the frame fixed like a native app.
   (iPhone 14 profile, touch gestures, production build): the document's
   `scrollTop` stays 0 and header/composer boxes do not move. **WebKit is not
   installed here and iOS was not tested** — the owner must check on the device.
+### Milestone 142 — D-4: runs.spec no longer flakes under full-suite load
+
+**Not yet manually verified by the owner.** `fleet/runs.spec.ts` failed
+intermittently inside `npm run test:plugins` (reproduced alone under CPU load:
+3 of 12 runs). Two causes, one in the spec and one real ordering bug in
+`RunSupervisor`:
+
+- **Spec:** `state` turns `done`/`failed`/`stopped` in memory *before* the
+  settle has cleared the ticket's run stamp, committed and written the persona
+  memory. 39 sites waited on `state` alone and then read the ticket (stamp
+  still there) or ended the test so `afterEach` removed the temp dirs under a
+  running settle (`ENOENT` / `ENOTEMPTY`). They now wait for `onRunSettled`,
+  which fires as the settle's last step (`settled()` helper). The run.json
+  read in "folds the run telemetry" retries (the write truncates first).
+- **Production (`runs.ts`):** (1) the reaper stops the worker and then
+  finishes the run, but `stop()` resolves `exited`, so the exit handler also
+  reached `finish` — two settles: two commits, `onRunSettled` twice (the chain
+  orchestrator was told twice), and (2) unserialised read-modify-writes of the
+  ticket (settle clearing the stamp vs. the exit handler's log line) could let
+  a stale write bring the cleared run stamp back. Now `finish` settles once
+  (a second caller awaits the first), a run's ticket writes are queued, and the
+  watchdog's fire-and-forget "looks stuck" write is awaited by the settle and
+  by `reap`.
+- **Specs:** two regression specs (state is terminal before `onRunSettled`
+  while the settle's commit is held; a reaped run settles exactly once and
+  leaves no run stamp). Full `test:plugins` green three times in a row
+  (291 files / 3613 tests).
 
 ### Milestone 141 — The Work view, first cut (E13-13, SDK 1.41)
 
