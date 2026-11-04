@@ -167,7 +167,7 @@ describe('the remote service settings half', () => {
     const devices = service as unknown as { registry(): DeviceRegistry };
     const phone = await devices.registry().add('Phone', false, new Date());
     const tablet = await devices.registry().add('Tablet', false, new Date());
-    const access = (service as unknown as { settingsAccess(): SettingsAccess }).settingsAccess();
+    const access = service.settings();
 
     const first = await access.read(phone.device.id);
     expect(first).toMatchObject({ ok: true, engine: { videos: { inGit: false, maxMb: 25, existing: 4 } } });

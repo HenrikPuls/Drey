@@ -6,6 +6,7 @@ import { el, iconButton, kv, mutate, numberConfig, selectConfig, textConfig } fr
 import { createPromptsSection } from './settings-prompts';
 import { createRemoteSection } from './settings-remote';
 import { createReposSection } from './settings-repos';
+import { createDeskSettings, type DeskSettingsHooks } from './settings/desk-settings';
 import { createWorkersSection } from './settings-workers';
 
 /**
@@ -19,13 +20,12 @@ import { createWorkersSection } from './settings-workers';
  * page follows the board's change events, so it never shows a copy that
  * drifted from disk.
  */
-export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPageContrib {
+export function createTicketsSettingsPage(api: DreyPluginApi, hooks: Pick<DeskSettingsHooks, 'openTeam' | 'openFlow'>): PluginSettingsPageContrib {
   return {
     id: 'tickets',
     label: 'Tickets',
-    hint: 'Board & fleet',
-    description:
-      'The pipeline and its workers. A column with a worker runs itself; manual columns are your checkpoints. Each CLI runner has its own pool and settings.',
+    hint: 'Team, flow, budget, devices',
+    description: 'The team, the flow, the budget and the devices that reach Mission Control.',
     mount: (body) => {
       body.classList.add('tset');
 
@@ -57,6 +57,7 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
             usage.set(ref, [...(usage.get(ref) ?? []), phase.title]);
           }
         }
+        desk.update(snap);
         columns.update({
           pipeline: snap.pipeline,
           folders,
@@ -79,7 +80,14 @@ export function createTicketsSettingsPage(api: DreyPluginApi): PluginSettingsPag
       const workers = createWorkersSection(api, 'opencode');
       let workersOpened = false;
       const remote = createRemoteSection(api);
-      body.append(repo, columns.root, repos.root, prompts.root, fleetSection(api), workers.root, remote.root);
+      const desk = createDeskSettings(api, {
+        ...hooks,
+        manageRunners: () => {
+          workers.root.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        },
+      });
+      const lower = el('h2', 'tset-desk-divider', 'Pipeline and workers');
+      body.append(desk.root, remote.root, lower, repo, columns.root, repos.root, prompts.root, fleetSection(api), workers.root);
 
       // The board's change events cover every write here and the runner's.
       const off = api.backend.on('board-changed', () => {

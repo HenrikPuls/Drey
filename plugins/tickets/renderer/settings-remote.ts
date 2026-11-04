@@ -19,14 +19,14 @@ export function createRemoteSection(api: DreyPluginApi): RemoteSection {
   const section = el('section', 'tset-section');
   section.setAttribute('aria-labelledby', 'tset-remote-head');
   const head = el('div', 'tset-section-head');
-  const title = el('h3', undefined, 'Remote access');
+  const title = el('h3', undefined, 'Mission Control on other devices');
   title.id = 'tset-remote-head';
   const state = el('span', 'tset-chip tset-chip-manual');
   head.append(title, state);
   const intro = el(
     'p',
     'tset-muted',
-    'Use the board from a phone or tablet: move tickets, start and answer runs. Off by default; only paired devices get in.',
+    'Use the board from a phone or tablet. Off by default; only paired devices get in.',
   );
 
   const rows = el('div', 'tset-kv');

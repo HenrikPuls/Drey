@@ -742,3 +742,27 @@ describe('invoke pair (M111/UX follow-up)', () => {
     await engine.invoke('cancelPairing');
   });
 });
+
+describe('invoke flow and settings (E13-11, E13-12)', () => {
+  it('answers a flow for a ticket that does not exist as a refusal, not a throw', async () => {
+    const reply = (await engine.invoke('flow', { id: 'T-9999', part: null })) as { ok: boolean; error?: string };
+    expect(reply.ok).toBe(false);
+    expect(typeof reply.error).toBe('string');
+  });
+
+  it('refuses a malformed flow edit through the router parser', async () => {
+    const reply = (await engine.invoke('flowEdit', { id: 'T-0001', chain: [], edit: { op: 'nonsense' } })) as { ok: boolean };
+    expect(reply.ok).toBe(false);
+    const saved = (await engine.invoke('flowSave', { part: 'x' })) as { ok: boolean };
+    expect(saved.ok).toBe(false);
+  });
+
+  it('reads the videos settings and writes a limit', async () => {
+    const read = (await engine.invoke('settingsRead')) as { ok: true; engine: { videos: { inGit: boolean; limitMb: number } } };
+    expect(read.engine.videos.inGit).toBe(false);
+    const written = (await engine.invoke('settingsPatch', { limitMb: 500 })) as { ok: true; engine: { videos: { limitMb: number } } };
+    expect(written.engine.videos.limitMb).toBe(500);
+    const refused = (await engine.invoke('settingsPatch', { inGit: true })) as { ok: boolean };
+    expect(refused.ok).toBe(false);
+  });
+});

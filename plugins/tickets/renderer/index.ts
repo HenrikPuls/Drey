@@ -46,6 +46,7 @@ import { createTicketHeader, isTicketPath, ticketLogFold } from './ticket-header
 import { WORK_VIEW_ID, registerWorkView } from './view-preset';
 import { createTicketDocumentExtension } from './ticket-document/extension';
 import { createTicketStrip } from './ticket-document/strip';
+import { openFlowTab, registerFlowKind } from './flow/register';
 import { openReviewTab, registerReviewKind } from './review/register';
 import type { WorkRow } from './work-groups';
 import { boardIssuesChip, boardIssuesList, type BoardIssuesDeps } from './board-issues';
@@ -3258,7 +3259,12 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     api.commands.register({ id: 'tickets.openBoard', label: 'Open the Board', run: () => openBoardDoc(api) });
     api.commands.register({ id: 'tickets.openTeam', label: 'Open the Team', run: () => openTeamDoc(api) });
     api.commands.register({ id: 'tickets.showCapacity', label: 'Show the Capacity band', run: () => api.ui.revealWidget('tickets-capacity') });
-    api.ui.registerSettingsPage(createTicketsSettingsPage(api));
+    api.ui.registerSettingsPage(
+      createTicketsSettingsPage(api, {
+        openTeam: () => openTeamDoc(api),
+        openFlow: (ticketId) => openFlowTab(api, ticketId),
+      }),
+    );
 
     // The Files-panel seam (T-0042, SDK 1.32): veto/takeover over the
     // board's ground, and the per-target context rows. Both read the
@@ -3286,6 +3292,8 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       const groups = workGroups(snapshot, liveRuns());
       return [...groups.needs, ...groups.shaping, ...groups.running, ...groups.ideas].find((row) => row.card.id === card.id) ?? null;
     };
+    // E13-11: the Flow tab -- a ticket's chain as an editor (gates, personas, Paul's draft).
+    registerFlowKind(api, deskDeps(api));
     // E13-7: the Review tab -- the proof and the branch's diff of one ticket.
     registerReviewKind(api, {
       ...deskDeps(api),
@@ -3316,7 +3324,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       }
     });
     const header = createTicketHeader({
-      strip: createTicketStrip({ snapshot: () => snapshot, rowOf, invoke: invokeBoard }),
+      strip: createTicketStrip({ snapshot: () => snapshot, rowOf, invoke: invokeBoard, openFlow: (card) => openFlowTab(api, card.id) }),
       api,
       snapshot: () => snapshot,
       invoke: invokeBoard,

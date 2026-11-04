@@ -222,6 +222,8 @@ export interface StripData {
   readonly chain: readonly ChainItem[];
   /** The gate: why the ticket waits on the owner (`Waits for you: …`); '' when it does not. */
   readonly gate: string;
+  /** "Change flow" under the chain (E13-11); absent = no link. */
+  readonly onFlow?: () => void;
 }
 
 const GLYPH: Record<ChainItem['state'], string> = { past: '✓', current: '●', future: '○' };
@@ -264,6 +266,13 @@ export function stripNode(data: StripData): HTMLElement {
       chain.append(item);
     }
     root.append(chain);
+    if (data.onFlow !== undefined) {
+      const change = el('button', 'tickets-doc-flow', 'Change flow');
+      change.type = 'button';
+      change.title = 'Open the flow editor for this ticket';
+      change.addEventListener('click', data.onFlow);
+      root.append(change);
+    }
   }
 
   if (data.gate !== '') {

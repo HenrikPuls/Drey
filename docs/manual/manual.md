@@ -947,6 +947,20 @@ comment (file, line, text) in its Handover, so the next run reads them;
 **Accept and move to Commit** accepts as on the Ready card. Both show only
 while the ticket waits at one of your checkpoints.
 
+**The Flow tab.** *Change flow* under the chain in a ticket's header
+opens **Flow · T-0121**: the gates the ticket will still pass, each with who
+works it and on which model. Click a gate to open its settings on the right:
+who works it (the pipeline's default or one persona), *Tell me when it is
+done*, *Earlier* / *Later*, *Add a gate after* and *Remove gate* (a standard
+gate is struck, not deleted; *Restore gate* brings it back). The round **+**
+between two gates adds a gate there. A gate drawn with a dashed outline is a
+change you have not saved. Type into *Ask Paul to change this flow* (or leave
+it empty) and press *Ask Paul* to get his draft with the reason, *Undo draft*
+if you do not like it. Nothing is written until **Save flow**; *Reset to
+standard flow* drops every change. The gate that is running and the ones
+before it cannot change, and the whole flow is read-only while a run is live
+on the ticket.
+
 **By voice.** On Windows the dialog's Description label carries a
 **mic button**: it starts Windows dictation (Win+H — Windows' own;
 Drey adds no speech recognition), so speaking types into the
@@ -1478,9 +1492,25 @@ And the assistant can drive runs: ask it about the fleet — it sees
 `fleet_watch` through Drey's MCP server.
 
 
+### The Tickets settings page
+
+Settings → Tickets starts with the things you decide about the team:
+**Team** shows the personas as chips (you are *You*); *Edit team* opens the
+Team tab. **Default flow** shows the standard flow, the columns an agent
+works with who does each; a flow is changed per ticket, so pick a ticket
+next to *Open flow editor* to open its Flow tab (the standard flow itself is
+set below, in the pipeline table). **Budget and runners** shows the daily
+budgets of the personas added up with today's spending, and how many runs
+each runner takes at once; *Manage* jumps to the runner settings.
+**Walkthrough videos** has *Keep in Git* (off: videos are large and stay in
+the history once committed — switching it on asks first and can include the
+videos already there) and *Largest video* in MB. Under **Mission Control on
+other devices** you pair a phone or tablet and revoke it again (below). The
+pipeline, prompts, fleet and workers follow under *Pipeline and workers*.
+
 ### The board from a phone or tablet
 
-Settings → Tickets → **Remote access** offers the board to a phone or
+Settings → Tickets → **Mission Control on other devices** offers the board to a phone or
 tablet on your network or over Tailscale. It is off until you switch
 it on, and only devices you pair get in.
 

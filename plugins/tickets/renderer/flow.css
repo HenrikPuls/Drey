@@ -1,0 +1,418 @@
+/*
+ * The Flow tab (E13-11): gates as a list with + connectors, an inspector
+ * column, a foot with Paul, reset and Save flow. Flat, sentence-case sans,
+ * theme tokens only; radii 4 / 8 / 16, nothing under 13 px. A changed gate
+ * is drawn dashed until the flow is saved. Every class is scoped `flow-`.
+ */
+.flow-tab {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--text-2);
+  font-family: var(--font-sans, inherit);
+  font-size: 13px;
+}
+
+.flow-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.flow-id {
+  font-family: var(--font-mono, monospace);
+  color: var(--text-3);
+}
+
+.flow-head-title {
+  color: var(--text-2);
+}
+
+.flow-grow {
+  flex: 1;
+}
+
+.flow-chip {
+  padding: 2px 10px;
+  color: var(--text-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-chip);
+}
+
+.flow-chip.is-dirty {
+  color: var(--accent-fg, var(--accent));
+  border: 1px dashed var(--accent);
+}
+
+.flow-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.flow-body {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 16px 18px;
+}
+
+.flow-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.flow-eyebrow {
+  color: var(--text-3);
+}
+
+.flow-h {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-heading, var(--text-2));
+}
+
+.flow-note {
+  margin: 0 0 12px;
+  color: var(--text-3);
+}
+
+.flow-note.is-error,
+.flow-message.is-error {
+  color: var(--status-deleted);
+}
+
+.flow-paul {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--accent-surface);
+  border-radius: var(--radius-control);
+}
+
+.flow-paul-k {
+  font-weight: 600;
+  color: var(--text-primary, var(--text-2));
+}
+
+.flow-paul-t {
+  flex: 1;
+  min-width: 12ch;
+}
+
+.flow-list {
+  max-width: 520px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flow-gate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+}
+
+.flow-gate:hover {
+  background: var(--hover-bg);
+}
+
+.flow-gate:focus-visible,
+.flow-plus:focus-visible,
+.flow-chipbtn:focus-visible,
+.flow-switch:focus-visible,
+.flow-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.flow-gate.is-selected {
+  border-color: var(--accent);
+}
+
+.flow-gate.is-dashed {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+
+.flow-gate.is-struck .flow-gate-title {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+
+.flow-gate.is-current {
+  background: var(--accent-surface);
+}
+
+.flow-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.flow-dot.is-small {
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+}
+
+.flow-gate-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.flow-gate-title {
+  font-weight: 600;
+  color: var(--text-primary, var(--text-2));
+}
+
+.flow-gate-who {
+  color: var(--text-3);
+}
+
+.flow-mark {
+  padding: 1px 8px;
+  color: var(--text-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-chip);
+}
+
+.flow-mark.is-running {
+  color: var(--accent-fg, var(--accent));
+  border-color: var(--accent);
+}
+
+.flow-plus {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 28px;
+  padding: 0;
+  color: var(--text-3);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.flow-plus:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.flow-plus-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  border-left: 1px solid var(--border-strong);
+}
+
+.flow-plus-dot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: var(--bg-editor, var(--bg-input));
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+}
+
+.flow-plus:hover:not(:disabled) .flow-plus-dot,
+.flow-plus.is-open .flow-plus-dot {
+  color: var(--accent-fg, var(--accent));
+  border-color: var(--accent);
+}
+
+.flow-add,
+.flow-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.flow-add {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+}
+
+.flow-chipbtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font: inherit;
+  color: var(--text-2);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-chip);
+}
+
+.flow-chipbtn:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.flow-chipbtn.is-on {
+  color: var(--accent-fg, var(--accent));
+  border-color: var(--accent);
+}
+
+.flow-chipbtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.flow-hint {
+  margin: 0;
+  color: var(--text-3);
+}
+
+.flow-inspector {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 14px;
+  width: 280px;
+  overflow-y: auto;
+  padding: 16px 18px;
+  border-left: 1px solid var(--border);
+}
+
+.flow-inspector[hidden],
+.flow-foot[hidden],
+.flow-message[hidden] {
+  display: none;
+}
+
+.flow-ins-head,
+.flow-actions,
+.flow-row,
+.flow-ask,
+.flow-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flow-ins-title {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-heading, var(--text-2));
+}
+
+.flow-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.flow-sec.flow-row {
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.flow-sec-h {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.flow-val {
+  margin: 0;
+  color: var(--text-primary, var(--text-2));
+}
+
+.flow-switch {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  cursor: pointer;
+  background: var(--border-strong);
+  border: 0;
+  border-radius: var(--radius-control);
+}
+
+.flow-switch.is-on {
+  background: var(--accent);
+}
+
+.flow-switch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.flow-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--text-heading, #fff);
+  border-radius: 50%;
+}
+
+.flow-switch.is-on .flow-knob {
+  left: 16px;
+}
+
+.flow-foot {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+}
+
+.flow-message {
+  margin: 0;
+  color: var(--text-3);
+}
+
+.flow-input {
+  flex: 1;
+  box-sizing: border-box;
+  padding: 4px 10px;
+  font: inherit;
+  color: var(--text-primary, var(--text-2));
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+}
+
+.flow-input::placeholder {
+  color: var(--placeholder);
+}

@@ -481,3 +481,21 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     log records which device started each pairing; the way in stays a code
     that exists, is used once and expires, and a revoked device loses
     nothing it could not already do.
+
+  - **The Flow tab (E13-11, milestone 145).** The desktop's flow editor is a
+    plain-DOM tab in the tickets plugin over the engine's `flow`, `flowEdit`,
+    `flowDraft` and `flowSave` (invoke allowlist, parsed by the router's own
+    `parseFlow*`). It holds only a draft: the grammar (`core/flow-edit.ts`,
+    `chain-delta.ts`) stays in the engine, so Drey, the phone and Paul's draft
+    go through one guard. The word helpers it shares with the Angular editor
+    in `libs/mission-ui` exist twice (the lib cannot be imported); the engine
+    contract `contracts/flow.ts` is the single shape.
+
+  - **Settings → Tickets in Drey (E13-12, milestone 146).** The page's top
+    rows (Team, Default flow, Budget and runners, Walkthrough videos) read the
+    engine's own answers (`personas`, the board snapshot, `settingsRead`) and
+    write only `videos.inGit` / `videos.limitMb`, through `settingsPatch` ->
+    `RemoteService.settings()` — the `SettingsAccess` the phone's Settings
+    uses, so the confirmation rule and the bounds exist once. Devices and
+    pairing stay the desktop's Remote section (req-66, D-2's single pairing
+    slot), renamed "Mission Control on other devices".

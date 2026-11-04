@@ -20,6 +20,8 @@ export interface TicketStripDeps {
   readonly snapshot: () => BoardSnapshot | null;
   readonly rowOf: (card: TicketCard) => WorkRow | null;
   readonly invoke: (method: string, payload?: unknown) => Promise<unknown>;
+  /** Opens the ticket's Flow tab (E13-11); absent = the chain is not a link. */
+  readonly openFlow?: (card: TicketCard) => void;
 }
 
 export interface TicketStrip {
@@ -113,6 +115,7 @@ export function createTicketStrip(deps: TicketStripDeps): TicketStrip {
             cost: cost.label,
             estimate,
             chain,
+            ...(deps.openFlow === undefined ? {} : { onFlow: () => deps.openFlow?.(card) }),
             gate: need !== null && need.text.trim() !== '' ? `Waits for you: ${need.text.trim()}` : '',
           }),
         );

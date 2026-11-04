@@ -121,7 +121,7 @@ export class RemoteService {
         now: this.now,
         log: (message) => deps.log(message),
         onPaired: () => deps.onChanged(),
-        settings: this.settingsAccess(),
+        settings: this.settings(),
         pairingAccess: this.pairingAccess(),
       },
     });
@@ -149,7 +149,7 @@ export class RemoteService {
   }
 
   /** The settings screen's engine half: devices and the `videos.*` keys (E12-3). */
-  private settingsAccess(): SettingsAccess {
+  settings(): SettingsAccess {
     const reply = async (asking: string): Promise<SettingsReply> => {
       const get = this.deps.config.get.bind(this.deps.config);
       const existing = this.deps.countVideos === undefined ? 0 : await this.deps.countVideos().catch(() => 0);
