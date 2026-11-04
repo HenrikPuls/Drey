@@ -53,7 +53,7 @@ export interface DeskDevice {
 
 export interface DeskVideos {
   readonly inGit: boolean;
-  readonly limitMb: number;
+  readonly maxMb: number;
   readonly existing: number;
   readonly notice: string | null;
 }
@@ -71,14 +71,14 @@ export function parseDeskVideos(json: unknown): DeskVideos | null {
   }
   return {
     inGit: videos['inGit'] === true,
-    limitMb: typeof videos['limitMb'] === 'number' ? videos['limitMb'] : 0,
+    maxMb: typeof videos['maxMb'] === 'number' ? videos['maxMb'] : 0,
     existing: typeof videos['existing'] === 'number' ? videos['existing'] : 0,
     notice: typeof videos['notice'] === 'string' ? videos['notice'] : null,
   };
 }
 
 /** A whole number of megabytes from a field; null = not a number. */
-export function limitMbOf(text: string): number | null {
+export function maxMbOf(text: string): number | null {
   const n = Number(text.trim());
   return text.trim() !== '' && Number.isInteger(n) && n > 0 ? n : null;
 }

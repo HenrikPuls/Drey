@@ -506,7 +506,7 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   - **Settings → Tickets in Drey (E13-12, milestone 146).** The page's top
     rows (Team, Default flow, Budget and runners, Walkthrough videos) read the
     engine's own answers (`personas`, the board snapshot, `settingsRead`) and
-    write only `videos.inGit` / `videos.limitMb`, through `settingsPatch` ->
+    write only `videos.inGit` / `videos.maxMb`, through `settingsPatch` ->
     `RemoteService.settings()` — the `SettingsAccess` the phone's Settings
     uses, so the confirmation rule and the bounds exist once. Devices and
     pairing stay the desktop's Remote section (req-66, D-2's single pairing

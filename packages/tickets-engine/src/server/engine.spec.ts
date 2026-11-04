@@ -757,11 +757,11 @@ describe('invoke flow and settings (E13-11, E13-12)', () => {
     expect(saved.ok).toBe(false);
   });
 
-  it('reads the videos settings and writes a limit', async () => {
-    const read = (await engine.invoke('settingsRead')) as { ok: true; engine: { videos: { inGit: boolean; limitMb: number } } };
+  it('reads the videos settings and writes the per-video cap', async () => {
+    const read = (await engine.invoke('settingsRead')) as { ok: true; engine: { videos: { inGit: boolean; maxMb: number } } };
     expect(read.engine.videos.inGit).toBe(false);
-    const written = (await engine.invoke('settingsPatch', { limitMb: 500 })) as { ok: true; engine: { videos: { limitMb: number } } };
-    expect(written.engine.videos.limitMb).toBe(500);
+    const written = (await engine.invoke('settingsPatch', { maxMb: 20 })) as { ok: true; engine: { videos: { maxMb: number } } };
+    expect(written.engine.videos.maxMb).toBe(20);
     const refused = (await engine.invoke('settingsPatch', { inGit: true })) as { ok: boolean };
     expect(refused.ok).toBe(false);
   });

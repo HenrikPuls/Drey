@@ -175,7 +175,7 @@ Mission Control."
   spent" and a runners dialog still need a desk setting first (E12-3b), so
   there is no switch for them yet.
 - **Walkthrough videos.** *Keep in Git* (off) and *Largest video* (MB) read
-  and write the engine's own `videos.inGit` / `videos.limitMb` through the new
+  and write the engine's own `videos.inGit` / `videos.maxMb` through the new
   invoke names `settingsRead` / `settingsPatch` — the same guard the phone's
   Settings uses: turning *Keep in Git* on asks first (a warning with *Keep in
   Git* and, when videos exist, *… and include the n existing videos*); the

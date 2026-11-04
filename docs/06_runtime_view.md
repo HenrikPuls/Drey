@@ -4089,7 +4089,7 @@ sequenceDiagram
     participant C as Engine config (videos.*)
 
     S->>M: settingsRead
-    M->>E: read('drey') -> devices, videos {inGit, limitMb, existing, notice}
+    M->>E: read('drey') -> devices, videos {inGit, maxMb, existing, notice}
     E-->>S: the row's values
     O->>S: tick "Keep in Git"
     S->>S: warning + "Keep in Git" / "... include the n existing videos"

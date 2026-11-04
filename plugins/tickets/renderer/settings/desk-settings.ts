@@ -4,7 +4,7 @@
  * devices and the pairing are the page's Remote section (req-66) under its
  * new heading, and the pipeline, prompts and workers keep their sections
  * below. Every value is read from what the engine answers; the only things
- * written here are `videos.inGit` and `videos.limitMb`, through the
+ * written here are `videos.inGit` and `videos.maxMb`, through the
  * engine's own settings guard (E12-3) — nothing is defined twice.
  */
 import type { DreyPluginApi } from '../../../../shared/plugin-api/renderer';
@@ -14,7 +14,7 @@ import type { PersonaView } from '../../shared/remote-protocol';
 import type { BoardSnapshot } from '../../shared/tickets';
 import { RUNNER_LABEL } from '../settings-workers';
 import { el, textButton } from '../settings-dom';
-import { budgetLineOf, limitMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, type DeskVideos } from './desk-model';
+import { budgetLineOf, maxMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, type DeskVideos } from './desk-model';
 
 export interface DeskSettingsHooks {
   /** Opens the Team tab ("Edit team"). */
@@ -181,7 +181,7 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
     keep.disabled = videos === null;
     limit.disabled = videos === null;
     if (document.activeElement !== limit) {
-      limit.value = videos === null || videos.limitMb === 0 ? '' : String(videos.limitMb);
+      limit.value = videos === null || videos.maxMb === 0 ? '' : String(videos.maxMb);
     }
     confirmBox.replaceChildren();
     confirmBox.hidden = !confirming;
@@ -243,13 +243,13 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
     }
   });
   limit.addEventListener('change', () => {
-    const mb = limitMbOf(limit.value);
+    const mb = maxMbOf(limit.value);
     if (mb === null) {
       videoError = 'The largest video is a whole number of megabytes';
       paintVideos();
       return;
     }
-    void patchVideos({ limitMb: mb });
+    void patchVideos({ maxMb: mb });
   });
 
   const loadPersonas = async (): Promise<void> => {

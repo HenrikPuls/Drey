@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PipelinePhase } from '../../../../packages/tickets-engine/src/contracts/tickets';
 import type { PersonaView } from '../../shared/remote-protocol';
-import { budgetLineOf, limitMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, usd } from './desk-model';
+import { budgetLineOf, maxMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, usd } from './desk-model';
 
 const persona = (id: string, extra: Partial<PersonaView> = {}): PersonaView => ({
   id,
@@ -45,9 +45,9 @@ describe('desk settings model', () => {
   });
 
   it('reads the engine settings answer tolerantly', () => {
-    expect(parseDeskVideos({ ok: true, devices: [], engine: { videos: { inGit: true, limitMb: 25, existing: 3, notice: 'x' } } })).toEqual({
+    expect(parseDeskVideos({ ok: true, devices: [], engine: { videos: { inGit: true, maxMb: 25, existing: 3, notice: 'x' } } })).toEqual({
       inGit: true,
-      limitMb: 25,
+      maxMb: 25,
       existing: 3,
       notice: 'x',
     });
@@ -57,9 +57,9 @@ describe('desk settings model', () => {
   });
 
   it('parses the largest-video field as whole megabytes', () => {
-    expect(limitMbOf(' 25 ')).toBe(25);
-    expect(limitMbOf('')).toBeNull();
-    expect(limitMbOf('2.5')).toBeNull();
-    expect(limitMbOf('-3')).toBeNull();
+    expect(maxMbOf(' 25 ')).toBe(25);
+    expect(maxMbOf('')).toBeNull();
+    expect(maxMbOf('2.5')).toBeNull();
+    expect(maxMbOf('-3')).toBeNull();
   });
 });

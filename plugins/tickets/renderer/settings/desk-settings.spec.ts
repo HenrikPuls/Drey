@@ -4,7 +4,7 @@ import type { DreyPluginApi } from '../../../../shared/plugin-api/renderer';
 import type { BoardSnapshot } from '../../shared/tickets';
 import { createDeskSettings } from './desk-settings';
 
-const videos = (inGit: boolean, limitMb = 25, existing = 0) => ({ ok: true, devices: [], engine: { videos: { inGit, limitMb, existing, notice: null } } });
+const videos = (inGit: boolean, maxMb = 25, existing = 0) => ({ ok: true, devices: [], engine: { videos: { inGit, maxMb, existing, notice: null } } });
 
 function setup(settingsReply: unknown = videos(false)) {
   const invoke = vi.fn((method: string) => {
@@ -85,7 +85,7 @@ describe('Settings → Tickets desk rows', () => {
     limit.value = '60';
     limit.dispatchEvent(new Event('change'));
     await settle();
-    expect(invoke).toHaveBeenCalledWith('settingsPatch', { limitMb: 60 });
+    expect(invoke).toHaveBeenCalledWith('settingsPatch', { maxMb: 60 });
     limit.value = 'many';
     limit.dispatchEvent(new Event('change'));
     expect(desk.root.textContent).toContain('whole number of megabytes');
