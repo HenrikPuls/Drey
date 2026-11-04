@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { ToolbarContributionsService } from '../plugin-host';
 import { MarkdownToolbar } from './markdown-toolbar';
-import { ToolbarAction } from './toolbar-commands';
+import { ToolbarAction } from '@markdown-surface/toolbar-commands';
 
 /**
  * The formatting strip (req-41): nine buttons with the rare commands

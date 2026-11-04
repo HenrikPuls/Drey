@@ -27,8 +27,8 @@ import { ImageLightboxService } from '../../image-viewer';
 import { VaultService } from '../../vault';
 import { ThemeService } from '../../services/theme.service';
 import { ThemeCatalogEntry } from '../themes/theme-catalog';
-import { dreyEditorLook, dreyFallbackStyle, editorStructure, headingTypographyStyle } from '../editor-theme';
-import { editorIndentation } from '../editor-indent';
+import { dreyEditorLook, dreyFallbackStyle, editorStructure, headingTypographyStyle } from '@markdown-surface/editor-theme';
+import { editorIndentation } from '@markdown-surface/editor-indent';
 import { imagePaste, ImagePasteConfig, insertImageFiles } from '../image-paste';
 import {
   frontmatterExpandedOf,
@@ -36,19 +36,19 @@ import {
   refreshFrontmatterView,
   setFrontmatterExpanded,
 } from '../frontmatter-fold';
-import { livePreview } from '../live-preview';
-import { extendedMarkdown } from '../markdown-extensions';
+import { livePreview } from '@markdown-surface/live-preview';
+import { extendedMarkdown } from '@markdown-surface/markdown-extensions';
 import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellcheck/spellcheck';
-import { linkActivation } from '../link-open';
+import { linkActivation } from '@markdown-surface/link-open';
 import { WikilinkService, makeWikilinkCompletionSource, wikilinks } from '../wikilinks';
 import { pasteUrlAsMarkdownLink } from '../paste-link';
-import { assetUrlToVaultPath, resolveHelpImageCandidates, resolveVaultImageCandidates } from '../vault-image';
+import { assetUrlToVaultPath, resolveHelpImageCandidates, resolveVaultImageCandidates } from '@markdown-surface/vault-image';
 import { makeTagCompletionSource, tagPills, tagStyleRefresh } from '../tags';
 import { makeWordCompletionSource } from '../word-completion';
 import { makeEmojiCompletionSource } from '../emoji';
-import { ToolbarAction } from '../toolbar-commands';
-import { dispatchToolbarAction } from '../toolbar-dispatch';
-import { eraseFormatting } from '../erase-formatting';
+import { ToolbarAction } from '@markdown-surface/toolbar-commands';
+import { dispatchToolbarAction } from '@markdown-surface/toolbar-dispatch';
+import { eraseFormatting } from '@markdown-surface/erase-formatting';
 import { makeSlashCommandSource } from '../slash-commands';
 import { EmojiPickerService } from '../../emoji-picker/emoji-picker.service';
 import { loadEmojiRecents } from '../../emoji-picker/emoji-recents';

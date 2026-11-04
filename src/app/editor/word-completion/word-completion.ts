@@ -1,6 +1,6 @@
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import type { Text } from '@codemirror/state';
-import { inCompletableText, markdownContextAt } from '../markdown-context';
+import { inCompletableText, markdownContextAt } from '@markdown-surface/markdown-context';
 
 /**
  * Word completion: repeat what the note already says. The vocabulary is the

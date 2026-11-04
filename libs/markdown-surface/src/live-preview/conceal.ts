@@ -5,7 +5,7 @@ import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@
 import { parseCalloutMarker } from '../../../../shared/markdown/callouts';
 import { emojiFor } from '../../../../shared/markdown/emoji';
 import { frontmatterEnd } from '../markdown-frontmatter';import { footnoteNumbers } from '../markdown-extensions';
-import { extractWikilinks } from '../wikilinks/wikilink';
+import { extractWikilinks } from '../wikilink';
 import { fenceLang } from './fenced-code';
 import {
   CalloutTitleWidget,

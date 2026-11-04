@@ -10,7 +10,7 @@ import type { LinkLocation, NoteIndex } from '../../../../shared/wikilinks';
 import { SettingsService } from '../../services/settings.service';
 import { EditorService, docKey } from '../../services/editor.service';
 import { VaultService } from '../../vault';
-import type { WikilinkCandidate, WikilinkHint } from './wikilink';
+import type { WikilinkCandidate, WikilinkHint } from '@markdown-surface/wikilink';
 
 /**
  * Resolves and follows `[[wikilinks]]` (req-20). The note index is derived

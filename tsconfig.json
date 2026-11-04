@@ -14,7 +14,8 @@
     "target": "ES2022",
     "module": "preserve",
     "paths": {
-      "@mission-ui/*": ["./libs/mission-ui/src/*"]
+      "@mission-ui/*": ["./libs/mission-ui/src/*"],
+      "@markdown-surface/*": ["./libs/markdown-surface/src/*"]
     }
   },
   "angularCompilerOptions": {

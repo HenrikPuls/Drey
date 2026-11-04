@@ -8,7 +8,7 @@ import { clampEmbedWidth, parseImageEmbed, setEmbedWidth } from '../../../../sha
 import { applyExtendedMarkdown } from '../../../../shared/markdown/markdown-it-extended';
 import { frontmatterEnd } from '../markdown-frontmatter';
 import { highlightFence } from '../preview-highlight';
-import { extractWikilinks } from '../wikilinks/wikilink';
+import { extractWikilinks } from '../wikilink';
 import { fenceLang } from './fenced-code';
 import { MathWidget } from './math-widget';
 import { htmlTagBalance, sanitizeHtml } from './sanitize-html';

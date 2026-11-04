@@ -1,7 +1,7 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { livePreview } from './index';
+import { livePreview } from '@markdown-surface/live-preview/index';
 
 /**
  * The `.lp-resize` grip drag: a real `EditorView` over a live-preview

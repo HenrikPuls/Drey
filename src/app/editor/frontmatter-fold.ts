@@ -1,7 +1,7 @@
 import { EditorState, Extension, Range, StateEffect, StateField } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, WidgetType } from '@codemirror/view';
 import type { FrontmatterViewContrib } from '../../../shared/plugin-api/renderer';
-import { frontmatterEnd } from './markdown-frontmatter';
+import { frontmatterEnd } from '@markdown-surface/markdown-frontmatter';
 
 /**
  * Folds the leading YAML frontmatter behind a clickable pill (`▸ Frontmatter`)

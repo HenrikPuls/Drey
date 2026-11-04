@@ -1,7 +1,7 @@
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import type { Extension } from '@codemirror/state';
 import { tags as t } from '@lezer/highlight';
-import { dreyEditorTheme } from '../editor-theme';
+import { dreyEditorTheme } from '@markdown-surface/editor-theme';
 
 /**
  * The **Cyberpunk** editor look: the token-driven Drey surface (so the

@@ -2,7 +2,7 @@ import { syntaxTree } from '@codemirror/language';
 import type { SyntaxNode } from '@lezer/common';
 import { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { frontmatterEnd } from './markdown-frontmatter';
+import { frontmatterEnd } from '@markdown-surface/markdown-frontmatter';
 
 /**
  * Paste a URL onto an empty selection and get a Markdown link

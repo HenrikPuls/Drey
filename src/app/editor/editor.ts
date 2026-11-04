@@ -28,12 +28,12 @@ import { PaneService } from '../panes/pane.service';
 import { SettingsService } from '../services/settings.service';
 import { SpellcheckService } from '../services/spellcheck.service';
 import { Icon } from '../icons/icon';
-import { resolveVaultLinkPath } from './link-open';
+import { resolveVaultLinkPath } from '@markdown-surface/link-open';
 import { EditorPrefsService } from './editor-prefs.service';
 import { WikilinkService } from './wikilinks';
 import { MarkdownSurface } from './markdown-surface/markdown-surface';
 import { MarkdownToolbar } from './markdown-toolbar';
-import { caretLineText } from './toolbar-dispatch';
+import { caretLineText } from '@markdown-surface/toolbar-dispatch';
 
 /**
  * One pane's document editor (ADR-0037): hosts one `MarkdownSurface` (the

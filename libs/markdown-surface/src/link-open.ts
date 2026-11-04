@@ -2,7 +2,7 @@ import { syntaxTree } from '@codemirror/language';
 import { EditorState, Extension, Range } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { frontmatterEnd } from './markdown-frontmatter';
-import { extractWikilinks } from './wikilinks/wikilink';
+import { extractWikilinks } from './wikilink';
 import { normalizeRelative } from './vault-image';
 
 /**

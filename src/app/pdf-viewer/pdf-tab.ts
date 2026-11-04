@@ -6,7 +6,7 @@ import {
   input,
 } from '@angular/core';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
-import { resolveVaultImageUrl } from '../editor/vault-image';
+import { resolveVaultImageUrl } from '@markdown-surface/vault-image';
 
 /**
  * One pane's view for a `kind: 'pdf'` tab (ADR-0052), picked over

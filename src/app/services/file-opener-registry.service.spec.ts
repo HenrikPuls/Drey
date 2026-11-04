@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { DreyApi } from '../../../shared/ipc-api';
-import { refreshChangedAssets, resolveVaultImageUrl } from '../editor/vault-image';
+import { refreshChangedAssets, resolveVaultImageUrl } from '@markdown-surface/vault-image';
 import { ToolbarContributionsService } from '../plugin-host';
 import { EditorService } from './editor.service';
 import { FileOpenerRegistry } from './file-opener-registry.service';

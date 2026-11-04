@@ -8,7 +8,7 @@ import {
   OnDestroy,
   viewChild,
 } from '@angular/core';
-import { resolveVaultImageUrl } from '../editor/vault-image';
+import { resolveVaultImageUrl } from '@markdown-surface/vault-image';
 import { EditorService } from '../services/editor.service';
 import { ImageViewer } from './image-viewer';
 import { ImageLightboxService } from './image-lightbox.service';

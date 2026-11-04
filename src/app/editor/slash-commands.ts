@@ -1,8 +1,8 @@
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import { EditorSelection } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { inCompletableText, markdownContextAt } from './markdown-context';
-import { applyAction, ToolbarAction } from './toolbar-commands';
+import { inCompletableText, markdownContextAt } from '@markdown-surface/markdown-context';
+import { applyAction, ToolbarAction } from '@markdown-surface/toolbar-commands';
 
 /**
  * The `/` selection dialog: typing a `/` at a line start or after whitespace

@@ -18,7 +18,7 @@ import type { ToolbarButtonContrib } from '../../../shared/plugin-api/renderer';
 import { Icon, IconName } from '../icons/icon';
 import { KeybindingService } from '../keybindings';
 import { ToolbarContributionsService } from '../plugin-host';
-import { ParagraphStyle, ToolbarAction, paragraphStyleOf } from './toolbar-commands';
+import { ParagraphStyle, ToolbarAction, paragraphStyleOf } from '@markdown-surface/toolbar-commands';
 
 type MenuId = 'host' | 'paragraph' | 'format' | 'list' | 'table' | 'insert' | 'plugin';
 

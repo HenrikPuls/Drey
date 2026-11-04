@@ -1,6 +1,6 @@
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import { emojiFor, searchEmojiNames } from '../../../../shared/markdown/emoji';
-import { inCompletableText, markdownContextAt } from '../markdown-context';
+import { inCompletableText, markdownContextAt } from '@markdown-surface/markdown-context';
 
 /**
  * `:shortcode:` completion over the curated gemoji table (milestone 72,

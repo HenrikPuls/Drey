@@ -40,7 +40,7 @@ import { EditorContextMenuService } from './editor-context-menu/editor-context-m
 import { EditorContextMenuRegistry } from './plugin-host';
 import { EditorPrefsService } from './editor/editor-prefs.service';
 import { ZenService } from './services/zen.service';
-import { eraseFormatting } from './editor/erase-formatting';
+import { eraseFormatting } from '@markdown-surface/erase-formatting';
 import { EditTargetService } from './services/edit-target.service';
 import { installLinkNavigationGuard } from './services/link-navigation-guard';
 import { EmojiPicker } from './emoji-picker/emoji-picker';
