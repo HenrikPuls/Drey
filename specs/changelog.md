@@ -1,3 +1,67 @@
+### Milestone 153 — E14-3: the ticket migration tool
+
+**Not yet manually verified by the owner.** Owner request 2026-11-04 (roadmap
+E14-3, ADR-0090, `docs/design/dricket/migration-plan.md`). A CLI-style tool in
+`packages/tickets-engine/src/migrate/`, no UI, no engine wiring: it reads a
+legacy tickets vault **read-only** and writes only into a **scratch** dricket
+store, through the installed `dk` (v0.6.0). Nothing in the running system
+changed; `drey-tickets` and `~/.drey-engine` were only read.
+
+- **Run it:** `node scripts/migrate-tickets.mjs --legacy <vault> --allow <ids.txt>`
+  (dry run, the default), `... --apply --store <new dir> [--report <file>]`,
+  `... --reverse --store <dricket store> --out <new dir>`. The allow-list is a
+  text file of ticket ids (`docs/design/dricket/migrate-allow-list.txt` is the
+  owner's triage list: 22 ids). Needs `npm run build:plugins`.
+- **Reader** (`legacy-vault.ts`): phase folders and `archive/`, raw YAML header,
+  body verbatim; unreadable files are listed, not hidden (the real vault has one:
+  `archive/T-0084.md`, no front matter fence -- the "91 vs 90 files" of the plan).
+- **Converter** (`convert.ts`, pure): `T-0063` -> `t-63`, phase -> stage (variant A),
+  Drey-only keys -> `x-` fields (`chain` `;`-joined, other lists `, `-joined),
+  `blocked-by` -> `depends` (an id outside the migrated set is removed, kept in
+  `x-legacy-blocked-by`, noted in a dk comment), title over 200 characters
+  shortened with the full text prepended to the description, unknown priority ->
+  default + `x-legacy-priority`, `../attachments/` links rewritten. Live state
+  (`run`, `claimed-by/at`) is not migrated and **blocks the apply** (a run stamp, a
+  claim in build) unless `--allow-live-runs`. Deviation from the plan table:
+  `interactive` is carried as `x-interactive` (a per-ticket setting, not run state);
+  `x-legacy-commit` is not carried (the history is cut, the old repo keeps it).
+- **Apply** (`apply.ts`): refuses a store that is, is inside or contains the legacy
+  vault, and a store that is not empty; `dk init` + the scratch `dricket.toml`
+  (`[stages]` = Drey's phases, Drey's priorities, quota 0) on `main`; per ticket
+  `dk add --unclaimed` then one `dk put --claim --if-version` of the document `dk`
+  itself produced, patched (`dricket-doc.ts`) with stage, branch, repos, `x-` fields
+  and the legacy body. **dk v0.6.0 gap (R-26 in `dricket-requirements.md`):** no
+  import and no way to choose the number or `created_at`/`created_by`; so gaps are
+  filled with cancelled `placeholder` tickets (the 22 real tickets need 69) and the
+  legacy creation data travels as `x-created-at`/`x-created-by`. Nothing of dricket
+  is re-implemented; `put` and `validate` judge every document.
+- **Report** (`report.ts`): the dry run prints per ticket the target (id, stage,
+  priority, kind, depends, x-fields, body size), warnings and what cannot be carried;
+  `--report` writes a Markdown report with the apply outcome and the shadow diff.
+- **Shadow diff input** (`shadow-diff.ts`): `rowsFromLegacy`, `rowsFromRecords`,
+  `collectStoreRows` (list + `show` per ticket: dk v0.6.0's `ls` still lacks
+  `depends`/`x-` fields, R-05) and `shadowDiff(legacy, store)` -- set, stage, title,
+  priority, depends sets, derived column order; dangling blockers are *declared*, not
+  differences. E14-2's shadow mode feeds the same `BoardRow`s.
+- **Reverse converter** (`reverse.ts`): a dricket document -> the legacy file text
+  (typed back: `rank`, `interactive`, lists), comments appended to `## Log` as one line
+  each, a `lost` list per ticket (labels, touches, lease/epoch of a claim). The
+  rollback of migration-plan §5.
+- **Tests** (42, `migrate/*.spec.ts`): converter table over a fixture vault of real
+  and realistic legacy tickets (`fixtures/legacy-vault/`: dangling blocker, run stamp,
+  build claim, odd priority, over-long title, archive, unreadable file); pure round
+  trip legacy -> dricket -> legacy' on every fixture; shadow diff; the guard; and,
+  against the **real dk 0.6.0** in a temp dir with a temp HOME (skipped with a printed
+  reason when dk is missing), apply + `dk validate` + shadow diff + round trip through
+  `dk show`. `DREY_DK_BIN` selects the binary. The E14-1 contract spec got a 60 s timeout (it flaked under load beside this one).
+- **Docs:** docs/06 section 6.93, docs/05, `dricket-requirements.md` (R-26, R-10
+  status).
+- **Real run** (scratch store, temp HOME, short path -- a Windows path over ~120 characters breaks git on dricket's comment files, so the apply refuses it): the 22 triaged tickets applied in ~8 min, 91 tickets incl. 69 placeholders, `dk validate` ok, shadow diff identical (1 declared), reverse wrote 22 files back.
+- **Real dry run** of the 22 triaged tickets against `drey-tickets` (read-only):
+  22 migrate, 69 placeholders, `T-0030` blocks the apply (run stamp), `T-0017`'s dangling
+  blocker is removed with a warning. Not done: the cut-over apply into the real
+  `drey-board` (E14-7), the pipeline/meta repo split, `dricket.toml` through a PR.
+
 ### Milestone 151 — E14-1: the `TicketStore` port and the first dricket slice
 
 **Not yet manually verified by the owner.** Owner request 2026-11-04 (roadmap

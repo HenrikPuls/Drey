@@ -4261,3 +4261,43 @@ sequenceDiagram
 Reads (`list`, `show`) take the same path without the write turn and with a
 30 s timeout. A `claim-lost` (13) on any later write is the signal for the
 fleet to stop the worker (E14-5).
+
+## 6.93 Migrating the legacy tickets into a scratch dricket store (E14-3, milestone 153)
+
+`scripts/migrate-tickets.mjs` reads a legacy tickets vault (read-only), converts the
+owner's allow-listed tickets and, on request, writes them into a **scratch** dricket
+store through `dk` (v0.6.0). The dry run is the default and touches nothing.
+
+```mermaid
+sequenceDiagram
+    participant O as Owner (CLI)
+    participant L as legacy-vault.ts (read only)
+    participant C as convert.ts (pure)
+    participant A as apply.ts
+    participant D as dk --json (scratch store)
+    O->>L: readLegacyVault(drey-tickets)
+    L-->>C: tickets (raw header, body verbatim) + unreadable files
+    O->>C: buildPlan(allow-list)
+    C-->>O: per ticket: target, warnings, dropped, blocking; placeholder numbers
+    Note over O: dry run stops here (prints the plan)
+    O->>A: --apply --store <new dir>
+    A->>A: refuse the legacy vault itself / overlap / non-empty store
+    A->>D: dk init + dricket.toml on main ([stages], priorities, quota 0)
+    loop each number 1..highest, ascending
+        alt number not migrated (R-26 gap)
+            A->>D: dk add --unclaimed (placeholder), dk put --claim -> cancelled
+        else migrated ticket
+            A->>D: dk add --unclaimed --kind --priority -m title
+            D-->>A: id (must equal the expected t-N, else stop)
+            A->>D: dk show -> patch stage/branch/repos/x- fields + legacy body
+            A->>D: dk put --claim --if-version rev (dk lints, one commit)
+            A->>D: dk comment (only when a blocker was removed)
+        end
+    end
+    A->>D: ls + show per ticket -> shadowDiff(legacy rows, store rows)
+    A-->>O: report.md (moved, skipped and why, warnings, diff)
+    Note over O,D: rollback: --reverse reads dk show per ticket and writes legacy files into a fresh directory
+```
+
+The tool never writes to the legacy vault and refuses to apply a plan that contains a
+live-run stamp or a claim in build unless told to (`--allow-live-runs`).

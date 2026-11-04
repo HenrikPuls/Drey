@@ -35,6 +35,7 @@ structs, `dk` itself was not run (see `fit-analysis.md` §0).
 | R-21 | `release -m` can delete other body chapters | Needed (data-loss hazard) |
 | R-15 | `validate` cost grows with history | Needed |
 | R-24 | One-step change under a short claim (`dk commit --release`, optionally with the claim taken in the same call) | Needed (alternative to R-02 / R-04) |
+| R-26 | Create a ticket with a chosen number and creation data (the small form of R-10) | **Blocks** a clean migration (E14-3 works around it) |
 | R-11 | Per-ticket attachments | Nice |
 | R-14 | Batch mode (one process, many operations) and multi-ticket commits | Nice |
 | R-16 | Hook / pre-receive template to refuse non-`dk` commits | Nice |
@@ -159,6 +160,8 @@ round trip is two commits and raises `epoch` twice.
 
 ### R-10 Import that preserves id, creation data and stage
 
+**Status 2026-11-04: not in dricket v0.6.0** (`dk help` has no `import`; `add` has no `--id`). E14-3 works around it with placeholders and `x-created-*`; the small form is R-26.
+
 **Drey needs.** Migrating 27 live tickets (and optionally 64 archived) with
 `T-0063` -> `t-63` (numbers preserved), original `created_at`/`created_by`, the
 right stage, and the body byte for byte.
@@ -181,6 +184,32 @@ on a fresh or empty prefix:
 
 Without this the migration must renumber (breaks the id continuity the owner
 asked for) or create 90 placeholder tickets.
+
+### R-26 Create a ticket with a chosen number and creation data
+
+**Found 2026-11-04 by E14-3 (migration tool) against dk v0.6.0.** R-10 (import) did not ship in
+v0.6.0, and the smallest form of it is enough for Drey: creating one ticket whose number and
+creation data the caller chooses.
+
+**Drey needs.** `T-0063` -> `t-63` with the legacy `created_at` / `created_by`, the stage the
+ticket was in and `rev` 1, without a pile of filler tickets.
+
+**Today (v0.6.0).** `dk add` allocates `max + 1` and stamps now and the caller (no `--id`,
+`--created-at`, `--created-by`); `dk put t-63 -F f` on a number that does not exist answers
+exit 10 (`precondition failed: ... not found`). The migration therefore fills every gap below
+the highest migrated number with a cancelled placeholder ticket (label `placeholder`, two
+commits each): the real 22-ticket list needs 69 of them for `t-91`. The legacy creation data
+travels as `x-created-at` / `x-created-by`.
+
+**Proposal.** `dk put <id> -F <file> --create` (admin only, like `--force`): the document names
+the id (any unused number of a registered prefix), `created_at`, `created_by`, `stage` and `x-`
+fields; dk validates it with the full lint, writes ONE commit, `rev` 1, `epoch` 0, and the
+next `add` is still `max + 1`. Same secret scan and size limits as `put`; the quota does not
+apply to an admin import. `--dry-run` prints what would be written. (`dk import` per R-10 is
+the batch form of the same thing; either closes this.)
+
+**Effect on Drey.** `apply.ts` creates tickets directly with `put --create` and drops the
+placeholder pass; the creation data is real instead of `x-created-*`.
 
 ### R-13 Windows is a supported platform
 

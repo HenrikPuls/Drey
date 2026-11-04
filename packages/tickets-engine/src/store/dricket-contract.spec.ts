@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { TicketStoreError } from '../ports/ticket-store';
 import { assertDkVersion, defaultExec, DkProcess, MIN_DK_VERSION, type ExecFn } from './dk-process';
@@ -17,6 +17,9 @@ import { DricketTicketStore } from './dricket-ticket-store';
  *   DREY_CAPTURE_DK_FIXTURES=1      also rewrite fixtures/dk-v<version>/*.json
  *                                   from this run's raw output
  */
+// Real processes: each dk call takes seconds on a loaded Windows machine (the migrate spec runs beside this one).
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
 const bin = process.env['DREY_DK_BIN'] ?? 'dk';
 
 function probe(): { ok: true; version: string } | { ok: false; reason: string } {
