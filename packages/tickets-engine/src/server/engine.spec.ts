@@ -92,6 +92,45 @@ describe('createEngine', () => {
     await expect(fsp.stat(path.join(vault, created.path!))).rejects.toThrow();
   });
 
+  it('reports the files a move wrote on the plugin-only paths channel and SSE stream (D-3)', async () => {
+    const created = (await engine.invoke('createTicket', { title: 'Paths', priority: 'normal', repo: null, description: '' })) as {
+      id: string;
+      path: string;
+    };
+    const reports: { vaultPath: string; changed: readonly string[]; deleted: readonly string[] }[] = [];
+    const off = engine.onPaths((change) => reports.push(change));
+    const frames: string[] = [];
+    const controller = new AbortController();
+    const stream = await fetch(`${engine.invokeUrl}/api/events`, {
+      headers: { authorization: `Bearer ${engine.token}` },
+      signal: controller.signal,
+    });
+    void (async () => {
+      try {
+        for await (const chunk of stream.body as unknown as AsyncIterable<Uint8Array>) {
+          frames.push(new TextDecoder().decode(chunk));
+        }
+      } catch {
+        // aborted
+      }
+    })();
+    const moved = (await engine.invoke('transition', { id: created.id, from: 'inbox', to: 'build' })) as { ok: boolean; path: string };
+    expect(moved.ok).toBe(true);
+    const deadline = Date.now() + 3_000;
+    while (!frames.join('').includes('"change":"paths"') && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    off();
+    controller.abort();
+    // The move names the new file as changed and the old one as deleted.
+    const changed = reports.flatMap((r) => r.changed);
+    const deleted = reports.flatMap((r) => r.deleted);
+    expect(changed).toContain(moved.path);
+    expect(deleted).toContain(created.path);
+    expect(reports[0]?.vaultPath).toBe(vault);
+    expect(frames.join('')).toContain('"change":"paths"');
+  });
+
   it('round-trips config through the sync channel', async () => {
     await engine.invoke('configSet', { key: 'defaultWorker', value: 'claude-code' });
     expect(await engine.invoke('configGet', { key: 'defaultWorker' })).toBe('claude-code');

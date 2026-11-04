@@ -161,6 +161,32 @@ export class ChangeHub {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
+
+  private readonly pathListeners = new Set<(change: PathsChange) => void>();
+
+  /**
+   * The files an engine write touched (G-08 / D-3). Deliberately NOT a
+   * RemoteChange: the gateway and the phone never see it -- only the Drey
+   * plugin's own event stream carries it, to tell Drey's vault layer.
+   */
+  emitPaths(change: PathsChange): void {
+    for (const listener of [...this.pathListeners]) {
+      listener(change);
+    }
+  }
+
+  subscribePaths(listener: (change: PathsChange) => void): () => void {
+    this.pathListeners.add(listener);
+    return () => this.pathListeners.delete(listener);
+  }
+}
+
+/** Vault-relative paths one engine write changed / removed (a move = both). */
+export interface PathsChange {
+  /** Absolute root of the vault the engine hosts, so Drey can match its own registration. */
+  readonly vaultPath: string;
+  readonly changed: readonly string[];
+  readonly deleted: readonly string[];
 }
 
 export interface DreyPortOptions {

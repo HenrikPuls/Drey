@@ -20,7 +20,7 @@ import { VideoService } from '../services/video-service';
 import { FilePlanShadowStore } from '../services/plan-shadow';
 import { FleetEventWriter, statusPathFor } from '../fleet/event-writer';
 import type { FleetEvents } from '../fleet/orchestrator';
-import { ChangeHub, DreyTicketsPort } from './drey-port';
+import { ChangeHub, DreyTicketsPort, type PathsChange } from './drey-port';
 import { FileConfigStore } from './file-config';
 import { RemoteService } from './service';
 import { FsEngineHost } from './standalone-host';
@@ -59,6 +59,8 @@ export interface Engine {
   config: FileConfigStore;
   invoke(method: string, payload?: unknown): Promise<unknown>;
   onEvent(listener: (what: 'board' | 'fleet' | 'remote' | 'chat', payload?: ChatChangePayload) => void): () => void;
+  /** The files engine writes touched (D-3): the plugin-only paths channel. */
+  onPaths(listener: (change: PathsChange) => void): () => void;
   close(): Promise<void>;
 }
 
@@ -324,10 +326,14 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
       const unsubscribe = hub.subscribe((what, payload) => {
         res.write(`data: ${JSON.stringify(payload === undefined ? { change: what } : { change: what, ...payload })}\n\n`);
       });
+      const unsubscribePaths = hub.subscribePaths((change) => {
+        res.write(`data: ${JSON.stringify({ change: 'paths', ...change })}\n\n`);
+      });
       const keepAlive = setInterval(() => res.write(`: keep-alive\n\n`), 25_000);
       req.on('close', () => {
         clearInterval(keepAlive);
         unsubscribe();
+        unsubscribePaths();
       });
       return;
     }
@@ -379,6 +385,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
       return fn(payload);
     },
     onEvent: (listener) => hub.subscribe((what, payload) => listener(what, payload)),
+    onPaths: (listener) => hub.subscribePaths(listener),
     close: async () => {
       if (closed) {
         return;

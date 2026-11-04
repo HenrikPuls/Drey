@@ -44,6 +44,7 @@ import { startWindowsDictation } from './dictation';
 import { createFleetMcpTools } from './mcp-tools';
 import { listWorkerModels } from './worker-models';
 import { EngineClient } from './engine-client';
+import { PathAnnouncer } from './path-announcer';
 import { ensureEngine, syncChatConfig } from './engine-lifecycle';
 import { MissionControlHost, createMissionControlView } from './mission-control';
 
@@ -52,6 +53,7 @@ function messageOf(error: unknown): string {
 }
 
 let engineEvents: (() => void) | null = null;
+let pathAnnouncer: PathAnnouncer | null = null;
 let missionControl: MissionControlHost | null = null;
 
 const plugin: MainPluginModule = {
@@ -63,6 +65,8 @@ const plugin: MainPluginModule = {
     missionControl = null;
     engineEvents?.();
     engineEvents = null;
+    pathAnnouncer?.dispose();
+    pathAnnouncer = null;
   },
 
   async activate(ctx: MainPluginContext) {
@@ -104,9 +108,22 @@ const plugin: MainPluginModule = {
         priorities = snap.priorities;
       })
       .catch(() => undefined);
-    engineEvents = client.onEvent((what) => {
-      ctx.ipc.emit(what === 'board' ? 'board-changed' : what === 'fleet' ? 'fleet-changed' : 'remote-changed');
+    // D-3: the engine is a separate process and Drey's watcher is off by
+    // default -- the engine reports the files it wrote, and this tells the
+    // vault layer (Files tree, indexes, open tabs) in one batched round.
+    pathAnnouncer = new PathAnnouncer({
+      listVaults: () => ctx.vault.listVaults(),
+      announce: (payload) => ctx.vault.announceChanges(payload),
+      log: ctx.log,
     });
+    const announcer = pathAnnouncer;
+    engineEvents = client.onEvent(
+      (what) => {
+        ctx.ipc.emit(what === 'board' ? 'board-changed' : what === 'fleet' ? 'fleet-changed' : 'remote-changed');
+      },
+      undefined,
+      (event) => announcer.add(event),
+    );
     void fleet.startPolling();
     void board.worktreeBootSweep().catch((error: unknown) => ctx.log(`engine boot sweep: ${messageOf(error)}`, 'warn'));
     ctx.ipc.handle('remoteStatus', () => remoteService.status());
