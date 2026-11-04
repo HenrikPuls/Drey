@@ -447,6 +447,32 @@ The **Assistant panel** is chat-first:
 
 ![The chat picker](img/assistant-chat-picker.png)
 
+### Conversation targets {#assistant-targets}
+
+When the Tickets plugin is on, the Assistant head carries a segmented
+control: **Model**, **Mission Control** and **1:1**.
+
+- **Model** is the chat described here: the provider from Settings →
+  Assistant, with the composer's chips and tools.
+- **Mission Control** is the team's contact (Pia). It knows the board and
+  proposes changes as cards with **Confirm** and **Dismiss**; nothing changes
+  until you confirm. A question from Paul, the planner, appears as a card
+  above the composer — tap an answer to send it — and his words carry the
+  *via Mission Control* chip. Mission Control needs an HTTP provider (LM
+  Studio, an OpenAI-compatible server, OpenRouter, the Anthropic API or
+  Z.ai GLM); with a CLI provider it answers with an error card saying so.
+  The head's list button opens the earlier Mission Control chats, `+`
+  starts a new one.
+- **1:1** opens a menu of the team's agent personas. Your messages go into
+  that persona's thread, which the persona reads before the next run.
+
+A view can name its own default target: switching to such a view switches the
+Assistant with it; Notes always starts on Model. Your own pick stays until you
+change the view.
+
+The **microphone** button in the composer dictates into the field (hidden
+where the system offers no speech input); read the text, then send it.
+
 ### Asking about a selection
 
 Select text in a note and a small assistant button appears next to the
@@ -901,9 +927,37 @@ shows again. At the very end the **Cost** table lists every settled run
 of `## Verlauf` (phase, model, tokens, time, cost) with the total.
 Under it the **action bar**: *Send back…* and *Accept and move to
 <next column>* while the ticket waits at one of your checkpoints, and
-always *Thread* (the agent's thread of the ticket) and *Open Review*
-(the result card and the changes in that thread — the Review tab is
-still to come).
+always *Thread* (the agent's thread of the ticket) and *Open Review*.
+
+**The Review tab.** *Open Review* opens a tab **Review · T-0121** with the
+ticket's proof on top (the same block as in the document) and the changes
+of its branch below: one chip per file with its +/− counts, then the
+selected file's lines. Switch between *Changes* and *Whole file*, tick
+*Viewed* when you have read a file (the summary says *3 files · 1 of 3
+viewed*; a file that changed since stays unviewed), *Open in editor* to
+read it in a normal tab at that line and *Git history* for the file's
+history — both need the ticket's worktree to be inside a vault you have
+added; otherwise *Open in editor* opens a copy. Click a **line number** to
+comment on that line, Shift-click a second number for a range, then add
+the comment (Ctrl+Enter). The footer button names how many you wrote:
+**Send back with 2 comments** moves the ticket back to the agent with each
+comment (file, line, text) in its Handover, so the next run reads them;
+**Accept and move to Commit** accepts as on the Ready card. Both show only
+while the ticket waits at one of your checkpoints.
+
+**The Flow tab.** *Change flow* under the chain in a ticket's header
+opens **Flow · T-0121**: the gates the ticket will still pass, each with who
+works it and on which model. Click a gate to open its settings on the right:
+who works it (the pipeline's default or one persona), *Tell me when it is
+done*, *Earlier* / *Later*, *Add a gate after* and *Remove gate* (a standard
+gate is struck, not deleted; *Restore gate* brings it back). The round **+**
+between two gates adds a gate there. A gate drawn with a dashed outline is a
+change you have not saved. Type into *Ask Paul to change this flow* (or leave
+it empty) and press *Ask Paul* to get his draft with the reason, *Undo draft*
+if you do not like it. Nothing is written until **Save flow**; *Reset to
+standard flow* drops every change. The gate that is running and the ones
+before it cannot change, and the whole flow is read-only while a run is live
+on the ticket.
 
 **By voice.** On Windows the dialog's Description label carries a
 **mic button**: it starts Windows dictation (Win+H — Windows' own;
@@ -1436,9 +1490,25 @@ And the assistant can drive runs: ask it about the fleet — it sees
 `fleet_watch` through Drey's MCP server.
 
 
+### The Tickets settings page
+
+Settings → Tickets starts with the things you decide about the team:
+**Team** shows the personas as chips (you are *You*); *Edit team* opens the
+Team tab. **Default flow** shows the standard flow, the columns an agent
+works with who does each; a flow is changed per ticket, so pick a ticket
+next to *Open flow editor* to open its Flow tab (the standard flow itself is
+set below, in the pipeline table). **Budget and runners** shows the daily
+budgets of the personas added up with today's spending, and how many runs
+each runner takes at once; *Manage* jumps to the runner settings.
+**Walkthrough videos** has *Keep in Git* (off: videos are large and stay in
+the history once committed — switching it on asks first and can include the
+videos already there) and *Largest video* in MB. Under **Mission Control on
+other devices** you pair a phone or tablet and revoke it again (below). The
+pipeline, prompts, fleet and workers follow under *Pipeline and workers*.
+
 ### The board from a phone or tablet
 
-Settings → Tickets → **Remote access** offers the board to a phone or
+Settings → Tickets → **Mission Control on other devices** offers the board to a phone or
 tablet on your network or over Tailscale. It is off until you switch
 it on, and only devices you pair get in.
 

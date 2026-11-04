@@ -362,7 +362,7 @@
   cursor: pointer;
   background: var(--border-strong);
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 
 .flow-switch.is-on {

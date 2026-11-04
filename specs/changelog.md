@@ -35,6 +35,7 @@ Mission Control."
   `desk-settings.ts` DOM), `renderer/settings-desk.css`; `settings-page.ts`
   composes the page (it takes two hooks, `openTeam` and `openFlow`);
   `settings-remote.ts` only renames its heading and shortens its intro.
+- **Seen in the built app** (e2e `flow-settings.spec.ts`, throwaway vault and engine home): the Flow tab edits (a manual step added after Review, dashed, "not saved") and saves a `chain:` into the ticket file; Settings shows the team chips, the standard flow, budget, runners, videos and the device section. While the Settings overlay is open it covers the Flow tab that *Open flow editor* opens behind it (close Settings to see it). Not seen: Paul's draft (no model in e2e), a live run on the ticket (read-only state), the QR pairing.
 - **Specs:** `desk-model.spec.ts` (standard flow, budget line, runners line,
   settings answer, megabyte field), `desk-settings.spec.ts` (jsdom: team,
   flow, confirmation before *Keep in Git*, the limit field).
