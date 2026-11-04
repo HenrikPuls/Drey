@@ -1407,3 +1407,21 @@
 .assistant-composer button[hidden] {
   display: none;
 }
+
+.target-tray-attached {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.target-tray-attached + * {
+  margin-top: 8px;
+}
+
+.target-chip {
+  padding: 1px 8px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-surface);
+  color: var(--accent-text);
+  font-size: 11px;
+}

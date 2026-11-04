@@ -13,6 +13,7 @@ type Invoke = (method: string, payload?: unknown) => Promise<unknown>;
 
 const CHAT_FILE_PATTERN = /^tickets\/_meta\/chat\/[A-Za-z0-9][A-Za-z0-9._-]*\.md$/;
 const PROPOSAL_ID_PATTERN = /^p-\d+$/;
+const TICKET_ID_PATTERN = /^T-\d{4,}$/;
 
 const bad = (what: string): { ok: false; error: string } => ({ ok: false, error: `bad ${what} payload` });
 
@@ -30,7 +31,24 @@ export function registerChatIpc(ctx: Pick<MainPluginContext, 'ipc'>, invoke: Inv
   });
   ctx.ipc.handle('mcStart', (payload) => {
     const text = field(payload, 'text');
-    return text === null ? bad('message') : invoke('chatStart', { text });
+    if (text === null) {
+      return bad('message');
+    }
+    // A shape session (E13-9) names the ticket whose plan Paul works on.
+    const ticket = field(payload, 'ticket');
+    if (ticket !== null && !TICKET_ID_PATTERN.test(ticket)) {
+      return bad('ticket');
+    }
+    return invoke('chatStart', ticket === null ? { text } : { text, ticket });
+  });
+  ctx.ipc.handle('mcPlanStatus', (payload) => {
+    const ticket = field(payload, 'ticket');
+    if (ticket === null || !TICKET_ID_PATTERN.test(ticket)) {
+      return bad('ticket');
+    }
+    // The open buffer's text, when the desktop has one (E13-9): its unsaved edits count.
+    const text = (payload as Record<string, unknown>)['text'];
+    return invoke('chatPlanStatus', typeof text === 'string' ? { ticket, text } : ticket);
   });
   ctx.ipc.handle('mcSend', (payload) => {
     const file = field(payload, 'file');

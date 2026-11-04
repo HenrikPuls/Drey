@@ -2,8 +2,8 @@ import { test, expect } from './fixtures/drey';
 
 /**
  * The interactive dialog's affordances (req-65, req-72): "Plan with agent"
- * on the first automatic column and "Refine with agent" in every manual
- * column — in the ticket header and the Work row's menu. The run itself (worker,
+ * on the first automatic column only (the "Refine with agent" of the manual
+ * columns was removed in E13-9) — in the ticket header and the Work row's menu. The run itself (worker,
  * takeover tab, end moves) is the owner's live round; here the switches
  * must simply be where the rules put them, and nowhere else.
  */
@@ -75,9 +75,9 @@ test.describe('Interactive dialog affordances (req-65)', () => {
     await openFileOf('T-0042');
     await expect(page.locator('app-editor .tickets-head .tickets-head-dialog')).toHaveText('Plan with agent');
 
-    // The checkpoint: the refine dialog.
+    // The checkpoint: no refine dialog any more (E13-9).
     await openFileOf('T-0043');
-    await expect(page.locator('app-editor .tickets-head .tickets-head-dialog')).toHaveText('Refine with agent');
+    await expect(page.locator('app-editor .tickets-head .tickets-head-dialog')).toHaveCount(0);
 
     // A middle agent column (build) offers none.
     await openFileOf('T-0044');

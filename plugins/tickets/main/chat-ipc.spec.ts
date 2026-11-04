@@ -25,6 +25,8 @@ describe('registerChatIpc', () => {
     await call('mcSend', { file: FILE, text: 'More' });
     await call('mcDecide', { file: FILE, id: 'p-2', decision: 'dismiss' });
     await call('mcShapeDecide', { file: FILE, choice: 'split' });
+    await call('mcStart', { text: 'Shape', ticket: 'T-0130' });
+    await call('mcPlanStatus', { ticket: 'T-0130' });
     expect(calls.map((c) => c.method)).toEqual([
       'chatSessions',
       'chatOpen',
@@ -32,7 +34,11 @@ describe('registerChatIpc', () => {
       'chatSend',
       'chatDismiss',
       'chatShapeDecide',
+      'chatStart',
+      'chatPlanStatus',
     ]);
+    expect(calls[6]?.payload).toEqual({ text: 'Shape', ticket: 'T-0130' });
+    expect(calls[7]?.payload).toBe('T-0130');
     expect(calls[1]?.payload).toBe(FILE);
   });
 
@@ -43,6 +49,8 @@ describe('registerChatIpc', () => {
     expect(call('mcDecide', { file: FILE, id: 'x-1', decision: 'confirm' })).toEqual({ ok: false, error: 'bad decision payload' });
     expect(call('mcDecide', { file: FILE, id: 'p-1', decision: 'delete' })).toEqual({ ok: false, error: 'bad decision payload' });
     expect(call('mcStart', { text: '  ' })).toEqual({ ok: false, error: 'bad message payload' });
+    expect(call('mcStart', { text: 'x', ticket: 'nope' })).toEqual({ ok: false, error: 'bad ticket payload' });
+    expect(call('mcPlanStatus', { ticket: '../x' })).toEqual({ ok: false, error: 'bad ticket payload' });
     expect(calls).toEqual([]);
   });
 });

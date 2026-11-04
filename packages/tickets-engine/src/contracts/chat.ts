@@ -188,6 +188,8 @@ export type PlanStatus =
       readonly ok: true;
       /** The model's turns that ended on this plan; null = it has not worked on the plan yet. */
       readonly version: number | null;
+      /** When the model's last turn on this plan ended (ISO); null before its first or for a shadow without a stamp (E13-9). */
+      readonly modelAt: string | null;
       /** The owner's edit groups since the model's last turn (what the chip counts). */
       readonly edits: number;
       /** `2 edits · +3 −1`; null when nothing changed. */

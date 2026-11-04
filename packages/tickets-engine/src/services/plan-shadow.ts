@@ -15,6 +15,8 @@ export interface PlanShadow {
   readonly text: string;
   /** 1-based lines of that text the model changed in its last turn. */
   readonly modelLines: readonly number[];
+  /** When that turn ended (ISO, E13-9: "Paul edited this · 2 min ago"); absent on a shadow written before. */
+  readonly at?: string;
 }
 
 export interface PlanShadowStore {
@@ -44,7 +46,7 @@ function readShadow(raw: unknown): PlanShadow | null {
     return null;
   }
   const lines = Array.isArray(r['modelLines']) ? r['modelLines'].filter((n): n is number => Number.isInteger(n)) : [];
-  return { version: r['version'], text: r['text'], modelLines: lines };
+  return { version: r['version'], text: r['text'], modelLines: lines, ...(typeof r['at'] === 'string' ? { at: r['at'] } : {}) };
 }
 
 /** One JSON file; writes are queued and atomic (temp file + rename). */

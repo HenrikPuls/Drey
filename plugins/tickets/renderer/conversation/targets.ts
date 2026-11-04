@@ -18,8 +18,10 @@ import type {
   ChatTurnResult,
 } from '../../../../packages/tickets-engine/src/contracts/chat';
 import type { PersonaView } from '../../shared/remote-protocol';
+import type { ShapeTarget } from '../ticket-document/shape';
 import {
   EMPTY_THREAD,
+  PLANNER_NAME,
   errorMessageOf,
   historyOfSessions,
   threadOfPersona,
@@ -41,17 +43,46 @@ export interface ConversationDeps {
   personas(): readonly PersonaView[];
   /** Fires when the directory changed; returns the unsubscribe. */
   subscribePersonas(listener: () => void): () => void;
+  /** The ticket document in focus, when there is one to shape (E13-9); absent = Mission Control never shapes. */
+  shape?: ShapeBinding;
 }
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
+/**
+ * The shape binding (E13-9): the ticket document in focus that can be
+ * shaped with Paul, and what the Assistant needs from the editor around a
+ * turn. The target reads it on every call, so the thread follows the open
+ * ticket without the Assistant knowing a ticket from a note.
+ */
+export interface ShapeBinding {
+  /** The ticket document in focus (an Ideas-phase ticket without a live run), or null. */
+  current(): ShapeTarget | null;
+  /** Saves the open buffer so the engine reads what the owner wrote; resolves a sentence when it could not. */
+  flush(target: ShapeTarget): Promise<string | null>;
+  /** Blocks typing in the document while Paul works on it. */
+  lock(target: ShapeTarget, locked: boolean): void;
+  /** A turn or a decision ended: the marks and the board look again. */
+  settled(target: ShapeTarget): void;
+  /** Fires when `current()` may have a new answer; returns the unsubscribe. */
+  subscribe(listener: () => void): () => void;
+}
+
 /** Pia: the engine's chat sessions. */
 export function createMissionControlTarget(deps: ConversationDeps): ConversationTarget {
   let file: string | null = null;
+  /** The ticket whose shape session `file` is; null for a plain chat. */
+  let fileTicket: string | null = null;
   /** A failed turn is not part of the session file; it hangs on the thread until the next send. */
   let lastError: ReturnType<typeof errorMessageOf> | null = null;
 
-  const open = async (path: string): Promise<ConversationThread> => {
+  const attachedTo = (thread: ConversationThread, shape: ShapeTarget | null): ConversationThread =>
+    shape === null ? thread : { ...thread, attached: [`${shape.label} attached`] };
+
+  const withError = (thread: ConversationThread): ConversationThread =>
+    lastError === null ? thread : { ...thread, messages: [...thread.messages, lastError] };
+
+  const open = async (path: string, shape: ShapeTarget | null): Promise<ConversationThread> => {
     try {
       const session = (await deps.invoke('mcOpen', { file: path })) as ChatSession | null;
       if (session === null || typeof session !== 'object' || !('messages' in session)) {
@@ -59,60 +90,111 @@ export function createMissionControlTarget(deps: ConversationDeps): Conversation
         return EMPTY_THREAD;
       }
       file = session.file;
-      return withError(threadOfSession(session));
+      fileTicket = shape?.id ?? null;
+      return withError(attachedTo(threadOfSession(session), shape));
     } catch (error) {
       return { ...EMPTY_THREAD, messages: [errorMessageOf(undefined, messageOf(error))] };
     }
   };
 
-  const withError = (thread: ConversationThread): ConversationThread =>
-    lastError === null ? thread : { ...thread, messages: [...thread.messages, lastError] };
+  const sessionsOf = async (): Promise<readonly ChatSessionMeta[]> => {
+    const sessions = (await deps.invoke('mcSessions')) as readonly ChatSessionMeta[];
+    return Array.isArray(sessions) ? sessions : [];
+  };
 
-  const reopen = async (): Promise<ConversationThread> => (file === null ? withError(EMPTY_THREAD) : open(file));
+  /** The newest shape session of a ticket (the engine lists newest first), or null. */
+  const shapeFileOf = async (ticket: string): Promise<string | null> =>
+    (await sessionsOf()).find((session) => session.ticket === ticket)?.file ?? null;
+
+  /**
+   * The thread the panel shows now. With a ticket document in focus that
+   * is that ticket's shape session (a fresh composer when it has none);
+   * otherwise the open session, or the newest one.
+   */
+  const read = async (): Promise<ConversationThread> => {
+    const shape = deps.shape?.current() ?? null;
+    try {
+      if (shape !== null) {
+        if (fileTicket !== shape.id) {
+          file = await shapeFileOf(shape.id);
+          fileTicket = shape.id;
+        }
+        if (file === null) {
+          return withError(
+            attachedTo({ ...EMPTY_THREAD, title: `Shape ${shape.id}`, notice: `Shaping ${shape.id} with ${PLANNER_NAME}` }, shape),
+          );
+        }
+        return open(file, shape);
+      }
+      if (fileTicket !== null) {
+        file = null;
+        fileTicket = null;
+      }
+      if (file === null) {
+        const newest = (await sessionsOf())[0];
+        if (newest === undefined) {
+          return withError(EMPTY_THREAD);
+        }
+        return open(newest.file, null);
+      }
+      return open(file, null);
+    } catch (error) {
+      return { ...EMPTY_THREAD, messages: [errorMessageOf(undefined, messageOf(error))] };
+    }
+  };
 
   return {
     id: MISSION_CONTROL_TARGET,
     label: 'Mission Control',
     description: 'Talk to Mission Control: it knows the board and proposes changes you confirm',
-    thread: async () => {
-      if (file === null) {
-        try {
-          const sessions = (await deps.invoke('mcSessions')) as readonly ChatSessionMeta[];
-          const newest = Array.isArray(sessions) ? sessions[0] : undefined;
-          if (newest !== undefined) {
-            return open(newest.file);
-          }
-        } catch (error) {
-          return { ...EMPTY_THREAD, messages: [errorMessageOf(undefined, messageOf(error))] };
-        }
-        return EMPTY_THREAD;
-      }
-      return reopen();
-    },
+    thread: read,
     send: async (text) => {
       lastError = null;
-      let result: ChatTurnResult;
+      const shape = deps.shape?.current() ?? null;
+      if (shape !== null && deps.shape !== undefined) {
+        // Paul reads the file: whatever the owner typed into the plan goes to disk first.
+        const problem = await deps.shape.flush(shape);
+        if (problem !== null) {
+          lastError = errorMessageOf(undefined, problem);
+          return read();
+        }
+        deps.shape.lock(shape, true);
+      }
       try {
-        result = (await (file === null
-          ? deps.invoke('mcStart', { text })
-          : deps.invoke('mcSend', { file, text }))) as ChatTurnResult;
-      } catch (error) {
-        lastError = errorMessageOf(undefined, messageOf(error));
-        return reopen();
+        if (shape !== null && fileTicket !== shape.id) {
+          file = await shapeFileOf(shape.id).catch(() => null);
+          fileTicket = shape.id;
+        }
+        let result: ChatTurnResult;
+        try {
+          result = (await (file === null
+            ? deps.invoke('mcStart', shape === null ? { text } : { text, ticket: shape.id })
+            : deps.invoke('mcSend', { file, text }))) as ChatTurnResult;
+        } catch (error) {
+          lastError = errorMessageOf(undefined, messageOf(error));
+          return read();
+        }
+        if (typeof result.file === 'string') {
+          file = result.file;
+          fileTicket = shape?.id ?? null;
+        }
+        if (result.ok !== true) {
+          lastError = errorMessageOf(result.failure, result.error);
+        }
+        return read();
+      } finally {
+        if (shape !== null) {
+          deps.shape?.lock(shape, false);
+          deps.shape?.settled(shape);
+        }
       }
-      if (typeof result.file === 'string') {
-        file = result.file;
-      }
-      if (result.ok !== true) {
-        lastError = errorMessageOf(result.failure, result.error);
-      }
-      return reopen();
     },
     act: async (cardId, actionId) => {
       lastError = null;
       if (file === null) {
         return EMPTY_THREAD;
       }
+      const shape = deps.shape?.current() ?? null;
       try {
         let result: { ok?: boolean; error?: string };
         if (cardId.startsWith('s-')) {
@@ -126,25 +208,44 @@ export function createMissionControlTarget(deps: ConversationDeps): Conversation
       } catch (error) {
         lastError = errorMessageOf(undefined, messageOf(error));
       }
-      return reopen();
+      if (shape !== null) {
+        // "Keep as one" moves the ticket into the build queue: the board and the marks look again.
+        deps.shape?.settled(shape);
+      }
+      return read();
     },
     newThread: async () => {
       file = null;
+      fileTicket = null;
       lastError = null;
-      return EMPTY_THREAD;
+      return attachedTo(EMPTY_THREAD, deps.shape?.current() ?? null);
     },
     history: async () => {
       try {
-        const sessions = (await deps.invoke('mcSessions')) as readonly ChatSessionMeta[];
-        return Array.isArray(sessions) ? historyOfSessions(sessions) : [];
+        return historyOfSessions(await sessionsOf());
       } catch {
         return [];
       }
     },
     open: async (id) => {
       lastError = null;
-      return open(id);
+      return open(id, null);
     },
+    ...(deps.shape === undefined
+      ? {}
+      : {
+          onThreadChange: (listener: () => void) => {
+            const shape = deps.shape!;
+            let seen = shape.current()?.id ?? null;
+            return shape.subscribe(() => {
+              const now = shape.current()?.id ?? null;
+              if (now !== seen) {
+                seen = now;
+                listener();
+              }
+            });
+          },
+        }),
   };
 }
 

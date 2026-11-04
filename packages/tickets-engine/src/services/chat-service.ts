@@ -426,6 +426,7 @@ export class ChatService implements ChatServicePort {
         version: (shadow?.version ?? 0) + 1,
         text: planAfter,
         modelLines: changedLinesOf(planBefore, planAfter),
+        at: this.now().toISOString(),
       });
     }
     return {
@@ -561,9 +562,11 @@ export class ChatService implements ChatServicePort {
    * Where the shared plan stands: the version the model last saw, the
    * owner's edit groups since, and the marked lines — the owner's changed
    * lines against the shadow, the model's lines from its last turn.
+   * `ticketText` stands in for the file on disk.
    */
-  async planStatus(ticket: string): Promise<PlanStatus> {
-    const plan = await this.planOf(ticket);
+  async planStatus(ticket: string, ticketText?: string): Promise<PlanStatus> {
+    // The desktop passes the open buffer's text (E13-9): its unsaved edits are marked too.
+    const plan = ticketText === undefined ? await this.planOf(ticket) : planSectionOf(ticketText);
     if (plan === null) {
       return { ok: false, error: `${ticket} has no readable plan` };
     }
@@ -583,6 +586,7 @@ export class ChatService implements ChatServicePort {
     return {
       ok: true,
       version: shadow?.version ?? null,
+      modelAt: shadow?.at ?? null,
       edits: delta?.edits ?? 0,
       summary: delta === null ? null : editsSummary(delta.edits, delta.added, delta.removed),
       marks: marks.slice(0, 60),

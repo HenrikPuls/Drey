@@ -73,7 +73,7 @@ const BOARD_METHODS = [
   'restoreShippedPrompts', 'listRepos', 'saveRepos', 'pickFolder', 'scanRepos', 'listProjects',
   'switchProject', 'openTicketsFolder', 'folderStatus', 'numberFolders', 'reorderPhases', 'editPhase',
   'personaLearn', 'listPersonas', 'verifyTicket', 'verifyStatus', 'estimateOf',
-  'chatSessions', 'chatOpen', 'chatSend', 'chatStart', 'chatConfirm', 'chatDismiss', 'chatShapeDecide',
+  'chatSessions', 'chatOpen', 'chatSend', 'chatStart', 'chatConfirm', 'chatDismiss', 'chatShapeDecide', 'chatPlanStatus',
   'initialize', 'onVaultEvent',
 ] as const;
 
@@ -263,7 +263,18 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     return chat.open(payload);
   });
   table.set('chatSend', (payload) => chat.send(payload as { readonly file: string; readonly text: string }));
-  table.set('chatStart', (payload) => chat.start(payload as { readonly title?: string; readonly text: string }));
+  table.set('chatStart', (payload) => chat.start(payload as { readonly title?: string; readonly text: string; readonly ticket?: string }));
+  table.set('chatPlanStatus', (payload) => {
+    // A ticket id, or { ticket, text } to mark the open buffer instead of the file (E13-9).
+    if (typeof payload === 'string') {
+      return chat.planStatus(payload);
+    }
+    const message = (payload ?? {}) as { ticket?: unknown; text?: unknown };
+    if (typeof message.ticket !== 'string') {
+      throw new Error('chatPlanStatus expects a ticket id');
+    }
+    return chat.planStatus(message.ticket, typeof message.text === 'string' ? message.text : undefined);
+  });
   table.set('chatConfirm', (payload) => chat.confirm(payload as { readonly file: string; readonly id: string }));
   table.set('chatDismiss', (payload) => chat.dismiss(payload as { readonly file: string; readonly id: string }));
   table.set('chatShapeDecide', (payload) => chat.shapeDecide(payload as { readonly file: string; readonly choice: 'keep' | 'split' }));

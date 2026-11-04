@@ -345,6 +345,12 @@ export interface ConversationThread {
   readonly messages: readonly ConversationMessage[];
   /** One quiet line under the thread (what this thread is, when that is not obvious). */
   readonly notice?: string;
+  /**
+   * What the target reads along with this thread, as short labels (SDK 1.43)
+   * -- a note it has loaded by itself. The Assistant shows them as chips
+   * above the composer.
+   */
+  readonly attached?: readonly string[];
 }
 
 /** One earlier thread of a target, for the history list (SDK 1.41). */
@@ -383,6 +389,12 @@ export interface ConversationTarget {
   history?(): Promise<readonly ConversationThreadMeta[]>;
   /** Opens one earlier thread. */
   open?(id: string): Promise<ConversationThread>;
+  /**
+   * The thread changed without a call from the Assistant (SDK 1.43) -- the
+   * note the target follows changed, or an answer arrived by another way.
+   * The Assistant reads `thread()` again. Returns the unsubscribe.
+   */
+  onThreadChange?(listener: () => void): Unsubscribe;
 }
 
 /**

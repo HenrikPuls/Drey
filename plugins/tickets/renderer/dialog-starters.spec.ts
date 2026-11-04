@@ -12,15 +12,8 @@ describe('dialogStarter', () => {
     );
   });
 
-  it('refine: verify with the owner, fix what they approve, record the verdict', () => {
-    expect(dialogStarter('refine')).toBe(
-      'Refine step — verify the branch against the plan with me, fix what I approve, record the verdict in the ticket Log.\nMy question: ',
-    );
-  });
-
-  it('both end on the question lead-in, so the owner types right after it', () => {
+  it('ends on the question lead-in, so the owner types right after it', () => {
     expect(dialogStarter('plan').endsWith('My question: ')).toBe(true);
-    expect(dialogStarter('refine').endsWith('My question: ')).toBe(true);
   });
 });
 

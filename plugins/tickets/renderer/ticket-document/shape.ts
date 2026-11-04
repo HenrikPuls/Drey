@@ -1,0 +1,127 @@
+/**
+ * Shape in the editor (E13-9), the pure half: which open document can be
+ * shaped with Paul, and the two marks the document shows under its Plan
+ * chapter -- "Paul edited this · 2 min ago" and "You edited this · rides
+ * along with your next message". No DOM, no IPC.
+ *
+ * The facts come from the engine's plan status (`PlanStatus`, E10-2): the
+ * version and time of Paul's last turn, the owner's edit groups since, and
+ * the marked lines. Nothing is recomputed here.
+ */
+import type { PlanMark } from '../../../../packages/tickets-engine/src/contracts/chat';
+import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
+import { ideaPhaseIds } from '../work-groups';
+
+export interface ShapeTarget {
+  readonly id: string;
+  readonly path: string;
+  /** The label of the attachment chip (`T-0130.md`). */
+  readonly label: string;
+}
+
+/**
+ * The ticket a vault file is, when it can be shaped: it sits in an Ideas
+ * phase of the board's vault and no run works on it. Null for every other
+ * file.
+ */
+export function shapeTargetOf(
+  snapshot: BoardSnapshot | null,
+  doc: { readonly path: string; readonly vaultId: string | null },
+  runLive: (ticketId: string) => boolean,
+): ShapeTarget | null {
+  if (snapshot === null || (snapshot.vaultId !== null && doc.vaultId !== snapshot.vaultId)) {
+    return null;
+  }
+  const card = findCard(snapshot, doc.path);
+  if (card === null || !ideaPhaseIds(snapshot.pipeline).includes(card.phase) || runLive(card.id)) {
+    return null;
+  }
+  return { id: card.id, path: card.path, label: `${card.id}.md` };
+}
+
+function findCard(snapshot: BoardSnapshot, path: string): TicketCard | null {
+  return snapshot.columns.flatMap((column) => column.tickets).find((ticket) => ticket.path === path) ?? null;
+}
+
+/** `just now`, `2 min ago`, `3 h ago`, `2 days ago`; an unreadable or future stamp reads as `just now`. */
+export function agoWords(iso: string, now: Date): string {
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) {
+    return 'just now';
+  }
+  const minutes = Math.floor((now.getTime() - then) / 60_000);
+  if (minutes < 1) {
+    return 'just now';
+  }
+  if (minutes < 60) {
+    return `${minutes} min ago`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) {
+    return `${hours} h ago`;
+  }
+  return `${Math.floor(hours / 24)} days ago`;
+}
+
+/** The plan status the engine answers (`GET /api/tickets/<id>/plan`), as far as the marks need it. */
+export interface PlanStatusLike {
+  readonly ok: true;
+  readonly version: number | null;
+  readonly modelAt?: string | null;
+  readonly edits: number;
+  readonly summary: string | null;
+  readonly marks: readonly PlanMark[];
+}
+
+export interface ShapeMarks {
+  /** `Paul edited this · 2 min ago`; null when Paul changed nothing that still stands. */
+  readonly paul: string | null;
+  /** `You edited this · rides along with your next message`; null without edits since his last turn. */
+  readonly you: string | null;
+  /** The change summary behind `you` (`2 edits · +3 −1`), for the tooltip. */
+  readonly youDetail: string | null;
+}
+
+/** True for a well-formed `ok` plan status; anything else (a refusal, junk) is not usable. */
+export function isPlanStatus(value: unknown): value is PlanStatusLike {
+  const v = value as Partial<PlanStatusLike> | null;
+  return (
+    v !== null &&
+    typeof v === 'object' &&
+    v.ok === true &&
+    (v.version === null || typeof v.version === 'number') &&
+    typeof v.edits === 'number' &&
+    Array.isArray(v.marks)
+  );
+}
+
+/** The two mark lines of a plan status; null when there is nothing to say. */
+export function shapeMarksOf(status: PlanStatusLike | null, now: Date): ShapeMarks | null {
+  if (status === null) {
+    return null;
+  }
+  const modelEdited = status.version !== null && status.marks.some((mark) => mark.by === 'model');
+  const paul = modelEdited
+    ? typeof status.modelAt === 'string' && status.modelAt !== ''
+      ? `Paul edited this · ${agoWords(status.modelAt, now)}`
+      : 'Paul edited this'
+    : null;
+  const you = status.edits > 0 ? 'You edited this · rides along with your next message' : null;
+  return paul === null && you === null ? null : { paul, you, youDetail: you === null ? null : status.summary };
+}
+
+/** The end offset of the `## Plan` heading line (outside code fences), or null without one. */
+export function planHeadingEnd(text: string): number | null {
+  let offset = 0;
+  let fenced = false;
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+    if (/^\s*(```|~~~)/.test(line)) {
+      fenced = !fenced;
+    } else if (!fenced && /^##\s+Plan\s*$/.test(line)) {
+      return offset + line.length;
+    }
+    offset += rawLine.length + 1;
+  }
+  return null;
+}

@@ -31,10 +31,11 @@ export type PermissionMode = 'accept-edits' | 'bypass';
  * The interactive dialog modes (req-65): the owner drives the run as a
  * conversation — held from turn one, no gate, no move at its end; the
  * owner moves the ticket themselves when the dialog ends. `'plan'`
- * interviews the owner and writes the plan into the ticket; `'refine'`
- * is the checkpoint companion (plan-review / review / commit).
+ * interviews the owner and writes the plan into the ticket. (A second
+ * mode, `'refine'` -- the checkpoint companion -- was removed in E13-9:
+ * shaping is the ticket file plus Mission Control in the Assistant.)
  */
-export type InteractiveMode = 'plan' | 'refine';
+export type InteractiveMode = 'plan';
 
 /**
  * What the runner needs to start one run. One run = one ticket = one

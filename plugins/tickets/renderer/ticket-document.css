@@ -409,3 +409,22 @@
   background: var(--accent-hover);
   color: var(--on-accent);
 }
+
+/* --- shape marks (E13-9) ------------------------------------------------- */
+
+.tickets-doc-shape-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 0 2px 6px 6px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+.tickets-doc-shape-mark {
+  color: var(--text-4);
+}
+
+.tickets-doc-shape-mark.is-you {
+  color: var(--accent-text);
+}

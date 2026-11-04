@@ -96,7 +96,47 @@ export function createTargetController(api: DreyPluginApi): TargetController {
     select(resolved.id);
   };
 
+  /** A target may say its thread changed on its own (SDK 1.43): read it again. */
+  const watched = new Map<string, () => void>();
+  const watchThreads = (): void => {
+    const live = new Set<string>();
+    for (const target of targets()) {
+      live.add(target.id);
+      if (target.onThreadChange === undefined || watched.has(target.id)) {
+        continue;
+      }
+      const id = target.id;
+      watched.set(
+        id,
+        target.onThreadChange(() => {
+          // Never replace the thread under a send that is still on its way.
+          if (working.has(id) || !threads.has(id)) {
+            return;
+          }
+          const current = byId(id);
+          if (current !== null) {
+            void current
+              .thread()
+              .then((thread) => {
+                if (!working.has(id)) {
+                  apply(id, thread);
+                }
+              })
+              .catch(() => undefined);
+          }
+        }),
+      );
+    }
+    for (const [id, off] of [...watched]) {
+      if (!live.has(id)) {
+        off();
+        watched.delete(id);
+      }
+    }
+  };
+
   const unsubTargets = api.conversations.onTargetsChange(() => {
+    watchThreads();
     if (active !== MODEL_TARGET && byId(active) === null) {
       active = MODEL_TARGET;
     }
@@ -107,6 +147,7 @@ export function createTargetController(api: DreyPluginApi): TargetController {
     appliedView = undefined;
     applyViewDefault();
   });
+  watchThreads();
   applyViewDefault();
 
   const run = async (id: string, action: (target: ConversationTarget) => Promise<ConversationThread>): Promise<void> => {
@@ -198,6 +239,10 @@ export function createTargetController(api: DreyPluginApi): TargetController {
     destroy: () => {
       unsubTargets();
       unsubView();
+      for (const off of watched.values()) {
+        off();
+      }
+      watched.clear();
       listeners.clear();
     },
   };

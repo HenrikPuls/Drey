@@ -4,7 +4,7 @@ import { interactiveEndMoves, interactiveModeFor } from './end-moves';
 
 /**
  * The interactive dialog's column rules and end moves (req-65): where
- * "Plan with agent" / "Refine with agent" are offered, and which owner
+ * "Plan with agent" are offered, and which owner
  * moves end a dialog there.
  */
 
@@ -28,15 +28,12 @@ const COLUMNS: readonly BoardColumn[] = [
 ];
 
 describe('interactiveModeFor', () => {
-  it('offers plan on the first automatic column, refine in every manual column (req-72)', () => {
+  it('offers plan on the first automatic column and nothing in the manual ones (E13-9: no refine)', () => {
     expect(interactiveModeFor('plan', COLUMNS)).toBe('plan');
-    expect(interactiveModeFor('plan-review', COLUMNS)).toBe('refine');
-    expect(interactiveModeFor('review', COLUMNS)).toBe('refine');
-  });
-
-  it('offers refine on the queues before the first automatic column, too', () => {
-    expect(interactiveModeFor('inbox', COLUMNS)).toBe('refine');
-    expect(interactiveModeFor('prioritized', COLUMNS)).toBe('refine');
+    expect(interactiveModeFor('plan-review', COLUMNS)).toBeNull();
+    expect(interactiveModeFor('review', COLUMNS)).toBeNull();
+    expect(interactiveModeFor('inbox', COLUMNS)).toBeNull();
+    expect(interactiveModeFor('prioritized', COLUMNS)).toBeNull();
   });
 
   it('offers nothing on the automatic columns and the terminal phase', () => {
@@ -53,11 +50,11 @@ describe('interactiveModeFor', () => {
     expect(interactiveModeFor('build', ci)).toBeNull();
   });
 
-  it('refines everywhere on a board without an automatic column', () => {
+  it('a board without an automatic column offers no dialog at all', () => {
     const manual = COLUMNS.map((c) => column(phase(c.phase.id, { handover: 'manual' })));
-    expect(interactiveModeFor('inbox', manual)).toBe('refine');
-    expect(interactiveModeFor('plan-review', manual)).toBe('refine');
-    expect(interactiveModeFor('done', manual)).toBeNull(); // still the terminal column
+    expect(interactiveModeFor('inbox', manual)).toBeNull();
+    expect(interactiveModeFor('plan-review', manual)).toBeNull();
+    expect(interactiveModeFor('done', manual)).toBeNull();
   });
 });
 
@@ -69,18 +66,13 @@ describe('interactiveEndMoves', () => {
     expect(moves[1]!.label).toBe('Approve → build');
   });
 
-  it('a refine dialog goes on to the next column or back to the nearest automatic column', () => {
-    const moves = interactiveEndMoves('refine', 'review', COLUMNS);
-    expect(moves.map((m) => m.toPhase)).toEqual(['commit', 'build']);
-    expect(moves[0]!.label).toBe('On to commit');
-    expect(moves[1]!.label).toBe('Back to build');
+  it('a run left over from the refine dialog offers no end move', () => {
+    expect(interactiveEndMoves('refine' as never, 'review', COLUMNS)).toEqual([]);
   });
 
   it('omits the sides that do not exist', () => {
-    // plan-review refines: on to build, back to plan (it is automatic)
-    expect(interactiveEndMoves('refine', 'plan-review', COLUMNS).map((m) => m.toPhase)).toEqual(['build', 'plan']);
-    // inbox refines before any automatic column: only "on to"
-    expect(interactiveEndMoves('refine', 'inbox', COLUMNS).map((m) => m.toPhase)).toEqual(['prioritized']);
+    // the last column before the terminal one has no second step
+    expect(interactiveEndMoves('plan', 'commit', COLUMNS).map((m) => m.toPhase)).toEqual(['done']);
     expect(interactiveEndMoves('plan', 'nowhere', COLUMNS)).toEqual([]);
   });
 });

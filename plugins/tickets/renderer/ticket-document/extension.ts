@@ -14,8 +14,9 @@
 import type { DreyPluginApi, EditorSurfaceContext } from '../../../../shared/plugin-api/renderer';
 import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
 import type { WorkRow } from '../work-groups';
-import { actionBarNode, costNode, proofNode } from './dom';
+import { actionBarNode, costNode, proofNode, shapeMarksNode } from './dom';
 import { actionBarOf, costTableOfText, proofOfText, sectionBodyRange } from './model';
+import { planHeadingEnd, type ShapeMarks } from './shape';
 
 export interface TicketDocumentActions {
   accept(card: TicketCard): void;
@@ -33,6 +34,15 @@ export interface TicketDocumentDeps {
   /** The surface shows a ticket of the board's vault. */
   readonly matches: (context: EditorSurfaceContext) => boolean;
   readonly actions: TicketDocumentActions;
+  /**
+   * Shape (E13-9): the marks under the Plan heading. `want` tells the source
+   * what the buffer says now (it decides whether to ask the engine); `marks`
+   * answers from what it knows. Absent = no marks.
+   */
+  readonly shape?: {
+    want(ticketId: string, text: string): void;
+    marks(ticketId: string): ShapeMarks | null;
+  };
 }
 
 export interface TicketDocumentExtension {
@@ -106,6 +116,21 @@ export function createTicketDocumentExtension(deps: TicketDocumentDeps): TicketD
                 ),
               ),
             }).range(body.from, body.to),
+          );
+        }
+      }
+
+      if (deps.shape !== undefined) {
+        deps.shape.want(id, text);
+        const marks = deps.shape.marks(id);
+        const headingEnd = marks === null ? null : planHeadingEnd(text);
+        if (marks !== null && headingEnd !== null) {
+          ranges.push(
+            Decoration.widget({
+              block: true,
+              side: 1,
+              widget: new BlockWidget(JSON.stringify(['shape', marks]), () => shapeMarksNode(marks)),
+            }).range(headingEnd),
           );
         }
       }

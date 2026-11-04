@@ -114,7 +114,7 @@ describe('the shared plan in a shape session', () => {
   it('sends nothing on the first turn (no shadow) and keeps a shadow of the plan after it', async () => {
     const started = await service.start({ text: 'Start', ticket: TICKET });
     expect(bridgeInputs[0]!.planDelta).toBeUndefined();
-    expect(await shadows.get(TICKET)).toEqual({ version: 1, text: 'Goal\n- one', modelLines: [] });
+    expect(await shadows.get(TICKET)).toEqual({ version: 1, text: 'Goal\n- one', modelLines: [], at: expect.any(String) });
     expect(started.ok).toBe(true);
   });
 
@@ -176,6 +176,7 @@ describe('the shared plan in a shape session', () => {
     expect(status).toEqual({
       ok: true,
       version: 2,
+      modelAt: expect.any(String),
       edits: 1,
       summary: '1 edit · +1 −1',
       marks: [
@@ -187,7 +188,7 @@ describe('the shared plan in a shape session', () => {
 
   it('refuses a ticket it cannot read and needs no shadow to answer', async () => {
     expect(await service.planStatus('T-9999')).toEqual({ ok: false, error: 'T-9999 has no readable plan' });
-    expect(await service.planStatus(TICKET)).toEqual({ ok: true, version: null, edits: 0, summary: null, marks: [] });
+    expect(await service.planStatus(TICKET)).toEqual({ ok: true, version: null, modelAt: null, edits: 0, summary: null, marks: [] });
   });
 });
 

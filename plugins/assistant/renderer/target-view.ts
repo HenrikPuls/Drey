@@ -185,6 +185,15 @@ export function createTargetThread(api: DreyPluginApi, targets: TargetController
         node.scrollTop = node.scrollHeight;
       }
       tray.textContent = '';
+      const attached = targets.thread()?.attached ?? [];
+      if (attached.length > 0) {
+        tray.hidden = false;
+        const chips = el('div', 'target-tray-attached');
+        for (const label of attached) {
+          chips.appendChild(el('span', 'target-chip', label));
+        }
+        tray.appendChild(chips);
+      }
       const choices = targets.choices();
       if (choices !== null && choices.choices !== undefined && choices.choices.length > 0 && !targets.busy()) {
         tray.hidden = false;

@@ -6,10 +6,16 @@ const thread = (title: string): ConversationThread => ({ id: title, title, messa
 
 function fixture() {
   const sent: string[] = [];
+  const threadListeners = new Set<() => void>();
+  let title = 'Chat';
   const target: ConversationTarget = {
     id: 't.mc',
     label: 'Mission Control',
-    thread: () => Promise.resolve(thread('Chat')),
+    thread: () => Promise.resolve({ ...thread(title), attached: ['T-0130.md attached'] }),
+    onThreadChange: (l) => {
+      threadListeners.add(l);
+      return () => threadListeners.delete(l);
+    },
     send: (text) => {
       sent.push(text);
       return Promise.resolve({
@@ -51,6 +57,11 @@ function fixture() {
   return {
     api,
     sent,
+    changeThread: (next: string) => {
+      title = next;
+      threadListeners.forEach((l) => l());
+    },
+    threadListenerCount: () => threadListeners.size,
     register: () => {
       targets = [target];
       targetListeners.forEach((l) => l());
@@ -97,6 +108,20 @@ describe('createTargetController', () => {
     expect(c.busy()).toBe(false);
     expect(f.sent).toEqual(['hello']);
     expect(c.choices()?.choices?.[0]?.label).toBe('One');
+  });
+
+  it('reads the thread again when the target says it changed on its own (SDK 1.43)', async () => {
+    const f = fixture();
+    const c = createTargetController(f.api);
+    f.register();
+    c.select('t.mc');
+    await settle();
+    expect(c.thread()?.attached).toEqual(['T-0130.md attached']);
+    f.changeThread('Other note');
+    await settle();
+    expect(c.thread()?.title).toBe('Other note');
+    c.destroy();
+    expect(f.threadListenerCount()).toBe(0);
   });
 
   it('refuses to send on the model target', async () => {
