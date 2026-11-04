@@ -162,7 +162,7 @@ canvas "Drey Tickets — Workflow redesign" is binding for the UI;
 [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
 "Later changes" records the decisions). Worked in this order, one
 milestone at a time, a pause after each; milestone numbers are taken
-when an item ships (next free: 123; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, 116 = proof mode + videos, 117 = diff review, 118 = line comments, 119 = cost table + estimate, 120 = parts schema, 121 = plan delta, 122 = shape mode; E12-1 – E12-4, E11, E10-1 – E10-3 shipped). Nothing here creates tickets — the
+when an item ships (next free: 123; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, 116 = proof mode + videos, 117 = diff review, 118 = line comments, 119 = cost table + estimate, 120 = parts schema, 121 = plan delta, 122 = shape mode; E12-1 – E12-4, E11, E10-1 – E10-6 shipped). Nothing here creates tickets — the
 owner builds without the tickets system.
 
 - **E12-3b — Settings pages still missing.** Chat (the model rows and
@@ -216,17 +216,6 @@ owner builds without the tickets system.
   the three modes Live Preview, View and Source. **View is the default
   wherever results are presented** (plan, ticket text, proof summary, the
   Verification chapter); the owner can switch per surface.
-- **E10-6 — You as a team member: manual steps** (owner request, outside
-  the list, 2026-11-04; milestone 132). A persona of kind `human` ("You",
-  the name from Settings, file `personas/you`) next to Paul, Ben, Ralf and
-  Tessa: selectable in Team, the flow editor, plan parts and the chain
-  grammar (`insert manual(you, notify) after review`). A gate assigned to you
-  **parks the ticket and notifies**: a card in Needs you, no agent runs, no
-  worktree is prepared; you finish it with Accept (the chain goes on) or
-  Send back. The human persona never counts toward capacity or budget. Touches
-  the persona loader and the fleet dispatcher in `packages/tickets-engine`,
-  `specs/ticket-schema.md`, the validator, and Team / picker / Needs-you in
-  `libs/mission-ui`.
 
 Decided against and not on the list: an overlap guard, touches or file
 routing between parallel tickets (D5 — req-75 W7 and W8 dropped; their

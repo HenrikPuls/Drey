@@ -1,3 +1,41 @@
+### Milestone 132 — You as a team member: manual steps (E10-6)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(roadmap E10-6; ADR-0088 later change; `specs/ticket-schema.md`, "The manual
+step"). What was and was not seen in a running app is at the end.
+
+- **The human persona.** `kind: human` in `persona.md` (`personas/you`, created
+  once on first sight — Team list or flow editor — titled from config
+  `personas.humanName`, default "You"). Never dispatched, no capacity, budget,
+  pause or model; Team shows its card as "Manual steps", not counted in the
+  header.
+- **The manual gate.** Chain phase `manual` / `manual-<word>`, valid only as an
+  `insert` (`insert manual(you, notify) after review`); an agent persona on it
+  is refused at the flow write guard. Two ways to park: a `manual` step after
+  a gate (the run request carries `parkFor`; on a green gate the runner stamps
+  `awaiting: you` instead of moving on) and a gate whose resolved persona is
+  human (the dispatch pass stamps it before any run is composed — no run, no
+  worktree). New ticket field `awaiting:`; any transition clears it;
+  `dispatchable` skips it.
+- **Finishing.** Accept / Send back are the existing board moves (Log line
+  "manual step finished by <owner>", status `done:` line with the owner).
+  Needs you gets a `manual` item ("Your turn" card with Accept and
+  Send back + mandatory note) in Mission Control.
+- **Flow editor.** The manual step is always offered under "Add a gate"; its
+  Who picker lists only human personas, the model block is hidden for the
+  owner.
+- **Specs added:** `core/manual-gate.spec.ts`, orchestrator, runs, chain, needs,
+  board-service-flow (accept, send back, persona creation, guard), Work card,
+  Team card, flow picker.
+- **Seen in a running app:** throwaway vault + own `--home`, built engine and
+  Mission Control: Team lists You; the flow editor gave Build to You; with the
+  chain running the ticket parked (one commit, Log line, no run), the card
+  "Your turn" appeared and Accept moved it on (`build -> review`, awaiting gone).
+  **Not seen:** the park-after-green-gate path against a real agent run (only
+  specs), Send back in the UI, the plan-part picker offering You, phone
+  hardware, screenshots (viewport measured via DOM only), the `paused:` status
+  line of an in-place park (not in the status log in that run).
+- **Not done:** persona editing of `humanName` in Settings, E10-5b items.
 ### Milestone 131 — Mission Control chat reaches its model (D-1)
 
 **Not yet manually verified by the owner.** Owner report, 2026-11-04

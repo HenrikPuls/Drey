@@ -84,6 +84,20 @@ export function parseChainEntry(text: string): ChainEntry | null {
 
 const PERSONA_ID = /^[a-z][a-z0-9-]*$/;
 
+/**
+ * The manual step (E10-6): a gate the owner works by hand. It is not a
+ * pipeline directory — the id `manual` (or `manual-<word>` for a second
+ * one) is valid in any chain as an INSERT, anchored on a real phase. The
+ * ticket parks at the anchor with the `awaiting:` field until the owner
+ * accepts or sends it back.
+ */
+export const MANUAL_PHASE = 'manual';
+export const MANUAL_TITLE = 'Manual step';
+
+export function isManualPhase(id: string): boolean {
+  return id === MANUAL_PHASE || /^manual-[a-z0-9][a-z0-9-]*$/.test(id);
+}
+
 /** Renders one entry in the canonical grammar (the round trip with `parseChainEntry`). */
 export function renderChainEntry(entry: ChainEntry): string {
   switch (entry.kind) {
@@ -172,7 +186,7 @@ export function mergeChain(
     // insert: a second occurrence of an existing phase is the one thing
     // validateChain refuses; the merger still renders it (read tolerance).
     const anchorAt = indexOf(entry.anchor);
-    const title = phases.find((phase) => phase.id === entry.phase)?.title ?? entry.phase;
+    const title = phases.find((phase) => phase.id === entry.phase)?.title ?? (isManualPhase(entry.phase) ? MANUAL_TITLE : entry.phase);
     const step: ChainStep = {
       phase: entry.phase,
       title,
@@ -222,7 +236,8 @@ export function validateChain(
     const refs =
       entry.kind === 'insert' || entry.kind === 'move' ? [entry.phase, entry.anchor] : [entry.phase];
     for (const ref of refs) {
-      if (!known.has(ref)) {
+      // A manual step is no pipeline directory: it is valid wherever this delta inserts it.
+      if (!known.has(ref) && !(isManualPhase(ref) && inserts.has(ref))) {
         return `the pipeline has no phase "${ref}"`;
       }
     }

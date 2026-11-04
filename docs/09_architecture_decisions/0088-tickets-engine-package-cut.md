@@ -392,6 +392,24 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     (`POST …/flow-draft`) is one bridge turn under its own prompt that
     answers a `setChain` command; the desk reads it back through the same
     guard as a hand edit, and it is never written by the draft.
+- **E10-6 (milestone 132):** the owner is a team member. A persona file may
+  say `kind: human` (`personas/you`, created on first sight with the title
+  from config `personas.humanName`, default "You"); a human persona is never
+  dispatched, counted toward capacity or budgeted. A manual gate is either an
+  inserted chain phase `manual` / `manual-<word>` (the one phase id that is
+  not a pipeline directory — valid only as an `insert`) or any gate whose
+  resolved persona is human. Both **park** the ticket with a new frontmatter
+  field `awaiting: <persona>` instead of running an agent: the run request
+  carries `parkFor` (the runner stamps the field where the ticket sits
+  instead of moving it on), or the dispatch pass stamps it before it composes
+  a run (so no worktree is ever prepared). Accept and Send back are the
+  existing board moves — any transition clears the field — so the phone, the
+  Drey desk and the ledger needed no new verb; Needs you gets one new item
+  kind, `manual`. Considered and not done: a pipeline column per manual step
+  (it would add a column to every board), and a separate "manual-done"
+  endpoint (Accept already is that). The dispatcher still reads the rest of
+  the delta (`move`, `skip`, `assign` of agents) nowhere — that stays
+  roadmap E10-5b.
   Not yet manually verified by the owner; the etappen land one
   milestone at a time (roadmap, "Mission Control redesign").
 - **The chat model reaches the engine on every change and speaks two

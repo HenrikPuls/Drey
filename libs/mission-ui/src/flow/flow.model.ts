@@ -136,9 +136,15 @@ export function moveRoomOf(flow: McFlow, step: McFlowStep): { readonly earlier: 
  * (a phase that is done or is the current gate is not offered), not added
  * already and not struck.
  */
+/** The manual step's ids: `manual`, or `manual-<word>` for a second one (the engine's `isManualPhase`). */
+export function isManualPhaseId(id: string): boolean {
+  return id === 'manual' || /^manual-[a-z0-9][a-z0-9-]*$/.test(id);
+}
+
 export function addablePhasesOf(flow: McFlow): readonly { readonly id: string; readonly title: string }[] {
   const ahead = new Set(flow.steps.filter((s) => !s.inserted && s.state !== 'current').map((s) => s.phase));
   return flow.phases.filter(
-    (phase) => ahead.has(phase.id) && !flow.steps.some((s) => (s.inserted && s.phase === phase.id) || (!s.inserted && s.skipped && s.phase === phase.id)),
+    // The manual step (E10-6) is no pipeline phase: it is always on offer, once per id.
+    (phase) => (ahead.has(phase.id) || isManualPhaseId(phase.id)) && !flow.steps.some((s) => (s.inserted && s.phase === phase.id) || (!s.inserted && s.skipped && s.phase === phase.id)),
   );
 }

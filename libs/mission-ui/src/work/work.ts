@@ -17,6 +17,7 @@ import {
   type McMoveResult,
   type McPersona,
   type McScoutReport,
+  type McWorkState,
   type NeedVm,
   type QuestionCardVm,
   type SwipeAction,
@@ -304,6 +305,72 @@ export class Work {
       return;
     }
     this.state.promote(ticketId);
+  }
+
+  // --- the manual-step card (E10-6): Accept or Send back, in place ----------
+
+  /** Per manual card: an action is in flight / its refusal / the send-back note panel and text. */
+  protected readonly manualPending = signal<Readonly<Record<string, boolean>>>({});
+  protected readonly manualError = signal<Readonly<Record<string, string>>>({});
+  protected readonly manualDone = signal<Readonly<Record<string, string>>>({});
+  protected readonly manualSendBackOpen = signal<Readonly<Record<string, boolean>>>({});
+  protected readonly manualNote = signal<Readonly<Record<string, string>>>({});
+
+  /** The actions show only where the adapter offers them and the device may act. */
+  protected canFinishManual(): boolean {
+    return !this.readOnly() && this.state?.finishManual !== undefined && this.state?.sendBackManual !== undefined;
+  }
+
+  protected toggleManualSendBack(vm: NeedVm): void {
+    this.manualSendBackOpen.update((open) => ({ ...open, [vm.key]: open[vm.key] !== true }));
+  }
+
+  protected setManualNote(vm: NeedVm, text: string): void {
+    this.manualNote.update((notes) => ({ ...notes, [vm.key]: text }));
+  }
+
+  /** Accept: the manual step is done, the chain goes on. */
+  protected async manualAccept(vm: NeedVm): Promise<void> {
+    const ticketId = vm.need.ticketId ?? '';
+    if (this.readOnly() || ticketId === '' || this.state?.finishManual === undefined || this.manualPending()[vm.key] === true) {
+      return;
+    }
+    await this.runManual(vm, 'Accepted.', (state) => state.finishManual!(ticketId));
+  }
+
+  /** Send back: the note is mandatory - an empty one refuses before the desk is asked. */
+  protected async manualSendBack(vm: NeedVm): Promise<void> {
+    const ticketId = vm.need.ticketId ?? '';
+    const note = (this.manualNote()[vm.key] ?? '').trim();
+    if (this.readOnly() || ticketId === '' || this.state?.sendBackManual === undefined || this.manualPending()[vm.key] === true) {
+      return;
+    }
+    if (note === '') {
+      this.manualError.update((errors) => ({ ...errors, [vm.key]: 'A send-back needs a note.' }));
+      return;
+    }
+    await this.runManual(vm, 'Sent back.', (state) => state.sendBackManual!(ticketId, note));
+  }
+
+  private async runManual(vm: NeedVm, doneText: string, call: (state: McWorkState) => Promise<McAnswerReply>): Promise<void> {
+    const state = this.state;
+    if (state === null) {
+      return;
+    }
+    this.manualPending.update((p) => ({ ...p, [vm.key]: true }));
+    this.manualError.update((errors) => ({ ...errors, [vm.key]: '' }));
+    let reply: McAnswerReply;
+    try {
+      reply = await call(state);
+    } catch {
+      reply = { ok: false, error: 'The desk did not answer.' };
+    }
+    this.manualPending.update((p) => ({ ...p, [vm.key]: false }));
+    if (reply.ok) {
+      this.manualDone.update((d) => ({ ...d, [vm.key]: doneText }));
+    } else {
+      this.manualError.update((errors) => ({ ...errors, [vm.key]: reply.error ?? 'The desk refused.' }));
+    }
   }
 
   /**

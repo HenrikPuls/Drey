@@ -2050,9 +2050,60 @@ export class RunSupervisor {
         await this.finish(run, 'failed');
         return;
       }
+    } else if (run.request.parkFor !== undefined) {
+      // E10-6: a manual step follows - the ticket waits where it is.
+      const parked = await this.parkTicketOnSuccess(run, run.request.parkFor);
+      if (!parked.ok) {
+        await this.logLine(run, `the gate passed but parking the ticket failed — ${parked.error}`);
+        await this.finish(run, 'failed');
+        return;
+      }
     }
     await this.logLine(run, `run finished (exit ${code ?? 'signal'})`);
     await this.finish(run, 'done');
+  }
+
+  /**
+   * E10-6: the success of a gate that a manual step follows. The ticket
+   * does not move on - it gets `awaiting: <human persona>` where it sits,
+   * one Log line, one commit. The owner's Accept moves it from here.
+   */
+  private async parkTicketOnSuccess(run: LiveRun, personaId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    const request = run.request;
+    const here = await fsp
+      .access(path.join(request.ticketsVaultPath, run.currentRelPath))
+      .then(() => true)
+      .catch(() => false);
+    if (!here) {
+      await this.relocateTicket(run);
+    }
+    if (run.currentPhase !== request.phase) {
+      return { ok: true }; // the owner moved the ticket by hand: that move stands
+    }
+    try {
+      const abs = path.join(request.ticketsVaultPath, run.currentRelPath);
+      const text = await fsp.readFile(abs, 'utf8');
+      const patched = patchTicketFile(text, {
+        to: run.currentPhase,
+        from: null,
+        now: this.now(),
+        actor: this.agentActor(),
+        action: `run ${run.info.id} done - gate green; parked for ${personaId} (manual step)`,
+        setAwaiting: personaId,
+      });
+      await fsp.writeFile(abs, patched, 'utf8');
+      const location = await this.git.locate(request.ticketsVaultPath);
+      if (location !== null) {
+        await this.git.commitPaths(
+          location.root,
+          [`${location.prefix}${run.currentRelPath}`],
+          `tickets: ${request.ticketId} awaiting ${personaId} (fleet)`,
+        );
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: messageOf(error) };
+    }
   }
 
   /** The success transition: move + entered-stamp + one commit (board semantics). */
@@ -2083,13 +2134,17 @@ export class RunSupervisor {
       // into a column whose pool it would block (review finding 3).
       const claims =
         request.claimIdentity !== null ? { claimBy: request.claimIdentity } : { releaseClaim: true };
+      const parkFor = request.parkFor;
       const patched = patchTicketFile(text, {
         to: nextPhase,
         from: run.currentPhase,
         now: this.now(),
         actor: this.agentActor(),
-        action: `run ${run.info.id} done — gate green, moving to ${nextPhase}`,
+        action:
+          `run ${run.info.id} done — gate green, moving to ${nextPhase}` +
+          (parkFor === undefined ? '' : `; parked for ${parkFor} (manual step)`),
         ...claims,
+        ...(parkFor === undefined ? {} : { setAwaiting: parkFor }),
       });
       await fsp.mkdir(path.dirname(abs(newRel)), { recursive: true });
       await fsp.rename(abs(oldRel), abs(newRel));

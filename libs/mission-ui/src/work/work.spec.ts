@@ -458,6 +458,7 @@ describe('card helpers', () => {
       blocked: 'Blocked',
       report: 'Scout report',
       notify: 'Gate done',
+      manual: 'Your turn',
     });
     expect(needKindLabelOf('question')).toBe('Asks you');
     expect(needKindLabelOf('improvements')).toBe('Improvements');
@@ -604,6 +605,73 @@ describe('header helpers', () => {
 });
 
 // --- the component class -----------------------------------------------------------
+
+describe('the manual-step card (E10-6)', () => {
+  interface ManualSurface {
+    groups(): WorkGroup[];
+    canFinishManual(): boolean;
+    manualAccept(vm: NeedVm): Promise<void>;
+    manualSendBack(vm: NeedVm): Promise<void>;
+    setManualNote(vm: NeedVm, text: string): void;
+    manualError(): Readonly<Record<string, string>>;
+    manualDone(): Readonly<Record<string, string>>;
+  }
+
+  function setupManual(patch: Partial<FakeState> = {}) {
+    const accepted: string[] = [];
+    const sentBack: { id: string; note: string }[] = [];
+    const { state } = makeFake({
+      needs: [need('manual', 'Check the layout', { ticketId: 'T-0007', summary: 'a manual step waits for you' })],
+      ...patch,
+    });
+    state.finishManual = (id: string) => {
+      accepted.push(id);
+      return Promise.resolve({ ok: true });
+    };
+    state.sendBackManual = (id: string, note: string) => {
+      sentBack.push({ id, note });
+      return Promise.resolve({ ok: true });
+    };
+    const vm = setup(state) as unknown as ManualSurface;
+    const group = vm.groups()[0];
+    if (group?.kind !== 'needs') {
+      throw new Error('expected the needs group');
+    }
+    return { vm, card: group.needs[0]!, accepted, sentBack };
+  }
+
+  it('is a Needs-you card labelled for the owner, with the ticket id', () => {
+    const { card } = setupManual();
+    expect(card.kindLabel).toBe('Your turn');
+    expect(card.need.ticketId).toBe('T-0007');
+  });
+
+  it('Accept finishes the step once and turns the card into its done line', async () => {
+    const { vm, card, accepted } = setupManual();
+    expect(vm.canFinishManual()).toBe(true);
+    await vm.manualAccept(card);
+    expect(accepted).toEqual(['T-0007']);
+    expect(vm.manualDone()[card.key]).toBe('Accepted.');
+  });
+
+  it('Send back needs a note; with one it goes to the desk', async () => {
+    const { vm, card, sentBack } = setupManual();
+    await vm.manualSendBack(card);
+    expect(sentBack).toEqual([]);
+    expect(vm.manualError()[card.key]).toBe('A send-back needs a note.');
+    vm.setManualNote(card, '  The spacing is off  ');
+    await vm.manualSendBack(card);
+    expect(sentBack).toEqual([{ id: 'T-0007', note: 'The spacing is off' }]);
+    expect(vm.manualDone()[card.key]).toBe('Sent back.');
+  });
+
+  it('a read-only device sees the card but cannot act', async () => {
+    const { vm, card, accepted } = setupManual({ readOnly: true });
+    expect(vm.canFinishManual()).toBe(false);
+    await vm.manualAccept(card);
+    expect(accepted).toEqual([]);
+  });
+});
 
 describe('Work', () => {
   // Pipeline order: inbox → build → done. Render order reads the other

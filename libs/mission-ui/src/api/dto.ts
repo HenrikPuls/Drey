@@ -233,6 +233,8 @@ export interface CapacityView {
 /** One team card: the persona directory slice plus what it is running now. */
 export interface PersonaView {
   readonly id: string;
+  /** `human` = the owner as a team member (E10-6); absent = an agent. */
+  readonly kind?: 'agent' | 'human';
   readonly title: string;
   readonly role: string;
   readonly worker: string;
@@ -983,6 +985,8 @@ export function parseNeeds(json: unknown): NeedView[] {
     'report',
     /** E9 (concept §5.7): a chain gate with a Bescheid rule just completed. */
     'notify',
+    /** E10-6: a ticket parked at a manual step. */
+    'manual',
   ];
   const needs: NeedView[] = [];
   for (const raw of arr(json)) {
@@ -1042,6 +1046,7 @@ function personaOf(raw: unknown): PersonaView | null {
   const paused = personasPausedOf(persona['paused']);
   return {
     id,
+    ...(persona['kind'] === 'human' ? { kind: 'human' as const } : {}),
     title: str(persona['title'], id),
     role: str(persona['role']),
     worker: str(persona['worker']),
@@ -1825,6 +1830,8 @@ export interface McFlowStep {
 
 export interface McFlowPersona {
   readonly id: string;
+  /** `human` = the owner (E10-6); the manual step offers only these. */
+  readonly kind: 'agent' | 'human';
   readonly title: string;
   readonly color: string;
   readonly model: string;
@@ -1891,7 +1898,13 @@ export function parseFlow(json: unknown): McFlow | null {
   for (const raw of arr(body['personas'])) {
     const persona = rec(raw);
     if (persona !== null && typeof persona['id'] === 'string') {
-      personas.push({ id: persona['id'], title: str(persona['title'], persona['id']), color: str(persona['color']), model: str(persona['model']) });
+      personas.push({
+        id: persona['id'],
+        kind: persona['kind'] === 'human' ? 'human' : 'agent',
+        title: str(persona['title'], persona['id']),
+        color: str(persona['color']),
+        model: str(persona['model']),
+      });
     }
   }
   const strings = (value: unknown): string[] => arr(value).filter((c): c is string => typeof c === 'string');

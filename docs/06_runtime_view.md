@@ -3854,3 +3854,29 @@ The chat reads the config per turn, so a change in Settings → Assistant
 applies to the next question without restarting the engine. A flow draft
 (`flow-draft`) that finds no model returns the failure's one-sentence
 text as its error.
+
+## 6.80 A manual step: park, notify, Accept or Send back (E10-6)
+
+```mermaid
+sequenceDiagram
+    participant O as Orchestrator (dispatch pass)
+    participant R as Run supervisor
+    participant T as Ticket file (awaiting)
+    participant N as Needs you (phone / desk)
+    participant U as Owner
+    Note over O: chain: insert manual(you) after review
+    O->>R: start run for review (request.parkFor = you, nextPhase = null)
+    R->>T: gate green: awaiting: you + Log "parked for you"
+    O-->>O: dispatchable() is false while awaiting is set
+    N->>T: needsOf: kind manual (since = entered stamp)
+    U->>N: Accept
+    N->>T: acceptTicket: move to next phase, awaiting cleared, Log "manual step finished by owner"
+    O->>R: next gate dispatches as usual
+    Note over O,T: Gate worked by the human persona: the dispatch pass stamps awaiting itself, no run is composed, no worktree is prepared
+    U->>N: Send back (note)
+    N->>T: sendBack: nearest earlier agent phase, awaiting cleared
+```
+
+The park is the only thing the engine does for a manual step: no agent, no
+worktree, no pool slot. The same Accept and Send back that finish a Ready
+card finish it, so a phone, the desk and the ledger need nothing new.

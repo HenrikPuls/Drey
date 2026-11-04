@@ -76,7 +76,7 @@
               </div>
             }
           </ng-template>
-          @if (canOpen()) {
+          @if (canOpen() && persona.kind !== 'human') {
             <button type="button" class="card-btn" (click)="open(persona)">
               <ng-container [ngTemplateOutlet]="head" />
             </button>
@@ -114,7 +114,7 @@
             </div>
           }
 
-          @if (canPause()) {
+          @if (canPause() && persona.kind !== 'human') {
             <div class="pacts">
               <button type="button" class="btn ghost" (click)="togglePause(persona)">
                 {{ isPaused(persona) ? 'Resume' : 'Pause' }}

@@ -143,6 +143,8 @@ export const appConfig: ApplicationConfig = {
           openTicketSendBack: (ticketId) => state.openTicketSendBack(ticketId),
           promote: (ticketId) => state.prefillChat(`promote ${ticketId}`),
           answer: (runId, text) => state.answerRun(runId, text),
+          finishManual: (ticketId) => state.finishManualStep(ticketId),
+          sendBackManual: (ticketId, note) => state.sendBackManualStep(ticketId, note),
           openPersona: (titleOrId) => {
             const byTitle = (
               state.personas() as unknown as readonly { id: string; title: string }[]

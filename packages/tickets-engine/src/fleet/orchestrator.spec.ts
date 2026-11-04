@@ -1205,6 +1205,112 @@ describe('Orchestrator', () => {
     });
   });
 
+  describe('manual steps (E10-6)', () => {
+    const PLAN_LINE =
+      '  - { id: plan, title: Plan, handover: agent plan-default, worker: opencode, model: zai/glm-5.3 }';
+
+    async function writeHuman(id = 'you', kind = 'human'): Promise<void> {
+      const dir = path.join(vaultDir, 'tickets', '_meta', 'personas', id);
+      await fsp.mkdir(dir, { recursive: true });
+      await fsp.writeFile(
+        path.join(dir, 'persona.md'),
+        ['---', `title: ${id === 'you' ? 'You' : id}`, `kind: ${kind}`, 'role: custom', 'worker: opencode', '---', ''].join('\n'),
+        'utf8',
+      );
+    }
+
+    async function writeChainTicket(id: string, phase: string, chain: string[]): Promise<void> {
+      await writeTicket(id, phase);
+      const rel = path.join(vaultDir, 'tickets', phase, `${id}.md`);
+      const lines = ['chain:', ...chain.map((c) => `  - ${c}`)].join('\n');
+      await fsp.writeFile(rel, ticketText(id, phase).replace('repo: drey', `repo: drey\n${lines}`), 'utf8');
+    }
+
+    it('a gate the human persona works parks the ticket: no run, no worktree, awaiting set', async () => {
+      await writeMeta();
+      await writeHuman();
+      await writeChainTicket('T-0200', 'plan', ['assign plan you']);
+      const { orch, fleet } = orchestrator();
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      expect(fleet.start).not.toHaveBeenCalled();
+      const text = await fsp.readFile(await phasePath('plan', 'T-0200'), 'utf8');
+      expect(text).toMatch(/^awaiting: ['"]?you['"]?$/m);
+      expect(text).toContain('parked for You');
+      // a second pass does not park again (the Log line is written once)
+      await orch.setMaster('run');
+      const again = await fsp.readFile(await phasePath('plan', 'T-0200'), 'utf8');
+      expect(again.match(/parked for You/g)).toHaveLength(1);
+    });
+
+    it('the phase persona being human parks every ticket of the column', async () => {
+      await writeMeta();
+      await writeHuman();
+      await fsp.writeFile(
+        path.join(vaultDir, 'tickets', '_meta', 'pipeline.md'),
+        PIPELINE.replace(PLAN_LINE, `${PLAN_LINE.slice(0, -2)}, persona: you }`),
+        'utf8',
+      );
+      await writeTicket('T-0201', 'plan');
+      const { orch, fleet } = orchestrator();
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      expect(fleet.start).not.toHaveBeenCalled();
+      expect(await fsp.readFile(await phasePath('plan', 'T-0201'), 'utf8')).toMatch(/^awaiting: /m);
+    });
+
+    it('an awaiting ticket is never dispatched, and the human never takes a pool slot', async () => {
+      await writeMeta();
+      await writeHuman();
+      await writeChainTicket('T-0202', 'plan', ['assign plan you']);
+      await writeTicket('T-0203', 'plan');
+      const { orch, fleet } = orchestrator();
+      await orch.configure({ ...CONFIG, pools: ONE });
+      await orch.setMaster('run');
+
+      // the only slot went to the agent ticket although the parked one ranks first
+      expect(fleet.records.map((r) => r.request.ticketId)).toEqual(['T-0203']);
+    });
+
+    it('a manual step after the gate rides the run request: it parks, it does not move on', async () => {
+      await writeMeta();
+      await writeChainTicket('T-0204', 'plan', ['insert manual(you, notify) after plan']);
+      const { orch, fleet } = orchestrator();
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      const request = fleet.records[0]!.request;
+      expect(request.parkFor).toBe('you');
+      expect(request.nextPhase).toBeNull();
+      expect(request.nextPhaseDir).toBeNull();
+    });
+
+    it('a manual step names an agent persona: ignored, the chain goes on', async () => {
+      await writeMeta();
+      await writeHuman('ben', 'agent');
+      await writeChainTicket('T-0205', 'plan', ['insert manual(ben) after plan']);
+      const { orch, fleet } = orchestrator();
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+
+      const request = fleet.records[0]!.request;
+      expect(request.parkFor).toBeUndefined();
+      expect(request.nextPhase).toBe('plan-review');
+    });
+
+    it('a ticket without a manual step keeps its normal move', async () => {
+      await writeMeta();
+      await writeTicket('T-0206', 'plan');
+      const { orch, fleet } = orchestrator();
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+      expect(fleet.records[0]!.request.parkFor).toBeUndefined();
+      expect(fleet.records[0]!.request.nextPhase).toBe('plan-review');
+    });
+  });
+
   describe('persona dispatch (E3, ADR-0088)', () => {
     const PLAN_LINE =
       '  - { id: plan, title: Plan, handover: agent plan-default, worker: opencode, model: zai/glm-5.3 }';

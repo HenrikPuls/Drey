@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import type { McFlowStep } from '../api/dto';
+import type { McFlowPersona, McFlowStep } from '../api/dto';
 import {
   MC_FLOW_STATE,
   addablePhasesOf,
@@ -106,6 +106,12 @@ export class FlowEditor {
       owner: step.owner,
     };
   });
+
+  /** The personas a gate can be given: a manual step is worked by a human, so only those (E10-6). */
+  protected personasFor(step: McFlowStep): readonly McFlowPersona[] {
+    const all = this.flow()?.personas ?? [];
+    return step.phase === 'manual' || step.phase.startsWith('manual-') ? all.filter((p) => p.kind === 'human') : all;
+  }
 
   protected readonly addable = computed(() => {
     const flow = this.flow();

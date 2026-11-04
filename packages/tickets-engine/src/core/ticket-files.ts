@@ -206,6 +206,7 @@ export function parseTicketFile(text: string, relPath: string, priorities: Prior
   // req-65: the dialog reservation. Only a bare `true` counts — anything
   // else reads as absent (the owner edits freely, machine writers are strict).
   const interactive = obj['interactive'] === true;
+  const awaiting = asText(obj['awaiting']);
 
   // --- entered-<phase> stamps --------------------------------------------
   const entered: Record<string, string> = {};
@@ -251,6 +252,7 @@ export function parseTicketFile(text: string, relPath: string, priorities: Prior
       parkedReason,
       parkedAt,
       interactive,
+      ...(awaiting !== null ? { awaiting } : {}),
       entered,
     },
     issues,
@@ -429,6 +431,8 @@ export interface TransitionPatch {
   readonly setInteractive?: boolean;
   /** Park the ticket (`parked-reason` + `parked-at`, M85): circuit breaker, budgets. */
   readonly park?: string;
+  /** Park the ticket at a manual step (E10-6): `awaiting: <human persona id>`. A transition (`from` set) clears it. */
+  readonly setAwaiting?: string;
 }
 
 /** Applies a transition/claim patch to a ticket file's text and appends the
@@ -483,6 +487,10 @@ export function patchTicketFile(text: string, patch: TransitionPatch): string {
     doc.set('interactive', true);
   }
 
+  if (patch.setAwaiting !== undefined) {
+    setQuoted(doc, 'awaiting', patch.setAwaiting);
+  }
+
   if (patch.park !== undefined) {
     setQuoted(doc, 'parked-reason', patch.park);
     setQuoted(doc, 'parked-at', stamp);
@@ -493,6 +501,9 @@ export function patchTicketFile(text: string, patch: TransitionPatch): string {
   // is not a move — the field stands.
   if (patch.from !== null) {
     removeKey(doc, 'interactive');
+    if (patch.setAwaiting === undefined) {
+      removeKey(doc, 'awaiting');
+    }
   }
 
   // Leaving the inbox always clears a parked state (schema rule).

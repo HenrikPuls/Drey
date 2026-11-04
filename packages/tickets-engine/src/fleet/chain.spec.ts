@@ -9,6 +9,7 @@ import {
 } from '../contracts/tickets';
 import {
   checkpointPhaseIds,
+  dispatchable,
   columnPromptRef,
   columnWorkerPin,
   isAutoPhase,
@@ -317,5 +318,25 @@ describe('planDispatch — provider pools and column priority (req-63)', () => {
     // Without the vocabulary both are unknown words — one class, the
     // rightmost column's ticket goes first as always.
     expect(ids(input({ columns, poolSize: one }))).toEqual(['T-0182']);
+  });
+});
+
+describe('a ticket parked at a manual step (E10-6)', () => {
+  it('is never dispatchable, and takes no slot from the plan', () => {
+    const parked = card('T-0300', { meta: { ...card('T-0300').meta, awaiting: 'you' } });
+    const free = card('T-0301');
+    expect(dispatchable(parked, new Set())).toBe(false);
+    expect(dispatchable(free, new Set())).toBe(true);
+    const columns = [column(phase('inbox')), column(PLAN, [parked, free]), column(phase('done', { handover: 'none' }))];
+    const plan = planDispatch({
+      master: 'run',
+      columns,
+      modes: {},
+      poolSize: { opencode: 1, 'claude-code': 0 },
+      liveByPool: { opencode: 0, 'claude-code': 0 },
+      poolOf: () => 'opencode',
+      busyTickets: new Set(),
+    });
+    expect(plan.map((p) => p.card.id)).toEqual(['T-0301']);
   });
 });
