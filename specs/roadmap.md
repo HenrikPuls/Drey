@@ -70,7 +70,7 @@ and suite-green but await the owner's
 rounds** — with E9 the whole E0–E9 arc stands built and the concept
 is complete, caveat:
 none of it is owner-verified yet; the next step is the owner's
-verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) 130 (E13-8, Board and Team tabs, the Capacity band) and 131 (D-1, the Mission Control chat reaches its model: sync on change, both HTTP dialects, the error card, Settings → Chat) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
+verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) 130 (E13-8, Board and Team tabs, the Capacity band) and 131 (D-1, the Mission Control chat reaches its model: sync on change, both HTTP dialects, the error card, Settings → Chat), 132 (E10-6, you as a team member: manual steps that park the ticket and notify) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
