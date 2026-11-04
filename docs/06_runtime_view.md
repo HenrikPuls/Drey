@@ -4097,3 +4097,32 @@ Every reader that locates structure by line pattern goes through the
 mask first; the offsets it finds index the original text, so no reader
 re-serialises a chapter it does not own. A fence that never closes ends at
 the next column-0 `## ` (so Verification and Log stay reachable).
+
+## 6.88 Dictating into the Mission Control chat composer (E12-8, milestone 149)
+
+```mermaid
+sequenceDiagram
+    participant O as Owner
+    participant C as Chat composer
+    participant D as Dictation (dictation.ts)
+    participant R as SpeechRecognition (browser)
+
+    O->>C: taps the microphone
+    C->>D: toggle(draft)
+    D->>R: new engine, lang from the device, continuous + interim, start()
+    R-->>D: onstart
+    D-->>C: state "recording", timer 0:00 (the Recording line)
+    R-->>D: onresult (final + interim words)
+    D->>C: onText(base + final + interim) - the draft, live
+    O->>C: edits the text
+    C->>D: cancel() - typing ends the dictation, later results are dropped
+    O->>C: taps Send
+    C->>D: cancel() - no late word lands in the next message
+    R-->>D: onerror (not-allowed / no-speech / network) then onend
+    D-->>C: inline sentence, state "idle", text stays
+```
+
+The button exists only where the browser has an engine and the page is a
+secure context (iOS Safari: HTTPS only, e.g. Tailscale Serve). The final
+text is never sent for the owner. Leaving the composer (focus out) or hiding
+the page stops the engine gracefully; destroying the chat cancels it.

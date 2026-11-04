@@ -1,3 +1,49 @@
+### Milestone 149 — Dictation in the Mission Control chat composer (E12-8)
+
+**Not yet manually verified by the owner.** Owner decision 2026-11-04: voice is
+an input to the assistant, not a capture screen (board 4d is a plain text
+sheet). The phone's chat composer gets a microphone.
+
+- **Button.** `libs/mission-ui/src/chat/chat.html`: between the field and Send,
+  44 × 44 pt, `aria-label="Dictate"`, `aria-pressed` while it records, filled
+  accent while on (board PhoneChat's look). Disabled while a turn is sending
+  or the view is read-only. **Hidden** where the browser has no
+  `SpeechRecognition` / `webkitSpeechRecognition`, and on a page that is not a
+  secure context: iOS Safari refuses recognition on plain `http`, so the button
+  is simply absent there (no hint line — CLAUDE.md: no UI text a screen does not
+  need). **Dictation needs HTTPS** — Tailscale Serve (the manual says so).
+- **Behaviour.** Interim results fill the field live (`base + final + interim`),
+  the final text stays editable and is never sent for the owner. While it
+  records a line above the field shows the board's indicator: dot, "Recording",
+  a bar wave (CSS animation, off under reduced motion) and the timer `0:03`.
+  Typing, Send, a new chat and destroying the chat **cancel** the engine silently
+  (a late result cannot land in the next message); leaving the composer or
+  hiding the page **stops** it gracefully (the last words still arrive). Language:
+  the device's first language, else the page `lang`, else `en-US`. Errors are
+  inline sentences: microphone blocked, no speech heard, no network to the speech
+  service, no microphone, language unsupported, "stopped unexpectedly"; the
+  owner's own stop says nothing.
+- **Code.** `chat/dictation.ts` is pure and testable: the `Dictation` state
+  machine (`idle → starting → recording`) over a small recognition seam,
+  `mergeTranscript`, `splitResults`, `resolveDictationLang`, `clockOf`, the error
+  mapping. `chat.ts` only wires it. The shape session and the plan sheet use this
+  same composer (the plan pane has none of its own), so there was no second one
+  to change. The desktop Assistant's microphone (E13-5) is untouched.
+- **Specs:** `dictation.spec.ts` (22, a fake recognition: live merge, timer,
+  graceful stop vs cancel, every error code, a throwing engine, a stale engine) and
+  seven component specs in `chat.spec.ts` (hidden without engine / on http, 44 pt
+  button order, live fill without a send, typing ends it, blocked microphone,
+  send cancels).
+- **Seen:** the production build in Chromium (390 × 844): the button is visible,
+  44 × 44, not pressed; with a fake engine injected the pressed state, the
+  "Recording 0:01" line and the live text ("T-0084 back to Ralf and ship it")
+  render as drawn; on a tap the real Chromium engine started without an error
+  within 2.5 s. **Not tested: real speech.** Headless Chromium has no microphone
+  and no speech service, and iOS / WebKit is not installed here — whether the
+  iPhone hears and transcribes (and which language it picks) is for the owner
+  to try on the device over HTTPS. A long dictated text wraps inside a
+  one-row field (the field grows by line breaks only, as before) and scrolls.
+
 ### Milestone 148 — Fenced code is opaque: Mermaid plans work end to end (E10-7)
 
 **Not yet manually verified by the owner.** Owner requirement 2026-11-04: a
