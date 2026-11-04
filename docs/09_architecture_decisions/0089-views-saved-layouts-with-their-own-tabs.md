@@ -214,3 +214,17 @@ Constraints that shape the answer:
   have; it comes with the first plugin that needs it (E13-6/E13-13). A UI row
   "Open in this view" (the user-facing form of `stayInView`) is not added yet;
   the plugin-side flag exists.
+
+## Later change: the Assistant reads the view's target (E13-5, milestone 138)
+
+The preset's `assistantTarget` gained its reader. The base still reads
+nothing from the string: `ConversationTargetsService`
+(`src/app/plugin-host/`, SDK 1.41, `api.conversations`) carries the active
+view's value (`viewTarget()`, `onViewTargetChange`) next to the registry of
+conversation targets that plugins offer (`registerTargets`). The Assistant
+(`plugins/assistant/renderer/targets.ts`) resolves it: a registered id is
+selected when the view becomes active, an id that is not registered yet is
+waited for (its plugin may activate later), no value means its own Model
+target. The owner's explicit pick holds until the next view change. A view
+preset names the target by id (the tickets plugin's Mission Control is
+`tickets.mission-control`; the Work view preset sets it, E13-13).

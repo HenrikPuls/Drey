@@ -1402,3 +1402,8 @@
   color: var(--text-5);
   font-size: 11.5px;
 }
+
+.assistant-composer .composer-chips[hidden],
+.assistant-composer button[hidden] {
+  display: none;
+}

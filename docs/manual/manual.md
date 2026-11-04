@@ -447,6 +447,32 @@ The **Assistant panel** is chat-first:
 
 ![The chat picker](img/assistant-chat-picker.png)
 
+### Conversation targets {#assistant-targets}
+
+When the Tickets plugin is on, the Assistant head carries a segmented
+control: **Model**, **Mission Control** and **1:1**.
+
+- **Model** is the chat described here: the provider from Settings →
+  Assistant, with the composer's chips and tools.
+- **Mission Control** is the team's contact (Pia). It knows the board and
+  proposes changes as cards with **Confirm** and **Dismiss**; nothing changes
+  until you confirm. A question from Paul, the planner, appears as a card
+  above the composer — tap an answer to send it — and his words carry the
+  *via Mission Control* chip. Mission Control needs an HTTP provider (LM
+  Studio, an OpenAI-compatible server, OpenRouter, the Anthropic API or
+  Z.ai GLM); with a CLI provider it answers with an error card saying so.
+  The head's list button opens the earlier Mission Control chats, `+`
+  starts a new one.
+- **1:1** opens a menu of the team's agent personas. Your messages go into
+  that persona's thread, which the persona reads before the next run.
+
+A view can name its own default target: switching to such a view switches the
+Assistant with it; Notes always starts on Model. Your own pick stays until you
+change the view.
+
+The **microphone** button in the composer dictates into the field (hidden
+where the system offers no speech input); read the text, then send it.
+
 ### Asking about a selection
 
 Select text in a note and a small assistant button appears next to the

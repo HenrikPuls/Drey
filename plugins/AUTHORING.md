@@ -100,6 +100,17 @@ leaves the app on the previous build. Verify with
   `documents.open` / `addDoc` take `stayInView: true` to open it where the
   owner is. Namespace the preset id (`mycorp.review`); a taken id is
   refused. The sample plugin shows all of it.
+  1.41 added `conversations` (renderer): a plugin offers who the Assistant
+  can talk to besides its own model with `conversations.registerTargets({
+  targets(), onChange(cb) })` — each `ConversationTarget` has an `id`, a
+  `label`, an optional `group` (same group = one switcher segment with a
+  menu), `thread()`, `send(text)`, `act(cardId, actionId)`, `newThread()` and
+  optional `history()` / `open(id)`; threads are plain messages with
+  optional `author` / `via` chip, `cards` (buttons, or `choices` for an answer
+  card) and an `error` card. `conversations.targets()` / `viewTarget()` (the
+  active view's preset `assistantTarget`) and their `on…Change` listeners are
+  for the Assistant. The host attaches no meaning to any of it; namespace
+  the target ids.
   1.40 added `ctx.appConfig.onChange(cb)` (main side): fires after every
   write of the base app config, so a plugin that mirrors part of it (the
   tickets plugin pushes the assistant LLM settings into its engine)

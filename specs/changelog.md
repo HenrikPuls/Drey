@@ -1,3 +1,66 @@
+### Milestone 138 — Assistant conversation targets (E13-5)
+
+**Not yet manually verified by the owner.** Owner request (outside the list,
+2026-11-04, E13-5). The Drey Assistant talks to a **target** the owner picks in
+a segmented control in the panel head: **Model** (today's plain chat over the
+registered provider, `LlmRouter`, nothing new), **Mission Control** (the
+engine's chat, Pia) and **1:1** with one persona (a menu of the team's agent
+personas). The control appears only while a plugin registered a target; an
+install without the tickets plugin looks exactly as before.
+
+- **A generic SDK seam (SDK 1.41, content-agnostic).**
+  `api.conversations.registerTargets(provider)` / `targets()` /
+  `onTargetsChange` / `viewTarget()` / `onViewTargetChange`. A
+  `ConversationTarget` is `id`, `label`, optional `group` (targets with the
+  same group fold into one segment with a menu) and `thread()`, `send`, `act`
+  (a card button), `newThread`, optional `history` / `open`. A thread is
+  messages with an optional `author` + `via` chip, folded `thought`, `cards`
+  (a proposal with buttons, or a `choices` answer card) and an `error` card.
+  The base (`src/app/plugin-host/conversation-targets.service.ts`) only
+  collects providers and fans out change notices; the assistant plugin knows no
+  tickets, the tickets plugin registers Mission Control and the personas.
+- **Per-view default.** `viewTarget()` is the active view's preset
+  `assistantTarget` (milestone 127, the seam already carried it, ADR-0089): the
+  Assistant selects that target when the view becomes active, waits when the
+  target registers later, and falls back to Model in a view without one. The
+  owner's own pick stays until the next view change. The Work view preset
+  that names `tickets.mission-control` is E13-13.
+- **Mission Control over the plugin's engine channel, not the gateway.** The
+  roadmap said "through `RemoteService.localClient`"; that call registers a
+  device for the gateway URL and needs remote access on. The tickets plugin
+  already holds the engine's loopback invoke channel, which exposes the same
+  `ChatService` (`chatSessions`/`chatOpen`/`chatStart`/`chatSend`/
+  `chatConfirm`/`chatDismiss`/`chatShapeDecide`), so `plugins/tickets/main/chat-ipc.ts`
+  (`mc*` handlers, the router's id grammar re-checked) forwards there: no
+  pairing, no dependence on the remote switch.
+- **Cards.** A proposal renders under the mission message it followed with
+  **Confirm / Dismiss** (a decided one as "Done — …" / "Dismissed", no
+  buttons); Paul's split proposal as **Split / Keep as one**; an open question
+  as an **answer card above the composer** whose pick is sent as the next
+  message. Shape-session relays are Paul's words with the **via Mission
+  Control** chip. A failed turn is the D-1 error card (provider, reason,
+  endpoint, model) and is not written into the session; a CLI provider shows
+  the engine's refusal.
+- **1:1.** The persona's thread (E12-4: the owner's messages; `personaThread`
+  / `personaThreadAppend`) with one line "<Name> reads this thread before the
+  next run." The owner as a team member (`kind: human`) has no 1:1.
+- **Dictate.** A microphone button in the composer (icon size 14, the
+  composer's own) on every target, using the Web Speech API
+  (`webkitSpeechRecognition`) and hidden where the page has none; the words
+  land in the composer, the owner sends them; errors ("needs microphone
+  access", "could not reach its speech service") show under the field.
+- **Specs.** `targets-model.spec.ts`, `targets.spec.ts`, `dictate.spec.ts`
+  (assistant), `conversation/map.spec.ts`, `conversation/targets.spec.ts`,
+  `main/chat-ipc.spec.ts` (tickets), `conversation-targets.service.spec.ts`
+  (base). **Real run:** `e2e/assistant-targets.spec.ts` on the built app
+  (own profile, own engine home, a mock OpenAI-compatible endpoint on port
+  41871): Model answers, Mission Control answers with a proposal card that is
+  dismissed, a 1:1 with Paul appends, a `claude-code` provider shows the
+  refusal; screenshots `target-model.png`, `target-mission-control.png`,
+  `target-one-to-one.png`, `target-cli-refused.png` in the test output.
+  **Not seen:** a real model, speech actually heard (the mock cannot), the
+  Work view switching targets (no preset names one yet).
+
 ### Milestone 137 — Text size steps S / M / L / XL
 
 **Not yet manually verified by the owner.** Owner decision, 2026-11-04: the
