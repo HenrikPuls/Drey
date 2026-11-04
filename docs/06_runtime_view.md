@@ -3880,3 +3880,35 @@ sequenceDiagram
 The park is the only thing the engine does for a manual step: no agent, no
 worktree, no pool slot. The same Accept and Send back that finish a Ready
 card finish it, so a phone, the desk and the ledger need nothing new.
+
+## 6.81 Mission Control shows a result: View by default, Live and Source on tap (E12-6)
+
+```mermaid
+sequenceDiagram
+    participant S as Ticket screen / plan sheet
+    participant M as mc-markdown
+    participant L as markdown-surface chunk (lazy)
+    participant D as Device storage
+    participant O as Owner
+
+    S->>M: text, surface key ('ticket', 'plan-edit', ...), defaultMode
+    M->>D: storedMode(surface, defaultMode)
+    M-->>O: the text as plain wrapped lines (first paint, no CodeMirror yet)
+    M->>L: import('@markdown-surface/create-view')
+    L-->>M: createMarkdownView
+    M->>L: parent, doc, mode, editable
+    L-->>O: CodeMirror view: dialect + View (or Live / Source) extensions
+    O->>M: taps Live / View / Source
+    M->>L: setMode (one compartment reconfigure) / setEditable
+    M->>D: storeMode(surface, mode)
+    O->>L: types (Live / Source, editable surface) or taps a strip button
+    L-->>M: onChange(text) / applyAction on the selection
+    M-->>S: textChange - the owner of the text saves it as before
+```
+
+The desktop editor builds its state from the same `engine.ts`
+(`markdownDialect`, `surfaceModeExtensions`, `readOnlyExtension`), so a
+construct that renders on the desktop renders on the phone. View is the
+default wherever a result is shown (ticket text, report summary, plan
+chapters, Verification text); the plan editor is the one Live Preview
+default.

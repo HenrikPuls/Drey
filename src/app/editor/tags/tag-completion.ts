@@ -1,7 +1,7 @@
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import type { TagEntry } from '../../../../shared/plugin-api/search-types';
 import { tagChipColors } from '../../../../shared/tag-style';
-import { inCompletableText, markdownContextAt } from '../markdown-context';
+import { inCompletableText, markdownContextAt } from '@markdown-surface/markdown-context';
 
 /**
  * `#tag` completion against the live tag vocabulary (milestone 33: a BASE

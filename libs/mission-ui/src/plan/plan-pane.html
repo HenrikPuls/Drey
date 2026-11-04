@@ -17,13 +17,14 @@
     @if (plan() === null) {
       <p class="pp-note" aria-live="polite">Loading…</p>
     } @else if (editing()) {
-      <textarea
+      <mc-markdown
         class="pp-text"
-        aria-label="Plan"
-        spellcheck="false"
-        [value]="draftText()"
-        [disabled]="busy()"
-        (input)="onDraft($event)"></textarea>
+        surface="plan-edit"
+        label="Plan"
+        defaultMode="live"
+        [editable]="!busy()"
+        [text]="draftText()"
+        (textChange)="onDraft($event)" />
     } @else if (empty()) {
       <p class="pp-note">No plan yet.</p>
     } @else {
@@ -57,31 +58,7 @@
                   }
                 </ol>
               } @else {
-                @for (block of chapter.blocks; track $index) {
-                  @switch (block.kind) {
-                    @case ('heading') {
-                      <p class="md-h">{{ block.text }}</p>
-                    }
-                    @case ('paragraph') {
-                      <p class="md-p">{{ block.text }}</p>
-                    }
-                    @case ('list') {
-                      <ul class="md-ul">
-                        @for (item of block.items; track $index) {
-                          <li>
-                            @if (item.checked !== null) {
-                              <span aria-hidden="true">{{ item.checked ? '☑' : '☐' }}</span>
-                            }
-                            {{ item.text }}
-                          </li>
-                        }
-                      </ul>
-                    }
-                    @case ('code') {
-                      <pre class="md-code">{{ block.text }}</pre>
-                    }
-                  }
-                }
+                <mc-markdown [text]="chapter.body" [surface]="'plan-' + chapter.key" [label]="chapter.title" />
               }
             </div>
           }

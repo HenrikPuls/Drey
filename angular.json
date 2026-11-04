@@ -128,6 +128,16 @@
               {
                 "glob": "**/*",
                 "input": "apps/mission-control/public"
+              },
+              {
+                "glob": "katex.min.css",
+                "input": "node_modules/katex/dist",
+                "output": "katex"
+              },
+              {
+                "glob": "*.woff2",
+                "input": "node_modules/katex/dist/fonts",
+                "output": "katex/fonts"
               }
             ],
             "styles": [
@@ -186,7 +196,27 @@
           "options": {
             "buildTarget": "mission-control:build:development",
             "tsConfig": "libs/mission-ui/tsconfig.spec.json",
-            "include": ["**/*.spec.ts"]
+            "include": [
+              "**/*.spec.ts"
+            ]
+          }
+        }
+      }
+    },
+    "markdown-surface": {
+      "projectType": "application",
+      "root": "libs/markdown-surface",
+      "sourceRoot": "libs/markdown-surface/src",
+      "prefix": "ms",
+      "architect": {
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "buildTarget": "drey:build:development",
+            "tsConfig": "libs/markdown-surface/tsconfig.spec.json",
+            "include": [
+              "**/*.spec.ts"
+            ]
           }
         }
       }

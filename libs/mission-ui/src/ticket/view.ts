@@ -19,7 +19,7 @@ import {
   type McPersona,
   type QuestionCardVm,
 } from '../work/work.model';
-import { renderMarkdown, type MdBlock } from './markdown';
+import { Markdown } from '../markdown/markdown';
 import { planPartsOf, planSectionOf } from '../plan/plan.model';
 import {
   ACCEPT_ARM_WINDOW_MS,
@@ -118,7 +118,7 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
   templateUrl: './view.html',
   styleUrl: './view.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, Markdown],
 })
 export class TicketView {
   protected readonly vm = inject(MC_TICKET);
@@ -392,12 +392,19 @@ export class TicketView {
     this.vm.proposeChain(chainPrefillOf(doc.id, entries));
   }
 
-  private readonly sections = computed(() => {
+  protected readonly sections = computed(() => {
     const doc = this.doc();
     return doc === null ? splitTicketSections('') : splitTicketSections(doc.text);
   });
 
-  protected readonly blocks = computed<readonly MdBlock[]>(() => renderMarkdown(this.sections().body));
+  /** The ticket text the Markdown surface shows (View by default — it is a result being read). */
+  protected readonly bodyText = computed(() => this.sections().body);
+
+  /** The Verification chapter as written, for the proof face's Markdown surface; null = none. */
+  protected readonly verificationText = computed(() => this.sections().verification);
+
+  /** Whether the proof face's Verification text is unfolded (it mounts the surface lazily). */
+  protected readonly verificationOpen = signal(false);
 
   /** The proof card's data; null = the ticket carries no Verification section. */
   protected readonly proof = computed<ProofReport | null>(() => {

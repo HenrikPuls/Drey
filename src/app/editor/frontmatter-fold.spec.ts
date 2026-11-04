@@ -2,7 +2,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorState, Extension } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, WidgetType } from '@codemirror/view';
 import type { FrontmatterViewContrib, FrontmatterViewInput } from '../../../shared/plugin-api/renderer';
-import { frontmatterFieldCount } from './markdown-frontmatter';
+import { frontmatterFieldCount } from '@markdown-surface/markdown-frontmatter';
 import {
   foldDecorations,
   frontmatterExpandedOf,

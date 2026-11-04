@@ -4,7 +4,7 @@ import { EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
 
 import { makeEmojiCompletionSource } from './emoji-completion';
-import { extendedMarkdown } from '../markdown-extensions';
+import { extendedMarkdown } from '@markdown-surface/markdown-extensions';
 
 interface ResultLike {
   from: number;

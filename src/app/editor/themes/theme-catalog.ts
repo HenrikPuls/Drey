@@ -1,6 +1,6 @@
 import type { Extension } from '@codemirror/state';
 import { ANTHRAZIT_THEME, CYBERPUNK_THEME, DREY_THEME } from '../../../../shared/app-config';
-import { dreyEditorLook } from '../editor-theme';
+import { dreyEditorLook } from '@markdown-surface/editor-theme';
 
 /**
  * The seed a non-Drey theme derives its *shell* palette from -- the docks,

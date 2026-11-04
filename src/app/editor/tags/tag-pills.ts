@@ -12,8 +12,8 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
-import { frontmatterEnd } from '../markdown-frontmatter';
-import { insideCode } from '../markdown-context';
+import { frontmatterEnd } from '@markdown-surface/markdown-frontmatter';
+import { insideCode } from '@markdown-surface/markdown-context';
 import { extractTagOccurrences } from '../../../../shared/tag-grammar';
 
 /**

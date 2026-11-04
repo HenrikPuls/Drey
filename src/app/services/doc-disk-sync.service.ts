@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { isChatNotePath } from '../../../shared/structural-folders';
 import { ConflictService } from '../conflict';
-import { refreshChangedAssets } from '../editor/vault-image';
+import { refreshChangedAssets } from '@markdown-surface/vault-image';
 import { OpenDoc, isDirty, splitEol } from './open-doc';
 import { OpenDocsStore } from './open-docs.store';
 

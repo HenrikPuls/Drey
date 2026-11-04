@@ -26,7 +26,7 @@ import { SettingsService } from '../services/settings.service';
 import { VaultService } from '../vault';
 import { ZenService } from '../services/zen.service';
 import { WindowChromeService } from './window-chrome.service';
-import { duplicateSelection } from '../editor/markdown-commands';
+import { duplicateSelection } from '@markdown-surface/markdown-commands';
 import type { EditCommand } from '../../../shared/ipc-api';
 import type { MenuContribution } from '../../../shared/plugin-api/renderer';
 

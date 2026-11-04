@@ -1,0 +1,24 @@
+<div class="mdx" [class.mdx-view]="mode() === 'view'">
+  <div class="mdx-bar">
+    <div class="mdx-seg" role="group" [attr.aria-label]="label() + ' mode'">
+      @for (m of modes; track m) {
+        <button type="button" class="mdx-seg-btn" [attr.aria-pressed]="mode() === m" (click)="pick(m)">
+          {{ modeLabel[m] }}
+        </button>
+      }
+    </div>
+    @if (editable() && mode() !== 'view' && ready()) {
+      <div class="mdx-strip" role="toolbar" [attr.aria-label]="label() + ' formatting'">
+        @for (b of strip; track b.label) {
+          <button type="button" class="mdx-fmt" [attr.title]="b.label" [attr.aria-label]="b.label" (click)="format(b.action)">
+            {{ b.glyph }}
+          </button>
+        }
+      </div>
+    }
+  </div>
+  <div class="mdx-host" #host [attr.aria-label]="label()"></div>
+  @if (!ready()) {
+    <pre class="mdx-plain">{{ text() }}</pre>
+  }
+</div>

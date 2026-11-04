@@ -2,11 +2,11 @@ export type {
   WikilinkCandidate,
   WikilinkOccurrence,
   WikilinkResolve,
-} from './wikilink';
+} from '@markdown-surface/wikilink';
 export {
   extractWikilinks,
   makeWikilinkCompletionSource,
   wikilinkDecorations,
   wikilinks,
-} from './wikilink';
+} from '@markdown-surface/wikilink';
 export { WikilinkService } from './wikilink.service';

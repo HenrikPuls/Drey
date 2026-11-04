@@ -2,10 +2,10 @@ import { syntaxTree } from '@codemirror/language';
 import type { CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import { EditorState, Extension, Range } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
-import { frontmatterEnd } from '../markdown-frontmatter';
-import { inCompletableText, insideCode, markdownContextAt } from '../markdown-context';
-import { extractWikilinks } from '../../../../shared/wikilinks';
-import type { WikilinkOccurrence } from '../../../../shared/wikilinks';
+import { frontmatterEnd } from './markdown-frontmatter';
+import { inCompletableText, insideCode, markdownContextAt } from './markdown-context';
+import { extractWikilinks } from '../../../shared/wikilinks';
+import type { WikilinkOccurrence } from '../../../shared/wikilinks';
 
 /**
  * Obsidian-style `[[wikilinks]]` (req-20), built the same way as the `#tag`

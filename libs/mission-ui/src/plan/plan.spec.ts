@@ -270,7 +270,7 @@ interface PaneSurface {
   error(): string | null;
   statusLine(): string | null;
   splitLabel(): string;
-  onDraft(event: Event): void;
+  onDraft(text: string): void;
   toggleEdit(): Promise<void>;
   decide(choice: 'keep' | 'split'): Promise<void>;
 }
@@ -320,7 +320,7 @@ describe('the plan pane', () => {
     await pane.toggleEdit();
     expect(pane.editing()).toBe(true);
     expect(flush.current).not.toBeNull();
-    pane.onDraft({ target: { value: '### Goal\n\nchanged' } } as unknown as Event);
+    pane.onDraft('### Goal\n\nchanged');
     await pane.toggleEdit();
     expect(save).toHaveBeenCalledTimes(1);
     expect(save.mock.calls[0]![0]).toBe(ticket('### Goal\n\nchanged'));
@@ -338,7 +338,7 @@ describe('the plan pane', () => {
   it('stays in edit mode and says why when the save is refused; the flush then reports false', async () => {
     const { pane, flush } = paneWith({ save: async () => ({ ok: false, error: 'The plan changed since you opened it.' }) });
     await pane.toggleEdit();
-    pane.onDraft({ target: { value: 'x' } } as unknown as Event);
+    pane.onDraft('x');
     await pane.toggleEdit();
     expect(pane.editing()).toBe(true);
     expect(pane.error()).toBe('The plan changed since you opened it.');

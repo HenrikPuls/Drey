@@ -127,6 +127,7 @@ export default tseslint.config(
           'apps/mission-control/tsconfig.app.json',
           'apps/mission-control/tsconfig.spec.json',
           'libs/mission-ui/tsconfig.json',
+          'libs/markdown-surface/tsconfig.json',
           'plugins/tsconfig.main.json',
           'plugins/tsconfig.renderer.json',
           'packages/tickets-engine/tsconfig.json',
@@ -235,6 +236,29 @@ export default tseslint.config(
       '@typescript-eslint/no-restricted-imports': [
         'error',
         { patterns: [NO_RENDERER, NO_PLUGINS] },
+      ],
+    },
+  },
+  {
+    // The Markdown surface lib (E12-6, milestone 133): CodeMirror + the
+    // dialect, shared by Drey's editor and Mission Control. It knows no
+    // Angular, no Electron and no host -- its own folder and shared/ only.
+    files: ['libs/markdown-surface/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@angular/*', '@angular'],
+              message: 'The Markdown surface lib is framework-free: the Angular wrappers live in src/ and libs/mission-ui.',
+            },
+            NO_RENDERER,
+            NO_MAIN,
+            NO_PLUGINS,
+            NO_APPS,
+          ],
+        },
       ],
     },
   },

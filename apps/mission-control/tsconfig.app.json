@@ -4,6 +4,6 @@
   "compilerOptions": {
     "types": []
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "../../shared/**/*.d.ts"],
   "exclude": ["src/**/*.spec.ts"]
 }

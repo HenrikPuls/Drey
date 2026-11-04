@@ -15,7 +15,7 @@ import { OpenDoc, docKey, isDirty, isMarkdownPath } from './open-doc';
 import { OpenDocsStore } from './open-docs.store';
 
 /** Re-exported for existing importers (`Editor`, specs); defined in `markdown-frontmatter.ts`. */
-export { stripFrontmatter } from '../editor/markdown-frontmatter';
+export { stripFrontmatter } from '@markdown-surface/markdown-frontmatter';
 /** Re-exported for existing importers; defined in the split-out collaborators. */
 export type { EditorViewMode } from '../editor/editor-prefs.service';
 export type { NewEntryRequest } from '../editor/editor-commands.service';
