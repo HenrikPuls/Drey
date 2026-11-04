@@ -2309,6 +2309,7 @@ sequenceDiagram
     Panel->>BE: backlinks {path, vaultId}
     BE->>BE: buildNoteIndex(current file list)
     BE->>BE: collectBacklinks: every OTHER file's link where<br/>resolveNoteTarget(target, fromPath) === path<br/>(shared/wikilinks.ts, the editor's own resolution)
+    BE->>BE: collectFallbackBacklinks (E13-4): links of vaults that opted in,<br/>unmatched at home, whose fallback search lands first on this note
     BE-->>Panel: rows (path · heading · line · snippet)
     User->>Panel: click a row
     Panel->>Doc: open(row.path, row.line, {vaultId})
@@ -2320,8 +2321,13 @@ same through the announcer, every other round (refresh, renames,
 registry changes) rebuilds the vaults — each mutation pushes
 `links-updated` and the panel re-queries. Resolution happens at QUERY
 time against the current file list, so a rename or a new file reshapes
-the backlinks without re-reading every note's links. Known v1 limits:
-same-vault only, `.md` files only, unsaved buffers don't count.
+the backlinks without re-reading every note's links. Cross-vault rows
+(milestone 125, E13-4) come from vaults with "Also look for link targets
+in other vaults" on: a link that matches nothing in its own vault and
+whose fallback search (active vault first, then the registry order) lands
+first on this note; the row carries the linking note's `vaultId` and the
+click opens it there. Known limits: `.md` files only, unsaved buffers
+don't count.
 
 ## 6.47 Back / forward through the document history (milestone 55, `DocHistoryService`)
 

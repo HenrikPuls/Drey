@@ -69,6 +69,7 @@ export const DEFAULT_TEMPLATES_CONFIG: TemplatesConfig = { dir: 'templates', sni
 export const DEFAULT_VAULT_CONFIG: VaultConfig = {
   watch: false,
   updateLinksOnRename: 'ask',
+  linkFallbackVaults: [],
   history: { enabled: true, keepDays: 30, maxPerFile: 50 },
 };
 

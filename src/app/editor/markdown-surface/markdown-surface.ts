@@ -497,7 +497,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       // doc's vault (ADR-0051).
       wikilinks({
         resolve: (target) =>
-          this.wikiLinks.resolve(target, this.docVaultId(), this.languageFilename()) !== null,
+          this.wikiLinks.inspect(target, this.docVaultId(), this.languageFilename()),
         onActivate: this.onWikilinkActivate(),
       }),
       markdownLanguage.data.of({

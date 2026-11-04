@@ -728,6 +728,13 @@ export interface VaultConfig {
    * only renames.
    */
   updateLinksOnRename: UpdateLinksMode;
+  /**
+   * Vault ids whose `[[links]]` that match nothing in their own vault are
+   * looked up in the other registered vaults too (E13-4, ADR-0051 later
+   * change). Off for every vault by default: an unmatched link still
+   * creates its note in its own vault.
+   */
+  linkFallbackVaults: string[];
   /** Local note history (milestone 60, ADR-0060). */
   history: VaultHistoryConfig;
 }

@@ -237,6 +237,12 @@ in Settings â†’ *Templates*.
   the note if it does not exist — and `[[Note#Heading]]` jumps to a
   heading. `[[Note|alias]]` shows the alias text. Typing after `[[`
   autocompletes note names across all vaults.
+- A link is looked up in its own vault first. With **Settings → Vault →
+  Also look for link targets in other vaults** switched on for that vault,
+  a link that matches nothing there is looked up in your other vaults (the
+  active one first). Hover such a link to see which vault it opens; a name
+  found in several other vaults opens the first and is drawn dashed. Off by
+  default — then following a link that matches nothing creates the note.
 
 ### Editing aids
 
@@ -1866,7 +1872,7 @@ history store is deliberately outside it).
 ---
 
 *Manual for Drey 0.8.1; manual content last changed
-2026-11-01. Screenshots were captured automatically from
+2026-11-04. Screenshots were captured automatically from
 the built app (Anthrazit theme, 1600Ã—1000) by
 `e2e/manual-screenshots.spec.ts` — run
 `$env:DREY_MANUAL_SHOTS='1'; npm run e2e:run -- manual-screenshots`

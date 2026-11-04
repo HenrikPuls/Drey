@@ -70,10 +70,7 @@ and suite-green but await the owner's
 rounds** — with E9 the whole E0–E9 arc stands built and the concept
 is complete, caveat:
 none of it is owner-verified yet; the next step is the owner's
-verification round before anything further. **Milestone 123 (E13-1,
-views — saved layouts with their own tabs, ADR-0089) is built and
-suite-green and awaits the owner's round** (E13 is the desktop
-integration of Mission Control, below). The owner's verification round for 1–81 closed
+verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot) and 125 (E13-4, link fallback to other vaults) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
@@ -241,20 +238,6 @@ Order and dependencies (an item needs everything it names):
    plugin registers a view preset (id, label, initial layout, default
    Assistant target) and may name a `homeView` on doc kinds and file openers.
    Any plugin can use it. Needs E13-1; follows right after it.
-4. **E13-4 — Link fallback to other vaults** (base; no SDK change). A
-   wikilink is resolved in its own vault first; **only when it cannot be
-   resolved there** are the other registered vaults searched. Order of the
-   fallback vaults: the active vault (when it is not the link's own), then the
-   registry order (ADR-0051). Within one vault the existing rules hold
-   (unique name wins, then a sibling, then the shortest path). The first vault
-   in that order that has a match wins; a name found in several fallback
-   vaults is **ambiguous**: it opens the first match and the link check and
-   hover name the vault and mark the ambiguity. Settings → Vault: "Also look
-   for link targets in other vaults" per vault, default off, so clicking a
-   link that matches nothing still creates the note as before. The backlinks
-   index counts links that resolved into another vault. Link-integrity
-   rewrites on rename (ADR-0059) stay per vault. Records a later-change note
-   in ADR-0051 and ADR-0059. Independent.
 5. **E13-5 — Assistant conversation targets.** Target *Model* (plain chat,
    no agent, no tools, any provider registered in Settings → Assistant — the
    existing `LlmRouter`, nothing new), *Mission Control* (the E5a chat

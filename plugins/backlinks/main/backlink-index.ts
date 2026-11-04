@@ -9,8 +9,9 @@
  */
 import { extractLinkTargets } from '../shared/link-targets';
 import type { LinkOccurrence } from '../shared/link-targets';
-import { buildNoteIndex, type NoteIndex } from '../../../shared/wikilinks';
-import { collectBacklinks } from '../shared/link-index';
+import { buildNoteIndex, type NoteIndex, type VaultNoteIndex } from '../../../shared/wikilinks';
+import { collectBacklinks, collectFallbackBacklinks } from '../shared/link-index';
+import type { FallbackSource } from '../shared/link-index';
 import type { BacklinkRow } from '../shared/link-index';
 
 /** One vault's outlinks: the file list plus each file's occurrences. */
@@ -74,6 +75,11 @@ class VaultLinks {
     this.paths = this.paths.filter((p) => p !== path);
   }
 
+  /** This vault's note index and outlinks, for the cross-vault fallback pass. */
+  snapshot(): { index: NoteIndex; outlinks: ReadonlyMap<string, readonly LinkOccurrence[]> } {
+    return { index: buildNoteIndex(this.paths), outlinks: this.links };
+  }
+
   /** The backlink rows for one note, resolved against the current file list. */
   backlinksFor(path: string): BacklinkRow[] {
     const index: NoteIndex = buildNoteIndex(this.paths);
@@ -127,8 +133,37 @@ export class BacklinkIndex {
     return [...this.byVault.keys()];
   }
 
-  /** The backlink rows for one note in one vault (empty when unknown). */
-  backlinksFor(vaultId: string, path: string): BacklinkRow[] {
-    return this.byVault.get(vaultId)?.backlinksFor(path) ?? [];
+  /**
+   * The backlink rows for one note in one vault (empty when unknown). With
+   * `fallback`, links of other vaults that reached this note through the
+   * link fallback (E13-4) are added: `order` is the fallback search order
+   * (active vault first, then the registry order), `enabled` the vaults
+   * whose links may fall back at all.
+   */
+  backlinksFor(
+    vaultId: string,
+    path: string,
+    fallback?: { order: readonly string[]; enabled: ReadonlySet<string> },
+  ): BacklinkRow[] {
+    const own = this.byVault.get(vaultId)?.backlinksFor(path) ?? [];
+    if (fallback === undefined || fallback.enabled.size === 0) {
+      return own;
+    }
+    const vaults: VaultNoteIndex[] = [];
+    const sources: FallbackSource[] = [];
+    for (const id of fallback.order) {
+      const snap = this.byVault.get(id)?.snapshot();
+      if (snap === undefined) {
+        continue;
+      }
+      vaults.push({ vaultId: id, index: snap.index });
+      if (fallback.enabled.has(id)) {
+        sources.push({ vaultId: id, outlinks: snap.outlinks });
+      }
+    }
+    if (!vaults.some((v) => v.vaultId === vaultId && v.index.all.includes(path))) {
+      return own;
+    }
+    return [...own, ...collectFallbackBacklinks({ vaultId, path }, sources, vaults)];
   }
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { extractLinkTargets } from './link-targets.js';
 import { buildNoteIndex, resolveNoteTarget } from '../../../shared/wikilinks.js';
-import { collectBacklinks } from './link-index.js';
+import { collectBacklinks, collectFallbackBacklinks } from './link-index.js';
 
 describe('extractLinkTargets', () => {
   it('parses target, anchor and skips aliases', () => {
@@ -107,5 +107,49 @@ describe('collectBacklinks', () => {
   it('returns nothing for an unknown path', () => {
     const index = buildNoteIndex(['a.md']);
     expect(collectBacklinks('nope.md', new Map(), index)).toEqual([]);
+  });
+});
+
+describe('collectFallbackBacklinks (E13-4)', () => {
+  const notes = buildNoteIndex(['a.md']);
+  const tickets = buildNoteIndex(['T-1.md']);
+  const archive = buildNoteIndex(['T-1.md']);
+  const link = (target: string) => extractLinkTargets(`see [[${target}]]`);
+  const outlinks = new Map([['a.md', link('T-1')]]);
+  const vaults = [
+    { vaultId: 'notes', index: notes },
+    { vaultId: 'tickets', index: tickets },
+    { vaultId: 'archive', index: archive },
+  ];
+
+  it('counts a link that matched nothing at home and landed in the target vault', () => {
+    const rows = collectFallbackBacklinks(
+      { vaultId: 'tickets', path: 'T-1.md' },
+      [{ vaultId: 'notes', outlinks }],
+      vaults,
+    );
+    expect(rows).toEqual([expect.objectContaining({ path: 'a.md', vaultId: 'notes', line: 1 })]);
+  });
+
+  it('counts an ambiguous name for the first match only', () => {
+    const second = collectFallbackBacklinks(
+      { vaultId: 'archive', path: 'T-1.md' },
+      [{ vaultId: 'notes', outlinks }],
+      vaults,
+    );
+    expect(second).toEqual([]);
+  });
+
+  it('ignores a link that resolves in its own vault', () => {
+    const own = new Map([['a.md', link('a')]]);
+    expect(
+      collectFallbackBacklinks({ vaultId: 'tickets', path: 'T-1.md' }, [{ vaultId: 'notes', outlinks: own }], vaults),
+    ).toEqual([]);
+  });
+
+  it('ignores sources that are the target vault itself', () => {
+    expect(
+      collectFallbackBacklinks({ vaultId: 'tickets', path: 'T-1.md' }, [{ vaultId: 'tickets', outlinks }], vaults),
+    ).toEqual([]);
   });
 });

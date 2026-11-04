@@ -7,6 +7,7 @@ import {
   makeWikilinkCompletionSource,
   wikilinkDecorations,
   type WikilinkCandidate,
+  type WikilinkResolve,
 } from './wikilink';
 
 describe('extractWikilinks', () => {
@@ -81,7 +82,7 @@ const MARKS = { extensions: [markdown({ base: markdownLanguage })] };
 
 function marks(
   doc: string,
-  resolve: (target: string) => boolean = () => true,
+  resolve: WikilinkResolve = () => true,
 ): { from: number; to: number; cls: string; attrs: Record<string, string> }[] {
   const state = EditorState.create({ doc, extensions: MARKS.extensions });
   const set: DecorationSet = wikilinkDecorations(state, [{ from: 0, to: state.doc.length }], resolve);
@@ -198,5 +199,23 @@ describe('makeWikilinkCompletionSource', () => {
     // `#` (anchor) / `|` (alias) end the name query -- the popup closes.
     expect(result?.validFor?.test('[[pl#Head')).toBe(false);
     expect(result?.validFor?.test('[[pl|x')).toBe(false);
+  });
+});
+
+describe('wikilinkDecorations: cross-vault hints (E13-4)', () => {
+  it('adds the hover title for a link that resolved in another vault', () => {
+    const [hit] = marks('[[T-0063]]', () => ({ title: 'In vault “Tickets”', ambiguous: false }));
+    expect(hit!.cls).toBe('cm-wikilink');
+    expect(hit!.attrs['title']).toBe('In vault “Tickets”');
+  });
+
+  it('marks an ambiguous cross-vault link', () => {
+    const [hit] = marks('[[T-0063]]', () => ({ title: 'Ambiguous: also in “Archive”.', ambiguous: true }));
+    expect(hit!.cls).toBe('cm-wikilink cm-wikilink-ambiguous');
+  });
+
+  it('keeps null / false unresolved', () => {
+    expect(marks('[[x]]', () => null)[0]!.cls).toContain('cm-wikilink-unresolved');
+    expect(marks('[[x]]', () => false)[0]!.cls).toContain('cm-wikilink-unresolved');
   });
 });

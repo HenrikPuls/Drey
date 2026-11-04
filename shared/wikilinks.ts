@@ -130,3 +130,70 @@ export function resolveNoteTarget(
   }
   return [...hits].sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
 }
+
+/** One registered vault's note index, for cross-vault resolution (E13-4). */
+export interface VaultNoteIndex {
+  vaultId: string;
+  index: NoteIndex;
+}
+
+/** Where a wikilink points: the owning vault and the note path inside it. */
+export interface LinkLocation {
+  vaultId: string;
+  path: string;
+  /** True when the match came from another vault than the link's own. */
+  fallback: boolean;
+  /**
+   * Further fallback vaults that also have a match (fallback only), in
+   * search order. Non-empty = the link is ambiguous across vaults; the
+   * location itself is the first match.
+   */
+  alsoIn: string[];
+}
+
+/**
+ * Resolves a link against its OWN vault first and, only when that finds
+ * nothing and `fallback` is on, against the other vaults (E13-4).
+ *
+ * `vaults` is the full list in fallback order -- the caller puts the active
+ * vault first (when it is not the link's own), then the registry order
+ * (ADR-0051); the link's own vault is skipped in the fallback pass. Within
+ * one vault the usual rules hold (`resolveNoteTarget`); a fallback vault
+ * has no linking note, so no sibling preference applies there. A name found
+ * in several fallback vaults opens the first and lists the rest in
+ * `alsoIn`. An empty target is the linking note itself (own vault only).
+ */
+export function resolveWikilinkAcrossVaults(
+  rawTarget: string,
+  fromVaultId: string,
+  fromPath: string | null,
+  vaults: readonly VaultNoteIndex[],
+  fallback: boolean,
+): LinkLocation | null {
+  const own = vaults.find((v) => v.vaultId === fromVaultId);
+  if (own !== undefined) {
+    const path = resolveNoteTarget(rawTarget, fromPath, own.index);
+    if (path !== null) {
+      return { vaultId: fromVaultId, path, fallback: false, alsoIn: [] };
+    }
+  }
+  if (!fallback || rawTarget.trim() === '') {
+    return null;
+  }
+  let first: LinkLocation | null = null;
+  for (const { vaultId, index } of vaults) {
+    if (vaultId === fromVaultId) {
+      continue;
+    }
+    const path = resolveNoteTarget(rawTarget, null, index);
+    if (path === null) {
+      continue;
+    }
+    if (first === null) {
+      first = { vaultId, path, fallback: true, alsoIn: [] };
+    } else {
+      first.alsoIn.push(vaultId);
+    }
+  }
+  return first;
+}

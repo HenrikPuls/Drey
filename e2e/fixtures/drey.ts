@@ -45,6 +45,12 @@ interface DreyFixtures {
    */
   seedVault: Record<string, string>;
   /**
+   * More registered vaults next to the seeded one: `{ vaultName: { relativePath:
+   * content } }`, created under the test's output dir and registered (ids
+   * `v-main`, `v-<name>`) before launch; the seeded vault stays active.
+   */
+  extraVaults: Record<string, Record<string, string>>;
+  /**
    * A plugin directory exposed to the app via `DREY_EXTRA_PLUGIN_DIR`
    * (ADR-0044), or null. `plugins.spec.ts` writes a self-contained plugin
    * (plain JS, no build step) into it before launch.
@@ -104,6 +110,8 @@ export const test = base.extend<DreyFixtures>({
 
   seedVault: [{}, { option: true }],
 
+  extraVaults: [{}, { option: true }],
+
   extraPluginDir: [null, { option: true }],
 
   userDataPlugins: [null, { option: true }],
@@ -117,7 +125,7 @@ export const test = base.extend<DreyFixtures>({
   },
 
   electronApp: async (
-    { vaultDir, appConfig, seedVault, extraPluginDir, userDataPlugins, externalDir, launchFiles, userDataDir },
+    { vaultDir, appConfig, seedVault, extraVaults, extraPluginDir, userDataPlugins, externalDir, launchFiles, userDataDir },
     use,
     testInfo,
   ) => {
@@ -134,10 +142,28 @@ export const test = base.extend<DreyFixtures>({
       fs.writeFileSync(target, content);
     }
 
-    fs.writeFileSync(
-      path.join(userDataDir, 'vault-config.json'),
-      JSON.stringify({ activeVaultPath: vaultDir }, null, 2),
-    );
+    const extraNames = Object.keys(extraVaults);
+    if (extraNames.length === 0) {
+      fs.writeFileSync(
+        path.join(userDataDir, 'vault-config.json'),
+        JSON.stringify({ activeVaultPath: vaultDir }, null, 2),
+      );
+    } else {
+      const registry = [{ id: 'v-main', name: 'main', path: vaultDir }];
+      for (const name of extraNames) {
+        const dir = path.join(testInfo.outputDir, `vault-${name}`);
+        for (const [relativePath, content] of Object.entries(extraVaults[name])) {
+          const target = path.join(dir, relativePath);
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          fs.writeFileSync(target, content);
+        }
+        registry.push({ id: `v-${name}`, name, path: dir });
+      }
+      fs.writeFileSync(
+        path.join(userDataDir, 'vault-config.json'),
+        JSON.stringify({ version: 2, vaults: registry, activeVaultId: 'v-main' }, null, 2),
+      );
+    }
     // User-installed plugins land in the app-level discovery root
     // (`<userData>/plugins/<id>/`, ADR-0044) — indistinguishable from a
     // real install from the app's point of view.
