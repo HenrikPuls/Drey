@@ -36,6 +36,9 @@ import { parseVerlaufEntries, type VerlaufEntry } from '../core/verlauf';
 import { mergeWorktreeChanges, diffOfOutput, isSafeRepoPath, MAX_FILE_VIEW_BYTES, type TicketDiff, type TicketFileReply, type WorktreeFile } from '../core/worktree-changes';
 import { planWorktreeRemoval } from '../core/worktree-removal';
 import { TicketsGit, type RepoLocation } from '../core/tickets-git';
+import { TicketStoreError } from '../ports/ticket-store';
+import { FileTicketStore } from '../store/file-ticket-store';
+import { createDricketStore, groupByStage, readStoreSettings, type StoreListing } from '../store/store-settings';
 import { loadShippedPrompts } from '../core/default-prompts';
 import { type AttachmentCommand, RefineCommand } from '../core/commands';
 import { nextImprovementId, parseFriction, parseImprovements, renderImprovements, type FrictionLine, type ImprovementDraft, type ImprovementProposal } from '../core/improvements';
@@ -421,6 +424,42 @@ export class EngineBoardService {
     await this.refreshHandover(snapshot);
     await this.syncChainConfig(vault, snapshot.pipeline);
     return snapshot;
+  }
+
+  /**
+   * The read-only listing from the `TicketStore` behind `tickets.backend`
+   * (E14-1, ADR-0090): `files` reads the tickets vault through the file
+   * store, `dricket` shells out to `dk`. Never throws — a missing `dk` or a
+   * misconfigured store comes back as `{ ok: false, error }`. Not the board:
+   * columns here are the store's stages; the board over `TicketRecord[]` is
+   * E14-2.
+   */
+  async storeListing(): Promise<StoreListing> {
+    const settings = await readStoreSettings(this.host.configGet.bind(this.host));
+    try {
+      if (settings.backend === 'dricket') {
+        if (settings.dkStore === '') {
+          return { ok: false, backend: 'dricket', error: 'no dricket store configured (tickets.dk.store)' };
+        }
+        const store = createDricketStore(settings);
+        const [records, capabilities] = await Promise.all([store.list(), store.capabilities()]);
+        return { ok: true, backend: 'dricket', version: capabilities.version, columns: groupByStage(records) };
+      }
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, backend: 'files', error: 'no tickets vault detected' };
+      }
+      const store = new FileTicketStore({
+        listMarkdownFiles: () => this.host.listMarkdownFiles(vault.id),
+        read: (p) => this.host.read(vault.id, p),
+        write: (p, text) => this.host.write(vault.id, p, text),
+        commit: (paths, message) => this.commit(vault, paths, message),
+        announce: (paths) => this.host.announceChanges(vault.id, paths),
+      });
+      return { ok: true, backend: 'files', version: null, columns: groupByStage(await store.list()) };
+    } catch (error) {
+      return { ok: false, backend: settings.backend, error: error instanceof TicketStoreError || error instanceof Error ? error.message : String(error) };
+    }
   }
 
   /** Re-reads the handover thresholds with the board's override keys (T-0049). */

@@ -3,6 +3,7 @@ import { promises as fsp } from 'node:fs';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { WORKER_PROVIDERS } from '../../../packages/tickets-engine/src/fleet/protocol';
+import { STORE_SETTING_KEYS } from '../../../packages/tickets-engine/src/store/store-settings';
 import { EngineClient, type EngineEndpoints } from './engine-client';
 
 /**
@@ -75,6 +76,7 @@ const SYNCED_KEYS = (providers: readonly string[]): readonly string[] => [
   'defaultWorker',
   'autoPermissionMode',
   'vaultId',
+  ...STORE_SETTING_KEYS,
   ...['gateFailureLines', 'gateFailureBytes', 'diffStatLines', 'diffStatBytes'].map((k) => `fleet.cap.${k}`),
   ...providers.flatMap((p) => [`fleet.pool.${p}.size`, `fleet.pool.${p}.probe`]),
   'fleet.compactAboveTokens',

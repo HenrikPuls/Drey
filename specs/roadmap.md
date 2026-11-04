@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–149 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -520,14 +520,11 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   contract (extension fields, `put`, configurable stages, `move`), v0.8 (import,
   change feed, stage log, Windows CI, dependency semantics). Gate for E14-4;
   not for E14-1..3, E14-5.
-- **E14-1 — `TicketStore` port + the first slice.** The port, the file store
-  wrapper, the `dk` process wrapper (queue, exit-code table, version gate), id
-  mapping `T-0063` <-> `t-63`, the flat front-matter reader, contract tests
-  against a scratch store; slice: list, show, claim, release of one ticket
-  through `dk --json`, board listing read-only. Needs only dk v0.5.
 - **E14-2 — Board from the store.** `ticket-board` over `TicketRecord[]`, stage
   mapping, derived order and blocked from `depends`, `shadow` mode with a diff
-  report. Needs E14-1. Parallel with E14-3, E14-5.
+  report; also renders E14-1's read-only `storeListing` in the Work panel
+  (the engine route exists, the panel does not show it yet). Needs E14-1 (done).
+  Parallel with E14-3, E14-5.
 - **E14-3 — Migration tool.** Dry run, apply, report, shadow diff, **reverse
   converter** (the rollback). Apply needs dk R-10. Parallel with E14-2, E14-5.
 - **E14-4 — Write path.** Capture, refine, header edits, moves, accept/send
