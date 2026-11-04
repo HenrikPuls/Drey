@@ -19,6 +19,7 @@ describe('parsePersonaFile', () => {
   it('reads the frontmatter with the concept defaults', () => {
     expect(parsePersonaFile('pia', PIA)).toEqual({
       id: 'pia',
+      kind: 'agent',
       title: 'Pia',
       role: 'planner',
       worker: 'claude-code',

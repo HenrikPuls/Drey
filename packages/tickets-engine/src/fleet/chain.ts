@@ -134,6 +134,10 @@ export function dispatchable(card: TicketCard, busyTickets: ReadonlySet<string>)
   if (card.meta.interactive) {
     return false;
   }
+  // E10-6: parked at a manual step — the owner finishes it, no run, no worktree.
+  if (card.meta.awaiting !== undefined) {
+    return false;
+  }
   if (card.blocked.length > 0) {
     return false;
   }

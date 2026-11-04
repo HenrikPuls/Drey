@@ -1230,6 +1230,39 @@ describe('RunSupervisor', () => {
     await expect(fsp.access(path.join(vaultDir, rel))).rejects.toBeDefined();
   });
 
+  it('a manual step after the gate parks the ticket in place: awaiting set, no move (E10-6)', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel, nextPhase: null, nextPhaseDir: null, parkFor: 'you' }));
+    expect(started.ok).toBe(true);
+    const id = (started as { run: { id: string } }).run.id;
+
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    const meta = parseTicketFile(text, rel).meta;
+    expect(meta.awaiting).toBe('you');
+    expect(text).toContain('parked for you (manual step)');
+  });
+
+  it('a pulled ticket moves into the working column and parks there (E10-6)', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel, nextPhase: 'qa', nextPhaseDir: 'qa', parkFor: 'you' }));
+    const id = (started as { run: { id: string } }).run.id;
+
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+
+    const movedRel = 'tickets/qa/T-0001.md';
+    const moved = await fsp.readFile(path.join(vaultDir, movedRel), 'utf8');
+    expect(parseTicketFile(moved, movedRel).meta.awaiting).toBe('you');
+    expect(parseTicketFile(moved, movedRel).meta.entered['qa']).toBeDefined();
+  });
+
   it('pushes the transition commit when the request names a remote, never otherwise (T-0041)', async () => {
     const withPush = supervisor();
     const rel = await writeTicket();

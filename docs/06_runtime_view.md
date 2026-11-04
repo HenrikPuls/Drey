@@ -3822,3 +3822,29 @@ The Board also asks `planParts` for every ticket in an owner-checkpoint column
 (once per snapshot) so a plan's unreleased parts hang under the planning
 ticket. A detail pane (1:1 thread, Memory, Setup) keeps its own DOM across
 the fleet repaints, so a half-typed message survives them.
+
+## 6.79 A manual step: park, notify, Accept or Send back (E10-6)
+
+```mermaid
+sequenceDiagram
+    participant O as Orchestrator (dispatch pass)
+    participant R as Run supervisor
+    participant T as Ticket file (awaiting)
+    participant N as Needs you (phone / desk)
+    participant U as Owner
+    Note over O: chain: insert manual(you) after review
+    O->>R: start run for review (request.parkFor = you, nextPhase = null)
+    R->>T: gate green: awaiting: you + Log "parked for you"
+    O-->>O: dispatchable() is false while awaiting is set
+    N->>T: needsOf: kind manual (since = entered stamp)
+    U->>N: Accept
+    N->>T: acceptTicket: move to next phase, awaiting cleared, Log "manual step finished by owner"
+    O->>R: next gate dispatches as usual
+    Note over O,T: Gate worked by the human persona: the dispatch pass stamps awaiting itself, no run is composed, no worktree is prepared
+    U->>N: Send back (note)
+    N->>T: sendBack: nearest earlier agent phase, awaiting cleared
+```
+
+The park is the only thing the engine does for a manual step: no agent, no
+worktree, no pool slot. The same Accept and Send back that finish a Ready
+card finish it, so a phone, the desk and the ledger need nothing new.

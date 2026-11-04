@@ -41,9 +41,24 @@ export interface PersonaModels {
   readonly router: PersonaRouter;
 }
 
+/**
+ * What a persona is (E10-6): an `agent` (the fleet runs it) or the `human`
+ * — the owner as a team member. A gate assigned to the human persona
+ * parks the ticket instead of dispatching a run; the human never counts
+ * toward capacity, budget or the worker pool.
+ */
+export type PersonaKind = 'agent' | 'human';
+
+export const PERSONA_KINDS: readonly PersonaKind[] = ['agent', 'human'];
+
+/** The directory id of the owner's own persona (`personas/you`). */
+export const HUMAN_PERSONA_ID = 'you';
+
 export interface Persona {
   /** The directory id (the folder name under `_meta/personas/`). */
   readonly id: string;
+  /** `agent` (default, absent in the file) or `human` (E10-6). */
+  readonly kind: PersonaKind;
   readonly title: string;
   readonly role: PersonaRole;
   /** The CLI harness (`claude-code` | `opencode` | `api`). */
@@ -90,6 +105,7 @@ export function parsePersonaFile(id: string, text: string): Persona {
   const get = (key: string): unknown => (js === null || typeof js !== 'object' ? undefined : js[key]);
 
   const title = asString(get('title')) ?? id;
+  const kind: PersonaKind = asString(get('kind')) === 'human' ? 'human' : 'agent';
   const roleRaw = asString(get('role')) ?? 'custom';
   const role = (PERSONA_ROLES as readonly string[]).includes(roleRaw) ? (roleRaw as PersonaRole) : 'custom';
   const worker = asString(get('worker')) ?? 'opencode';
@@ -111,7 +127,27 @@ export function parsePersonaFile(id: string, text: string): Persona {
   const budgetNum = typeof budgetRaw === 'number' ? budgetRaw : typeof budgetRaw === 'string' ? Number(budgetRaw.trim()) : Number.NaN;
   const budget = Number.isFinite(budgetNum) && budgetNum >= 0 ? budgetNum : null;
 
-  return { id, title, role, worker, models: { default: defaultModel, pool, router }, color, skills, budget };
+  return { id, kind, title, role, worker, models: { default: defaultModel, pool, router }, color, skills, budget };
+}
+
+/** True for the owner's own persona (E10-6) — no run, no model, no budget. */
+export function isHumanPersona(persona: Pick<Persona, 'kind'> | null | undefined): boolean {
+  return persona?.kind === 'human';
+}
+
+/** A fresh human persona: the owner as a team member; the model fields are inert placeholders. */
+export function humanPersona(title: string, id: string = HUMAN_PERSONA_ID): Persona {
+  return {
+    id,
+    kind: 'human',
+    title,
+    role: 'custom',
+    worker: 'opencode',
+    models: { default: 'opus', pool: ['opus'], router: 'off' },
+    color: '#38bdf8',
+    skills: [],
+    budget: null,
+  };
 }
 
 /** The canonical persona file text (stable key order, byte-stable round trips).
@@ -120,10 +156,16 @@ export function parsePersonaFile(id: string, text: string): Persona {
  *  persona gets the default line. */
 export function personaFileText(persona: Persona, body?: string): string {
   personaRef(persona.id);
-  const prose = body !== undefined && body.trim() !== '' ? body.trimStart() : `Who ${persona.title} is: role, tone, limits. Edit freely — the next run reads it.`;
+  const prose =
+    body !== undefined && body.trim() !== ''
+      ? body.trimStart()
+      : persona.kind === 'human'
+        ? `${persona.title} is you: manual steps park the ticket here until you accept or send it back.`
+        : `Who ${persona.title} is: role, tone, limits. Edit freely — the next run reads it.`;
   const lines = [
     '---',
     `title: ${persona.title}`,
+    ...(persona.kind === 'human' ? ['kind: human'] : []),
     `role: ${persona.role}`,
     `worker: ${persona.worker}`,
     'models:',

@@ -18,7 +18,7 @@ import { newTicketFileText, parseTicketFile, patchTicketFile, patchBlockedBy, pa
 import { withPlanSection } from '../core/plan-section';
 import { applyFlowOp, type FlowOp } from '../core/flow-edit';
 import type { FlowReply, FlowSaveReply, FlowStepView, FlowTarget, FlowScope } from '../contracts/flow';
-import { mergeChain, parseChainEntry, renderChainEntries, validateChain } from '../core/chain-delta';
+import { isManualPhase, MANUAL_PHASE, MANUAL_TITLE, mergeChain, parseChainEntry, renderChainEntries, validateChain } from '../core/chain-delta';
 import { deletePlanPart, movePlanPart, parsePlanParts, partChainEntries, withPlanParts, type PlanPart } from '../core/plan-parts';
 import { blockerOf, indicesToMint, lockedIndices, matchPartTickets, partStateOf, partTicketText, releaseLogText, startLineOf, type PartTicket } from '../core/plan-release';
 import type { PlanPartCard, PlanPartsEdit, PlanPartsReply, PlanReleaseReply, PlanReleaseScope } from '../contracts/plan-approval';
@@ -28,7 +28,7 @@ import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhase
 import { detectDrift, recentDoneOf, type DriftDetection } from '../core/normalize';
 import { blockedRefusal } from '../core/blocked';
 import { runTransition, type TransitionIo } from '../core/transition';
-import { parseStatusLog, type StatusLine } from '../core/status-log';
+import { parseStatusLog, type StatusLine, type StatusVerb } from '../core/status-log';
 import { LEDGER_FILE, parseLedger, settledUsageByTicket, type LedgerWrite } from '../core/ledger';
 import { estimateFrom, type EstimateKey, type RunEstimate } from '../core/estimate';
 import { withReviewFeedback, type ReviewComment } from '../core/review-feedback';
@@ -54,7 +54,7 @@ import { type ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, Interac
 import { type EngineHost, type EngineVaultChangeEvent, EngineVault, FleetPort } from './host';
 import { handoverFromConfig, handoverOverrideKeys } from './handover-config';
 import { appendMemory, memoryPathFor, parseMemoryEntries, toggleMemoryPin } from './persona-store';
-import { personaFileText, personaMigrationFor, parsePersonaFile, personaRef, PERSONAS_DIR, PERSONA_ROLES, type Persona, type PersonaMigration, type PersonaRouter } from '../core/persona';
+import { HUMAN_PERSONA_ID, humanPersona, isHumanPersona, personaFileText, personaMigrationFor, parsePersonaFile, personaRef, PERSONAS_DIR, PERSONA_ROLES, type Persona, type PersonaMigration, type PersonaRouter } from '../core/persona';
 import { appendThreadOwner, newThreadText, parseThread, threadPathFor } from '../core/persona-thread';
 import { scanRepoFolder } from './repos-scan';
 
@@ -259,6 +259,8 @@ export interface ImprovementInput {
  */
 export interface LedgerEvents {
   readonly ledger: (write: LedgerWrite) => void;
+  /** The ticket's status log (E7); the manual step's finish writes its line here (E10-6). */
+  readonly status?: (cardPath: string, at: string, verb: StatusVerb, payload: string) => void;
 }
 
 /** The optional construction extras (E7); the default keeps every existing call site. */
@@ -1030,9 +1032,9 @@ export class EngineBoardService {
       personas: personas.map((p) => ({
         id: p.id,
         title: p.title,
-        role: p.role,
+        role: isHumanPersona(p) ? '' : p.role,
         color: p.color,
-        model: deriveWorkerModel(p, null).model ?? '',
+        model: isHumanPersona(p) ? '' : (deriveWorkerModel(p, null).model ?? ''),
       })),
       warnings: parsed.warnings,
     };
@@ -1170,12 +1172,13 @@ export class EngineBoardService {
 
   /** A flow frame's chain as the editor shows it: the merged gates from the current one on, the terminal phase left out. */
   private async flowReply(frame: FlowFrame, entries: readonly ChainEntry[]): Promise<FlowReply> {
+    await this.ensureHumanPersona();
     const personas = await this.listPersonas();
     const terminal = frame.snap.pipeline[frame.snap.pipeline.length - 1]!.id;
     const buildId = this.buildPhaseOf(frame.snap)?.id ?? null;
     const modelOf = (personaId: string | null): string | null => {
       const persona = personas.find((p) => p.id === personaId);
-      return persona === undefined ? null : (deriveWorkerModel(persona, null).model ?? null);
+      return persona === undefined || isHumanPersona(persona) ? null : (deriveWorkerModel(persona, null).model ?? null);
     };
     const steps: FlowStepView[] = mergeChain(frame.phases, frame.currentId, entries)
       .map((step, index): FlowStepView | null => {
@@ -1197,7 +1200,9 @@ export class EngineBoardService {
           persona,
           pinned: step.persona !== null,
           model: modelOf(persona),
-          owner: persona === null && (column?.handover ?? '').trim().startsWith('manual'),
+          owner:
+            isHumanPersona(personas.find((p) => p.id === persona)) ||
+            (persona === null && (isManualPhase(step.phase) || (column?.handover ?? '').trim().startsWith('manual'))),
           locked: step.state === 'current' || frame.readOnly !== null,
         };
       })
@@ -1210,8 +1215,18 @@ export class EngineBoardService {
       chain: renderChainEntries(entries),
       saved: renderChainEntries(frame.saved),
       steps,
-      phases: frame.phases.filter((phase) => phase.id !== terminal),
-      personas: personas.map((p) => ({ id: p.id, title: p.title, color: p.color, model: deriveWorkerModel(p, null).model ?? '' })),
+      // E10-6: the manual step is no pipeline directory - always on offer (once per flow).
+      phases: [
+        ...frame.phases.filter((phase) => phase.id !== terminal),
+        ...(frame.phases.some((phase) => phase.id === MANUAL_PHASE) ? [] : [{ id: MANUAL_PHASE, title: MANUAL_TITLE }]),
+      ],
+      personas: personas.map((p) => ({
+        id: p.id,
+        kind: p.kind,
+        title: p.title,
+        color: p.color,
+        model: isHumanPersona(p) ? '' : (deriveWorkerModel(p, null).model ?? ''),
+      })),
       readOnly: frame.readOnly,
     };
   }
@@ -1229,11 +1244,16 @@ export class EngineBoardService {
     if (refusal !== null) {
       return { error: refusal };
     }
-    const ids = await this.listPersonaIds();
+    const all = await this.listPersonas();
+    const ids = all.map((p) => p.id);
     for (const entry of entries) {
       const persona = entry.kind === 'insert' || entry.kind === 'assign' ? entry.persona : null;
       if (persona !== null && !ids.includes(persona)) {
         return { error: personaMissing(persona) };
+      }
+      // E10-6: a manual step is worked by a human - an agent persona cannot hold one.
+      if (entry.kind === 'insert' && isManualPhase(entry.phase) && persona !== null && !isHumanPersona(all.find((p) => p.id === persona))) {
+        return { error: `A manual step is yours to work - ${persona} is an agent. Pick ${HUMAN_PERSONA_ID} or nobody.` };
       }
     }
     return entries;
@@ -1926,7 +1946,13 @@ export class EngineBoardService {
       const actor = input.actor ?? this.owner;
       const next = nextPhaseIdOf(snap.columns, card.phase);
       if (next !== null) {
-        return this.moveCard(vault, snap, card, next, actor);
+        // E10-6: finishing a manual step is an ordinary Accept; the Log says whose step it was.
+        const finished = card.meta.awaiting === undefined ? undefined : `manual step finished by ${actor} (${card.meta.awaiting})`;
+        const moved = await this.moveCard(vault, snap, card, next, actor, finished);
+        if (moved.ok && finished !== undefined) {
+          this.options.events?.status?.(card.path, new Date().toISOString(), 'done', finished);
+        }
+        return moved;
       }
       const archived = await this.archiveCard(vault, snap, card, actor);
       if (!archived.ok) {
@@ -3278,6 +3304,37 @@ export class EngineBoardService {
   }
 
   /**
+   * The owner's own persona (E10-6): `personas/you`, kind `human`, next to
+   * Paul, Ben, Ralf and Tessa. Created once when absent (idempotent - an
+   * existing file is the owner's and stays as written); its title is the
+   * config `personas.humanName` ('You' by default) and is editable like
+   * any persona's. One commit `tickets: you persona`. A failure logs.
+   * Called where the persona is first shown (the Team list, the flow editor) -
+   * never on a plain board refresh, so a vault nobody opens it in stays untouched.
+   */
+  ensureHumanPersona(): Promise<void> {
+    return this.enqueue(async () => {
+      try {
+        const vault = await this.detect();
+        if (vault === null) {
+          return;
+        }
+        const personaPath = `${PERSONAS_DIR}/${HUMAN_PERSONA_ID}/persona.md`;
+        if ((await this.readOptional(vault.id, personaPath)) !== null) {
+          return;
+        }
+        const name = (((await this.host.configGet<string>('personas.humanName')) ?? '').trim()) || 'You';
+        await this.host.write(vault.id, personaPath, personaFileText(humanPersona(name)));
+        await this.commit(vault, [personaPath], 'tickets: you persona');
+        this.host.announceChanges(vault.id, [personaPath]);
+        this.announceChanged();
+      } catch (error) {
+        this.host.log(`human persona setup failed: ${messageOf(error)}`, 'warn');
+      }
+    });
+  }
+
+  /**
    * The legacy column-key migration (E3, idempotent — the marker is the
    * absence of the legacy keys themselves): a pipeline phase still
    * carrying `worker:`/`model:`/`prompt:` keys is the pre-persona world.
@@ -3331,6 +3388,7 @@ export class EngineBoardService {
         for (const migration of missing) {
           const persona: Persona = {
             id: migration.id,
+            kind: 'agent',
             title: migration.title,
             role: 'custom',
             worker: migration.worker,

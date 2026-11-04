@@ -16,6 +16,8 @@ import type { CapacityView, LiveRunView, PersonaRouterView } from '../api/dto';
  * until `app/api` lands; reconcile the shapes on import, do not guess.
  */
 export interface McPersonaView {
+  /** `human` = the owner as a team member (E10-6); absent = an agent. */
+  readonly kind?: 'agent' | 'human';
   readonly id: string;
   readonly title: string;
   readonly role: string;
@@ -260,7 +262,8 @@ export function headerSubOf(
   if (personas === null) {
     return null;
   }
-  const count = personas.length;
+  // The human persona is the owner, not a worker: it does not count (E10-6).
+  const count = personas.filter((p) => (p as { kind?: string }).kind !== 'human').length;
   const sum = dailySumOf(personas);
   const noun = count === 1 ? 'persona' : 'personas';
   return sum === null ? `${count} ${noun}` : `${count} ${noun} · today ${usdOf(sum)}`;
@@ -436,10 +439,16 @@ export class Team {
   }
 
   protected stateWords(persona: McTeamPersona): string {
+    if (persona.kind === 'human') {
+      return 'Manual steps';
+    }
     return stateWordsOf(this.liveCountOf(persona), this.isPaused(persona));
   }
 
   protected dotClass(persona: McTeamPersona): string {
+    if (persona.kind === 'human') {
+      return 'run-dim';
+    }
     if (this.isPaused(persona)) {
       return 'run-dim';
     }

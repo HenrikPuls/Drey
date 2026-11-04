@@ -270,6 +270,12 @@ export interface TicketMeta {
    * a board move drops it.
    */
   readonly interactive: boolean;
+  /**
+   * E10-6: the ticket is parked at a manual step — `awaiting: <persona id>`
+   * names the human persona who works it. The dispatcher never takes it;
+   * Accept or Send back (any transition) clears the field.
+   */
+  readonly awaiting?: string;
   /** phase id -> most recent `entered-<phase>` stamp as written. */
   readonly entered: Readonly<Record<string, string>>;
 }

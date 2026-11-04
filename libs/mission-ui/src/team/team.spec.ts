@@ -495,3 +495,33 @@ describe('Team controls (E12-4)', () => {
     expect(calls).toEqual(['nudge r2', 'hand r2', 'stop r2']);
   });
 });
+
+describe('the human persona on the Team page (E10-6)', () => {
+  const YOU: McTeamPersona = { ...PIA, id: 'you', kind: 'human', title: 'You', role: 'custom', dailyCost: 1.5, budget: 5 };
+
+  it('does not count in the header sub, though it is listed', () => {
+    expect(headerSubOf([PIA, YOU])).toBe('1 persona · today $1.50');
+    expect(headerSubOf([YOU])).toBe('0 personas · today $1.50');
+  });
+
+  it('renders the owner as a card without a pause button or a tappable 1:1', () => {
+    TestBed.resetTestingModule();
+    const state: McTeamState = {
+      team: signal([PIA, YOU]),
+      openPersona: () => undefined,
+      personaPause: () => undefined,
+    };
+    TestBed.configureTestingModule({ providers: [{ provide: MC_TEAM_STATE, useValue: state }] });
+    const fixture = TestBed.createComponent(Team);
+    fixture.detectChanges();
+    const cards = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('.card'));
+    expect(cards).toHaveLength(2);
+    const [agent, owner] = cards as HTMLElement[];
+    expect(agent!.querySelector('.card-btn')).not.toBeNull();
+    expect(agent!.textContent).toContain('Pause');
+    expect(owner!.querySelector('.card-btn')).toBeNull();
+    expect(owner!.textContent).toContain('You');
+    expect(owner!.textContent).toContain('Manual steps');
+    expect(owner!.textContent).not.toContain('Pause');
+  });
+});

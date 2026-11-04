@@ -68,6 +68,8 @@ export interface RemoteBoard {
   startRun(input: StartRunCommand): Promise<RunReply>;
   /** The Team tab's cards (E5b). */
   listPersonas(): Promise<readonly import('../core/persona').Persona[]>;
+  /** Creates the owner's own persona on first sight (E10-6); a fake without it is fine. */
+  ensureHumanPersona?(): Promise<void>;
   /** The fleet ledger's raw text (`tickets/_meta/ledger.jsonl`); null without a vault or ledger. */
   ledgerText(): Promise<string | null>;
   /** The raw-text save behind the phone edit mode (E5c). */
@@ -404,6 +406,7 @@ export class DreyTicketsPort implements TicketsRemotePort {
   }
 
   async personas(): Promise<readonly PersonaView[]> {
+    await this.boardService.ensureHumanPersona?.();
     const [personas, ledgerText, snapshot, chain] = await Promise.all([
       this.boardService.listPersonas(),
       this.boardService.ledgerText(),
@@ -426,11 +429,12 @@ export class DreyTicketsPort implements TicketsRemotePort {
     const paused = chain?.pausedPersonas;
     return personas.map((p) => ({
       id: p.id,
+      ...(p.kind === 'human' ? { kind: 'human' as const } : {}),
       title: p.title,
-      role: p.role,
-      worker: p.worker,
-      model: p.models.default,
-      pool: p.models.pool,
+      role: p.kind === 'human' ? 'owner' : p.role,
+      worker: p.kind === 'human' ? '' : p.worker,
+      model: p.kind === 'human' ? '' : p.models.default,
+      pool: p.kind === 'human' ? [] : p.models.pool,
       color: p.color,
       budget: p.budget,
       ...(daily[p.id] !== undefined ? { dailyCost: daily[p.id] } : {}),

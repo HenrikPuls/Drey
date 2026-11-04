@@ -269,6 +269,13 @@ export interface McWorkState {
    * parent wires it; absent = the option card renders display-only.
    */
   answer?(runId: string, text: string): Promise<McAnswerReply>;
+  /**
+   * A manual step's Accept (E10-6): the ticket parked for the owner goes on
+   * along its chain. Absent = the manual card shows no actions.
+   */
+  finishManual?(ticketId: string): Promise<McAnswerReply>;
+  /** A manual step's Send back (E10-6); the note is mandatory. */
+  sendBackManual?(ticketId: string, note: string): Promise<McAnswerReply>;
 }
 
 /** What an answer hands back (`McReply` in the app's api layer, restated). */
@@ -343,6 +350,8 @@ export const NEED_KIND_LABELS: Readonly<Record<string, string>> = {
   report: 'Scout report',
   /** E9 (concept §5.7): a chain gate with a Bescheid rule just completed. */
   notify: 'Gate done',
+  /** E10-6: a ticket parked at a manual step - the owner finishes it. */
+  manual: 'Your turn',
 };
 
 /** The need card's kind chip; an unknown kind shows itself, never a guess. */

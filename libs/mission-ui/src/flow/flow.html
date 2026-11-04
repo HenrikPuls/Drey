@@ -124,7 +124,7 @@
                 Pipeline default
               </button>
             }
-            @for (p of flow()?.personas ?? []; track p.id) {
+            @for (p of personasFor(ins.step); track p.id) {
               <button
                 type="button"
                 class="chip"
@@ -139,10 +139,12 @@
           </div>
         </section>
 
-        <section class="fe-sec" aria-label="Model">
-          <h3>Model</h3>
-          <p class="fe-val">{{ ins.step.model ?? 'None' }}</p>
-        </section>
+        @if (!ins.owner) {
+          <section class="fe-sec" aria-label="Model">
+            <h3>Model</h3>
+            <p class="fe-val">{{ ins.step.model ?? 'None' }}</p>
+          </section>
+        }
 
         <section class="fe-sec fe-row" aria-label="Tell me when it is done">
           <span class="fe-row-t">Tell me when it is done</span>

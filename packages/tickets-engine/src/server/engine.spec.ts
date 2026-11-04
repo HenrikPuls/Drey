@@ -181,11 +181,12 @@ describe('personas (ADR-0088, E3)', () => {
   });
 
   it('serves the team reads of the remote port on the invoke channel (E13-8)', async () => {
-    expect(await engine.invoke('personas')).toEqual([]);
+    // the owner's own persona is the one entry an empty team shows (E10-6)
+    expect(((await engine.invoke('personas')) as { id: string; kind?: string }[]).map((p) => [p.id, p.kind])).toEqual([['you', 'human']]);
     await fsp.mkdir(path.join(vault, 'tickets/_meta/personas/pia'), { recursive: true });
     await fsp.writeFile(path.join(vault, 'tickets/_meta/personas/pia/persona.md'), PIA_PERSONA, 'utf8');
     const personas = (await engine.invoke('personas')) as { id: string; title: string; pool: readonly string[] }[];
-    expect(personas.map((p) => p.id)).toEqual(['pia']);
+    expect(personas.map((p) => p.id)).toEqual(['pia', 'you']);
     expect(personas[0]).toMatchObject({ title: 'Pia', pool: ['opus', 'sonnet'] });
     const thread = (await engine.invoke('personaThread', 'pia')) as { ok: boolean; messages?: unknown[] };
     expect(thread.ok).toBe(true);
