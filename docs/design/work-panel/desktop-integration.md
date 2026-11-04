@@ -37,8 +37,30 @@ bigger copy of the iPad layout. It uses what Drey already has.
 | Flow editor | Editor tab **Flow**; the default flow is also in Settings |
 | Settings | Settings, **Tickets**: team, default flow, budget, runners, devices and pairing. Appearance is Drey's own |
 
+## Views (owner, 2026-11-04: promoted from "later" to the first step)
+
+Without a way to switch, the agent system and the note app compete for the same
+docks and tabs. Drey gets **views**: a view is a saved layout with its own docks,
+open panels, split panes and open tabs, switched from a segmented control in the
+title bar (Ctrl+1, Ctrl+2, a Views menu; board 7h).
+
+- **Notes** is today's Drey: Files, Calendar, Outline, Backlinks; the Assistant
+  talks to the model.
+- **Work** is the arrangement of boards 7a to 7f: Tickets panel, ticket, Board,
+  Review, Team; the Assistant talks to Mission Control.
+- Opening a ticket (a chip in a note, a notification, the capture hotkey)
+  switches to Work. Opening a note from Work switches to Notes. The status bar
+  and the Assistant history are global; a signal from the other view shows as
+  "3 need you in Work".
+- Later: user-defined views ("Save current layout as a view…").
+- Base work: `DockService` state and the `PaneService` tree move from one global
+  slot to one slot per view; the session snapshot (ADR-0043) stores the active
+  view and each view's tabs; "Reset layout" resets the current view. This is the
+  extension of ADR-0019 and ADR-0037/0038 that needs its own ADR.
+
 ## Changes in Drey itself (the owner allows SDK and base changes)
 
+0. **Views** (above).
 1. **Status bar items for plugins** (SDK). Today a plugin only gets `statusText`
    for the active tab.
 2. **Assistant conversation targets.** Model (any LLM provider, no tools, no
@@ -50,8 +72,6 @@ bigger copy of the iPad layout. It uses what Drey already has.
 5. **Links across vaults.** Wikilinks are vault-scoped (ADR-0051/0059) and the
    tickets repository is its own vault, so `[[T-0121]]` from a note does not
    resolve today.
-6. **Later: saved layouts** ("Notes", "Work"), so the arrangement in 7a is one
-   click away.
 
 ## Plain chat without an agent: what the code says
 
@@ -78,7 +98,8 @@ targets.
 
 ## Suggested order
 
-Ticket header with the gate, then the Assistant targets (Shape needs them), the
+Views first (they decide where everything else sits), then the ticket header with
+the gate, the Assistant targets (Shape needs them), the
 Parts block, the Review tab, the Board tab, the Team tab and Capacity, Flow, and
 the status bar item. Each step is its own milestone and gets its own roadmap
 entry before work starts; this file does not claim a milestone number.
