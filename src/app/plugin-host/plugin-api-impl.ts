@@ -227,6 +227,7 @@ export class PluginApiFactory {
           this.editor.addPluginDoc(kind, key, name, { split: opts?.split, beside: opts?.beside });
         },
         registerFileOpener: (opener) => track(this.fileOpeners.register(opener)),
+        registerHomeViewRule: (rule) => track(this.fileOpeners.registerHomeViewRule(rule)),
         rename: (path, name) => this.editor.renameDoc(path, name),
         insertAtCursor: (text) => {
           if (text === '' || this.editor.activePath() === null || this.editor.activeKind() !== 'text') {

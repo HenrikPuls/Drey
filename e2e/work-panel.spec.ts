@@ -94,7 +94,7 @@ test.use({
 test.describe('Work panel (req-75 W1/W1b)', () => {
   test('groups the tickets, and a row opens the ticket thread alone', async ({ page, electronApp }, testInfo) => {
     // The Work panel gets the left dock to itself, as an owner would set it.
-    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     for (const other of ['Calendar', 'Files', 'Open windows']) {
       await page.locator(`app-dock-strip button[aria-label="Hide ${other}"]`).click();
     }
@@ -227,7 +227,7 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
   });
 
   test('rows reuse the one thread tab; Open ticket opens the pair', async ({ page }, testInfo) => {
-    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
 
@@ -262,7 +262,7 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     page,
     electronApp,
   }, testInfo) => {
-    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0107"]')).toBeVisible({ timeout: 15_000 });
     await electronApp.evaluate(
@@ -302,7 +302,7 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
   });
 
   test('folds a group and keeps it folded', async ({ page }) => {
-    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
     await panel.locator('.work-group-ideas .work-group-head').click();
@@ -313,7 +313,7 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
   });
 
   test('orders the groups and filters by status (T-0084)', async ({ page }) => {
-    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
 

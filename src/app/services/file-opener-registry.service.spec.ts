@@ -43,6 +43,23 @@ describe('FileOpenerRegistry (SDK 1.16, ADR-0064)', () => {
     expect(registry.find('a.drawio')).toBeNull();
   });
 
+  it('names the home view by opener, else by the first matching path rule (SDK 1.41)', () => {
+    registry.register({ extensions: ['.drawio'], homeView: 'draw', open: vi.fn() });
+    registry.registerHomeViewRule({ homeView: 'work', matches: (path, vault) => vault === 'v1' && path.startsWith('tickets/') });
+    expect(registry.homeViewOf('a.drawio', 'v1')).toBe('draw');
+    expect(registry.homeViewOf('tickets/x/T-0001.md', 'v1')).toBe('work');
+    expect(registry.homeViewOf('tickets/x/T-0001.md', 'v2')).toBeUndefined();
+    expect(registry.homeViewOf('notes/a.md', 'v1')).toBeUndefined();
+  });
+
+  it('skips a throwing home view rule and forgets a removed one', () => {
+    registry.registerHomeViewRule({ homeView: 'bad', matches: () => { throw new Error('boom'); } });
+    const off = registry.registerHomeViewRule({ homeView: 'ok', matches: () => true });
+    expect(registry.homeViewOf('a.md', null)).toBe('ok');
+    off();
+    expect(registry.homeViewOf('a.md', null)).toBeUndefined();
+  });
+
   it('falls back to the base routing when the opener throws', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     registry.register({

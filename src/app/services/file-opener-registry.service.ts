@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import type { FileOpenerContrib, Unsubscribe } from '../../../shared/plugin-api/renderer';
+import type { FileOpenerContrib, HomeViewRuleContrib, Unsubscribe } from '../../../shared/plugin-api/renderer';
 import { LogService } from './log.service';
 
 /**
@@ -17,6 +17,40 @@ import { LogService } from './log.service';
 export class FileOpenerRegistry {
   private readonly log = inject(LogService);
   private readonly openers: FileOpenerContrib[] = [];
+  private readonly homeRules: HomeViewRuleContrib[] = [];
+
+  /** A path rule for the home view of files no opener claims (SDK 1.41). */
+  registerHomeViewRule(rule: HomeViewRuleContrib): Unsubscribe {
+    this.homeRules.push(rule);
+    return () => {
+      const index = this.homeRules.indexOf(rule);
+      if (index !== -1) {
+        this.homeRules.splice(index, 1);
+      }
+    };
+  }
+
+  /**
+   * The view a file opens in: its opener's `homeView`, else the first path
+   * rule that matches; undefined when it has none. A throwing rule is logged
+   * and skipped -- opening a file must never fail over it.
+   */
+  homeViewOf(relativePath: string, vaultId: string | null): string | undefined {
+    const opened = this.find(relativePath)?.homeView;
+    if (opened !== undefined) {
+      return opened;
+    }
+    for (const rule of this.homeRules) {
+      try {
+        if (rule.matches(relativePath, vaultId)) {
+          return rule.homeView;
+        }
+      } catch (error) {
+        this.log.record('error', `home view rule failed for ${relativePath}: ${String(error)}`);
+      }
+    }
+    return undefined;
+  }
 
   register(opener: FileOpenerContrib): Unsubscribe {
     this.openers.push(opener);

@@ -108,7 +108,7 @@ export class DocOpenService {
     // (SDK 1.39): bring that view up first, so everything below -- the
     // victim pick, the anchor, the landing -- addresses ITS panes.
     if (opts.stayInView !== true) {
-      this.homeViews.enter(this.fileOpeners.find(relativePath)?.homeView);
+      this.homeViews.enter(this.fileOpeners.homeViewOf(relativePath, vaultId ?? this.vault.activeVaultId()));
     }
     // The anchor pane takes focus first: everything below (the victim
     // pick, the plain add, the split) then addresses that pane, never

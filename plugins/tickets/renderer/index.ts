@@ -43,6 +43,7 @@ import { createWorkFilterStore, filterPopover, isFilterActive, NO_WORK_FILTER, t
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
 import { createTicketHeader, isTicketPath, ticketLogFold } from './ticket-header';
+import { WORK_VIEW_ID, registerWorkView } from './view-preset';
 import { createTicketDocumentExtension } from './ticket-document/extension';
 import { createTicketStrip } from './ticket-document/strip';
 import type { WorkRow } from './work-groups';
@@ -686,7 +687,7 @@ function moveTicket(api: DreyPluginApi, card: TicketCard, to: string): void {
 export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
   return {
     id: 'tickets',
-    title: 'Work',
+    title: 'Tickets',
     icon: 'layers',
     defaultDock: 'left',
     defaultOpen: false,
@@ -1877,7 +1878,7 @@ function mountThread(api: DreyPluginApi, host: HTMLElement): () => void {
     host.replaceChildren();
     shown = threadTicketId;
     if (shown === null) {
-      host.append(el('div', 'tickets-empty', 'Open a ticket from the Work panel'));
+      host.append(el('div', 'tickets-empty', 'Open a ticket from the Tickets panel'));
     } else {
       dispose = mountThreadOf(api, host, shown);
     }
@@ -3211,7 +3212,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     backend = api.backend;
     statusItem = api.ui.createStatusItem({
       text: '',
-      tooltip: 'Open the Work panel',
+      tooltip: 'Open the Tickets panel',
       commandId: 'tickets.showBoard',
       priority: 10,
     });
@@ -3219,13 +3220,15 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     fleetListeners.add(fireDesk);
     api.commands.register({
       id: 'tickets.showBoard',
-      label: 'Show the Work panel',
+      label: 'Show the Tickets panel',
       run: () => api.ui.revealWidget('tickets'),
     });
     // A worker that waits on the owner says so outside the board too (req-64).
     fleetListeners.add(() => announceWaits(api));
     // So does a fleet that stopped by itself: a tripped breaker, a spent quota.
     fleetListeners.add(() => announceChainAlerts(api));
+    // The Work view (E13-13): the preset, and ticket files opening there.
+    registerWorkView(api, () => snapshot?.vaultId ?? null);
     api.ui.registerWidget(createTicketsWidget(api));
     // The rows' persona chips read the same directory as the Team tab.
     teamStore(api).subscribe(notifyViews);
@@ -3358,6 +3361,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     // reopens them from their fixed keys.
     api.ui.registerDocKind({
       kind: BOARD_KIND,
+      homeView: WORK_VIEW_ID,
       icon: 'table',
       serialize: () => null,
       restore: () => openBoardDoc(api),
@@ -3369,6 +3373,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     });
     api.ui.registerDocKind({
       kind: TEAM_KIND,
+      homeView: WORK_VIEW_ID,
       icon: 'users',
       serialize: () => null,
       restore: () => openTeamDoc(api),
@@ -3378,6 +3383,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
 
     api.ui.registerDocKind({
       kind: THREAD_KIND,
+      homeView: WORK_VIEW_ID,
       icon: 'messages-square',
       serialize: () => (threadTicketId === null ? null : { ticketId: threadTicketId }),
       restore: (_path, data) => {
