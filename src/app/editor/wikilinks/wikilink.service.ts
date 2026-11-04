@@ -1,10 +1,16 @@
 import { Injectable, computed, inject } from '@angular/core';
 import { VaultFileEntry } from '../../../../shared/ipc-api';
-import { NOTE_FILE, buildNoteIndex, resolveNoteTarget } from '../../../../shared/wikilinks';
-import type { NoteIndex } from '../../../../shared/wikilinks';
+import {
+  NOTE_FILE,
+  buildNoteIndex,
+  resolveNoteTarget,
+  resolveWikilinkAcrossVaults,
+} from '../../../../shared/wikilinks';
+import type { LinkLocation, NoteIndex } from '../../../../shared/wikilinks';
+import { SettingsService } from '../../services/settings.service';
 import { EditorService, docKey } from '../../services/editor.service';
 import { VaultService } from '../../vault';
-import type { WikilinkCandidate } from './wikilink';
+import type { WikilinkCandidate, WikilinkHint } from './wikilink';
 
 /**
  * Resolves and follows `[[wikilinks]]` (req-20). The note index is derived
@@ -31,7 +37,17 @@ import type { WikilinkCandidate } from './wikilink';
  * the linking note's own folder, then the shortest path, then a plain
  * locale compare so the pick is deterministic. An empty target
  * (`[[#heading]]`) means the linking note itself.
+ *
+ * Link fallback (E13-4): a vault-scoped link that matches nothing in its
+ * own vault is looked up in the OTHER registered vaults -- but only when
+ * the link's vault has "Also look for link targets in other vaults" on
+ * (`vault.linkFallbackVaults`, off by default). Order: the active vault
+ * (when it is not the link's own), then the registry order. The first
+ * vault with a match wins; a name found in several fallback vaults is
+ * ambiguous (`LinkLocation.alsoIn`). Only a link that matches nowhere
+ * creates a note, still in its own vault.
  */
+
 
 const MARKDOWN_FILE = NOTE_FILE;
 
@@ -47,6 +63,7 @@ const EMPTY_INDEX: NoteIndex = { byPath: new Map(), byName: new Map(), all: [] }
 export class WikilinkService {
   private readonly vault = inject(VaultService);
   private readonly editor = inject(EditorService);
+  private readonly settings = inject(SettingsService);
 
   /** One note index per registered vault, keyed by vault id (ADR-0051). */
   private readonly indexes = computed<Record<string, NoteIndex>>(() => {
@@ -125,6 +142,69 @@ export class WikilinkService {
     return { byPath, byName, all, vaultOf };
   });
 
+  /** Whether `vaultId` also looks for link targets in the other vaults. */
+  private fallbackEnabled(vaultId: string): boolean {
+    return this.settings.config()?.vault.linkFallbackVaults.includes(vaultId) ?? false;
+  }
+
+  /**
+   * Locates a link of a vault-scoped note: its own vault first, the other
+   * vaults only when that fails and the fallback is on. The active vault
+   * leads the fallback order, then the registry order (ADR-0051).
+   */
+  private locateScoped(
+    rawTarget: string,
+    fromVaultId: string,
+    fromPath: string | null,
+  ): LinkLocation | null {
+    const perVault = this.indexes();
+    const active = this.vault.activeVaultId();
+    const order = this.vault.vaults().map((v) => v.id);
+    if (active !== null) {
+      order.sort((a, b) => Number(b === active) - Number(a === active)); // stable: active first
+    }
+    for (const id of Object.keys(perVault)) {
+      if (!order.includes(id)) {
+        order.push(id);
+      }
+    }
+    const vaults = order
+      .filter((id) => perVault[id] !== undefined)
+      .map((vaultId) => ({ vaultId, index: perVault[vaultId] }));
+    return resolveWikilinkAcrossVaults(
+      rawTarget,
+      fromVaultId,
+      fromPath,
+      vaults,
+      this.fallbackEnabled(fromVaultId),
+    );
+  }
+
+  /**
+   * The editor's link check: null when the link resolves nowhere (it is
+   * drawn unresolved), else the hover text -- naming the vault when the
+   * target lives in another one, and marking a cross-vault ambiguity.
+   */
+  inspect(rawTarget: string, fromVaultId: string | null, fromPath: string | null): WikilinkHint | null {
+    if (fromVaultId === null) {
+      return this.resolve(rawTarget, null, fromPath) === null ? null : { title: null, ambiguous: false };
+    }
+    const location = this.locateScoped(rawTarget, fromVaultId, fromPath);
+    if (location === null) {
+      return null;
+    }
+    if (!location.fallback) {
+      return { title: null, ambiguous: false };
+    }
+    const nameOf = (id: string): string => this.vault.vaults().find((v) => v.id === id)?.name ?? id;
+    const where = `In vault “${nameOf(location.vaultId)}”`;
+    if (location.alsoIn.length === 0) {
+      return { title: where, ambiguous: false };
+    }
+    const others = location.alsoIn.map((id) => `“${nameOf(id)}”`).join(', ');
+    return { title: `Ambiguous: also in ${others}. Opens the one in “${nameOf(location.vaultId)}”.`, ambiguous: true };
+  }
+
   /**
    * Resolves a link target to a vault-relative path (inside `fromVaultId` --
    * the linking note's vault, or the merged cross-vault index when null),
@@ -187,12 +267,13 @@ export class WikilinkService {
     fromVaultId: string | null,
     fromPath: string | null,
   ): { vaultId: string; path: string } | null {
+    if (fromVaultId !== null) {
+      const location = this.locateScoped(rawTarget, fromVaultId, fromPath);
+      return location === null ? null : { vaultId: location.vaultId, path: location.path };
+    }
     const resolved = this.resolve(rawTarget, fromVaultId, fromPath);
     if (resolved === null) {
       return null;
-    }
-    if (fromVaultId !== null) {
-      return { vaultId: fromVaultId, path: resolved };
     }
     const vaultId = this.mergedIndex().vaultOf.get(resolved);
     return vaultId === undefined ? null : { vaultId, path: resolved };

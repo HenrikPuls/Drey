@@ -579,8 +579,16 @@ function normalizeVault(raw: unknown): VaultConfig {
     updateLinksOnRename: UPDATE_LINKS_MODES.includes(mode as UpdateLinksMode)
       ? (mode as UpdateLinksMode)
       : DEFAULT_VAULT_CONFIG.updateLinksOnRename,
+    linkFallbackVaults: normalizeIdList(source['linkFallbackVaults']),
     history: normalizeVaultHistory(source['history']),
   };
+}
+
+function normalizeIdList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return [...new Set(raw.filter((v): v is string => typeof v === 'string' && v !== ''))];
 }
 
 function normalizeVaultHistory(raw: unknown): VaultConfig['history'] {

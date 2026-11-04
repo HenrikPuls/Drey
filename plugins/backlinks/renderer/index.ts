@@ -14,6 +14,8 @@ interface BacklinkRow {
   heading: string;
   line: number;
   snippet: string;
+  /** Set on a row linking in from another vault (E13-4). */
+  vaultId?: string;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -135,6 +137,9 @@ const plugin: PluginRendererModule = {
             const dir = row.path.includes('/') ? row.path.slice(0, row.path.lastIndexOf('/')) : '';
             const head = el('span', 'file', file);
             card.title = `${row.path}:${row.line}`;
+            if (row.vaultId !== undefined) {
+              card.title += ` (other vault)`;
+            }
             card.appendChild(head);
             if (row.heading !== '') {
               card.appendChild(el('span', 'heading', row.heading));
@@ -143,8 +148,9 @@ const plugin: PluginRendererModule = {
             }
             card.appendChild(el('span', 'snippet', row.snippet));
             card.addEventListener('click', () => {
-              if (state.activeVault !== null) {
-                void api.documents.open(row.path, row.line, { vaultId: state.activeVault });
+              const vaultId = row.vaultId ?? state.activeVault;
+              if (vaultId !== null) {
+                void api.documents.open(row.path, row.line, { vaultId });
               }
             });
             list.appendChild(card);

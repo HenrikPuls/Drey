@@ -29,23 +29,46 @@ export { extractWikilinks };
 export type { WikilinkOccurrence };
 
 const markCache = new Map<string, Decoration>();
-function wikilinkMark(resolved: boolean, attrs: Record<string, string>): Decoration {
+function wikilinkMark(
+  resolved: boolean,
+  attrs: Record<string, string>,
+  hint: WikilinkHint | null,
+): Decoration {
   // Decorations are compared by identity across rebuilds -- cache per full
   // attribute set, or [[Plan#A]] and [[Plan]] would share a data-anchor.
-  const cacheKey = `${resolved ? 'r' : 'u'}|${attrs['data-wikilink']}|${attrs['data-anchor'] ?? ''}|${attrs['data-alias'] ?? ''}`;
+  const cacheKey = `${resolved ? 'r' : 'u'}|${hint?.ambiguous ? 'a' : ''}|${hint?.title ?? ''}|${attrs['data-wikilink']}|${attrs['data-anchor'] ?? ''}|${attrs['data-alias'] ?? ''}`;
   let deco = markCache.get(cacheKey);
   if (!deco) {
+    const classes = ['cm-wikilink'];
+    if (!resolved) {
+      classes.push('cm-wikilink-unresolved');
+    } else if (hint?.ambiguous) {
+      classes.push('cm-wikilink-ambiguous');
+    }
     deco = Decoration.mark({
-      class: resolved ? 'cm-wikilink' : 'cm-wikilink cm-wikilink-unresolved',
-      attributes: attrs,
+      class: classes.join(' '),
+      attributes: hint?.title ? { ...attrs, title: hint.title } : attrs,
     });
     markCache.set(cacheKey, deco);
   }
   return deco;
 }
 
-/** The `resolve` probe: does this wikilink target exist in the vault? */
-export type WikilinkResolve = (target: string) => boolean;
+/**
+ * What the link check tells the editor about a resolved link (E13-4): the
+ * hover text (set when the target lives in another vault, or is ambiguous
+ * across vaults) and the ambiguity mark.
+ */
+export interface WikilinkHint {
+  title: string | null;
+  ambiguous: boolean;
+}
+
+/**
+ * The `resolve` probe: does this wikilink target exist? `false` / `null` =
+ * no; `true` = yes; a hint = yes, with hover text.
+ */
+export type WikilinkResolve = (target: string) => boolean | WikilinkHint | null;
 
 /**
  * The `data-wikilink` mark decorations over the visible ranges -- the
@@ -78,7 +101,9 @@ export function wikilinkDecorations(
       if (occ.alias !== null) {
         attrs['data-alias'] = occ.alias;
       }
-      deco.push(wikilinkMark(resolve(occ.target), attrs).range(start, start + occ.length));
+      const found = resolve(occ.target);
+      const hint = typeof found === 'object' && found !== null ? found : null;
+      deco.push(wikilinkMark(found !== false && found !== null, attrs, hint).range(start, start + occ.length));
     }
   }
 
@@ -155,6 +180,11 @@ const wikilinkTheme = EditorView.theme({
   },
   // A target that does not resolve: muted with a dotted underline -- visibly
   // "not there yet" (Ctrl+click creates it), but still a link.
+  // Found in several other vaults (E13-4): dashed, so the choice is visible.
+  '.cm-wikilink-ambiguous': {
+    textDecoration: 'underline dashed',
+    textUnderlineOffset: '3px',
+  },
   '.cm-wikilink-unresolved': {
     color: 'var(--text-5)',
     textDecoration: 'underline dotted',

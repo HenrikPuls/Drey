@@ -50,6 +50,19 @@
           too stays where it is and the moved note's link is adjusted instead.
         </p>
       </div>
+      @for (v of vaults(); track v.id) {
+        <label class="switch-row">
+          <input
+            type="checkbox"
+            [checked]="vault.linkFallbackVaults.includes(v.id)"
+            (change)="onLinkFallbackChange(v.id, $any($event.target).checked)"
+          />
+          <span>
+            <span class="switch-label">Also look for link targets in other vaults ({{ v.name }})</span>
+            <span class="switch-hint">Only for links that match nothing in “{{ v.name }}”.</span>
+          </span>
+        </label>
+      }
     </section>
 
     <section>

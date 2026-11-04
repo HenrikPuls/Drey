@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { UPDATE_LINKS_MODES, UpdateLinksMode } from '../../../../shared/app-config';
 import { SettingsService } from '../../services/settings.service';
+import { VaultService } from '../../vault';
 import { SettingsPane } from '../settings-pane/settings-pane';
 
 /**
@@ -20,6 +21,13 @@ export class SettingsVault {
   protected readonly settings = inject(SettingsService);
 
   protected readonly vault = computed(() => this.settings.draft()?.vault ?? null);
+  protected readonly vaults = inject(VaultService).vaults;
+
+  protected onLinkFallbackChange(vaultId: string, on: boolean): void {
+    const current = this.vault()?.linkFallbackVaults ?? [];
+    const without = current.filter((id) => id !== vaultId);
+    this.settings.patchVault({ linkFallbackVaults: on ? [...without, vaultId] : without });
+  }
 
   protected onWatchChange(on: boolean): void {
     this.settings.patchVault({ watch: on });

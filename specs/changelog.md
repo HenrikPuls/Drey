@@ -1,4 +1,49 @@
 
+### Milestone 125 — Link fallback to other vaults (E13-4)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(roadmap E13-4; ADR-0051 / ADR-0059 later changes). Base only, no SDK
+change.
+
+- **Resolution.** A `[[wikilink]]` of a vault-scoped note is resolved in
+  its own vault first — unchanged. Only when that finds nothing **and the
+  link's vault has the fallback on** are the other registered vaults
+  searched: the active vault first (when it is not the link's own), then
+  the registry order. The first vault with a match wins; within a vault
+  the existing rules hold (unique name, sibling, shortest path; path
+  targets work too — a fallback vault has no sibling preference). A name
+  found in several fallback vaults is **ambiguous**: it opens the first.
+  Nothing is created when any vault matches; a link that matches nowhere
+  still creates its note in its own vault. The pure rule is
+  `resolveWikilinkAcrossVaults` (`shared/wikilinks.ts`).
+- **Link check and hover.** `WikilinkService.inspect` feeds the editor's
+  link check: a link that resolved into another vault gets the hover
+  title `In vault “Tickets”`; an ambiguous one `Ambiguous: also in
+  “Archive”. Opens the one in “Tickets”.` and a dashed underline
+  (`cm-wikilink-ambiguous`). Same-vault links look as before. The marks
+  refresh when the document is edited or scrolled, like every tree change
+  (a toggled setting does not repaint untouched text at once).
+- **Settings → Vault → Links.** One switch per registered vault, "Also
+  look for link targets in other vaults (<vault>)", stored as
+  `vault.linkFallbackVaults` (vault ids), **off for every vault by
+  default** — so following a link that matches nothing creates the note
+  as before.
+- **Backlinks.** The panel also lists links that reached the shown note
+  through the fallback (`collectFallbackBacklinks`): links of vaults that
+  opted in, unmatched at home, whose fallback search lands first on this
+  note — an ambiguous name counts for its first match only, exactly where
+  Ctrl-click opens. Such a row carries the linking note's `vaultId`; the
+  click opens it in that vault.
+- **Not changed.** Link-integrity rewrites on rename (ADR-0059) stay per
+  vault; vault-less documents keep their merged index; `[[` completion
+  stays per vault; the entry drawer still resolves in the active vault.
+- **Specs / tests.** `shared/wikilinks.spec.ts` (order, ambiguity, off,
+  own-vault first), `WikilinkService` (off by default creates, own first,
+  other vault opens and names it, ambiguity, active vault first, opt-in
+  per vault), decorations (title, ambiguous class), backlinks
+  (`collectFallbackBacklinks`), config normalisation. Docs: ADR-0051 and
+  ADR-0059 later-change notes, docs/05, docs/06 §6.46, the manual.
+
 ### Milestone 122 — Mission Control shape mode (E10-3)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04

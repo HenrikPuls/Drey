@@ -112,3 +112,16 @@ re-read after their keys follow the rename.
 link update rewrites has its previous text in the local history (origin
 `links`), and the history follows the renamed note. Moved attachments
 are still not versioned.
+
+## Later change — links that reach into another vault (milestone 125, E13-4)
+
+The link fallback of [ADR-0051](0051-multi-vault-registry.md) (a link that
+matches nothing in its own vault may resolve into another vault) does
+**not** widen the rename rewrite: link-integrity rewrites stay **per
+vault** — a rename in vault B rewrites links of vault B notes only and
+never scans other vaults for fallback links, so a fallback link into a
+renamed note is left alone (it simply stops resolving, or resolves to
+another note of that name). The backlinks index does count such links
+(`collectFallbackBacklinks`, `plugins/backlinks/shared/link-index.ts`) —
+as rows marked with the linking note's vault — but only for the first
+match of an ambiguous name, exactly where Ctrl-click would open.

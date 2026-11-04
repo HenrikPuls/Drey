@@ -116,3 +116,23 @@ inside its own tree and index).
   registry is the additive hook they will hang off.
 - Files panel owns all vault management (root-row context menu); there is
   deliberately no second management surface in Settings.
+
+## Later change — link fallback to other vaults (milestone 125, E13-4)
+
+A `[[wikilink]]` is still resolved in **its own vault first** (the rule
+above is unchanged). New: a vault can opt in — Settings → Vault, "Also
+look for link targets in other vaults", per vault, `vault.linkFallbackVaults`
+in the config, **off by default** — and then a link that matches nothing
+in its own vault is looked up in the other registered vaults. Order: the
+active vault (when it is not the link's own), then the registry order.
+The first vault with a match wins; a name found in several fallback vaults
+is **ambiguous** — it opens the first match, and the hover title names the
+vault and the other candidates (`cm-wikilink-ambiguous`). Within one vault
+the usual rules hold; there is no sibling preference in a vault the linking
+note is not part of. Only a link that matches in **no** vault creates a
+note, in its own vault as before; with the setting off nothing changes.
+The pure rule is `resolveWikilinkAcrossVaults` (`shared/wikilinks.ts`);
+`WikilinkService.inspect` / `open` use it, the backlinks plugin applies
+the same rule in reverse (see ADR-0059). Vault-less documents keep their
+merged index. This is the base's answer to the tickets repository being a
+vault of its own: `[[T-0063]]` written in a note resolves into it.

@@ -2,6 +2,8 @@ import { TestBed } from '@angular/core/testing';
 import { DreyApi, VaultFileEntry } from '../../../../shared/ipc-api';
 import { EditorService } from '../../services/editor.service';
 import { VaultService } from '../../vault';
+import { SettingsService } from '../../services/settings.service';
+import { normalizeAppConfig } from '../../../../shared/app-config';
 import { WikilinkService } from './wikilink.service';
 
 const V = 'v1';
@@ -170,6 +172,79 @@ describe('WikilinkService', () => {
       await service.openResolvedOnly('missing note', null);
       expect(created).toEqual([]);
       expect(editor.activePath()).toBeNull();
+    });
+  });
+
+  describe('link fallback to other vaults (E13-4)', () => {
+    const V3 = 'v3';
+    /** v1 + v2 + v3 where only v2/v3 know `T-0063`; `other` lives in v2 only. */
+    const setup = async (fallbackFor: string[], activeId = V): Promise<void> => {
+      const trees: Record<string, VaultFileEntry[]> = {
+        [V]: TREE,
+        [V2]: [
+          ...TREE_V2,
+          { name: 'T-0063.md', relativePath: 'tickets/T-0063.md', type: 'file' },
+        ],
+        [V3]: [{ name: 'T-0063.md', relativePath: 'old/T-0063.md', type: 'file' }],
+      };
+      window.dreyApi = {
+        ...window.dreyApi,
+        getConfig: () =>
+          Promise.resolve(normalizeAppConfig({ vault: { linkFallbackVaults: fallbackFor } })),
+        listVaults: () =>
+          Promise.resolve([
+            { id: V, name: 'one', path: 'C:/one', exists: true, active: activeId === V },
+            { id: V2, name: 'Tickets', path: 'C:/two', exists: true, active: activeId === V2 },
+            { id: V3, name: 'Archive', path: 'C:/three', exists: true, active: activeId === V3 },
+          ]),
+        getActiveVaultId: () => Promise.resolve(activeId),
+        listVaultFiles: (vaultId?: string) => Promise.resolve(trees[vaultId ?? activeId] ?? []),
+      } as unknown as DreyApi;
+      await TestBed.inject(SettingsService).load();
+      await TestBed.inject(VaultService).refresh();
+    };
+
+    it('is off by default: an unmatched link is unresolved and still creates the note', async () => {
+      await setup([]);
+      expect(service.inspect('T-0063', V, null)).toBeNull();
+      await service.open('T-0063', null, V, null);
+      expect(created).toEqual(['T-0063.md']);
+      expect(editor.activePath()).toBe(`${V}::T-0063.md`);
+    });
+
+    it('resolves in the own vault first, even with the fallback on', async () => {
+      await setup([V]);
+      await service.open('plan', null, V, null);
+      expect(editor.activePath()).toBe(`${V}::plan.md`);
+      expect(service.inspect('plan', V, null)).toEqual({ title: null, ambiguous: false });
+    });
+
+    it('opens a note from another vault, names the vault, and creates nothing', async () => {
+      await setup([V]);
+      await service.open('other', null, V, null);
+      expect(editor.activePath()).toBe(`${V2}::only/other.md`);
+      expect(created).toEqual([]);
+      expect(service.inspect('other', V, null)).toEqual({ title: 'In vault “Tickets”', ambiguous: false });
+    });
+
+    it('marks a name found in several fallback vaults ambiguous and opens the registry-first one', async () => {
+      await setup([V]);
+      const hint = service.inspect('T-0063', V, null);
+      expect(hint?.ambiguous).toBe(true);
+      expect(hint?.title).toContain('“Archive”');
+      await service.open('T-0063', null, V, null);
+      expect(editor.activePath()).toBe(`${V2}::tickets/T-0063.md`);
+    });
+
+    it("searches the active vault first when it is not the link's own", async () => {
+      await setup([V], V3);
+      await service.open('T-0063', null, V, null);
+      expect(editor.activePath()).toBe(`${V3}::old/T-0063.md`);
+    });
+
+    it('only the vaults that opted in fall back', async () => {
+      await setup([V2]);
+      expect(service.inspect('T-0063', V, null)).toBeNull();
     });
   });
 

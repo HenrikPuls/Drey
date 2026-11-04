@@ -6,8 +6,8 @@ import { BacklinkIndex } from './backlink-index';
  * index per registered vault, fed through the save-hook and vault-change
  * registries exactly like the tags/tasks indexes, and one backend method
  * the dock panel queries for the focused note's backlink rows. Resolution
- * is the editor's own (`resolveNoteTarget`, `shared/wikilinks.ts`) — v1 is
- * same-vault and `.md`-only
+ * is the editor's own (`resolveNoteTarget`, `shared/wikilinks.ts`) — same-vault
+ * and `.md`-only, plus the opt-in cross-vault fallback (E13-4)
  * (`listMarkdownFiles`), matching what the tag index scans.
  */
 
@@ -87,7 +87,13 @@ const plugin: MainPluginModule = {
       if (vaultId === null) {
         return { rows: [] };
       }
-      return { rows: index.backlinksFor(vaultId, path) };
+      // Link fallback (E13-4): links of vaults that opted in, which match
+      // nothing at home, count here when they land on this note. Order: the
+      // active vault, then the registry order (ADR-0051).
+      const vaults = await ctx.vault.listVaults();
+      const enabled = new Set(ctx.appConfig.get().vault.linkFallbackVaults);
+      const order = [...vaults].sort((a, b) => Number(b.active) - Number(a.active)).map((v) => v.id);
+      return { rows: index.backlinksFor(vaultId, path, { order, enabled }) };
     });
 
     ctx.log('activated');

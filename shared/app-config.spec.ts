@@ -272,8 +272,13 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig({}).vault).toEqual({
       watch: false,
       updateLinksOnRename: 'ask',
+      linkFallbackVaults: [],
       history: { enabled: true, keepDays: 30, maxPerFile: 50 },
     });
+    expect(
+      normalizeAppConfig({ vault: { linkFallbackVaults: ['a', 'a', '', 7, 'b'] } }).vault.linkFallbackVaults,
+    ).toEqual(['a', 'b']);
+    expect(normalizeAppConfig({ vault: { linkFallbackVaults: 'a' } }).vault.linkFallbackVaults).toEqual([]);
     expect(
       normalizeAppConfig({ vault: { history: { enabled: false, keepDays: 9999, maxPerFile: 'x' } } }).vault.history,
     ).toEqual({ enabled: false, keepDays: 365, maxPerFile: 50 });
