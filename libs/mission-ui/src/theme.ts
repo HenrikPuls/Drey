@@ -1,7 +1,7 @@
 /**
  * The device's appearance (E12-3, design boards 5f / 5g): the theme
  * (Anthrazit, Drey, Cyberpunk), the highlight colour, the text size
- * S–XXXL, Compact lists and Reduce motion. All of it is saved on this
+ * S / M / L / XL, Compact lists and Reduce motion. All of it is saved on this
  * device only (localStorage) and applies at once: the theme and the two
  * switches ride `data-*` attributes on the document element that the
  * token blocks and component styles key off, the highlight colour is a
@@ -60,13 +60,13 @@ export const ACCENT_COLOR: Record<Exclude<AccentName, 'default'>, string> = {
   yellow: '#e6d27a',
 };
 
-/** Text sizes (canvas decision 2026-11-04): S / L / XL / XXL / XXXL, L the default. */
-export type TextSize = 'S' | 'L' | 'XL' | 'XXL' | 'XXXL';
+/** Text sizes (owner decision 2026-11-04): S / M / L / XL, L the default (iOS body size). */
+export type TextSize = 'S' | 'M' | 'L' | 'XL';
 
-export const TEXT_SIZES: readonly TextSize[] = ['S', 'L', 'XL', 'XXL', 'XXXL'];
+export const TEXT_SIZES: readonly TextSize[] = ['S', 'M', 'L', 'XL'];
 
 /** The body text size in px each step stands for (the board's "L · 17 px"). */
-export const TEXT_BODY_PX: Record<TextSize, number> = { S: 15, L: 17, XL: 19, XXL: 21, XXXL: 24 };
+export const TEXT_BODY_PX: Record<TextSize, number> = { S: 15, M: 16, L: 17, XL: 19 };
 
 /** The px every stylesheet writes its base font-sizes in (the body at the scale's origin). */
 export const TEXT_BASE_PX = 15;
@@ -74,26 +74,29 @@ export const TEXT_BASE_PX = 15;
 /** The factor each size multiplies every font-size by: body px over the base. */
 export const TEXT_SCALE: Record<TextSize, number> = {
   S: TEXT_BODY_PX.S / TEXT_BASE_PX,
+  M: TEXT_BODY_PX.M / TEXT_BASE_PX,
   L: TEXT_BODY_PX.L / TEXT_BASE_PX,
   XL: TEXT_BODY_PX.XL / TEXT_BASE_PX,
-  XXL: TEXT_BODY_PX.XXL / TEXT_BASE_PX,
-  XXXL: TEXT_BODY_PX.XXXL / TEXT_BASE_PX,
 };
 
 export const DEFAULT_TEXT_SIZE: TextSize = 'L';
 
 /**
- * The first build's steps (S M L XL XXL) onto the new ones, one step up
- * from M on, so a stored choice keeps its place in the order and the old
- * default M lands on the new default L. Nobody loses a setting.
+ * Earlier scales onto the current four, by the nearest body px. Version 1
+ * (no marker, the first build): S 13.5, M 15, L 17.25, XL 19.5, XXL 22.5 px.
+ * Version 2 (marker '2', E12-7): S 15, L 17, XL 19, XXL 21, XXXL 24 px.
  */
-const LEGACY_TEXT_SIZE: Readonly<Record<string, TextSize>> = { S: 'S', M: 'L', L: 'XL', XL: 'XXL', XXL: 'XXXL' };
+const LEGACY_V1: Readonly<Record<string, TextSize>> = { S: 'S', M: 'S', L: 'L', XL: 'XL', XXL: 'XL' };
+const LEGACY_V2: Readonly<Record<string, TextSize>> = { S: 'S', L: 'L', XL: 'XL', XXL: 'XL', XXXL: 'XL' };
+
+/** The marker value of the current scale. */
+export const TEXT_SIZE_SCALE_VERSION = '3';
 
 /** The localStorage keys, one per setting. */
 export const THEME_STORAGE_KEY = 'mc.theme';
 export const ACCENT_STORAGE_KEY = 'mc.accent';
 export const TEXT_SIZE_STORAGE_KEY = 'mc.textSize';
-/** Present once the text size is stored in the S / L / XL / XXL / XXXL scale. */
+/** Holds the scale version the stored text size was written in (absent = the first build). */
 export const TEXT_SIZE_SCALE_KEY = 'mc.textSizeScale';
 export const COMPACT_STORAGE_KEY = 'mc.compact';
 export const MOTION_STORAGE_KEY = 'mc.reduceMotion';
@@ -131,9 +134,10 @@ export function parseTextSize(value: unknown): TextSize {
   return TEXT_SIZES.find((name) => name === value) ?? DEFAULT_TEXT_SIZE;
 }
 
-/** A pre-2026-11-04 stored value (S M L XL XXL) as its new step. */
-export function migrateLegacyTextSize(value: unknown): TextSize {
-  return typeof value === 'string' ? (LEGACY_TEXT_SIZE[value] ?? DEFAULT_TEXT_SIZE) : DEFAULT_TEXT_SIZE;
+/** A stored value of an earlier scale (version 1 = unmarked, 2 = E12-7) as the nearest current step. */
+export function migrateLegacyTextSize(value: unknown, version: '1' | '2' = '1'): TextSize {
+  const table = version === '2' ? LEGACY_V2 : LEGACY_V1;
+  return typeof value === 'string' ? (table[value] ?? DEFAULT_TEXT_SIZE) : DEFAULT_TEXT_SIZE;
 }
 
 /** Applies the theme on the document element — the token blocks key off it. */
@@ -170,22 +174,23 @@ export function storedTheme(storage: Storage | null): ThemeName {
 }
 
 /**
- * The persisted text size. Names S, L, XL and XXL exist in both scales,
+ * The persisted text size. Names such as S, L and XL exist in every scale,
  * so a value is read as the current scale only when the marker key says
  * it was written by it; an unmarked value is the first build's and is
  * migrated (and re-saved) once.
  */
 export function storedTextSize(storage: Storage | null): TextSize {
   const raw = readItem(storage, TEXT_SIZE_STORAGE_KEY);
-  if (readItem(storage, TEXT_SIZE_SCALE_KEY) === '2') {
+  const version = readItem(storage, TEXT_SIZE_SCALE_KEY);
+  if (version === TEXT_SIZE_SCALE_VERSION) {
     return parseTextSize(raw);
   }
   if (raw === null) {
     return DEFAULT_TEXT_SIZE;
   }
-  const migrated = migrateLegacyTextSize(raw);
+  const migrated = migrateLegacyTextSize(raw, version === '2' ? '2' : '1');
   writeItem(storage, TEXT_SIZE_STORAGE_KEY, migrated);
-  writeItem(storage, TEXT_SIZE_SCALE_KEY, '2');
+  writeItem(storage, TEXT_SIZE_SCALE_KEY, TEXT_SIZE_SCALE_VERSION);
   return migrated;
 }
 
@@ -248,7 +253,7 @@ export class Theme {
 
   setTextSize(size: TextSize): void {
     writeItem(this.env.storage, TEXT_SIZE_STORAGE_KEY, size);
-    writeItem(this.env.storage, TEXT_SIZE_SCALE_KEY, '2');
+    writeItem(this.env.storage, TEXT_SIZE_SCALE_KEY, TEXT_SIZE_SCALE_VERSION);
     this.textSize.set(size);
     this.applyAll();
   }

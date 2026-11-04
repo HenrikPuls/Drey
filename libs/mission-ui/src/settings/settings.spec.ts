@@ -125,10 +125,10 @@ describe('Settings', () => {
     fixture.detectChanges();
     expect(theme.name()).toBe('drey');
     expect(storage.get('mc.theme')).toBe('drey');
-    click(el.querySelectorAll('.sizes .size')[4]!);
-    expect(theme.textSize()).toBe('XXXL');
+    click(el.querySelectorAll('.sizes .size')[3]!);
+    expect(theme.textSize()).toBe('XL');
     fixture.detectChanges();
-    expect(el.querySelector('.pv-line')?.textContent).toBe('XXXL · 24 px body text');
+    expect(el.querySelector('.pv-line')?.textContent).toBe('XL · 19 px body text');
     const compact = el.querySelectorAll<HTMLInputElement>('.sw')[0]!;
     compact.checked = true;
     compact.dispatchEvent(new Event('change'));
