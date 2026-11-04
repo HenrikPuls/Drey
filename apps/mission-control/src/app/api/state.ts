@@ -31,6 +31,7 @@ import {
   parseTicketDetail,
   parseEstimate,
   parsePlanStatus,
+  parseFlow,
   parsePlanApproval,
   parseTicketDiff,
   parseWork,
@@ -39,6 +40,7 @@ import {
   type ChatStateView,
   type ChatStreamView,
   type McEstimate,
+  type McFlow,
   type McPlanApproval,
   type McPlanStatus,
   type NeedView,
@@ -53,6 +55,7 @@ import {
   type WorkView,
 } from '@mission-ui/api/dto';
 import type { McApproveReply, McPartsEdit } from '@mission-ui/plan/approve.model';
+import type { McFlowOp, McFlowReply } from '@mission-ui/flow/flow.model';
 
 export type PairingPhase = 'needs-code' | 'pairing' | 'ready';
 
@@ -655,6 +658,139 @@ export class McState {
     this.closeApproval();
     this.tab.set('work');
     return { ok: true, tickets };
+  }
+
+  // --- the flow editor (E10-5) ---------------------------------------------
+
+  /** The flow being edited: a ticket's own chain (`part` null) or one part of a plan. */
+  readonly flowTarget = signal<{ readonly ticket: string; readonly part: number | null } | null>(null);
+  /** The working draft as the desk last answered it. */
+  readonly flow = signal<McFlow | null>(null);
+  /** The flow as the file holds it — what the dashed marks compare against. */
+  readonly flowSaved = signal<McFlow | null>(null);
+  readonly flowError = signal<string | null>(null);
+  /** Paul's reason while his draft is the working draft. */
+  readonly flowReason = signal<string | null>(null);
+  /** The draft before Paul's, for "Undo draft". */
+  private flowBeforePaul: McFlow | null = null;
+
+  private flowPath(target: { ticket: string; part: number | null }): string {
+    return `/api/tickets/${encodeURIComponent(target.ticket)}/flow`;
+  }
+
+  /** Opens the flow editor on a ticket's flow (`part` null) or one part's. */
+  async openFlow(ticket: string, part: number | null): Promise<void> {
+    this.flow.set(null);
+    this.flowSaved.set(null);
+    this.flowError.set(null);
+    this.flowReason.set(null);
+    this.flowBeforePaul = null;
+    this.flowTarget.set({ ticket, part });
+    const body = await this.client.raw(`${this.flowPath({ ticket, part })}${part === null ? '' : `/${part}`}`);
+    const target = this.flowTarget();
+    if (target === null || target.ticket !== ticket || target.part !== part) {
+      return;
+    }
+    const flow = body === null ? null : parseFlow(body);
+    if (flow === null) {
+      const error = (typeof body === 'object' && body !== null ? (body as { error?: unknown }).error : null) ?? null;
+      this.flowError.set(typeof error === 'string' ? error : 'The desk has no flow for this ticket.');
+      return;
+    }
+    this.flow.set(flow);
+    this.flowSaved.set(flow);
+  }
+
+  closeFlow(): void {
+    this.flowTarget.set(null);
+    this.flow.set(null);
+    this.flowSaved.set(null);
+    this.flowError.set(null);
+    this.flowReason.set(null);
+    this.flowBeforePaul = null;
+  }
+
+  /** One edit on the draft: the desk answers the next draft; nothing is written. */
+  async editFlow(op: McFlowOp): Promise<McFlowReply> {
+    const target = this.flowTarget();
+    const draft = this.flow();
+    if (target === null || draft === null) {
+      return { ok: false, error: 'no flow is open' };
+    }
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', `${this.flowPath(target)}-edit`, { part: target.part, chain: draft.chain, edit: op })
+      .catch(fail);
+    if (isFailure(body)) {
+      return body;
+    }
+    const next = parseFlow(body);
+    if (next === null) {
+      return refusal(body, 'the desk did not take that change');
+    }
+    this.flow.set(next);
+    // A hand edit makes the working draft the owner's again.
+    this.flowReason.set(null);
+    this.flowBeforePaul = null;
+    return { ok: true };
+  }
+
+  /** Paul drafts a flow; the draft becomes the working draft (dashed) and keeps the one before for undo. */
+  async draftFlow(ask: string | null): Promise<McFlowReply> {
+    const target = this.flowTarget();
+    const before = this.flow();
+    if (target === null || before === null) {
+      return { ok: false, error: 'no flow is open' };
+    }
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', `${this.flowPath(target)}-draft`, { part: target.part, ask })
+      .catch(fail);
+    if (isFailure(body)) {
+      return body;
+    }
+    const drafted = parseFlow(body);
+    if (drafted === null) {
+      return refusal(body, 'Paul could not draft a flow');
+    }
+    this.flowBeforePaul = before;
+    this.flow.set(drafted);
+    this.flowReason.set(drafted.reason ?? 'Paul proposes this flow.');
+    return { ok: true };
+  }
+
+  undoFlowDraft(): void {
+    if (this.flowBeforePaul !== null) {
+      this.flow.set(this.flowBeforePaul);
+    }
+    this.flowBeforePaul = null;
+    this.flowReason.set(null);
+  }
+
+  /** "Save flow": the draft becomes the chain in the file; the editor closes and the screens under it refresh. */
+  async saveFlow(): Promise<McFlowReply> {
+    const target = this.flowTarget();
+    const draft = this.flow();
+    if (target === null || draft === null) {
+      return { ok: false, error: 'no flow is open' };
+    }
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', `${this.flowPath(target)}-save`, { part: target.part, chain: draft.chain })
+      .catch(fail);
+    if (isFailure(body)) {
+      return body;
+    }
+    if (body['ok'] !== true) {
+      return refusal(body, 'the desk did not save the flow');
+    }
+    this.closeFlow();
+    this.toast('Flow saved', 'ok');
+    if (target.part !== null) {
+      void this.refreshApproval();
+    }
+    if (this.ticketOpen()?.id === target.ticket) {
+      void this.loadTicket(target.ticket);
+    }
+    void this.refreshWork();
+    return { ok: true };
   }
 
   /** Uploads the composer's picked attachments to the desk. */

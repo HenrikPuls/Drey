@@ -289,8 +289,14 @@
 }
 
 .pa-flow-link {
+  min-height: 44px;
+  padding: 0 6px;
+  font: inherit;
   font-size: calc(15px * var(--mc-text, 1));
   color: var(--accent);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
 }
 
 .pa-meta {

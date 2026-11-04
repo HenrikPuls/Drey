@@ -228,6 +228,7 @@ function mount(
         released.push(scope);
         return { ok: true };
       }),
+    changeFlow: vi.fn(),
     changeSplit: vi.fn(),
     close: vi.fn(),
     openTicket: vi.fn(),
@@ -277,6 +278,13 @@ describe('PlanApprove', () => {
     const body = text(el);
     expect(body).toContain('Estimate not yet · fewer than 3 similar runs so far');
     expect(body).toContain('Typically $0.30 for 1 of 2 parts');
+  });
+
+  it('Change flow opens the flow editor on that part; a released part has no link', () => {
+    const { el, state, click } = mount(approval([card(0), card(1, { locked: true, state: 'queued', ticket: 'T-0141' })]));
+    expect(el.querySelectorAll('.pa-flow-link')).toHaveLength(1);
+    click('.pa-flow-link', 0);
+    expect(state.changeFlow).toHaveBeenCalledWith(0);
   });
 
   it('shows no touches, overlap or routing anywhere (D5)', () => {

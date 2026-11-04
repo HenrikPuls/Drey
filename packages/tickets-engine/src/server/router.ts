@@ -16,6 +16,9 @@ import {
   parseClaim,
   parseCreate,
   parsePermission,
+  parseFlowDraft,
+  parseFlowEdit,
+  parseFlowSave,
   parsePlanPartsEdit,
   parsePlanRelease,
   parseRefine,
@@ -404,6 +407,11 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
       const id = decodeURIComponent(parts[1]!);
       return TICKET_ID_PATTERN.test(id) ? json(await port.planParts(id)) : fail(404, 'no such ticket id');
     }
+    const flow = /^\/api\/tickets\/([^/]+)\/flow(?:\/(\d{1,3}))?$/.exec(req.path);
+    if (flow !== null) {
+      const id = decodeURIComponent(flow[1]!);
+      return TICKET_ID_PATTERN.test(id) ? json(await port.flow({ id, part: flow[2] === undefined ? null : Number(flow[2]) })) : fail(404, 'no such ticket id');
+    }
     const estimate = /^\/api\/estimate\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(req.path);
     if (estimate !== null) {
       const [gate, persona, model] = [1, 2, 3].map((i) => decodeURIComponent(estimate[i]!));
@@ -448,7 +456,7 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
   if (req.path === '/api/attachments') {
     return write('attachment', parseAttachment(body), (cmd) => port.saveAttachment(cmd, actor));
   }
-  const ticket = /^\/api\/tickets\/([^/]+)\/(move|claim|archive|refine|save|accept|send-back|parts|release)$/.exec(req.path);
+  const ticket = /^\/api\/tickets\/([^/]+)\/(move|claim|archive|refine|save|accept|send-back|parts|release|flow-edit|flow-save|flow-draft)$/.exec(req.path);
   if (ticket !== null) {
     const id = decodeURIComponent(ticket[1]!);
     if (!TICKET_ID_PATTERN.test(id)) {
@@ -476,6 +484,12 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
         return write(`parts ${id}`, parsePlanPartsEdit(withId), (cmd) => port.planPartsEdit(cmd, actor));
       case 'release':
         return write(`release ${id}`, parsePlanRelease(withId), (cmd) => port.planRelease(cmd, actor));
+      case 'flow-edit':
+        return write(`flow-edit ${id}`, parseFlowEdit(withId), (cmd) => port.flowEdit(cmd));
+      case 'flow-save':
+        return write(`flow-save ${id}`, parseFlowSave(withId), (cmd) => port.flowSave(cmd, actor));
+      case 'flow-draft':
+        return write(`flow-draft ${id}`, parseFlowDraft(withId), (cmd) => port.flowDraft(cmd));
       default:
         return write(`archive ${id}`, { ok: true, value: { id } }, (cmd) => port.archive(cmd, actor));
     }

@@ -158,9 +158,20 @@ export interface ChatServicePort {
    * to approve (E10-4). Either way the decision line lands in the file.
    */
   shapeDecide(input: { readonly file: string; readonly choice: ChatSplitChoice }): Promise<ChatShapeResult>;
+  /**
+   * Paul drafts a flow (E10-5): the model reads the ticket's flow and
+   * proposes the whole chain delta with a reason. Nothing is written; the
+   * caller checks the draft against the pipeline before showing it.
+   */
+  draftFlow(input: { readonly ticket: string; readonly context: string; readonly ask: string | null }): Promise<ChatFlowDraft>;
   confirm(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult>;
   dismiss(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult>;
 }
+
+/** Paul's flow draft: the proposed delta and his reason, or why there is none. */
+export type ChatFlowDraft =
+  | { readonly ok: true; readonly chain: readonly string[]; readonly reason: string }
+  | { readonly ok: false; readonly error: string };
 
 /** One marked line of the shared plan. */
 export interface PlanMark {
@@ -249,6 +260,8 @@ export interface ChatBridge {
      * the read-only access to the ticket's repository.
      */
     readonly shape?: ChatShapeContext;
+    /** Present on a flow draft (E10-5): the flow Paul reads, replacing the board digest. */
+    readonly flow?: { readonly context: string };
     /** Receives the live stream: thought and text deltas. */
     emit(event: ChatStreamEvent): void;
   }): Promise<{

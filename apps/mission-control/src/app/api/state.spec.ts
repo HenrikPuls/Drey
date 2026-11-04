@@ -1955,6 +1955,101 @@ describe('McState shape mode (E10-3)', () => {
     });
   });
 
+  describe('the flow editor (E10-5)', () => {
+    const FLOW = {
+      ok: true,
+      ticket: 'T-0130',
+      title: 'Voice capture',
+      scope: { kind: 'ticket' },
+      chain: [],
+      saved: [],
+      steps: [{ index: 2, phase: 'review', title: 'Review', state: 'future', persona: 'ralf' }],
+      phases: [{ id: 'review', title: 'Review' }],
+      personas: [{ id: 'ralf', title: 'Ralf', color: '#a6a', model: 'opus' }],
+      readOnly: null,
+    };
+
+    it('opens a ticket flow and a part flow from the right paths and says why when there is none', async () => {
+      const { desk } = makeDesk();
+      desk.on('GET', '/api/tickets/T-0130/flow', () => FLOW);
+      desk.on('GET', '/api/tickets/T-0130/flow/1', () => ({ ...FLOW, scope: { kind: 'part', index: 1, title: 'B' } }));
+      const state = makeState(desk);
+      await state.openFlow('T-0130', null);
+      expect(state.flow()?.steps.map((s) => s.phase)).toEqual(['review']);
+      expect(state.flowSaved()).toBe(state.flow());
+      await state.openFlow('T-0130', 1);
+      expect(state.flow()?.scope).toEqual({ kind: 'part', index: 1, title: 'B' });
+
+      desk.on('GET', '/api/tickets/T-0131/flow', () => ({ ok: false, error: 'T-0131 is not on the board' }));
+      await state.openFlow('T-0131', null);
+      expect(state.flow()).toBeNull();
+      expect(state.flowError()).toBe('T-0131 is not on the board');
+      state.closeFlow();
+      expect(state.flowTarget()).toBeNull();
+    });
+
+    it('posts an edit with the draft chain and the part, and takes the desk’s next draft', async () => {
+      const { desk } = makeDesk();
+      desk.on('GET', '/api/tickets/T-0130/flow/1', () => ({ ...FLOW, scope: { kind: 'part', index: 1, title: 'B' }, chain: ['skip verify'], saved: ['skip verify'] }));
+      const state = makeState(desk);
+      await state.openFlow('T-0130', 1);
+      desk.on('POST', '/api/tickets/T-0130/flow-edit', () => ({ ...FLOW, chain: ['skip verify', 'notify review'], saved: ['skip verify'] }));
+      expect(await state.editFlow({ op: 'notify', step: 2, on: true })).toEqual({ ok: true });
+      expect(desk.callsOf('POST', '/api/tickets/T-0130/flow-edit')[0]!.body).toEqual({ part: 1, chain: ['skip verify'], edit: { op: 'notify', step: 2, on: true } });
+      expect(state.flow()?.chain).toEqual(['skip verify', 'notify review']);
+      expect(state.flowSaved()?.chain).toEqual(['skip verify']);
+
+      desk.on('POST', '/api/tickets/T-0130/flow-edit', () => ({ ok: false, error: 'Review is done' }));
+      expect(await state.editFlow({ op: 'remove', step: 2 })).toEqual({ ok: false, error: 'Review is done' });
+      expect(state.flow()?.chain).toEqual(['skip verify', 'notify review']);
+    });
+
+    it('takes Paul’s draft as the working draft and undoes it; a hand edit makes it the owner’s', async () => {
+      const { desk } = makeDesk();
+      desk.on('GET', '/api/tickets/T-0130/flow', () => FLOW);
+      const state = makeState(desk);
+      await state.openFlow('T-0130', null);
+      desk.on('POST', '/api/tickets/T-0130/flow-draft', () => ({ ...FLOW, chain: ['insert security(ralf, notify) after review'], reason: 'Auth change.' }));
+      expect(await state.draftFlow('add a security pass')).toEqual({ ok: true });
+      expect(desk.callsOf('POST', '/api/tickets/T-0130/flow-draft')[0]!.body).toEqual({ part: null, ask: 'add a security pass' });
+      expect(state.flow()?.chain).toEqual(['insert security(ralf, notify) after review']);
+      expect(state.flowReason()).toBe('Auth change.');
+
+      state.undoFlowDraft();
+      expect(state.flow()?.chain).toEqual([]);
+      expect(state.flowReason()).toBeNull();
+
+      await state.draftFlow(null);
+      desk.on('POST', '/api/tickets/T-0130/flow-edit', () => ({ ...FLOW, chain: ['insert security after review'] }));
+      await state.editFlow({ op: 'persona', step: 3, persona: null });
+      expect(state.flowReason()).toBeNull();
+
+      desk.on('POST', '/api/tickets/T-0130/flow-draft', () => ({ ok: false, error: 'Mission Control is not set up yet.' }));
+      expect(await state.draftFlow(null)).toEqual({ ok: false, error: 'Mission Control is not set up yet.' });
+    });
+
+    it('saves the draft, closes, toasts and refreshes what lies under it; a refusal keeps it open', async () => {
+      const { desk } = makeDesk();
+      desk.on('GET', '/api/tickets/T-0130/flow/0', () => ({ ...FLOW, scope: { kind: 'part', index: 0, title: 'A' }, chain: ['skip verify'] }));
+      desk.on('GET', '/api/tickets/T-0130/parts', () => ({ ok: true, ticket: 'T-0130', title: 't', gate: 'build', defaultPersona: null, warnings: [], personas: [], parts: [] }));
+      const state = makeState(desk);
+      await state.openApproval('T-0130');
+      await state.openFlow('T-0130', 0);
+
+      desk.on('POST', '/api/tickets/T-0130/flow-save', () => ({ ok: false, error: 'a skip only reaches future gates' }));
+      expect(await state.saveFlow()).toEqual({ ok: false, error: 'a skip only reaches future gates' });
+      expect(state.flowTarget()).not.toBeNull();
+
+      desk.on('POST', '/api/tickets/T-0130/flow-save', () => ({ ok: true }));
+      const before = desk.callsOf('GET', '/api/tickets/T-0130/parts').length;
+      expect(await state.saveFlow()).toEqual({ ok: true });
+      expect(desk.callsOf('POST', '/api/tickets/T-0130/flow-save').at(-1)!.body).toEqual({ part: 0, chain: ['skip verify'] });
+      expect(state.flowTarget()).toBeNull();
+      expect(state.toastMessage()?.message).toBe('Flow saved');
+      await waitFor(() => expect(desk.callsOf('GET', '/api/tickets/T-0130/parts').length).toBe(before + 1));
+    });
+  });
+
   it('saves the plan against the loaded revision and reports a stale base honestly', async () => {
     const { desk } = makeDesk();
     desk.on('GET', '/api/tickets/T-0130', () => ticketFor('### Goal'));

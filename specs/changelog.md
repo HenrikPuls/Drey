@@ -1,3 +1,80 @@
+### Milestone 128 — Mission Control flow editor (E10-5)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(concept v2 §5.7; design boards "iPad: Flow editor" and its phone twin;
+ADR-0088 E10 – E12). See the end of this entry for what was and was not
+seen in a running app.
+
+- **Chain grammar.** `before` / `after` and the per-part scope existed
+  (E9, E10-1); added are `move <phase> after|before <anchor>` (a standard
+  gate runs elsewhere) and `assign <phase> <persona>` (a standard gate's
+  persona), with merge (`moved` mark, pinned persona) and write-guard rules
+  (`specs/ticket-schema.md`, "The chain delta").
+- **Edit the arrangement, not the strings** (`core/flow-edit.ts`).
+  `applyFlowOp` takes a draft delta and one edit — insert after a gate,
+  remove (a strike, or dropping an insert), restore, move earlier / later,
+  persona, tell me, reset — and returns the next delta, regenerated
+  canonically: the longest in-order run of standard gates stays silent, the
+  others get `move`, new gates `insert`, then `skip` / `notify` / `assign`.
+  The result is validated and merged back; an arrangement the grammar
+  cannot write is refused with a reason. Only the future is editable.
+- **Wire.** `GET /api/tickets/<id>/flow[/<part>]` (the gates from the
+  current one on with persona, model, owner mark, locks; the phases to add;
+  the personas), `POST …/flow-edit` (stateless: draft in, draft out, nothing
+  written), `POST …/flow-save` (ticket header through `setChain`, or the
+  part's `chain:` line in the parent's plan, one commit `tickets: <id> part
+  <n> flow`; refuses a released part, a live run, a delta the guard
+  rejects), `POST …/flow-draft`.
+- **Paul drafts.** "Ask Paul" runs one bridge turn under `FLOW_SYSTEM_PROMPT`
+  (the standard flow, the flow now, the crew; the reply is the mission
+  envelope with one `setChain`); the desk reads the draft back through the
+  same guard and returns it with his reason. It is the working draft,
+  dashed, with **Undo draft**; nothing is written.
+- **The screen** (`libs/mission-ui/src/flow`). The gates as a list — dot,
+  title, who · model (`you` for the owner's own gates), marks (`current`,
+  `added`, `moved`, `struck`, `tell me`) — with a 44 pt **+** connector
+  after each; the chip `Standard flow` / `Standard flow + n changes`;
+  changed gates dashed against the saved flow. The inspector for a tapped
+  gate: Who (Pipeline default or a persona), Model (the persona's, shown),
+  Tell me when it is done (switch), Runs after, Earlier / Later, Add a gate
+  after, Remove / Restore gate; a bottom sheet while the editor is narrow,
+  a side column from 720 px of editor width (container query). Foot: ask
+  Paul, **Reset to standard flow**, **Save flow** (disabled until the draft
+  differs). A read-only device sees the flow and changes nothing.
+- **Entries.** `Change flow ›` on each card of the plan to approve opens
+  that part's flow (a released part has no link); the ticket screen's gate
+  sheet opens the ticket's own flow with **Edit the flow**. Save closes the
+  editor, toasts `Flow saved` and refreshes the cards and the ticket.
+- **Specs added:** grammar round trip, merge, guard (`flow-edit.spec.ts`),
+  the ops incl. the regeneration property; the service on a real temp vault
+  — ticket and part scope, persona/model/owner, locks, refusals, save into
+  the header and the part line, Paul's context (`board-service-flow.spec.ts`);
+  the flow prompt on the wire (`chat-llm-flow.spec.ts`); the port
+  composition of a draft (`drey-port.spec.ts`); the routes incl. a read-only
+  device (`router.spec.ts`); the DTO reader, helpers and the screen
+  (`flow/flow.spec.ts`); the state's open / edit / draft / undo / save
+  (`state.spec.ts`); the approve link and the sheet row.
+- **Seen in a running app:** the engine (`engine-main`, a throwaway demo
+  vault with English content, loopback remote, a stub OpenAI-compatible
+  endpoint for Paul) served the production build to the built-in browser,
+  paired as a device. At 1194 × 834 (docked layout) and 375 × 812 the flow
+  of a part (`Change flow ›` from the plan to approve) and of a ticket (gate
+  sheet) were driven through the DOM: restore a struck gate, move Verify
+  earlier (`moved` mark, chip + 1 change), add a gate and give it Ralf and
+  tell me, Paul's draft with his reason (dashed gate), Save flow — the files
+  carried `chain: move verify after build; notify build` in the part and
+  `chain: - insert security(ralf, notify) after review` on the ticket, one
+  commit each, and the ticket's gate bar showed the new gate. 44 pt targets
+  and no horizontal scroll were measured. **Not seen:** the built-in
+  browser would not return screenshots (pane hidden, 5 s timeouts), so the
+  layout, the dashed styling and the sheet were **not looked at, only
+  measured**; a real iPad / iPhone (Safari); the dark / Drey / Cyberpunk
+  themes; a draft from a real model; the side-column inspector (the demo
+  layouts were narrower than 720 px of editor width).
+- **Not done:** Paul proposing a flow for every new plan (the switch), a
+  per-gate model pick, the default flow in Settings → Tickets, the fleet
+  executing `move` / `assign`. Roadmap: E10-5b.
+
 ### Milestone 126 — Mission Control plan to approve (E10-4)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04
