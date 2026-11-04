@@ -3757,3 +3757,35 @@ views under `views`; on restore each view's layout is rebuilt through the same
 pruning (tabs that did not come back leave their pane), the view named by
 `DockService`'s persisted `active` becomes the one on screen, and a document
 only a vanished view held is closed.
+
+## 6.77 The desk surfaces: Team, Capacity and Board repaint from one store (E13-8)
+
+```mermaid
+sequenceDiagram
+    participant E as Tickets engine
+    participant X as index.ts store (snapshot, runs, chain)
+    participant T as TeamStore
+    participant V as Board / Team tab, Capacity band
+    participant O as Owner
+
+    E-->>X: board-changed / fleet-changed (SSE, debounced)
+    X->>X: refreshBoard / applyFleetSnapshot
+    X-->>V: DeskDeps.subscribe listeners (notifyViews, fleet listeners)
+    X-->>T: same signal
+    T->>E: personas (invoke, at most every 4 s)
+    E-->>T: PersonaView[] (budget, today's cost, phases, pause)
+    T-->>V: new directory
+    V->>V: one animation frame: teamModelOf / boardModelOf, replace the DOM
+    O->>V: Nudge / Hand to Claude Code / Stop on a flagged run
+    V->>X: mutate(label, invoke) - fleetSend / handoffRun / fleetStop
+    X->>E: the same routes the phone uses
+    O->>V: Pause all / armed Stop all
+    V->>X: chainAction(chainMaster | chainAbort) - applied to the shared chain state
+    O->>V: open a Board card or a run row
+    V->>X: openTicket(card) - the ticket page (file + thread)
+```
+
+The Board also asks `planParts` for every ticket in an owner-checkpoint column
+(once per snapshot) so a plan's unreleased parts hang under the planning
+ticket. A detail pane (1:1 thread, Memory, Setup) keeps its own DOM across
+the fleet repaints, so a half-typed message survives them.

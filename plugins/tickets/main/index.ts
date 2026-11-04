@@ -509,6 +509,60 @@ const plugin: MainPluginModule = {
 
     ctx.ipc.handle('chainAbort', async () => chainResult(await fleet.abortAll()));
 
+    // --- the team (E13-8, E12-4): the remote port's own reads and controls ---
+    // The Team tab and the Capacity band show what the phone shows, so they
+    // ask the engine's port (through the invoke allowlist), not a copy.
+    const str = (payload: unknown, key: string): string | null => {
+      const value = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>)[key] : undefined;
+      return typeof value === 'string' && value !== '' ? value : null;
+    };
+    ctx.ipc.handle('personas', () => client.invoke('personas'));
+    // The Board's "plan to approve": a ticket's parts that are no tickets yet.
+    ctx.ipc.handle('planParts', (payload) => {
+      const id = str(payload, 'id');
+      return id === null ? { ok: false, error: 'bad plan parts payload' } : client.invoke('planParts', id);
+    });
+    ctx.ipc.handle('personaPause', (payload) => {
+      const persona = str(payload, 'persona');
+      const paused = (payload as { paused?: unknown } | null)?.paused;
+      return persona === null || typeof paused !== 'boolean'
+        ? { ok: false, error: 'bad persona pause payload' }
+        : client.invoke('chainPersonaPause', { persona, paused });
+    });
+    ctx.ipc.handle('handoffRun', (payload) => {
+      const runId = str(payload, 'runId');
+      return runId === null ? { ok: false, error: 'bad hand-off payload' } : client.invoke('handoffRun', { runId });
+    });
+    ctx.ipc.handle('personaThread', (payload) => {
+      const persona = str(payload, 'persona');
+      return persona === null ? { ok: false, error: 'bad persona payload' } : client.invoke('personaThread', persona);
+    });
+    ctx.ipc.handle('personaThreadAppend', (payload) => {
+      const persona = str(payload, 'persona');
+      const text = str(payload, 'text');
+      return persona === null || text === null
+        ? { ok: false, error: 'bad persona message payload' }
+        : client.invoke('personaThreadAppend', { persona, text });
+    });
+    ctx.ipc.handle('personaMemory', (payload) => {
+      const persona = str(payload, 'persona');
+      return persona === null ? { ok: false, error: 'bad persona payload' } : client.invoke('personaMemory', persona);
+    });
+    ctx.ipc.handle('personaMemoryAppend', (payload) => {
+      const persona = str(payload, 'persona');
+      const text = str(payload, 'text');
+      return persona === null || text === null
+        ? { ok: false, error: 'bad memory payload' }
+        : client.invoke('personaMemoryAppend', { persona, text });
+    });
+    ctx.ipc.handle('personaMemoryPin', (payload) => {
+      const persona = str(payload, 'persona');
+      const p = (payload ?? {}) as { index?: unknown; pinned?: unknown };
+      return persona === null || typeof p.index !== 'number' || typeof p.pinned !== 'boolean'
+        ? { ok: false, error: 'bad memory pin payload' }
+        : client.invoke('personaMemoryPin', { persona, index: p.index, pinned: p.pinned });
+    });
+
     // T-0004: open the ticket's work checkout in the OS terminal — the
     // directory where `.\dev.ps1` (or the repo's own build) runs.
     ctx.ipc.handle('openRepoFolder', async (payload) => {

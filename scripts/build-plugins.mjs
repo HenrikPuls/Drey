@@ -145,7 +145,8 @@ for (const entry of readdirSync(pluginsDir)) {
   // Static assets the bundler does not emit (stylesheets): copy explicitly.
   if (existsSync(rendererSrc)) {
     for (const file of readdirSync(rendererSrc)) {
-      if (!file.endsWith('.ts') && !file.endsWith('.js')) {
+      // A sub-folder holds sources esbuild already bundled into index.js (E13-8: board/, team/).
+      if (!file.endsWith('.ts') && !file.endsWith('.js') && !statSync(path.join(rendererSrc, file)).isDirectory()) {
         const dest = path.join(pluginOut, 'renderer');
         mkdirSync(dest, { recursive: true });
         cpSync(path.join(rendererSrc, file), path.join(dest, file));

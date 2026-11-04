@@ -63,6 +63,11 @@ import {
   workerLabelOf,
 } from './worker-status';
 import { NUDGE_TEXT, workersNode, type WorkerCardAction } from './workers-view';
+import type { DeskDeps } from './desk-deps';
+import { createTeamStore, type TeamStore } from './team/team-store';
+import { mountTeam } from './team/team-view';
+import { bandStatusOf, mountCapacity } from './team/capacity-view';
+import { mountBoard } from './board/board-view';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -145,6 +150,14 @@ const headerViewPainters = new Set<() => void>();
 /** Repaints the project switcher in every panel header (req-72). */
 const projectPainters = new Set<(projects: readonly ProjectRef[]) => void>();
 
+/** The desk surfaces (Board, Team, Capacity; E13-8) repaint after every board or fleet change. */
+const deskListeners = new Set<() => void>();
+const fireDesk = (): void => {
+  for (const listener of [...deskListeners]) {
+    listener();
+  }
+};
+
 const notifyViews = (): void => {
   for (const view of views) {
     view.render();
@@ -152,6 +165,7 @@ const notifyViews = (): void => {
   for (const paint of headerViewPainters) {
     paint();
   }
+  fireDesk();
 };
 
 /** Keeps the editor's ticket headers in step with each fresh board (set in activate). */
@@ -629,6 +643,7 @@ function workPanelDeps(api: DreyPluginApi): WorkPanelDeps {
       workFilter.set(NO_WORK_FILTER);
       notifyViews();
     },
+    personaName: (id) => teamStore(api).nameOf(id),
   };
   return deps;
 }
@@ -1104,6 +1119,8 @@ function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
         },
       );
     });
+    item('Board', 'The pipeline as columns, parts under their ticket, cost per column', () => openBoardDoc(api));
+    item('Team', 'The personas, their runs and budgets, capacity, Pause all', () => openTeamDoc(api));
     item('Workers', 'Every live worker as a card — what it does, its context, its controls', () => openWorkersDoc(api));
     item('Chain log', 'What the fleet daemon did (dispatches, skips, gates), as a readonly editor tab', () => openChainLog(api));
     item('Clean up worktrees…', 'Removes every worktree whose ticket has no live run, then prunes', () => void runWorktreesCleanup());
@@ -1664,6 +1681,54 @@ const readWorkerPools = async (api: DreyPluginApi): Promise<void> => {
   );
   workerPools = entries;
 };
+
+// --- the desk surfaces (E13-8): Board and Team tabs, the Capacity band ------------
+
+const BOARD_KIND = 'tickets-board';
+const BOARD_KEY = 'board://all';
+const TEAM_KIND = 'tickets-team';
+const TEAM_KEY = 'team://all';
+
+let deskDepsMemo: DeskDeps | null = null;
+let teamStoreMemo: TeamStore | null = null;
+
+/** What the desk views read from this module; built once, the getters stay live. */
+function deskDeps(api: DreyPluginApi): DeskDeps {
+  deskDepsMemo ??= {
+    api,
+    snapshot: () => snapshot,
+    runs: () => fleetRuns,
+    chain: () => chain,
+    invoke: invokeBoard,
+    subscribe: (listener) => {
+      deskListeners.add(listener);
+      return () => deskListeners.delete(listener);
+    },
+    mutate: runMutation,
+    chainAction: runChainAction,
+    openTicket: (card) => void openTicketPage(api, card),
+    newIdea: () => {
+      if (snapshot?.vaultId != null) {
+        openCreateModal(api, snapshot);
+      }
+    },
+    titleOf: (ticketId) => boardCard(ticketId)?.meta.title ?? null,
+  };
+  return deskDepsMemo;
+}
+
+function teamStore(api: DreyPluginApi): TeamStore {
+  teamStoreMemo ??= createTeamStore(deskDeps(api));
+  return teamStoreMemo;
+}
+
+function openBoardDoc(api: DreyPluginApi): void {
+  api.documents.addDoc(BOARD_KIND, BOARD_KEY, 'Board');
+}
+
+function openTeamDoc(api: DreyPluginApi): void {
+  api.documents.addDoc(TEAM_KIND, TEAM_KEY, 'Team');
+}
 
 /** Opens (or focuses) the Workers tab. */
 function openWorkersDoc(api: DreyPluginApi): void {
@@ -3145,6 +3210,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       priority: 10,
     });
     fleetListeners.add(refreshStatusItem);
+    fleetListeners.add(fireDesk);
     api.commands.register({
       id: 'tickets.showBoard',
       label: 'Show the Work panel',
@@ -3155,6 +3221,24 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     // So does a fleet that stopped by itself: a tripped breaker, a spent quota.
     fleetListeners.add(() => announceChainAlerts(api));
     api.ui.registerWidget(createTicketsWidget(api));
+    // The rows' persona chips read the same directory as the Team tab.
+    teamStore(api).subscribe(notifyViews);
+    // The Capacity band (E13-8): a panel for the bottom dock - slots busy,
+    // what each persona does, today's cost, Pause all, Open Team.
+    api.ui.registerWidget({
+      id: 'tickets-capacity',
+      title: 'Capacity',
+      icon: 'rocket',
+      defaultDock: 'bottom',
+      defaultOpen: false,
+      defaultFlex: 120,
+      flush: true,
+      status: () => bandStatusOf(fleetRuns),
+      mount: (el) => mountCapacity(deskDeps(api), teamStore(api), el, () => openTeamDoc(api)),
+    });
+    api.commands.register({ id: 'tickets.openBoard', label: 'Open the Board', run: () => openBoardDoc(api) });
+    api.commands.register({ id: 'tickets.openTeam', label: 'Open the Team', run: () => openTeamDoc(api) });
+    api.commands.register({ id: 'tickets.showCapacity', label: 'Show the Capacity band', run: () => api.ui.revealWidget('tickets-capacity') });
     api.ui.registerSettingsPage(createTicketsSettingsPage(api));
 
     // The Files-panel seam (T-0042, SDK 1.32): veto/takeover over the
@@ -3225,6 +3309,28 @@ const plugin: { activate(api: DreyPluginApi): void } = {
         const n = liveRuns().length;
         return n === 0 ? null : `${n} running`;
       },
+    });
+
+    // The Board and the Team (E13-8): stateless tabs; the session snapshot
+    // reopens them from their fixed keys.
+    api.ui.registerDocKind({
+      kind: BOARD_KIND,
+      icon: 'table',
+      serialize: () => null,
+      restore: () => openBoardDoc(api),
+      mount: (host) => mountBoard(deskDeps(api), teamStore(api), host),
+      statusText: () => {
+        const n = liveRuns().length;
+        return n === 0 ? null : `${n} running`;
+      },
+    });
+    api.ui.registerDocKind({
+      kind: TEAM_KIND,
+      icon: 'users',
+      serialize: () => null,
+      restore: () => openTeamDoc(api),
+      mount: (host) => mountTeam(deskDeps(api), teamStore(api), host),
+      statusText: () => bandStatusOf(fleetRuns),
     });
 
     api.ui.registerDocKind({

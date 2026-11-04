@@ -1,3 +1,98 @@
+### Milestone 130 — Board, Team and Capacity in Drey (E13-8)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(roadmap E13-8; design boards DeskBoard, DeskTeam and DeskWork of the
+design canvas; `docs/design/work-panel/desktop-integration.md`; the data is
+E12-4's, nothing was rebuilt). Tickets plugin and engine only — no SDK, no
+base change (the existing doc-kind and dock-widget registries carried it).
+What was and was not seen in the built app is at the end of this entry.
+
+- **Board tab** (`tickets-board`, `board://all`, `tickets.openBoard`, the
+  Work panel's ⋯ row): the pipeline as columns, one card per ticket — id,
+  kind (Running / Waiting / Plan), **persona** chip, title, **cost**, the
+  worker's line or the blockers — the **cost of each column** in its head,
+  "Done this week" last, **New idea** in the first column. A ticket with
+  `parent:` hangs **under its ticket** (own phase, persona, cost); the
+  plan's parts that are no tickets yet come from `planParts` and hang under
+  the planning ticket marked `P1`, `P2` with their start line. A card opens
+  the ticket page. The persona is the live run's, else the ticket's pin,
+  else the column's. A ticket without a known cost shows none, never
+  `$0.00`. **No estimate** on the board: it needs ≥ 3 similar runs
+  (decision D9) and is the ticket header's (E13-6). A repaint keeps the
+  scroll position.
+- **Team tab** (`tickets-team`, `team://all`, `tickets.openTeam`): E12-4's
+  Team on the desktop — head `4 personas · today $1.59`, Today against the
+  summed budgets, the capacity chips (`Local 1/2`), **Pause all / Resume
+  all** (`chainMaster`), the armed **Stop all** (`chainAbort`), a card per
+  persona (avatar, role · phases, state word idle / running / `2 running` /
+  waiting / stuck / paused, the day's cost line and bar, one row per live run
+  with the worker's line). A flagged run turns amber (`No progress for 9
+  minutes and the context is filling up (78%).`) with **Nudge**, **Hand to
+  Claude Code** (not offered on a run already there) and **Stop**. A card
+  opens the persona's detail beside the grid: **1:1** (the coaching thread
+  and composer, Ctrl+Enter sends), **Memory** (entries, Pin, teach a line)
+  and **Setup** (worker, model, pool, phases, cost, Pause / Resume persona).
+- **Capacity band** (dock widget `tickets-capacity`, bottom dock, closed by
+  default, `tickets.showCapacity`): `2 of 5 slots busy`, the pool chips, one
+  line per persona (`idle`, `works on T-0121`, `waits for you on T-0121`,
+  `stuck on T-0126`), Today against the budget, Pause all, **Open Team ›**.
+  The header status reads `1 stuck` / `2 running`.
+- **Tickets panel parity** with the mobile list: every row carries the
+  **persona** chip and the **cost**; the queued ideas are their own
+  **Prioritized** group ("waits for Ben") between Shaping and Ideas
+  (`applyWorkFilter` splits on `queued`; `workGroups` is unchanged).
+- **Engine / main.** The invoke allowlist gained `TEAM_METHODS` — the remote
+  port's own `personas`, `handoffRun`, `chainPersonaPause`,
+  `personaThread[Append]`, `personaMemory[Append|Pin]`, `planParts` — and the
+  plugin main the matching IPC routes (`personas`, `personaPause`,
+  `handoffRun`, `personaThread[Append]`, `personaMemory[Append|Pin]`,
+  `planParts`). The Team tab therefore shows what the phone shows.
+- **Build.** `scripts/build-plugins.mjs` no longer tries to copy a
+  sub-folder of `renderer/` as an asset (it crashed on `board/` and `team/`;
+  their sources are bundled into `index.js` like every other).
+- **Code** (all under `plugins/tickets/renderer/`): `desk-deps.ts` (the seam
+  to `index.ts`'s store), `team/` (`team-model`, `team-store`, `team-view`,
+  `capacity-view`), `board/` (`board-model`, `board-view`), `desk.css`.
+- **Specs / tests.** `team-model.spec` (money, role, state words, stuck copy,
+  budget share, capacity chips, the model), `board-model.spec` (columns,
+  cost per column, persona ladder, parts under their ticket, plan parts),
+  `team-store.spec`, `team-view.spec` (jsdom: Team, Capacity, Board incl.
+  Nudge / Hand-off / Stop, Pause all, armed Stop all, detail),
+  `work-panel.spec` (persona + cost, Prioritized), `engine.spec` (the team
+  reads over invoke), `e2e/desk-board-team.spec.ts` (the built app, below);
+  `e2e/work-panel.spec.ts` follows the Prioritized group.
+
+**Seen in the built app** (Playwright over the production build, seeded
+tickets vault with four personas, a ledger of settled runs and a plan with
+parts; screenshots `desk-board.png`, `desk-board-build.png`, `desk-team.png`,
+`desk-capacity.png` in the e2e output and the session notes): the Board with
+persona chips, card costs, `$3.61` on Build, the plan card with its released
+part and two plan parts, the scroll position surviving a board refresh; the
+Team with the capacity chips, a waiting persona, the stuck persona's amber
+row and its three buttons, the day's cost bars and the Setup detail; the
+Capacity band in the bottom dock (`2 of 5 slots busy`, `stuck on T-0126`);
+the Prioritized group and the row costs in the Work panel.
+**Not seen:** the fleet runner does not run under e2e, so the live runs were
+a pushed `fleet-changed` snapshot — Nudge, Hand to Claude Code, Stop, Pause
+all and Stop all were **not pressed in the real app** (covered by the jsdom
+specs only); the 1:1 and Memory panes were not opened against real data; no
+estimate (D9) is shown anywhere, so none was checked; light and Cyberpunk
+themes were not looked at.
+
+**Not done / open:** "New persona", "Remove from team" and editing a persona's
+Setup (the port's `personaPatch`) are not on the desktop yet — Setup is a
+read-out plus Pause / Resume; the 1:1 is the coaching thread of E12-4 (the
+Assistant target "1:1 per persona" is E13-5); the persona's share of the
+pool slots (`1/2`) in the band needs a per-persona slot count the engine does
+not report; the improvements ("Friction") card is not on the desktop; the
+Board has no drag between columns (a card's move stays in the Work panel's
+row menu); the Board and Team tabs have no home view yet (E13-13). **Test
+hazard, not fixed here:** the tickets e2e specs adopt the engine of the
+owner's `~/.drey-engine` when one runs (they then read the real board);
+`desk-board-team.spec.ts` points `USERPROFILE` at a temp home so it spawns
+its own engine — the other tickets specs still need that, or a stopped
+engine, to pass on this machine.
+
 ### Milestone 128 — Mission Control flow editor (E10-5)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04

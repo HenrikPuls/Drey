@@ -3698,3 +3698,22 @@ details[open] > summary > .tickets-tx-think-preview {
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* Persona chip and cost on every row (E13-8, mobile list parity). */
+.work-row-persona {
+  flex: none;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--accent-surface);
+  color: var(--accent-fg, var(--accent));
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.work-row-cost {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}

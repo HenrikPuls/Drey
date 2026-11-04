@@ -151,8 +151,10 @@ describe('workListNode', () => {
       () => undefined,
       { phases: ['prioritized'], statuses: [] },
     );
-    expect(list.querySelector('.work-group-ideas .work-group-count')?.textContent).toBe('1/2');
-    expect(list.querySelectorAll('.work-group-ideas .work-row')).toHaveLength(1);
+    // The queued idea is the Prioritized group's (E13-8); Ideas keeps the inbox one.
+    expect(list.querySelector('.work-group-prioritized .work-group-count')?.textContent).toBe('1/1');
+    expect(list.querySelectorAll('.work-group-prioritized .work-row')).toHaveLength(1);
+    expect(list.querySelector('.work-group-ideas .work-group-count')?.textContent).toBe('0/1');
     expect(list.querySelector('.work-group-running .work-group-empty')?.textContent).toBe('Nothing running');
     const hidden = workListNode(
       d,
@@ -196,20 +198,53 @@ describe('workListNode', () => {
     expect(sub.querySelector('.work-row-line')?.textContent).toBe('Dialog not started');
   });
 
-  it('marks a prioritized idea as queued and gives ideas their track chip', () => {
+  it('lists the queued ideas under Prioritized, waiting for their persona, and gives ideas their track chip', () => {
     const placed = {
       // Same priority and stamp: newest id first inside Ideas.
       inbox: [card('T-0006', 'inbox', { track: 'auto' }), card('T-0007', 'inbox', { track: 'shape' })],
       prioritized: [card('T-0008', 'prioritized')],
     };
     const list = workListNode(deps(), board(placed), [], createGroupFoldStore(null), () => undefined);
+    const queued = [...list.querySelectorAll<HTMLElement>('.work-group-prioritized .work-row')];
+    expect(queued.map((row) => row.dataset['id'])).toEqual(['T-0008']);
+    expect(queued[0]!.querySelector('.work-row-queued')?.textContent).toBe('Queued');
     const rows = [...list.querySelectorAll<HTMLElement>('.work-group-ideas .work-row')];
-    // Same priority and stamp: newest id first — the prioritized one leads.
-    expect(rows[0]!.dataset['id']).toBe('T-0008');
-    expect(rows[0]!.querySelector('.work-row-queued')?.textContent).toBe('Queued');
-    expect(rows[0]!.querySelector('.work-track')?.textContent).toBe('Triage');
-    expect(rows[1]!.querySelector('.work-track')?.textContent).toBe('Shape');
-    expect(rows[2]!.querySelector('.work-track')?.textContent).toBe('Auto');
+    expect(rows.map((row) => row.dataset['id'])).toEqual(['T-0007', 'T-0006']);
+    expect(rows[0]!.querySelector('.work-track')?.textContent).toBe('Shape');
+    expect(rows[1]!.querySelector('.work-track')?.textContent).toBe('Auto');
+  });
+
+  it('every row carries the persona and the cost, and a Prioritized row says who it waits for (E13-8)', () => {
+    const withCost = (id: string, at: string, cost: number | null, persona: string | null): TicketCard => {
+      const base = card(id, at);
+      return {
+        ...base,
+        meta: { ...base.meta, persona },
+        ...(cost === null ? {} : { usage: { tokensIn: 1, tokensOut: 1, cost, runs: 1 } }),
+      } as unknown as TicketCard;
+    };
+    const d = { ...deps(), personaName: (id: string) => id.toUpperCase() };
+    const list = workListNode(
+      d,
+      board({
+        inbox: [withCost('T-0001', 'inbox', null, null)],
+        prioritized: [withCost('T-0002', 'prioritized', 0.5, 'ben')],
+        build: [withCost('T-0003', 'build', 1.2, 'ben')],
+      }),
+      [],
+      createGroupFoldStore(null),
+      () => undefined,
+    );
+    const build = list.querySelector<HTMLElement>('.work-group-running [data-id="T-0003"]')!;
+    expect(build.querySelector('.work-row-persona')?.textContent).toBe('BEN');
+    expect(build.querySelector('.work-row-cost')?.textContent).toBe('$1.20');
+    const queued = list.querySelector<HTMLElement>('.work-group-prioritized [data-id="T-0002"]')!;
+    expect(queued.querySelector('.work-row-queued')?.textContent).toBe('waits for BEN');
+    expect(queued.querySelector('.work-row-cost')?.textContent).toBe('$0.50');
+    // No known cost, no persona: nothing is invented.
+    const idea = list.querySelector<HTMLElement>('.work-group-ideas [data-id="T-0001"]')!;
+    expect(idea.querySelector('.work-row-cost')).toBeNull();
+    expect(idea.querySelector('.work-row-persona')).toBeNull();
   });
 
   it('shows the first five ideas, then "<n> more" unfolds the rest (remembered)', () => {

@@ -1,0 +1,666 @@
+/*
+ * The desk surfaces (E13-8): the Board and Team tabs and the Capacity band.
+ * Flat, sentence-case sans, theme tokens only (ADR-0057); every class is
+ * scoped under `desk-`.
+ */
+.desk-board,
+.desk-team,
+.desk-capacity {
+  box-sizing: border-box;
+  color: var(--text-2);
+  font-family: var(--font-sans, inherit);
+  font-size: 12.5px;
+}
+
+.desk-board,
+.desk-team {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 14px 18px;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.desk-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.desk-head-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.desk-h {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-1, var(--text-2));
+}
+
+.desk-head-sub,
+.desk-note,
+.desk-today-label,
+.desk-card-line,
+.desk-run-age,
+.desk-msg-at {
+  color: var(--text-3);
+}
+
+.desk-note {
+  padding: 8px 2px;
+}
+
+.desk-note-error {
+  color: var(--status-deleted);
+}
+
+.desk-head-controls,
+.desk-composer,
+.desk-run-controls,
+.desk-cap-tail,
+.desk-cap-lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.desk-today {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-right: 6px;
+}
+
+.desk-today-cost,
+.desk-card-cost,
+.desk-col-cost {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1, var(--text-2));
+}
+
+.desk-today-budget {
+  color: var(--text-3);
+}
+
+/* buttons */
+.desk-btn {
+  font: inherit;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs, 4px);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.desk-btn:hover {
+  background: var(--hover-bg);
+}
+
+.desk-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.desk-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.desk-btn-primary {
+  border-color: var(--accent);
+  color: var(--accent-fg, var(--accent));
+}
+
+.desk-btn-danger {
+  color: var(--status-deleted);
+}
+
+.desk-btn-armed {
+  background: color-mix(in srgb, var(--status-deleted) 16%, transparent);
+  border-color: var(--status-deleted);
+}
+
+.desk-btn-small {
+  padding: 1px 7px;
+  font-size: 11.5px;
+}
+
+.desk-btn-link {
+  border-color: transparent;
+  color: var(--accent-fg, var(--accent));
+}
+
+/* chips */
+.desk-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.desk-chip,
+.desk-persona-chip,
+.desk-card-kind {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--hover-bg);
+  color: var(--text-2);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.desk-chip-full {
+  color: var(--status-modified);
+  background: color-mix(in srgb, var(--status-modified) 14%, transparent);
+}
+
+.desk-persona-chip {
+  background: var(--accent-surface);
+  color: var(--accent-fg, var(--accent));
+}
+
+.desk-card-kind {
+  color: var(--status-modified);
+  background: color-mix(in srgb, var(--status-modified) 14%, transparent);
+}
+
+/* avatar */
+.desk-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--persona-color, var(--border));
+  color: var(--text-1, var(--text-2));
+  font-weight: 600;
+}
+
+.desk-avatar-sm {
+  width: 28px;
+  height: 28px;
+  font-size: 11px;
+}
+
+.desk-avatar-lg {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+}
+
+/* ---- Team ---- */
+.desk-team-body {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.desk-team-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.desk-persona-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.desk-persona {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+}
+
+.desk-persona:hover {
+  background: var(--hover-bg);
+}
+
+.desk-persona:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.desk-persona-selected {
+  border-color: var(--persona-color, var(--accent));
+}
+
+.desk-persona-stuck {
+  border-color: var(--status-modified);
+}
+
+.desk-persona-top,
+.desk-detail-head,
+.desk-run-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.desk-persona-name,
+.desk-detail-name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+}
+
+.desk-persona-title {
+  font-weight: 600;
+  color: var(--text-1, var(--text-2));
+}
+
+.desk-persona-state {
+  color: var(--text-3);
+}
+
+.desk-persona-running .desk-persona-state {
+  color: var(--status-added);
+}
+
+.desk-persona-waiting .desk-persona-state,
+.desk-persona-stuck .desk-persona-state {
+  color: var(--status-modified);
+}
+
+.desk-persona-role {
+  color: var(--text-3);
+}
+
+.desk-run {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--radius-xs, 4px);
+  background: var(--hover-bg);
+}
+
+.desk-run-stuck {
+  background: color-mix(in srgb, var(--status-modified) 14%, transparent);
+}
+
+.desk-run-head {
+  justify-content: space-between;
+}
+
+.desk-run-ticket {
+  font: inherit;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-1, var(--text-2));
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.desk-run-ticket:hover {
+  text-decoration: underline;
+}
+
+.desk-run-activity,
+.desk-run-stuckline {
+  color: var(--text-3);
+}
+
+.desk-run-stuckline {
+  color: var(--status-modified);
+}
+
+.desk-persona-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+}
+
+.desk-over {
+  color: var(--status-deleted);
+}
+
+.desk-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hover-bg);
+  overflow: hidden;
+}
+
+.desk-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--persona-color, var(--accent));
+}
+
+/* detail */
+.desk-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 340px;
+  flex: none;
+  min-height: 0;
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+
+.desk-detail-close {
+  margin-left: auto;
+}
+
+.desk-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.desk-tab {
+  font: inherit;
+  padding: 4px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.desk-tab-on {
+  color: var(--text-1, var(--text-2));
+  border-bottom-color: var(--accent);
+}
+
+.desk-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.desk-thread,
+.desk-memory {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 80px;
+  overflow: auto;
+}
+
+.desk-msg {
+  padding: 6px 8px;
+  border-radius: var(--radius-xs, 4px);
+  background: var(--hover-bg);
+}
+
+.desk-msg-text,
+.desk-memory-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.desk-memory-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.desk-memory-pinned .desk-memory-text {
+  color: var(--text-1, var(--text-2));
+}
+
+.desk-input {
+  font: inherit;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs, 4px);
+  background: transparent;
+  color: var(--text-1, var(--text-2));
+  resize: vertical;
+}
+
+.desk-composer {
+  align-items: flex-end;
+  flex-wrap: nowrap;
+}
+
+.desk-setup {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.desk-setup dt {
+  color: var(--text-3);
+}
+
+.desk-setup dd {
+  margin: 0;
+}
+
+/* ---- Board ---- */
+.desk-cols {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  align-items: stretch;
+}
+
+.desk-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 215px;
+  max-width: 290px;
+  min-height: 0;
+  gap: 8px;
+}
+
+.desk-col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.desk-col-title {
+  font-weight: 600;
+  color: var(--text-1, var(--text-2));
+}
+
+.desk-col-count {
+  color: var(--text-3);
+}
+
+.desk-col-cost {
+  margin-left: auto;
+}
+
+.desk-col-new {
+  margin-left: auto;
+}
+
+.desk-col-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.desk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+}
+
+.desk-card:hover {
+  background: var(--hover-bg);
+}
+
+.desk-card:focus-visible,
+.desk-part:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.desk-card-running {
+  border-color: var(--status-added);
+}
+
+.desk-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.desk-card-id {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.desk-card-cost {
+  margin-left: auto;
+}
+
+.desk-card-title {
+  color: var(--text-1, var(--text-2));
+}
+
+.desk-parts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+}
+
+.desk-part {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.desk-part-open {
+  cursor: pointer;
+}
+
+.desk-part-open:hover .desk-part-title {
+  text-decoration: underline;
+}
+
+.desk-part-plan .desk-part-title {
+  color: var(--text-3);
+}
+
+.desk-part-handle,
+.desk-part-state {
+  color: var(--text-3);
+}
+
+.desk-part-title {
+  flex: 1;
+  min-width: 80px;
+}
+
+.desk-done {
+  display: flex;
+  gap: 8px;
+  padding: 3px 2px;
+  color: var(--text-3);
+}
+
+/* ---- Capacity band ---- */
+.desk-capacity {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 100%;
+  padding: 8px 14px;
+  overflow: auto;
+}
+
+.desk-cap-slots {
+  font-weight: 600;
+  color: var(--text-1, var(--text-2));
+  white-space: nowrap;
+}
+
+.desk-cap-people {
+  display: flex;
+  gap: 18px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.desk-cap-person {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.desk-cap-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--persona-color, var(--text-4));
+  opacity: 0.5;
+}
+
+.desk-cap-running .desk-cap-dot,
+.desk-cap-waiting .desk-cap-dot,
+.desk-cap-stuck .desk-cap-dot {
+  opacity: 1;
+}
+
+.desk-cap-stuck .desk-cap-line {
+  color: var(--status-modified);
+}
+
+.desk-cap-name {
+  color: var(--text-1, var(--text-2));
+}
+
+.desk-cap-line,
+.desk-cap-today {
+  color: var(--text-3);
+}

@@ -77,6 +77,14 @@ const BOARD_METHODS = [
 
 const FLEET_METHODS = ['runs', 'start', 'chainStatus', 'stop', 'send', 'answerPermission', 'answerQuestion', 'stream', 'setMaster', 'setColumn', 'stopColumn', 'abortAll', 'startPolling', 'attach', 'control', 'log', 'status'] as const;
 
+// The team's reads and controls (E13-8): the remote port's own methods, so
+// Drey's Team tab and Capacity band show exactly what the phone shows.
+// None of these names is in the board or fleet tables (a later register() wins).
+const TEAM_METHODS = [
+  'personas', 'handoffRun', 'chainPersonaPause', 'personaThread', 'personaThreadAppend',
+  'personaMemory', 'personaMemoryAppend', 'personaMemoryPin', 'planParts',
+] as const;
+
 // pair/revoke take primitive args; the invoke channel carries one object
 // payload, so both get explicit adapters below (the generic register would
 // hand the whole payload where a string is expected).
@@ -159,9 +167,10 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     onEvent: (file, event) => hub.emit('chat', { file, event }),
   });
 
+  const remotePort = new DreyTicketsPort(board, fleet, hub, { allowBypass: () => remoteService.allowBypass() }, chat);
   const remoteService: RemoteService = new RemoteService({
     config,
-    port: new DreyTicketsPort(board, fleet, hub, { allowBypass: () => remoteService.allowBypass() }, chat),
+    port: remotePort,
     clientDir: opts.clientDir,
     // E5c: the proof card's gallery — attachment bytes straight from the
     // vault, authorized per device token (the gateway stays vault-agnostic).
@@ -228,6 +237,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   register(verify, BOARD_METHODS);
   register(fleet, FLEET_METHODS);
   register(remoteService, REMOTE_METHODS);
+  register(remotePort, TEAM_METHODS);
   table.set('pair', (payload) => {
     // Tolerant on the wire: `{ deviceName, readOnly }` from a proper caller,
     // or a bare string when a proxy passes the first positional argument.

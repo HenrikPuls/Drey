@@ -10,6 +10,7 @@
  * store beside the folds.
  */
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
+import { usd } from './team/team-model';
 import {
   DEFAULT_PRIORITY_CONFIG,
   priorityClass,
@@ -37,6 +38,7 @@ const GROUP_TITLE: Readonly<Record<WorkGroupId, string>> = {
   needs: 'Needs you',
   shaping: 'Shaping',
   running: 'Running',
+  prioritized: 'Prioritized',
   ideas: 'Ideas',
   done: 'Done this week',
 };
@@ -49,7 +51,7 @@ const IDEAS_SHOWN = 5;
 
 /** The groups in display order (T-0084 made it a constant): what runs
  *  stays above the backlog — Needs you first, then Running. */
-export const WORK_GROUP_ORDER: readonly WorkGroupId[] = ['needs', 'running', 'shaping', 'ideas', 'done'];
+export const WORK_GROUP_ORDER: readonly WorkGroupId[] = ['needs', 'running', 'shaping', 'prioritized', 'ideas', 'done'];
 
 export interface WorkPanelDeps {
   readonly api: DreyPluginApi;
@@ -64,6 +66,8 @@ export interface WorkPanelDeps {
   onAlertAction?(action: ChainAlertAction): void;
   /** Clears the Work filter (the hidden-by-filter marker's button, T-0084). */
   clearFilter(): void;
+  /** A persona id as its name (E13-8, the rows' persona chip); absent = the id itself. */
+  personaName?(id: string): string;
 }
 
 /** Which groups the owner folded — per viewer, never in the repo. */
@@ -149,7 +153,7 @@ export function workListNode(
     const group = filtered[id];
     // Needs you and Shaping show only when something waits / runs — the
     // unfiltered totals decide, so a filter never hides a whole group's head.
-    if ((id === 'needs' || id === 'shaping') && group.total === 0) {
+    if ((id === 'needs' || id === 'shaping' || id === 'prioritized') && group.total === 0) {
       continue;
     }
     list.append(groupNode(deps, snap, id, group, folds, rerender, isFilterActive(filter)));
@@ -307,7 +311,15 @@ function groupNode(
       appendIdeas(deps, snap, body, group.rows, group.total, folds, rerender, filterActive);
     } else {
       for (const row of group.rows) {
-        body.append(id === 'shaping' ? shapingRowNode(deps, row) : id === 'running' ? runningRowNode(deps, snap, row) : rowNode(deps, snap, row));
+        body.append(
+          id === 'shaping'
+            ? shapingRowNode(deps, row)
+            : id === 'running'
+              ? runningRowNode(deps, snap, row)
+              : id === 'prioritized'
+                ? prioritizedRowNode(deps, row)
+                : rowNode(deps, snap, row),
+        );
       }
       if (group.rows.length === 0) {
         if (group.total > 0) {
@@ -466,6 +478,39 @@ function phaseChipNode(row: WorkRow): HTMLElement {
   return chip;
 }
 
+/** The persona a row belongs to: the live run's, the ticket's pin, else the column's. */
+function personaIdOf(row: WorkRow): string | null {
+  const id = row.run?.persona ?? row.card.meta.persona ?? row.phase.persona ?? null;
+  return id === null || id === '' ? null : id;
+}
+
+function personaLabel(deps: WorkPanelDeps, id: string): string {
+  return deps.personaName?.(id) ?? id;
+}
+
+/** The ticket's settled cost as the mobile list writes it (`$1.20`); null = none known. */
+function costNode(row: WorkRow): HTMLElement | null {
+  const cost = row.card.usage?.cost;
+  return typeof cost === 'number' && Number.isFinite(cost) ? el('span', 'work-row-cost', usd(cost)) : null;
+}
+
+/** The persona chip and the cost every row carries (mobile list parity, E13-8). */
+function metaNodes(deps: WorkPanelDeps, row: WorkRow): HTMLElement[] {
+  const nodes: HTMLElement[] = [];
+  const who = personaIdOf(row);
+  if (who !== null) {
+    const chip = el('span', 'work-row-persona', personaLabel(deps, who));
+    chip.title = `Persona: ${personaLabel(deps, who)}`;
+    nodes.push(chip);
+  }
+  const cost = costNode(row);
+  if (cost !== null) {
+    cost.title = 'Settled cost of the ticket so far';
+    nodes.push(cost);
+  }
+  return nodes;
+}
+
 /** A Needs-you row: title + age, then the phase chip, the kind chip and why it waits. */
 function rowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLElement {
   const { card, need } = row;
@@ -483,7 +528,7 @@ function rowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLEl
   node.append(top);
   if (need !== null) {
     const line = el('div', 'work-row-sub');
-    line.append(phaseChipNode(row), el('span', 'work-kind', needKindLabel(need, snap)), el('span', 'work-row-line', statusLineOf(row, snap)));
+    line.append(phaseChipNode(row), el('span', 'work-kind', needKindLabel(need, snap)), el('span', 'work-row-line', statusLineOf(row, snap)), ...metaNodes(deps, row));
     node.append(line);
   }
   return node;
@@ -511,7 +556,7 @@ function shapingRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
   top.append(el('span', 'work-row-age', ageWords(row.run?.startedAt ?? card.meta.entered[row.phase.id] ?? null, Date.now())), more);
   node.append(top);
   const sub = el('div', 'work-row-sub');
-  sub.append(phaseChipNode(row), el('span', 'work-row-line', shapingDialogLine(row)));
+  sub.append(phaseChipNode(row), el('span', 'work-row-line', shapingDialogLine(row)), ...metaNodes(deps, row));
   node.append(sub);
   return node;
 }
@@ -544,7 +589,7 @@ function runningRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow):
   // paint can fill it without touching the row's bones (T-0086).
   const line = el('span', 'work-run-line', step.line);
   line.hidden = step.line === '';
-  sub.append(step.live ? runSquirrel(row.run) : el('span', 'work-run-dot work-run-dot-queued'), phaseChipNode(row), el('span', 'work-run-step', step.step), line);
+  sub.append(step.live ? runSquirrel(row.run) : el('span', 'work-run-dot work-run-dot-queued'), phaseChipNode(row), el('span', 'work-run-step', step.step), line, ...metaNodes(deps, row));
   node.append(sub);
   return node;
 }
@@ -572,7 +617,25 @@ function ideaRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HT
     track === null
       ? 'Not triaged yet — pick a track from the menu'
       : `Track: ${track === 'auto' ? 'Auto — runs on its own' : 'Shape — a plan-mode dialog with you'}`;
-  node.append(chip, more);
+  node.append(chip, ...metaNodes(deps, row), more);
+  return node;
+}
+
+/** A Prioritized row (E13-8): queued for the fleet - id, title, who it waits for, the cost so far. */
+function prioritizedRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
+  const { card } = row;
+  const { node, more } = baseRow(deps, card);
+  node.classList.add('work-row-idea');
+  node.append(idNode(card.id), el('span', 'work-row-title', card.meta.title ?? '(untitled)'));
+  const who = personaIdOf(row);
+  const wait = el('span', 'work-row-queued', who === null ? 'Queued' : `waits for ${personaLabel(deps, who)}`);
+  wait.title = 'Queued for the fleet - the next free worker takes it';
+  node.append(wait);
+  const cost = costNode(row);
+  if (cost !== null) {
+    node.append(cost);
+  }
+  node.append(more);
   return node;
 }
 
