@@ -927,9 +927,23 @@ shows again. At the very end the **Cost** table lists every settled run
 of `## Verlauf` (phase, model, tokens, time, cost) with the total.
 Under it the **action bar**: *Send back…* and *Accept and move to
 <next column>* while the ticket waits at one of your checkpoints, and
-always *Thread* (the agent's thread of the ticket) and *Open Review*
-(the result card and the changes in that thread — the Review tab is
-still to come).
+always *Thread* (the agent's thread of the ticket) and *Open Review*.
+
+**The Review tab.** *Open Review* opens a tab **Review · T-0121** with the
+ticket's proof on top (the same block as in the document) and the changes
+of its branch below: one chip per file with its +/− counts, then the
+selected file's lines. Switch between *Changes* and *Whole file*, tick
+*Viewed* when you have read a file (the summary says *3 files · 1 of 3
+viewed*; a file that changed since stays unviewed), *Open in editor* to
+read it in a normal tab at that line and *Git history* for the file's
+history — both need the ticket's worktree to be inside a vault you have
+added; otherwise *Open in editor* opens a copy. Click a **line number** to
+comment on that line, Shift-click a second number for a range, then add
+the comment (Ctrl+Enter). The footer button names how many you wrote:
+**Send back with 2 comments** moves the ticket back to the agent with each
+comment (file, line, text) in its Handover, so the next run reads them;
+**Accept and move to Commit** accepts as on the Ready card. Both show only
+while the ticket waits at one of your checkpoints.
 
 **By voice.** On Windows the dialog's Description label carries a
 **mic button**: it starts Windows dictation (Win+H — Windows' own;

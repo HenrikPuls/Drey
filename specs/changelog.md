@@ -41,6 +41,73 @@ open ticket tab stayed stale until a manual refresh.
   built engine).
 - **Not done.** A ticket tab does not follow an external move to the new
   folder (it flips to draft semantics); watcher stays off by default.
+### Milestone 139 — The Review tab (E13-7)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04 (board
+7d of the design canvas): the review of Mission Control's proof card (E11-2,
+E11-3) on the desktop, as an editor tab of the tickets plugin.
+
+- **The tab.** Doc kind `tickets-review`, one tab per ticket, key
+  `review://T-0121`, title **Review · T-0121** (`renderer/review/`). The
+  ticket document's **Open Review** button opens it (it opened the thread
+  tab until now). Above: the ticket's **proof** — the same block as in the
+  ticket document (`proofNode`: verdict, checks, screenshots, walkthrough
+  video with chapters, findings). Below: **"3 files · 1 of 3 viewed"**,
+  one chip per changed file (status, path, +/−, comment count), the
+  selected file's rows with old/new line numbers, and a footer with the
+  checks ("Checks green · 4/4"), **Send back with N comments** and
+  **Accept and move to Commit** (only while the ticket waits at one of
+  your checkpoints; otherwise "Not waiting for your decision").
+- **File pane.** *Changes* (the patch's rows) or *Whole file* (the file on
+  the ticket branch with the patch laid over it), *Viewed* per file (the
+  mark is keyed by path + patch hash, so a file that changed after you
+  looked reads unviewed again), **Open in editor** (the file as a vault
+  file at the line when its worktree is, or sits inside, a registered
+  vault; otherwise a scratch copy of the branch's file) and **Git history**
+  (opens that vault file and runs the git plugin's `git.fileHistory`;
+  says so when the file is in no Git vault).
+- **Comments.** Click a line number for a comment on that line of the new
+  file, Shift-click a second number for a range; Ctrl+Enter adds, Esc
+  cancels, every comment can be edited or removed. Comments and viewed
+  marks are kept per ticket in `localStorage` (`drey.tickets.review.<id>`)
+  and dropped when their file leaves the diff.
+- **Feedback.** *Send back with N comments* calls the existing `sendBack`
+  board IPC with `comments: ReviewComment[]` — **the engine's own contract**
+  (`core/review-feedback.ts`, E11-3): the plugin's `sendBack` handler now
+  parses them with `parseReviewComments` and hands them to
+  `BoardService.sendBack`, which writes the `### Review feedback` block into
+  the ticket's `## Handover`. With comments the note is optional
+  (`sendBackNoteOf`, new in `review-feedback.ts`, shared with the HTTP
+  router, which had the same fallback inline); without comments the button
+  opens the ordinary send-back dialog. Accept is the Ready card's
+  `acceptTicket`. Two new plugin IPC handlers carry the data:
+  `reviewDiff` (`BoardService.ticketDiff`) and `reviewFile`
+  (`ticketFile`), the calls Mission Control reaches over HTTP — through two
+  new methods on the engine's invoke channel (`ticketDiff`, `ticketFile`;
+  `server/engine.ts`, spec in `engine.spec.ts`). **A running engine must be
+  restarted** to have them; an older one answers "no such method".
+- **DiffView.** The design doc names Drey's `DiffView` for this tab. It is
+  an Angular component over two texts (before / after) with no line
+  gutter, so it can carry neither per-line comments nor viewed marks, and
+  plugins have no way to mount an Angular component (`ui.showDiff` is a
+  modal). The tab therefore renders the engine's unified patch itself, as
+  the phone client does (`patch.ts` is the plugin-side port of
+  `patchRowsOf` / `wholeFileRowsOf`; the lib is Angular-bound and the
+  plugin may not import it). No SDK change.
+- **Not in this milestone:** desk-wide viewed marks across devices
+  (E11-2b — the marks are per machine here), a file list longer than the
+  engine's cap of 20 files / 200 KB (the tab says "the list is cut for
+  size"), and the Before / After pictures as a dedicated pair (the
+  proof's screenshots show as the gallery).
+- **Specs.** `review/patch.spec.ts`, `model.spec.ts` (incl. the
+  worktree-to-vault resolution), `view.spec.ts` (jsdom: files and rows,
+  viewed, line and range comment → `sendBack` payload, accept, no
+  buttons off a checkpoint, Whole file, open in editor with and without a
+  vault), `review-feedback.spec.ts` (`sendBackNoteOf`), and
+  `e2e/review-tab.spec.ts` (a real git repo with a branch and worktree:
+  Open Review → proof and diff → two comments → Send back → the
+  ticket file carries the `### Review feedback` lines).
+
 ### Milestone 138 — Assistant conversation targets (E13-5)
 
 **Not yet manually verified by the owner.** Owner request (outside the list,
@@ -103,7 +170,6 @@ install without the tickets plugin looks exactly as before.
   `target-one-to-one.png`, `target-cli-refused.png` in the test output.
   **Not seen:** a real model, speech actually heard (the mock cannot), the
   Work view switching targets (no preset names one yet).
-
 ### Milestone 137 — Text size steps S / M / L / XL
 
 **Not yet manually verified by the owner.** Owner decision, 2026-11-04: the

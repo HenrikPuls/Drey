@@ -34,6 +34,7 @@ import {
   parseUnarchive,
 } from '../../../packages/tickets-engine/src/core/commands';
 import { parseTicketFile, patchHeaderFields, type HeaderPatch } from '../../../packages/tickets-engine/src/core/ticket-files';
+import { parseReviewComments, sendBackNoteOf } from '../../../packages/tickets-engine/src/core/review-feedback';
 import { personaModelFor } from '../../../packages/tickets-engine/src/core/persona';
 import { planWorktreeRemoval } from '../../../packages/tickets-engine/src/core/worktree-removal';
 import { captureTidyMessages, parseCaptureTidy } from '../shared/capture-tidy';
@@ -417,8 +418,13 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('sendBack', async (payload) => {
-      const cmd = parseSendBack(payload);
-      return cmd.ok ? board.sendBack(cmd.value) : cmd;
+      // E13-7: the Review tab's line comments ride along as structured
+      // feedback (the Ready card sends none); they stand in for a note.
+      const raw = (payload ?? {}) as Record<string, unknown>;
+      const comments = parseReviewComments(raw['comments']);
+      const note = sendBackNoteOf(typeof raw['note'] === 'string' ? raw['note'] : '', comments.length);
+      const cmd = parseSendBack(comments.length > 0 ? { ...raw, note } : payload);
+      return cmd.ok ? board.sendBack(comments.length > 0 ? { ...cmd.value, comments } : cmd.value) : cmd;
     });
 
     ctx.ipc.handle('changes', async (payload) => {
@@ -550,6 +556,22 @@ const plugin: MainPluginModule = {
         return { files: [] };
       }
       return { files: await board.worktreeChangesOf(p.id) };
+    });
+
+    // The Review tab (E13-7): the ticket branch's unified diff and, for the
+    // "Whole file" view, one file as it stands on the branch -- the same
+    // board-service calls Mission Control's proof card reaches over HTTP, here
+    // over the engine's invoke channel (`ticketDiff` / `ticketFile`; positional
+    // arguments there, one object here).
+    ctx.ipc.handle('reviewDiff', async (payload) => {
+      const cmd = parseTicketId(payload, 'review diff');
+      return cmd.ok ? client.invoke('ticketDiff', { id: cmd.value.id }) : { files: [], truncated: false };
+    });
+    ctx.ipc.handle('reviewFile', async (payload) => {
+      const p = (payload ?? {}) as { id?: unknown; path?: unknown };
+      return typeof p.id === 'string' && typeof p.path === 'string'
+        ? client.invoke('ticketFile', { id: p.id, path: p.path })
+        : { ok: false, error: 'bad review file payload' };
     });
 
     ctx.ipc.handle('worktreesCleanup', async () => board.worktreeCleanup());

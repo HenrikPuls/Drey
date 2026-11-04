@@ -233,6 +233,15 @@ describe('personas (ADR-0088, E3)', () => {
     expect(memory.ok).toBe(true);
   });
 
+  it('serves the Review tab reads on the invoke channel: no worktree -> an empty diff and a plain error (E13-7)', async () => {
+    expect(await engine.invoke('ticketDiff', { id: 'T-0001' })).toEqual({ files: [], truncated: false });
+    expect(await engine.invoke('ticketDiff')).toEqual({ files: [], truncated: false });
+    const file = (await engine.invoke('ticketFile', { id: 'T-0001', path: 'src/a.ts' })) as { ok: boolean; error?: string };
+    expect(file.ok).toBe(false);
+    const unsafe = (await engine.invoke('ticketFile', { id: 'T-0001', path: '../secret' })) as { ok: boolean; error?: string };
+    expect(unsafe).toEqual({ ok: false, error: 'not a path inside the repository' });
+  });
+
   it('personaLearn appends one confirmed entry (header on creation) and refuses unknown personas', async () => {
     const ghost = (await engine.invoke('personaLearn', { id: 'ghost', entry: 'a lesson' })) as { ok: boolean; error?: string };
     expect(ghost.ok).toBe(false);

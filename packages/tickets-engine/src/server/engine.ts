@@ -267,6 +267,17 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   table.set('chatConfirm', (payload) => chat.confirm(payload as { readonly file: string; readonly id: string }));
   table.set('chatDismiss', (payload) => chat.dismiss(payload as { readonly file: string; readonly id: string }));
   table.set('chatShapeDecide', (payload) => chat.shapeDecide(payload as { readonly file: string; readonly choice: 'keep' | 'split' }));
+  // The Review tab's reads (E13-7): the branch's diff and one file of it --
+  // the same board-service calls the phone's proof card reaches over HTTP.
+  // The service takes positional arguments, the invoke channel one object.
+  table.set('ticketDiff', (payload) => {
+    const message = (payload ?? {}) as { id?: unknown };
+    return board.ticketDiff(typeof message.id === 'string' ? message.id : '');
+  });
+  table.set('ticketFile', (payload) => {
+    const message = (payload ?? {}) as { id?: unknown; path?: unknown };
+    return board.ticketFile(typeof message.id === 'string' ? message.id : '', typeof message.path === 'string' ? message.path : '');
+  });
   // The plugin's config sync: Drey's settings keys the engine reads.
   table.set('configSet', (payload) => {
     const message = payload as { key?: unknown; value?: unknown };

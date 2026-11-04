@@ -45,6 +45,7 @@ import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-g
 import { createTicketHeader, isTicketPath, ticketLogFold } from './ticket-header';
 import { createTicketDocumentExtension } from './ticket-document/extension';
 import { createTicketStrip } from './ticket-document/strip';
+import { openReviewTab, registerReviewKind } from './review/register';
 import type { WorkRow } from './work-groups';
 import { boardIssuesChip, boardIssuesList, type BoardIssuesDeps } from './board-issues';
 import type { ChainStatus, FleetHandoverConfig, RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
@@ -3282,6 +3283,14 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       const groups = workGroups(snapshot, liveRuns());
       return [...groups.needs, ...groups.shaping, ...groups.running, ...groups.ideas].find((row) => row.card.id === card.id) ?? null;
     };
+    // E13-7: the Review tab -- the proof and the branch's diff of one ticket.
+    registerReviewKind(api, {
+      ...deskDeps(api),
+      rowOf,
+      openSendBack: (ticketId) => openSendBackModal(api, ticketId),
+      openTicketFile: (card) => openTicketFile(api, card.path),
+      storage: () => window.localStorage,
+    });
     const documentExtension = createTicketDocumentExtension({
       api,
       snapshot: () => snapshot,
@@ -3292,9 +3301,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
         accept: (card) => void runMutation(`Accepting ${card.id}`, () => invokeBoard('acceptTicket', { id: card.id })),
         sendBack: (card) => openSendBackModal(api, card.id),
         openThread: (card) => openTicketThread(api, card),
-        // The Review tab is E13-7; until it exists the thread carries the
-        // result card and the changes.
-        openReview: (card) => openTicketThread(api, card),
+        openReview: (card) => openReviewTab(api, card),
       },
     });
     let documentSignature = '';

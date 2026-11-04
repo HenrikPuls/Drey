@@ -21,7 +21,7 @@ export interface TicketDocumentActions {
   accept(card: TicketCard): void;
   sendBack(card: TicketCard): void;
   openThread(card: TicketCard): void;
-  /** Until the Review tab exists (E13-7): the result card and changes in the thread. */
+  /** Opens the ticket's Review tab (E13-7): the proof and the branch's diff. */
   openReview(card: TicketCard): void;
 }
 
