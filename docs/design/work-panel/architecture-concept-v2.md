@@ -180,7 +180,7 @@ Everything else (board data, runs, chat, proof) Drey also gets through the engin
 
 ### 3.4a Mission Control on the desktop, inside Drey (new in this edition)
 
-> Status: **partly built** — views (E13-1, milestone 123, ADR-0089), view presets and home views (E13-2, 127, SDK 1.39), status bar slot (E13-3, 124, SDK 1.38), link fallback (E13-4, 125), the ticket as a document (E13-6, 129), Board and Team tabs plus the Capacity band (E13-8, 130). **Planned:** Assistant conversation targets (E13-5), Review tab (E13-7), Shape in Drey (E13-9), Parts block in the ticket (E13-10), Flow tab (E13-11), Settings → Tickets (E13-12), the Work view preset (E13-13).
+> Status: **partly built** — views (E13-1, milestone 123, ADR-0089), view presets and home views (E13-2, 127, SDK 1.39), status bar slot (E13-3, 124, SDK 1.38), link fallback (E13-4, 125), the ticket as a document (E13-6, 129), Board and Team tabs plus the Capacity band (E13-8, 130), Review tab (E13-7, 139). **Planned:** Assistant conversation targets (E13-5), Shape in Drey (E13-9), Parts block in the ticket (E13-10), Flow tab (E13-11), Settings → Tickets (E13-12), the Work view preset (E13-13).
 
 Owner decision 2026-11-04 ("A+": native tabs with the Assistant at the centre). Detail lives in [desktop-integration.md](desktop-integration.md) and ADR-0089; the points that bind this concept:
 
@@ -437,7 +437,7 @@ Schema delta (the only change to `specs/ticket-schema.md` in v1): section `## Ve
 
 ### 5.3 The approval experience on the phone
 
-> Status: **built** (E5c, E11-2, E11-3; milestones 106, 117, 118). Wide layout and desk-wide viewed marks: planned (E11-2b). The desktop **Review tab** is planned (E13-7).
+> Status: **built** (E5c, E11-2, E11-3; milestones 106, 117, 118). Wide layout and desk-wide viewed marks: planned (E11-2b). The desktop **Review tab** is built (E13-7, milestone 139).
 
 The proof card in "Needs you": title, persona chip (Tessa), the 3–6 screenshots as a **swipable gallery**, compact checklist report, then two actions: **Accept** (= `approve -> commit`, the commit agent merges) / **Send back…** (= `sendBack` with a note). Both already exist as commands — only the packaging is new. **Sending back is never silent:** the note, what did not fit, is a mandatory field — without a reason the action cannot be submitted. The note lands as feedback in the ticket (handover to build) so the next iteration knows what to change.
 

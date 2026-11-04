@@ -3951,3 +3951,40 @@ sequenceDiagram
 Cancel is `POST /api/pairing/cancel`; an expired code simply answers
 `pairing: null` on the next poll. The desktop's Settings and a phone share
 the one slot: whoever starts last replaces the waiting pairing.
+## 6.83 Review tab: proof and diff in, structured comments out (E13-7)
+
+```mermaid
+sequenceDiagram
+    participant O as Owner
+    participant D as Ticket document (action bar)
+    participant R as Review tab (renderer/review)
+    participant M as Plugin main (IPC)
+    participant B as BoardService
+    participant G as git (ticket worktree)
+
+    O->>D: Open Review
+    D->>R: addDoc(tickets-review, review://T-0121)
+    R->>R: readFile(ticket) -> proofOfText -> proof block
+    R->>M: reviewDiff {id}
+    M->>B: ticketDiff(id)
+    B->>G: git diff --unified=3 base...HEAD
+    G-->>R: per-file patches (capped)
+    O->>R: click a line number / Shift-click a range, write, add
+    R->>R: comments + viewed marks (localStorage per ticket)
+    O->>R: Whole file
+    R->>M: reviewFile {id, path}
+    M->>B: ticketFile -> git show HEAD:path
+    O->>R: Send back with N comments
+    R->>M: sendBack {id, note: "", comments}
+    M->>M: parseReviewComments, sendBackNoteOf
+    M->>B: sendBack({id, note, comments})
+    B->>B: withReviewFeedback -> "### Review feedback" in ## Handover, move to the earlier agent phase, one commit
+    B-->>R: ok (comments cleared, board repaints)
+```
+
+The tab holds no engine state: the diff is read once on open, the
+comments live with the tab and `localStorage`. *Open in editor* maps
+`<worktree>/<file>` onto a registered vault (`open-file.ts`, longest root
+wins) and opens it at the line; without such a vault it opens a scratch
+copy read through `reviewFile`. *Git history* opens that vault file and
+runs the git plugin's `git.fileHistory` command.

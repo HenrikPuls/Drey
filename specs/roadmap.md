@@ -70,7 +70,7 @@ and suite-green but await the owner's
 rounds** — with E9 the whole E0–E9 arc stands built and the concept
 is complete, caveat:
 none of it is owner-verified yet; the next step is the owner's
-verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) 130 (E13-8, Board and Team tabs, the Capacity band) and 131 (D-1, the Mission Control chat reaches its model: sync on change, both HTTP dialects, the error card, Settings → Chat), 132 (E10-6, you as a team member: manual steps that park the ticket and notify), 133 (E12-6, the Markdown surface lib and Mission Control's View / Live / Source) and 135 (D-2, the paired-devices list with total and last connected, and pairing from Mission Control), 136 (E12-7, the Anthrazit design decisions: pastels, radius scale, type floor, text size scale) and 137 (the text size steps S / M / L / XL) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
+verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) 130 (E13-8, Board and Team tabs, the Capacity band) and 131 (D-1, the Mission Control chat reaches its model: sync on change, both HTTP dialects, the error card, Settings → Chat), 132 (E10-6, you as a team member: manual steps that park the ticket and notify), 133 (E12-6, the Markdown surface lib and Mission Control's View / Live / Source) and 135 (D-2, the paired-devices list with total and last connected, and pairing from Mission Control), 136 (E12-7, the Anthrazit design decisions: pastels, radius scale, type floor, text size scale) and 137 (the text size steps S / M / L / XL) and 139 (E13-7, the Review tab) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
@@ -259,16 +259,6 @@ Order and dependencies (an item needs everything it names):
    create-ticket modal has one), context chips Vault · Web · "<ticket>.md
    attached"; the per-view default is Notes = Model, Work = Mission Control.
    The persona detail's 1:1 tab moves here (see E13-19).
-7. **E13-7 — Review tab.** Editor tab kind with the proof above and the
-   `DiffView` below, viewed marks, Changes / Whole file, line and range
-   comments that go as structured feedback into the Handover (E11-3),
-   "Open in editor" and "Git history". Needs E11-2, E11-3 and E13-6 (all
-   built). **Open Review** in the ticket document (milestone 129) opens the
-   ticket's thread tab (result card and changes) until this tab exists;
-   wire the button to the Review tab here. **Board 7d adds:** tab title
-   "Review · T-0121", the proof strip with Before / After pictures, "N files ·
-   M of N viewed", the footer buttons `Send back with N comments` and
-   `Accept and move to Commit`.
 9. **E13-9 — Shape in Drey.** The ticket in the Ideas phase opened in the
    editor with the Assistant on Mission Control: Paul edits through live edit
    (ADR-0049), the owner's edits ride along (E10-2 plan delta through

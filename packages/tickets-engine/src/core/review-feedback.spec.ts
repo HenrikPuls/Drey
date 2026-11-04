@@ -4,6 +4,7 @@ import {
   parseFeedbackBlock,
   parseReviewComments,
   renderFeedbackBlock,
+  sendBackNoteOf,
   withReviewFeedback,
   type ReviewComment,
 } from './review-feedback';
@@ -99,5 +100,14 @@ describe('withReviewFeedback', () => {
     expect(out.trimEnd().endsWith('Should the guard live in the caller?')).toBe(true);
     expect(parseFeedbackBlock(out)).toEqual([A]);
     expect(withReviewFeedback(TICKET, [])).toBe(TICKET);
+  });
+});
+
+describe('sendBackNoteOf', () => {
+  it('keeps the owner’s words, and lets the comment count stand in for missing ones', () => {
+    expect(sendBackNoteOf('  rename it ', 3)).toBe('rename it');
+    expect(sendBackNoteOf('', 1)).toBe('1 review comment');
+    expect(sendBackNoteOf(' ', 2)).toBe('2 review comments');
+    expect(sendBackNoteOf('', 0)).toBe('');
   });
 });

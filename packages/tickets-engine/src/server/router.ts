@@ -29,7 +29,7 @@ import {
   type Parsed,
 } from '../core/commands';
 import { remoteActorOf, type ImprovementDecision, type TicketsRemotePort } from '../contracts/remote-protocol';
-import { parseReviewComments, type ReviewComment } from '../core/review-feedback';
+import { parseReviewComments, sendBackNoteOf, type ReviewComment } from '../core/review-feedback';
 import type { PersonaRouter } from '../core/persona';
 import { TICKET_ID_PATTERN } from '../contracts/tickets';
 import { parseRevoke, parseSettingsPatch, type SettingsAccess } from './settings';
@@ -178,7 +178,7 @@ function parseSendBack(body: unknown): Parsed<{ id: string; note: string; commen
     return { ok: false, error: 'a send-back needs a note' };
   }
   if (note === '') {
-    note = comments.length === 1 ? '1 review comment' : `${comments.length} review comments`;
+    note = sendBackNoteOf('', comments.length);
   }
   const { comments: _raw, ...rest } = obj as { id: string; comments?: unknown };
   return { ok: true, value: { ...rest, note, ...(comments.length > 0 ? { comments } : {}) } };

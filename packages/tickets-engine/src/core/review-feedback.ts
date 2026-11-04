@@ -56,6 +56,19 @@ export function parseReviewComments(raw: unknown): ReviewComment[] {
   return out;
 }
 
+/**
+ * The send-back note: the owner's own words, or (E11-3, E13-7) when only
+ * line comments were given, the count standing in for them. Empty when
+ * there is neither.
+ */
+export function sendBackNoteOf(note: string, commentCount: number): string {
+  const trimmed = note.trim();
+  if (trimmed !== '' || commentCount === 0) {
+    return trimmed;
+  }
+  return commentCount === 1 ? '1 review comment' : `${commentCount} review comments`;
+}
+
 /** `src/a.ts:27` or `src/a.ts:30-33`. */
 export function commentLocation(comment: ReviewComment): string {
   return comment.endLine === null ? `${comment.file}:${comment.line}` : `${comment.file}:${comment.line}-${comment.endLine}`;
