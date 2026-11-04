@@ -24,9 +24,9 @@
 
 .tickets-doc-status {
   padding: 0 7px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-chip);
   border: 1px solid var(--border-strong);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -100,7 +100,7 @@
 }
 
 .tickets-doc-step-mark {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .tickets-doc-step.is-past .tickets-doc-step-mark {
@@ -132,7 +132,7 @@
 
 .tickets-doc-block {
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   background: var(--bg-input);
   padding: 12px 14px;
   font-size: 0.85rem;
@@ -147,7 +147,7 @@
 }
 
 .tickets-doc-kicker {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -234,7 +234,7 @@
   width: 100%;
   padding: 0;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
   background: var(--bg-editor);
   overflow: hidden;
   cursor: zoom-in;
@@ -250,7 +250,7 @@
 .tickets-doc-shot figcaption {
   padding-top: 3px;
   color: var(--text-4);
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
 
@@ -262,7 +262,7 @@
   display: block;
   width: 100%;
   max-width: 560px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-control);
   background: #000;
 }
 
@@ -276,7 +276,7 @@
 .tickets-doc-chapter {
   padding: 1px 8px;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-chip);
   background: transparent;
   color: var(--text-3);
   font: inherit;
@@ -327,7 +327,7 @@
 
 .tickets-doc-table th {
   color: var(--text-4);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   border-bottom: 1px solid var(--border-strong);
@@ -384,7 +384,7 @@
   gap: 6px;
   padding: 4px 12px;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-2);
   font: inherit;

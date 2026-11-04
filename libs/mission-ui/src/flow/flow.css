@@ -59,7 +59,7 @@
   font-size: calc(13px * var(--mc-text, 1));
   color: var(--text-2);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-dialog);
 }
 
 .fe-chip.dirty {
@@ -121,7 +121,7 @@
   padding: 10px 14px;
   background: var(--panel);
   border: 1px dashed var(--accent);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
 }
 
 .fe-paul-k {
@@ -159,7 +159,7 @@
   cursor: pointer;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
 }
 
 .fe-gate.sel {
@@ -188,7 +188,7 @@
   flex: none;
   width: 10px;
   height: 10px;
-  border-radius: 5px;
+  border-radius: var(--radius-chip);
 }
 
 .fe-dot.sm {
@@ -263,7 +263,7 @@
   line-height: 1;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-dialog);
 }
 
 .fe-plus.open .fe-plus-dot {
@@ -300,7 +300,7 @@
   gap: 8px;
   align-items: center;
   padding: 0 14px;
-  border-radius: 22px;
+  border-radius: 99px;
 }
 
 .chip.on {
@@ -317,7 +317,7 @@
 
 .fe-btn {
   padding: 0 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 
 .fe-btn.danger {
@@ -328,7 +328,7 @@
 .fe-btn.wide {
   min-height: 48px;
   padding: 0 20px;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
 }
 
 .fe-btn.primary {
@@ -365,7 +365,7 @@
   overflow-y: auto;
   background: var(--panel);
   border-top: 1px solid var(--line);
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
 }
 
 .fe-ins-head {
@@ -428,7 +428,7 @@
   cursor: pointer;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-dialog);
 }
 
 .fe-switch.on {
@@ -448,7 +448,7 @@
   width: 25px;
   height: 25px;
   background: #fff;
-  border-radius: 13px;
+  border-radius: var(--radius-dialog);
   transition: transform 0.15s;
 }
 
@@ -482,7 +482,7 @@
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 
 .fe-error {

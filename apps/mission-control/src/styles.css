@@ -24,8 +24,15 @@
   --violet: #a78bfa;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Helvetica, Arial, sans-serif;
-  --r: 12px;
-  --mc-text: 1;
+  --radius-chip: 4px; /* chip, tag, badge */
+  --radius-control: 8px; /* button, field, card */
+  --radius-dialog: 16px; /* dialog, sheet, large container */
+  /* Anthrazit attention pastels (ds/anthrazit/tokens.json): the same in every theme. */
+  --accent-peach: #f2cfae;
+  --accent-pink: #f2d3e2;
+  --accent-mint: #bfe3cd;
+  --on-pastel: #101113;
+  --mc-text: 1.1333; /* L, the default: 17 px body over the 15 px base */
   color-scheme: dark;
 }
 
@@ -59,7 +66,6 @@
   --warn: #fbbf24;
   --danger: #f87171;
   --violet: #a78bfa;
-  --r: 14px;
 }
 
 [data-reduce-motion='true'] *,
@@ -129,7 +135,7 @@ button {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
 }
 
 @media (prefers-reduced-motion: reduce) {

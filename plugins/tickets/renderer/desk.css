@@ -95,7 +95,7 @@
   font: inherit;
   padding: 3px 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-xs, 4px);
+  border-radius: var(--radius-chip);
   background: transparent;
   color: var(--text-2);
   cursor: pointer;
@@ -131,7 +131,7 @@
 
 .desk-btn-small {
   padding: 1px 7px;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .desk-btn-link {
@@ -153,7 +153,7 @@
   border-radius: 999px;
   background: var(--hover-bg);
   color: var(--text-2);
-  font-size: 11.5px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -187,7 +187,7 @@
 .desk-avatar-sm {
   width: 28px;
   height: 28px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .desk-avatar-lg {
@@ -226,7 +226,7 @@
   gap: 6px;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-control);
   cursor: pointer;
 }
 
@@ -291,7 +291,7 @@
   flex-direction: column;
   gap: 4px;
   padding: 6px 8px;
-  border-radius: var(--radius-xs, 4px);
+  border-radius: var(--radius-chip);
   background: var(--hover-bg);
 }
 
@@ -344,7 +344,7 @@
 .desk-bar {
   flex: 1;
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-chip);
   background: var(--hover-bg);
   overflow: hidden;
 }
@@ -413,7 +413,7 @@
 
 .desk-msg {
   padding: 6px 8px;
-  border-radius: var(--radius-xs, 4px);
+  border-radius: var(--radius-chip);
   background: var(--hover-bg);
 }
 
@@ -442,7 +442,7 @@
   width: 100%;
   padding: 5px 8px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-xs, 4px);
+  border-radius: var(--radius-chip);
   background: transparent;
   color: var(--text-1, var(--text-2));
   resize: vertical;
@@ -525,7 +525,7 @@
   gap: 4px;
   padding: 8px 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-control);
   cursor: pointer;
 }
 

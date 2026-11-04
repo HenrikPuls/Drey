@@ -84,6 +84,21 @@
   --radius-md: 8px; /* popover, summary card */
   --radius-lg: 9px; /* assistant composer */
 
+  /* ---- Anthrazit radius scale (E12-7, canvas decision 2026-11-04): three
+     steps named by role, so they never collide with the legacy steps above.
+     The tickets plugin and every surface touched since use only these. ---- */
+  --radius-chip: 4px; /* chip, tag, badge */
+  --radius-control: 8px; /* button, field, card, row */
+  --radius-dialog: 16px; /* dialog, sheet, large container */
+
+  /* ---- Anthrazit attention pastels (ds/anthrazit/tokens.json). The same
+     in every theme: they are fills, and text on them is `--on-pastel`.
+     peach = needs you, pink = shaping / info, mint = positive. ---- */
+  --accent-peach: #f2cfae;
+  --accent-pink: #f2d3e2;
+  --accent-mint: #bfe3cd;
+  --on-pastel: #101113;
+
   /* ---- Shadow ---- */
   --popover-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
 

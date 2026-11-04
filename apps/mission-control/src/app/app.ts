@@ -14,6 +14,7 @@ import { Work } from '@mission-ui/work/work';
 import { Chat } from '@mission-ui/chat/chat';
 import { Capacity } from '@mission-ui/capacity/capacity';
 import { Settings } from '@mission-ui/settings/settings';
+import { Theme } from '@mission-ui/theme';
 import { Team } from '@mission-ui/team/team';
 import { PersonaDetail } from '@mission-ui/team/detail';
 import { TicketView } from '@mission-ui/ticket/view';
@@ -70,6 +71,8 @@ function mediaSignal(query: string): Signal<boolean> {
 })
 export class App {
   private readonly state = inject(McState);
+  /** Constructed at boot so the stored theme, accent and text size apply before Settings is ever opened. */
+  private readonly theme = inject(Theme);
 
   /** The shell's visible tab — McState owns it; the nav writes it. */
   protected readonly tab = this.state.tab;
@@ -81,7 +84,7 @@ export class App {
   protected readonly flowOpen = this.state.flowTarget;
   /** The open persona 1:1 (same layering as the ticket). */
   protected readonly personaOpen = this.state.personaDetail;
-  /** The Work tab's amber counter: the needs count. */
+  /** The Work tab's needs counter: the needs count. */
   protected readonly needsCount = computed(() => this.state.needs().length);
 
   /** The pairing gate: 'ready' = the app; anything else = the pairing screen. */

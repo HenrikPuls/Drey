@@ -36,7 +36,7 @@
   flex: none;
   overflow: hidden;
   background: var(--panel);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
 }
 
 .row {
@@ -189,7 +189,7 @@
   cursor: pointer;
   background: var(--panel);
   border: 2px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
 }
 
 .tile.on {
@@ -201,7 +201,7 @@
   height: 36px;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
 }
 
 .s3 {
@@ -246,11 +246,12 @@
   min-width: 0;
   height: 48px;
   font: inherit;
+  font-size: 15px; /* the step labels never scale with the text size */
   color: var(--text);
   cursor: pointer;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
 }
 
 .size.on {
@@ -264,14 +265,18 @@
   gap: 2px;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
 }
 
 .pv-accent {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.pv-line {
+  color: var(--text);
 }
 
 .pv-sub {
@@ -291,7 +296,7 @@
   appearance: none;
   background: var(--panel-3);
   border: 0;
-  border-radius: 16px;
+  border-radius: var(--radius-dialog);
   transition: background 0.2s;
 }
 
@@ -325,7 +330,7 @@
   text-align: right;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
 }
 
 .act {
@@ -336,7 +341,7 @@
   cursor: pointer;
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
 }
 
 .act.armed {
@@ -370,7 +375,7 @@
   padding: 20px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-dialog);
 }
 
 .dialog-title {
@@ -400,7 +405,7 @@
   cursor: pointer;
   background: var(--accent);
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
 }
 
 .btn.ghost {

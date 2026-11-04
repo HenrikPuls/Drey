@@ -126,7 +126,9 @@ describe('Settings', () => {
     expect(theme.name()).toBe('drey');
     expect(storage.get('mc.theme')).toBe('drey');
     click(el.querySelectorAll('.sizes .size')[4]!);
-    expect(theme.textSize()).toBe('XXL');
+    expect(theme.textSize()).toBe('XXXL');
+    fixture.detectChanges();
+    expect(el.querySelector('.pv-line')?.textContent).toBe('XXXL · 24 px body text');
     const compact = el.querySelectorAll<HTMLInputElement>('.sw')[0]!;
     compact.checked = true;
     compact.dispatchEvent(new Event('change'));

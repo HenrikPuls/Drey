@@ -53,7 +53,7 @@
   flex: none;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   padding: 2px;
 }
 
@@ -63,7 +63,7 @@
   padding: 0 12px;
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--text-3);
   font-size: calc(13px * var(--mc-text, 1));
   font-weight: 600;
@@ -88,7 +88,7 @@
   min-height: 44px;
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--text-2);
   font-size: calc(15px * var(--mc-text, 1));
   cursor: pointer;

@@ -116,7 +116,7 @@
   margin: 4px 0 8px;
   overflow: hidden;
   background: var(--panel);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
 }
 
 .menu-row {
@@ -155,9 +155,9 @@
   font-size: calc(13px * var(--mc-text, 1));
   line-height: 22px;
   text-align: center;
-  color: var(--bg);
-  background: var(--warn);
-  border-radius: 11px;
+  color: var(--on-pastel);
+  background: var(--accent-peach);
+  border-radius: var(--radius-control);
 }
 
 /* The top tab bar (≥768): Work with the needs counter, Chat, Team, Settings. */
@@ -180,7 +180,7 @@
   font-weight: 700;
   color: var(--bg);
   background: var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
 }
 
 .spacer {
@@ -199,7 +199,7 @@
   cursor: pointer;
   background: transparent;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-control);
 }
 
 .nt svg {
@@ -222,17 +222,17 @@
   padding: 0;
 }
 
-/* The amber needs badge on the Work tab. */
+/* The peach needs badge on the Work tab. */
 .bdg {
   display: grid;
   place-items: center;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  font-size: calc(11px * var(--mc-text, 1));
+  font-size: calc(13px * var(--mc-text, 1));
   font-weight: 700;
-  color: var(--bg);
-  background: var(--warn);
+  color: var(--on-pastel);
+  background: var(--accent-peach);
   border-radius: 99px;
 }
 
@@ -260,7 +260,7 @@
   cursor: pointer;
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
 }
 
 .dock-tabs button[aria-selected='true'] {
