@@ -34,6 +34,7 @@ import type { PersonaRouter } from '../core/persona';
 import { TICKET_ID_PATTERN } from '../contracts/tickets';
 import { parseRevoke, parseSettingsPatch, type SettingsAccess } from './settings';
 import type { DeviceRegistry, DeviceView, FailureLimiter, PairingCodes, RemoteDevice } from './auth';
+import type { PairingView } from './service';
 
 /** The registry's part the router uses (`DeviceRegistry` fits it). */
 export type DeviceAccess = Pick<DeviceRegistry, 'byToken' | 'touch' | 'add'>;
@@ -71,6 +72,36 @@ export interface RouterDeps {
   readonly onPaired: (device: DeviceView) => void;
   /** The settings screen's engine half (E12-3); absent on a host without one (404). */
   readonly settings?: SettingsAccess;
+  /** Pairing from a paired device (D-2); absent on a host without it (404). */
+  readonly pairingAccess?: PairingAccess;
+}
+
+/** What a pairing call answers: the waiting pairing (or none) and whether a phone could open its link. */
+export interface PairingReply {
+  readonly ok: true;
+  readonly pairing: PairingView | null;
+  /** The device address is this computer's loopback — "set the device address first". */
+  readonly needsPublicUrl: boolean;
+}
+
+/** The pairing half the router calls; the remote service implements it. */
+export interface PairingAccess {
+  current(): PairingReply;
+  start(name: string, readOnly: boolean): PairingReply;
+  cancel(): PairingReply;
+}
+
+function parsePairingStart(body: unknown): Parsed<{ name: string; readOnly: boolean }> {
+  const obj = asObject(body);
+  const name = obj?.['name'];
+  const readOnly = obj?.['readOnly'];
+  if (obj === null || (name !== undefined && typeof name !== 'string')) {
+    return { ok: false, error: 'bad pairing payload' };
+  }
+  if (readOnly !== undefined && typeof readOnly !== 'boolean') {
+    return { ok: false, error: 'readOnly is true or false' };
+  }
+  return { ok: true, value: { name: (name ?? '').trim().slice(0, 40), readOnly: readOnly === true } };
 }
 
 const fail = (status: number, error: string): RemoteResponse => ({ status, body: { ok: false, error } });
@@ -361,6 +392,12 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
         return json(await port.chatSessions());
       case '/api/settings':
         return deps.settings === undefined ? fail(404, 'no such route') : json(await deps.settings.read(device.id));
+      case '/api/pairing':
+        // The waiting code is a credential: a read-only device may not even look at it.
+        if (device.readOnly) {
+          return fail(403, 'this device is paired read-only');
+        }
+        return deps.pairingAccess === undefined ? fail(404, 'no such route') : json(deps.pairingAccess.current());
     }
     const ticket = /^\/api\/tickets\/([^/]+)$/.exec(req.path);
     if (ticket !== null) {
@@ -580,6 +617,25 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
   if (memory !== null) {
     const id = memory[1]!;
     return write(`persona ${id} memory`, parseMemoryAppend(body), (value) => port.personaMemoryAppend({ persona: id, text: value.text }));
+  }
+
+  // D-2: a paired, not read-only device starts or cancels the one waiting
+  // pairing (the read-only refusal happened above for every POST). The
+  // code still only pairs through POST /api/pair, once, within its TTL.
+  if ((req.path === '/api/pairing/start' || req.path === '/api/pairing/cancel') && deps.pairingAccess !== undefined) {
+    const access = deps.pairingAccess;
+    if (req.path === '/api/pairing/cancel') {
+      deps.log(`remote ${device.name} (${device.id}): pairing cancelled`);
+      return json(access.cancel());
+    }
+    const parsed = parsePairingStart(body);
+    if (!parsed.ok) {
+      return json(parsed);
+    }
+    deps.log(
+      `remote ${device.name} (${device.id}): pairing started for "${parsed.value.name}"${parsed.value.readOnly ? ' (read-only)' : ''}`,
+    );
+    return json(access.start(parsed.value.name, parsed.value.readOnly));
   }
 
   if (req.path === '/api/settings/chat/test' && deps.settings !== undefined) {

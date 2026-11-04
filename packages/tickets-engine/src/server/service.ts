@@ -17,6 +17,7 @@ import {
   type RemoteConfig,
 } from './config';
 import { RemoteGateway } from './gateway';
+import type { PairingAccess, PairingReply } from './router';
 import { qrMatrix } from './qr';
 import { testChatModel } from '../services/chat-model';
 import {
@@ -123,8 +124,30 @@ export class RemoteService {
         log: (message) => deps.log(message),
         onPaired: () => deps.onChanged(),
         settings: this.settingsAccess(),
+        pairingAccess: this.pairingAccess(),
       },
     });
+  }
+
+  /** Pairing from a paired device (D-2): the same pending slot and view the desktop uses. */
+  private pairingAccess(): PairingAccess {
+    const reply = (): PairingReply => {
+      const status = this.status();
+      return { ok: true, pairing: status.pairing, needsPublicUrl: status.needsPublicUrl };
+    };
+    return {
+      current: reply,
+      start: (name, readOnly) => {
+        this.pair(name, readOnly);
+        this.deps.onChanged();
+        return reply();
+      },
+      cancel: () => {
+        this.cancelPairing();
+        this.deps.onChanged();
+        return reply();
+      },
+    };
   }
 
   /** The settings screen's engine half: devices and the `videos.*` keys (E12-3). */

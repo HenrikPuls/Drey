@@ -3921,3 +3921,33 @@ construct that renders on the desktop renders on the phone. View is the
 default wherever a result is shown (ticket text, report summary, plan
 chapters, Verification text); the plan editor is the one Live Preview
 default.
+
+## 6.82 Pairing a device from a paired device (D-2, milestone 135)
+
+```mermaid
+sequenceDiagram
+    participant O as Owner (Mission Control, Settings → Devices)
+    participant E as Engine gateway
+    participant C as PairingCodes (one slot)
+    participant N as New device
+
+    O->>E: POST /api/pairing/start {name, readOnly} (bearer)
+    alt device is read-only
+        E-->>O: 403 this device is paired read-only
+    else full device
+        E->>C: issue(name, readOnly)
+        E-->>O: {pairing: code, url, qr, expiresAt, needsPublicUrl}
+        Note over E: log: remote <device> (<id>): pairing started
+        O-->>O: code XXXXX-XXXXX, QR, link, countdown; GET /api/pairing every 3 s
+    end
+    N->>E: POST /api/pair {code} (scan or typed)
+    E->>C: consume(code) — once, within five minutes
+    E-->>N: {token, device}
+    O->>E: GET /api/pairing
+    E-->>O: {pairing: null}
+    O->>E: GET /api/settings (the list reloads, the new device is in it)
+```
+
+Cancel is `POST /api/pairing/cancel`; an expired code simply answers
+`pairing: null` on the next poll. The desktop's Settings and a phone share
+the one slot: whoever starts last replaces the waiting pairing.

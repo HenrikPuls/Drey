@@ -1461,6 +1461,50 @@ describe('the chain master and persona pause (prototype convergence)', () => {
     expect(state.settings()?.devices).toHaveLength(1);
   });
 
+  it('starts and cancels a pairing, and reloads the device list once the code is used (D-2)', async () => {
+    const { desk, state } = await bootState();
+    const waiting = {
+      ok: true,
+      needsPublicUrl: false,
+      pairing: {
+        code: 'ABCDE12345',
+        url: 'https://desk.test/#pair=ABCDE12345',
+        deviceName: 'Pia phone',
+        readOnly: false,
+        expiresAt: '2026-11-04T10:05:00Z',
+        qr: ['1'],
+      },
+    };
+    desk.on('POST', '/api/pairing/start', () => waiting);
+    desk.on('GET', '/api/pairing', () => waiting);
+    desk.on('GET', '/api/settings', () => SETTINGS_REPLY);
+
+    expect(await state.startPairing('Pia phone', false)).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/pairing/start')[0]!.body).toEqual({ name: 'Pia phone', readOnly: false });
+    expect(state.pairingView()?.pairing?.code).toBe('ABCDE12345');
+
+    // Still waiting: no reload.
+    await state.refreshPairing();
+    expect(desk.callsOf('GET', '/api/settings')).toHaveLength(0);
+
+    // The second client paired: the code is gone, the list reloads.
+    desk.on('GET', '/api/pairing', () => ({ ok: true, pairing: null, needsPublicUrl: false }));
+    await state.refreshPairing();
+    expect(state.pairingView()?.pairing).toBeNull();
+    expect(desk.callsOf('GET', '/api/settings')).toHaveLength(1);
+
+    desk.on('POST', '/api/pairing/cancel', () => ({ ok: true, pairing: null, needsPublicUrl: false }));
+    expect(await state.cancelPairing()).toEqual({ ok: true });
+  });
+
+  it('toasts the refusal of a read-only device that starts a pairing (D-2)', async () => {
+    const { desk, state } = await bootState();
+    desk.on('POST', '/api/pairing/start', () => ({ ok: false, error: 'this device is paired read-only' }));
+    expect(await state.startPairing('X', false)).toEqual({ ok: false, error: 'this device is paired read-only' });
+    expect(state.toastMessage()?.message).toBe('this device is paired read-only');
+    expect(state.pairingView()).toBeNull();
+  });
+
   it('toasts the refusal of the desk and keeps the view', async () => {
     const { desk, state } = await bootState();
     desk.on('POST', '/api/settings/engine', () => ({ ok: false, error: 'turning on videos in git needs the confirmation' }));

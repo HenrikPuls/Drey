@@ -1458,9 +1458,13 @@ it on, and only devices you pair get in.
 
 Every ticket move from a device is logged with the device's name
 (`owner@ipad`), so the Log shows where it came from. **Paired devices**
-lists each device with when it was last seen; **Revoke** locks one out
-for good. A device paired **Read only** can look but not change
-anything. Runs that skip permission prompts cannot be started from a
+states how many there are and lists each with when it last connected
+("3 h ago"); a device that has not connected for two weeks is marked
+**Inactive**, and two devices with the same name get a short id so the
+leftover can be spotted. **Revoke** locks one out for good. A device paired
+**Read only** can look but not change anything. Mission Control can pair
+another device as well: Settings → Devices → **Pair another device** (not
+offered on a Read-only device). Runs that skip permission prompts cannot be started from a
 device unless you allow **Bypass runs**.
 
 On the phone, four tabs sit at the bottom:
