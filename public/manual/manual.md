@@ -1458,9 +1458,13 @@ it on, and only devices you pair get in.
 
 Every ticket move from a device is logged with the device's name
 (`owner@ipad`), so the Log shows where it came from. **Paired devices**
-lists each device with when it was last seen; **Revoke** locks one out
-for good. A device paired **Read only** can look but not change
-anything. Runs that skip permission prompts cannot be started from a
+states how many there are and lists each with when it last connected
+("3 h ago"); a device that has not connected for two weeks is marked
+**Inactive**, and two devices with the same name get a short id so the
+leftover can be spotted. **Revoke** locks one out for good. A device paired
+**Read only** can look but not change anything. Mission Control can pair
+another device as well: Settings → Devices → **Pair another device** (not
+offered on a Read-only device). Runs that skip permission prompts cannot be started from a
 device unless you allow **Bypass runs**.
 
 On the phone, four tabs sit at the bottom:
@@ -1623,7 +1627,11 @@ automatically.
   current view only. A plugin can offer views of its own: they appear in
   the switcher after *Notes* and cannot be deleted, and opening a
   document that belongs to such a view (a tab the plugin names for it)
-  switches there first.
+  switches there first. The tickets plugin offers **Work** (`Ctrl+2`):
+  the Tickets panel on the left, the Assistant on the right and the
+  Capacity band below. Opening a ticket — from the Files panel, a
+  `[[T-0121]]` link or the quick switcher — or the Board or Team tab
+  switches to Work; Notes is `Ctrl+1`.
 - **Open windows** panel lists the open documents of the current view,
   and under *In other views* the rest, each with a *Show here* button:
 

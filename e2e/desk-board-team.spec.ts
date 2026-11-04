@@ -146,7 +146,7 @@ function liveRun(id: string, ticketId: string, personaId: string, extra: Record<
 
 test.describe('Board, Team and Capacity (E13-8)', () => {
   test('shows the board, the team and the capacity band', async ({ page, electronApp }, testInfo) => {
-    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0121"]')).toBeVisible({ timeout: 15_000 });
 

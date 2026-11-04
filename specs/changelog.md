@@ -1,3 +1,45 @@
+### Milestone 141 — The Work view, first cut (E13-13, SDK 1.41)
+
+**Not yet manually verified by the owner.** The tickets plugin registers the
+view preset **Work**; the title bar's switcher now shows **Notes | Work**
+(`Ctrl+1` / `Ctrl+2`). First cut of the roadmap item, as its text allows once
+E13-2 and E13-6 are built; the rest stays on the roadmap as E13-13.
+
+- **The preset** (`plugins/tickets/renderer/view-preset.ts`, over the E13-2
+  SDK): `tickets.work`, label "Work"; **Tickets** panel left, **Assistant**
+  right, **Capacity** band at the bottom; the centre is the pane tree of the
+  view (ticket documents, the Board, the Team). Applied once when the view is
+  first shown; afterwards the owner's arrangement is kept. No
+  `assistantTarget` (E13-5 does not exist on this base).
+- **Home views.** The Board, Team and ticket-thread kinds name Work as their
+  `homeView`. A ticket **file** is plain Markdown, which a file opener (name
+  suffix only) cannot single out, so **SDK 1.41 adds
+  `documents.registerHomeViewRule({ homeView, matches(path, vaultId) })`**
+  (`FileOpenerRegistry.homeViewOf`, asked by `DocOpenService.openFile`; an
+  opener's own `homeView` wins; `stayInView` opts out; a throwing rule is
+  logged and skipped). The tickets plugin's rule matches ticket paths of the
+  board vault, so a ticket opened from the Files tree, a `[[T-0121]]` link or
+  the quick switcher jumps to Work.
+- **Naming (G-10), decided from the boards and ADR text:** the view and its
+  switcher button are **Work**, the dock panel is **Tickets** (boards 7a–7j and
+  the sorting rule say "Tickets panel"). Panel title, the "Show the Tickets
+  panel" command, the status item tooltip, the empty-thread text and the e2e
+  selectors (`aria-label="Show Tickets"`) follow; the panel id stays `tickets`.
+  The header's "Open Board tab" icon and the footer's Team link stay with E13-14.
+- **Specs / tests.** `view-preset.spec.ts` (layout, no target, the rule per
+  vault and path, both registrations), `file-opener-registry.service.spec.ts`
+  (opener beats rule, throwing rule, unsubscribe), the new e2e
+  `e2e/work-view.spec.ts` (switcher text, `Ctrl+2`, the Work arrangement,
+  `Ctrl+1`, a ticket opened from the Files tree lands in Work) with an isolated
+  profile and engine home. Typechecks, lint, cycles and the four app suites,
+  `test:plugins` green.
+- **Seen in the built app** (e2e run, screenshots in the session notes): the
+  switcher, Work with the three panels, the ticket header in the centre after
+  the jump. **Not seen:** the Board/Team tabs jumping to Work by hand, a live
+  fleet in Work, session restore of the Work layout.
+- Docs: ADR-0089 later change, docs/05, docs/06 §6.83, the manual (Views),
+  `plugins/AUTHORING.md`.
+
 ### Milestone 140 — Engine writes refresh Drey's vault views (D-3, G-08)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04

@@ -96,6 +96,7 @@ export type {
   ConversationTargetProvider,
   ConversationThread,
   ConversationThreadMeta,
+  HomeViewRuleContrib,
   ViewPresetContrib,
   ViewPresetLayout,
   VaultFileOperation,

@@ -244,6 +244,20 @@ export interface FileOpenerContrib {
 }
 
 /**
+ * A rule that names the home view of vault files by path (SDK 1.42,
+ * `documents.registerHomeViewRule`) -- for files a plugin cares about but
+ * does not open itself, such as ticket Markdown files, which a file opener
+ * (name suffix only) cannot single out. Opening a matching file switches to
+ * `homeView` first, like `FileOpenerContrib.homeView`; `stayInView` opts out.
+ */
+export interface HomeViewRuleContrib {
+  /** The id of a view preset (SDK 1.39). */
+  readonly homeView: string;
+  /** `vaultId` is the file's vault (ADR-0051), null when none is known. Must be cheap and pure. */
+  matches(path: string, vaultId: string | null): boolean;
+}
+
+/**
  * The first layout of a view preset (SDK 1.39): which panels sit in which
  * dock. Panel ids are dock widget ids (`ui.registerWidget`, or a core
  * panel's). Unknown ids are skipped; a panel named nowhere stays in its
@@ -822,6 +836,11 @@ export interface DreyPluginApi {
      * instead of the base routing (SDK 1.16) — see `FileOpenerContrib`.
      */
     registerFileOpener(opener: FileOpenerContrib): Unsubscribe;
+    /**
+     * Name the home view of vault files by path (SDK 1.42) -- see
+     * `HomeViewRuleContrib`. A file opener's own `homeView` wins.
+     */
+    registerHomeViewRule(rule: HomeViewRuleContrib): Unsubscribe;
     /**
      * Rename a contributed doc's tab label (e.g. the browser tab following
      * the page title). No-op for text docs.

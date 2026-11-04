@@ -60,7 +60,7 @@ test.describe('Ticket header in the editor (req-62)', () => {
   test('shows title and fields, edits them as buffer changes, folds the Log', async ({ page }) => {
     // The owner's path: a Work row opens the ticket's thread (req-84),
     // its Ticket file link opens the file with the header.
-    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     await page.locator('.work-row[data-id="T-0042"]').filter({ visible: true }).click();
     const thread = page.locator('.tickets-thread').filter({ visible: true });
     await expect(thread).toBeVisible({ timeout: 15_000 });
@@ -101,7 +101,8 @@ test.describe('Ticket header in the editor (req-62)', () => {
     await page.keyboard.press('Control+z');
     await expect(content).toContainText('title: "Fix the palette race in CI"');
 
-    // A plain note keeps the base pill.
+    // A plain note keeps the base pill (Notes is the view with the Files panel).
+    await page.keyboard.press('Control+1');
     await page.locator('app-files-panel .node.file', { hasText: 'plain.md' }).click();
     await expect(page.locator('app-editor .cm-fm-pill')).toBeVisible();
     await expect(page.locator('app-editor .tickets-head')).toHaveCount(0);

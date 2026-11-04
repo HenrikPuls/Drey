@@ -59,7 +59,7 @@ test.use({
 });
 test.describe('Interactive dialog affordances (req-65)', () => {
   test('the header offers the dialog exactly where the column does', async ({ page }) => {
-    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
 
     // A row opens the ticket's thread (req-84); its Ticket file link
     // opens the file whose header carries the dialog.
@@ -85,7 +85,7 @@ test.describe('Interactive dialog affordances (req-65)', () => {
   });
 
   test('the row menu carries the one-click entries, gated by the column', async ({ page }) => {
-    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
 
     const planRow = page.locator('.work-row[data-id="T-0042"]').filter({ visible: true });
     await planRow.click({ button: 'right' });

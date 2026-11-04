@@ -25,7 +25,7 @@ test.use({
 });
 
 test('the board issues are a header chip that unfolds readable messages', async ({ page }) => {
-  await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+  await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
   // req-69: the chip sits in the panel header, not a row of their own.
   const controls = page.locator('.tickets-head-view').filter({ visible: true });
   const chip = controls.locator('.tickets-issues-chip');

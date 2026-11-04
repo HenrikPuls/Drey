@@ -111,6 +111,11 @@ leaves the app on the previous build. Verify with
   active view's preset `assistantTarget`) and their `on…Change` listeners are
   for the Assistant. The host attaches no meaning to any of it; namespace
   the target ids.
+  1.42 added `documents.registerHomeViewRule({ homeView, matches(path,
+  vaultId) })`: opening a vault file the rule matches switches to that view
+  first, like a file opener's `homeView` but by path (an opener's own
+  `homeView` wins; `stayInView` opts out). The tickets plugin sends ticket
+  files to its Work view with it.
   1.40 added `ctx.appConfig.onChange(cb)` (main side): fires after every
   write of the base app config, so a plugin that mirrors part of it (the
   tickets plugin pushes the assistant LLM settings into its engine)

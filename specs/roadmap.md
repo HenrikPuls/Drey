@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–132 and 137–138 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–141 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -70,7 +70,7 @@ and suite-green but await the owner's
 rounds** — with E9 the whole E0–E9 arc stands built and the concept
 is complete, caveat:
 none of it is owner-verified yet; the next step is the owner's
-verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) 130 (E13-8, Board and Team tabs, the Capacity band) and 131 (D-1, the Mission Control chat reaches its model: sync on change, both HTTP dialects, the error card, Settings → Chat), 132 (E10-6, you as a team member: manual steps that park the ticket and notify), 133 (E12-6, the Markdown surface lib and Mission Control's View / Live / Source) and 135 (D-2, the paired-devices list with total and last connected, and pairing from Mission Control), 136 (E12-7, the Anthrazit design decisions: pastels, radius scale, type floor, text size scale) and 137 (the text size steps S / M / L / XL) and 140 (D-3, engine writes refresh Drey's vault views), 138 (E13-5, Assistant conversation targets), 139 (E13-7, the Review tab) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
+verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) 130 (E13-8, Board and Team tabs, the Capacity band) and 131 (D-1, the Mission Control chat reaches its model: sync on change, both HTTP dialects, the error card, Settings → Chat), 132 (E10-6, you as a team member: manual steps that park the ticket and notify), 133 (E12-6, the Markdown surface lib and Mission Control's View / Live / Source) and 135 (D-2, the paired-devices list with total and last connected, and pairing from Mission Control), 136 (E12-7, the Anthrazit design decisions: pastels, radius scale, type floor, text size scale) and 137 (the text size steps S / M / L / XL) and 140 (D-3, engine writes refresh Drey's vault views), 138 (E13-5, Assistant conversation targets), 139 (E13-7, the Review tab), 141 (E13-13 first cut, the Work view) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
@@ -280,16 +280,15 @@ Order and dependencies (an item needs everything it names):
     videos ("keep in Git" off, "Largest video" 25 MB), "Mission Control on
     other devices" (Pair a device, paired devices with Revoke). The budget
     pause and the runners dialog need a desk setting first (E12-3b).
-13. **E13-13 — The Work view.** The tickets plugin's preset (no
-    `registerViewPreset` in `plugins/tickets` yet — the switch has nothing to
-    switch to): Tickets panel
-    left, ticket and Board in the centre, Assistant on Mission Control
-    right, Capacity band at the bottom **while the Board or Team tab is active
-    (board 7e; boards 7a–7d and 7j show no bottom dock)**; ticket documents have the Work view as
-    their home. Needs E13-1, E13-2 and the tabs it arranges (6–11). An early
-    first cut (Tickets panel, ticket tabs, Assistant) can ship as soon as
-    E13-2 and E13-6 are done, so the switch is usable before every tab
-    exists.
+13. **E13-13 — The Work view (rest).** The first cut is built (milestone
+    141: the preset, the Tickets panel / ticket / Assistant / Capacity
+    arrangement, home views, Ctrl+2). What is left: the Capacity band **only
+    while the Board or Team tab is active** (board 7e; boards 7a–7d and 7j show
+    no bottom dock) — today it is always shown; the centre opening on the
+    Board when the view is first shown empty; **Mission Control as the
+    Assistant's default target** (the `assistantTarget` field of the preset
+    stays unset until E13-5 exists, then the preset names it); and the tabs it
+    arranges once they exist (Review 7, Shape 9, Parts 10, Flow 11).
 
 Parallel lanes: 1, 3 and 4 are disjoint and can run together; 5 and 8 can
 start when their needs are met without waiting for 1. Relation to the
@@ -319,10 +318,10 @@ and severity per item in
 [`convergence-gaps.md`](../docs/design/work-panel/convergence-gaps.md); the
 owner confirms scope and order before any of it starts:
 
-- **E13-14 — Panel naming and chrome.** The dock panel is titled "Tickets"
-  (not "Work"), an "Open Board tab" icon in its header, the footer links to
+- **E13-14 — Panel naming and chrome.** The dock panel title is done
+  (milestone 141, G-10); left: an "Open Board tab" icon in its header, the footer links to
   the Team tab ("Team · Ben, Tessa busy") instead of "Workers", the Workers
-  tab retires (G-10, G-11).
+  tab retires (G-11).
 - **E13-15 — Status bar items.** A separate "$4.10 today" item and a
   "● 3 need you" item, "in Work" while the Notes view is active (G-12).
 - **E13-16 — Title-bar capture button.** "Capture by voice" on the desk

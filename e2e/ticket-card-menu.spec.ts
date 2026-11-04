@@ -78,7 +78,7 @@ const menu = '.tickets-menu:not(.tickets-submenu)';
 
 test.describe('Work row menu (req-70, req-75 W1)', () => {
   test('past runs sit behind one submenu row', async ({ page, electronApp }, testInfo) => {
-    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     const row = page.locator('.work-row[data-id="T-0051"]').filter({ visible: true });
     await expect(row).toBeVisible({ timeout: 15_000 });
 
@@ -130,7 +130,7 @@ test.describe('Work row menu (req-70, req-75 W1)', () => {
   });
 
   test('an idea is queued for the fleet, a waiting one goes back', async ({ page }) => {
-    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     const rows = page.locator(`${menu} .tickets-menu-item`);
 
     const idea = page.locator('.work-row[data-id="T-0050"]').filter({ visible: true });
@@ -152,7 +152,7 @@ test.describe('Work row menu (req-70, req-75 W1)', () => {
   });
 
   test('only the claim rows that apply, behind More', async ({ page }) => {
-    await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     const more = page.locator(`${menu} .tickets-menu-item.has-sub`, { hasText: 'More' });
     const sub = page.locator('.tickets-submenu .tickets-menu-item');
 
