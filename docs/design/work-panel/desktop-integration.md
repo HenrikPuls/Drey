@@ -1,9 +1,16 @@
 # Mission Control on the desktop: part of Drey, not an app next to it
 
-Status: design proposal, confirmed by the owner on 2026-11-04 as "A+" (native
-tabs with the Assistant at the centre). Nothing here is built. The boards are in
-the design canvas "Drey Tickets — Workflow redesign", row "Desktop in Drey",
-boards 7a to 7g.
+Status: design, confirmed by the owner on 2026-11-04 as "A+" (native
+tabs with the Assistant at the centre). **Built so far (state of milestone
+132):** views (E13-1, 123, ADR-0089), view presets and home views (E13-2, 127),
+the status bar slot (E13-3, 124), the link fallback (E13-4, 125), the ticket as
+a document (E13-6, 129), the Board and Team tabs and the Capacity band (E13-8,
+130). **Not built:** Assistant conversation targets (E13-5), the Review tab
+(E13-7), Shape in Drey (E13-9), the Parts block (E13-10), the Flow tab (E13-11),
+Settings → Tickets (E13-12), the Work view preset (E13-13); the roadmap holds
+the order. The boards are in the design canvas "Drey Tickets — Workflow
+redesign", row "Desktop in Drey", boards 7a to 7j. The whole concept is in
+[architecture-concept-v2.md](architecture-concept-v2.md) (§3.4a).
 
 ## Why
 
