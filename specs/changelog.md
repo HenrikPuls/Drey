@@ -32,7 +32,13 @@ open ticket tab stayed stale until a manual refresh.
   matching, unregistered vault, burst coalescing, max wait, last write wins,
   oversize → full refresh, dispose, failing listing, `dispatchFrame`),
   `engine.spec.ts` (a real transition reports both paths on `onPaths` and
-  the SSE stream).
+  the SSE stream), and `e2e/engine-refresh.spec.ts` (a real Drey with the
+  watcher off, its own engine, driven over the loopback channel like Mission
+  Control: a clean open ticket tab reloads after an engine edit, the Files
+  tree shows an engine move into another phase folder, a dirty tab keeps its
+  unsaved text and is marked "Changed on disk"). Without the fix the first
+  and the last assertion fail (reproduced by disabling `emitPaths` in the
+  built engine).
 - **Not done.** A ticket tab does not follow an external move to the new
   folder (it flips to draft semantics); watcher stays off by default.
 
