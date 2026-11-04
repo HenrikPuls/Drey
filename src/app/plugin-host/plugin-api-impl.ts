@@ -40,6 +40,7 @@ import { extractWikilinks } from '../editor/wikilinks/wikilink';
 import { HOST_CODEMIRROR } from './runtime-exports';
 import { highlightCode } from './code-highlight';
 import { mountMarkdownView } from './markdown-view';
+import { StatusItemsService } from './status-items.service';
 import { browserNotificationApi, showOsNotification } from './os-notify';
 import { dreyHighlightStyle } from '../editor/editor-theme';
 import type { HighlightStyle } from '@codemirror/language';
@@ -97,6 +98,7 @@ export class PluginApiFactory {
   private readonly menuContributions = inject(MenuContributionsService);
   private readonly contextMenuItems = inject(EditorContextMenuRegistry);
   private readonly toolbarButtons = inject(ToolbarContributionsService);
+  private readonly statusItems = inject(StatusItemsService);
   private readonly log = inject(LogService);
   private readonly decorations = inject(FileDecorationService);
   private readonly filesOperations = inject(FilesOperationsRegistryService);
@@ -386,6 +388,11 @@ export class PluginApiFactory {
         highlightCode: async (code, lang) =>
           highlightCode(code, lang, await this.codeHighlightStyle()),
         icon: (name, size) => createIconElement(name, size),
+        createStatusItem: (spec) => {
+          const handle = this.statusItems.create(spec);
+          track(handle.remove);
+          return handle;
+        },
         setFileDecorations: (vaultId, decorations) =>
           this.decorations.set(pluginId, vaultId, decorations),
         showDiff: (request) => this.diffDialog.show(request),

@@ -522,7 +522,9 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   Toggle task done — disabled when no editor is focused).
 - `StatusBarComponent` (`src/app/status-bar/`) — the 28px bottom bar:
   word/char count, a context hint (the drag instruction while a panel is
-  moving), and the Settings entry.
+  moving), the plugin status items (SDK 1.38, `ui.createStatusItem` →
+  `StatusItemsService` in `src/app/plugin-host/`: text, icon, tooltip,
+  command id, priority — content-agnostic), and the Settings entry.
 - `KeybindingService` (`src/app/keybindings/`) — a capture-phase
   `keydown` listener mapping chord strings onto `Command`s. A command's
   `keybinding` is its default; the chord in effect is the user's override

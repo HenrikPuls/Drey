@@ -60,7 +60,7 @@ leaves the app on the previous build. Verify with
 
 - `apiVersion` is a **major gate**: a manifest whose major differs from
   `PLUGIN_API_VERSION.major` (`shared/plugin-api/versions.ts`, currently
-  `{ major: 1, minor: 37 }`) is never imported — the plugin shows up in
+  `{ major: 1, minor: 38 }`) is never imported — the plugin shows up in
   Settings → Panels & plugins as incompatible. Minor bumps are additive;
   1.9 added `commands.run(id, payload?)`, `ui.createTagField` (the shared
   tag chip field — prefer it over a hand-rolled chip row), the main-side
@@ -81,6 +81,12 @@ leaves the app on the previous build. Verify with
   chord registers with the OS instead of the in-window keymap, so it
   fires while any app is focused; Drey comes to the front and runs it
   (the tickets plugin's New ticket is the reference).
+  1.38 added `ui.createStatusItem({ text, icon?, tooltip?, commandId?,
+  priority? })` -- an entry in the status bar (right side, higher priority
+  further left); the returned handle's `update(patch)` changes it, `dispose()`
+  removes it, and an item with neither text nor icon is hidden. No colour
+  or tone: the host attaches no meaning to the content (the sample plugin
+  shows it).
   `ui.registerComposerContribution` is a deprecated no-op since the
   "Add entry" drawer was removed (ADR-0057). 1.11 added the task-index
   seam (`ctx.tasks.registerTaskQuery` / `queryProvider` — the `TaskQueryProvider`

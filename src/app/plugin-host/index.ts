@@ -26,4 +26,5 @@ export {
   ToolbarContributionsService,
   type ContributableMenu,
 } from './menu-contributions.service';
+export { StatusItemsService, type StatusItemView } from './status-items.service';
 export { HOST_CODEMIRROR } from './runtime-exports';

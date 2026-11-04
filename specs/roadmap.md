@@ -241,12 +241,6 @@ Order and dependencies (an item needs everything it names):
    plugin registers a view preset (id, label, initial layout, default
    Assistant target) and may name a `homeView` on doc kinds and file openers.
    Any plugin can use it. Needs E13-1; follows right after it.
-3. **E13-3 — Status bar slot for plugins** (SDK minor, content-agnostic). A
-   generic slot only: text, icon, tooltip, click action (a command id) and a
-   priority for ordering. No ticket, cost or fleet semantics anywhere in the
-   SDK; the tickets plugin merely fills the slot ("2 running · $4.10 today",
-   "3 need you"). No tone or colour field (the boards' coloured dot is an
-   illustration; whether the slot gets one is a later question). Independent.
 4. **E13-4 — Link fallback to other vaults** (base; no SDK change). A
    wikilink is resolved in its own vault first; **only when it cannot be
    resolved there** are the other registered vaults searched. Order of the

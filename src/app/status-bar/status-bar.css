@@ -44,8 +44,41 @@
   color: var(--status-added);
 }
 
-.settings {
+/* Plugin status items (SDK 1.38): right-aligned, left of Settings. */
+.slots {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.slot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.slot-btn {
+  cursor: pointer;
+}
+
+.slot-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.settings {
   flex: none;
   display: flex;
   align-items: center;

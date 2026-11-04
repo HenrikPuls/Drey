@@ -86,6 +86,8 @@ export type {
   PluginStatusContext,
   PluginWidgetContrib,
   RewriteRequest,
+  StatusItemHandle,
+  StatusItemSpec,
   ToolbarButtonContrib,
   VaultFileOperation,
   VaultFileOperationOutcome,
