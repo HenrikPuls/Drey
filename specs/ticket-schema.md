@@ -172,14 +172,14 @@ never a column, never reported as a stray file.
   size (for example Git LFS)." Existing videos are **not** committed
   retroactively unless the owner ticks "Include the n existing videos"
   in that dialog.
-- **Size limit.** Engine config key `videos.limitMb` (default `2000`).
-  When the folder exceeds it and `videos.inGit` is `false`, the engine
-  deletes the **oldest videos of `done` tickets** until it is under
-  the limit — never the video of a ticket that is not done — and the
-  ticket's `## Verification` keeps a `Video removed (size limit).` note
-  in place of the player. When `videos.inGit` is `true` nothing is
-  deleted automatically; the engine only raises the notice "The limit
-  no longer frees space."
+- **Size rule (owner decision, 2026-11-04).** One limit, per video:
+  engine config key `videos.maxMb` (default `25`) caps a single
+  recording. There is **no retention limit** — neither by age nor by the
+  size of the folder — and nothing is deleted automatically; videos stay
+  until the owner deletes them, bounded only by the disk. Supersedes the
+  earlier `videos.limitMb` (total folder size, oldest `done` videos
+  deleted first); the code of E11-1 still implements that until the roadmap item
+  E11-1c changes it.
 - **Served** by the engine's bearer-authenticated
   `GET /api/videos/<name>` with HTTP `Range` support (Safari needs it
   to stream), the name pinned like `/api/attachments/<name>` to

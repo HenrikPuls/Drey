@@ -104,6 +104,12 @@ one means moving it back to the roadmap with a new justification.
   Settings stay; another model (for example Kimi) is registered there as an
   OpenAI-compatible endpoint.
 
+- **Walkthrough video retention (2026-11-04).** *A total-size limit with
+  oldest-first deletion (`videos.limitMb` 2000)* and *any time-based
+  retention* are decided against: the only limit is the size of a single
+  video (25 MB, `videos.maxMb`); videos otherwise stay until the owner deletes
+  them, bounded by the disk. The folder is not in git by default, so the disk is the only cost.
+
 ## Won't do (decided against, kept for the record)
 
 - **Auto-pairing the ticket file and its thread across panes** (owner,

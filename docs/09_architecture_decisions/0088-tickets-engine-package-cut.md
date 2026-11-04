@@ -325,8 +325,11 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   - **Videos.** Reserved folder `tickets/videos/`, not in git by default
     (the engine maintains the `.gitignore`); engine keys `videos.inGit`
     (default false, turning it on is a warned and confirmed act) and
-    `videos.limitMb` (default 2000, oldest videos of `done` tickets are
-    deleted when exceeded and `inGit` is off); served by a
+    `videos.maxMb` (default 25 per video; owner decision 2026-11-04: no
+    retention limit by age or total size, nothing is deleted
+    automatically, the disk is the only bound; this replaces the first
+    cut `videos.limitMb` 2000 with oldest-first deletion, which E11-1
+    still implements until E11-1c); served by a
     bearer-authenticated, Range-capable `GET /api/videos/<name>`.
   - **Schema deltas** (`specs/ticket-schema.md`): `### Parts`,
     `parent:`, `proof:`, `videos/`, a per-part `chain:` scope.
@@ -337,8 +340,8 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     structured feedback (file, line, text) into the Handover to the
     responsible persona (D6); the cost estimate is shown only with ≥ 3
     similar runs of the owner's own history (D9). The product name
-    "Drey Crew" needs a name check before rollout; code is not renamed
-    (D11).
+    "Drey Crew" needs a name check before rollout, with "Kobel" as the
+    fallback name; code is not renamed (D11).
   - **Shape mode (E10-3, milestone 122) — the one write the chat makes
     on its own.** A chat session may name a ticket (`ticket:` in its
     frontmatter, E10-2); its turns then run on Paul's prompt instead of

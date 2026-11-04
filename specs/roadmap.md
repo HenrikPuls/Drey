@@ -173,6 +173,14 @@ owner builds without the tickets system.
   fetches the whole video through the bearer header instead of
   streaming (a `<video>` tag cannot send it; the route itself answers
   Range), and the Drey-hosted Work panel shows no player.
+- **E11-1c — Video size rule (owner decision 2026-11-04).** Replace the
+  total-size limit `videos.limitMb` (2000, oldest videos of `done`
+  tickets deleted) by one cap per video, `videos.maxMb` (25), and no
+  automatic deletion at all: no retention by age or folder size. Engine
+  config, the `## Verification` "Video removed" note goes away, the
+  Settings row (E12-3) and the validator follow; what happens to a
+  recording over 25 MB (re-encode or drop with a note) is settled when
+  built.
 - **E11-2b — Diff review, wide layout.** The iPad board's master-detail
   split (file list left, one file's diff right) and the viewed marks on
   the desk instead of per device; E11-2 shipped both inside the proof
@@ -200,8 +208,8 @@ routing between parallel tickets (D5 — req-75 W7 and W8 dropped; their
 tickets closed); a separate design persona (dropped, it was only an
 example). The default team is Paul (plans), Ben (builds), Ralf
 (reviews), Tessa (tests); **Pia is the name of Mission Control itself**.
-The product name "Drey Crew" needs a name check before any rollout (the
-code is not renamed). Out of scope: away posture / return briefing,
+The product name "Drey Crew" needs a name check before any rollout, with
+"Kobel" as the fallback (the code is not renamed). Out of scope: away posture / return briefing,
 report intent, photo markup.
 
 **Mission Control on the desktop, inside Drey (E13)** (owner request,
@@ -295,7 +303,7 @@ Order and dependencies (an item needs everything it names):
     flow also under Settings → Tickets. Needs **E10-5**.
 12. **E13-12 — Settings → Tickets in Drey.** Team, default flow, budget and
     runners, devices and pairing (QR), video storage (`videos.inGit` off,
-    `videos.limitMb`), reading what E12-3 stores. Needs E12-3 (built) and,
+    `videos.maxMb`), reading what E12-3 stores. Needs E12-3 (built) and,
     for the flow row, E13-11.
 13. **E13-13 — The Work view.** The tickets plugin's preset: Tickets panel
     left, ticket and Board in the centre, Assistant on Mission Control
