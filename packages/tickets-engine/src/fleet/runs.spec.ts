@@ -144,6 +144,21 @@ function request(overrides: Partial<RunRequest> = {}): RunRequest {
   };
 }
 
+/**
+ * The supervisors' settled run ids. `state` turns terminal in memory
+ * BEFORE the settle has written the ticket (stamp cleared, Verlauf line,
+ * commit, persona memory) — so a spec that waits on `state` alone and then
+ * reads the ticket races the settle, and a spec that ends right after
+ * races the `afterEach` cleanup (the D-4 flake under full-suite load).
+ * `onRunSettled` fires as the settle's very last step: waiting on it is
+ * waiting for the whole settle.
+ */
+const settledRuns = new WeakMap<RunSupervisor, Set<string>>();
+
+async function settled(sup: RunSupervisor, id: string, state: RunState): Promise<void> {
+  await vi.waitFor(() => expect(settledRuns.get(sup)?.has(id) === true ? sup.get(id)?.state : 'not settled yet').toBe(state));
+}
+
 function supervisor(overrides: Partial<RunSupervisorDeps> = {}): {
   sup: RunSupervisor;
   adapter: ReturnType<typeof fakeAdapter>;
@@ -165,7 +180,12 @@ function supervisor(overrides: Partial<RunSupervisorDeps> = {}): {
     },
     ticketsGit: git.ticketsGit,
     ...overrides,
+    onRunSettled: (info) => {
+      settledRuns.get(sup)?.add(info.id);
+      overrides.onRunSettled?.(info);
+    },
   });
+  settledRuns.set(sup, new Set());
   return { sup, adapter, git, gate };
 }
 
@@ -254,6 +274,26 @@ describe('RunSupervisor', () => {
     await sup.reap();
     expect(sup.get(id)!.state).toBe('failed');
     expect(sup.get(id)!.lastError).toContain('hung');
+  });
+
+  it('a reaped run settles once, although stopping its worker also fires the exit handler (D-4)', async () => {
+    const rel = await writeTicket();
+    let current = new Date('2026-10-17T12:00:00Z');
+    const alive = async (_cmd: string, args: readonly string[]): Promise<string> => `"${args.join(' ').match(/d+/)?.[0] ?? ''}"`;
+    const settles: string[] = [];
+    const { sup, git } = supervisor({ now: () => current, exec: alive, onRunSettled: (info) => void settles.push(info.id) });
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+
+    current = new Date(current.getTime() + STUCK_FLAG_MS + STUCK_FAIL_MS + 60_000);
+    await sup.reap();
+    await settled(sup, id, 'failed');
+    // Let a second (exit-handler) settle, if one were running, finish too.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(settles).toEqual([id]);
+    expect(git.calls.filter((c) => c.args[0] === 'commit' && c.args.includes('-m')).length).toBeGreaterThan(0);
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    expect(parseTicketFile(text, rel).meta.run).toBeNull();
   });
 
   it('the reaper stops a run past its turn limit', async () => {
@@ -368,7 +408,7 @@ describe('RunSupervisor', () => {
     expect(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'stream.jsonl'), 'utf8')).toContain('brief: continuation');
 
     await same.sup.stop(id, null);
-    await vi.waitFor(() => expect(same.sup.get(id)?.state).toBe('stopped'));
+    await settled(same.sup, id, 'stopped');
     await new Promise((resolve) => setTimeout(resolve, 50));
     await fsp.rm(path.join(fleetRoot, 'runs', id), { recursive: true, force: true });
     const changed = supervisor();
@@ -503,7 +543,7 @@ describe('RunSupervisor', () => {
     // The replacement worker's turn decides the run as usual.
     adapter.handles[1]!.result();
     adapter.handles[1]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
   });
 
   it('resume strips the stored handover ask from the copied request (T-0049)', async () => {
@@ -591,7 +631,7 @@ describe('RunSupervisor', () => {
     // The worker exits without a result of its own after the hand-back:
     // no agent-done was ever declared, so the step fails instead of gating.
     handle.fail(0);
-    await vi.waitFor(() => expect(sup.get(runId)?.state).toBe('failed'));
+    await settled(sup, runId, 'failed');
     expect(gate).toEqual([]);
   });
 
@@ -1016,7 +1056,7 @@ describe('RunSupervisor', () => {
 
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+    await settled(sup, id, 'failed');
 
     expect(gate).toEqual([]); // no commands to run — the gate reads instead
     expect(sup.get(id)?.gateFailure).toContain('no executable acceptance criteria');
@@ -1044,7 +1084,7 @@ describe('RunSupervisor', () => {
     // …and the gate reads them as green (no commands to run).
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
     expect(gate).toEqual([]);
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'build', 'T-0001.md'))).resolves.toBeUndefined();
   });
@@ -1073,7 +1113,7 @@ describe('RunSupervisor', () => {
     adapter.handles[0]!.onEvent('working…');
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(info.id)?.state).toBe('done'));
+    await settled(sup, info.id, 'done');
 
     // The gate ran exactly the ticket's commands, in the worktree.
     expect(gate[0]).toEqual(['npm run verify:unit']);
@@ -1087,6 +1127,44 @@ describe('RunSupervisor', () => {
     expect(commit?.args).toContain('--');
     expect(git.calls.some((c) => c.args[0] === 'add')).toBe(true);
     await expect(fsp.access(path.join(vaultDir, rel))).rejects.toBeDefined();
+  });
+
+  it('a run is `done` in memory before its settle has written the ticket — only onRunSettled marks the end (D-4)', async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let holding = 0;
+    let runId = '';
+    let sup: RunSupervisor | null = null;
+    const exec: GitExecFn = async (_exe, args) => {
+      if (args[0] === 'rev-parse') {
+        return `${path.sep}root${path.sep}tk
+`;
+      }
+      // Every commit from the moment the run is `done` belongs to the settle.
+      if (args[0] === 'commit' && sup?.get(runId)?.state === 'done') {
+        holding++;
+        await held;
+      }
+      return '';
+    };
+    const built = supervisor({ ticketsGit: new TicketsGit(() => 'git', exec) });
+    sup = built.sup;
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    runId = (started as { run: { id: string } }).run.id;
+    built.adapter.handles[0]!.result();
+    built.adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(holding).toBe(1));
+    // The settle is inside its commit: `state` is terminal, the run is not settled.
+    expect(sup.get(runId)?.state).toBe('done');
+    expect(settledRuns.get(sup)?.has(runId)).toBe(false);
+    release();
+    await settled(sup, runId, 'done');
+    const movedRel = 'tickets/build/T-0001.md';
+    const moved = await fsp.readFile(path.join(vaultDir, movedRel), 'utf8');
+    expect(parseTicketFile(moved, movedRel).meta.run).toBeNull();
   });
 
   it('an interactive dialog starts held, lays the run stamp and the reservation, and ends without gate or move (req-65)', async () => {
@@ -1119,7 +1197,7 @@ describe('RunSupervisor', () => {
     // The worker ends its turn without a result — a dialog turn, not a
     // claim: the run still ends done, and nothing gates or moves.
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(info.id)?.state).toBe('done'));
+    await settled(sup, info.id, 'done');
     expect(gate).toEqual([]);
     const kept = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
     const keptMeta = parseTicketFile(kept, rel).meta;
@@ -1203,7 +1281,7 @@ describe('RunSupervisor', () => {
     // …but the fleet's own move never carries it into the next column.
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
 
     const movedRel = 'tickets/build/T-0001.md';
     const moved = await fsp.readFile(path.join(vaultDir, movedRel), 'utf8');
@@ -1221,7 +1299,7 @@ describe('RunSupervisor', () => {
 
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
 
     const movedRel = 'tickets/35-qa/T-0001.md';
     const moved = await fsp.readFile(path.join(vaultDir, movedRel), 'utf8');
@@ -1239,7 +1317,7 @@ describe('RunSupervisor', () => {
 
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
 
     const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
     const meta = parseTicketFile(text, rel).meta;
@@ -1255,7 +1333,7 @@ describe('RunSupervisor', () => {
 
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
 
     const movedRel = 'tickets/qa/T-0001.md';
     const moved = await fsp.readFile(path.join(vaultDir, movedRel), 'utf8');
@@ -1272,7 +1350,7 @@ describe('RunSupervisor', () => {
 
     withPush.adapter.handles[0]!.result();
     withPush.adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(withPush.sup.get(id)?.state).toBe('done'));
+    await settled(withPush.sup, id, 'done');
 
     const push = withPush.git.calls.find((c) => c.args[0] === 'push');
     expect(push?.args).toEqual(['push', 'origin', 'HEAD']);
@@ -1284,7 +1362,7 @@ describe('RunSupervisor', () => {
     const id2 = (started2 as { run: { id: string } }).run.id;
     noPush.adapter.handles[0]!.result();
     noPush.adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(noPush.sup.get(id2)?.state).toBe('done'));
+    await settled(noPush.sup, id2, 'done');
     expect(noPush.git.calls.some((c) => c.args[0] === 'push')).toBe(false);
   });
 
@@ -1299,7 +1377,7 @@ describe('RunSupervisor', () => {
 
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+    await settled(sup, id, 'failed');
     expect(sup.get(id)?.gateFailure).toContain('exit 1');
 
     const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
@@ -1323,7 +1401,7 @@ describe('RunSupervisor', () => {
 
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+    await settled(sup, id, 'failed');
     const info = sup.get(id)!;
     expect(info.gateResult).toBe('red');
     expect(info.gateFailure).toContain('\n'); // multi-line: the command line, then the output
@@ -1345,7 +1423,7 @@ describe('RunSupervisor', () => {
     const id = (started as { run: { id: string } }).run.id;
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
     expect(sup.get(id)?.gateResult).toBe('green');
   });
 
@@ -1358,7 +1436,7 @@ describe('RunSupervisor', () => {
 
     adapter.handles[0]!.result('merge conflict in specs/changelog.md — not resolvable');
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
     // No gate ran — a green one over the branch would say nothing about the step's own report.
     expect(gate).toHaveLength(0);
     expect(sup.get(id)?.gateResult).toBeNull();
@@ -1395,12 +1473,16 @@ describe('RunSupervisor', () => {
     expect(info.lastTurnContext).toBe(31_100);
     expect(info.readCalls).toBe(1);
     expect(info.tokensBeforeFirstWrite).toBe(24_900);
-    // The record is durable: run.json carries the fields.
-    const stored = JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')) as {
-      info: { turns?: number; usage?: unknown };
-    };
-    expect(stored.info.turns).toBe(2);
-    expect(stored.info.usage).toBeDefined();
+    // The record is durable: run.json carries the fields. The write is
+    // queued behind the events and truncates before it fills — a read can
+    // land on an empty or older file, so it is retried (D-4).
+    await vi.waitFor(async () => {
+      const stored = JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')) as {
+        info: { turns?: number; usage?: unknown };
+      };
+      expect(stored.info.turns).toBe(2);
+      expect(stored.info.usage).toBeDefined();
+    });
   });
 
   it('stop kills the worker and frees the run slot', async () => {
@@ -1429,7 +1511,7 @@ describe('RunSupervisor', () => {
     const id = (started as { run: { id: string } }).run.id;
     adapter.handles[0]!.onEvent('session');
     await sup.stop(id, 'pause');
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('stopped'));
+    await settled(sup, id, 'stopped');
     // The fake worker reported no session; give the record one.
     (sup as unknown as { runs: Map<string, { info: RunInfo }> }).runs.get(id)!.info = {
       ...sup.get(id)!,
@@ -1462,7 +1544,7 @@ describe('RunSupervisor', () => {
 
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
 
     const text = await fsp.readFile(path.join(vaultDir, movedRel), 'utf8');
     expect(parseTicketFile(text, movedRel).meta.run).toBeNull();
@@ -1533,7 +1615,7 @@ describe('RunSupervisor', () => {
     // The auditor's green gate moves the ticket, and no third round starts.
     adapter.handles[1]!.result();
     adapter.handles[1]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'build', 'T-0001.md'))).resolves.toBeUndefined();
     expect(opinions).toBe(1);
     expect(adapter.handles).toHaveLength(2);
@@ -1565,7 +1647,7 @@ describe('RunSupervisor', () => {
     await vi.waitFor(() => expect(adapter.handles.length).toBe(2));
     adapter.handles[1]!.result();
     adapter.handles[1]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+    await settled(sup, id, 'failed');
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).resolves.toBeUndefined();
     expect(sup.get(id)?.gateFailure).toContain('exit 1');
     expect(sup.get(id)?.gateResult).toBe('red');
@@ -1580,7 +1662,7 @@ describe('RunSupervisor', () => {
     // A crash (or a spawn that never came up): the turn never finished,
     // so there is no agent-done for the gate to judge.
     adapter.handles[0]!.fail(-1);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+    await settled(sup, id, 'failed');
 
     expect(gate).toEqual([]); // the safety net judges claimed-done work only
     const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
@@ -1796,7 +1878,7 @@ describe('RunSupervisor handover', () => {
     adapter.handles[0]!.fail(0);
     await vi.waitFor(() => expect(sup.handoverBlocker()).toContain('machine gate'));
     releaseGate();
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
     expect(sup.handoverBlocker()).toBeNull();
   });
 
@@ -1822,7 +1904,7 @@ describe('RunSupervisor handover', () => {
     // and it ends like any run: agent done, gate green, the ticket moves
     second.adapter.handles[0]!.result();
     second.adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(second.sup.get(id)?.state).toBe('done'));
+    await settled(second.sup, id, 'done');
   });
 
   it("keeps a resumed session's usage base across the handover, so the run's counts go on from its own (req-53)", async () => {
@@ -1964,7 +2046,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
     adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:10Z', kind: 'usage', tokensIn: 12_000, tokensOut: 300 });
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
     // The settle's tail (persist, the ticket stamp, the memory append)
     // still runs when the state flips — poll the file, don't read it once.
     await vi.waitFor(async () => {
@@ -1985,7 +2067,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
     const id = (started as { run: RunInfo }).run.id;
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(1);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+    await settled(sup, id, 'failed');
     await vi.waitFor(async () => {
       expect(await fsp.readFile(memoryFile(), 'utf8')).toContain('· failed ·');
     });
@@ -1993,7 +2075,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
     const second = await sup.start(request({ ticketRelPath: rel }), { persona: 'pia' });
     const id2 = (second as { run: RunInfo }).run.id;
     await sup.stop(id2, 'test');
-    await vi.waitFor(() => expect(sup.get(id2)?.state).toBe('stopped'));
+    await settled(sup, id2, 'stopped');
     await vi.waitFor(async () => {
       const memory = await fsp.readFile(memoryFile(), 'utf8');
       expect(memory).toContain('· stopped ·');
@@ -2016,7 +2098,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
     const id = (started as { run: RunInfo }).run.id;
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
     await vi.waitFor(async () => {
       const memory = await fsp.readFile(memoryFile(), 'utf8');
       expect(memory).toContain('- 2026-10-17 · T-0001 · handed-over · 0 tokens'); // the new entry landed
@@ -2042,7 +2124,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
     const id = (started as { run: RunInfo }).run.id;
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
     await vi.waitFor(() => {
       expect(logs.some((line) => line.includes('persona memory append failed'))).toBe(true);
     });
@@ -2102,7 +2184,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
 
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
 
     expect(gate).toEqual([]); // the machine gate never ran
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'build', 'T-0001.md'))).rejects.toBeDefined(); // no move
@@ -2122,7 +2204,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
 
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
 
     expect(gate).toEqual([]);
     const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
@@ -2136,7 +2218,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
     const id = (started as { run: RunInfo }).run.id;
 
     adapter.handles[0]!.fail(1); // no result — the worker died mid-exploration
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+    await settled(sup, id, 'failed');
 
     expect(gate).toEqual([]); // still no gate
     const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
@@ -2151,7 +2233,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
 
     adapter.handles[0]!.result('the index API needs an owner decision');
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
 
     expect(sup.get(id)?.blocked).toBe('the index API needs an owner decision');
     const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
@@ -2224,7 +2306,7 @@ describe('RunSupervisor settled cost and the Verlauf chapter (costtracking, conc
     adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:10Z', kind: 'usage', tokensIn: 48_000, tokensOut: 6_000, costUsd: 1.17 });
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
 
     await vi.waitFor(async () => {
       // The fixture's clock is fixed at 12:00, so the run's dauer is 0m.
@@ -2238,7 +2320,7 @@ describe('RunSupervisor settled cost and the Verlauf chapter (costtracking, conc
     adapter.starts[1]!.onEvent({ ts: '2026-10-17T12:00:10Z', kind: 'usage', tokensIn: 10_000, tokensOut: 500 });
     adapter.handles[1]!.result();
     adapter.handles[1]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id2)?.state).toBe('done'));
+    await settled(sup, id2, 'done');
     await vi.waitFor(async () => {
       const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
       const at = text.lastIndexOf('- { phase:');
@@ -2257,7 +2339,7 @@ describe('RunSupervisor settled cost and the Verlauf chapter (costtracking, conc
     const id = (started as { run: RunInfo }).run.id;
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
     await expect(fsp.readFile(path.join(vaultDir, rel), 'utf8')).resolves.not.toContain('## Verlauf');
     await settleDurably(id);
   });
@@ -2271,7 +2353,7 @@ describe('RunSupervisor settled cost and the Verlauf chapter (costtracking, conc
     adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:10Z', kind: 'usage', tokensIn: 48_000, tokensOut: 6_000 });
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await settled(sup, id, 'done');
     await vi.waitFor(() => expect(sup.get(id)?.costUsd).toBe(1.17));
     await settleDurably(id);
 
@@ -2281,7 +2363,7 @@ describe('RunSupervisor settled cost and the Verlauf chapter (costtracking, conc
     adapter.starts[1]!.onEvent({ ts: '2026-10-17T12:00:10Z', kind: 'usage', tokensIn: 48_000, tokensOut: 6_000, costUsd: 0.5 });
     adapter.handles[1]!.result();
     adapter.handles[1]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id2)?.state).toBe('done'));
+    await settled(sup, id2, 'done');
     expect(sup.get(id2)?.costUsd).toBe(0.5);
     await settleDurably(id2);
 
@@ -2291,7 +2373,7 @@ describe('RunSupervisor settled cost and the Verlauf chapter (costtracking, conc
     adapter.starts[2]!.onEvent({ ts: '2026-10-17T12:00:10Z', kind: 'usage', tokensIn: 48_000, tokensOut: 6_000 });
     adapter.handles[2]!.result();
     adapter.handles[2]!.fail(0);
-    await vi.waitFor(() => expect(sup.get(id3)?.state).toBe('done'));
+    await settled(sup, id3, 'done');
     expect(sup.get(id3)?.costUsd).toBeNull();
     await settleDurably(id3);
   });

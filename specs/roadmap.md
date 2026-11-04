@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–141 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–142 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -90,14 +90,11 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
-**D-4 — runs.spec flakes under full-suite load** (owner request, outside
-the list, 2026-11-04; milestone 142). `packages/tickets-engine/src/fleet/runs.spec.ts`
-passes 103/103 alone but one test fails intermittently inside the full
-plugin suite (`npm run test:plugins`): the green-worker test finds the
-ticket's run record still there after the move, others hit an `ENOENT` /
-`ENOTEMPTY` on the temp dir. It makes the release gate (`npm run
-test:all`) unreliable. Find the cause, fix it (no retries, no timeout
-inflation), add a regression spec.
+_None open._ (D-1, Mission Control chat reaching no model, shipped as
+milestone 131; D-2, the paired-devices list and pairing from Mission
+Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
+views, as milestone 140; D-4, runs.spec flaking under full-suite load,
+as milestone 142 — see the changelog.)
 
 ### Now (small, daily value)
 
