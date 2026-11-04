@@ -325,6 +325,15 @@ path for the write path (already so).
 
 ### R-24 One-step change under a short claim
 
+**Status 2026-11-04: shipped in dricket v0.6.0** (dricket ADR-0013, commit 16e812e).
+`dk set` and `dk move` were removed again: every field or stage edit is a whole-ticket
+`dk put <id> -F <file> --claim` (claim, write and release in ONE commit; `--claim` is required on
+an unclaimed ticket, exit 17 otherwise; `--force` stays the admin emergency path) or
+`dk commit <id> --release [--stage S] [-m note]` for a claimed ticket. R-01 (`x-` fields) and R-03
+(`[stages]`) shipped as specified. R-02 / R-04 are therefore met by `put --claim` and
+`commit --release`; there is no claim-free write left for humans or admins. Drey's contract suite
+(48 tests, none skipped) ran green against v0.6.0.
+
 **Drey needs.** The owner's single edits (persona, chain, stage, a header
 field) without a second write path. Owner question 2026-11-04: why not hold
 the ticket directly -- claim, set, release? That keeps dricket's promise (no
