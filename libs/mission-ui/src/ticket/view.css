@@ -1040,6 +1040,7 @@
   margin: 0;
   padding: 8px 0 calc(12px + env(safe-area-inset-bottom));
   overflow: auto;
+  overscroll-behavior-x: contain;
 }
 
 .fs-patch .dl2 {
@@ -1072,6 +1073,7 @@
   max-height: 80dvh;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   background: var(--panel);
   border: 1px solid var(--line);
   border-bottom: 0;

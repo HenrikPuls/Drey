@@ -1,3 +1,34 @@
+### Milestone 143 — The Mission Control frame stays put (D-5)
+
+**Not yet manually verified by the owner.** Owner report 2026-11-04: on iPhone
+and iPad, installed to the home screen, a scroll gesture moved the whole
+content instead of leaving the frame fixed like a native app.
+
+- **Cause.** The document itself was scrollable: `html, body` had only
+  `height: 100%`, no `overflow` and no `overscroll-behavior`, so iOS
+  rubber-banded the page; and eleven inner scrollers (chat body and sheet,
+  flow editor body and inspector, plan approve and pane bodies, settings
+  categories and page body, team and ticket sheets, the Work dock body) had no
+  `overscroll-behavior`, so a drag at the end of a list chained into the page.
+- **Fix** (CSS only, no visual change). `apps/mission-control/src/styles.css`:
+  `html, body` get `overflow: hidden` and `overscroll-behavior: none`;
+  `body` is `position: fixed; inset: 0` (iOS ignores `overflow: hidden` on
+  the body for touch drags otherwise). Every vertical scroll container in
+  `apps/mission-control` and `libs/mission-ui` now carries
+  `overscroll-behavior-y: contain`; the ticket patch `<pre>` (horizontal
+  scroll) carries `-x: contain`. Pinch zoom and safe-area padding are
+  untouched. The `::host` typo from the report does not exist in the tree
+  (`app.css` already has `:host`).
+- **Not done:** no keyboard handling beyond the existing `dvh` layout — iOS
+  does not shrink the layout viewport when the keyboard opens; if the composer
+  sits behind the keyboard on the device, that is a follow-up.
+- **Spec:** `shared/mission-control-scroll-contract.spec.ts` reads every
+  stylesheet of both trees and asserts the html/body contract and that no
+  scroll container lacks `overscroll-behavior`. **Verified in Chromium only**
+  (iPhone 14 profile, touch gestures, production build): the document's
+  `scrollTop` stays 0 and header/composer boxes do not move. **WebKit is not
+  installed here and iOS was not tested** — the owner must check on the device.
+
 ### Milestone 141 — The Work view, first cut (E13-13, SDK 1.41)
 
 **Not yet manually verified by the owner.** The tickets plugin registers the

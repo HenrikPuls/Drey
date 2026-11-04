@@ -86,6 +86,7 @@
   min-height: 0;
   padding: 16px 20px 12px;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 
 .fe-title {
@@ -363,6 +364,7 @@
   max-height: 72%;
   padding: 14px 20px calc(16px + env(safe-area-inset-bottom));
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   background: var(--panel);
   border-top: 1px solid var(--line);
   border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;
