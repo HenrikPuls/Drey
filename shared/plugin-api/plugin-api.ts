@@ -377,6 +377,8 @@ export interface ConversationTarget {
   readonly group?: string;
   /** Hover text of the segment. */
   readonly description?: string;
+  /** An icon name of the host's set (as for `ui.icon`) for the switcher; absent = a generic one (SDK 1.43). */
+  readonly icon?: string;
   /** The current thread (the newest one on first call). */
   thread(): Promise<ConversationThread>;
   /**

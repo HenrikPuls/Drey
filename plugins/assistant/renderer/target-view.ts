@@ -17,7 +17,7 @@ export interface TargetSwitcher {
 }
 
 /** The segmented control: Model | one segment per target | a group's menu. */
-export function createTargetSwitcher(targets: TargetController): TargetSwitcher {
+export function createTargetSwitcher(api: DreyPluginApi, targets: TargetController): TargetSwitcher {
   const node = el('div', 'assistant-targets');
   node.setAttribute('role', 'tablist');
   node.setAttribute('aria-label', 'Conversation target');
@@ -70,11 +70,13 @@ export function createTargetSwitcher(targets: TargetController): TargetSwitcher 
         const on = segment.key === MODEL_TARGET ? activeId === MODEL_TARGET : member !== undefined;
         const grouped = segment.key.startsWith('group:');
         const label = grouped && member !== undefined ? `${segment.label} · ${member.label}` : segment.label;
-        const button = el('button', 'assistant-target' + (on ? ' on' : ''), label) as HTMLButtonElement;
+        const button = el('button', 'assistant-target' + (on ? ' on' : '')) as HTMLButtonElement;
         button.type = 'button';
+        button.setAttribute('aria-label', label);
+        button.appendChild(api.ui.icon(segment.key === MODEL_TARGET ? 'message-circle' : (segment.targets[0]?.icon ?? 'sparkles'), 15));
         button.setAttribute('role', 'tab');
         button.setAttribute('aria-selected', String(on));
-        button.title = segment.description;
+        button.title = grouped && member !== undefined ? label : segment.description;
         button.addEventListener('click', () => {
           if (grouped) {
             openGroup(segment, button);
@@ -185,15 +187,6 @@ export function createTargetThread(api: DreyPluginApi, targets: TargetController
         node.scrollTop = node.scrollHeight;
       }
       tray.textContent = '';
-      const attached = targets.thread()?.attached ?? [];
-      if (attached.length > 0) {
-        tray.hidden = false;
-        const chips = el('div', 'target-tray-attached');
-        for (const label of attached) {
-          chips.appendChild(el('span', 'target-chip', label));
-        }
-        tray.appendChild(chips);
-      }
       const choices = targets.choices();
       if (choices !== null && choices.choices !== undefined && choices.choices.length > 0 && !targets.busy()) {
         tray.hidden = false;
@@ -210,30 +203,4 @@ export function createTargetThread(api: DreyPluginApi, targets: TargetController
       }
     },
   };
-}
-
-/** The history list of the active target in the shared modal. */
-export function openTargetHistory(api: DreyPluginApi, targets: TargetController): void {
-  void targets.history().then((rows) => {
-    let close: () => void = () => undefined;
-    close = api.ui.showModal((root) => {
-      root.classList.add('assistant-target-history');
-      root.appendChild(el('h3', undefined, 'Chat history'));
-      if (rows.length === 0) {
-        root.appendChild(el('p', 'empty', 'No earlier chats.'));
-      }
-      for (const row of rows) {
-        const item = el('button', 'assistant-target-item', row.title) as HTMLButtonElement;
-        item.type = 'button';
-        if (row.pending !== undefined && row.pending > 0) {
-          item.appendChild(el('span', 'relay-chip', `${row.pending} open`));
-        }
-        item.addEventListener('click', () => {
-          close();
-          void targets.openThread(row.id);
-        });
-        root.appendChild(item);
-      }
-    });
-  });
 }

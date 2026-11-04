@@ -73,6 +73,22 @@ ends it. **The "Refine with agent" button is gone everywhere.**
   characters), where it is appended to the model's system prompt for that turn
   only — never written to the session file. Reading only: Pia and Paul get
   the sections, no vault tools. Switching back to Model changes nothing there.
+- **The Assistant's head and chat list, redone (owner design, same
+  session).** One head row instead of two: the **chats button** (three
+  lines) on the left, the **icon switcher** (speech bubble = Model, rocket =
+  Mission Control, two heads = 1:1; tooltips carry the names, a target names
+  its icon — SDK 1.43 `ConversationTarget.icon`), the active chat's title and
+  **+** for a new chat on the right. The chats button swaps the thread for
+  the **chat list inside the panel** (the Model's chats, or the target's
+  history; title, time, "n open"; the current one marked) — the two modal
+  pickers are gone (`chat-list.ts`; `picker-chat.ts` deleted; the attach,
+  prompt, vault and model pickers stay). The composer on a target looks like
+  Model's: the attached ticket is a **chip inside the box**, and **Attach**
+  works — attached files go to the target as reference text (6 000 characters
+  each) beside the Vault chip's sections. The e2e specs that read the old
+  switcher words / chat modal follow (`assistant.spec`, `assistant-targets.spec`;
+  `assistant-tools.spec` was already failing on a strict-mode locator since
+  E13-5 and got `.first()`).
 - **Specs added.** `ticket-document/shape.spec.ts` (target of a document, ago
   words, the two marks, heading offset), `shape-state.spec.ts` (the status
   store), `conversation/shape-target.spec.ts` (thread per ticket, save → lock →

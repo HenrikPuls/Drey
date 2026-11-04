@@ -169,12 +169,20 @@ export function mountComposer(
     webButton.title = webOn
       ? 'Web: on — the assistant may search the web, fetch pages and call your MCP servers for the next question. Click to turn off.'
       : 'Web: off — nothing leaves this computer through a tool. Click to let the assistant search the web, fetch pages and call your MCP servers.';
+    const onTarget = targets.activeId() !== MODEL_TARGET;
+    // What a target has loaded by itself (the ticket it shapes): a chip that is not the owner's to drop.
+    for (const label of onTarget ? (targets.thread()?.attached ?? []) : []) {
+      chipsRow.appendChild(el('span', 'chip target-attached', label));
+    }
     const path = state.notePath();
-    if (path !== null && state.noteIncluded()) {
+    if (!onTarget && path !== null && state.noteIncluded()) {
       chipsRow.appendChild(chipNode(path, 'note'));
     }
     for (const file of state.extraFiles()) {
       chipsRow.appendChild(chipNode(file, 'file'));
+    }
+    if (onTarget) {
+      return;
     }
     for (const scratch of state.scratchFiles()) {
       chipsRow.appendChild(chipNode(scratch.docPath, 'scratch'));
@@ -299,9 +307,14 @@ export function mountComposer(
     }
     setText('');
     if (targets.activeId() !== MODEL_TARGET) {
-      void targets.send(question, { scope: state.vaultScope(), vaultIds: state.customVaultIds() }).then((sent) => {
+      const files = [...state.extraFiles()];
+      void targets.send(question, { scope: state.vaultScope(), vaultIds: state.customVaultIds(), files }).then((sent) => {
         if (!sent) {
           setText(question);
+          return;
+        }
+        for (const file of files) {
+          state.removeFile(file);
         }
       });
       return;
@@ -403,11 +416,12 @@ export function mountComposer(
       // the Assistant's own model can do: attachments and note chips, live edit and the
       // model row. The Vault chip (its notes ride along as reference) and the prompts stay.
       const onTarget = targets.activeId() !== MODEL_TARGET;
-      for (const tool of [chipsRow, plusButton, liveButton, modelButton]) {
+      for (const tool of [liveButton, modelButton]) {
         tool.hidden = onTarget;
       }
-      vaultButton.hidden = false;
-      promptsButton.hidden = false;
+      for (const tool of [chipsRow, plusButton, vaultButton, promptsButton]) {
+        tool.hidden = false;
+      }
       sendButton.disabled = onTarget ? targets.busy() : state.asking();
       sendButton.setAttribute('aria-label', onTarget ? 'Send message' : 'Send question');
       renderChips();

@@ -29,7 +29,7 @@ export interface TargetController {
   /** An open answer card (the last message's `choices`), or null. */
   choices(): ConversationCard | null;
   /** `vault`: the Vault chip as it stands; a scope other than `off` gathers note sections for this message. */
-  send(text: string, vault?: { readonly scope: VaultScope; readonly vaultIds: readonly string[] }): Promise<boolean>;
+  send(text: string, vault?: { readonly scope: VaultScope; readonly vaultIds: readonly string[]; readonly files?: readonly string[] }): Promise<boolean>;
   act(cardId: string, actionId: string): Promise<void>;
   newThread(): Promise<void>;
   history(): Promise<readonly ConversationThreadMeta[]>;
@@ -37,6 +37,9 @@ export interface TargetController {
   subscribe(listener: () => void): () => void;
   destroy(): void;
 }
+
+/** How much of one attached file a target gets. */
+const ATTACHED_MAX_CHARS = 6_000;
 
 export function createTargetController(api: DreyPluginApi): TargetController {
   let active = MODEL_TARGET;
@@ -212,6 +215,15 @@ export function createTargetController(api: DreyPluginApi): TargetController {
           context = typeof found.block === 'string' ? found.block : '';
         } catch {
           context = '';
+        }
+      }
+      // Attached files ride along as reference too (bounded, read from the active vault).
+      for (const path of vault?.files ?? []) {
+        try {
+          const { content } = await api.vault.readFile(path);
+          context += `${context === '' ? '' : '\n\n'}ATTACHED FILE ${path} — read-only reference.\n${content.slice(0, ATTACHED_MAX_CHARS)}`;
+        } catch {
+          // an unreadable file is simply not attached
         }
       }
       await run(id, (target) => target.send(text, context === '' ? undefined : { context }));

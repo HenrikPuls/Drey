@@ -449,8 +449,11 @@ The **Assistant panel** is chat-first:
 
 ### Conversation targets {#assistant-targets}
 
-When the Tickets plugin is on, the Assistant head carries a segmented
-control: **Model**, **Mission Control** and **1:1**.
+The Assistant head is one row: the **chats button** (three lines) opens the
+list of chats right in the panel, then come the target icons, the title of the
+chat and **+** for a new chat. When the Tickets plugin is on, the icons are a
+speech bubble (**Model**), a rocket (**Mission Control**) and two heads
+(**1:1**); hover one for its name.
 
 - **Model** is the chat described here: the provider from Settings →
   Assistant, with the composer's chips and tools.

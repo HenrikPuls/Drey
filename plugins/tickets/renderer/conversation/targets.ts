@@ -146,6 +146,7 @@ export function createMissionControlTarget(deps: ConversationDeps): Conversation
   return {
     id: MISSION_CONTROL_TARGET,
     label: 'Mission Control',
+    icon: 'rocket',
     description: 'Talk to Mission Control: it knows the board and proposes changes you confirm',
     thread: read,
     send: async (text, options) => {
@@ -263,6 +264,7 @@ export function createPersonaTarget(deps: ConversationDeps, persona: PersonaView
     id: personaTargetId(persona.id),
     label: persona.title,
     group: PERSONA_GROUP,
+    icon: 'users',
     description: `Talk to ${persona.title} 1:1`,
     thread: read,
     send: async (text) => {

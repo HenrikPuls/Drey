@@ -197,9 +197,10 @@ test.describe('Shape in Drey (E13-9)', () => {
 
     const panel = page.locator('app-panel-frame', { has: page.locator('.assistant-panel') });
     const switcher = panel.locator('.assistant-targets');
-    await expect(switcher.locator('.assistant-target')).toHaveText(['Model', 'Mission Control', '1:1'], { timeout: 30_000 });
-    await switcher.locator('.assistant-target', { hasText: 'Mission Control' }).click();
-    await expect(panel.locator('.target-tray-attached .target-chip')).toHaveText('T-0130.md attached', { timeout: 15_000 });
+    await expect(switcher.locator('.assistant-target')).toHaveCount(3, { timeout: 30_000 });
+    await switcher.getByLabel('Mission Control', { exact: true }).click();
+    await expect(panel.locator('.assistant-composer .chip.target-attached')).toHaveText('T-0130.md attached', { timeout: 15_000 });
+    await expect(panel.locator('.assistant-composer .icon-btn.plus')).toBeVisible();
 
     // The composer keeps its Vault chip (off by default) and prompts on a target.
     await expect(panel.locator('.assistant-composer .icon-btn.vault')).toBeVisible();
@@ -253,6 +254,12 @@ test.describe('Shape in Drey (E13-9)', () => {
     await card.locator('.target-card-btn', { hasText: 'Keep as one' }).click();
     await expect.poll(() => fs.existsSync(path.join(vaultDir, 'tickets', '20-build', 'T-0130.md')), { timeout: 30_000 }).toBe(true);
     await page.screenshot({ path: testInfo.outputPath('shape-kept.png') });
+    // The chat list sits inside the panel: the shape chat is in it, current.
+    await panel.locator('.assistant-head .chat-switch').click();
+    const rowsList = panel.locator('.assistant-chatlist-row');
+    await expect(rowsList.first()).toBeVisible({ timeout: 15_000 });
+    await expect(panel.locator('.assistant-chatlist-row.current')).toHaveCount(1);
+    await page.screenshot({ path: testInfo.outputPath('shape-chat-list.png') });
     stopEngine();
   });
 });

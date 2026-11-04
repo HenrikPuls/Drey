@@ -111,6 +111,7 @@ leaves the app on the previous build. Verify with
   active view's preset `assistantTarget`) and their `on…Change` listeners are
   for the Assistant. The host attaches no meaning to any of it; namespace
   the target ids.
+  1.43 also gave a target an optional `icon` (the switcher draws icons, not words).
   1.43 added two optional parts to conversation targets: `onThreadChange(cb)`
   (the thread changed without a call from the Assistant -- the Assistant reads
   `thread()` again) and `ConversationThread.attached` (labels of what the

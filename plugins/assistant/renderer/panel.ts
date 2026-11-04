@@ -18,10 +18,10 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import { mountComposer } from './composer.js';
 import { el, icon } from './dom.js';
-import { openChatPicker } from './picker-chat.js';
+import { createChatList } from './chat-list.js';
 import type { RunningTasks } from './running-tasks.js';
 import type { AssistantState } from './state.js';
-import { createTargetSwitcher, createTargetThread, openTargetHistory } from './target-view.js';
+import { createTargetSwitcher, createTargetThread } from './target-view.js';
 import type { TargetController } from './targets.js';
 import { MODEL_TARGET } from './targets-model.js';
 import { createThread } from './thread.js';
@@ -47,12 +47,10 @@ export function mountPanel(
   const chatLabel = el('span', 'chat-label');
   const chatSwitchButton = el('button', 'chat-switch') as HTMLButtonElement;
   chatSwitchButton.type = 'button';
-  chatSwitchButton.title = 'Switch chat';
-  chatSwitchButton.setAttribute('aria-label', 'Switch chat');
+  chatSwitchButton.title = 'Chats';
+  chatSwitchButton.setAttribute('aria-label', 'Chats');
   chatSwitchButton.appendChild(icon('list', 13));
-  chatSwitchButton.addEventListener('click', () =>
-    targets.activeId() === MODEL_TARGET ? openChatPicker(api, state) : openTargetHistory(api, targets),
-  );
+  chatSwitchButton.addEventListener('click', () => chatList.toggle());
   const chatNewButton = el('button', 'chat-new') as HTMLButtonElement;
   chatNewButton.type = 'button';
   chatNewButton.title = 'Start a new chat';
@@ -64,14 +62,12 @@ export function mountPanel(
 
   // The conversation target switcher (E13-5): Model | Mission Control | 1:1 …,
   // present only while a plugin registered a target.
-  const switcher = createTargetSwitcher(targets);
-  body.appendChild(switcher.node);
-
+  // One head row: the chats button, the icon switcher, the title, + for a new chat.
+  const switcher = createTargetSwitcher(api, targets);
   const head = el('header', 'assistant-head');
-  const chatHead = el('div', 'chat-head');
-  chatHead.append(chatLabel, chatSwitchButton, chatNewButton);
-  head.append(chatHead);
+  head.append(chatSwitchButton, switcher.node, chatLabel, chatNewButton);
   body.appendChild(head);
+  const chatList = createChatList(state, targets, () => render());
 
   // -- thread + composer -------------------------------------------------------
   // A chat restarted from a question offers that question again.
@@ -83,9 +79,11 @@ export function mountPanel(
   const targetThread = createTargetThread(api, targets);
   body.appendChild(targetThread.node);
   body.appendChild(targetThread.tray);
+  body.appendChild(chatList.node);
   const composer = mountComposer(body, api, state, targets);
 
   // -- render loop -----------------------------------------------------------
+  let lastActive = targets.activeId();
   const render = (): void => {
     // The active chat's title: the live list wins (fresh after every
     // change round), the loaded view's frontmatter is the fallback for
@@ -99,8 +97,13 @@ export function mountPanel(
         : (state.chats().find((chat) => chat.path === activePath)?.title ??
           state.view()?.frontmatter.title ??
           null);
-    chatLabel.textContent = chatTitle ?? 'New chat';
-    chatLabel.title = chatTitle ?? 'New chat';
+    chatLabel.textContent = chatList.isOpen() ? 'Chats' : (chatTitle ?? 'New chat');
+    chatLabel.title = chatLabel.textContent;
+    if (targets.activeId() !== lastActive) {
+      lastActive = targets.activeId();
+      chatList.close();
+    }
+    chatSwitchButton.classList.toggle('on', chatList.isOpen());
 
     switcher.render();
     thread.node.hidden = onTarget;
@@ -108,6 +111,12 @@ export function mountPanel(
     composer.render();
     thread.render();
     targetThread.render();
+    chatList.render();
+    if (chatList.isOpen()) {
+      thread.node.hidden = true;
+      targetThread.node.hidden = true;
+      targetThread.tray.hidden = true;
+    }
   };
   render();
   const unsubState = state.subscribe(render);

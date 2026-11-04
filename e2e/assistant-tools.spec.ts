@@ -340,7 +340,7 @@ test.describe('Assistant tool loop', () => {
   }) => {
     await vaultChipOn(page);
     await ask(page, 'What is the harbour fee?');
-    const thread = page.locator('.assistant-panel .assistant-thread');
+    const thread = page.locator('.assistant-panel .assistant-thread').first();
 
     // While the model is still working: the calls made so far.
     const running = thread.locator('.card.streaming .tool-chip.running');
@@ -365,7 +365,7 @@ test.describe('Assistant tool loop', () => {
   }) => {
     await vaultChipOn(page);
     await ask(page, 'What do I know about Einstein?');
-    const thread = page.locator('.assistant-panel .assistant-thread');
+    const thread = page.locator('.assistant-panel .assistant-thread').first();
 
     await expect(thread).toContainText('CONTEXT RECEIVED', { timeout: 30_000 });
     await expect(thread.locator('.context-chip')).toContainText('vault context · 1 section');
@@ -378,7 +378,7 @@ test.describe('Assistant tool loop', () => {
   test('reads a tool call the model wrote into its reply text', async ({ page, vaultDir }) => {
     await vaultChipOn(page);
     await ask(page, 'What is the harbour fee? Answer in text form.');
-    const thread = page.locator('.assistant-panel .assistant-thread');
+    const thread = page.locator('.assistant-panel .assistant-thread').first();
 
     await expect(thread).toContainText(ANSWER, { timeout: 30_000 });
     await expect.poll(() => chatNotes(vaultDir), { timeout: 10_000 }).toContain('vault_read');
@@ -400,7 +400,7 @@ test.describe('Assistant tool loop', () => {
   }) => {
     // The app starts on today's daily note, which rides the question.
     await ask(page, 'Which tools do you have?');
-    const thread = page.locator('.assistant-panel .assistant-thread');
+    const thread = page.locator('.assistant-panel .assistant-thread').first();
 
     await expect(thread).toContainText('DOCUMENT TOOLS ONLY', { timeout: 30_000 });
   });
@@ -408,7 +408,7 @@ test.describe('Assistant tool loop', () => {
   test('with the Vault chip on the vault tools are offered', async ({ page }) => {
     await vaultChipOn(page);
     await ask(page, 'Which tools do you have?');
-    const thread = page.locator('.assistant-panel .assistant-thread');
+    const thread = page.locator('.assistant-panel .assistant-thread').first();
 
     await expect(thread).toContainText('VAULT TOOLS OFFERED', { timeout: 30_000 });
   });
@@ -442,7 +442,7 @@ test.describe('Assistant tool loop', () => {
 
     const content = page.locator('app-editor .cm-content');
     await expect(content).toContainText('The berth fee is 25 euros per night.', { timeout: 30_000 });
-    const thread = page.locator('.assistant-panel .assistant-thread');
+    const thread = page.locator('.assistant-panel .assistant-thread').first();
     await expect(thread).toContainText(ANSWER, { timeout: 30_000 });
     // Unsaved: the file still holds the old text until the user saves.
     const file = path.join(vaultDir, 'berth.md');
@@ -471,7 +471,7 @@ test.describe('Assistant tool loop', () => {
   });
 
   test('the Web chip decides whether a question may search the web', async ({ page, vaultDir }) => {
-    const thread = page.locator('.assistant-panel .assistant-thread');
+    const thread = page.locator('.assistant-panel .assistant-thread').first();
     const web = page.locator('.assistant-panel .composer-meta [aria-label="Toggle web access"]');
     // Web search is switched on in the config, so the chip exists — and is off.
     await expect(web).toBeVisible();
