@@ -15,9 +15,14 @@
   --border-strong: var(--line);
   --hover-bg: var(--panel-2);
   --hover-bg-strong: var(--panel-3);
-  --accent-fg: var(--bg);
-  --accent-hover: var(--accent);
-  --accent-quote: var(--accent);
+  --accent-fg: var(--accent);
+  --accent-hover: color-mix(in srgb, var(--accent) 78%, white);
+  --accent-contrast: var(--bg);
+  --accent-surface: color-mix(in srgb, var(--accent) 15%, transparent);
+  --accent-text: var(--accent);
+  --accent-ring: color-mix(in srgb, var(--accent) 55%, transparent);
+  --accent-edge: color-mix(in srgb, var(--accent) 45%, transparent);
+  --accent-quote: color-mix(in srgb, var(--accent) 45%, transparent);
   --bg-bar: var(--panel);
   --bg-main: transparent;
   --bg-editor: transparent;
