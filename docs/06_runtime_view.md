@@ -3757,3 +3757,36 @@ views under `views`; on restore each view's layout is rebuilt through the same
 pruning (tabs that did not come back leave their pane), the view named by
 `DockService`'s persisted `active` becomes the one on screen, and a document
 only a vanished view held is closed.
+
+## 6.77 A ticket opens as a document: strip, proof, cost, actions (E13-6)
+
+```mermaid
+sequenceDiagram
+    participant U as Owner
+    participant E as Editor (CodeMirror)
+    participant H as ticket-header (frontmatter view)
+    participant X as ticket-document extension
+    participant M as plugin main (IPC)
+    participant G as Engine (board service)
+
+    U->>E: opens tickets/<phase>/T-0118.md
+    E->>H: render(frontmatter)
+    H->>H: strip.mount: status from the work groups,<br/>chain = mergeChain(pipeline, ticket delta),<br/>cost from the buffer's ## Verlauf
+    H->>M: personas / estimate(gate, persona)
+    M->>G: listPersonas / estimateOf (median of earlier runs)
+    G-->>H: names / estimate or null (< 3 runs)
+    H-->>U: strip repaints with names and estimate
+    E->>X: StateField.create(state)
+    X->>X: parseVerificationSection + sectionBodyRange,<br/>parseVerlauf -> cost table
+    X-->>E: block replace (proof) + block widget at the end
+    U->>X: caret into the proof section
+    X-->>E: no replace decoration: the Markdown shows
+    U->>X: Accept / Send back…
+    X->>M: acceptTicket / sendBack (the Ready card's calls)
+    M->>G: transition (one commit)
+    G-->>X: board-changed -> repaint (header + decorations)
+```
+
+The widgets read the buffer, so an unsaved edit shows at once; the board's
+refresh and a change of the fleet's wait/run signature repaint every open
+ticket document (a `StateEffect`, no document change).

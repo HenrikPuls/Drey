@@ -27,6 +27,7 @@ import {
   type TicketPriority,
 } from '../shared/tickets';
 import { interactiveModeFor, type InteractiveMode } from './end-moves';
+import type { TicketStrip } from './ticket-document/strip';
 
 /** A ticket file of the board: `tickets/<phase dir>/T-nnnn.md` (archive included). */
 export function isTicketPath(path: string | null): boolean {
@@ -100,6 +101,8 @@ export interface TicketHeaderDeps {
    * the board's one-click start, shared with the card menu.
    */
   readonly startInteractive: (card: TicketCard, mode: InteractiveMode) => void;
+  /** The ticket document's strip under the chips (E13-6); absent = chips only. */
+  readonly strip?: TicketStrip;
 }
 
 export interface TicketHeader {
@@ -148,7 +151,10 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
     title.type = 'text';
     title.spellcheck = true;
     title.setAttribute('aria-label', 'Ticket title');
-    root.append(chips, title);
+    // E13-6: the strip (status, persona, cost, estimate, chain, gate) sits
+    // between the chip row and the headline.
+    const strip = deps.strip?.mount({ path, view: input.view });
+    root.append(chips, ...(strip === undefined ? [] : [strip.node]), title);
 
     let model: HeaderModel | null = models.get(input.frontmatter) ?? null;
     if (model === null) {
@@ -326,6 +332,7 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
       if (document.activeElement !== title) {
         title.value = meta?.title ?? '';
       }
+      strip?.paint();
     }
 
     // The headline commits on Enter or when it is left; Escape restores it.

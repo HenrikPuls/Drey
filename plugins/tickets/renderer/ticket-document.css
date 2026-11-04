@@ -1,0 +1,411 @@
+/* The ticket as a document (E13-6): the header strip, the proof widget, the
+   cost table and the action bar. Vertical spacing is padding, never margin:
+   CodeMirror measures a block widget without its margin, so a margin would
+   drift the gutter and the click positions below it (see ticket-header.css). */
+
+/* --- the strip, under the chip row ------------------------------------- */
+
+.tickets-doc-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0 4px;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--text-3);
+}
+
+.tickets-doc-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.tickets-doc-status {
+  padding: 0 7px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-strong);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.tickets-doc-status.is-needs {
+  border-color: var(--accent-edge);
+  background: var(--accent-surface);
+  color: var(--accent-text);
+}
+
+.tickets-doc-status.is-running {
+  border-color: color-mix(in srgb, var(--status-added) 45%, transparent);
+  color: var(--status-added);
+}
+
+.tickets-doc-status.is-blocked {
+  border-color: color-mix(in srgb, var(--status-modified) 45%, transparent);
+  color: var(--status-modified);
+}
+
+.tickets-doc-who {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.tickets-doc-line,
+.tickets-doc-sep,
+.tickets-doc-estimate {
+  color: var(--text-4);
+}
+
+.tickets-doc-cost-fact {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.tickets-doc-estimate {
+  cursor: help;
+}
+
+.tickets-doc-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tickets-doc-step {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--text-5);
+}
+
+.tickets-doc-step.is-past {
+  color: var(--text-3);
+}
+
+.tickets-doc-step.is-current {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.tickets-doc-step.is-skipped .tickets-doc-step-title {
+  text-decoration: line-through;
+}
+
+.tickets-doc-step-mark {
+  font-size: 0.72rem;
+}
+
+.tickets-doc-step.is-past .tickets-doc-step-mark {
+  color: var(--status-added);
+}
+
+.tickets-doc-step.is-current .tickets-doc-step-mark,
+.tickets-doc-step.is-checkpoint:not(.is-past) .tickets-doc-step-mark {
+  color: var(--accent-fg);
+}
+
+.tickets-doc-step-who {
+  color: var(--text-4);
+  font-weight: 400;
+}
+
+.tickets-doc-gate {
+  margin: 0;
+  color: var(--accent-text);
+}
+
+/* --- the blocks inside the document ------------------------------------ */
+
+.tickets-doc-host {
+  padding: 8px 2px 8px 6px;
+  font-family: var(--font-sans);
+  cursor: default;
+}
+
+.tickets-doc-block {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  padding: 12px 14px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.tickets-doc-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.tickets-doc-kicker {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
+.tickets-doc-verdict {
+  font-weight: 600;
+}
+
+.tickets-doc-verdict.is-green {
+  color: var(--status-added);
+}
+
+.tickets-doc-verdict.is-red {
+  color: var(--status-deleted);
+}
+
+.tickets-doc-total {
+  color: var(--text-heading);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tickets-doc-stamp {
+  margin: 4px 0 0;
+  color: var(--text-4);
+  font-size: 0.78rem;
+}
+
+.tickets-doc-checks {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tickets-doc-check {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.tickets-doc-check .tickets-doc-mark {
+  width: 1em;
+  flex: none;
+  font-weight: 700;
+}
+
+.tickets-doc-check.is-pass .tickets-doc-mark {
+  color: var(--status-added);
+}
+
+.tickets-doc-check.is-fail .tickets-doc-mark {
+  color: var(--status-deleted);
+}
+
+.tickets-doc-check-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tickets-doc-check-meta {
+  margin-left: auto;
+  flex: none;
+  color: var(--text-4);
+  font-size: 0.78rem;
+}
+
+.tickets-doc-shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.tickets-doc-shot {
+  width: 190px;
+  margin: 0;
+}
+
+.tickets-doc-shot-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-editor);
+  overflow: hidden;
+  cursor: zoom-in;
+}
+
+.tickets-doc-shot img {
+  display: block;
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+}
+
+.tickets-doc-shot figcaption {
+  padding-top: 3px;
+  color: var(--text-4);
+  font-size: 0.74rem;
+  overflow-wrap: anywhere;
+}
+
+.tickets-doc-video {
+  padding-top: 10px;
+}
+
+.tickets-doc-player {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  border-radius: var(--radius-sm);
+  background: #000;
+}
+
+.tickets-doc-chapters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding-top: 6px;
+}
+
+.tickets-doc-chapter {
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.tickets-doc-chapter:hover,
+.tickets-doc-chapter:focus-visible {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.tickets-doc-chapter-at {
+  font-family: var(--font-mono);
+  color: var(--accent-fg);
+}
+
+.tickets-doc-note {
+  margin: 0;
+  color: var(--text-4);
+}
+
+.tickets-doc-findings {
+  padding-top: 10px;
+}
+
+.tickets-doc-findings ul {
+  margin: 2px 0 0;
+  padding-left: 18px;
+}
+
+/* --- the cost table ----------------------------------------------------- */
+
+.tickets-doc-table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.tickets-doc-table th,
+.tickets-doc-table td {
+  padding: 3px 10px 3px 0;
+  text-align: left;
+  font-weight: 400;
+}
+
+.tickets-doc-table th {
+  color: var(--text-4);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.tickets-doc-table .is-num {
+  text-align: right;
+  padding-right: 0;
+  padding-left: 10px;
+}
+
+.tickets-doc-table .is-muted {
+  color: var(--text-4);
+}
+
+.tickets-doc-table tr.is-bad td {
+  color: var(--status-deleted);
+}
+
+.tickets-doc-table tfoot td {
+  border-top: 1px solid var(--border-strong);
+  color: var(--text-heading);
+  font-weight: 600;
+}
+
+/* --- the action bar ----------------------------------------------------- */
+
+.tickets-doc-tail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 2px 18px 6px;
+  font-family: var(--font-sans);
+}
+
+.tickets-doc-tail .tickets-doc-cost {
+  margin: 0;
+}
+
+.tickets-doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.tickets-doc-spacer {
+  flex: 1;
+}
+
+.tickets-doc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.tickets-doc-btn:hover,
+.tickets-doc-btn:focus-visible {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.tickets-doc-btn.is-primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.tickets-doc-btn.is-primary:hover,
+.tickets-doc-btn.is-primary:focus-visible {
+  background: var(--accent-hover);
+  color: var(--on-accent);
+}
