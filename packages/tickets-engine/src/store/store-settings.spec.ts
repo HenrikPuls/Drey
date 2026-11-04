@@ -4,7 +4,7 @@ import { parseTicketBackend, type TicketRecord } from '../ports/ticket-store';
 import { groupByStage, readStoreSettings } from './store-settings';
 
 const rec = (id: string, stage: string): TicketRecord => ({
-  id, stage, title: id, owner: null, priority: null, kind: null, epoch: null, rev: null, labels: [], dependsOn: [],
+  id, stage, title: id, owner: null, priority: null, kind: null, epoch: null, rev: null, labels: [], dependsOn: [], parent: null,
   claimedAt: null, leaseUntil: null, size: null, branch: null, repos: [], extensions: {},
 });
 
@@ -19,7 +19,12 @@ describe('tickets.backend', () => {
   it('reads the four keys, trimmed', async () => {
     const values: Record<string, string> = { backend: 'dricket', 'dk.path': ' C:\\x\\dk.exe ', 'dk.store': 'E:\\scratch' };
     const settings = await readStoreSettings(<T>(key: string) => Promise.resolve(values[key] as T | undefined));
-    expect(settings).toEqual({ backend: 'dricket', dkPath: 'C:\\x\\dk.exe', dkStore: 'E:\\scratch', dkDataDir: '' });
+    expect(settings).toEqual({ backend: 'dricket', shadow: false, dkPath: 'C:\\x\\dk.exe', dkStore: 'E:\\scratch', dkDataDir: '' });
+  });
+
+  it('reads shadow as files plus the shadow flag', async () => {
+    const settings = await readStoreSettings(<T>(key: string) => Promise.resolve((key === 'backend' ? 'shadow' : undefined) as T | undefined));
+    expect(settings).toMatchObject({ backend: 'files', shadow: true });
   });
 
   it('defaults to files with nothing set', async () => {

@@ -4261,3 +4261,47 @@ sequenceDiagram
 Reads (`list`, `show`) take the same path without the write turn and with a
 30 s timeout. A `claim-lost` (13) on any later write is the signal for the
 fleet to stop the worker (E14-5).
+
+## 6.93 The board from a dricket store, and the shadow comparison (E14-2, milestone 152)
+
+`tickets.backend` decides where the board's tickets come from; the pipeline,
+repos and ledger stay in the meta vault either way. `files` (default) is the
+old path. `dricket` shows the store's board. `shadow` shows the files board and
+compares it, in the background, with the store's.
+
+```mermaid
+sequenceDiagram
+    participant UI as Work panel / Mission Control
+    participant B as EngineBoardService.snapshot
+    participant F as assembleBoard (files)
+    participant S as StoreBoardSource
+    participant R as StoreReader (cache)
+    participant D as dk --json
+    UI->>B: snapshot()
+    B->>F: pipeline.md + ticket files
+    F-->>B: files board
+    B-->>UI: files board (backend files / shadow)
+    opt backend = shadow, at most every 30 s, one at a time
+        B->>S: scheduleShadow(settings, input, filesBoard)
+        S->>R: readAll()
+        R->>D: ls --json
+        loop tickets whose (rev, epoch, stage, owner, title, priority) changed
+            R->>D: show --json t-N (one at a time)
+        end
+        S->>S: assembleBoardFromRecords -> diffBoards(files, store)
+        S->>S: write board-diff.md / .json
+    end
+    opt backend = dricket
+        B->>S: board(settings, input)
+        S->>R: readAll()
+        S-->>B: store board (or empty + error issue)
+        B-->>UI: store board
+    end
+```
+
+A store record becomes a legacy ticket (`recordToBoardFile`) and runs through
+`assembleBoard`: the board has one implementation of column order, `blocked`
+and issues for both backends. A store that cannot be read gives an empty
+board with one `error` issue (`dricket store: ...`) — never an exception and
+never a silent fallback to the files.
+

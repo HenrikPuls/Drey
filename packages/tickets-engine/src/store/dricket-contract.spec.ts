@@ -41,7 +41,7 @@ if (!found.ok) {
 
 const recorded: Array<{ step: string; args: readonly string[]; code: number | null; stdout: string }> = [];
 
-describe.skipIf(!found.ok)('DricketTicketStore against a scratch dricket store', () => {
+describe.skipIf(!found.ok)('DricketTicketStore against a scratch dricket store', { timeout: 60_000 }, () => {
   let root = '';
   let store: DricketTicketStore;
   let step = 'setup';
@@ -83,7 +83,7 @@ describe.skipIf(!found.ok)('DricketTicketStore against a scratch dricket store',
     dk(['add', '--unclaimed', '-l', 'a,b', '--priority', 'high', '-m', 'Second', '-d', 'The second.'], seed);
     dk(['add', '--unclaimed', '-m', 'Third', '-d', 'The third.'], seed);
     store = new DricketTicketStore(new DkProcess({ bin, store: storeDir, dataDir: path.join(root, 'data'), env, exec: recording }));
-  });
+   }, 120_000);
 
   afterAll(() => {
     if (process.env['DREY_CAPTURE_DK_FIXTURES'] === '1' && found.ok) {

@@ -156,6 +156,7 @@ function recordOf(meta: TicketMeta, stem: string, phase: string): TicketRecord {
     rev: null,
     labels: [],
     dependsOn: meta.blockedBy,
+    parent: meta.parent ?? null,
     claimedAt: meta.claimedAt,
     leaseUntil: null,
     size: null,

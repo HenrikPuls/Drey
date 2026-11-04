@@ -520,11 +520,11 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   contract (extension fields, `put`, configurable stages, `move`), v0.8 (import,
   change feed, stage log, Windows CI, dependency semantics). Gate for E14-4;
   not for E14-1..3, E14-5.
-- **E14-2 — Board from the store.** `ticket-board` over `TicketRecord[]`, stage
-  mapping, derived order and blocked from `depends`, `shadow` mode with a diff
-  report; also renders E14-1's read-only `storeListing` in the Work panel
-  (the engine route exists, the panel does not show it yet). Needs E14-1 (done).
-  Parallel with E14-3, E14-5.
+- **E14-2 follow-ups** (the board from the store shipped as milestone 152): run
+  `tickets.backend = shadow` against the migrated store once E14-3 has produced
+  it and read `~/.drey-engine/shadow/board-diff.md` until it is identical; the
+  500-ticket benchmark waits for dk R-05 (one `ls` call carries every field);
+  ticket documents under `dricket` come with E14-4.
 - **E14-3 — Migration tool.** Dry run, apply, report, shadow diff, **reverse
   converter** (the rollback). Apply needs dk R-10. Parallel with E14-2, E14-5.
 - **E14-4 — Write path.** Capture, refine, header edits, moves, accept/send
