@@ -1,0 +1,170 @@
+<section class="pa" aria-label="Plan to approve">
+  <header class="pa-head">
+    <button type="button" class="pa-back" (click)="close()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M15 5l-7 7 7 7" />
+      </svg>
+      Shape
+    </button>
+    @if (approval(); as a) {
+      <span class="pa-id">{{ a.ticket }}</span>
+    }
+  </header>
+
+  <div class="pa-body">
+    @if (approval(); as a) {
+      <div class="pa-title">
+        <span class="pa-eyebrow">Plan to approve · {{ headline() }}</span>
+        <h1>{{ a.title }}</h1>
+      </div>
+
+      @for (row of rows(); track row.card.index) {
+        <div class="pa-item">
+          <article class="pa-card" [class.locked]="row.card.locked" [attr.aria-label]="'Part ' + row.n + ', ' + row.card.title">
+            <div class="pa-top">
+              <button
+                type="button"
+                class="pa-open"
+                [attr.aria-expanded]="selected() === row.card.index"
+                [attr.aria-label]="'Part ' + row.n + ', ' + row.card.title + ': show actions'"
+                (click)="select(row.card)"
+              >
+                <span class="pa-n">Part {{ row.n }}</span>
+                <b class="pa-name">{{ row.card.title }}</b>
+                @if (row.badge !== '') {
+                  <span class="pa-badge">{{ row.badge }}</span>
+                }
+                <span class="pa-chev" aria-hidden="true">{{ selected() === row.card.index ? '▴' : '▾' }}</span>
+              </button>
+              <button
+                type="button"
+                class="pa-who"
+                aria-haspopup="true"
+                [attr.aria-expanded]="picking() === row.card.index"
+                [attr.aria-label]="'Who builds part ' + row.n + ': ' + row.who"
+                [disabled]="row.card.locked || readOnly() || busy()"
+                (click)="togglePick(row.card)"
+              >
+                <span class="dot" [style.background]="row.tint || 'var(--text-3)'"></span>{{ row.who }}
+                @if (!row.card.locked) {
+                  <span aria-hidden="true">▾</span>
+                }
+              </button>
+            </div>
+
+            @if (picking() === row.card.index) {
+              <div class="pa-pick" role="group" aria-label="Who builds this part">
+                @for (p of a.personas; track p.id) {
+                  <button
+                    type="button"
+                    class="chip"
+                    [class.on]="p.id === (row.card.persona ?? a.defaultPersona)"
+                    [attr.aria-pressed]="p.id === (row.card.persona ?? a.defaultPersona)"
+                    (click)="pick(row.card, p.id)"
+                  >
+                    <span class="dot" [style.background]="p.color || 'var(--text-3)'"></span>{{ p.title }}
+                    @if (p.role !== '') {
+                      <span class="chip-role">{{ p.role }}</span>
+                    }
+                  </button>
+                }
+              </div>
+            }
+
+            @if (selected() === row.card.index) {
+              @if (row.card.locked) {
+                <div class="pa-actions">
+                  <span class="pa-hint">
+                    @if (row.card.state === 'running') {
+                      Running: this part cannot be moved or deleted, and no part can be moved above it.
+                    } @else {
+                      Released as {{ row.card.ticket }}: this part cannot be moved or deleted, and no part can be moved above it.
+                    }
+                  </span>
+                  <span class="grow"></span>
+                  @if (row.card.ticket !== null) {
+                    <button type="button" class="link" (click)="openTicket(row.card.ticket)">Open ticket</button>
+                  }
+                </div>
+              } @else if (!readOnly()) {
+                <div class="pa-actions">
+                  <button type="button" class="pa-btn" [disabled]="!row.up || busy()" (click)="move(row.card, -1)">↑ Move up</button>
+                  <button type="button" class="pa-btn" [disabled]="!row.down || busy()" (click)="move(row.card, 1)">↓ Move down</button>
+                  <span class="grow"></span>
+                  <button type="button" class="pa-btn danger" [disabled]="busy()" (click)="remove(row.card)">
+                    {{ armed() === row.card.index ? 'Press again to delete' : 'Delete part' }}
+                  </button>
+                </div>
+              }
+            }
+
+            @if (row.card.reason !== null) {
+              <span class="pa-why">{{ row.card.reason }}</span>
+            }
+
+            <div class="pa-flow" [attr.aria-label]="'Flow of part ' + row.n">
+              <span class="pa-label">Flow</span>
+              @for (seg of row.flow; track $index) {
+                @if ($index > 0) {
+                  <span class="arrow" aria-hidden="true">→</span>
+                }
+                <span class="seg" [class.ins]="seg.inserted" [class.skip]="seg.skipped">{{ seg.text }}</span>
+              }
+              <span class="pa-flow-note">{{ row.flowNote }}</span>
+              <span class="grow"></span>
+              <span class="pa-flow-link" aria-hidden="true">Change flow ›</span>
+            </div>
+
+            <div class="pa-meta">
+              <span class="pa-start">{{ row.card.start }}</span>
+              @if (row.estimate !== null) {
+                <span>Estimate {{ row.estimate.value }} · {{ row.estimate.note }}</span>
+              }
+            </div>
+          </article>
+          @if (row.gate !== null) {
+            <div class="pa-gate"><span class="pa-gate-k">Gate</span><span>{{ row.gate }}</span></div>
+          }
+        </div>
+      }
+
+      @for (warning of a.warnings; track $index) {
+        <p class="pa-warn">{{ warning }}</p>
+      }
+
+      <button type="button" class="pa-split" (click)="changeSplit()">Change the split: edit the plan or ask Mission Control</button>
+    } @else if (error(); as e) {
+      <p class="pa-note" role="alert">{{ e }}</p>
+    } @else {
+      <p class="pa-note" aria-live="polite">Loading…</p>
+    }
+  </div>
+
+  @if (approval() !== null) {
+    <footer class="pa-foot">
+      <p class="pa-proposal">{{ proposal().text }}</p>
+      @if (total(); as t) {
+        @if (proposal().approveLabel !== null) {
+          <p class="pa-total">
+            Typically <b>{{ t.value }}</b>{{ t.note }}, from your own past runs · nothing runs until you approve.
+          </p>
+        }
+      }
+      @if (message(); as m) {
+        <p class="pa-error" role="alert">{{ m }}</p>
+      }
+      @if (proposal().approveLabel !== null) {
+        <div class="pa-buttons">
+          @if (proposal().firstLabel !== null) {
+            <button type="button" class="pa-btn wide" [disabled]="readOnly() || busy()" (click)="release('first')">
+              {{ proposal().firstLabel }}
+            </button>
+          }
+          <button type="button" class="pa-btn wide primary" [disabled]="readOnly() || busy()" (click)="release('all')">
+            {{ proposal().approveLabel }}
+          </button>
+        </div>
+      }
+    </footer>
+  }
+</section>

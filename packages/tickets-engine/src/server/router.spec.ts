@@ -28,6 +28,9 @@ function port(): TicketsRemotePort {
     estimate: vi.fn(async (key: { gate: string }) =>
       key.gate === 'build' ? { gate: 'build', persona: 'ben', model: 'a/b', runs: 3, cost: 0.3, minutes: 9, tokens: 48000 } : null,
     ),
+    planParts: vi.fn(async () => ({ ok: true as const, ticket: 'T-0052', title: 'x', parts: [], gate: 'build', defaultPersona: 'ben', personas: [], warnings: [] })),
+    planPartsEdit: vi.fn(ok),
+    planRelease: vi.fn(async () => ({ ok: true as const, tickets: ['T-0060'] })),
     planStatus: vi.fn(async () => ({ ok: true as const, version: 2, edits: 1, summary: '1 edit · +1 −0', marks: [] })),
     ticketFile: vi.fn(async (_id: string, path: string) =>
       path === 'src/a.ts' ? { ok: true as const, text: 'a\nb\n', truncated: false } : { ok: false as const, error: 'nope' },
@@ -228,6 +231,43 @@ describe('route', () => {
     expect((await route(req({ path: '/api/tickets/T-0052/file/missing.ts', authorization: auth }), deps)).status).toBe(404);
     expect((await route(req({ path: '/api/tickets/T-0052/worktree-changes', authorization: auth }), deps)).status).toBe(200);
     expect(remote.ticketWorktreeChanges).toHaveBeenCalledWith('T-0052');
+  });
+
+  it('routes the plan to approve: the cards, the list edits and the release', async () => {
+    const { deps, devices, remote } = setup();
+    const { token } = await devices.add('iPhone 15', false, new Date());
+    const auth = `Bearer ${token}`;
+    const cards = await route(req({ path: '/api/tickets/T-0052/parts', authorization: auth }), deps);
+    expect(remote.planParts).toHaveBeenCalledWith('T-0052');
+    expect(cards.body).toMatchObject({ ok: true, ticket: 'T-0052', gate: 'build' });
+    expect((await route(req({ path: '/api/tickets/nope/parts', authorization: auth }), deps)).status).toBe(404);
+
+    await route(req({ method: 'POST', path: '/api/tickets/T-0052/parts', authorization: auth, body: { op: 'move', from: 2, to: 0 } }), deps);
+    expect(remote.planPartsEdit).toHaveBeenLastCalledWith({ id: 'T-0052', edit: { op: 'move', from: 2, to: 0 } }, 'owner@iphone-15');
+    await route(req({ method: 'POST', path: '/api/tickets/T-0052/parts', authorization: auth, body: { op: 'persona', index: 1, persona: null } }), deps);
+    expect(remote.planPartsEdit).toHaveBeenLastCalledWith({ id: 'T-0052', edit: { op: 'persona', index: 1, persona: null } }, 'owner@iphone-15');
+    expect((await route(req({ method: 'POST', path: '/api/tickets/T-0052/parts', authorization: auth, body: { op: 'rename' } }), deps)).body).toEqual({
+      ok: false,
+      error: 'parts op must be persona, move or delete',
+    });
+
+    const released = await route(req({ method: 'POST', path: '/api/tickets/T-0052/release', authorization: auth, body: {} }), deps);
+    expect(remote.planRelease).toHaveBeenLastCalledWith({ id: 'T-0052', scope: 'all' }, 'owner@iphone-15');
+    expect(released.body).toEqual({ ok: true, tickets: ['T-0060'] });
+    await route(req({ method: 'POST', path: '/api/tickets/T-0052/release', authorization: auth, body: { scope: 'first' } }), deps);
+    expect(remote.planRelease).toHaveBeenLastCalledWith({ id: 'T-0052', scope: 'first' }, 'owner@iphone-15');
+    expect((await route(req({ method: 'POST', path: '/api/tickets/T-0052/release', authorization: auth, body: { scope: 'some' } }), deps)).body).toEqual({
+      ok: false,
+      error: 'release scope must be all or first',
+    });
+  });
+
+  it('a read-only device may read the cards but not edit or release', async () => {
+    const { deps, devices } = setup();
+    const { token } = await devices.add('iPad', true, new Date());
+    const auth = `Bearer ${token}`;
+    expect((await route(req({ path: '/api/tickets/T-0052/parts', authorization: auth }), deps)).status).toBe(200);
+    expect((await route(req({ method: 'POST', path: '/api/tickets/T-0052/release', authorization: auth, body: {} }), deps)).status).toBe(403);
   });
 
   it('a refused command is a 200 with ok:false; unknown ids and routes are 404', async () => {

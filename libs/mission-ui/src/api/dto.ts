@@ -1643,3 +1643,121 @@ export function parsePlanStatus(json: unknown): McPlanStatus | null {
   }
   return { version: num(body['version']), edits: num(body['edits']) ?? 0, summary: strOrNull(body['summary']), marks };
 }
+
+// --- the plan to approve (E10-4) -------------------------------------------------------
+
+export type McPartState = 'new' | 'queued' | 'running' | 'active' | 'done';
+
+/** One gate of a part's flow, from the build step on. */
+export interface McPartFlowStep {
+  readonly phase: string;
+  readonly title: string;
+  readonly persona: string | null;
+  readonly inserted: boolean;
+  readonly skipped: boolean;
+  readonly notify: boolean;
+}
+
+/** One card of the plan to approve (`GET /api/tickets/<id>/parts`). */
+export interface McPartCard {
+  readonly index: number;
+  readonly title: string;
+  readonly reason: string | null;
+  /** The pinned builder; null = the default builder decides. */
+  readonly persona: string | null;
+  readonly chain: readonly string[];
+  readonly flow: readonly McPartFlowStep[];
+  /** The ticket the part became; null while it is only a line of the plan. */
+  readonly ticket: string | null;
+  readonly state: McPartState;
+  readonly phase: string | null;
+  /** True once the part is a ticket: no move, delete or persona change. */
+  readonly locked: boolean;
+  readonly start: string;
+}
+
+export interface McPartPersona {
+  readonly id: string;
+  readonly title: string;
+  readonly role: string;
+  readonly color: string;
+  readonly model: string;
+}
+
+export interface McPlanApproval {
+  readonly ticket: string;
+  readonly title: string;
+  readonly parts: readonly McPartCard[];
+  /** The build gate's phase id — the gate the estimate is asked for. */
+  readonly gate: string;
+  readonly defaultPersona: string | null;
+  readonly personas: readonly McPartPersona[];
+  readonly warnings: readonly string[];
+}
+
+const PART_STATES: ReadonlySet<string> = new Set(['new', 'queued', 'running', 'active', 'done']);
+
+/** Reads the parts answer tolerantly; null = the desk has no readable parts for the ticket. */
+export function parsePlanApproval(json: unknown): McPlanApproval | null {
+  const body = rec(json);
+  if (body === null || body['ok'] !== true || typeof body['ticket'] !== 'string') {
+    return null;
+  }
+  const parts: McPartCard[] = [];
+  for (const raw of arr(body['parts'])) {
+    const card = rec(raw);
+    if (card === null || typeof card['title'] !== 'string' || typeof card['index'] !== 'number') {
+      continue;
+    }
+    const flow: McPartFlowStep[] = [];
+    for (const rawStep of arr(card['flow'])) {
+      const step = rec(rawStep);
+      if (step !== null && typeof step['phase'] === 'string') {
+        flow.push({
+          phase: step['phase'],
+          title: str(step['title'], step['phase']),
+          persona: strOrNull(step['persona']),
+          inserted: step['inserted'] === true,
+          skipped: step['skipped'] === true,
+          notify: step['notify'] === true,
+        });
+      }
+    }
+    const state = str(card['state']);
+    parts.push({
+      index: card['index'],
+      title: card['title'],
+      reason: strOrNull(card['reason']),
+      persona: strOrNull(card['persona']),
+      chain: arr(card['chain']).filter((c): c is string => typeof c === 'string'),
+      flow,
+      ticket: strOrNull(card['ticket']),
+      state: PART_STATES.has(state) ? (state as McPartState) : 'new',
+      phase: strOrNull(card['phase']),
+      locked: card['locked'] === true,
+      start: str(card['start']),
+    });
+  }
+  const personas: McPartPersona[] = [];
+  for (const raw of arr(body['personas'])) {
+    const persona = rec(raw);
+    if (persona !== null && typeof persona['id'] === 'string') {
+      personas.push({
+        id: persona['id'],
+        title: str(persona['title'], persona['id']),
+        role: str(persona['role']),
+        color: str(persona['color']),
+        model: str(persona['model']),
+      });
+    }
+  }
+  return {
+    ticket: body['ticket'],
+    title: str(body['title'], body['ticket']),
+    parts,
+    gate: str(body['gate'], 'build'),
+    defaultPersona: strOrNull(body['defaultPersona']),
+    personas,
+    warnings: arr(body['warnings']).filter((w): w is string => typeof w === 'string'),
+  };
+}

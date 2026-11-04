@@ -1030,6 +1030,11 @@ export interface TicketVm {
    * leaves it off and the button hides.
    */
   shape?(ticketId: string): void;
+  /**
+   * The ticket face's 'Plan to approve' (E10-4): opens the approval of
+   * the plan's parts. Optional — an adapter without it hides the button.
+   */
+  approvePlan?(ticketId: string): void;
   /** The raw edit's save; one commit on the desk, the refusal inline. */
   save(text: string): Promise<TicketSaveReply>;
   accept(): Promise<TicketActionReply>;

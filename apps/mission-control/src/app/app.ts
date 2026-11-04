@@ -19,6 +19,7 @@ import { PersonaDetail } from '@mission-ui/team/detail';
 import { TicketView } from '@mission-ui/ticket/view';
 import { TicketEdit } from '@mission-ui/ticket/edit';
 import { PlanPane } from '@mission-ui/plan/plan-pane';
+import { PlanApprove } from '@mission-ui/plan/approve';
 
 export type { McTab };
 
@@ -58,6 +59,7 @@ function mediaSignal(query: string): Signal<boolean> {
     TicketView,
     TicketEdit,
     PlanPane,
+    PlanApprove,
     Empty,
     Toast,
     Pairing,
@@ -71,6 +73,8 @@ export class App {
   protected readonly tab = this.state.tab;
   /** The ticket screen: fullscreen overlay on the phone, detail column from 768 px. */
   protected readonly ticketOpen = this.state.ticketOpen;
+  /** The plan to approve (E10-4): a layer under the ticket screen, so a part's ticket opens over it. */
+  protected readonly approveOpen = this.state.approvalTicket;
   /** The open persona 1:1 (same layering as the ticket). */
   protected readonly personaOpen = this.state.personaDetail;
   /** The Work tab's amber counter: the needs count. */

@@ -362,5 +362,20 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     counted from the plan's `### Parts`, never fixed. Questions are
     answer cards above the composer (pick, then send; the pick is never
     the action).
+  - **Plan to approve (E10-4, milestone 126) — the owner's tap releases,
+    the chat proposes nothing.** The approval is a tap on the plan card
+    itself (`POST /api/tickets/<id>/release`), not a chat proposal card:
+    the plan is the shared document the owner just read, the screen
+    states what the tap will do (Mission Control's proposal text:
+    approve all N parts, or only the first) and nothing is written before
+    it, so the iron rule holds without a second confirmation in the
+    thread. The desk owns the edits (`GET/POST /api/tickets/<id>/parts`
+    — persona pick, move, delete over `### Parts`) and the release
+    (`BoardService.releasePlan`): one ticket per new part in the build
+    queue with `parent:`, `persona:`, its own `chain:` and `blocked-by:`
+    the part before it; a part that is a ticket is locked. Locked is
+    wider than "running" on purpose — a released part is a ticket and its
+    order, owner and removal live there. No overlap guard, touches or
+    routing (D5).
   Not yet manually verified by the owner; the etappen land one
   milestone at a time (roadmap, "Mission Control redesign").

@@ -22,6 +22,7 @@ import { MC_WORK_STATE, type McPersona, type McWorkState } from '@mission-ui/wor
 import { MC_SETTINGS_STATE } from '@mission-ui/settings/settings.model';
 import { MC_TOAST_STATE } from '@mission-ui/toast.model';
 import { MC_PLAN_STATE, type McPlanState } from '@mission-ui/plan/plan.model';
+import { MC_APPROVE_STATE, type McApproveState } from '@mission-ui/plan/approve.model';
 
 /**
  * One shared McState for the whole shell: the chat tab consumes it
@@ -64,6 +65,30 @@ export const appConfig: ApplicationConfig = {
           },
           setFlush: (flush) => state.setPlanFlush(flush),
           busy: state.shapeBusy,
+        };
+      },
+    },
+    {
+      provide: MC_APPROVE_STATE,
+      useFactory: (): McApproveState => {
+        const state = inject(McState);
+        return {
+          open: () => state.approvalTicket(),
+          approval: () => state.approval(),
+          error: () => state.approvalError(),
+          readOnly: () => state.readOnly(),
+          estimate: (gate, persona) => state.estimateFor(gate, persona),
+          edit: (edit) => state.editParts(edit),
+          release: (scope) => state.releaseParts(scope),
+          changeSplit: () => {
+            const ticket = state.approvalTicket();
+            state.closeApproval();
+            if (ticket !== null) {
+              state.beginShape(ticket);
+            }
+          },
+          close: () => state.closeApproval(),
+          openTicket: (id) => state.openTicket(id),
         };
       },
     },
@@ -299,6 +324,10 @@ export const appConfig: ApplicationConfig = {
           },
           onClose: () => state.closeTicket(),
           shape: (ticketId) => state.beginShape(ticketId),
+          approvePlan: (ticketId) => {
+            state.closeTicket();
+            void state.openApproval(ticketId);
+          },
           proposeChain: (text) => state.prefillChat(text),
           prefillChat: (text) => state.prefillChat(text),
           save: async (text) => {

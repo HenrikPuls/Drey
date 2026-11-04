@@ -14,6 +14,7 @@ import {
   type PermissionMode,
   type QuestionAnswers,
 } from '../fleet/protocol';
+import type { PlanPartsEdit, PlanReleaseScope } from '../contracts/plan-approval';
 import { DEFAULT_PRIORITY_CONFIG, titleFromDescription, type PriorityConfig, type TicketPriority, type TicketTrack } from '../contracts/tickets';
 
 export type Parsed<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: string };
@@ -169,6 +170,58 @@ export function parseSendBack(payload: unknown): Parsed<SendBackCommand> {
     return refuse('the send-back note is empty');
   }
   return ok({ id: p['id'], note: note.slice(0, 500) });
+}
+
+export interface PlanPartsEditCommand {
+  readonly id: string;
+  readonly edit: PlanPartsEdit;
+}
+
+const PERSONA_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/** The plan to approve's list edit (E10-4): `{op:'persona', index, persona|null}`, `{op:'move', from, to}`, `{op:'delete', index}`. */
+export function parsePlanPartsEdit(payload: unknown): Parsed<PlanPartsEditCommand> {
+  const p = record(payload);
+  if (typeof p['id'] !== 'string') {
+    return refuse('bad parts payload');
+  }
+  const int = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 200 ? v : null);
+  switch (p['op']) {
+    case 'persona': {
+      const index = int(p['index']);
+      const persona = p['persona'];
+      if (index === null || (persona !== null && (typeof persona !== 'string' || !PERSONA_ID.test(persona)))) {
+        return refuse('bad persona edit');
+      }
+      return ok({ id: p['id'], edit: { op: 'persona', index, persona: persona as string | null } });
+    }
+    case 'move': {
+      const from = int(p['from']);
+      const to = int(p['to']);
+      return from === null || to === null ? refuse('bad move') : ok({ id: p['id'], edit: { op: 'move', from, to } });
+    }
+    case 'delete': {
+      const index = int(p['index']);
+      return index === null ? refuse('bad delete') : ok({ id: p['id'], edit: { op: 'delete', index } });
+    }
+    default:
+      return refuse('parts op must be persona, move or delete');
+  }
+}
+
+export interface PlanReleaseCommand {
+  readonly id: string;
+  readonly scope: PlanReleaseScope;
+}
+
+/** The approval (E10-4): `scope` is `all` (the default) or `first`. */
+export function parsePlanRelease(payload: unknown): Parsed<PlanReleaseCommand> {
+  const p = record(payload);
+  if (typeof p['id'] !== 'string') {
+    return refuse('bad release payload');
+  }
+  const scope = p['scope'] ?? 'all';
+  return scope === 'all' || scope === 'first' ? ok({ id: p['id'], scope }) : refuse('release scope must be all or first');
 }
 
 export interface StartRunCommand {

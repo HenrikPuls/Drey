@@ -185,15 +185,20 @@ owner builds without the tickets system.
   split (file list left, one file's diff right) and the viewed marks on
   the desk instead of per device; E11-2 shipped both inside the proof
   card's accordion.
+- **E10-4b — Plan to approve follow-ups.** The desktop widget is E13-10;
+  here: the parent ticket leaves "needs shaping" once its parts are
+  released (today it stays in its phase with one Log line), a per-gate
+  estimate for the whole flow (the card estimates the build gate), the
+  estimate reading "not yet" until the desk's answer arrives (it cannot
+  tell "asked, no basis" from "not asked yet"), and a
+  Change-flow link that opens the flow editor (E10-5). Adding a part or
+  renaming one from the card stays out on purpose: the cut changes in the
+  plan or by asking Mission Control.
 - **E10-3b — Shape mode follow-ups.** Tinted line marks inside the
   rendered plan and a line-level "tap a line to edit" on the phone sheet
   (both want the Markdown surface, E12-6); the iPad board's formatting
   strip over the plan; Paul on his own persona model instead of the chat
   model.
-- **E10-4 — Plan to approve.** One card per part with the builder
-  persona, flow row, move / delete (second press), running parts
-  locked, the start rule, the estimate, Mission Control's proposal
-  (recut of T-0079).
 - **E10-5 — Flow editor.** Chain-grammar extension (`before` / `after`,
   move, per-part scope), Paul drafts a flow, "Save flow".
 - **E12-5 — Device rules audit.** 47/34 pt insets, 44 pt targets,
@@ -298,7 +303,8 @@ Order and dependencies (an item needs everything it names):
 10. **E13-10 — Plan to approve in the ticket.** The Parts block as an editor
     widget under the header (persona per part, move / delete with a second
     press, running parts locked, flow row, estimate, Approve plan). Needs
-    **E10-4** (the engine side and the proposal) and E13-6.
+    E13-6; the engine side (`GET/POST /api/tickets/<id>/parts`, `POST
+    …/release`) and the proposal text shipped with **E10-4** (milestone 126).
 11. **E13-11 — Flow tab.** The flow editor as an editor tab; the default
     flow also under Settings → Tickets. Needs **E10-5**.
 12. **E13-12 — Settings → Tickets in Drey.** Team, default flow, budget and

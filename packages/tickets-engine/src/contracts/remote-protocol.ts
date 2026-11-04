@@ -124,6 +124,7 @@ export interface ChatChangePayload {
 export type { RefineReply, TicketReply, AttachmentReply } from './replies';
 import type { RefineReply, TicketReply, AttachmentReply } from './replies';
 import type { EstimateKey, RunEstimate } from '../core/estimate';
+import type { PlanPartsEdit, PlanPartsReply, PlanReleaseReply, PlanReleaseScope } from './plan-approval';
 import type { ReviewComment } from '../core/review-feedback';
 import type { TicketDiff, TicketFileReply, WorktreeFile } from '../core/worktree-changes';
 
@@ -212,6 +213,12 @@ export interface TicketsRemotePort {
   ticketFile(id: string, path: string): Promise<TicketFileReply>;
   /** The run estimate from the owner's own history; null below three similar runs (E11-4). */
   estimate(key: EstimateKey): Promise<RunEstimate | null>;
+  /** The plan to approve (E10-4): a ticket's parts with their tickets, states, flows and the persona picker. */
+  planParts(id: string): Promise<PlanPartsReply>;
+  /** One owner edit on the parts list: persona pick, move, delete (E10-4). */
+  planPartsEdit(cmd: { id: string; edit: PlanPartsEdit }, actor: string): Promise<MutationResult>;
+  /** The approval: mints a ticket per new part, or only the first (E10-4). */
+  planRelease(cmd: { id: string; scope: PlanReleaseScope }, actor: string): Promise<PlanReleaseReply>;
 
   /** The Mission Control chat surface (E5a) — the service's port verbatim. */
   chatSessions(): Promise<readonly ChatSessionMeta[]>;
