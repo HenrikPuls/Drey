@@ -1,6 +1,6 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import type { RemoteStatus } from '../../../packages/tickets-engine/src/server/service';
-import { ageOf } from '../shared/tickets';
+import { deviceListOf } from '../shared/device-list';
 import { el, textButton } from './settings-dom';
 
 /**
@@ -106,7 +106,7 @@ export function createRemoteSection(api: DreyPluginApi): RemoteSection {
   pairing.append(qr, pairText);
 
   // Devices
-  const devicesHead = el('h4', 'tset-remote-sub', 'Paired devices');
+  const devicesHead = el('h4', 'tset-remote-sub');
   const devices = el('div', 'tset-remote-devices');
 
   section.append(head, intro, rows, pairHead, pairForm, pairing, devicesHead, devices);
@@ -164,26 +164,20 @@ export function createRemoteSection(api: DreyPluginApi): RemoteSection {
       }
     }
 
-    devicesHead.hidden = next.devices.length === 0;
+    const list = deviceListOf(next.devices, Date.now());
+    devicesHead.textContent = list.heading;
     devices.replaceChildren(
-      ...next.devices.map((d) => {
+      ...list.rows.map((d) => {
         const row = el('div', 'tset-remote-device');
-        const name = el('span', 'tset-remote-device-name', d.name);
-        const meta = el(
-          'span',
-          'tset-muted',
-          [
-            d.readOnly ? 'read only' : null,
-            `paired ${new Date(d.pairedAt).toLocaleDateString()}`,
-            d.lastSeen === null ? 'not seen yet' : `seen ${ageOf(d.lastSeen)} ago`,
-          ]
-            .filter((x): x is string => x !== null)
-            .join(' · '),
-        );
+        const name = el('span', 'tset-remote-device-name', d.label);
+        const meta = el('span', 'tset-muted', d.line);
+        const marks = [d.readOnly ? 'Read-only' : null, d.inactive ? 'Inactive' : null]
+          .filter((x): x is string => x !== null)
+          .map((text) => el('span', text === 'Inactive' ? 'tset-chip tset-error' : 'tset-chip tset-chip-manual', text));
         const revoke = textButton('Revoke');
-        revoke.title = `Revoke ${d.name}: it must pair again to get in`;
+        revoke.title = `Revoke ${d.label}: it must pair again to get in`;
         revoke.addEventListener('click', () => void call('remoteRevoke', { id: d.id }));
-        row.append(name, meta, revoke);
+        row.append(name, ...marks, meta, revoke);
         return row;
       }),
     );

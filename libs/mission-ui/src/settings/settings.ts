@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { deviceListOf } from './device-list';
 import {
   ACCENTS,
   ACCENT_COLOR,
@@ -13,7 +14,13 @@ import {
   type TextSize,
   type ThemeName,
 } from '../theme';
-import { MC_SETTINGS_STATE, type McChatTest, type McSettingsDevice } from './settings.model';
+import {
+  MC_SETTINGS_STATE,
+  countdownOf,
+  groupedCode,
+  qrPathOf,
+  type McChatTest,
+} from './settings.model';
 
 /** The settings screen's pages. */
 export type SettingsPage = 'appearance' | 'chat' | 'devices' | 'engine';
@@ -77,6 +84,9 @@ export class Settings {
   constructor() {
     this.wideQuery?.addEventListener('change', () => this.wide.set(this.wideQuery?.matches ?? false));
     void this.state?.load();
+    void this.state?.refreshPairing?.();
+    const timer = setInterval(() => this.tick(), 1000);
+    inject(DestroyRef).onDestroy(() => clearInterval(timer));
   }
 
   protected open(page: SettingsPage): void {
@@ -102,8 +112,7 @@ export class Settings {
       }
       case 'devices': {
         const count = this.view()?.devices.length;
-        return count === undefined ? '' : `${count} paired`;
-      }
+        return count === undefined ? '' : `${count} paired`;      }
       case 'engine':
         return '';
     }
@@ -176,20 +185,71 @@ export class Settings {
 
   // -- devices ----------------------------------------------------------------
 
-  protected seenOf(device: McSettingsDevice): string {
-    const at = device.lastSeen ?? device.pairedAt;
-    const date = Date.parse(at);
-    return Number.isNaN(date) ? '' : `${device.lastSeen === null ? 'Paired' : 'Seen'} ${new Date(date).toLocaleDateString()}`;
+  /** The clock the list's "3 h ago" and the countdown read; one tick a second. */
+  protected readonly now = signal(Date.now());
+
+  /** The heading with the total and one row per device (D-2). */
+  protected readonly list = computed(() => deviceListOf(this.view()?.devices ?? [], this.now()));
+
+  /** This device may mint others: it is known and not read-only. */
+  protected readonly canPair = computed(() => {
+    const me = this.view()?.devices.find((d) => d.current);
+    return this.state?.startPairing !== undefined && me !== undefined && !me.readOnly;
+  });
+  protected readonly waiting = computed(() => this.state?.pairingView?.() ?? null);
+  protected readonly pairName = signal('');
+  protected readonly pairReadOnly = signal(false);
+  protected readonly pairBusy = signal(false);
+
+  protected readonly code = computed(() => groupedCode(this.waiting()?.pairing?.code ?? ''));
+  protected readonly qr = computed(() => qrPathOf(this.waiting()?.pairing?.qr ?? []));
+  protected readonly countdown = computed(() => {
+    const p = this.waiting()?.pairing;
+    return p === null || p === undefined ? '' : countdownOf(p.expiresAt, this.now());
+  });
+
+  private ticks = 0;
+
+  /** One second: the clock moves; while a pairing waits, the engine is asked now and then. */
+  protected tick(): void {
+    this.now.set(Date.now());
+    if (this.waiting()?.pairing !== null && this.waiting()?.pairing !== undefined && ++this.ticks % 3 === 0) {
+      void this.state?.refreshPairing?.();
+    }
+  }
+
+  protected onPairName(event: Event): void {
+    this.pairName.set((event.target as HTMLInputElement).value);
+  }
+
+  protected onPairReadOnly(event: Event): void {
+    this.pairReadOnly.set((event.target as HTMLInputElement).checked);
+  }
+
+  protected async startPairing(): Promise<void> {
+    if (this.state?.startPairing === undefined || this.pairBusy()) {
+      return;
+    }
+    this.pairBusy.set(true);
+    try {
+      await this.state.startPairing(this.pairName().trim(), this.pairReadOnly());
+    } finally {
+      this.pairBusy.set(false);
+    }
+  }
+
+  protected async cancelPairing(): Promise<void> {
+    await this.state?.cancelPairing?.();
   }
 
   /** First press arms, the second revokes. */
-  protected async revoke(device: McSettingsDevice): Promise<void> {
-    if (this.armed() !== device.id) {
-      this.armed.set(device.id);
+  protected async revokeId(id: string): Promise<void> {
+    if (this.armed() !== id) {
+      this.armed.set(id);
       return;
     }
     this.armed.set(null);
-    await this.state?.revokeDevice(device.id);
+    await this.state?.revokeDevice(id);
   }
 
   // -- engine -----------------------------------------------------------------

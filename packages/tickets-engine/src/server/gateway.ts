@@ -222,7 +222,13 @@ export class RemoteGateway {
     const off = this.options.router.port.onChanged((what: RemoteChange, payload?: ChatChangePayload) => {
       res.write(`event: ${what}\ndata: ${JSON.stringify(payload ?? {})}\n\n`);
     });
-    const keepAlive = setInterval(() => res.write(': ping\n\n'), KEEPALIVE_MS);
+    const { router } = this.options;
+    // An open stream is a connected device: the keep-alive refreshes its
+    // "last connected" (D-2) — the registry persists at most once a minute.
+    const keepAlive = setInterval(() => {
+      res.write(': ping\n\n');
+      void router.devices.touch(auth.device.id, router.now()).catch(() => undefined);
+    }, KEEPALIVE_MS);
     const close = (): void => {
       clearInterval(keepAlive);
       off();

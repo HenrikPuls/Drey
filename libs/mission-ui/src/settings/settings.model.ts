@@ -93,6 +93,82 @@ export function parseSettings(json: unknown): McSettingsView | null {
   };
 }
 
+/** A pairing waiting for its device (D-2): what the desk shows, now on Mission Control too. */
+export interface McPairing {
+  /** The one-time code, ten characters without a separator. */
+  readonly code: string;
+  readonly url: string;
+  readonly deviceName: string;
+  readonly readOnly: boolean;
+  readonly expiresAt: string;
+  /** The QR code of `url`, one string of `0`/`1` per row. */
+  readonly qr: readonly string[];
+}
+
+/** The engine's answer to a pairing call: the waiting pairing (or none) and the "set the device address" case. */
+export interface McPairingView {
+  readonly pairing: McPairing | null;
+  readonly needsPublicUrl: boolean;
+}
+
+/** Reads a pairing answer tolerantly; null = not a pairing answer. */
+export function parsePairingView(json: unknown): McPairingView | null {
+  if (typeof json !== 'object' || json === null || (json as Record<string, unknown>)['ok'] !== true) {
+    return null;
+  }
+  const body = json as Record<string, unknown>;
+  const p = body['pairing'] as Record<string, unknown> | null | undefined;
+  const needsPublicUrl = body['needsPublicUrl'] === true;
+  if (p === null || p === undefined) {
+    return { pairing: null, needsPublicUrl };
+  }
+  if (
+    typeof p !== 'object' ||
+    typeof p['code'] !== 'string' ||
+    typeof p['url'] !== 'string' ||
+    typeof p['expiresAt'] !== 'string' ||
+    !Array.isArray(p['qr'])
+  ) {
+    return null;
+  }
+  return {
+    needsPublicUrl,
+    pairing: {
+      code: p['code'],
+      url: p['url'],
+      deviceName: typeof p['deviceName'] === 'string' ? p['deviceName'] : 'Phone',
+      readOnly: p['readOnly'] === true,
+      expiresAt: p['expiresAt'],
+      qr: p['qr'].filter((row): row is string => typeof row === 'string'),
+    },
+  };
+}
+
+/** "XXXXX-XXXXX" — the code as it is typed. */
+export function groupedCode(code: string): string {
+  return code.length === 10 ? `${code.slice(0, 5)}-${code.slice(5)}` : code;
+}
+
+/** "4:32" until the code expires; "0:00" once it has. */
+export function countdownOf(expiresAt: string, now: number): string {
+  const left = Math.max(0, Math.ceil((Date.parse(expiresAt) - now) / 1000));
+  return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+}
+
+/** The QR as one SVG path of unit squares (dark modules); `size` is the grid edge. */
+export function qrPathOf(rows: readonly string[]): { readonly d: string; readonly size: number } {
+  let d = '';
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      if (row[x] === '1') {
+        d += `M${x + 4} ${y + 4}h1v1h-1z`;
+      }
+    }
+  });
+  // Four modules of quiet zone on every side.
+  return { d, size: rows.length + 8 };
+}
+
 /** What the settings screen consumes of the app state (the per-vault half). */
 export interface McSettingsState {
   readonly settings: Signal<McSettingsView | null>;
@@ -105,6 +181,13 @@ export interface McSettingsState {
   revokeDevice(id: string): Promise<McSettingsReply>;
   /** The Chat row's "Test connection": probes the endpoint the chat would use. Optional: a desk without it hides the button. */
   testChat?(): Promise<McChatTest>;
+  /** The pairing waiting for a device, started from here (D-2); absent = this client cannot pair. */
+  readonly pairingView?: Signal<McPairingView | null>;
+  /** Starts a pairing (name, read-only); the engine refuses a read-only device. */
+  startPairing?(name: string, readOnly: boolean): Promise<McSettingsReply>;
+  cancelPairing?(): Promise<McSettingsReply>;
+  /** Re-reads the waiting pairing; once it is gone (used or expired) the device list reloads. */
+  refreshPairing?(): Promise<void>;
 }
 
 export const MC_SETTINGS_STATE = new InjectionToken<McSettingsState>('mc.settings-state');

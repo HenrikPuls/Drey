@@ -441,3 +441,15 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   use only. The rest of the editor (tag pills, spellcheck, slash menu,
   frontmatter fold, plugin extensions) stays desktop-only in
   `src/app/editor/`.
+
+  - **A paired device may pair another (D-2, milestone 135).** Settings →
+    Devices in Mission Control starts the one waiting pairing over
+    `GET /api/pairing`, `POST /api/pairing/start` and `POST /api/pairing/cancel`
+    (engine `src/server/router.ts`, `PairingAccess`), the same one-time code,
+    five-minute expiry and single slot the desktop uses. Trust model: a
+    device that already holds the owner's access may mint more of it (that
+    is the point), so a **read-only device is refused on all three routes**
+    — it could otherwise promote itself to a full device — and the engine
+    log records which device started each pairing; the way in stays a code
+    that exists, is used once and expires, and a revoked device loses
+    nothing it could not already do.

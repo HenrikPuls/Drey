@@ -1,3 +1,62 @@
+### Milestone 135 — Paired devices list and pairing from Mission Control (D-2)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04,
+outside the list. The paired-devices view read like a log of when devices
+reported (one phone paired twice, Mission Control showed only a date). The
+owner: "I only want to know how many there are in total and, for each one,
+when it last connected" — and "Mission Control should also be able to do the
+pairing."
+
+- **One list, two screens.** The pure model is
+  `packages/tickets-engine/src/contracts/device-list.ts` (`deviceListOf`):
+  the heading states the total ("4 paired devices", "1 paired device",
+  "No paired devices"); one row per device, most recently connected first,
+  "Last connected <local date and time> · 3 h ago" or "Paired <date>, not
+  connected yet"; **This device** (Mission Control knows it), **Read-only**,
+  **Inactive** (not connected for 14+ days — a marker, nothing is removed);
+  a name that appears twice gets a short id suffix ("Phone · f6a7") so the
+  stale leftover can be spotted and revoked. Drey's Settings → Tickets →
+  Remote access (`settings-remote.ts`, plain DOM, via the
+  `plugins/tickets/shared/device-list.ts` shim) and Mission Control's
+  Settings → Devices (`libs/mission-ui/src/settings/`, which keeps a local
+  copy of the file like `team.ts` — the lib imports nothing from the repo)
+  draw it. A spec in the lib runs both copies on one case table
+  (`device-list.cases.ts`), so they cannot drift apart.
+- **`lastSeen` means "last connected".** `DeviceRegistry.touch` already ran
+  on every authenticated request, persisted at most once a minute per
+  device (checked, unchanged). The gap: an open event stream (phone left on
+  the board) only counted at connect time; the stream's 25 s keep-alive now
+  touches the device too.
+- **Pairing from Mission Control.** Settings → Devices, for a paired device
+  that is **not read-only**, "Pair another device": name, Read-only switch,
+  "Show pairing code", then code (`XXXXX-XXXXX`), QR (SVG from the engine's
+  matrix), the pairing link, an expiry countdown and Cancel; once the second
+  device used the code the card vanishes and the list reloads (3 s poll while
+  a pairing waits). Engine routes (`server/router.ts`, `PairingAccess` over
+  the same `PairingCodes` slot as the desktop): `GET /api/pairing`,
+  `POST /api/pairing/start {name, readOnly}`, `POST /api/pairing/cancel`,
+  all behind the bearer token; **a read-only device gets 403 on all three**
+  (reading the waiting code is refused too — it is a credential) and never
+  sees the button. The engine log names who started it ("remote Owner iPad
+  (aaaa…): pairing started for "Pia phone""). One-time code, five-minute
+  expiry, the failure limiter and `POST /api/pair` are unchanged; there is
+  no new way to pair without an existing code. A missing public URL gives
+  the desktop's hint ("Set the device address first — a phone cannot open
+  127.0.0.1"). Trust model: ADR-0088 later change.
+- **Specs.** `contracts/device-list.spec.ts` (heading singular/plural/none,
+  relative hints, inactive at exactly 14 days, duplicate suffix, ordering),
+  `server/pairing-access.spec.ts` (start → a second client pairs → listed,
+  read-only 403 on start/cancel/read, bad payload, cancel, expiry, 404 on a
+  host without it), `libs/mission-ui/src/settings/settings-devices.spec.ts`
+  (parity, rows and markers, form and start, no button for read-only,
+  code/QR/countdown/cancel, the address hint, the 3 s poll),
+  `apps/mission-control state.spec.ts` (start/cancel/refresh reload, refusal
+  toast), `plugins/tickets/renderer/settings-remote.spec.ts` (the desktop
+  list). Seen working against a real engine in a throwaway home and vault:
+  code and QR appear in Mission Control, a second client pairs with the
+  code, the new device is listed ("5 paired devices"), a read-only device
+  gets 403 and no button.
+
 ### Milestone 133 — Markdown surface for Mission Control (E12-6)
 
 **Not yet manually verified by the owner.** Owner priority, 2026-11-04 (the

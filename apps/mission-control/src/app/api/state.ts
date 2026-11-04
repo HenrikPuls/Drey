@@ -17,7 +17,13 @@
 import { computed, signal } from '@angular/core';
 import { ApiError, McClient, type McBootHints, type McEventHandlers } from './client';
 import { type McChatUploadReply } from '@mission-ui/chat/chat.model';
-import { parseSettings, type McChatTest, type McSettingsView } from '@mission-ui/settings/settings.model';
+import {
+  parsePairingView,
+  parseSettings,
+  type McChatTest,
+  type McPairingView,
+  type McSettingsView,
+} from '@mission-ui/settings/settings.model';
 import {
   parseActiveSession,
   parseChatEvent,
@@ -130,6 +136,8 @@ export class McState {
   /** The per-vault settings (E12-3); null until the first load or after a failure. */
   readonly settings = signal<McSettingsView | null>(null);
   readonly settingsError = signal<string | null>(null);
+  /** The pairing waiting for a device, started from Settings → Devices (D-2); null = none. */
+  readonly pairingView = signal<McPairingView | null>(null);
   readonly work = signal<WorkView>({ groups: [], priorities: DEFAULT_PRIORITY_CONFIG });
   readonly needs = signal<readonly NeedView[]>([]);
   readonly team = signal<TeamView>({ personas: [], runs: [] });
@@ -1611,6 +1619,48 @@ export class McState {
 
   revokeDevice(id: string): Promise<McReply> {
     return this.settingsWrite('/api/settings/devices/revoke', { id });
+  }
+
+  // --- pairing from this device (D-2) -------------------------------------------
+
+  /** Starts a pairing (`POST /api/pairing/start`); the engine refuses a read-only device. */
+  async startPairing(name: string, readOnly: boolean): Promise<McReply> {
+    return this.pairingCall('POST', '/api/pairing/start', { name, readOnly });
+  }
+
+  async cancelPairing(): Promise<McReply> {
+    return this.pairingCall('POST', '/api/pairing/cancel', {});
+  }
+
+  /**
+   * Re-reads the waiting pairing (`GET /api/pairing`). Once a pairing that
+   * was up is gone -- its code was used or it expired -- the device list
+   * reloads, so the new device appears.
+   */
+  async refreshPairing(): Promise<void> {
+    const had = this.pairingView()?.pairing != null;
+    const body = await this.client.request<unknown>('GET', '/api/pairing').catch(fail);
+    const view = isFailure(body) ? null : parsePairingView(body);
+    this.pairingView.set(view);
+    if (had && view?.pairing == null) {
+      await this.load();
+    }
+  }
+
+  private async pairingCall(method: 'POST', path: string, payload: unknown): Promise<McReply> {
+    const body = await this.client.request<Record<string, unknown>>(method, path, payload).catch(fail);
+    if (isFailure(body)) {
+      this.toast(body.error, 'error');
+      return body;
+    }
+    const view = parsePairingView(body);
+    if (view === null) {
+      const refused = refusal(body, 'the desk did not take the pairing');
+      this.toast(refused.error, 'error');
+      return refused;
+    }
+    this.pairingView.set(view);
+    return { ok: true };
   }
 
   /** One settings write: the desk answers with the fresh view, a refusal toasts why. */

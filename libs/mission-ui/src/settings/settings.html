@@ -131,26 +131,76 @@
             }
           }
           @case ('devices') {
-            <p class="note">Everything on this page applies to all your devices.</p>
             @if (error(); as message) {
               <p class="inline-error">{{ message }}</p>
             }
             @if (view(); as v) {
+              <h3 class="cap" role="status">{{ list().heading }}</h3>
               <div class="group">
-                @for (d of v.devices; track d.id) {
-                  <div class="row dev">
+                @for (r of list().rows; track r.id) {
+                  <div class="row dev" [class.inactive]="r.inactive">
                     <span class="grow">
-                      <b>{{ d.name }}</b>
-                      <small class="sub">{{ d.current ? 'This device' : seenOf(d) }}{{ d.readOnly ? ' · read-only' : '' }}</small>
+                      <span class="name-line">
+                        <b>{{ r.label }}</b>
+                        @if (r.current) {
+                          <span class="tag me">This device</span>
+                        }
+                        @if (r.readOnly) {
+                          <span class="tag">Read-only</span>
+                        }
+                        @if (r.inactive) {
+                          <span class="tag warn">Inactive</span>
+                        }
+                      </span>
+                      <small class="sub">{{ r.line }}</small>
                     </span>
-                    @if (!d.current) {
-                      <button type="button" class="act" [class.armed]="armed() === d.id" (click)="revoke(d)">
-                        {{ armed() === d.id ? 'Confirm revoke' : 'Revoke' }}
+                    @if (!r.current) {
+                      <button type="button" class="act" [class.armed]="armed() === r.id" (click)="revokeId(r.id)">
+                        {{ armed() === r.id ? 'Confirm revoke' : 'Revoke' }}
                       </button>
                     }
                   </div>
                 }
               </div>
+
+              @if (canPair()) {
+                <h3 class="cap">Pair another device</h3>
+                @if (waiting()?.pairing; as p) {
+                  <div class="pairing">
+                    <svg
+                      class="qr"
+                      role="img"
+                      [attr.viewBox]="'0 0 ' + qr().size + ' ' + qr().size"
+                      [attr.aria-label]="'QR code for ' + p.url"
+                      shape-rendering="crispEdges"
+                    >
+                      <rect [attr.width]="qr().size" [attr.height]="qr().size" fill="#fff" />
+                      <path [attr.d]="qr().d" fill="#000" />
+                    </svg>
+                    <div class="code" aria-label="Pairing code">{{ code() }}</div>
+                    <p class="link">{{ p.url }}</p>
+                    <p class="note">
+                      For "{{ p.deviceName }}"{{ p.readOnly ? ', read-only' : '' }} · expires in {{ countdown() }}
+                    </p>
+                    @if (waiting()?.needsPublicUrl) {
+                      <p class="inline-error">Set the device address first — a phone cannot open 127.0.0.1.</p>
+                    }
+                    <button type="button" class="btn ghost" (click)="cancelPairing()">Cancel</button>
+                  </div>
+                } @else {
+                  <div class="group">
+                    <label class="row">
+                      <span class="grow">Device name</span>
+                      <input type="text" class="txt" maxlength="40" placeholder="Phone" aria-label="Device name" [value]="pairName()" (input)="onPairName($event)" />
+                    </label>
+                    <label class="row sw-row">
+                      <span class="grow">Read-only</span>
+                      <input type="checkbox" role="switch" class="sw" [checked]="pairReadOnly()" (change)="onPairReadOnly($event)" />
+                    </label>
+                  </div>
+                  <button type="button" class="btn" [disabled]="pairBusy()" (click)="startPairing()">Show pairing code</button>
+                }
+              }
             }
           }
           @case ('engine') {
