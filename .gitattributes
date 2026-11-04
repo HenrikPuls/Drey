@@ -4,3 +4,6 @@
 # the LF blobs out as CRLF and fail CI while local worktrees (never
 # re-checked out) stay green. eol=lf overrides autocrlf at checkout.
 packages/tickets-engine/prompts/*.md text eol=lf
+
+# Migration-tool fixtures are legacy ticket files compared byte for byte (E14-3): LF at checkout
+packages/tickets-engine/src/migrate/fixtures/** text eol=lf
