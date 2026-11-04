@@ -81,13 +81,14 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   switches to watch mode, anything else passes through to vitest
   (`-t "name"`), and a path fragment instead of an id scopes outside
   `plugins/` (`shared`, `electron/ipc`). `npm run test:plugins` runs
-  the whole out-of-Angular suite, `npm run test:app` the three Angular
-  suites once — drey's renderer, then `mission-control`, then `mission-ui` (the
-  `@mission-ui` lib's specs — `ng test mission-control` can't see them: the
-  unit-test builder discovers spec files inside the project's sourceRoot
-  only, and the lib lives outside it). `npm run test:all` — lint, the nine
-  typechecks, import cycles,
-  all three suites — is the **release gate**: `prepack` runs it before every
+  the whole out-of-Angular suite, `npm run test:app` the four Angular
+  suites once — drey's renderer, then `mission-control`, then `mission-ui`
+  (the `@mission-ui` lib's specs), then `markdown-surface` (the
+  `@markdown-surface` lib's specs) — `ng test mission-control` can't see
+  the libs' specs: the unit-test builder discovers spec files inside the
+  project's sourceRoot only, and the libs live outside it. `npm run
+  test:all` — lint, the ten typechecks, import cycles,
+  all four suites — is the **release gate**: `prepack` runs it before every
   `npm run pack` (skip the gate with `npm run pack --ignore-scripts`).
   `pack:dir` stays the fast unpacked smoke build and runs no gate —
   npm fires no pre-hooks for colon-named scripts anyway; run
@@ -493,6 +494,12 @@ Renderer (`src/app/`):
 
 Cross-layer:
 
+- `libs/markdown-surface/` — the framework-free CodeMirror core both clients
+  share (E12-6): the extended dialect, Live Preview / View / Source
+  (`engine.ts`), theme, link and formatting actions, `createMarkdownView`.
+  The desktop `MarkdownSurface` and Mission Control's `mc-markdown`
+  (`libs/mission-ui/src/markdown/`) are its two wrappers; specs run with
+  `ng test markdown-surface`
 - `shared/plugin-api/` — the frozen, versioned plugin SDK (manifest,
   `DreyPluginApi`, `MainPluginContext`, `PLUGIN_API_VERSION`)
 - `shared/ipc-api.ts` — the base IPC contract: a barrel over

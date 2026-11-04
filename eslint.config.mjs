@@ -239,6 +239,29 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // The Markdown surface lib (E12-6, milestone 133): CodeMirror + the
+    // dialect, shared by Drey's editor and Mission Control. It knows no
+    // Angular, no Electron and no host -- its own folder and shared/ only.
+    files: ['libs/markdown-surface/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@angular/*', '@angular'],
+              message: 'The Markdown surface lib is framework-free: the Angular wrappers live in src/ and libs/mission-ui.',
+            },
+            NO_RENDERER,
+            NO_MAIN,
+            NO_PLUGINS,
+            NO_APPS,
+          ],
+        },
+      ],
+    },
+  },
   // Plugin authoring rules (ADR-0044 rules 1 + 2) plus the plugin's side of
   // the dependency rules: its own folder and `shared/`, nothing else.
   // `allowTypeImports` keeps the ADR's escape hatch: a plugin may *type*

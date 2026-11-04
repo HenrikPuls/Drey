@@ -70,7 +70,7 @@ and suite-green but await the owner's
 rounds** — with E9 the whole E0–E9 arc stands built and the concept
 is complete, caveat:
 none of it is owner-verified yet; the next step is the owner's
-verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) and 130 (E13-8, Board and Team tabs, the Capacity band) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
+verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document), 130 (E13-8, Board and Team tabs, the Capacity band) and 133 (E12-6, the Markdown surface lib and Mission Control's View / Live / Source) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
@@ -207,7 +207,8 @@ owner builds without the tickets system.
   plan or by asking Mission Control.
 - **E10-3b — Shape mode follow-ups.** Tinted line marks inside the
   rendered plan and a line-level "tap a line to edit" on the phone sheet
-  (both want the Markdown surface, E12-6); the iPad board's formatting
+  (both want the Markdown surface, built in E12-6 — the surface is there,
+  these two are still to wire in); the iPad board's formatting
   strip over the plan; Paul on his own persona model instead of the chat
   model.
 - **E10-5b — Flow editor follow-ups.** The switch that lets Paul propose
@@ -220,12 +221,6 @@ owner builds without the tickets system.
 - **E12-5 — Device rules audit.** 47/34 pt insets, 44 pt targets,
   17/15/13 type scale, 16 px inputs, switches, large titles, pointer
   hover, focus ring.
-- **E12-6 — Markdown surface extraction** (owner priority 2026-11-04: the
-  phone renders Markdown wrongly). CodeMirror 6 + formatting strip from
-  `src/app/editor` into `libs/mission-ui` (large; its own milestone), with
-  the three modes Live Preview, View and Source. **View is the default
-  wherever results are presented** (plan, ticket text, proof summary, the
-  Verification chapter); the owner can switch per surface.
 - **E10-6 — You as a team member: manual steps** (owner request, outside
   the list, 2026-11-04; milestone 132). A persona of kind `human` ("You",
   the name from Settings, file `personas/you`) next to Paul, Ben, Ralf and
@@ -316,7 +311,7 @@ Order and dependencies (an item needs everything it names):
 Parallel lanes: 1, 3 and 4 are disjoint and can run together; 5 and 8 can
 start when their needs are met without waiting for 1. Relation to the
 E10–E12 line: 10 and 11 waited for E10-4 and E10-5 (both built); E12-5 (device rules
-audit) and E12-6 (Markdown surface for the web app) are independent of E13.
+audit) is independent of E13.
 Persona names follow D7 (Pia = Mission Control, Paul plans).
 
 

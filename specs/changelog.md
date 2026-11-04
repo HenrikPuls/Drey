@@ -1,3 +1,71 @@
+### Milestone 133 — Markdown surface for Mission Control (E12-6)
+
+**Not yet manually verified by the owner.** Owner priority, 2026-11-04 (the
+phone rendered ticket Markdown wrongly: its own reader knew headings,
+paragraphs, bullets and code — tables, callouts, math, diagrams and inline
+formatting came out as raw characters). "Use our Drey md editor instead":
+the **same CodeMirror engine as the desktop editor** now renders and edits
+Markdown in Mission Control, in three modes.
+
+- **Extraction, not a copy** (ADR-0088 later change). The Angular-free half
+  of `src/app/editor/` moved to **`libs/markdown-surface/`** (alias
+  `@markdown-surface/*`): theme, the extended dialect (`markdown-extensions`),
+  Live Preview (`live-preview/`), link and wikilink handling, vault-image
+  helpers, the toolbar actions, the eraser. New `engine.ts` is the one place
+  both clients take the dialect (`markdownDialect`), the three modes
+  (`surfaceModeExtensions`: Source adds nothing, View is read-only with
+  links on a plain click, Live reveals around the selection) and the
+  read-only lock from; the desktop `MarkdownSurface` now builds from it
+  (the inline `markdown({...})` block and the mode switch are gone from it).
+  `create-view.ts` is the plain-DOM entry (`createMarkdownView`:
+  mode, editable, `setDoc` that keeps selection and scroll, `applyAction`).
+  Desktop behaviour is unchanged: specs moved with the code, the desktop
+  suite is green. Lint rule: the lib imports its own folder and `shared/`
+  only, no Angular.
+- **`mc-markdown`** (`libs/mission-ui/src/markdown/`): the Angular wrapper.
+  **View is the default wherever a result is presented** — the ticket text,
+  the report summary, the plan's chapters, the proof face's new
+  **Verification text** (unfolds on tap) — **Live Preview where the owner
+  writes** (the plan editor in Shape, with a compact formatting strip: bold,
+  italic, heading, bullets, tasks, code block, quote, link; 44 pt targets).
+  A segmented **Live | View | Source** control (44 pt) on every surface; the
+  pick is remembered per surface on the device (`mc.md-mode.<surface>`,
+  `mode.ts`; a blocked storage falls back to the default). The CodeMirror
+  chunk loads on first mount; until then the text shows as plain wrapped
+  lines. The desktop's tokens are mapped onto Mission Control's in
+  `markdown.css` (all three themes follow). KaTeX's stylesheet and fonts
+  are now assets of the Mission Control build (without them the math showed
+  twice).
+- The old reader `ticket/markdown.ts` is deleted; the plan pane's draft
+  field is the surface (`onDraft(text)`), the ticket view binds
+  `bodyText()` instead of blocks.
+- **Bundle** (production build, `ng build mission-control`): initial
+  534.8 kB raw / 118.0 kB transfer, unchanged in kind — the engine is the
+  lazy chunk `create-view` (325 kB raw / 100 kB transfer), plus the lazy
+  `katex` chunk (261 kB / 64 kB) and mermaid's own lazy chunks, which load
+  only when a note carries math or a diagram.
+- **Specs.** Moved with the code (`ng test markdown-surface`, 17 files /
+  260 tests); `mode.spec.ts` (the memory) and `markdown.spec.ts` (the
+  component: plain text first, engine mounts, View default and read-only,
+  Live default with strip, Source shows raw Markdown, remembered per surface,
+  follows the bound text) in mission-ui; the plan and ticket specs follow the
+  new bindings.
+- **Seen in a real run** (built Mission Control, 375×812, a real engine on a
+  temporary tickets vault and home — not the owner's board): the ticket text
+  in View with headings, bold, highlight, strike, inline code, link, emoji,
+  a callout, task list, table, inline and block math, a TypeScript fence
+  with syntax colours, a mermaid diagram and a footnote; Source (raw
+  Markdown with colours) and Live (syntax revealed on the caret line) by tap.
+  **Not seen:** the plan editor and the plan sheet in Shape mode, the proof
+  face's Verification text, the report summary, the iPad width, the Drey
+  theme and Cyberpunk, Safari (the run was Chromium), and typing on a real
+  touch keyboard. The desktop editor was covered by its suites and the
+  e2e specs named in the commit, not by hand.
+- **Left out on purpose** (roadmap, E10-3b): tinted line marks inside the
+  rendered plan and tap-a-line editing on the phone sheet; the Ready card
+  and the chat bubbles still use their own plain text (the chat files belong
+  to another milestone).
+
 ### Milestone 130 — Board, Team and Capacity in Drey (E13-8)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04

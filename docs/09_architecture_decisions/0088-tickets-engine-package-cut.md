@@ -394,3 +394,18 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     guard as a hand edit, and it is never written by the draft.
   Not yet manually verified by the owner; the etappen land one
   milestone at a time (roadmap, "Mission Control redesign").
+
+- **The Markdown surface lib (E12-6, milestone 133).** Mission Control's
+  hand-written Markdown reader (headings, paragraphs, bullets, code only)
+  showed tickets wrongly. The renderer is not rewritten for the phone: the
+  Angular-free half of the desktop editor — CodeMirror theme, the extended
+  dialect, Live Preview, link and wikilink handling, the formatting
+  actions — moved from `src/app/editor/` to **`libs/markdown-surface/`**
+  (alias `@markdown-surface/*`, its own `ng test markdown-surface`
+  project and lint rule: own folder + `shared/`, no Angular). Both clients
+  build their state from `engine.ts`; nothing is copied. Mission Control
+  mounts it through `mc-markdown` in `libs/mission-ui`, behind a dynamic
+  `import()` so the CodeMirror (and KaTeX, mermaid) chunks load on first
+  use only. The rest of the editor (tag pills, spellcheck, slash menu,
+  frontmatter fold, plugin extensions) stays desktop-only in
+  `src/app/editor/`.
