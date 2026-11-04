@@ -89,9 +89,16 @@ Code and Copilot command lines. The API providers are plain chat unless tools
 are attached. The Claude Code command line runs its own agent loop (`claude -p`);
 as plain chat it needs its tools switched off. opencode and claude-code in the
 fleet (`plugins/tickets/main/fleet/assignment.ts`) are runner workers, a
-separate registry from the Assistant providers. Unifying the two lists, so a
-persona and the Assistant know the same models, belongs with the Assistant
-targets.
+separate registry from the Assistant providers.
+
+**Decision (owner, 2026-11-04): stay with the LLM integration Drey already has.**
+The Assistant's Model target and Mission Control's own chat use the existing
+`LlmRouter` and the providers registered in Settings. Another model such as Kimi
+is registered there (an OpenAI-compatible endpoint with a base URL, model id and
+optional key), not in a new registry and not as a new provider. The fleet's
+runner workers keep their own pools for runs. Whether a persona's model pool
+should one day list the Settings models too is a separate question and not part
+of this step.
 
 ## Open decisions
 
@@ -99,8 +106,7 @@ targets.
    wikilinks for the tickets vault, a `ticket:` syntax, or the tickets
    repository under the notes vault (ADR-0083).
 2. The Parts block inline in the ticket or as a split tab beside it.
-3. Whether Kimi is added as an OpenAI-compatible endpoint (probably no code) or
-   as a command-line provider.
+3. (Closed: models are registered in the existing LLM settings, see above.)
 4. Companion rule: the iPad and phone client stays; the desktop does not embed
    it. Shared code is the engine contract, not the UI.
 
