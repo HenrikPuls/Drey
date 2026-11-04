@@ -90,10 +90,14 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
-_None open._ (D-1, Mission Control chat reaching no model, shipped as
-milestone 131; D-2, the paired-devices list and pairing from Mission
-Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
-views, as milestone 140 — see the changelog.)
+**D-4 — runs.spec flakes under full-suite load** (owner request, outside
+the list, 2026-11-04; milestone 142). `packages/tickets-engine/src/fleet/runs.spec.ts`
+passes 103/103 alone but one test fails intermittently inside the full
+plugin suite (`npm run test:plugins`): the green-worker test finds the
+ticket's run record still there after the move, others hit an `ENOENT` /
+`ENOTEMPTY` on the temp dir. It makes the release gate (`npm run
+test:all`) unreliable. Find the cause, fix it (no retries, no timeout
+inflation), add a regression spec.
 
 ### Now (small, daily value)
 
