@@ -29,7 +29,7 @@ sheet). The phone's chat composer gets a microphone.
   mapping. `chat.ts` only wires it. The shape session and the plan sheet use this
   same composer (the plan pane has none of its own), so there was no second one
   to change. The desktop Assistant's microphone (E13-5) is untouched.
-- **Specs:** `dictation.spec.ts` (22, a fake recognition: live merge, timer,
+- **Specs:** `dictation.spec.ts` (19, a fake recognition: live merge, timer,
   graceful stop vs cancel, every error code, a throwing engine, a stale engine) and
   seven component specs in `chat.spec.ts` (hidden without engine / on http, 44 pt
   button order, live fill without a send, typing ends it, blocked microphone,
