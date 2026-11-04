@@ -1,3 +1,35 @@
+### Milestone 150 — Dricket analysis (documentation only)
+
+**Not yet manually verified by the owner.** Owner request 2026-11-04: move
+Drey's whole ticket handling, the fleet included, onto **dricket** (`dk`,
+v0.5.0) and find out what that takes. No product code changed.
+
+- **Analysis** in `docs/design/dricket/`: `fit-analysis.md` (concept-by-concept
+  mapping of ids, paths, front matter, body chapters, phases vs stages, claims
+  and leases vs the runner, comments, status log and ledger, dependencies,
+  priorities, validation, monitoring, secret scan, quotas, profiles),
+  `engine-impact.md` (per module of `packages/tickets-engine`,
+  `plugins/tickets`, `libs/mission-ui`, `apps/mission-control`: replaced,
+  adapted, unchanged, deleted; the `TicketStore` port; how reading works; the
+  contracts that change; the own-write ledger and watcher),
+  `migration-plan.md` (inventory of the real repo, conversion rules, history
+  cut, dry run and rollback, cut-over checklist, staged items E14-0 .. E14-9,
+  the first thin slice, owner decisions OD-1 .. OD-9) and
+  `dricket-requirements.md` (R-01 .. R-21 and Q-01 .. Q-08 with severity and a
+  concrete proposal each).
+- **ADR-0090** `0090-tickets-on-dricket.md` (status: proposed) and its row in
+  the ADR index.
+- **Roadmap:** new heading "Tickets on dricket (proposed by the analysis,
+  owner request 2026-11-04)" with E14-0 .. E14-9 and a table of which running
+  or planned items stay valid, wait, are reshaped or become obsolete. Nothing
+  else was reordered.
+- **Not verified:** `dk` was not built or run (the one build attempt was
+  denied by the session's permission classifier and was not retried by another
+  route), so every `dk` statement comes from reading its source and docs; the
+  engine's fleet internals were read through ADRs and call sites. The first
+  slice (E14-1) starts by capturing the real JSON in a contract suite.
+- **Tests:** none (documentation only).
+
 ### Milestone 143 — The Mission Control frame stays put (D-5)
 
 **Not yet manually verified by the owner.** Owner report 2026-11-04: on iPhone

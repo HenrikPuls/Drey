@@ -520,6 +520,77 @@ phone's markdown rendering. Remaining steps, each shipped on its own:
 - **R7 (optional, its own decision)** — Web Push: needs HTTPS and
   Apple's push service, a further cloud exception.
 
+### Tickets on dricket (proposed by the analysis, owner request 2026-11-04)
+
+**Proposed, nothing built, nothing here reorders the lists above or below.**
+The owner decided to move Drey's whole ticket handling, the fleet included,
+onto **dricket** (`dk`, calls `dk ... --json`; no TypeScript
+re-implementation). Analysis and plan: `docs/design/dricket/`
+([fit analysis](../docs/design/dricket/fit-analysis.md),
+[engine impact](../docs/design/dricket/engine-impact.md),
+[migration plan](../docs/design/dricket/migration-plan.md),
+[requirements on dricket](../docs/design/dricket/dricket-requirements.md));
+decision draft
+[ADR-0090](../docs/09_architecture_decisions/0090-tickets-on-dricket.md)
+(status: proposed). Gaps in dricket are **requirements for dricket** (R-01 ..
+R-21 in the requirements file), not Drey workarounds. Owner decisions
+OD-1 .. OD-9 are open (migration plan §10). Each item is shippable on its own
+behind `tickets.backend` (`files` stays the default until E14-7); the real-run
+checks use a scratch store and a second instance, never `drey-tickets`.
+
+- **E14-0 — dricket releases (owner's dricket repo, not Drey).** v0.6 read
+  contract (full `ls`/`show` JSON, comments list, capabilities), v0.7 write
+  contract (extension fields, `put`, configurable stages, `move`), v0.8 (import,
+  change feed, stage log, Windows CI, dependency semantics). Gate for E14-4;
+  not for E14-1..3, E14-5.
+- **E14-1 — `TicketStore` port + the first slice.** The port, the file store
+  wrapper, the `dk` process wrapper (queue, exit-code table, version gate), id
+  mapping `T-0063` <-> `t-63`, the flat front-matter reader, contract tests
+  against a scratch store; slice: list, show, claim, release of one ticket
+  through `dk --json`, board listing read-only. Needs only dk v0.5.
+- **E14-2 — Board from the store.** `ticket-board` over `TicketRecord[]`, stage
+  mapping, derived order and blocked from `depends`, `shadow` mode with a diff
+  report. Needs E14-1. Parallel with E14-3, E14-5.
+- **E14-3 — Migration tool.** Dry run, apply, report, shadow diff, **reverse
+  converter** (the rollback). Apply needs dk R-10. Parallel with E14-2, E14-5.
+- **E14-4 — Write path.** Capture, refine, header edits, moves, accept/send
+  back, `ticketSave` with `rev`, parts release (resumable), flow save, the editor
+  save hook. Needs E14-2 and dk v0.7. The only item that rewrites
+  `board-service.ts` heavily; no other change to that file beside it.
+- **E14-5 — Fleet on `dk`.** Claim before the worker spawns, extend, release
+  with stage/message, exit 13 stops the worker, takeover by lease, park =
+  `blocked` + comment, optional `Dricket-*` trailers and `dk validate
+  --trailers` in the commit step. Needs E14-1. Parallel with E14-2, E14-3.
+- **E14-6 — Comments, signals, ledger.** Send-back notes and Needs-you answers
+  as comments, keyed status verbs as comments (`working:` not persisted), ledger
+  to the meta repo. Needs E14-4 and dk R-08.
+- **E14-7 — Cut-over.** Freeze, final import, flip `tickets.backend`, smoke,
+  owner round. Needs E14-3..6, E14-8.
+- **E14-8 — Change detection.** The engine polls (`dk changes` or the
+  `ls-remote` recipe), announces its own writes, checkout registered as
+  plugin-managed (no watcher, no Source-control writes). Reshapes **E2b-4**.
+- **E14-9 — Decommission.** Delete the file write paths and the legacy
+  machinery 30 days after the cut-over; supersede the parts of
+  `ticket-schema.md`; the manual; retire the legacy phone remote.
+
+**What this does to running or planned items** (marks, not reordering):
+
+| Item | Effect |
+|---|---|
+| E13-9 Shape in Drey (running) | **Stays valid** (UI, live edit, plan delta). Finish on the `files` backend; it must add **no new direct file writer**; its write path is re-targeted in E14-4 (needs dk R-02). |
+| E13-10 Plan to approve in the ticket | **Stays valid**; the `### Parts` block is body text. The engine routes (`parts`, `release`) are the contract: build the widget against them and put **no direct file write** behind them; the release becomes children-first, parent-last, resumable in E14-4. |
+| E13-11 Flow tab, E13-13..19 (Work view rest, panel naming, status bar, capture button, board filter, views polish, team completion) | **Stay valid** (UI/DTO driven). |
+| E13-12 Settings → Tickets in Drey | **Stays valid** except the pipeline/column editor: **waits** for OD-4 (stage vocabulary) and Q-05 (who edits `dricket.toml`). |
+| E11-1c video size rule, E11-1b, E11-2b, E10-3b/4b/5b, E10-7, E12-3b/5/7/8 | **Stay valid** (videos stay outside git; UI follow-ups). |
+| E11-4 cost table and estimate; `## Verlauf` writer | **Stay valid**; the writer moves inside the runner's claim (E14-5); history for the estimate comes from `dk log` (dk R-07). |
+| E7 ledger and status log | **Reshaped** (E14-6): ledger relocates to the meta repo; status log becomes keyed comments. No new work on `.status.log` files. |
+| E2b-4 engine announces its writes | **Reshaped** into E14-8; do not extend. |
+| Fleet stability remainder, "Takeover follow-ups", req-78 (red gate sends back) | **Wait**: claims, takeover and moves are re-based on `dk` in E14-5; do not start new claim/takeover code. |
+| req-66 remote (refine, claim routes, R7 push), req-75 W5 capture, W9 audit runs | **Stay valid**; their write calls go through the port. |
+| ADR-0076 file layout, T-0041 numbered folders, req-50/req-86 "Number folders" and column renaming, archive folder and marker, "a file move is a ticket move" and the drift pass, `entered-*`, the `run:` map, `claimed-by`/`claimed-at`, the pipeline `push:` key | **Obsolete after E14-7** (kept only as a read fallback for migrated tickets); do not extend. |
+| X-1 documentation hygiene | Stays valid for notes; skip the parts of `ticket-schema.md` that E14-9 supersedes. |
+| Mission Control UI, chat (Pia), personas (Paul, Ben, Ralf, Tessa, You), flows and chains, plans and parts, proof/verification/video, costs, views, Assistant targets | **Unchanged.** |
+
 ### Next
 
 ~~7. **Screenshots in the app.** Capture a region or window and embed it
