@@ -4044,6 +4044,40 @@ wins) and opens it at the line; without such a vault it opens a scratch
 copy read through `reviewFile`. *Git history* opens that vault file and
 runs the git plugin's `git.fileHistory` command.
 
+## 6.87 Flow tab: edit a draft through the engine, save once (E13-11)
+
+```mermaid
+sequenceDiagram
+    participant O as Owner
+    participant S as Ticket header strip
+    participant F as Flow tab (renderer/flow)
+    participant M as Plugin main (IPC)
+    participant E as Engine (flow-edit, chain-delta)
+    participant T as Ticket file
+
+    O->>S: Change flow
+    S->>F: addDoc(tickets-flow, flow://T-0121)
+    F->>M: flow {id}
+    M->>E: flowOf -> steps, phases, personas, readOnly
+    E-->>F: the flow as the file holds it (= the saved copy)
+    O->>F: + Security, move later, pick a persona, tell me
+    F->>M: flowEdit {id, chain: draft, edit}
+    M->>E: applyFlowOp -> validateChain -> smallest delta
+    E-->>F: the next draft (or a refusal, shown under the list)
+    O->>F: Ask Paul
+    F->>M: flowDraft {id, ask}
+    E-->>F: Paul's draft + reason (Undo draft restores the one before)
+    O->>F: Save flow
+    F->>M: flowSave {id, chain}
+    M->>E: saveFlow -> `chain:` frontmatter, one commit
+    E-->>F: ok / warning
+    F->>M: flow {id}
+```
+
+The tab keeps the only copy of the draft; closing it drops unsaved edits.
+A board change while the draft has no edits reloads the flow; with edits
+the draft stays and Save flow writes it against the file as it is.
+
 ## 6.86 A ticket opens from Notes: the jump to Work (E13-13, milestone 141)
 
 ```mermaid

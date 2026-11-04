@@ -945,6 +945,20 @@ comment (file, line, text) in its Handover, so the next run reads them;
 **Accept and move to Commit** accepts as on the Ready card. Both show only
 while the ticket waits at one of your checkpoints.
 
+**The Flow tab.** *Change flow* under the chain in a ticket's header
+opens **Flow · T-0121**: the gates the ticket will still pass, each with who
+works it and on which model. Click a gate to open its settings on the right:
+who works it (the pipeline's default or one persona), *Tell me when it is
+done*, *Earlier* / *Later*, *Add a gate after* and *Remove gate* (a standard
+gate is struck, not deleted; *Restore gate* brings it back). The round **+**
+between two gates adds a gate there. A gate drawn with a dashed outline is a
+change you have not saved. Type into *Ask Paul to change this flow* (or leave
+it empty) and press *Ask Paul* to get his draft with the reason, *Undo draft*
+if you do not like it. Nothing is written until **Save flow**; *Reset to
+standard flow* drops every change. The gate that is running and the ones
+before it cannot change, and the whole flow is read-only while a run is live
+on the ticket.
+
 **By voice.** On Windows the dialog's Description label carries a
 **mic button**: it starts Windows dictation (Win+H — Windows' own;
 Drey adds no speech recognition), so speaking types into the

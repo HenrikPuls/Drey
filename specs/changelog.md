@@ -1,3 +1,40 @@
+### Milestone 145 — The Flow tab (E13-11)
+
+**Not yet manually verified by the owner.** The flow editor of Mission Control
+(E10-5) as an editor tab in Drey: gates with `+` connectors, an inspector
+(who, model, tell me, runs after, earlier / later, add after, remove or
+restore), "Ask Paul to change this flow", "Reset to standard flow" and
+"Save flow". Board 7c's "Change flow ›" link and board 5i's editor.
+
+- **One grammar.** The tab edits nothing itself: every edit is a round trip
+  to the engine's `flowEdit` (`core/flow-edit.ts` + `chain-delta.ts`, the
+  same functions behind the phone's editor), the save is `flowSave`, Paul's
+  draft is `flowDraft`. A refusal ("Review is in this flow already") shows
+  under the list and the draft stays. Nothing is written before Save flow;
+  a changed gate is drawn dashed until then.
+- **Opened from** the ticket header strip's new "Change flow" link under the
+  chain (`ticket-document/strip.ts`, `dom.ts`; one optional `openFlow` dep and
+  one optional `onFlow` field); Settings → Tickets → Default flow opens it
+  too (E13-12). One tab per ticket (`flow://T-0121`) or
+  per plan part (`flow://T-0121/2`, for E13-10's Parts block); the tab belongs
+  to the Work view; the session restores it by key and reads the flow again.
+- **Engine surface.** The invoke allowlist gained `flow`, `flowEdit`,
+  `flowDraft`, `flowSave` (parsed by the router's own `parseFlow*`, actor
+  `owner@drey`) and, for E13-12, `settingsRead` / `settingsPatch`
+  (`RemoteService.settings()` is public now); `main/index.ts` forwards them.
+- **Files.** `plugins/tickets/renderer/flow/` (`flow-model.ts` pure,
+  `flow-view.ts` plain DOM + controller, `register.ts` the doc kind
+  `tickets-flow`), `renderer/flow.css` (top level: the plugin build copies
+  only top-level stylesheets). The phone client's Angular editor and this
+  one share the engine contract (`contracts/flow.ts`) but not code: Drey
+  cannot import the Angular lib, so the small word helpers
+  (`changesLabelOf`, `marksOf`, `moveRoomOf`, `addablePhasesOf`) exist twice,
+  mirrored and spec-pinned on both sides.
+- **Specs:** `flow-model.spec.ts` (labels, dirty, dashed marks, move room,
+  addable phases, manual-step personas, tab key), `flow-view.spec.ts` (jsdom:
+  load, insert + save, refusal, Paul's draft + undo, read-only, failed load),
+  engine invoke specs for `flow*` / `settings*`.
+
 ### Milestone 143 — The Mission Control frame stays put (D-5)
 
 **Not yet manually verified by the owner.** Owner report 2026-11-04: on iPhone

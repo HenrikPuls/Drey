@@ -4,9 +4,10 @@ import { promises as fsp } from 'node:fs';
 import * as http from 'node:http';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
+import { parseFlowDraft, parseFlowEdit, parseFlowSave, type Parsed } from '../core/commands';
 import { TicketsGit } from '../core/tickets-git';
 import type { ChatBridge } from '../contracts/chat';
-import type { ChatChangePayload } from '../contracts/remote-protocol';
+import { remoteActorOf, type ChatChangePayload } from '../contracts/remote-protocol';
 import type { VerifyHarness } from '../contracts/verify';
 import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools } from '../fleet/protocol';
 import { RUNNER_SCRIPT_PATH } from '../fleet/runner-path';
@@ -23,6 +24,7 @@ import type { FleetEvents } from '../fleet/orchestrator';
 import { ChangeHub, DreyTicketsPort, type PathsChange } from './drey-port';
 import { FileConfigStore } from './file-config';
 import { RemoteService } from './service';
+import { parseSettingsPatch } from './settings';
 import { FsEngineHost } from './standalone-host';
 import { createPlaywrightVerifyHarness } from './verify-harness';
 
@@ -255,6 +257,28 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   });
   // The chat service speaks the ChatServicePort names (sessions/open/send/…);
   // the invoke channel exposes them under the chat* names from BOARD_METHODS.
+  // The Flow tab (E13-11): the same flow calls the phone's editor makes over
+  // HTTP, parsed by the same functions the router uses (one grammar, one guard).
+  table.set('flow', (payload) => {
+    const message = (payload ?? {}) as { id?: unknown; part?: unknown };
+    const part = typeof message.part === 'number' ? message.part : null;
+    return typeof message.id === 'string' ? remotePort.flow({ id: message.id, part }) : Promise.resolve({ ok: false, error: 'bad flow payload' });
+  });
+  const flowWrite = <T extends object>(parse: (p: unknown) => Parsed<T>, run: (cmd: T) => Promise<unknown>) => (payload: unknown): Promise<unknown> => {
+    const cmd = parse(payload);
+    return cmd.ok ? run(cmd.value) : Promise.resolve(cmd);
+  };
+  table.set('flowEdit', flowWrite(parseFlowEdit, (cmd) => remotePort.flowEdit(cmd)));
+  table.set('flowDraft', flowWrite(parseFlowDraft, (cmd) => remotePort.flowDraft(cmd)));
+  table.set('flowSave', flowWrite(parseFlowSave, (cmd) => remotePort.flowSave(cmd, remoteActorOf('Drey'))));
+  // The settings page's engine half (E13-12): what the phone's Settings reads
+  // and writes (`videos.*`, E12-3), behind the same guard (turning videos in
+  // git on needs the confirmation).
+  table.set('settingsRead', () => remoteService.settings().read('drey'));
+  table.set('settingsPatch', (payload) => {
+    const patch = parseSettingsPatch(payload);
+    return patch.ok ? remoteService.settings().patch(patch.value, 'drey') : Promise.resolve(patch);
+  });
   table.set('chatSessions', () => chat.sessions());
   table.set('chatOpen', (payload) => {
     if (typeof payload !== 'string') {

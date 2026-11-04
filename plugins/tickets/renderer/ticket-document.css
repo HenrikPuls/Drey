@@ -117,6 +117,20 @@
   font-weight: 400;
 }
 
+.tickets-doc-flow {
+  align-self: flex-start;
+  padding: 0;
+  font: inherit;
+  color: var(--accent-text);
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.tickets-doc-flow:hover {
+  text-decoration: underline;
+}
+
 .tickets-doc-gate {
   margin: 0;
   color: var(--accent-text);

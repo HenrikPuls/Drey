@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–143 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–145 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -269,9 +269,6 @@ Order and dependencies (an item needs everything it names):
     blocked-by P1" lines, "Typical total $a–b", the per-part estimate reading
     "from N runs" or "not yet · fewer than 3 runs", "Ask Mission Control to
     change the split" and "Change flow ›". **Status per part lives here** (owner, 2026-11-04: no separate plan-step list in the ticket).
-11. **E13-11 — Flow tab.** The flow editor as an editor tab; the default
-    flow also under Settings → Tickets. Needs E10-5 (milestone 128, built:
-    `GET/POST /api/tickets/<id>/flow…`).
 12. **E13-12 — Settings → Tickets in Drey.** Team, default flow, budget and
     runners, devices and pairing (QR), video storage (`videos.inGit` off,
     `videos.maxMb`), reading what E12-3 stores. Needs E12-3 (built) and,

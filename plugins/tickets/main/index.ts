@@ -634,6 +634,11 @@ const plugin: MainPluginModule = {
         : client.invoke('personaThreadAppend', { persona, text });
     });
     registerChatIpc(ctx, (method, payload) => client.invoke(method, payload));
+    // The Flow tab (E13-11) and the Settings page's engine half (E13-12):
+    // the engine's own flow calls and `videos.*` settings, one channel each.
+    for (const method of ['flow', 'flowEdit', 'flowDraft', 'flowSave', 'settingsRead', 'settingsPatch']) {
+      ctx.ipc.handle(method, (payload) => client.invoke(method, payload));
+    }
     ctx.ipc.handle('personaMemory', (payload) => {
       const persona = str(payload, 'persona');
       return persona === null ? { ok: false, error: 'bad persona payload' } : client.invoke('personaMemory', persona);
