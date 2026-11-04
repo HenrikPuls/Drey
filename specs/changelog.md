@@ -46,6 +46,7 @@ convergence audit.
   there was nothing to correct there. `Ctrl+Alt+N` stays the *daily-note*
   quick capture. The platform formatter shows `Ctrl` — no `⌘⌥T` form
   exists in the code (the app is Windows-first); not added.
+- **Fix on the way:** Mission Control constructed its `Theme` only when Settings opened, so a stored theme / text size applied only after a visit there; the app root now injects it at boot (needed for the migration to take effect on load).
 - **Specs.** `shared/design-scale.spec.ts` (new): no radius outside the
   tokens in the tickets plugin and Mission Control, no font-size below the
   floor, tokens present in both sheets. `libs/mission-ui/src/theme.spec.ts`
