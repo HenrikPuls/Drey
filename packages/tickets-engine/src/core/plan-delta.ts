@@ -8,16 +8,18 @@
  * half: the Plan section of a ticket file, a line diff, the delta, and
  * the line marks ("you" / "model") the screen draws.
  */
+import { maskFences } from '../../../../shared/markdown/fences';
 
 /** The text of the `## Plan` section (heading excluded), `\n` newlines, edges trimmed; '' without one. */
 export function planSectionOf(ticketText: string): string {
   const text = ticketText.replace(/\r\n/g, '\n');
-  const heading = /^## Plan[ \t]*$/m.exec(text);
+  const scan = maskFences(text);
+  const heading = /^## Plan[ \t]*$/m.exec(scan);
   if (heading === null) {
     return '';
   }
   const rest = text.slice(heading.index + heading[0].length);
-  const next = /^## /m.exec(rest);
+  const next = /^## /m.exec(scan.slice(heading.index + heading[0].length));
   return (next === null ? rest : rest.slice(0, next.index)).replace(/^\n+/, '').replace(/\s+$/, '');
 }
 

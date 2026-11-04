@@ -11,6 +11,7 @@
  */
 import { Document, isScalar, parseDocument, Scalar } from 'yaml';
 import { splitFrontmatter } from '../../../../shared/frontmatter';
+import { maskFenceLines, maskFences } from '../../../../shared/markdown/fences';
 import {
   DEFAULT_PRIORITY_CONFIG,
   DEFAULT_RANK,
@@ -333,20 +334,23 @@ export function ticketSections(text: string): { description: string; plan: strin
   const description: string[] = [];
   const plan: string[] = [];
   const handover: string[] = [];
-  for (const line of body.split('\n')) {
-    if (/^##\s+Description\s*$/.test(line)) {
+  const lines = body.split('\n');
+  const scan = maskFenceLines(lines);
+  for (const [i, line] of lines.entries()) {
+    const probe = scan[i]!;
+    if (/^##\s+Description\s*$/.test(probe)) {
       current = 'description';
       continue;
     }
-    if (/^##\s+Plan\s*$/.test(line)) {
+    if (/^##\s+Plan\s*$/.test(probe)) {
       current = 'plan';
       continue;
     }
-    if (/^##\s+Handover\s*$/.test(line)) {
+    if (/^##\s+Handover\s*$/.test(probe)) {
       current = 'handover';
       continue;
     }
-    if (/^##\s/.test(line)) {
+    if (/^##\s/.test(probe)) {
       current = null; // Log or a future section
       continue;
     }
@@ -375,7 +379,7 @@ export function ticketSections(text: string): { description: string; plan: strin
 export function acceptanceCommands(text: string): string[] {
   const commands: string[] = [];
   let inCriteria = false;
-  for (const line of text.split('\n')) {
+  for (const line of maskFences(text).split('\n')) {
     if (/^##\s/.test(line)) {
       inCriteria = false; // any H2 leaves the Plan section behind
       continue;
@@ -529,10 +533,11 @@ function appendLogLine(body: string, stamp: string, who: string, what: string): 
   const lines = body.split('\n');
   let logAt = -1;
   let insertAt = -1;
+  const scan = maskFenceLines(lines);
   for (let i = 0; i < lines.length; i++) {
-    if (/^##\s+Log\s*$/.test(lines[i]!)) {
+    if (/^##\s+Log\s*$/.test(scan[i]!)) {
       logAt = i;
-    } else if (logAt >= 0 && /^##\s/.test(lines[i]!)) {
+    } else if (logAt >= 0 && /^##\s/.test(scan[i]!)) {
       insertAt = i;
       break;
     }

@@ -8,6 +8,7 @@
  * stays as it is.
  */
 import { InjectionToken, type Signal } from '@angular/core';
+import { fencedLineFlags, maskFenceLines, maskFences } from '../../../../shared/markdown/fences';
 import type { McPlanStatus } from '../api/dto';
 
 /** What the pane edits: the ticket's file, its revision (the save's base). */
@@ -57,12 +58,13 @@ export const MC_PLAN_STATE = new InjectionToken<McPlanState>('mc-plan-state');
 /** The `## Plan` section of a ticket file (heading excluded), `\n` newlines, edges trimmed; '' without one. */
 export function planSectionOf(ticketText: string): string {
   const text = ticketText.replace(/\r\n/g, '\n');
-  const heading = /^## Plan[ \t]*$/m.exec(text);
+  const scan = maskFences(text);
+  const heading = /^## Plan[ \t]*$/m.exec(scan);
   if (heading === null) {
     return '';
   }
   const rest = text.slice(heading.index + heading[0].length);
-  const next = /^## /m.exec(rest);
+  const next = /^## /m.exec(scan.slice(heading.index + heading[0].length));
   return (next === null ? rest : rest.slice(0, next.index)).replace(/^\n+/, '').replace(/\s+$/, '');
 }
 
@@ -76,18 +78,16 @@ export function planChaptersOf(plan: string): McPlanChapter[] {
   const chapters: McPlanChapter[] = [];
   let title = '';
   let lines: string[] = [];
-  let fenced = false;
   const flush = (): void => {
     const body = lines.join('\n').trim();
     if (title !== '' || body !== '') {
       chapters.push({ title, body });
     }
   };
-  for (const line of plan.replace(/\r\n/g, '\n').split('\n')) {
-    if (/^\s{0,3}```/.test(line)) {
-      fenced = !fenced;
-    }
-    const heading = fenced ? null : /^#{3}[ \t]+(.*?)[ \t]*$/.exec(line);
+  const planLines = plan.replace(/\r\n/g, '\n').split('\n');
+  const scan = maskFenceLines(planLines);
+  for (const [i, line] of planLines.entries()) {
+    const heading = /^#{3}[ \t]+(.*?)[ \t]*$/.exec(scan[i]!);
     if (heading !== null) {
       flush();
       title = heading[1]!;
@@ -114,7 +114,7 @@ export function planPartsOf(plan: string): McPlanPartView[] {
     return [];
   }
   const parts: { title: string; persona: string | null; reason: string | null }[] = [];
-  for (const line of chapter.body.split('\n')) {
+  for (const line of maskFences(chapter.body).split('\n')) {
     const part = /^- \[[ xX]\] (.+)$/.exec(line);
     if (part !== null) {
       parts.push({ title: part[1]!.trim(), persona: null, reason: null });
@@ -181,21 +181,19 @@ export function markedLinesOf(status: McPlanStatus | null): ReadonlyMap<number, 
  * before its Log (or at the end).
  */
 export function replacePlanSection(ticketText: string, rawBody: string): string {
-  const body = rawBody
-    .replace(/\r\n/g, '\n')
-    .trim()
-    .split('\n')
-    .map((line) => (/^## /.test(line) ? `#${line}` : line))
-    .join('\n');
+  const bodyLines = rawBody.replace(/\r\n/g, '\n').trim().split('\n');
+  const fenced = fencedLineFlags(bodyLines);
+  const body = bodyLines.map((line, i) => (!fenced[i] && /^## /.test(line) ? `#${line}` : line)).join('\n');
   const text = ticketText.replace(/\r\n/g, '\n');
-  const heading = /^## Plan[ \t]*$/m.exec(text);
+  const scan = maskFences(text);
+  const heading = /^## Plan[ \t]*$/m.exec(scan);
   if (heading !== null) {
     const start = heading.index + heading[0].length;
-    const next = /^## /m.exec(text.slice(start));
+    const next = /^## /m.exec(scan.slice(start));
     const tail = text.slice(next === null ? text.length : start + next.index);
     return `${text.slice(0, start)}\n\n${body}\n${tail === '' ? '' : `\n${tail}`}`;
   }
-  const log = /^## Log[ \t]*$/m.exec(text);
+  const log = /^## Log[ \t]*$/m.exec(scan);
   const block = `## Plan\n\n${body}\n`;
   return log === null ? `${text.replace(/\n*$/, '\n')}\n${block}` : `${text.slice(0, log.index)}${block}\n${text.slice(log.index)}`;
 }

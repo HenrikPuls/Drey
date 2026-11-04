@@ -1,3 +1,64 @@
+### Milestone 148 — Fenced code is opaque: Mermaid plans work end to end (E10-7)
+
+**Not yet manually verified by the owner.** Owner requirement 2026-11-04: a
+ticket with a Mermaid diagram must display *and* evaluate. Display worked
+(E12-6); evaluation did not: every reader of ticket text found its
+structure with a line regex over the whole text, so a diagram line starting
+`## Verification`, `### Parts`, `- [ ]`, `persona:` or a Log line counted —
+a mermaid block in the Plan cut the plan short, added fake parts and
+criteria, or made the Log patcher append into the diagram.
+
+- **One shared reader.** `shared/markdown/fences.ts` — `maskFences(text)`
+  (same length, fenced lines blanked, `\r` kept), `fencedLineFlags` and
+  `maskFenceLines`. A reader looks for structure in the masked text and
+  slices the original with the offsets it found, so a write keeps every
+  other chapter and every fence byte for byte. Rule (also in
+  `specs/ticket-schema.md`, "Body sections"): ``` and `~~~` fences,
+  indented or in a list item / quote, closing fence at least as long (nested
+  lengths), a backtick info string without a backtick; **a fence that never
+  closes ends at the next column-0 `## `**, so a forgotten closing fence
+  cannot swallow Verification and Log.
+- **Parsers checked (all that read ticket text) — wrong before, fixed
+  now:** engine `plan-parts` (plan/parts bounds, part lines), `plan-section`
+  (Plan write, the `## ` demotion of a shape reply — a `## ` line inside a
+  fence of the reply is no longer demoted), `plan-delta` (`planSectionOf`),
+  `ticket-files` (`ticketSections`, `acceptanceCommands`, the Log
+  append), `ticket-refine` (`replaceSection`), `verification` (section
+  bounds, stamp, criteria, findings, video chapters, upsert before Log),
+  `verlauf` (read and append), `scout` (`## Report` read and upsert),
+  `proof-mode` (Handover declaration), `review-feedback` (feedback block read
+  and write), `contracts/changes` (`## Changes`, `## Result`, the story
+  and `planApprovedOf` Log lines); Mission Control's mirrors `plan.model`
+  (`planSectionOf`, chapters, parts, `replacePlanSection`), `ticket.model`
+  (`splitTicketSections` — the section split of the View screen —,
+  `proofOf`, `scoutReportOf`) and `api/dto` (Verlauf, Verification); Drey's
+  `sectionBodyRange` and `logSectionRange` (their private fence toggles
+  closed on any fence line and ignored lengths). **Right already:**
+  frontmatter split (line 1 only), chain / persona readers (frontmatter, and
+  the `chain:` details only inside the Parts chapter), `status-log` (own
+  line grammar, not Markdown), chat sessions and persona threads (own line
+  grammars with their own fenced JSON), `shared/note-sections.ts` and the
+  tags plugin's section splitter (already fence-aware, used for notes, not
+  for tickets).
+- **Specs, written red first:** `shared/markdown/fences.spec.ts` (12);
+  `core/fence-safety.spec.ts` (31, one realistic ticket with seven fences
+  — backtick, tilde, indented, four-backtick — whose lines look like every
+  structure; plus an unterminated fence, a fence in the criteria chapter,
+  Mermaid between `### Goal` and `### Parts`, CRLF);
+  `services/board-service-fences.spec.ts` (4: a real `EngineBoardService`
+  on a temp vault — the shape reply writes a Mermaid plan, `planParts`
+  reads only real parts, persona/move/delete edits and the release leave the
+  diagram intact, a second shape reply replaces the chapter whole);
+  `libs/mission-ui/src/ticket/fence-safety.spec.ts` (7).
+- **Seen, not just tested:** the production Mission Control build in
+  Chromium (390 × 844) against a stub desk, a ticket with a Mermaid flowchart
+  and a text fence full of decoy headings in the Plan: View mode draws the
+  diagram, the fenced decoy text stays inside its block, the plan card
+  lists only the two real parts and the proof line reads "1/1 green".
+  **The desk was a stub, not the real engine**; the engine side is the board
+  service spec above. Unterminated fences get no warning in the validator
+  yet (they end at the next `## `, silently).
+
 ### Milestone 143 — The Mission Control frame stays put (D-5)
 
 **Not yet manually verified by the owner.** Owner report 2026-11-04: on iPhone

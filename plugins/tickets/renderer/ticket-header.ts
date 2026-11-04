@@ -26,6 +26,7 @@ import {
   type TicketMeta,
   type TicketPriority,
 } from '../shared/tickets';
+import { maskFenceLines } from '../../../shared/markdown/fences';
 import { interactiveModeFor, type InteractiveMode } from './end-moves';
 import type { TicketStrip } from './ticket-document/strip';
 
@@ -48,18 +49,17 @@ export function phaseOfTicketPath(path: string): string | null {
  */
 export function logSectionRange(text: string): { from: number; to: number } | null {
   let offset = 0;
-  let fenced = false;
   let start: number | null = null;
   let end: number | null = null;
-  for (const line of text.split('\n')) {
+  const lines = text.split('\n');
+  const scan = maskFenceLines(lines);
+  for (const [i, line] of lines.entries()) {
     const lineEnd = offset + line.length;
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced;
-    } else if (!fenced && /^#{1,2}\s/.test(line)) {
+    if (/^#{1,2}\s/.test(scan[i]!)) {
       if (start !== null) {
         break;
       }
-      if (/^##\s+Log\s*$/.test(line)) {
+      if (/^##\s+Log\s*$/.test(scan[i]!)) {
         start = lineEnd;
       }
     } else if (start !== null && line.trim() !== '') {

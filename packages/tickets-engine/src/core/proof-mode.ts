@@ -9,6 +9,7 @@
  * declaration is never a guess towards the cheap side. Specification:
  * specs/ticket-schema.md, "Proof mode".
  */
+import { maskFences } from '../../../../shared/markdown/fences';
 
 export type ProofMode = 'ui' | 'tests';
 
@@ -30,7 +31,7 @@ export function parseProofMode(value: unknown): ProofMode | null {
   return word === 'ui' || word === 'tests' ? word : null;
 }
 
-const HANDOVER_HEADING = /^## Handover[ \t]*$/m;
+const HANDOVER_HEADING = /^## Handover[ \t]*\r?$/m;
 const DECLARATION = /^[ \t]*(?:[-*][ \t]+)?proof:[ \t]*(\S+)(?:[ \t]*[—–-]+[ \t]*(.*?))?[ \t]*$/im;
 
 /**
@@ -39,11 +40,12 @@ const DECLARATION = /^[ \t]*(?:[-*][ \t]+)?proof:[ \t]*(\S+)(?:[ \t]*[—–-]+[
  * appended a correction the LAST declaration wins.
  */
 export function parseProofDeclaration(ticketText: string): { mode: ProofMode; reason: string | null } | null {
-  const heading = HANDOVER_HEADING.exec(ticketText);
+  const scan = maskFences(ticketText);
+  const heading = HANDOVER_HEADING.exec(scan);
   if (heading === null) {
     return null;
   }
-  const rest = ticketText.slice(heading.index + heading[0].length);
+  const rest = scan.slice(heading.index + heading[0].length);
   const next = /^## /m.exec(rest);
   const section = next === null ? rest : rest.slice(0, next.index);
   let found: { mode: ProofMode; reason: string | null } | null = null;

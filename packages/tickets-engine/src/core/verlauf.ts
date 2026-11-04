@@ -14,6 +14,7 @@
  * (the asymmetric-tolerance rule): a torn or hand-edited line degrades
  * to nulls, never a guess.
  */
+import { maskFenceLines, maskFences } from '../../../../shared/markdown/fences';
 
 /** The outcome a settled run can report (the supervisor's terminal states). */
 export type VerlaufOutcome = 'handed-over' | 'failed' | 'stopped';
@@ -102,14 +103,15 @@ export function appendVerlaufEntry(fileText: string, line: string): string {
   let headingAt = -1;
   let nextHeadingAt = -1;
   let logAt = -1;
+  const scan = maskFenceLines(lines);
   for (let i = 0; i < lines.length; i++) {
-    if (/^##\s+Verlauf\s*$/.test(lines[i]!)) {
+    if (/^##\s+Verlauf\s*$/.test(scan[i]!)) {
       headingAt = i;
-    } else if (headingAt >= 0 && nextHeadingAt === -1 && /^##\s/.test(lines[i]!)) {
+    } else if (headingAt >= 0 && nextHeadingAt === -1 && /^##\s/.test(scan[i]!)) {
       // The first heading after the chapter ends it — a trailing `## Log`
       // included (the Log branch below must not shadow this one).
       nextHeadingAt = i;
-    } else if (/^##\s+Log\s*$/.test(lines[i]!)) {
+    } else if (/^##\s+Log\s*$/.test(scan[i]!)) {
       logAt = i;
     }
   }
@@ -132,11 +134,12 @@ export function appendVerlaufEntry(fileText: string, line: string): string {
 
 /** The section's lines, tolerantly read back; [] when the chapter is absent. */
 export function parseVerlaufEntries(fileText: string): readonly VerlaufEntry[] {
-  const heading = /^##\s+Verlauf\s*$/m.exec(fileText);
+  const scan = maskFences(fileText);
+  const heading = /^##\s+Verlauf\s*$/m.exec(scan);
   if (heading === null) {
     return [];
   }
-  const rest = fileText.slice(heading.index);
+  const rest = scan.slice(heading.index);
   const bodyStart = rest.indexOf('\n') + 1;
   const next = /^## /gm.exec(rest.slice(bodyStart));
   const section = next === null ? rest : rest.slice(0, bodyStart + next.index);
