@@ -1,120 +1,3 @@
-### Milestone 124 — Status bar slot for plugins (E13-3, SDK 1.38)
-
-**Not yet manually verified by the owner.** Owner request, 2026-11-04
-(roadmap E13-3; Mission Control on the desktop inside Drey).
-
-- **SDK 1.38** (`shared/plugin-api/`): `api.ui.createStatusItem({ text,
-  icon?, tooltip?, commandId?, priority? })` returns a `StatusItemHandle`
-  (`update(patch)`, `dispose()`). Content-agnostic: no tone or colour
-  field, no ticket/cost/fleet meaning in the SDK or the base. An item with
-  neither text nor icon is hidden; the host removes a plugin's items when
-  it is disabled.
-- **Base** (`src/app/plugin-host/status-items.service.ts`, `src/app/status-bar/`):
-  items sit right-aligned left of Settings, higher `priority` further
-  left, registration order within equal priority; with a `commandId` the
-  item is a button that runs the command, otherwise plain text.
-- **Sample plugin**: a "Sample" item that runs `sample.stamp`
-  (`plugins/AUTHORING.md` documents 1.38).
-- **Tickets plugin** (`renderer/status-slot.ts`): "2 running · 3 need you"
-  from the fleet's live runs and the board's needs-you count (the same
-  number the Work panel header shows); hidden when both are 0; a click
-  reveals the Work panel (`tickets.showBoard`). No cost text yet — the
-  renderer holds no cost number today.
-- **Specs**: `status-items.service.spec.ts`, `status-bar.spec.ts`,
-  `status-slot.spec.ts`.
-
-
-### Milestone 123 — Views: saved layouts with their own tabs (E13-1)
-
-**Not yet manually verified by the owner.** Owner request, 2026-11-04
-(ADR-0089, accepted with this change; design
-`docs/design/work-panel/desktop-integration.md`, boards 7a–7j). The base half
-of the desktop integration: the shell can hold several saved layouts. Checked
-in the unit suites and, for the switcher, the dock layouts and the persistence,
-in the dev renderer in a browser pane (no Electron, no vault, so **no tab was
-opened by hand**: tabs per view, "Show this tab in", "Show here" and the
-session restore are covered by specs only).
-
-- **A view** is a named layout: its dock state (`DockService`), its pane tree
-  with docked bands and tabs (`PaneService`, `ViewSlot`). `ViewService`
-  (`src/app/views/`) owns the list and the active id; switching restores the
-  other view's panes, sizes and tabs exactly as left. **Notes** is today's
-  layout and always exists; others come from *View → Save current layout as a
-  view…* (name field under the title bar; copies the layout, tabs included,
-  documents shared) and can be renamed or deleted (right-click on the
-  switcher button). Plugin presets and `homeView` are E13-2.
-- **Switching.** Title-bar switcher (segmented up to four views, a menu above;
-  invisible with Notes alone), `Ctrl+1`–`Ctrl+9`, the **Switch view** command
-  (next, wrapping) and View-menu rows. `Reset layout` resets the active view.
-- **Tabs belong to views.** The other views' tabs are hidden; one tab may be
-  shown in several (tab menu *Show this tab in*, the last tick stays; Open
-  windows lists the view's tabs and, under *In other views*, the rest with
-  *Show here*; its count is the view's). One document, one buffer: dirty
-  state, save and save conflicts act on the document in every view. A tab's X
-  leaves only the active view while another one shows it (no prompt); the
-  document closes with the unsaved-changes prompt when the last view lets go.
-  Deleting a file closes its tab everywhere; a rename follows it everywhere.
-- **Persistence.** `drey.dock` is now `{ active, views }` (the old blob reads
-  as Notes); the session snapshot (still version 2) gains an additive `views`
-  map, `layout` stays the Notes layout, `tabs` is the union. A snapshot
-  without views restores into Notes; a vanished view's layout is dropped and
-  a document only it held is closed.
-- **Specs.** `view-slot.spec`, `pane.service.views.spec`,
-  `dock.service.views.spec`, `view.service.spec` (switching, tab ownership,
-  closing, delete, name field), `session.service.views.spec` (write, restore,
-  old snapshot, vanished view); the folded-side spec follows the new blob.
-  Also in this change: `menu.service` and `session.service` import
-  `PaneService` from its file, not the `panes` barrel — the barrel pulls
-  `PaneLeaf` → `TabBar` → `ViewService` into a runtime loop that
-  `check-cycles` does not see but the test bed does.
-- **Docs.** ADR-0089 accepted with an "As built" section, docs/05 (component
-  reference, feature index), docs/06 §6.76, manual §16 "Views".
-
-### Milestone 125 — Link fallback to other vaults (E13-4)
-
-**Not yet manually verified by the owner.** Owner request, 2026-11-04
-(roadmap E13-4; ADR-0051 / ADR-0059 later changes). Base only, no SDK
-change.
-
-- **Resolution.** A `[[wikilink]]` of a vault-scoped note is resolved in
-  its own vault first — unchanged. Only when that finds nothing **and the
-  link's vault has the fallback on** are the other registered vaults
-  searched: the active vault first (when it is not the link's own), then
-  the registry order. The first vault with a match wins; within a vault
-  the existing rules hold (unique name, sibling, shortest path; path
-  targets work too — a fallback vault has no sibling preference). A name
-  found in several fallback vaults is **ambiguous**: it opens the first.
-  Nothing is created when any vault matches; a link that matches nowhere
-  still creates its note in its own vault. The pure rule is
-  `resolveWikilinkAcrossVaults` (`shared/wikilinks.ts`).
-- **Link check and hover.** `WikilinkService.inspect` feeds the editor's
-  link check: a link that resolved into another vault gets the hover
-  title `In vault “Tickets”`; an ambiguous one `Ambiguous: also in
-  “Archive”. Opens the one in “Tickets”.` and a dashed underline
-  (`cm-wikilink-ambiguous`). Same-vault links look as before. The marks
-  refresh when the document is edited or scrolled, like every tree change
-  (a toggled setting does not repaint untouched text at once).
-- **Settings → Vault → Links.** One switch per registered vault, "Also
-  look for link targets in other vaults (<vault>)", stored as
-  `vault.linkFallbackVaults` (vault ids), **off for every vault by
-  default** — so following a link that matches nothing creates the note
-  as before.
-- **Backlinks.** The panel also lists links that reached the shown note
-  through the fallback (`collectFallbackBacklinks`): links of vaults that
-  opted in, unmatched at home, whose fallback search lands first on this
-  note — an ambiguous name counts for its first match only, exactly where
-  Ctrl-click opens. Such a row carries the linking note's `vaultId`; the
-  click opens it in that vault.
-- **Not changed.** Link-integrity rewrites on rename (ADR-0059) stay per
-  vault; vault-less documents keep their merged index; `[[` completion
-  stays per vault; the entry drawer still resolves in the active vault.
-- **Specs / tests.** `shared/wikilinks.spec.ts` (order, ambiguity, off,
-  own-vault first), `WikilinkService` (off by default creates, own first,
-  other vault opens and names it, ambiguity, active vault first, opt-in
-  per vault), decorations (title, ambiguous class), backlinks
-  (`collectFallbackBacklinks`), config normalisation. Docs: ADR-0051 and
-  ADR-0059 later-change notes, docs/05, docs/06 §6.46, the manual.
-
 ### Milestone 126 — Mission Control plan to approve (E10-4)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04
@@ -213,6 +96,123 @@ entry for what was and was not seen in a running app.
 - **Not done:** the flow editor behind `Change flow ›` (E10-5), the whole-
   flow estimate, a parent that leaves "needs shaping" after the release,
   the desktop widget (E13-10). Roadmap: E10-4b.
+
+### Milestone 125 — Link fallback to other vaults (E13-4)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(roadmap E13-4; ADR-0051 / ADR-0059 later changes). Base only, no SDK
+change.
+
+- **Resolution.** A `[[wikilink]]` of a vault-scoped note is resolved in
+  its own vault first — unchanged. Only when that finds nothing **and the
+  link's vault has the fallback on** are the other registered vaults
+  searched: the active vault first (when it is not the link's own), then
+  the registry order. The first vault with a match wins; within a vault
+  the existing rules hold (unique name, sibling, shortest path; path
+  targets work too — a fallback vault has no sibling preference). A name
+  found in several fallback vaults is **ambiguous**: it opens the first.
+  Nothing is created when any vault matches; a link that matches nowhere
+  still creates its note in its own vault. The pure rule is
+  `resolveWikilinkAcrossVaults` (`shared/wikilinks.ts`).
+- **Link check and hover.** `WikilinkService.inspect` feeds the editor's
+  link check: a link that resolved into another vault gets the hover
+  title `In vault “Tickets”`; an ambiguous one `Ambiguous: also in
+  “Archive”. Opens the one in “Tickets”.` and a dashed underline
+  (`cm-wikilink-ambiguous`). Same-vault links look as before. The marks
+  refresh when the document is edited or scrolled, like every tree change
+  (a toggled setting does not repaint untouched text at once).
+- **Settings → Vault → Links.** One switch per registered vault, "Also
+  look for link targets in other vaults (<vault>)", stored as
+  `vault.linkFallbackVaults` (vault ids), **off for every vault by
+  default** — so following a link that matches nothing creates the note
+  as before.
+- **Backlinks.** The panel also lists links that reached the shown note
+  through the fallback (`collectFallbackBacklinks`): links of vaults that
+  opted in, unmatched at home, whose fallback search lands first on this
+  note — an ambiguous name counts for its first match only, exactly where
+  Ctrl-click opens. Such a row carries the linking note's `vaultId`; the
+  click opens it in that vault.
+- **Not changed.** Link-integrity rewrites on rename (ADR-0059) stay per
+  vault; vault-less documents keep their merged index; `[[` completion
+  stays per vault; the entry drawer still resolves in the active vault.
+- **Specs / tests.** `shared/wikilinks.spec.ts` (order, ambiguity, off,
+  own-vault first), `WikilinkService` (off by default creates, own first,
+  other vault opens and names it, ambiguity, active vault first, opt-in
+  per vault), decorations (title, ambiguous class), backlinks
+  (`collectFallbackBacklinks`), config normalisation. Docs: ADR-0051 and
+  ADR-0059 later-change notes, docs/05, docs/06 §6.46, the manual.
+
+### Milestone 124 — Status bar slot for plugins (E13-3, SDK 1.38)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(roadmap E13-3; Mission Control on the desktop inside Drey).
+
+- **SDK 1.38** (`shared/plugin-api/`): `api.ui.createStatusItem({ text,
+  icon?, tooltip?, commandId?, priority? })` returns a `StatusItemHandle`
+  (`update(patch)`, `dispose()`). Content-agnostic: no tone or colour
+  field, no ticket/cost/fleet meaning in the SDK or the base. An item with
+  neither text nor icon is hidden; the host removes a plugin's items when
+  it is disabled.
+- **Base** (`src/app/plugin-host/status-items.service.ts`, `src/app/status-bar/`):
+  items sit right-aligned left of Settings, higher `priority` further
+  left, registration order within equal priority; with a `commandId` the
+  item is a button that runs the command, otherwise plain text.
+- **Sample plugin**: a "Sample" item that runs `sample.stamp`
+  (`plugins/AUTHORING.md` documents 1.38).
+- **Tickets plugin** (`renderer/status-slot.ts`): "2 running · 3 need you"
+  from the fleet's live runs and the board's needs-you count (the same
+  number the Work panel header shows); hidden when both are 0; a click
+  reveals the Work panel (`tickets.showBoard`). No cost text yet — the
+  renderer holds no cost number today.
+- **Specs**: `status-items.service.spec.ts`, `status-bar.spec.ts`,
+  `status-slot.spec.ts`.
+
+
+### Milestone 123 — Views: saved layouts with their own tabs (E13-1)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(ADR-0089, accepted with this change; design
+`docs/design/work-panel/desktop-integration.md`, boards 7a–7j). The base half
+of the desktop integration: the shell can hold several saved layouts. Checked
+in the unit suites and, for the switcher, the dock layouts and the persistence,
+in the dev renderer in a browser pane (no Electron, no vault, so **no tab was
+opened by hand**: tabs per view, "Show this tab in", "Show here" and the
+session restore are covered by specs only).
+
+- **A view** is a named layout: its dock state (`DockService`), its pane tree
+  with docked bands and tabs (`PaneService`, `ViewSlot`). `ViewService`
+  (`src/app/views/`) owns the list and the active id; switching restores the
+  other view's panes, sizes and tabs exactly as left. **Notes** is today's
+  layout and always exists; others come from *View → Save current layout as a
+  view…* (name field under the title bar; copies the layout, tabs included,
+  documents shared) and can be renamed or deleted (right-click on the
+  switcher button). Plugin presets and `homeView` are E13-2.
+- **Switching.** Title-bar switcher (segmented up to four views, a menu above;
+  invisible with Notes alone), `Ctrl+1`–`Ctrl+9`, the **Switch view** command
+  (next, wrapping) and View-menu rows. `Reset layout` resets the active view.
+- **Tabs belong to views.** The other views' tabs are hidden; one tab may be
+  shown in several (tab menu *Show this tab in*, the last tick stays; Open
+  windows lists the view's tabs and, under *In other views*, the rest with
+  *Show here*; its count is the view's). One document, one buffer: dirty
+  state, save and save conflicts act on the document in every view. A tab's X
+  leaves only the active view while another one shows it (no prompt); the
+  document closes with the unsaved-changes prompt when the last view lets go.
+  Deleting a file closes its tab everywhere; a rename follows it everywhere.
+- **Persistence.** `drey.dock` is now `{ active, views }` (the old blob reads
+  as Notes); the session snapshot (still version 2) gains an additive `views`
+  map, `layout` stays the Notes layout, `tabs` is the union. A snapshot
+  without views restores into Notes; a vanished view's layout is dropped and
+  a document only it held is closed.
+- **Specs.** `view-slot.spec`, `pane.service.views.spec`,
+  `dock.service.views.spec`, `view.service.spec` (switching, tab ownership,
+  closing, delete, name field), `session.service.views.spec` (write, restore,
+  old snapshot, vanished view); the folded-side spec follows the new blob.
+  Also in this change: `menu.service` and `session.service` import
+  `PaneService` from its file, not the `panes` barrel — the barrel pulls
+  `PaneLeaf` → `TabBar` → `ViewService` into a runtime loop that
+  `check-cycles` does not see but the test bed does.
+- **Docs.** ADR-0089 accepted with an "As built" section, docs/05 (component
+  reference, feature index), docs/06 §6.76, manual §16 "Views".
 
 ### Milestone 122 — Mission Control shape mode (E10-3)
 
