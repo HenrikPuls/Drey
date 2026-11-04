@@ -138,8 +138,8 @@ describe('shadow diff input', () => {
 
   it('leaves import placeholders out of the store rows', () => {
     const rows = rowsFromRecords([
-      { id: 'T-0001', stage: 'cancelled', title: 'Unused', owner: null, priority: 'normal', kind: 'human', epoch: 0, rev: 1, labels: ['placeholder'], dependsOn: [], claimedAt: null, leaseUntil: null, size: null, branch: null, repos: [], extensions: {} },
-      { id: 'T-0010', stage: 'inbox', title: 'Real', owner: null, priority: 'normal', kind: 'agent', epoch: 0, rev: 1, labels: [], dependsOn: [], claimedAt: null, leaseUntil: null, size: null, branch: null, repos: [], extensions: { 'x-rank': '7' } },
+      { id: 'T-0001', stage: 'cancelled', title: 'Unused', owner: null, priority: 'normal', kind: 'human', epoch: 0, rev: 1, labels: ['placeholder'], dependsOn: [], parent: null, claimedAt: null, leaseUntil: null, size: null, branch: null, repos: [], extensions: {} },
+      { id: 'T-0010', stage: 'inbox', title: 'Real', owner: null, priority: 'normal', kind: 'agent', epoch: 0, rev: 1, labels: [], dependsOn: [], parent: null, claimedAt: null, leaseUntil: null, size: null, branch: null, repos: [], extensions: { 'x-rank': '7' } },
     ]);
     expect(rows).toEqual([{ id: 'T-0010', stage: 'inbox', title: 'Real', priority: 'normal', dependsOn: [], rank: 7 }]);
   });
