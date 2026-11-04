@@ -100,6 +100,7 @@
   min-height: 0;
   padding: 14px;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
 }
 
 .empty {
@@ -753,6 +754,7 @@ details.think .step-body {
   max-height: 80dvh;
   padding: 8px 16px calc(14px + env(safe-area-inset-bottom));
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   background: var(--panel-2);
   border-top: 1px solid var(--line);
   border-radius: var(--radius-dialog) var(--radius-dialog) 0 0;

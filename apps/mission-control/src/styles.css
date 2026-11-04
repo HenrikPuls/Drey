@@ -100,9 +100,17 @@
 html,
 body {
   height: 100%;
+  /* D-5: the installed PWA is an app frame, not a page — the document never
+     scrolls or rubber-bands; only the content regions below scroll, each with
+     its own overscroll-behavior-y: contain. */
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
+  position: fixed; /* iOS ignores overflow:hidden on body alone for touch drags */
+  inset: 0;
+  width: 100%;
   margin: 0;
   background: var(--bg);
   color: var(--text);
