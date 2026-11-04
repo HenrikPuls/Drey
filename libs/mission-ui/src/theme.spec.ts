@@ -86,8 +86,8 @@ describe('parsers', () => {
     }
     expect(parseAccent('chartreuse')).toBe('default');
     expect(parseAccent('teal')).toBe('teal');
-    expect(parseTextSize('M')).toBe('L');
-    expect(parseTextSize('XXXL')).toBe('XXXL');
+    expect(parseTextSize('M')).toBe('M');
+    expect(parseTextSize('XXXL')).toBe('L');
     expect(parseTextSize('XL')).toBe('XL');
   });
 
@@ -124,35 +124,48 @@ describe('storedTheme / persistTheme', () => {
 });
 
 describe('text size scale', () => {
-  it('is S / L / XL / XXL / XXXL = 15 / 17 / 19 / 21 / 24 px with L the default', () => {
-    expect(TEXT_SIZES).toEqual(['S', 'L', 'XL', 'XXL', 'XXXL']);
-    expect(TEXT_SIZES.map((size) => TEXT_BODY_PX[size])).toEqual([15, 17, 19, 21, 24]);
+  it('is S / M / L / XL = 15 / 16 / 17 / 19 px with L the default', () => {
+    expect(TEXT_SIZES).toEqual(['S', 'M', 'L', 'XL']);
+    expect(TEXT_SIZES.map((size) => TEXT_BODY_PX[size])).toEqual([15, 16, 17, 19]);
     expect(DEFAULT_TEXT_SIZE).toBe('L');
     expect(TEXT_SCALE.S).toBe(1);
     expect(15 * TEXT_SCALE.L).toBeCloseTo(17);
   });
 
-  it('migrates a first-build value one step up from M, so the old default lands on L', () => {
-    expect(['S', 'M', 'L', 'XL', 'XXL'].map(migrateLegacyTextSize)).toEqual(['S', 'L', 'XL', 'XXL', 'XXXL']);
+  it('migrates both earlier scales to the nearest step by px', () => {
+    expect(['S', 'M', 'L', 'XL', 'XXL'].map((v) => migrateLegacyTextSize(v))).toEqual(['S', 'S', 'L', 'XL', 'XL']);
+    expect(['S', 'L', 'XL', 'XXL', 'XXXL'].map((v) => migrateLegacyTextSize(v, '2'))).toEqual(['S', 'L', 'XL', 'XL', 'XL']);
     expect(migrateLegacyTextSize('huge')).toBe('L');
   });
 
   it('reads an unmarked stored value as legacy, once, and keeps the choice afterwards', () => {
-    const store = new Map<string, string>([[TEXT_SIZE_STORAGE_KEY, 'L']]);
+    const store = new Map<string, string>([[TEXT_SIZE_STORAGE_KEY, 'XXL']]);
     const storage = {
       getItem: (key: string) => store.get(key) ?? null,
       setItem: (key: string, value: string) => void store.set(key, value),
     } as unknown as Storage;
     expect(storedTextSize(storage)).toBe('XL');
     expect(store.get(TEXT_SIZE_STORAGE_KEY)).toBe('XL');
+    expect(store.get(TEXT_SIZE_SCALE_KEY)).toBe('3');
     expect(storedTextSize(storage)).toBe('XL');
     expect(storedTextSize(null)).toBe('L');
   });
 
-  it('boots a stored legacy M to the new default L', () => {
+  it('reads a version-2 value (E12-7) once: XXXL lands on XL, then it stays', () => {
+    const store = new Map<string, string>([[TEXT_SIZE_STORAGE_KEY, 'XXXL'], [TEXT_SIZE_SCALE_KEY, '2']]);
+    const storage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    } as unknown as Storage;
+    expect(storedTextSize(storage)).toBe('XL');
+    expect(store.get(TEXT_SIZE_SCALE_KEY)).toBe('3');
+    expect(storedTextSize(storage)).toBe('XL');
+  });
+
+  it('boots a stored legacy M (15 px) to S, the nearest step', () => {
     const e = env();
     e.storage?.setItem(TEXT_SIZE_STORAGE_KEY, 'M');
-    expect(new Theme(e).textSize()).toBe('L');
+    expect(new Theme(e).textSize()).toBe('S');
   });
 });
 
@@ -183,7 +196,7 @@ describe('Theme', () => {
     e.storage?.setItem(THEME_STORAGE_KEY, 'cyberpunk');
     e.storage?.setItem(ACCENT_STORAGE_KEY, 'teal');
     e.storage?.setItem(TEXT_SIZE_STORAGE_KEY, 'XL');
-    e.storage?.setItem(TEXT_SIZE_SCALE_KEY, '2');
+    e.storage?.setItem(TEXT_SIZE_SCALE_KEY, '3');
     e.storage?.setItem(COMPACT_STORAGE_KEY, 'true');
     e.storage?.setItem(MOTION_STORAGE_KEY, 'true');
     const theme = new Theme(e);
@@ -219,18 +232,18 @@ describe('Theme', () => {
     const theme = new Theme(e);
     expect(theme.set('drey')).toBe('drey');
     theme.setAccent('pink');
-    theme.setTextSize('XXXL');
+    theme.setTextSize('M');
     theme.setCompact(true);
     theme.setReduceMotion(true);
     expect(e.storage?.getItem(THEME_STORAGE_KEY)).toBe('drey');
     expect(e.storage?.getItem(ACCENT_STORAGE_KEY)).toBe('pink');
-    expect(e.storage?.getItem(TEXT_SIZE_STORAGE_KEY)).toBe('XXXL');
-    expect(e.storage?.getItem(TEXT_SIZE_SCALE_KEY)).toBe('2');
+    expect(e.storage?.getItem(TEXT_SIZE_STORAGE_KEY)).toBe('M');
+    expect(e.storage?.getItem(TEXT_SIZE_SCALE_KEY)).toBe('3');
     expect(e.storage?.getItem(COMPACT_STORAGE_KEY)).toBe('true');
     expect(e.storage?.getItem(MOTION_STORAGE_KEY)).toBe('true');
     expect(rootOf(e).dataset).toMatchObject({ theme: 'drey', compact: 'true', reduceMotion: 'true' });
     expect(rootOf(e).style.props.get('--accent')).toBe('#f2a0d0');
-    expect(rootOf(e).style.props.get('--mc-text')).toBe(String(24 / 15));
+    expect(rootOf(e).style.props.get('--mc-text')).toBe(String(16 / 15));
     theme.setAccent('default');
     expect(rootOf(e).style.props.has('--accent')).toBe(false);
   });

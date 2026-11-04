@@ -445,7 +445,7 @@
 .tag {
   display: inline-block;
   padding: 1px 8px;
-  font-size: calc(12px * var(--mc-text, 1));
+  font-size: calc(13px * var(--mc-text, 1));
   font-weight: 600;
   color: var(--text-2);
   border: 1px solid var(--line);
@@ -475,7 +475,7 @@
   color: var(--text);
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
 }
 
 .pairing {
@@ -486,13 +486,13 @@
   padding: 16px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-dialog);
 }
 
 .qr {
   width: min(100%, 240px);
   height: auto;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
 }
 
 .code {

@@ -1,3 +1,22 @@
+### Milestone 137 — Text size steps S / M / L / XL
+
+**Not yet manually verified by the owner.** Owner decision, 2026-11-04: the
+Mission Control text size has **four** steps, not the five of milestone 136.
+
+- **Scale.** Settings → Appearance: **S = 15, M = 16, L = 17 (default, the
+  iOS body size), XL = 19 px** body. The factor stays px / 15
+  (`--mc-text`); the labels stay fixed 15 px; the preview line reads
+  "L · 17 px body text, the default". XXL and XXXL are gone.
+- **Migration, idempotent, versioned by `mc.textSizeScale`.** Each earlier
+  scale maps to the nearest step by body px, once, then the value is
+  re-saved with marker `3`: unmarked (the first build: S 13.5, M 15,
+  L 17.25, XL 19.5, XXL 22.5 px) → S, **S**, L, XL, **XL**; marker `2`
+  (milestone 136: S 15, L 17, XL 19, XXL 21, XXXL 24) → S, L, XL, **XL**,
+  **XL**. A stored first-build M (15 px) therefore lands on S, not on the
+  default L as milestone 136 had it.
+- **Specs.** `theme.spec.ts` (scale, both migrations, idempotence, boot),
+  `settings.spec.ts` (the XL step and its preview line).
+
 ### Milestone 136 — Design decisions into code (E12-7)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04: after
