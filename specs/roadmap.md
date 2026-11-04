@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–145 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–146 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -269,15 +269,6 @@ Order and dependencies (an item needs everything it names):
     blocked-by P1" lines, "Typical total $a–b", the per-part estimate reading
     "from N runs" or "not yet · fewer than 3 runs", "Ask Mission Control to
     change the split" and "Change flow ›". **Status per part lives here** (owner, 2026-11-04: no separate plan-step list in the ticket).
-12. **E13-12 — Settings → Tickets in Drey.** Team, default flow, budget and
-    runners, devices and pairing (QR), video storage (`videos.inGit` off,
-    `videos.maxMb`), reading what E12-3 stores. Needs E12-3 (built) and,
-    for the flow row, E13-11. **Board 7g's rows:** Team (Edit team), Default
-    flow (Open flow editor), Daily budget with "Pause when the budget is
-    spent" (running work finishes first), Runners (Manage), Walkthrough
-    videos ("keep in Git" off, "Largest video" 25 MB), "Mission Control on
-    other devices" (Pair a device, paired devices with Revoke). The budget
-    pause and the runners dialog need a desk setting first (E12-3b).
 13. **E13-13 — The Work view (rest).** The first cut is built (milestone
     141: the preset, the Tickets panel / ticket / Assistant / Capacity
     arrangement, home views, Ctrl+2). What is left: the Capacity band **only
@@ -293,6 +284,20 @@ start when their needs are met without waiting for 1. Relation to the
 E10–E12 line: 10 and 11 waited for E10-4 and E10-5 (both built); E12-5 (device rules
 audit) is independent of E13.
 Persona names follow D7 (Pia = Mission Control, Paul plans).
+
+**Follow-ups of E13-11 / E13-12 (milestones 145–146):**
+
+- **E13-12b — Budget pause and runners dialog.** "Pause when the budget is
+  spent" (running work finishes first) and a runners dialog behind *Manage*
+  (board 7g) need a desk setting first (E12-3b); today *Daily budget* only
+  adds up the personas' budgets and *Manage* scrolls to the Workers section.
+  The "default flow for new plans" (E10-5b) would also get its row here.
+- **E13-11b — Flow tab, what is left.** The tab opens from the ticket
+  strip and Settings; the plan block's "Change flow ›" link arrives with the
+  Parts block (E13-10, the tab can open `flow://<id>/<part>` already). The word
+  helpers (`changesLabelOf`, `marksOf`, `moveRoomOf`, `addablePhasesOf`) exist
+  twice, in `libs/mission-ui` and in the plugin; one pure module in the
+  engine package that both import would remove the copy.
 
 **Follow-ups of E13-5 (milestone 138):**
 

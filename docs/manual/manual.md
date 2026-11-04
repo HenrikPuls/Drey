@@ -1490,9 +1490,25 @@ And the assistant can drive runs: ask it about the fleet — it sees
 `fleet_watch` through Drey's MCP server.
 
 
+### The Tickets settings page
+
+Settings → Tickets starts with the things you decide about the team:
+**Team** shows the personas as chips (you are *You*); *Edit team* opens the
+Team tab. **Default flow** shows the standard flow, the columns an agent
+works with who does each; a flow is changed per ticket, so pick a ticket
+next to *Open flow editor* to open its Flow tab (the standard flow itself is
+set below, in the pipeline table). **Budget and runners** shows the daily
+budgets of the personas added up with today's spending, and how many runs
+each runner takes at once; *Manage* jumps to the runner settings.
+**Walkthrough videos** has *Keep in Git* (off: videos are large and stay in
+the history once committed — switching it on asks first and can include the
+videos already there) and *Largest video* in MB. Under **Mission Control on
+other devices** you pair a phone or tablet and revoke it again (below). The
+pipeline, prompts, fleet and workers follow under *Pipeline and workers*.
+
 ### The board from a phone or tablet
 
-Settings → Tickets → **Remote access** offers the board to a phone or
+Settings → Tickets → **Mission Control on other devices** offers the board to a phone or
 tablet on your network or over Tailscale. It is off until you switch
 it on, and only devices you pair get in.
 

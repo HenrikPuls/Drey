@@ -4078,6 +4078,32 @@ The tab keeps the only copy of the draft; closing it drops unsaved edits.
 A board change while the draft has no edits reloads the flow; with edits
 the draft stays and Save flow writes it against the file as it is.
 
+## 6.88 Settings → Tickets: videos through the engine's guard (E13-12)
+
+```mermaid
+sequenceDiagram
+    participant O as Owner
+    participant S as Settings → Tickets (renderer/settings)
+    participant M as Plugin main (IPC)
+    participant E as Engine (RemoteService.settings)
+    participant C as Engine config (videos.*)
+
+    S->>M: settingsRead
+    M->>E: read('drey') -> devices, videos {inGit, limitMb, existing, notice}
+    E-->>S: the row's values
+    O->>S: tick "Keep in Git"
+    S->>S: warning + "Keep in Git" / "... include the n existing videos"
+    O->>S: confirm
+    S->>M: settingsPatch {inGit: true, confirm: true, includeExisting}
+    M->>E: patch -> refused without confirm
+    E->>C: set videos.inGit, videosChanged(includeExisting)
+    E-->>S: the new settings (or the refusal, shown under the row)
+```
+
+The page draws the engine's answer and decides nothing: bounds, defaults and
+the confirmation rule are the engine's (the phone's Settings goes through the
+same `SettingsAccess`).
+
 ## 6.86 A ticket opens from Notes: the jump to Work (E13-13, milestone 141)
 
 ```mermaid

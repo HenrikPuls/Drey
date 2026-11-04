@@ -3259,7 +3259,12 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     api.commands.register({ id: 'tickets.openBoard', label: 'Open the Board', run: () => openBoardDoc(api) });
     api.commands.register({ id: 'tickets.openTeam', label: 'Open the Team', run: () => openTeamDoc(api) });
     api.commands.register({ id: 'tickets.showCapacity', label: 'Show the Capacity band', run: () => api.ui.revealWidget('tickets-capacity') });
-    api.ui.registerSettingsPage(createTicketsSettingsPage(api));
+    api.ui.registerSettingsPage(
+      createTicketsSettingsPage(api, {
+        openTeam: () => openTeamDoc(api),
+        openFlow: (ticketId) => openFlowTab(api, ticketId),
+      }),
+    );
 
     // The Files-panel seam (T-0042, SDK 1.32): veto/takeover over the
     // board's ground, and the per-target context rows. Both read the

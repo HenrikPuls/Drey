@@ -1,3 +1,44 @@
+### Milestone 146 — Settings → Tickets in Drey (E13-12)
+
+**Not yet manually verified by the owner.** The tickets settings page now
+opens with the rows of board 7g — **Team**, **Default flow**, **Budget and
+runners**, **Walkthrough videos** — followed by **Mission Control on other
+devices** (the former "Remote access" section: switch, reach, pairing by QR
+and code, paired devices with Revoke); the pipeline, repository, prompts,
+fleet and workers sections moved under a "Pipeline and workers" heading.
+Page sentence: "The team, the flow, the budget and the devices that reach
+Mission Control."
+
+- **Team.** The personas as colour chips (the owner as "You", E10-6) from the
+  engine's `personas`; *Edit team* opens the Team tab, where setup and memory
+  live (E13-8).
+- **Default flow.** The standard flow as a strip (`Build · Ben → Review ·
+  Ralf …`: the agent columns of the pipeline with their `persona:`). A flow
+  is edited per ticket, so *Open flow editor* opens the Flow tab (milestone
+  145) of the ticket picked next to it (every ticket past the first column);
+  changing the standard flow itself is the pipeline table below (a column's
+  worker and persona). A "default flow for new plans" is E10-5b's follow-up.
+- **Budget and runners.** *Daily budget* adds up the personas' budgets and
+  today's cost (`PersonaView.budget` / `dailyCost`, read-only); *Runners*
+  shows the pool sizes (`fleet.pool.<id>.size`, or the default) and *Manage*
+  scrolls to the Workers section. **Not built:** "Pause when the budget is
+  spent" and a runners dialog still need a desk setting first (E12-3b), so
+  there is no switch for them yet.
+- **Walkthrough videos.** *Keep in Git* (off) and *Largest video* (MB) read
+  and write the engine's own `videos.inGit` / `videos.limitMb` through the new
+  invoke names `settingsRead` / `settingsPatch` — the same guard the phone's
+  Settings uses: turning *Keep in Git* on asks first (a warning with *Keep in
+  Git* and, when videos exist, *… and include the n existing videos*); the
+  engine's limits and refusals show under the row. Nothing about the keys
+  or their defaults is defined in Drey (E11-1c owns the rule).
+- **Files.** `plugins/tickets/renderer/settings/` (`desk-model.ts` pure,
+  `desk-settings.ts` DOM), `renderer/settings-desk.css`; `settings-page.ts`
+  composes the page (it takes two hooks, `openTeam` and `openFlow`);
+  `settings-remote.ts` only renames its heading and shortens its intro.
+- **Specs:** `desk-model.spec.ts` (standard flow, budget line, runners line,
+  settings answer, megabyte field), `desk-settings.spec.ts` (jsdom: team,
+  flow, confirmation before *Keep in Git*, the limit field).
+
 ### Milestone 145 — The Flow tab (E13-11)
 
 **Not yet manually verified by the owner.** The flow editor of Mission Control

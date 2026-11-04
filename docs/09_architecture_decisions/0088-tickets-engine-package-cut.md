@@ -486,3 +486,12 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     go through one guard. The word helpers it shares with the Angular editor
     in `libs/mission-ui` exist twice (the lib cannot be imported); the engine
     contract `contracts/flow.ts` is the single shape.
+
+  - **Settings → Tickets in Drey (E13-12, milestone 146).** The page's top
+    rows (Team, Default flow, Budget and runners, Walkthrough videos) read the
+    engine's own answers (`personas`, the board snapshot, `settingsRead`) and
+    write only `videos.inGit` / `videos.limitMb`, through `settingsPatch` ->
+    `RemoteService.settings()` — the `SettingsAccess` the phone's Settings
+    uses, so the confirmation rule and the bounds exist once. Devices and
+    pairing stay the desktop's Remote section (req-66, D-2's single pairing
+    slot), renamed "Mission Control on other devices".
