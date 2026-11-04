@@ -90,7 +90,19 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
-(none known)
+- **D-1 — Mission Control chat reaches no model** (owner report, 2026-11-04;
+  milestone 131). Asking Pia or Paul sends nothing to the model. Known
+  facts: the engine bridge (`packages/tickets-engine/src/services/chat-llm.ts`)
+  reads `chat.baseUrl` / `chat.apiKey` / `chat.model` from its own config and
+  speaks only the OpenAI-compatible dialect; `plugins/tickets/main/engine-lifecycle.ts`
+  (`syncConfig`) pushes Drey's `llm` slice only when the engine is activated
+  or adopted, not when Settings → Assistant changes; the live engine config
+  held `http://localhost:1234/v1` with nothing listening; presets the bridge
+  cannot speak (`zai-glm`, CLI providers) exist. Reproduce first (real engine
+  plus a mock OpenAI endpoint: Pia, Paul shape turn, flow draft), then fix
+  what the trace shows: sync on change, carry the provider kind, speak or
+  refuse the dialect with a clear message in the chat (provider, URL, reason),
+  and the Chat row of E12-3b (endpoint and model visible, testable).
 
 ### Now (small, daily value)
 
@@ -208,9 +220,23 @@ owner builds without the tickets system.
 - **E12-5 — Device rules audit.** 47/34 pt insets, 44 pt targets,
   17/15/13 type scale, 16 px inputs, switches, large titles, pointer
   hover, focus ring.
-- **E12-6 — Markdown surface extraction.** CodeMirror 6 + formatting
-  strip from `src/app/editor` into `libs/mission-ui` (large; its own
-  milestone).
+- **E12-6 — Markdown surface extraction** (owner priority 2026-11-04: the
+  phone renders Markdown wrongly). CodeMirror 6 + formatting strip from
+  `src/app/editor` into `libs/mission-ui` (large; its own milestone), with
+  the three modes Live Preview, View and Source. **View is the default
+  wherever results are presented** (plan, ticket text, proof summary, the
+  Verification chapter); the owner can switch per surface.
+- **E10-6 — You as a team member: manual steps** (owner request, outside
+  the list, 2026-11-04; milestone 132). A persona of kind `human` ("You",
+  the name from Settings, file `personas/you`) next to Paul, Ben, Ralf and
+  Tessa: selectable in Team, the flow editor, plan parts and the chain
+  grammar (`insert manual(you, notify) after review`). A gate assigned to you
+  **parks the ticket and notifies**: a card in Needs you, no agent runs, no
+  worktree is prepared; you finish it with Accept (the chain goes on) or
+  Send back. The human persona never counts toward capacity or budget. Touches
+  the persona loader and the fleet dispatcher in `packages/tickets-engine`,
+  `specs/ticket-schema.md`, the validator, and Team / picker / Needs-you in
+  `libs/mission-ui`.
 
 Decided against and not on the list: an overlap guard, touches or file
 routing between parallel tickets (D5 — req-75 W7 and W8 dropped; their
@@ -262,7 +288,11 @@ Order and dependencies (an item needs everything it names):
    editor with the Assistant on Mission Control: Paul edits through live edit
    (ADR-0049), the owner's edits ride along (E10-2 plan delta through
    `OpenDocsBridge`), answer cards above the composer, the split proposal.
-   Needs E10-2, E10-3 (built), E13-5 and E13-6 (built).
+   Needs E10-2, E10-3 (built), E13-5 and E13-6 (built). **The Refine button
+   goes away here** (owner, 2026-11-04): once the Assistant on Mission Control
+   loads the ticket file itself, the Refine button (Work panel and Mission
+   Control) and the `refine-interactive-default` prompt are removed; not
+   before.
 10. **E13-10 — Plan to approve in the ticket.** The Parts block as an editor
     widget under the header (persona per part, move / delete with a second
     press, running parts locked, flow row, estimate, Approve plan). Needs
