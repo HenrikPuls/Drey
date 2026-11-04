@@ -98,6 +98,7 @@ package, a minor naming convention).
 | [0087](09_architecture_decisions/0087-work-panel-replaces-the-kanban-board.md) | The Work panel replaces the kanban board (req-75): groups Needs you / Ideas / In progress, accepted tickets go to the archive; Auto and Shape tracks chosen at triage; one page per ticket with the live worker and Launch / Accept; questions carry their context; an orchestrator routes phase tickets by a rules file with a touched-paths overlap guard; the phone becomes a chat client | Accepted |
 | [0088](09_architecture_decisions/0088-tickets-engine-package-cut.md) | Tickets engine: the package cut — npm workspaces, pure @drey/tickets-engine package (domain, fleet, contracts), one compile program, ESLint-enforced boundary; Mission-Control migration E0 | Accepted |
 | [0089](09_architecture_decisions/0089-views-saved-layouts-with-their-own-tabs.md) | Views: saved layouts (docks, panes, tabs) with a title-bar switcher; tabs belong to views, hidden elsewhere; plugin-contributed presets (Work); one document, one buffer | Accepted |
+| [0090](09_architecture_decisions/0090-tickets-on-dricket.md) | Tickets on dricket: `dk` becomes the ticket store, the fleet claims through it, behind a `TicketStore` port; ids `t-N`, history cut, `_meta` in a second repo | Proposed |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per
