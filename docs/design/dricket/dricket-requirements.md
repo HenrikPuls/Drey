@@ -34,6 +34,7 @@ structs, `dk` itself was not run (see `fit-analysis.md` §0).
 | R-19 | Machine contract: capabilities, schema, stable JSON, rich errors | Needed |
 | R-21 | `release -m` can delete other body chapters | Needed (data-loss hazard) |
 | R-15 | `validate` cost grows with history | Needed |
+| R-24 | One-step change under a short claim (`dk commit --release`, optionally with the claim taken in the same call) | Needed (alternative to R-02 / R-04) |
 | R-11 | Per-ticket attachments | Nice |
 | R-14 | Batch mode (one process, many operations) and multi-ticket commits | Nice |
 | R-16 | Hook / pre-receive template to refuse non-`dk` commits | Nice |
@@ -321,6 +322,33 @@ year is tens of thousands of commits.
 (`validate --since <sha>` with the checkpoint stored in the private state), a
 measured budget in CI (10 k commits under N seconds), and `lint`-level fast
 path for the write path (already so).
+
+### R-24 One-step change under a short claim
+
+**Drey needs.** The owner's single edits (persona, chain, stage, a header
+field) without a second write path. Owner question 2026-11-04: why not hold
+the ticket directly -- claim, set, release? That keeps dricket's promise (no
+write without a claim) intact, but today it is three commits and three round
+trips to a remote for one change.
+
+**Today.** `claim` (commit 1), `sync` + edit + `commit` (commit 2), `release`
+(commit 3). `release` takes `--stage` and `-m`, but cannot carry a content
+change.
+
+**Proposal.** `dk commit --release [--stage S] [-m note]`: write the edited
+ticket and release the claim in ONE commit, same exact-base and epoch checks
+as `commit`. Optionally `dk edit <id> -F <file> | set k=v... --claim`: take the
+claim, apply the change, release, as one commit (claim fields keep the epoch
+bump of a claim). Open points for dricket to decide: whether the epoch rises
+by one for such a claim-free-in-practice change; how the lease clock reads in
+the log line; behaviour when the ticket is claimed by someone else (exit 11,
+unchanged).
+
+**Effect on R-02 / R-04.** If R-24 lands, `put` and `move` are no longer
+needed for the owner's handgrips and the claim promise holds without an
+exception for humans and admins. R-01 stays (the fields must exist).
+Decision pending: keep `put` / `move` as shipped on the branch until the
+owner decides.
 
 ## Nice
 
