@@ -770,7 +770,7 @@ creates the configuration files under `tickets/_meta/`:
   inside (the folder itself and its subfolders) with clone URL, branch
   and local path prefilled.
 
-**The Work panel** (req-75) shows six groups, each folded or opened by
+**The Work panel** (req-75) shows five groups, each folded or opened by
 its heading (remembered across restarts):
 
 - **Needs you** — only there when something waits on you: a worker's
@@ -795,13 +795,12 @@ its heading (remembered across restarts):
   not started, and how many turns it has.
 - **Ideas** — the backlog before the machine, highest priority first
   (a blocker before what it blocks, as in Running; a small *Urgent*/*High* chip marks the ones that matter), newest
-  first within a priority. The chip on the right is its track —
+  first within a priority. An idea in the queue the fleet pulls from
+  carries a **Queued** chip; the chip on the right is its track —
   **Auto** (runs on its own), **Shape** (a plan-mode dialog with you)
   or **Triage** (not decided yet). Set both track and priority from the
   row's menu (right-click or **⋯**). The first five ideas show; *n more*
   unfolds the rest.
-- **Prioritized** — the ideas already in the queue the fleet pulls from, each
-  saying whom it waits for.
 - **Done this week** — what you accepted into the archive in the last
   seven days, folded away by default.
 
@@ -881,29 +880,6 @@ Save and Undo work as for any typing. The code button at the right
 edits the frontmatter as YAML; its header folds back to the ticket
 header. The **Log** section opens folded the first time a ticket shows
 in a session — the fold marker beside "Log" opens it.
-
-**The ticket as a document.** Under the chip row the header carries a
-**strip**: the status (why the ticket waits for you, *Running*,
-*Blocked*, or its phase), the persona doing the current step, what the
-ticket has cost so far or in total, and — when the history holds at
-least three similar runs — the **estimate** for the step now due (hover
-it for its basis). Below it the **chain** shows every step with who does
-it (*Plan Paul, Build Ben …*, a checkpoint is *you*); a step the ticket
-skips is struck, one added for this ticket is marked. A ticket that
-waits on a question shows *Waits for you:* and the question.
-
-When a verify run has written `## Verification`, the section reads as a
-**Proof** block instead of its Markdown: the verdict (*3/3 green.*), the
-checks with their notes and video times, the screenshots (click one to
-open it), the walkthrough video with a button per chapter that jumps to
-it, and the findings. Put the caret in the section and the Markdown
-shows again. At the very end the **Cost** table lists every settled run
-of `## Verlauf` (phase, model, tokens, time, cost) with the total.
-Under it the **action bar**: *Send back…* and *Accept and move to
-<next column>* while the ticket waits at one of your checkpoints, and
-always *Thread* (the agent's thread of the ticket) and *Open Review*
-(the result card and the changes in that thread — the Review tab is
-still to come).
 
 **By voice.** On Windows the dialog's Description label carries a
 **mic button**: it starts Windows dictation (Win+H — Windows' own;
@@ -1035,41 +1011,6 @@ next to its buttons (`● 1 running · 18.9M tok · 26:22`): the worst
 light, the states in words, the tokens in flight and how long the
 oldest live run has been at it — hover it for the long form; a narrow
 panel keeps only the light and the states.
-
-**Prioritized, persona and cost on every row.** The ideas already in the
-fleet's queue are their own group, **Prioritized**, between Shaping and
-Ideas; a row says whom it waits for (*waits for Ben*). Every row also carries
-the **persona** that works on it (the live run's, else the ticket's pin, else
-the column's) and the **cost** of the ticket so far, written as on the phone
-(`$1.20`); a ticket without a known cost shows none.
-
-**Board, Team and Capacity.** Three more surfaces show the whole desk, from
-the Work panel's **⋯** menu (*Board*, *Team*) or the command palette
-(*Open the Board*, *Open the Team*, *Show the Capacity band*):
-
-- **Board** (an editor tab) — the pipeline as columns. A card shows the
-  ticket's id, what it is doing (*Running*, *Waiting*, *Plan*), its persona,
-  its title and its cost; the head of a column shows the summed cost of its
-  tickets. A ticket that is a part of another hangs under it, and a plan's
-  parts that are not tickets yet hang under the planning ticket as *P1*,
-  *P2*. A click opens the ticket; **New idea** in the first column captures
-  one. *Done this week* is the last column.
-- **Team** (an editor tab) — a card per persona: its state (*idle*,
-  *running*, *waiting*, *stuck*, *paused*), the day's cost against its
-  budget, and one row per live run. A run that stopped making progress
-  turns amber and offers **Nudge** (asks the worker for a status line),
-  **Hand to Claude Code** (stops the run and starts the ticket again on
-  Claude Code) and **Stop**. Above the cards: today's cost against all
-  budgets, the pool load (*Local 1/2*), **Pause all** (running work
-  finishes, nothing new starts; the button then reads **Resume all**) and
-  **Stop all** (press twice — it aborts every live run and halts the
-  chain). Click a card to open the persona's **1:1** (your messages to it;
-  Ctrl+Enter sends), **Memory** (its entries — pin the ones that must
-  always ride along — and a line to teach it) and **Setup** (worker,
-  model, pool, phases, cost; **Pause** or **Resume** the persona).
-- **Capacity** (a panel for the bottom dock) — one line: how many of the
-  worker slots are busy, the pool chips, what each persona is doing right
-  now, today's cost, **Pause all** and **Open Team ›**.
 
 **Workers.** While workers run, a *Workers* section tops the Work panel:
 one card per worker with its state in words (*Building*, *Paused*,
