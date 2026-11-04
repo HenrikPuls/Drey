@@ -198,6 +198,13 @@ export interface PluginDocKindContrib {
   favicon?(path: string): string | null;
   /** Tab-strip fallback glyph — an icon name from the host's vendored set. */
   icon?: string;
+  /**
+   * The id of a view preset (SDK 1.39, `ui.registerViewPreset`) this kind
+   * belongs to. Adding a tab of this kind switches to that view first, so
+   * the tab opens there; `stayInView` on `documents.addDoc` opts out. Ignored
+   * while a session is restored, and when no such view exists.
+   */
+  homeView?: string;
   /** Status-bar text for the active doc of this kind, or null. */
   statusText?(path: string): string | null;
   /** The doc's pane gained/lost focus (e.g. to gate a find-in-page chord). */
@@ -225,8 +232,50 @@ export interface FileOpenerContrib {
    * The longest matching suffix across all openers wins.
    */
   readonly extensions: readonly string[];
+  /**
+   * The id of a view preset (SDK 1.39) the opened file belongs to: opening
+   * a matching file switches to that view first (see
+   * `PluginDocKindContrib.homeView`). `documents.open` with `stayInView`
+   * opts out.
+   */
+  readonly homeView?: string;
   /** `vaultId` is the file's vault (ADR-0051), null when none is known. */
   open(path: string, vaultId: string | null): void;
+}
+
+/**
+ * The first layout of a view preset (SDK 1.39): which panels sit in which
+ * dock. Panel ids are dock widget ids (`ui.registerWidget`, or a core
+ * panel's). Unknown ids are skipped; a panel named nowhere stays in its
+ * default dock, closed. Only used the first time the view is shown --
+ * afterwards the user's own arrangement is what is saved.
+ */
+export interface ViewPresetLayout {
+  readonly left?: readonly string[];
+  readonly right?: readonly string[];
+  readonly bottom?: readonly string[];
+  /** Listed panels shown open; the others show only their dock-strip icon. Default: all listed. */
+  readonly open?: readonly string[];
+  /** Side docks folded away at first. */
+  readonly folded?: readonly ('left' | 'right')[];
+}
+
+/**
+ * A view a plugin offers next to Notes (SDK 1.39, `ui.registerViewPreset`):
+ * a named layout with its own docks and tabs (ADR-0089). The host attaches
+ * no meaning to the content; any plugin can contribute one.
+ */
+export interface ViewPresetContrib {
+  /** Stable id, unique across plugins; namespace it (`mycorp.review`). */
+  readonly id: string;
+  /** The name in the view switcher. */
+  readonly label: string;
+  readonly layout?: ViewPresetLayout;
+  /**
+   * The Assistant's default conversation target in this view -- an opaque
+   * string the Assistant resolves (the host only carries it, per view).
+   */
+  readonly assistantTarget?: string;
 }
 
 /** One menu row. Either run a registered command or pass a closure. */
@@ -629,11 +678,17 @@ export interface DreyPluginApi {
      * decision, so a plain open lands (or replaces) inside that pane and
      * `split` opens the fresh pane off it. An anchor that is not open is
      * a no-op -- the focused pane decides, as before the option existed.
+     * `opts.stayInView` (SDK 1.39) keeps the current view when a file
+     * opener names a `homeView` -- the tab opens here instead of there.
      */
     open(
       path: string,
       line?: number,
-      opts?: VaultOpOptions & { readonly split?: DocSplit; readonly beside?: string },
+      opts?: VaultOpOptions & {
+        readonly split?: DocSplit;
+        readonly beside?: string;
+        readonly stayInView?: boolean;
+      },
     ): Promise<void>;
     /** Open an unsaved, dirty-from-the-start scratch tab (Save-as on first save). */
     openScratch(path: string, content: string): void;
@@ -649,12 +704,14 @@ export interface DreyPluginApi {
      * resolved like `get`): its pane takes focus before the landing
      * decision, so a plain add lands inside that pane and `split` opens
      * the fresh pane off it. An anchor that is not open is a no-op.
+     * `opts.stayInView` (SDK 1.39) keeps the current view when the kind
+     * names a `homeView`.
      */
     addDoc(
       kind: string,
       key: string,
       name: string,
-      opts?: { readonly split?: DocSplit; readonly beside?: string },
+      opts?: { readonly split?: DocSplit; readonly beside?: string; readonly stayInView?: boolean },
     ): void;
     /**
      * Open vault files with one of these name suffixes through this plugin
@@ -750,6 +807,15 @@ export interface DreyPluginApi {
     registerWidget(widget: PluginWidgetContrib): Unsubscribe;
     registerSettingsPage(page: PluginSettingsPageContrib): Unsubscribe;
     registerDocKind(kind: PluginDocKindContrib): Unsubscribe;
+    /**
+     * Offer a view next to Notes (SDK 1.39): its own docks and tabs,
+     * shown in the title bar's view switcher. Not deletable by the user;
+     * the host removes it when the plugin is disabled (the owner then
+     * lands in Notes). A taken id is refused with a logged warning.
+     */
+    registerViewPreset(preset: ViewPresetContrib): Unsubscribe;
+    /** Make the view `id` (a preset's id, `notes`, or a user view) the active one. Unknown ids are a no-op. */
+    switchView(id: string): void;
     registerMenuContributions(items: readonly MenuContribution[]): Unsubscribe;
     /**
      * @deprecated The "Add entry" drawer was removed in milestone 43

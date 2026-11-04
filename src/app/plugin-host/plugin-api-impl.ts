@@ -51,6 +51,8 @@ import { DropDecoderRegistry } from './drop-decoder-registry.service';
 import { FrontmatterViewRegistry } from './frontmatter-view-registry.service';
 import { FileOpenerRegistry } from '../services/file-opener-registry.service';
 import { DocKindRegistry } from './doc-kind-registry.service';
+import { HomeViewRouter } from '../services/home-view-router.service';
+import { ViewService } from '../views';
 import { PluginSettingsHost } from './plugin-settings-host';
 import {
   EditorContextMenuRegistry,
@@ -95,6 +97,8 @@ export class PluginApiFactory {
   private readonly frontmatterViews = inject(FrontmatterViewRegistry);
   private readonly fileOpeners = inject(FileOpenerRegistry);
   private readonly docKinds = inject(DocKindRegistry);
+  private readonly homeViews = inject(HomeViewRouter);
+  private readonly views = inject(ViewService);
   private readonly menuContributions = inject(MenuContributionsService);
   private readonly contextMenuItems = inject(EditorContextMenuRegistry);
   private readonly toolbarButtons = inject(ToolbarContributionsService);
@@ -197,9 +201,17 @@ export class PluginApiFactory {
         list: () => this.editor.openDocs().map(toOpenDoc),
         open: (path, line, opts) => {
           if (line === undefined) {
-            return this.editor.openFile(path, opts?.vaultId, { split: opts?.split, beside: opts?.beside });
+            return this.editor.openFile(path, opts?.vaultId, {
+              split: opts?.split,
+              beside: opts?.beside,
+              stayInView: opts?.stayInView,
+            });
           }
-          return this.editor.openFileAt(path, line, opts?.vaultId, { split: opts?.split, beside: opts?.beside });
+          return this.editor.openFileAt(path, line, opts?.vaultId, {
+            split: opts?.split,
+            beside: opts?.beside,
+            stayInView: opts?.stayInView,
+          });
         },
         openScratch: (path, content) => this.editor.openScratch(path, content),
         addDoc: (kind, key, name, opts) => {
@@ -207,6 +219,10 @@ export class PluginApiFactory {
           // renders the "kind not available" empty state (ADR-0044).
           if (this.docKinds.get(kind) === undefined) {
             throw new Error(`documents.addDoc: doc kind "${kind}" is not registered`);
+          }
+          // The kind's home view (SDK 1.39) comes up first, so the tab lands there.
+          if (opts?.stayInView !== true) {
+            this.homeViews.enter(this.docKinds.get(kind)?.homeView);
           }
           this.editor.addPluginDoc(kind, key, name, { split: opts?.split, beside: opts?.beside });
         },
@@ -322,6 +338,8 @@ export class PluginApiFactory {
         registerSettingsPage: (page: PluginSettingsPageContrib) =>
           track(this.settingsPages.registerPluginPage(page, PluginSettingsHost)),
         registerDocKind: (kind: PluginDocKindContrib) => track(this.docKinds.register(kind)),
+        registerViewPreset: (preset) => track(this.views.registerPreset(pluginId, preset)),
+        switchView: (id) => this.views.switchTo(id),
         registerMenuContributions: (items: readonly MenuContribution[]) =>
           track(this.menuContributions.register(pluginId, items)),
         // The "Add entry" drawer it mounted into is gone (milestone 43,

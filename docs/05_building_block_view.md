@@ -617,7 +617,16 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   `viewsHolding(key)` answers which views show a document — closing a tab
   leaves only the active view while another still shows it. The switcher is
   title-bar chrome; `Ctrl+1`–`9`, "Switch view" and "Save current layout as
-  a view…" are commands registered in `App`.
+  a view…" are commands registered in `App`. Plugin **view presets** (SDK
+  1.39, `ui.registerViewPreset`, E13-2) join the list after Notes
+  (`registerPreset`, not persisted -- the plugin re-registers at every start;
+  `settleStartup()` runs at the head of `SessionService.restore` and sends an
+  active preset whose plugin is gone back to Notes); the preset's layout is
+  seeded into `DockService` the first time the view is shown
+  (`seedView`). A doc kind's or file opener's `homeView` is honoured through
+  `HomeViewRouter` (`src/app/services/`, no dependencies): `DocOpenService`
+  and the plugin API's `addDoc` call `enter(homeView)`, `ViewService` attaches
+  the handler, and `SessionService.restore` suspends it while tabs come back.
 - `PaneService` (`src/app/panes/`, ADR-0037) — the split-view editor
   layout: an arbitrary tree of row/column splits down to leaf panes, each
   a `{ tabs, active }` record. `PaneLayout` renders the tree recursively

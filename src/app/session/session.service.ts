@@ -3,6 +3,7 @@ import { DocKindRegistry } from '../plugin-host';
 import type { PaneLayoutSnapshot } from '../panes';
 import { DEFAULT_VIEW_ID, PaneService } from '../panes/pane.service';
 import { EditorService, docKey } from '../services/editor.service';
+import { HomeViewRouter } from '../services/home-view-router.service';
 import { LogService } from '../services/log.service';
 import { VaultService } from '../vault';
 import { ViewService } from '../views';
@@ -69,6 +70,7 @@ export class SessionService {
   private readonly editor = inject(EditorService);
   private readonly panes = inject(PaneService);
   private readonly views = inject(ViewService);
+  private readonly homeViews = inject(HomeViewRouter);
   private readonly docKinds = inject(DocKindRegistry);
   private readonly vault = inject(VaultService);
   private readonly log = inject(LogService);
@@ -126,6 +128,11 @@ export class SessionService {
    */
   async restore(): Promise<boolean> {
     let restoredAny = false;
+    // The plugins have registered their view presets by now: an active view
+    // whose plugin is gone falls back to Notes. While tabs come back, no
+    // doc kind or opener may switch views -- the snapshot knows the places.
+    this.views.settleStartup();
+    const releaseHomeViews = this.homeViews.suspend();
     try {
       const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(KEY) : null;
       const parsed = raw ? (JSON.parse(raw) as Partial<SessionSnapshot> & { vault?: unknown }) : null;
@@ -223,6 +230,7 @@ export class SessionService {
     } catch {
       // A corrupt session file must never block startup.
     } finally {
+      releaseHomeViews();
       this.restoring = false;
       this.ready = true;
       void this.pruneOrphanBackups();

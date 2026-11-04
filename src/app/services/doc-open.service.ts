@@ -8,6 +8,7 @@ import { EditorPrefsService } from '../editor/editor-prefs.service';
 import { PaneService } from '../panes/pane.service';
 import { VaultService } from '../vault';
 import { FileOpenerRegistry } from './file-opener-registry.service';
+import { HomeViewRouter } from './home-view-router.service';
 import {
   OpenDoc,
   baseName,
@@ -36,6 +37,7 @@ export class DocOpenService {
   private readonly prefs = inject(EditorPrefsService);
   private readonly settings = inject(SettingsService);
   private readonly fileOpeners = inject(FileOpenerRegistry);
+  private readonly homeViews = inject(HomeViewRouter);
 
   /** id + target for `openFileAt`; `id === 0` means "nothing pending". */
   readonly revealRequest = signal<{ id: number; key: string; line: number }>({
@@ -96,10 +98,17 @@ export class DocOpenService {
       pinned?: boolean;
       split?: DocSplit;
       beside?: string;
+      stayInView?: boolean;
     } = {},
   ): Promise<void> {
     if (!this.api) {
       return;
+    }
+    // A file a plugin opener claims may belong to a view of its own
+    // (SDK 1.39): bring that view up first, so everything below -- the
+    // victim pick, the anchor, the landing -- addresses ITS panes.
+    if (opts.stayInView !== true) {
+      this.homeViews.enter(this.fileOpeners.find(relativePath)?.homeView);
     }
     // The anchor pane takes focus first: everything below (the victim
     // pick, the plain add, the split) then addresses that pane, never
@@ -187,7 +196,7 @@ export class DocOpenService {
     relativePath: string,
     line: number,
     vaultId?: string,
-    opts?: { split?: DocSplit; beside?: string },
+    opts?: { split?: DocSplit; beside?: string; stayInView?: boolean },
   ): Promise<void> {
     await this.openFile(relativePath, vaultId, opts);
     const key = docKey(vaultId ?? this.vault.activeVaultId(), relativePath);

@@ -3,6 +3,8 @@ import type { DreyApi } from '../../../shared/ipc-api';
 import { DockService } from '../dock';
 import { PaneService } from '../panes';
 import { EditorService } from '../services/editor.service';
+import { FileOpenerRegistry } from '../services/file-opener-registry.service';
+import { HomeViewRouter } from '../services/home-view-router.service';
 import { ViewService } from './view.service';
 
 describe('ViewService', () => {
@@ -176,5 +178,153 @@ describe('ViewService', () => {
     expect(again.views().map((v) => v.label)).toEqual(['Notes']);
     expect(again.activeId()).toBe('notes');
     expect(TestBed.inject(DockService).activeViewId()).toBe('notes');
+  });
+});
+
+describe('ViewService presets and home views (SDK 1.39)', () => {
+  let views: ViewService;
+  let dock: DockService;
+  let router: HomeViewRouter;
+
+  beforeEach(() => {
+    localStorage.clear();
+    window.dreyApi = {
+      readVaultFile: (p: string) => Promise.resolve({ content: `body of ${p}`, modifiedMs: 1 }),
+    } as unknown as DreyApi;
+    views = TestBed.inject(ViewService);
+    dock = TestBed.inject(DockService);
+    router = TestBed.inject(HomeViewRouter);
+  });
+
+  afterEach(() => {
+    delete (window as { dreyApi?: unknown }).dreyApi;
+    localStorage.clear();
+  });
+
+  it('lists a preset after Notes and before user views; presets are not saved or deletable', async () => {
+    views.registerPreset('acme', { id: 'acme.work', label: 'Work' });
+    const user = views.saveCurrentAs('Mine');
+    expect(views.views().map((v) => v.label)).toEqual(['Notes', 'Work', 'Mine']);
+    expect(views.views()[1]).toMatchObject({ id: 'acme.work', builtin: true, pluginId: 'acme' });
+    expect(JSON.parse(localStorage.getItem('drey.views')!).views.map((v: { id: string }) => v.id)).toEqual([user]);
+
+    views.openRenamePrompt('acme.work');
+    expect(views.prompt()).toBeNull();
+    await views.remove('acme.work');
+    expect(views.views().length).toBe(3);
+  });
+
+  it('refuses a taken or empty id', () => {
+    const first = views.registerPreset('acme', { id: 'acme.work', label: 'Work' });
+    views.registerPreset('other', { id: 'acme.work', label: 'Imposter' });
+    views.registerPreset('other', { id: 'notes', label: 'Notes 2' });
+    views.registerPreset('other', { id: ' ', label: 'Blank' });
+    expect(views.views().map((v) => v.label)).toEqual(['Notes', 'Work']);
+    first();
+    expect(views.views().map((v) => v.label)).toEqual(['Notes']);
+  });
+
+  it('applies the preset layout the first time the view is shown, then keeps the owner\'s changes', () => {
+    views.registerPreset('acme', {
+      id: 'acme.work',
+      label: 'Work',
+      layout: { left: ['files'], right: ['windows', 'calendar'], open: ['files'], folded: ['right'] },
+    });
+    views.switchTo('acme.work');
+
+    expect(dock.leftIds()).toContain('files');
+    expect(dock.rightIds().slice(0, 2)).toEqual(['windows', 'calendar']);
+    expect(dock.closed('files')).toBe(false);
+    expect(dock.closed('windows')).toBe(true); // named but not in `open`
+    expect(dock.closed('calendar')).toBe(true);
+    expect(dock.sideFolded('right')).toBe(true);
+    expect(dock.sideFolded('left')).toBe(false);
+
+    dock.toggleSide('right');
+    views.switchTo('notes');
+    views.switchTo('acme.work');
+    expect(dock.sideFolded('right')).toBe(false); // the owner's arrangement, not the preset's
+  });
+
+  it('skips unknown panel ids and leaves unnamed panels closed in their default dock', () => {
+    views.registerPreset('acme', { id: 'acme.work', label: 'Work', layout: { left: ['nope', 'files'] } });
+    views.switchTo('acme.work');
+    expect(dock.leftIds()).toContain('files');
+    expect(dock.leftIds()).not.toContain('nope');
+    expect(dock.closed('files')).toBe(false);
+    expect(dock.closed('calendar')).toBe(true);
+  });
+
+  it('carries the preset\'s Assistant target per view', () => {
+    views.registerPreset('acme', { id: 'acme.work', label: 'Work', assistantTarget: 'acme.agent' });
+    expect(views.assistantTarget()).toBeNull();
+    views.switchTo('acme.work');
+    expect(views.assistantTarget()).toBe('acme.agent');
+    views.switchTo('notes');
+    expect(views.assistantTarget()).toBeNull();
+  });
+
+  it('removing the active preset lands in Notes', () => {
+    const off = views.registerPreset('acme', { id: 'acme.work', label: 'Work' });
+    views.switchTo('acme.work');
+    off();
+    expect(views.activeId()).toBe('notes');
+    expect(views.views().length).toBe(1);
+  });
+
+  it('keeps an active preset from the last run until the plugins registered, then settles', () => {
+    views.registerPreset('acme', { id: 'acme.work', label: 'Work' });
+    views.switchTo('acme.work');
+
+    // Restart: the plugin registers its preset a moment after ViewService exists.
+    TestBed.resetTestingModule();
+    const again = TestBed.inject(ViewService);
+    expect(again.activeId()).toBe('acme.work');
+    again.registerPreset('acme', { id: 'acme.work', label: 'Work' });
+    again.settleStartup();
+    expect(again.activeId()).toBe('acme.work');
+
+    // Restart with the plugin gone: back to Notes, layout kept for later.
+    TestBed.resetTestingModule();
+    const gone = TestBed.inject(ViewService);
+    gone.settleStartup();
+    expect(gone.activeId()).toBe('notes');
+    expect(TestBed.inject(DockService).activeViewId()).toBe('notes');
+    expect(JSON.parse(localStorage.getItem('drey.dock')!).views['acme.work']).toBeDefined();
+  });
+
+  it('routes a document to its home view; unknown views, suspension and stayInView do nothing', async () => {
+    views.registerPreset('acme', { id: 'acme.work', label: 'Work' });
+    router.enter(undefined);
+    router.enter('acme.nope');
+    expect(views.activeId()).toBe('notes');
+
+    const release = router.suspend();
+    router.enter('acme.work');
+    expect(views.activeId()).toBe('notes');
+    release();
+    release(); // idempotent
+    router.enter('acme.work');
+    expect(views.activeId()).toBe('acme.work');
+  });
+
+  it('opening a file a plugin opener claims switches to the opener\'s home view first', async () => {
+    const editor = TestBed.inject(EditorService);
+    const openers = TestBed.inject(FileOpenerRegistry);
+    views.registerPreset('acme', { id: 'acme.work', label: 'Work' });
+    const landed: string[] = [];
+    openers.register({
+      extensions: ['.board'],
+      homeView: 'acme.work',
+      open: (path) => landed.push(`${views.activeId()}:${path}`),
+    });
+
+    await editor.openFile('x.board');
+    expect(landed).toEqual(['acme.work:x.board']);
+
+    views.switchTo('notes');
+    await editor.openFile('y.board', undefined, { stayInView: true });
+    expect(landed[1]).toBe('notes:y.board');
+    expect(views.activeId()).toBe('notes');
   });
 });

@@ -1,4 +1,5 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import type { ViewPresetLayout } from '../../../shared/plugin-api/renderer';
 import { endDragChrome, moveDragChrome, startDragChrome } from '../dnd';
 import { PaneService } from '../panes/pane.service';
 import { LayoutGestureService } from '../services/layout-gesture.service';
@@ -414,6 +415,45 @@ export class DockService {
       ...this.slots,
       [id]: { ...s, dock: { left: [...s.dock.left], right: [...s.dock.right], bottom: [...s.dock.bottom] } },
     };
+    this.persist();
+  }
+
+  /** True when the dock already holds a layout for view `id` (the active one included). */
+  hasView(id: string): boolean {
+    return id === this._activeView() || id in this.slots;
+  }
+
+  /**
+   * A view preset's first layout (SDK 1.39): the panels it names go to the
+   * docks it names, open unless `open` narrows them; every other panel
+   * stays in its default dock, closed. Does nothing when the view already
+   * has a layout -- afterwards the user's arrangement is the truth.
+   */
+  seedView(id: string, layout: ViewPresetLayout): void {
+    if (this.hasView(id)) {
+      return;
+    }
+    const base = this.defaultState();
+    const named = new Set<string>([
+      ...(layout.left ?? []),
+      ...(layout.right ?? []),
+      ...(layout.bottom ?? []),
+    ]);
+    const shown = layout.open === undefined ? named : new Set<string>(layout.open);
+    const open: Record<string, boolean> = {};
+    for (const widgetId of this.registry.allWidgetIds()) {
+      open[widgetId] = named.has(widgetId) && shown.has(widgetId);
+    }
+    const seed = this.merge(base, {
+      dock: {
+        left: [...(layout.left ?? [])],
+        right: [...(layout.right ?? [])],
+        bottom: [...(layout.bottom ?? [])],
+      },
+      open,
+      foldedSides: [...(layout.folded ?? [])],
+    });
+    this.slots = { ...this.slots, [id]: seed };
     this.persist();
   }
 

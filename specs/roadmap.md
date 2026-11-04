@@ -70,7 +70,7 @@ and suite-green but await the owner's
 rounds** — with E9 the whole E0–E9 arc stands built and the concept
 is complete, caveat:
 none of it is owner-verified yet; the next step is the owner's
-verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot) and 125 (E13-4, link fallback to other vaults) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
+verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults) and 127 (E13-2, view presets and home views, SDK 1.39) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
@@ -239,10 +239,6 @@ ships.
 
 Order and dependencies (an item needs everything it names):
 
-2. **E13-2 — View presets and home views** (SDK minor, content-agnostic). A
-   plugin registers a view preset (id, label, initial layout, default
-   Assistant target) and may name a `homeView` on doc kinds and file openers.
-   Any plugin can use it. Needs E13-1; follows right after it.
 5. **E13-5 — Assistant conversation targets.** Target *Model* (plain chat,
    no agent, no tools, any provider registered in Settings → Assistant — the
    existing `LlmRouter`, nothing new), *Mission Control* (the E5a chat

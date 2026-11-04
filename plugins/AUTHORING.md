@@ -87,6 +87,19 @@ leaves the app on the previous build. Verify with
   removes it, and an item with neither text nor icon is hidden. No colour
   or tone: the host attaches no meaning to the content (the sample plugin
   shows it).
+  1.39 added view presets and home views: `ui.registerViewPreset({ id,
+  label, layout?, assistantTarget? })` offers a view next to Notes in the
+  title bar's switcher (its own docks and tabs, ADR-0089) -- `layout` names
+  dock widget ids per dock (`left` / `right` / `bottom`, `open` to narrow
+  which are shown, `folded`) and is applied only the first time the view is
+  shown, after that the owner's arrangement is kept; `assistantTarget` is an
+  opaque string the host carries per view for the Assistant. `ui.switchView(id)`
+  activates a view. `homeView` on a doc kind (`registerDocKind`) or a file
+  opener (`registerFileOpener`) names a preset id: opening such a tab
+  switches to that view first (not while a session is restored);
+  `documents.open` / `addDoc` take `stayInView: true` to open it where the
+  owner is. Namespace the preset id (`mycorp.review`); a taken id is
+  refused. The sample plugin shows all of it.
   `ui.registerComposerContribution` is a deprecated no-op since the
   "Add entry" drawer was removed (ADR-0057). 1.11 added the task-index
   seam (`ctx.tasks.registerTaskQuery` / `queryProvider` — the `TaskQueryProvider`

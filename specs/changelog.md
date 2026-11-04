@@ -1,3 +1,44 @@
+### Milestone 127 — View presets and home views (E13-2, SDK 1.39)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(roadmap E13-2; ADR-0089 decisions 2 and 7, "Later change: presets and home
+views"). Content-agnostic: nothing ticket-specific in the SDK or the base; the
+tickets plugin's own "Work" preset is E13-13 and is not built here.
+
+- **SDK 1.39** (`shared/plugin-api/`): `api.ui.registerViewPreset({ id,
+  label, layout?, assistantTarget? })` returns an `Unsubscribe`;
+  `api.ui.switchView(id)`; `homeView?: string` on `PluginDocKindContrib` and
+  `FileOpenerContrib`; `stayInView?: boolean` on `documents.open` and
+  `documents.addDoc`. `ViewPresetLayout` = widget ids per dock
+  (`left`/`right`/`bottom`), `open`, `folded`.
+- **Base** (`src/app/views/view.service.ts`, `dock/dock.service.ts`,
+  `services/home-view-router.service.ts`): presets join the switcher after
+  Notes (not renamable, not deletable, not saved — the plugin re-registers at
+  every start); the first layout is seeded into the dock when the view is
+  first shown (`DockService.seedView`), afterwards the owner's arrangement
+  rules; a taken or empty id is refused (logged); disposing the registration
+  removes the view and lands in Notes when it was active. An active preset
+  from the last run survives until the plugins have registered
+  (`ViewService.settleStartup`, head of `SessionService.restore`); a vanished
+  plugin sends the owner to Notes with the layout kept.
+- **Home views.** Opening a tab of a kind (`addDoc`) or a file claimed by an
+  opener (`openFile`) that names `homeView` switches to that view first, so
+  the tab lands there; `stayInView` opts out; a session restore never
+  switches (`HomeViewRouter.suspend`).
+- **Assistant target.** The preset's `assistantTarget` is carried per view
+  (`ViewService.assistantTarget()`); the base reads nothing from it (E13-5).
+- **Sample plugin**: view "Sample" (`left: sample`, `right: files`), the
+  command "Sample: switch to the Sample view", and the clock kind with
+  `homeView`. `plugins/AUTHORING.md`, `TUTORIAL.md`, manual (Views),
+  docs/05 and ADR-0089 updated.
+- **Not built.** "Opening a note from Work goes to Notes" (needs a notion of a
+  note the base does not have), a UI row "Open in this view", the Assistant
+  actually using the target.
+- **Specs**: `view.service.spec.ts` (9 new: order and protection of presets,
+  refused ids, first-show layout then owner's changes, unknown panels, target
+  per view, removal of the active preset, startup settling, router,
+  opener home view with `stayInView`).
+
 ### Milestone 126 — Mission Control plan to approve (E10-4)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04
