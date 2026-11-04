@@ -1627,7 +1627,11 @@ automatically.
   current view only. A plugin can offer views of its own: they appear in
   the switcher after *Notes* and cannot be deleted, and opening a
   document that belongs to such a view (a tab the plugin names for it)
-  switches there first.
+  switches there first. The tickets plugin offers **Work** (`Ctrl+2`):
+  the Tickets panel on the left, the Assistant on the right and the
+  Capacity band below. Opening a ticket — from the Files panel, a
+  `[[T-0121]]` link or the quick switcher — or the Board or Team tab
+  switches to Work; Notes is `Ctrl+1`.
 - **Open windows** panel lists the open documents of the current view,
   and under *In other views* the rest, each with a *Show here* button:
 

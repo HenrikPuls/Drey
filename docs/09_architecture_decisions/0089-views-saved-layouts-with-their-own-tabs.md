@@ -214,3 +214,17 @@ Constraints that shape the answer:
   have; it comes with the first plugin that needs it (E13-6/E13-13). A UI row
   "Open in this view" (the user-facing form of `stayInView`) is not added yet;
   the plugin-side flag exists.
+
+## Later change: the Work view and path-based home views (E13-13, milestone 141, SDK 1.41)
+
+- The tickets plugin is the first preset provider: `tickets.work` ("Work") with
+  the Tickets panel left, the Assistant right, the Capacity band below; the
+  Board, Team and thread kinds name it as `homeView`.
+- A file opener claims by name suffix, so it cannot name the home view of
+  ticket Markdown files (`tickets/<phase>/T-nnnn.md`) without taking every
+  `.md`. The seam is therefore generic and small:
+  `documents.registerHomeViewRule({ homeView, matches(path, vaultId) })`, kept in
+  `FileOpenerRegistry` and asked by `DocOpenService.openFile` through the
+  `HomeViewRouter` (an opener's `homeView` first, then the rules in
+  registration order). The base still knows no tickets.
+- Naming: view "Work", dock panel "Tickets" (id `tickets` unchanged).

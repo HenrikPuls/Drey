@@ -3951,3 +3951,29 @@ sequenceDiagram
 Cancel is `POST /api/pairing/cancel`; an expired code simply answers
 `pairing: null` on the next poll. The desktop's Settings and a phone share
 the one slot: whoever starts last replaces the waiting pairing.
+
+## 6.83 A ticket opens from Notes: the jump to Work (E13-13, milestone 141)
+
+```mermaid
+sequenceDiagram
+    participant O as Owner (Notes view)
+    participant D as DocOpenService.openFile
+    participant R as FileOpenerRegistry
+    participant H as HomeViewRouter
+    participant V as ViewService
+    participant T as tickets plugin (home rule)
+
+    O->>D: open tickets/40-build/T-0121.md (Files tree, [[T-0121]], switcher)
+    D->>R: homeViewOf(path, vaultId)
+    R->>R: opener for the suffix? none
+    R->>T: rules: matches(path, vaultId)
+    T-->>R: true (board vault, ticket path)
+    R-->>D: tickets.work
+    D->>H: enter(tickets.work)
+    H->>V: switchTo (seed the preset layout the first time)
+    V-->>O: Work: Tickets left, Assistant right, Capacity below
+    D->>D: the tab lands in Work's pane tree
+```
+
+`stayInView` skips the lookup; a restored session suspends the router, so the
+snapshot's own view assignment wins.

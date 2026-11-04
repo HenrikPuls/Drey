@@ -101,7 +101,8 @@ test.describe('Ticket header in the editor (req-62)', () => {
     await page.keyboard.press('Control+z');
     await expect(content).toContainText('title: "Fix the palette race in CI"');
 
-    // A plain note keeps the base pill.
+    // A plain note keeps the base pill (Notes is the view with the Files panel).
+    await page.keyboard.press('Control+1');
     await page.locator('app-files-panel .node.file', { hasText: 'plain.md' }).click();
     await expect(page.locator('app-editor .cm-fm-pill')).toBeVisible();
     await expect(page.locator('app-editor .tickets-head')).toHaveCount(0);

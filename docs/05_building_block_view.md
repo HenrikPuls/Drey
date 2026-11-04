@@ -629,6 +629,10 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   `HomeViewRouter` (`src/app/services/`, no dependencies): `DocOpenService`
   and the plugin API's `addDoc` call `enter(homeView)`, `ViewService` attaches
   the handler, and `SessionService.restore` suspends it while tabs come back.
+  Since E13-13 (SDK 1.41) `FileOpenerRegistry.homeViewOf(path, vaultId)` also
+  consults path rules (`documents.registerHomeViewRule`); the tickets plugin's
+  `renderer/view-preset.ts` registers the **Work** preset and the rule that
+  sends ticket files of the board vault there.
 - `PaneService` (`src/app/panes/`, ADR-0037) — the split-view editor
   layout: an arbitrary tree of row/column splits down to leaf panes, each
   a `{ tabs, active }` record. `PaneLayout` renders the tree recursively

@@ -100,6 +100,11 @@ leaves the app on the previous build. Verify with
   `documents.open` / `addDoc` take `stayInView: true` to open it where the
   owner is. Namespace the preset id (`mycorp.review`); a taken id is
   refused. The sample plugin shows all of it.
+  1.41 added `documents.registerHomeViewRule({ homeView, matches(path,
+  vaultId) })`: opening a vault file the rule matches switches to that view
+  first, like a file opener's `homeView` but by path (an opener's own
+  `homeView` wins; `stayInView` opts out). The tickets plugin sends ticket
+  files to its Work view with it.
   1.40 added `ctx.appConfig.onChange(cb)` (main side): fires after every
   write of the base app config, so a plugin that mirrors part of it (the
   tickets plugin pushes the assistant LLM settings into its engine)
