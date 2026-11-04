@@ -211,6 +211,7 @@ owner builds without the tickets system.
 - **E12-5 — Device rules audit.** 47/34 pt insets, 44 pt targets,
   17/15/13 type scale, 16 px inputs, switches, large titles, pointer
   hover, focus ring.
+- **E12-7 — Design decisions into code** (milestone 136; owner request 2026-11-04, outside the list; replaces the audit's token-only E12-7, takes G-13, G-23, G-26 of the convergence audit). The Anthrazit design system wins over ad-hoc values: accent pastels peach / pink / mint in all three themes and the attention colours re-pointed at them; one radius scale 4 / 8 / 16 as tokens (tickets plugin + Mission Control); type floor 13 px on Mission Control (12 px only for dense desktop list metadata); the text size scale S / L / XL / XXL / XXXL (15 / 17 / 19 / 21 / 24 px, L default, stored value migrated); the capture label Ctrl+Alt+T. Visual and settings only.
 
 Decided against and not on the list: an overlap guard, touches or file
 routing between parallel tickets (D5 — req-75 W7 and W8 dropped; their
