@@ -23,6 +23,7 @@ import { MC_SETTINGS_STATE } from '@mission-ui/settings/settings.model';
 import { MC_TOAST_STATE } from '@mission-ui/toast.model';
 import { MC_PLAN_STATE, type McPlanState } from '@mission-ui/plan/plan.model';
 import { MC_APPROVE_STATE, type McApproveState } from '@mission-ui/plan/approve.model';
+import { MC_FLOW_STATE, type McFlowState } from '@mission-ui/flow/flow.model';
 
 /**
  * One shared McState for the whole shell: the chat tab consumes it
@@ -80,6 +81,12 @@ export const appConfig: ApplicationConfig = {
           estimate: (gate, persona) => state.estimateFor(gate, persona),
           edit: (edit) => state.editParts(edit),
           release: (scope) => state.releaseParts(scope),
+          changeFlow: (part) => {
+            const ticket = state.approvalTicket();
+            if (ticket !== null) {
+              void state.openFlow(ticket, part);
+            }
+          },
           changeSplit: () => {
             const ticket = state.approvalTicket();
             state.closeApproval();
@@ -89,6 +96,24 @@ export const appConfig: ApplicationConfig = {
           },
           close: () => state.closeApproval(),
           openTicket: (id) => state.openTicket(id),
+        };
+      },
+    },
+    {
+      provide: MC_FLOW_STATE,
+      useFactory: (): McFlowState => {
+        const state = inject(McState);
+        return {
+          flow: () => state.flow(),
+          saved: () => state.flowSaved(),
+          error: () => state.flowError(),
+          readOnly: () => state.readOnly(),
+          edit: (op) => state.editFlow(op),
+          draft: (ask) => state.draftFlow(ask),
+          paulReason: () => state.flowReason(),
+          undoDraft: () => state.undoFlowDraft(),
+          save: () => state.saveFlow(),
+          close: () => state.closeFlow(),
         };
       },
     },
@@ -324,6 +349,9 @@ export const appConfig: ApplicationConfig = {
           },
           onClose: () => state.closeTicket(),
           shape: (ticketId) => state.beginShape(ticketId),
+          openFlow: (ticketId) => {
+            void state.openFlow(ticketId, null);
+          },
           approvePlan: (ticketId) => {
             state.closeTicket();
             void state.openApproval(ticketId);

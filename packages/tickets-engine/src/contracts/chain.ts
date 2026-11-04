@@ -41,6 +41,19 @@ export type ChainEntry =
       readonly kind: 'notify';
       /** The gate whose completion lands a card in "Needs you". */
       readonly phase: string;
+    }
+  | {
+      readonly kind: 'move';
+      /** The standard gate this ticket runs somewhere else (E10-5). */
+      readonly phase: string;
+      readonly anchor: string;
+      readonly position: 'after' | 'before';
+    }
+  | {
+      readonly kind: 'assign';
+      /** The standard gate whose persona this ticket pins (E10-5). */
+      readonly phase: string;
+      readonly persona: string;
     };
 
 /** One step of the merged chain — what the gate bar renders. */
@@ -54,8 +67,10 @@ export interface ChainStep {
   readonly skipped: boolean;
   /** The Bescheid rule stands on this gate. */
   readonly notify: boolean;
-  /** The persona pinned to this gate; null = none. */
+  /** The persona pinned to this gate by the delta; null = none (the pipeline decides). */
   readonly persona: string | null;
+  /** A standard gate the delta moved (E10-5). */
+  readonly moved: boolean;
 }
 
 /** The Bescheid card's freshness window (concept §5.7): a notify card

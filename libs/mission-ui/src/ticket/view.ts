@@ -865,6 +865,17 @@ export class TicketView {
 
   protected readonly canApprove = computed(() => this.planParts() >= 2);
 
+  protected readonly canEditFlow = computed(() => this.vm.openFlow !== undefined && !this.readOnly());
+
+  /** The gate sheet's first row: the flow editor, which edits the same chain with a preview. */
+  protected openFlowEditor(): void {
+    const doc = this.doc();
+    if (doc !== null) {
+      this.closeSheet();
+      this.vm.openFlow?.(doc.id);
+    }
+  }
+
   protected approvePlan(): void {
     const doc = this.doc();
     if (doc !== null) {

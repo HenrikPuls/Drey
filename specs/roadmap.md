@@ -190,8 +190,7 @@ owner builds without the tickets system.
   released (today it stays in its phase with one Log line), a per-gate
   estimate for the whole flow (the card estimates the build gate), the
   estimate reading "not yet" until the desk's answer arrives (it cannot
-  tell "asked, no basis" from "not asked yet"), and a
-  Change-flow link that opens the flow editor (E10-5). Adding a part or
+  tell "asked, no basis" from "not asked yet"). Adding a part or
   renaming one from the card stays out on purpose: the cut changes in the
   plan or by asking Mission Control.
 - **E10-3b — Shape mode follow-ups.** Tinted line marks inside the
@@ -199,8 +198,13 @@ owner builds without the tickets system.
   (both want the Markdown surface, E12-6); the iPad board's formatting
   strip over the plan; Paul on his own persona model instead of the chat
   model.
-- **E10-5 — Flow editor.** Chain-grammar extension (`before` / `after`,
-  move, per-part scope), Paul drafts a flow, "Save flow".
+- **E10-5b — Flow editor follow-ups.** The switch that lets Paul propose
+  a flow for **every new plan** (concept §5.7 point 3: he starts at the
+  standard flow; today only the "Ask Paul" draft exists), a per-gate model
+  pick (the model is the persona's today and shown, not set), the default
+  flow under Settings → Tickets (E13-12 / E12-3), and the fleet executing
+  `move` / `assign` (the dispatcher reads the delta nowhere yet — it is
+  data and renders on the gate bar, the cards and the editor).
 - **E12-5 — Device rules audit.** 47/34 pt insets, 44 pt targets,
   17/15/13 type scale, 16 px inputs, switches, large titles, pointer
   hover, focus ring.
@@ -275,7 +279,8 @@ Order and dependencies (an item needs everything it names):
     E13-6; the engine side (`GET/POST /api/tickets/<id>/parts`, `POST
     …/release`) and the proposal text shipped with **E10-4** (milestone 126).
 11. **E13-11 — Flow tab.** The flow editor as an editor tab; the default
-    flow also under Settings → Tickets. Needs **E10-5**.
+    flow also under Settings → Tickets. Needs E10-5 (milestone 128, built:
+    `GET/POST /api/tickets/<id>/flow…`).
 12. **E13-12 — Settings → Tickets in Drey.** Team, default flow, budget and
     runners, devices and pairing (QR), video storage (`videos.inGit` off,
     `videos.maxMb`), reading what E12-3 stores. Needs E12-3 (built) and,
@@ -290,7 +295,7 @@ Order and dependencies (an item needs everything it names):
 
 Parallel lanes: 1, 3 and 4 are disjoint and can run together; 5 and 8 can
 start when their needs are met without waiting for 1. Relation to the
-E10–E12 line: only 10 and 11 wait for E10-4 and E10-5; E12-5 (device rules
+E10–E12 line: 10 and 11 waited for E10-4 and E10-5 (both built); E12-5 (device rules
 audit) and E12-6 (Markdown surface for the web app) are independent of E13.
 Persona names follow D7 (Pia = Mission Control, Paul plans).
 

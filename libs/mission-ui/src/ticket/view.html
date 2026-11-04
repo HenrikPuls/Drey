@@ -773,6 +773,12 @@
       <p class="sheet-note">The pipeline's standard flow applies to this ticket.</p>
     }
 
+    @if (canEditFlow()) {
+      <section class="sheet-section" aria-label="Flow editor">
+        <button type="button" class="btn primary" (click)="openFlowEditor()">Edit the flow</button>
+      </section>
+    }
+
     <section class="sheet-section" aria-label="Insert a gate">
       <h3 class="sheet-label">Insert a gate</h3>
       <div class="sheet-row">

@@ -60,6 +60,17 @@
   display: flex;
 }
 
+/* The flow editor (E10-5) — above the ticket screen and the plan to approve it was opened from. */
+.flow-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 21;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
 /* The plan to approve (E10-4) — the same layer as the ticket screen, one step under it. */
 .approve-layer {
   position: fixed;
@@ -297,6 +308,7 @@
 
   .persona-layer,
   .approve-layer,
+  .flow-layer,
   .ticket-layer {
     position: relative;
     inset: auto;

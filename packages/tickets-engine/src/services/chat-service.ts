@@ -23,6 +23,7 @@ import { promises as fsp } from 'node:fs';
 import type {
   ChatBridge,
   ChatCommand,
+  ChatFlowDraft,
   ChatDecisionResult,
   ChatMessage,
   ChatProposal,
@@ -522,6 +523,26 @@ export class ChatService implements ChatServicePort {
     }
     const reply = await reader.call(this.deps.board, ticket).catch(() => null);
     return reply !== null && reply.ok ? planSectionOf(reply.text) : null;
+  }
+
+  /**
+   * Paul drafts a flow (E10-5): one bridge turn under the flow prompt, the
+   * single setChain command read back as the proposed delta. No session
+   * file, no write — the draft lives on the owner's screen until "Save flow".
+   */
+  async draftFlow(input: { readonly ticket: string; readonly context: string; readonly ask: string | null }): Promise<ChatFlowDraft> {
+    const text = input.ask ?? 'Draft the flow for this ticket.';
+    let reply: Awaited<ReturnType<ChatBridge['runTurn']>>;
+    try {
+      reply = await this.deps.bridge.runTurn({ text, history: [], board: '', flow: { context: input.context }, emit: () => undefined });
+    } catch (error) {
+      return { ok: false, error: `Paul could not be reached (${error instanceof Error ? error.message : String(error)}).` };
+    }
+    const command = reply.commands.find((c) => c.kind === 'setChain');
+    if (command === undefined || command.kind !== 'setChain') {
+      return { ok: false, error: reply.say.trim() === '' ? 'Paul did not propose a flow.' : reply.say.trim() };
+    }
+    return { ok: true, chain: command.chain, reason: reply.say.trim() };
   }
 
   /**

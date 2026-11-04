@@ -16,6 +16,8 @@ import { type RefineReply, TicketReply, AttachmentReply } from '../contracts/rep
 import { assembleBoard, parseRepos, addPipelinePhase, patchPipelinePhase, removePipelinePhase, renamePipelinePhase, parsePipeline, reorderPipelinePhases, reposFileText, reposProse } from '../core/ticket-board';
 import { newTicketFileText, parseTicketFile, patchTicketFile, patchBlockedBy, patchChain, patchForm, patchTrack, ticketPathParts, withLogLine } from '../core/ticket-files';
 import { withPlanSection } from '../core/plan-section';
+import { applyFlowOp, type FlowOp } from '../core/flow-edit';
+import type { FlowReply, FlowSaveReply, FlowStepView, FlowTarget, FlowScope } from '../contracts/flow';
 import { mergeChain, parseChainEntry, renderChainEntries, validateChain } from '../core/chain-delta';
 import { deletePlanPart, movePlanPart, parsePlanParts, partChainEntries, withPlanParts, type PlanPart } from '../core/plan-parts';
 import { blockerOf, indicesToMint, lockedIndices, matchPartTickets, partStateOf, partTicketText, releaseLogText, startLineOf, type PartTicket } from '../core/plan-release';
@@ -126,6 +128,23 @@ function oneMemoryLine(text: string): string {
 }
 
 /** The readable refusal every persona-scoped method shares. */
+/** The flow editor's frame (E10-5): the chain being edited and where it flows from. */
+interface FlowFrame {
+  readonly vault: EngineVault;
+  readonly card: TicketCard;
+  readonly text: string;
+  readonly snap: BoardSnapshot;
+  readonly phases: readonly { readonly id: string; readonly title: string }[];
+  readonly title: string;
+  readonly scope: FlowScope;
+  readonly currentId: string;
+  readonly saved: readonly ChainEntry[];
+  /** Who builds: the ticket's pin or the part's builder; null = the pipeline decides. */
+  readonly builder: string | null;
+  readonly part: PlanPart | null;
+  readonly readOnly: string | null;
+}
+
 function personaMissing(id: string): string {
   return `persona "${id}" does not exist — create tickets/_meta/personas/${id}/persona.md first`;
 }
@@ -1086,6 +1105,241 @@ export class EngineBoardService {
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };
     });
+  }
+
+  /**
+   * The flow editor's frame (E10-5): which chain, from which gate on, what
+   * the file holds now, and whether it may change at all. The ticket scope
+   * is the card's own `chain:`; the part scope is one part's `chain:` line
+   * in the parent's `### Parts`, flowing from the build gate.
+   */
+  private async flowFrame(target: FlowTarget): Promise<FlowFrame | { readonly error: string }> {
+    const found = await this.findCard(target.id);
+    if (found === null) {
+      return { error: `${target.id} is not on the board` };
+    }
+    const { vault, card, text } = found;
+    const snap = await this.snapshot();
+    const phases = snap.pipeline.map((p) => ({ id: p.id, title: p.title }));
+    if (phases.length < 2) {
+      return { error: snap.pipelineError ?? 'the pipeline is empty' };
+    }
+    const title = card.meta.title ?? target.id;
+    if (target.part === null) {
+      return {
+        vault,
+        card,
+        text,
+        snap,
+        phases,
+        title,
+        scope: { kind: 'ticket' },
+        currentId: card.phase,
+        saved: card.meta.chain ?? [],
+        builder: card.meta.persona ?? null,
+        part: null,
+        readOnly: card.meta.run !== null ? 'A run is live on this ticket. Change the flow when the run has ended.' : null,
+      };
+    }
+    const build = this.buildPhaseOf(snap);
+    if (build === null) {
+      return { error: snap.pipelineError ?? 'the pipeline has no build queue' };
+    }
+    const parts = parsePlanParts(text).parts;
+    const part = parts[target.part];
+    if (part === undefined || parts.length < 2) {
+      return { error: 'no such part in this plan' };
+    }
+    const locked = lockedIndices(matchPartTickets(parts, this.childrenOf(snap, target.id))).has(target.part);
+    const defaultPersona = build.persona ?? (((await this.host.configGet<string>('personas.default')) ?? '').trim() || null);
+    return {
+      vault,
+      card,
+      text,
+      snap,
+      phases,
+      title,
+      scope: { kind: 'part', index: target.part, title: part.title },
+      currentId: build.id,
+      saved: partChainEntries(part),
+      builder: part.persona ?? defaultPersona,
+      part,
+      readOnly: locked ? `"${part.title}" is released as a ticket — change its flow on that ticket.` : null,
+    };
+  }
+
+  /** A flow frame's chain as the editor shows it: the merged gates from the current one on, the terminal phase left out. */
+  private async flowReply(frame: FlowFrame, entries: readonly ChainEntry[]): Promise<FlowReply> {
+    const personas = await this.listPersonas();
+    const terminal = frame.snap.pipeline[frame.snap.pipeline.length - 1]!.id;
+    const buildId = this.buildPhaseOf(frame.snap)?.id ?? null;
+    const modelOf = (personaId: string | null): string | null => {
+      const persona = personas.find((p) => p.id === personaId);
+      return persona === undefined ? null : (deriveWorkerModel(persona, null).model ?? null);
+    };
+    const steps: FlowStepView[] = mergeChain(frame.phases, frame.currentId, entries)
+      .map((step, index): FlowStepView | null => {
+        if (step.state === 'past' || step.phase === terminal) {
+          return null;
+        }
+        const column = frame.snap.pipeline.find((p) => p.id === step.phase);
+        const base = step.phase === buildId && !step.inserted && frame.builder !== null ? frame.builder : (column?.persona ?? null);
+        const persona = step.persona ?? base;
+        return {
+          index,
+          phase: step.phase,
+          title: step.title,
+          state: step.state === 'current' ? 'current' : 'future',
+          inserted: step.inserted,
+          skipped: step.skipped,
+          moved: step.moved,
+          notify: step.notify,
+          persona,
+          pinned: step.persona !== null,
+          model: modelOf(persona),
+          owner: persona === null && (column?.handover ?? '').trim().startsWith('manual'),
+          locked: step.state === 'current' || frame.readOnly !== null,
+        };
+      })
+      .filter((step): step is FlowStepView => step !== null);
+    return {
+      ok: true,
+      ticket: frame.card.id,
+      title: frame.title,
+      scope: frame.scope,
+      chain: renderChainEntries(entries),
+      saved: renderChainEntries(frame.saved),
+      steps,
+      phases: frame.phases.filter((phase) => phase.id !== terminal),
+      personas: personas.map((p) => ({ id: p.id, title: p.title, color: p.color, model: deriveWorkerModel(p, null).model ?? '' })),
+      readOnly: frame.readOnly,
+    };
+  }
+
+  private async flowEntriesOf(chain: readonly string[], frame: FlowFrame): Promise<ChainEntry[] | { readonly error: string }> {
+    const entries: ChainEntry[] = [];
+    for (const raw of chain) {
+      const entry = parseChainEntry(raw);
+      if (entry === null) {
+        return { error: `chain entry "${raw}" is not readable` };
+      }
+      entries.push(entry);
+    }
+    const refusal = validateChain(frame.phases, frame.currentId, entries);
+    if (refusal !== null) {
+      return { error: refusal };
+    }
+    const ids = await this.listPersonaIds();
+    for (const entry of entries) {
+      const persona = entry.kind === 'insert' || entry.kind === 'assign' ? entry.persona : null;
+      if (persona !== null && !ids.includes(persona)) {
+        return { error: personaMissing(persona) };
+      }
+    }
+    return entries;
+  }
+
+  /** The flow as the file holds it (E10-5). */
+  async flowOf(target: FlowTarget): Promise<FlowReply> {
+    const frame = await this.flowFrame(target);
+    return 'error' in frame ? { ok: false, error: frame.error } : this.flowReply(frame, frame.saved);
+  }
+
+  /**
+   * One edit on a draft chain (E10-5): the draft arrives, the edited draft
+   * returns — nothing is written. `view` re-reads a draft (Paul's).
+   */
+  async flowEdit(input: FlowTarget & { chain: readonly string[]; edit: FlowOp }): Promise<FlowReply> {
+    const frame = await this.flowFrame(input);
+    if ('error' in frame) {
+      return { ok: false, error: frame.error };
+    }
+    const entries = await this.flowEntriesOf(input.chain, frame);
+    if ('error' in entries) {
+      return { ok: false, error: entries.error };
+    }
+    if (input.edit.op === 'persona' && input.edit.persona !== null && !(await this.listPersonaIds()).includes(input.edit.persona)) {
+      return { ok: false, error: personaMissing(input.edit.persona) };
+    }
+    if (frame.readOnly !== null && input.edit.op !== 'view') {
+      return { ok: false, error: frame.readOnly };
+    }
+    const edited = applyFlowOp(frame.phases, frame.currentId, entries, input.edit);
+    if (!edited.ok) {
+      return { ok: false, error: edited.error };
+    }
+    return this.flowReply(frame, edited.entries);
+  }
+
+  /**
+   * "Save flow" (E10-5): the draft becomes the ticket's `chain:` (the
+   * setChain write: one header rewrite, one Log line, one commit) or one
+   * part's `chain:` in the parent's plan (one commit
+   * `tickets: <id> part <n> flow`). A part that is a ticket already, a
+   * live run and a delta that does not hold refuse.
+   */
+  async saveFlow(input: FlowTarget & { chain: readonly string[]; actor?: string }): Promise<FlowSaveReply> {
+    if (input.part === null) {
+      return this.setChain({ id: input.id, chain: input.chain, ...(input.actor === undefined ? {} : { actor: input.actor }) });
+    }
+    const partIndex = input.part;
+    return this.enqueue(async (): Promise<FlowSaveReply> => {
+      const frame = await this.flowFrame(input);
+      if ('error' in frame) {
+        return { ok: false, error: frame.error };
+      }
+      if (frame.readOnly !== null) {
+        return { ok: false, error: frame.readOnly };
+      }
+      const entries = await this.flowEntriesOf(input.chain, frame);
+      if ('error' in entries) {
+        return { ok: false, error: entries.error };
+      }
+      const canonical = renderChainEntries(entries);
+      const parts = parsePlanParts(frame.text).parts;
+      const next = parts.map((part, i) => (i === partIndex ? { ...part, chain: canonical } : part));
+      const patched = withPlanParts(frame.text, next);
+      if (patched === frame.text.replace(/\r\n/g, '\n')) {
+        return { ok: true };
+      }
+      try {
+        await this.host.write(frame.vault.id, frame.card.path, patched);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const warning = await this.commit(frame.vault, [frame.card.path], `tickets: ${input.id} part ${partIndex + 1} flow`);
+      this.host.announceChanges(frame.vault.id, [frame.card.path]);
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /** What Paul reads before he drafts a flow (E10-5): the standard flow, the flow now, the crew. */
+  async flowDraftContext(target: FlowTarget): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly error: string }> {
+    const frame = await this.flowFrame(target);
+    if ('error' in frame) {
+      return { ok: false, error: frame.error };
+    }
+    if (frame.readOnly !== null) {
+      return { ok: false, error: frame.readOnly };
+    }
+    const reply = await this.flowReply(frame, frame.saved);
+    if (!reply.ok) {
+      return reply;
+    }
+    const personas = reply.personas.map((p) => `- ${p.id} (${p.title})`).join('\n');
+    const standard = frame.phases.map((p) => p.id).join(' -> ');
+    const now = reply.steps
+      .map(
+        (s) =>
+          `${s.index}. ${s.phase}${s.persona === null ? '' : ` — ${s.persona}`}${s.skipped ? ' (struck)' : ''}${s.inserted ? ' (added)' : ''}${s.notify ? ' (tell me)' : ''}${s.state === 'current' ? ' (running now, locked)' : ''}`,
+      )
+      .join('\n');
+    const plan = frame.part !== null ? `\nThis flow belongs to part "${frame.part.title}"${frame.part.reason === null ? '' : ` — ${frame.part.reason}`}.` : '';
+    return {
+      ok: true,
+      text: `Ticket ${target.id}: ${frame.title}${plan}\n\nStandard flow (phase ids): ${standard}\nThe flow now, from the current gate:\n${now}\nSaved delta: ${reply.saved.length === 0 ? '(none — standard flow)' : reply.saved.join('; ')}\n\nPersonas:\n${personas}`,
+    };
   }
 
   /**

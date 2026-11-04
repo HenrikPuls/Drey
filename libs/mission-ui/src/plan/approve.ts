@@ -173,6 +173,10 @@ export class PlanApprove {
     this.state.openTicket(id);
   }
 
+  protected changeFlow(card: McPartCard): void {
+    this.state.changeFlow(card.index);
+  }
+
   protected changeSplit(): void {
     this.state.changeSplit();
   }

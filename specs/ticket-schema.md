@@ -631,9 +631,35 @@ The grammar, one entry per list item:
   from the gate's completion until the ticket leaves the following
   gate or the freshness window (`NOTIFY_WINDOW_MS`, 24 h) runs out,
   whichever comes first.
+- `move <phase> after|before <anchor>` — a standard gate runs
+  somewhere else in this ticket's chain (E10-5, the flow editor's move
+  earlier / later). Once per phase; an inserted gate is moved by
+  changing its own insert, never by `move`.
+- `assign <phase> <persona>` — pins who works a standard gate
+  (E10-5). An inserted gate carries its persona in the insert.
 
 A split ticket's **parts** each carry their own `chain:` delta (E10): the
-scope is the part, never the parent.
+scope is the part, never the parent. A part's chain flows from the build
+gate on (the part's builder is the persona on the plan card, so the build
+gate itself is not editable in a part's flow).
+
+**The flow editor (E10-5).** Mission Control edits the chain as *steps*, not
+as strings: an insert after a gate, a removal (a strike for a standard gate,
+dropping an insert), a restore, move earlier / later, a persona, the notify
+rule, a reset to the standard flow. Every edit takes the draft delta and
+returns the next one (`core/flow-edit.ts`, `applyFlowOp`); the delta is
+regenerated canonically from the edited arrangement — standard gates that
+kept their relative order stay silent (the longest in-order run), the
+others get `move`, new gates `insert`, then `skip` / `notify` / `assign`
+follow — and is checked by merging it back to the same arrangement, so an
+arrangement the grammar cannot write (two gates of one phase make an
+anchor ambiguous) is refused with a reason instead of written wrong. Only
+the future is editable: the current and past gates are locked (a running
+gate stays as it is). Nothing is written before "Save flow": ticket scope
+goes through `setChain` (one commit `tickets: <id> chain <n entries|
+standard>`), part scope rewrites that part's `chain:` line in the parent's
+`### Parts` (one commit `tickets: <id> part <n> flow`); a part that is a
+ticket already, a live run and a delta the guard rejects refuse.
 
 Phase ids are the pipeline's id grammar (`[a-z][a-z0-9-]*`),
 persona names bare lowercase words.
@@ -646,7 +672,9 @@ a phase or anchor the pipeline does not contain; a phase anchored
 on its own insert; a phase inserted twice; a phase both skipped and
 inserted ("strike the gate or revisit it, not both"); a skip,
 anchor or notify of the current or a past gate (the delta only
-reaches future gates).
+reaches future gates); a `move` of a current, past, inserted, skipped or
+already moved gate, onto itself, or ahead of the current gate; an `assign`
+of a current or past gate, of an inserted gate or twice.
 
 **The machine write** is the chat's `setChain` command (concept §6:
 the change runs through the chat as a command **with confirmation**

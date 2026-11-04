@@ -48,6 +48,10 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
     planParts: vi.fn(async () => ({ ok: false as const, error: 'x' })),
     editPlanParts: vi.fn(async () => ok),
     releasePlan: vi.fn(async () => ({ ok: true as const, tickets: [] })),
+    flowOf: vi.fn(async () => ({ ok: false as const, error: 'unused' })),
+    flowEdit: vi.fn(async () => ({ ok: false as const, error: 'unused' })),
+    saveFlow: vi.fn(async () => ({ ok: true as const })),
+    flowDraftContext: vi.fn(async () => ({ ok: true as const, text: 'ctx' })),
     ticketFile: vi.fn(async () => ({ ok: false as const, error: 'nope' })),
     worktreeChangesOf: vi.fn(async () => []),
     acceptTicket: vi.fn(async () => ok),
@@ -706,6 +710,41 @@ describe('handoffRun (E12-4)', () => {
     vi.mocked(fleet.stop).mockResolvedValue({ ok: false, error: 'cannot stop' });
     await expect(port.handoffRun({ runId: 'r1' })).resolves.toEqual({ ok: false, error: 'cannot stop' });
     expect(board.startRun).not.toHaveBeenCalled();
+  });
+});
+
+describe('flowDraft (E10-5)', () => {
+  const chat = (draft: unknown) => ({ draftFlow: vi.fn(async () => draft) }) as unknown as import('../contracts/chat').ChatServicePort;
+  const view = { ok: true as const, ticket: 'T-1', title: 't', scope: { kind: 'ticket' as const }, chain: ['skip verify'], saved: [], steps: [], phases: [], personas: [], readOnly: null };
+
+  it('reads the draft back through the board and carries Paul’s reason', async () => {
+    const { board, fleet } = fakes();
+    vi.mocked(board.flowDraftContext).mockResolvedValue({ ok: true, text: 'ctx' });
+    vi.mocked(board.flowEdit).mockResolvedValue(view);
+    const c = chat({ ok: true, chain: ['skip verify'], reason: 'No tests needed.' });
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false }, c);
+    await expect(port.flowDraft({ id: 'T-1', part: null, ask: 'quick one' })).resolves.toEqual({ ...view, reason: 'No tests needed.' });
+    expect(vi.mocked(c.draftFlow)).toHaveBeenCalledWith({ ticket: 'T-1', context: 'ctx', ask: 'quick one' });
+    expect(board.flowEdit).toHaveBeenCalledWith({ id: 'T-1', part: null, chain: ['skip verify'], edit: { op: 'view' } });
+  });
+
+  it('passes the refusal on, and says when his draft does not hold', async () => {
+    const { board, fleet } = fakes();
+    vi.mocked(board.flowDraftContext).mockResolvedValue({ ok: true, text: 'ctx' });
+    const refused = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false }, chat({ ok: false, error: 'No model.' }));
+    await expect(refused.flowDraft({ id: 'T-1', part: null, ask: null })).resolves.toEqual({ ok: false, error: 'No model.' });
+    vi.mocked(board.flowEdit).mockResolvedValue({ ok: false, error: 'the pipeline has no phase "design"' });
+    const bad = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false }, chat({ ok: true, chain: ['insert design after review'], reason: 'r' }));
+    await expect(bad.flowDraft({ id: 'T-1', part: null, ask: null })).resolves.toEqual({ ok: false, error: "Paul's draft does not hold: the pipeline has no phase \"design\"" });
+  });
+
+  it('stops before asking Paul when the flow cannot change', async () => {
+    const { board, fleet } = fakes();
+    vi.mocked(board.flowDraftContext).mockResolvedValue({ ok: false, error: 'A run is live.' });
+    const c = chat({ ok: true, chain: [], reason: '' });
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false }, c);
+    await expect(port.flowDraft({ id: 'T-1', part: null, ask: null })).resolves.toEqual({ ok: false, error: 'A run is live.' });
+    expect(vi.mocked(c.draftFlow)).not.toHaveBeenCalled();
   });
 });
 

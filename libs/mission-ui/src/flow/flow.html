@@ -1,0 +1,210 @@
+<section class="fe" aria-label="Flow editor">
+  <header class="fe-head">
+    <button type="button" class="fe-back" (click)="close()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M15 5l-7 7 7 7" />
+      </svg>
+      Back
+    </button>
+    @if (flow(); as f) {
+      <span class="fe-id">{{ f.ticket }}</span>
+    }
+    <span class="grow"></span>
+    @if (flow() !== null) {
+      <span class="fe-chip" [class.dirty]="dirty()">{{ chip() }}</span>
+    }
+  </header>
+
+  <div class="fe-main">
+    <div class="fe-body">
+      @if (flow(); as f) {
+        <div class="fe-title">
+          <span class="fe-eyebrow">{{ eyebrow() }}</span>
+          <h1>{{ f.scope.kind === 'part' ? f.scope.title : f.title }}</h1>
+        </div>
+
+        @if (readOnly()) {
+          <p class="fe-note">{{ f.readOnly ?? 'This device is read-only.' }}</p>
+        }
+
+        @if (reason(); as why) {
+          <div class="fe-paul" role="status">
+            <span class="fe-paul-k">Paul drafted this flow</span>
+            <span class="fe-paul-t">{{ why }}</span>
+            <button type="button" class="fe-link" (click)="undoDraft()">Undo draft</button>
+          </div>
+        }
+
+        <ol class="fe-list" aria-label="Gates">
+          @for (row of rows(); track row.step.index) {
+            <li class="fe-item">
+              <button
+                type="button"
+                class="fe-gate"
+                [class.dashed]="row.dashed"
+                [class.skip]="row.step.skipped"
+                [class.ins]="row.step.inserted"
+                [class.running]="row.step.state === 'current'"
+                [class.sel]="selected() === row.step.index"
+                [attr.aria-pressed]="selected() === row.step.index"
+                [attr.aria-label]="row.step.title + ', ' + row.who + (row.step.state === 'current' ? ', current gate' : '')"
+                (click)="select(row.step)"
+              >
+                <span class="fe-dot" [style.background]="row.tint || 'var(--text-3)'"></span>
+                <span class="fe-gate-main">
+                  <b class="fe-gate-title">{{ row.step.title }}</b>
+                  <span class="fe-gate-who">{{ row.who }}@if (row.model) { · {{ row.model }} }</span>
+                </span>
+                @if (row.step.state === 'current') {
+                  <span class="fe-mark running">current</span>
+                }
+                @for (mark of row.marks; track mark) {
+                  <span class="fe-mark">{{ mark }}</span>
+                }
+              </button>
+              <button
+                type="button"
+                class="fe-plus"
+                [class.open]="adding() === row.step.index"
+                [disabled]="readOnly()"
+                [attr.aria-expanded]="adding() === row.step.index"
+                [attr.aria-label]="'Add a gate after ' + row.step.title"
+                (click)="toggleAdding(row.step.index)"
+              >
+                <span class="fe-plus-line" aria-hidden="true"></span>
+                <span class="fe-plus-dot" aria-hidden="true">+</span>
+              </button>
+              @if (adding() === row.step.index) {
+                <div class="fe-add" role="group" aria-label="Add a gate">
+                  @for (phase of addable(); track phase.id) {
+                    <button type="button" class="chip" [disabled]="busy()" (click)="add(phase.id, row.step.index)">{{ phase.title }}</button>
+                  } @empty {
+                    <span class="fe-hint">Every phase is in this flow already.</span>
+                  }
+                </div>
+              }
+            </li>
+          }
+        </ol>
+      } @else if (error(); as e) {
+        <p class="fe-note" role="alert">{{ e }}</p>
+      } @else {
+        <p class="fe-note" aria-live="polite">Loading…</p>
+      }
+    </div>
+
+    @if (inspector(); as ins) {
+      <aside class="fe-inspector" role="dialog" aria-label="Gate settings">
+        <div class="fe-ins-head">
+          <h2>{{ ins.step.title }}</h2>
+          <button type="button" class="fe-x" aria-label="Close" (click)="select(ins.step)">×</button>
+        </div>
+
+        @if (ins.running) {
+          <p class="fe-hint">This is the current gate. It stays as it is; changes reach the gates after it.</p>
+        } @else if (!ins.editable) {
+          <p class="fe-hint">This flow cannot change.</p>
+        }
+
+        <section class="fe-sec" aria-label="Who works this gate">
+          <h3>Who</h3>
+          @if (ins.owner) {
+            <p class="fe-val">You</p>
+          }
+          <div class="fe-chips" role="group">
+            @if (!ins.owner) {
+              <button
+                type="button"
+                class="chip"
+                [class.on]="!ins.step.pinned"
+                [attr.aria-pressed]="!ins.step.pinned"
+                [disabled]="!ins.editable || busy()"
+                (click)="setPersona(ins.step, null)"
+              >
+                Pipeline default
+              </button>
+            }
+            @for (p of flow()?.personas ?? []; track p.id) {
+              <button
+                type="button"
+                class="chip"
+                [class.on]="ins.step.pinned && ins.step.persona === p.id"
+                [attr.aria-pressed]="ins.step.pinned && ins.step.persona === p.id"
+                [disabled]="!ins.editable || busy()"
+                (click)="setPersona(ins.step, p.id)"
+              >
+                <span class="fe-dot sm" [style.background]="p.color || 'var(--text-3)'"></span>{{ p.title }}
+              </button>
+            }
+          </div>
+        </section>
+
+        <section class="fe-sec" aria-label="Model">
+          <h3>Model</h3>
+          <p class="fe-val">{{ ins.step.model ?? 'None' }}</p>
+        </section>
+
+        <section class="fe-sec fe-row" aria-label="Tell me when it is done">
+          <span class="fe-row-t">Tell me when it is done</span>
+          <button
+            type="button"
+            class="fe-switch"
+            role="switch"
+            [class.on]="ins.step.notify"
+            [attr.aria-checked]="ins.step.notify"
+            aria-label="Tell me when it is done"
+            [disabled]="!ins.editable || busy()"
+            (click)="setNotify(ins.step, !ins.step.notify)"
+          >
+            <span class="fe-knob"></span>
+          </button>
+        </section>
+
+        <section class="fe-sec" aria-label="Runs after">
+          <h3>Runs after</h3>
+          <p class="fe-val">{{ ins.after ?? 'The start of this flow' }}</p>
+          <div class="fe-actions">
+            <button type="button" class="fe-btn" [disabled]="!ins.editable || !ins.earlier || busy()" (click)="move(ins.step, -1)">↑ Earlier</button>
+            <button type="button" class="fe-btn" [disabled]="!ins.editable || !ins.later || busy()" (click)="move(ins.step, 1)">↓ Later</button>
+          </div>
+        </section>
+
+        <div class="fe-actions">
+          <button type="button" class="fe-btn" [disabled]="readOnly() || busy()" (click)="toggleAdding(ins.step.index)">Add a gate after</button>
+          <span class="grow"></span>
+          @if (ins.step.skipped) {
+            <button type="button" class="fe-btn" [disabled]="!ins.editable || busy()" (click)="restore(ins.step)">Restore gate</button>
+          } @else {
+            <button type="button" class="fe-btn danger" [disabled]="!ins.editable || busy()" (click)="remove(ins.step)">Remove gate</button>
+          }
+        </div>
+      </aside>
+    }
+  </div>
+
+  @if (flow() !== null) {
+    <footer class="fe-foot">
+      @if (message(); as m) {
+        <p class="fe-error" role="alert">{{ m }}</p>
+      }
+      <div class="fe-ask">
+        <input
+          type="text"
+          class="fe-input"
+          aria-label="Ask Paul to change this flow"
+          placeholder="Ask Paul to change this flow"
+          [value]="ask()"
+          [disabled]="readOnly() || busy()"
+          (input)="onAsk($event)"
+          (keydown.enter)="askPaul()"
+        />
+        <button type="button" class="fe-btn" [disabled]="readOnly() || busy()" (click)="askPaul()">Ask Paul</button>
+      </div>
+      <div class="fe-buttons">
+        <button type="button" class="fe-link" [disabled]="readOnly() || busy() || (flow()?.chain?.length ?? 0) === 0" (click)="reset()">Reset to standard flow</button>
+        <span class="grow"></span>
+        <button type="button" class="fe-btn wide primary" [disabled]="readOnly() || busy() || !dirty()" (click)="save()">Save flow</button>
+      </div>
+    </footer>
+  }
+</section>

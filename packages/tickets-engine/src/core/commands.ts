@@ -15,6 +15,7 @@ import {
   type QuestionAnswers,
 } from '../fleet/protocol';
 import type { PlanPartsEdit, PlanReleaseScope } from '../contracts/plan-approval';
+import type { FlowOp } from './flow-edit';
 import { DEFAULT_PRIORITY_CONFIG, titleFromDescription, type PriorityConfig, type TicketPriority, type TicketTrack } from '../contracts/tickets';
 
 export type Parsed<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: string };
@@ -222,6 +223,117 @@ export function parsePlanRelease(payload: unknown): Parsed<PlanReleaseCommand> {
   }
   const scope = p['scope'] ?? 'all';
   return scope === 'all' || scope === 'first' ? ok({ id: p['id'], scope }) : refuse('release scope must be all or first');
+}
+
+export interface FlowEditCommand {
+  readonly id: string;
+  readonly part: number | null;
+  readonly chain: readonly string[];
+  readonly edit: FlowOp;
+}
+
+function flowTargetOf(p: Record<string, unknown>): { id: string; part: number | null } | null {
+  if (typeof p['id'] !== 'string') {
+    return null;
+  }
+  const part = p['part'];
+  if (part === undefined || part === null) {
+    return { id: p['id'], part: null };
+  }
+  return typeof part === 'number' && Number.isInteger(part) && part >= 0 && part < 200 ? { id: p['id'], part } : null;
+}
+
+function chainStringsOf(value: unknown): string[] | null {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value) || value.length > 40) {
+    return null;
+  }
+  const out: string[] = [];
+  for (const item of value as unknown[]) {
+    if (typeof item !== 'string' || item.trim() === '' || item.length > 200) {
+      return null;
+    }
+    out.push(item.trim());
+  }
+  return out;
+}
+
+/** The flow editor's edit (E10-5): `{part?, chain, edit: {op, ...}}`. */
+export function parseFlowEdit(payload: unknown): Parsed<FlowEditCommand> {
+  const p = record(payload);
+  const target = flowTargetOf(p);
+  const chain = chainStringsOf(p['chain']);
+  const e = record(p['edit']);
+  if (target === null || chain === null) {
+    return refuse('bad flow payload');
+  }
+  const int = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 100 ? v : null);
+  const ident = (v: unknown): string | null => (typeof v === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(v) ? v : null);
+  const done = (edit: FlowOp): Parsed<FlowEditCommand> => ok({ ...target, chain, edit });
+  switch (e['op']) {
+    case 'view':
+    case 'reset':
+      return done({ op: e['op'] });
+    case 'insert': {
+      const phase = ident(e['phase']);
+      const after = int(e['after']);
+      return phase === null || after === null ? refuse('bad flow edit') : done({ op: 'insert', phase, after });
+    }
+    case 'remove':
+    case 'restore': {
+      const step = int(e['step']);
+      return step === null ? refuse('bad flow edit') : done({ op: e['op'], step });
+    }
+    case 'move': {
+      const step = int(e['step']);
+      return step === null || (e['dir'] !== -1 && e['dir'] !== 1) ? refuse('bad flow edit') : done({ op: 'move', step, dir: e['dir'] });
+    }
+    case 'notify': {
+      const step = int(e['step']);
+      return step === null || typeof e['on'] !== 'boolean' ? refuse('bad flow edit') : done({ op: 'notify', step, on: e['on'] });
+    }
+    case 'persona': {
+      const step = int(e['step']);
+      const persona = e['persona'] === null ? null : ident(e['persona']);
+      return step === null || (e['persona'] !== null && persona === null) ? refuse('bad flow edit') : done({ op: 'persona', step, persona });
+    }
+    default:
+      return refuse('unknown flow edit');
+  }
+}
+
+export interface FlowSaveCommand {
+  readonly id: string;
+  readonly part: number | null;
+  readonly chain: readonly string[];
+}
+
+/** "Save flow" (E10-5): the whole draft delta of a ticket or one part. */
+export function parseFlowSave(payload: unknown): Parsed<FlowSaveCommand> {
+  const p = record(payload);
+  const target = flowTargetOf(p);
+  const chain = chainStringsOf(p['chain']);
+  return target === null || chain === null ? refuse('bad flow payload') : ok({ ...target, chain });
+}
+
+export interface FlowDraftCommand {
+  readonly id: string;
+  readonly part: number | null;
+  /** What the owner asked Paul for; null = Paul proposes from the ticket alone. */
+  readonly ask: string | null;
+}
+
+/** Paul's flow draft (E10-5). */
+export function parseFlowDraft(payload: unknown): Parsed<FlowDraftCommand> {
+  const p = record(payload);
+  const target = flowTargetOf(p);
+  if (target === null) {
+    return refuse('bad flow payload');
+  }
+  const ask = typeof p['ask'] === 'string' && p['ask'].trim() !== '' ? p['ask'].trim().slice(0, 1000) : null;
+  return ok({ ...target, ask });
 }
 
 export interface StartRunCommand {

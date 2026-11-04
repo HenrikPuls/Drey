@@ -141,6 +141,11 @@
     <mc-ticket />
     <mc-ticket-edit />
   </div>
+  @if (flowOpen() !== null) {
+    <div class="flow-layer">
+      <mc-flow-editor />
+    </div>
+  }
   <mc-toast />
 </div>
 }

@@ -635,6 +635,21 @@ describe('TicketView gate sheet', () => {
     expect(fake.calls.proposeChain).toEqual(['Return T-0042 to the standard flow']);
   });
 
+  it('offers the flow editor from the sheet when the adapter has one, and hands the ticket over', () => {
+    const opened: string[] = [];
+    const fake = { ...makeFake({ docValue: DOC }), openFlow: (id: string) => opened.push(id) };
+    const view = setup(fake);
+    const vm = sheet(view);
+    vm.openSheet();
+    const surface = view as unknown as { canEditFlow(): boolean; openFlowEditor(): void };
+    expect(surface.canEditFlow()).toBe(true);
+    surface.openFlowEditor();
+    expect(opened).toEqual(['T-0042']);
+    expect(vm.sheetOpen()).toBe(false);
+    const without = setup(makeFake({ docValue: DOC })) as unknown as { canEditFlow(): boolean };
+    expect(without.canEditFlow()).toBe(false);
+  });
+
   it('opens nothing without a document', () => {
     const fake = makeFake({ docValue: null });
     const vm = sheet(setup(fake));

@@ -35,6 +35,8 @@ export interface McApproveState {
   edit(edit: McPartsEdit): Promise<McApproveReply>;
   /** The approval: `all` new parts or only the `first` one. */
   release(scope: 'all' | 'first'): Promise<McApproveReply>;
+  /** Opens the flow editor on one part's flow (E10-5). */
+  changeFlow(part: number): void;
   /** Back to the shape dialog: the split changes in the plan or by asking Mission Control. */
   changeSplit(): void;
   close(): void;

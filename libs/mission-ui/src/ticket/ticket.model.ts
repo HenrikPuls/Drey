@@ -1035,6 +1035,11 @@ export interface TicketVm {
    * the plan's parts. Optional — an adapter without it hides the button.
    */
   approvePlan?(ticketId: string): void;
+  /**
+   * The gate sheet's way into the flow editor (E10-5). Optional — an
+   * adapter without it hides the row.
+   */
+  openFlow?(ticketId: string): void;
   /** The raw edit's save; one commit on the desk, the refusal inline. */
   save(text: string): Promise<TicketSaveReply>;
   accept(): Promise<TicketActionReply>;

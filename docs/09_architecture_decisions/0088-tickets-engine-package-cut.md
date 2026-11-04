@@ -377,5 +377,20 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     wider than "running" on purpose — a released part is a ticket and its
     order, owner and removal live there. No overlap guard, touches or
     routing (D5).
+  - **Flow editor (E10-5, milestone 128) — edit the arrangement, not the
+    strings.** The chain delta stays the one source of truth in the file;
+    the editor never edits entry text. It edits the merged steps and the
+    desk regenerates the smallest canonical delta that merges back to the
+    same arrangement (a verified round trip, refused when the grammar
+    cannot write it). Two entries were added to the grammar for it: `move`
+    (a standard gate runs elsewhere) and `assign` (a standard gate's
+    persona); `before`/`after` and the per-part scope were already there.
+    The draft lives in the app and each tap is a stateless round trip
+    (`POST …/flow-edit`), so nothing is written before "Save flow"
+    (`POST …/flow-save`, ticket header or the part's line in the parent's
+    plan) and no draft state exists on the desk. Paul's draft
+    (`POST …/flow-draft`) is one bridge turn under its own prompt that
+    answers a `setChain` command; the desk reads it back through the same
+    guard as a hand edit, and it is never written by the draft.
   Not yet manually verified by the owner; the etappen land one
   milestone at a time (roadmap, "Mission Control redesign").

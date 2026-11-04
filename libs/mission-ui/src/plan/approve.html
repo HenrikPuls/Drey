@@ -112,7 +112,9 @@
               }
               <span class="pa-flow-note">{{ row.flowNote }}</span>
               <span class="grow"></span>
-              <span class="pa-flow-link" aria-hidden="true">Change flow ›</span>
+              @if (!row.card.locked) {
+                <button type="button" class="pa-flow-link" [attr.aria-label]="'Change the flow of part ' + row.n" (click)="changeFlow(row.card)">Change flow ›</button>
+              }
             </div>
 
             <div class="pa-meta">

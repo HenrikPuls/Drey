@@ -235,6 +235,16 @@ create as a `raw capture:` Log line (ticket-schema).
   appended to a user's own Action template prompt when the Action rewrites
   the document. The Action context carries the current selection
   (`SELECTED SECTION`) next to the whole document.
+- **`FLOW_SYSTEM_PROMPT`** (`packages/tickets-engine/src/services/chat-llm.ts`,
+  E10-5) — Paul drafts one ticket's or one plan part's flow. The system
+  message is the prompt plus `## Flow` (the standard flow's phase ids, the
+  flow now with each gate's persona and marks, the saved delta, the crew);
+  the user message is the owner's words or "Draft the flow for this
+  ticket.". The reply is the mission envelope with exactly one
+  `setChain` command (`{"kind":"setChain","id":…,"chain":[…]}`) — the whole
+  delta in the chain grammar incl. `move` and `assign` — and a `say` that is
+  his reason. The desk validates it like any edit and shows it as a draft;
+  nothing is written.
 - The former built-in "Summarise note" (`builtin:note-summary`) is
   retired (`RETIRED_BUILTIN_TEMPLATE_IDS` in `shared/config/normalize.ts`).
 

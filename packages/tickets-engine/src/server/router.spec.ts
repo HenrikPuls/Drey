@@ -31,6 +31,10 @@ function port(): TicketsRemotePort {
     planParts: vi.fn(async () => ({ ok: true as const, ticket: 'T-0052', title: 'x', parts: [], gate: 'build', defaultPersona: 'ben', personas: [], warnings: [] })),
     planPartsEdit: vi.fn(ok),
     planRelease: vi.fn(async () => ({ ok: true as const, tickets: ['T-0060'] })),
+    flow: vi.fn(async () => ({ ok: false as const, error: 'unused' })),
+    flowEdit: vi.fn(async () => ({ ok: false as const, error: 'unused' })),
+    flowSave: vi.fn(async () => ({ ok: true as const })),
+    flowDraft: vi.fn(async () => ({ ok: false as const, error: 'unused' })),
     planStatus: vi.fn(async () => ({ ok: true as const, version: 2, edits: 1, summary: '1 edit · +1 −0', marks: [] })),
     ticketFile: vi.fn(async (_id: string, path: string) =>
       path === 'src/a.ts' ? { ok: true as const, text: 'a\nb\n', truncated: false } : { ok: false as const, error: 'nope' },
@@ -260,6 +264,47 @@ describe('route', () => {
       ok: false,
       error: 'release scope must be all or first',
     });
+  });
+
+  it('routes the flow editor: read, edit, save and the draft, with the part in the path or the body', async () => {
+    const { deps, devices, remote } = setup();
+    const { token } = await devices.add('iPad', false, new Date());
+    const auth = `Bearer ${token}`;
+    await route(req({ path: '/api/tickets/T-0052/flow', authorization: auth }), deps);
+    expect(remote.flow).toHaveBeenLastCalledWith({ id: 'T-0052', part: null });
+    await route(req({ path: '/api/tickets/T-0052/flow/2', authorization: auth }), deps);
+    expect(remote.flow).toHaveBeenLastCalledWith({ id: 'T-0052', part: 2 });
+    expect((await route(req({ path: '/api/tickets/nope/flow', authorization: auth }), deps)).status).toBe(404);
+
+    await route(req({ method: 'POST', path: '/api/tickets/T-0052/flow-edit', authorization: auth, body: { part: 1, chain: ['skip verify'], edit: { op: 'move', step: 3, dir: -1 } } }), deps);
+    expect(remote.flowEdit).toHaveBeenLastCalledWith({ id: 'T-0052', part: 1, chain: ['skip verify'], edit: { op: 'move', step: 3, dir: -1 } });
+    await route(req({ method: 'POST', path: '/api/tickets/T-0052/flow-edit', authorization: auth, body: { chain: [], edit: { op: 'persona', step: 2, persona: null } } }), deps);
+    expect(remote.flowEdit).toHaveBeenLastCalledWith({ id: 'T-0052', part: null, chain: [], edit: { op: 'persona', step: 2, persona: null } });
+    expect((await route(req({ method: 'POST', path: '/api/tickets/T-0052/flow-edit', authorization: auth, body: { chain: [], edit: { op: 'explode' } } }), deps)).body).toEqual({
+      ok: false,
+      error: 'unknown flow edit',
+    });
+    expect((await route(req({ method: 'POST', path: '/api/tickets/T-0052/flow-edit', authorization: auth, body: { chain: [7], edit: { op: 'view' } } }), deps)).body).toEqual({
+      ok: false,
+      error: 'bad flow payload',
+    });
+
+    await route(req({ method: 'POST', path: '/api/tickets/T-0052/flow-save', authorization: auth, body: { chain: ['insert security(ralf, notify) after review'] } }), deps);
+    expect(remote.flowSave).toHaveBeenLastCalledWith({ id: 'T-0052', part: null, chain: ['insert security(ralf, notify) after review'] }, 'owner@ipad');
+    await route(req({ method: 'POST', path: '/api/tickets/T-0052/flow-draft', authorization: auth, body: { part: 0, ask: ' add a security pass ' } }), deps);
+    expect(remote.flowDraft).toHaveBeenLastCalledWith({ id: 'T-0052', part: 0, ask: 'add a security pass' });
+    await route(req({ method: 'POST', path: '/api/tickets/T-0052/flow-draft', authorization: auth, body: {} }), deps);
+    expect(remote.flowDraft).toHaveBeenLastCalledWith({ id: 'T-0052', part: null, ask: null });
+  });
+
+  it('a read-only device may read a flow but not edit, save or ask for a draft', async () => {
+    const { deps, devices } = setup();
+    const { token } = await devices.add('iPad', true, new Date());
+    const auth = `Bearer ${token}`;
+    expect((await route(req({ path: '/api/tickets/T-0052/flow', authorization: auth }), deps)).status).toBe(200);
+    for (const what of ['flow-edit', 'flow-save', 'flow-draft']) {
+      expect((await route(req({ method: 'POST', path: `/api/tickets/T-0052/${what}`, authorization: auth, body: {} }), deps)).status).toBe(403);
+    }
   });
 
   it('a read-only device may read the cards but not edit or release', async () => {

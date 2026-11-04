@@ -1761,3 +1761,114 @@ export function parsePlanApproval(json: unknown): McPlanApproval | null {
     warnings: arr(body['warnings']).filter((w): w is string => typeof w === 'string'),
   };
 }
+
+// --- the flow editor (E10-5) --------------------------------------------------------------
+
+/** Which flow: the ticket's own chain, or one part of a split plan. */
+export type McFlowScope = { readonly kind: 'ticket' } | { readonly kind: 'part'; readonly index: number; readonly title: string };
+
+/** One gate of a flow, from the current gate on (`GET /api/tickets/<id>/flow`). */
+export interface McFlowStep {
+  /** Position in the merged chain — what an edit addresses. */
+  readonly index: number;
+  readonly phase: string;
+  readonly title: string;
+  readonly state: 'current' | 'future';
+  readonly inserted: boolean;
+  readonly skipped: boolean;
+  readonly moved: boolean;
+  readonly notify: boolean;
+  readonly persona: string | null;
+  /** The delta pinned the persona. */
+  readonly pinned: boolean;
+  readonly model: string | null;
+  /** A gate the owner works by hand. */
+  readonly owner: boolean;
+  readonly locked: boolean;
+}
+
+export interface McFlowPersona {
+  readonly id: string;
+  readonly title: string;
+  readonly color: string;
+  readonly model: string;
+}
+
+export interface McFlow {
+  readonly ticket: string;
+  readonly title: string;
+  readonly scope: McFlowScope;
+  /** The chain shown: the saved delta, an edit's result or Paul's draft. */
+  readonly chain: readonly string[];
+  /** The delta in the file now. */
+  readonly saved: readonly string[];
+  readonly steps: readonly McFlowStep[];
+  readonly phases: readonly { readonly id: string; readonly title: string }[];
+  readonly personas: readonly McFlowPersona[];
+  /** Why nothing can be saved (a live run, a released part); null = editable. */
+  readonly readOnly: string | null;
+  /** Paul's reason, present on a draft only. */
+  readonly reason: string | null;
+}
+
+/** Reads a flow answer tolerantly; null = the desk has no readable flow. */
+export function parseFlow(json: unknown): McFlow | null {
+  const body = rec(json);
+  if (body === null || body['ok'] !== true || typeof body['ticket'] !== 'string') {
+    return null;
+  }
+  const scopeRaw = rec(body['scope']);
+  const scope: McFlowScope =
+    scopeRaw !== null && scopeRaw['kind'] === 'part' && typeof scopeRaw['index'] === 'number'
+      ? { kind: 'part', index: scopeRaw['index'], title: str(scopeRaw['title']) }
+      : { kind: 'ticket' };
+  const steps: McFlowStep[] = [];
+  for (const raw of arr(body['steps'])) {
+    const step = rec(raw);
+    if (step === null || typeof step['phase'] !== 'string' || typeof step['index'] !== 'number') {
+      continue;
+    }
+    steps.push({
+      index: step['index'],
+      phase: step['phase'],
+      title: str(step['title'], step['phase']),
+      state: step['state'] === 'current' ? 'current' : 'future',
+      inserted: step['inserted'] === true,
+      skipped: step['skipped'] === true,
+      moved: step['moved'] === true,
+      notify: step['notify'] === true,
+      persona: strOrNull(step['persona']),
+      pinned: step['pinned'] === true,
+      model: strOrNull(step['model']),
+      owner: step['owner'] === true,
+      locked: step['locked'] === true,
+    });
+  }
+  const phases: { id: string; title: string }[] = [];
+  for (const raw of arr(body['phases'])) {
+    const phase = rec(raw);
+    if (phase !== null && typeof phase['id'] === 'string') {
+      phases.push({ id: phase['id'], title: str(phase['title'], phase['id']) });
+    }
+  }
+  const personas: McFlowPersona[] = [];
+  for (const raw of arr(body['personas'])) {
+    const persona = rec(raw);
+    if (persona !== null && typeof persona['id'] === 'string') {
+      personas.push({ id: persona['id'], title: str(persona['title'], persona['id']), color: str(persona['color']), model: str(persona['model']) });
+    }
+  }
+  const strings = (value: unknown): string[] => arr(value).filter((c): c is string => typeof c === 'string');
+  return {
+    ticket: body['ticket'],
+    title: str(body['title'], body['ticket']),
+    scope,
+    chain: strings(body['chain']),
+    saved: strings(body['saved']),
+    steps,
+    phases,
+    personas,
+    readOnly: strOrNull(body['readOnly']),
+    reason: strOrNull(body['reason']),
+  };
+}
