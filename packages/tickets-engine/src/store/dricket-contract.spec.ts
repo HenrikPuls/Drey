@@ -41,7 +41,7 @@ if (!found.ok) {
 
 const recorded: Array<{ step: string; args: readonly string[]; code: number | null; stdout: string }> = [];
 
-describe.skipIf(!found.ok)('DricketTicketStore against a scratch dricket store', () => {
+describe.skipIf(!found.ok)('DricketTicketStore against a scratch dricket store', { timeout: 60_000 }, () => {
   let root = '';
   let store: DricketTicketStore;
   let step = 'setup';

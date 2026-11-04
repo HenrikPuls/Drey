@@ -36,6 +36,8 @@ export interface TicketRecord {
   readonly labels: readonly string[];
   /** Display ids this ticket depends on (dricket `depends`, legacy `blocked-by`). */
   readonly dependsOn: readonly string[];
+  /** The ticket this one is a part of (display id); null = a ticket of its own. */
+  readonly parent: string | null;
   readonly claimedAt: string | null;
   readonly leaseUntil: string | null;
   readonly size: 'S' | 'M' | 'L' | null;

@@ -1,3 +1,57 @@
+### Milestone 152 — E14-2: the board from the store, and the shadow comparison
+
+**Not yet manually verified by the owner.** Owner request 2026-11-04 (roadmap
+E14-2, ADR-0090). Read-only; `tickets.backend` stays `files` by default, which
+behaves exactly as before (the files board is built by the same call as ever).
+
+- **`tickets.backend` has three values:** `files` (default), `dricket` (the
+  Work panel, Mission Control and the phone show the store's board) and
+  `shadow` (they keep showing the files board while the store's board is built
+  beside it and compared). Set by hand in the tickets config (`backend`,
+  `dk.store`, `dk.path`, `dk.dataDir`); no Settings page yet.
+- **One assembler for both backends.** `store/store-board.ts` folds a store
+  `TicketDetail` back into the legacy ticket shape and runs it through the
+  unchanged `assembleBoard`, so column order, derived `blocked`/`blocks`,
+  issues and card workers have one implementation. The mapping (stage → phase,
+  `depends` → `blocked-by`, `x-rank` `x-worker` `x-persona` `x-track` `x-form`
+  `x-proof` `x-awaiting` `x-interactive` `x-chain` `x-references`
+  `x-entered-<phase>`, `owner` → `claimed-by`) is the table in
+  `specs/ticket-schema.md`. Stage → phase: `x-phase`, else the stage when it
+  is a pipeline phase (a store configured with `[stages]` = the phase ids), else
+  dricket's built-in names by role; an unmappable stage is an unknown column
+  with a warning. A store that cannot be read gives an empty board with one
+  `error` issue, never a silent fallback.
+- **Shadow report.** At most every 30 s and never on the request path, the
+  engine builds both boards, compares them ticket by ticket and field by field
+  (phase, worker, blocked, blocks, issues, every meta field; column order;
+  tickets only on one side) and writes `<userRoot>/shadow/board-diff.md` and
+  `.json` (engine home: `~/.drey-engine/shadow/`); a difference is also logged.
+  `path`, `run` and `branch` are not compared by design.
+- **Reader.** dk v0.6.0 `ls`/`show` still carry only the header subset (R-05,
+  R-06), so the board reads `ls` plus one `show` per ticket, cached by what the
+  `ls` row reports, so a second snapshot re-reads only changed tickets. Measured
+  at about 0.2-0.4 s per `dk` call here: a cold board of 22 tickets takes
+  seconds, 500 tickets would take minutes (R-05 is the fix).
+- **dk gaps found (docs/design/dricket/dricket-requirements.md):** R-26 parallel
+  `dk` reads of one store fail with git exit 128, so `createDricketStore` now
+  reads one call at a time; R-27 `dk init`'s `dricket.toml` becomes invalid with
+  a custom `[stages]` until its legacy `[transitions.agent]` table is deleted;
+  measured cost added to R-05.
+- **Port:** `TicketRecord` gains `parent`.
+- **Not in this milestone:** the separate `storeListing` view in the Work panel
+  was dropped as a to-do (under `dricket` the board itself is the store; the
+  engine route stays). Tickets open from their `tickets/<phase>/<id>.md` path,
+  which does not exist under `dricket`, so opening a ticket document, every
+  write and the fleet stay on the files until E14-4/E14-5. Benchmark at 500
+  tickets not done (see the cost above).
+- **Tests:** `store-board.spec.ts` (mapping, stage resolution, order, blocked,
+  equality with the files board over equal data), `board-diff.spec.ts`,
+  `store-board-source.spec.ts` (reader cache, shadow report, unreadable store,
+  rate limit), `store-board-dk.spec.ts` (real `dk` v0.6.0, scratch store with a
+  configured `[stages]` vocabulary and Drey's priorities in a temp dir with a
+  temp HOME: columns, order, depends/parent, claim, extension fields, shadow
+  report; skips with a reason when `dk` is missing or older than 0.5.0).
+
 ### Milestone 151 — E14-1: the `TicketStore` port and the first dricket slice
 
 **Not yet manually verified by the owner.** Owner request 2026-11-04 (roadmap

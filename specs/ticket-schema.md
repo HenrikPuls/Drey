@@ -1369,3 +1369,30 @@ and re-runs safely because the treatment is idempotent):
   with a live `run:` map (the runner owns the file mid-move), unknown
   directories, `_meta`. Backwards moves and skips are logged, never
   blocked — lane rules stay runner-only.
+
+## Reading tickets from a dricket store (E14-2, read-only)
+
+With `tickets.backend` set to `dricket` (or `shadow`, which only compares) the
+board's tickets come from a dricket store (`docs/design/dricket/`) instead of
+`tickets/<phase>/*.md`. `pipeline.md`, `repos.md` and the ledger still come
+from the tickets vault. A store ticket is folded into the layout above by
+`packages/tickets-engine/src/store/store-board.ts`; the card's `path` stays
+the virtual `tickets/<phase>/<id>.md` (there is no such file).
+
+| dricket | Ticket key here | Note |
+|---|---|---|
+| `stage` | the phase directory | `x-phase` if it names a phase, else the stage itself when it is a pipeline phase id (store configured with `[stages]` = the phase ids), else the built-in names by role: `open`/`blocked` → first column, `in-progress` → first `claim: true` column, `review` → `commit`, `done`/`cancelled` → last column; anything else is an unknown column with a warning |
+| `id`, `title`, `priority`, `parent`, `repos` | same | the store's `[priorities]` must use the pipeline's words |
+| `depends` | `blocked-by` | `blocked`/`blocks` stay derived |
+| `owner`, `claimed_at` | `claimed-by`, `claimed-at` | |
+| `x-rank` | `rank` | |
+| `x-worker` `x-persona` `x-track` `x-form` `x-proof` `x-awaiting` | `worker` `persona` `track` `form` `proof` `awaiting` | raw values |
+| `x-interactive` | `interactive` | only `true` |
+| `x-chain` | `chain` | entries separated by `;` |
+| `x-references` | `references` | separated by `,` |
+| `x-entered-<phase>` | `entered-<phase>` | |
+
+Not carried: `branch` (the rule `t/<id>` wins), `run` (the runner's table),
+`parked-*` (a parked ticket is stage `blocked`), `labels`, `kind`, `size`,
+`epoch`, `rev`, lease times. The archive is not a column in either backend.
+

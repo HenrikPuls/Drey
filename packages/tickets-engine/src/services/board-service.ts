@@ -39,6 +39,7 @@ import { TicketsGit, type RepoLocation } from '../core/tickets-git';
 import { TicketStoreError } from '../ports/ticket-store';
 import { FileTicketStore } from '../store/file-ticket-store';
 import { createDricketStore, groupByStage, readStoreSettings, type StoreListing } from '../store/store-settings';
+import { StoreBoardSource } from '../store/store-board-source';
 import { loadShippedPrompts } from '../core/default-prompts';
 import { type AttachmentCommand, RefineCommand } from '../core/commands';
 import { nextImprovementId, parseFriction, parseImprovements, renderImprovements, type FrictionLine, type ImprovementDraft, type ImprovementProposal } from '../core/improvements';
@@ -278,6 +279,8 @@ export class EngineBoardService {
   /** Who hears the debounced board change besides the renderer (the remote, req-66). */
   private readonly changeListeners = new Set<() => void>();
   private lastChainConfig: string | null = null;
+  /** The dricket-backed board and the shadow comparison (E14-2); idle while `tickets.backend` is `files`. */
+  private readonly storeBoard: StoreBoardSource;
 
   constructor(
     /** The host ports: every Drey/Electron affordance the service needs (ADR-0088, E2a). */
@@ -300,7 +303,9 @@ export class EngineBoardService {
     private readonly owner: string,
     /** The optional extras (E7 ledger writes); `{}` keeps the service event-free. */
     private readonly options: BoardServiceOptions = {},
-  ) {}
+  ) {
+    this.storeBoard = new StoreBoardSource(path.join(host.userRoot, 'shadow'), (message, level) => host.log(message, level));
+  }
 
   /** The board's emit, debounced — one push per burst of changes. */
   announceChanged(): void {
@@ -403,7 +408,7 @@ export class EngineBoardService {
         text: await this.host.read(vault.id, path),
       })),
     );
-    const snapshot = assembleBoard({
+    const common = {
       vaultId: vault.id,
       vaultName: vault.name,
       activeVaultName: active?.name ?? null,
@@ -411,13 +416,26 @@ export class EngineBoardService {
       defaultWorker: this.defaultWorker,
       pipelineText,
       reposText,
-      files,
-      // The same file list already carries the archive — no extra reads.
-      recentDone: recentDoneOf(files, Date.now()),
       // The settled runs' usage (concept §4.3): one vault-file read, the
       // pure assembly only attaches the sums to the matching cards.
       ticketUsage: settledUsageByTicket(parseLedger(ledgerText ?? '')),
-    });
+    };
+    // E14-2: `tickets.backend` decides where the TICKETS come from; the
+    // pipeline, repos and ledger stay in this vault either way.
+    const store = await readStoreSettings(this.host.configGet.bind(this.host));
+    const snapshot = store.backend === 'dricket'
+      ? await this.storeBoard.board(store, common)
+      : assembleBoard({
+        ...common,
+        files,
+        // The same file list already carries the archive — no extra reads.
+        recentDone: recentDoneOf(files, Date.now()),
+      });
+    if (store.shadow) {
+      // The UI keeps the files board; the store's board is built beside it
+      // and the difference is written to a report (never shown, never fatal).
+      this.storeBoard.scheduleShadow(store, common, snapshot);
+    }
     // The chain follows the pipeline: an automatic column anywhere
     // points the runner at this vault (M85). Cheap and idempotent —
     // the runner re-reads the vault on every dispatch pass anyway.

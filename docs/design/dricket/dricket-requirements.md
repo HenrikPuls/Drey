@@ -42,6 +42,8 @@ structs, `dk` itself was not run (see `fit-analysis.md` §0).
 | R-18 | `add` options for a complete first write | Nice (covered by R-02) |
 | R-22 | `ls --json` answers `null` for an empty list | Nice (found in E14-1) |
 | R-23 | `dk version --json` (machine-readable version) | Nice (found in E14-1) |
+| R-26 | Parallel read-only `dk` calls on one store must not fail | Needed (found in E14-2) |
+| R-27 | `dk init` writes a `dricket.toml` that stays valid with a custom `[stages]` | Nice (found in E14-2) |
 | Q-01 | Account model: service account or own accounts | Question |
 | Q-02 | Owner id grammar | Question |
 | Q-03 | Waiting for a human inside a claim | Question |
@@ -219,6 +221,17 @@ several hundred are not (process spawn per ticket, worse on Windows).
 `git cat-file --batch` (or `git archive`) over the tree. Target: 1 000 tickets
 under one second locally, measured and recorded.
 
+**Status at v0.6.0 (measured in E14-2, 2026-11-04): still open, and it now
+decides the board's cost.** `ls --json` still returns the header subset and
+`show --json` the raw file, so Drey builds a board with `ls` plus one `show`
+per ticket (the `x-` fields, `depends` and `parent` exist only in the file).
+Measured on the owner's Windows desk with a local store: **about 0.2-0.4 s per
+`dk` call**, i.e. a cold board of 22 tickets takes roughly 8 s and 500 tickets
+would take minutes. Drey caches each ticket by `(rev, epoch, stage, owner,
+title, priority)` from the `ls` row, so only changed tickets are re-read, and
+reads are forced serial (R-26). The fix is this requirement: every field in
+`ls --json`, in one `git cat-file --batch` pass.
+
 ### R-06 `show --json` with parsed fields and comments
 
 **Today.** `show --json` = `{id, content}` — the raw file. No comments, no
@@ -393,6 +406,22 @@ owner decides.
   (`{"tool_version","commit","date"}`) — or the `capabilities` of R-19 — would
   let Drey gate on features instead of parsing text. Drey parses
   `version: vX.Y.Z` today (E14-1).
+
+- **R-26 Parallel reads.** Two or more `dk` read calls (`dk show`) at the same
+  time against one store fail with `reset to local head: exit status 128`
+  (git on the private working copy under `DK_DATA_DIR`; the calls refresh and
+  reset the same copy). Found in E14-2 when the board read six tickets in
+  parallel; serial reads are clean. A read-only command must be safe to run
+  concurrently (a lock around the refresh that waits instead of failing, or
+  reads that do not touch the working copy). Drey queues its reads one at a
+  time until this is fixed (`createDricketStore`, `readConcurrency: 1`).
+- **R-27 `dk init` and `[stages]`.** The `dricket.toml` that `dk init` writes
+  carries `[transitions.agent]` with the built-in stage names; adding a
+  `[stages]` table makes it invalid (`transitions.agent.in-progress: unknown
+  stage`, every call then fails with `config-invalid`) until that table is
+  deleted by hand. `dk init --stages a,b,c` (or an init that omits the legacy
+  table) would give a valid store in one step. Drey's scratch stores strip the
+  table in test setup.
 
 ## Questions (not defects)
 
