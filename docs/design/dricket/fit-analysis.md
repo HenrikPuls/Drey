@@ -102,7 +102,7 @@ disagree and a decision is needed; **GAP** dricket lacks something Drey needs
 
 | # | Concept | Drey | dricket | Verdict | Notes |
 |---|---|---|---|---|---|
-| 1 | Ticket id | `T-0063` | `prefix-N` | **CONFLICT -> decided by a pure function** | Prefix `t`, number preserved: `T-0063` <-> `t-63`. Zero-padding is a Drey display rule only (dricket allocates `%s-%d`, unpadded). No id map table needed. Owner decision Q1. |
+| 1 | Ticket id | `T-0063` | `prefix-N` | **CONFLICT -> decided by a pure function** | Prefix `t`, number preserved: `T-0063` <-> `t-63`. Zero-padding is a Drey display rule only (dricket allocates `%s-%d`, unpadded). No id map table needed. Owner decision OD-1. |
 | 2 | Id minting | max over all phase folders + 1; gaps never reused | max in the prefix + 1 inside the CAS; gaps allowed | **DK** | Better: allocation races resolved by CAS. Drey's "re-mint on merge conflict" rule disappears. Migration needs an explicit-number import ([R-10]). |
 | 3 | Path | `tickets/NN-phase/T-0042.md`, moves on transitions | `tickets/<prefix>/<shard N/1000>/<id>/ticket.md`, **never moves** | **CONFLICT** | Every Drey reader that globs phase folders, the Files panel move semantics, `normalize.ts`, `phase-dirs.ts`, `archive/`, and the `../attachments/...` relative links die. Stable paths are a gain (links, history `--follow`). |
 | 4 | Phase as folder | the directory *is* the phase; a file move is a ticket move (T-0041) | the stage is a front-matter value; "Move ticket files between stage folders" is in dricket's *decisions against* list (2026-11-02) | **CONFLICT, dricket wins** | Drey drops "a file move is a ticket move" and the stateless drift pass. |
@@ -229,7 +229,7 @@ other paths). History is cut at migration; the old repo stays as the archive.
 | Change notification | vault watcher round / SSE `board` event / engine announces its writes (E2b-4) | none: "built-in watcher or background poller" is in dricket's decisions against; users loop `dk inbox`; hint: `git ls-remote` tip then incremental fetch | **GAP** [R-09]. Drey's engine owns the poll (it is the process that writes anyway) and needs a cheap `dk changes --since <sha>`. |
 | Secret scan | none (the owner's prompts contain no scan) | scans title/description/comment/note/release result and whole-ticket `commit`; exit 19 | **DK, new**; Drey must handle exit 19 (hold the step, tell the owner) and may hit false positives on pasted logs [Q-04]. |
 | Quota | none | `quota_tickets_per_day` (default config value in the scaffold: 50) per commit author identity | **DK, new**; set `0` during import; plan release mints at most a handful per day. |
-| Profiles / accounts | one git identity of the desk; actors named `owner@<device>` in the Log | `--profile`, `DK_OWNER`, per-profile ssh key and data dir | **DK**. The owner is the only human and the only Git account today, so the "service account vs own accounts" hurdle from `integrations/drey.md` is **moot until a second human exists**; recommendation in Q3. |
+| Profiles / accounts | one git identity of the desk; actors named `owner@<device>` in the Log | `--profile`, `DK_OWNER`, per-profile ssh key and data dir | **DK**. The owner is the only human and the only Git account today, so the "service account vs own accounts" hurdle from `integrations/drey.md` is **moot until a second human exists**; recommendation OD-3. |
 | `min_version` / exit 16 | n/a | forces tool updates | **DK**: Drey bundles a fixed `dk`. |
 | Backup | tickets repo with `push:` | repo is its own backup | **SAME** |
 
