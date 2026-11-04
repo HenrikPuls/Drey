@@ -37,6 +37,26 @@ bigger copy of the iPad layout. It uses what Drey already has.
 | Flow editor | Editor tab **Flow**; the default flow is also in Settings |
 | Settings | Settings, **Tickets**: team, default flow, budget, runners, devices and pairing. Appearance is Drey's own |
 
+## Parity with the mobile client (owner, 2026-11-04)
+
+The desktop shows at least what the phone and iPad show; the interaction
+differs, the content does not. In particular:
+
+- **Lists** (Tickets panel, Board cards): id, kind, persona, title, status line,
+  age and the **cost** of the ticket on every entry, including Running, Shaping
+  and Prioritized (with the wait reason).
+- **Ticket header**: status chip, persona, phase, chain with who does what,
+  cost in total and the estimate from history, and the gate when it waits on you.
+- **Ticket document**: the engine's `## Proof` (summary line, checks with their
+  notes, screenshots with captions, the walkthrough video) and a **Cost** table
+  (phase, model, tokens, time, cost, total) are shown in the editor as widgets,
+  the table at the end. In the Review tab the same proof sits above the diff.
+- **Actions**: Send back, Accept and move to Commit, Thread, Open Review sit in
+  a bar under the ticket; "Edit the ticket" needs no button because the ticket
+  is already the editable document (source mode is in the `⋯` menu).
+- Boards 7a (in progress), 7j (ready to try), 7d (review) and the list in every
+  board carry these; the iPad boards 5a to 5i stay the reference.
+
 ## Views (owner, 2026-11-04: promoted from "later" to the first step)
 
 Without a way to switch, the agent system and the note app compete for the same
