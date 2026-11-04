@@ -448,3 +448,5 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   The engine's `announceChanges` only emits the `board` event, so Drey's own
   vault layer learns of an engine write through its vault round or the
   opt-in watcher.
+
+- **Zod dropped (owner, 2026-11-04, convergence audit).** Concept v2 §3.3 wanted Zod schemas as one contract source. Not adopted: the hand-written `parseXxx` validators cover the contracts, no new dependency; reversible later if wanted.

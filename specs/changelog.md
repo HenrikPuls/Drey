@@ -23,6 +23,7 @@ had drifted after milestones 97–132 were built in parallel.
   (35 rows, sorted by severity, with roadmap ids); the new roadmap items are
   marked "proposed by the convergence audit". Roadmap Status line and "next free"
   counter corrected; ADR-0089 shown as accepted.
+- **Owner answers applied (2026-11-04, canvas v71):** capture chord Ctrl+Alt+T, "Add part" stays excluded, the Mermaid gate diagram and Zod dropped (new roadmap items E10-7 Mermaid-safe parsers and E12-8 dictation), the Anthrazit design system wins (code: milestone 136, E12-7), no separate plan-step list.
 - **Not verified:** nothing was run and no board rendered (strings, structure and
   colours were compared); legacy parts of docs/05 and docs/06 were not audited.
 
