@@ -87,6 +87,7 @@ function sameList(a: readonly WidgetId[], b: readonly WidgetId[]): boolean {
 @Injectable({ providedIn: 'root' })
 export class DockService {
   private static readonly KEY = 'drey.dock';
+  private static readonly DEFAULT_VIEW = 'notes';
   private static readonly MIN_PANEL_PX = 40;
   /** Extra slack, in px, when deciding a pointer is "over" a dock. */
   private static readonly DOCK_TOLERANCE = 12;
@@ -96,6 +97,14 @@ export class DockService {
   private readonly registry = inject(WidgetRegistryService);
   /** Owns the editor band's side + height (ADR-0038) -- a read-only consumer here. */
   private readonly panes = inject(PaneService);
+  /**
+   * Views (ADR-0089): `state` is the ACTIVE view's layout; every other
+   * view's layout waits here, not reactive (nothing renders it). Persisted
+   * together under one key.
+   */
+  private slots: Record<string, DockState> = {};
+  private readonly _activeView = signal<string>(DockService.DEFAULT_VIEW);
+  readonly activeViewId = this._activeView.asReadonly();
   private readonly state = signal<DockState>(this.read());
 
   /** What is being dragged by a dock header: a widget or an editor pane, else null. */
@@ -379,7 +388,43 @@ export class DockService {
     this.patch((s) => ({ ...s, bottomH: clamped }));
   }
 
-  /** View -> "Reset layout": everything back to the defaults. */
+  /**
+   * Makes `to` the active view: the current dock layout is parked, `to`'s
+   * layout (the defaults for a view without one) is loaded and brought in
+   * line with the registry and the disabled widgets.
+   */
+  switchView(to: string): void {
+    const from = this._activeView();
+    if (to === from) {
+      return;
+    }
+    const next = this.slots[to] ?? this.defaultState();
+    this.slots = { ...this.slots, [from]: this.state() };
+    delete this.slots[to];
+    this.state.set(this.merge(this.defaultState(), next));
+    this._activeView.set(to);
+    this.persist();
+    this.reconcileEnabled(this.settings.widgetsDisabled());
+  }
+
+  /** "Save current layout as a view": `id` starts as a copy of the active dock layout. */
+  copyActiveTo(id: string): void {
+    const s = this.state();
+    this.slots = {
+      ...this.slots,
+      [id]: { ...s, dock: { left: [...s.dock.left], right: [...s.dock.right], bottom: [...s.dock.bottom] } },
+    };
+    this.persist();
+  }
+
+  /** Forgets a deleted view's dock layout. */
+  dropView(id: string): void {
+    const { [id]: _gone, ...rest } = this.slots;
+    this.slots = rest;
+    this.persist();
+  }
+
+  /** View -> "Reset layout": the ACTIVE view's dock back to the defaults. */
   reset(): void {
     this.state.set(this.defaultState());
     this.persist();
@@ -826,11 +871,21 @@ export class DockService {
 
   private persist(): void {
     try {
-      const { dock, flexes, open, leftW, rightW, bottomH, foldedSides } = this.state();
-      localStorage.setItem(
-        DockService.KEY,
-        JSON.stringify({ dock, flexes, open, leftW, rightW, bottomH, foldedSides }),
-      );
+      const pick = ({ dock, flexes, open, leftW, rightW, bottomH, foldedSides }: DockState): DockState => ({
+        dock,
+        flexes,
+        open,
+        leftW,
+        rightW,
+        bottomH,
+        foldedSides,
+      });
+      const views: Record<string, DockState> = {};
+      for (const [id, v] of Object.entries(this.slots)) {
+        views[id] = pick(v);
+      }
+      views[this._activeView()] = pick(this.state());
+      localStorage.setItem(DockService.KEY, JSON.stringify({ active: this._activeView(), views }));
     } catch {
       // Private-mode / storage-disabled: a non-persisted session is fine.
     }
@@ -848,7 +903,24 @@ export class DockService {
       return base;
     }
     try {
-      const saved = JSON.parse(raw) as Partial<DockState>;
+      const saved = JSON.parse(raw) as Partial<DockState> & {
+        active?: unknown;
+        views?: Record<string, Partial<DockState>>;
+      };
+      if (saved.views !== undefined && saved.views !== null && typeof saved.views === 'object') {
+        // The per-view blob (ADR-0089).
+        const active = typeof saved.active === 'string' ? saved.active : DockService.DEFAULT_VIEW;
+        const slots: Record<string, DockState> = {};
+        for (const [id, v] of Object.entries(saved.views)) {
+          slots[id] = this.merge(base, v);
+        }
+        const current = slots[active] ?? base;
+        delete slots[active];
+        this.slots = slots;
+        this._activeView.set(active);
+        return current;
+      }
+      // A layout stored before views: it is the Notes view.
       return this.merge(base, saved);
     } catch {
       return base;

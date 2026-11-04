@@ -448,6 +448,10 @@ export class DocOpenService {
   private closeReplacedTab(victim: string | null): void {
     const doc = this.store.docFor(victim);
     if (doc !== null && isReplaceable(doc)) {
+      if (this.panes.viewsHolding(doc.key).length > 1) {
+        this.panes.closeInActiveView(doc.key); // another view still shows it
+        return;
+      }
       this.store.remove(doc.key);
     }
   }

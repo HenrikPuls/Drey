@@ -30,6 +30,7 @@ import { AboutService } from './services/about.service';
 import { VaultService } from './vault';
 import { KeybindingService } from './keybindings';
 import { Dock, DockService } from './dock';
+import { ViewService } from './views';
 import { Titlebar } from './titlebar';
 import { WindowChromeService } from './titlebar';
 import { StatusBar } from './status-bar/status-bar';
@@ -428,9 +429,28 @@ export class App {
       id: 'layout.reset',
       label: 'Reset layout',
       run: () => {
+        // The active view only (ADR-0089).
         this.dock.reset();
         this.panes.resetRegions();
       },
+    });
+
+    // Views (ADR-0089): Ctrl+1…9 jump to the nth view, "Switch view" steps
+    // to the next one, and the current layout can be kept as a view.
+    const views = inject(ViewService);
+    for (let n = 1; n <= 9; n++) {
+      keys.register({
+        id: `view.switch.${n}`,
+        label: `Switch to view ${n}`,
+        keybinding: `Mod+${n}`,
+        run: () => views.switchToIndex(n - 1),
+      });
+    }
+    keys.register({ id: 'view.next', label: 'Switch view', run: () => views.switchToNext() });
+    keys.register({
+      id: 'view.saveAs',
+      label: 'Save current layout as a view…',
+      run: () => views.openSavePrompt(),
     });
     keys.register({
       id: 'vault.refresh',

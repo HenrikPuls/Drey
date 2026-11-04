@@ -1,9 +1,11 @@
 import { Injectable, effect, inject } from '@angular/core';
 import { DocKindRegistry } from '../plugin-host';
-import { PaneLayoutSnapshot, PaneService } from '../panes';
+import type { PaneLayoutSnapshot } from '../panes';
+import { DEFAULT_VIEW_ID, PaneService } from '../panes/pane.service';
 import { EditorService, docKey } from '../services/editor.service';
 import { LogService } from '../services/log.service';
 import { VaultService } from '../vault';
+import { ViewService } from '../views';
 
 /**
  * One persisted open tab. `vaultId` is the tab's vault (ADR-0051; null for
@@ -26,11 +28,24 @@ export type SessionTab =
 export interface SessionSnapshot {
   version: 2;
   savedAt: number;
+  /** The Notes view's layout -- what a snapshot without views already was. */
   layout: PaneLayoutSnapshot;
   tabs: SessionTab[];
+  /**
+   * Every other view's layout by view id (ADR-0089), additive: a snapshot
+   * without it restores into Notes. The tab list above is the union over
+   * all views; each layout names the tabs its view shows.
+   */
+  views?: Record<string, PaneLayoutSnapshot>;
 }
 
 const KEY = 'drey.session';
+/** A view without tabs. */
+const EMPTY_LAYOUT: PaneLayoutSnapshot = {
+  root: { kind: 'leaf', paneId: 'p1' },
+  panes: { p1: { id: 'p1', tabs: [], active: null } },
+  focusedId: 'p1',
+};
 const LAYOUT_DEBOUNCE = 400;
 const BACKUP_DEBOUNCE = 700;
 
@@ -53,6 +68,7 @@ const BACKUP_DEBOUNCE = 700;
 export class SessionService {
   private readonly editor = inject(EditorService);
   private readonly panes = inject(PaneService);
+  private readonly views = inject(ViewService);
   private readonly docKinds = inject(DocKindRegistry);
   private readonly vault = inject(VaultService);
   private readonly log = inject(LogService);
@@ -79,6 +95,7 @@ export class SessionService {
     effect(() => {
       this.editor.openDocs();
       this.panes.snapshot();
+      this.panes.snapshotOtherViews();
       if (!this.ready || this.restoring) {
         return;
       }
@@ -175,7 +192,28 @@ export class SessionService {
           }
         }
       }
-      restoredAny = this.panes.restore(layout, (p) => restoredKeys.has(p));
+      const keep = (p: string): boolean => restoredKeys.has(p);
+      // Each view gets its own layout back (ADR-0089); the active one is
+      // the one ViewService restored from its own storage.
+      const layouts: Record<string, PaneLayoutSnapshot> = {
+        ...(parsed.views ?? {}),
+        [DEFAULT_VIEW_ID]: layout,
+      };
+      const known = new Set(this.views.views().map((v) => v.id));
+      const active = this.views.activeId();
+      const others = Object.fromEntries(
+        Object.entries(layouts).filter(([id]) => id !== active && known.has(id)),
+      );
+      this.panes.restoreOtherViews(others, keep);
+      restoredAny = this.panes.restore(layouts[active] ?? EMPTY_LAYOUT, keep);
+      // A tab only a vanished view held has no place any more; a document
+      // held by no view cannot stay open (ADR-0089).
+      const placed = this.panes.allTabKeys();
+      for (const key of restoredKeys) {
+        if (!placed.has(key)) {
+          void this.editor.closeTab(key, { silent: true });
+        }
+      }
       this.log.record(
         'info',
         `[startup] renderer: session restored (${restoredKeys.size} tabs) in ${Math.round(
@@ -291,13 +329,15 @@ export class SessionService {
   // --- persistence ---------------------------------------------------
 
   private buildSnapshot(): SessionSnapshot {
-    const layout = this.panes.snapshot();
-    const keys = new Set<string>();
-    for (const id of Object.keys(layout.panes)) {
-      for (const p of layout.panes[id].tabs) {
-        keys.add(p);
-      }
-    }
+    // The active view's layout lives in the pane signals, the others in
+    // parked slots; Notes goes in `layout`, the rest in `views`.
+    const all: Record<string, PaneLayoutSnapshot> = {
+      ...this.panes.snapshotOtherViews(),
+      [this.panes.activeViewId()]: this.panes.snapshot(),
+    };
+    const { [DEFAULT_VIEW_ID]: notes, ...rest } = all;
+    const layout = notes ?? EMPTY_LAYOUT;
+    const keys = this.panes.allTabKeys();
     const tabs: SessionTab[] = [];
     for (const key of keys) {
       const doc = this.editor.docFor(key);
@@ -350,6 +390,7 @@ export class SessionService {
       savedAt: Date.now(),
       layout,
       tabs,
+      ...(Object.keys(rest).length > 0 ? { views: rest } : {}),
     };
   }
 

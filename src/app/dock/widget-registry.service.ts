@@ -1,7 +1,7 @@
 import { Injectable, Signal, computed, inject, signal } from '@angular/core';
 import { CalendarService } from '../calendar';
 import { isIconName } from '../icons/icon';
-import { EditorService } from '../services/editor.service';
+import { PaneService } from '../panes/pane.service';
 import type { PluginWidgetContrib, Unsubscribe } from '../../../shared/plugin-api/renderer';
 import { CORE_WIDGETS, type WidgetDescriptor, type WidgetId, type WidgetStatusContext } from './widget-registry';
 
@@ -52,7 +52,7 @@ export class WidgetRegistryService {
     // shrinking place) that knows which feature service backs which core
     // widget; a converted plugin brings its own `status()` callback.
     const calendar = inject(CalendarService);
-    const editor = inject(EditorService);
+    const panes = inject(PaneService);
 
     const statusCallbacks: Record<WidgetId, (context: WidgetStatusContext) => string | null> = {
       calendar: ({ collapsed }) =>
@@ -61,7 +61,8 @@ export class WidgetRegistryService {
         collapsed
           ? `${String(calendar.viewMonth() + 1).padStart(2, '0')}/${calendar.viewYear()}`
           : null,
-      windows: () => String(editor.openDocs().length),
+      // The open tabs of the active view (ADR-0089).
+      windows: () => String(panes.tabsOfView(panes.activeViewId()).length),
     };
 
     this.coreWidgets = CORE_WIDGETS.map((w) => {
