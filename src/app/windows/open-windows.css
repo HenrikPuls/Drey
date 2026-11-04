@@ -94,3 +94,41 @@
   background: var(--hover-bg-loud);
   opacity: 1;
 }
+
+.group {
+  margin: 8px 6px 2px;
+  font-size: 10.5px;
+  color: var(--text-6);
+}
+
+.row.other {
+  gap: 7px;
+}
+
+.row.other .where {
+  flex: none;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  color: var(--text-6);
+}
+
+.show-here {
+  flex: none;
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.show-here:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}

@@ -3717,3 +3717,37 @@ successful run only — ride the create as a Log line, so a misheard
 dictation stays recoverable. A hand-typed ticket sends no `raw`, and
 the canonical file is byte-identical to before.
 
+
+## 6.76 Switching a view: two layouts swap, one document registry stays (E13-1, [ADR-0089](09_architecture_decisions/0089-views-saved-layouts-with-their-own-tabs.md))
+
+```mermaid
+sequenceDiagram
+    participant U as Owner
+    participant S as ViewSwitcher / Ctrl+2
+    participant V as ViewService
+    participant D as DockService
+    participant P as PaneService
+    participant R as OpenDocsStore
+
+    U->>S: click "Work" (or Ctrl+2, "Switch view")
+    S->>V: switchTo("work")
+    V->>D: switchView("work")
+    D->>D: park the active DockState, load work's<br/>(defaults when it has none), reconcile with<br/>the registry and disabled widgets, persist
+    V->>P: switchView("work")
+    P->>P: park the active ViewSlot (tree, panes, focus, bands),<br/>load work's (an empty pane when it has none)
+    V->>V: activeId = "work"
+    Note over R: unchanged: every open document keeps its<br/>buffer, dirty state and save conflicts
+    P-->>U: PaneLayout / tab bars render work's tabs only;<br/>the other view's panes are unmounted
+    U->>P: tab menu: Show this tab in Notes
+    P->>P: showInView("notes", key): the document is added<br/>to Notes' focused pane (no copy)
+    U->>R: tab X while Notes still shows it
+    R->>P: closeInActiveView(key) - no prompt, nothing is lost
+    U->>R: tab X in the last view holding it
+    R->>R: unsaved-changes prompt, then the document is closed
+```
+
+Restart: `SessionService` writes the Notes layout as `layout` and the other
+views under `views`; on restore each view's layout is rebuilt through the same
+pruning (tabs that did not come back leave their pane), the view named by
+`DockService`'s persisted `active` becomes the one on screen, and a document
+only a vanished view held is closed.

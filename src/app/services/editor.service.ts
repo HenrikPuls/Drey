@@ -402,6 +402,16 @@ export class EditorService {
     if (!doc) {
       return false;
     }
+    // A document another view still shows only leaves THIS view: it closes
+    // for good (with the unsaved-changes prompt) when no view holds it
+    // (ADR-0089). A silent close means the file is gone -- it goes everywhere.
+    if (!options.silent) {
+      const holding = this.panes.viewsHolding(key);
+      if (holding.length > 1 && holding.includes(this.panes.activeViewId())) {
+        this.panes.closeInActiveView(key);
+        return true;
+      }
+    }
     if (!options.silent && isDirty(doc)) {
       const decision = await this.dialogs.decide({
         title: 'Unsaved changes',

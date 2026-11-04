@@ -1,4 +1,50 @@
 
+### Milestone 123 — Views: saved layouts with their own tabs (E13-1)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(ADR-0089, accepted with this change; design
+`docs/design/work-panel/desktop-integration.md`, boards 7a–7j). The base half
+of the desktop integration: the shell can hold several saved layouts. Checked
+in the unit suites and, for the switcher, the dock layouts and the persistence,
+in the dev renderer in a browser pane (no Electron, no vault, so **no tab was
+opened by hand**: tabs per view, "Show this tab in", "Show here" and the
+session restore are covered by specs only).
+
+- **A view** is a named layout: its dock state (`DockService`), its pane tree
+  with docked bands and tabs (`PaneService`, `ViewSlot`). `ViewService`
+  (`src/app/views/`) owns the list and the active id; switching restores the
+  other view's panes, sizes and tabs exactly as left. **Notes** is today's
+  layout and always exists; others come from *View → Save current layout as a
+  view…* (name field under the title bar; copies the layout, tabs included,
+  documents shared) and can be renamed or deleted (right-click on the
+  switcher button). Plugin presets and `homeView` are E13-2.
+- **Switching.** Title-bar switcher (segmented up to four views, a menu above;
+  invisible with Notes alone), `Ctrl+1`–`Ctrl+9`, the **Switch view** command
+  (next, wrapping) and View-menu rows. `Reset layout` resets the active view.
+- **Tabs belong to views.** The other views' tabs are hidden; one tab may be
+  shown in several (tab menu *Show this tab in*, the last tick stays; Open
+  windows lists the view's tabs and, under *In other views*, the rest with
+  *Show here*; its count is the view's). One document, one buffer: dirty
+  state, save and save conflicts act on the document in every view. A tab's X
+  leaves only the active view while another one shows it (no prompt); the
+  document closes with the unsaved-changes prompt when the last view lets go.
+  Deleting a file closes its tab everywhere; a rename follows it everywhere.
+- **Persistence.** `drey.dock` is now `{ active, views }` (the old blob reads
+  as Notes); the session snapshot (still version 2) gains an additive `views`
+  map, `layout` stays the Notes layout, `tabs` is the union. A snapshot
+  without views restores into Notes; a vanished view's layout is dropped and
+  a document only it held is closed.
+- **Specs.** `view-slot.spec`, `pane.service.views.spec`,
+  `dock.service.views.spec`, `view.service.spec` (switching, tab ownership,
+  closing, delete, name field), `session.service.views.spec` (write, restore,
+  old snapshot, vanished view); the folded-side spec follows the new blob.
+  Also in this change: `menu.service` and `session.service` import
+  `PaneService` from its file, not the `panes` barrel — the barrel pulls
+  `PaneLeaf` → `TabBar` → `ViewService` into a runtime loop that
+  `check-cycles` does not see but the test bed does.
+- **Docs.** ADR-0089 accepted with an "As built" section, docs/05 (component
+  reference, feature index), docs/06 §6.76, manual §16 "Views".
+
 ### Milestone 122 — Mission Control shape mode (E10-3)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04

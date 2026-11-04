@@ -461,6 +461,10 @@ Renderer (`src/app/`):
 - `dock/` — `DockService` + `DockStrip` (icon strips, M69) +
   `WidgetRegistryService`: the three docks, every panel, each dock's
   editor band (ADR-0019/0034/0038)
+- `views/` — `ViewService`: saved layouts (ADR-0089, M123); docks and
+  pane trees per view (`DockService` / `PaneService` slots), tabs belong
+  to views, one document registry; the title-bar `ViewSwitcher` sits in
+  `titlebar/`
 - `vault/` — `FilesPanel` + `VaultService` (trees, vault management;
   the panel handles input only, over `FilesTreeState` and
   `FileOperationsService` in `dock/panels/`);

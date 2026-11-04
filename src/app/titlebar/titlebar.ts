@@ -4,6 +4,7 @@ import { DockService, type SideDock } from '../dock';
 import { DocHistoryService } from '../services/doc-history.service';
 import { ThemeService } from '../services/theme.service';
 import { Icon } from '../icons/icon';
+import { ViewSwitcher } from './view-switcher';
 import { MenuBar } from './menu-bar';
 import { WindowChromeService } from './window-chrome.service';
 
@@ -17,7 +18,7 @@ import { WindowChromeService } from './window-chrome.service';
 @Component({
   selector: 'app-titlebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, MenuBar, NgTemplateOutlet],
+  imports: [Icon, MenuBar, NgTemplateOutlet, ViewSwitcher],
   templateUrl: './titlebar.html',
   styleUrl: './titlebar.css',
 })

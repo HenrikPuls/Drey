@@ -1,4 +1,4 @@
-export { PaneService } from './pane.service';
+export { PaneService, DEFAULT_VIEW_ID } from './pane.service';
 export type {
   PaneRecord,
   PaneLayoutSnapshot,

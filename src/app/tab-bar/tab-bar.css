@@ -183,3 +183,21 @@
   margin: 4px 2px;
   background: var(--border);
 }
+
+.ctx-label {
+  padding: 4px 9px 2px;
+  font-size: 10px;
+  color: var(--text-6);
+}
+
+.ctx-check {
+  flex: none;
+  width: 12px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--accent-fg);
+}
+
+.ctx-grow {
+  flex: 1;
+}

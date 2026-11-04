@@ -7,6 +7,20 @@ import {
   removeLeaf,
   replaceLeaf,
 } from './pane-tree';
+import {
+  ViewSlot,
+  emptySlot,
+  slotAddTab,
+  slotHolds,
+  slotPaneIds,
+  slotRemapIds,
+  slotRemoveTab,
+  slotRenameTab,
+  slotTabs,
+} from './view-slot';
+
+/** The view every layout belongs to until the user makes another one (ADR-0089). */
+export const DEFAULT_VIEW_ID = 'notes';
 
 /** One editor pane's tab strip: an ordered subset of `EditorService`'s open paths, plus which is active. */
 export interface PaneRecord {
@@ -79,6 +93,15 @@ export class PaneService {
   });
   private nextPaneNum = 2;
   private nextSplitNum = 1;
+
+  /**
+   * Views (ADR-0089): the signals above are the ACTIVE view's layout; every
+   * other view's layout waits here as a plain slot. Pane and split ids come
+   * from the two counters above for all views, so they never repeat.
+   */
+  private readonly _activeView = signal<string>(DEFAULT_VIEW_ID);
+  private readonly _otherViews = signal<Record<string, ViewSlot>>({});
+  readonly activeViewId = this._activeView.asReadonly();
 
   /** The split-tree layout (row/column splits down to leaf panes) of the centre region. */
   readonly root = this._root.asReadonly();
@@ -180,11 +203,153 @@ export class PaneService {
     }
   }
 
-  /** Closes `path` wherever it is open (the "Open windows" list / File menu close). */
-  closeEverywhere(path: string): void {
+  /** Closes `path` in the active view only (the tab's X while another view still shows it). */
+  closeInActiveView(path: string): void {
     for (const id of this.paneIds()) {
       this.closeInPane(id, path);
     }
+  }
+
+  /** Closes `path` wherever it is open, in every view (the document itself is going away). */
+  closeEverywhere(path: string): void {
+    this.closeInActiveView(path);
+    this._otherViews.update((views) => {
+      const next: Record<string, ViewSlot> = {};
+      for (const [id, slot] of Object.entries(views)) {
+        next[id] = slotRemoveTab(slot, path);
+      }
+      return next;
+    });
+  }
+
+  // --- views (ADR-0089) ---------------------------------------------------
+
+  /** Startup only: names the view the restored layout belongs to, without swapping anything. */
+  setActiveViewId(id: string): void {
+    this._activeView.set(id);
+  }
+
+  /** The ids of the views that hold a tab for `key` (the active one included). */
+  viewsHolding(key: string): string[] {
+    const ids: string[] = [];
+    if (this.paneIdForInActive(key) !== null) {
+      ids.push(this._activeView());
+    }
+    for (const [id, slot] of Object.entries(this._otherViews())) {
+      if (slotHolds(slot, key)) {
+        ids.push(id);
+      }
+    }
+    return ids;
+  }
+
+  /** Every tab key `viewId` holds, in pane order. */
+  tabsOfView(viewId: string): string[] {
+    if (viewId === this._activeView()) {
+      return this.paneIds().flatMap((id) => this._panes()[id]?.tabs ?? []);
+    }
+    const slot = this._otherViews()[viewId];
+    return slot === undefined ? [] : slotTabs(slot);
+  }
+
+  /** Every tab key any view holds. */
+  allTabKeys(): Set<string> {
+    const keys = new Set<string>();
+    for (const id of [this._activeView(), ...Object.keys(this._otherViews())]) {
+      for (const key of this.tabsOfView(id)) {
+        keys.add(key);
+      }
+    }
+    return keys;
+  }
+
+  /** Brings `key` into `viewId` as a tab (one document, several views); no-op where it already is. */
+  showInView(viewId: string, key: string): void {
+    if (viewId === this._activeView()) {
+      if (this.paneIdForInActive(key) === null) {
+        this.open(key);
+      }
+      return;
+    }
+    const slot = this._otherViews()[viewId] ?? this.freshSlot();
+    this._otherViews.update((views) => ({ ...views, [viewId]: slotAddTab(slot, key) }));
+  }
+
+  /** Takes `key` out of `viewId` only; the other views keep it. */
+  hideInView(viewId: string, key: string): void {
+    if (viewId === this._activeView()) {
+      this.closeInActiveView(key);
+      return;
+    }
+    const slot = this._otherViews()[viewId];
+    if (slot !== undefined) {
+      this._otherViews.update((views) => ({ ...views, [viewId]: slotRemoveTab(slot, key) }));
+    }
+  }
+
+  /** Makes `to` the active view: the current layout is parked, `to`'s layout (or an empty one) loaded. */
+  switchView(to: string): void {
+    const from = this._activeView();
+    if (to === from) {
+      return;
+    }
+    const parked = this.captureSlot();
+    const next = this._otherViews()[to] ?? this.freshSlot();
+    this._otherViews.update((views) => {
+      const { [to]: _loaded, ...rest } = views;
+      return { ...rest, [from]: parked };
+    });
+    this.loadSlot(next);
+    this._activeView.set(to);
+  }
+
+  /** "Save current layout as a view": `newId` starts as a copy of the active layout (same documents, fresh pane ids). */
+  cloneActiveViewTo(newId: string): void {
+    const copy = slotRemapIds(
+      this.captureSlot(),
+      () => `p${this.nextPaneNum++}`,
+      () => `s${this.nextSplitNum++}`,
+    );
+    this._otherViews.update((views) => ({ ...views, [newId]: copy }));
+  }
+
+  /** Forgets a view's layout (the view was deleted; it is not the active one). */
+  dropView(id: string): void {
+    this._otherViews.update((views) => {
+      const { [id]: _gone, ...rest } = views;
+      return rest;
+    });
+  }
+
+  private paneIdForInActive(key: string): string | null {
+    for (const id of this.paneIds()) {
+      if (this._panes()[id]?.tabs.includes(key)) {
+        return id;
+      }
+    }
+    return null;
+  }
+
+  private freshSlot(): ViewSlot {
+    return emptySlot(`p${this.nextPaneNum++}`, BAND_HEIGHT.default);
+  }
+
+  private captureSlot(): ViewSlot {
+    return {
+      root: this._root(),
+      panes: this._panes(),
+      focusedId: this._focusedId(),
+      dockPanes: this._dockPanes(),
+      bandHeights: this._bandHeights(),
+    };
+  }
+
+  private loadSlot(slot: ViewSlot): void {
+    this._root.set(slot.root);
+    this._panes.set(slot.panes);
+    this._focusedId.set(slot.focusedId);
+    this._dockPanes.set(slot.dockPanes);
+    this._bandHeights.set(slot.bandHeights);
   }
 
   closeAllInPane(paneId: string): void {
@@ -427,6 +592,13 @@ export class PaneService {
         };
       }
     });
+    this._otherViews.update((views) => {
+      const next: Record<string, ViewSlot> = {};
+      for (const [id, slot] of Object.entries(views)) {
+        next[id] = slotRenameTab(slot, oldPath, newPath);
+      }
+      return next;
+    });
   }
 
   /**
@@ -473,23 +645,20 @@ export class PaneService {
 
   // --- session restore (ADR-0043) -------------------------------------
 
-  /** The full layout, for `SessionService` to persist. */
+  /** The active view's full layout, for `SessionService` to persist. */
   snapshot(): PaneLayoutSnapshot {
-    const dock = this._dockPanes();
-    const heights = this._bandHeights();
-    const entries: Partial<Record<PaneDockSide, DockedPaneSnapshot>> = {};
-    for (const side of DOCK_SIDES) {
-      const id = dock[side];
-      if (id !== null) {
-        entries[side] = { paneId: id, height: heights[side] };
-      }
-    }
-    const base = { root: this._root(), panes: this._panes(), focusedId: this._focusedId() };
-    return Object.keys(entries).length > 0 ? { ...base, dock: entries } : base;
+    return snapshotOfSlot(this.captureSlot());
+  }
+
+  /** The layout of every view that is not the active one, by view id. */
+  snapshotOtherViews(): Record<string, PaneLayoutSnapshot> {
+    return Object.fromEntries(
+      Object.entries(this._otherViews()).map(([id, slot]) => [id, snapshotOfSlot(slot)]),
+    );
   }
 
   /**
-   * Rebuilds the layout from a persisted `snapshot()`. `keepPath` is asked
+   * Rebuilds the active view's layout from a persisted `snapshot()`. `keepPath` is asked
    * for every tab path -- one that no longer resolves (a deleted file whose
    * backup is also gone) is dropped, and a pane left with no tabs is pruned
    * from the tree (unless it is the last one). A dock region whose pane
@@ -499,6 +668,50 @@ export class PaneService {
    * skip its default "open today's note" behaviour.
    */
   restore(snap: PaneLayoutSnapshot, keepPath: (path: string) => boolean): boolean {
+    const slot = this.buildSlot(snap, keepPath);
+    if (slot === null) {
+      // Nothing worth restoring -- hand back the fresh default,
+      // deterministically, whatever the service held before.
+      const taken = Object.values(this._otherViews()).flatMap((s) => slotPaneIds(s));
+      this.loadSlot(
+        emptySlot(taken.includes(FIRST_PANE_ID) ? `p${this.nextPaneNum++}` : FIRST_PANE_ID, BAND_HEIGHT.default),
+      );
+      if (taken.length === 0) {
+        this.nextPaneNum = 2;
+        this.nextSplitNum = 1;
+      }
+      this.recomputeCounters();
+      return false;
+    }
+    this.loadSlot(slot);
+    this.recomputeCounters();
+    return true;
+  }
+
+  /**
+   * Rebuilds the layouts of the views that are not active (ADR-0089), each
+   * through the same pruning as {@link restore}. A view whose layout holds
+   * nothing keeps no slot -- it opens empty when switched to.
+   */
+  restoreOtherViews(
+    layouts: Record<string, PaneLayoutSnapshot>,
+    keepPath: (path: string) => boolean,
+  ): void {
+    const others: Record<string, ViewSlot> = {};
+    for (const [id, snap] of Object.entries(layouts)) {
+      if (id === this._activeView()) {
+        continue;
+      }
+      const slot = this.buildSlot(snap, keepPath);
+      if (slot !== null) {
+        others[id] = slot;
+      }
+    }
+    this._otherViews.set(others);
+    this.recomputeCounters();
+  }
+
+  private buildSlot(snap: PaneLayoutSnapshot, keepPath: (path: string) => boolean): ViewSlot | null {
     const ids = leafIds(snap.root);
     const kept: Record<string, PaneRecord> = {};
     for (const id of ids) {
@@ -523,7 +736,7 @@ export class PaneService {
     // Dock regions (ADR-0038): an entry survives only if its pane is not a
     // centre leaf, unknown, or already used -- and still holds a tab.
     const dockIn = snap.dock ?? {};
-    const restoredDock: Partial<Record<PaneDockSide, DockedPaneSnapshot>> = {};
+    const restoredDock: Partial<Record<PaneDockSide, string>> = {};
     const heights: Partial<Record<PaneDockSide, number>> = {};
     const used = new Set<string>(surviving);
     for (const side of DOCK_SIDES) {
@@ -547,52 +760,54 @@ export class PaneService {
       heights[side] = Number.isFinite(raw)
         ? Math.max(BAND_HEIGHT.min, Math.min(BAND_HEIGHT.max, raw))
         : BAND_HEIGHT.default;
-      restoredDock[side] = { paneId: id, height: heights[side] };
+      restoredDock[side] = id;
     }
 
     const centreEmpty = surviving.every((id) => panes[id].tabs.length === 0);
-    const dockIds = DOCK_SIDES.map((s) => restoredDock[s]?.paneId).filter(
-      (id): id is string => id !== undefined,
-    );
+    const dockIds = DOCK_SIDES.map((s) => restoredDock[s]).filter((id): id is string => id !== undefined);
     if (centreEmpty && dockIds.length === 0) {
-      // Nothing worth restoring -- hand back the fresh default,
-      // deterministically, whatever the service held before.
-      this._root.set({ kind: 'leaf', paneId: FIRST_PANE_ID });
-      this._panes.set({ [FIRST_PANE_ID]: { id: FIRST_PANE_ID, tabs: [], active: null } });
-      this._focusedId.set(FIRST_PANE_ID);
-      this._dockPanes.set({ left: null, right: null, bottom: null });
-      this._bandHeights.set({
-        left: BAND_HEIGHT.default,
-        right: BAND_HEIGHT.default,
-        bottom: BAND_HEIGHT.default,
-      });
-      this.nextPaneNum = 2;
-      this.nextSplitNum = 1;
-      return false;
+      return null;
     }
 
-    this._root.set(root);
-    this._panes.set(panes);
-    this._dockPanes.set({
-      left: restoredDock.left?.paneId ?? null,
-      right: restoredDock.right?.paneId ?? null,
-      bottom: restoredDock.bottom?.paneId ?? null,
-    });
-    this._bandHeights.set({
-      left: heights.left ?? BAND_HEIGHT.default,
-      right: heights.right ?? BAND_HEIGHT.default,
-      bottom: heights.bottom ?? BAND_HEIGHT.default,
-    });
-
     const focusCandidates = [...surviving, ...dockIds];
-    this._focusedId.set(
-      focusCandidates.includes(snap.focusedId) ? snap.focusedId : (focusCandidates[0] ?? FIRST_PANE_ID),
-    );
-    this.nextPaneNum =
-      Math.max(1, ...focusCandidates.map((id) => Number(id.replace(/^p/, '')) || 0)) + 1;
-    this.nextSplitNum = maxSplitNum(root) + 1;
-    return true;
+    return {
+      root,
+      panes,
+      focusedId: focusCandidates.includes(snap.focusedId)
+        ? snap.focusedId
+        : (focusCandidates[0] ?? FIRST_PANE_ID),
+      dockPanes: {
+        left: restoredDock.left ?? null,
+        right: restoredDock.right ?? null,
+        bottom: restoredDock.bottom ?? null,
+      },
+      bandHeights: {
+        left: heights.left ?? BAND_HEIGHT.default,
+        right: heights.right ?? BAND_HEIGHT.default,
+        bottom: heights.bottom ?? BAND_HEIGHT.default,
+      },
+    };
   }
+
+  /** The id counters must clear every pane and split of every view. */
+  private recomputeCounters(): void {
+    const slots = [this.captureSlot(), ...Object.values(this._otherViews())];
+    const paneNums = slots.flatMap((s) => slotPaneIds(s)).map((id) => Number(id.replace(/^p/, '')) || 0);
+    this.nextPaneNum = Math.max(1, ...paneNums, this.nextPaneNum - 1) + 1;
+    this.nextSplitNum = Math.max(0, ...slots.map((s) => maxSplitNum(s.root)), this.nextSplitNum - 1) + 1;
+  }
+}
+
+function snapshotOfSlot(slot: ViewSlot): PaneLayoutSnapshot {
+  const entries: Partial<Record<PaneDockSide, DockedPaneSnapshot>> = {};
+  for (const side of DOCK_SIDES) {
+    const id = slot.dockPanes[side];
+    if (id !== null) {
+      entries[side] = { paneId: id, height: slot.bandHeights[side] };
+    }
+  }
+  const base = { root: slot.root, panes: slot.panes, focusedId: slot.focusedId };
+  return Object.keys(entries).length > 0 ? { ...base, dock: entries } : base;
 }
 
 /** One docked pane in the persisted layout (ADR-0038): which pane, and the band height. */

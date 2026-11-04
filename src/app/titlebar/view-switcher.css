@@ -1,0 +1,138 @@
+:host {
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin: 0 8px;
+  -webkit-app-region: no-drag;
+}
+
+.vs {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.vs-btn,
+.vs-fold {
+  height: 20px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-4);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.vs-btn:hover,
+.vs-fold:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.vs-btn.on {
+  background: var(--hover-bg-strong);
+  color: var(--text-heading);
+}
+
+.vs-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  height: 22px;
+}
+
+.ctx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.ctx-menu {
+  position: fixed;
+  z-index: 41;
+  min-width: 168px;
+  padding: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--popover-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--popover-shadow);
+}
+
+.ctx-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.ctx-menu button:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.check {
+  flex: none;
+  width: 12px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--accent-fg);
+}
+
+.ctx-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
+.name-pop {
+  position: fixed;
+  top: calc(var(--bar-h) + 2px);
+  left: 50%;
+  z-index: 41;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--popover-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--popover-shadow);
+}
+
+.name-input {
+  width: 220px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+.name-input.rejected {
+  border-color: var(--danger, #d4574a);
+}
+
+.name-error {
+  padding: 0 2px;
+  font-size: 11px;
+  color: var(--text-4);
+}

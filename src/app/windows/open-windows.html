@@ -1,8 +1,8 @@
-@if (editor.openDocs().length === 0) {
+@if (shown().length === 0 && elsewhere().length === 0) {
   <p class="empty">Nothing open.</p>
 } @else {
   <div class="list">
-    @for (doc of editor.openDocs(); track doc.path) {
+    @for (doc of shown(); track doc.key) {
       <div class="row" [class.active]="doc.key === editor.activePath()" [title]="doc.path">
         <button type="button" class="open" (click)="editor.activate(doc.key)">
           <span class="win-glyph" aria-hidden="true"></span>
@@ -14,7 +14,7 @@
         <button
           type="button"
           class="close"
-          (click)="onClose($event, doc.path)"
+          (click)="onClose($event, doc.key)"
           [attr.aria-label]="'Close ' + doc.name"
         >
           <app-icon name="x" [size]="7" [strokeWidth]="1.1" />
@@ -22,4 +22,20 @@
       </div>
     }
   </div>
+  @if (elsewhere().length > 0) {
+    <div class="group">In other views</div>
+    <div class="list">
+      @for (entry of elsewhere(); track entry.doc.key) {
+        <div class="row other" [title]="entry.doc.path + ' · ' + entry.where">
+          <span class="win-glyph" aria-hidden="true"></span>
+          <span class="name">{{ entry.doc.name }}</span>
+          @if (entry.doc.bufferContent !== entry.doc.savedContent) {
+            <span class="dirty" aria-label="Unsaved changes"></span>
+          }
+          <span class="where">{{ entry.where }}</span>
+          <button type="button" class="show-here" (click)="views.showHere(entry.doc.key)">Show here</button>
+        </div>
+      }
+    </div>
+  }
 }

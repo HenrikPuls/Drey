@@ -2,10 +2,13 @@
 
 ## Status
 
-Proposed. The direction was confirmed by the owner on 2026-11-04 (a view
-switcher, tabs per view, hidden elsewhere but addable). The owner made
-saved layouts mandatory and first in the build order (2026-11-04): without them
-the agent system and the note app are unusable side by side. Nothing is built.
+Accepted (2026-11-04) and built as E13-1, milestone 123 -- the base half
+(views, switching, tabs per view, session). Plugin-contributed presets and
+`homeView` (decision 2, 7) are E13-2 and not built yet. The direction was
+confirmed by the owner on 2026-11-04 (a view switcher, tabs per view, hidden
+elsewhere but addable). The owner made saved layouts mandatory and first in
+the build order: without them the agent system and the note app are unusable
+side by side.
 Extends ADR-0019 (dock layout state), ADR-0037/0038 (panes and docked editor
 bands) and ADR-0043 (session snapshot). Design: `docs/design/work-panel/
 desktop-integration.md`, boards 7a to 7i.
@@ -119,6 +122,48 @@ Constraints that shape the answer:
 - The manual (`docs/manual/manual.md`), docs/05 and docs/06 gain a "Views"
   section when this ships; the `specs/frontmatter-schema.md` is not touched (no
   vault file changes).
+## As built (E13-1, milestone 123)
+
+- **State.** `DockService` keeps the active view's layout in its signal and
+  every other view's as a parked slot; `PaneService` does the same with a
+  `ViewSlot` (centre tree, panes, focus, docked bands; pure edits in
+  `src/app/panes/view-slot.ts`). Pane and split ids come from one counter, so
+  they never repeat across views. `ViewService` (`src/app/views/`) owns the
+  list and the active id and switches both services together; the list of user
+  views is `localStorage['drey.views']`.
+- **Persistence.** `localStorage['drey.dock']` became
+  `{ active, views: { <id>: DockState } }`; the old flat blob reads as Notes.
+  The session snapshot stays version 2 (the ADR said 1; the shipped version
+  is 2) with an additive `views` map: `layout` is the Notes layout, every
+  other view sits in `views`, `tabs` is the union over all views. A snapshot
+  without `views` restores into Notes; a view that no longer exists drops its
+  layout, and a document only that view held is closed.
+- **Closing.** The tab's X and "Close all / others" leave only the active view
+  while another view shows the document (no prompt: nothing is lost); the
+  unsaved-changes prompt comes when the last view lets go. Deleting a file
+  closes its tab in every view; so does a rename follow it everywhere.
+  Replacing a clean tab (opening another file) is also per view.
+- **"Save current layout as a view…"** copies the dock layout and the pane
+  tree *including its tabs* (documents are shared, not copied) under fresh
+  pane ids, and switches to the new view. Deleting a user view closes the
+  documents only it held (asking about unsaved changes; a cancelled prompt
+  moves the document into Notes).
+- **UI.** The switcher is in the title bar (`src/app/titlebar/view-switcher.*`):
+  a segmented control up to four views, a menu above that, nothing at all with
+  Notes alone. Right-click on a user view: Rename, Delete. `Ctrl+1`-`Ctrl+9`
+  (commands `view.switch.1`-`9`), "Switch view" (next, wrapping),
+  "Save current layout as a view…" are commands and View-menu rows. A tab's
+  context menu ticks the views it shows in ("Show this tab in"); the last tick
+  cannot be removed. The Open windows panel lists the active view's tabs and,
+  under "In other views", the other documents with a "Show here" button; its
+  header count is the active view's.
+- **Not built here (E13-2).** View presets from plugins, `homeView`, the
+  Assistant's default target per view. The quick switcher lists vault files,
+  not open tabs, so it needed no change; the "include other views" toggle is
+  not needed. A history jump (back/forward) to a document that only another
+  view shows brings it into the active view. Hidden views cost nothing at rest:
+  their pane components are not mounted.
+
 - Open for the implementation: whether the quick switcher gets an "include other
   views" toggle; how many views the title bar shows before it folds into a menu;
   how a plugin preset is versioned when its layout changes; whether user views

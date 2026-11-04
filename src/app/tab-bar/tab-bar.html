@@ -55,6 +55,21 @@
     (contextmenu)="$event.preventDefault(); closeMenu()"
   ></div>
   <div class="ctx-menu" [style.left.px]="m.x" [style.top.px]="m.y">
+    @if (views.views().length > 1) {
+      <div class="ctx-label">Show this tab in</div>
+      @for (view of views.views(); track view.id) {
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          [attr.aria-checked]="inView(m.path, view.id)"
+          (click)="toggleView(m.path, view.id)"
+        >
+          <span class="ctx-check">{{ inView(m.path, view.id) ? '✓' : '' }}</span>
+          <span class="ctx-grow">{{ view.label }}</span>
+        </button>
+      }
+      <div class="ctx-sep" role="separator"></div>
+    }
     @if (pinnable(m.path)) {
       <button type="button" (click)="togglePin(m.path)">
         {{ editor.docFor(m.path)?.pinned ? 'Unpin tab' : 'Pin tab' }}

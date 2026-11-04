@@ -1539,7 +1539,21 @@ automatically.
   the left, right and bottom docks, resize them with the splitters,
   collapse them to their 32 px headers. The whole layout persists
   across restarts.
-- **Open windows** panel lists every open document across panes:
+- **Views** — a view is a saved layout: its own docks and panels, split
+  panes and open tabs. *View → Save current layout as a view…* (or the
+  command palette) keeps the current arrangement under a name and
+  switches to it; the title bar then shows one button per view, and
+  `Ctrl+1` … `Ctrl+9` or *View → Switch view* jump between them. A
+  view comes back exactly as you left it. Right-click a view you made
+  to rename or delete it; *Notes* is always there. Tabs belong to
+  views: another view's tabs are hidden, and one tab can be shown in
+  several views — its context menu has *Show this tab in* with a
+  check per view. Closing a tab only takes it out of the current
+  view while another view still shows it; it closes for good (asking
+  about unsaved changes) with the last one. *Reset layout* resets the
+  current view only.
+- **Open windows** panel lists the open documents of the current view,
+  and under *In other views* the rest, each with a *Show here* button:
 
 ![The Open windows panel](img/panel-windows.png)
 

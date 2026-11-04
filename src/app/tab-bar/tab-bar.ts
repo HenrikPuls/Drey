@@ -7,6 +7,7 @@ import { PaneService, type PaneRegion } from '../panes/pane.service';
 import { TabDragService } from './tab-drag.service';
 import { Icon, type IconName } from '../icons/icon';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
+import { ViewService } from '../views';
 
 interface TabMenu {
   x: number;
@@ -49,6 +50,7 @@ export class TabBar {
   protected readonly tabDrag = inject(TabDragService);
   protected readonly history = inject(HistoryService);
   protected readonly keys = inject(KeybindingService);
+  protected readonly views = inject(ViewService);
   private readonly docKinds = inject(DocKindRegistry);
 
   readonly paneId = input.required<string>();
@@ -128,7 +130,8 @@ export class TabBar {
     this.menu.set({
       x: Math.min(event.clientX, window.innerWidth - 168),
       // The menu grew to eight rows with the dock-move and pin entries (ADR-0038).
-      y: Math.min(event.clientY, window.innerHeight - 270),
+      // ...plus one row per view for "Show this tab in" (ADR-0089).
+      y: Math.min(event.clientY, window.innerHeight - 270 - (this.views.views().length > 1 ? 26 * (this.views.views().length + 1) : 0)),
       path,
     });
   }
@@ -148,6 +151,17 @@ export class TabBar {
     }
     const kind = this.editor.docFor(path)?.kind;
     return kind === 'text' || kind === 'image' || kind === 'pdf';
+  }
+
+  /** True when the right-clicked tab is shown in view `viewId` (a tab can belong to several). */
+  protected inView(path: string, viewId: string): boolean {
+    return this.views.viewsOfTab(path).includes(viewId);
+  }
+
+  /** "Show this tab in": ticks / unticks a view; the last tick stays (that is Close). */
+  protected toggleView(path: string, viewId: string): void {
+    this.closeMenu();
+    this.views.toggleTabIn(path, viewId);
   }
 
   protected togglePin(path: string): void {

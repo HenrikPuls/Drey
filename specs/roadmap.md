@@ -70,7 +70,10 @@ and suite-green but await the owner's
 rounds** — with E9 the whole E0–E9 arc stands built and the concept
 is complete, caveat:
 none of it is owner-verified yet; the next step is the owner's
-verification round before anything further. The owner's verification round for 1–81 closed
+verification round before anything further. **Milestone 123 (E13-1,
+views — saved layouts with their own tabs, ADR-0089) is built and
+suite-green and awaits the owner's round** (E13 is the desktop
+integration of Mission Control, below). The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
@@ -234,13 +237,6 @@ ships.
 
 Order and dependencies (an item needs everything it names):
 
-1. **E13-1 — Views** (ADR-0089, accepted first). `DockService` and
-   `PaneService` state per view, the title-bar switcher, `Ctrl+1`–`9`, a
-   "Switch view" command, "Save current layout as a view…", tabs belong to
-   views (hidden elsewhere, "Show this tab in", Open windows "In other views /
-   Show here"), one document and one buffer, session snapshot with views,
-   "Reset layout" per view. Notes is today's layout. Starts at once; the
-   largest base change, so it ships on its own.
 2. **E13-2 — View presets and home views** (SDK minor, content-agnostic). A
    plugin registers a view preset (id, label, initial layout, default
    Assistant target) and may name a `homeView` on doc kinds and file openers.

@@ -1,0 +1,77 @@
+@if (views.views().length > 1) {
+  @if (folded()) {
+    <button
+      type="button"
+      class="vs-fold"
+      aria-haspopup="menu"
+      title="Switch view"
+      aria-label="Switch view"
+      (click)="openList($event)"
+    >
+      <span>{{ views.active().label }}</span>
+      <app-icon name="chevron-down" [size]="10" />
+    </button>
+  } @else {
+    <div class="vs" role="tablist" aria-label="Views">
+      @for (view of views.views(); track view.id; let i = $index) {
+        <button
+          type="button"
+          role="tab"
+          class="vs-btn"
+          [class.on]="view.id === views.activeId()"
+          [attr.aria-selected]="view.id === views.activeId()"
+          [title]="titleOf(view, i)"
+          (click)="views.switchTo(view.id)"
+          (contextmenu)="openMenu($event, view)"
+        >
+          {{ view.label }}
+        </button>
+      }
+    </div>
+  }
+}
+
+@if (menu(); as m) {
+  <div
+    class="ctx-backdrop"
+    appOverlayGuard
+    (click)="closeMenu()"
+    (contextmenu)="$event.preventDefault(); closeMenu()"
+  ></div>
+  <div class="ctx-menu" role="menu" [style.left.px]="m.x" [style.top.px]="m.y">
+    @if (m.view === null) {
+      @for (view of views.views(); track view.id) {
+        <button type="button" role="menuitemradio" [attr.aria-checked]="view.id === views.activeId()" (click)="pick(view)">
+          <span class="check">{{ view.id === views.activeId() ? '✓' : '' }}</span>
+          {{ view.label }}
+        </button>
+      }
+      <div class="ctx-sep" role="separator"></div>
+      <button type="button" role="menuitem" (click)="saveAs()">Save current layout as a view…</button>
+    } @else {
+      <button type="button" role="menuitem" (click)="rename(m.view)">Rename…</button>
+      <button type="button" role="menuitem" (click)="remove(m.view)">Delete view</button>
+    }
+  </div>
+}
+
+@if (views.prompt(); as p) {
+  <div class="ctx-backdrop" appOverlayGuard (click)="cancel()"></div>
+  <div class="name-pop">
+    <input
+      #name
+      type="text"
+      class="name-input"
+      [class.rejected]="rejected()"
+      [value]="p.initial"
+      aria-label="View name"
+      spellcheck="false"
+      (input)="rejected.set(false)"
+      (keydown.enter)="commit(name.value)"
+      (keydown.escape)="cancel()"
+    />
+    @if (rejected()) {
+      <span class="name-error" role="alert">Pick an unused name.</span>
+    }
+  </div>
+}

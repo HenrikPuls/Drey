@@ -604,6 +604,18 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   unrestorable entries (scratch tabs, plugin doc kinds). Purely
   in-memory — nothing rides into the session snapshot; caret/scroll
   restore rides the existing milestone-50 memory
+- `ViewService` + `ViewSwitcher` (`src/app/views/`, `src/app/titlebar/view-switcher.*`,
+  ADR-0089) — views: named, saved layouts. `ViewService` owns the list of
+  views (Notes always; user views from "Save current layout as a view…",
+  `localStorage['drey.views']`) and the active id, and switches
+  `DockService.switchView` and `PaneService.switchView` together. Each of
+  the two keeps the active view's layout in its signals and the other
+  views' layouts parked (`ViewSlot`, `panes/view-slot.ts`, pure edits).
+  Documents stay global in `OpenDocsStore`; a view owns placements.
+  `viewsHolding(key)` answers which views show a document — closing a tab
+  leaves only the active view while another still shows it. The switcher is
+  title-bar chrome; `Ctrl+1`–`9`, "Switch view" and "Save current layout as
+  a view…" are commands registered in `App`.
 - `PaneService` (`src/app/panes/`, ADR-0037) — the split-view editor
   layout: an arbitrary tree of row/column splits down to leaf panes, each
   a `{ tabs, active }` record. `PaneLayout` renders the tree recursively
@@ -967,6 +979,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Palette (files / commands, `Mod+P`) | `src/app/palette/` | Base | M59 |
 | Panes, splits, tab DnD, pinning | `src/app/panes/`, `src/app/dnd/`, `src/app/tab-bar/` | Base | ADR-0037–0039 |
 | Docks, panels, icon strips, layout state | `src/app/dock/` | Base | ADR-0019 (+ M69 later change), ADR-0034 |
+| Views (saved layouts, switcher, tabs per view) | `src/app/views/`, `src/app/titlebar/view-switcher.*`, `src/app/panes/view-slot.ts` | Base | ADR-0089, M123 |
 | Session restore + unsaved-buffer backups | `electron/session/` | Base | ADR-0043 |
 | Doc back/forward history | `src/app/services/doc-history.service.ts` | Base | M55 |
 | Settings framework (core categories, config store) | `src/app/settings/`, `electron/llm/app-config.ts` | Base | ADR-0010 |

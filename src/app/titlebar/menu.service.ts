@@ -17,7 +17,8 @@ import {
   MenuContributionsService,
   type ContributableMenu,
 } from '../plugin-host/menu-contributions.service';
-import { PaneService } from '../panes';
+import { ViewService } from '../views';
+import { PaneService } from '../panes/pane.service';
 import { DocHistoryService } from '../services/doc-history.service';
 import { EditorService } from '../services/editor.service';
 import { EditTargetService } from '../services/edit-target.service';
@@ -72,6 +73,7 @@ export class MenuService {
   private readonly keys = inject(KeybindingService);
   private readonly dock = inject(DockService);
   private readonly panes = inject(PaneService);
+  private readonly views = inject(ViewService);
   private readonly editor = inject(EditorService);
   private readonly history = inject(DocHistoryService);
   private readonly editTarget = inject(EditTargetService);
@@ -417,6 +419,13 @@ export class MenuService {
             this.panes.resetRegions();
           },
         },
+        SEP,
+        {
+          kind: 'item',
+          label: 'Switch view',
+          run: this.views.views().length > 1 ? () => this.run('view.next') : undefined,
+        },
+        { kind: 'item', label: 'Save current layout as a view…', run: () => this.run('view.saveAs') },
         ...this.contributionRows('view'),
       ],
     },

@@ -39,7 +39,7 @@ describe('DockService', () => {
       expect(dock.sideFolded('left')).toBe(true);
       expect(dock.sideFolded('right')).toBe(false);
       expect(dock.leftIds()).toEqual(before);
-      expect(JSON.parse(localStorage.getItem('drey.dock')!).foldedSides).toEqual(['left']);
+      expect(JSON.parse(localStorage.getItem('drey.dock')!).views.notes.foldedSides).toEqual(['left']);
 
       dock.toggleSide('left');
       expect(dock.sideFolded('left')).toBe(false);
