@@ -2,6 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DreyApi } from '../../../shared/ipc-api';
 import { EditorService } from '../services/editor.service';
 import { UpdateService } from '../services/update.service';
+import { KeybindingService } from '../keybindings';
+import { StatusItemsService } from '../plugin-host';
 import { StatusBar } from './status-bar';
 
 describe('StatusBar', () => {
@@ -61,5 +63,19 @@ describe('StatusBar', () => {
   it('shows no update note by default', () => {
     fixture.detectChanges();
     expect(el.querySelector('.update-note')).toBeNull();
+  });
+
+  it('renders plugin status items in priority order and runs the command on click', () => {
+    const run = vi.spyOn(TestBed.inject(KeybindingService), 'run').mockReturnValue(undefined as never);
+    const items = TestBed.inject(StatusItemsService);
+    items.create({ text: 'low', priority: 1 });
+    items.create({ text: 'high', tooltip: 'tip', commandId: 'x.open', priority: 9 });
+    fixture.detectChanges();
+    const slots = Array.from(el.querySelectorAll('.slot'));
+    expect(slots.map((s) => s.textContent?.trim())).toEqual(['high', 'low']);
+    expect(slots[0].getAttribute('title')).toBe('tip');
+    expect(slots[1].tagName).toBe('SPAN');
+    (slots[0] as HTMLButtonElement).click();
+    expect(run).toHaveBeenCalledWith('x.open');
   });
 });

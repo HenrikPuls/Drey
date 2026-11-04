@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { Icon } from '../icons/icon';
-import { DocKindRegistry } from '../plugin-host';
+import { DocKindRegistry, StatusItemsService } from '../plugin-host';
+import { KeybindingService } from '../keybindings';
 import { EditorService } from '../services/editor.service';
 import { SettingsService } from '../services/settings.service';
 import { UpdateService } from '../services/update.service';
@@ -23,6 +24,14 @@ export class StatusBar {
   protected readonly settings = inject(SettingsService);
   protected readonly update = inject(UpdateService);
   private readonly docKinds = inject(DocKindRegistry);
+  protected readonly statusItems = inject(StatusItemsService).items;
+  private readonly keys = inject(KeybindingService);
+
+  protected runItem(commandId: string | undefined): void {
+    if (commandId !== undefined) {
+      this.keys.run(commandId);
+    }
+  }
 
   /** `"<W> × <H> · <zoom>%"` for the active image tab; `—` before it loads. */
   protected readonly imageInfo = computed(() => {

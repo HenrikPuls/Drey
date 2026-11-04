@@ -10,6 +10,29 @@
 @if (update.notice(); as note) {
   <span class="update-note">{{ note }}</span>
 }
+<div class="slots">
+@for (item of statusItems(); track item.key) {
+  @if (item.spec.commandId; as cmd) {
+    <button type="button" class="slot slot-btn" [title]="item.spec.tooltip ?? ''" (click)="runItem(cmd)">
+      @if (item.icon; as ic) {
+        <app-icon [name]="ic" [size]="12" />
+      }
+      @if (item.spec.text !== '') {
+        <span>{{ item.spec.text }}</span>
+      }
+    </button>
+  } @else {
+    <span class="slot" [title]="item.spec.tooltip ?? ''">
+      @if (item.icon; as ic) {
+        <app-icon [name]="ic" [size]="12" />
+      }
+      @if (item.spec.text !== '') {
+        <span>{{ item.spec.text }}</span>
+      }
+    </span>
+  }
+}
+</div>
 <button type="button" class="settings" (click)="settings.openScreen()" aria-label="Settings">
   <app-icon name="settings" [size]="12" />
   <span>Settings</span>

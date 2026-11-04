@@ -1,3 +1,28 @@
+### Milestone 124 — Status bar slot for plugins (E13-3, SDK 1.38)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(roadmap E13-3; Mission Control on the desktop inside Drey).
+
+- **SDK 1.38** (`shared/plugin-api/`): `api.ui.createStatusItem({ text,
+  icon?, tooltip?, commandId?, priority? })` returns a `StatusItemHandle`
+  (`update(patch)`, `dispose()`). Content-agnostic: no tone or colour
+  field, no ticket/cost/fleet meaning in the SDK or the base. An item with
+  neither text nor icon is hidden; the host removes a plugin's items when
+  it is disabled.
+- **Base** (`src/app/plugin-host/status-items.service.ts`, `src/app/status-bar/`):
+  items sit right-aligned left of Settings, higher `priority` further
+  left, registration order within equal priority; with a `commandId` the
+  item is a button that runs the command, otherwise plain text.
+- **Sample plugin**: a "Sample" item that runs `sample.stamp`
+  (`plugins/AUTHORING.md` documents 1.38).
+- **Tickets plugin** (`renderer/status-slot.ts`): "2 running · 3 need you"
+  from the fleet's live runs and the board's needs-you count (the same
+  number the Work panel header shows); hidden when both are 0; a click
+  reveals the Work panel (`tickets.showBoard`). No cost text yet — the
+  renderer holds no cost number today.
+- **Specs**: `status-items.service.spec.ts`, `status-bar.spec.ts`,
+  `status-slot.spec.ts`.
+
 
 ### Milestone 122 — Mission Control shape mode (E10-3)
 

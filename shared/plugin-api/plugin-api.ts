@@ -455,6 +455,30 @@ export interface NotifyRequest {
   readonly onClick?: () => void;
 }
 
+/**
+ * One entry in the status bar (`ui.createStatusItem`, SDK 1.38). Content-
+ * agnostic: a short text, an optional icon and tooltip, an optional click
+ * action and a priority -- the host attaches no meaning to any of them.
+ */
+export interface StatusItemSpec {
+  /** The visible text. An item with neither text nor icon is not shown. */
+  readonly text: string;
+  /** An icon name from the host's vendored set (as for `ui.icon`). */
+  readonly icon?: string;
+  readonly tooltip?: string;
+  /** A registered command id run on click; without one the item is plain text. */
+  readonly commandId?: string;
+  /** Ordering among all plugin items, left to right; higher is further left. Default 0. */
+  readonly priority?: number;
+}
+
+/** A live status-bar item: change it with `update`, remove it with `dispose` (SDK 1.38). */
+export interface StatusItemHandle {
+  /** Replaces the given fields; the rest stay as they are. */
+  update(patch: Partial<StatusItemSpec>): void;
+  dispose(): void;
+}
+
 /** Options for `ui.createMarkdownView` (SDK 1.30). */
 export interface MarkdownViewOptions {
   /** Initial text. */
@@ -756,6 +780,13 @@ export interface DreyPluginApi {
      * false when the system shows none (notifications off).
      */
     notify(request: NotifyRequest): Promise<boolean>;
+    /**
+     * An entry in the status bar (SDK 1.38): text, optional icon and
+     * tooltip, an optional command id run on click, and a priority for the
+     * ordering. The handle updates or removes it; the host removes it when
+     * the plugin is disabled. There is no colour -- the bar's own style.
+     */
+    createStatusItem(spec: StatusItemSpec): StatusItemHandle;
     /**
      * The shared tag chip field (SDK 1.9): colored chips with a completion
      * dropdown fed by the section-search provider's vocabulary — the same

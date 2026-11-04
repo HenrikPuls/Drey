@@ -172,6 +172,14 @@ test.describe('plugin doc kinds', () => {
     await expect(page.locator('app-status-bar .count.url')).toHaveText('sample clock');
   });
 
+  test('a plugin status item shows in the status bar and runs its command (SDK 1.38)', async ({
+    page,
+  }) => {
+    const item = page.locator('app-status-bar .slot', { hasText: 'Sample' });
+    await expect(item).toBeVisible();
+    await expect(item).toHaveAttribute('title', 'Insert a timestamp (sample plugin)');
+  });
+
   test('a plugin doc-kind tab survives a reload through the session', async ({ page }) => {
     await openClockTab(page);
     await expect(

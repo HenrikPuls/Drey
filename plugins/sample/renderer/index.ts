@@ -227,6 +227,15 @@ const plugin: PluginRendererModule = {
       },
     });
 
+    // A status-bar item (SDK 1.38): text + tooltip + click action, ordered by priority.
+    api.ui.createStatusItem({
+      text: 'Sample',
+      icon: 'sparkles',
+      tooltip: 'Insert a timestamp (sample plugin)',
+      commandId: 'sample.stamp',
+      priority: -10,
+    });
+
     api.commands.register({
       id: 'sample.stamp',
       label: 'Sample: insert timestamp',

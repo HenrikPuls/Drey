@@ -12,7 +12,7 @@ import { newWaits } from './waiting';
 import { interactiveEndMoves, interactiveModeFor, type InteractiveMode } from './end-moves';
 import { asParagraphs, chainLogStamp, visibleChainLog } from './chain-log';
 import { chainAlertsOf, newChainAlerts, type ChainAlert } from './chain-alerts';
-import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
+import type { DreyPluginApi, PluginWidgetContrib, StatusItemHandle } from '../../../shared/plugin-api/renderer';
 import {
   branchForTicket,
   DEFAULT_PRIORITY_CONFIG,
@@ -30,6 +30,7 @@ import { PRIORITY_LABEL, createGroupFoldStore, workListLivePaint, workListNode, 
 import { createRunComposer } from './run-composer';
 import { THREAD_KEY, ticketPagePlan } from './ticket-page';
 import { PENDING_HINT, dialogStarter } from './dialog-starters';
+import { statusSlotText } from './status-slot';
 import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups, workListSignature } from './work-groups';
 import { readyBarNode, readyCardNode, storyNode } from './ready-view';
 import { stepCardOf } from '../shared/step-card';
@@ -165,6 +166,7 @@ function refreshBoard(): Promise<void> {
   inFlight = (async () => {
     try {
       snapshot = (await invokeBoard('board')) as BoardSnapshot;
+      refreshStatusItem();
       // A fresh board clears its own earlier load error; results and
       // failures of actions keep their own lifetime.
       if (noteFromLoad) {
@@ -299,6 +301,18 @@ const boardCard = (id: string): TicketCard | null => {
 
 const liveRuns = (): readonly RunInfo[] =>
   fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state));
+
+/** The status-bar item (SDK 1.38): "2 running · 3 need you"; hidden when both are 0. */
+let statusItem: StatusItemHandle | null = null;
+const refreshStatusItem = (): void => {
+  if (statusItem === null) {
+    return;
+  }
+  const needs = snapshot === null || snapshot.vaultId === null
+    ? 0
+    : workGroups(snapshot, liveRuns()).needs.length + currentChainAlerts().length;
+  statusItem.update({ text: statusSlotText(liveRuns().length, needs) });
+};
 
 /** Keeps the header's master switch in step (the buttons live outside the board). */
 const masterButtons: { run: HTMLButtonElement; halt: HTMLButtonElement; abort: HTMLButtonElement }[] = [];
@@ -3124,6 +3138,18 @@ function openCardMenu(
 const plugin: { activate(api: DreyPluginApi): void } = {
   activate(api) {
     backend = api.backend;
+    statusItem = api.ui.createStatusItem({
+      text: '',
+      tooltip: 'Open the Work panel',
+      commandId: 'tickets.showBoard',
+      priority: 10,
+    });
+    fleetListeners.add(refreshStatusItem);
+    api.commands.register({
+      id: 'tickets.showBoard',
+      label: 'Show the Work panel',
+      run: () => api.ui.revealWidget('tickets'),
+    });
     // A worker that waits on the owner says so outside the board too (req-64).
     fleetListeners.add(() => announceWaits(api));
     // So does a fleet that stopped by itself: a tripped breaker, a spent quota.
