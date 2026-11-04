@@ -77,9 +77,25 @@ title bar (Ctrl+1, Ctrl+2, a Views menu; board 7h).
 3. **New editor tab kinds**: Board, Review, Team, Flow, built on the existing
    `registerDocKind`; Review uses the existing `DiffView`.
 4. **Parts block** as an editor widget under the ticket header.
-5. **Links across vaults.** Wikilinks are vault-scoped (ADR-0051/0059) and the
-   tickets repository is its own vault, so `[[T-0121]]` from a note does not
-   resolve today.
+5. **Links fall back to other vaults** (owner, 2026-11-04). Wikilinks are
+   vault-scoped (ADR-0051/0059) and the tickets repository is its own vault, so
+   `[[T-0121]]` from a note does not resolve today. The fix is generic, the base
+   must not know a "tickets vault" (that would break the plugin separation,
+   ADR-0044): a link is resolved in its own vault first, and only when nothing is
+   found there are the other registered vaults searched. No SDK change is
+   needed for this. Rules to settle when it is built:
+   - Order: own vault, then the active vault, then the registry order; within a
+     vault the existing rules (unique name, sibling, shortest path).
+   - A name that exists elsewhere no longer creates a new note on click; it
+     opens the other vault's note. A per-vault setting ("Also look for link
+     targets in other vaults", Settings, Vault) keeps the old behaviour for
+     whoever wants it, default off, so the tickets vault is opted in once.
+   - Backlinks count a link from vault A that resolved into vault B as a
+     backlink of the target in B (the backlinks index needs the other vaults'
+     unresolved links). Ticket ids are stable names and survive the move between
+     phase folders.
+   - Link-integrity rewrites on rename (ADR-0059) stay per vault; tickets are not
+     renamed.
 
 ## Plain chat without an agent: what the code says
 
@@ -102,10 +118,9 @@ of this step.
 
 ## Open decisions
 
-1. How a note links to a ticket across the vault boundary: vault-wide
-   wikilinks for the tickets vault, a `ticket:` syntax, or the tickets
-   repository under the notes vault (ADR-0083).
-2. The Parts block inline in the ticket or as a split tab beside it.
+1. (Closed: generic fallback to the other vaults, opt-in per vault, see Changes
+   in Drey itself, item 5.)
+2. (Closed, owner 2026-11-04: the Parts block is inline in the ticket, board 7c.)
 3. (Closed: models are registered in the existing LLM settings, see above.)
 4. Companion rule: the iPad and phone client stays; the desktop does not embed
    it. Shared code is the engine contract, not the UI.
