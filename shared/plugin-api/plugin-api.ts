@@ -278,6 +278,110 @@ export interface ViewPresetContrib {
   readonly assistantTarget?: string;
 }
 
+/**
+ * A button on a message card of a conversation target (SDK 1.41). `tone`
+ * only orders the look: `primary` is the filled one.
+ */
+export interface ConversationCardAction {
+  readonly id: string;
+  readonly label: string;
+  readonly tone?: 'primary' | 'quiet';
+}
+
+/**
+ * A card under a conversation message (SDK 1.41): a proposal with buttons
+ * (`kind: 'card'`), or an answer card whose `choices` the Assistant shows
+ * above the composer and sends back as the next message (`kind: 'choices'`).
+ * Content-agnostic -- the host and the Assistant only draw it.
+ */
+export interface ConversationCard {
+  readonly id: string;
+  readonly kind: 'card' | 'choices';
+  readonly text: string;
+  /** Free small line under the text (a state, an outcome). */
+  readonly note?: string;
+  /** Buttons of a `card`; empty once it is decided. */
+  readonly actions?: readonly ConversationCardAction[];
+  /** Options of a `choices` card; a pick is sent as the owner's next message. */
+  readonly choices?: readonly { readonly label: string; readonly recommended?: boolean }[];
+}
+
+/** One message of a conversation target's thread (SDK 1.41). */
+export interface ConversationMessage {
+  readonly id: string;
+  readonly role: 'user' | 'agent';
+  /** Plain Markdown text. */
+  readonly text: string;
+  /** Who speaks when it is not the target itself (a relay's persona). */
+  readonly author?: string;
+  /** A chip under the author, e.g. "via Mission Control". */
+  readonly via?: string;
+  /** Folded reasoning, shown dim. */
+  readonly thought?: string;
+  readonly cards?: readonly ConversationCard[];
+  /** A failure that is not a message: title and detail lines (the error card). */
+  readonly error?: { readonly title: string; readonly lines: readonly string[] };
+}
+
+/** A conversation target's current thread (SDK 1.41). */
+export interface ConversationThread {
+  /** Stable id of the thread (a session file, a persona); null for a fresh, unsent one. */
+  readonly id: string | null;
+  readonly title: string;
+  readonly messages: readonly ConversationMessage[];
+  /** One quiet line under the thread (what this thread is, when that is not obvious). */
+  readonly notice?: string;
+}
+
+/** One earlier thread of a target, for the history list (SDK 1.41). */
+export interface ConversationThreadMeta {
+  readonly id: string;
+  readonly title: string;
+  /** ISO stamp of the last change. */
+  readonly updatedAt: string;
+  /** Open cards that wait for a decision. */
+  readonly pending?: number;
+}
+
+/**
+ * Somebody the Assistant can talk to besides its own model (SDK 1.41,
+ * `conversations.registerTargets`). The Assistant draws the switcher, the
+ * thread, the cards and the composer; the plugin that registers the target
+ * owns what answers. The host attaches no meaning to the content.
+ */
+export interface ConversationTarget {
+  /** Stable id, namespaced (`mycorp.helper`); a preset's `assistantTarget` names it. */
+  readonly id: string;
+  readonly label: string;
+  /** Targets with the same `group` fold into one switcher segment with a menu of their labels. */
+  readonly group?: string;
+  /** Hover text of the segment. */
+  readonly description?: string;
+  /** The current thread (the newest one on first call). */
+  thread(): Promise<ConversationThread>;
+  /** One owner message; resolves with the thread after the answer. Never rejects: a failure is an `error` message. */
+  send(text: string): Promise<ConversationThread>;
+  /** A button on a card. */
+  act(cardId: string, actionId: string): Promise<ConversationThread>;
+  /** Starts a fresh thread. */
+  newThread(): Promise<ConversationThread>;
+  /** Earlier threads, newest first; absent = the target keeps one. */
+  history?(): Promise<readonly ConversationThreadMeta[]>;
+  /** Opens one earlier thread. */
+  open?(id: string): Promise<ConversationThread>;
+}
+
+/**
+ * What a plugin hands `conversations.registerTargets` (SDK 1.41): the
+ * targets it offers right now and a way to hear when that list changes
+ * (a persona added, a service going away).
+ */
+export interface ConversationTargetProvider {
+  targets(): readonly ConversationTarget[];
+  /** Fires when `targets()` has a different answer. Returns the unsubscribe. */
+  onChange(listener: () => void): Unsubscribe;
+}
+
 /** One menu row. Either run a registered command or pass a closure. */
 export interface MenuContribution {
   /**
@@ -795,6 +899,23 @@ export interface DreyPluginApi {
     registerContextMenuItems(
       items: (target: FilesContextMenuTarget) => readonly FilesContextMenuItem[],
     ): Unsubscribe;
+  };
+
+  /**
+   * Who the Assistant can talk to (SDK 1.41). A plugin offers targets, the
+   * Assistant lists them next to its own model. `viewTarget` is the active
+   * view's default target id (a view preset's `assistantTarget`), null in
+   * a view without one.
+   */
+  readonly conversations: {
+    registerTargets(provider: ConversationTargetProvider): Unsubscribe;
+    /** Every registered target, in registration order. */
+    targets(): readonly ConversationTarget[];
+    /** Fires when the list of targets changes. */
+    onTargetsChange(listener: () => void): Unsubscribe;
+    viewTarget(): string | null;
+    /** Fires when the active view (and so its default target) changes. */
+    onViewTargetChange(listener: () => void): Unsubscribe;
   };
 
   readonly commands: {

@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–132 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–132 and 137–138 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -246,20 +246,6 @@ ships.
 
 Order and dependencies (an item needs everything it names):
 
-5. **E13-5 — Assistant conversation targets.** Target *Model* (plain chat,
-   no agent, no tools, any provider registered in Settings → Assistant — the
-   existing `LlmRouter`, nothing new), *Mission Control* (the E5a chat
-   engine through the E5c `RemoteService.localClient`; persona relays carry
-   the "via Mission Control" chip), *1:1* per persona (the merged persona
-   conversation of E12-4). Per-view default target once E13-1 exists. Needs
-   E5a/E5c/E12-4 (all built). The Claude Code CLI provider as plain chat
-   needs its tools switched off (to verify). **Boards 7a–7i add:** a
-   segmented control *Model | Mission Control | 1:1* in the Assistant header,
-   Chat history and New chat icons, step cards in the thread ("T-0121 · step 1
-   · tests green · 7 actions ›"), a Dictate mic in the composer (today only the
-   create-ticket modal has one), context chips Vault · Web · "<ticket>.md
-   attached"; the per-view default is Notes = Model, Work = Mission Control.
-   The persona detail's 1:1 tab moves here (see E13-19).
 7. **E13-7 — Review tab.** Editor tab kind with the proof above and the
    `DiffView` below, viewed marks, Changes / Whole file, line and range
    comments that go as structured feedback into the Handover (E11-3),
@@ -320,6 +306,23 @@ start when their needs are met without waiting for 1. Relation to the
 E10–E12 line: 10 and 11 waited for E10-4 and E10-5 (both built); E12-5 (device rules
 audit) is independent of E13.
 Persona names follow D7 (Pia = Mission Control, Paul plans).
+
+**Follow-ups of E13-5 (milestone 138):**
+
+- **E13-5b — Assistant targets, what is left.** Streaming of Mission
+  Control's words into the thread (the engine already streams `chat` events
+  on its `/api/events` channel; the plugin's `EngineClient.onEvent` drops
+  them, so a turn shows "Working …" until it is whole); the step cards
+  ("T-0121 · step 1 · tests green · 7 actions ›", board 7a) once runs report
+  steps to a chat thread; the "<ticket>.md attached" chip (E13-9); a 1:1 that
+  answers (the persona thread holds only the owner's messages today, E12-4);
+  the Claude Code CLI provider as the *Model* target with its tools switched
+  off (`claude -p --tools ""` — the empty argument through `shell: true` on
+  Windows is not verified); the Work view preset must name
+  `assistantTarget: 'tickets.mission-control'` (E13-13); dictation reaching a
+  speech service inside Electron (the Web Speech API needs a network service
+  the packaged app may not reach — only seen as "button shown", not as words
+  heard).
 
 **Proposed by the convergence audit (2026-11-04, milestone 134)** — evidence
 and severity per item in

@@ -3974,3 +3974,34 @@ sequenceDiagram
 The paths channel is plugin-only; the gateway's SSE (phone) carries the
 bare `board` signal as before. The watcher stays off; this is the same
 external-change round it would run.
+
+## 6.84 Talking to a conversation target in the Assistant (E13-5, milestone 138)
+
+```mermaid
+sequenceDiagram
+    participant O as Owner
+    participant A as Assistant panel (plugins/assistant)
+    participant R as ConversationTargetsService (base)
+    participant T as Tickets plugin renderer (target)
+    participant M as Tickets plugin main (mc* IPC)
+    participant E as Engine ChatService (invoke channel)
+
+    T->>R: conversations.registerTargets(provider)
+    R-->>A: onTargetsChange → segmented control: Model | Mission Control | 1:1
+    Note over A,R: view switch → viewTarget() = preset assistantTarget → select it (or wait / Model)
+    O->>A: picks Mission Control, sends "New ticket: …"
+    A->>T: target.send(text)
+    T->>M: mcStart / mcSend {file, text}
+    M->>E: chatStart / chatSend (id grammar re-checked)
+    E-->>M: ChatTurnResult {say, proposals} or {failure}
+    T->>M: mcOpen {file}
+    M-->>T: ChatSession
+    T-->>A: ConversationThread (messages, cards, or an error card)
+    O->>A: Confirm on a proposal card
+    A->>T: target.act(cardId, 'confirm')
+    T->>M: mcDecide → chatConfirm (executes only now)
+```
+
+The Model segment never goes through this path: it is the Assistant's own
+`ask` over the `LlmRouter`. A target's failure is a thread `error` card, not
+a rejected promise.

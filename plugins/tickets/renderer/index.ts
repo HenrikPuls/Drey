@@ -68,6 +68,7 @@ import {
 import { NUDGE_TEXT, workersNode, type WorkerCardAction } from './workers-view';
 import type { DeskDeps } from './desk-deps';
 import { createTeamStore, type TeamStore } from './team/team-store';
+import { createConversationProvider } from './conversation/targets';
 import { mountTeam } from './team/team-view';
 import { bandStatusOf, mountCapacity } from './team/capacity-view';
 import { mountBoard } from './board/board-view';
@@ -3229,6 +3230,14 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     api.ui.registerWidget(createTicketsWidget(api));
     // The rows' persona chips read the same directory as the Team tab.
     teamStore(api).subscribe(notifyViews);
+    // The Assistant's conversation targets (E13-5): Mission Control and the team's 1:1s.
+    api.conversations.registerTargets(
+      createConversationProvider({
+        invoke: (method, payload) => api.backend.invoke(method, payload),
+        personas: () => teamStore(api).personas(),
+        subscribePersonas: (listener) => teamStore(api).subscribe(listener),
+      }),
+    );
     // The Capacity band (E13-8): a panel for the bottom dock - slots busy,
     // what each persona does, today's cost, Pause all, Open Team.
     api.ui.registerWidget({
