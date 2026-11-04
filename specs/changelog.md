@@ -1,3 +1,46 @@
+### Milestone 151 — E14-1: the `TicketStore` port and the first dricket slice
+
+**Not yet manually verified by the owner.** Owner request 2026-11-04 (roadmap
+E14-1, ADR-0090, `docs/design/dricket/`). Read-mostly and behind
+`tickets.backend` (`files`, the default, behaves exactly as before).
+
+- **Port** `packages/tickets-engine/src/ports/ticket-store.ts`: `list`, `show`,
+  `claim`, `release`, `extend`, `comments`, `capabilities`; typed
+  `TicketRecord` / `TicketDetail`; `TicketStoreError` with kinds mirroring
+  dk's exit codes. Ids cross the port as `T-0063`.
+- **`FileTicketStore`** wraps today's code (`parseTicketFile`,
+  `patchTicketFile` exactly as `setClaim` uses them): same stamps, one commit,
+  one announce. Leases, stage moves through `release` and comments are
+  reported `unsupported` / empty. Not yet called by the board service's
+  writers (E14-4).
+- **`DricketTicketStore`** over the installed `dk --json` (`store/`):
+  `dk-process.ts` (`execFile`, no shell; version gate `>= 0.5.0` with a clear
+  `too-old` error; envelope decode; exit-code table 1, 2, 10-19; write queue
+  per store, reads timed out, writes never; abort signal), `ids.ts`
+  (`T-0063` <-> `t-63`), `flat-frontmatter.ts` (dricket's non-YAML header,
+  `title: a: b` reads), `store-settings.ts`. Comments cannot be read (no dk
+  command, R-08): `unsupported`, no workaround.
+- **Board listing:** `EngineBoardService.storeListing()` (engine route
+  `storeListing`) groups `TicketRecord`s by stage, from either backend.
+  Settings keys `backend`, `dk.path`, `dk.store`, `dk.dataDir` (synced to the
+  engine). **Not rendered in the Work panel yet** -- the board over
+  `TicketRecord[]` is E14-2.
+- **Real `dk` findings** in `docs/design/dricket/v0.5-observations.md`: ten
+  differences from the analysis (extra exit codes 2/10/17-19, errors also as a
+  stdout envelope, an agent cannot release to `done`, `ls` answers `null` for
+  an empty list, `extend -m` is mandatory, no comment list, ...); new
+  requirements R-22, R-23 in `dricket-requirements.md`.
+- **Tests:** unit specs for ids, flat reader, process wrapper (gate, exit
+  table, queue, abort), the store over captured dk v0.5.0 output
+  (`store/fixtures/dk-v0.5.0/`), the file store, settings; a **contract suite**
+  (`dricket-contract.spec.ts`) against a scratch store in a temp dir with a
+  temp HOME: list -> show -> claim -> show -> second claimant (11) -> extend ->
+  release -> show -> list, plus 10 and 14. It skips with a printed reason when
+  `dk` is missing or older than 0.5.0 (`DREY_DK_BIN` selects the binary;
+  `DREY_CAPTURE_DK_FIXTURES=1` rewrites the fixtures). CLI probe:
+  `scripts/dricket-slice.mjs`.
+- **Docs:** docs/05 (building block), docs/06 section 6.92 (claim sequence).
+
 ### Milestone 150 — Dricket analysis (documentation only)
 
 **Not yet manually verified by the owner.** Owner request 2026-11-04: move

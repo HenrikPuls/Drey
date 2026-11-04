@@ -1,0 +1,158 @@
+{
+  "01-ls-initial": {
+    "args": [
+      "--json",
+      "ls"
+    ],
+    "code": 0
+  },
+  "02-show-open": {
+    "args": [
+      "--json",
+      "show",
+      "t-1"
+    ],
+    "code": 0
+  },
+  "03-claim": {
+    "args": [
+      "--json",
+      "claim",
+      "--size",
+      "S",
+      "--kind",
+      "agent",
+      "t-1"
+    ],
+    "code": 0
+  },
+  "04-show-claimed": {
+    "args": [
+      "--json",
+      "show",
+      "t-1"
+    ],
+    "code": 0
+  },
+  "05-claim-taken": {
+    "args": [
+      "--json",
+      "claim",
+      "--size",
+      "M",
+      "--kind",
+      "agent",
+      "t-1"
+    ],
+    "code": 11
+  },
+  "06-extend": {
+    "args": [
+      "--json",
+      "extend",
+      "-m",
+      "tests take longer",
+      "t-1"
+    ],
+    "code": 0
+  },
+  "07-release-foreign": {
+    "args": [
+      "--json",
+      "release",
+      "-m",
+      "x",
+      "t-1"
+    ],
+    "code": 11
+  },
+  "08-release": {
+    "args": [
+      "--json",
+      "release",
+      "--stage",
+      "review",
+      "-m",
+      "done it",
+      "t-1"
+    ],
+    "code": 0
+  },
+  "09-show-released": {
+    "args": [
+      "--json",
+      "show",
+      "t-1"
+    ],
+    "code": 0
+  },
+  "10-ls-final": {
+    "args": [
+      "--json",
+      "ls"
+    ],
+    "code": 0
+  },
+  "11-ls-review": {
+    "args": [
+      "--json",
+      "ls",
+      "-s",
+      "review"
+    ],
+    "code": 0
+  },
+  "12-claim-missing": {
+    "args": [
+      "--json",
+      "claim",
+      "--size",
+      "M",
+      "--kind",
+      "agent",
+      "t-99"
+    ],
+    "code": 10
+  },
+  "13-claim-second": {
+    "args": [
+      "--json",
+      "claim",
+      "--size",
+      "M",
+      "--kind",
+      "agent",
+      "t-2"
+    ],
+    "code": 0
+  },
+  "14-release-invalid": {
+    "args": [
+      "--json",
+      "release",
+      "--stage",
+      "done",
+      "t-2"
+    ],
+    "code": 14
+  },
+  "15-release-second": {
+    "args": [
+      "--json",
+      "release",
+      "--stage",
+      "review",
+      "t-2"
+    ],
+    "code": 0
+  },
+  "16-ls-empty-stage": {
+    "args": [
+      "--json",
+      "ls",
+      "-s",
+      "cancelled"
+    ],
+    "code": 0
+  }
+}

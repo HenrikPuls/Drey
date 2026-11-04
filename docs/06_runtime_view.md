@@ -4226,3 +4226,38 @@ as the delta on the next message after the editor saved the file. Paul's own
 edits are in the shadow and never come back. "Keep as one" moves the ticket
 file into the build queue; the binding asks for a fresh board so the tab
 follows.
+
+## 6.92 A ticket claim through `dk` (E14-1, milestone 151)
+
+The first slice of tickets on dricket (ADR-0090), read-mostly and behind
+`tickets.backend` (`files` by default): the engine reaches tickets through the
+`TicketStore` port; the dricket implementation shells out to the installed
+`dk`. Only `storeListing` is wired into the board service so far; claim,
+release and extend are exercised by the contract suite and the CLI probe
+`scripts/dricket-slice.mjs`.
+
+```mermaid
+sequenceDiagram
+    participant C as Caller (probe / later the fleet)
+    participant S as DricketTicketStore
+    participant Q as DkProcess (queue per store)
+    participant D as dk --json
+    C->>S: claim("T-0063", { actor: "ben.run-1", size: "S" })
+    S->>S: toDricketId -> "t-63"
+    S->>Q: call(["claim","--size","S","--kind","agent","t-63"], write, actor)
+    Q->>Q: version gate once (dk --version >= 0.5.0, else too-old)
+    Q->>Q: wait for this store's write turn
+    Q->>D: execFile dk --json claim ... (DK_OWNER=ben.run-1, DK_STORE, DK_DATA_DIR)
+    alt claimed
+        D-->>Q: exit 0, {"data":{"id":"t-63","epoch":1,"lease_until":...}}
+        Q-->>S: data
+        S-->>C: Claim { id: "T-0063", epoch: 1, leaseUntil }
+    else already taken
+        D-->>Q: exit 11, {"error":{"kind":"claimed",...}}
+        Q-->>C: TicketStoreError { kind: "claimed", exitCode: 11 }
+    end
+```
+
+Reads (`list`, `show`) take the same path without the write turn and with a
+30 s timeout. A `claim-lost` (13) on any later write is the signal for the
+fleet to stop the worker (E14-5).

@@ -1,0 +1,1 @@
+{"schema_version":1,"error":{"kind":"claimed","exit_code":11,"message":"precondition failed: ticket t-1 is claimed by ben.slice-1, not by you"}}

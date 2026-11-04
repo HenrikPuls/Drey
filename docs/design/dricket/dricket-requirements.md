@@ -39,6 +39,8 @@ structs, `dk` itself was not run (see `fit-analysis.md` §0).
 | R-16 | Hook / pre-receive template to refuse non-`dk` commits | Nice |
 | R-17 | Byte-limit truncation cuts UTF-8 | Nice (bug) |
 | R-18 | `add` options for a complete first write | Nice (covered by R-02) |
+| R-22 | `ls --json` answers `null` for an empty list | Nice (found in E14-1) |
+| R-23 | `dk version --json` (machine-readable version) | Nice (found in E14-1) |
 | Q-01 | Account model: service account or own accounts | Question |
 | Q-02 | Owner id grammar | Question |
 | Q-03 | Waiting for a human inside a claim | Question |
@@ -344,6 +346,16 @@ path for the write path (already so).
   boundary (or count runes).
 - **R-18 `add` completeness.** Folded into R-02 (`add -F`, `--stage`,
   `--set`).
+
+- **R-22 Empty lists are `[]`.** `dk ls --json` answers `"tickets": null` when
+  nothing matches (Go nil slice); a stable JSON contract wants `[]` for every
+  list field (found in E14-1, see [`v0.5-observations.md`](v0.5-observations.md)).
+  Drey tolerates `null` today.
+- **R-23 `dk version --json`.** The version is three text lines
+  (`version: v0.5.0` / `commit:` / `date:`); a machine form
+  (`{"tool_version","commit","date"}`) — or the `capabilities` of R-19 — would
+  let Drey gate on features instead of parsing text. Drey parses
+  `version: vX.Y.Z` today (E14-1).
 
 ## Questions (not defects)
 
