@@ -455,9 +455,8 @@
 }
 
 .scout-summary {
+  display: block;
   margin: 0 0 10px;
-  font-size: calc(13.5px * var(--mc-text, 1));
-  white-space: pre-wrap;
 }
 
 .scout-decisions li {
@@ -1785,4 +1784,28 @@ details.think .step-body {
 
 .pmark-text {
   overflow-wrap: anywhere;
+}
+
+/* -- the proof face's Verification text (E12-6) ----------------------------------- */
+
+.vtext {
+  margin: 14px 0;
+}
+
+.vtext-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 2px;
+  background: transparent;
+  border: 0;
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: calc(11px * var(--mc-text, 1));
+  letter-spacing: 0.12em;
+  text-align: left;
+  text-transform: uppercase;
+  cursor: pointer;
 }

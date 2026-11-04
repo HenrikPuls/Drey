@@ -79,35 +79,7 @@
           }
 
           <div class="body">
-            @for (block of blocks(); track $index) {
-              @switch (block.kind) {
-                @case ('heading') {
-                  @if (block.level === 2) {
-                    <h3 class="tk-sec">{{ block.text }}</h3>
-                  } @else {
-                    <h4 class="tk-sub">{{ block.text }}</h4>
-                  }
-                }
-                @case ('paragraph') {
-                  <p class="tk-p">{{ block.text }}</p>
-                }
-                @case ('list') {
-                  <ul class="tk-list">
-                    @for (item of block.items; track $index) {
-                      <li class="tk-li" [class.li-done]="item.checked === true">
-                        <span class="box" aria-hidden="true">
-                          {{ item.checked === null ? '–' : item.checked ? '☑' : '☐' }}
-                        </span>
-                        <span>{{ item.text }}</span>
-                      </li>
-                    }
-                  </ul>
-                }
-                @case ('code') {
-                  <pre class="tk-yaml">{{ block.text }}</pre>
-                }
-              }
-            }
+            <mc-markdown [text]="bodyText()" surface="ticket" label="Ticket text" />
           </div>
 
           @if (planState(); as plan) {
@@ -159,7 +131,7 @@
                 </p>
               }
               @if (scoutReport.summary) {
-                <p class="scout-summary">{{ scoutReport.summary }}</p>
+                <mc-markdown class="scout-summary" [text]="scoutReport.summary" surface="report" label="Report summary" />
               }
               @if (scoutReport.decisions.length > 0) {
                 <ul class="tk-list scout-decisions">
@@ -346,6 +318,18 @@
                 </ul>
               </div>
             }
+          }
+
+          @if (verificationText(); as verification) {
+            <section class="vtext" aria-label="Verification text">
+              <button type="button" class="vtext-head" [attr.aria-expanded]="verificationOpen()" (click)="verificationOpen.set(!verificationOpen())">
+                <span class="chev" aria-hidden="true">{{ verificationOpen() ? '▾' : '▸' }}</span>
+                Verification text
+              </button>
+              @if (verificationOpen()) {
+                <mc-markdown [text]="verification" surface="verification" label="Verification text" />
+              }
+            </section>
           }
 
           @if (diff(); as proofDiff) {

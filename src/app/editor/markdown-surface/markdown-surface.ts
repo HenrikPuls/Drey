@@ -14,7 +14,7 @@ import {
 } from '@angular/core';
 import { completionStatus } from '@codemirror/autocomplete';
 import { insertNewlineAndIndent } from '@codemirror/commands';
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { markdownLanguage } from '@codemirror/lang-markdown';
 import { LanguageDescription, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { Compartment, EditorState, Extension, Prec, Transaction } from '@codemirror/state';
@@ -36,7 +36,7 @@ import {
   refreshFrontmatterView,
   setFrontmatterExpanded,
 } from '../frontmatter-fold';
-import { livePreview } from '@markdown-surface/live-preview';
+import { markdownDialect, readOnlyExtension, surfaceModeExtensions } from '@markdown-surface/engine';
 import { extendedMarkdown } from '@markdown-surface/markdown-extensions';
 import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellcheck/spellcheck';
 import { linkActivation } from '@markdown-surface/link-open';
@@ -461,19 +461,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    */
   private markdownBundle(): Extension {
     return [
-      markdown({
-        base: markdownLanguage,
-        codeLanguages: languages,
-        completeHTMLTags: false,
-        // The extended dialect (milestone 71): `==highlight==`, `$…$` /
-        // `$$…$$` math, footnotes, curated `:emoji:` — plus GFM and
-        // Pandoc sub/superscript, which `markdownLanguage` already
-        // parses. `@lezer/markdown`'s own `Emoji` parser is dropped (any
-        // `name:` matched, so a timestamp like `2026-09-09T00:03:48` had
-        // its `:03:` slice coloured as an emoji); the curated replacement
-        // only matches known GitHub names.
-        extensions: [{ remove: ['Emoji'] }, ...extendedMarkdown],
-      }),
+      // The extended dialect (milestone 71) -- the shared engine's, so the
+      // phone client parses exactly what this editor does (milestone 133).
+      markdownDialect(),
       // `#tag` completion + pills are BASE editor features (milestone 33 —
       // moved out of the Tags plugin, which stays the data owner): colored
       // pills, Ctrl/Cmd-click -> the Search panel's `search.open` with
@@ -1007,23 +997,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         }
       },
     };
-    if (mode === 'source') {
-      return [];
-    }
-    if (mode === 'view') {
-      // Read-only rendering: everything stays rendered (the selection is
-      // ignored), links open on a plain click, and the editing chrome on
-      // embeds (view-source, zoom lens, resize grip) is hidden -- its
-      // handlers are dormant in read-only state anyway.
-      return [
-        livePreview(live, { revealSelection: false }),
-        EditorView.theme({
-          '.lp-edit, .lp-lens, .lp-resize': { display: 'none' },
-          '.lp-task input': { pointerEvents: 'none' },
-        }),
-      ];
-    }
-    return livePreview(live);
+    return surfaceModeExtensions(mode, live);
   }
 
   private submitKeymap() {
@@ -1052,8 +1026,6 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   }
 }
 
-/** Blocks user input while still allowing owner-driven `setContent`. */
-const readOnlyExtension: Extension = [EditorView.editable.of(false), EditorState.readOnly.of(true)];
 
 /**
  * Shows the line-number column and restyles it to the v3 spec: 46px column,

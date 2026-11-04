@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal, effect, DestroyRef } from '@angular/core';
 import { planStatusLineOf } from '../ticket/ticket.model';
-import { renderMarkdown } from '../ticket/markdown';
+import { Markdown } from '../markdown/markdown';
 import {
   MC_PLAN_STATE,
   planChaptersOf,
@@ -28,6 +28,7 @@ const OPEN_BY_DEFAULT: ReadonlySet<string> = new Set(['goal', 'parts']);
   templateUrl: './plan-pane.html',
   styleUrl: './plan-pane.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Markdown],
 })
 export class PlanPane {
   private readonly state: McPlanState = inject(MC_PLAN_STATE);
@@ -65,7 +66,7 @@ export class PlanPane {
       return {
         title: chapter.title === '' ? 'Plan' : chapter.title,
         key: key === '' ? 'plan' : key,
-        blocks: renderMarkdown(chapter.body),
+        body: chapter.body,
         parts: key === 'parts' ? parts : [],
         summary: key === 'parts' && parts.length > 0 ? `${parts.length}` : '',
       };
@@ -100,8 +101,8 @@ export class PlanPane {
     return this.draft();
   }
 
-  protected onDraft(event: Event): void {
-    this.draft.set((event.target as HTMLTextAreaElement).value);
+  protected onDraft(text: string): void {
+    this.draft.set(text);
   }
 
   /** Edit ⇄ Done: leaving saves what changed. */

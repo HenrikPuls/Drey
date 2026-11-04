@@ -1,0 +1,131 @@
+/* The Markdown surface (E12-6). View encapsulation is off on purpose:
+   CodeMirror builds its DOM itself, so the component's own scoped styles
+   could not reach it. Every rule is under .mdx. The block at the top maps
+   the desktop editor's tokens (the names its theme and Live Preview read)
+   onto Mission Control's, so the shared engine looks like the rest of the
+   app. --text-2 and --text-3 already carry the same names in both. */
+
+.mdx {
+  --text-primary: var(--text);
+  --text-heading: var(--text);
+  --text-4: var(--text-3);
+  --text-5: var(--text-3);
+  --text-6: var(--text-3);
+  --text-faint: var(--text-3);
+  --border-strong: var(--line);
+  --hover-bg: var(--panel-2);
+  --hover-bg-strong: var(--panel-3);
+  --accent-fg: var(--bg);
+  --accent-hover: var(--accent);
+  --accent-quote: var(--accent);
+  --bg-bar: var(--panel);
+  --bg-main: transparent;
+  --bg-editor: transparent;
+  --gutter: var(--text-3);
+  --radius: 8px;
+  --radius-sm: 6px;
+  --radius-xs: 4px;
+  --font-mono: var(--mono);
+  --font-sans: var(--sans);
+  --font-serif: var(--sans);
+  --drey-heading-font: var(--sans);
+  --drey-editor-scale: var(--mc-text, 1);
+
+  display: block;
+  min-width: 0;
+}
+
+.mdx-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+
+.mdx-seg {
+  display: inline-flex;
+  flex: none;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 2px;
+}
+
+.mdx-seg-btn {
+  min-width: 52px;
+  min-height: 44px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-3);
+  font-size: calc(13px * var(--mc-text, 1));
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mdx-seg-btn[aria-pressed='true'] {
+  background: var(--panel-3);
+  color: var(--text);
+}
+
+.mdx-strip {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.mdx-fmt {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-2);
+  font-size: calc(15px * var(--mc-text, 1));
+  cursor: pointer;
+}
+
+.mdx-fmt:active {
+  background: var(--panel-2);
+}
+
+.mdx-plain {
+  margin: 0;
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: calc(15px * var(--mc-text, 1));
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The engine's own scroller grows with the content here: the page scrolls,
+   not the surface. */
+.mdx-host .cm-editor {
+  background: transparent;
+  color: var(--text);
+  outline: none;
+}
+
+.mdx-host .cm-scroller {
+  overflow: visible;
+}
+
+.mdx-host .cm-content {
+  max-width: none;
+  margin: 0;
+  padding: 4px 0 8px;
+  font-size: calc(15px * var(--mc-text, 1));
+}
+
+.mdx-host .cm-gutters {
+  display: none;
+}
+
+.mdx-host .cm-editor.cm-focused {
+  outline: none;
+}

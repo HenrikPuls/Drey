@@ -307,7 +307,7 @@ interface TicketSurface {
   fmLine(): string;
   readOnly(): boolean;
   steps(): ReturnType<typeof gateStepsOf>;
-  blocks(): readonly unknown[];
+  bodyText(): string;
   proof(): ReturnType<typeof proofOf> | null;
   report(): ReturnType<typeof scoutReportOf> | null;
   verlauf(): string | null;
@@ -1102,8 +1102,8 @@ describe('TicketView', () => {
     expect(vm.title()).toBe('Fix the palette race in CI');
     expect(vm.phaseTitle()).toBe('Verify');
     expect(vm.steps().map((step) => step.state)).toEqual(['past', 'current', 'future']);
-    const headings = vm.blocks().filter((block) => (block as { kind: string }).kind === 'heading');
-    expect(headings.map((block) => (block as { text: string }).text)).toEqual([
+    const headings = vm.bodyText().split('\n').filter((line) => /^#{1,6} /.test(line));
+    expect(headings.map((line) => line.replace(/^#{1,6} /, ''))).toEqual([
       'Description',
       'Plan',
       'Acceptance criteria',
@@ -1159,8 +1159,8 @@ describe('TicketView', () => {
       { key: 'D2', question: 'Migrate existing data?', recommendation: 'yes, one migration script.', resolved: true },
     ]);
     // The chapter left the generic body; the Log never reaches it either way.
-    const headings = vm.blocks().filter((block) => (block as { kind: string }).kind === 'heading');
-    expect(headings.map((block) => (block as { text: string }).text)).toEqual(['Description']);
+    const headings = vm.bodyText().split('\n').filter((line) => /^#{1,6} /.test(line));
+    expect(headings.map((line) => line.replace(/^#{1,6} /, ''))).toEqual(['Description']);
   });
 
   it('resolves the screenshots the vm serves and opens the viewer', () => {

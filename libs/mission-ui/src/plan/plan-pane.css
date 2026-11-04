@@ -99,15 +99,6 @@
 .pp-text {
   flex: 1;
   min-height: 240px;
-  padding: 10px 12px;
-  font-family: var(--mono);
-  font-size: 16px;
-  line-height: 1.5;
-  color: var(--text);
-  resize: none;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
 }
 
 .chap-head {
@@ -145,16 +136,6 @@
   line-height: 1.5;
 }
 
-.md-p,
-.md-h {
-  margin: 0 0 6px;
-}
-
-.md-h {
-  font-weight: 600;
-}
-
-.md-ul,
 .parts {
   margin: 0 0 6px;
   padding-left: 20px;
@@ -173,16 +154,6 @@
 .part-who {
   margin-right: 6px;
   font-family: var(--mono);
-}
-
-.md-code {
-  margin: 0 0 6px;
-  padding: 8px 10px;
-  overflow-x: auto;
-  font-family: var(--mono);
-  font-size: calc(13px * var(--mc-text, 1));
-  background: var(--panel);
-  border-radius: 8px;
 }
 
 .pp-error {
