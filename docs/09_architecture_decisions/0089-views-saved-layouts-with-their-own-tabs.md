@@ -3,7 +3,9 @@
 ## Status
 
 Proposed. The direction was confirmed by the owner on 2026-11-04 (a view
-switcher, tabs per view, hidden elsewhere but addable). Nothing is built.
+switcher, tabs per view, hidden elsewhere but addable). The owner made
+saved layouts mandatory and first in the build order (2026-11-04): without them
+the agent system and the note app are unusable side by side. Nothing is built.
 Extends ADR-0019 (dock layout state), ADR-0037/0038 (panes and docked editor
 bands) and ADR-0043 (session snapshot). Design: `docs/design/work-panel/
 desktop-integration.md`, boards 7a to 7i.
@@ -106,7 +108,8 @@ Constraints that shape the answer:
   main regression risk; ADR-0038's band logic must be covered by the same specs
   per view.
 - A new SDK call (view presets) and `homeView` on doc kinds and file openers;
-  an SDK minor version.
+  an SDK minor version. Both are content-agnostic: any plugin can contribute a
+  view or name a home view.
 - The tab bar, the Open windows panel, the quick switcher, the tab context menu
   and the View menu change; the keyboard shortcut list gains `Ctrl+1` to
   `Ctrl+9`, which must not collide with existing bindings (checked when built).

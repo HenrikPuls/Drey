@@ -212,43 +212,59 @@ boards 7a–7j of the design canvas; views:
 proposed). The desktop is not the iPad layout on a big screen: the ticket is
 its Markdown file in the editor, Shape is that file plus Paul through the
 Assistant, review and board are editor tabs, and the owner switches between
-**Notes** and **Work** views. The desktop shows at least what the mobile
-client shows (the cost above all). Base and SDK changes are allowed. Work
-happens in `src/app/` (docks, panes, session, status bar, wikilinks),
-`shared/plugin-api/` and `plugins/tickets/renderer/`; the E10–E12 line works
-in `apps/mission-control`, `libs/mission-ui` and `packages/tickets-engine`
-and has not touched those (checked 2026-11-04), so both lines can run side
-by side. Milestone numbers are taken when an item ships.
+**Notes** and **Work** views. **Saved layouts (views) are mandatory, not a
+second stage** (owner, 2026-11-04): without them the two kinds of work fight
+over the same docks and tabs, so they come first. The desktop shows at least
+what the mobile client shows (the cost above all). Base and SDK changes are
+allowed, but the SDK stays content-agnostic: no function that only the
+tickets plugin could use. Work happens in `src/app/` (docks, panes, session,
+status bar, wikilinks), `shared/plugin-api/` and `plugins/tickets/renderer/`;
+the E10–E12 line works in `apps/mission-control`, `libs/mission-ui` and
+`packages/tickets-engine` and has not touched those (checked 2026-11-04), so
+both lines can run side by side. Milestone numbers are taken when an item
+ships.
 
 Order and dependencies (an item needs everything it names):
 
-1. **E13-1 — Status bar items for plugins** (SDK minor). A plugin
-   registers an item (text, tone, click command); the base draws it in the
-   28 px status bar. First user: the fleet summary "2 running · $4.10 today"
-   and "3 need you". Independent.
-2. **E13-2 — Link fallback to other vaults** (base; no SDK change). A
-   wikilink is resolved in its own vault first, then in the others;
-   Settings → Vault gets "Also look for link targets in other vaults" (per
-   vault, default off); the backlinks index counts links that resolved into
-   another vault; an ADR-0051/0059 later-change note. Independent. Gives
-   `[[T-0121]]` from a note.
-3. **E13-3 — Views** (ADR-0089, accepted first). `DockService` and
-   `PaneService` state per view, the title-bar switcher, `Ctrl+1`–`9`, tabs
-   belong to views (hidden elsewhere, "Show this tab in", Open windows "In
-   other views / Show here"), session snapshot with views, "Reset layout"
-   per view. Notes is today's layout. Independent of 1–2; the largest base
-   change, so it ships alone.
-4. **E13-4 — View presets and home views** (SDK minor). A plugin registers a
-   view preset (id, label, initial layout, default Assistant target) and a
-   `homeView` on doc kinds and file openers. Needs E13-3.
+1. **E13-1 — Views** (ADR-0089, accepted first). `DockService` and
+   `PaneService` state per view, the title-bar switcher, `Ctrl+1`–`9`, a
+   "Switch view" command, "Save current layout as a view…", tabs belong to
+   views (hidden elsewhere, "Show this tab in", Open windows "In other views /
+   Show here"), one document and one buffer, session snapshot with views,
+   "Reset layout" per view. Notes is today's layout. Starts at once; the
+   largest base change, so it ships on its own.
+2. **E13-2 — View presets and home views** (SDK minor, content-agnostic). A
+   plugin registers a view preset (id, label, initial layout, default
+   Assistant target) and may name a `homeView` on doc kinds and file openers.
+   Any plugin can use it. Needs E13-1; follows right after it.
+3. **E13-3 — Status bar slot for plugins** (SDK minor, content-agnostic). A
+   generic slot only: text, icon, tooltip, click action (a command id) and a
+   priority for ordering. No ticket, cost or fleet semantics anywhere in the
+   SDK; the tickets plugin merely fills the slot ("2 running · $4.10 today",
+   "3 need you"). No tone or colour field (the boards' coloured dot is an
+   illustration; whether the slot gets one is a later question). Independent.
+4. **E13-4 — Link fallback to other vaults** (base; no SDK change). A
+   wikilink is resolved in its own vault first; **only when it cannot be
+   resolved there** are the other registered vaults searched. Order of the
+   fallback vaults: the active vault (when it is not the link's own), then the
+   registry order (ADR-0051). Within one vault the existing rules hold
+   (unique name wins, then a sibling, then the shortest path). The first vault
+   in that order that has a match wins; a name found in several fallback
+   vaults is **ambiguous**: it opens the first match and the link check and
+   hover name the vault and mark the ambiguity. Settings → Vault: "Also look
+   for link targets in other vaults" per vault, default off, so clicking a
+   link that matches nothing still creates the note as before. The backlinks
+   index counts links that resolved into another vault. Link-integrity
+   rewrites on rename (ADR-0059) stay per vault. Records a later-change note
+   in ADR-0051 and ADR-0059. Independent.
 5. **E13-5 — Assistant conversation targets.** Target *Model* (plain chat,
    no agent, no tools, any provider registered in Settings → Assistant — the
    existing `LlmRouter`, nothing new), *Mission Control* (the E5a chat
    engine through the E5c `RemoteService.localClient`; persona relays carry
    the "via Mission Control" chip), *1:1* per persona (the merged persona
-   conversation of E12-4). Per-view default target. Needs E5a/E5c/E12-4
-   (all built). Independent of 1–4; the Claude Code CLI provider as plain
-   chat needs its tools switched off (to verify).
+   conversation of E12-4). Per-view default target once E13-1 exists. Needs
+   E5a/E5c/E12-4 (all built). The Claude Code CLI provider as plain chat
+   needs its tools switched off (to verify).
 6. **E13-6 — The ticket as a document.** In the editor: header strip with the
    status chip, persona, phase, chain with who does what, total cost and the
    estimate (E11-4), the gate; `## Proof` as a widget (summary, checks,
@@ -284,12 +300,15 @@ Order and dependencies (an item needs everything it names):
 13. **E13-13 — The Work view.** The tickets plugin's preset: Tickets panel
     left, ticket and Board in the centre, Assistant on Mission Control
     right, Capacity at the bottom; ticket documents have the Work view as
-    their home. Last: needs E13-3, E13-4 and the tabs it arranges (6–11).
+    their home. Needs E13-1, E13-2 and the tabs it arranges (6–11). An early
+    first cut (Tickets panel, ticket tabs, Assistant) can ship as soon as
+    E13-2 and E13-6 are done, so the switch is usable before every tab
+    exists.
 
-Parallel lanes: 1, 2 and 3 are disjoint and can run together; 5 and 8 can
-start when their needs are met without waiting for 3. Relation to the E10–E12
-line: only 10 and 11 wait for E10-4 and E10-5; E12-5 (device rules audit)
-and E12-6 (Markdown surface for the web app) are independent of E13.
+Parallel lanes: 1, 3 and 4 are disjoint and can run together; 5 and 8 can
+start when their needs are met without waiting for 1. Relation to the
+E10–E12 line: only 10 and 11 wait for E10-4 and E10-5; E12-5 (device rules
+audit) and E12-6 (Markdown surface for the web app) are independent of E13.
 Persona names follow D7 (Pia = Mission Control, Paul plans).
 
 

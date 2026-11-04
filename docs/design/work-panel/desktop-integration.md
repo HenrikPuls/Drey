@@ -60,7 +60,7 @@ differs, the content does not. In particular:
 - Boards 7a (in progress), 7j (ready to try), 7d (review) and the list in every
   board carry these; the iPad boards 5a to 5i stay the reference.
 
-## Views (owner, 2026-11-04: promoted from "later" to the first step)
+## Views (owner, 2026-11-04: mandatory and first, not a second stage)
 
 Without a way to switch, the agent system and the note app compete for the same
 docks and tabs. Drey gets **views**: a view is a saved layout with its own docks,
@@ -92,8 +92,10 @@ title bar (Ctrl+1, Ctrl+2, a Views menu; board 7h).
 ## Changes in Drey itself (the owner allows SDK and base changes)
 
 0. **Views** (above).
-1. **Status bar items for plugins** (SDK). Today a plugin only gets `statusText`
-   for the active tab.
+1. **A status bar slot for plugins** (SDK, content-agnostic): text, icon, tooltip,
+   click action and priority, nothing else. No fleet, ticket or cost
+   semantics in the SDK; the tickets plugin only fills the slot. Today a
+   plugin only gets `statusText` for the active tab.
 2. **Assistant conversation targets.** Model (any LLM provider, no tools, no
    agent), Mission Control, 1:1 per persona. This is what makes the Assistant
    part of the work instead of a separate chat.
@@ -104,21 +106,23 @@ title bar (Ctrl+1, Ctrl+2, a Views menu; board 7h).
    vault-scoped (ADR-0051/0059) and the tickets repository is its own vault, so
    `[[T-0121]]` from a note does not resolve today. The fix is generic, the base
    must not know a "tickets vault" (that would break the plugin separation,
-   ADR-0044): a link is resolved in its own vault first, and only when nothing is
-   found there are the other registered vaults searched. No SDK change is
-   needed for this. Rules to settle when it is built:
-   - Order: own vault, then the active vault, then the registry order; within a
-     vault the existing rules (unique name, sibling, shortest path).
-   - A name that exists elsewhere no longer creates a new note on click; it
-     opens the other vault's note. A per-vault setting ("Also look for link
-     targets in other vaults", Settings, Vault) keeps the old behaviour for
-     whoever wants it, default off, so the tickets vault is opted in once.
+   ADR-0044): a link is resolved in its own vault first, and **only when it
+   cannot be resolved there** are the other registered vaults searched. No SDK
+   change is needed. Rules:
+   - Order of the fallback vaults: the active vault (when it is not the link's
+     own), then the registry order. Within a vault the existing rules hold
+     (unique name, sibling, shortest path).
+   - The first vault in that order with a match wins. A name found in several
+     fallback vaults is ambiguous: the first match opens, and the link check and
+     the hover name the vault and mark the ambiguity.
+   - A name that exists elsewhere no longer creates a new note on click; a
+     per-vault setting ("Also look for link targets in other vaults", Settings,
+     Vault, default off) keeps the old behaviour for whoever wants it.
    - Backlinks count a link from vault A that resolved into vault B as a
-     backlink of the target in B (the backlinks index needs the other vaults'
-     unresolved links). Ticket ids are stable names and survive the move between
-     phase folders.
+     backlink of the target in B. Ticket ids are stable names and survive the
+     move between phase folders.
    - Link-integrity rewrites on rename (ADR-0059) stay per vault; tickets are not
-     renamed.
+     renamed. A later-change note goes into ADR-0051 and ADR-0059.
 
 ## Plain chat without an agent: what the code says
 
@@ -150,7 +154,7 @@ of this step.
 
 ## Suggested order
 
-Views first (they decide where everything else sits), then the ticket header with
+Views first and mandatory (they decide where everything else sits), then view presets, then the ticket header with
 the gate, the Assistant targets (Shape needs them), the
 Parts block, the Review tab, the Board tab, the Team tab and Capacity, Flow, and
 the status bar item. Each step is its own milestone and gets its own roadmap
