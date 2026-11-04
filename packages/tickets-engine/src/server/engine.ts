@@ -70,7 +70,7 @@ const BOARD_METHODS = [
   'worktreesStatus', 'setClaim', 'startRun', 'setColumnConfig', 'listPrompts', 'savePrompt',
   'restoreShippedPrompts', 'listRepos', 'saveRepos', 'pickFolder', 'scanRepos', 'listProjects',
   'switchProject', 'openTicketsFolder', 'folderStatus', 'numberFolders', 'reorderPhases', 'editPhase',
-  'personaLearn', 'listPersonas', 'verifyTicket', 'verifyStatus',
+  'personaLearn', 'listPersonas', 'verifyTicket', 'verifyStatus', 'estimateOf',
   'chatSessions', 'chatOpen', 'chatSend', 'chatStart', 'chatConfirm', 'chatDismiss', 'chatShapeDecide',
   'initialize', 'onVaultEvent',
 ] as const;

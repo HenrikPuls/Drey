@@ -1,3 +1,62 @@
+### Milestone 129 — The ticket as a document (E13-6)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(Mission Control on the desktop, inside Drey; design canvas boards
+DeskReady, DeskTabs, DeskWork). A ticket file in the editor now reads like
+the phone's ticket screen: the same content, edited in place.
+
+- **Header strip** (under the req-62 chip row, `renderer/ticket-document/`):
+  the status chip (why it waits for you — *Ready to try*, *Plan to approve*,
+  *Question* … — *Running*, *Blocked*, or the phase), the persona doing the
+  current step, the cost (`$1.84 in total` when it waits for you, `so far`
+  while it is worked), the **estimate** of the step now due (E11-4, hover for
+  its basis; only with three or more similar runs), the **chain** (every step
+  with who does it, ✓ / ● / ○, ◆ for your checkpoint, from the engine's own
+  `mergeChain` with the ticket's `chain:` delta; persona = delta, else the
+  ticket pin, else the column's) and the **gate** (`Waits for you: …`).
+- **Proof widget.** `## Verification` (the section the verify step writes —
+  the roadmap called it Proof) is drawn as a block: verdict (`3/3 green.`),
+  checks with notes and video times, screenshots from `tickets/attachments/`
+  (a click opens the picture), the walkthrough `<video>` from
+  `tickets/videos/` with a chapter button per shot, the `Video removed (size
+  limit).` note, the findings. It is a block *replace* over the section body:
+  the caret entering it shows the Markdown again (the table rule).
+- **Cost table** at the end: one row per settled `## Verlauf` run (phase,
+  model, tokens, time, cost) and the total row; an unknown figure reads `—`
+  and is never zero.
+- **Action bar** under it: *Send back…* and *Accept and move to <next
+  column>* at one of your checkpoints (the Ready card's own `sendBack` /
+  `acceptTicket` calls; the send-back modal was lifted to module level),
+  always *Thread* and *Open Review*. **Open Review opens the ticket's thread
+  tab** (result card and changes) until the Review tab exists (E13-7).
+- **Base / SDK:** none. Everything is the generic `registerFrontmatterView` /
+  `registerExtension` seams with the host's CodeMirror modules. Plugin main:
+  `personas` and `estimate` IPC; the engine's invoke channel exposes
+  `estimateOf`. The plugin cannot import `libs/mission-ui` (Angular), so the
+  few word helpers (`$1.84`, `48k`) are rewritten over the engine's readers
+  (`parseVerificationSection`, `parseVerlaufEntries`, `mergeChain`,
+  `RunEstimate`).
+- **Three pre-existing defects fixed on the way** (each blocked the real run):
+  (1) the engine hosts the vault as `standalone`, so `snapshot.vaultId`
+  never equalled Drey's vault id — the req-62 ticket header never matched and
+  the thread's "Ticket file" link opened nothing; `main/host-vault-id.ts`
+  maps it to the Drey vault (same folder name, holds `pipeline.md`) in the
+  `board` IPC answer. (2) `run-composer.ts` applied the quiet-start pre-fill
+  before `paint` existed (`setContent` fires `onChange` synchronously →
+  "Cannot access 'paint' before initialization", the whole thread view died for
+  a ticket with a pre-fill); the pre-fill now applies after `paint`.
+  (3) `scripts/build-plugins.mjs` copied every non-`.ts` entry of
+  `renderer/` and crashed on a subfolder; folders are skipped (their sources
+  are in the bundle).
+- **Specs added:** `ticket-document/model.spec.ts` (words, section ranges,
+  proof view, cost table incl. unknown figures, estimate line, chain with
+  pin/delta), `dom.spec.ts` (proof, cost, bar, strip), `e2e/ticket-document.spec.ts`.
+- **Not done / not seen:** video playback of a real recording (the player is
+  checked as an element with its `drey-asset` URL; the vault protocol answers
+  without Range, so seeking in a long video is untested), the 25 MB video rule
+  (E11-1c), the Source-mode escape (the widgets also show in source mode),
+  narrow-width wrapping beyond the CSS wrap rules.
+
 ### Milestone 128 — Mission Control flow editor (E10-5)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04

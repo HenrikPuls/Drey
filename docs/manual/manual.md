@@ -881,6 +881,29 @@ edits the frontmatter as YAML; its header folds back to the ticket
 header. The **Log** section opens folded the first time a ticket shows
 in a session — the fold marker beside "Log" opens it.
 
+**The ticket as a document.** Under the chip row the header carries a
+**strip**: the status (why the ticket waits for you, *Running*,
+*Blocked*, or its phase), the persona doing the current step, what the
+ticket has cost so far or in total, and — when the history holds at
+least three similar runs — the **estimate** for the step now due (hover
+it for its basis). Below it the **chain** shows every step with who does
+it (*Plan Paul, Build Ben …*, a checkpoint is *you*); a step the ticket
+skips is struck, one added for this ticket is marked. A ticket that
+waits on a question shows *Waits for you:* and the question.
+
+When a verify run has written `## Verification`, the section reads as a
+**Proof** block instead of its Markdown: the verdict (*3/3 green.*), the
+checks with their notes and video times, the screenshots (click one to
+open it), the walkthrough video with a button per chapter that jumps to
+it, and the findings. Put the caret in the section and the Markdown
+shows again. At the very end the **Cost** table lists every settled run
+of `## Verlauf` (phase, model, tokens, time, cost) with the total.
+Under it the **action bar**: *Send back…* and *Accept and move to
+<next column>* while the ticket waits at one of your checkpoints, and
+always *Thread* (the agent's thread of the ticket) and *Open Review*
+(the result card and the changes in that thread — the Review tab is
+still to come).
+
 **By voice.** On Windows the dialog's Description label carries a
 **mic button**: it starts Windows dictation (Win+H — Windows' own;
 Drey adds no speech recognition), so speaking types into the

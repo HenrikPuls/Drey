@@ -34,9 +34,11 @@ import {
   parseUnarchive,
 } from '../../../packages/tickets-engine/src/core/commands';
 import { parseTicketFile, patchHeaderFields, type HeaderPatch } from '../../../packages/tickets-engine/src/core/ticket-files';
+import { personaModelFor } from '../../../packages/tickets-engine/src/core/persona';
 import { planWorktreeRemoval } from '../../../packages/tickets-engine/src/core/worktree-removal';
 import { captureTidyMessages, parseCaptureTidy } from '../shared/capture-tidy';
 import type { AttachmentReply, RefineReply, TicketReply } from '../shared/remote-protocol';
+import { hostVaultIdMapper } from './host-vault-id';
 import { openTerminalAt } from './open-terminal';
 import { startWindowsDictation } from './dictation';
 import { createFleetMcpTools } from './mcp-tools';
@@ -130,10 +132,23 @@ const plugin: MainPluginModule = {
     missionControl = mcHost;
     ctx.ipc.handle('openMissionControl', () => mcHost.open());
 
+    // The engine hosts the vault as `standalone`; the renderer speaks Drey's
+    // vault ids (documents.open, the editor surface) -- translate here.
+    const withHostVaultId = hostVaultIdMapper({
+      listVaults: () => ctx.vault.listVaults(),
+      hasBoard: async (vaultId) => {
+        try {
+          await ctx.vault.read('tickets/_meta/pipeline.md', { vaultId });
+          return true;
+        } catch {
+          return false;
+        }
+      },
+    });
     ctx.ipc.handle('board', async () => {
       const snap = await board.refresh();
       priorities = snap.priorities;
-      return snap;
+      return withHostVaultId(snap);
     });
 
     ctx.ipc.handle('create', async (payload) => {
@@ -379,6 +394,26 @@ const plugin: MainPluginModule = {
       return cmd.ok
         ? board.changesOf(cmd.value.id)
         : { changes: null, story: [], totals: { minutes: null, tokens: null }, planApproved: null, result: null, launchable: false };
+    });
+
+    // The ticket document (E13-6): the personas for the header strip's chain,
+    // and the run estimate for the gate now waiting, on the model its
+    // persona is set to (E11-4) -- null below three similar runs.
+    ctx.ipc.handle('personas', async () => {
+      const list = await board.listPersonas();
+      return list.map((p) => ({ id: p.id, title: p.title, color: p.color, role: p.role }));
+    });
+    ctx.ipc.handle('estimate', async (payload) => {
+      const p = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+      if (typeof p['gate'] !== 'string' || typeof p['persona'] !== 'string') {
+        return { estimate: null };
+      }
+      const persona = (await board.listPersonas()).find((candidate) => candidate.id === p['persona']);
+      if (persona === undefined) {
+        return { estimate: null };
+      }
+      const model = personaModelFor(persona, null).model;
+      return { estimate: await board.estimateOf({ gate: p['gate'], persona: persona.id, model }) };
     });
 
     // T-0042: a move out of tickets/archive/ performed as the board

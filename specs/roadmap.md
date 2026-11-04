@@ -70,7 +70,7 @@ and suite-green but await the owner's
 rounds** — with E9 the whole E0–E9 arc stands built and the concept
 is complete, caveat:
 none of it is owner-verified yet; the next step is the owner's
-verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults) and 127 (E13-2, view presets and home views, SDK 1.39) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
+verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults) 127 (E13-2, view presets and home views, SDK 1.39) and 129 (E13-6, the ticket as a document) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
@@ -251,17 +251,13 @@ Order and dependencies (an item needs everything it names):
    conversation of E12-4). Per-view default target once E13-1 exists. Needs
    E5a/E5c/E12-4 (all built). The Claude Code CLI provider as plain chat
    needs its tools switched off (to verify).
-6. **E13-6 — The ticket as a document.** In the editor: header strip with the
-   status chip, persona, phase, chain with who does what, total cost and the
-   estimate (E11-4), the gate; `## Proof` as a widget (summary, checks,
-   screenshots, video player); the Cost table widget at the end; the action
-   bar (Send back…, Accept and move to Commit, Thread, Open Review). Extends
-   the req-62 ticket header and folded Log. Needs E11-1 and E11-4 (built).
 7. **E13-7 — Review tab.** Editor tab kind with the proof above and the
    `DiffView` below, viewed marks, Changes / Whole file, line and range
    comments that go as structured feedback into the Handover (E11-3),
-   "Open in editor" and "Git history". Needs E11-2, E11-3 (built) and
-   E13-6.
+   "Open in editor" and "Git history". Needs E11-2, E11-3 and E13-6 (all
+   built). **Open Review** in the ticket document (milestone 129) opens the
+   ticket's thread tab (result card and changes) until this tab exists;
+   wire the button to the Review tab here.
 8. **E13-8 — Board, Team and Capacity.** Editor tab kinds Board (pipeline
    columns, parts under their ticket, cost per column) and Team (personas,
    stuck worker with Nudge / Hand to Claude Code / Stop, Pause all, budget,
@@ -272,11 +268,11 @@ Order and dependencies (an item needs everything it names):
    editor with the Assistant on Mission Control: Paul edits through live edit
    (ADR-0049), the owner's edits ride along (E10-2 plan delta through
    `OpenDocsBridge`), answer cards above the composer, the split proposal.
-   Needs E10-2, E10-3 (built), E13-5 and E13-6.
+   Needs E10-2, E10-3 (built), E13-5 and E13-6 (built).
 10. **E13-10 — Plan to approve in the ticket.** The Parts block as an editor
     widget under the header (persona per part, move / delete with a second
     press, running parts locked, flow row, estimate, Approve plan). Needs
-    E13-6; the engine side (`GET/POST /api/tickets/<id>/parts`, `POST
+    E13-6 (built, milestone 129); the engine side (`GET/POST /api/tickets/<id>/parts`, `POST
     …/release`) and the proposal text shipped with **E10-4** (milestone 126).
 11. **E13-11 — Flow tab.** The flow editor as an editor tab; the default
     flow also under Settings → Tickets. Needs E10-5 (milestone 128, built:

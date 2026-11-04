@@ -42,7 +42,10 @@ import type { WorktreeFile } from '../../../packages/tickets-engine/src/core/wor
 import { createWorkFilterStore, filterPopover, isFilterActive, NO_WORK_FILTER, type WorkFilterState } from './work-filter';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
-import { createTicketHeader, ticketLogFold } from './ticket-header';
+import { createTicketHeader, isTicketPath, ticketLogFold } from './ticket-header';
+import { createTicketDocumentExtension } from './ticket-document/extension';
+import { createTicketStrip } from './ticket-document/strip';
+import type { WorkRow } from './work-groups';
 import { boardIssuesChip, boardIssuesList, type BoardIssuesDeps } from './board-issues';
 import type { ChainStatus, FleetHandoverConfig, RunInfo } from '../../../packages/tickets-engine/src/fleet/protocol';
 import type { NormalizedEvent } from '../../../packages/tickets-engine/src/fleet/providers';
@@ -1743,6 +1746,38 @@ async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<voi
   markOpenCard(api);
 }
 
+/** The Send back… modal (canvas): one note, one move back to the agent. */
+function openSendBackModal(api: DreyPluginApi, ticketId: string): void {
+  const close = api.ui.showModal((host) => {
+    const box = el('div', 'tickets-sendback');
+    const head = el('h3', undefined, `Send ${ticketId} back`);
+    const field = el('label', 'tickets-sendback-field');
+    field.append(el('span', undefined, 'What should change?'));
+    const note = el('textarea', 'tickets-sendback-note');
+    note.rows = 4;
+    const actions = el('div', 'tickets-sendback-actions');
+    const cancel = el('button', 'tickets-takeover-btn', 'Cancel');
+    cancel.type = 'button';
+    const send = el('button', 'tickets-takeover-btn tickets-takeover-btn-primary', 'Send back');
+    send.type = 'button';
+    send.disabled = true;
+    note.addEventListener('input', () => {
+      send.disabled = note.value.trim() === '';
+    });
+    cancel.addEventListener('click', close);
+    send.addEventListener('click', () => {
+      const text = note.value;
+      close();
+      void runMutation(`Sending ${ticketId} back`, () => invokeBoard('sendBack', { id: ticketId, note: text }));
+    });
+    actions.append(el('span', 'tickets-takeover-spacer'), cancel, send);
+    field.append(note);
+    box.append(head, field, actions);
+    host.append(box);
+    note.focus();
+  });
+}
+
 /**
  * The runner alone: the one thread tab follows `card` and is revealed --
  * opened plainly where the focus is (no split, no anchor), so it never
@@ -2003,36 +2038,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       .catch(() => undefined);
   };
   /** The Send back… modal (canvas): one note, one move back to the agent. */
-  const sendBackModal = (): void => {
-    const close = api.ui.showModal((host) => {
-      const box = el('div', 'tickets-sendback');
-      const head = el('h3', undefined, `Send ${ticketId} back`);
-      const field = el('label', 'tickets-sendback-field');
-      field.append(el('span', undefined, 'What should change?'));
-      const note = el('textarea', 'tickets-sendback-note');
-      note.rows = 4;
-      const actions = el('div', 'tickets-sendback-actions');
-      const cancel = el('button', 'tickets-takeover-btn', 'Cancel');
-      cancel.type = 'button';
-      const send = el('button', 'tickets-takeover-btn tickets-takeover-btn-primary', 'Send back');
-      send.type = 'button';
-      send.disabled = true;
-      note.addEventListener('input', () => {
-        send.disabled = note.value.trim() === '';
-      });
-      cancel.addEventListener('click', close);
-      send.addEventListener('click', () => {
-        const text = note.value;
-        close();
-        void runMutation(`Sending ${ticketId} back`, () => invokeBoard('sendBack', { id: ticketId, note: text }));
-      });
-      actions.append(el('span', 'tickets-takeover-spacer'), cancel, send);
-      field.append(note);
-      box.append(head, field, actions);
-      host.append(box);
-      note.focus();
-    });
-  };
+  const sendBackModal = (): void => openSendBackModal(api, ticketId);
   /**
    * Shows the card for a Needs-you `Ready to try` / `Review` ticket and
    * for any ticket whose file carries a `## Changes` section; the
@@ -3173,7 +3179,41 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     // Both match on the board's vault, so they register again when that
     // vault becomes known or changes — the registration is what makes open
     // editors look again.
+    // E13-6: the ticket as a document -- the header strip, the proof widget,
+    // the cost table and the action bar. The row of a ticket in the work
+    // groups carries why it waits and whether a run is live.
+    const rowOf = (card: TicketCard): WorkRow | null => {
+      if (snapshot === null) {
+        return null;
+      }
+      const groups = workGroups(snapshot, liveRuns());
+      return [...groups.needs, ...groups.shaping, ...groups.running, ...groups.ideas].find((row) => row.card.id === card.id) ?? null;
+    };
+    const documentExtension = createTicketDocumentExtension({
+      api,
+      snapshot: () => snapshot,
+      rowOf,
+      matches: (context) =>
+        snapshot?.vaultId != null && context.vaultId() === snapshot.vaultId && isTicketPath(context.path()),
+      actions: {
+        accept: (card) => void runMutation(`Accepting ${card.id}`, () => invokeBoard('acceptTicket', { id: card.id })),
+        sendBack: (card) => openSendBackModal(api, card.id),
+        openThread: (card) => openTicketThread(api, card),
+        // The Review tab is E13-7; until it exists the thread carries the
+        // result card and the changes.
+        openReview: (card) => openTicketThread(api, card),
+      },
+    });
+    let documentSignature = '';
+    fleetListeners.add(() => {
+      const next = listSignature();
+      if (next !== documentSignature) {
+        documentSignature = next;
+        documentExtension.repaint();
+      }
+    });
     const header = createTicketHeader({
+      strip: createTicketStrip({ snapshot: () => snapshot, rowOf, invoke: invokeBoard }),
       api,
       snapshot: () => snapshot,
       invoke: invokeBoard,
@@ -3193,12 +3233,15 @@ const plugin: { activate(api: DreyPluginApi): void } = {
         unregisterHeader?.();
         const offView = api.editor.registerFrontmatterView(header.view);
         const offFold = api.editor.registerExtension('document', ticketLogFold(api, () => snapshot));
+        const offDocument = api.editor.registerExtension('document', documentExtension.factory);
         unregisterHeader = () => {
           offView();
           offFold();
+          offDocument();
         };
       }
       header.repaint();
+      documentExtension.repaint();
     };
 
     // The fleet daemon's chain log: a readonly, tail-following editor tab

@@ -338,13 +338,6 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
     },
     true,
   );
-  // The quiet start's pre-fill (req-75): the box opens carrying the
-  // current step and its meaning — applied ONCE, at creation, so a later
-  // paint never clobbers what the owner typed (or cleared after a send).
-  const prefill = deps.prefill?.() ?? '';
-  if (prefill !== '') {
-    prompt.setContent(prefill);
-  }
 
   const fileInput = el('input');
   fileInput.type = 'file';
@@ -778,6 +771,14 @@ export function createRunComposer(deps: RunComposerDeps): RunComposer {
   };
 
   wrap.append(progress, askSlot, waitCard, chipsRow, queueBlock, box);
+  // The quiet start's pre-fill (req-75): the box opens carrying the
+  // current step and its meaning — applied ONCE, at creation, so a later
+  // paint never clobbers what the owner typed (or cleared after a send).
+  // Here, after `paint` exists: `setContent` fires `onChange` at once.
+  const prefill = deps.prefill?.() ?? '';
+  if (prefill !== '') {
+    prompt.setContent(prefill);
+  }
   paint();
   return {
     element: wrap,
