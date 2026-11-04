@@ -157,8 +157,23 @@ const plugin: PluginRendererModule = {
     // tab-strip favicon/status slots and the session persist/restore all
     // resolve through this registration.
     let clockSeq = 0;
+    // A view preset (SDK 1.39): "Sample" appears next to Notes in the view
+    // switcher, with its own docks. The clock kind names it as its home
+    // view, so opening a clock tab brings the owner here.
+    const sampleView = 'sample.view';
+    api.ui.registerViewPreset({
+      id: sampleView,
+      label: 'Sample',
+      layout: { left: ['sample'], right: ['files'] },
+    });
+    api.commands.register({
+      id: 'sample.view',
+      label: 'Sample: switch to the Sample view',
+      run: () => api.ui.switchView(sampleView),
+    });
     api.ui.registerDocKind({
       kind: 'sample-clock',
+      homeView: sampleView,
       icon: 'sparkles',
       serialize: () => null, // stateless -- a restored clock just restarts
       restore: (path) => {

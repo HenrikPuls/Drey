@@ -180,6 +180,24 @@ test.describe('plugin doc kinds', () => {
     await expect(item).toHaveAttribute('title', 'Insert a timestamp (sample plugin)');
   });
 
+  test('a plugin view preset joins the switcher and its doc kind opens there (SDK 1.39)', async ({
+    page,
+  }) => {
+    const notes = page.locator('app-view-switcher .vs-btn', { hasText: 'Notes' });
+    const sample = page.locator('app-view-switcher .vs-btn', { hasText: 'Sample' });
+    await expect(notes).toHaveAttribute('aria-selected', 'true');
+    await expect(sample).toBeVisible();
+
+    // The clock kind names the preset as its home view: opening it switches there.
+    await openClockTab(page);
+    await expect(sample).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('app-tab-bar .tab', { hasText: 'Sample clock' })).toBeVisible();
+
+    // The tab belongs to that view only.
+    await notes.click();
+    await expect(page.locator('app-tab-bar .tab', { hasText: 'Sample clock' })).toHaveCount(0);
+  });
+
   test('a plugin doc-kind tab survives a reload through the session', async ({ page }) => {
     await openClockTab(page);
     await expect(

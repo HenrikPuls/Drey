@@ -89,6 +89,8 @@ export type {
   StatusItemHandle,
   StatusItemSpec,
   ToolbarButtonContrib,
+  ViewPresetContrib,
+  ViewPresetLayout,
   VaultFileOperation,
   VaultFileOperationOutcome,
   VaultFileOperationsHandler,

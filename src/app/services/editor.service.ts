@@ -305,6 +305,7 @@ export class EditorService {
       pinned?: boolean;
       split?: DocSplit;
       beside?: string;
+      stayInView?: boolean;
     } = {},
   ): Promise<void> {
     return this.opener.openFile(relativePath, vaultId, opts);
@@ -320,7 +321,7 @@ export class EditorService {
     relativePath: string,
     line: number,
     vaultId?: string,
-    opts?: { split?: DocSplit; beside?: string },
+    opts?: { split?: DocSplit; beside?: string; stayInView?: boolean },
   ): Promise<void> {
     return this.opener.openFileAt(relativePath, line, vaultId, opts);
   }

@@ -146,8 +146,17 @@ const plugin: PluginRendererModule = {
       },
     });
 
+    // A view next to Notes (SDK 1.39): the title bar's switcher lists it;
+    // its first layout names the panels it docks where.
+    api.ui.registerViewPreset({
+      id: 'sample.view',
+      label: 'Sample',
+      layout: { left: ['sample'], right: ['files'] },
+    });
+
     // … a settings page (api.ui.registerSettingsPage), a document tab kind
-    // (api.ui.registerDocKind), a File-menu row (api.ui.registerMenuContributions).
+    // (api.ui.registerDocKind -- with `homeView: 'sample.view'` its tabs
+    // open in that view), a File-menu row (api.ui.registerMenuContributions).
   },
 };
 ```

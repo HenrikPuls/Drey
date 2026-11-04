@@ -1,14 +1,21 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import type { Unsubscribe, ViewPresetContrib } from '../../../shared/plugin-api/renderer';
 import { DockService } from '../dock';
 import { DEFAULT_VIEW_ID, PaneService } from '../panes/pane.service';
 import { EditorService } from '../services/editor.service';
+import { HomeViewRouter } from '../services/home-view-router.service';
+import { LogService } from '../services/log.service';
 
 /** One view: a named, saved layout (ADR-0089). */
 export interface ViewDef {
   readonly id: string;
   readonly label: string;
-  /** Built-in views (Notes) cannot be renamed away or deleted. */
+  /** Built-in views (Notes) and plugin presets cannot be renamed or deleted by the user. */
   readonly builtin: boolean;
+  /** The plugin that registered this view as a preset (SDK 1.39); absent for Notes and user views. */
+  readonly pluginId?: string;
+  /** The Assistant's default conversation target in this view (opaque to the host, SDK 1.39). */
+  readonly assistantTarget?: string;
 }
 
 /** The name field of "Save current layout as a view…" / "Rename view…". */
@@ -29,23 +36,32 @@ const NOTES: ViewDef = { id: DEFAULT_VIEW_ID, label: 'Notes', builtin: true };
  * `OpenDocsStore` (one document, one buffer); a view owns placements only.
  *
  * Notes is today's layout and always exists. Further views come from
- * "Save current layout as a view…" (a plugin-contributed preset is the next
- * roadmap item, E13-2). The list of user views is small per-machine window
- * state in `localStorage['drey.views']`, like the dock layout.
+ * "Save current layout as a view…" and from plugin presets (SDK 1.39,
+ * `registerPreset`): the order is Notes, presets, user views. Only the user
+ * views are listed in `localStorage['drey.views']` (small per-machine window
+ * state, like the dock layout); a preset comes back from its plugin at every
+ * start, and its layout waits in the dock/pane slots under its id.
  */
 @Injectable({ providedIn: 'root' })
 export class ViewService {
   private readonly dock = inject(DockService);
   private readonly panes = inject(PaneService);
   private readonly editor = inject(EditorService);
+  private readonly homeViews = inject(HomeViewRouter);
+  private readonly log = inject(LogService);
 
-  private readonly _views = signal<readonly ViewDef[]>(this.read());
-  readonly views = this._views.asReadonly();
+  private readonly user = signal<readonly ViewDef[]>(this.read());
+  private readonly presets = signal<readonly (ViewDef & { readonly preset: ViewPresetContrib })[]>([]);
+  readonly views = computed<readonly ViewDef[]>(() => [NOTES, ...this.presets(), ...this.user()]);
   private readonly _activeId = signal<string>(DEFAULT_VIEW_ID);
   readonly activeId = this._activeId.asReadonly();
   readonly active = computed<ViewDef>(
-    () => this._views().find((v) => v.id === this._activeId()) ?? NOTES,
+    () => this.views().find((v) => v.id === this._activeId()) ?? NOTES,
   );
+  /** The active view's default Assistant target, or null (Notes, user views, presets without one). */
+  readonly assistantTarget = computed<string | null>(() => this.active().assistantTarget ?? null);
+  /** True from start until `settleStartup` while the stored active view might be a preset not yet registered. */
+  private unsettled = false;
 
   /** The name field's request, shown by the title bar; null while closed. */
   readonly prompt = signal<ViewNamePrompt | null>(null);
@@ -54,19 +70,81 @@ export class ViewService {
     // The dock layout remembers its own active view; a view that was
     // deleted since (or a damaged list) falls back to Notes.
     const stored = this.dock.activeViewId();
-    if (this._views().some((v) => v.id === stored)) {
+    if (this.views().some((v) => v.id === stored)) {
       this._activeId.set(stored);
       this.panes.setActiveViewId(stored);
+    } else if (stored !== DEFAULT_VIEW_ID && !stored.startsWith('view-')) {
+      // Possibly a plugin preset: its plugin registers it a moment from now.
+      // `settleStartup` decides once the plugins are loaded.
+      this._activeId.set(stored);
+      this.panes.setActiveViewId(stored);
+      this.unsettled = true;
     } else {
       this.dock.switchView(DEFAULT_VIEW_ID);
       this.panes.setActiveViewId(DEFAULT_VIEW_ID);
     }
+    this.homeViews.attach((id) => this.switchTo(id));
+  }
+
+  /**
+   * Called once the plugins have registered their presets (before the
+   * session is restored): an active view that still does not exist -- its
+   * plugin was disabled since -- falls back to Notes. Its saved layout is
+   * kept in case the plugin comes back.
+   */
+  settleStartup(): void {
+    if (!this.unsettled) {
+      return;
+    }
+    this.unsettled = false;
+    if (!this.views().some((v) => v.id === this._activeId())) {
+      this.dock.switchView(DEFAULT_VIEW_ID);
+      this.panes.switchView(DEFAULT_VIEW_ID);
+      this._activeId.set(DEFAULT_VIEW_ID);
+    }
+  }
+
+  // --- plugin presets (SDK 1.39) ---------------------------------------------
+
+  /**
+   * A plugin's view preset joins the switcher after Notes. A taken id is
+   * refused (logged). The preset's first layout is applied when the view is
+   * first shown, not now: its panels may belong to plugins that register
+   * after this one. Disposing removes the view; if it was active the owner
+   * lands in Notes.
+   */
+  registerPreset(pluginId: string, preset: ViewPresetContrib): Unsubscribe {
+    const id = preset.id.trim();
+    const label = preset.label.trim();
+    if (id === '' || label === '' || this.views().some((v) => v.id === id)) {
+      this.log.record('warn', `view preset "${preset.id}" of plugin "${pluginId}" refused: empty or taken id`);
+      return () => undefined;
+    }
+    const entry = {
+      id,
+      label,
+      builtin: true,
+      pluginId,
+      ...(preset.assistantTarget !== undefined ? { assistantTarget: preset.assistantTarget } : {}),
+      preset,
+    };
+    this.presets.update((list) => [...list, entry]);
+    return () => {
+      if (this._activeId() === id) {
+        this.switchTo(DEFAULT_VIEW_ID);
+      }
+      this.presets.update((list) => list.filter((p) => p !== entry));
+    };
   }
 
   /** Switches the whole workspace: docks and panes together. */
   switchTo(id: string): void {
-    if (id === this._activeId() || !this._views().some((v) => v.id === id)) {
+    if (id === this._activeId() || !this.views().some((v) => v.id === id)) {
       return;
+    }
+    const preset = this.presets().find((p) => p.id === id)?.preset;
+    if (preset?.layout !== undefined) {
+      this.dock.seedView(id, preset.layout);
     }
     this.dock.switchView(id);
     this.panes.switchView(id);
@@ -75,7 +153,7 @@ export class ViewService {
 
   /** `Ctrl+1`…`Ctrl+9`: the view at 0-based `index`; a missing one does nothing. */
   switchToIndex(index: number): void {
-    const view = this._views()[index];
+    const view = this.views()[index];
     if (view !== undefined) {
       this.switchTo(view.id);
     }
@@ -83,7 +161,7 @@ export class ViewService {
 
   /** The "Switch view" command: the next view, wrapping around. */
   switchToNext(): void {
-    const views = this._views();
+    const views = this.views();
     if (views.length < 2) {
       return;
     }
@@ -98,7 +176,7 @@ export class ViewService {
   }
 
   openRenamePrompt(id: string): void {
-    const view = this._views().find((v) => v.id === id);
+    const view = this.views().find((v) => v.id === id);
     if (view !== undefined && !view.builtin) {
       this.prompt.set({ mode: 'rename', viewId: id, initial: view.label });
     }
@@ -127,7 +205,7 @@ export class ViewService {
   /** True when another view already carries `label` (case-insensitive). */
   labelTaken(label: string, exceptId: string | null = null): boolean {
     const wanted = label.trim().toLowerCase();
-    return this._views().some((v) => v.id !== exceptId && v.label.toLowerCase() === wanted);
+    return this.views().some((v) => v.id !== exceptId && v.label.toLowerCase() === wanted);
   }
 
   // --- the list --------------------------------------------------------------
@@ -138,19 +216,17 @@ export class ViewService {
    * copied) -- and becomes the active view.
    */
   saveCurrentAs(label: string): string {
-    const id = `view-${Date.now().toString(36)}-${this._views().length}`;
+    const id = `view-${Date.now().toString(36)}-${this.views().length}`;
     this.dock.copyActiveTo(id);
     this.panes.cloneActiveViewTo(id);
-    this._views.update((views) => [...views, { id, label: label.trim(), builtin: false }]);
+    this.user.update((views) => [...views, { id, label: label.trim(), builtin: false }]);
     this.persist();
     this.switchTo(id);
     return id;
   }
 
   rename(id: string, label: string): void {
-    this._views.update((views) =>
-      views.map((v) => (v.id === id && !v.builtin ? { ...v, label: label.trim() } : v)),
-    );
+    this.user.update((views) => views.map((v) => (v.id === id ? { ...v, label: label.trim() } : v)));
     this.persist();
   }
 
@@ -160,8 +236,8 @@ export class ViewService {
    * to Notes -- a document held by no view cannot be open.
    */
   async remove(id: string): Promise<void> {
-    const view = this._views().find((v) => v.id === id);
-    if (view === undefined || view.builtin) {
+    const view = this.user().find((v) => v.id === id);
+    if (view === undefined) {
       return;
     }
     if (this._activeId() === id) {
@@ -177,7 +253,7 @@ export class ViewService {
     }
     this.dock.dropView(id);
     this.panes.dropView(id);
-    this._views.update((views) => views.filter((v) => v.id !== id));
+    this.user.update((views) => views.filter((v) => v.id !== id));
     this.persist();
   }
 
@@ -210,8 +286,7 @@ export class ViewService {
 
   private persist(): void {
     try {
-      const user = this._views().filter((v) => !v.builtin);
-      localStorage.setItem(KEY, JSON.stringify({ views: user }));
+      localStorage.setItem(KEY, JSON.stringify({ views: this.user() }));
     } catch {
       // Storage disabled: the views last for this session.
     }
@@ -231,12 +306,12 @@ export class ViewService {
               typeof (v as { label?: unknown }).label === 'string' &&
               (v as { id: string }).id !== DEFAULT_VIEW_ID,
           );
-          return [NOTES, ...user.map((v) => ({ id: v.id, label: v.label, builtin: false }))];
+          return user.map((v) => ({ id: v.id, label: v.label, builtin: false }));
         }
       }
     } catch {
-      // A damaged list: only Notes.
+      // A damaged list: no user views.
     }
-    return [NOTES];
+    return [];
   }
 }

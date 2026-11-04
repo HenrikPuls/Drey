@@ -3,8 +3,9 @@
 ## Status
 
 Accepted (2026-11-04) and built as E13-1, milestone 123 -- the base half
-(views, switching, tabs per view, session). Plugin-contributed presets and
-`homeView` (decision 2, 7) are E13-2 and not built yet. The direction was
+(views, switching, tabs per view, session) -- and E13-2, milestone 127 --
+plugin-contributed presets and `homeView` (decision 2, 7; see "Later change:
+presets and home views"). The direction was
 confirmed by the owner on 2026-11-04 (a view switcher, tabs per view, hidden
 elsewhere but addable). The owner made saved layouts mandatory and first in
 the build order: without them the agent system and the note app are unusable
@@ -168,3 +169,42 @@ Constraints that shape the answer:
   views" toggle; how many views the title bar shows before it folds into a menu;
   how a plugin preset is versioned when its layout changes; whether user views
   can be exported.
+
+## Later change: presets and home views (E13-2, milestone 127, SDK 1.39)
+
+- **Preset.** `api.ui.registerViewPreset({ id, label, layout?, assistantTarget? })`
+  adds a view after Notes (order: Notes, presets, user views). It is
+  `builtin` for the switcher: no rename, no delete. It is not saved in
+  `drey.views` -- the plugin registers it at every start; its layout and tabs
+  wait in the dock and pane slots under its id. A taken id is refused with a
+  logged warning. Disposing the registration (plugin disabled) removes the view
+  and, when it was active, lands in Notes; the saved layout stays.
+- **Layout.** `ViewPresetLayout` names widget ids per dock plus `open` and
+  `folded`. It is applied when the view is *first shown* (not at registration:
+  its panels may belong to plugins that register later), through
+  `DockService.seedView` over the ordinary `merge`: unknown ids are skipped,
+  panels named nowhere stay in their default dock, closed. The first pane tree
+  of a preset view is empty, as for any new view. Afterwards the owner's own
+  arrangement is the truth; a changed preset never overwrites it (answers the
+  versioning question for now: no versioning).
+- **Assistant target.** The preset carries `assistantTarget`, an opaque string;
+  `ViewService.assistantTarget()` exposes the active view's. The base reads
+  nothing from it -- E13-5 gives it meaning.
+- **Startup.** The dock layout remembers the active view across runs. A stored
+  active view that is not Notes or a user view might be a preset whose plugin
+  has not registered yet, so `ViewService` keeps it until `settleStartup()`
+  (head of `SessionService.restore`, after the plugins loaded) and only then
+  falls back to Notes if it is still unknown.
+- **Home view.** `homeView?: string` on `PluginDocKindContrib` and
+  `FileOpenerContrib`. Opening such a document calls `HomeViewRouter.enter`
+  *before* the tab is added, so it lands in the home view's panes (the
+  already-open case included: the view is shown, then the tab revealed or added
+  there). `stayInView: true` on `documents.open` / `addDoc` is the explicit
+  "open here". Restoring a session suspends the router. An unknown view id is
+  ignored. The router is a dependency-free seam in `src/app/services/` because
+  `ViewService` depends on the editor service that `DocOpenService` belongs to.
+- **Not built.** The reverse rule ("opening a note from Work goes to Notes"):
+  it needs a definition of "a note" that the content-agnostic base does not
+  have; it comes with the first plugin that needs it (E13-6/E13-13). A UI row
+  "Open in this view" (the user-facing form of `stayInView`) is not added yet;
+  the plugin-side flag exists.

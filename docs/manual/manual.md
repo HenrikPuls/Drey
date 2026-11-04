@@ -1561,7 +1561,10 @@ automatically.
   check per view. Closing a tab only takes it out of the current
   view while another view still shows it; it closes for good (asking
   about unsaved changes) with the last one. *Reset layout* resets the
-  current view only.
+  current view only. A plugin can offer views of its own: they appear in
+  the switcher after *Notes* and cannot be deleted, and opening a
+  document that belongs to such a view (a tab the plugin names for it)
+  switches there first.
 - **Open windows** panel lists the open documents of the current view,
   and under *In other views* the rest, each with a *Show here* button:
 
