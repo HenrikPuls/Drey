@@ -92,6 +92,18 @@ one means moving it back to the roadmap with a new justification.
   vague to build; the assistant is already the task and navigation
   surface (milestone 57), Jira is excluded (req-17).
 
+- **Mission Control on the desktop (2026-11-04).** *The phone/iPad web app
+  embedded in a Drey tab* (the "umbilical cord"): no editor, no docks, no links
+  to Search, Backlinks or Git; rejected for a native integration (tickets as
+  documents, editor tabs, the Assistant). *A hard-wired "Work" view or a
+  "tickets vault" known to the base*: the base stays plugin-neutral
+  (ADR-0044) — Work is a plugin view preset and links fall back generically to
+  the other vaults. *Shared tabs across views*: the tab bar is where the
+  confusion shows; tabs belong to views. *A new LLM provider list for
+  Mission Control or the Assistant targets*: the existing LLM integration and
+  Settings stay; another model (for example Kimi) is registered there as an
+  OpenAI-compatible endpoint.
+
 ## Won't do (decided against, kept for the record)
 
 - **Auto-pairing the ticket file and its thread across panes** (owner,

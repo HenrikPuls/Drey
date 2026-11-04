@@ -13,6 +13,9 @@ no Drey editor, no dock panels, no split panes, and no link to the other tools
 (Search, Tags, Backlinks, Git, Assistant). The desktop client is therefore not a
 bigger copy of the iPad layout. It uses what Drey already has.
 
+Names follow the owner decision D7: **Pia is Mission Control**, the one contact;
+**Paul** is the planner persona; the default team is Paul, Ben, Ralf, Tessa.
+
 ## The sorting rule
 
 | What it is for | Where it lives |
@@ -29,7 +32,7 @@ bigger copy of the iPad layout. It uses what Drey already has.
 | Needs you, Shaping, Running, Ideas | Dock panel **Tickets** (exists; slimmed to the glance) |
 | Pipeline overview, parts under their ticket, cost per column | Editor tab **Board** (new tab kind) |
 | A ticket | Its Markdown file in the normal editor. The header strip shows persona, phase, cost, estimate, chain and the gate |
-| Shape | The ticket in the editor plus Pia in the Assistant, the ticket attached as a note. Pia edits through live edit (ADR-0049); the owner types in the same document |
+| Shape | The ticket in the editor plus Mission Control (Pia) in the Assistant, the ticket attached as a note. Paul, the planner persona, edits through live edit (ADR-0049); the owner types in the same document |
 | Plan to approve | A **Parts block** inside the ticket (editor widget) written as `### Parts` |
 | Review, proof | Editor tab **Review**: proof strip (video, chapters, screenshots), file list with viewed, Changes or Whole file, line comments, Send back / Accept. A file opens in the real editor |
 | Chat | Assistant panel. Target **Model** is plain chat, no agent, no tools. Target **Mission Control** is the team. A 1:1 per persona is a third target |

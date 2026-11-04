@@ -204,6 +204,94 @@ The product name "Drey Crew" needs a name check before any rollout (the
 code is not renamed). Out of scope: away posture / return briefing,
 report intent, photo markup.
 
+**Mission Control on the desktop, inside Drey (E13)** (owner request,
+outside the list, 2026-11-04; design:
+[`docs/design/work-panel/desktop-integration.md`](../docs/design/work-panel/desktop-integration.md),
+boards 7a–7j of the design canvas; views:
+[ADR-0089](../docs/09_architecture_decisions/0089-views-saved-layouts-with-their-own-tabs.md),
+proposed). The desktop is not the iPad layout on a big screen: the ticket is
+its Markdown file in the editor, Shape is that file plus Paul through the
+Assistant, review and board are editor tabs, and the owner switches between
+**Notes** and **Work** views. The desktop shows at least what the mobile
+client shows (the cost above all). Base and SDK changes are allowed. Work
+happens in `src/app/` (docks, panes, session, status bar, wikilinks),
+`shared/plugin-api/` and `plugins/tickets/renderer/`; the E10–E12 line works
+in `apps/mission-control`, `libs/mission-ui` and `packages/tickets-engine`
+and has not touched those (checked 2026-11-04), so both lines can run side
+by side. Milestone numbers are taken when an item ships.
+
+Order and dependencies (an item needs everything it names):
+
+1. **E13-1 — Status bar items for plugins** (SDK minor). A plugin
+   registers an item (text, tone, click command); the base draws it in the
+   28 px status bar. First user: the fleet summary "2 running · $4.10 today"
+   and "3 need you". Independent.
+2. **E13-2 — Link fallback to other vaults** (base; no SDK change). A
+   wikilink is resolved in its own vault first, then in the others;
+   Settings → Vault gets "Also look for link targets in other vaults" (per
+   vault, default off); the backlinks index counts links that resolved into
+   another vault; an ADR-0051/0059 later-change note. Independent. Gives
+   `[[T-0121]]` from a note.
+3. **E13-3 — Views** (ADR-0089, accepted first). `DockService` and
+   `PaneService` state per view, the title-bar switcher, `Ctrl+1`–`9`, tabs
+   belong to views (hidden elsewhere, "Show this tab in", Open windows "In
+   other views / Show here"), session snapshot with views, "Reset layout"
+   per view. Notes is today's layout. Independent of 1–2; the largest base
+   change, so it ships alone.
+4. **E13-4 — View presets and home views** (SDK minor). A plugin registers a
+   view preset (id, label, initial layout, default Assistant target) and a
+   `homeView` on doc kinds and file openers. Needs E13-3.
+5. **E13-5 — Assistant conversation targets.** Target *Model* (plain chat,
+   no agent, no tools, any provider registered in Settings → Assistant — the
+   existing `LlmRouter`, nothing new), *Mission Control* (the E5a chat
+   engine through the E5c `RemoteService.localClient`; persona relays carry
+   the "via Mission Control" chip), *1:1* per persona (the merged persona
+   conversation of E12-4). Per-view default target. Needs E5a/E5c/E12-4
+   (all built). Independent of 1–4; the Claude Code CLI provider as plain
+   chat needs its tools switched off (to verify).
+6. **E13-6 — The ticket as a document.** In the editor: header strip with the
+   status chip, persona, phase, chain with who does what, total cost and the
+   estimate (E11-4), the gate; `## Proof` as a widget (summary, checks,
+   screenshots, video player); the Cost table widget at the end; the action
+   bar (Send back…, Accept and move to Commit, Thread, Open Review). Extends
+   the req-62 ticket header and folded Log. Needs E11-1 and E11-4 (built).
+7. **E13-7 — Review tab.** Editor tab kind with the proof above and the
+   `DiffView` below, viewed marks, Changes / Whole file, line and range
+   comments that go as structured feedback into the Handover (E11-3),
+   "Open in editor" and "Git history". Needs E11-2, E11-3 (built) and
+   E13-6.
+8. **E13-8 — Board, Team and Capacity.** Editor tab kinds Board (pipeline
+   columns, parts under their ticket, cost per column) and Team (personas,
+   stuck worker with Nudge / Hand to Claude Code / Stop, Pause all, budget,
+   setup, memory, 1:1 entry), plus the Capacity band as a dock panel
+   (bottom dock). Needs E12-4 (built); the Tickets panel gets the mobile
+   list parity (id, kind, persona, cost, Prioritized). Independent of 6–7.
+9. **E13-9 — Shape in Drey.** The ticket in the Ideas phase opened in the
+   editor with the Assistant on Mission Control: Paul edits through live edit
+   (ADR-0049), the owner's edits ride along (E10-2 plan delta through
+   `OpenDocsBridge`), answer cards above the composer, the split proposal.
+   Needs E10-2, E10-3 (built), E13-5 and E13-6.
+10. **E13-10 — Plan to approve in the ticket.** The Parts block as an editor
+    widget under the header (persona per part, move / delete with a second
+    press, running parts locked, flow row, estimate, Approve plan). Needs
+    **E10-4** (the engine side and the proposal) and E13-6.
+11. **E13-11 — Flow tab.** The flow editor as an editor tab; the default
+    flow also under Settings → Tickets. Needs **E10-5**.
+12. **E13-12 — Settings → Tickets in Drey.** Team, default flow, budget and
+    runners, devices and pairing (QR), video storage (`videos.inGit` off,
+    `videos.limitMb`), reading what E12-3 stores. Needs E12-3 (built) and,
+    for the flow row, E13-11.
+13. **E13-13 — The Work view.** The tickets plugin's preset: Tickets panel
+    left, ticket and Board in the centre, Assistant on Mission Control
+    right, Capacity at the bottom; ticket documents have the Work view as
+    their home. Last: needs E13-3, E13-4 and the tabs it arranges (6–11).
+
+Parallel lanes: 1, 2 and 3 are disjoint and can run together; 5 and 8 can
+start when their needs are met without waiting for 3. Relation to the E10–E12
+line: only 10 and 11 wait for E10-4 and E10-5; E12-5 (device rules audit)
+and E12-6 (Markdown surface for the web app) are independent of E13.
+Persona names follow D7 (Pia = Mission Control, Paul plans).
+
 
 The assistant tool rework (owner request, outside the list, 2026-10-13)
 shipped as milestones 76–79, the removal of the embedding retrieval
