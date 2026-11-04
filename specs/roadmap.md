@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-02):** version 0.8.1, milestones 1–115 built — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–132 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -162,7 +162,7 @@ canvas "Drey Tickets — Workflow redesign" is binding for the UI;
 [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
 "Later changes" records the decisions). Worked in this order, one
 milestone at a time, a pause after each; milestone numbers are taken
-when an item ships (next free: 123; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, 116 = proof mode + videos, 117 = diff review, 118 = line comments, 119 = cost table + estimate, 120 = parts schema, 121 = plan delta, 122 = shape mode; E12-1 – E12-4, E11, E10-1 – E10-6 shipped). Nothing here creates tickets — the
+when an item ships (next free: 135 — 133 is taken by other work, 134 = the convergence audit; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, 116 = proof mode + videos, 117 = diff review, 118 = line comments, 119 = cost table + estimate, 120 = parts schema, 121 = plan delta, 122 = shape mode; E12-1 – E12-4, E11, E10-1 – E10-6 shipped). Nothing here creates tickets — the
 owner builds without the tickets system.
 
 - **E12-3b — Settings pages still missing.** Chat (the model rows and
@@ -192,9 +192,10 @@ owner builds without the tickets system.
   released (today it stays in its phase with one Log line), a per-gate
   estimate for the whole flow (the card estimates the build gate), the
   estimate reading "not yet" until the desk's answer arrives (it cannot
-  tell "asked, no basis" from "not asked yet"). Adding a part or
-  renaming one from the card stays out on purpose: the cut changes in the
-  plan or by asking Mission Control.
+  tell "asked, no basis" from "not asked yet"). Adding or renaming a part
+  from the card stays out on purpose (owner, 2026-11-04: board 7c's "Add
+  part" button was removed again): the cut changes in the plan or by asking
+  Mission Control.
 - **E10-3b — Shape mode follow-ups.** Tinted line marks inside the
   rendered plan and a line-level "tap a line to edit" on the phone sheet
   (both want the Markdown surface, built in E12-6 — the surface is there,
@@ -226,7 +227,7 @@ outside the list, 2026-11-04; design:
 [`docs/design/work-panel/desktop-integration.md`](../docs/design/work-panel/desktop-integration.md),
 boards 7a–7j of the design canvas; views:
 [ADR-0089](../docs/09_architecture_decisions/0089-views-saved-layouts-with-their-own-tabs.md),
-proposed). The desktop is not the iPad layout on a big screen: the ticket is
+accepted, built as milestones 123 and 127). The desktop is not the iPad layout on a big screen: the ticket is
 its Markdown file in the editor, Shape is that file plus Paul through the
 Assistant, review and board are editor tabs, and the owner switches between
 **Notes** and **Work** views. **Saved layouts (views) are mandatory, not a
@@ -250,14 +251,23 @@ Order and dependencies (an item needs everything it names):
    the "via Mission Control" chip), *1:1* per persona (the merged persona
    conversation of E12-4). Per-view default target once E13-1 exists. Needs
    E5a/E5c/E12-4 (all built). The Claude Code CLI provider as plain chat
-   needs its tools switched off (to verify).
+   needs its tools switched off (to verify). **Boards 7a–7i add:** a
+   segmented control *Model | Mission Control | 1:1* in the Assistant header,
+   Chat history and New chat icons, step cards in the thread ("T-0121 · step 1
+   · tests green · 7 actions ›"), a Dictate mic in the composer (today only the
+   create-ticket modal has one), context chips Vault · Web · "<ticket>.md
+   attached"; the per-view default is Notes = Model, Work = Mission Control.
+   The persona detail's 1:1 tab moves here (see E13-19).
 7. **E13-7 — Review tab.** Editor tab kind with the proof above and the
    `DiffView` below, viewed marks, Changes / Whole file, line and range
    comments that go as structured feedback into the Handover (E11-3),
    "Open in editor" and "Git history". Needs E11-2, E11-3 and E13-6 (all
    built). **Open Review** in the ticket document (milestone 129) opens the
    ticket's thread tab (result card and changes) until this tab exists;
-   wire the button to the Review tab here.
+   wire the button to the Review tab here. **Board 7d adds:** tab title
+   "Review · T-0121", the proof strip with Before / After pictures, "N files ·
+   M of N viewed", the footer buttons `Send back with N comments` and
+   `Accept and move to Commit`.
 9. **E13-9 — Shape in Drey.** The ticket in the Ideas phase opened in the
    editor with the Assistant on Mission Control: Paul edits through live edit
    (ADR-0049), the owner's edits ride along (E10-2 plan delta through
@@ -266,22 +276,38 @@ Order and dependencies (an item needs everything it names):
    goes away here** (owner, 2026-11-04): once the Assistant on Mission Control
    loads the ticket file itself, the Refine button (Work panel and Mission
    Control) and the `refine-interactive-default` prompt are removed; not
-   before.
+   before (the ticket header still carries "Plan with agent" / "Refine with
+   agent" at `ticket-header.ts`; board 7b no longer shows them). **Board 7b
+   adds:** the marks "Paul edited this · 2 min ago" and "You edited this ·
+   rides along with your next message" in the document, and the answer card
+   above the composer ("How many parts does this need?", `Send "3 parts"`); the open question is only that answer card plus a plain "Open questions" entry in the ticket text (owner, 2026-11-04: no separate plan-step list or question card in the document).
 10. **E13-10 — Plan to approve in the ticket.** The Parts block as an editor
     widget under the header (persona per part, move / delete with a second
     press, running parts locked, flow row, estimate, Approve plan). Needs
     E13-6 (built, milestone 129); the engine side (`GET/POST /api/tickets/<id>/parts`, `POST
     …/release`) and the proposal text shipped with **E10-4** (milestone 126).
+    **Board 7c adds:** "starts first" / "after P1 ·
+    blocked-by P1" lines, "Typical total $a–b", the per-part estimate reading
+    "from N runs" or "not yet · fewer than 3 runs", "Ask Mission Control to
+    change the split" and "Change flow ›". **Status per part lives here** (owner, 2026-11-04: no separate plan-step list in the ticket).
 11. **E13-11 — Flow tab.** The flow editor as an editor tab; the default
     flow also under Settings → Tickets. Needs E10-5 (milestone 128, built:
     `GET/POST /api/tickets/<id>/flow…`).
 12. **E13-12 — Settings → Tickets in Drey.** Team, default flow, budget and
     runners, devices and pairing (QR), video storage (`videos.inGit` off,
     `videos.maxMb`), reading what E12-3 stores. Needs E12-3 (built) and,
-    for the flow row, E13-11.
-13. **E13-13 — The Work view.** The tickets plugin's preset: Tickets panel
+    for the flow row, E13-11. **Board 7g's rows:** Team (Edit team), Default
+    flow (Open flow editor), Daily budget with "Pause when the budget is
+    spent" (running work finishes first), Runners (Manage), Walkthrough
+    videos ("keep in Git" off, "Largest video" 25 MB), "Mission Control on
+    other devices" (Pair a device, paired devices with Revoke). The budget
+    pause and the runners dialog need a desk setting first (E12-3b).
+13. **E13-13 — The Work view.** The tickets plugin's preset (no
+    `registerViewPreset` in `plugins/tickets` yet — the switch has nothing to
+    switch to): Tickets panel
     left, ticket and Board in the centre, Assistant on Mission Control
-    right, Capacity at the bottom; ticket documents have the Work view as
+    right, Capacity band at the bottom **while the Board or Team tab is active
+    (board 7e; boards 7a–7d and 7j show no bottom dock)**; ticket documents have the Work view as
     their home. Needs E13-1, E13-2 and the tabs it arranges (6–11). An early
     first cut (Tickets panel, ticket tabs, Assistant) can ship as soon as
     E13-2 and E13-6 are done, so the switch is usable before every tab
@@ -292,6 +318,60 @@ start when their needs are met without waiting for 1. Relation to the
 E10–E12 line: 10 and 11 waited for E10-4 and E10-5 (both built); E12-5 (device rules
 audit) is independent of E13.
 Persona names follow D7 (Pia = Mission Control, Paul plans).
+
+**Proposed by the convergence audit (2026-11-04, milestone 134)** — evidence
+and severity per item in
+[`convergence-gaps.md`](../docs/design/work-panel/convergence-gaps.md); the
+owner confirms scope and order before any of it starts:
+
+- **E13-14 — Panel naming and chrome.** The dock panel is titled "Tickets"
+  (not "Work"), an "Open Board tab" icon in its header, the footer links to
+  the Team tab ("Team · Ben, Tessa busy") instead of "Workers", the Workers
+  tab retires (G-10, G-11).
+- **E13-15 — Status bar items.** A separate "$4.10 today" item and a
+  "● 3 need you" item, "in Work" while the Notes view is active (G-12).
+- **E13-16 — Title-bar capture button.** "Capture by voice" on the desk
+  boards; needs the owner's ruling on the chord first (Ctrl+Alt+N is the
+  daily-note capture; tickets use Mod+Alt+T) (G-13).
+- **E13-17 — Board filter and cost toggle.** "Filter: all personas" and
+  "Cost by column" on the Board tab (board 7e) (G-15).
+- **E13-18 — Views polish.** Views menu descriptions, shortcut text, "Edit
+  views…", "Go to the Work view" in the tab menu, "2 here · 3 elsewhere" in
+  Open windows (boards 7h, 7i) (G-28).
+- **E13-19 — Team tab completion.** New persona from a template, Remove from
+  team, editable Setup, Friction tab, Notify / Runs after / This week /
+  Typical run fields, "Talk to <name> 1:1 in the Assistant" (with E13-5), the
+  per-persona slot share (needs an engine count) (G-14).
+- **E12-7 — Token alignment** (owner decision 2026-11-04: the Anthrazit design
+  system wins). Milestone 136 on branch `design-to-code` owns it: peach / pink /
+  mint tokens in the three themes, badges re-pointed, radii 4/8/16, a 13 px
+  floor on mobile, Settings text size S / L / XL / XXL / XXXL (L = 17 px
+  default), the capture label Ctrl+Alt+T (binding `Mod+Alt+T`) (G-13, G-23–G-26).
+  This entry only states the decision; the work is not duplicated here.
+- **E12-8 — Dictation into the Assistant** (owner, 2026-11-04; replaces the
+  voice-capture screen of board 4d, now a plain text-capture sheet). A
+  microphone button in the Mission Control chat composer first (Web Speech API
+  where available, hidden otherwise); the Drey Assistant composer follows with
+  E13-5 (G-18, G-32).
+- **E10-7 — Mermaid blocks in ticket documents** (owner, 2026-11-04; the
+  autogenerated gate diagram of concept §5.4 is dropped). Mission Control and
+  the agent must process tickets that contain Mermaid blocks: **display** (the
+  shared Markdown surface renders them, E12-6) and **evaluation**: the engine's
+  parsers must not read fenced content (a Mermaid block's lines starting with
+  `#`, `###`, `- [ ]`) as chapters, parts or criteria. Scope: a fence-aware
+  check plus tests in `packages/tickets-engine` for the plan / parts parser
+  (`core/plan-parts.ts`, `plan-section.ts`), the acceptance-criteria reader,
+  the `## Verification` / `## Verlauf` / `## Report` readers and the frontmatter
+  split (`core/ticket-files.ts`), and the chapter patchers (G-07).
+- **E2b-4 — The engine announces its writes to Drey.** Changed paths ride the
+  `board` event and the plugin calls `ctx.vault.announceChanges`, so the
+  Files tree, indexes and open ticket tabs stay fresh with the watcher off
+  (G-08).
+- **X-1 — Documentation and code hygiene.** The schema's noise promise
+  versus the parser (G-20), delete `plugins/tickets/main/engine-host.ts` and
+  reword the engine's package description (G-21), German code comments (G-22),
+  undocumented commit subjects (G-33), the unaudited legacy parts of docs/05
+  and docs/06 (G-34), a stray `apps/mission-control/node_modules` (G-35).
 
 
 The assistant tool rework (owner request, outside the list, 2026-10-13)

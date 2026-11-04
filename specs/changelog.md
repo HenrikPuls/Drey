@@ -1,3 +1,32 @@
+### Convergence audit (documentation only) — milestone 134
+
+**Documentation only; no product code changed, nothing to verify in the app.**
+Owner-requested audit, 2026-11-04: the concept, the design canvas and the code
+had drifted after milestones 97–132 were built in parallel.
+
+- **Concept v2 in the repo, in English:**
+  [`docs/design/work-panel/architecture-concept-v2.md`](../docs/design/work-panel/architecture-concept-v2.md),
+  a faithful translation of the owner's German v2, with a status line per
+  section (built / planned / dropped, milestone numbers) and updates for D5–D11,
+  the video size rule, E10-6, E12-6, the desktop integration and ADR-0089, the
+  Refine-button removal (E13-9) and D-1.
+- **Doc-to-code audit:** `docs/05`, `docs/06`, ADR-0088, ADR-0089 and
+  `specs/ticket-schema.md` brought to the code (stale paths after the engine
+  extraction, relabelled sequence diagrams, new building blocks for the engine
+  process and Mission Control, the fleet-ledger section of the schema, the
+  `chain` grammar, German words removed). Milestones 109–111 had no changelog
+  entry: backfilled below from the commits.
+- **Design-to-code audit:** all 34 canvas boards compared with the code; the
+  roadmap's E13 items carry what the owner's boards show; the Anthrazit tokens
+  were checked against the CSS variables.
+- **Gap list:** [`convergence-gaps.md`](../docs/design/work-panel/convergence-gaps.md)
+  (35 rows, sorted by severity, with roadmap ids); the new roadmap items are
+  marked "proposed by the convergence audit". Roadmap Status line and "next free"
+  counter corrected; ADR-0089 shown as accepted.
+- **Owner answers applied (2026-11-04, canvas v71):** capture chord Ctrl+Alt+T, "Add part" stays excluded, the Mermaid gate diagram and Zod dropped (new roadmap items E10-7 Mermaid-safe parsers and E12-8 dictation), the Anthrazit design system wins (code: milestone 136, E12-7), no separate plan-step list.
+- **Not verified:** nothing was run and no board rendered (strings, structure and
+  colours were compared); legacy parts of docs/05 and docs/06 were not audited.
+
 ### Milestone 133 — Markdown surface for Mission Control (E12-6)
 
 **Not yet manually verified by the owner.** Owner priority, 2026-11-04 (the
@@ -1110,6 +1139,49 @@ Verified: typecheck (nine configs), lint, import cycles, `test:app`
 (1196 + 120 + 450), `test:plugins` (3194 of 3195 — the one failure,
 `default-prompts.spec`, is a CRLF checkout artefact of the shipped
 prompt files and predates this change). Not verified in the running app.
+
+### Milestone 111 — configurable priorities + the blocked-by chat path
+
+**Not yet manually verified by the owner.** *Backfilled by the convergence audit
+(milestone 134) from commits `f73ff404` and `971a1a31`; the entry was not written
+when the milestone shipped (2026-11-02).*
+
+- `_meta/pipeline.md` gains a top-level `priorities:` — ids in weight order, the
+  vault's own vocabulary; its middle entry is the default, its first half the
+  dispatch's jump class. `urgent, high, normal, low` is exactly that split, so an
+  unconfigured vault behaves as before. Unknown ids in tickets warn and read as
+  the default; `createTicket` refuses an off-vocabulary priority.
+- Board order, dispatch classes, chat digest and envelope validation, header edits
+  read the vocabulary instead of a fixed list; the board's column order follows it.
+- The chat's sixth intent `setBlockedBy` (whole-list replacement, an empty list
+  clears the blockers) executes like `setChain`: no-op when unchanged, refusal on
+  a live run, one header rewrite, one commit `tickets: <id> blocked-by <n ids|none>`.
+
+### Milestone 110 — the chain delta (E9, concept §5.7)
+
+**Not yet manually verified by the owner.** *Backfilled by the convergence audit
+from commit `033520f3`.*
+
+- The pipeline defines the standard flow; a ticket overrides it with a `chain:`
+  frontmatter delta (`insert <phase>(<persona>, notify) after|before <anchor>`,
+  `skip <phase>`, `notify <phase>`). Every write validates the delta against the
+  pipeline and the ticket's position; a live run refuses like every header edit.
+- Merge of flow + delta feeds the gate bar (a tappable bar opening the sheet with
+  three interventions), the notify cards (fire when the following gate is
+  entered, hide after the next or 24 h) and the chat's `setChain` command with a
+  before/after proposal card. `specs/ticket-schema.md` "The chain delta".
+
+### Milestone 109 — the Scout track (E8, concept §5.6)
+
+**Not yet manually verified by the owner.** *Backfilled by the convergence audit
+from commit `a96a3639`.*
+
+- `form: scout` (absent = ship): a scout run has no worktree, branch, diff, gate
+  or move; the worker writes only the `## Report` chapter (`### Summary`,
+  `### Decisions`) into its own ticket file; the supervisor commits it at settle.
+- The report waits as a `report` card in Needs you; the dispatcher holds a scout
+  ticket whose report is written; the chat's `promote` command (proposal card,
+  confirmation, `setForm` patch, one commit) turns it into a ship.
 
 ### Milestone 108 — the status log + fleet ledger surface (Mission-Control migration E7)
 

@@ -17,6 +17,19 @@ ticket's Log.
 | `Orchestrator.dc.html` | Plan to approve: phase tickets, routing, touches, gates | W6, W7 |
 | `PhoneInbox.dc.html` … `PhoneCapture.dc.html` | The phone client as a chat | W8 |
 
+**State after the Mission Control redesign (2026-11-04).** The files above are
+the early boards as they were copied into the repo on 2026-10-31; the canvas
+has moved on (the owner edited them by hand: "phases" became "parts", costs and
+the Ready proof strip were added) and the repo copies are stale. The canvas now
+also holds the iPad boards 5a–5i, the phone boards 5e, 5g, 6a–6d and the
+desktop row "Desktop in Drey", boards 7a–7j (`DeskWork`, `DeskShape`,
+`DeskPlan`, `DeskReview`, `DeskBoard`, `DeskTeam`, `DeskSettings`, `DeskViews`,
+`DeskTabs`, `DeskReady`), which are binding for E13. `Shaping` (2b) and
+`Orchestrator` (2c) are superseded by 7b and 7c, `Workers` (3b) by the Team
+view (5d, 7f). The board-by-board comparison with the code is in
+[convergence-gaps.md](convergence-gaps.md); the whole concept is
+[architecture-concept-v2.md](architecture-concept-v2.md).
+
 How to read them: the markup is plain HTML with inline styles; `{{…}}`
 holes are filled from the `renderVals()` sample data at the bottom of
 each file — that sample data shows realistic content, not strings to
