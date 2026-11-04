@@ -128,3 +128,19 @@ input lock for the turn, one undo step per change, the applied `edit`
 entry in the chat note, the visible failure without tool support. A
 tab that was never saved stays a target: it rides as a file without a
 vault and is changed in the editor only. See [ADR-0071](0071-unified-vault-toolset-and-agent-loop.md).
+
+## Later change — Paul edits the open ticket (E13-9, milestone 144)
+
+Live edit stays the Assistant's own mechanism for its model target. Shape
+in Drey (E13-9) does not reuse the tool loop: Paul runs in the tickets
+engine (Mission Control target, milestone 138), and the one chapter he may
+write, `## Plan`, is written by the engine's `setPlan` into the ticket
+file. What carries over from this ADR is the *experience*: the open tab is
+the surface, the owner's input is locked for the turn (`documents.setEditLock`)
+and the change appears in place. It arrives as the base's reload of a clean
+tab after the engine announced its write (milestone 140), not as a buffer
+push, so it is **not** one Ctrl+Z step — the replaced text is in File
+history. The owner's own edits are saved before each message
+(`documents.save`), which is also what makes the engine's plan delta see
+them. SDK 1.43 gave the targets two generic parts for this
+(`onThreadChange`, `attached`).

@@ -169,7 +169,8 @@ stream; on daemon builds it also feeds `redStreak` and `cooldownUntil` in
 
 ### Interactive dialog runs (req-65)
 
-A run whose request carries `interactive: "plan" | "refine"` is the
+A run whose request carries `interactive: "plan"` (a `"refine"` mode existed until
+E13-9 removed it) is the
 **owner's dialog, and it starts quiet** (req-75): held at spawn with
 **no first prompt delivered** — the worker stands, its session live,
 nothing runs until the owner's first `/send`, which wraps the composed

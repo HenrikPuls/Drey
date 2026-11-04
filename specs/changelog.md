@@ -1,3 +1,90 @@
+### Milestone 144 — Shape in Drey (E13-9, SDK 1.43)
+
+**Not yet manually verified by the owner.** Owner request (roadmap E13-9,
+2026-11-04; board 7b of the design canvas). A ticket of an Ideas phase opens in
+the editor as its Markdown file; the Assistant on **Mission Control** shapes it:
+Paul writes the `## Plan` chapter of the open file, the owner's own edits ride
+along, the question is an answer card above the composer, the split proposal
+ends it. **The "Refine with agent" button is gone everywhere.**
+
+- **The ticket is attached.** With a ticket document of an Ideas phase in focus
+  (no live run on it) the Mission Control target shows *that ticket's* shape
+  session (`chatSessions` entry with `ticket:`; a fresh composer when it has
+  none; the first message starts it with `ticket`) and the chip *T-0130.md
+  attached* sits above the composer. Another document in focus switches the
+  thread with it; a note shows the newest Mission Control chat as before. No
+  seam of the Assistant knows a ticket: the tickets plugin's target reads a
+  `ShapeBinding` (`conversation/shape-binding.ts`) over the SDK's
+  `documents` facade.
+- **Before a message.** The binding saves a dirty buffer (`documents.save`) —
+  Paul and the engine's plan delta read the file — and locks the tab for the
+  turn (`documents.setEditLock`, ADR-0049's advisory lock). A save that cannot
+  finish stops the send and shows the reason as the error card.
+- **Paul edits live.** The engine writes the `## Plan` chapter (`setPlan`, one
+  commit) and announces the file; the open clean tab shows it in place (the
+  vault change round of milestone 140). After the turn the binding waits
+  (bounded, 4 s) until the buffer *is* the file before it asks for the marks,
+  otherwise the stale buffer would read as the owner's edit. **Deviation from
+  the roadmap wording:** this is not the Assistant's buffer-push live edit
+  (ADR-0049's `documents.setBuffer`): Paul runs in the engine, so the change is
+  one reload of the tab, **not one Ctrl+Z step** (File history keeps the replaced
+  text). ADR-0049 carries a later-change note. The roadmap named
+  `OpenDocsBridge`; that bridge is main-side and the tickets plugin's target runs
+  in the renderer where the same `documents.save` / `setEditLock` are the
+  equivalent calls, so nothing is re-implemented.
+- **Marks in the document.** Under the `## Plan` heading: *Paul edited this · 2
+  min ago* and *You edited this · rides along with your next message*, drawn by
+  the ticket-document extension (`shapeMarksNode`, a block widget; the next
+  widget — the Parts block, E13-10 — sits beside it). They come from the
+  engine's plan status, asked with the **buffer's text** (`chatPlanStatus
+  { ticket, text }`), so unsaved edits count; `PlanStatus.modelAt` /
+  `PlanShadow.at` carry the time of Paul's last turn.
+- **Answer card and split.** Unchanged from E13-5 / E10-3 (they only needed the
+  ticket-bound session): the question as pills above the composer, the pick sent
+  as the next message; *Split* / *Keep as one*; *Keep as one* moves the file
+  into the build queue and the binding asks for a fresh board.
+- **SDK 1.43 (content-agnostic).** `ConversationTarget.onThreadChange(listener)`
+  — the thread changed without a call from the Assistant, read `thread()`
+  again — and `ConversationThread.attached` — labels drawn as chips above the
+  composer. `plugins/AUTHORING.md` has the note. (1.42 was the highest; if a
+  parallel session also took 1.43, renumber at merge time.)
+- **Refine removed.** The ticket header, the Work panel row menu and the
+  thread's decision bar lose "Refine with agent"; `interactiveModeFor` now offers
+  only `plan` ("Plan with agent" on the first automatic column — kept: it is
+  still referenced); `InteractiveMode` is `'plan'` in the engine, the fleet
+  start parser ignores `refine`; the shipped prompt
+  `refine-interactive-default` is deleted (`plan-interactive-default` stays);
+  manual, ticket schema, FLEET.md, runtime view and the ADR index follow. A run
+  persisted with `interactive: refine` offers no end move. **Mission Control
+  (`apps/mission-control`) never had a Refine button**; the phone's "Refine…"
+  menu and `POST …/refine` (a field / section rewrite) are another thing and
+  stay. The Shaping dialog ("Plan with agent") is *not* superseded for the
+  first automatic column; for the Ideas phase, shaping is this item.
+- **Specs added.** `ticket-document/shape.spec.ts` (target of a document, ago
+  words, the two marks, heading offset), `shape-state.spec.ts` (the status
+  store), `conversation/shape-target.spec.ts` (thread per ticket, save → lock →
+  send → unlock → settle, error without sending, switching documents, split
+  decision), `main/chat-ipc.spec.ts` (`mcStart` with ticket, `mcPlanStatus`),
+  `assistant/renderer/targets.spec.ts` (`onThreadChange`, `attached`), engine
+  plan status `modelAt` / shadow `at`; the dialog specs lose the refine cases
+  (`end-moves`, `dialog-starters`, `default-prompts`).
+- **Real run:** `e2e/shape-in-drey.spec.ts` on the built app (own profile, own
+  engine home, a mock OpenAI-compatible endpoint on port 41872): the ticket
+  opens from the Files panel with no dialog button in its header, Mission
+  Control shows the chip, Paul's plan appears in the open document with *Paul
+  edited this*, the answer card (3 pills, one recommended) sits above the
+  composer, the owner types into the plan and *You edited this* appears, the
+  pick "3 parts" goes out with the edit (the mock saw "The owner edited the
+  plan" and the typed words; the file on disk had them), the split card shows
+  *Split* / *Keep as one*, *Keep as one* moves the file to `20-build/`.
+  Screenshots `shape-paul-edited.png`, `shape-owner-edited.png`,
+  `shape-split-proposal.png`, `shape-kept.png` in the test output.
+  **Not seen:** a real model (the mock returns one fixed envelope); the open tab
+  *after* "Keep as one" still shows the old path and the file's old strip (the
+  tab is not re-keyed to the moved file; reopen from the Work list); a
+  Windows-CRLF ticket file; the Work view's Capacity band is still shown while
+  a ticket is open (E13-13 rest).
+
 ### Milestone 143 — The Mission Control frame stays put (D-5)
 
 **Not yet manually verified by the owner.** Owner report 2026-11-04: on iPhone

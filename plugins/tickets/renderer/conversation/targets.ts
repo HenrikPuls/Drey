@@ -62,8 +62,8 @@ export interface ShapeBinding {
   flush(target: ShapeTarget): Promise<string | null>;
   /** Blocks typing in the document while Paul works on it. */
   lock(target: ShapeTarget, locked: boolean): void;
-  /** A turn or a decision ended: the marks and the board look again. */
-  settled(target: ShapeTarget): void;
+  /** A turn or a decision ended: waits until the open tab shows what is on disk, then the marks and the board look again. */
+  settled(target: ShapeTarget): Promise<void> | void;
   /** Fires when `current()` may have a new answer; returns the unsubscribe. */
   subscribe(listener: () => void): () => void;
 }
@@ -185,7 +185,7 @@ export function createMissionControlTarget(deps: ConversationDeps): Conversation
       } finally {
         if (shape !== null) {
           deps.shape?.lock(shape, false);
-          deps.shape?.settled(shape);
+          await deps.shape?.settled(shape);
         }
       }
     },
@@ -210,7 +210,7 @@ export function createMissionControlTarget(deps: ConversationDeps): Conversation
       }
       if (shape !== null) {
         // "Keep as one" moves the ticket into the build queue: the board and the marks look again.
-        deps.shape?.settled(shape);
+        await deps.shape?.settled(shape);
       }
       return read();
     },

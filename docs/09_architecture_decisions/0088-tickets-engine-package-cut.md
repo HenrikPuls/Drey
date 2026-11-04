@@ -477,3 +477,15 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     log records which device started each pairing; the way in stays a code
     that exists, is used once and expires, and a revoked device loses
     nothing it could not already do.
+  - **Shape in Drey (E13-9, milestone 144).** The Assistant's Mission Control
+    target (milestone 138) follows the ticket document in focus: a shape
+    session per ticket (`chatStart { ticket }`), the file saved before each
+    message, the plan status asked with the buffer's text
+    (`chatPlanStatus { ticket, text }` on the invoke channel; `PlanStatus`
+    gained `modelAt`, `PlanShadow` `at`). The interactive dialog's
+    `'refine'` mode is removed from the engine: `InteractiveMode` is
+    `'plan'`, `parseFleetStart` ignores anything else, and the shipped
+    prompt `refine-interactive-default` is deleted (`plan-interactive-default`
+    stays for "Plan with agent" on the first automatic column). The
+    `refine` *ticket edit* (`POST …/refine`, section and header rewrite)
+    is a different thing and stays.

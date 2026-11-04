@@ -12,7 +12,7 @@
 import type { DreyPluginApi } from '../../../../shared/plugin-api/renderer';
 import type { BoardSnapshot } from '../../shared/tickets';
 import type { PlanStatusStore } from '../ticket-document/shape-state';
-import { shapeTargetOf } from '../ticket-document/shape';
+import { shapeTargetOf, type ShapeTarget } from '../ticket-document/shape';
 import type { ShapeBinding } from './targets';
 
 export interface ShapeBindingDeps {
@@ -27,8 +27,38 @@ export interface ShapeBindingDeps {
   readonly refreshBoard: () => Promise<void>;
 }
 
+/** How long a finished turn waits for the open tab to show the plan Paul wrote. */
+const FOLLOW_MS = 4_000;
+const FOLLOW_STEP_MS = 100;
+
 export function createShapeBinding(deps: ShapeBindingDeps): ShapeBinding {
   const { api } = deps;
+
+  /**
+   * Paul's write reaches a clean tab by the vault change round, a moment
+   * after his turn resolved. Asking for the marks before that would compare
+   * the stale buffer with his plan and show it as the owner's edit; so wait
+   * (bounded) until the buffer is the file, or the file is gone from the tab.
+   */
+  const bufferFollowsDisk = async (target: ShapeTarget): Promise<void> => {
+    const vaultId = api.documents.get(target.path)?.vaultId ?? undefined;
+    const deadline = Date.now() + FOLLOW_MS;
+    while (Date.now() < deadline) {
+      const info = api.documents.get(target.path);
+      if (info === null || info.dirty) {
+        return;
+      }
+      try {
+        const disk = (await api.vault.readFile(target.path, vaultId === undefined ? undefined : { vaultId })).content;
+        if (disk.split('\r\n').join('\n') === info.buffer) {
+          return;
+        }
+      } catch {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, FOLLOW_STEP_MS));
+    }
+  };
   return {
     current: () => {
       const active = api.documents.active();
@@ -52,7 +82,8 @@ export function createShapeBinding(deps: ShapeBindingDeps): ShapeBinding {
     lock: (target, locked) => {
       api.documents.setEditLock(target.path, locked);
     },
-    settled: (target) => {
+    settled: async (target) => {
+      await bufferFollowsDisk(target);
       deps.status.refresh(target.id);
       // "Keep as one ticket" moves the file; the board shows where it went.
       void deps.refreshBoard();

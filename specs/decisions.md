@@ -8,6 +8,18 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **"Refine with agent" and the `refine-interactive-default` prompt**
+  (owner, 2026-11-04; removed in E13-9, milestone 144). The checkpoint
+  companion dialog — a worker that walks plan review, review or commit with
+  the owner — is superseded: shaping an idea is the ticket file plus Mission
+  Control in the Assistant (Paul edits the `## Plan` chapter), and the review
+  of a finished branch is the Review tab. The button is gone from the ticket
+  header, the Work panel (row menu, decision bar) and the shipped prompts; the
+  interactive run keeps its `'plan'` mode ("Plan with agent" on the first
+  automatic column, `plan-interactive-default`). Not re-proposed. Mission
+  Control (`apps/mission-control`) never had the button; the phone's
+  "Refine…" menu edits ticket fields and is unrelated.
+
 - **req-74 alternatives — app-internal toast chrome; OS-scheduled
   reminders while Drey is closed** (2026-10-31). The due-date digest
   notifies through `ui.notify` (SDK 1.34) — the app's one established

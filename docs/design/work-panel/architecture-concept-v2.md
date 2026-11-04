@@ -524,7 +524,7 @@ Limit as everywhere: chain changes write into the ticket and are commits — the
 
 ### 5.8 Shape — working out new tasks together (v2)
 
-> Status: **built** (E10-1, E10-2, E10-3; milestones 120–122). **Planned:** Shape in Drey (E13-9, with the Refine-button removal) and follow-ups (E10-3b: tinted line marks, line-level edit sheet, Paul on his own persona model).
+> Status: **built** (E10-1, E10-2, E10-3; milestones 120–122). **Built since:** Shape in Drey (E13-9, milestone 144, with the Refine-button removal). **Planned:** follow-ups (E10-3b: tinted line marks, line-level edit sheet, Paul on his own persona model).
 
 Shape is the second way of the intent "Feed in" (§6): instead of immediately creating a ticket with a confirmation card, the owner works out the idea **together with Paul**. Shape is a *mode of the ideas phase*, not its own column (planning runs just-in-time, the plan columns are no longer part of the standard pipeline).
 
@@ -536,7 +536,7 @@ Shape is the second way of the intent "Feed in" (§6): instead of immediately cr
 6. **End:** "Keep as one ticket" puts the ticket into the build queue. "Split into N tickets" leads to the plan to approve (§5.9).
 7. **Schema delta:** the plan section is called `### Parts` (instead of `### Phases` in the req-75 W6 draft). Each part becomes a ticket with `parent:` and `blocked-by:` (§5.9).
 
-> **Update (2026-11-04): the Refine button goes away (E13-9, planned).** Once the Assistant on Mission Control loads the ticket file itself, the Refine button (Work panel and Mission Control) and the `refine-interactive-default` prompt are removed; **not before**. On the desktop Shape is the ticket in the editor plus Mission Control in the Assistant, Paul editing through live edit (ADR-0049), the owner's edits riding along through `OpenDocsBridge`.
+> **Update (2026-11-04): the Refine button goes away (E13-9, built, milestone 144).** Once the Assistant on Mission Control loads the ticket file itself, the Refine button (Work panel and Mission Control) and the `refine-interactive-default` prompt are removed; **not before**. On the desktop Shape is the ticket in the editor plus Mission Control in the Assistant, Paul editing through live edit (ADR-0049), the owner's edits riding along through `OpenDocsBridge`.
 
 ### 5.9 Plan to approve — the parts (v2)
 
