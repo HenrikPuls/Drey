@@ -139,6 +139,13 @@ describe('the helpers', () => {
     const f = flow({ steps: [...BASE_STEPS, step(5, 'security', { inserted: true }), { ...step(6, 'verify'), skipped: true }] });
     expect(addablePhasesOf(f).map((p) => p.id)).toEqual(['review', 'approve']);
   });
+
+  it('always offers the manual step, once (E10-6)', () => {
+    const phases = [...flow().phases, { id: 'manual', title: 'Manual step' }];
+    expect(addablePhasesOf(flow({ phases })).map((p) => p.id)).toContain('manual');
+    const used = flow({ phases, steps: [...BASE_STEPS, step(5, 'manual', { inserted: true })] });
+    expect(addablePhasesOf(used).map((p) => p.id)).not.toContain('manual');
+  });
 });
 
 // --- the screen -------------------------------------------------------------------
