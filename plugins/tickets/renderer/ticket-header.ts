@@ -292,18 +292,14 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
       }
 
       // The one-click dialog (req-65, req-72): offered where the column
-      // offers it — plan on the first automatic column, refine in every
-      // manual column. A refused start (a live run, no repo) surfaces in
+      // offers it — plan on the first automatic column. A refused start (a live run, no repo) surfaces in
       // the board's status bar like any action.
       const card = snapshot?.columns.flatMap((c) => c.tickets).find((t) => t.path === path);
       const mode = snapshot !== null && phaseId !== null ? interactiveModeFor(phaseId, snapshot.columns) : null;
       if (card !== undefined && mode !== null) {
-        const dialog = el('button', 'tickets-head-dialog', mode === 'plan' ? 'Plan with agent' : 'Refine with agent');
+        const dialog = el('button', 'tickets-head-dialog', 'Plan with agent');
         dialog.type = 'button';
-        dialog.title =
-          mode === 'plan'
-            ? 'Plan this ticket in a dialog with a fleet worker — the ticket and the dialog open side by side'
-            : 'Refine this ticket in a dialog with a fleet worker — the ticket and the dialog open side by side';
+        dialog.title = 'Plan this ticket in a dialog with a fleet worker — the ticket and the dialog open side by side';
         dialog.addEventListener('click', () => deps.startInteractive(card, mode));
         chips.append(dialog);
       }

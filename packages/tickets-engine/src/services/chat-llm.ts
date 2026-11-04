@@ -191,7 +191,7 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
               ? `${systemPrompt}\n\n## Board digest\n\n${input.board}`
               : `${SHAPE_SYSTEM_PROMPT}\n\n## Ticket ${shape.ticket}\n\n${shape.ticketText}`;
         const messages: { role: string; content: string }[] = [
-          { role: 'system', content: system },
+          { role: 'system', content: input.reference === undefined ? system : `${system}\n\n${input.reference}` },
           ...input.history.map((message) => ({
             role: message.role === 'owner' ? 'user' : 'assistant',
             content: message.text,

@@ -147,8 +147,8 @@ test.describe('Assistant conversation targets (E13-5)', () => {
     const panel = page.locator('app-panel-frame', { has: page.locator('.assistant-panel') });
     const switcher = panel.locator('.assistant-targets');
     // The tickets plugin registers its targets when it activates.
-    await expect(switcher.locator('.assistant-target')).toHaveText(['Model', 'Mission Control', '1:1'], { timeout: 30_000 });
-    await expect(switcher.locator('.assistant-target.on')).toHaveText('Model');
+    await expect(switcher.locator('.assistant-target')).toHaveCount(3, { timeout: 30_000 });
+    await expect(switcher.locator('.assistant-target.on')).toHaveAttribute('aria-label', 'Model');
 
     // --- Model: plain chat from the endpoint in Settings
     const input = panel.locator('.composer-input .cm-content');
@@ -159,8 +159,8 @@ test.describe('Assistant conversation targets (E13-5)', () => {
     await page.screenshot({ path: testInfo.outputPath('target-model.png') });
 
     // --- Mission Control: the engine's chat, a proposal card waits for the owner
-    await switcher.locator('.assistant-target', { hasText: 'Mission Control' }).click();
-    await expect(switcher.locator('.assistant-target.on')).toHaveText('Mission Control');
+    await switcher.getByLabel('Mission Control', { exact: true }).click();
+    await expect(switcher.locator('.assistant-target.on')).toHaveAttribute('aria-label', 'Mission Control');
     await input.click();
     await page.keyboard.type('New ticket: dark mode for the PDF export');
     await page.keyboard.press('Enter');
@@ -175,9 +175,9 @@ test.describe('Assistant conversation targets (E13-5)', () => {
     await expect(card.locator('.target-card-btn')).toHaveCount(0);
 
     // --- 1:1: the group opens a menu of the team's agent personas
-    await switcher.locator('.assistant-target', { hasText: '1:1' }).click();
+    await switcher.getByLabel('1:1', { exact: true }).click();
     await switcher.locator('.assistant-target-item', { hasText: 'Paul' }).click();
-    await expect(switcher.locator('.assistant-target.on')).toHaveText('1:1 · Paul');
+    await expect(switcher.locator('.assistant-target.on')).toHaveAttribute('aria-label', '1:1 · Paul');
     await input.click();
     await page.keyboard.type('Keep the plans short.');
     await page.keyboard.press('Enter');
@@ -186,7 +186,7 @@ test.describe('Assistant conversation targets (E13-5)', () => {
     await page.screenshot({ path: testInfo.outputPath('target-one-to-one.png') });
 
     // Back on the model the old chat is still there, the target view is gone.
-    await switcher.locator('.assistant-target', { hasText: 'Model' }).click();
+    await switcher.getByLabel('Model', { exact: true }).click();
     await expect(thread).toBeHidden();
     stopEngine();
   });
@@ -198,8 +198,8 @@ test.describe('Assistant conversation targets with a CLI provider (E13-5, D-1)',
   test('Mission Control shows the engine refusal instead of a reply', async ({ page }, testInfo) => {
     const panel = page.locator('app-panel-frame', { has: page.locator('.assistant-panel') });
     const switcher = panel.locator('.assistant-targets');
-    await expect(switcher.locator('.assistant-target')).toHaveText(['Model', 'Mission Control', '1:1'], { timeout: 30_000 });
-    await switcher.locator('.assistant-target', { hasText: 'Mission Control' }).click();
+    await expect(switcher.locator('.assistant-target')).toHaveCount(3, { timeout: 30_000 });
+    await switcher.getByLabel('Mission Control', { exact: true }).click();
     const input = panel.locator('.composer-input .cm-content');
     await input.click();
     await page.keyboard.type('Hello?');

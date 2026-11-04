@@ -12,6 +12,7 @@ import type {
   ConversationThreadMeta,
   DreyPluginApi,
 } from '../../../shared/plugin-api/renderer';
+import type { VaultScope } from '../shared/vault-context.js';
 import { MODEL_TARGET, resolveViewDefault, segmentsOf, type TargetSegment } from './targets-model.js';
 
 export interface TargetController {
@@ -27,7 +28,8 @@ export interface TargetController {
   busy(): boolean;
   /** An open answer card (the last message's `choices`), or null. */
   choices(): ConversationCard | null;
-  send(text: string): Promise<boolean>;
+  /** `vault`: the Vault chip as it stands; a scope other than `off` gathers note sections for this message. */
+  send(text: string, vault?: { readonly scope: VaultScope; readonly vaultIds: readonly string[]; readonly files?: readonly string[] }): Promise<boolean>;
   act(cardId: string, actionId: string): Promise<void>;
   newThread(): Promise<void>;
   history(): Promise<readonly ConversationThreadMeta[]>;
@@ -35,6 +37,9 @@ export interface TargetController {
   subscribe(listener: () => void): () => void;
   destroy(): void;
 }
+
+/** How much of one attached file a target gets. */
+const ATTACHED_MAX_CHARS = 6_000;
 
 export function createTargetController(api: DreyPluginApi): TargetController {
   let active = MODEL_TARGET;
@@ -96,7 +101,47 @@ export function createTargetController(api: DreyPluginApi): TargetController {
     select(resolved.id);
   };
 
+  /** A target may say its thread changed on its own (SDK 1.43): read it again. */
+  const watched = new Map<string, () => void>();
+  const watchThreads = (): void => {
+    const live = new Set<string>();
+    for (const target of targets()) {
+      live.add(target.id);
+      if (target.onThreadChange === undefined || watched.has(target.id)) {
+        continue;
+      }
+      const id = target.id;
+      watched.set(
+        id,
+        target.onThreadChange(() => {
+          // Never replace the thread under a send that is still on its way.
+          if (working.has(id) || !threads.has(id)) {
+            return;
+          }
+          const current = byId(id);
+          if (current !== null) {
+            void current
+              .thread()
+              .then((thread) => {
+                if (!working.has(id)) {
+                  apply(id, thread);
+                }
+              })
+              .catch(() => undefined);
+          }
+        }),
+      );
+    }
+    for (const [id, off] of [...watched]) {
+      if (!live.has(id)) {
+        off();
+        watched.delete(id);
+      }
+    }
+  };
+
   const unsubTargets = api.conversations.onTargetsChange(() => {
+    watchThreads();
     if (active !== MODEL_TARGET && byId(active) === null) {
       active = MODEL_TARGET;
     }
@@ -107,6 +152,7 @@ export function createTargetController(api: DreyPluginApi): TargetController {
     appliedView = undefined;
     applyViewDefault();
   });
+  watchThreads();
   applyViewDefault();
 
   const run = async (id: string, action: (target: ConversationTarget) => Promise<ConversationThread>): Promise<void> => {
@@ -150,14 +196,37 @@ export function createTargetController(api: DreyPluginApi): TargetController {
       const last = thread?.messages[thread.messages.length - 1];
       return last?.cards?.find((card) => card.kind === 'choices') ?? null;
     },
-    send: async (text) => {
+    send: async (text, vault) => {
       const id = active;
       if (id === MODEL_TARGET || working.has(id)) {
         return false;
       }
       working.set(id, text);
       notify();
-      await run(id, (target) => target.send(text));
+      // The Vault chip: note sections that contain words of the message ride along as reference.
+      let context = '';
+      if (vault !== undefined && vault.scope !== 'off') {
+        try {
+          const found = (await api.backend.invoke('vault:context', {
+            question: text,
+            scope: vault.scope,
+            vaultIds: vault.vaultIds,
+          })) as { block?: unknown };
+          context = typeof found.block === 'string' ? found.block : '';
+        } catch {
+          context = '';
+        }
+      }
+      // Attached files ride along as reference too (bounded, read from the active vault).
+      for (const path of vault?.files ?? []) {
+        try {
+          const { content } = await api.vault.readFile(path);
+          context += `${context === '' ? '' : '\n\n'}ATTACHED FILE ${path} — read-only reference.\n${content.slice(0, ATTACHED_MAX_CHARS)}`;
+        } catch {
+          // an unreadable file is simply not attached
+        }
+      }
+      await run(id, (target) => target.send(text, context === '' ? undefined : { context }));
       working.delete(id);
       notify();
       return true;
@@ -198,6 +267,10 @@ export function createTargetController(api: DreyPluginApi): TargetController {
     destroy: () => {
       unsubTargets();
       unsubView();
+      for (const off of watched.values()) {
+        off();
+      }
+      watched.clear();
       listeners.clear();
     },
   };

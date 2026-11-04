@@ -24,6 +24,7 @@ import { ChatEngine } from './chat-engine';
 import { ChatStore } from './chat-store';
 import { createTemplateTools } from './template-tools';
 import { retrieveVaultContext } from './vault-context';
+import { buildVaultContextBlock, normalizeVaultScope } from '../shared/vault-context';
 import { readFile, rm } from 'node:fs/promises';
 import { dialog, app } from 'electron';
 import * as path from 'node:path';
@@ -260,6 +261,25 @@ const plugin: MainPluginModule = {
         context as ActionContext,
         typeof taskId === 'string' ? taskId : undefined,
       );
+    });
+
+    // The Vault chip for a conversation target (E13-9): the same retrieval as an
+    // ask turn, handed back as the block the target passes on as reference.
+    ctx.ipc.handle('vault:context', async (payload) => {
+      const p = (payload ?? {}) as { question?: unknown; scope?: unknown; vaultIds?: unknown };
+      const scope = normalizeVaultScope(p.scope);
+      const question = typeof p.question === 'string' ? p.question : '';
+      if (scope === 'off' || question.trim() === '') {
+        return { block: '', hits: 0 };
+      }
+      const vaultIds = Array.isArray(p.vaultIds) ? p.vaultIds.filter((id): id is string => typeof id === 'string') : [];
+      const outcome = await retrieveVaultContext(
+        { listVaults: () => vaultInfos(), sectionSearch: () => ctx.search.sectionSearchProvider() },
+        question,
+        scope,
+        vaultIds,
+      );
+      return { block: buildVaultContextBlock(outcome.hits), hits: outcome.hits.length };
     });
 
     ctx.ipc.handle('ask', (payload) => {

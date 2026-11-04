@@ -1239,7 +1239,7 @@ describe('RunSupervisor', () => {
         gate: 'structural',
         nextPhase: null,
         nextPhaseDir: null,
-        interactive: 'refine',
+        interactive: 'plan',
       }),
     );
     const id = (started as { run: { id: string } }).run.id;

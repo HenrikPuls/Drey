@@ -66,7 +66,6 @@ const REPO_READ_DENIED = /^(\.git|node_modules|\.env.*|\.ssh|.*\.(pem|key))$/i;
 const PROMPTS_DIR = 'tickets/_meta/prompts';
 const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PLAN_INTERACTIVE_PROMPT = 'plan-interactive-default';
-const REFINE_INTERACTIVE_PROMPT = 'refine-interactive-default';
 const DEFAULT_PIPELINE = `---
 phases:
   - { id: inbox, title: Inbox, handover: manual }
@@ -2270,11 +2269,8 @@ export class EngineBoardService {
       let prompt: string | null = null;
       if (input.interactive !== null) {
         // req-65: the dialog's brief — the phase's `interactive:` ref,
-        // else the shipped default for the mode. A manual checkpoint
-        // column has no prompt of its own; the dialog gets one anyway.
-        const ref =
-          workingPhase?.interactive ??
-          (input.interactive === 'plan' ? PLAN_INTERACTIVE_PROMPT : REFINE_INTERACTIVE_PROMPT);
+        // else the shipped plan default.
+        const ref = workingPhase?.interactive ?? PLAN_INTERACTIVE_PROMPT;
         prompt = await this.readOptional(vault.id, `tickets/_meta/prompts/${ref}.md`);
         if (prompt === null) {
           return {

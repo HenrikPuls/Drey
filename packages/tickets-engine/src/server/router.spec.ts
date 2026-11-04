@@ -35,7 +35,7 @@ function port(): TicketsRemotePort {
     flowEdit: vi.fn(async () => ({ ok: false as const, error: 'unused' })),
     flowSave: vi.fn(async () => ({ ok: true as const })),
     flowDraft: vi.fn(async () => ({ ok: false as const, error: 'unused' })),
-    planStatus: vi.fn(async () => ({ ok: true as const, version: 2, edits: 1, summary: '1 edit · +1 −0', marks: [] })),
+    planStatus: vi.fn(async () => ({ ok: true as const, version: 2, modelAt: null, edits: 1, summary: '1 edit · +1 −0', marks: [] })),
     ticketFile: vi.fn(async (_id: string, path: string) =>
       path === 'src/a.ts' ? { ok: true as const, text: 'a\nb\n', truncated: false } : { ok: false as const, error: 'nope' },
     ),

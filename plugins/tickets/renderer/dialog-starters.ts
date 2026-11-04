@@ -6,10 +6,8 @@ import type { InteractiveMode } from './end-moves';
  * processing step and its meaning — the owner completes it with their
  * question and sends. Pure text, pinned by the spec beside it.
  */
-export function dialogStarter(mode: InteractiveMode): string {
-  return mode === 'plan'
-    ? 'Plan step — interview me first, then propose the plan, then write it into the ticket with acceptance criteria.\nMy question: '
-    : 'Refine step — verify the branch against the plan with me, fix what I approve, record the verdict in the ticket Log.\nMy question: ';
+export function dialogStarter(_mode: InteractiveMode): string {
+  return 'Plan step — interview me first, then propose the plan, then write it into the ticket with acceptance criteria.\nMy question: ';
 }
 
 /**

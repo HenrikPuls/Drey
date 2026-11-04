@@ -256,7 +256,7 @@ export class ChatService implements ChatServicePort {
     return model === undefined || model === '' ? session : { ...session, model };
   }
 
-  async send(input: { readonly file: string; readonly text: string; readonly planEdits?: boolean }): Promise<ChatTurnResult> {
+  async send(input: { readonly file: string; readonly text: string; readonly planEdits?: boolean; readonly context?: string }): Promise<ChatTurnResult> {
     if (input.text.trim() === '') {
       return { ok: false, error: 'the message is empty' };
     }
@@ -265,13 +265,13 @@ export class ChatService implements ChatServicePort {
     }
     this.inFlight.add(input.file);
     try {
-      return await this.turn(input.file, input.text, input.planEdits !== false);
+      return await this.turn(input.file, input.text, input.planEdits !== false, input.context);
     } finally {
       this.inFlight.delete(input.file);
     }
   }
 
-  async start(input: { readonly title?: string; readonly text: string; readonly ticket?: string }): Promise<ChatTurnResult> {
+  async start(input: { readonly title?: string; readonly text: string; readonly ticket?: string; readonly context?: string }): Promise<ChatTurnResult> {
     if (input.text.trim() === '') {
       return { ok: false, error: 'the message is empty' };
     }
@@ -288,7 +288,7 @@ export class ChatService implements ChatServicePort {
     await this.deps.host.write(vault.id, file, newSessionText(title, stamp, input.ticket));
     await this.commit(vault, [file], `tickets: chat started ${file}`);
     this.deps.host.announceChanges(vault.id, [file]);
-    return this.turn(file, input.text);
+    return this.turn(file, input.text, true, input.context);
   }
 
   async confirm(input: { readonly file: string; readonly id: string }): Promise<ChatDecisionResult> {
@@ -308,7 +308,7 @@ export class ChatService implements ChatServicePort {
    * as one write and one commit. A crashed bridge leaves the owner line
    * as the honest record and reports the error through the stream.
    */
-  private async turn(file: string, text: string, planEdits = true): Promise<ChatTurnResult> {
+  private async turn(file: string, text: string, planEdits = true, reference?: string): Promise<ChatTurnResult> {
     const found = await this.boardAndVault();
     if (found === null) {
       return { ok: false, error: 'no tickets vault detected', file };
@@ -362,6 +362,7 @@ export class ChatService implements ChatServicePort {
         board: boardDigest(snap),
         priorities: snap.priorities,
         ...(delta === null ? {} : { planDelta: planDeltaForModel(delta) }),
+        ...(reference === undefined || reference.trim() === '' ? {} : { reference }),
         ...(shape === undefined ? {} : { shape }),
         emit: (event) => this.deps.onEvent(file, event),
       });
@@ -426,6 +427,7 @@ export class ChatService implements ChatServicePort {
         version: (shadow?.version ?? 0) + 1,
         text: planAfter,
         modelLines: changedLinesOf(planBefore, planAfter),
+        at: this.now().toISOString(),
       });
     }
     return {
@@ -561,9 +563,11 @@ export class ChatService implements ChatServicePort {
    * Where the shared plan stands: the version the model last saw, the
    * owner's edit groups since, and the marked lines — the owner's changed
    * lines against the shadow, the model's lines from its last turn.
+   * `ticketText` stands in for the file on disk.
    */
-  async planStatus(ticket: string): Promise<PlanStatus> {
-    const plan = await this.planOf(ticket);
+  async planStatus(ticket: string, ticketText?: string): Promise<PlanStatus> {
+    // The desktop passes the open buffer's text (E13-9): its unsaved edits are marked too.
+    const plan = ticketText === undefined ? await this.planOf(ticket) : planSectionOf(ticketText);
     if (plan === null) {
       return { ok: false, error: `${ticket} has no readable plan` };
     }
@@ -583,6 +587,7 @@ export class ChatService implements ChatServicePort {
     return {
       ok: true,
       version: shadow?.version ?? null,
+      modelAt: shadow?.at ?? null,
       edits: delta?.edits ?? 0,
       summary: delta === null ? null : editsSummary(delta.edits, delta.added, delta.removed),
       marks: marks.slice(0, 60),

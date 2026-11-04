@@ -3455,8 +3455,8 @@ Rescans run on registry changes and relocate only.
 ## 6.70 The interactive dialog: start, talk, end with a move (req-65, [ADR-0084](09_architecture_decisions/0084-interactive-runs-at-plan-and-checkpoints.md))
 
 The owner's conversation with a fleet worker — "Plan with agent" on the
-plan column, "Refine with agent" at the checkpoints and the last agent
-column. One click (Work row menu or ticket header); the run is a normal
+plan column. ("Refine with agent" at the checkpoints was removed in E13-9;
+see 6.81 for shaping an idea in the editor.) One click (Work row menu or ticket header); the run is a normal
 record with `interactive` set, so every fleet surface shows it.
 
 ```mermaid
@@ -4130,7 +4130,7 @@ sequenceDiagram
 `stayInView` skips the lookup; a restored session suspends the router, so the
 snapshot's own view assignment wins.
 
-## 6.87 A Mermaid plan is read, edited and released without damage (E10-7, milestone 148)
+## 6.89 A Mermaid plan is read, edited and released without damage (E10-7, milestone 148)
 
 ```mermaid
 sequenceDiagram
@@ -4158,7 +4158,7 @@ mask first; the offsets it finds index the original text, so no reader
 re-serialises a chapter it does not own. A fence that never closes ends at
 the next column-0 `## ` (so Verification and Log stay reachable).
 
-## 6.88 Dictating into the Mission Control chat composer (E12-8, milestone 149)
+## 6.90 Dictating into the Mission Control chat composer (E12-8, milestone 149)
 
 ```mermaid
 sequenceDiagram
@@ -4186,3 +4186,43 @@ The button exists only where the browser has an engine and the page is a
 secure context (iOS Safari: HTTPS only, e.g. Tailscale Serve). The final
 text is never sent for the owner. Leaving the composer (focus out) or hiding
 the page stops the engine gracefully; destroying the chat cancels it.
+
+## 6.91 Shape in Drey: the ticket file, Mission Control and Paul (E13-9)
+
+```mermaid
+sequenceDiagram
+    participant O as Owner (editor + Assistant)
+    participant B as Shape binding (tickets plugin renderer)
+    participant T as Mission Control target
+    participant P as Plugin main (mc* IPC)
+    participant E as Engine ChatService
+    participant M as Chat model (Paul)
+
+    O->>B: a ticket of an Ideas phase comes into focus
+    B-->>T: current() = { T-0130, path }, onThreadChange
+    T->>P: mcSessions, mcOpen (the ticket's shape session, if any)
+    T-->>O: thread + chip "T-0130.md attached"
+    O->>T: message (typed, or an answer card pick)
+    T->>B: flush() - save the dirty buffer (the owner's plan edits reach the file)
+    T->>B: lock() - input off while Paul writes
+    T->>P: mcStart { text, ticket } or mcSend { file, text }
+    P->>E: chatStart / chatSend
+    E->>E: plan delta = shadow plan vs the plan on disk (only the owner's edits)
+    E->>M: shape prompt + delta + text
+    M-->>E: envelope { say, plan, question, split }
+    E->>E: setPlan (one commit), shadow := plan after the turn
+    E-->>P: announce the ticket file (vault change round, D-3)
+    Note over O: the clean tab reloads - Paul's change appears in place
+    P-->>T: result
+    T->>B: unlock(), settled() - plan status asked again
+    B->>E: chatPlanStatus { ticket, text of the buffer }
+    B-->>O: marks under "## Plan": Paul edited this - 2 min ago / You edited this - rides along
+    T-->>O: thread; a question as the answer card above the composer, a split as Split / Keep as one
+```
+
+The owner's own typing between turns is marked from the open buffer (the
+status is asked with the buffer's text, so unsaved edits count) and goes back
+as the delta on the next message after the editor saved the file. Paul's own
+edits are in the shadow and never come back. "Keep as one" moves the ticket
+file into the build queue; the binding asks for a fresh board so the tab
+follows.

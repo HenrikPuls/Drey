@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–143 and 147–149 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–149 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -70,7 +70,7 @@ and suite-green but await the owner's
 rounds** — with E9 the whole E0–E9 arc stands built and the concept
 is complete, caveat:
 none of it is owner-verified yet; the next step is the owner's
-verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) 130 (E13-8, Board and Team tabs, the Capacity band) and 131 (D-1, the Mission Control chat reaches its model: sync on change, both HTTP dialects, the error card, Settings → Chat), 132 (E10-6, you as a team member: manual steps that park the ticket and notify), 133 (E12-6, the Markdown surface lib and Mission Control's View / Live / Source) and 135 (D-2, the paired-devices list with total and last connected, and pairing from Mission Control), 136 (E12-7, the Anthrazit design decisions: pastels, radius scale, type floor, text size scale) and 137 (the text size steps S / M / L / XL) and 140 (D-3, engine writes refresh Drey's vault views), 138 (E13-5, Assistant conversation targets), 139 (E13-7, the Review tab), 141 (E13-13 first cut, the Work view) and 143 (D-5, the Mission Control frame stays put on iOS) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
+verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) 130 (E13-8, Board and Team tabs, the Capacity band) and 131 (D-1, the Mission Control chat reaches its model: sync on change, both HTTP dialects, the error card, Settings → Chat), 132 (E10-6, you as a team member: manual steps that park the ticket and notify), 133 (E12-6, the Markdown surface lib and Mission Control's View / Live / Source) and 135 (D-2, the paired-devices list with total and last connected, and pairing from Mission Control), 136 (E12-7, the Anthrazit design decisions: pastels, radius scale, type floor, text size scale) and 137 (the text size steps S / M / L / XL) and 140 (D-3, engine writes refresh Drey's vault views), 138 (E13-5, Assistant conversation targets), 139 (E13-7, the Review tab), 141 (E13-13 first cut, the Work view), 143 (D-5, the Mission Control frame stays put on iOS) and 144 (E13-9, Shape in Drey: Paul edits the open ticket through Mission Control, the Refine button removed) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
@@ -239,19 +239,6 @@ ships.
 
 Order and dependencies (an item needs everything it names):
 
-9. **E13-9 — Shape in Drey.** The ticket in the Ideas phase opened in the
-   editor with the Assistant on Mission Control: Paul edits through live edit
-   (ADR-0049), the owner's edits ride along (E10-2 plan delta through
-   `OpenDocsBridge`), answer cards above the composer, the split proposal.
-   Needs E10-2, E10-3 (built), E13-5 and E13-6 (built). **The Refine button
-   goes away here** (owner, 2026-11-04): once the Assistant on Mission Control
-   loads the ticket file itself, the Refine button (Work panel and Mission
-   Control) and the `refine-interactive-default` prompt are removed; not
-   before (the ticket header still carries "Plan with agent" / "Refine with
-   agent" at `ticket-header.ts`; board 7b no longer shows them). **Board 7b
-   adds:** the marks "Paul edited this · 2 min ago" and "You edited this ·
-   rides along with your next message" in the document, and the answer card
-   above the composer ("How many parts does this need?", `Send "3 parts"`); the open question is only that answer card plus a plain "Open questions" entry in the ticket text (owner, 2026-11-04: no separate plan-step list or question card in the document).
 10. **E13-10 — Plan to approve in the ticket.** The Parts block as an editor
     widget under the header (persona per part, move / delete with a second
     press, running parts locked, flow row, estimate, Approve plan). Needs
@@ -298,7 +285,7 @@ Persona names follow D7 (Pia = Mission Control, Paul plans).
   on its `/api/events` channel; the plugin's `EngineClient.onEvent` drops
   them, so a turn shows "Working …" until it is whole); the step cards
   ("T-0121 · step 1 · tests green · 7 actions ›", board 7a) once runs report
-  steps to a chat thread; the "<ticket>.md attached" chip (E13-9); a 1:1 that
+  steps to a chat thread; a 1:1 that
   answers (the persona thread holds only the owner's messages today, E12-4);
   the Claude Code CLI provider as the *Model* target with its tools switched
   off (`claude -p --tools ""` — the empty argument through `shell: true` on
@@ -307,6 +294,17 @@ Persona names follow D7 (Pia = Mission Control, Paul plans).
   speech service inside Electron (the Web Speech API needs a network service
   the packaged app may not reach — only seen as "button shown", not as words
   heard).
+
+**Follow-ups of E13-9 (milestone 144):**
+
+- **E13-9b — Shape in Drey, what is left.** The open tab follows the ticket
+  when "Keep as one" moves its file (today the tab keeps the old path until
+  reopened); Paul's edit as one Ctrl+Z step (needs the engine to return the
+  plan instead of writing it, or the plugin to push the reloaded text as a
+  buffer transaction); tinted lines for the marks inside the plan (E10-3b) and
+  the line-level edit sheet; the Work view preset naming
+  `assistantTarget: 'tickets.mission-control'` (E13-13) so the Assistant is on
+  Mission Control without the owner picking it.
 
 **Proposed by the convergence audit (2026-11-04, milestone 134)** — evidence
 and severity per item in

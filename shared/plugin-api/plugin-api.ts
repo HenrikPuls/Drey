@@ -345,6 +345,12 @@ export interface ConversationThread {
   readonly messages: readonly ConversationMessage[];
   /** One quiet line under the thread (what this thread is, when that is not obvious). */
   readonly notice?: string;
+  /**
+   * What the target reads along with this thread, as short labels (SDK 1.43)
+   * -- a note it has loaded by itself. The Assistant shows them as chips
+   * above the composer.
+   */
+  readonly attached?: readonly string[];
 }
 
 /** One earlier thread of a target, for the history list (SDK 1.41). */
@@ -371,10 +377,17 @@ export interface ConversationTarget {
   readonly group?: string;
   /** Hover text of the segment. */
   readonly description?: string;
+  /** An icon name of the host's set (as for `ui.icon`) for the switcher; absent = a generic one (SDK 1.43). */
+  readonly icon?: string;
   /** The current thread (the newest one on first call). */
   thread(): Promise<ConversationThread>;
-  /** One owner message; resolves with the thread after the answer. Never rejects: a failure is an `error` message. */
-  send(text: string): Promise<ConversationThread>;
+  /**
+   * One owner message; resolves with the thread after the answer. Never rejects: a failure is an `error` message.
+   * `options.context` (SDK 1.43) is reference text the Assistant gathered for this message (the Vault
+   * chip's note sections): the target may hand it to its model as read-only background; it is never
+   * the owner's words and not part of the thread.
+   */
+  send(text: string, options?: { readonly context?: string }): Promise<ConversationThread>;
   /** A button on a card. */
   act(cardId: string, actionId: string): Promise<ConversationThread>;
   /** Starts a fresh thread. */
@@ -383,6 +396,12 @@ export interface ConversationTarget {
   history?(): Promise<readonly ConversationThreadMeta[]>;
   /** Opens one earlier thread. */
   open?(id: string): Promise<ConversationThread>;
+  /**
+   * The thread changed without a call from the Assistant (SDK 1.43) -- the
+   * note the target follows changed, or an answer arrived by another way.
+   * The Assistant reads `thread()` again. Returns the unsubscribe.
+   */
+  onThreadChange?(listener: () => void): Unsubscribe;
 }
 
 /**

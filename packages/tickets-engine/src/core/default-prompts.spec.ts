@@ -13,7 +13,6 @@ describe('shipped prompts', () => {
       'plan-default',
       'plan-interactive-default',
       'qa-default',
-      'refine-interactive-default',
       'review-default',
       'scout-default',
     ]);
@@ -33,11 +32,10 @@ describe('shipped prompts', () => {
     expect(prompts.get('build-default')).toContain('**What changed for you:**');
     // The commit step closes with the report the final card shows.
     expect(prompts.get('commit-default')).toContain('`## Result`');
-    // The interactive defaults (req-65): interview first, never move the
-    // ticket themselves.
+    // The interactive default (req-65): interview first. (The refine twin
+    // was removed in E13-9.)
     expect(prompts.get('plan-interactive-default')).toContain('QUESTION:');
-    expect(prompts.get('refine-interactive-default')).toContain('QUESTION:');
-    expect(prompts.get('refine-interactive-default')).toContain('Never move the ticket yourself');
+    expect(prompts.has('refine-interactive-default')).toBe(false);
   });
 
   it('every shipped prompt carries a version marker the runner can compare', async () => {

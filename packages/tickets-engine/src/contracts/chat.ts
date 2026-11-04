@@ -147,9 +147,9 @@ export interface ChatServicePort {
    * stream → events), appends the reply, and returns the finished
    * session slice. The stream arrives through `onEvent`.
    */
-  send(input: { readonly file: string; readonly text: string; readonly planEdits?: boolean }): Promise<ChatTurnResult>;
+  send(input: { readonly file: string; readonly text: string; readonly planEdits?: boolean; readonly context?: string }): Promise<ChatTurnResult>;
   /** Starts a fresh session and sends the first message; `ticket` makes it a shape session for that ticket's plan. */
-  start(input: { readonly title?: string; readonly text: string; readonly ticket?: string }): Promise<ChatTurnResult>;
+  start(input: { readonly title?: string; readonly text: string; readonly ticket?: string; readonly context?: string }): Promise<ChatTurnResult>;
   /** Where the shared plan of a ticket stands: version, the owner's edits since the model's last turn, the line marks (E10-2). */
   planStatus(ticket: string): Promise<PlanStatus>;
   /**
@@ -188,6 +188,8 @@ export type PlanStatus =
       readonly ok: true;
       /** The model's turns that ended on this plan; null = it has not worked on the plan yet. */
       readonly version: number | null;
+      /** When the model's last turn on this plan ended (ISO); null before its first or for a shadow without a stamp (E13-9). */
+      readonly modelAt: string | null;
       /** The owner's edit groups since the model's last turn (what the chip counts). */
       readonly edits: number;
       /** `2 edits · +3 −1`; null when nothing changed. */
@@ -277,6 +279,8 @@ export interface ChatBridge {
      * turn (E10-2), ready to read; absent = nothing went along.
      */
     readonly planDelta?: string;
+    /** Read-only reference text for this turn (the desktop's Vault chip, E13-9); never written to the session. */
+    readonly reference?: string;
     /**
      * Present on a shape turn (E10-3): the ticket Paul shapes, its file
      * text (description and the current plan, the owner's edits in) and

@@ -339,8 +339,7 @@ export interface PipelinePhase {
   /**
    * The interactive dialog's prompt ref (`interactive: plan-interview`,
    * req-65) — the brief an interactive run in this column gets; null =
-   * the shipped defaults (`plan-interactive-default` on the plan column,
-   * `refine-interactive-default` at the checkpoints).
+   * the shipped default (`plan-interactive-default`).
    */
   readonly interactive: string | null;
   /**

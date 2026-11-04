@@ -280,3 +280,24 @@ export function stripNode(data: StripData): HTMLElement {
   }
   return root;
 }
+
+/**
+ * The two marks under the `## Plan` heading (E13-9): who changed the plan
+ * last. Paul's line is quiet; the owner's carries the accent, because it
+ * is the one that asks something (it goes with the next message).
+ */
+export function shapeMarksNode(marks: { readonly paul: string | null; readonly you: string | null; readonly youDetail: string | null }): HTMLElement {
+  const root = el('div', 'tickets-doc-shape-marks');
+  root.contentEditable = 'false';
+  if (marks.paul !== null) {
+    root.append(el('span', 'tickets-doc-shape-mark is-paul', marks.paul));
+  }
+  if (marks.you !== null) {
+    const you = el('span', 'tickets-doc-shape-mark is-you', marks.you);
+    if (marks.youDetail !== null) {
+      you.title = marks.youDetail;
+    }
+    root.append(you);
+  }
+  return root;
+}

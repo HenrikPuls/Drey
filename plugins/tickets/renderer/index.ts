@@ -45,6 +45,9 @@ import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-g
 import { createTicketHeader, isTicketPath, ticketLogFold } from './ticket-header';
 import { WORK_VIEW_ID, registerWorkView } from './view-preset';
 import { createTicketDocumentExtension } from './ticket-document/extension';
+import { createPlanStatusStore } from './ticket-document/shape-state';
+import { shapeMarksOf } from './ticket-document/shape';
+import { createShapeBinding } from './conversation/shape-binding';
 import { createTicketStrip } from './ticket-document/strip';
 import { openFlowTab, registerFlowKind } from './flow/register';
 import { openReviewTab, registerReviewKind } from './review/register';
@@ -1548,7 +1551,7 @@ async function startInteractive(
   mode: InteractiveMode,
   open = true,
 ): Promise<string | null> {
-  const label = mode === 'plan' ? 'Starting the plan dialog' : 'Starting the refine dialog';
+  const label = 'Starting the plan dialog';
   const result = await runMutation(label, () =>
     invokeBoard('fleetStart', { id: card.id, worker: card.worker, permissionMode: 'accept-edits', interactive: mode }),
   );
@@ -1971,8 +1974,8 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       });
     },
   );
-  // Start (W4a): the existing manual start — the phase's dialog (plan or
-  // refine) in a worker, the same first-message path the composer takes.
+  // Start (W4a): the existing manual start — the phase's plan dialog
+  // in a worker, the same first-message path the composer takes.
   const startRun = iconButton('play', 'Start a worker on this ticket', 'Start', () => {
     const card = boardCard(ticketId);
     const mode = dialogMode();
@@ -2242,13 +2245,6 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
           moveTicket(api, card, action.to),
         ),
       );
-      if (interactiveModeFor(need.phase, snapshot.columns) === 'refine' && live === null) {
-        decisionBar.append(
-          decisionButton('Refine with agent', 'Talk it through with a worker first', false, () =>
-            void startInteractive(api, card, 'refine'),
-          ),
-        );
-      }
     }
     decisionBar.hidden = false;
   };
@@ -2434,7 +2430,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     target: () => threadRun(ticketId),
     onReopened: () => undefined,
     othersLive: () => fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state) && r.id !== threadRun(ticketId)?.id).length,
-    // No live run: the first message starts the phase's dialog (plan or refine).
+    // No live run: the first message starts the phase's plan dialog.
     startFor: async () => {
       const card = boardCard(ticketId);
       const mode = dialogMode();
@@ -3042,13 +3038,12 @@ function openCardMenu(
   );
   menu.append(el('div', 'tickets-menu-sep'));
 
-  // The one-click interactive dialog (req-65, req-72): plan on the first
-  // automatic phase, refine in every manual one — only without a live run.
+  // The one-click interactive dialog (req-65): plan on the first
+  // automatic phase — only without a live run.
   if (snapshot !== null && live === null) {
     const mode = interactiveModeFor(card.phase, snapshot.columns);
     if (mode !== null) {
-      const action = mode === 'plan' ? 'Plan with agent' : 'Refine with agent';
-      item(`${action} (${card.worker})`, () => void startInteractive(api, card, mode));
+      item(`Plan with agent (${card.worker})`, () => void startInteractive(api, card, mode));
     }
   }
   if (live === null) {
@@ -3236,11 +3231,27 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     // The rows' persona chips read the same directory as the Team tab.
     teamStore(api).subscribe(notifyViews);
     // The Assistant's conversation targets (E13-5): Mission Control and the team's 1:1s.
+    // Shape (E13-9): the ticket document in focus is attached to Mission Control,
+    // and the plan marks in the document read the engine's plan status.
+    const planStatus = createPlanStatusStore({ invoke: (method, payload) => api.backend.invoke(method, payload) });
+    let repaintDocuments: () => void = () => undefined;
+    planStatus.subscribe(() => repaintDocuments());
     api.conversations.registerTargets(
       createConversationProvider({
         invoke: (method, payload) => api.backend.invoke(method, payload),
         personas: () => teamStore(api).personas(),
         subscribePersonas: (listener) => teamStore(api).subscribe(listener),
+        shape: createShapeBinding({
+          api,
+          snapshot: () => snapshot,
+          runLive: (ticketId) => liveRuns().some((run) => run.ticketId === ticketId),
+          status: planStatus,
+          onBoardChange: (listener) => {
+            deskListeners.add(listener);
+            return () => deskListeners.delete(listener);
+          },
+          refreshBoard: () => refreshBoard(),
+        }),
       }),
     );
     // The Capacity band (E13-8): a panel for the bottom dock - slots busy,
@@ -3306,6 +3317,15 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       api,
       snapshot: () => snapshot,
       rowOf,
+      shape: {
+        marks: (id) => shapeMarksOf(planStatus.get(id), new Date()),
+        want: (id, text) => {
+          const phase = snapshot?.columns.flatMap((column) => column.tickets).find((ticket) => ticket.id === id)?.phase;
+          if (snapshot !== null && phase !== undefined && ideaPhaseIds(snapshot.pipeline).includes(phase)) {
+            planStatus.want(id, text);
+          }
+        },
+      },
       matches: (context) =>
         snapshot?.vaultId != null && context.vaultId() === snapshot.vaultId && isTicketPath(context.path()),
       actions: {
@@ -3315,6 +3335,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
         openReview: (card) => openReviewTab(api, card),
       },
     });
+    repaintDocuments = () => documentExtension.repaint();
     let documentSignature = '';
     fleetListeners.add(() => {
       const next = listSignature();

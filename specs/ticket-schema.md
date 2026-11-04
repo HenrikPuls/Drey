@@ -851,12 +851,12 @@ Prose for humans. The board follows this file on refresh.
 - `interactive`: optional prompt ref (req-65) — the brief an
   **interactive dialog run** in this column gets
   (`interactive: plan-interview` → `tickets/_meta/prompts/plan-interview.md`).
-  Absent, the shipped defaults apply: `plan-interactive-default` on the
-  pipeline's first automatic column, `refine-interactive-default` in
-  every manual column (req-72 — the queues before the first automatic
-  column included; automatic columns offer no dialog, the runner works
-  them). An interactive run is started
-  from the board ("Plan with agent" / "Refine with agent"), not by the
+  Absent, the shipped default applies: `plan-interactive-default` on the
+  pipeline's first automatic column (E13-9 removed the `refine-interactive-default`
+  twin and the "Refine with agent" start of the manual columns; shaping an
+  idea is the ticket file plus Mission Control; automatic columns offer no
+  dialog, the runner works them). An interactive run is started
+  from the board ("Plan with agent"), not by the
   dispatcher: the worker is the owner's from turn one (held), the run
   never gates and never moves — the dialog's end moves (in the takeover
   tab) are owner moves. While the run is live the ticket carries

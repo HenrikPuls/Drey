@@ -149,13 +149,12 @@ test.describe('Assistant plugin — composer chips and pickers', () => {
     const panel = page.locator('.assistant-panel');
     const picker = page.locator('.assistant-picker');
 
+    // The chat list is part of the panel now (no modal): empty first, then closed again.
     await panel.locator('.chat-switch').click();
-    await expect(picker.locator('.assistant-picker-head')).toHaveText('Chats');
-    await expect(picker.locator('.assistant-picker-empty')).toHaveText(
-      'No chats yet — the first question creates one.',
-    );
-    await picker.locator('.assistant-picker-row.new-chat').click();
-    await expect(picker).toHaveCount(0);
+    await expect(panel.locator('.assistant-chatlist')).toBeVisible();
+    await expect(panel.locator('.assistant-chatlist .empty')).toHaveText('No chats yet.');
+    await panel.locator('.chat-switch').click();
+    await expect(panel.locator('.assistant-chatlist')).toBeHidden();
 
     const vaultButton = panel.locator('.composer-meta .vault');
     await expect(vaultButton).toHaveAttribute('aria-pressed', 'false');

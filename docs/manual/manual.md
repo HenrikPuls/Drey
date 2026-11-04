@@ -449,8 +449,11 @@ The **Assistant panel** is chat-first:
 
 ### Conversation targets {#assistant-targets}
 
-When the Tickets plugin is on, the Assistant head carries a segmented
-control: **Model**, **Mission Control** and **1:1**.
+The Assistant head is one row: the **chats button** (three lines) opens the
+list of chats right in the panel, then come the target icons, the title of the
+chat and **+** for a new chat. When the Tickets plugin is on, the icons are a
+speech bubble (**Model**), a rocket (**Mission Control**) and two heads
+(**1:1**); hover one for its name.
 
 - **Model** is the chat described here: the provider from Settings →
   Assistant, with the composer's chips and tools.
@@ -465,6 +468,39 @@ control: **Model**, **Mission Control** and **1:1**.
   starts a new one.
 - **1:1** opens a menu of the team's agent personas. Your messages go into
   that persona's thread, which the persona reads before the next run.
+
+#### Shape a ticket in the editor {#shape-in-editor}
+
+Open a ticket that is still an idea (a phase before the first automatic
+one) from the Files panel or the Tickets panel: the ticket is its Markdown
+file, and the **Mission Control** target shows that ticket's conversation
+with a chip *T-0130.md attached* above the composer. Write what you want;
+Mission Control relays it to Paul, the planner, who reads the ticket's
+repository and rewrites **only the `## Plan` chapter** of the open file.
+
+- Your own text in the document is saved before each message goes out, so
+  Paul reads what you wrote. While he works the document is locked; his
+  change appears in place, and a quiet line under the **Plan** heading
+  says *Paul edited this · 2 min ago*.
+- Edit the plan yourself any time. The line *You edited this · rides along
+  with your next message* shows that your changes since Paul's last turn
+  will be sent with the next message (as a short summary and a diff); his
+  own changes are never sent back to him.
+- When Paul has a question, the answer card sits above the composer with
+  2–4 choices and the recommended one marked; a choice is sent as your
+  next message, or write your own answer.
+- When he is ready, the thread shows **Split** / **Keep as one**. *Keep as
+  one* moves the ticket into the build queue; *Split* records the choice and
+  leads to the plan to approve.
+
+On a target the composer keeps the **Vault** chip (off by default; the same
+picker as on Model) and **Prompts**. With the chip on, the note sections that
+contain words of your message ride along as read-only reference — pick an
+architecture-docs vault and Mission Control or Paul can draw on it. Attachments,
+live edit and the model row belong to the Model target only.
+
+Switching to another document switches the conversation with it; a note
+shows the latest Mission Control chat as before.
 
 A view can name its own default target: switching to such a view switches the
 Assistant with it; Notes always starts on Model. Your own pick stays until you
@@ -840,7 +876,7 @@ id, then the title, an age and one line; the open ticket's row is marked with an
 accent bar. Click a row to open the ticket's **thread** — the worker's
 page: the thread's header shows the run's light and who is working, and
 above its composer sits the **decision bar** (Approve → next phase,
-Refine with agent, or Accept). The thread follows whichever ticket you
+or Accept). The thread follows whichever ticket you
 click last — one tab, not one per ticket — and opens where your focus is,
 never as an automatic split. A ticket picked in the Files panel opens as
 a plain file tab. The row's menu **Open ticket** opens both: the ticket
@@ -1291,14 +1327,11 @@ it, the row menu and the ticket header show a one-click start:
   and the repo, asks you the few things it cannot learn there, proposes
   the plan in the chat, and writes only the agreed result into the
   ticket (plan, acceptance criteria, Log).
-- **Refine with agent** in **every manual column** (req-72): the plan
-  review and the review as before, but also the queues before the plan
-  (inbox, prioritized) and any other manual column — wherever the
-  machine does not work the ticket, the dialog is yours. The worker
-  checks the branch with
-  you, applies the fixes you approve as small commits, and records the
-  verdict in the ticket's Log; at commit it also drives the push.
-  Automatic columns (agent and CI) offer no dialog — there the runner
+
+There is no "Refine with agent" any more: shaping an idea is the ticket
+file plus Mission Control in the Assistant (see *Shape a ticket in the
+editor* under Conversation targets), and the review of a finished branch
+is the Review tab. Automatic columns (agent and CI) offer no dialog — there the runner
   works the ticket, and its thread shows the run.
 
 The start opens **the ticket page**: the ticket file with its thread
@@ -1315,9 +1348,7 @@ way. (A Claude Code worker starts as today, running its first turn.)
 Ending the dialog
 is a move, right in the thread: a plan dialog offers **Finish → Plan
 review** and **Approve → Build** (when you settled the open points
-yourself, your own checkpoint can be skipped); a refine dialog offers
-**On to** the next phase or **Back to** the nearest agent phase for
-rework. A click stops the run and makes the move — the same one-commit
+yourself, your own checkpoint can be skipped). A click stops the run and makes the move — the same one-commit
 move as from the menu. Closing the tab without a move keeps everything:
 the reservation stays on the ticket (the fleet will not pick it up), and
 when the run ended with a session, a message in the thread — or its
@@ -1325,9 +1356,8 @@ when the run ended with a session, a message in the thread — or its
 
 Each column's dialog prompt is a prompt file like any other: a phase's
 `interactive:` key in `pipeline.md` names one, otherwise the shipped
-defaults apply (`plan-interactive-default` and
-`refine-interactive-default` — editable in Settings → Tickets, re-added
-by "Add Drey's prompts").
+default applies (`plan-interactive-default` — editable in Settings → Tickets,
+re-added by "Add Drey's prompts").
 
 Runs survive closing Drey — the runner is its own small process — and,
 for OpenCode workers, even a restart of the runner: the new runner takes the

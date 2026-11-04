@@ -359,7 +359,7 @@ export function parseStartRun(payload: unknown): Parsed<StartRunCommand> {
     workerChoice: typeof worker === 'string' && worker.trim() !== '' ? worker.trim() : null,
     permissionMode: p['permissionMode'] === 'bypass' ? 'bypass' : 'accept-edits',
     handover,
-    interactive: i === 'plan' || i === 'refine' ? i : null,
+    interactive: i === 'plan' ? i : null,
   });
 }
 
