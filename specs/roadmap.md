@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -525,8 +525,11 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   it and read `~/.drey-engine/shadow/board-diff.md` until it is identical; the
   500-ticket benchmark waits for dk R-05 (one `ls` call carries every field);
   ticket documents under `dricket` come with E14-4.
-- **E14-3 — Migration tool.** Dry run, apply, report, shadow diff, **reverse
-  converter** (the rollback). Apply needs dk R-10. Parallel with E14-2, E14-5.
+- **E14-3b — Migration apply with a chosen number.** E14-3 (milestone 153)
+  fills number gaps with placeholder tickets because dk v0.6.0 cannot create a
+  ticket with a given number or creation data (R-28). When dk ships R-28 / R-10,
+  `apply.ts` creates directly and drops the placeholder pass; until then the
+  cut-over (E14-7) either accepts the placeholders or waits for dk.
 - **E14-4 — Write path.** Capture, refine, header edits, moves, accept/send
   back, `ticketSave` with `rev`, parts release (resumable), flow save, the editor
   save hook. Needs E14-2 and dk v0.7. The only item that rewrites
