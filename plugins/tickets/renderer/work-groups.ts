@@ -31,7 +31,7 @@ import { phaseColorOf } from './phase-colors';
 
 const LIVE: ReadonlySet<RunState> = new Set(['starting', 'running', 'stopping', 'detached']);
 
-export type WorkGroupId = 'needs' | 'shaping' | 'running' | 'ideas' | 'done';
+export type WorkGroupId = 'needs' | 'shaping' | 'running' | 'prioritized' | 'ideas' | 'done';
 
 export interface WorkRow {
   readonly card: TicketCard;

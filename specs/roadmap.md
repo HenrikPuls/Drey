@@ -70,7 +70,7 @@ and suite-green but await the owner's
 rounds** — with E9 the whole E0–E9 arc stands built and the concept
 is complete, caveat:
 none of it is owner-verified yet; the next step is the owner's
-verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults) 127 (E13-2, view presets and home views, SDK 1.39) and 129 (E13-6, the ticket as a document) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
+verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) and 130 (E13-8, Board and Team tabs, the Capacity band) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
@@ -258,12 +258,6 @@ Order and dependencies (an item needs everything it names):
    built). **Open Review** in the ticket document (milestone 129) opens the
    ticket's thread tab (result card and changes) until this tab exists;
    wire the button to the Review tab here.
-8. **E13-8 — Board, Team and Capacity.** Editor tab kinds Board (pipeline
-   columns, parts under their ticket, cost per column) and Team (personas,
-   stuck worker with Nudge / Hand to Claude Code / Stop, Pause all, budget,
-   setup, memory, 1:1 entry), plus the Capacity band as a dock panel
-   (bottom dock). Needs E12-4 (built); the Tickets panel gets the mobile
-   list parity (id, kind, persona, cost, Prioritized). Independent of 6–7.
 9. **E13-9 — Shape in Drey.** The ticket in the Ideas phase opened in the
    editor with the Assistant on Mission Control: Paul edits through live edit
    (ADR-0049), the owner's edits ride along (E10-2 plan delta through

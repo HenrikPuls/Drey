@@ -148,7 +148,9 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(rows('running')).toHaveCount(1);
     await expect(rows('running').first()).toHaveAttribute('data-id', 'T-0107');
     await expect(panel.locator('.work-row[data-id="T-0107"] .work-run-step')).toHaveText('Planning');
-    await expect(rows('ideas')).toHaveCount(3);
+    // The queued idea is the Prioritized group's (E13-8); Ideas keeps the inbox ones.
+    await expect(rows('prioritized')).toHaveCount(1);
+    await expect(rows('ideas')).toHaveCount(2);
     await expect(rows('ideas').first()).toHaveAttribute('data-id', 'T-0101');
     await expect(panel.locator('.work-row[data-id="T-0103"] .work-row-queued')).toHaveText('Queued');
     await expect(panel.locator('.work-row[data-id="T-0102"] .work-track')).toHaveText('Triage');
@@ -305,9 +307,9 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
     await panel.locator('.work-group-ideas .work-group-head').click();
     await expect(panel.locator('.work-group-ideas .work-row')).toHaveCount(0);
-    await expect(panel.locator('.work-group-ideas .work-group-count')).toHaveText('3');
+    await expect(panel.locator('.work-group-ideas .work-group-count')).toHaveText('2');
     await panel.locator('.work-group-ideas .work-group-head').click();
-    await expect(panel.locator('.work-group-ideas .work-row')).toHaveCount(3);
+    await expect(panel.locator('.work-group-ideas .work-row')).toHaveCount(2);
   });
 
   test('orders the groups and filters by status (T-0084)', async ({ page }) => {
@@ -315,9 +317,9 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
 
-    // The canvas order (W1b): Needs you, Running, Shaping, Ideas — the
-    // seeded review checkpoint and finished ticket fill the first.
-    await expect(panel.locator('.work-group-title')).toHaveText(['Needs you', 'Running', 'Shaping', 'Ideas']);
+    // The canvas order (W1b, E13-8): Needs you, Running, Shaping, Prioritized,
+    // Ideas — the seeded review checkpoint and finished ticket fill the first.
+    await expect(panel.locator('.work-group-title')).toHaveText(['Needs you', 'Running', 'Shaping', 'Prioritized', 'Ideas']);
 
     // The filter popover: the Idle chip keeps the idle ideas — the queued
     // one (and only it) goes.
@@ -327,10 +329,10 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(pop).toBeVisible();
     await pop.getByRole('button', { name: 'Idle', exact: true }).click();
     await expect(panel.locator('.work-group-ideas .work-row')).toHaveCount(2);
-    await expect(panel.locator('.work-group-ideas .work-row[data-id="T-0103"]')).toHaveCount(0);
-    await expect(panel.locator('.work-group-ideas .work-group-count')).toHaveText('2/3');
+    await expect(panel.locator('.work-group-prioritized .work-row[data-id="T-0103"]')).toHaveCount(0);
+    await expect(panel.locator('.work-group-prioritized .work-group-count')).toHaveText('0/1');
     await pop.getByRole('button', { name: 'Clear', exact: true }).click();
-    await expect(panel.locator('.work-group-ideas .work-row')).toHaveCount(3);
-    await expect(panel.locator('.work-group-ideas .work-group-count')).toHaveText('3');
+    await expect(panel.locator('.work-group-prioritized .work-row')).toHaveCount(1);
+    await expect(panel.locator('.work-group-ideas .work-group-count')).toHaveText('2');
   });
 });

@@ -44,7 +44,16 @@ export function applyWorkFilter(groups: WorkGroups, state: WorkFilterState): Rec
   });
   // Done this week is the snapshot's recentDone, drawn unfiltered —
   // its entry exists only to satisfy the record's shape.
-  return { needs: filter(groups.needs), shaping: filter(groups.shaping), running: filter(groups.running), ideas: filter(groups.ideas), done: { rows: [], total: 0 } };
+  // Prioritized (E13-8, the mobile list's group): the ideas already queued for
+  // the fleet, each waiting on its persona; Ideas keeps the rest.
+  return {
+    needs: filter(groups.needs),
+    shaping: filter(groups.shaping),
+    running: filter(groups.running),
+    prioritized: filter(groups.ideas.filter((row) => row.queued)),
+    ideas: filter(groups.ideas.filter((row) => !row.queued)),
+    done: { rows: [], total: 0 },
+  };
 }
 
 /** The filter state, per viewer — the same lifetime as the group folds. */
