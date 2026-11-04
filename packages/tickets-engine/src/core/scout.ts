@@ -26,6 +26,7 @@
  * writer replaces only its own block, so frontmatter, Log and
  * neighbouring chapters survive byte-identical.
  */
+import { maskFences } from '../../../../shared/markdown/fences';
 import type { ScoutDecision, ScoutReport } from '../contracts/scout';
 
 export const SCOUT_REPORT_HEADING = '## Report';
@@ -61,10 +62,11 @@ export function renderScoutReportSection(report: ScoutReport): string {
  * line skipped) — the report card shows what the file actually says.
  */
 export function parseScoutReportSection(text: string): ScoutReport | null {
-  const section = sectionText(text);
-  if (section === null) {
+  const raw = sectionText(text);
+  if (raw === null) {
     return null;
   }
+  const section = maskFences(raw);
   const stamp = /^Written on (\S+) by (.+?)\.?$/m.exec(section);
   const summary = summaryOf(section);
   const decisions: ScoutDecision[] = [];
@@ -107,7 +109,7 @@ export function upsertScoutReportSection(fileText: string, section: string): str
     const after = fileText.slice(current.end).replace(/^\n+/, '');
     return after === '' ? `${before}${normalized}` : `${before}${normalized}\n${after}`;
   }
-  const logAt = /^## Log$/m.exec(fileText);
+  const logAt = /^## Log$/m.exec(maskFences(fileText));
   if (logAt !== null) {
     return `${fileText.slice(0, logAt.index)}${normalized}\n${fileText.slice(logAt.index)}`;
   }
@@ -139,11 +141,12 @@ function sectionText(text: string): string | null {
 
 /** [start, end) of the `## Report` block — end at the next H2 or EOF. */
 function boundsOf(text: string): { start: number; end: number } | null {
-  const heading = /^## Report$/m.exec(text);
+  const scan = maskFences(text);
+  const heading = /^## Report$/m.exec(scan);
   if (heading === null) {
     return null;
   }
-  const rest = text.slice(heading.index);
+  const rest = scan.slice(heading.index);
   const next = /^## /gm.exec(rest.slice(SCOUT_REPORT_HEADING.length));
   const end = next === null ? text.length : heading.index + SCOUT_REPORT_HEADING.length + next.index;
   return { start: heading.index, end };

@@ -433,7 +433,24 @@ readable error instead of being written).
 ### Body sections
 
 Free Markdown; the section headings below are convention that Drey and
-the runner rely on:
+the runner rely on.
+
+**Fenced code is opaque to every ticket parser** (E10-7, milestone 148).
+A Mermaid diagram (or any fenced block) may sit anywhere in the body —
+under the description, between `### Goal` and `### Parts`, inside the
+Handover — and its lines never count as structure: a `## Verification`,
+`### Parts`, `- [ ] step`, `persona:` / `chain:` detail, `proof:` line,
+Log line or `---` inside a fence is text. The rule is one shared reader,
+`shared/markdown/fences.ts`: a fence opens on three or more backticks or
+tildes (after indentation, a list marker or a `>` quote), carries no
+backtick in a backtick fence's info string, and closes on the same
+character at least as long; a fence that never closes ends at the next
+`## ` heading in column 0, so a forgotten closing fence cannot swallow the
+Verification and Log chapters. Writers slice the original text around the
+chapter they own, so a fence inside any other chapter survives byte for
+byte (a chapter that is replaced as a whole — the Plan on a shape reply —
+replaces its fences with it). The status log, the personas and the chat
+sessions are own line grammars, not ticket documents, and not covered.
 
 - `## Description` — what and why. The capture text lands here.
 - `## Plan` — how; authored at refine (the shape dialog or the

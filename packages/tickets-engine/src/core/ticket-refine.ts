@@ -9,6 +9,7 @@
  */
 import { createHash } from 'node:crypto';
 import { splitFrontmatter } from '../../../../shared/frontmatter';
+import { maskFenceLines } from '../../../../shared/markdown/fences';
 import { patchHeaderFields, withLogLine, type HeaderPatch } from './ticket-files';
 import { DEFAULT_PRIORITY_CONFIG, type PriorityConfig } from '../contracts/tickets';
 
@@ -37,14 +38,15 @@ export function replaceSection(body: string, section: RefineSection, content: st
   const { title, level } = REFINE_SECTIONS[section];
   const lines = body.split('\n');
   const block = ['', ...content.replace(/\r\n?/g, '\n').replace(/\s+$/, '').split('\n'), ''];
-  const isHeading = (line: string): boolean => HEADING.test(line);
-  const at = lines.findIndex((line) => {
+  const scan = maskFenceLines(lines);
+  const isHeading = (index: number): boolean => HEADING.test(scan[index]!);
+  const at = scan.findIndex((line) => {
     const m = HEADING.exec(line);
     return m !== null && m[1]!.length >= 2 && m[1]!.length <= 3 && m[2]!.toLowerCase() === title.toLowerCase();
   });
   if (at >= 0) {
     let end = at + 1;
-    while (end < lines.length && !isHeading(lines[end]!)) {
+    while (end < lines.length && !isHeading(end)) {
       end++;
     }
     return [...lines.slice(0, at + 1), ...block, ...lines.slice(end)].join('\n');
@@ -53,16 +55,16 @@ export function replaceSection(body: string, section: RefineSection, content: st
   // rest before the Log (or at the end).
   let insertAt = -1;
   if (section === 'acceptance') {
-    const plan = lines.findIndex((line) => /^##\s+Plan\s*$/i.test(line));
+    const plan = scan.findIndex((line) => /^##\s+Plan\s*$/i.test(line));
     if (plan >= 0) {
       insertAt = plan + 1;
-      while (insertAt < lines.length && !isHeading(lines[insertAt]!)) {
+      while (insertAt < lines.length && !isHeading(insertAt)) {
         insertAt++;
       }
     }
   }
   if (insertAt < 0) {
-    insertAt = lines.findIndex((line) => /^##\s+Log\s*$/i.test(line));
+    insertAt = scan.findIndex((line) => /^##\s+Log\s*$/i.test(line));
   }
   const heading = `${'#'.repeat(level)} ${title}`;
   if (insertAt < 0) {

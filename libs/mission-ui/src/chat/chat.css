@@ -599,8 +599,94 @@ details.think .step-body {
 }
 
 .attach:active,
-.send:active {
+.send:active,
+.mic:active {
   transform: scale(0.93);
+}
+
+/* the microphone: 44 pt like the board's PhoneChat; filled while it records */
+.mic {
+  display: grid;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-2);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  transition:
+    transform 0.12s ease,
+    background 0.15s ease;
+}
+
+.mic svg {
+  width: 18px;
+  height: 18px;
+}
+
+.mic.on {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.mic:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.recording {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: calc(14px * var(--mc-text, 1));
+  color: var(--text);
+}
+
+.rec-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-peach);
+}
+
+.rec-wave {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  color: var(--accent);
+}
+
+.rec-wave rect {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rec-bar 0.9s ease-in-out infinite alternate;
+}
+
+.rec-clock {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+@keyframes rec-bar {
+  from {
+    transform: scaleY(0.35);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rec-wave rect {
+    animation: none;
+  }
 }
 
 .attach {

@@ -24,6 +24,7 @@
  * The screenshot link is relative from `tickets/<phase>/<id>.md`, so
  * `../attachments/<name>` resolves to the vault's `tickets/attachments/`.
  */
+import { maskFences } from '../../../../shared/markdown/fences';
 import type { VerificationCriterionProof, VerificationReport, VideoChapter } from '../contracts/verify';
 
 export const VERIFICATION_HEADING = '## Verification';
@@ -77,10 +78,13 @@ export function renderVerificationSection(report: VerificationReport): string {
  * the proof card shows what the file actually says.
  */
 export function parseVerificationSection(text: string): VerificationReport | null {
-  const section = sectionText(text);
-  if (section === null) {
+  const raw = sectionText(text);
+  if (raw === null) {
     return null;
   }
+  // A fence inside the section hides its lines from the stamp, the
+  // criteria, the findings and the video chapter alike.
+  const section = maskFences(raw);
   const tested = /^Tested on (\S+) by ([^—]+?)(?: — (.+?))?\.?$/m.exec(section);
   const criteria: VerificationCriterionProof[] = [];
   const criterionRe = /^- \[([ xX])\] `([^`]+)`(?: → !\[\]\(\.\.\/attachments\/([^)]+)\))?(?: — (.+))?$/gm;
@@ -128,7 +132,7 @@ export function upsertVerificationSection(fileText: string, section: string): st
     const after = fileText.slice(current.end).replace(/^\n+/, '');
     return after === '' ? `${before}${normalized}` : `${before}${normalized}\n${after}`;
   }
-  const logAt = /^## Log$/m.exec(fileText);
+  const logAt = /^## Log$/m.exec(maskFences(fileText));
   if (logAt !== null) {
     return `${fileText.slice(0, logAt.index)}${normalized}\n${fileText.slice(logAt.index)}`;
   }
@@ -175,11 +179,12 @@ function sectionText(text: string): string | null {
 
 /** [start, end) of the `## Verification` block — end at the next H2 or EOF. */
 function boundsOf(text: string): { start: number; end: number } | null {
-  const heading = /^## Verification$/m.exec(text);
+  const scan = maskFences(text);
+  const heading = /^## Verification$/m.exec(scan);
   if (heading === null) {
     return null;
   }
-  const rest = text.slice(heading.index);
+  const rest = scan.slice(heading.index);
   const next = /^## /gm.exec(rest.slice('## Verification'.length));
   const end = next === null ? text.length : heading.index + '## Verification'.length + next.index;
   return { start: heading.index, end };

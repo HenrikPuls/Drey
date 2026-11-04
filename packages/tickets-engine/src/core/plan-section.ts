@@ -5,6 +5,7 @@
  * model's text. A ticket without a `## Plan` gets one before its Log (or
  * at the end). Pure — the board service does the IO.
  */
+import { fencedLineFlags, maskFences } from '../../../../shared/markdown/fences';
 
 /** The text of the Plan chapter for a model's reply: trimmed, no stray `## Plan` heading of its own, `\n` newlines. */
 export function normalizePlanBody(raw: string): string {
@@ -21,20 +22,20 @@ export function normalizePlanBody(raw: string): string {
  * can never touch another chapter.
  */
 export function withPlanSection(ticketText: string, rawBody: string): string {
-  const body = normalizePlanBody(rawBody)
-    .split('\n')
-    .map((line) => (/^## /.test(line) ? `#${line}` : line))
-    .join('\n');
+  const bodyLines = normalizePlanBody(rawBody).split('\n');
+  const fenced = fencedLineFlags(bodyLines);
+  const body = bodyLines.map((line, i) => (!fenced[i] && /^## /.test(line) ? `#${line}` : line)).join('\n');
   const text = ticketText.replace(/\r\n/g, '\n');
-  const heading = /^## Plan[ \t]*$/m.exec(text);
+  const scan = maskFences(text);
+  const heading = /^## Plan[ \t]*$/m.exec(scan);
   if (heading !== null) {
     const start = heading.index + heading[0].length;
-    const next = /^## /m.exec(text.slice(start));
+    const next = /^## /m.exec(scan.slice(start));
     const end = next === null ? text.length : start + next.index;
     const tail = text.slice(end);
     return `${text.slice(0, start)}\n\n${body}\n${tail === '' ? '' : `\n${tail}`}`;
   }
-  const log = /^## Log[ \t]*$/m.exec(text);
+  const log = /^## Log[ \t]*$/m.exec(scan);
   const block = `## Plan\n\n${body}\n`;
   if (log !== null) {
     return `${text.slice(0, log.index)}${block}\n${text.slice(log.index)}`;

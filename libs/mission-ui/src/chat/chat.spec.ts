@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type Signal, type WritableSignal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { ActiveSession, ChatFailureView, ChatMessageView, ChatProposalView, ChatStateView, McChainEntry, McPlanStatus, WorkView } from '../api/dto';
@@ -1501,5 +1501,147 @@ describe('Chat menu request (E12-2)', () => {
   it('stays closed without the request, and without the signal', () => {
     expect(chatWith(signal(false)).sheetOpen()).toBe(false);
     expect(chatWith(undefined).sheetOpen()).toBe(false);
+  });
+});
+
+// -- dictation in the composer (E12-8, milestone 149) -----------------------------
+
+describe('Chat dictation (the microphone in the composer)', () => {
+  interface FakeEngine {
+    lang: string;
+    onstart: (() => void) | null;
+    onresult: ((event: { results: unknown }) => void) | null;
+    onerror: ((event: { error: string }) => void) | null;
+    onend: (() => void) | null;
+    start(): void;
+    stop(): void;
+    abort(): void;
+  }
+  const engines: FakeEngine[] = [];
+
+  class Engine implements FakeEngine {
+    lang = '';
+    continuous = false;
+    interimResults = false;
+    maxAlternatives = 1;
+    onstart: (() => void) | null = null;
+    onresult: ((event: { results: unknown }) => void) | null = null;
+    onerror: ((event: { error: string }) => void) | null = null;
+    onend: (() => void) | null = null;
+    constructor() {
+      engines.push(this);
+    }
+    start(): void {}
+    stop(): void {}
+    abort(): void {}
+  }
+
+  const win = window as unknown as Record<string, unknown>;
+
+  function install(secure = true): void {
+    win['webkitSpeechRecognition'] = Engine;
+    Object.defineProperty(window, 'isSecureContext', { value: secure, configurable: true });
+  }
+
+  afterEach(() => {
+    engines.length = 0;
+    delete win['webkitSpeechRecognition'];
+    delete win['SpeechRecognition'];
+    Object.defineProperty(window, 'isSecureContext', { value: false, configurable: true });
+  });
+
+  const said = (...parts: [string, boolean][]): { results: unknown } => ({
+    results: Object.assign(
+      parts.map(([transcript, isFinal]) => ({ isFinal, length: 1, 0: { transcript } })),
+      {},
+    ),
+  });
+
+  it('is hidden where the browser has no speech engine', () => {
+    const { el } = renderChat(activeSession());
+    expect(el.querySelector('.composer .mic')).toBeNull();
+  });
+
+  it('is hidden on a page that is not a secure context (plain http)', () => {
+    install(false);
+    const { el } = renderChat(activeSession());
+    expect(el.querySelector('.composer .mic')).toBeNull();
+  });
+
+  it('shows a 44 pt "Dictate" button, not pressed, between the field and Send', () => {
+    install();
+    const { el } = renderChat(activeSession());
+    const mic = el.querySelector<HTMLButtonElement>('.composer .mic')!;
+    expect(mic.getAttribute('aria-label')).toBe('Dictate');
+    expect(mic.getAttribute('aria-pressed')).toBe('false');
+    const row = Array.from(el.querySelector('.composer-row')!.children).map((c) => c.className.split(' ')[0]);
+    expect(row).toEqual(['attach', 'composer-input', 'mic', 'send']);
+  });
+
+  it('records on tap: pressed, the recording line, speech fills the field live and nothing is sent', async () => {
+    install();
+    const { fixture, el } = renderChat(activeSession());
+    const send = vi.fn();
+    (fixture.componentInstance as unknown as { state: { send: unknown } }).state.send = send;
+    el.querySelector<HTMLButtonElement>('.composer .mic')!.click();
+    fixture.detectChanges();
+    const engine = engines[0]!;
+    expect(engine.lang).toBeTruthy();
+    engine.onstart?.();
+    fixture.detectChanges();
+    const mic = el.querySelector<HTMLButtonElement>('.composer .mic')!;
+    expect(mic.getAttribute('aria-pressed')).toBe('true');
+    expect(el.querySelector('.recording')?.textContent).toContain('Recording');
+    expect(el.querySelector('.rec-clock')?.textContent?.trim()).toBe('0:00');
+    engine.onresult?.(said(['move T-0084', false]));
+    fixture.detectChanges();
+    const field = el.querySelector<HTMLTextAreaElement>('.composer-input')!;
+    expect(field.value).toBe('move T-0084');
+    engine.onresult?.(said(['move T-0084 back to Ralf', true]));
+    fixture.detectChanges();
+    expect(field.value).toBe('move T-0084 back to Ralf');
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('typing ends the dictation and keeps the text; a late result no longer lands', () => {
+    install();
+    const { fixture, el } = renderChat(activeSession());
+    el.querySelector<HTMLButtonElement>('.composer .mic')!.click();
+    const engine = engines[0]!;
+    engine.onstart?.();
+    engine.onresult?.(said(['hello', true]));
+    fixture.detectChanges();
+    const field = el.querySelector<HTMLTextAreaElement>('.composer-input')!;
+    field.value = 'hello there';
+    field.dispatchEvent(new Event('input'));
+    engine.onresult?.(said(['hello', true], ['again', true]));
+    fixture.detectChanges();
+    expect(field.value).toBe('hello there');
+    expect(el.querySelector('.recording')).toBeNull();
+  });
+
+  it('shows the refusal inline when the microphone is blocked', () => {
+    install();
+    const { fixture, el } = renderChat(activeSession());
+    el.querySelector<HTMLButtonElement>('.composer .mic')!.click();
+    const engine = engines[0]!;
+    engine.onerror?.({ error: 'not-allowed' });
+    engine.onend?.();
+    fixture.detectChanges();
+    expect(el.querySelector('.composer .inline-error')?.textContent).toMatch(/Microphone access is blocked/);
+    expect(el.querySelector('.recording')).toBeNull();
+  });
+
+  it('a send cancels the dictation', () => {
+    install();
+    const { fixture, el } = renderChat(activeSession());
+    el.querySelector<HTMLButtonElement>('.composer .mic')!.click();
+    const engine = engines[0]!;
+    const abort = vi.spyOn(engine, 'abort');
+    engine.onstart?.();
+    engine.onresult?.(said(['go', true]));
+    fixture.detectChanges();
+    void (fixture.componentInstance as unknown as { send(): Promise<void> }).send();
+    expect(abort).toHaveBeenCalled();
   });
 });

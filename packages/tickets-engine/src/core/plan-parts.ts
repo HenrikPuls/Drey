@@ -21,6 +21,7 @@
  * all ("Keep as one"): {@link withPlanParts} removes the chapter then.
  */
 import type { ChainEntry } from '../contracts/chain';
+import { maskFences } from '../../../../shared/markdown/fences';
 import { parseChainEntry } from './chain-delta';
 
 export interface PlanPart {
@@ -52,12 +53,13 @@ type MutablePart = { -readonly [K in keyof PlanPart]: PlanPart[K] };
 
 /** The `## Plan` section's [start, end) in the text (heading excluded); null without one. */
 function planBounds(text: string): { start: number; end: number } | null {
-  const heading = /^## Plan[ \t]*$/m.exec(text);
+  const scan = maskFences(text);
+  const heading = /^## Plan[ \t]*$/m.exec(scan);
   if (heading === null) {
     return null;
   }
   const start = heading.index + heading[0].length;
-  const next = /^## /m.exec(text.slice(start));
+  const next = /^## /m.exec(scan.slice(start));
   return { start, end: next === null ? text.length : start + next.index };
 }
 
@@ -67,7 +69,7 @@ function partsBounds(text: string): { start: number; end: number } | null {
   if (plan === null) {
     return null;
   }
-  const body = text.slice(plan.start, plan.end);
+  const body = maskFences(text).slice(plan.start, plan.end);
   const heading = /^### Parts[ \t]*$/m.exec(body);
   if (heading === null) {
     return null;
@@ -87,7 +89,7 @@ export function parsePlanParts(ticketText: string): ParsedPlanParts {
   }
   const warnings: string[] = [];
   const parts: MutablePart[] = [];
-  const lines = text.slice(bounds.start, bounds.end).split('\n').slice(1);
+  const lines = maskFences(text).slice(bounds.start, bounds.end).split('\n').slice(1);
   for (const line of lines) {
     if (line.trim() === '') {
       continue;

@@ -7,6 +7,7 @@
  * `-`/`*` bullets, missing parts null/empty, never a throw. The section
  * is the contract — no diff parsing on the desk (ADR-0087).
  */
+import { maskFenceLines, maskFences } from '../../../../shared/markdown/fences';
 
 // --- the `## Changes` section -------------------------------------------------
 
@@ -50,13 +51,14 @@ const LABEL_OF: Readonly<Record<string, ChangeLabel>> = {
 /** The section body: the lines under `## Changes` up to the next H2. */
 function changesBody(ticketText: string): string[] | null {
   const lines = ticketText.split('\n');
-  const at = lines.findIndex((line) => /^##\s+Changes\s*$/.test(line));
+  const scan = maskFenceLines(lines);
+  const at = scan.findIndex((line) => /^##\s+Changes\s*$/.test(line));
   if (at < 0) {
     return null;
   }
   const body: string[] = [];
   for (let i = at + 1; i < lines.length; i++) {
-    if (/^##\s/.test(lines[i]!)) {
+    if (/^##\s/.test(scan[i]!)) {
       break;
     }
     body.push(lines[i]!);
@@ -72,13 +74,14 @@ function changesBody(ticketText: string): string[] | null {
  */
 export function parseResult(ticketText: string): string | null {
   const lines = ticketText.split('\n');
-  const at = lines.findIndex((line) => /^##\s+Result\s*$/.test(line));
+  const scan = maskFenceLines(lines);
+  const at = scan.findIndex((line) => /^##\s+Result\s*$/.test(line));
   if (at < 0) {
     return null;
   }
   const body: string[] = [];
   for (let i = at + 1; i < lines.length; i++) {
-    if (/^##\s/.test(lines[i]!)) {
+    if (/^##\s/.test(scan[i]!)) {
       break;
     }
     body.push(lines[i]!.replace(/\r$/, ''));
@@ -253,7 +256,7 @@ export interface ChangesReply {
  */
 export function planApprovedOf(ticketText: string): string | null {
   let stamp: string | null = null;
-  for (const line of ticketText.split('\n')) {
+  for (const line of maskFences(ticketText).split('\n')) {
     const match = LOG_LINE.exec(line);
     if (match === null) {
       continue;
@@ -273,7 +276,7 @@ export function storyOf(ticketText: string): { readonly items: readonly StoryIte
   // current run named — both derived from the text alone.
   let phase: string | null = null;
   let worker: string | null = null;
-  for (const line of ticketText.split('\n')) {
+  for (const line of maskFences(ticketText).split('\n')) {
     const match = LOG_LINE.exec(line);
     if (match === null) {
       continue;

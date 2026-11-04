@@ -1,3 +1,110 @@
+### Milestone 149 — Dictation in the Mission Control chat composer (E12-8)
+
+**Not yet manually verified by the owner.** Owner decision 2026-11-04: voice is
+an input to the assistant, not a capture screen (board 4d is a plain text
+sheet). The phone's chat composer gets a microphone.
+
+- **Button.** `libs/mission-ui/src/chat/chat.html`: between the field and Send,
+  44 × 44 pt, `aria-label="Dictate"`, `aria-pressed` while it records, filled
+  accent while on (board PhoneChat's look). Disabled while a turn is sending
+  or the view is read-only. **Hidden** where the browser has no
+  `SpeechRecognition` / `webkitSpeechRecognition`, and on a page that is not a
+  secure context: iOS Safari refuses recognition on plain `http`, so the button
+  is simply absent there (no hint line — CLAUDE.md: no UI text a screen does not
+  need). **Dictation needs HTTPS** — Tailscale Serve (the manual says so).
+- **Behaviour.** Interim results fill the field live (`base + final + interim`),
+  the final text stays editable and is never sent for the owner. While it
+  records a line above the field shows the board's indicator: dot, "Recording",
+  a bar wave (CSS animation, off under reduced motion) and the timer `0:03`.
+  Typing, Send, a new chat and destroying the chat **cancel** the engine silently
+  (a late result cannot land in the next message); leaving the composer or
+  hiding the page **stops** it gracefully (the last words still arrive). Language:
+  the device's first language, else the page `lang`, else `en-US`. Errors are
+  inline sentences: microphone blocked, no speech heard, no network to the speech
+  service, no microphone, language unsupported, "stopped unexpectedly"; the
+  owner's own stop says nothing.
+- **Code.** `chat/dictation.ts` is pure and testable: the `Dictation` state
+  machine (`idle → starting → recording`) over a small recognition seam,
+  `mergeTranscript`, `splitResults`, `resolveDictationLang`, `clockOf`, the error
+  mapping. `chat.ts` only wires it. The shape session and the plan sheet use this
+  same composer (the plan pane has none of its own), so there was no second one
+  to change. The desktop Assistant's microphone (E13-5) is untouched.
+- **Specs:** `dictation.spec.ts` (19, a fake recognition: live merge, timer,
+  graceful stop vs cancel, every error code, a throwing engine, a stale engine) and
+  seven component specs in `chat.spec.ts` (hidden without engine / on http, 44 pt
+  button order, live fill without a send, typing ends it, blocked microphone,
+  send cancels).
+- **Seen:** the production build in Chromium (390 × 844): the button is visible,
+  44 × 44, not pressed; with a fake engine injected the pressed state, the
+  "Recording 0:01" line and the live text ("T-0084 back to Ralf and ship it")
+  render as drawn; on a tap the real Chromium engine started without an error
+  within 2.5 s. **Not tested: real speech.** Headless Chromium has no microphone
+  and no speech service, and iOS / WebKit is not installed here — whether the
+  iPhone hears and transcribes (and which language it picks) is for the owner
+  to try on the device over HTTPS. A long dictated text wraps inside a
+  one-row field (the field grows by line breaks only, as before) and scrolls.
+
+### Milestone 148 — Fenced code is opaque: Mermaid plans work end to end (E10-7)
+
+**Not yet manually verified by the owner.** Owner requirement 2026-11-04: a
+ticket with a Mermaid diagram must display *and* evaluate. Display worked
+(E12-6); evaluation did not: every reader of ticket text found its
+structure with a line regex over the whole text, so a diagram line starting
+`## Verification`, `### Parts`, `- [ ]`, `persona:` or a Log line counted —
+a mermaid block in the Plan cut the plan short, added fake parts and
+criteria, or made the Log patcher append into the diagram.
+
+- **One shared reader.** `shared/markdown/fences.ts` — `maskFences(text)`
+  (same length, fenced lines blanked, `\r` kept), `fencedLineFlags` and
+  `maskFenceLines`. A reader looks for structure in the masked text and
+  slices the original with the offsets it found, so a write keeps every
+  other chapter and every fence byte for byte. Rule (also in
+  `specs/ticket-schema.md`, "Body sections"): ``` and `~~~` fences,
+  indented or in a list item / quote, closing fence at least as long (nested
+  lengths), a backtick info string without a backtick; **a fence that never
+  closes ends at the next column-0 `## `**, so a forgotten closing fence
+  cannot swallow Verification and Log.
+- **Parsers checked (all that read ticket text) — wrong before, fixed
+  now:** engine `plan-parts` (plan/parts bounds, part lines), `plan-section`
+  (Plan write, the `## ` demotion of a shape reply — a `## ` line inside a
+  fence of the reply is no longer demoted), `plan-delta` (`planSectionOf`),
+  `ticket-files` (`ticketSections`, `acceptanceCommands`, the Log
+  append), `ticket-refine` (`replaceSection`), `verification` (section
+  bounds, stamp, criteria, findings, video chapters, upsert before Log),
+  `verlauf` (read and append), `scout` (`## Report` read and upsert),
+  `proof-mode` (Handover declaration), `review-feedback` (feedback block read
+  and write), `contracts/changes` (`## Changes`, `## Result`, the story
+  and `planApprovedOf` Log lines); Mission Control's mirrors `plan.model`
+  (`planSectionOf`, chapters, parts, `replacePlanSection`), `ticket.model`
+  (`splitTicketSections` — the section split of the View screen —,
+  `proofOf`, `scoutReportOf`) and `api/dto` (Verlauf, Verification); Drey's
+  `sectionBodyRange` and `logSectionRange` (their private fence toggles
+  closed on any fence line and ignored lengths). **Right already:**
+  frontmatter split (line 1 only), chain / persona readers (frontmatter, and
+  the `chain:` details only inside the Parts chapter), `status-log` (own
+  line grammar, not Markdown), chat sessions and persona threads (own line
+  grammars with their own fenced JSON), `shared/note-sections.ts` and the
+  tags plugin's section splitter (already fence-aware, used for notes, not
+  for tickets).
+- **Specs, written red first:** `shared/markdown/fences.spec.ts` (12);
+  `core/fence-safety.spec.ts` (31, one realistic ticket with seven fences
+  — backtick, tilde, indented, four-backtick — whose lines look like every
+  structure; plus an unterminated fence, a fence in the criteria chapter,
+  Mermaid between `### Goal` and `### Parts`, CRLF);
+  `services/board-service-fences.spec.ts` (4: a real `EngineBoardService`
+  on a temp vault — the shape reply writes a Mermaid plan, `planParts`
+  reads only real parts, persona/move/delete edits and the release leave the
+  diagram intact, a second shape reply replaces the chapter whole);
+  `libs/mission-ui/src/ticket/fence-safety.spec.ts` (7).
+- **Seen, not just tested:** the production Mission Control build in
+  Chromium (390 × 844) against a stub desk, a ticket with a Mermaid flowchart
+  and a text fence full of decoy headings in the Plan: View mode draws the
+  diagram, the fenced decoy text stays inside its block, the plan card
+  lists only the two real parts and the proof line reads "1/1 green".
+  **The desk was a stub, not the real engine**; the engine side is the board
+  service spec above. Unterminated fences get no warning in the validator
+  yet (they end at the next `## `, silently).
+
 ### Milestone 147 — One cap per video, nothing deleted (E11-1c)
 
 **Not yet manually verified by the owner.** Owner decision 2026-11-04: the
@@ -41,7 +148,6 @@ by the disk.
   `verification.spec.ts`, the Mission Control and ticket-document specs.
   **Not seen:** a recording from a real Playwright/Electron run — the harness
   was a fake that writes a file of the chosen size.
-
 ### Milestone 143 — The Mission Control frame stays put (D-5)
 
 **Not yet manually verified by the owner.** Owner report 2026-11-04: on iPhone

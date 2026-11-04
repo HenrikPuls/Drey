@@ -223,9 +223,26 @@
     </div>
   }
 
-  <div class="composer" [class.ro]="readOnly()">
+  <div class="composer" [class.ro]="readOnly()" (focusout)="onComposerFocusOut($event)">
     @if (composerError(); as error) {
       <p class="inline-error">{{ error }}</p>
+    }
+    @if (dictation.error(); as error) {
+      <p class="inline-error" role="alert">{{ error }}</p>
+    }
+    @if (dictation.state() !== 'idle') {
+      <div class="recording" role="status">
+        <span class="rec-dot" aria-hidden="true"></span>
+        <span class="rec-label">Recording</span>
+        <svg class="rec-wave" viewBox="0 0 200 24" preserveAspectRatio="none" aria-hidden="true">
+          <g fill="currentColor">
+            @for (bar of waveBars; track $index) {
+              <rect [attr.x]="$index * 8" [attr.y]="12 - bar / 2" width="3" [attr.height]="bar" rx="1.5" [style.animation-delay]="$index * 70 + 'ms'" />
+            }
+          </g>
+        </svg>
+        <span class="rec-clock">{{ clockOf(dictation.seconds()) }}</span>
+      </div>
     }
     @if (planChip(); as chip) {
       <div class="chips" aria-label="Plan edits">
@@ -268,6 +285,22 @@
         (keydown)="onComposerKeydown($event)"
         placeholder="“New ticket: …” or “T-0084 back to Ralf”…"
         aria-label="Message to Mission Control"></textarea>
+      @if (dictation.supported) {
+        <button
+          type="button"
+          class="mic"
+          [class.on]="dictation.state() !== 'idle'"
+          [attr.aria-pressed]="dictation.state() !== 'idle'"
+          [disabled]="readOnly() || sending()"
+          (click)="toggleDictation()"
+          [title]="dictation.state() === 'idle' ? 'Dictate' : 'Stop dictation'"
+          aria-label="Dictate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="9" y="2" width="6" height="12" rx="3" />
+            <path d="M5 11a7 7 0 0 0 14 0M12 18v4" />
+          </svg>
+        </button>
+      }
       <button type="button" class="send" [disabled]="!canSend() || readOnly()" (click)="send()" aria-label="Send">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M12 19V5M5 12l7-7 7 7" />

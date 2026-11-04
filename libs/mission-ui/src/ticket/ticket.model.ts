@@ -18,6 +18,7 @@
  * client.
  */
 import { InjectionToken } from '@angular/core';
+import { maskFenceLines, maskFences } from '../../../../shared/markdown/fences';
 import type { McEstimate, McPlanStatus, McTicketUsage, McVerlaufEntry } from '../api/dto';
 
 // --- action replies ----------------------------------------------------------
@@ -322,7 +323,8 @@ const FINDINGS_ITEM = /^- (.+)$/;
  * a checkbox line the strict shape missed still listed, findings collect
  * under their heading. Half-readable input degrades, never throws.
  */
-export function proofOf(sectionText: string): ProofReport {
+export function proofOf(rawSection: string): ProofReport {
+  const sectionText = maskFences(rawSection);
   const testedOn = TESTED_ON.exec(sectionText)?.[0]?.trim() ?? '';
   const criteria: ProofCriterion[] = [];
   const findings: string[] = [];
@@ -548,8 +550,10 @@ export function splitTicketSections(text: string): TicketSections {
     verlauf: [],
   };
   let target: 'body' | (typeof SPECIAL_TITLES)[number] = 'body';
-  for (const line of source.split('\n')) {
-    const heading = H2.exec(line);
+  const sourceLines = source.split('\n');
+  const scan = maskFenceLines(sourceLines);
+  for (const [i, line] of sourceLines.entries()) {
+    const heading = H2.exec(scan[i]!);
     if (heading !== null) {
       const title = heading[1]!.trim().toLowerCase();
       target = isSpecialTitle(title) ? title : 'body';
@@ -696,7 +700,8 @@ const DECISIONS_HEAD = /^###\s+decisions\s*$/im;
  * skipped, half-readable input degrades, never throws. The `### Summary`
  * block ends at the next H3; decisions collect under `### Decisions`.
  */
-export function scoutReportOf(sectionText: string): ScoutReport {
+export function scoutReportOf(rawSection: string): ScoutReport {
+  const sectionText = maskFences(rawSection);
   const stamp = REPORT_STAMP.exec(sectionText);
   const decisions: ScoutDecision[] = [];
   const decisionsAt = sectionText.search(DECISIONS_HEAD);

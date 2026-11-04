@@ -10,6 +10,7 @@
  * file only turns them into the words the desktop shows (the same words
  * the phone's ticket screen uses: `$1.84`, `48k`, `9 min`).
  */
+import { maskFenceLines } from '../../../../shared/markdown/fences';
 import { mergeChain } from '../../../../packages/tickets-engine/src/core/chain-delta';
 import { minutesOf } from '../../../../packages/tickets-engine/src/core/estimate';
 import { parseVerificationSection } from '../../../../packages/tickets-engine/src/core/verification';
@@ -49,22 +50,21 @@ export interface TextRange {
  */
 export function sectionBodyRange(text: string, name: string): TextRange | null {
   let offset = 0;
-  let fenced = false;
   let inSection = false;
   let from: number | null = null;
   let to: number | null = null;
   const heading = new RegExp(`^##\\s+${name}\\s*$`);
-  for (const rawLine of text.split('\n')) {
+  const rawLines = text.split('\n');
+  const scan = maskFenceLines(rawLines);
+  for (const [i, rawLine] of rawLines.entries()) {
     const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+    const probe = scan[i]!.endsWith('\r') ? scan[i]!.slice(0, -1) : scan[i]!;
     const lineEnd = offset + line.length;
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced;
-    }
-    if (!fenced && /^#{1,2}\s/.test(line)) {
+    if (/^#{1,2}\s/.test(probe)) {
       if (inSection) {
         break;
       }
-      inSection = heading.test(line);
+      inSection = heading.test(probe);
     } else if (inSection && line.trim() !== '') {
       from ??= offset;
       to = lineEnd;

@@ -1498,6 +1498,15 @@ it on, and only devices you pair get in.
    type the code. The code works once and for five minutes.
 3. On the phone, add the page to the home screen.
 
+The chat's **microphone** button (next to Send) dictates into the message
+field: tap it, speak, and the words appear as you talk; tap again to stop.
+The text stays editable and is never sent for you, and typing, sending or
+leaving the page ends the dictation. The phone's speech service does the
+listening, so the page must be opened over **HTTPS** — Tailscale Serve
+provides that; on a plain `http://` address the button does not appear —
+and the first tap asks for microphone access. It follows the phone's
+language.
+
 Every ticket move from a device is logged with the device's name
 (`owner@ipad`), so the Log shows where it came from. **Paired devices**
 states how many there are and lists each with when it last connected

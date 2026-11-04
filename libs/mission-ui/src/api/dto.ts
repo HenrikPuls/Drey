@@ -6,6 +6,7 @@
  * fields with defaults instead of throwing: a partial desk answer must
  * never white-screen the phone.
  */
+import { maskFences } from '../../../../shared/markdown/fences';
 
 // --- Work ------------------------------------------------------------------
 
@@ -585,11 +586,12 @@ export function parseVerlaufEntries(fileText: string): readonly McVerlaufEntry[]
   if (typeof fileText !== 'string') {
     return [];
   }
-  const heading = /^##\s+Verlauf\s*$/m.exec(fileText);
+  const scan = maskFences(fileText);
+  const heading = /^##\s+Verlauf\s*$/m.exec(scan);
   if (heading === null) {
     return [];
   }
-  const rest = fileText.slice(heading.index);
+  const rest = scan.slice(heading.index);
   const bodyStart = rest.indexOf('\n') + 1;
   const next = /^## /gm.exec(rest.slice(bodyStart));
   const section = next === null ? rest : rest.slice(0, bodyStart + next.index);
@@ -1474,11 +1476,11 @@ const VERIFICATION_HEADING = '## Verification';
 
 /** [start, end) of the `## Verification` block — end at the next H2 or EOF. */
 function verificationBoundsOf(text: string): { start: number; end: number } | null {
-  const heading = /^## Verification$/m.exec(text);
+  const heading = /^## Verification$/m.exec(maskFences(text));
   if (heading === null) {
     return null;
   }
-  const rest = text.slice(heading.index);
+  const rest = maskFences(text).slice(heading.index);
   const next = /^## /gm.exec(rest.slice(VERIFICATION_HEADING.length));
   const end =
     next === null ? text.length : heading.index + VERIFICATION_HEADING.length + next.index;
@@ -1500,8 +1502,8 @@ export function parseVerification(text: string): VerificationView | null {
   if (bounds === null) {
     return null;
   }
-  const section = text.slice(bounds.start, bounds.end);
-  const tested = /^Tested on (\S+) by ([^—]+?)(?: — (.+?))?\.?$/m.exec(section);
+  const section = maskFences(text.slice(bounds.start, bounds.end));
+  const tested =/^Tested on (\S+) by ([^—]+?)(?: — (.+?))?\.?$/m.exec(section);
   const criteria: VerificationCriterionView[] = [];
   const criterionRe =
     /^- \[([ xX])\] `([^`]+)`(?: → !\[\]\(\.\.\/attachments\/([^)]+)\))?(?: — (.+))?$/gm;

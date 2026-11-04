@@ -6,6 +6,7 @@
  * run. A new send-back replaces the previous block. Specification:
  * specs/ticket-schema.md, "Review feedback".
  */
+import { maskFences } from '../../../../shared/markdown/fences';
 
 export interface ReviewComment {
   /** Repo-relative path of the commented file. */
@@ -87,11 +88,12 @@ const LINE = /^- `([^`:]+):(\d+)(?:-(\d+))?` — (.+)$/;
 
 /** Reads the block back (the persona-facing text round trip); empty when absent. */
 export function parseFeedbackBlock(ticketText: string): ReviewComment[] {
-  const at = ticketText.indexOf(`\n${FEEDBACK_HEADING}\n`);
+  const scan = maskFences(ticketText);
+  const at = scan.search(new RegExp(`^${FEEDBACK_HEADING}[ \\t]*\\r?$`, 'm'));
   if (at < 0) {
     return [];
   }
-  const rest = ticketText.slice(at + FEEDBACK_HEADING.length + 2);
+  const rest = scan.slice(scan.indexOf('\n', at) + 1);
   const end = /^#{1,3} /m.exec(rest);
   const comments: ReviewComment[] = [];
   for (const line of (end === null ? rest : rest.slice(0, end.index)).split(/\r?\n/)) {
@@ -116,19 +118,20 @@ export function withReviewFeedback(ticketText: string, comments: readonly Review
   }
   const text = ticketText.replace(/\r\n/g, '\n');
   const block = renderFeedbackBlock(comments);
-  const heading = /^## Handover[ \t]*$/m.exec(text);
+  const scan = maskFences(text);
+  const heading = /^## Handover[ \t]*$/m.exec(scan);
   if (heading === null) {
     const section = `## Handover\n\n${block}`;
-    const log = /^## Log[ \t]*$/m.exec(text);
+    const log = /^## Log[ \t]*$/m.exec(scan);
     return log === null
       ? `${text.replace(/\n*$/, '')}\n\n${section}`
       : `${text.slice(0, log.index)}${section}\n${text.slice(log.index)}`;
   }
   const bodyStart = heading.index + heading[0].length;
-  const next = /^## /m.exec(text.slice(bodyStart));
+  const next = /^## /m.exec(scan.slice(bodyStart));
   const bodyEnd = next === null ? text.length : bodyStart + next.index;
   let body = text.slice(bodyStart, bodyEnd);
-  const old = new RegExp(`^${FEEDBACK_HEADING}[ \\t]*\\n[\\s\\S]*?(?=^#{1,3} |$(?![\\s\\S]))`, 'm').exec(body);
+  const old = new RegExp(`^${FEEDBACK_HEADING}[ \\t]*\\n[\\s\\S]*?(?=^#{1,3} |$(?![\\s\\S]))`, 'm').exec(maskFences(body));
   if (old !== null) {
     body = body.slice(0, old.index) + body.slice(old.index + old[0].length);
   }

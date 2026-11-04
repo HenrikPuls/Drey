@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   computed,
   effect,
@@ -9,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
+import { Dictation, browserDictationEnv, clockOf } from './dictation';
 import { PlanPane } from '../plan/plan-pane';
 import { MC_PLAN_STATE, planRowSubtitleOf, planSectionOf, splitLabelOf } from '../plan/plan.model';
 import {
@@ -528,6 +530,30 @@ export class Chat {
 
   private readonly composing = signal(false);
   private readonly draft = signal('');
+  /**
+   * The microphone (E12-8): interim speech fills the draft live, the final
+   * text stays editable and is never sent for the owner.
+   */
+  protected readonly dictation = new Dictation(browserDictationEnv(), (text) => this.draft.set(text));
+  protected readonly clockOf = clockOf;
+  /** The recording indicator's bars (heights in a 24-high box); the animation moves them. */
+  protected readonly waveBars: readonly number[] = [6, 12, 20, 10, 16, 6, 22, 12, 8, 18, 10, 4, 14, 6, 10, 4, 8, 14, 6];
+  private readonly dictationCleanup = ((): void => {
+    const stopHidden = (): void => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        this.dictation.stop();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', stopHidden);
+    }
+    inject(DestroyRef).onDestroy(() => {
+      this.dictation.cancel();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', stopHidden);
+      }
+    });
+  })();
   /** A turn (newSession/send) spans the mission's whole answer. */
   private readonly sending = signal(false);
   private readonly composerError = signal<string | null>(null);
@@ -821,6 +847,7 @@ export class Chat {
     this.attachSheetOpen.set(false);
     this.composing.set(true);
     this.state.shapeTicket?.set(null);
+    this.dictation.cancel();
     this.draft.set('');
     this.composerError.set(null);
     this.clearAttachments();
@@ -921,7 +948,23 @@ export class Chat {
   // -- composer -------------------------------------------------------------
 
   protected onDraft(event: Event): void {
+    // The owner's own typing ends a dictation: the engine's next result
+    // would otherwise rebuild the draft from the text it started with.
+    this.dictation.cancel();
     this.draft.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  protected toggleDictation(): void {
+    this.dictation.toggle(this.draft());
+  }
+
+  /** Focus leaving the composer (not just moving between its controls) ends a dictation. */
+  protected onComposerFocusOut(event: FocusEvent): void {
+    const next = event.relatedTarget;
+    if (next instanceof Node && (event.currentTarget as HTMLElement).contains(next)) {
+      return;
+    }
+    this.dictation.stop();
   }
 
   protected onComposerKeydown(event: KeyboardEvent): void {
@@ -935,6 +978,7 @@ export class Chat {
   }
 
   protected async send(): Promise<void> {
+    this.dictation.cancel();
     const text = this.draft().trim();
     if (text === '' || !this.canSend() || this.readOnly()) {
       return;
