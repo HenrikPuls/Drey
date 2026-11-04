@@ -305,8 +305,8 @@
                   </div>
                 }
               </div>
-            } @else if (report.videoRemoved) {
-              <p class="clip-removed">Video removed (size limit).</p>
+            } @else if (report.videoNotKept) {
+              <p class="clip-removed">{{ report.videoNotKept }}</p>
             }
             @if (report.findings.length > 0) {
               <div class="findings">

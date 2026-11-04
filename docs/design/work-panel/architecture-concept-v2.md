@@ -408,7 +408,7 @@ Firstmate's strongest infrastructure idea: **supervising the running fleet costs
 
 ### 5.2 Flow of a verify run
 
-> Status: **built** (E4, E11-1; milestones 103, 116). **Planned:** the video size rule (E11-1c) and the proof-video follow-ups (E11-1b).
+> Status: **built** (E4, E11-1; milestones 103, 116). The video size rule (E11-1c, milestone 147) is built. **Planned:** the proof-video follow-ups (E11-1b).
 
 1. **Start:** start the program in the worktree — through the existing `launch:` key in `repos.md` (or the `dev.ps1` default). Headless: Playwright Chromium against the built artifact, **no Electron window on the desktop** (the owner may be working right now).
 2. **Click through:** happy path + the error cases, along the acceptance criteria. Every criterion produces at least one screenshot.
@@ -433,7 +433,7 @@ Schema delta (the only change to `specs/ticket-schema.md` in v1): section `## Ve
 
 **Video and captions (v2):** in addition to the screenshots the verify run **always** records a short walkthrough video (at most 60 seconds, headless, with chapters, e.g. "Launch the build", "Ctrl+P twice, fast", "One palette opens"). Every screenshot carries as caption the criterion it proves. This replaces the v1 rule "video only on failure" and costs storage in the tickets repository (R6).
 
-> **Update (2026-11-04): video size rule, E11-1c (planned).** One cap **per video**, `videos.maxMb` (25), and **no automatic deletion at all** — no retention by age or folder size. This replaces the built total-size limit `videos.limitMb` (2000, oldest videos of `done` tickets deleted). Engine config, the `## Verification` "Video removed" note, the Settings row and the validator follow; what happens to a recording over 25 MB (re-encode or drop with a note) is settled when built. The 60-second cap is not enforced today (E11-1b). A `proof:` mode per ticket decides whether a ticket needs a video at all (see the schema, "Proof mode").
+> **Update (2026-11-04): video size rule, E11-1c (built, milestone 147).** One cap **per video**, `videos.maxMb` (25), and **no automatic deletion at all** — no retention by age or folder size. This replaces the built total-size limit `videos.limitMb` (2000, oldest videos of `done` tickets deleted). Engine config, the `## Verification` "Video removed" note, the Settings row and the validator follow; settled when built: a recording over 25 MB is dropped (Playwright cannot trim) and the ticket says `Video not kept: N MB exceeds the 25 MB limit.` The 60-second cap is not enforced today (E11-1b). A `proof:` mode per ticket decides whether a ticket needs a video at all (see the schema, "Proof mode").
 
 ### 5.3 The approval experience on the phone
 

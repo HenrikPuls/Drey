@@ -34,11 +34,9 @@ export interface McSettingsView {
   readonly devices: readonly McSettingsDevice[];
   readonly videos: {
     readonly inGit: boolean;
-    readonly limitMb: number;
+    readonly maxMb: number;
     /** Videos in `tickets/videos/` — the "Include the n existing videos" count. */
     readonly existing: number;
-    /** A standing notice from the engine (the limit cannot free space); null = none. */
-    readonly notice: string | null;
   };
 }
 
@@ -86,9 +84,8 @@ export function parseSettings(json: unknown): McSettingsView | null {
     }),
     videos: {
       inGit: videos['inGit'] === true,
-      limitMb: typeof videos['limitMb'] === 'number' ? videos['limitMb'] : 2000,
+      maxMb: typeof videos['maxMb'] === 'number' ? videos['maxMb'] : 25,
       existing: typeof videos['existing'] === 'number' ? videos['existing'] : 0,
-      notice: typeof videos['notice'] === 'string' ? videos['notice'] : null,
     },
   };
 }
@@ -175,7 +172,7 @@ export interface McSettingsState {
   /** Why the load failed; null when all is well. */
   readonly settingsError: Signal<string | null>;
   load(): Promise<void>;
-  setVideoLimit(limitMb: number): Promise<McSettingsReply>;
+  setVideoMaxMb(maxMb: number): Promise<McSettingsReply>;
   /** Turning it on carries `confirm: true` (the warning dialog's yes). */
   setVideosInGit(inGit: boolean, confirm: boolean, includeExisting?: boolean): Promise<McSettingsReply>;
   revokeDevice(id: string): Promise<McSettingsReply>;

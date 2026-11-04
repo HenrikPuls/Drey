@@ -33,6 +33,20 @@ export class FileConfigStore {
   async set<T>(key: string, value: T): Promise<void> {
     const data = await this.load();
     data[key] = value;
+    await this.persist(data);
+  }
+
+  /** Removes a key (a retired setting); a key that is not there writes nothing. */
+  async delete(key: string): Promise<void> {
+    const data = await this.load();
+    if (!(key in data)) {
+      return;
+    }
+    delete data[key];
+    await this.persist(data);
+  }
+
+  private async persist(data: Record<string, unknown>): Promise<void> {
     this.cache = data;
     await fsp.mkdir(path.dirname(this.file), { recursive: true });
     const tmp = `${this.file}.tmp`;

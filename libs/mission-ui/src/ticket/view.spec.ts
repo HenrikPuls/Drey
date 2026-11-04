@@ -821,7 +821,7 @@ describe('proofOf', () => {
   });
 
   it('degrades honestly on half-readable sections', () => {
-    expect(proofOf('')).toEqual({ testedOn: '', tester: '', criteria: [], findings: [], video: null, videoRemoved: false, chapters: [] });
+    expect(proofOf('')).toEqual({ testedOn: '', tester: '', criteria: [], findings: [], video: null, videoNotKept: null, chapters: [] });
     const loose = proofOf('- [x] checked by hand\n- [ ] `npm run build`\ngarbage line');
     expect(loose.criteria).toEqual([
       { command: 'checked by hand', passed: true, screenshot: null, note: null },
@@ -841,13 +841,13 @@ describe('proofOf', () => {
     ]);
     expect(withVideo.criteria).toHaveLength(1);
     expect(withVideo.findings).toEqual(['one']);
-    const removed = proofOf('### Criteria\n\n- [x] `a`\n\n### Video\n\nVideo removed (size limit).\n');
+    const removed = proofOf('### Criteria\n\n- [x] `a`\n\n### Video\n\nVideo not kept: 31.2 MB exceeds the 25 MB limit.\n');
     expect(removed.video).toBeNull();
-    expect(removed.videoRemoved).toBe(true);
+    expect(removed.videoNotKept).toBe('Video not kept: 31.2 MB exceeds the 25 MB limit.');
     // A tests proof carries neither: nothing for the card to show.
     const tests = proofOf('### Criteria\n\n- [x] `a` — checked by the machine gate\n');
     expect(tests.video).toBeNull();
-    expect(tests.videoRemoved).toBe(false);
+    expect(tests.videoNotKept).toBeNull();
   });
 
   it('collects every bullet under Findings and ignores prose lines', () => {
@@ -1500,7 +1500,7 @@ describe('proofRecommendationOf', () => {
     criteria: [{ command: 'npm test', passed: true, screenshot: null, note: null }],
     findings: [],
     video: null,
-    videoRemoved: false,
+    videoNotKept: null,
     chapters: [],
   });
 

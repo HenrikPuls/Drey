@@ -922,7 +922,9 @@ When a verify run has written `## Verification`, the section reads as a
 **Proof** block instead of its Markdown: the verdict (*3/3 green.*), the
 checks with their notes and video times, the screenshots (click one to
 open it), the walkthrough video with a button per chapter that jumps to
-it, and the findings. Put the caret in the section and the Markdown
+it, and the findings. A walkthrough over 25 MB is not kept; the block
+says so in one line instead of the player (Settings → Engine → Videos,
+*Largest video*; videos are never deleted automatically). Put the caret in the section and the Markdown
 shows again. At the very end the **Cost** table lists every settled run
 of `## Verlauf` (phase, model, tokens, time, cost) with the total.
 Under it the **action bar**: *Send back…* and *Accept and move to

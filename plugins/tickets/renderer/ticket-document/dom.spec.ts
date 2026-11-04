@@ -12,7 +12,7 @@ const proof: ProofView = {
     { label: 'Escape closes it', passed: false, note: 'focus lost', at: null },
   ],
   shots: [{ file: 'verify-1.png', caption: 'shot 1 · One palette' }],
-  video: { file: 'v.webm', removed: false, chapters: [{ atMs: 12_000, at: '0:12', label: 'One palette' }] },
+  video: { file: 'v.webm', notKept: null, chapters: [{ atMs: 12_000, at: '0:12', label: 'One palette' }] },
   findings: ['Slow start.'],
 };
 
@@ -34,10 +34,10 @@ describe('proofNode', () => {
     expect(node.querySelector('.tickets-doc-findings li')?.textContent).toBe('Slow start.');
   });
 
-  it('replaces the player with the removal note', () => {
-    const node = proofNode({ vaultId: null, openFile: vi.fn() }, { ...proof, video: { file: null, removed: true, chapters: [] } });
+  it('replaces the player with the not-kept line', () => {
+    const node = proofNode({ vaultId: null, openFile: vi.fn() }, { ...proof, video: { file: null, notKept: 'Video not kept: 31.2 MB exceeds the 25 MB limit.', chapters: [] } });
     expect(node.querySelector('video')).toBeNull();
-    expect(node.querySelector('.tickets-doc-note')?.textContent).toBe('Video removed (size limit).');
+    expect(node.querySelector('.tickets-doc-note')?.textContent).toBe('Video not kept: 31.2 MB exceeds the 25 MB limit.');
   });
 
   it('hides gallery and player when the ticket carries none', () => {

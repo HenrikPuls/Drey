@@ -26,7 +26,7 @@ const VIEW: McSettingsView = {
     { id: 'd1aa', name: 'Phone', readOnly: false, pairedAt: '2026-11-01T10:00:00Z', lastSeen: NOW_ISO, current: true },
     { id: 'd2bb', name: 'Tablet', readOnly: true, pairedAt: OLD, lastSeen: OLD, current: false },
   ],
-  videos: { inGit: false, limitMb: 2000, existing: 0, notice: null },
+  videos: { inGit: false, maxMb: 25, existing: 0 },
 };
 
 const WAITING: McPairingView = {
@@ -46,7 +46,7 @@ function mount(view: McSettingsView, pairing?: McPairingView | null) {
     settings: signal<McSettingsView | null>(view),
     settingsError: signal<string | null>(null),
     load: vi.fn(() => Promise.resolve()),
-    setVideoLimit: vi.fn(() => Promise.resolve({ ok: true as const })),
+    setVideoMaxMb: vi.fn(() => Promise.resolve({ ok: true as const })),
     setVideosInGit: vi.fn(() => Promise.resolve({ ok: true as const })),
     revokeDevice: vi.fn(() => Promise.resolve({ ok: true as const })),
     ...(pairing === undefined

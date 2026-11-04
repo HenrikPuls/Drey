@@ -76,7 +76,7 @@ export function proofNode(deps: ProofDeps, proof: ProofView): HTMLElement {
   if (proof.video !== null) {
     const block = el('div', 'tickets-doc-video');
     if (proof.video.file === null) {
-      block.append(el('p', 'tickets-doc-note', 'Video removed (size limit).'));
+      block.append(el('p', 'tickets-doc-note', proof.video.notKept ?? ''));
     } else {
       const player = el('video', 'tickets-doc-player');
       player.controls = true;

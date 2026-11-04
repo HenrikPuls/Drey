@@ -221,19 +221,20 @@
                 </label>
                 <label class="row">
                   <span class="grow">
-                    Size limit
-                    <small class="sub">{{ v.videos.notice ?? (v.videos.inGit ? 'The limit no longer frees space.' : 'Oldest videos of done tickets go first.') }}</small>
+                    Largest video
+                    <small class="sub">Longer recordings are not kept</small>
                   </span>
                   <input
                     type="number"
                     class="num"
-                    min="100"
-                    step="100"
-                    aria-label="Video size limit in MB"
-                    [value]="limitDraft() ?? v.videos.limitMb"
-                    (input)="onLimitInput($event)"
-                    (blur)="commitLimit()"
-                    (keydown.enter)="commitLimit()"
+                    min="1"
+                    max="200"
+                    step="1"
+                    aria-label="Largest video in MB"
+                    [value]="maxDraft() ?? v.videos.maxMb"
+                    (input)="onMaxInput($event)"
+                    (blur)="commitMax()"
+                    (keydown.enter)="commitMax()"
                   />
                   <span class="val">MB</span>
                 </label>

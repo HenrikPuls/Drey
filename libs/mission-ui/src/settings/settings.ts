@@ -31,7 +31,7 @@ export const SETTINGS_PAGES: readonly { readonly id: SettingsPage; readonly labe
   { id: 'appearance', label: 'Appearance', sub: 'Theme, highlight color, text size, density' },
   { id: 'chat', label: 'Chat', sub: 'Model, connection' },
   { id: 'devices', label: 'Devices', sub: 'Paired devices, revoke' },
-  { id: 'engine', label: 'Engine', sub: 'Videos, size limit' },
+  { id: 'engine', label: 'Engine', sub: 'Videos' },
 ];
 
 /** The warning the "Videos in git" confirmation shows (specs/ticket-schema.md, "Videos"). */
@@ -77,7 +77,7 @@ export class Settings {
   protected readonly includeExisting = signal(false);
   /** The device whose revoke button was pressed once. */
   protected readonly armed = signal<string | null>(null);
-  protected readonly limitDraft = signal<string | null>(null);
+  protected readonly maxDraft = signal<string | null>(null);
 
   /** The preview card's colours follow the chosen theme and highlight. */
   protected readonly previewAccent = computed(() => this.accentColor(this.theme.accent()));
@@ -286,20 +286,20 @@ export class Settings {
     await this.state?.setVideosInGit(true, true, this.includeExisting());
   }
 
-  protected onLimitInput(event: Event): void {
-    this.limitDraft.set((event.target as HTMLInputElement).value);
+  protected onMaxInput(event: Event): void {
+    this.maxDraft.set((event.target as HTMLInputElement).value);
   }
 
   /** A typed value commits when the field is left or on Enter. */
-  protected async commitLimit(): Promise<void> {
-    const draft = this.limitDraft();
-    this.limitDraft.set(null);
+  protected async commitMax(): Promise<void> {
+    const draft = this.maxDraft();
+    this.maxDraft.set(null);
     if (draft === null || this.view() === null) {
       return;
     }
     const mb = Number(draft);
-    if (Number.isInteger(mb) && mb !== this.view()?.videos.limitMb) {
-      await this.state?.setVideoLimit(mb);
+    if (Number.isInteger(mb) && mb >= 1 && mb <= 200 && mb !== this.view()?.videos.maxMb) {
+      await this.state?.setVideoMaxMb(mb);
     }
   }
 }
