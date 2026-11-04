@@ -1082,3 +1082,60 @@ details.think .step-body {
 .splitcard .card-summary {
   margin-bottom: 10px;
 }
+/* D-1: the model could not answer -- provider, endpoint, reason */
+
+.errcard {
+  padding: 12px 13px;
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: 12px;
+}
+
+.errcard .ck {
+  margin-bottom: 8px;
+  font-family: var(--mono);
+  font-size: calc(10px * var(--mc-text, 1));
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--danger);
+}
+
+.errfacts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  margin: 0 0 8px;
+  font-size: calc(13px * var(--mc-text, 1));
+}
+
+.errfacts dt {
+  color: var(--text-3);
+}
+
+.errfacts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.errfacts .mono {
+  font-family: var(--mono);
+}
+
+.errreason {
+  margin: 0;
+  font-size: calc(13px * var(--mc-text, 1));
+  line-height: 1.45;
+}
+
+.errcard .row {
+  display: flex;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.errcard .row .btn {
+  min-height: 40px;
+  padding: 10px 16px;
+  font-size: calc(13px * var(--mc-text, 1));
+}

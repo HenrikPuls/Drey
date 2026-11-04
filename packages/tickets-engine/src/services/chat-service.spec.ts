@@ -626,6 +626,45 @@ describe('ChatService start and send', () => {
     expect(parseSessionFile(text, file)!.messages.map((m) => m.role)).toEqual(['owner', 'mission', 'owner']);
   });
 
+  it('a turn the model never answered is an error with the failure, not a mission line (D-1)', async () => {
+    const failure = {
+      code: 'unreachable' as const,
+      provider: 'lmstudio',
+      providerLabel: 'LM Studio',
+      baseUrl: 'http://localhost:1234/v1',
+      model: 'glm-5.3-flash',
+      reason: 'could not be reached — connection refused — nothing is listening there.',
+      message: 'LM Studio at http://localhost:1234/v1: could not be reached — connection refused — nothing is listening there.',
+    };
+    bridgeGate = () => Promise.resolve({ say: failure.message, thought: null, commands: [], failure });
+    service = boot();
+
+    const result = await service.start({ title: 'Down', text: 'Anyone there?' });
+
+    expect(result).toEqual({ ok: false, error: failure.message, failure, file: result.file });
+    expect(events[events.length - 1]).toEqual({ file: result.file, event: { kind: 'error', message: failure.message } });
+    const text = await readOnDisk(result.file!);
+    // The owner's line stays; the failure is never written down as the mission's words
+    // (the next turn's history would feed it to the model as if it had said it).
+    expect(parseSessionFile(text, result.file!)!.messages.map((m) => m.role)).toEqual(['owner']);
+    expect(text).not.toContain('nothing is listening');
+  });
+
+  it('a flow draft without a model returns the failure message as its error (D-1)', async () => {
+    const failure = {
+      code: 'unsupported' as const,
+      provider: 'copilot-cli',
+      providerLabel: 'GitHub Copilot CLI',
+      baseUrl: null,
+      model: 'gpt',
+      reason: 'Mission Control cannot talk to this provider.',
+      message: 'GitHub Copilot CLI: Mission Control cannot talk to this provider.',
+    };
+    bridgeGate = () => Promise.resolve({ say: failure.message, thought: null, commands: [], failure });
+    service = boot();
+    expect(await service.draftFlow({ ticket: 'T-0001', context: 'flow', ask: null })).toEqual({ ok: false, error: failure.message });
+  });
+
   it('refuses an empty message and a missing file without touching the vault', async () => {
     service = boot();
     const started = await service.start({ title: 'Refusals', text: 'One' });

@@ -11,8 +11,26 @@ export interface McSettingsDevice {
   readonly current: boolean;
 }
 
+/** The chat model as Drey pushed it (D-1, E12-3b): read-only here, never the key itself. */
+export interface McChatSettings {
+  readonly providerLabel: string;
+  readonly baseUrl: string | null;
+  readonly model: string | null;
+  readonly hasKey: boolean;
+  /** Why a chat turn could not run right now (the error card's text); null = it can. */
+  readonly problem: string | null;
+}
+
+/** The outcome of "Test connection". */
+export interface McChatTest {
+  readonly ok: boolean;
+  readonly message: string;
+}
+
 /** The per-vault settings the desk sends (`GET /api/settings`). */
 export interface McSettingsView {
+  /** The Chat row; null on a desk that predates it. */
+  readonly chat: McChatSettings | null;
   readonly devices: readonly McSettingsDevice[];
   readonly videos: {
     readonly inGit: boolean;
@@ -38,7 +56,18 @@ export function parseSettings(json: unknown): McSettingsView | null {
     return null;
   }
   const devices = Array.isArray(body['devices']) ? body['devices'] : [];
+  const chat = engine?.['chat'] as Record<string, unknown> | undefined;
   return {
+    chat:
+      chat === undefined || chat === null || typeof chat !== 'object'
+        ? null
+        : {
+            providerLabel: typeof chat['providerLabel'] === 'string' ? chat['providerLabel'] : 'Unknown provider',
+            baseUrl: typeof chat['baseUrl'] === 'string' ? chat['baseUrl'] : null,
+            model: typeof chat['model'] === 'string' ? chat['model'] : null,
+            hasKey: chat['hasKey'] === true,
+            problem: typeof chat['problem'] === 'string' ? chat['problem'] : null,
+          },
     devices: devices.flatMap((raw): McSettingsDevice[] => {
       const d = raw as Record<string, unknown> | null;
       if (d === null || typeof d !== 'object' || typeof d['id'] !== 'string' || typeof d['name'] !== 'string') {
@@ -74,6 +103,8 @@ export interface McSettingsState {
   /** Turning it on carries `confirm: true` (the warning dialog's yes). */
   setVideosInGit(inGit: boolean, confirm: boolean, includeExisting?: boolean): Promise<McSettingsReply>;
   revokeDevice(id: string): Promise<McSettingsReply>;
+  /** The Chat row's "Test connection": probes the endpoint the chat would use. Optional: a desk without it hides the button. */
+  testChat?(): Promise<McChatTest>;
 }
 
 export const MC_SETTINGS_STATE = new InjectionToken<McSettingsState>('mc.settings-state');

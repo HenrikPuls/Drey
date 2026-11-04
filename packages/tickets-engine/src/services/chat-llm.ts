@@ -1,23 +1,24 @@
 /**
  * The Mission Control LLM bridge (E5a, ADR-0088 later change): the one
  * provider seam the chat service composes (concept §4.7 — one prompt in,
- * structured answer out). It speaks the OpenAI-compatible dialect
- * directly: POST {baseUrl}/chat/completions, `stream: true`, SSE `data:`
- * frames whose `choices.delta.content` accumulates the reply, parsed by
- * core/chat-intents after the stream completes. The system prompt is a
+ * structured answer out). It speaks two dialects, picked by the provider
+ * kind Drey pushes (chat-model.ts): OpenAI-compatible (POST
+ * {baseUrl}/chat/completions) and Anthropic Messages (POST
+ * {baseUrl}/v1/messages), both `stream: true` SSE whose text deltas
+ * accumulate the reply, parsed by core/chat-intents after the stream
+ * completes; any other provider is refused with a named reason (D-1,
+ * milestone 131). The system prompt is a
  * dep (the mission prompt by default, AGGREGATOR_SYSTEM_PROMPT for the
  * improvement loop's turns — E6). The bridge never touches the vault and
- * never throws: a missing model, an unreachable provider and an
- * unreadable answer each resolve an honest envelope whose say explains
- * the situation and whose commands stay empty.
+ * never throws: a missing model, an unsupported or unreachable provider each
+ * resolve an outcome carrying a `failure` (provider, endpoint, reason) the
+ * chat service reports as an error; an unreadable answer resolves an honest
+ * say. Commands stay empty either way.
  */
-import type { ChatBridge, ChatCommand, ChatShapeReply, ChatStreamEvent } from '../contracts/chat';
+import type { ChatBridge, ChatCommand, ChatModelFailure, ChatShapeReply, ChatStreamEvent } from '../contracts/chat';
 import { parseEnvelope, type ChatEnvelope } from '../core/chat-intents';
+import { causeOf, chatFailure, chatRequest, deltaOf, httpReason, resolveChatModel, type ChatDialect } from './chat-model';
 
-/** The config keys the bridge reads from the engine's config store. */
-const KEY_BASE_URL = 'chat.baseUrl';
-const KEY_API_KEY = 'chat.apiKey';
-const KEY_MODEL = 'chat.model';
 /** One mission turn may take this long before the bridge gives up — honestly. */
 const TURN_TIMEOUT_MS = 120_000;
 /** A shape turn may read the repository this many times before it must answer. */
@@ -148,6 +149,7 @@ interface TurnOutcome {
   readonly thought: string | null;
   readonly commands: readonly ChatCommand[];
   readonly shape?: ChatShapeReply;
+  readonly failure?: ChatModelFailure;
 }
 
 export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
@@ -158,23 +160,22 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
   return {
     async runTurn(input) {
       const emit = (event: ChatStreamEvent): void => input.emit(event);
-      /** The honest fallback: one explaining text event, no commands, never a throw. */
-      const fail = (say: string): TurnOutcome => {
-        emit({ kind: 'text', text: say });
-        return { say, thought: null, commands: [] };
-      };
+      /**
+       * The honest fallback, never a throw: no commands, and a `failure`
+       * the chat service turns into an error (the owner sees the card
+       * with provider, endpoint and reason — never a mission message).
+       * The stream carries no text for it.
+       */
+      const fail = (failure: ChatModelFailure): TurnOutcome => ({ say: failure.message, thought: null, commands: [], failure });
 
-      const [baseUrl, apiKey, model] = await Promise.all([
-        deps.config.get<string>(KEY_BASE_URL),
-        deps.config.get<string>(KEY_API_KEY),
-        deps.config.get<string>(KEY_MODEL),
-      ]);
-      const base = typeof baseUrl === 'string' ? baseUrl.trim().replace(/\/+$/, '') : '';
-      const key = typeof apiKey === 'string' && apiKey.trim() !== '' ? apiKey.trim() : null;
-      const modelId = typeof model === 'string' ? model.trim() : '';
-      if (base === '' || modelId === '') {
-        return fail('Mission Control is not set up yet — pick the assistant model in Settings, then ask again.');
+      const resolved = await resolveChatModel(deps.config);
+      if (!resolved.ok) {
+        return fail(resolved.failure);
       }
+      const { spec } = resolved;
+      const dialect: ChatDialect = spec.dialect;
+      const refuse = (code: 'unreachable' | 'refused' | 'timeout', reason: string): TurnOutcome =>
+        fail(chatFailure(code, spec.provider, spec.baseUrl, spec.model, reason));
 
       const controller = new AbortController();
       const startedAt = now();
@@ -199,23 +200,22 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
         ];
         let envelope: ChatEnvelope | null = null;
         for (let round = 0; ; round++) {
-          const response = await transport(`${base}/chat/completions`, {
+          const request = chatRequest(spec, messages);
+          const response = await transport(request.url, {
             method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              ...(key === null ? {} : { authorization: `Bearer ${key}` }),
-            },
-            body: JSON.stringify({ model: modelId, stream: true, messages }),
+            headers: request.headers,
+            body: request.body,
             signal: controller.signal,
           });
           if (!response.ok) {
-            return fail(`The chat model answered ${response.status} — Mission Control cannot reach it right now.`);
+            return refuse('refused', httpReason(response.status, await response.text().catch(() => '')));
           }
           if (response.body === null) {
-            return fail('The chat model returned no stream — Mission Control cannot reach it right now.');
+            return refuse('refused', 'the endpoint returned no stream.');
           }
           const reply = await readSse(
             response.body as unknown as AsyncIterable<Uint8Array>,
+            dialect,
             // A shape reply is one JSON envelope around the plan: showing it
             // as it types would print the document escaped. The screen waits
             // (and shows what Paul reads) until the finished turn is read back.
@@ -223,17 +223,22 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
             () => {
               if (now() - startedAt > TURN_TIMEOUT_MS) {
                 controller.abort();
-                return 'The chat model took too long to answer — try again.';
+                return 'the model took too long to answer — try again.';
               }
               return null;
             },
           );
           if (reply.timedOut !== null) {
-            return fail(reply.timedOut);
+            return refuse('timeout', reply.timedOut);
           }
           envelope = parseEnvelope(reply.text, input.priorities);
           if (envelope === null) {
-            return fail("The chat model's reply could not be read — it answered outside its envelope.");
+            // The model answered — only not in its envelope: an honest say,
+            // not a connection failure (the card would send the owner to
+            // the wrong place).
+            const say = "The chat model's reply could not be read — it answered outside its envelope.";
+            emit({ kind: 'text', text: say });
+            return { say, thought: null, commands: [] };
           }
           // A shape turn may read the repository before it answers: the
           // files go back as the next user message, a bounded few rounds.
@@ -263,10 +268,9 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
         return { ...out, shape: shaped };
       } catch (error) {
         if (controller.signal.aborted) {
-          return fail('The chat model took too long to answer — try again.');
+          return refuse('timeout', 'the model took too long to answer — try again.');
         }
-        const message = error instanceof Error ? error.message : String(error);
-        return fail(`The chat model could not be reached (${message}) — Mission Control is sorry.`);
+        return refuse('unreachable', `could not be reached — ${causeOf(error)}.`);
       } finally {
         clearTimeout(watchdog);
       }
@@ -282,6 +286,7 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
  */
 async function readSse(
   body: AsyncIterable<Uint8Array>,
+  dialect: ChatDialect,
   onDelta: (delta: string) => void,
   onChunk: () => string | null,
 ): Promise<{ readonly text: string; readonly timedOut: string | null }> {
@@ -306,7 +311,7 @@ async function readSse(
       if (data === '' || data === '[DONE]') {
         continue;
       }
-      const delta = deltaContent(data);
+      const delta = deltaOf(dialect, data);
       if (delta !== null && delta !== '') {
         text += delta;
         onDelta(delta);
@@ -314,31 +319,4 @@ async function readSse(
     }
   }
   return { text, timedOut };
-}
-
-/** The `choices[0].delta.content` string of one streamed chunk, null when absent. */
-function deltaContent(data: string): string | null {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(data) as unknown;
-  } catch {
-    return null;
-  }
-  if (typeof raw !== 'object' || raw === null) {
-    return null;
-  }
-  const choices = (raw as Record<string, unknown>)['choices'];
-  if (!Array.isArray(choices) || choices.length === 0) {
-    return null;
-  }
-  const first = choices[0];
-  if (typeof first !== 'object' || first === null) {
-    return null;
-  }
-  const delta = (first as Record<string, unknown>)['delta'];
-  if (typeof delta !== 'object' || delta === null) {
-    return null;
-  }
-  const content = (delta as Record<string, unknown>)['content'];
-  return typeof content === 'string' ? content : null;
 }

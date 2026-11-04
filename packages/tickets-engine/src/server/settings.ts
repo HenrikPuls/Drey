@@ -9,6 +9,7 @@
  * what they govern is specified in `specs/ticket-schema.md`, "Videos".
  */
 import type { Parsed } from '../core/commands';
+import { CHAT_KEYS, providerLabelOf, resolveChatModel, type ChatModelConfig } from '../services/chat-model';
 import type { DeviceView } from './auth';
 
 export const SETTINGS_KEYS = {
@@ -29,8 +30,24 @@ export interface VideoSettings {
   readonly notice: string | null;
 }
 
+/**
+ * The chat model as the settings screen shows it (D-1, E12-3b): what
+ * Drey pushed (`chat.*` keys) — never the API key itself, only whether
+ * one is set. `problem` is why a turn would have no model right now.
+ */
+export interface ChatSettings {
+  readonly provider: string;
+  readonly providerLabel: string;
+  readonly baseUrl: string | null;
+  readonly model: string | null;
+  readonly hasKey: boolean;
+  /** null = a turn can run; otherwise the reason in one sentence (the same text the chat's error card shows). */
+  readonly problem: string | null;
+}
+
 export interface EngineSettings {
   readonly videos: VideoSettings;
+  readonly chat: ChatSettings;
 }
 
 /** One paired device as the settings screen lists it; `current` marks the asker. */
@@ -53,8 +70,16 @@ export interface SettingsPatch {
   readonly includeExisting?: boolean;
 }
 
+/** The outcome of the Chat row's "Test connection". */
+export interface ChatTestReply {
+  readonly ok: boolean;
+  readonly message: string;
+}
+
 /** The engine side the router calls; the remote service implements it over its config store. */
 export interface SettingsAccess {
+  /** Probes the configured chat endpoint (a cheap model-list GET); never throws. */
+  testChat(): Promise<ChatTestReply>;
   read(askingDevice: string): Promise<SettingsReply>;
   patch(patch: SettingsPatch, askingDevice: string): Promise<{ ok: false; error: string } | SettingsReply>;
   revoke(id: string, askingDevice: string): Promise<{ ok: false; error: string } | SettingsReply>;
@@ -75,6 +100,27 @@ export function normalizeVideoSettings(
         : DEFAULT_VIDEO_LIMIT_MB,
     existing,
     notice,
+  };
+}
+
+/** The Chat row's content: what Drey pushed and whether a turn could run on it. */
+export async function chatSettingsOf(config: ChatModelConfig): Promise<ChatSettings> {
+  const resolved = await resolveChatModel(config);
+  const [provider, baseUrl, model, key] = await Promise.all([
+    config.get<string>(CHAT_KEYS.provider),
+    config.get<string>(CHAT_KEYS.baseUrl),
+    config.get<string>(CHAT_KEYS.model),
+    config.get<string>(CHAT_KEYS.apiKey),
+  ]);
+  const text = (value: unknown): string | null => (typeof value === 'string' && value.trim() !== '' ? value.trim() : null);
+  const id = resolved.ok ? resolved.spec.provider : resolved.failure.provider;
+  return {
+    provider: id,
+    providerLabel: providerLabelOf(id),
+    baseUrl: text(baseUrl),
+    model: text(model),
+    hasKey: text(key) !== null,
+    problem: resolved.ok ? null : resolved.failure.message,
   };
 }
 

@@ -4,10 +4,13 @@ import { createChatBridge, MISSION_SYSTEM_PROMPT } from './chat-llm';
 
 /**
  * The Mission Control bridge (E5a): one POST against the OpenAI-compatible
- * chat/completions endpoint, live text deltas off the SSE stream, and the
- * final say/thought/commands from the strict envelope. Every failure —
- * unconfigured, unreachable, unreadable, stalled — resolves an honest
- * envelope and never throws. A fake fetch proves the wire shape.
+ * chat/completions endpoint (or, for the Anthropic-Messages providers,
+ * /v1/messages), live text deltas off the SSE stream, and the final
+ * say/thought/commands from the strict envelope. Every failure —
+ * unconfigured, unsupported provider, unreachable, refused, stalled —
+ * resolves an outcome with a named `failure` and never throws; an
+ * unreadable answer resolves an honest say. A fake fetch proves the wire
+ * shape (D-1, milestone 131).
  */
 
 interface RecordedCall {
@@ -140,7 +143,7 @@ describe('createChatBridge', () => {
     });
   });
 
-  it('resolves an honest unconfigured envelope without calling the model — and never throws', async () => {
+  it('resolves a not-configured failure without calling the model — and never throws', async () => {
     const calls: RecordedCall[] = [];
     const bridge = createChatBridge({
       config: chatConfig({ 'chat.baseUrl': 'http://127.0.0.1:1234/v1' }), // no model
@@ -152,8 +155,11 @@ describe('createChatBridge', () => {
     expect(calls).toHaveLength(0);
     expect(result.commands).toEqual([]);
     expect(result.thought).toBeNull();
-    expect(result.say).toMatch(/not set up yet/);
-    expect(events).toEqual([{ kind: 'text', text: result.say }]);
+    expect(result.failure).toMatchObject({ code: 'not-configured', baseUrl: 'http://127.0.0.1:1234/v1', model: null });
+    expect(result.say).toBe(result.failure?.message);
+    expect(result.say).toMatch(/no model is selected/);
+    // The failure is the service's to report (error card), not a streamed reply.
+    expect(events).toEqual([]);
   });
 
   it('treats a blank base URL as unconfigured too', async () => {
@@ -164,7 +170,8 @@ describe('createChatBridge', () => {
     });
     const result = await bridge.runTurn({ text: 'hello?', history: [], board: BOARD, emit: () => undefined });
     expect(calls).toHaveLength(0);
-    expect(result.say).toMatch(/not set up yet/);
+    expect(result.failure?.code).toBe('not-configured');
+    expect(result.say).toMatch(/no endpoint is set/);
     expect(result.commands).toEqual([]);
   });
 
@@ -178,8 +185,9 @@ describe('createChatBridge', () => {
     const result = await bridge.runTurn({ text: 'hello?', history: [], board: BOARD, emit });
 
     expect(result.commands).toEqual([]);
-    expect(result.say).toMatch(/500/);
-    expect(events).toEqual([{ kind: 'text', text: result.say }]);
+    expect(result.failure).toMatchObject({ code: 'refused', providerLabel: 'OpenAI-compatible server', baseUrl: 'http://127.0.0.1:1234/v1', model: 'glm-5' });
+    expect(result.say).toMatch(/HTTP 500/);
+    expect(events).toEqual([]);
   });
 
   it('answers honestly when the transport itself fails', async () => {
@@ -191,7 +199,85 @@ describe('createChatBridge', () => {
     });
     const result = await bridge.runTurn({ text: 'hello?', history: [], board: BOARD, emit: () => undefined });
     expect(result.commands).toEqual([]);
+    expect(result.failure?.code).toBe('unreachable');
     expect(result.say).toMatch(/connection refused/);
+    expect(result.say).toContain('http://127.0.0.1:1234/v1');
+  });
+
+  it('names the cause node hides behind "fetch failed" (nothing listening)', async () => {
+    const bridge = createChatBridge({
+      config: chatConfig({ 'chat.baseUrl': 'http://localhost:1234/v1', 'chat.model': 'glm-5.3-flash' }),
+      fetch: (async () => {
+        throw Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) });
+      }) as typeof fetch,
+    });
+    const result = await bridge.runTurn({ text: 'hello?', history: [], board: BOARD, emit: () => undefined });
+    expect(result.failure?.reason).toMatch(/nothing is listening/);
+    expect(result.say).not.toMatch(/fetch failed/);
+    expect(result.say).toContain('http://localhost:1234/v1');
+  });
+
+  it('speaks the Anthropic Messages dialect for zai-glm and anthropic', async () => {
+    const calls: RecordedCall[] = [];
+    const text = '{"say":"Hello from Pia.","thought":"","commands":[]}';
+    const bridge = createChatBridge({
+      config: chatConfig({
+        'chat.provider': 'zai-glm',
+        'chat.baseUrl': 'https://api.z.ai/api/anthropic/',
+        'chat.apiKey': 'zk',
+        'chat.model': 'glm-5.3-flash',
+      }),
+      fetch: fakeFetch(calls, [
+        'event: message_start\ndata: ' + JSON.stringify({ type: 'message_start' }) + '\n\n',
+        'event: content_block_delta\ndata: ' + JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } }) + '\n\n',
+        'event: message_stop\ndata: ' + JSON.stringify({ type: 'message_stop' }) + '\n\n',
+      ]),
+    });
+    const { events, emit } = collect();
+    const result = await bridge.runTurn({
+      text: 'Anyone there?',
+      history: [{ role: 'owner', text: 'Hi' }, { role: 'mission', text: 'Hello.' }],
+      board: BOARD,
+      emit,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe('https://api.z.ai/api/anthropic/v1/messages');
+    const headers = calls[0]!.init.headers as Record<string, string>;
+    expect(headers['x-api-key']).toBe('zk');
+    expect(headers['anthropic-version']).toBe('2023-06-01');
+    expect(headers['authorization']).toBeUndefined();
+    const body = JSON.parse(String(calls[0]!.init.body)) as { model: string; stream: boolean; max_tokens: number; system: string; messages: { role: string }[] };
+    expect(body).toMatchObject({ model: 'glm-5.3-flash', stream: true, max_tokens: 4096 });
+    expect(body.system).toContain('You are Mission Control');
+    expect(body.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
+    expect(events).toEqual([{ kind: 'text', text }]);
+    expect(result.say).toBe('Hello from Pia.');
+    expect(result.failure).toBeUndefined();
+  });
+
+  it('refuses a provider it cannot speak by name, without calling anything', async () => {
+    const calls: RecordedCall[] = [];
+    const bridge = createChatBridge({
+      config: chatConfig({ 'chat.provider': 'copilot-cli', 'chat.baseUrl': 'http://localhost:1234/v1', 'chat.model': 'gpt' }),
+      fetch: fakeFetch(calls, []),
+    });
+    const result = await bridge.runTurn({ text: 'hello?', history: [], board: BOARD, emit: () => undefined });
+    expect(calls).toHaveLength(0);
+    expect(result.failure).toMatchObject({ code: 'unsupported', providerLabel: 'GitHub Copilot CLI' });
+    expect(result.say).toMatch(/cannot talk to this provider/);
+  });
+
+  it('is switched off with the assistant master switch', async () => {
+    const calls: RecordedCall[] = [];
+    const values: Record<string, unknown> = { 'chat.baseUrl': 'http://x/v1', 'chat.model': 'm', 'chat.enabled': false };
+    const bridge = createChatBridge({
+      config: { get: async <T,>(key: string) => values[key] as T | undefined },
+      fetch: fakeFetch(calls, []),
+    });
+    const result = await bridge.runTurn({ text: 'hello?', history: [], board: BOARD, emit: () => undefined });
+    expect(calls).toHaveLength(0);
+    expect(result.failure?.reason).toMatch(/switched off/);
   });
 
   it('answers honestly when the reply holds no envelope', async () => {
@@ -219,8 +305,9 @@ describe('createChatBridge', () => {
 
       expect(calls).toHaveLength(1);
       expect(result.commands).toEqual([]);
+      expect(result.failure?.code).toBe('timeout');
       expect(result.say).toMatch(/too long/);
-      expect(events).toEqual([{ kind: 'text', text: result.say }]);
+      expect(events).toEqual([]);
     } finally {
       vi.useRealTimers();
     }

@@ -5,6 +5,7 @@ import { RemoteService } from './service';
 import type { TicketsRemotePort } from '../contracts/remote-protocol';
 import {
   DEFAULT_VIDEO_LIMIT_MB,
+  chatSettingsOf,
   normalizeVideoSettings,
   parseRevoke,
   parseSettingsPatch,
@@ -82,7 +83,15 @@ describe('the settings routes', () => {
 
   it('reads, patches and revokes through the access, naming the asking device', async () => {
     const access: SettingsAccess = {
-      read: vi.fn(async () => ({ ok: true as const, devices: [], engine: { videos: { inGit: false, limitMb: 2000, existing: 0, notice: null } } })),
+      read: vi.fn(async () => ({
+        ok: true as const,
+        devices: [],
+        engine: {
+          videos: { inGit: false, limitMb: 2000, existing: 0, notice: null },
+          chat: { provider: 'lmstudio', providerLabel: 'LM Studio', baseUrl: null, model: null, hasKey: false, problem: 'no endpoint' },
+        },
+      })),
+      testChat: vi.fn(async () => ({ ok: true, message: 'Connected.' })),
       patch: vi.fn(async () => ({ ok: false as const, error: 'nope' })),
       revoke: vi.fn(async () => ({ ok: false as const, error: 'nope' })),
     };
@@ -98,11 +107,40 @@ describe('the settings routes', () => {
     await route(req({ method: 'POST', path: '/api/settings/devices/revoke', authorization: auth, body: { id: 'abc' } }), deps);
     expect(access.revoke).toHaveBeenCalledWith('abc', expect.any(String));
 
+    const tested = await route(req({ method: 'POST', path: '/api/settings/chat/test', authorization: auth, body: {} }), deps);
+    expect(tested).toMatchObject({ status: 200, body: { ok: true, message: 'Connected.' } });
+    expect(access.testChat).toHaveBeenCalledTimes(1);
+
     const bad = await route(req({ method: 'POST', path: '/api/settings/engine', authorization: auth, body: { limitMb: 1 } }), deps);
     expect(bad.body).toMatchObject({ ok: false });
 
     const viewer = await route(req({ method: 'POST', path: '/api/settings/engine', authorization: read, body: { limitMb: 900 } }), deps);
     expect(viewer.status).toBe(403);
+  });
+});
+
+describe('the chat settings (D-1, E12-3b)', () => {
+  const memory = (values: Record<string, unknown>): { get<T>(key: string): Promise<T | undefined> } => ({
+    get: async <T>(key: string) => values[key] as T | undefined,
+  });
+
+  it('shows what Drey pushed, never the key, and the reason a turn could not run', async () => {
+    const view = await chatSettingsOf(
+      memory({ 'chat.provider': 'zai-glm', 'chat.baseUrl': 'https://api.z.ai/api/anthropic', 'chat.model': 'glm-5.3-flash', 'chat.apiKey': 'secret' }),
+    );
+    expect(view).toEqual({
+      provider: 'zai-glm',
+      providerLabel: 'Z.ai GLM',
+      baseUrl: 'https://api.z.ai/api/anthropic',
+      model: 'glm-5.3-flash',
+      hasKey: true,
+      problem: null,
+    });
+    expect(JSON.stringify(view)).not.toContain('secret');
+
+    const stuck = await chatSettingsOf(memory({ 'chat.provider': 'copilot-cli', 'chat.model': 'gpt' }));
+    expect(stuck.problem).toMatch(/GitHub Copilot CLI.*cannot talk to this provider/);
+    expect(stuck.hasKey).toBe(false);
   });
 });
 

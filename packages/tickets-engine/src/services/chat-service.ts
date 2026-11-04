@@ -365,6 +365,15 @@ export class ChatService implements ChatServicePort {
         ...(shape === undefined ? {} : { shape }),
         emit: (event) => this.deps.onEvent(file, event),
       });
+      if (reply.failure !== undefined) {
+        // D-1: no model answered. The owner's line stays in the file, the
+        // failure is never written down as the mission's reply (the next
+        // turn's history would feed it to the model as if it had said it);
+        // the card on the owner's screen names provider, endpoint, reason.
+        this.log(`mission turn for ${file}: ${reply.failure.message}`, 'warn');
+        this.deps.onEvent(file, { kind: 'error', message: reply.failure.message });
+        return { ok: false, error: reply.failure.message, failure: reply.failure, file };
+      }
       say = reply.say;
       thought = reply.thought;
       let wrote = true;
@@ -537,6 +546,9 @@ export class ChatService implements ChatServicePort {
       reply = await this.deps.bridge.runTurn({ text, history: [], board: '', flow: { context: input.context }, emit: () => undefined });
     } catch (error) {
       return { ok: false, error: `Paul could not be reached (${error instanceof Error ? error.message : String(error)}).` };
+    }
+    if (reply.failure !== undefined) {
+      return { ok: false, error: reply.failure.message };
     }
     const command = reply.commands.find((c) => c.kind === 'setChain');
     if (command === undefined || command.kind !== 'setChain') {

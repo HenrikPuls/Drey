@@ -44,7 +44,7 @@ import { startWindowsDictation } from './dictation';
 import { createFleetMcpTools } from './mcp-tools';
 import { listWorkerModels } from './worker-models';
 import { EngineClient } from './engine-client';
-import { ensureEngine } from './engine-lifecycle';
+import { ensureEngine, syncChatConfig } from './engine-lifecycle';
 import { MissionControlHost, createMissionControlView } from './mission-control';
 
 function messageOf(error: unknown): string {
@@ -73,6 +73,20 @@ const plugin: MainPluginModule = {
     // or spawn one; never stop it.
     const endpoints = await ensureEngine(ctx, ctx.log);
     const client = new EngineClient(endpoints);
+    // D-1: the assistant LLM settings reach the engine at activation (above)
+    // AND whenever Settings -> Assistant changes them -- the chat reads them
+    // per turn, so a change applies to the next question.
+    const chatSignature = (llm: ReturnType<typeof ctx.appConfig.get>['llm']): string =>
+      JSON.stringify([llm.enabled, llm.provider, llm.baseUrl, llm.apiKey, llm.model]);
+    let pushedChat = chatSignature(ctx.appConfig.get().llm);
+    ctx.appConfig.onChange((config) => {
+      // Unrelated config writes (a spell-check word, a layout) change nothing here.
+      if (chatSignature(config.llm) === pushedChat) {
+        return;
+      }
+      pushedChat = chatSignature(config.llm);
+      void syncChatConfig(client, config.llm).catch((error: unknown) => ctx.log(`engine chat config sync failed: ${messageOf(error)}`, 'warn'));
+    });
     const board = client.board();
     const fleet = client.fleet();
     const remoteService = client.remote();

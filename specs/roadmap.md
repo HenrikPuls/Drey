@@ -70,7 +70,7 @@ and suite-green but await the owner's
 rounds** — with E9 the whole E0–E9 arc stands built and the concept
 is complete, caveat:
 none of it is owner-verified yet; the next step is the owner's
-verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) and 130 (E13-8, Board and Team tabs, the Capacity band) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
+verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) 130 (E13-8, Board and Team tabs, the Capacity band) and 131 (D-1, the Mission Control chat reaches its model: sync on change, both HTTP dialects, the error card, Settings → Chat) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
@@ -90,19 +90,8 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
-- **D-1 — Mission Control chat reaches no model** (owner report, 2026-11-04;
-  milestone 131). Asking Pia or Paul sends nothing to the model. Known
-  facts: the engine bridge (`packages/tickets-engine/src/services/chat-llm.ts`)
-  reads `chat.baseUrl` / `chat.apiKey` / `chat.model` from its own config and
-  speaks only the OpenAI-compatible dialect; `plugins/tickets/main/engine-lifecycle.ts`
-  (`syncConfig`) pushes Drey's `llm` slice only when the engine is activated
-  or adopted, not when Settings → Assistant changes; the live engine config
-  held `http://localhost:1234/v1` with nothing listening; presets the bridge
-  cannot speak (`zai-glm`, CLI providers) exist. Reproduce first (real engine
-  plus a mock OpenAI endpoint: Pia, Paul shape turn, flow draft), then fix
-  what the trace shows: sync on change, carry the provider kind, speak or
-  refuse the dialect with a clear message in the chat (provider, URL, reason),
-  and the Chat row of E12-3b (endpoint and model visible, testable).
+_None open._ (D-1, Mission Control chat reaching no model, shipped as
+milestone 131 — see the changelog.)
 
 ### Now (small, daily value)
 
@@ -176,8 +165,9 @@ milestone at a time, a pause after each; milestone numbers are taken
 when an item ships (next free: 123; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, 116 = proof mode + videos, 117 = diff review, 118 = line comments, 119 = cost table + estimate, 120 = parts schema, 121 = plan delta, 122 = shape mode; E12-1 – E12-4, E11, E10-1 – E10-3 shipped). Nothing here creates tickets — the
 owner builds without the tickets system.
 
-- **E12-3b — Settings pages still missing.** Chat (thinking trace, new
-  chat, attachments), Repositories (launch command for verify, default
+- **E12-3b — Settings pages still missing.** Chat (the model rows and
+  "Test connection" shipped with D-1 / milestone 131; still missing: thinking
+  trace, new chat, attachments), Repositories (launch command for verify, default
   branch) and "Away and alerts" — each needs a desk setting behind it
   first; away posture itself is out of scope.
 - **E11-1b — Proof video follow-ups.** The 60-second cap is not
@@ -613,6 +603,13 @@ rest are kept so they still match `docs/11`.
   own.
 
 ### Follow-ups of shipped milestones (none committed)
+
+- **Mission Control over the CLI providers (D-1 follow-up, 2026-11-04).**
+  The chat bridge speaks the HTTP providers (OpenAI-compatible, Anthropic
+  Messages) and refuses `claude-code`, `copilot-cli` and `copilot-web` by name.
+  An engine-side CLI bridge (headless `claude -p` per turn) would let the
+  chat follow those too; until then the owner picks an HTTP provider in
+  Settings → Assistant.
 
 - **Chain alerts fix (owner request, 2026-10-31):** the run's usage
   in the thread as a menu, like Claude Code's context indicator — a

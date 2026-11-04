@@ -18,8 +18,10 @@ import {
 } from './config';
 import { RemoteGateway } from './gateway';
 import { qrMatrix } from './qr';
+import { testChatModel } from '../services/chat-model';
 import {
   normalizeVideoSettings,
+  chatSettingsOf,
   SETTINGS_KEYS,
   type SettingsAccess,
   type SettingsReply,
@@ -136,6 +138,7 @@ export class RemoteService {
           .list()
           .map((device) => ({ ...device, current: device.id === asking })),
         engine: {
+          chat: await chatSettingsOf(this.deps.config),
           videos: normalizeVideoSettings(
             { inGit: await get(SETTINGS_KEYS.videosInGit), limitMb: await get(SETTINGS_KEYS.videosLimitMb) },
             existing,
@@ -146,6 +149,7 @@ export class RemoteService {
     };
     return {
       read: reply,
+      testChat: () => testChatModel(this.deps.config),
       patch: async (patch, asking) => {
         const current = (await reply(asking)).engine.videos;
         if (patch.inGit === true && !current.inGit && patch.confirm !== true) {

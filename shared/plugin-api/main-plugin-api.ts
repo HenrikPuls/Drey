@@ -504,8 +504,15 @@ export interface MainPluginContext {
     register(path: string): Promise<VaultRegistration>;
   };
 
-  /** The base app config (ADR-0010). Read-only from a plugin — no patching from main. */
-  readonly appConfig: { get(): AppConfig };
+  /**
+   * The base app config (ADR-0010). Read-only from a plugin — no patching
+   * from main. `onChange` (SDK 1.40) fires after every successful write
+   * of the config (Settings, an import) with the stored config; a plugin
+   * that mirrors part of it elsewhere (the tickets plugin pushes the
+   * assistant LLM settings into its engine) re-syncs there instead of
+   * only at activation. Unsubscribed automatically on deactivate.
+   */
+  readonly appConfig: { get(): AppConfig; onChange(cb: (config: AppConfig) => void): Unsubscribe };
 
   /** The plugin's own config (`<userData>/plugins/<id>/config.json`). */
   readonly config: {

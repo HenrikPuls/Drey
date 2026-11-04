@@ -95,6 +95,9 @@ const SYNCED_KEYS = (providers: readonly string[]): readonly string[] => [
 
 /** The assistant LLM slice the chat bridge needs, out of the base app config. */
 interface ChatLlmSettings {
+  readonly enabled: boolean;
+  /** Drey's provider id (ADR-0047) -- the engine picks the wire dialect from it, or refuses the provider by name. */
+  readonly provider: string;
   readonly baseUrl: string;
   readonly apiKey: string | null;
   readonly model: string | null;
@@ -123,16 +126,30 @@ export async function syncConfig(client: ConfigSyncClient, ctx: {
       await client.invoke('configSet', { key, value }).catch(() => undefined);
     }
   }
-  const llm = ctx.appConfig.get().llm;
-  const chatKeys: [string, string | null][] = [
-    ['chat.baseUrl', llm.baseUrl.trim() === '' ? null : llm.baseUrl.trim()],
-    ['chat.apiKey', llm.apiKey === null || llm.apiKey.trim() === '' ? null : llm.apiKey.trim()],
-    ['chat.model', llm.model === null || llm.model.trim() === '' ? null : llm.model.trim()],
+  await syncChatConfig(client, ctx.appConfig.get().llm);
+}
+
+/**
+ * Pushes the assistant LLM settings into the engine as the `chat.*` keys
+ * the Mission Control bridge reads. Every key travels every time -- a
+ * cleared model or key arrives as `null` instead of leaving the old value
+ * behind (D-1: a stale endpoint was the failure). Runs at activation and
+ * adoption (`syncConfig`) and again on every change of the app config
+ * (`appConfig.onChange`, SDK 1.40), so Settings -> Assistant applies to the
+ * next chat turn without a restart. The api key travels the invoke
+ * channel and is never logged.
+ */
+export async function syncChatConfig(client: ConfigSyncClient, llm: ChatLlmSettings): Promise<void> {
+  const text = (value: string | null): string | null => (value === null || value.trim() === '' ? null : value.trim());
+  const chatKeys: [string, unknown][] = [
+    ['chat.enabled', llm.enabled],
+    ['chat.provider', text(llm.provider)],
+    ['chat.baseUrl', text(llm.baseUrl)],
+    ['chat.apiKey', text(llm.apiKey)],
+    ['chat.model', text(llm.model)],
   ];
   for (const [key, value] of chatKeys) {
-    if (value !== null) {
-      await client.invoke('configSet', { key, value }).catch(() => undefined);
-    }
+    await client.invoke('configSet', { key, value }).catch(() => undefined);
   }
 }
 

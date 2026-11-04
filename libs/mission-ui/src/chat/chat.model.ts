@@ -8,6 +8,7 @@
 import { InjectionToken, type Signal, type WritableSignal, signal } from '@angular/core';
 import {
   DEFAULT_PRIORITY_CONFIG,
+  type ChatFailureView,
   type ChatStateView,
   type McPlanStatus,
   type WorkView,
@@ -39,6 +40,12 @@ export interface McChatState {
    * Optional — a host without a menu leaves it off.
    */
   readonly chatMenu?: WritableSignal<boolean>;
+  /**
+   * The error card (D-1): why the last turn had no model -- provider,
+   * endpoint, reason. Set by a turn the desk refused, cleared by the next
+   * turn or by dismissing. Optional: a host without it shows nothing.
+   */
+  readonly chatFailure?: WritableSignal<ChatFailureView | null>;
   /** The session list and the open session — the merged timeline's source. */
   readonly chat: Signal<ChatStateView>;
   /** The raw board snapshot; the proposal cards read it tolerantly. */

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { type Signal, type WritableSignal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { ActiveSession, ChatMessageView, ChatProposalView, ChatStateView, McChainEntry, McPlanStatus, WorkView } from '../api/dto';
+import type { ActiveSession, ChatFailureView, ChatMessageView, ChatProposalView, ChatStateView, McChainEntry, McPlanStatus, WorkView } from '../api/dto';
 import { DEFAULT_PRIORITY_CONFIG } from '../api/dto';
 import type { McChatState, McChatUploadReply } from './chat.model';
 import {
@@ -1269,6 +1269,77 @@ describe('Chat column structure (header / messages / composer)', () => {
     const { el } = renderChat(null, 'promote T-0004');
     const empties = Array.from(el.querySelectorAll('.body .empty')).map((p) => p.textContent ?? '');
     expect(empties).toEqual(['Earlier chats are in the menu (top left).']);
+  });
+});
+
+describe('Chat error card (D-1: the model could not answer)', () => {
+  function renderWithFailure(failure: ChatFailureView | null, active: ActiveSession = activeSession()) {
+    const chatFailure = signal<ChatFailureView | null>(failure);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: MC_CHAT_STATE,
+          useValue: {
+            chat: signal<ChatStateView>({ sessions: [], active }),
+            chatPrefill: signal(null),
+            chatFailure,
+            board: signal(null),
+            work: signal({ groups: [], priorities: DEFAULT_PRIORITY_CONFIG }),
+            toast: () => undefined,
+          } as unknown as McChatState,
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(Chat);
+    fixture.detectChanges();
+    return { fixture, chatFailure, el: fixture.nativeElement as HTMLElement };
+  }
+
+  const unreachable: ChatFailureView = {
+    code: 'unreachable',
+    providerLabel: 'LM Studio',
+    baseUrl: 'http://localhost:1234/v1',
+    model: 'glm-5.3-flash',
+    reason: 'could not be reached — connection refused — nothing is listening there.',
+  };
+
+  it('shows provider, endpoint, model and reason under the thread', () => {
+    const { el } = renderWithFailure(unreachable);
+    const card = el.querySelector('.errcard');
+    expect(card).not.toBeNull();
+    expect(card!.getAttribute('role')).toBe('alert');
+    expect(card!.querySelector('.ck')!.textContent).toBe('Pia cannot reach the model');
+    const text = card!.textContent ?? '';
+    expect(text).toContain('LM Studio');
+    expect(text).toContain('http://localhost:1234/v1');
+    expect(text).toContain('glm-5.3-flash');
+    expect(text).toContain('nothing is listening there');
+  });
+
+  it('speaks as Paul in a shape session', () => {
+    const { el } = renderWithFailure(
+      { ...unreachable, code: 'unsupported', providerLabel: 'GitHub Copilot CLI', baseUrl: null },
+      { ...activeSession(), ticket: 'T-0130' },
+    );
+    expect(el.querySelector('.errcard .ck')!.textContent).toBe('Paul cannot use this provider');
+    expect(el.querySelector('.errcard')!.textContent).not.toContain('Endpoint');
+  });
+
+  it('belongs to its session only, and Dismiss clears it', () => {
+    const other = renderWithFailure({ ...unreachable, file: 'chat-b.md' });
+    expect(other.el.querySelector('.errcard')).toBeNull();
+
+    const own = renderWithFailure({ ...unreachable, file: 'chat-a.md' });
+    expect(own.el.querySelector('.errcard')).not.toBeNull();
+    (own.el.querySelector('.errcard button') as HTMLButtonElement).click();
+    own.fixture.detectChanges();
+    expect(own.chatFailure()).toBeNull();
+    expect(own.el.querySelector('.errcard')).toBeNull();
+  });
+
+  it('shows no card when nothing failed', () => {
+    expect(renderWithFailure(null).el.querySelector('.errcard')).toBeNull();
   });
 });
 

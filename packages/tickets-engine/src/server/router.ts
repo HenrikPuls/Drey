@@ -582,6 +582,10 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
     return write(`persona ${id} memory`, parseMemoryAppend(body), (value) => port.personaMemoryAppend({ persona: id, text: value.text }));
   }
 
+  if (req.path === '/api/settings/chat/test' && deps.settings !== undefined) {
+    deps.log(`remote ${device.name}: settings chat test`);
+    return json(await deps.settings.testChat());
+  }
   if ((req.path === '/api/settings/engine' || req.path === '/api/settings/devices/revoke') && deps.settings !== undefined) {
     const settings = deps.settings;
     if (req.path === '/api/settings/engine') {
