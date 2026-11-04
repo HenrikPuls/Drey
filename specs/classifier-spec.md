@@ -245,6 +245,23 @@ create as a `raw capture:` Log line (ticket-schema).
   delta in the chain grammar incl. `move` and `assign` — and a `say` that is
   his reason. The desk validates it like any edit and shows it as a draft;
   nothing is written.
+- **The Mission Control bridge's provider call** (`packages/tickets-engine/src/services/chat-model.ts`,
+  `chat-llm.ts`, D-1 / milestone 131) — every Mission Control prompt above
+  (mission, shape, flow, aggregator) goes out as ONE streamed request in the
+  dialect of the provider Drey pushed as `chat.provider`: for `lmstudio`,
+  `openai-compat`, `openrouter` `POST {baseUrl}/chat/completions` with
+  `{model, stream: true, messages}` and `Authorization: Bearer`; for
+  `anthropic`, `zai-glm` `POST {baseUrl}/v1/messages` with `{model,
+  max_tokens: 4096, stream: true, system, messages}` (the system prompt
+  lifted out, roles alternating — `toAnthropicMessages`), `x-api-key` and
+  `anthropic-version: 2023-06-01`; the text deltas (`choices[0].delta.content`
+  or `content_block_delta` `text_delta`) accumulate and parse as the
+  envelope. The prompts themselves did not change. A provider without
+  one of these dialects (`claude-code`, `copilot-cli`, `copilot-web`) is not
+  called: the turn fails with *"<provider>: Mission Control cannot talk to
+  this provider …"*, an unreachable or refusing endpoint with *"<provider>
+  at <url>: <reason>"* — never as a model reply. "Test connection" is a
+  tokenless `GET {baseUrl}/models` (`/v1/models` for Anthropic).
 - The former built-in "Summarise note" (`builtin:note-summary`) is
   retired (`RETIRED_BUILTIN_TEMPLATE_IDS` in `shared/config/normalize.ts`).
 

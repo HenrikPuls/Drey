@@ -692,7 +692,10 @@ export class PluginHost {
         this.vaultChangeCallbacks.push(cb);
         return track(() => removeItem(this.vaultChangeCallbacks, cb));
       }),
-      appConfig: { get: () => this.deps.appConfig.get() },
+      appConfig: {
+        get: () => this.deps.appConfig.get(),
+        onChange: (cb) => track(this.deps.appConfig.onChange(cb)),
+      },
       config: {
         get: <T>(key: string) => this.configStore.get<T>(id, key),
         set: <T>(key: string, value: T) => this.configStore.set(id, key, value),

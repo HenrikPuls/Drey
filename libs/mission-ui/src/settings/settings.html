@@ -91,6 +91,45 @@
               </label>
             </div>
           }
+          @case ('chat') {
+            <p class="note">Taken from Drey's assistant settings; change it there.</p>
+            @if (error(); as message) {
+              <p class="inline-error">{{ message }}</p>
+            }
+            @if (view()?.chat; as c) {
+              <div class="group">
+                <div class="row">
+                  <span class="grow">Provider</span>
+                  <span class="val">{{ c.providerLabel }}</span>
+                </div>
+                <div class="row">
+                  <span class="grow">Endpoint</span>
+                  <span class="val">{{ c.baseUrl ?? 'Not set' }}</span>
+                </div>
+                <div class="row">
+                  <span class="grow">Model</span>
+                  <span class="val">{{ c.model ?? 'Not set' }}</span>
+                </div>
+                <div class="row">
+                  <span class="grow">API key</span>
+                  <span class="val">{{ c.hasKey ? 'Set' : 'Not set' }}</span>
+                </div>
+              </div>
+              @if (c.problem; as problem) {
+                <p class="inline-error">{{ problem }}</p>
+              }
+              @if (canTest()) {
+                <div class="group">
+                  <button type="button" class="row" [disabled]="testing()" (click)="testChat()">
+                    <span class="grow">{{ testing() ? 'Testing…' : 'Test connection' }}</span>
+                  </button>
+                </div>
+                @if (tested(); as result) {
+                  <p [class.inline-error]="!result.ok" [class.note]="result.ok" role="status">{{ result.message }}</p>
+                }
+              }
+            }
+          }
           @case ('devices') {
             <p class="note">Everything on this page applies to all your devices.</p>
             @if (error(); as message) {

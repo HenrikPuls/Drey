@@ -1343,6 +1343,42 @@ export function parseProposal(json: unknown): ChatProposalView | null {
   return proposalOf(json);
 }
 
+/**
+ * Why a chat turn had no model (D-1, mirrors the desk's `ChatModelFailure`):
+ * the error card shows provider, endpoint and reason. `code` picks the
+ * card's headline.
+ */
+export interface ChatFailureView {
+  readonly code: 'not-configured' | 'unsupported' | 'unreachable' | 'refused' | 'timeout';
+  readonly providerLabel: string;
+  readonly baseUrl: string | null;
+  readonly model: string | null;
+  readonly reason: string;
+  /** The session the turn belonged to (set by the app state); the card shows under that session only. */
+  readonly file?: string;
+}
+
+const FAILURE_CODES: readonly ChatFailureView['code'][] = ['not-configured', 'unsupported', 'unreachable', 'refused', 'timeout'];
+
+/** The `failure` of a refused chat turn; null when the answer carries none (or a malformed one). */
+export function parseChatFailure(json: unknown): ChatFailureView | null {
+  if (typeof json !== 'object' || json === null) {
+    return null;
+  }
+  const f = json as Record<string, unknown>;
+  const code = FAILURE_CODES.find((c) => c === f['code']);
+  if (code === undefined || typeof f['reason'] !== 'string') {
+    return null;
+  }
+  return {
+    code,
+    providerLabel: str(f['providerLabel'], str(f['provider'], 'The model')),
+    baseUrl: strOrNull(f['baseUrl']),
+    model: strOrNull(f['model']),
+    reason: f['reason'],
+  };
+}
+
 /** One session's JSON; null when the desk sent nothing usable (e.g. the file is gone). */
 export function parseActiveSession(json: unknown): ActiveSession | null {
   const session = rec(json);

@@ -394,3 +394,17 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     guard as a hand edit, and it is never written by the draft.
   Not yet manually verified by the owner; the etappen land one
   milestone at a time (roadmap, "Mission Control redesign").
+- **The chat model reaches the engine on every change and speaks two
+  dialects (D-1, milestone 131).** The first E5a cut synced the assistant
+  settings once and spoke only the OpenAI-compatible wire, so a provider
+  switch in Drey (or a Z.ai / Anthropic preset) left the chat on a stale or
+  wrong endpoint, and a failed turn was written into the session as the
+  mission's words. Now `chat.provider` / `chat.enabled` travel with the
+  URL, key and model, pushed at activation and on every app-config change
+  (SDK 1.40 `appConfig.onChange`); the bridge speaks OpenAI-compatible and
+  Anthropic Messages (the engine package reuses Drey's pure `shared/llm`
+  adapter, never `electron/`) and refuses the CLI providers by name; a turn
+  without a model is a typed failure (error card, `{ok: false, failure}`),
+  never a reply. The engine config keys stay Drey's mirror, not a second
+  source of truth. Rejected for now: an engine-side CLI bridge (roadmap
+  follow-up); the Chat page shows only whether a key is set, never the key.

@@ -10,6 +10,7 @@ import {
   parseActiveSession,
   parseBoardCard,
   parseChatEvent,
+  parseChatFailure,
   parseEstimate,
   parsePlanStatus,
   parseImprovements,
@@ -1601,5 +1602,26 @@ describe('the shared plan (E10-2)', () => {
     expect(session.messages[0]).toMatchObject({ kind: 'plan-edit', diff: '@@ line 3\n+ x' });
     expect(session.messages[1]!.kind).toBeUndefined();
     expect(parseActiveSession({ file: 'f.md', ticket: 'soon' })!.ticket).toBeUndefined();
+  });
+});
+
+describe('parseChatFailure (D-1)', () => {
+  it('reads the failure of a refused chat turn tolerantly', () => {
+    expect(
+      parseChatFailure({ code: 'unreachable', provider: 'lmstudio', providerLabel: 'LM Studio', baseUrl: 'http://h/v1', model: 'm', reason: 'r', message: 'ignored' }),
+    ).toEqual({ code: 'unreachable', providerLabel: 'LM Studio', baseUrl: 'http://h/v1', model: 'm', reason: 'r' });
+    expect(parseChatFailure({ code: 'unsupported', provider: 'copilot-cli', reason: 'r' })).toEqual({
+      code: 'unsupported',
+      providerLabel: 'copilot-cli',
+      baseUrl: null,
+      model: null,
+      reason: 'r',
+    });
+  });
+
+  it('reads nothing from an answer without a usable failure', () => {
+    expect(parseChatFailure(undefined)).toBeNull();
+    expect(parseChatFailure({ code: 'nonsense', reason: 'r' })).toBeNull();
+    expect(parseChatFailure({ code: 'refused' })).toBeNull();
   });
 });

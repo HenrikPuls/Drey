@@ -509,6 +509,88 @@ describe('chat', () => {
     expect(active.messages.filter((m) => m.text === 'Started')).toHaveLength(1);
   });
 
+  const FAILURE = {
+    code: 'unreachable',
+    provider: 'lmstudio',
+    providerLabel: 'LM Studio',
+    baseUrl: 'http://localhost:1234/v1',
+    model: 'glm-5.3-flash',
+    reason: 'could not be reached — connection refused — nothing is listening there.',
+    message: 'LM Studio at http://localhost:1234/v1: could not be reached — connection refused — nothing is listening there.',
+  };
+
+  it('a send the model never answered raises the error card and keeps the owner line (D-1)', async () => {
+    const { desk, data } = makeDesk();
+    data.sessionA = { file: FILE_A, title: 'A', createdAt: '', messages: [], proposals: [] };
+    desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`, () => {
+      data.sessionA = {
+        file: FILE_A,
+        title: 'A',
+        createdAt: '',
+        messages: [{ role: 'owner', text: 'hi', at: 't1', thought: null }],
+        proposals: [],
+      };
+      return { ok: false, error: FAILURE.message, failure: FAILURE, file: FILE_A };
+    });
+    const state = makeState(desk);
+    await state.openSession(FILE_A);
+
+    const reply = await state.send('hi');
+
+    expect(reply).toEqual({ ok: true });
+    expect(state.chatFailure()).toEqual({
+      code: 'unreachable',
+      providerLabel: 'LM Studio',
+      baseUrl: 'http://localhost:1234/v1',
+      model: 'glm-5.3-flash',
+      reason: FAILURE.reason,
+      file: FILE_A,
+    });
+    expect(state.chat().active!.messages.map((m) => [m.role, m.text])).toEqual([['owner', 'hi']]);
+  });
+
+  it('the next send clears the card; the stream error is no reply text', async () => {
+    const { desk, data } = makeDesk();
+    data.sessionA = { file: FILE_A, title: 'A', createdAt: '', messages: [], proposals: [] };
+    desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`, () => ({ ok: true, say: 'Back.', thought: null, proposals: [] }));
+    const state = makeState(desk);
+    await state.openSession(FILE_A);
+    state.chatFailure.set({ code: 'refused', providerLabel: 'X', baseUrl: null, model: null, reason: 'r', file: FILE_A });
+
+    await state.send('again');
+    expect(state.chatFailure()).toBeNull();
+
+    desk.pushEvent('chat', { file: FILE_A, event: { kind: 'error', message: FAILURE.message } });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(state.chat().active!.messages.some((m) => m.text.includes('nothing is listening'))).toBe(false);
+  });
+
+  it('a new session the model never answered opens with the owner line and the card (D-1)', async () => {
+    const { desk } = makeDesk();
+    const FILE_NEW = 'tickets/_meta/chat/new.md';
+    desk.on('POST', '/api/chat/sessions', () => ({ ok: false, error: FAILURE.message, failure: FAILURE, file: FILE_NEW }));
+    desk.on('GET', `/api/chat/sessions/${enc(FILE_NEW)}`, () => ({
+      file: FILE_NEW,
+      title: 'New',
+      createdAt: '',
+      messages: [{ role: 'owner', text: 'do it', at: 't1', thought: null }],
+      proposals: [],
+    }));
+    const state = makeState(desk);
+
+    expect(await state.newSession('do it')).toEqual({ ok: true });
+
+    expect(state.chat().active!.file).toBe(FILE_NEW);
+    expect(state.chatFailure()).toMatchObject({ code: 'unreachable', file: FILE_NEW });
+  });
+
+  it('testChat asks the desk to probe the chat endpoint', async () => {
+    const { desk } = makeDesk();
+    desk.on('POST', '/api/settings/chat/test', () => ({ ok: false, message: 'LM Studio at http://localhost:1234/v1: could not be reached.' }));
+    const state = makeState(desk);
+    expect(await state.testChat()).toEqual({ ok: false, message: 'LM Studio at http://localhost:1234/v1: could not be reached.' });
+  });
+
   it('confirm updates the proposal card with the desk outcome', async () => {
     const { desk, data } = makeDesk();
     data.sessionA = {

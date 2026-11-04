@@ -163,6 +163,27 @@
           }
         }
       }
+      @if (failure(); as f) {
+        <div class="errcard" role="alert">
+          <div class="ck">{{ f.headline }}</div>
+          <dl class="errfacts">
+            <dt>Provider</dt>
+            <dd>{{ f.providerLabel }}</dd>
+            @if (f.baseUrl) {
+              <dt>Endpoint</dt>
+              <dd class="mono">{{ f.baseUrl }}</dd>
+            }
+            @if (f.model) {
+              <dt>Model</dt>
+              <dd class="mono">{{ f.model }}</dd>
+            }
+          </dl>
+          <p class="errreason">{{ f.reason }}</p>
+          <div class="row">
+            <button type="button" class="btn ghost" (click)="dismissFailure()">Dismiss</button>
+          </div>
+        </div>
+      }
       @if (streaming()) {
         <div class="msg mission">
           <p class="bubble pending" aria-label="Mission Control is thinking">

@@ -613,6 +613,31 @@ export class Chat {
       checkpoint: marks.has(group.id),
     }));
   });
+  /**
+   * The error card (D-1): provider, endpoint and reason of the turn that
+   * found no model, with a headline per kind. The speaker is Paul in a
+   * shape session, Pia otherwise.
+   */
+  protected readonly failure = computed(() => {
+    const failure = this.state.chatFailure?.() ?? null;
+    if (failure === null || (failure.file !== undefined && failure.file !== this.active()?.file)) {
+      return null;
+    }
+    const who = this.shape() === null ? 'Pia' : 'Paul';
+    const headline: Record<typeof failure.code, string> = {
+      'not-configured': `${who} has no model yet`,
+      unsupported: `${who} cannot use this provider`,
+      unreachable: `${who} cannot reach the model`,
+      refused: `The model refused ${who}'s request`,
+      timeout: `The model took too long for ${who}`,
+    };
+    return { ...failure, headline: headline[failure.code] };
+  });
+
+  protected dismissFailure(): void {
+    this.state.chatFailure?.set(null);
+  }
+
   /** The waiting ellipsis: no mission text has landed yet this turn. */
   protected readonly streaming = computed(() => {
     if (!this.sending()) {

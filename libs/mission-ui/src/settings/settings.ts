@@ -13,13 +13,14 @@ import {
   type TextSize,
   type ThemeName,
 } from '../theme';
-import { MC_SETTINGS_STATE, type McSettingsDevice } from './settings.model';
+import { MC_SETTINGS_STATE, type McChatTest, type McSettingsDevice } from './settings.model';
 
 /** The settings screen's pages. */
-export type SettingsPage = 'appearance' | 'devices' | 'engine';
+export type SettingsPage = 'appearance' | 'chat' | 'devices' | 'engine';
 
 export const SETTINGS_PAGES: readonly { readonly id: SettingsPage; readonly label: string; readonly sub: string }[] = [
   { id: 'appearance', label: 'Appearance', sub: 'Theme, highlight color, text size, density' },
+  { id: 'chat', label: 'Chat', sub: 'Model, connection' },
   { id: 'devices', label: 'Devices', sub: 'Paired devices, revoke' },
   { id: 'engine', label: 'Engine', sub: 'Videos, size limit' },
 ];
@@ -95,6 +96,10 @@ export class Settings {
     switch (id) {
       case 'appearance':
         return `${THEME_LABEL[this.theme.name()]} · ${this.theme.textSize()}`;
+      case 'chat': {
+        const chat = this.view()?.chat;
+        return chat === undefined || chat === null ? '' : (chat.model ?? 'No model');
+      }
       case 'devices': {
         const count = this.view()?.devices.length;
         return count === undefined ? '' : `${count} paired`;
@@ -145,6 +150,28 @@ export class Settings {
 
   protected onMotion(event: Event): void {
     this.theme.setReduceMotion((event.target as HTMLInputElement).checked);
+  }
+
+  // -- chat -------------------------------------------------------------------
+
+  /** True while "Test connection" waits for the endpoint. */
+  protected readonly testing = signal(false);
+  protected readonly tested = signal<McChatTest | null>(null);
+  protected readonly canTest = computed(() => this.state?.testChat !== undefined);
+
+  protected async testChat(): Promise<void> {
+    if (this.state?.testChat === undefined || this.testing()) {
+      return;
+    }
+    this.testing.set(true);
+    this.tested.set(null);
+    try {
+      this.tested.set(await this.state.testChat());
+    } catch (err) {
+      this.tested.set({ ok: false, message: err instanceof Error ? err.message : 'The test failed.' });
+    } finally {
+      this.testing.set(false);
+    }
   }
 
   // -- devices ----------------------------------------------------------------

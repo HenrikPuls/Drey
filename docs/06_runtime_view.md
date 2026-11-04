@@ -3822,3 +3822,35 @@ The Board also asks `planParts` for every ticket in an owner-checkpoint column
 (once per snapshot) so a plan's unreleased parts hang under the planning
 ticket. A detail pane (1:1 thread, Memory, Setup) keeps its own DOM across
 the fleet repaints, so a half-typed message survives them.
+
+## 6.79 A chat turn finds its model, or says why not (D-1, milestone 131)
+
+```mermaid
+sequenceDiagram
+    participant S as Drey Settings → Assistant
+    participant P as Tickets plugin
+    participant E as Tickets engine (config, ChatService, bridge)
+    participant M as Chat model endpoint
+    participant O as Owner (Mission Control)
+
+    S->>P: appConfig.onChange (SDK 1.40)
+    P->>E: configSet chat.enabled / provider / baseUrl / apiKey / model (null clears)
+    O->>E: ask Pia, or Paul in a shape session (POST /api/chat/sessions…)
+    E->>E: resolveChatModel(config) - provider id to dialect, or a named refusal
+    alt a provider with an HTTP dialect
+        E->>M: POST /chat/completions (OpenAI) or /v1/messages (Anthropic), stream
+        M-->>E: SSE text deltas
+        E-->>O: text events, then the envelope as Pia's / Paul's reply
+    else no model: not set up, unsupported provider, unreachable, refused, timed out
+        E-->>O: { ok: false, error, failure } + an error event; the owner's line stays, nothing is written as a reply
+        O->>O: the error card: provider, endpoint, model, reason
+    end
+    O->>E: Settings → Chat → Test connection (POST /api/settings/chat/test)
+    E->>M: GET /models (no tokens)
+    E-->>O: { ok, message }
+```
+
+The chat reads the config per turn, so a change in Settings → Assistant
+applies to the next question without restarting the engine. A flow draft
+(`flow-draft`) that finds no model returns the failure's one-sentence
+text as its error.

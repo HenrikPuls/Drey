@@ -17,10 +17,11 @@
 import { computed, signal } from '@angular/core';
 import { ApiError, McClient, type McBootHints, type McEventHandlers } from './client';
 import { type McChatUploadReply } from '@mission-ui/chat/chat.model';
-import { parseSettings, type McSettingsView } from '@mission-ui/settings/settings.model';
+import { parseSettings, type McChatTest, type McSettingsView } from '@mission-ui/settings/settings.model';
 import {
   parseActiveSession,
   parseChatEvent,
+  parseChatFailure,
   parseImprovements,
   parseNeeds,
   parsePersonaMemory,
@@ -53,6 +54,7 @@ import {
   type TicketDiffView,
   type TicketPhaseOption,
   type WorkView,
+  type ChatFailureView,
 } from '@mission-ui/api/dto';
 import type { McApproveReply, McPartsEdit } from '@mission-ui/plan/approve.model';
 import type { McFlowOp, McFlowReply } from '@mission-ui/flow/flow.model';
@@ -118,6 +120,8 @@ export class McState {
    * null = nothing waiting.
    */
   readonly chatPrefill = signal<string | null>(null);
+  /** D-1: why the last chat turn had no model (the chat's error card); null = none. */
+  readonly chatFailure = signal<ChatFailureView | null>(null);
   /**
    * One-shot: the phone's menu button on another screen switches to the
    * chat tab with this set; the chat opens its history (the menu) on mount.
@@ -441,13 +445,26 @@ export class McState {
 
   /** Starts a session with the first owner message and opens it; `ticket` makes it a shape session. */
   async newSession(text: string, ticket?: string): Promise<McReply> {
+    this.chatFailure.set(null);
     const body = await this.client
       .request<Record<string, unknown>>('POST', '/api/chat/sessions', { text, ...(ticket === undefined ? {} : { ticket }) })
       .catch(fail);
-    if (isFailure(body)) {
+    // A turn the model never answered comes back as { ok: false, failure, file }:
+    // read that before the generic refusal.
+    const file = typeof (body as Record<string, unknown>)['file'] === 'string' ? ((body as Record<string, unknown>)['file'] as string) : '';
+    const failure = body['ok'] === true ? null : parseChatFailure((body as Record<string, unknown>)['failure']);
+    if (failure === null && isFailure(body)) {
       return body;
     }
-    const file = typeof body['file'] === 'string' ? body['file'] : '';
+    if (failure !== null && file !== '') {
+      // The desk wrote the session with the owner's line, then found no
+      // model: open it and show the card under the line.
+      await this.refreshSessions();
+      await this.openSession(file);
+      this.shapeTicket.set(null);
+      this.chatFailure.set({ ...failure, file });
+      return { ok: true };
+    }
     if (body['ok'] !== true || file === '') {
       return refusal(body, 'the desk started no session');
     }
@@ -812,6 +829,7 @@ export class McState {
     this.shapeBusy.set(this.chat().active?.ticket != null);
     const shaped = this.chat().active?.ticket ?? null;
     const withEdits = this.planEdits();
+    this.chatFailure.set(null);
     const body = await this.client
       .request<Record<string, unknown>>(
         'POST',
@@ -820,8 +838,18 @@ export class McState {
       )
       .catch(fail);
     this.shapeBusy.set(false);
-    if (isFailure(body)) {
+    const failure = body['ok'] === true ? null : parseChatFailure((body as Record<string, unknown>)['failure']);
+    if (failure === null && isFailure(body)) {
       return body;
+    }
+    if (failure !== null) {
+      // The owner's line is in the session; no model answered. Reload the
+      // canonical thread (the optimistic echo and the stream tail go) and
+      // let the card say why.
+      this.tail = null;
+      await this.openSession(file);
+      this.chatFailure.set({ ...failure, file });
+      return { ok: true };
     }
     if (body['ok'] !== true) {
       return refusal(body, 'the desk did not take the message');
@@ -1541,6 +1569,20 @@ export class McState {
     return this.settingsWrite('/api/settings/engine', { inGit, confirm, includeExisting });
   }
 
+  /** The Chat row's "Test connection": the desk probes the endpoint the chat would use. */
+  async testChat(): Promise<McChatTest> {
+    const body: Record<string, unknown> | { readonly ok: false; readonly error: string } = await this.client
+      .request<Record<string, unknown>>('POST', '/api/settings/chat/test', {})
+      .catch(fail);
+    // The desk's answer is { ok, message } either way -- a failed probe is a
+    // result to show, not a failed request.
+    const record = body as Record<string, unknown>;
+    if (typeof record['message'] === 'string') {
+      return { ok: record['ok'] === true, message: record['message'] };
+    }
+    return { ok: false, message: isFailure(body) ? body.error : 'The desk gave no answer to the test.' };
+  }
+
   revokeDevice(id: string): Promise<McReply> {
     return this.settingsWrite('/api/settings/devices/revoke', { id });
   }
@@ -1678,7 +1720,9 @@ export class McState {
         void this.refreshSessions();
         break;
       case 'error':
-        this.extendStream(file, { text: event.message, thought: null });
+        // The turn's reply carries the failure (the card shows why); the
+        // stream's error is no reply text.
+        this.tail = null;
         break;
     }
   }

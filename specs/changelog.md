@@ -1,3 +1,95 @@
+### Milestone 131 — Mission Control chat reaches its model (D-1)
+
+**Not yet manually verified by the owner.** Owner report, 2026-11-04
+("nothing gets to the model if I ask Paul or Pia"; roadmap D-1, a known
+defect; [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
+E5a bridge). What was and was not seen is at the end of this entry.
+
+- **Reproduced first** with the real engine process (`engine-main.js`,
+  own `--home`, throwaway tickets vault) against a mock OpenAI endpoint,
+  driven through the phone's gateway routes (pair, `POST /api/chat/sessions`
+  for Pia and for a shape session with `ticket`, `POST …/flow-draft`):
+  with the config right, all three reach the mock; with nothing listening
+  the reply was the text *"The chat model could not be reached (fetch
+  failed) — Mission Control is sorry."* — no provider, no URL, and
+  **written into the session as Pia's own words** (so the next turn's
+  history fed it to the model as if she had said it); against a host that
+  only speaks Anthropic Messages the engine POSTed `/chat/completions`
+  and answered *"answered 404"*. The owner's live engine config holds
+  `chat.baseUrl=http://localhost:1234/v1` with a Z.ai-style key and
+  nothing listening: Drey's provider had been switched, the engine never
+  heard.
+- **Root cause (three parts).** (1) `syncConfig` pushed the assistant LLM
+  settings only at engine activation/adoption, never when Settings →
+  Assistant changed them, and skipped cleared values, so the engine kept a
+  stale endpoint. (2) The bridge spoke only the OpenAI-compatible dialect
+  and never learned which provider Drey uses: `zai-glm` / `anthropic`
+  (Anthropic Messages) got a wrong request, the CLI providers have no
+  endpoint at all. (3) A failed turn was an ordinary mission reply.
+- **Sync on change.** SDK 1.40: `ctx.appConfig.onChange(cb)` (main side;
+  the base store already had the hook). The tickets plugin pushes
+  `chat.enabled`, `chat.provider`, `chat.baseUrl`, `chat.apiKey`,
+  `chat.model` at activation **and** whenever one of them changes (an
+  unrelated config write pushes nothing); a cleared value travels as
+  `null`.
+- **Dialects.** `services/chat-model.ts` (new, pure) is the engine's whole
+  knowledge of providers: `lmstudio` / `openai-compat` / `openrouter` →
+  `POST {base}/chat/completions` with a bearer key; `anthropic` /
+  `zai-glm` → `POST {base}/v1/messages` with `x-api-key`, the system
+  prompt lifted out and roles merged by Drey's own pure adapter
+  (`shared/llm` `toAnthropicMessages`, no `electron/` import), SSE
+  `content_block_delta`. `claude-code`, `copilot-cli`, `copilot-web` (and any
+  unknown id) are **refused by name**: *"GitHub Copilot CLI: Mission
+  Control cannot talk to this provider…"*. An engine configured before the
+  provider key existed stays OpenAI-compatible. The master switch
+  (`llm.enabled`) turns the chat off too, with that reason.
+- **An honest failure, not a reply.** The bridge's outcome carries a typed
+  `failure` (`not-configured` / `unsupported` / `unreachable` / `refused` /
+  `timeout`: provider, endpoint, model, reason — node's "fetch failed" is
+  unpacked to *connection refused — nothing is listening there*). The chat
+  service answers `{ok: false, error, failure, file}`, streams an
+  `error` event, keeps the owner's line and writes **nothing** as the
+  mission's reply; a flow draft returns the same text as its error. An
+  unreadable answer (the model replied outside its envelope) stays an
+  honest say — the model was reached.
+- **The error card.** The chat shows it under the thread, with a headline
+  per kind ("Pia cannot reach the model", "Paul cannot use this provider",
+  …; Paul in a shape session), the provider, endpoint and model and the
+  reason, and a Dismiss button; it belongs to its session, the next turn
+  clears it, a stream `error` is no longer appended as reply text.
+- **Settings → Chat (the E12-3b row).** A new page: provider, endpoint,
+  model, "API key: Set / Not set" (the key itself never leaves the
+  engine), the reason a turn could not run right now, and **Test
+  connection** — `POST /api/settings/chat/test` asks the endpoint for its
+  model list (no tokens) and reports *Connected… model … is available*, *it
+  does not list the model*, *the endpoint rejected the API key*, or the
+  unreachable/unsupported text. Read-only: the values are Drey's assistant
+  settings.
+- **Specs.** Engine: `chat-model.spec.ts` (new: the table pinned against
+  `PROVIDER_PRESETS`, both wires, the delta readers, the cause text, the
+  probe), `chat-llm.spec` (the failure outcomes, the Anthropic wire, an
+  unsupported provider, the master switch), `chat-service.spec` (no
+  mission line on a failure, the flow draft's error), `settings.spec` (the
+  route and the chat block without the key); plugin:
+  `engine-lifecycle.spec` (provider kind, null clears, the sync on
+  change); mission-ui / app: `chat.spec` (the card), `settings.spec` (the
+  page and its test), `dto.spec`, `state.spec` (the card on send and on a
+  new session, the probe).
+- **Not in this milestone (roadmap).** Mission Control over the CLI
+  providers (Claude Code, Copilot): refused by name for now, an engine-side
+  CLI bridge would be its own item.
+- **Seen and not seen.** Seen in the built engine and the built Mission
+  Control app (in-app browser, own temp home, mock endpoint): Pia and Paul
+  (shape session, plan pane) answering from the mock; the error card under
+  Pia with the endpoint down; Settings → Chat with a successful and a
+  failed Test connection; the gateway flow draft and the zai-glm wire
+  (`POST /v1/messages`, `x-api-key`) in the scripted run. **Not seen:** the
+  Paul error card and the flow-draft error in the UI (covered by specs and
+  the scripted run), a real hosted provider (no key), Drey's own window
+  with a Settings → Assistant change reaching the running engine (the sync
+  is spec'd, the Electron round was not run), and the owner's live engine
+  (not touched).
+
 ### Milestone 130 — Board, Team and Capacity in Drey (E13-8)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04

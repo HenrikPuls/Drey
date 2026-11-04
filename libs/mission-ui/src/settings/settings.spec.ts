@@ -6,6 +6,13 @@ import { MC_SETTINGS_STATE, parseSettings, type McSettingsState, type McSettings
 import { Theme, THEME_ENV } from '../theme';
 
 const VIEW: McSettingsView = {
+  chat: {
+    providerLabel: 'Z.ai GLM',
+    baseUrl: 'https://api.z.ai/api/anthropic',
+    model: 'glm-5.3-flash',
+    hasKey: true,
+    problem: null,
+  },
   devices: [
     { id: 'd1', name: 'Phone', readOnly: false, pairedAt: '2026-11-01T10:00:00Z', lastSeen: null, current: true },
     { id: 'd2', name: 'Tablet', readOnly: true, pairedAt: '2026-11-01T11:00:00Z', lastSeen: '2026-11-02T08:00:00Z', current: false },
@@ -21,6 +28,7 @@ function mount(view: McSettingsView | null = VIEW) {
     setVideoLimit: vi.fn(() => Promise.resolve({ ok: true as const })),
     setVideosInGit: vi.fn(() => Promise.resolve({ ok: true as const })),
     revokeDevice: vi.fn(() => Promise.resolve({ ok: true as const })),
+    testChat: vi.fn(() => Promise.resolve({ ok: true, message: 'Connected to Z.ai GLM.' })),
   };
   const storage = new Map<string, string>();
   TestBed.resetTestingModule();
@@ -55,6 +63,7 @@ const click = (el: Element | null): void => (el as HTMLElement).click();
 describe('parseSettings', () => {
   it('reads the desk answer tolerantly', () => {
     expect(parseSettings({ ok: true, devices: [{ id: 'a', name: 'A' }, 5], engine: { videos: { inGit: true } } })).toEqual({
+      chat: null,
       devices: [{ id: 'a', name: 'A', readOnly: false, pairedAt: '', lastSeen: null, current: false }],
       videos: { inGit: true, limitMb: 2000, existing: 0, notice: null },
     });
@@ -64,10 +73,48 @@ describe('parseSettings', () => {
   });
 });
 
+describe('Settings - Chat row (D-1)', () => {
+  it('reads the chat block without ever expecting a key', () => {
+    const view = parseSettings({
+      ok: true,
+      devices: [],
+      engine: {
+        videos: {},
+        chat: { providerLabel: 'LM Studio', baseUrl: 'http://localhost:1234/v1', model: 'm', hasKey: false, problem: 'no model is selected', apiKey: 'sk-leak' },
+      },
+    });
+    expect(view?.chat).toEqual({ providerLabel: 'LM Studio', baseUrl: 'http://localhost:1234/v1', model: 'm', hasKey: false, problem: 'no model is selected' });
+  });
+
+  it('shows provider, endpoint and model, and tests the connection', async () => {
+    const { el, go, fake, fixture } = mount();
+    go('chat');
+    const text = el.querySelector('.page-body')?.textContent ?? '';
+    expect(text).toContain('Z.ai GLM');
+    expect(text).toContain('https://api.z.ai/api/anthropic');
+    expect(text).toContain('glm-5.3-flash');
+    const test = Array.from(el.querySelectorAll('.page-body button')).find((b) => b.textContent?.includes('Test connection'));
+    click(test ?? null);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fake.testChat).toHaveBeenCalledTimes(1);
+    expect(el.querySelector('[role="status"]')?.textContent).toContain('Connected to Z.ai GLM.');
+  });
+
+  it('names the problem when the chat has no model', () => {
+    const { el, go } = mount({
+      ...VIEW,
+      chat: { providerLabel: 'GitHub Copilot CLI', baseUrl: null, model: 'gpt', hasKey: false, problem: 'GitHub Copilot CLI: Mission Control cannot talk to this provider.' },
+    });
+    go('chat');
+    expect(el.querySelector('.page-body .inline-error')?.textContent).toContain('cannot talk to this provider');
+  });
+});
+
 describe('Settings', () => {
   it('lists the pages and loads the desk settings', () => {
     const { el, fake } = mount();
-    expect(Array.from(el.querySelectorAll('.cats .row b')).map((b) => b.textContent)).toEqual(['Appearance', 'Devices', 'Engine']);
+    expect(Array.from(el.querySelectorAll('.cats .row b')).map((b) => b.textContent)).toEqual(['Appearance', 'Chat', 'Devices', 'Engine']);
     expect(fake.load).toHaveBeenCalledTimes(1);
   });
 

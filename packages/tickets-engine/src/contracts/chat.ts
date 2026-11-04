@@ -207,10 +207,33 @@ export interface ChatSessionMeta {
   readonly ticket?: string;
 }
 
-/** What send/start return: the appended mission text and its proposals. */
+export type ChatFailureCode = 'not-configured' | 'unsupported' | 'unreachable' | 'refused' | 'timeout';
+
+/**
+ * Why a turn had no model (D-1) — the error card's content: provider,
+ * endpoint and reason. `message` is the same in one sentence (the stream's
+ * error event, the flow draft's error text).
+ */
+export interface ChatModelFailure {
+  readonly code: ChatFailureCode;
+  readonly provider: string;
+  readonly providerLabel: string;
+  readonly baseUrl: string | null;
+  readonly model: string | null;
+  /** The reason alone, without the provider and URL (the card shows those on their own lines). */
+  readonly reason: string;
+  readonly message: string;
+}
+
+/**
+ * What send/start return: the appended mission text and its proposals.
+ * When the model could not answer, `ok` is false, nothing is appended as
+ * the mission's reply (the owner's line stays), and `failure` names why.
+ */
 export interface ChatTurnResult {
   readonly ok: boolean;
   readonly error?: string;
+  readonly failure?: ChatModelFailure;
   readonly file?: string;
   readonly say?: string;
   readonly thought?: string;
@@ -270,6 +293,8 @@ export interface ChatBridge {
     readonly commands: readonly ChatCommand[];
     /** Shape turns only: Paul's new Plan chapter (the whole body), the open question, the split reason, the files read. */
     readonly shape?: ChatShapeReply;
+    /** Set when no model answered (not set up, unsupported provider, unreachable, refused): `say` then holds the failure's message. */
+    readonly failure?: ChatModelFailure;
   }>;
 }
 
