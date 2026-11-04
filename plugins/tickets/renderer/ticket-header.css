@@ -24,7 +24,7 @@
 
 .tickets-head-id {
   font-family: var(--font-mono);
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   color: var(--text-4);
 }
 
@@ -32,7 +32,7 @@
 .tickets-head-select {
   padding: 0 6px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-chip);
   background: transparent;
   color: var(--text-3);
   font: inherit;
@@ -61,7 +61,7 @@
 
 .tickets-head-branch {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   color: var(--text-4);
 }
 

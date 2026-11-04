@@ -1,3 +1,59 @@
+### Milestone 136 — Design decisions into code (E12-7)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04: after
+the audit of docs, design canvas and code, the **Anthrazit design-system
+values win over ad-hoc ones** (canvas version 71, sticky "Decisions
+2026-11-04"). Visual and settings only; takes G-13, G-23 and G-26 of the
+convergence audit.
+
+- **Attention pastels (G-23).** `--accent-peach #f2cfae`, `--accent-pink
+  #f2d3e2`, `--accent-mint #bfe3cd` plus `--on-pastel #101113` (the DS
+  `ink-on-accent`) in `src/styles.css` and Mission Control's `styles.css`.
+  They are one value in every theme (the DS defines them identical in
+  light and dark), so Anthrazit, Drey and Cyberpunk all carry them; the
+  theme palettes themselves are untouched. Re-pointed from amber
+  `--status-modified` / `--accent-quote`: the desktop Work panel's
+  **Needs-you** group badge and **kind chip** (peach), the **Shaping**
+  badge and the shaping track border (pink); in Mission Control the Work
+  tab's needs badge, the needs-you group head, the question cards' left
+  border and kind label (peach). Amber stays where it means a *state*
+  (cost, flags, source-control "modified"). **Persona colours are owner
+  data** (the `color:` of each `persona.md`), not code — nothing to
+  re-point; the code's defaults (`#a78bfa` migrated agents, `#38bdf8`
+  human) are unchanged.
+- **Radius scale (G-26).** `--radius-chip` 4 / `--radius-control` 8 /
+  `--radius-dialog` 16, named by role because the legacy `--radius-sm`
+  (5) / `--radius-lg` (9) names are in use all over Drey with other
+  values. Migrated: every stylesheet of the tickets plugin and all of
+  `libs/mission-ui` and the Mission Control app (their `--r` 12/14 is
+  gone; 22 px round buttons became the `99px` pill, circles stay `50%`).
+  **Not migrated:** the rest of Drey's panels (`src/**`, other plugins)
+  keep the legacy steps 4–9 — they move to the scale when touched.
+- **Type floor.** Mission Control: no `font-size` below 13 px in any
+  stylesheet (about 120 declarations of 9–12 px raised). Desktop tickets
+  surfaces: floor 12 px (11 px / 0.65–0.74 rem raised); 12 px stays for
+  dense list metadata.
+- **Text size scale.** Settings → Appearance: **S / L / XL / XXL / XXXL =
+  15 / 17 / 19 / 21 / 24 px** body, **L the default** (second smallest).
+  Every stylesheet's base is written for the 15 px body, so a step's
+  factor is px / 15 (`--mc-text`; default 1.1333 in the token sheet).
+  The step labels are fixed 15 px; the live preview line reads "L · 17 px
+  body text, the default". A stored first-build value is migrated once
+  (marker key `mc.textSizeScale`): S→S, **M→L**, L→XL, XL→XXL, XXL→XXXL.
+- **Capture label (G-13).** The tickets capture command is `Mod+Alt+T`
+  (shown as Ctrl+Alt+T; the manual already says so); no UI string in the
+  tickets plugin, Mission Control or the title bar named Ctrl+Alt+N, so
+  there was nothing to correct there. `Ctrl+Alt+N` stays the *daily-note*
+  quick capture. The platform formatter shows `Ctrl` — no `⌘⌥T` form
+  exists in the code (the app is Windows-first); not added.
+- **Specs.** `shared/design-scale.spec.ts` (new): no radius outside the
+  tokens in the tickets plugin and Mission Control, no font-size below the
+  floor, tokens present in both sheets. `libs/mission-ui/src/theme.spec.ts`
+  / `settings/settings.spec.ts`: the new scale, the migration, the preview
+  line.
+- **Out of scope here:** dictate button, mermaid, parts block, E13-x,
+  devices (D-2), the docs sweep.
+
 ### Milestone 133 — Markdown surface for Mission Control (E12-6)
 
 **Not yet manually verified by the owner.** Owner priority, 2026-11-04 (the

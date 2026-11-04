@@ -3,6 +3,8 @@ import {
   ACCENTS,
   ACCENT_COLOR,
   ACCENT_LABEL,
+  DEFAULT_TEXT_SIZE,
+  TEXT_BODY_PX,
   TEXT_SCALE,
   TEXT_SIZES,
   THEMES,
@@ -126,6 +128,11 @@ export class Settings {
   /** The dot's colour: the override, or the current theme's own accent. */
   protected accentColor(name: AccentName): string {
     return name === 'default' ? THEME_SWATCH[this.theme.name()].accent : ACCENT_COLOR[name];
+  }
+
+  /** The preview's first line: the step, its body size, and whether it is the default. */
+  protected previewLine(size: TextSize): string {
+    return `${size} · ${TEXT_BODY_PX[size]} px body text${size === DEFAULT_TEXT_SIZE ? ", the default" : ""}`;
   }
 
   protected scaled(size: TextSize, base: number): number {

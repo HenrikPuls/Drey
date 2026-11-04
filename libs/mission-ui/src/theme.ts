@@ -1,7 +1,7 @@
 /**
  * The device's appearance (E12-3, design boards 5f / 5g): the theme
  * (Anthrazit, Drey, Cyberpunk), the highlight colour, the text size
- * S–XXL, Compact lists and Reduce motion. All of it is saved on this
+ * S–XXXL, Compact lists and Reduce motion. All of it is saved on this
  * device only (localStorage) and applies at once: the theme and the two
  * switches ride `data-*` attributes on the document element that the
  * token blocks and component styles key off, the highlight colour is a
@@ -60,19 +60,41 @@ export const ACCENT_COLOR: Record<Exclude<AccentName, 'default'>, string> = {
   yellow: '#e6d27a',
 };
 
-/** Text sizes and the factor each multiplies every font-size by. */
-export type TextSize = 'S' | 'M' | 'L' | 'XL' | 'XXL';
+/** Text sizes (canvas decision 2026-11-04): S / L / XL / XXL / XXXL, L the default. */
+export type TextSize = 'S' | 'L' | 'XL' | 'XXL' | 'XXXL';
 
-export const TEXT_SIZES: readonly TextSize[] = ['S', 'M', 'L', 'XL', 'XXL'];
+export const TEXT_SIZES: readonly TextSize[] = ['S', 'L', 'XL', 'XXL', 'XXXL'];
 
-export const TEXT_SCALE: Record<TextSize, number> = { S: 0.9, M: 1, L: 1.15, XL: 1.3, XXL: 1.5 };
+/** The body text size in px each step stands for (the board's "L · 17 px"). */
+export const TEXT_BODY_PX: Record<TextSize, number> = { S: 15, L: 17, XL: 19, XXL: 21, XXXL: 24 };
 
-export const DEFAULT_TEXT_SIZE: TextSize = 'M';
+/** The px every stylesheet writes its base font-sizes in (the body at the scale's origin). */
+export const TEXT_BASE_PX = 15;
+
+/** The factor each size multiplies every font-size by: body px over the base. */
+export const TEXT_SCALE: Record<TextSize, number> = {
+  S: TEXT_BODY_PX.S / TEXT_BASE_PX,
+  L: TEXT_BODY_PX.L / TEXT_BASE_PX,
+  XL: TEXT_BODY_PX.XL / TEXT_BASE_PX,
+  XXL: TEXT_BODY_PX.XXL / TEXT_BASE_PX,
+  XXXL: TEXT_BODY_PX.XXXL / TEXT_BASE_PX,
+};
+
+export const DEFAULT_TEXT_SIZE: TextSize = 'L';
+
+/**
+ * The first build's steps (S M L XL XXL) onto the new ones, one step up
+ * from M on, so a stored choice keeps its place in the order and the old
+ * default M lands on the new default L. Nobody loses a setting.
+ */
+const LEGACY_TEXT_SIZE: Readonly<Record<string, TextSize>> = { S: 'S', M: 'L', L: 'XL', XL: 'XXL', XXL: 'XXXL' };
 
 /** The localStorage keys, one per setting. */
 export const THEME_STORAGE_KEY = 'mc.theme';
 export const ACCENT_STORAGE_KEY = 'mc.accent';
 export const TEXT_SIZE_STORAGE_KEY = 'mc.textSize';
+/** Present once the text size is stored in the S / L / XL / XXL / XXXL scale. */
+export const TEXT_SIZE_SCALE_KEY = 'mc.textSizeScale';
 export const COMPACT_STORAGE_KEY = 'mc.compact';
 export const MOTION_STORAGE_KEY = 'mc.reduceMotion';
 
@@ -104,8 +126,14 @@ export function parseAccent(value: unknown): AccentName {
   return ACCENTS.find((name) => name === value) ?? 'default';
 }
 
+/** Folds a value of the current scale into a size; anything else is the default. */
 export function parseTextSize(value: unknown): TextSize {
   return TEXT_SIZES.find((name) => name === value) ?? DEFAULT_TEXT_SIZE;
+}
+
+/** A pre-2026-11-04 stored value (S M L XL XXL) as its new step. */
+export function migrateLegacyTextSize(value: unknown): TextSize {
+  return typeof value === 'string' ? (LEGACY_TEXT_SIZE[value] ?? DEFAULT_TEXT_SIZE) : DEFAULT_TEXT_SIZE;
 }
 
 /** Applies the theme on the document element — the token blocks key off it. */
@@ -139,6 +167,26 @@ function writeItem(storage: Storage | null, key: string, value: string): void {
 /** Reads the persisted theme; a missing entry (or storage) is the default. */
 export function storedTheme(storage: Storage | null): ThemeName {
   return parseTheme(readItem(storage, THEME_STORAGE_KEY));
+}
+
+/**
+ * The persisted text size. Names S, L, XL and XXL exist in both scales,
+ * so a value is read as the current scale only when the marker key says
+ * it was written by it; an unmarked value is the first build's and is
+ * migrated (and re-saved) once.
+ */
+export function storedTextSize(storage: Storage | null): TextSize {
+  const raw = readItem(storage, TEXT_SIZE_STORAGE_KEY);
+  if (readItem(storage, TEXT_SIZE_SCALE_KEY) === '2') {
+    return parseTextSize(raw);
+  }
+  if (raw === null) {
+    return DEFAULT_TEXT_SIZE;
+  }
+  const migrated = migrateLegacyTextSize(raw);
+  writeItem(storage, TEXT_SIZE_STORAGE_KEY, migrated);
+  writeItem(storage, TEXT_SIZE_SCALE_KEY, '2');
+  return migrated;
 }
 
 /** Persists the theme. */
@@ -177,7 +225,7 @@ export class Theme {
     const storage = this.env.storage;
     this.name.set(storedTheme(storage));
     this.accent.set(parseAccent(readItem(storage, ACCENT_STORAGE_KEY)));
-    this.textSize.set(parseTextSize(readItem(storage, TEXT_SIZE_STORAGE_KEY)));
+    this.textSize.set(storedTextSize(storage));
     this.compact.set(readItem(storage, COMPACT_STORAGE_KEY) === 'true');
     const motion = readItem(storage, MOTION_STORAGE_KEY);
     this.reduceMotion.set(motion === null ? this.env.prefersReducedMotion === true : motion === 'true');
@@ -200,6 +248,7 @@ export class Theme {
 
   setTextSize(size: TextSize): void {
     writeItem(this.env.storage, TEXT_SIZE_STORAGE_KEY, size);
+    writeItem(this.env.storage, TEXT_SIZE_SCALE_KEY, '2');
     this.textSize.set(size);
     this.applyAll();
   }

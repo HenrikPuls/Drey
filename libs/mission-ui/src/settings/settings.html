@@ -76,6 +76,7 @@
             </div>
             <div class="preview" [style.background]="previewSwatch().panel">
               <span class="pv-accent" [style.color]="previewAccent()">Needs you</span>
+              <span class="pv-line" [style.font-size.px]="scaled(theme.textSize(), 15)">{{ previewLine(theme.textSize()) }}</span>
               <b [style.font-size.px]="scaled(theme.textSize(), 16)">Which storage should back the backlinks index?</b>
               <span [style.font-size.px]="scaled(theme.textSize(), 14)" class="pv-sub">2 of 3 decisions open. Pia recommends SQLite.</span>
             </div>
