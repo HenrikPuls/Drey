@@ -57,9 +57,10 @@ const flow = (extra: Partial<McFlow> = {}): McFlow => ({
     { id: 'security', title: 'Security' },
   ],
   personas: [
-    { id: 'ben', title: 'Ben', color: '#6aa', model: 'sonnet' },
-    { id: 'ralf', title: 'Ralf', color: '#a6a', model: 'opus' },
-    { id: 'tessa', title: 'Tessa', color: '#aa6', model: 'sonnet' },
+    { id: 'ben', kind: 'agent', title: 'Ben', color: '#6aa', model: 'sonnet' },
+    { id: 'ralf', kind: 'agent', title: 'Ralf', color: '#a6a', model: 'opus' },
+    { id: 'tessa', kind: 'agent', title: 'Tessa', color: '#aa6', model: 'sonnet' },
+    { id: 'you', kind: 'human', title: 'You', color: '#38bdf8', model: '' },
   ],
   readOnly: null,
   reason: null,
@@ -183,6 +184,23 @@ function mount(
 }
 
 describe('FlowEditor', () => {
+  it('offers only the human persona on a manual step and shows no model for the owner (E10-6)', () => {
+    const steps = [...BASE_STEPS, step(5, 'manual', { title: 'Manual step', inserted: true, persona: 'you', pinned: true, owner: true })];
+    const { el, click } = mount(flow({ steps }));
+    click('.fe-gate', 4);
+    const panel = text(el.querySelector('.fe-inspector') as HTMLElement);
+    expect(panel).toContain('Manual step');
+    expect(panel).toContain('You');
+    expect(panel).not.toContain('Ben');
+    expect(panel).not.toContain('Ralf');
+    expect(panel).not.toContain('Model');
+    // an agent gate still lists everyone, the human included
+    click('.fe-gate', 2);
+    const agent = text(el.querySelector('.fe-inspector') as HTMLElement);
+    expect(agent).toContain('Ralf');
+    expect(agent).toContain('You');
+  });
+
   it('shows the gates with who works them, the running one marked, and the standard chip', () => {
     const { el } = mount(flow());
     const body = text(el);

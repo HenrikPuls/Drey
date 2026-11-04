@@ -158,6 +158,50 @@
                   <p class="need-summary">{{ vm.need.summary }}</p>
                 }
               </article>
+            } @else if (vm.need.kind === 'manual') {
+              <article class="card qcard need-card need-manual">
+                <div class="qk">{{ vm.kindLabel }}</div>
+                <div class="card-top">
+                  @if (vm.need.ticketId) {
+                    <span class="tid">{{ vm.need.ticketId }}</span>
+                  }
+                </div>
+                <h3 class="need-title">{{ vm.need.title }}</h3>
+                @if (vm.need.summary) {
+                  <p class="need-summary">{{ vm.need.summary }}</p>
+                }
+                @if (manualDone()[vm.key]) {
+                  <p class="manual-done">{{ manualDone()[vm.key] }}</p>
+                } @else if (canFinishManual()) {
+                  @if (manualSendBackOpen()[vm.key]) {
+                    <textarea
+                      class="manual-note"
+                      rows="3"
+                      aria-label="Why it goes back"
+                      [value]="manualNote()[vm.key] ?? ''"
+                      (input)="setManualNote(vm, $any($event.target).value)"
+                    ></textarea>
+                  }
+                  @if (manualError()[vm.key]) {
+                    <p class="manual-error" role="alert">{{ manualError()[vm.key] }}</p>
+                  }
+                  <div class="manual-actions">
+                    @if (manualSendBackOpen()[vm.key]) {
+                      <button type="button" class="btn" [disabled]="manualPending()[vm.key]" (click)="manualSendBack(vm)">
+                        {{ manualPending()[vm.key] ? 'Sending…' : 'Send back' }}
+                      </button>
+                      <button type="button" class="btn" (click)="toggleManualSendBack(vm)">Cancel</button>
+                    } @else {
+                      <button type="button" class="btn" (click)="toggleManualSendBack(vm)">Send back…</button>
+                      <button type="button" class="btn btn-primary" [disabled]="manualPending()[vm.key]" (click)="manualAccept(vm)">
+                        {{ manualPending()[vm.key] ? 'Accepting…' : 'Accept' }}
+                      </button>
+                    }
+                  </div>
+                } @else {
+                  <button type="button" class="btn" (click)="openNeedTicket(vm)">Open ticket</button>
+                }
+              </article>
             } @else if (needTappable(vm)) {
               <button
                 type="button"

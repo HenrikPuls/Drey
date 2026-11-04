@@ -42,7 +42,9 @@ export type NeedKind =
   /** E8 (concept §5.6): a scout ticket's report waits for the owner. */
   | 'report'
   /** E9 (concept §5.7): a chain gate with a Bescheid rule just completed. */
-  | 'notify';
+  | 'notify'
+  /** E10-6: the ticket is parked at a manual step — the owner finishes it (Accept) or sends it back. */
+  | 'manual';
 
 /** One thing that waits on the owner. */
 export interface NeedItem {
@@ -250,6 +252,8 @@ export interface TicketsRemotePort {
  */
 export interface PersonaView {
   readonly id: string;
+  /** `human` = the owner as a team member (E10-6): no model, budget or pause. Absent = agent. */
+  readonly kind?: 'agent' | 'human';
   readonly title: string;
   readonly role: string;
   readonly worker: string;

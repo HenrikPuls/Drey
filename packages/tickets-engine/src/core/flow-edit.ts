@@ -17,7 +17,7 @@
  * (a running gate stays as it is).
  */
 import type { ChainEntry, ChainStep } from '../contracts/chain';
-import { mergeChain, renderChainEntries, validateChain } from './chain-delta';
+import { isManualPhase, MANUAL_TITLE, mergeChain, renderChainEntries, validateChain } from './chain-delta';
 
 export interface FlowPhase {
   readonly id: string;
@@ -66,7 +66,7 @@ export function applyFlowOp(
     if (anchor.state === 'past') {
       return refuse(`${anchor.title} is done — a gate can only be added after the current or a later gate`);
     }
-    const known = phases.find((phase) => phase.id === edit.phase);
+    const known = phases.find((phase) => phase.id === edit.phase) ?? (isManualPhase(edit.phase) ? { id: edit.phase, title: MANUAL_TITLE } : undefined);
     if (known === undefined) {
       return refuse(`the pipeline has no phase "${edit.phase}"`);
     }

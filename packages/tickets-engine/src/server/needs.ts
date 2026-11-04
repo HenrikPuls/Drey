@@ -21,7 +21,7 @@ import { mergeChain } from '../core/chain-delta';
 import type { RunInfo, RunState } from '../fleet/protocol';
 
 const LIVE: ReadonlySet<RunState> = new Set(['starting', 'running', 'stopping', 'detached']);
-const KIND_ORDER: readonly NeedKind[] = ['question', 'permission', 'red-gate', 'failed', 'checkpoint'];
+const KIND_ORDER: readonly NeedKind[] = ['question', 'permission', 'manual', 'red-gate', 'failed', 'checkpoint'];
 
 interface Placed {
   readonly card: TicketCard;
@@ -79,9 +79,25 @@ export function needsOf(board: BoardSnapshot, runs: readonly RunInfo[]): readonl
     }
   }
 
+  // E10-6: a ticket parked at a manual step waits for the owner, wherever it sits.
+  for (const { card, phase } of placed.values()) {
+    const awaiting = card.meta.awaiting;
+    if (awaiting !== undefined && !hasLiveRun.has(card.id)) {
+      items.push({
+        kind: 'manual',
+        ticketId: card.id,
+        title: titleOf(card),
+        phase,
+        runId: null,
+        text: `a manual step waits for ${awaiting}`,
+        since: card.meta.entered[phase] ?? null,
+      });
+    }
+  }
+
   const checkpoints = new Set(board.checkpoints);
   for (const { card, phase } of placed.values()) {
-    if (checkpoints.has(phase) && !hasLiveRun.has(card.id)) {
+    if (checkpoints.has(phase) && !hasLiveRun.has(card.id) && card.meta.awaiting === undefined) {
       items.push({
         kind: 'checkpoint',
         ticketId: card.id,

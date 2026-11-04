@@ -180,7 +180,7 @@ describe('flowOf / flowEdit (ticket scope)', () => {
       ['security', 'future', null, null, true, false],
       ['commit', 'future', null, null, true, false],
     ]);
-    expect(reply.phases.map((p) => p.id)).toEqual(['inbox', 'build', 'review', 'verify', 'security', 'commit']);
+    expect(reply.phases.map((p) => p.id)).toEqual(['inbox', 'build', 'review', 'verify', 'security', 'commit', 'manual']);
     expect(reply.readOnly).toBeNull();
   });
 
@@ -267,5 +267,105 @@ describe('flowDraftContext', () => {
       expect(ctx.text).toContain('part "Capture window"');
       expect(ctx.text).toContain('- ralf (Ralf)');
     }
+  });
+});
+
+describe('manual steps and the human persona (E10-6)', () => {
+  const YOU = `---\ntitle: You\nkind: human\nrole: custom\nworker: opencode\n---\n\nYou.\n`;
+
+  async function writeYou(): Promise<void> {
+    await fsp.mkdir(path.join(vaultDir, 'tickets', '_meta', 'personas', 'you'), { recursive: true });
+    await fsp.writeFile(path.join(vaultDir, 'tickets', '_meta', 'personas', 'you', 'persona.md'), YOU, 'utf8');
+  }
+
+  async function park(phase: string): Promise<void> {
+    const rel = path.join(vaultDir, 'tickets', phase, 'T-0130.md');
+    const text = await fsp.readFile(rel, 'utf8');
+    await fsp.writeFile(
+      rel,
+      patchTicketFile(text, { to: phase, from: null, now: new Date('2026-11-04T10:00:00Z'), actor: 'agent@fleet', action: 'parked for You', setAwaiting: 'you' }),
+      'utf8',
+    );
+  }
+
+  it('offers the manual step as a gate to add and lists you as a human persona', async () => {
+    await writeYou();
+    await writeParent(PARENT_PLAN, 'build');
+    const reply = await serviceOf().flowOf({ id: 'T-0130', part: null });
+    expect(reply.ok).toBe(true);
+    if (reply.ok) {
+      expect(reply.phases.map((p) => p.id)).toContain('manual');
+      expect(reply.personas.find((p) => p.id === 'you')).toMatchObject({ kind: 'human', model: '' });
+      expect(reply.personas.find((p) => p.id === 'ben')).toMatchObject({ kind: 'agent' });
+    }
+  });
+
+  it('adds a manual step for you after review, shows it as the owner\'s gate and saves it', async () => {
+    await writeYou();
+    await writeParent(PARENT_PLAN, 'build');
+    const board = serviceOf();
+    const added = await board.flowEdit({ id: 'T-0130', part: null, chain: [], edit: { op: 'insert', phase: 'manual', after: 2 } });
+    expect(added.ok && added.chain).toEqual(['insert manual after review']);
+    const pinned = await board.flowEdit({ id: 'T-0130', part: null, chain: ['insert manual after review'], edit: { op: 'persona', step: 3, persona: 'you' } });
+    expect(pinned.ok).toBe(true);
+    if (!pinned.ok) {
+      return;
+    }
+    expect(pinned.chain).toEqual(['insert manual(you) after review']);
+    expect(pinned.steps.find((s) => s.phase === 'manual')).toMatchObject({ inserted: true, persona: 'you', owner: true, title: 'Manual step' });
+    expect(await board.saveFlow({ id: 'T-0130', part: null, chain: pinned.chain })).toMatchObject({ ok: true });
+    expect(await read('tickets/build/T-0130.md')).toContain('insert manual(you) after review');
+  });
+
+  it('refuses an agent persona on a manual step', async () => {
+    await writeYou();
+    await writeParent(PARENT_PLAN, 'build');
+    const refused = await serviceOf().flowEdit({ id: 'T-0130', part: null, chain: ['insert manual(ben) after review'], edit: { op: 'view' } });
+    expect(refused).toMatchObject({ ok: false, error: expect.stringContaining('ben is an agent') });
+  });
+
+  it('Accept finishes the manual step: the chain goes on, the park is gone, the Log names the owner', async () => {
+    await writeParent(PARENT_PLAN, 'review');
+    await park('review');
+    const board = serviceOf();
+    expect(await read('tickets/review/T-0130.md')).toMatch(/^awaiting: /m);
+    expect(await board.acceptTicket({ id: 'T-0130' })).toMatchObject({ ok: true });
+    const text = await read(await fileOf('T-0130'));
+    expect(text).not.toMatch(/^awaiting:/m);
+    expect(text).toContain('manual step finished by owner@test');
+    expect(await fileOf('T-0130')).toContain('verify/T-0130.md');
+  });
+
+  it('Send back returns the ticket to the previous agent phase with the note, and the park is gone', async () => {
+    await fsp.writeFile(
+      path.join(vaultDir, 'tickets', '_meta', 'pipeline.md'),
+      PIPELINE.replace('{ id: build, title: Build, handover: manual, persona: ben }', '{ id: build, title: Build, handover: agent build-default, persona: ben }'),
+      'utf8',
+    );
+    await writeParent(PARENT_PLAN, 'review');
+    await park('review');
+    const board = serviceOf();
+    expect(await board.sendBack({ id: 'T-0130', note: 'The spacing is off' })).toMatchObject({ ok: true });
+    const text = await read(await fileOf('T-0130'));
+    expect(text).not.toMatch(/^awaiting:/m);
+    expect(text).toContain('sent back: The spacing is off');
+    expect(await fileOf('T-0130')).toContain('build/T-0130.md');
+  });
+
+  it('the first flow read creates personas/you once, and a plain refresh leaves the vault alone', async () => {
+    await writeParent(PARENT_PLAN, 'build');
+    const board = serviceOf();
+    await board.refresh();
+    expect(await listMarkdownFiles(vaultDir)).not.toContain('tickets/_meta/personas/you/persona.md');
+    await board.flowOf({ id: 'T-0130', part: null });
+    const path1 = 'tickets/_meta/personas/you/persona.md';
+    const created = await read(path1);
+    expect(created).toContain('kind: human');
+    expect(created).toContain('title: You');
+    await fsp.writeFile(path.join(vaultDir, ...path1.split('/')), created.replace('title: You', 'title: Henrik'), 'utf8');
+    await board.flowOf({ id: 'T-0130', part: null });
+    expect(await read(path1)).toContain('title: Henrik');
+    const personas = await board.listPersonas();
+    expect(personas.find((p) => p.id === 'you')).toMatchObject({ kind: 'human', title: 'Henrik' });
   });
 });

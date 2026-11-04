@@ -132,6 +132,12 @@ export interface RunRequest {
   /** Next phase claims (claim: true) → stamped with this identity. */
   readonly claimIdentity: string | null;
   /**
+   * E10-6: a manual step follows this gate in the ticket's chain. On a
+   * green gate the ticket does not move on (a pulled ticket moves into the
+   * working column only): it parks with `awaiting: <human persona id>`.
+   */
+  readonly parkFor?: string;
+  /**
    * The column's own run ceilings (`max-turns:` / `max-work:` in
    * pipeline.md); absent keys fall back to the runner's defaults.
    */

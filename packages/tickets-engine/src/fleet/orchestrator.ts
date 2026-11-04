@@ -17,13 +17,14 @@
 import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
-import type { BoardColumn, BoardSnapshot, PipelinePhase, RepoRef } from '../contracts/tickets';
+import type { BoardColumn, BoardSnapshot, PipelinePhase, RepoRef, TicketCard } from '../contracts/tickets';
 import { isValidTicketFile, parseHandover, stripPhasePrefix, TICKETS_ARCHIVE_DIR } from '../contracts/tickets';
 import { assembleBoard, type BoardFile } from '../core/ticket-board';
 import { promptVersion, stripPromptVersion } from '../core/default-prompts';
 import { patchTicketFile } from '../core/ticket-files';
 import { TicketsGit } from '../core/tickets-git';
-import { PERSONAS_DIR, parsePersonaFile, personaModelFor, resolvePersona, type Persona, type PersonaResolution } from '../core/persona';
+import { HUMAN_PERSONA_ID, PERSONAS_DIR, isHumanPersona, parsePersonaFile, personaModelFor, resolvePersona, type Persona, type PersonaResolution } from '../core/persona';
+import { chainPersonaAt, manualStepAfter } from '../core/manual-gate';
 import { columnPromptRef, dispatchable, isAutoPhase, nextPhaseIdOf, planDispatch } from './chain';
 import { parseWorkerValue, resolveAssignment } from './assignment';
 import { composeRunRequest } from './request';
@@ -589,7 +590,7 @@ export class Orchestrator {
     const record = this.allRecords().find((r) => r.info.id === info.id) ?? null;
     const column = record?.request.column ?? null;
     if (column !== null && record !== null) {
-      await this.noteSettledStatus(info, column);
+      await this.noteSettledStatus(info, column, record.request.parkFor);
       const tokens = info.tokensIn + info.tokensOut;
       if (tokens > 0) {
         const day = this.stamp().slice(0, 10);
@@ -674,7 +675,7 @@ export class Orchestrator {
    * the last error's first line. Only when both seams are wired — the
    * events sink and the card-path resolver; the path's absence is silent.
    */
-  private async noteSettledStatus(info: RunInfo, column: string): Promise<void> {
+  private async noteSettledStatus(info: RunInfo, column: string, parkFor?: string): Promise<void> {
     const events = this.deps.events;
     const cardPathOf = this.deps.cardPathOf;
     if (events === undefined || cardPathOf === undefined) {
@@ -697,7 +698,12 @@ export class Orchestrator {
         // card in "Needs you" is the endpoint the status line names.
         events.status(cardPath, at, 'done', 'scout report ready — the owner promotes from Needs you');
       } else {
-        events.status(cardPath, at, 'done', `handed over on ${column}`);
+        events.status(
+          cardPath,
+          at,
+          'done',
+          parkFor === undefined ? `handed over on ${column}` : `handed over on ${column} — a manual step waits for ${parkFor}`,
+        );
       }
       return;
     }
@@ -1177,6 +1183,11 @@ export class Orchestrator {
           busyTickets.add(cardId);
         }
       }
+      // E10-6: a gate the human persona works runs no agent — the ticket
+      // parks for the owner instead, and is busy for this pass.
+      if (this.master === 'run') {
+        await this.parkHumanGates(config, snap, personas, busyTickets, modes);
+      }
       const poolOf = (card: BoardColumn['tickets'][number], phase: PipelinePhase): WorkerProviderId | null => {
         const persona = personas.get(card.id)?.persona ?? null;
         if (persona !== null) {
@@ -1482,6 +1493,106 @@ export class Orchestrator {
     return personas;
   }
 
+  /** The persona file of an id, or null when absent / unreadable. */
+  private async readPersona(config: ChainConfig, id: string): Promise<Persona | null> {
+    const text = await fsp.readFile(path.join(config.ticketsVaultPath, PERSONAS_DIR, id, 'persona.md'), 'utf8').catch(() => null);
+    if (text === null) {
+      return null;
+    }
+    try {
+      return parsePersonaFile(id, text);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The human persona a manual step after `workingPhaseId` waits for, or
+   * null when the card's chain holds none. A step with no pin is the
+   * owner's (`you`); a pin on an agent persona is no manual step (said once).
+   */
+  private async manualParkFor(config: ChainConfig, snap: BoardSnapshot, card: TicketCard, workingPhaseId: string): Promise<string | null> {
+    const entries = card.meta.chain ?? [];
+    if (entries.length === 0) {
+      return null;
+    }
+    const step = manualStepAfter(snap.pipeline.map((p) => ({ id: p.id, title: p.title })), workingPhaseId, entries);
+    if (step === null) {
+      return null;
+    }
+    const id = step.persona ?? HUMAN_PERSONA_ID;
+    const persona = await this.readPersona(config, id);
+    if (persona !== null && !isHumanPersona(persona)) {
+      this.noteSkip(card.id, `dispatch: the manual step of ${card.id} names "${id}", which is an agent - the step is ignored`);
+      return null;
+    }
+    return id;
+  }
+
+  /**
+   * Parks every dispatchable ticket whose current gate the human persona
+   * works (the delta's pin, then the ticket / phase / default ladder). No
+   * run is composed, so no worktree is prepared; the ticket stays in its
+   * column with `awaiting:` and lands in Needs you.
+   */
+  private async parkHumanGates(
+    config: ChainConfig,
+    snap: BoardSnapshot,
+    personas: ReadonlyMap<string, TicketPersona>,
+    busyTickets: Set<string>,
+    modes: Readonly<Record<string, ColumnMode>>,
+  ): Promise<void> {
+    const phases = snap.pipeline.map((p) => ({ id: p.id, title: p.title }));
+    for (const column of snap.columns) {
+      if (!isAutoPhase(column.phase) || (modes[column.phase.id] ?? 'playing') !== 'playing') {
+        continue;
+      }
+      for (const card of column.tickets) {
+        if (!dispatchable(card, busyTickets)) {
+          continue;
+        }
+        const pinned = chainPersonaAt(phases, card.phase, card.meta.chain ?? []);
+        const id = pinned ?? personas.get(card.id)?.resolution.persona ?? null;
+        if (id === null) {
+          continue;
+        }
+        const loaded = personas.get(card.id)?.persona;
+        const persona = loaded !== undefined && loaded !== null && loaded.id === id ? loaded : await this.readPersona(config, id);
+        if (persona === null || !isHumanPersona(persona)) {
+          continue;
+        }
+        busyTickets.add(card.id);
+        await this.parkInPlace(config, card, id, `parked for ${persona.title} - the ${column.phase.title} gate is a manual step`);
+      }
+    }
+  }
+
+  /** Stamps `awaiting:` on a ticket where it sits: one Log line, one status line, one commit (failures logged, never thrown). */
+  private async parkInPlace(config: ChainConfig, card: TicketCard, personaId: string, what: string): Promise<void> {
+    try {
+      const git = new TicketsGit(() => config.git);
+      const abs = path.join(config.ticketsVaultPath, card.path);
+      const text = await fsp.readFile(abs, 'utf8');
+      const patched = patchTicketFile(text, {
+        to: card.phase,
+        from: null,
+        now: this.now(),
+        actor: this.agentActor(),
+        action: what,
+        setAwaiting: personaId,
+      });
+      await fsp.writeFile(abs, patched, 'utf8');
+      const location = await git.locate(config.ticketsVaultPath);
+      if (location !== null) {
+        await git.commitPaths(location.root, [`${location.prefix}${card.path}`], `tickets: ${card.id} awaiting ${personaId}`);
+      }
+      this.deps.events?.status(card.path, this.stamp(), 'paused', what);
+      this.deps.log(`parked ${card.id} for ${personaId}: ${what}`);
+    } catch (error) {
+      this.deps.log(`parking ${card.id} failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   /** One planned dispatch; the pass collects the refusals per column. */
   private async dispatchOne(
     config: ChainConfig,
@@ -1561,7 +1672,12 @@ export class Orchestrator {
         promptText = stripPromptVersion(promptText);
       }
     }
-    const nextPhaseId = nextPhaseIdOf(columns, workingPhaseId);
+    // E10-6: a manual step right after this gate parks the ticket for the
+    // owner on a green gate - the ticket moves only as far as the working
+    // column (a pulled ticket) and then waits.
+    const parkFor = await this.manualParkFor(config, snap, card, workingPhaseId);
+    const nextPhaseId =
+      parkFor !== null ? (card.phase !== workingPhaseId ? workingPhaseId : null) : nextPhaseIdOf(columns, workingPhaseId);
     const nextPhaseClaims =
       nextPhaseId !== null ? snap.pipeline.find((p) => p.id === nextPhaseId)?.claim === true : false;
     const text = await fsp
@@ -1624,6 +1740,7 @@ export class Orchestrator {
       caps: config.caps ?? DEFAULT_FLEET_CAPS,
       structuralGateAllowed: firstWorker?.id === workingPhaseId,
       dispatchedBy: workingPhaseId,
+      parkFor,
       // The dispatcher asks the supervisor's rules to decide (T-0049):
       // the dialog is the only place an explicit mode is chosen.
       handover: 'auto',

@@ -1044,6 +1044,32 @@ export class McState {
     return { ok: true };
   }
 
+  /** A manual step's Accept (E10-6): the same endpoint as the ticket screen's, for any ticket by id. */
+  async finishManualStep(id: string): Promise<McReply> {
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', `/api/tickets/${encodeURIComponent(id)}/accept`)
+      .catch(fail);
+    if (isFailure(body)) {
+      return body;
+    }
+    return body['ok'] === true ? { ok: true } : refusal(body, 'the desk did not accept the step');
+  }
+
+  /** A manual step's Send back (E10-6): the note is mandatory. */
+  async sendBackManualStep(id: string, note: string): Promise<McReply> {
+    const text = note.trim();
+    if (text === '') {
+      return { ok: false, error: 'a send-back needs a note' };
+    }
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', `/api/tickets/${encodeURIComponent(id)}/send-back`, { note: text })
+      .catch(fail);
+    if (isFailure(body)) {
+      return body;
+    }
+    return body['ok'] === true ? { ok: true } : refusal(body, 'the desk did not send the ticket back');
+  }
+
   /** Sends the open ticket back to the agent; the note is mandatory (an empty one refuses). */
   async sendBack(note: string, comments: readonly { file: string; line: number; endLine: number | null; text: string }[] = []): Promise<McReply> {
     const open = this.ticketOpen();

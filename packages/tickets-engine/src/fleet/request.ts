@@ -38,6 +38,8 @@ export interface ComposeRunInput {
   readonly nextPhaseDir: string | null;
   /** pipeline.md's `push:` remote (T-0041); null = never push. */
   readonly pushRemote: string | null;
+  /** E10-6: park the ticket for this human persona after a green gate instead of moving it on. */
+  readonly parkFor?: string | null;
   /** Whether `nextPhaseId` claims (claim: true) — stamps the agent identity. */
   readonly nextPhaseClaims: boolean;
   readonly repo: RepoRef | null;
@@ -314,6 +316,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     ...(input.dispatchedBy !== undefined ? { column: input.dispatchedBy } : {}),
     ...(input.handover !== undefined ? { handover: input.handover } : {}),
     ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
+    ...(moves && input.parkFor ? { parkFor: input.parkFor } : {}),
   };
   return { ok: true, request, truncations: instruction.truncations, persona: persona?.id ?? null };
 }

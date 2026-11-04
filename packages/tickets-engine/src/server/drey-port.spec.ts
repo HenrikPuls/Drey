@@ -19,6 +19,7 @@ const ok = { ok: true } as const;
 function fakePersona(id: string, title: string): import('../core/persona').Persona {
   return {
     id,
+    kind: 'agent',
     title,
     role: 'builder',
     worker: 'claude-code',

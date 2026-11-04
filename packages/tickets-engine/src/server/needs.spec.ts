@@ -266,3 +266,20 @@ describe('notifyNeedsOf', () => {
     expect(notifyNeedsOf(board, NOW)).toEqual([]);
   });
 });
+
+describe('the manual-step card (E10-6)', () => {
+  it('a parked ticket is a manual need, ahead of red gates, and not a checkpoint twice', () => {
+    const parked = {
+      ...card('T-0001', 'plan-review', '2026-11-04T10:00:00Z'),
+      meta: { title: 'Ticket T-0001', entered: { 'plan-review': '2026-11-04T10:00:00Z' }, awaiting: 'you' },
+    } as unknown as TicketCard;
+    const snap = board([column('plan-review', [parked]), column('build', [card('T-0002', 'build')])], ['plan-review']);
+    const items = needsOf(snap, [run({ ticketId: 'T-0002', state: 'failed', endedAt: '2026-11-04T09:00:00Z', lastError: 'boom' })]);
+    expect(items.map((i) => [i.kind, i.ticketId])).toEqual([
+      ['manual', 'T-0001'],
+      ['failed', 'T-0002'],
+    ]);
+    expect(items[0]!.text).toContain('you');
+    expect(items[0]!.since).toBe('2026-11-04T10:00:00Z');
+  });
+});

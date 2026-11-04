@@ -329,6 +329,7 @@ of the Plan and removes it for fewer than two parts.
 | `repos` | list of names | Optional (req-72). Every work repo the ticket touches, **primary first** — `repos: [drey, lariscus]`. When set, the list is the truth and `repo:` repeats its first entry (a mismatch is a noise finding, the list wins). One worktree per named repo, all on the ticket's branch; a run refuses while any named repo lacks a local `path:` in `_meta/repos.md`. One or zero names write no `repos:` line. |
 | `worker` | string | Optional pin for the fleet worker (M84): `opencode`, `claude-code`, or `<provider>/<model>`. Wins over the column's `worker:` key, the phase handover's `@worker` pin, the repo's `worker:` and the configured default (M85's assignment ring). An unknown value badges the card; a run start with it refuses. |
 | `persona` | string | Optional persona pin (ADR-0088 E3): `persona: paul` — the top of the persona ladder, winning over the phase's `persona:` key and the engine default (`personas.default`). The persona's worker/model/prompt drive the dispatch; when nothing resolves or the persona file is missing the legacy assignment ring runs unchanged. See `_meta/personas/` below. |
+| `awaiting` | persona id | Optional (E10-6). The ticket is **parked at a manual step** for that human persona (`awaiting: you`): the dispatcher never takes it (no run, no worktree) and it shows in Needs you as a `manual` card. Machine-written when a manual gate parks the ticket; **any transition clears it** (Accept or Send back are ordinary board moves, so is a hand move). See "The manual step" under the chain delta. |
 | `priority` | one id of the board's configured vocabulary | Required. The vocabulary is the vault's own — `_meta/pipeline.md`'s `priorities:` list (default `urgent \| high \| normal \| low`); the list's order IS the weight, first = highest. An omitted or unknown id reads as the vocabulary's default (its middle entry) with a warning badge; machine writers always write a vocabulary word. See [Priorities](#priorities-priorities-in-pipelinemd). |
 | `track` | `auto \| shape` | Optional (req-75 W1b, ADR-0087 decision 2). The ticket's triage track: `auto` runs on its own, `shape` goes through the plan-mode dialog with the owner. Absent (or any other value — a warning) reads as not triaged; set from the Work panel's row menu (Track ›) until W5c/W6 fill it from triage. |
 | `form` | `ship \| scout` | Optional (concept §5.6, E8). The ticket's form: `ship` (the default — an absent key reads as ship) is the known way, plan → worktree → gate → move. `scout` is exploration only: a scout run reads repo/history/data and writes the ticket's `## Report` section — no worktree, no diff, no gate, no move; the report surfaces as a card in "Needs you" and the owner promotes the ticket to ship from there. Any other value warns (`form must be ship or scout — read as ship`) and reads as ship. See [The scout form](#the-scout-form-e8-concept-56). |
@@ -638,6 +639,45 @@ The grammar, one entry per list item:
 - `assign <phase> <persona>` — pins who works a standard gate
   (E10-5). An inserted gate carries its persona in the insert.
 
+**The manual step (E10-6).** A gate the owner works by hand. Its phase id
+is `manual` (a second one `manual-<word>`, e.g. `manual-qa`) — the only
+phase ids the chain accepts that are **not** a pipeline directory — and it
+exists only as an `insert`:
+
+```markdown
+chain:
+  - insert manual(you, notify) after review
+```
+
+The persona is the **human** persona (`kind: human`, below); without one the
+step is the owner's anyway (`you`). A pinned **agent** persona is refused at
+the write guard (the flow service) and ignored by the dispatcher. It anchors
+on a real phase, is inserted at most once per id, and nothing anchors on it
+or moves it; `skip`/`assign` on it are refused (the existing "inserted"
+rules).
+
+*Parking.* When the gate before the manual step finishes green, the run does
+not move the ticket on: it stamps `awaiting: you` where the ticket sits (a
+ticket the dispatcher pulled across a checkpoint moves into the working
+column first), appends one Log line (`parked for you (manual step)`, actor =
+the fleet) and the status log's `done:` line names who waits. No agent runs
+for the step and no worktree is prepared for it. The same park happens for a
+gate the human persona **works itself** — the delta's `assign`/insert pin,
+else the ticket's `persona:` pin, else the phase's `persona:`, else the
+engine default resolves to a `kind: human` persona: the dispatch pass
+stamps `awaiting` instead of composing a run (once; `paused:` status line,
+Log line `parked for <name> - the <phase> gate is a manual step`).
+
+*Finishing.* **Accept** is the board's ordinary accept — the ticket moves to
+the next phase, the field goes (Log line `manual step finished by <owner>
+(<persona>)`, the status log's `done:` line with the owner as actor, one
+commit). **Send back** is the ordinary send-back (nearest earlier agent
+phase, the mandatory note, the structured feedback of E11-3). Neither needs
+a new endpoint. The Needs-you list raises a `manual` item for every
+`awaiting` ticket (it replaces the checkpoint item when both would apply).
+The human persona never takes a pool slot, never appears in the capacity
+or stuck figures and carries no budget.
+
 A split ticket's **parts** each carry their own `chain:` delta (E10): the
 scope is the part, never the parent. A part's chain flows from the build
 gate on (the part's builder is the persona on the plan card, so the build
@@ -896,6 +936,7 @@ tickets/_meta/personas/
   | Field | Shape | Default |
   |---|---|---|
   | `title` | string | the id |
+  | `kind` | `agent \| human` | `agent` (an absent key). `human` is the owner as a team member (E10-6): `personas/you`, created once by the board service (title = config `personas.humanName`, default `You`; editable like any title). Inert for `role`/`worker`/`models`/`skills`/`budget` — the human is never dispatched, counted toward capacity or budgeted. Written only when `human` |
   | `role` | `planner \| builder \| reviewer \| tester \| custom` | `custom` |
   | `worker` | the CLI harness (`claude-code`, `opencode`, `api`) | `opencode` |
   | `models.default` | the model nothing else decides | `opus` |
