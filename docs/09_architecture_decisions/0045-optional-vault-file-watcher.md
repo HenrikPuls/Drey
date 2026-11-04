@@ -117,3 +117,11 @@ bar's "Changed on disk" button), and the save itself refuses to overwrite
 a file that changed since the tab read it — with the watcher on or off.
 A clean tab still reloads; its previous text goes into the local history
 first.
+
+## Later change — a plugin's out-of-process writes announce themselves (milestone 140)
+
+The contract is unchanged (`ctx.vault.announceChanges` is still the seam),
+but a new caller depends on it: the tickets plugin announces the paths the
+standalone engine reports, batched (D-3). The watcher stays opt-in; an
+external process that writes into a registered vault and has a client in
+Drey tells Drey itself rather than waiting for the watcher.

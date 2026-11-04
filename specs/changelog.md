@@ -1,3 +1,47 @@
+### Milestone 140 — Engine writes refresh Drey's vault views (D-3, G-08)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(convergence audit G-08). The standalone tickets engine writes ticket
+files, but Drey's vault layer was never told: with the vault watcher off
+(the default) the Files tree, the search / tag index, backlinks and an
+open ticket tab stayed stale until a manual refresh.
+
+- **Root cause.** `FsEngineHost.announceChanges` (the engine's standalone
+  host, ADR-0088 E2b) threw the paths away (`void changedPaths`) and emitted
+  a bare `board` event; the Drey plugin turned that into the renderer's
+  `board-changed` only. The pre-E2b `DreyEngineHost` had called
+  `ctx.vault.announceChanges` — the extraction dropped that link.
+- **Paths on the stream.** The engine's hub got a second, plugin-only
+  channel (`ChangeHub.emitPaths` / `subscribePaths`, `Engine.onPaths`): the
+  `/api/events` stream carries `{change:'paths', vaultPath, changed,
+  deleted}`. It is not a `RemoteChange` — the gateway and the phone never
+  see it. A transition reports the new file as changed and the old one as
+  deleted (a rename is a delete + add pair, as for the watcher).
+- **Batched announce.** `plugins/tickets/main/path-announcer.ts` coalesces
+  reports (400 ms debounce, 2 s max wait, last write wins per path, a batch
+  over 400 paths degrades to a full refresh of the vault) and calls
+  `ctx.vault.announceChanges` once per burst, so a fleet run is a trickle of
+  rounds, not a storm. The Drey vault is matched by path (the engine's
+  vault root), so an unregistered tickets vault is silently skipped. The
+  plugin knows no ticket semantics; the SDK and base are unchanged.
+- **Open tabs.** The existing external-change round decides: a clean tab
+  reloads, a dirty tab keeps its buffer and is marked "Changed on disk", a
+  tab whose file moved away flips to draft semantics (`existsOnDisk:
+  false`) and stays open. No echo: the round never writes back to the engine.
+- **Specs.** `path-announcer.spec.ts` (move = changed + deleted, path
+  matching, unregistered vault, burst coalescing, max wait, last write wins,
+  oversize → full refresh, dispose, failing listing, `dispatchFrame`),
+  `engine.spec.ts` (a real transition reports both paths on `onPaths` and
+  the SSE stream), and `e2e/engine-refresh.spec.ts` (a real Drey with the
+  watcher off, its own engine, driven over the loopback channel like Mission
+  Control: a clean open ticket tab reloads after an engine edit, the Files
+  tree shows an engine move into another phase folder, a dirty tab keeps its
+  unsaved text and is marked "Changed on disk"). Without the fix the first
+  and the last assertion fail (reproduced by disabling `emitPaths` in the
+  built engine).
+- **Not done.** A ticket tab does not follow an external move to the new
+  folder (it flips to draft semantics); watcher stays off by default.
+
 ### Milestone 137 — Text size steps S / M / L / XL
 
 **Not yet manually verified by the owner.** Owner decision, 2026-11-04: the

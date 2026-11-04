@@ -3951,3 +3951,26 @@ sequenceDiagram
 Cancel is `POST /api/pairing/cancel`; an expired code simply answers
 `pairing: null` on the next poll. The desktop's Settings and a phone share
 the one slot: whoever starts last replaces the waiting pairing.
+
+## 6.83 An engine write reaches Drey's vault views (D-3, milestone 140)
+
+```mermaid
+sequenceDiagram
+    participant E as Engine (board service)
+    participant H as ChangeHub
+    participant P as Plugin main (EngineClient, PathAnnouncer)
+    participant V as VaultChangeAnnouncer
+    participant R as Renderer (Files tree, tabs)
+
+    E->>E: move T-1: write new file, delete old, commit
+    E->>H: announceChanges(vault, [new], [old]) -> board + emitPaths
+    H-->>P: SSE data {change: paths, vaultPath, changed, deleted}
+    Note over P: coalesce 400 ms / 2 s max, last write wins, > 400 paths = full refresh
+    P->>V: ctx.vault.announceChanges({vaultId, changedPaths, deletedPaths})
+    V->>R: plugin index events + vault:changed {paths}
+    R-->>R: tree reloads, clean tab reloads, dirty tab marked, moved-away tab draft
+```
+
+The paths channel is plugin-only; the gateway's SSE (phone) carries the
+bare `board` signal as before. The watcher stays off; this is the same
+external-change round it would run.

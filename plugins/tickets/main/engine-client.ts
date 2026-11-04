@@ -1,6 +1,7 @@
 import type { EngineBoardService } from '../../../packages/tickets-engine/src/services/board-service';
 import type { FleetClient } from '../../../packages/tickets-engine/src/services/fleet-client';
 import type { RemoteService } from '../../../packages/tickets-engine/src/server/service';
+import type { PathsEvent } from './path-announcer';
 
 /**
  * The Drey plugin's client of the standalone tickets engine (ADR-0088,
@@ -17,6 +18,26 @@ export interface EngineEndpoints {
 }
 
 export class EngineError extends Error {}
+
+/** One SSE `data:` line: board / fleet / remote are debounced signals, `paths` is a payload. */
+export function dispatchFrame(
+  json: string,
+  fire: (what: 'board' | 'fleet' | 'remote') => void,
+  onPaths?: (event: PathsEvent) => void,
+): void {
+  let frame: { change?: string; vaultPath?: unknown; changed?: unknown; deleted?: unknown };
+  try {
+    frame = JSON.parse(json) as typeof frame;
+  } catch {
+    return;
+  }
+  if (frame.change === 'board' || frame.change === 'fleet' || frame.change === 'remote') {
+    fire(frame.change);
+  } else if (frame.change === 'paths' && onPaths !== undefined && typeof frame.vaultPath === 'string') {
+    const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []);
+    onPaths({ vaultPath: frame.vaultPath, changed: strings(frame.changed), deleted: strings(frame.deleted) });
+  }
+}
 
 export class EngineClient {
   constructor(private readonly endpoints: EngineEndpoints) {}
@@ -53,7 +74,12 @@ export class EngineClient {
   }
 
   /** The engine's live-update stream (board | fleet | remote), debounced per kind. */
-  onEvent(listener: (what: 'board' | 'fleet' | 'remote') => void, debounceMs = 200): () => void {
+  onEvent(
+    listener: (what: 'board' | 'fleet' | 'remote') => void,
+    debounceMs = 200,
+    /** The `paths` frames (D-3): undebounced -- the receiver batches. */
+    onPaths?: (event: PathsEvent) => void,
+  ): () => void {
     let closed = false;
     let current: AbortController | null = null;
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -90,7 +116,7 @@ export class EngineClient {
             for (const frame of frames) {
               for (const line of frame.split('\n')) {
                 if (line.startsWith('data: ')) {
-                  fire((JSON.parse(line.slice(6)) as { change: 'board' | 'fleet' | 'remote' }).change);
+                  dispatchFrame(line.slice(6), fire, onPaths);
                 }
               }
             }

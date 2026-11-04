@@ -93,9 +93,11 @@ export class FsEngineHost implements EngineHost {
   resolveAssetPath = (_vaultId: string, rel: string): string | null => this.resolve(rel);
 
   announceChanges = (_vaultId: string, changedPaths: readonly string[], deletedPaths?: readonly string[]): void => {
-    void changedPaths;
-    void deletedPaths;
     this.hub.emit('board');
+    // The paths ride a plugin-only channel (D-3): Drey's watcher is off by
+    // default, so this is how its Files tree, indexes and open tabs hear of
+    // an engine write.
+    this.hub.emitPaths({ vaultPath: this.vault.path, changed: changedPaths, deleted: deletedPaths ?? [] });
   };
 
   markManaged = (_vaultId: string | null): void => {
