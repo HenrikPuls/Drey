@@ -20,6 +20,7 @@ import {
   type QuestionCardVm,
 } from '../work/work.model';
 import { renderMarkdown, type MdBlock } from './markdown';
+import { planPartsOf, planSectionOf } from '../plan/plan.model';
 import {
   ACCEPT_ARM_WINDOW_MS,
   ACCEPT_DISARMED,
@@ -849,6 +850,27 @@ export class TicketView {
     const build = doc.phases.findIndex((phase) => phase.id === 'build');
     return at >= 0 && (build < 0 ? at <= 1 : at < build);
   });
+
+  // --- the plan to approve (E10-4) ---------------------------------------------------
+
+  /** How many parts the plan lists; the approval is offered from two on, on a ticket that is not finished. */
+  protected readonly planParts = computed(() => {
+    const doc = this.doc();
+    if (doc === null || this.vm.approvePlan === undefined) {
+      return 0;
+    }
+    const last = doc.phases[doc.phases.length - 1]?.id ?? null;
+    return doc.phase === last ? 0 : planPartsOf(planSectionOf(doc.text)).length;
+  });
+
+  protected readonly canApprove = computed(() => this.planParts() >= 2);
+
+  protected approvePlan(): void {
+    const doc = this.doc();
+    if (doc !== null) {
+      this.vm.approvePlan?.(doc.id);
+    }
+  }
 
   /** 'Shape with Paul': the chat opens on this ticket's shape session (or a fresh one). */
   protected shapeWithPaul(): void {

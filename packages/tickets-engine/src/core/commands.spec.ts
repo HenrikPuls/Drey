@@ -8,6 +8,8 @@ import {
   parseClaim,
   parseCreate,
   parsePermission,
+  parsePlanPartsEdit,
+  parsePlanRelease,
   parseRefine,
   parseSend,
   parseSendBack,
@@ -189,5 +191,39 @@ describe('parseAttachment', () => {
   it('refuses a decoded image over 6 MB', () => {
     const big = Buffer.concat([png, Buffer.alloc(6 * 1024 * 1024)]);
     expect(parseAttachment({ dataBase64: big.toString('base64') })).toEqual({ ok: false, error: 'the image is larger than 6 MB' });
+  });
+});
+
+describe('the plan to approve commands (E10-4)', () => {
+  it('reads the three list edits', () => {
+    expect(parsePlanPartsEdit({ id: 'T-0130', op: 'persona', index: 1, persona: 'ben' })).toEqual({
+      ok: true,
+      value: { id: 'T-0130', edit: { op: 'persona', index: 1, persona: 'ben' } },
+    });
+    expect(parsePlanPartsEdit({ id: 'T-0130', op: 'persona', index: 0, persona: null })).toMatchObject({ ok: true });
+    expect(parsePlanPartsEdit({ id: 'T-0130', op: 'move', from: 2, to: 0 })).toEqual({
+      ok: true,
+      value: { id: 'T-0130', edit: { op: 'move', from: 2, to: 0 } },
+    });
+    expect(parsePlanPartsEdit({ id: 'T-0130', op: 'delete', index: 3 })).toEqual({
+      ok: true,
+      value: { id: 'T-0130', edit: { op: 'delete', index: 3 } },
+    });
+  });
+
+  it('refuses junk positions, persona ids and operations', () => {
+    expect(parsePlanPartsEdit({ id: 'T-0130', op: 'move', from: -1, to: 0 })).toEqual({ ok: false, error: 'bad move' });
+    expect(parsePlanPartsEdit({ id: 'T-0130', op: 'move', from: 1.5, to: 0 })).toEqual({ ok: false, error: 'bad move' });
+    expect(parsePlanPartsEdit({ id: 'T-0130', op: 'delete', index: 'x' })).toEqual({ ok: false, error: 'bad delete' });
+    expect(parsePlanPartsEdit({ id: 'T-0130', op: 'persona', index: 0, persona: '../x' })).toEqual({ ok: false, error: 'bad persona edit' });
+    expect(parsePlanPartsEdit({ op: 'delete', index: 0 })).toEqual({ ok: false, error: 'bad parts payload' });
+    expect(parsePlanPartsEdit({ id: 'T-0130', op: 'add' })).toEqual({ ok: false, error: 'parts op must be persona, move or delete' });
+  });
+
+  it('reads the release scope, all by default', () => {
+    expect(parsePlanRelease({ id: 'T-0130' })).toEqual({ ok: true, value: { id: 'T-0130', scope: 'all' } });
+    expect(parsePlanRelease({ id: 'T-0130', scope: 'first' })).toEqual({ ok: true, value: { id: 'T-0130', scope: 'first' } });
+    expect(parsePlanRelease({ id: 'T-0130', scope: 'two' })).toEqual({ ok: false, error: 'release scope must be all or first' });
+    expect(parsePlanRelease(null)).toEqual({ ok: false, error: 'bad release payload' });
   });
 });

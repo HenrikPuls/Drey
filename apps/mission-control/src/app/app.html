@@ -132,6 +132,11 @@
       }
     </mc-chat>
   }
+  @if (approveOpen() !== null) {
+    <div class="approve-layer">
+      <mc-plan-approve />
+    </div>
+  }
   <div class="ticket-layer" [class.open]="ticketOpen() !== null">
     <mc-ticket />
     <mc-ticket-edit />

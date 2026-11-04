@@ -1824,6 +1824,137 @@ describe('McState shape mode (E10-3)', () => {
     expect(state.splitProposal()).toBeNull();
   });
 
+  describe('the plan to approve (E10-4)', () => {
+    const PARTS = {
+      ok: true,
+      ticket: 'T-0130',
+      title: 'Voice capture',
+      gate: 'build',
+      defaultPersona: 'ben',
+      warnings: [],
+      personas: [{ id: 'ben', title: 'Ben', role: 'builder', color: '#f0a58a', model: 'sonnet' }],
+      parts: [
+        { index: 0, title: 'A', state: 'new', locked: false, start: 'Runs now', flow: [], chain: [] },
+        { index: 1, title: 'B', state: 'new', locked: false, start: 'After part 1', flow: [], chain: [] },
+      ],
+    };
+
+    it('opens after "Split into N tickets" and shows the desk’s cards', async () => {
+      const { desk, data } = makeDesk();
+      const split = (decision: string | null) => ({ role: 'mission', text: 'Parts ship alone', at: 'b', thought: null, kind: 'split', parts: 2, decision });
+      data.sessionA = { file: FILE_A, title: 'Shape', ticket: 'T-0130', createdAt: '', messages: [split(null)], proposals: [] };
+      desk.on('GET', '/api/tickets/T-0130/plan', () => ({ ok: true, version: 1, edits: 0, summary: null, marks: [] }));
+      desk.on('GET', '/api/tickets/T-0130', () => ticketFor('### Goal'));
+      desk.on('GET', '/api/tickets/T-0130/parts', () => PARTS);
+      desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/split/split`, () => ({ ok: true, outcome: 'split' }));
+      const state = makeState(desk);
+      await state.openSession(FILE_A);
+
+      expect(await state.shapeDecide(FILE_A, 'split')).toEqual({ ok: true });
+      await waitFor(() => expect(state.approval()?.parts.map((p) => p.title)).toEqual(['A', 'B']));
+      expect(state.approvalTicket()).toBe('T-0130');
+
+      // "Keep as one ticket" leads nowhere near the approval.
+      state.closeApproval();
+      desk.on('POST', `/api/chat/sessions/${enc(FILE_A)}/split/keep`, () => ({ ok: true, outcome: 'x' }));
+      data.sessionA = { file: FILE_A, title: 'Shape', ticket: 'T-0130', createdAt: '', messages: [split(null)], proposals: [] };
+      await state.openSession(FILE_A);
+      await state.shapeDecide(FILE_A, 'keep');
+      expect(state.approvalTicket()).toBeNull();
+    });
+
+    it('says why when the desk has no parts for the ticket, and keeps the last good cards on a failed refresh', async () => {
+      const { desk } = makeDesk();
+      desk.on('GET', '/api/tickets/T-0130/parts', () => ({ ok: false, error: 'T-0130 is not on the board' }));
+      const state = makeState(desk);
+      await state.openApproval('T-0130');
+      expect(state.approval()).toBeNull();
+      expect(state.approvalError()).toBe('T-0130 is not on the board');
+
+      desk.on('GET', '/api/tickets/T-0130/parts', () => PARTS);
+      await state.refreshApproval();
+      expect(state.approval()?.parts).toHaveLength(2);
+      desk.on('GET', '/api/tickets/T-0130/parts', () => ({ __status: 500, __body: { ok: false, error: 'boom' } }));
+      await state.refreshApproval();
+      expect(state.approval()?.parts).toHaveLength(2);
+    });
+
+    it('posts a list edit, re-reads the cards, and hands a refusal back unchanged', async () => {
+      const { desk } = makeDesk();
+      desk.on('GET', '/api/tickets/T-0130/parts', () => PARTS);
+      desk.on('GET', '/api/tickets/T-0130/plan', () => ({ ok: true, version: 1, edits: 0, summary: null, marks: [] }));
+      const state = makeState(desk);
+      await state.openApproval('T-0130');
+
+      desk.on('POST', '/api/tickets/T-0130/parts', () => ({ ok: true }));
+      const before = desk.callsOf('GET', '/api/tickets/T-0130/parts').length;
+      expect(await state.editParts({ op: 'move', from: 1, to: 0 })).toEqual({ ok: true });
+      expect(desk.callsOf('POST', '/api/tickets/T-0130/parts')[0]!.body).toEqual({ op: 'move', from: 1, to: 0 });
+      expect(desk.callsOf('GET', '/api/tickets/T-0130/parts').length).toBe(before + 1);
+
+      desk.on('POST', '/api/tickets/T-0130/parts', () => ({ ok: false, error: '"A" is running and cannot be moved' }));
+      expect(await state.editParts({ op: 'delete', index: 0 })).toEqual({ ok: false, error: '"A" is running and cannot be moved' });
+    });
+
+    it('releases, toasts, closes the screen and goes to Work', async () => {
+      const { desk } = makeDesk();
+      desk.on('GET', '/api/tickets/T-0130/parts', () => PARTS);
+      const state = makeState(desk);
+      await state.openApproval('T-0130');
+      state.tab.set('chat');
+
+      desk.on('POST', '/api/tickets/T-0130/release', () => ({ ok: true, tickets: ['T-0131', 'T-0132'] }));
+      expect(await state.releaseParts('all')).toEqual({ ok: true, tickets: ['T-0131', 'T-0132'] });
+      expect(desk.callsOf('POST', '/api/tickets/T-0130/release')[0]!.body).toEqual({ scope: 'all' });
+      expect(state.approvalTicket()).toBeNull();
+      expect(state.tab()).toBe('work');
+      expect(state.toastMessage()?.message).toBe('Released 2 tickets');
+    });
+
+    it('keeps the cards up after "Run part 1 only", now with the first part released', async () => {
+      const { desk } = makeDesk();
+      let released = false;
+      desk.on('GET', '/api/tickets/T-0130/parts', () =>
+        released
+          ? { ...PARTS, parts: [{ ...PARTS.parts[0], ticket: 'T-0131', state: 'queued', locked: true, start: 'Released as T-0131' }, PARTS.parts[1]] }
+          : PARTS,
+      );
+      const state = makeState(desk);
+      await state.openApproval('T-0130');
+      state.tab.set('chat');
+      desk.on('POST', '/api/tickets/T-0130/release', () => {
+        released = true;
+        return { ok: true, tickets: ['T-0131'] };
+      });
+      expect(await state.releaseParts('first')).toEqual({ ok: true, tickets: ['T-0131'] });
+      expect(desk.callsOf('POST', '/api/tickets/T-0130/release')[0]!.body).toEqual({ scope: 'first' });
+      expect(state.approvalTicket()).toBe('T-0130');
+      expect(state.approval()?.parts[0]!.locked).toBe(true);
+      expect(state.tab()).toBe('chat');
+      expect(state.toastMessage()?.message).toBe('Released T-0131');
+    });
+
+    it('keeps the screen open on a refused release', async () => {
+      const { desk } = makeDesk();
+      desk.on('GET', '/api/tickets/T-0130/parts', () => PARTS);
+      const state = makeState(desk);
+      await state.openApproval('T-0130');
+      desk.on('POST', '/api/tickets/T-0130/release', () => ({ ok: false, error: 'Every part is released already.' }));
+      expect(await state.releaseParts('first')).toEqual({ ok: false, error: 'Every part is released already.' });
+      expect(state.approvalTicket()).toBe('T-0130');
+    });
+
+    it('re-reads the open cards when the board changes', async () => {
+      const { desk } = makeDesk();
+      desk.on('GET', '/api/tickets/T-0130/parts', () => PARTS);
+      const state = makeState(desk);
+      await state.openApproval('T-0130');
+      const before = desk.callsOf('GET', '/api/tickets/T-0130/parts').length;
+      (state as unknown as { onFrame(name: string, data: string): void }).onFrame('board', '{}');
+      await waitFor(() => expect(desk.callsOf('GET', '/api/tickets/T-0130/parts').length).toBe(before + 1));
+    });
+  });
+
   it('saves the plan against the loaded revision and reports a stale base honestly', async () => {
     const { desk } = makeDesk();
     desk.on('GET', '/api/tickets/T-0130', () => ticketFor('### Goal'));

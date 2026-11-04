@@ -14,9 +14,12 @@ import { archivedTicketIds, nextTicketId, TICKETS_ARCHIVE_DIR, TICKET_ID_PATTERN
 import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply } from '../contracts/changes';
 import { type RefineReply, TicketReply, AttachmentReply } from '../contracts/replies';
 import { assembleBoard, parseRepos, addPipelinePhase, patchPipelinePhase, removePipelinePhase, renamePipelinePhase, parsePipeline, reorderPipelinePhases, reposFileText, reposProse } from '../core/ticket-board';
-import { newTicketFileText, parseTicketFile, patchTicketFile, patchBlockedBy, patchChain, patchForm, patchTrack, ticketPathParts } from '../core/ticket-files';
+import { newTicketFileText, parseTicketFile, patchTicketFile, patchBlockedBy, patchChain, patchForm, patchTrack, ticketPathParts, withLogLine } from '../core/ticket-files';
 import { withPlanSection } from '../core/plan-section';
-import { parseChainEntry, renderChainEntries, validateChain } from '../core/chain-delta';
+import { mergeChain, parseChainEntry, renderChainEntries, validateChain } from '../core/chain-delta';
+import { deletePlanPart, movePlanPart, parsePlanParts, partChainEntries, withPlanParts, type PlanPart } from '../core/plan-parts';
+import { blockerOf, indicesToMint, lockedIndices, matchPartTickets, partStateOf, partTicketText, releaseLogText, startLineOf, type PartTicket } from '../core/plan-release';
+import type { PlanPartCard, PlanPartsEdit, PlanPartsReply, PlanReleaseReply, PlanReleaseScope } from '../contracts/plan-approval';
 import type { ChainEntry } from '../contracts/chain';
 import { refineTicket, revisionOf } from '../core/ticket-refine';
 import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from '../core/phase-dirs';
@@ -929,6 +932,261 @@ export class EngineBoardService {
       this.host.announceChanges(vault.id, [card.path]);
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  // --- the plan to approve (E10-4, concept v2 §5.9) ----------------------------
+
+  /** The build queue's phase: `build`, else the phase after the first, else the first. */
+  private buildPhaseOf(snap: BoardSnapshot): PipelinePhase | null {
+    return snap.pipeline.find((p) => p.id === 'build') ?? snap.pipeline[1] ?? snap.pipeline[0] ?? null;
+  }
+
+  /** The tickets that name `parentId` as their parent, as the matcher reads them. */
+  private childrenOf(snap: BoardSnapshot, parentId: string): PartTicket[] {
+    return snap.columns.flatMap((column) =>
+      column.tickets
+        .filter((t) => t.meta.parent === parentId)
+        .map((t) => ({ id: t.id, title: t.meta.title ?? t.id, phase: column.phase.id, running: t.meta.run !== null })),
+    );
+  }
+
+  /**
+   * The cards of a ticket's plan to approve: its `### Parts` with the
+   * ticket each part became (by title among the tickets that name this
+   * one as `parent:`), the state and the lock that follows, each part's
+   * flow from the build gate on, and the personas the picker offers. A
+   * read — nothing is written, nothing normalized.
+   */
+  async planParts(id: string): Promise<PlanPartsReply> {
+    const found = await this.findCard(id);
+    if (found === null) {
+      return { ok: false, error: `${id} is not on the board` };
+    }
+    const snap = await this.snapshot();
+    const build = this.buildPhaseOf(snap);
+    if (build === null) {
+      return { ok: false, error: snap.pipelineError ?? 'the pipeline is empty' };
+    }
+    const parsed = parsePlanParts(found.text);
+    const matches = matchPartTickets(parsed.parts, this.childrenOf(snap, id));
+    const terminal = snap.pipeline[snap.pipeline.length - 1]!.id;
+    const buildAt = snap.pipeline.findIndex((p) => p.id === build.id);
+    const queue = new Set(snap.pipeline.slice(0, buildAt + 1).map((p) => p.id));
+    const personas = await this.listPersonas();
+    const defaultPersona = build.persona ?? (((await this.host.configGet<string>('personas.default')) ?? '').trim() || null);
+    const phases = snap.pipeline.map((p) => ({ id: p.id, title: p.title }));
+    const parts: PlanPartCard[] = parsed.parts.map((part, index) => {
+      const own = matches[index] ?? null;
+      const entries = partChainEntries(part);
+      const steps = mergeChain(phases, build.id, entries).filter((step) => step.state !== 'past' && step.phase !== terminal);
+      return {
+        index,
+        title: part.title,
+        reason: part.reason,
+        persona: part.persona,
+        chain: part.chain,
+        flow: steps.map((step) => ({
+          phase: step.phase,
+          title: step.title,
+          persona: step.phase === build.id ? (part.persona ?? defaultPersona) : (step.persona ?? snap.pipeline.find((p) => p.id === step.phase)?.persona ?? null),
+          inserted: step.inserted,
+          skipped: step.skipped,
+          notify: step.notify,
+        })),
+        ticket: own?.id ?? null,
+        state: partStateOf(own, queue, terminal),
+        phase: own?.phase ?? null,
+        locked: own !== null,
+        start: startLineOf(index, matches),
+      };
+    });
+    return {
+      ok: true,
+      ticket: id,
+      title: found.card.meta.title ?? id,
+      parts,
+      gate: build.id,
+      defaultPersona,
+      personas: personas.map((p) => ({
+        id: p.id,
+        title: p.title,
+        role: p.role,
+        color: p.color,
+        model: deriveWorkerModel(p, null).model ?? '',
+      })),
+      warnings: parsed.warnings,
+    };
+  }
+
+  /**
+   * The owner's edit on the card list — a persona pick, a move, a delete —
+   * written as the new `### Parts` chapter of the parent's Plan. A part
+   * that is a ticket already refuses (and nothing may move above one);
+   * the list never drops below two parts (that is "Keep as one ticket",
+   * a decision of its own). One commit `tickets: <id> parts`.
+   */
+  editPlanParts(input: { id: string; edit: PlanPartsEdit; actor?: string }): Promise<BoardMutationResult> {
+    return this.enqueue(async () => {
+      const found = await this.findCard(input.id);
+      if (found === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const { vault, card, text } = found;
+      if (card.meta.run !== null) {
+        return { ok: false, error: 'A run is live on this ticket. Change the parts when the run has ended.' };
+      }
+      const snap = await this.snapshot();
+      const parts = parsePlanParts(text).parts;
+      if (parts.length < 2) {
+        return { ok: false, error: 'This plan has no parts to change.' };
+      }
+      const locked = lockedIndices(matchPartTickets(parts, this.childrenOf(snap, input.id)));
+      const edit = input.edit;
+      let next: readonly PlanPart[];
+      if (edit.op === 'move') {
+        const moved = movePlanPart(parts, edit.from, edit.to, locked);
+        if (!moved.ok) {
+          return { ok: false, error: moved.error };
+        }
+        next = moved.parts;
+      } else if (edit.op === 'delete') {
+        const deleted = deletePlanPart(parts, edit.index, locked);
+        if (!deleted.ok) {
+          return { ok: false, error: deleted.error };
+        }
+        if (deleted.parts.length < 2) {
+          return { ok: false, error: 'A split needs two parts. Keep the plan as one ticket instead.' };
+        }
+        next = deleted.parts;
+      } else {
+        const target = parts[edit.index];
+        if (target === undefined) {
+          return { ok: false, error: 'no such part position' };
+        }
+        if (locked.has(edit.index)) {
+          return { ok: false, error: `"${target.title}" is released as a ticket — its persona changes there` };
+        }
+        if (edit.persona !== null && !(await this.listPersonaIds()).includes(edit.persona)) {
+          return { ok: false, error: personaMissing(edit.persona) };
+        }
+        next = parts.map((part, i) => (i === edit.index ? { ...part, persona: edit.persona } : part));
+      }
+      const patched = withPlanParts(text, next);
+      if (patched === text.replace(/\r\n/g, '\n')) {
+        return { ok: true };
+      }
+      try {
+        await this.host.write(vault.id, card.path, patched);
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const warning = await this.commit(vault, [card.path], `tickets: ${input.id} parts`);
+      this.host.announceChanges(vault.id, [card.path]);
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
+  /**
+   * The approval (E10-4): every part of the plan that is not a ticket yet
+   * — or only the first such part — becomes its own ticket in the build
+   * queue: `parent:` the plan's ticket, the builder's `persona:` pin, the
+   * part's own `chain:` delta, `blocked-by:` the part before it (so part
+   * 2 waits until part 1 reaches the terminal phase). Everything is
+   * checked first and written in one commit `tickets: <id> plan released`;
+   * the parent gets one Log line and keeps the plan.
+   */
+  releasePlan(input: { id: string; scope: PlanReleaseScope; actor?: string }): Promise<PlanReleaseReply> {
+    return this.enqueue(async () => {
+      const found = await this.findCard(input.id);
+      if (found === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const { vault, card, text } = found;
+      const snap = await this.snapshot();
+      const build = this.buildPhaseOf(snap);
+      if (build === null || snap.pipeline.length < 2) {
+        return { ok: false, error: snap.pipelineError ?? 'the pipeline has no build queue' };
+      }
+      const parts = parsePlanParts(text).parts;
+      if (parts.length < 2) {
+        return { ok: false, error: 'This plan has no parts to release.' };
+      }
+      const matches = matchPartTickets(parts, this.childrenOf(snap, input.id));
+      const mint = indicesToMint(matches, input.scope);
+      if (mint.length === 0) {
+        return { ok: false, error: 'Every part is released already.' };
+      }
+      const personaIds = await this.listPersonaIds();
+      const phases = snap.pipeline.map((p) => ({ id: p.id, title: p.title }));
+      for (const index of mint) {
+        const part = parts[index]!;
+        if (part.persona !== null && !personaIds.includes(part.persona)) {
+          return { ok: false, error: `Part ${index + 1}: ${personaMissing(part.persona)}` };
+        }
+        const refusal = validateChain(phases, build.id, partChainEntries(part));
+        if (refusal !== null) {
+          return { ok: false, error: `Part ${index + 1}: ${refusal}` };
+        }
+      }
+      const known = [
+        ...snap.columns.flatMap((c) => c.tickets.map((t) => t.id)),
+        ...archivedTicketIds(await this.host.listMarkdownFiles(vault.id)),
+      ];
+      const dirs = await this.ticketDirs(vault);
+      const buildDir = resolvePhaseDir(dirs, snap.pipeline.findIndex((p) => p.id === build.id) + 1, build.id);
+      const ids = new Map<number, string>();
+      matches.forEach((m, i) => {
+        if (m !== null) {
+          ids.set(i, m.id);
+        }
+      });
+      const now = new Date();
+      const actor = input.actor ?? this.owner;
+      const files: { path: string; text: string }[] = [];
+      for (const index of mint) {
+        const id = nextTicketId(known);
+        known.push(id);
+        ids.set(index, id);
+        files.push({
+          path: `tickets/${buildDir}/${id}.md`,
+          text: partTicketText({
+            id,
+            parentId: input.id,
+            parentTitle: card.meta.title ?? input.id,
+            part: parts[index]!,
+            index,
+            total: parts.length,
+            repo: card.meta.repo,
+            repos: card.meta.repos,
+            priority: card.meta.priority,
+            priorities: snap.priorities,
+            firstPhase: snap.pipeline[0]!.id,
+            phase: build.id,
+            blockedBy: blockerOf(index, ids),
+            now,
+            actor,
+          }),
+        });
+      }
+      const minted = mint.map((index) => ids.get(index)!);
+      try {
+        for (const file of files) {
+          await this.host.writeAnnounced(vault.id, file.path, file.text);
+        }
+        await this.host.write(vault.id, card.path, withLogLine(text, now, actor, releaseLogText(minted)));
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(
+        vault,
+        [...files.map((f) => f.path), card.path],
+        `tickets: ${input.id} plan released (${minted.length} ${minted.length === 1 ? 'part' : 'parts'})`,
+      );
+      this.host.announceChanges(vault.id, [card.path]);
+      this.announceChanged();
+      return { ok: true, tickets: minted, ...(warning === null ? {} : { warning }) };
     });
   }
 

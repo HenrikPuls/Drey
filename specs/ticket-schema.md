@@ -294,6 +294,21 @@ The canonical shape (`core/plan-parts.ts`):
   persona: ben
 ```
 
+**Release (E10-4).** The owner's approval turns every part that has no
+ticket yet into one (or only the first, "Run part 1 only"): the ticket
+lands in the build queue (`created in <first phase>`, then `<first> ->
+build` in its Log), named by the part's title, with `parent: <id>`, the
+part's `persona:` pin, its own `chain:` entries, the parent's repo,
+repos and priority, and `blocked-by:` the ticket of the part before it
+(none for part 1), so the plan's order is the order of the work. A part
+is matched to its ticket by title among the tickets that name the
+parent. Every part that is a ticket is locked in the list. The release
+is checked before it writes (persona files exist, each chain validates
+against the build phase) and is one commit `tickets: <id> plan released
+(<n> parts)`; the parent keeps its plan and gets one Log line, `plan
+released: T-0131, T-0132`. A list edit (persona pick, move, delete) is
+one commit `tickets: <id> parts` and keeps at least two parts.
+
 `[x]` marks a part whose ticket was accepted. Detail keys are `persona`
 (a persona id), `reason` (one line) and `chain` (entries of the
 [chain delta](#the-chain-delta-e9-concept-57) grammar separated by `;`

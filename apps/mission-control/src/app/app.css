@@ -60,6 +60,17 @@
   display: flex;
 }
 
+/* The plan to approve (E10-4) — the same layer as the ticket screen, one step under it. */
+.approve-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
 /* The phone has no tab bar: a 44 pt menu button leads back to the chat
    menu (history + Work, Team, Settings). */
 .phonebar {
@@ -285,6 +296,7 @@
   }
 
   .persona-layer,
+  .approve-layer,
   .ticket-layer {
     position: relative;
     inset: auto;

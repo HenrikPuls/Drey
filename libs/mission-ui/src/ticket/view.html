@@ -218,6 +218,9 @@
               @if (canShape()) {
                 <button type="button" class="btn ghost" (click)="shapeWithPaul()">Shape with Paul</button>
               }
+              @if (canApprove()) {
+                <button type="button" class="btn ghost" (click)="approvePlan()">Plan to approve · {{ planParts() }} parts</button>
+              }
             </div>
           }
         </div>

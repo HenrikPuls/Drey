@@ -31,6 +31,7 @@ import {
   parseTicketDetail,
   parseEstimate,
   parsePlanStatus,
+  parsePlanApproval,
   parseTicketDiff,
   parseWork,
   DEFAULT_PRIORITY_CONFIG,
@@ -38,6 +39,7 @@ import {
   type ChatStateView,
   type ChatStreamView,
   type McEstimate,
+  type McPlanApproval,
   type McPlanStatus,
   type NeedView,
   type PersonaImprovementsView,
@@ -50,6 +52,7 @@ import {
   type TicketPhaseOption,
   type WorkView,
 } from '@mission-ui/api/dto';
+import type { McApproveReply, McPartsEdit } from '@mission-ui/plan/approve.model';
 
 export type PairingPhase = 'needs-code' | 'pairing' | 'ready';
 
@@ -293,6 +296,7 @@ export class McState {
       case 'needs':
         void this.refreshWork();
         this.refreshOpenPlans();
+        void this.refreshApproval();
         break;
       case 'fleet':
       case 'remote':
@@ -534,8 +538,9 @@ export class McState {
     this.planFlush = flush;
   }
 
-  /** The owner's tap on Paul's split proposal. */
+  /** The owner's tap on Paul's split proposal. "Split into N tickets" leads on to the plan to approve. */
   async shapeDecide(file: string, choice: 'keep' | 'split'): Promise<McReply> {
+    const shaped = this.chat().active?.ticket ?? null;
     const body = await this.client
       .request<Record<string, unknown>>('POST', `/api/chat/sessions/${encodeURIComponent(file)}/split/${choice}`)
       .catch(fail);
@@ -553,7 +558,103 @@ export class McState {
       this.chat.update((chat) => ({ ...chat, active: canonical }));
     }
     void this.refreshWork();
+    if (choice === 'split' && shaped !== null) {
+      void this.openApproval(shaped);
+    }
     return { ok: true };
+  }
+
+  // --- the plan to approve (E10-4) -----------------------------------------
+
+  /** The ticket whose plan is up for approval; null = the screen is closed. */
+  readonly approvalTicket = signal<string | null>(null);
+  /** The cards as the desk answered; null while they load. */
+  readonly approval = signal<McPlanApproval | null>(null);
+  readonly approvalError = signal<string | null>(null);
+
+  /** Opens the plan to approve of one ticket (after "Split into N tickets", or from the ticket face). */
+  async openApproval(ticket: string): Promise<void> {
+    if (this.approvalTicket() !== ticket) {
+      this.approval.set(null);
+    }
+    this.approvalError.set(null);
+    this.approvalTicket.set(ticket);
+    await this.refreshApproval();
+  }
+
+  closeApproval(): void {
+    this.approvalTicket.set(null);
+    this.approval.set(null);
+    this.approvalError.set(null);
+  }
+
+  /** Re-reads the open plan's cards; a failed GET keeps the last good ones. */
+  async refreshApproval(): Promise<void> {
+    const id = this.approvalTicket();
+    if (id === null) {
+      return;
+    }
+    const body = await this.client.raw(`/api/tickets/${encodeURIComponent(id)}/parts`);
+    if (this.approvalTicket() !== id) {
+      return;
+    }
+    const approval = body === null ? null : parsePlanApproval(body);
+    if (approval !== null) {
+      this.approval.set(approval);
+      this.approvalError.set(null);
+    } else if (this.approval() === null) {
+      const error = (typeof body === 'object' && body !== null ? (body as { error?: unknown }).error : null) ?? null;
+      this.approvalError.set(typeof error === 'string' ? error : 'The desk has no plan parts for this ticket.');
+    }
+  }
+
+  /** One list edit on the cards: a persona pick, a move, a delete. */
+  async editParts(edit: McPartsEdit): Promise<McApproveReply> {
+    const id = this.approvalTicket();
+    if (id === null) {
+      return { ok: false, error: 'no plan is open' };
+    }
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', `/api/tickets/${encodeURIComponent(id)}/parts`, edit)
+      .catch(fail);
+    if (isFailure(body)) {
+      await this.refreshApproval();
+      return body;
+    }
+    if (body['ok'] !== true) {
+      return refusal(body, 'the desk did not change the parts');
+    }
+    await this.refreshApproval();
+    void this.refreshPlan(id);
+    return { ok: true };
+  }
+
+  /** The approval: mints a ticket per new part (or only the first). "All" closes the screen and shows Work; "first" keeps the cards up. */
+  async releaseParts(scope: 'all' | 'first'): Promise<McApproveReply> {
+    const id = this.approvalTicket();
+    if (id === null) {
+      return { ok: false, error: 'no plan is open' };
+    }
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', `/api/tickets/${encodeURIComponent(id)}/release`, { scope })
+      .catch(fail);
+    if (isFailure(body)) {
+      return body;
+    }
+    if (body['ok'] !== true) {
+      return refusal(body, 'the desk did not release the parts');
+    }
+    const tickets = Array.isArray(body['tickets']) ? body['tickets'].filter((t): t is string => typeof t === 'string') : [];
+    void this.refreshWork();
+    this.toast(tickets.length === 1 ? `Released ${tickets[0]}` : `Released ${tickets.length} tickets`, 'ok');
+    if (scope === 'first') {
+      // Only part 1 went: the rest still waits for its own approval, so the cards stay up, now with a locked first part.
+      await this.refreshApproval();
+      return { ok: true, tickets };
+    }
+    this.closeApproval();
+    this.tab.set('work');
+    return { ok: true, tickets };
   }
 
   /** Uploads the composer's picked attachments to the desk. */

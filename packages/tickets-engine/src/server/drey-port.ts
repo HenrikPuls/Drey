@@ -40,6 +40,7 @@ import type {
 } from '../contracts/remote-protocol';
 import type { BoardSnapshot, CreateResult, MutationResult } from '../contracts/tickets';
 import type { EstimateKey, RunEstimate } from '../core/estimate';
+import type { PlanPartsEdit, PlanPartsReply, PlanReleaseReply, PlanReleaseScope } from '../contracts/plan-approval';
 import type { ReviewComment } from '../core/review-feedback';
 import type { TicketDiff, TicketFileReply, WorktreeFile } from '../core/worktree-changes';
 import type { ChatDecisionResult, ChatServicePort, ChatShapeResult, ChatSplitChoice, ChatSession, ChatSessionMeta, ChatTurnResult, PlanStatus } from '../contracts/chat';
@@ -76,6 +77,10 @@ export interface RemoteBoard {
   ticketFile(id: string, path: string): Promise<TicketFileReply>;
   /** The run estimate from the owner's own history; null below three similar runs (E11-4). */
   estimateOf(key: EstimateKey): Promise<RunEstimate | null>;
+  /** The plan to approve's cards, edits and release (E10-4). */
+  planParts(id: string): Promise<PlanPartsReply>;
+  editPlanParts(input: { id: string; edit: PlanPartsEdit; actor?: string }): Promise<MutationResult>;
+  releasePlan(input: { id: string; scope: PlanReleaseScope; actor?: string }): Promise<PlanReleaseReply>;
   /** The proof card's file stat list (E5c). */
   worktreeChangesOf(id: string): Promise<readonly WorktreeFile[]>;
   /** The Ready card's accept (E5c). */
@@ -496,6 +501,18 @@ export class DreyTicketsPort implements TicketsRemotePort {
 
   estimate(key: EstimateKey): Promise<RunEstimate | null> {
     return this.boardService.estimateOf(key);
+  }
+
+  planParts(id: string): Promise<PlanPartsReply> {
+    return this.boardService.planParts(id);
+  }
+
+  planPartsEdit(cmd: { id: string; edit: PlanPartsEdit }, actor: string): Promise<MutationResult> {
+    return this.boardService.editPlanParts({ ...cmd, actor });
+  }
+
+  planRelease(cmd: { id: string; scope: PlanReleaseScope }, actor: string): Promise<PlanReleaseReply> {
+    return this.boardService.releasePlan({ ...cmd, actor });
   }
 
   chatSessions(): Promise<readonly ChatSessionMeta[]> {

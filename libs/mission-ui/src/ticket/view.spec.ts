@@ -2132,3 +2132,34 @@ describe('TicketView plan marks', () => {
     expect(surface(setup(fake)).planState()).toBeNull();
   });
 });
+
+describe('TicketView plan to approve (E10-4)', () => {
+  interface ApproveSurface {
+    planParts(): number;
+    canApprove(): boolean;
+    approvePlan(): void;
+  }
+  const PARTS_TEXT = '## Plan\n\n### Parts\n\n- [ ] One\n- [ ] Two\n- [ ] Three\n\n## Log\n\n- x\n';
+  const approveOf = (fake: unknown): ApproveSurface => setup(fake as TicketVm) as unknown as ApproveSurface;
+
+  it('offers the approval from two parts on, on a ticket that is not finished', () => {
+    const opened: string[] = [];
+    const fake = { ...makeFake({ docValue: { ...DOC, phase: 'prioritized', text: PARTS_TEXT } }), approvePlan: (id: string) => opened.push(id) };
+    const view = approveOf(fake);
+    expect(view.planParts()).toBe(3);
+    expect(view.canApprove()).toBe(true);
+    view.approvePlan();
+    expect(opened).toEqual(['T-0042']);
+  });
+
+  it('stays quiet for one part, a finished ticket and an adapter without the action', () => {
+    const onePart = '## Plan\n\n### Parts\n\n- [ ] One\n';
+    const one = { ...makeFake({ docValue: { ...DOC, phase: 'prioritized', text: onePart } }), approvePlan: () => undefined };
+    expect(approveOf(one).canApprove()).toBe(false);
+    const last = PHASES[PHASES.length - 1]!.id;
+    const finished = { ...makeFake({ docValue: { ...DOC, phase: last, text: PARTS_TEXT } }), approvePlan: () => undefined };
+    expect(approveOf(finished).canApprove()).toBe(false);
+    const without = makeFake({ docValue: { ...DOC, phase: 'prioritized', text: PARTS_TEXT } });
+    expect(approveOf(without).canApprove()).toBe(false);
+  });
+});

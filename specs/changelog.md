@@ -115,6 +115,105 @@ change.
   (`collectFallbackBacklinks`), config normalisation. Docs: ADR-0051 and
   ADR-0059 later-change notes, docs/05, docs/06 §6.46, the manual.
 
+### Milestone 126 — Mission Control plan to approve (E10-4)
+
+**Not yet manually verified by the owner.** Owner request, 2026-11-04
+(concept v2 §5.9; design boards "iPad: Plan to approve" and its phone
+version; ADR-0088 E10 – E12; recut of ticket T-0079). See the end of this
+entry for what was and was not seen in a running app.
+
+- **The screen.** "Split into N tickets" on Paul's split card (and the new
+  **Plan to approve · N parts** button on the ticket face of a ticket
+  whose plan lists two or more parts) opens a full-screen layer, one step
+  under the ticket screen: `Plan to approve · 3 parts` over the ticket's
+  title, then **one card per part** — `Part 2`, the title, the builder
+  (a button with the persona's dot; the chips under it list every persona
+  of the vault), the reason, a **Flow** row (`Build · Ben → Commit`,
+  inserted gates accent, skipped gates struck, `(tell me)` on a notify
+  gate, `standard` or `standard + 2 changes`; `Change flow ›` is a
+  placeholder until E10-5), the start rule (`Runs now`, `After part 2`,
+  `Released as T-0141`) and the estimate.
+- **Move and delete.** A tap on a card opens `↑ Move up`, `↓ Move down`
+  and `Delete part`; delete asks for **a second press** (`Press again to
+  delete`, forgotten when another card opens). The edit is written into
+  the parent's `### Parts` chapter (`tickets: T-0130 parts`, one commit);
+  a list never drops below two parts ("A split needs two parts. Keep the
+  plan as one ticket instead.").
+- **Locked parts.** A part that is a ticket already — queued, running, in
+  a later gate or done — is locked: no builder pick, no move, no delete,
+  nothing may be placed above it (`Running: this part cannot be moved or
+  deleted, and no part can be moved above it.`, `Open ticket`). The
+  desk decides (`movePlanPart` / `deletePlanPart` with the released set);
+  the screen only mirrors it.
+- **The start rule is the plan's order.** Part n+1 carries `blocked-by:`
+  the ticket of part n, so it starts when the part before it reaches the
+  pipeline's terminal phase; under each card `Part 3 starts when this one
+  is done.`
+- **The estimate (D9).** Per card the build gate's estimate for the
+  builder on its own model — `Estimate $0.30 · 9 min · median of 6 similar
+  runs` — only with at least three similar runs, otherwise `Estimate not
+  yet · fewer than 3 similar runs so far`; the foot says `Typically $0.90
+  for 2 of 3 parts, from your own past runs · nothing runs until you
+  approve.` (the parts still to run, those with a basis). It is the build
+  gate only, not the whole flow.
+- **Mission Control's proposal and the approval.** The foot's first line
+  is Mission Control's proposal for the parts still to release (`Mission
+  Control proposes to approve all 3 parts. Part 1 runs now; each part
+  after it starts when the one before it is done.`); **Approve and run**
+  releases them, **Run part 1 only** (`Run part 2 only` behind a released
+  part) releases just the first. Nothing runs before the tap; a read-only
+  device sees the cards but cannot edit or release. The card itself is
+  the confirmation surface — a tap on the app's own screen, not a chat
+  proposal card (ADR-0088 later change).
+- **The release** (`POST /api/tickets/<id>/release`, `{scope: all|first}`,
+  `BoardService.releasePlan`). Everything is checked first (personas
+  exist, each part's chain delta validates against the build phase) and
+  nothing is written on a refusal; then one ticket per new part is minted
+  **in the build queue** (`created in inbox`, `inbox -> build`) with
+  `parent:`, the builder's `persona:`, its own `chain:` and `blocked-by:`
+  the part before it, the parent's repo and priority, and a description
+  naming the part, its reason and the parent. One commit `tickets: T-0130
+  plan released (3 parts)`; the parent keeps the plan and gets the Log
+  line `plan released: T-0131, T-0132, T-0133`. A part is matched to its
+  ticket by title among the tickets naming the parent. After **Approve
+  and run** the screen closes, a toast says `Released 3 tickets` and Work
+  opens; after **Run part 1 only** the cards stay up with part 1 locked
+  (`● queued · locked`) and the proposal now covers the rest.
+- **Wire.** `GET /api/tickets/<id>/parts` (the cards, the build gate, the
+  default builder, the personas with their models), `POST …/parts` (`{op:
+  persona|move|delete, …}`), `POST …/release`. No touches, overlap or
+  routing anywhere (D5).
+- **Specs added:** the release matcher, states, locks, start lines,
+  minting order and the part ticket file (`core/plan-release.spec.ts`);
+  the cards, the edits with the locks, the release in a real temp vault
+  incl. blocked-by resolving on the board and refusals writing nothing
+  (`services/board-service-parts.spec.ts`); the command parsers and the
+  routes incl. a read-only device (`commands.spec.ts`, `router.spec.ts`);
+  the DTO reader, the card helpers, the estimate and total wording, the
+  proposal wording and the screen — cards, second-press delete, locks,
+  approve scopes, refusal, no overlap words (`plan/approve.spec.ts`); the
+  state's open-after-split, refresh, edit, release and board refresh
+  (`state.spec.ts`); the ticket face's entry (`view.spec.ts`).
+- **Seen in a running app:** the engine (`engine-main`, a throwaway demo
+  vault with English content, remote on loopback) served the production
+  build to the built-in browser paired as a device. At the tablet width
+  (1194 × 834 emulated, the pane scaled it) and the phone width (375 × 812)
+  the cards, the move (`tickets: T-0130 parts` landed), the second-press
+  delete, the persona chips, a skipped gate struck in the flow row, the
+  estimate (`$0.30 · median of 4 similar runs`, `not yet` for a persona
+  with two runs, `$0.61 for 2 of 3 parts`), **Run part 1 only** (part 1
+  `queued · locked`, T-0131 on Work), then **Approve and run** (T-0132
+  and T-0133 on Work, `waiting for T-0131` / `T-0132`, the files
+  carrying `parent:`, `persona:`, `chain:`, `blocked-by:`) were driven by
+  hand. **Not seen:** a real iPad or iPhone (Safari), the entry through
+  Paul's split card (its chat turn needs a model; the state spec covers the
+  hand-over), the dark/Drey/Cyberpunk themes beyond Anthrazit, a running
+  part (the lock for `running` is spec-tested only), and the estimate's
+  first paint — it reads `not yet` until the desk's answer arrives.
+- **Not done:** the flow editor behind `Change flow ›` (E10-5), the whole-
+  flow estimate, a parent that leaves "needs shaping" after the release,
+  the desktop widget (E13-10). Roadmap: E10-4b.
+
 ### Milestone 122 — Mission Control shape mode (E10-3)
 
 **Not yet manually verified by the owner.** Owner request, 2026-11-04
