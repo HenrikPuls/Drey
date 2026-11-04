@@ -10,6 +10,7 @@ import type { TicketsGit } from '../core/tickets-git';
 import type { EngineBoardService } from './board-service';
 import type { EngineHost } from './host';
 import { VerifyService } from './verify-service';
+import { VideoService } from './video-service';
 
 /**
  * The verify service (E4): a machine run persists the Verification
@@ -141,6 +142,7 @@ afterEach(async () => {
 
 interface BootOptions {
   phase?: string;
+  videos?: VideoService;
 }
 
 function boot(opts: BootOptions = {}): VerifyService {
@@ -202,6 +204,7 @@ function boot(opts: BootOptions = {}): VerifyService {
     actor: ACTOR,
     log: () => undefined,
     events: { ledger: (write) => ledgerWrites.push(write) },
+    ...(opts.videos === undefined ? {} : { videos: opts.videos }),
   });
 }
 
@@ -269,6 +272,61 @@ describe('VerifyService.verifyTicket', () => {
     expect(harnessRuns[0]).toMatchObject({ ticket: TICKET_ID, proof: 'ui' });
     const text = files.get(TICKET_PATH)!;
     expect(text).toContain('### Video\n\n![](../videos/verify-20261101-143200-T-0102.webm)\n\n- 0:12 npm run build');
+  });
+
+  describe('the per-video cap (E11-1c)', () => {
+    const MB = 1024 * 1024;
+    const NAME = 'verify-20261101-143200-T-0102.webm';
+
+    function videoService(maxMb?: number): VideoService {
+      return new VideoService({
+        board: { detect: async () => ({ id: 'vault', name: 'vault', path: vaultPath, exists: true, active: true }) } as unknown as EngineBoardService,
+        host: {
+          listVaults: async () => [{ id: 'vault', name: 'vault', path: vaultPath, exists: true, active: true }],
+          resolveAssetPath: (_v: string, p: string) => path.join(vaultPath, p),
+        } as unknown as EngineHost,
+        git: {} as unknown as TicketsGit,
+        config: { get: async <T,>(k: string) => (k === 'videos.maxMb' ? (maxMb as T | undefined) : undefined) },
+      });
+    }
+
+    async function runWith(bytes: number, maxMb?: number): Promise<string> {
+      await fsp.mkdir(path.join(vaultPath, 'tickets', 'videos'), { recursive: true });
+      await fsp.writeFile(path.join(vaultPath, 'tickets', 'videos', 'verify-old-T-0001.webm'), Buffer.alloc(30 * MB));
+      harnessResult = { ...OK_RESULT, shots: [{ file: 'verify-01.png', criterion: 'npm run build', atMs: 12_000 }], video: NAME };
+      harnessGate = async (input) => {
+        await fsp.writeFile(path.join(input.videoDir, NAME), Buffer.alloc(bytes));
+        return harnessResult;
+      };
+      service = boot({ videos: videoService(maxMb) });
+      expect(await service.verifyTicket({ id: TICKET_ID })).toEqual({ ok: true });
+      return files.get(TICKET_PATH)!;
+    }
+
+    const exists = (name: string): Promise<boolean> =>
+      fsp.stat(path.join(vaultPath, 'tickets', 'videos', name)).then(() => true, () => false);
+
+    it('keeps a recording of exactly 25 MB with its player and chapters', async () => {
+      const text = await runWith(25 * MB);
+      expect(text).toContain(`### Video\n\n![](../videos/${NAME})`);
+      expect(text).not.toContain('Video not kept');
+      expect(await exists(NAME)).toBe(true);
+    });
+
+    it('drops a recording over the cap and writes one honest line instead of the player', async () => {
+      const text = await runWith(31 * MB);
+      expect(text).toContain('### Video\n\nVideo not kept: 31 MB exceeds the 25 MB limit.\n');
+      expect(text).not.toContain('![](../videos/');
+      expect(text).toContain('![](../attachments/verify-01.png)');
+      expect(await exists(NAME)).toBe(false);
+      // Nothing else is ever deleted: the older, larger video stays.
+      expect(await exists('verify-old-T-0001.webm')).toBe(true);
+    });
+
+    it('follows videos.maxMb', async () => {
+      const text = await runWith(3 * MB, 2);
+      expect(text).toContain('Video not kept: 3 MB exceeds the 2 MB limit.');
+    });
   });
 
   it('asks the harness for a tests proof when the Handover declares one, and records no shots', async () => {

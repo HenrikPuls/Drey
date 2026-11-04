@@ -1,3 +1,47 @@
+### Milestone 147 — One cap per video, nothing deleted (E11-1c)
+
+**Not yet manually verified by the owner.** Owner decision 2026-11-04: the
+walkthrough video has a size cap per video; retention is never limited except
+by the disk.
+
+- **Engine.** `videos.limitMb` (2000, the oldest videos of `done` tickets
+  deleted) is gone together with its whole code path: `VideoService.sweep`,
+  `pickVideosToRemove`, `replaceVideoWithNote`, the standing notice and the
+  sweeps after a verify run, at startup and after a settings change. The new
+  key is `videos.maxMb` (default 25, whole MB from 1 to 200). A stored
+  `videos.limitMb` is ignored and removed from `config.json` at startup
+  (`FileConfigStore.delete`). Existing videos stay untouched.
+- **Over-cap recording.** Right after the harness stored the recording the
+  verify step checks its size (`VideoService.enforceCap`): exactly the cap is
+  kept, one byte more is not. Playwright cannot trim and the code has no
+  re-encoding path, so the file is deleted (the only deletion the engine ever
+  does, of the recording it was about to reference) and the ticket's
+  `### Video` chapter reads `Video not kept: 31 MB exceeds the 25 MB limit.`
+  (size rounded up to a tenth); screenshots and criteria are unaffected.
+- **Contract.** `VerificationReport.videoRemoved` became `videoNotKept` (the
+  line); the `Video removed (size limit).` note and its writer/reader are
+  removed (`core/verification.ts`), older tickets carrying it are read without
+  a video and without an error.
+- **Settings.** Mission Control, Engine page: the row is *Largest video* in MB
+  (default 25, 1–200; a value outside is not sent), the standing notice is
+  gone; `POST /api/settings/engine` takes `{maxMb}` and the `videos` view has
+  `{inGit, maxMb, existing}`. The proof card (Mission Control and the Drey
+  ticket document) shows the new line where the player would be. **The Drey
+  desktop settings have no video row on this base** (nothing to change there;
+  the Settings → Tickets page is rebuilt by E13-11/12).
+- **Specs/docs.** `specs/ticket-schema.md` (Videos size rule, Verification
+  chapter), ADR-0088 later-change note, `specs/roadmap.md` (item removed),
+  the manual, concept v2 §5.2 and convergence gap G-30.
+- **Tests.** `video-service.spec.ts` (cap boundary 25 MB exactly / one byte
+  over, line text, no `sweep`, older videos untouched, old key dropped),
+  `verify-service.spec.ts` (kept at 25 MB, dropped over, follows
+  `videos.maxMb`), `engine.spec.ts` (the same through the real engine, board
+  and git of a throwaway vault, plus the config migration),
+  `settings.spec.ts` (bounds 1/200, default 25, `limitMb` rejected),
+  `verification.spec.ts`, the Mission Control and ticket-document specs.
+  **Not seen:** a recording from a real Playwright/Electron run — the harness
+  was a fake that writes a file of the chosen size.
+
 ### Milestone 143 — The Mission Control frame stays put (D-5)
 
 **Not yet manually verified by the owner.** Owner report 2026-11-04: on iPhone

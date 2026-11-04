@@ -157,12 +157,12 @@ describe('the Video chapter (E11-1)', () => {
     expect(back.criteria).toEqual(FULL.criteria);
   });
 
-  it('writes nothing for a tests proof and keeps the removal note after the limit freed the video', () => {
+  it('writes nothing for a tests proof and keeps the not-kept line for an over-cap recording', () => {
     expect(renderVerificationSection(FULL)).not.toContain('### Video');
-    const removed = renderVerificationSection({ ...FULL, videoRemoved: true });
-    expect(removed).toContain('### Video\n\nVideo removed (size limit).');
+    const removed = renderVerificationSection({ ...FULL, videoNotKept: 'Video not kept: 31.2 MB exceeds the 25 MB limit.' });
+    expect(removed).toContain('### Video\n\nVideo not kept: 31.2 MB exceeds the 25 MB limit.');
     const back = parseVerificationSection(removed)!;
-    expect(back.videoRemoved).toBe(true);
+    expect(back.videoNotKept).toBe('Video not kept: 31.2 MB exceeds the 25 MB limit.');
     expect(back.video).toBeUndefined();
   });
 });

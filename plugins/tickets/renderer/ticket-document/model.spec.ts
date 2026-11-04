@@ -93,18 +93,18 @@ describe('proofOfText', () => {
     expect(proof.findings).toEqual(['The first shot was slow.']);
   });
 
-  it('counts failures and keeps the removal note', () => {
+  it('counts failures and keeps the not-kept line', () => {
     const failing: VerificationReport = {
       ...report,
       criteria: [{ ...report.criteria[0]!, passed: false }, report.criteria[1]!],
       video: null,
-      videoRemoved: true,
+      videoNotKept: 'Video not kept: 31.2 MB exceeds the 25 MB limit.',
       videoChapters: [],
     };
     const proof = proofOfText(renderVerificationSection(failing))!;
     expect(proof.summary).toBe('1/2 green, 1 failing.');
     expect(proof.allPassed).toBe(false);
-    expect(proof.video).toEqual({ file: null, removed: true, chapters: [] });
+    expect(proof.video).toEqual({ file: null, notKept: 'Video not kept: 31.2 MB exceeds the 25 MB limit.', chapters: [] });
   });
 });
 

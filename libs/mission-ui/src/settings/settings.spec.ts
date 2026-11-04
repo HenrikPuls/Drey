@@ -17,7 +17,7 @@ const VIEW: McSettingsView = {
     { id: 'd1', name: 'Phone', readOnly: false, pairedAt: '2026-11-01T10:00:00Z', lastSeen: null, current: true },
     { id: 'd2', name: 'Tablet', readOnly: true, pairedAt: '2026-11-01T11:00:00Z', lastSeen: '2026-11-02T08:00:00Z', current: false },
   ],
-  videos: { inGit: false, limitMb: 2000, existing: 0, notice: null },
+  videos: { inGit: false, maxMb: 25, existing: 0 },
 };
 
 function mount(view: McSettingsView | null = VIEW) {
@@ -25,7 +25,7 @@ function mount(view: McSettingsView | null = VIEW) {
     settings: signal(view),
     settingsError: signal<string | null>(null),
     load: vi.fn(() => Promise.resolve()),
-    setVideoLimit: vi.fn(() => Promise.resolve({ ok: true as const })),
+    setVideoMaxMb: vi.fn(() => Promise.resolve({ ok: true as const })),
     setVideosInGit: vi.fn(() => Promise.resolve({ ok: true as const })),
     revokeDevice: vi.fn(() => Promise.resolve({ ok: true as const })),
     testChat: vi.fn(() => Promise.resolve({ ok: true, message: 'Connected to Z.ai GLM.' })),
@@ -65,7 +65,7 @@ describe('parseSettings', () => {
     expect(parseSettings({ ok: true, devices: [{ id: 'a', name: 'A' }, 5], engine: { videos: { inGit: true } } })).toEqual({
       chat: null,
       devices: [{ id: 'a', name: 'A', readOnly: false, pairedAt: '', lastSeen: null, current: false }],
-      videos: { inGit: true, limitMb: 2000, existing: 0, notice: null },
+      videos: { inGit: true, maxMb: 25, existing: 0 },
     });
     expect(parseSettings({ ok: false })).toBeNull();
     expect(parseSettings(null)).toBeNull();
@@ -170,7 +170,7 @@ describe('Settings', () => {
   });
 
   it('offers to include the existing videos and sends the tick with the confirmation', () => {
-    const { el, go, fake, fixture } = mount({ ...VIEW, videos: { inGit: false, limitMb: 2000, existing: 3, notice: null } });
+    const { el, go, fake, fixture } = mount({ ...VIEW, videos: { inGit: false, maxMb: 25, existing: 3 } });
     go('engine');
     const sw = el.querySelectorAll<HTMLInputElement>('.sw')[0]!;
     sw.checked = true;
@@ -184,14 +184,31 @@ describe('Settings', () => {
     expect(fake.setVideosInGit).toHaveBeenCalledWith(true, true, true);
   });
 
-  it('shows the engine notice under the limit', () => {
-    const { el, go } = mount({ ...VIEW, videos: { inGit: true, limitMb: 2000, existing: 0, notice: 'The limit no longer frees space.' } });
+  it('labels the cap as the largest single video, default 25 MB', () => {
+    const { el, go } = mount();
     go('engine');
-    expect(el.textContent).toContain('The limit no longer frees space.');
+    expect(el.textContent).toContain('Largest video');
+    expect(el.textContent).not.toContain('Oldest videos');
+    const input = el.querySelector<HTMLInputElement>('.num')!;
+    expect(input.value).toBe('25');
+    expect([input.min, input.max]).toEqual(['1', '200']);
+  });
+
+  it('ignores a typed cap outside 1 to 200 MB', () => {
+    const { el, go, fake, fixture } = mount();
+    go('engine');
+    const input = el.querySelector<HTMLInputElement>('.num')!;
+    for (const bad of ['0', '201', '1.5']) {
+      input.value = bad;
+      input.dispatchEvent(new Event('input'));
+      input.dispatchEvent(new Event('blur'));
+      fixture.detectChanges();
+    }
+    expect(fake.setVideoMaxMb).not.toHaveBeenCalled();
   });
 
   it('turns videos in git off at once, without a dialog', () => {
-    const { el, go, fake, fixture } = mount({ ...VIEW, videos: { inGit: true, limitMb: 2000, existing: 0, notice: null } });
+    const { el, go, fake, fixture } = mount({ ...VIEW, videos: { inGit: true, maxMb: 25, existing: 0 } });
     go('engine');
     const sw = el.querySelectorAll<HTMLInputElement>('.sw')[0]!;
     sw.checked = false;
@@ -201,14 +218,14 @@ describe('Settings', () => {
     expect(el.querySelector('.dialog')).toBeNull();
   });
 
-  it('commits a typed size limit when the field is left', () => {
+  it('commits a typed largest-video cap when the field is left', () => {
     const { el, go, fake, fixture } = mount();
     go('engine');
     const input = el.querySelector<HTMLInputElement>('.num')!;
-    input.value = '800';
+    input.value = '40';
     input.dispatchEvent(new Event('input'));
     input.dispatchEvent(new Event('blur'));
     fixture.detectChanges();
-    expect(fake.setVideoLimit).toHaveBeenCalledWith(800);
+    expect(fake.setVideoMaxMb).toHaveBeenCalledWith(40);
   });
 });

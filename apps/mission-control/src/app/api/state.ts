@@ -1595,8 +1595,8 @@ export class McState {
     );
   }
 
-  setVideoLimit(limitMb: number): Promise<McReply> {
-    return this.settingsWrite('/api/settings/engine', { limitMb });
+  setVideoMaxMb(maxMb: number): Promise<McReply> {
+    return this.settingsWrite('/api/settings/engine', { maxMb });
   }
 
   setVideosInGit(inGit: boolean, confirm: boolean, includeExisting = false): Promise<McReply> {

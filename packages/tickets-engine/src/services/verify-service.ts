@@ -204,6 +204,18 @@ export class VerifyService {
       return this.refuse(vault, card, text, `verify failed — ${result.error}`);
     }
 
+    // E11-1c: one cap per video. An over-cap recording is dropped and the
+    // ticket says so in one honest line; nothing else is ever deleted.
+    let videoNotKept: string | undefined;
+    let video = result.video;
+    if (proof.mode === 'ui' && video !== null && this.deps.videos !== undefined) {
+      const verdict = await this.deps.videos.enforceCap(videoDir, video);
+      if (!verdict.keep) {
+        videoNotKept = verdict.line;
+        video = null;
+      }
+    }
+
     const now = new Date();
     const shots = result.shots.slice(0, MAX_VERIFY_SHOTS);
     const remaining = [...shots];
@@ -227,7 +239,8 @@ export class VerifyService {
       environment: result.environment,
       criteria: proofs,
       findings: [...result.findings],
-      ...(proof.mode === 'ui' && result.video !== null ? { video: result.video, videoChapters } : {}),
+      ...(proof.mode === 'ui' && video !== null ? { video, videoChapters } : {}),
+      ...(videoNotKept === undefined ? {} : { videoNotKept }),
     };
 
     let patched = upsertVerificationSection(text, renderVerificationSection(report));
@@ -243,8 +256,6 @@ export class VerifyService {
     this.deps.events?.ledger({ kind: 'proof_ready', ticket: id, persona: null, model: null });
     this.deps.host.announceChanges(vaultId, [card.path, ...shotPaths]);
     this.setStatus(id, 'done', report, null);
-    // A new video may push the folder over its limit (finished tickets' oldest go first).
-    void this.deps.videos?.sweep();
 
     const next = nextPhaseIdOf(snap.columns, card.phase);
     if (next !== null) {

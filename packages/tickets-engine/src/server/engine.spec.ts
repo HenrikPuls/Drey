@@ -404,6 +404,67 @@ describe('verify (E4)', () => {
     });
   });
 
+  describe('the per-video cap (E11-1c)', () => {
+    const MB = 1024 * 1024;
+
+    async function verifyWithVideo(bytes: number): Promise<{ id: string; text: string }> {
+      await engine.close();
+      const harness: VerifyHarness = {
+        async run(input: VerifyRunInput): Promise<VerifyRunResult> {
+          const file = 'verify-test-01.png';
+          await fsp.mkdir(input.attachDir, { recursive: true });
+          await fsp.writeFile(path.join(input.attachDir, file), Buffer.from(PNG_1PX, 'base64'));
+          const video = `verify-20261104-120000-${input.ticket}.webm`;
+          await fsp.writeFile(path.join(input.videoDir, video), Buffer.alloc(bytes));
+          return { environment: 'Electron test on win32', shots: [{ file, criterion: input.criteria[0] ?? null, atMs: 3000 }], findings: [], video, error: null };
+        },
+      };
+      engine = await createEngine({ vaultPath: vault, home, clientDir: path.join(root, 'client'), log: () => undefined, verifyHarness: harness });
+      const created = (await engine.invoke('createTicket', {
+        title: 'Verify me',
+        priority: 'normal',
+        repo: 'demo',
+        description: ['The body.', '', '### Acceptance criteria', '', '- [x] `npm run build`'].join('\n'),
+      })) as { ok: boolean; id?: string };
+      const id = created.id!;
+      await engine.invoke('transition', { id, from: 'inbox', to: 'verify' });
+      await fsp.mkdir(path.join(vault, '_worktrees', id), { recursive: true });
+      expect(await engine.invoke('verifyTicket', { id })).toEqual({ ok: true });
+      const snapshot = (await engine.invoke('snapshot')) as { columns: { tickets: { id: string; path: string }[] }[] };
+      const card = snapshot.columns.flatMap((c) => c.tickets).find((c) => c.id === id)!;
+      return { id, text: await fsp.readFile(path.join(vault, card.path), 'utf8') };
+    }
+
+    it('drops an over-cap recording, writes the honest line and never touches an older video', async () => {
+      const videos = path.join(vault, 'tickets/videos');
+      await fsp.mkdir(videos, { recursive: true });
+      await fsp.writeFile(path.join(videos, 'verify-20260101-000000-T-9999.webm'), Buffer.alloc(40 * MB));
+      const { id, text } = await verifyWithVideo(26 * MB);
+      expect(text).toContain('### Video\n\nVideo not kept: 26 MB exceeds the 25 MB limit.');
+      expect(text).not.toContain('![](../videos/');
+      await expect(fsp.stat(path.join(videos, `verify-20261104-120000-${id}.webm`))).rejects.toBeDefined();
+      expect((await fsp.stat(path.join(videos, 'verify-20260101-000000-T-9999.webm'))).size).toBe(40 * MB);
+    });
+
+    it('keeps a recording of exactly 25 MB with its player', async () => {
+      const { id, text } = await verifyWithVideo(25 * MB);
+      expect(text).toContain(`![](../videos/verify-20261104-120000-${id}.webm)`);
+      expect(text).not.toContain('Video not kept');
+      expect((await fsp.stat(path.join(vault, `tickets/videos/verify-20261104-120000-${id}.webm`))).size).toBe(25 * MB);
+    });
+
+    it('removes a stored videos.limitMb at startup and ignores it', async () => {
+      await engine.close();
+      await fsp.writeFile(path.join(home, 'config.json'), JSON.stringify({ 'videos.limitMb': 2000 }), 'utf8');
+      engine = await createEngine({ vaultPath: vault, home, clientDir: path.join(root, 'client'), log: () => undefined });
+      for (let i = 0; i < 50 && (await engine.config.get('videos.limitMb')) !== undefined; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(await engine.config.get('videos.limitMb')).toBeUndefined();
+      expect(JSON.parse(await fsp.readFile(path.join(home, 'config.json'), 'utf8'))).not.toHaveProperty('videos.limitMb');
+    });
+  });
+
   it('persists the proofs as one commit and moves the ticket to the owner', async () => {
     const created = (await engine.invoke('createTicket', {
       title: 'Verify me',

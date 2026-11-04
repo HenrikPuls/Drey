@@ -2,15 +2,13 @@ import { promises as fsp } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { TicketCard } from '../contracts/tickets';
 import type { TicketsGit } from '../core/tickets-git';
 import type { EngineBoardService } from './board-service';
 import type { EngineHost } from './host';
 import {
   ensureVideosDir,
-  LIMIT_NOTICE,
-  pickVideosToRemove,
-  replaceVideoWithNote,
+  judgeVideoSize,
+  maxVideoBytes,
   VIDEO_NAME,
   VIDEOS_GITIGNORE,
   videoTicketId,
@@ -29,41 +27,6 @@ describe('names', () => {
     expect(VIDEO_NAME.test('a/b.webm')).toBe(false);
     expect(VIDEO_NAME.test('..\\x.mp4')).toBe(false);
     expect(VIDEO_NAME.test('x.avi')).toBe(false);
-  });
-});
-
-describe('pickVideosToRemove', () => {
-  const MB = 1024 * 1024;
-  const files = [
-    { name: 'new.webm', bytes: 40 * MB, mtimeMs: 300 },
-    { name: 'old.webm', bytes: 40 * MB, mtimeMs: 100 },
-    { name: 'mid.webm', bytes: 40 * MB, mtimeMs: 200 },
-  ];
-
-  it('removes nothing while the folder fits', () => {
-    expect(pickVideosToRemove(files, 120 * MB, () => true)).toEqual([]);
-  });
-
-  it('removes the oldest first and stops as soon as it fits', () => {
-    expect(pickVideosToRemove(files, 100 * MB, () => true)).toEqual(['old.webm']);
-    expect(pickVideosToRemove(files, 50 * MB, () => true)).toEqual(['old.webm', 'mid.webm']);
-  });
-
-  it('never removes a video the rule keeps', () => {
-    expect(pickVideosToRemove(files, 50 * MB, (name) => name !== 'old.webm')).toEqual(['mid.webm', 'new.webm']);
-    expect(pickVideosToRemove(files, 0, () => false)).toEqual([]);
-  });
-});
-
-describe('replaceVideoWithNote', () => {
-  const section = '### Video\n\n![](../videos/a-T-0001.webm)\n\n- 0:03 build\n- 0:09 test\n\n### Findings\n';
-
-  it('swaps the player and its chapters for the removal note', () => {
-    expect(replaceVideoWithNote(section, 'a-T-0001.webm')).toBe('### Video\n\nVideo removed (size limit).\n\n### Findings\n');
-  });
-
-  it('leaves a text alone that does not hold the player', () => {
-    expect(replaceVideoWithNote(section, 'other.webm')).toBe(section);
   });
 });
 
@@ -95,23 +58,17 @@ describe('the folder', () => {
   });
 });
 
-describe('VideoService.sweep', () => {
+describe('VideoService', () => {
   const MB = 1024 * 1024;
   let root: string;
   let files: Map<string, string>;
   let commits: { paths: string[]; message: string }[];
   let config: Record<string, unknown>;
+  let deleted: string[];
 
-  const card = (id: string, phase: string): TicketCard =>
-    ({ id, path: `tickets/${phase}/${id}.md`, phase, meta: {} }) as unknown as TicketCard;
-
-  function boot(cards: readonly TicketCard[]): VideoService {
+  function boot(): VideoService {
     const board = {
       detect: async () => ({ id: 'vault', name: 'vault', path: root, exists: true, active: true }),
-      snapshot: async () => ({
-        vaultId: 'vault',
-        columns: ['build', 'done'].map((id) => ({ phase: { id }, tickets: cards.filter((c) => c.phase === id) })),
-      }),
     } as unknown as EngineBoardService;
     const host = {
       listVaults: async () => [{ id: 'vault', name: 'vault', path: root, exists: true, active: true }],
@@ -128,7 +85,14 @@ describe('VideoService.sweep', () => {
         commits.push({ paths: [...paths], message });
       },
     } as unknown as TicketsGit;
-    return new VideoService({ board, host, git, config: { get: async <T,>(k: string) => config[k] as T | undefined } });
+    return new VideoService({ board, host, git, config: {
+        get: async <T,>(k: string) => config[k] as T | undefined,
+        delete: async (k: string) => {
+          deleted.push(k);
+          delete config[k];
+        },
+      },
+    });
   }
 
   async function video(name: string, megabytes: number, ageMs: number): Promise<void> {
@@ -146,63 +110,17 @@ describe('VideoService.sweep', () => {
     root = await fsp.mkdtemp(path.join(tmpdir(), 'video-service-'));
     files = new Map();
     commits = [];
-    config = { 'videos.limitMb': 100 };
+    config = {};
+    deleted = [];
   });
   afterEach(async () => {
     await fsp.rm(root, { recursive: true, force: true });
   });
 
-  it('removes the oldest videos of done tickets only, notes it in the ticket, never touches a running ticket', async () => {
-    config['videos.limitMb'] = 130;
-    await video('verify-1-T-0001.webm', 60, 3000); // done, oldest
-    await video('verify-2-T-0002.webm', 60, 2000); // build — kept
-    await video('verify-3-T-0003.webm', 60, 1000); // done
-    files.set(
-      'tickets/done/T-0001.md',
-      '## Verification\n\n### Video\n\n![](../videos/verify-1-T-0001.webm)\n\n- 0:03 build\n\n### Findings\n',
-    );
-    const service = boot([card('T-0001', 'done'), card('T-0002', 'build'), card('T-0003', 'done')]);
-
-    const removed = await service.sweep();
-
-    expect(removed).toEqual(['verify-1-T-0001.webm']);
-    expect(await exists('verify-1-T-0001.webm')).toBe(false);
-    expect(await exists('verify-2-T-0002.webm')).toBe(true);
-    expect(await exists('verify-3-T-0003.webm')).toBe(true);
-    expect(files.get('tickets/done/T-0001.md')).toContain('Video removed (size limit).');
-    expect(files.get('tickets/done/T-0001.md')).not.toContain('![](');
-    expect(commits.map((c) => c.message)).toEqual(['tickets: videos removed (size limit)']);
-  });
-
-  it('removes a video whose ticket left the board, with no ticket text to touch', async () => {
-    await video('verify-1-T-0009.webm', 120, 1000);
-    const service = boot([]);
-    expect(await service.sweep()).toEqual(['verify-1-T-0009.webm']);
-    expect(commits).toEqual([]);
-  });
-
-  it('deletes nothing with inGit on and raises the notice', async () => {
-    config['videos.inGit'] = true;
-    await video('verify-1-T-0001.webm', 120, 1000);
-    const service = boot([card('T-0001', 'done')]);
-
-    expect(await service.sweep()).toEqual([]);
-    expect(await exists('verify-1-T-0001.webm')).toBe(true);
-    expect((await service.status()).notice).toBe(LIMIT_NOTICE);
-  });
-
-  it('says so when only unfinished tickets keep the folder over the limit', async () => {
-    await video('verify-1-T-0001.webm', 120, 1000);
-    const service = boot([card('T-0001', 'build')]);
-
-    expect(await service.sweep()).toEqual([]);
-    expect((await service.status()).notice).toContain('not done yet');
-  });
-
   it('commits the existing videos only when asked, with inGit on', async () => {
     config['videos.inGit'] = true;
     await video('verify-1-T-0001.webm', 1, 1000);
-    const service = boot([card('T-0001', 'done')]);
+    const service = boot();
 
     await service.applyInGit(false);
     expect(commits).toEqual([]);
@@ -210,11 +128,74 @@ describe('VideoService.sweep', () => {
     expect(commits).toEqual([{ paths: ['tickets/videos/verify-1-T-0001.webm'], message: 'tickets: include existing videos' }]);
   });
 
+  it('keeps a recording of exactly 25 MB and every other video, however many and however big', async () => {
+    await video('verify-1-T-0001.webm', 25, 5000);
+    await video('verify-0-T-0000.webm', 24, 9000);
+    const service = boot();
+    expect(await service.enforceCap(path.join(root, 'tickets', 'videos'), 'verify-1-T-0001.webm')).toEqual({ keep: true });
+    expect(await exists('verify-1-T-0001.webm')).toBe(true);
+    expect(await exists('verify-0-T-0000.webm')).toBe(true);
+  });
+
+  it('drops only the over-cap recording, with the honest line, and touches no older video', async () => {
+    await video('verify-1-T-0001.webm', 26, 1000);
+    await video('verify-0-T-0000.webm', 20, 99_000_000);
+    const service = boot();
+    const verdict = await service.enforceCap(path.join(root, 'tickets', 'videos'), 'verify-1-T-0001.webm');
+    expect(verdict).toMatchObject({ keep: false, line: 'Video not kept: 26 MB exceeds the 25 MB limit.' });
+    expect(await exists('verify-1-T-0001.webm')).toBe(false);
+    expect(await exists('verify-0-T-0000.webm')).toBe(true);
+  });
+
+  it('reads the cap from videos.maxMb', async () => {
+    config['videos.maxMb'] = 10;
+    await video('verify-1-T-0001.webm', 11, 1000);
+    const verdict = await boot().enforceCap(path.join(root, 'tickets', 'videos'), 'verify-1-T-0001.webm');
+    expect(verdict).toMatchObject({ keep: false, maxMb: 10 });
+  });
+
+  it('has no sweep: nothing deletes automatically', async () => {
+    expect((boot() as unknown as Record<string, unknown>)['sweep']).toBeUndefined();
+    await video('verify-1-T-0001.webm', 60, 1000);
+    await video('verify-2-T-0002.webm', 60, 2000);
+    const service = boot();
+    await service.prepare();
+    await service.status();
+    expect(await exists('verify-1-T-0001.webm')).toBe(true);
+    expect(await exists('verify-2-T-0002.webm')).toBe(true);
+  });
+
+  it('drops a stored videos.limitMb and ignores it', async () => {
+    config['videos.limitMb'] = 2000;
+    const service = boot();
+    expect(await service.settings()).toEqual({ inGit: false, maxMb: 25 });
+    await service.prepare();
+    expect(deleted).toEqual(['videos.limitMb']);
+    expect(config['videos.limitMb']).toBeUndefined();
+  });
+
   it('serves a stat for a real name only', async () => {
     await video('verify-1-T-0001.webm', 1, 1000);
-    const service = boot([]);
+    const service = boot();
     expect((await service.stat('verify-1-T-0001.webm'))?.bytes).toBe(MB);
     expect(await service.stat('nope.webm')).toBeNull();
     expect(await service.stat('../x.webm')).toBeNull();
+  });
+});
+
+describe('the per-video cap (E11-1c)', () => {
+  const MB = 1024 * 1024;
+
+  it('keeps a recording of exactly the cap and drops one byte more', () => {
+    expect(judgeVideoSize(25 * MB, 25)).toEqual({ keep: true });
+    expect(judgeVideoSize(25 * MB - 1, 25)).toEqual({ keep: true });
+    const over = judgeVideoSize(25 * MB + 1, 25);
+    expect(over).toMatchObject({ keep: false, maxMb: 25, mb: 25.1, line: 'Video not kept: 25.1 MB exceeds the 25 MB limit.' });
+  });
+
+  it('writes the size and the cap into the line', () => {
+    expect(judgeVideoSize(31 * MB, 25)).toMatchObject({ keep: false, line: 'Video not kept: 31 MB exceeds the 25 MB limit.' });
+    expect(judgeVideoSize(3 * MB, 2)).toMatchObject({ keep: false, line: 'Video not kept: 3 MB exceeds the 2 MB limit.' });
+    expect(maxVideoBytes(25)).toBe(26_214_400);
   });
 });

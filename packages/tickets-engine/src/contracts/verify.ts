@@ -39,8 +39,8 @@ export interface VerificationReport {
   readonly findings: readonly string[];
   /** The walkthrough video's file name in `tickets/videos/` (`ui` proof); null = none. */
   readonly video?: string | null;
-  /** The size limit freed the video (`Video removed (size limit).`); the player is replaced by the note. */
-  readonly videoRemoved?: boolean;
+  /** The recording exceeded the per-video cap and was dropped (E11-1c): the honest line (`Video not kept: 31 MB exceeds the 25 MB limit.`) that stands where the player would. */
+  readonly videoNotKept?: string;
   /** The video's chapters, one per shot criterion: the offset and the criterion. */
   readonly videoChapters?: readonly VideoChapter[];
 }

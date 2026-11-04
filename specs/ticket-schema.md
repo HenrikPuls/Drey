@@ -179,8 +179,17 @@ never a column, never reported as a stray file.
   size of the folder — and nothing is deleted automatically; videos stay
   until the owner deletes them, bounded only by the disk. Supersedes the
   earlier `videos.limitMb` (total folder size, oldest `done` videos
-  deleted first); the code of E11-1 still implements that until the roadmap item
-  E11-1c changes it.
+  deleted first), which no longer exists: a stored `videos.limitMb` is
+  ignored and removed from the config at startup (E11-1c, milestone 147).
+  The settings accept a whole number of MB from 1 to 200.
+  **A recording larger than the cap is not kept** (the verify step
+  checks the file right after the harness stored it: exactly the cap is
+  kept, one byte over is not; Playwright cannot trim, and nothing
+  re-encodes): the file is deleted — the one deletion the engine ever
+  does, of the recording it was about to reference — and the
+  `### Video` chapter carries one line instead of the player,
+  `Video not kept: <N> MB exceeds the <cap> MB limit.` (N rounded up
+  to a tenth). Existing videos are never touched.
 - **Served** by the engine's bearer-authenticated
   `GET /api/videos/<name>` with HTTP `Range` support (Safari needs it
   to stream), the name pinned like `/api/attachments/<name>` to
@@ -556,8 +565,11 @@ the runner rely on:
   (see [Proof mode](#proof-mode-e11)) adds a `### Video` chapter between
   Criteria and Findings: the player `![](../videos/<name>)` and one
   `- m:ss <criterion>` chapter line per shot (the offset is seconds from
-  the recording's start); after the size limit freed the file the
-  chapter reads `Video removed (size limit).` instead. A `tests` proof
+  the recording's start); when the recording was over the per-video
+  cap (see [Videos](#videos)) the chapter is the single line
+  `Video not kept: 31 MB exceeds the 25 MB limit.` instead.
+  Older tickets may still carry the retired `Video removed (size
+  limit).` line; the reader ignores it. A `tests` proof
   has no shot, no `### Video` and marks every criterion
   `- [x] \`cmd\` — checked by the machine gate` (no app was started; the
   gate that let the ticket reach the verify phase stands in). The proof card

@@ -333,8 +333,12 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     `videos.maxMb` (default 25 per video; owner decision 2026-11-04: no
     retention limit by age or total size, nothing is deleted
     automatically, the disk is the only bound; this replaces the first
-    cut `videos.limitMb` 2000 with oldest-first deletion, which E11-1
-    still implements until E11-1c); served by a
+    cut `videos.limitMb` 2000 with oldest-first deletion — **superseded
+    and removed by E11-1c (milestone 147)**: the sweep, its notice and
+    the "Video removed" note are gone, a stored `videos.limitMb` is
+    dropped at startup, and a recording over the cap is deleted right
+    after the verify run with one `Video not kept: …` line in the
+    ticket's `### Video` chapter); served by a
     bearer-authenticated, Range-capable `GET /api/videos/<name>`.
   - **Schema deltas** (`specs/ticket-schema.md`): `### Parts`,
     `parent:`, `proof:`, `videos/`, a per-part `chain:` scope.

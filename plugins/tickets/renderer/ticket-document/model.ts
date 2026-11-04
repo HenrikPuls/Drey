@@ -92,9 +92,10 @@ export interface ProofShot {
 }
 
 export interface ProofVideo {
-  /** The file name in `tickets/videos/`; null when the size limit freed it. */
+  /** The file name in `tickets/videos/`; null when the recording was not kept. */
   readonly file: string | null;
-  readonly removed: boolean;
+  /** The honest line for a recording dropped over the per-video cap (E11-1c); null = kept. */
+  readonly notKept: string | null;
   readonly chapters: readonly { readonly atMs: number; readonly at: string; readonly label: string }[];
 }
 
@@ -151,9 +152,9 @@ export function proofViewOf(report: VerificationReport): ProofView {
       : `Tested on ${day} by ${who}${report.environment === '' ? '' : ` — ${report.environment}`}.`;
   const video: ProofVideo | null =
     report.video !== undefined && report.video !== null
-      ? { file: report.video, removed: false, chapters }
-      : report.videoRemoved === true
-        ? { file: null, removed: true, chapters: [] }
+      ? { file: report.video, notKept: null, chapters }
+      : report.videoNotKept !== undefined
+        ? { file: null, notKept: report.videoNotKept, chapters: [] }
         : null;
   return { summary, allPassed, stamp, checks, shots, video, findings: report.findings };
 }

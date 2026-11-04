@@ -149,8 +149,8 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   // The engine listens only after the board was checked for verify
   // candidates (and the scan's startup IO has settled).
   await verify.initialScan;
-  // E11-1: the videos folder and its ignore rule exist from the start; an over-limit folder is trimmed.
-  void videos.prepare().then(() => videos.sweep());
+  // E11-1: the videos folder and its ignore rule exist from the start (E11-1c: nothing is ever deleted).
+  void videos.prepare();
 
   // E5a: the Mission Control chat — sessions under `tickets/_meta/chat/`,
   // one mission turn per owner message, every mutation a proposal card
@@ -189,11 +189,9 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     },
     // E12-3: the settings screen's "Include the n existing videos" count.
     countVideos: async () => (await videos.status()).count,
-    videoNotice: async () => (await videos.status()).notice,
     videos: (name) => videos.stat(name),
     videosChanged: async (includeExisting) => {
       await videos.applyInGit(includeExisting);
-      await videos.sweep();
     },
     log,
     onChanged: () => hub.emit('remote'),

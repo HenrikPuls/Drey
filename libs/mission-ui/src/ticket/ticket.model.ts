@@ -289,10 +289,10 @@ export interface ProofReport {
   readonly tester: string;
   readonly criteria: readonly ProofCriterion[];
   readonly findings: readonly string[];
-  /** The walkthrough video's file name (`tickets/videos/<name>`); null = none (a `tests` proof, or removed). */
+  /** The walkthrough video's file name (`tickets/videos/<name>`); null = none (a `tests` proof, or not kept). */
   readonly video: string | null;
-  /** The size limit freed the video: the card says so instead of showing a player. */
-  readonly videoRemoved: boolean;
+  /** The recording was over the per-video cap and dropped (E11-1c): the honest line the card shows instead of a player; null = none. */
+  readonly videoNotKept: string | null;
   /** The video's chapters, one per criterion shot: seconds from the start and the label. */
   readonly chapters: readonly ProofChapter[];
 }
@@ -305,7 +305,7 @@ export interface ProofChapter {
 const VIDEO_HEAD = /^###\s+video\s*$/i;
 const VIDEO_PLAYER = /!\[\]\(\.\.\/videos\/([^)]+)\)/;
 const VIDEO_CHAPTER = /^- (\d+):(\d{2}) (.+)$/;
-const VIDEO_REMOVED = /^Video removed \(size limit\)\.$/;
+const VIDEO_NOT_KEPT = /^Video not kept: .+\.$/;
 const OTHER_HEAD = /^###\s+/;
 
 const TESTED_ON = /^Tested on .+$/m;
@@ -329,7 +329,7 @@ export function proofOf(sectionText: string): ProofReport {
   let inFindings = false;
   let inVideo = false;
   let video: string | null = null;
-  let videoRemoved = false;
+  let videoNotKept: string | null = null;
   const chapters: ProofChapter[] = [];
   for (const line of sectionText.split('\n')) {
     if (FINDINGS_HEAD.test(line)) {
@@ -351,8 +351,8 @@ export function proofOf(sectionText: string): ProofReport {
           video = player[1]!;
         } else if (chapter !== null) {
           chapters.push({ atSec: Number(chapter[1]) * 60 + Number(chapter[2]), label: chapter[3]! });
-        } else if (VIDEO_REMOVED.test(line.trim())) {
-          videoRemoved = true;
+        } else if (VIDEO_NOT_KEPT.test(line.trim())) {
+          videoNotKept = line.trim();
         }
         continue;
       }
@@ -385,7 +385,7 @@ export function proofOf(sectionText: string): ProofReport {
     criteria,
     findings,
     video,
-    videoRemoved,
+    videoNotKept,
     chapters,
   };
 }

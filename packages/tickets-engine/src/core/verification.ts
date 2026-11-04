@@ -59,8 +59,8 @@ export function renderVerificationSection(report: VerificationReport): string {
         lines.push(`- ${formatOffset(chapter.atMs)} ${chapter.label}`);
       }
     }
-  } else if (report.videoRemoved === true) {
-    lines.push('', '### Video', '', VIDEO_REMOVED_NOTE);
+  } else if (report.videoNotKept !== undefined) {
+    lines.push('', '### Video', '', report.videoNotKept);
   }
   if (report.findings.length > 0) {
     lines.push('', '### Findings', '');
@@ -135,8 +135,8 @@ export function upsertVerificationSection(fileText: string, section: string): st
   return `${fileText.replace(/\n*$/, '')}\n\n${normalized}`;
 }
 
-/** The note that replaces the player once the size limit freed the video. */
-export const VIDEO_REMOVED_NOTE = 'Video removed (size limit).';
+/** The line a dropped over-cap recording leaves in the Video chapter (E11-1c). */
+const VIDEO_NOT_KEPT = /^Video not kept: .+\.$/m;
 
 function formatOffset(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
@@ -144,7 +144,7 @@ function formatOffset(ms: number): string {
 }
 
 /** The `### Video` chapter's pieces; empty when the chapter is absent. */
-function parseVideoChapter(section: string): { video?: string; videoRemoved?: boolean; videoChapters?: VideoChapter[] } {
+function parseVideoChapter(section: string): { video?: string; videoNotKept?: string; videoChapters?: VideoChapter[] } {
   const at = section.indexOf('### Video');
   if (at < 0) {
     return {};
@@ -154,7 +154,8 @@ function parseVideoChapter(section: string): { video?: string; videoRemoved?: bo
   const body = end === null ? rest : rest.slice(0, end.index);
   const player = /!\[\]\(\.\.\/videos\/([^)]+)\)/.exec(body);
   if (player === null) {
-    return body.includes(VIDEO_REMOVED_NOTE) ? { videoRemoved: true } : {};
+    const note = VIDEO_NOT_KEPT.exec(body);
+    return note === null ? {} : { videoNotKept: note[0] };
   }
   const videoChapters: VideoChapter[] = [];
   for (const line of body.split(/\r?\n/)) {

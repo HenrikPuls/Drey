@@ -5,8 +5,11 @@
  * device and lives in the app's local storage.
  *
  * Engine keys (the engine config store, `~/.drey-engine/config.json`):
- * `videos.inGit` (default false) and `videos.limitMb` (default 2000) —
- * what they govern is specified in `specs/ticket-schema.md`, "Videos".
+ * `videos.inGit` (default false) and `videos.maxMb` (default 25, the cap
+ * of ONE video; E11-1c — nothing is ever deleted automatically) — what
+ * they govern is specified in `specs/ticket-schema.md`, "Videos". The
+ * retired `videos.limitMb` (a folder total) is ignored and dropped by
+ * `VideoService.prepare`.
  */
 import type { Parsed } from '../core/commands';
 import { CHAT_KEYS, providerLabelOf, resolveChatModel, type ChatModelConfig } from '../services/chat-model';
@@ -14,20 +17,21 @@ import type { DeviceView } from './auth';
 
 export const SETTINGS_KEYS = {
   videosInGit: 'videos.inGit',
-  videosLimitMb: 'videos.limitMb',
+  videosMaxMb: 'videos.maxMb',
+  /** Retired by E11-1c; only read to be removed. */
+  videosLimitMbRetired: 'videos.limitMb',
 } as const;
 
-export const DEFAULT_VIDEO_LIMIT_MB = 2000;
-export const MIN_VIDEO_LIMIT_MB = 100;
-export const MAX_VIDEO_LIMIT_MB = 100_000;
+export const DEFAULT_VIDEO_MAX_MB = 25;
+export const MIN_VIDEO_MAX_MB = 1;
+export const MAX_VIDEO_MAX_MB = 200;
 
 export interface VideoSettings {
   readonly inGit: boolean;
-  readonly limitMb: number;
+  /** The cap of one video in MB; a longer recording is not kept. */
+  readonly maxMb: number;
   /** Videos currently in `tickets/videos/` (the "Include the n existing videos" count). */
   readonly existing: number;
-  /** A standing notice the screen shows under the limit (E11-1); null = none. */
-  readonly notice: string | null;
 }
 
 /**
@@ -63,7 +67,7 @@ export interface SettingsReply {
 
 export interface SettingsPatch {
   readonly inGit?: boolean;
-  readonly limitMb?: number;
+  readonly maxMb?: number;
   /** Turning `inGit` on is a confirmed act (the warning dialog); the flag carries the confirmation. */
   readonly confirm?: boolean;
   /** With the confirmation: also commit the videos already in the folder ("Include the n existing videos"). */
@@ -86,20 +90,15 @@ export interface SettingsAccess {
 }
 
 /** Folds stored values into valid settings; anything odd is the default. */
-export function normalizeVideoSettings(
-  raw: { inGit?: unknown; limitMb?: unknown },
-  existing: number,
-  notice: string | null = null,
-): VideoSettings {
-  const limit = raw.limitMb;
+export function isVideoMaxMb(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= MIN_VIDEO_MAX_MB && value <= MAX_VIDEO_MAX_MB;
+}
+
+export function normalizeVideoSettings(raw: { inGit?: unknown; maxMb?: unknown }, existing: number): VideoSettings {
   return {
     inGit: raw.inGit === true,
-    limitMb:
-      typeof limit === 'number' && Number.isInteger(limit) && limit >= MIN_VIDEO_LIMIT_MB && limit <= MAX_VIDEO_LIMIT_MB
-        ? limit
-        : DEFAULT_VIDEO_LIMIT_MB,
+    maxMb: isVideoMaxMb(raw.maxMb) ? raw.maxMb : DEFAULT_VIDEO_MAX_MB,
     existing,
-    notice,
   };
 }
 
@@ -129,7 +128,7 @@ export function parseSettingsPatch(body: unknown): Parsed<SettingsPatch> {
     return { ok: false, error: 'bad settings payload' };
   }
   const obj = body as Record<string, unknown>;
-  const { inGit, limitMb, confirm, includeExisting } = obj;
+  const { inGit, maxMb, confirm, includeExisting } = obj;
   if (inGit !== undefined && typeof inGit !== 'boolean') {
     return { ok: false, error: 'inGit is true or false' };
   }
@@ -139,16 +138,13 @@ export function parseSettingsPatch(body: unknown): Parsed<SettingsPatch> {
   if (includeExisting !== undefined && typeof includeExisting !== 'boolean') {
     return { ok: false, error: 'includeExisting is true or false' };
   }
-  if (
-    limitMb !== undefined &&
-    !(typeof limitMb === 'number' && Number.isInteger(limitMb) && limitMb >= MIN_VIDEO_LIMIT_MB && limitMb <= MAX_VIDEO_LIMIT_MB)
-  ) {
-    return { ok: false, error: `the video limit is a whole number of MB from ${MIN_VIDEO_LIMIT_MB} to ${MAX_VIDEO_LIMIT_MB}` };
+  if (maxMb !== undefined && !isVideoMaxMb(maxMb)) {
+    return { ok: false, error: `the largest video is a whole number of MB from ${MIN_VIDEO_MAX_MB} to ${MAX_VIDEO_MAX_MB}` };
   }
-  if (inGit === undefined && limitMb === undefined) {
+  if (inGit === undefined && maxMb === undefined) {
     return { ok: false, error: 'nothing to change' };
   }
-  return { ok: true, value: { inGit, limitMb, confirm, includeExisting } };
+  return { ok: true, value: { inGit, maxMb, confirm, includeExisting } };
 }
 
 export function parseRevoke(body: unknown): Parsed<{ id: string }> {

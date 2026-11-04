@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–143 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–143 and 147 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -178,14 +178,6 @@ owner builds without the tickets system.
   fetches the whole video through the bearer header instead of
   streaming (a `<video>` tag cannot send it; the route itself answers
   Range), and the Drey-hosted Work panel shows no player.
-- **E11-1c — Video size rule (owner decision 2026-11-04).** Replace the
-  total-size limit `videos.limitMb` (2000, oldest videos of `done`
-  tickets deleted) by one cap per video, `videos.maxMb` (25), and no
-  automatic deletion at all: no retention by age or folder size. Engine
-  config, the `## Verification` "Video removed" note goes away, the
-  Settings row (E12-3) and the validator follow; what happens to a
-  recording over 25 MB (re-encode or drop with a note) is settled when
-  built.
 - **E11-2b — Diff review, wide layout.** The iPad board's master-detail
   split (file list left, one file's diff right) and the viewed marks on
   the desk instead of per device; E11-2 shipped both inside the proof

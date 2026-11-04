@@ -1425,7 +1425,7 @@ describe('the chain master and persona pause (prototype convergence)', () => {
       { id: 'd1', name: 'Phone', readOnly: false, pairedAt: '2026-11-01T10:00:00Z', lastSeen: null, current: true },
       { id: 'd2', name: 'Tablet', readOnly: true, pairedAt: '2026-11-01T11:00:00Z', lastSeen: null, current: false },
     ],
-    engine: { videos: { inGit: false, limitMb: 2000, existing: 0 } },
+    engine: { videos: { inGit: false, maxMb: 25, existing: 0 } },
   };
 
   it('loads the per-vault settings, and says so when the desk has none', async () => {
@@ -1433,7 +1433,7 @@ describe('the chain master and persona pause (prototype convergence)', () => {
     desk.on('GET', '/api/settings', () => SETTINGS_REPLY);
     await state.load();
     expect(state.settings()?.devices.map((d) => d.name)).toEqual(['Phone', 'Tablet']);
-    expect(state.settings()?.videos).toEqual({ inGit: false, limitMb: 2000, existing: 0, notice: null });
+    expect(state.settings()?.videos).toEqual({ inGit: false, maxMb: 25, existing: 0 });
     expect(state.settingsError()).toBeNull();
 
     desk.on('GET', '/api/settings', () => ({ ok: false }));
@@ -1446,12 +1446,12 @@ describe('the chain master and persona pause (prototype convergence)', () => {
     const { desk, state } = await bootState();
     desk.on('POST', '/api/settings/engine', () => ({
       ...SETTINGS_REPLY,
-      engine: { videos: { inGit: true, limitMb: 600, existing: 0 } },
+      engine: { videos: { inGit: true, maxMb: 60, existing: 0 } },
     }));
     desk.on('POST', '/api/settings/devices/revoke', () => ({ ...SETTINGS_REPLY, devices: [SETTINGS_REPLY.devices[0]] }));
 
-    expect(await state.setVideoLimit(600)).toEqual({ ok: true });
-    expect(desk.callsOf('POST', '/api/settings/engine')[0]!.body).toEqual({ limitMb: 600 });
+    expect(await state.setVideoMaxMb(60)).toEqual({ ok: true });
+    expect(desk.callsOf('POST', '/api/settings/engine')[0]!.body).toEqual({ maxMb: 60 });
     expect(await state.setVideosInGit(true, true)).toEqual({ ok: true });
     expect(desk.callsOf('POST', '/api/settings/engine')[1]!.body).toEqual({ inGit: true, confirm: true, includeExisting: false });
     expect(state.settings()?.videos.inGit).toBe(true);
