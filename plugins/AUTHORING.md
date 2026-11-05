@@ -111,6 +111,8 @@ leaves the app on the previous build. Verify with
   active view's preset `assistantTarget`) and their `on…Change` listeners are
   for the Assistant. The host attaches no meaning to any of it; namespace
   the target ids.
+  1.45 lets `ctx.vault.markManaged` take a list of vault ids (an empty list clears): the tickets
+  plugin flags every vault that holds its store checkout.
   1.44 added `ctx.vault.routeDocuments(route)` (main side): a plugin that writes
   documents through its own engine claims them (`owns(vaultId, path)`); the
   editor's save goes to `route.save` (answer: the stored text and mtime, or a

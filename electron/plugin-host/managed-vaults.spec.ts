@@ -17,6 +17,17 @@ describe('ManagedVaults (SDK 1.32 plugin-managed vaults)', () => {
     expect(registry.managedBy('tickets-b')).toBe('Tickets');
   });
 
+  it('SDK 1.45: a list marks several vaults at once; an empty list clears', () => {
+    const registry = new ManagedVaults();
+    registry.mark('tickets', ['a', 'b'], 'Tickets');
+    expect(registry.managedBy('a')).toBe('Tickets');
+    expect(registry.managedBy('b')).toBe('Tickets');
+    registry.mark('tickets', ['b'], 'Tickets');
+    expect(registry.managedBy('a')).toBeNull();
+    registry.mark('tickets', [], 'Tickets');
+    expect(registry.managedBy('b')).toBeNull();
+  });
+
   it('re-marking the same vault refreshes the label', () => {
     const registry = new ManagedVaults();
     registry.mark('tickets', 'tickets', 'Tickets');

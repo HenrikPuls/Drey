@@ -23,6 +23,8 @@ export interface TicketDocumentsDeps {
   /** Asks the user, then registers the folder as a vault; false when they decline. */
   readonly registerCheckout: (checkout: string) => Promise<boolean>;
   readonly modifiedMs: (absolutePath: string) => Promise<number>;
+  /** Flags the vaults that hold the checkout as plugin-managed (SDK 1.45): Source control then refuses its writes. */
+  readonly markManaged?: (vaultIds: readonly string[]) => void;
   readonly platform?: NodeJS.Platform;
 }
 
@@ -55,6 +57,7 @@ export class TicketDocuments {
     const checkout = await this.deps.checkout();
     this.checkoutPath = checkout;
     this.owned = checkout === null ? [] : await this.vaultsContaining(checkout);
+    this.deps.markManaged?.(this.owned.map((o) => o.vaultId));
   }
 
   owns(vaultId: string, p: string): boolean {

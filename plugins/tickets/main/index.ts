@@ -212,6 +212,8 @@ const plugin: MainPluginModule = {
         return true;
       },
       modifiedMs: async (absolutePath) => (await fsp.stat(absolutePath)).mtimeMs,
+      // The checkout's history is written by dk: no Source-control commit, push or discard on it.
+      markManaged: (vaultIds) => ctx.vault.markManaged(vaultIds),
     });
     ctx.vault.routeDocuments(documents.route);
     void documents.refresh().catch(() => undefined);

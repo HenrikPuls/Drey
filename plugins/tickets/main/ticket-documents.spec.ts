@@ -33,6 +33,16 @@ describe('TicketDocuments (E14-4c)', () => {
     expect(documents.owns('meta', 'tickets/t/0000/t-63/ticket.md')).toBe(false);
   });
 
+  it('flags every vault that holds the checkout as plugin-managed, and clears the flag when the backend is off', async () => {
+    const markManaged = vi.fn();
+    const { documents } = make({ markManaged, vaults: async () => [{ id: 'big', path: '/data', exists: true }, { id: 'co', path: CHECKOUT, exists: true }, { id: 'meta', path: '/data/meta', exists: true }] });
+    await documents.refresh();
+    expect(markManaged).toHaveBeenLastCalledWith(['big', 'co']);
+    const off = vi.fn();
+    await make({ markManaged: off, checkout: async () => null }).documents.refresh();
+    expect(off).toHaveBeenLastCalledWith([]);
+  });
+
   it('owns nothing while the dricket backend is off', async () => {
     const { documents } = make({ checkout: async () => null });
     await documents.refresh();

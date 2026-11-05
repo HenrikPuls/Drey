@@ -8,12 +8,17 @@
  * other; the host is the only broker (ADR-0044).
  */
 export class ManagedVaults {
-  /** pluginId -> { vaultId, label } ; one mark per plugin (it follows detection). */
-  private readonly marks = new Map<string, { vaultId: string; label: string }>();
+  /** pluginId -> { vaultIds, label } ; one mark per plugin (it follows detection), SDK 1.45: of several vaults. */
+  private readonly marks = new Map<string, { vaultIds: ReadonlySet<string>; label: string }>();
 
-  /** THIS plugin claims `vaultId`; replaces the plugin's previous mark. */
-  mark(pluginId: string, vaultId: string, label: string): void {
-    this.marks.set(pluginId, { vaultId, label });
+  /** THIS plugin claims `vaultId` (or the listed vaults); replaces the plugin's previous mark. */
+  mark(pluginId: string, vaultId: string | readonly string[], label: string): void {
+    const vaultIds = new Set(typeof vaultId === 'string' ? [vaultId] : vaultId);
+    if (vaultIds.size === 0) {
+      this.marks.delete(pluginId);
+      return;
+    }
+    this.marks.set(pluginId, { vaultIds, label });
   }
 
   /** Drops one plugin's mark (a null re-detect, deactivation, quarantine). */
@@ -24,7 +29,7 @@ export class ManagedVaults {
   /** The managing plugin's display name for a vault, or null. First claim wins a collision. */
   managedBy(vaultId: string): string | null {
     for (const mark of this.marks.values()) {
-      if (mark.vaultId === vaultId) {
+      if (mark.vaultIds.has(vaultId)) {
         return mark.label;
       }
     }

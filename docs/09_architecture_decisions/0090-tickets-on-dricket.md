@@ -234,7 +234,17 @@ second bridge.
 
 **Consequences.** The checkout has to be a registered vault (the user is asked once). A checkout
 document is a plain document: header strip, thread pairing and Shape marks follow later. The
-checks ran on a scratch store; E14-8 owns the live check.
+checks ran on a scratch store; the live check ran with E14-8 (milestone 160).
+
+## Later change — change detection (E14-8, 2026-11-05)
+
+The checkout's change feed is a watcher plus a safety net: a trailing debounce with a ceiling, the
+own write's echo recognised by HEAD instead of swallowed, a 10 s HEAD comparison that announces and
+counts a move the watcher never reported (Windows' change buffer overflows when a process is busy
+for seconds — provoked, one real miss), and for a remote store the periodic `dk sync` gated by
+`git ls-remote` (plain git; dk v0.6.2 has no `changes` verb). The checkout vaults are flagged
+plugin-managed (SDK 1.45: `markManaged` takes a list), so Source control cannot write the history
+dk owns. Checked in a built app on a scratch store (`e2e/tickets-dricket-live.spec.ts`).
 
 ## Later change — the run lease (E14-5, 2026-11-05)
 
