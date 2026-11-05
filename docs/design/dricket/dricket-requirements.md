@@ -453,9 +453,9 @@ owner decides.
   deleted by hand. `dk init --stages a,b,c` (or an init that omits the legacy
   table) would give a valid store in one step. Drey's scratch stores strip the
   table in test setup.
-- **Status 2026-11-05 (R-29, R-30, and R-26 below):** implemented in dricket on
-  branch `claude/r29-r30-trace-fewer-git-processes-8f3cf1` (commits `1d0e601`,
-  `fbc16c4`; not merged, not released). dricket numbers its own requirements
+- **Status 2026-11-05 (R-29, R-30, and R-26 below):** implemented in dricket and
+  **released as v0.6.1** (2026-11-05, PR 24, CI green on Linux and Windows; the
+  Windows build is installed here, the old one kept as `dk-0.6.0.exe`). dricket numbers its own requirements
   separately: there the trace is dricket R-26 and the reads are dricket R-27 (ADR-0014
   maps them), so ids in dricket's changelog differ from this file. Verified
   here on the 91-ticket store: `show` 16 -> 4 git processes, 0.39 -> 0.18 s;
