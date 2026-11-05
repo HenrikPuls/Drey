@@ -45,6 +45,8 @@ structs, `dk` itself was not run (see `fit-analysis.md` §0).
 | R-23 | `dk version --json` (machine-readable version) | Nice (found in E14-1) |
 | R-26 | Parallel read-only `dk` calls on one store must not fail | Needed (found in E14-2) |
 | R-27 | `dk init` writes a `dricket.toml` that stays valid with a custom `[stages]` | Nice (found in E14-2) |
+| R-29 | `dk --trace` / `DK_TRACE`: per-step timing of what one call does | Nice (found in the E14-4 comparison) |
+| R-30 | Fewer git processes per command: a read needs about three, `ls` one batch read | Needed for dricket's own speed; moot for Drey's board (E14-4 reads files) |
 | Q-01 | Account model: service account or own accounts | Question |
 | Q-02 | Owner id grammar | Question |
 | Q-03 | Waiting for a human inside a claim | Question |
@@ -451,6 +453,40 @@ owner decides.
   deleted by hand. `dk init --stages a,b,c` (or an init that omits the legacy
   table) would give a valid store in one step. Drey's scratch stores strip the
   table in test setup.
+- **R-29 Trace.** `dk --trace` (or `DK_TRACE=1`) prints one line per step the
+  call performs on stderr (or as JSON with `--json`): the step's name (config
+  read, repo discovery, private-copy refresh, CAS attempt N, backoff wait,
+  push, fast-forward of the checkout), its duration, and every git process it
+  started with the arguments and run time, ending in a summary such as
+  `git: 16 processes, 340 ms of 380 ms`. Git's own `GIT_TRACE2_EVENT` shows the
+  git side only; it cannot say which dk step a process belongs to, nor how
+  long dk itself works. Found in the E14-4 comparison
+  (`docs/design/dricket/performance.md`).
+- **R-30 Fewer git processes per command.** Measured on dk v0.6.0, Windows,
+  local store (`GIT_TRACE2_EVENT`; a bare git call costs about 47 ms here, the
+  same as an empty process, so the count is the cost):
+  `dk show` starts 16 git processes, `dk ls --json` 107 (91 of them one
+  `git show HEAD:<path>` per ticket). Of the 16 for `show`: five `rev-parse`
+  that one call can answer (`--is-inside-work-tree`, `--show-toplevel` twice,
+  `--is-bare-repository`, `--git-common-dir`); `check-ref-format --branch
+  tickets` (a pure string check, no process needed); `status --porcelain`
+  of the user checkout; and for the private working copy `rev-parse`,
+  `worktree list`, `rev-parse`, `reset --hard`, `checkout --detach`, `clean
+  -fdq` — every read refreshes the copy although it only needs one `git show
+  <ref>:<path>`. Wanted: a read command costs the repo discovery (one
+  `rev-parse` with several options), the config read, one `git show
+  refs/heads/<branch>:<path>` and nothing else, no private working copy;
+  `ls --json` reads all tickets in one batch (`git cat-file --batch` or
+  `git archive`); `check-ref-format` in process. The private working copy is
+  then needed by writes only, and a read that does not touch it also removes
+  the cause of R-26. Writes may later move to plumbing (`hash-object`,
+  `mktree`, `commit-tree`, `update-ref <ref> <new> <old>`), which is a larger
+  change to be decided on its own. A go-git or libgit2 embedding was
+  considered and not recommended: go-git does not read `~/.ssh/config`
+  (aliases, `IdentityFile`, `ProxyJump`), so remote authentication would have
+  to be rebuilt (not verified in this session, from knowledge of the library).
+  Estimated effect (not measured): `show` from about 0.4 s to about 0.1 s,
+  `ls` from about 2 s to well under 0.3 s.
 
 ## Questions (not defects)
 
@@ -462,7 +498,7 @@ owner decides.
 | Q-04 | **Secret scan on whole-ticket writes** (exit 19 names pattern and line). Tickets carry pasted logs, diffs, tokens-as-examples. | A blocked `put` stops a run's hand-over. | Allow an allowlist in `dricket.toml` (patterns/paths) and let `put` return the finding without losing the text. Drey will surface exit 19 to the owner. |
 | Q-05 | **Editing `dricket.toml` from a frontend.** It lives on protected `main` and is changed by PR only. Drey's Settings edits stages/priorities today. | The Settings column editor cannot "just save". | Read-only in Settings plus "open the file"; or `dk config set` for admins that makes a signed-off commit/PR (the owner is the admin). |
 | Q-06 | **One ticket per commit** versus the plan release that mints N tickets and updates the parent. | Atomicity of "Approve plan". | Keep the invariant; Drey's release is resumable (children first, parent last). R-14 only if you want atomic. |
-| Q-07 | **Cost of one `dk` call.** Each call starts a process that reads config from `main`, refreshes the head and runs several `git` subprocesses. Unmeasured. | A board refresh with N tickets and the fleet's writes. | Measure `ls`, `show`, `claim`, `put` on Windows with 100 and 1 000 tickets; decide on R-14 batch mode from the numbers. |
+| Q-07 | **Cost of one `dk` call.** Each call starts a process that reads config from `main`, refreshes the head and runs several `git` subprocesses. Unmeasured. | A board refresh with N tickets and the fleet's writes. | Measured 2026-11-05 on Windows with 91 tickets: `show` 0.4 s (16 git processes), `ls` 2 s (107), `put --claim --if-version` 0.65 s, see `performance.md`; not measured at 1 000 tickets or with a remote. The cost is git process starts, which R-30 reduces; R-14 batch mode is not needed for Drey's reads (E14-4 reads files). |
 | Q-08 | **Local store as the desk's default.** A local non-bare store needs no network and has no push failure mode. | Offline writing today works; a remote store needs the network for every write (non-goal in dricket: "no offline writing with later merge"). | Local store on the desk; add a remote only when a second machine joins; document the migration of an existing local store to a remote. |
 
 ## What I checked and found fine

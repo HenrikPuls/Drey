@@ -94,3 +94,24 @@ virus-scanner exclusion or git settings (`core.fsmonitor`, `gc.auto=0`).
 Nothing beyond the file reader is worth building for speed on current
 evidence; correctness (`--if-version`, fencing) and robustness (watcher,
 sync) matter more.
+
+## Appendix: the git processes of one `dk show`
+
+From `GIT_TRACE2_EVENT` (arguments shortened; the private working copy lives
+under `%LOCALAPPDATA%\dricket\<store>-<profile>`):
+
+| # | Command | Purpose (inferred from the arguments, not from dricket's code) | Needed for a read? |
+|---|---|---|---|
+| 1, 2, 6, 7, 9 | `rev-parse --is-inside-work-tree`, `--show-toplevel` (twice), `--is-bare-repository`, `--git-common-dir` | find and classify the repository | one call can answer all five |
+| 3 | `show refs/heads/main:dricket.toml` | read the configuration | yes, once |
+| 4 | `remote get-url origin` | local or remote store | yes, or merged with discovery |
+| 5 | `check-ref-format --branch tickets` | validate the branch name | no: a string check in process |
+| 8, 10, 12 | `rev-parse`, `worktree list`, `rev-parse` in the private copy | check the private working copy | writes only |
+| 11 | `status --porcelain=v1 -z --untracked-files=all` | state of the user checkout | no |
+| 13, 14, 15 | `reset --hard`, `checkout --detach`, `clean -fdq` | bring the private copy to the ref head | writes only |
+| 16 | `show HEAD:tickets/<prefix>/<shard>/<id>/ticket.md` | the actual read | yes |
+
+`dk ls --json` runs the same preparation and then `ls-tree` plus 91 single
+`git show HEAD:<path>` calls: 107 processes in all. One batch read
+(`git cat-file --batch`) would replace the 91. Requirements R-29 (trace) and
+R-30 (fewer processes) in `dricket-requirements.md` carry this to dricket.
