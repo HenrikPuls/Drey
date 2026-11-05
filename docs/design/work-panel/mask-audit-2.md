@@ -182,7 +182,10 @@ Built: [desk-tab-menu.png](audit-2-screenshots/desk-tab-menu.png), [desk-open-wi
 > header = list icon, a rounded pill with three icon-only targets (chat, rocket, team), the conversation title, `+`;
 > messages with a `vault context · N sections` chip; composer with an `Ask anything …` field, a mic and a send button, a row of
 > attach / edit / vault / web / read icons and the model name on the right. [assistant-owner-layout-2026-11-05.png](assistant-owner-layout-2026-11-05.png)
-> is the reference for this panel; deviations below that contradict it (M-01 'text labels on the target switch') are withdrawn.
+> is the reference for this panel in two parts that STAY as they are: the **top row** (header with list icon, target pill, title, `+`)
+> and the **way of input** (composer field incl. its `Ask anything …` text, mic, send, the icon row, the model name). How the chat
+> itself looks (message blocks, chips, spacing, typography) may be adjusted to the design. Deviations below that contradict the
+> two fixed parts (M-01 'text labels on the target switch') are withdrawn.
 
 
 Built: [desk-assistant-target.png](audit-2-screenshots/desk-assistant-target.png), the right column in every Work-view shot.
