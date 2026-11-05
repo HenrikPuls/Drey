@@ -37,6 +37,17 @@ describe('status comments', () => {
     expect(openStatusItems(lines).map((i) => i.key)).toEqual(['ci']);
   });
 
+  it('folds a resolve that shares its second with its decision after it, whatever the file order', () => {
+    // dk names comment files <second>-<author>: same second, author-name order — here the resolver sorts first.
+    const lines = statusLinesOfComments([
+      { at: '2026-11-05T09:00:00Z', text: 'resolved: k1\n\nCtrl+K' },
+      { at: '2026-11-05T09:00:00Z', text: 'needs-decision: [k1] Which one?' },
+      { at: '2026-11-05T08:59:59Z', text: 'blocked: [ci] earlier' },
+    ]);
+    expect(lines.map((l) => l.verb)).toEqual(['blocked', 'needs-decision', 'resolved']);
+    expect(openStatusItems(lines).map((i) => i.key)).toEqual(['ci']);
+  });
+
   it('parses nothing from a comment with a hostile timestamp', () => {
     expect(parseStatusComment("x' blocked: y", 'done: z')).toBeNull();
   });

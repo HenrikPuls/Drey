@@ -76,7 +76,14 @@ export function parseStatusComment(at: string, text: string): StatusLine | null 
   return line ?? null;
 }
 
-/** The status lines of a ticket's comments, oldest first (the order the comments came in). */
+/**
+ * The status lines of a ticket's comments, oldest first. dk names a comment file
+ * `<second>-<author>.md`, so the store knows no order inside one second — two
+ * comments of one second come in author-name order. A `resolved` that shares its
+ * second with the decision it closes must not be folded first (the decision would
+ * then stay open), so within one timestamp the lines that open something go
+ * before the ones that close it; otherwise the order the comments came in stands.
+ */
 export function statusLinesOfComments(comments: readonly { readonly at: string; readonly text: string }[]): readonly StatusLine[] {
   const lines: StatusLine[] = [];
   for (const comment of comments) {
@@ -85,7 +92,14 @@ export function statusLinesOfComments(comments: readonly { readonly at: string; 
       lines.push(line);
     }
   }
-  return lines;
+  return lines
+    .map((line, index) => ({ line, index }))
+    .sort((a, b) => (a.line.at < b.line.at ? -1 : a.line.at > b.line.at ? 1 : 0) || closes(a.line) - closes(b.line) || a.index - b.index)
+    .map((entry) => entry.line);
+}
+
+function closes(line: StatusLine): number {
+  return line.verb === 'resolved' ? 1 : 0;
 }
 
 /** One comment as the board shows it: the text as written plus the verb line it carries, if any. */
@@ -101,8 +115,13 @@ export interface TicketCommentView {
 export function commentViewsOf(
   comments: readonly { readonly author: string; readonly at: string; readonly text: string }[],
 ): readonly TicketCommentView[] {
-  return comments.map((comment) => {
-    const line = parseStatusComment(comment.at, comment.text);
-    return { author: comment.author, at: comment.at, text: comment.text, verb: line?.verb ?? null, key: line?.key ?? null };
-  });
+  // Same tie rule as statusLinesOfComments: inside one second a closing `resolved` comes last.
+  return comments
+    .map((comment, index) => {
+      const line = parseStatusComment(comment.at, comment.text);
+      const view: TicketCommentView = { author: comment.author, at: comment.at, text: comment.text, verb: line?.verb ?? null, key: line?.key ?? null };
+      return { view, index };
+    })
+    .sort((a, b) => (a.view.at < b.view.at ? -1 : a.view.at > b.view.at ? 1 : 0) || Number(a.view.verb === 'resolved') - Number(b.view.verb === 'resolved') || a.index - b.index)
+    .map((entry) => entry.view);
 }
