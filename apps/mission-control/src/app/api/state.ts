@@ -451,6 +451,15 @@ export class McState {
     this.tab.set('chat');
   }
 
+  /**
+   * Leaves the ticket screen for the chat with nothing in the composer (D-7b:
+   * 'Change by chat' no longer pre-fills a ticket-id prefix).
+   */
+  openChat(): void {
+    this.closeTicket();
+    this.tab.set('chat');
+  }
+
   /** Starts a session with the first owner message and opens it; `ticket` makes it a shape session. */
   async newSession(text: string, ticket?: string): Promise<McReply> {
     this.chatFailure.set(null);

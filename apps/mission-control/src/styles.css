@@ -109,7 +109,18 @@ body {
 
 body {
   position: fixed; /* iOS ignores overflow:hidden on body alone for touch drags */
-  inset: 0;
+  /* D-7d: the body IS the visible area. With the iOS keyboard open the layout
+     viewport keeps its full height and the visual viewport shrinks and pans;
+     viewport.ts publishes both (--mc-vh, --mc-vv-top), so the frame ends where
+     the keyboard starts and the header and the thread stay where they are.
+     The transform makes the body the containing block of every position:fixed
+     layer below (ticket screen, sheets, overlays): their inset:0 and bottom:0
+     follow the visible area too, not the keyboard-covered layout viewport. */
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--mc-vh, 100%);
+  transform: translateY(var(--mc-vv-top, 0px));
   width: 100%;
   margin: 0;
   background: var(--bg);

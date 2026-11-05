@@ -245,6 +245,22 @@ create as a `raw capture:` Log line (ticket-schema).
   delta in the chain grammar incl. `move` and `assign` — and a `say` that is
   his reason. The desk validates it like any edit and shows it as a draft;
   nothing is written.
+- **`MISSION_SYSTEM_PROMPT` and its context** (`chat-llm.ts` + `chat-service.ts`,
+  E5a; D-7a / milestone 165) — the six intents (steer, create, promote, chain,
+  blocked, report) and the strict `{say, thought, commands}` envelope. The system
+  message is the prompt, then `## Board digest` (priority vocabulary, the columns
+  with counts, one line per **open** ticket, capped near 2 KB — the terminal column
+  is never listed, and the digest says so in one line), then — D-7a — `## Tickets
+  the owner named`: every ticket id the owner typed in this message (`T-0091`,
+  `t-91`, `#91`; else in the last three owner messages, so a follow-up keeps its
+  ticket; at most five) is read on demand (`readAnyTicket`: on the board, done or
+  archived, either backend) and attached as its full file (cut at 8,000
+  characters) plus, on a dricket store, its latest 20 comments; an id that does not
+  exist is attached as `Error: <id> is not on the board`. The prompt rules: the
+  digest is not the board (closed tickets and tickets beyond its size are left out
+  of it), a named ticket's block is authoritative, "I cannot find it" only when
+  that block says so; ticket ids may come from the digest or the named block.
+  Nothing of the named block is written to the session file.
 - **The Mission Control bridge's provider call** (`packages/tickets-engine/src/services/chat-model.ts`,
   `chat-llm.ts`, D-1 / milestone 131) — every Mission Control prompt above
   (mission, shape, flow, aggregator) goes out as ONE streamed request in the

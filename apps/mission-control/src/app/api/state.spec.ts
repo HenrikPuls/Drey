@@ -754,6 +754,21 @@ describe('prefillChat (E8, E9)', () => {
   });
 });
 
+describe('openChat (D-7b)', () => {
+  it('closes the ticket overlay and shows the chat with an empty draft', () => {
+    const { desk } = makeDesk();
+    desk.storage.setItem('drey.remote.token', 'tok');
+    const state = makeState(desk);
+    state.openTicket('T-1');
+
+    state.openChat();
+
+    expect(state.ticketOpen()).toBeNull();
+    expect(state.tab()).toBe('chat');
+    expect(state.chatPrefill()).toBeNull();
+  });
+});
+
 describe('moveTicket', () => {
   it('posts the transition with the card phase from the current view', async () => {
     const { desk, data } = makeDesk();

@@ -1,3 +1,59 @@
+### Milestone 165 — D-7: the phone chat about a ticket (named tickets, no id prefix, no view bounce, iOS keyboard)
+
+**Not yet manually verified by the owner.** Owner report 2026-11-05, real vault, iPhone; roadmap D-7.
+
+- **(a) Cause — "not in the current board excerpt".** The mission prompt's board digest
+  (`boardDigest` in `chat-service.ts`) lists *open* tickets only — the terminal column is
+  skipped — and is capped near 2 KB, so a done ticket and any ticket past the cap are invisible to
+  the model, which then reasonably says the ticket is not there. Second cause, found while
+  reproducing on both backends: an **accepted ticket leaves the board** (`tickets/archive/` on the
+  files backend, the `archived` label on dricket), and `readTicket` — the only per-ticket read —
+  finds cards on the board only, so even an on-demand read would have failed for exactly the
+  tickets the owner asks about (T-0091 is such a ticket).
+- **Fix.** `ticketRefsOf` (`core/chat-ticket-refs.ts`) reads `T-0091`, `t-91`, `#91` as one
+  canonical id (a word, `#fff`, `ST-91` are no ids; at most five). Each turn the chat service
+  attaches the tickets the owner **named** — in this message, else in the last three owner
+  messages, so "and who merged it?" keeps its ticket — as a `## Tickets the owner named`
+  block after the digest: the ticket's file (cut at 8,000 characters) and, on dricket, its latest
+  20 comments; an unknown id is attached as an error line so the model never guesses. New
+  `BoardService.readAnyTicket` = the board card, else the archive (both backends). The digest now
+  says it lists open tickets only; the mission prompt's rules were adjusted in step
+  (`specs/classifier-spec.md`). The block rides the call only, never the session file.
+- **(b) No id prefix.** The ticket thread's composer opened prefilled with `<id>: ` and "Change by
+  chat" prefilled the chat with the same prefix. Both are gone: the composer opens empty;
+  "Change by chat" calls the new `openChat()` (leave the ticket, show the chat, empty draft). The
+  thread lists messages that name its ticket, so `threadSend` puts the id in front of a message
+  that does not contain it as it goes out (not in the field); the desk resolves it as in (a).
+- **(c) The view bounced back after a send.** The ticket screen's per-ticket reset effect read
+  `doc()?.id` — a dependency on the whole `doc` computed, which is a new object on every board /
+  ticket reload (a sent message triggers one) — so it reset the face to *Ticket* and cleared the
+  draft each time. It now tracks a value-compared `docId` computed: the reset happens when the
+  ticket changes, not when it reloads.
+- **(d) iOS keyboard.** Safari keeps the layout viewport full-height and shrinks and pans the
+  *visual* viewport, which pushed header and thread out of view (D-5's `body { inset: 0 }` followed
+  the layout viewport). `apps/mission-control/src/app/viewport.ts` publishes `--mc-vh` (visual
+  viewport height) and `--mc-vv-top` (its pan) on `<html>` while the keyboard is up (and removes
+  them otherwise); `body` is `top/left/right: 0; height: var(--mc-vh, 100%); transform:
+  translateY(var(--mc-vv-top, 0px))`. The transform makes the body the containing block of every
+  `position: fixed` layer (ticket screen, sheets, overlays), so their `inset: 0` / `bottom: 0`
+  follow the visible area too. `100dvh` sizes of the shell and the ticket fullscreen are now
+  `100%` of that body; the document is scrolled back to 0 while the keyboard is up.
+- **(e) Ghost text.** The phone composer's placeholder was a sample command; it now shows the
+  same text as Drey's desktop Assistant composer, "Ask anything …", from one shared constant
+  (`shared/composer-placeholder.ts`) both import. The desktop composer itself is unchanged.
+- **Tests (red first):** `core/chat-ticket-refs.spec.ts`; `chat-service-named.spec.ts` (done,
+  beyond-the-cap and archived tickets by `T-0091` / `t-91` / `#91`, comments, unknown id, follow-up,
+  huge file cut, no read when nothing is named, digest hint); `chat-llm.spec.ts` (block order);
+  `board-service.spec.ts` + `board-service-dricket.spec.ts` (`readAnyTicket` on a done and an
+  archived ticket on **both backends**; the dricket one runs against a real `dk`);
+  `ticket/view.spec.ts` (empty composer, id added on send, `openChat`, reload keeps face and draft —
+  verified to fail without the fix); `state.spec.ts` (`openChat`); `chat.spec.ts` (phone placeholder equals the desktop constant); `viewport.spec.ts`;
+  `shared/mission-control-scroll-contract.spec.ts` (body is the visible area; nothing sized by
+  `100vh`/`100dvh`).
+- **Not checked:** no real iPhone / iPad — Chromium cannot reproduce the iOS keyboard's visual
+  viewport pan; the logic and the CSS contract are unit-tested only. The real owner vault (T-0091)
+  was not touched: the reproduction is a scratch vault and a scratch dricket store in the specs.
+
 ### Milestone 163 — D-6: selecting a ticket never changes the view, a view saves only by "Save view"
 
 **Not yet manually verified by the owner.** Owner report 2026-11-05, roadmap D-6.

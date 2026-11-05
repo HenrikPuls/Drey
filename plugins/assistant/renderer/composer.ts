@@ -13,6 +13,7 @@ import type { Completion, CompletionContext, CompletionResult } from '@codemirro
 import type { EditorView } from '@codemirror/view';
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import { STAGE_IMAGE_EXTENSIONS } from '../shared/stage.js';
+import { COMPOSER_PLACEHOLDER } from '../../../shared/composer-placeholder';
 import { createStager } from './composer-staging.js';
 import { createDictation, recognitionCtorOf, type Dictation } from './dictate.js';
 import { baseName, dirName, el, icon } from './dom.js';
@@ -372,7 +373,7 @@ export function mountComposer(
           // white ("&dark") -- otherwise the caret is invisible.
           EditorView.theme({}, { dark: true }),
           EditorView.lineWrapping,
-          cm.view.placeholder('Ask anything …'),
+          cm.view.placeholder(COMPOSER_PLACEHOLDER),
           cm.view.keymap.of(cm.autocomplete.completionKeymap),
           cm.autocomplete.autocompletion({ override: [atFileSource] }),
           EditorView.domEventHandlers({

@@ -38,7 +38,7 @@ You serve exactly six intents:
 - promote — the owner accepts a scout ticket's report and wants the ticket built: answer with a promote command naming that ticket; it turns into a ship ticket and enters the normal pipeline (plan, worktree, gate) on its next run.
 - chain — the owner wants a ticket's gate chain changed (insert a gate, skip a gate, set a notify rule, or return the ticket to the standard flow): answer with a setChain command carrying the ticket's whole new delta, never a partial edit.
 - blocked — the owner wants a ticket to wait for others (or stop waiting): answer with a setBlockedBy command carrying the ticket's whole blocker list, never a partial edit.
-- report — the owner asks about the board: answer from the board digest alone and propose no commands.
+- report — the owner asks about the board or about a ticket: answer from the board digest and the tickets named below, and propose no commands. A ticket the digest does not list is not missing: closed tickets and tickets beyond the digest's size are left out of it — when the owner names one, its file is attached under "Tickets the owner named"; say "I cannot find it" only when that block says so.
 
 STRICT output contract: your entire reply is exactly one JSON object and nothing outside it — no prose before or after, no markdown fences:
 {"say": string, "thought": string, "commands": []}
@@ -47,7 +47,7 @@ STRICT output contract: your entire reply is exactly one JSON object and nothing
 - "commands" holds zero or more typed commands, each safe to propose: the chat NEVER writes without the owner's explicit confirmation — every command renders as a proposal card the owner confirms or dismisses.
 
 Rules:
-- Never invent ticket ids: use only ids that appear in the board digest below.
+- Never invent ticket ids: use only ids that appear in the board digest or in the named tickets below.
 - Never invent priority words: the board's priorities are configured per vault — the digest's "priorities (weight order)" line is the whole vocabulary, and a setPriority/createTicket command picks from it.
 - description fields are written in the owner's language.
 - Propose only what the board itself does: createTicket, transition, setPriority, promote, setChain, setBlockedBy.
@@ -191,7 +191,7 @@ export function createChatBridge(deps: ChatBridgeDeps): ChatBridge {
               ? `${systemPrompt}\n\n## Board digest\n\n${input.board}`
               : `${SHAPE_SYSTEM_PROMPT}\n\n## Ticket ${shape.ticket}\n\n${shape.ticketText}`;
         const messages: { role: string; content: string }[] = [
-          { role: 'system', content: input.reference === undefined ? system : `${system}\n\n${input.reference}` },
+          { role: 'system', content: [system, input.named, input.reference].filter((part) => part !== undefined && part !== '').join('\n\n') },
           ...input.history.map((message) => ({
             role: message.role === 'owner' ? 'user' : 'assistant',
             content: message.text,

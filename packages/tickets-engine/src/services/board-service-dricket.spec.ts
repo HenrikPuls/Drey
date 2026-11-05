@@ -292,6 +292,9 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     expect(field('t-1', 'labels')).toContain('archived');
     expect(field('t-1', 'stage')).toBe('done');
     expect(await phaseOf('T-0001')).toBeNull();
+    // D-7a: an accepted (archived) ticket is no card on the board, yet the chat reads it by id.
+    expect(await service.readAnyTicket('T-0001')).toMatchObject({ ok: true, text: expect.stringContaining('T-0001') });
+    expect(await service.readAnyTicket('T-0999')).toMatchObject({ ok: false });
 
     expect(await service.unarchive({ id: 'T-0001', to: 'inbox' })).toMatchObject({ ok: true });
     expect(field('t-1', 'labels')).not.toContain('archived');

@@ -281,6 +281,8 @@ export interface ChatBridge {
     readonly planDelta?: string;
     /** Read-only reference text for this turn (the desktop's Vault chip, E13-9); never written to the session. */
     readonly reference?: string;
+    /** D-7a: the tickets the owner named (T-0091, t-91, #91) read on demand — the full file and thread, a block of its own after the digest; never written to the session. */
+    readonly named?: string;
     /**
      * Present on a shape turn (E10-3): the ticket Paul shapes, its file
      * text (description and the current plan, the owner's edits in) and
