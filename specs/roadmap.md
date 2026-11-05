@@ -90,6 +90,18 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
+- **D-7 — Mission Control chat on the phone about a ticket** (owner report 2026-11-05,
+  real vault, iPhone). (a) Asking about a ticket that exists (e.g. T-0091) gets "not in
+  the current board excerpt": the chat does not receive that ticket — find why (the
+  excerpt's limit or filter: done/archived, column, count; the ticket route the chat
+  engine uses) and give the chat the ticket by id (load it on demand / a tool, not a
+  fixed excerpt); (b) the chat field must NOT be pre-filled with a ticket-id prefix;
+  (c) after sending a message the view switches back (it must stay where it is);
+  (d) opening the keyboard pushes the upper part of the page out of view — the page
+  must shrink the area at the bottom instead (visual viewport / `dvh`, the header and
+  the thread stay put; relates to D-5). Reproduce each with a test or a recorded
+  fixture first.
+
 _Shipped defects:_ D-1, Mission Control chat reaching no model, shipped as
 milestone 131; D-2, the paired-devices list and pairing from Mission
 Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
