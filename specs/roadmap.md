@@ -520,12 +520,21 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   contract (extension fields, `put`, configurable stages, `move`), v0.8 (import,
   change feed, stage log, Windows CI, dependency semantics). Gate for E14-4;
   not for E14-1..3, E14-5.
-- **E14-2 follow-ups** (the board from the store shipped as milestone 152): run
-  `tickets.backend = shadow` against the migrated store once E14-3 has produced
-  it and read `~/.drey-engine/shadow/board-diff.md` until it is identical; the
-  500-ticket benchmark no longer waits for dk R-05: reads move to the file
-  reader (E14-4, milestone 154) and the comparison of both read paths runs first there;
-  ticket documents under `dricket` come with E14-4c.
+- **E14-2 follow-ups** (the shadow run against the migrated store is done, see the
+  changelog's "Shadow run" fix): the 500-ticket benchmark no longer waits for dk
+  R-05 — reads moved to the file reader (E14-4, milestone 154) — and the comparison
+  of both read paths runs first there; ticket documents under `dricket` come with
+  E14-4c. Findings of the shadow run that the cut-over (E14-7) has to settle:
+  the board comparison only covers the tickets that were migrated, so **done and
+  archived tickets** (not in the 22/25-ticket allow list) are not compared at all —
+  decide whether the cut-over migrates them; **re-run the migration with a fresh
+  allow list at the cut-over** (the first scratch store lacked T-0088..T-0090, created
+  in the legacy vault afterwards, and showed them as placeholders); **T-0017's
+  `blocked-by T-0049`** is dropped by the migration (T-0049 is a done legacy ticket
+  outside the set) — cosmetic, kept in `x-legacy-blocked-by`; **dk under a deep path**
+  (the repo's scratchpad, > ~200 chars) fails with "Filename too long" /
+  "clean local private worktree" — keep stores and `--data` short on Windows (dricket
+  requirement candidate: report it to dk).
 - **E14-3b — Migration apply with a chosen number.** E14-3 (milestone 153)
   fills number gaps with placeholder tickets because dk v0.6.0 cannot create a
   ticket with a given number or creation data (R-28). When dk ships R-28 / R-10,

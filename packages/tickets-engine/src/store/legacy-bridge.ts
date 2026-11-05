@@ -22,6 +22,9 @@ const EXTENSION_KEYS = ['worker', 'persona', 'track', 'form', 'proof', 'awaiting
 /** The label a closed-and-archived ticket carries (the archive is a label under dricket, migration plan §3). */
 export const ARCHIVED_LABEL = 'archived';
 
+/** The label of a cancelled import placeholder that keeps a legacy number free (E14-3); it is not a ticket of the board. */
+export const PLACEHOLDER_LABEL = 'placeholder';
+
 export interface BridgeOptions {
   /** The stage the document gets (variant A: the pipeline phase id). */
   readonly stage: string;
