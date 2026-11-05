@@ -102,6 +102,16 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   the thread stay put; relates to D-5). Reproduce each with a test or a recorded
   fixture first.
 
+- **D-9 — Tickets panel footer on a dricket board** (found 2026-11-05 by the verify-round
+  sessions). On `tickets.backend = dricket` the footer still says "The tickets vault is
+  not a git repository — transitions are not versioned." — wrong: every move is a `dk`
+  commit. Show the store state instead (store path, branch, head, sync age / "local
+  store") on the dricket backend; keep the text only for a files vault that really is no
+  repository.
+- **D-10 — Defects found by the running-app sweep** (owner request 2026-11-05): an open
+  slot; the sweep session writes each reproducible defect it finds as D-11… with steps,
+  expected/actual and a screenshot, and this entry is removed when it has reported.
+
 _Shipped defects:_ D-1, Mission Control chat reaching no model, shipped as
 milestone 131; D-2, the paired-devices list and pairing from Mission
 Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
