@@ -45,8 +45,6 @@ describe('buildPlan -- field mapping', () => {
     expect(t.extensions).toEqual({
       'x-legacy-id': 'T-0010',
       'x-legacy-phase': 'inbox',
-      'x-created-at': '2026-10-18T11:12:11Z',
-      'x-created-by': 'agent@legion',
       'x-rank': '5000',
       'x-entered-inbox': '2026-10-18T11:12:11Z',
     });
@@ -139,8 +137,9 @@ describe('buildPlan -- what it cannot carry', () => {
     expect(q.conversions[0]!.skipReason).toMatch(/not one of the configured stages/);
   });
 
-  it('lists the number gaps a fixed-id import would not need (R-28)', () => {
-    expect(plan(['T-0010', 'T-0014']).placeholderNumbers).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13]);
+  it('keeps the legacy number and creation data on the target, with no gap filling', () => {
+    expect(target(plan(['T-0010', 'T-0014']), 'T-0010')).toMatchObject({ number: 10, createdAt: '2026-10-18T11:12:11Z', createdBy: 'agent@legion' });
+    expect(plan(['T-0010', 'T-0014']).conversions.map((c) => c.target?.number)).toEqual([10, 14]);
     expect(plan(['T-0010']).conversions[0]!.target!.number).toBe(10);
   });
 

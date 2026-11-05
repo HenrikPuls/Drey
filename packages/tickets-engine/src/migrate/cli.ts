@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { DkProcess } from '../store/dk-process';
+import { defaultExec, DkProcess } from '../store/dk-process';
 import { DricketTicketStore } from '../store/dricket-ticket-store';
 import { applyPlan, assertScratchStore, initScratchStore } from './apply';
 import { buildPlan, DEFAULT_MIGRATION_CONFIG, type MigrationConfig } from './convert';
@@ -118,6 +118,7 @@ async function runForward(args: Args, io: CliIo, env: NodeJS.ProcessEnv): Promis
   let applyResult = null;
   let shadow: ShadowDiff | null = null;
   let dkVersion: string | null = null;
+  let validation: string | null = null;
   const storeDir = args.values.get('store') ?? null;
 
   if (apply) {
@@ -131,7 +132,13 @@ async function runForward(args: Args, io: CliIo, env: NodeJS.ProcessEnv): Promis
     await initScratchStore({ bin, storeDir, env: callEnv, config, admin: actor });
     const dk = new DkProcess({ bin, store: path.resolve(storeDir), dataDir: args.values.get('data') ?? null, env: callEnv });
     dkVersion = await dk.version();
-    applyResult = await applyPlan(plan, { dk, actor, allowBlocking: args.flags.has('allow-live-runs'), onProgress: (line) => io.out(`  ${line}\n`) });
+    applyResult = await applyPlan(plan, { storeDir: path.resolve(storeDir), env: callEnv, actor, allowBlocking: args.flags.has('allow-live-runs'), onProgress: (line) => io.out(`  ${line}\n`) });
+    if (applyResult.complete) {
+      const dataDir = args.values.get('data');
+      const validated = await defaultExec(bin, ['validate'], { env: { ...callEnv, DK_STORE: path.resolve(storeDir), DK_OWNER: actor, ...(dataDir === undefined ? {} : { DK_DATA_DIR: dataDir }) }, timeoutMs: null, signal: undefined });
+      validation = validated.code === 0 && validated.failure === null ? 'dk validate: clean' : `dk validate FAILED (exit ${String(validated.code)}): ${(validated.stdout + validated.stderr).trim().slice(0, 2000)}`;
+      io.out(`${validation}\n`);
+    }
     const store = new DricketTicketStore(dk);
 
     const migratedIds = new Set(plan.conversions.filter((c) => c.target !== null).map((c) => c.legacyId));
@@ -141,12 +148,12 @@ async function runForward(args: Args, io: CliIo, env: NodeJS.ProcessEnv): Promis
 
   const reportPath = args.values.get('report');
   if (reportPath !== undefined) {
-    const text = renderReport(plan, { legacyRoot: legacy, storeDir, generatedAt: new Date().toISOString(), dkVersion }, applyResult, shadow);
+    const text = renderReport(plan, { legacyRoot: legacy, storeDir, generatedAt: new Date().toISOString(), dkVersion, validation }, applyResult, shadow);
     mkdirSync(path.dirname(path.resolve(reportPath)), { recursive: true });
     writeFileSync(reportPath, text);
     io.out(`report written to ${reportPath}\n`);
   }
-  if (applyResult !== null && !applyResult.complete) {
+  if (applyResult !== null && (!applyResult.complete || (validation !== null && !validation.endsWith('clean')))) {
     return 1;
   }
   return 0;
@@ -163,9 +170,6 @@ async function runReverse(args: Args, io: CliIo, env: NodeJS.ProcessEnv): Promis
   const phases = DEFAULT_MIGRATION_CONFIG.stages;
   let written = 0;
   for (const record of await store.list()) {
-    if (record.labels.includes('placeholder')) {
-      continue;
-    }
     const detail = await store.show(record.id);
     const reversed = reverseTicket({ content: detail.text }, { phases });
     const target = path.join(out, reversed.relPath);

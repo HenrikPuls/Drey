@@ -1,26 +1,27 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { defaultExec, type DkProcess, type ExecFn } from '../store/dk-process';
-import { toDisplayId } from '../store/ids';
+import { defaultExec, type ExecFn } from '../store/dk-process';
 import { type ConversionPlan, type MigrationConfig, type TargetTicket } from './convert';
-import { patchDricketDocument } from './dricket-doc';
+import { stubDocument } from './dricket-doc';
 
 /**
- * APPLY: write a conversion plan into a SCRATCH dricket store through `dk`
- * (E14-3). Nothing here re-implements dricket: tickets are created with
- * `dk add` (which allocates the next number), then one whole-ticket
- * `dk put --claim --if-version` fills in what `add` has no flag for. Both are
- * the shipped v0.6.0 write path; every document is validated by `dk`.
+ * APPLY: write a conversion plan into a SCRATCH dricket store (E14-3b).
  *
- * Two things v0.6.0 cannot do, both filed as R-28 (and R-10's import would
- * remove both):
- * - choose the ticket NUMBER: `add` is max + 1, so a gap between migrated
- *   numbers is filled with cancelled placeholder tickets (`placeholder`
- *   label) to keep `T-0063` <-> `t-63`;
- * - choose `created_at` / `created_by`: dk stamps now and the importer; the
- *   legacy values travel as `x-created-at` / `x-created-by`.
+ * `dk` v0.6.1 cannot choose a ticket number or its creation data (`add` is
+ * max + 1, R-28; the import R-10 is not coming -- owner decision 2026-11-05:
+ * Drey has one user, the one-time migration does not wait). So the migration
+ * writes the ticket files itself, in the exact on-disk format of dricket's
+ * protocol (`tickets/<prefix>/<shard>/<id>/ticket.md` + `comments/`), with the
+ * legacy number, `created_at` / `created_by` and stage, and publishes them on
+ * the store's `tickets` branch with plain git: one `git fast-import` stream
+ * (one commit per ticket -- the protocol's history replay wants one ticket per
+ * commit), then ONE compare-and-swap of the ref (`merge --ff-only` when the
+ * branch is checked out, else `update-ref` with the old value): linear, never
+ * a force. Number gaps stay gaps (the protocol allows them). `dk validate` is
+ * the judge of the result; nothing of dricket's write path is re-implemented
+ * beyond the file format.
  */
 
 export interface ScratchGuard {
@@ -113,13 +114,14 @@ export async function initScratchStore(options: ScratchStoreOptions): Promise<vo
 
 // ---------------------------------------------------------------------------
 
-export type OutcomeStatus = 'created' | 'placeholder' | 'failed';
+export type OutcomeStatus = 'created' | 'failed';
 
 export interface ApplyOutcome {
   readonly number: number;
   readonly legacyId: string | null;
   readonly id: string;
   readonly status: OutcomeStatus;
+  /** Revision of the written ticket file (0: freshly created); null when not written. */
   readonly rev: number | null;
   readonly error: string | null;
 }
@@ -128,18 +130,34 @@ export interface ApplyResult {
   readonly outcomes: readonly ApplyOutcome[];
   /** True when every migrating ticket was written. */
   readonly complete: boolean;
+  /** The ticket branch head after the apply; null when nothing was written. */
+  readonly head: string | null;
+  /** Commits added to the ticket branch. */
+  readonly commits: number;
 }
 
 export interface ApplyOptions {
-  readonly dk: DkProcess;
-  /** The identity that creates everything (`DK_OWNER`). */
+  /** The scratch store (a git repository, bare or not). */
+  readonly storeDir: string;
+  /** Environment of the git calls (a scratch HOME, `GIT_*`); default the process's. */
+  readonly env?: NodeJS.ProcessEnv;
+  /** The identity that authors everything (`DK_OWNER`): commits and notes. */
   readonly actor: string;
   /** Apply tickets that carry a blocking finding (a run stamp). Default false. */
   readonly allowBlocking?: boolean;
-  /** Scratch folder for the put payloads; default an OS temp dir, removed afterwards. */
-  readonly tempDir?: string;
+  /** The ticket branch; dricket's default. */
+  readonly branch?: string;
+  /** Fixed clock for tests. */
+  readonly now?: () => Date;
   readonly onProgress?: (line: string) => void;
 }
+
+/** dricket's limits the format checks on write (`validate` re-checks all of them). */
+const MAX_BODY_BYTES = 100_000;
+const MAX_EXTENSION_BYTES = 1_000;
+const PREFIX = 't';
+const TICKETS_DIR = 'tickets';
+const IMPORT_REF = 'refs/dricket-migrate/import';
 
 export async function applyPlan(plan: ConversionPlan, options: ApplyOptions): Promise<ApplyResult> {
   const migrating = plan.conversions.filter((c) => c.target !== null);
@@ -147,98 +165,125 @@ export async function applyPlan(plan: ConversionPlan, options: ApplyOptions): Pr
   if (blocked.length > 0 && options.allowBlocking !== true) {
     throw new Error(`refusing to apply: ${blocked.map((c) => `${c.legacyId} (${c.blocking[0]})`).join('; ')}. Pass allowBlocking to override.`);
   }
-  const tmp = options.tempDir ?? mkdtempSync(path.join(os.tmpdir(), 'drey-migrate-'));
-  mkdirSync(tmp, { recursive: true });
   const say = options.onProgress ?? (() => undefined);
-  const outcomes: ApplyOutcome[] = [];
-  const state = await options.dk.call(['ls'], { write: false });
-  const existing = (state as { tickets?: unknown[] | null } | null)?.tickets ?? [];
-  if (existing.length > 0) {
+  const branch = options.branch ?? 'tickets';
+  const ref = `refs/heads/${branch}`;
+  const git = gitRunner(options.storeDir, options.env ?? process.env);
+  const base = git(['rev-parse', '--verify', '-q', `${ref}^{commit}`], undefined, true).trim();
+  if (base === '') {
+    throw new Error(`the store has no ${branch} branch`);
+  }
+  if (git(['ls-tree', '-r', '--name-only', base, '--', `${TICKETS_DIR}/`]).trim() !== '') {
     throw new Error('refusing to apply: the store already holds tickets');
   }
 
-  let next = 1;
-  try {
-    const targets = migrating.map((c) => c.target!).sort((a, b) => a.number - b.number);
-    for (const target of targets) {
-      while (next < target.number) {
-        const o = await createPlaceholder(options, tmp, next);
-        outcomes.push(o);
-        say(`${o.id} placeholder ${o.status}`);
-        if (o.status === 'failed') {
-          return { outcomes, complete: false };
-        }
-        next += 1;
-      }
-      if (target.number < next) {
-        outcomes.push(failure(target, `number ${target.number} is below the next free number ${next}`));
-        return { outcomes, complete: false };
-      }
-      const o = await createTicket(options, tmp, target);
-      outcomes.push(o);
-      say(`${target.legacyId} -> ${o.id} ${o.status}${o.error !== null ? `: ${o.error}` : ''}`);
-      if (o.status === 'failed') {
-        return { outcomes, complete: false };
-      }
-      next = target.number + 1;
+  const targets = migrating.map((c) => c.target!).sort((a, b) => a.number - b.number);
+  const now = (options.now ?? (() => new Date()))();
+  const stamp = isoSeconds(now);
+  const files = targets.map((target) => ({ target, ...buildFiles(target, options.actor, stamp) }));
+
+  // Pre-flight: every file is checked before the first byte is written, so a failure leaves the store untouched.
+  const problems = files.flatMap((f) => f.problems.map((problem) => ({ target: f.target, problem })));
+  if (problems.length > 0) {
+    return { outcomes: problems.map((p) => failure(p.target, p.problem)), complete: false, head: null, commits: 0 };
+  }
+
+  const actor = options.actor.replace(/[<>\s]/g, '');
+  const identity = `${actor} <${actor}@dricket.invalid>`;
+  const when = `${Math.floor(now.getTime() / 1000)} +0000`;
+  const stream: Buffer[] = [];
+  files.forEach((f, index) => {
+    const message = `dricket: add ${f.target.id} (migrated from ${f.target.legacyId})`;
+    stream.push(Buffer.from(`commit ${IMPORT_REF}\nauthor ${identity} ${when}\ncommitter ${identity} ${when}\ndata ${Buffer.byteLength(message)}\n${message}\n`));
+    if (index === 0) {
+      stream.push(Buffer.from(`from ${base}\n`));
     }
-    return { outcomes, complete: true };
+    for (const file of f.entries) {
+      const data = Buffer.from(file.content, 'utf8');
+      stream.push(Buffer.from(`M 100644 inline ${file.path}\ndata ${data.length}\n`), data, Buffer.from('\n'));
+    }
+    stream.push(Buffer.from('\n'));
+  });
+  stream.push(Buffer.from('done\n'));
+  git(['fast-import', '--quiet', '--done'], Buffer.concat(stream));
+  try {
+    const head = git(['rev-parse', IMPORT_REF]).trim();
+    publish(git, ref, base, head);
+    const outcomes: ApplyOutcome[] = files.map((f) => ({ number: f.target.number, legacyId: f.target.legacyId, id: f.target.id, status: 'created', rev: 0, error: null }));
+    for (const f of files) {
+      say(`${f.target.legacyId} -> ${f.target.id} created`);
+    }
+    return { outcomes, complete: true, head, commits: files.length };
   } finally {
-    if (options.tempDir === undefined) {
-      rmSync(tmp, { recursive: true, force: true });
-    }
+    git(['update-ref', '-d', IMPORT_REF], undefined, true);
   }
 }
 
-async function createTicket(options: ApplyOptions, tmp: string, target: TargetTicket): Promise<ApplyOutcome> {
-  try {
-    const addArgs = ['add', '--unclaimed', '--kind', target.kind, '--priority', target.priority, '-m', target.title, '-d', 'Migrated from the legacy tickets vault.'];
-    const added = asRecord(await options.dk.call(addArgs, { write: true, actor: options.actor }));
-    const id = String(added['id'] ?? '');
-    if (id !== target.id) {
-      return failure(target, `dk allocated ${id}, expected ${target.id}`);
+/** ff-only publication: ref, index and working tree together when the branch is checked out, else a CAS of the ref. */
+function publish(git: GitRunner, ref: string, base: string, head: string): void {
+  const checkedOut = git(['symbolic-ref', '-q', 'HEAD'], undefined, true).trim() === ref;
+  if (checkedOut) {
+    git(['merge', '--ff-only', '--quiet', head]);
+  } else {
+    git(['update-ref', '-m', 'dricket: migrated tickets', ref, head, base]);
+  }
+}
+
+interface TicketFile {
+  readonly path: string;
+  readonly content: string;
+}
+
+interface BuiltFiles {
+  readonly entries: readonly TicketFile[];
+  readonly problems: readonly string[];
+}
+
+/** The files of one ticket: the document and, when the converter left a note, a comment. */
+function buildFiles(target: TargetTicket, actor: string, stamp: string): BuiltFiles {
+  const m = /^([a-z]+)-([1-9]\d*)$/.exec(target.id);
+  if (m === null || m[1] !== PREFIX) {
+    return { entries: [], problems: [`${target.id} is not a ${PREFIX}-<number> id`] };
+  }
+  const problems: string[] = [];
+  const dir = `${TICKETS_DIR}/${PREFIX}/${String(Math.floor(Number(m[2]) / 1000)).padStart(4, '0')}/${target.id}`;
+  const document = stubDocument(target, target.createdAt ?? stamp, target.createdBy ?? actor).replace(/\r\n/g, '\n');
+  if (Buffer.byteLength(target.body) > MAX_BODY_BYTES) {
+    problems.push(`the body is ${Buffer.byteLength(target.body)} bytes; dricket allows ${MAX_BODY_BYTES}`);
+  }
+  for (const [key, value] of Object.entries(target.extensions)) {
+    if (!/^x-[a-z0-9][a-z0-9-]*$/.test(key) || /[\r\n]/.test(value) || Buffer.byteLength(value) > MAX_EXTENSION_BYTES) {
+      problems.push(`extension ${key} is not a single line of at most ${MAX_EXTENSION_BYTES} bytes`);
     }
-    const rev = await fillIn(options, tmp, id, (content) => patchDricketDocument(content, target));
-    let note: string | null = null;
-    for (const warning of danglingNotes(target)) {
-      try {
-        await options.dk.call(['comment', id, '-m', warning], { write: true, actor: options.actor });
-      } catch (error) {
-        // The ticket itself is written; a missing note must not stop the run (it is in x-legacy-blocked-by too).
-        note = `created, but the migration comment was not written: ${error instanceof Error ? error.message : String(error)}`;
+  }
+  const entries: TicketFile[] = [{ path: `${dir}/ticket.md`, content: document }];
+  for (const note of danglingNotes(target)) {
+    const name = `${stamp.replace(/:/g, '-')}-${actor}.md`;
+    entries.push({ path: `${dir}/comments/${name}`, content: `---\nticket: ${target.id}\nauthor: ${actor}\ncreated_at: ${stamp}\n---\n\n${note}\n` });
+  }
+  return { entries, problems };
+}
+
+function isoSeconds(date: Date): string {
+  return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+type GitRunner = (args: readonly string[], input?: Buffer, tolerateFailure?: boolean) => string;
+
+function gitRunner(storeDir: string, env: NodeJS.ProcessEnv): GitRunner {
+  return (args, input, tolerateFailure) => {
+    const result = spawnSync('git', ['-C', storeDir, ...args], { env, input, encoding: 'utf8', windowsHide: true, maxBuffer: 64 * 1024 * 1024 });
+    if (result.error !== undefined) {
+      throw result.error;
+    }
+    if (result.status !== 0) {
+      if (tolerateFailure === true) {
+        return '';
       }
+      throw new Error(`git ${args[0]} failed: ${(result.stderr || result.stdout || '').trim().split('\n')[0]}`);
     }
-    return { number: target.number, legacyId: target.legacyId, id, status: 'created', rev, error: note };
-  } catch (error) {
-    return failure(target, error instanceof Error ? error.message : String(error));
-  }
-}
-
-async function createPlaceholder(options: ApplyOptions, tmp: string, number: number): Promise<ApplyOutcome> {
-  const id = `t-${number}`;
-  try {
-    const args = ['add', '--unclaimed', '--kind', 'human', '-l', 'placeholder', '-m', `Unused number ${toDisplayId(id)}`, '-d', 'Keeps the number free so later tickets keep their ids (dk v0.6.0 has no import with a fixed id, R-28).'];
-    const added = asRecord(await options.dk.call(args, { write: true, actor: options.actor }));
-    if (String(added['id'] ?? '') !== id) {
-      return { number, legacyId: null, id, status: 'failed', rev: null, error: `dk allocated ${String(added['id'])}, expected ${id}` };
-    }
-    const rev = await fillIn(options, tmp, id, (content) => content.replace(/^stage: .*$/m, 'stage: cancelled'));
-    return { number, legacyId: null, id, status: 'placeholder', rev, error: null };
-  } catch (error) {
-    return { number, legacyId: null, id, status: 'failed', rev: null, error: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-/** show -> patch -> `put --claim --if-version`; returns the new rev. */
-async function fillIn(options: ApplyOptions, tmp: string, id: string, patch: (content: string) => string): Promise<number | null> {
-  const shown = asRecord(await options.dk.call(['show', id], { write: false }));
-  const content = String(shown['content'] ?? '');
-  const rev = Number(/^rev: (\d+)$/m.exec(content)?.[1] ?? 0);
-  const file = path.join(tmp, `${id}.md`);
-  writeFileSync(file, patch(content), 'utf8');
-  const put = asRecord(await options.dk.call(['put', id, '-F', file, '--claim', '--if-version', String(rev)], { write: true, actor: options.actor }));
-  const newRev = put['rev'];
-  return typeof newRev === 'number' ? newRev : null;
+    return result.stdout;
+  };
 }
 
 function danglingNotes(target: TargetTicket): string[] {
@@ -251,11 +296,4 @@ function danglingNotes(target: TargetTicket): string[] {
 
 function failure(target: TargetTicket, error: string): ApplyOutcome {
   return { number: target.number, legacyId: target.legacyId, id: target.id, status: 'failed', rev: null, error };
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('dk answered something that is not an object');
-  }
-  return value as Record<string, unknown>;
 }

@@ -4318,26 +4318,21 @@ sequenceDiagram
     participant L as legacy-vault.ts (read only)
     participant C as convert.ts (pure)
     participant A as apply.ts
-    participant D as dk --json (scratch store)
+    participant D as dk (scratch store: init, validate)
+    participant G as git (the store's tickets branch)
     O->>L: readLegacyVault(drey-tickets)
     L-->>C: tickets (raw header, body verbatim) + unreadable files
     O->>C: buildPlan(allow-list)
-    C-->>O: per ticket: target, warnings, dropped, blocking; placeholder numbers
+    C-->>O: per ticket: target, warnings, dropped, blocking
     Note over O: dry run stops here (prints the plan)
     O->>A: --apply --store <new dir>
     A->>A: refuse the legacy vault itself / overlap / non-empty store
     A->>D: dk init + dricket.toml on main ([stages], priorities, quota 0)
-    loop each number 1..highest, ascending
-        alt number not migrated (R-28 gap)
-            A->>D: dk add --unclaimed (placeholder), dk put --claim -> cancelled
-        else migrated ticket
-            A->>D: dk add --unclaimed --kind --priority -m title
-            D-->>A: id (must equal the expected t-N, else stop)
-            A->>D: dk show -> patch stage/branch/repos/x- fields + legacy body
-            A->>D: dk put --claim --if-version rev (dk lints, one commit)
-            A->>D: dk comment (only when a blocker was removed)
-        end
-    end
+    A->>G: ticket branch empty of tickets? (else refuse)
+    A->>A: build tickets/t/SHARD/t-N/ticket.md (legacy number, created_at/by, stage, x- fields, body) + a comment when a blocker was removed; pre-flight limits
+    A->>G: git fast-import: one commit per ticket, ascending number, gaps stay gaps
+    A->>G: merge --ff-only (branch checked out) or update-ref old->new (CAS)
+    A->>D: dk validate (history replay included)
     A->>D: ls + show per ticket -> shadowDiff(legacy rows, store rows)
     A-->>O: report.md (moved, skipped and why, warnings, diff)
     Note over O,D: rollback: --reverse reads dk show per ticket and writes legacy files into a fresh directory

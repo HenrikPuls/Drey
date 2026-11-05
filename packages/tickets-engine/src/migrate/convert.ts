@@ -11,8 +11,8 @@ import { ticketNumber, type LegacyTicket, type LegacyVault } from './legacy-vaul
  * - a legacy phase is the dricket stage (variant A, R-03 shipped);
  * - Drey-only header keys become `x-` fields (R-01); a value `x-` cannot hold
  *   (a nested map) is dropped and REPORTED, never silently lost;
- * - creation time and creator cannot be set through `dk` v0.6.0 (R-28): they
- *   travel as `x-created-at` / `x-created-by` and `dk` stamps its own.
+ * - creation time and creator become the ticket's own `created_at` /
+ *   `created_by` (the apply writes the files itself, E14-3b).
  */
 
 export interface MigrationConfig {
@@ -58,7 +58,7 @@ export interface TargetTicket {
   readonly title: string;
   readonly priority: string;
   readonly kind: 'human' | 'agent';
-  /** Legacy creation stamp / creator (null = unknown); `dk` stamps its own, these travel as `x-`. */
+  /** Legacy creation stamp / creator (null = unknown): written as `created_at` / `created_by`. */
   readonly createdAt: string | null;
   readonly createdBy: string | null;
   readonly labels: readonly string[];
@@ -95,8 +95,6 @@ export interface ConversionPlan {
   readonly conversions: readonly TicketConversion[];
   /** Allow-list ids that no file in the vault carries. */
   readonly missingSelected: readonly string[];
-  /** Numbers between 1 and the highest migrated number that `dk add` must fill to keep ids (R-28). */
-  readonly placeholderNumbers: readonly number[];
   readonly unreadable: LegacyVault['unreadable'];
 }
 
@@ -125,15 +123,7 @@ export function buildPlan(vault: LegacyVault, config: MigrationConfig): Conversi
   }
   conversions.sort((a, b) => ticketNumber(a.legacyId) - ticketNumber(b.legacyId));
 
-  const numbers = new Set(conversions.filter((c) => c.target !== null).map((c) => c.target!.number));
-  const highest = Math.max(0, ...numbers);
-  const placeholderNumbers: number[] = [];
-  for (let n = 1; n < highest; n += 1) {
-    if (!numbers.has(n)) {
-      placeholderNumbers.push(n);
-    }
-  }
-  return { conversions, missingSelected, placeholderNumbers, unreadable: vault.unreadable };
+  return { conversions, missingSelected, unreadable: vault.unreadable };
 }
 
 function skipReasonOf(t: LegacyTicket, config: MigrationConfig): string | null {
@@ -199,12 +189,10 @@ export function convertTicket(t: LegacyTicket, config: MigrationConfig, migratin
   const createdAt = enteredFirst ?? log?.stamp ?? null;
   const createdBy = log?.actor ?? null;
   if (createdAt === null) {
-    warnings.push('no creation time (no entered-* stamp, no Log line)');
-  } else {
-    extensions['x-created-at'] = createdAt;
+    warnings.push('no creation time (no entered-* stamp, no Log line); the apply time is used');
   }
-  if (createdBy !== null) {
-    extensions['x-created-by'] = createdBy;
+  if (createdBy === null) {
+    warnings.push('no creator (no Log line); the migrating identity is used');
   }
   const kind: 'human' | 'agent' = createdBy !== null && createdBy.startsWith('owner@') ? 'human' : 'agent';
 

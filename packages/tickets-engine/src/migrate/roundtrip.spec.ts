@@ -25,8 +25,7 @@ import { collectStoreRows, rowsFromLegacy, rowsFromRecords, shadowDiff } from '.
 const FIXTURE = path.join(__dirname, 'fixtures', 'legacy-vault');
 const vault = readLegacyVault(FIXTURE);
 const SELECTED = ['T-0010', 'T-0012', 'T-0014', 'T-0017', 'T-0020', 'T-0066', 'T-0085'];
-/** The real-dk half applies the low numbers only: every gap costs two dk calls (~2 s each on Windows). */
-const DK_SELECTED = SELECTED.slice(0, 5);
+const DK_SELECTED = SELECTED;
 const dkPlan: ConversionPlan = buildPlan(vault, { ...DEFAULT_MIGRATION_CONFIG, selected: DK_SELECTED });
 const plan: ConversionPlan = buildPlan(vault, { ...DEFAULT_MIGRATION_CONFIG, selected: SELECTED });
 const PHASES = DEFAULT_MIGRATION_CONFIG.stages;
@@ -234,17 +233,17 @@ describe.skipIf(!found.ok)('apply into a scratch dricket store (real dk)', () =>
   it('refuses to apply a plan with a live run or a build claim unless told to', async () => {
     await initScratchStore({ bin, storeDir, env, config: DEFAULT_MIGRATION_CONFIG, admin: 'owner@legion' });
     dk = new DkProcess({ bin, store: storeDir, dataDir: path.join(root, 'data'), env });
-    await expect(applyPlan(dkPlan, { dk, actor: 'owner@legion' })).rejects.toThrow(/refusing to apply: T-0012/);
+    await expect(applyPlan(dkPlan, { storeDir, env, actor: 'owner@legion' })).rejects.toThrow(/refusing to apply: T-0012/);
   }, 60_000);
 
-  it('applies the plan: ids keep their numbers, placeholders fill the gaps, dk validate is clean', async () => {
+  it('applies the plan: ids keep their numbers, gaps stay gaps, dk validate is clean', async () => {
     const lines: string[] = [];
-    const result = await applyPlan(dkPlan, { dk, actor: 'owner@legion', allowBlocking: true, onProgress: (l) => lines.push(l) });
+    const result = await applyPlan(dkPlan, { storeDir, env, actor: 'owner@legion', allowBlocking: true, onProgress: (l) => lines.push(l) });
     expect(result.outcomes.filter((o) => o.status === 'failed')).toEqual([]);
     expect(result.complete).toBe(true);
     const created = result.outcomes.filter((o) => o.status === 'created').map((o) => o.id);
-    expect(created).toEqual(['t-10', 't-12', 't-14', 't-17', 't-20']);
-    expect(result.outcomes.filter((o) => o.status === 'placeholder')).toHaveLength(dkPlan.placeholderNumbers.length);
+    expect(created).toEqual(['t-10', 't-12', 't-14', 't-17', 't-20', 't-66', 't-85']);
+    expect(result.commits).toBe(7);
 
     const out = execFileSync(bin, ['validate'], { env: { ...env, DK_STORE: storeDir, DK_DATA_DIR: path.join(root, 'data'), DK_OWNER: 'owner@legion' }, encoding: 'utf8', windowsHide: true });
     expect(out).toBeDefined(); // execFileSync throws on a non-zero exit
@@ -257,14 +256,26 @@ describe.skipIf(!found.ok)('apply into a scratch dricket store (real dk)', () =>
     expect(t20.extensions).toMatchObject({ 'x-persona': 'build-default', 'x-chain': 'plan; build; review', 'x-rank': '2500', 'x-legacy-id': 'T-0020' });
     expect(t20.body).toBe(dkPlan.conversions.find((c) => c.legacyId === 'T-0020')!.target!.body);
     expect((await store.show('T-0014')).priority).toBe('normal');
-    const placeholder = await store.show('T-0011');
-    expect(placeholder).toMatchObject({ stage: 'cancelled', labels: ['placeholder'] });
+    expect((await store.list()).map((r) => r.id)).toEqual(['T-0010', 'T-0012', 'T-0014', 'T-0017', 'T-0020', 'T-0066', 'T-0085']);
   }, 120_000);
+
+  it('keeps the legacy creation data, writes one commit per ticket on a linear branch and updates the checkout', () => {
+    const git = (args: string[]): string => execFileSync('git', ['-C', storeDir, ...args], { env, encoding: 'utf8', windowsHide: true });
+    const t10 = git(['show', 'refs/heads/tickets:tickets/t/0000/t-10/ticket.md']);
+    expect(t10).toContain('\ncreated_at: 2026-10-18T11:12:11Z\ncreated_by: agent@legion\n');
+    expect(t10).not.toContain('x-created-');
+    const subjects = git(['log', '--first-parent', '--reverse', '--format=%s', 'refs/heads/tickets']).trim().split('\n');
+    expect(subjects.slice(-7).map((s) => s.replace(/ \(migrated.*$/, ''))).toEqual(['t-10', 't-12', 't-14', 't-17', 't-20', 't-66', 't-85'].map((id) => `dricket: add ${id}`));
+    expect(git(['rev-list', '--merges', '--count', 'refs/heads/tickets']).trim()).toBe('0');
+    expect(git(['status', '--porcelain']).trim()).toBe('');
+    expect(git(['show', 'refs/heads/tickets:tickets/t/0000/t-17/comments/' + git(['ls-tree', '--name-only', 'refs/heads/tickets:tickets/t/0000/t-17/comments/']).trim()])).toMatch(/^---\nticket: t-17\nauthor: owner@legion\ncreated_at: .*\n---\n\nMigration: legacy blocked-by was T-0049/);
+    expect(git(['for-each-ref', 'refs/dricket-migrate']).trim()).toBe('');
+  });
 
   it('shadow diff: the store board equals the legacy board (declared: the dangling blocker)', async () => {
     const storeRows = await collectStoreRows(new DricketTicketStore(dk));
     const diff = shadowDiff(rowsFromLegacy(vault.tickets.filter((t) => DK_SELECTED.includes(t.id))), storeRows);
-    expect(diff.differences.map((d) => `${d.kind}:${d.id}`)).toEqual(['priority:T-0014']);
+    expect(diff.differences.map((d) => `${d.kind}:${d.id}`)).toEqual(['priority:T-0014', 'title:T-0085']); // both declared by the converter: an unconfigured priority, a title over 200 characters
     expect(diff.declared).toEqual([{ id: 'T-0017', what: 'blocked-by T-0049 is not in the store (dangling rule)' }]);
   }, 120_000);
 
@@ -279,7 +290,7 @@ describe.skipIf(!found.ok)('apply into a scratch dricket store (real dk)', () =>
   }, 120_000);
 
   it('a second apply into the same store refuses', async () => {
-    await expect(applyPlan(dkPlan, { dk, actor: 'owner@legion', allowBlocking: true })).rejects.toThrow(/already holds tickets/);
+    await expect(applyPlan(dkPlan, { storeDir, env, actor: 'owner@legion', allowBlocking: true })).rejects.toThrow(/already holds tickets/);
   }, 60_000);
 
   it('initScratchStore refuses a directory that is not empty', async () => {
