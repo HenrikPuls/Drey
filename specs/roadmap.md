@@ -547,9 +547,10 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   if the watcher is seen to miss. The store must not live in OneDrive. The
   deviation from "no TypeScript re-implementation" (a read-only format
   parser; claims, transitions and writes stay in `dk`) is recorded in
-  ADR-0090 and `specs/decisions.md` with this item. First step: a measured
-  comparison of the `dk` read path and the file read path on the migrated
-  store. Then capture, refine, header edits, moves, accept/send back,
+  ADR-0090 and `specs/decisions.md` with this item. The comparison of the
+  `dk` read path and the file read path is measured
+  ([performance.md](../docs/design/dricket/performance.md): 29 s vs 18 ms for
+  91 tickets). Then capture, refine, header edits, moves, accept/send back,
   `ticketSave` with `rev`, parts release (resumable), flow save, the editor
   save hook. Needs E14-2. The only item that rewrites `board-service.ts`
   heavily; no other change to that file beside it.
