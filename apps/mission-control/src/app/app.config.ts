@@ -304,6 +304,7 @@ export const appConfig: ApplicationConfig = {
             blockedBy: detail.blockedBy,
             usage: detail.usage,
             verlauf: detail.verlauf,
+            ...(detail.comments === undefined ? {} : { comments: detail.comments }),
           };
         });
         return {

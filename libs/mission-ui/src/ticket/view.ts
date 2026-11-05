@@ -429,6 +429,16 @@ export class TicketView {
     return line === null && plan.marks.length === 0 ? null : { line, marks: plan.marks };
   });
 
+  /** The comments kept beside the ticket in a dricket store (E14-6), oldest first; empty without any. */
+  protected readonly thread = computed(() =>
+    (this.doc()?.comments ?? []).map((comment) => ({
+      who: comment.author.split('@')[0] ?? comment.author,
+      when: comment.at.length >= 16 ? `${comment.at.slice(0, 10)} ${comment.at.slice(11, 16)}` : comment.at,
+      text: comment.text,
+      signal: comment.verb,
+    })),
+  );
+
   /** The cost table at the ticket's end (E11-4); null while no run has settled. */
   protected readonly costTable = computed(() => {
     const doc = this.doc();

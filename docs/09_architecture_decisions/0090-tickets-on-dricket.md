@@ -260,5 +260,16 @@ files paths unchanged.
   comment — OD-4 decides whether `blocked` joins the vocabulary.
 - `Dricket-*` trailers and `dk validate --trailers` in the gate are opt-in (`tickets.dk.trailers`).
 
+**Later change (E14-6, comments and signals).** On a store the persona's status verbs of the E7
+status log are the **first line of a comment** (`dk comment`; `core/status-comment.ts`): the same
+grammar (`needs-decision: [key] text`, `blocked: [key] text`, `resolved: key`, `done`, `failed`,
+`paused`), free detail after a blank line. `working:` is never persisted. The reader is the file
+reader (`comments/` of the checkout) — dricket's R-08 was not waited for. The send-back note is a
+comment next to the short Log line the story reads; a Needs-you answer is a `resolved: <key>`
+comment carrying the answer; a dk run's release comments lead with `done:` / `failed:` /
+`blocked: [run-<id>]`. The ledger stays at `tickets/_meta/ledger.jsonl` of the meta vault (the
+vault the pipeline, repos and personas already live in); `phase` lines are not written on a store
+(derivable from dk's history). Nothing writes a status file or a ledger line into the checkout.
+
 **Not decided here, left open (roadmap E14-5b).** The chain orchestrator still reads ticket files and
 is refused while the board runs on dricket; chapters written inside the claim; needs-input re-claim.

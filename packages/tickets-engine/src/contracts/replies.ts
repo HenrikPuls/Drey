@@ -1,3 +1,4 @@
+import type { TicketCommentView } from '../core/status-comment';
 import type { TicketCard } from './tickets';
 
 /** The remote refine's outcome: the new revision, a conflict flag, or the refusal. */
@@ -11,7 +12,14 @@ export interface RefineReply {
 
 /** One ticket as the ticket view reads it: the card and the file text. */
 export type TicketReply =
-  | { readonly ok: true; readonly card: TicketCard; readonly text: string; readonly revision: string }
+  | {
+      readonly ok: true;
+      readonly card: TicketCard;
+      readonly text: string;
+      readonly revision: string;
+      /** The ticket's comments (E14-6), oldest first; absent on the files backend. */
+      readonly comments?: readonly TicketCommentView[];
+    }
   | { readonly ok: false; readonly error: string };
 
 /** An image upload's outcome: the vault-relative file it saved, or why not. */

@@ -121,6 +121,20 @@
             </section>
           }
 
+          @if (thread(); as entries) {
+            @if (entries.length > 0) {
+              <section class="comments" aria-label="Comments">
+                <h3 class="tk-sec">Comments</h3>
+                @for (comment of entries; track $index) {
+                  <div class="comment" [class.signal]="comment.signal !== null">
+                    <span class="comment-meta">{{ comment.who }} · {{ comment.when }}</span>
+                    <span class="comment-text">{{ comment.text }}</span>
+                  </div>
+                }
+              </section>
+            }
+          }
+
           @if (report(); as scoutReport) {
             <section class="card scout" aria-label="Scout report">
               <h3 class="tk-sec">Report</h3>

@@ -1811,3 +1811,27 @@ details.think .step-body {
   text-transform: uppercase;
   cursor: pointer;
 }
+
+/* -- comments (E14-6) -------------------------------------------------------------- */
+
+.comment {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+  font-size: calc(15px * var(--mc-text, 1));
+}
+
+.comment-meta {
+  color: var(--text-3);
+  font-size: calc(13px * var(--mc-text, 1));
+}
+
+.comment-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.comment.signal .comment-text {
+  font-weight: 600;
+}

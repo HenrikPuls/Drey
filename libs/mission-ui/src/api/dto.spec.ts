@@ -1171,6 +1171,29 @@ describe('parseTicketDetail', () => {
     });
   });
 
+  it('carries the comments of a store ticket and drops the unusable ones (E14-6)', () => {
+    const detail = parseTicketDetail(
+      {
+        ok: true,
+        card: { id: 'T-1', phase: 'verify' },
+        text: TICKET_TEXT,
+        revision: 'abc123',
+        comments: [
+          { author: 'owner@pc', at: '2026-11-05T09:00:00Z', text: 'needs-decision: [k] Which?', verb: 'needs-decision', key: 'k' },
+          { author: 'ben@pc', at: '2026-11-05T09:05:00Z', text: 'looks fine', verb: null, key: null },
+          { author: 'x', at: '', text: '' },
+          'junk',
+        ],
+      },
+      phases,
+    );
+    expect(detail?.comments).toEqual([
+      { author: 'owner@pc', at: '2026-11-05T09:00:00Z', text: 'needs-decision: [k] Which?', verb: 'needs-decision', key: 'k' },
+      { author: 'ben@pc', at: '2026-11-05T09:05:00Z', text: 'looks fine', verb: null, key: null },
+    ]);
+    expect(parseTicketDetail({ ok: true, card: { id: 'T-1', phase: 'verify' }, text: TICKET_TEXT, revision: 'r' }, phases)).not.toHaveProperty('comments');
+  });
+
   it('parses the ## Verlauf chapter off the text tolerantly — and the usage off the card', () => {
     const detail = parseTicketDetail(
       {

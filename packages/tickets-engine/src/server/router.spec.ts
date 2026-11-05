@@ -23,6 +23,7 @@ function port(): TicketsRemotePort {
     ticketSave: vi.fn(async () => ({ ok: true, revision: '0123456789abcdef' })),
     ticketAccept: vi.fn(ok),
     ticketSendBack: vi.fn(ok),
+    ticketAnswerNeed: vi.fn(ok),
     ticketWorktreeChanges: vi.fn(async () => []),
     ticketDiff: vi.fn(async () => ({ files: [], truncated: false })),
     estimate: vi.fn(async (key: { gate: string }) =>
@@ -177,6 +178,19 @@ describe('route', () => {
     );
     expect(handed.status).toBe(200);
     expect(remote.handoffRun).toHaveBeenCalledWith({ runId: 'r-9' });
+  });
+
+  it('routes the answer to a Needs-you decision (E14-6)', async () => {
+    const { deps, devices, remote } = setup();
+    const { token } = await devices.add('iPhone 15', false, new Date());
+    const auth = `Bearer ${token}`;
+    const empty = await route(req({ method: 'POST', path: '/api/tickets/T-0052/answer', authorization: auth, body: {} }), deps);
+    expect(empty.body).toEqual({ ok: false, error: 'an answer needs a key or a text' });
+    await route(
+      req({ method: 'POST', path: '/api/tickets/T-0052/answer', authorization: auth, body: { key: 'palette', text: ' Ctrl+K ' } }),
+      deps,
+    );
+    expect(remote.ticketAnswerNeed).toHaveBeenCalledWith({ id: 'T-0052', key: 'palette', text: 'Ctrl+K' }, 'owner@iphone-15');
   });
 
   it('routes the E5c ticket screen: save, accept, send-back, diff and worktree-changes', async () => {

@@ -208,6 +208,8 @@ export interface TicketsRemotePort {
   ticketAccept(cmd: TicketIdCommand, actor: string): Promise<MutationResult>;
   /** The proof card's send-back; the note is mandatory (E5c). */
   ticketSendBack(cmd: { id: string; note: string; comments?: readonly ReviewComment[] }, actor: string): Promise<MutationResult>;
+  /** The owner's answer to a Needs-you decision (E14-6): closes its key; the text rides as a comment on a store. */
+  ticketAnswerNeed(cmd: { id: string; key?: string; text?: string }, actor: string): Promise<MutationResult>;
   /** The proof card's file stat list (E5c). */
   ticketWorktreeChanges(id: string): Promise<readonly WorktreeFile[]>;
   /** The proof card's unified diff (E5c). */

@@ -30,7 +30,8 @@ import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhase
 import { detectDrift, recentDoneOf, type DriftDetection } from '../core/normalize';
 import { blockedRefusal } from '../core/blocked';
 import { runTransition, type TransitionIo } from '../core/transition';
-import { parseStatusLog, type StatusLine, type StatusVerb } from '../core/status-log';
+import { openStatusItems, parseStatusLog, type StatusLine, type StatusVerb } from '../core/status-log';
+import { commentViewsOf, renderStatusComment, slugStatusKey, statusLinesOfComments, type TicketCommentView } from '../core/status-comment';
 import { LEDGER_FILE, parseLedger, settledUsageByTicket, type LedgerWrite } from '../core/ledger';
 import { estimateFrom, type EstimateKey, type RunEstimate } from '../core/estimate';
 import { withReviewFeedback, type ReviewComment } from '../core/review-feedback';
@@ -580,9 +581,56 @@ export class EngineBoardService {
   /** One ticket's card and file text, for the remote's ticket view (req-66). */
   async readTicket(id: string): Promise<TicketReply> {
     const found = await this.findCard(id);
-    return found === null
-      ? { ok: false, error: `${id} is not on the board` }
-      : { ok: true, card: found.card, text: found.text, revision: revisionOf(found.text) };
+    if (found === null) {
+      return { ok: false, error: `${id} is not on the board` };
+    }
+    const comments = this.dricket === null ? null : await this.commentsOf(this.dricket, id);
+    return {
+      ok: true,
+      card: found.card,
+      text: found.text,
+      revision: revisionOf(found.text),
+      ...(comments === null ? {} : { comments }),
+    };
+  }
+
+  /** The ticket's comments read from the store's `comments/` files, oldest first (E14-6); empty off dricket. */
+  async ticketComments(id: string): Promise<readonly TicketCommentView[]> {
+    await this.refreshDricket();
+    return this.dricket === null ? [] : this.commentsOf(this.dricket, id);
+  }
+
+  /** A comment-read failure is an empty thread, never a failed ticket view. */
+  private async commentsOf(store: StoreSettings, id: string): Promise<readonly TicketCommentView[]> {
+    try {
+      return commentViewsOf(await this.storeBoard.comments(store, id));
+    } catch (error) {
+      this.host.log(`tickets: comments of ${id} could not be read: ${messageOf(error)}`, 'warn');
+      return [];
+    }
+  }
+
+  /**
+   * One status event of a ticket (E14-6). On a store it is a keyed comment
+   * (`dk comment`; `working` is never persisted, a keyless `resolved` closes
+   * nothing); on the files backend the old status log line. A failure is a log
+   * line, never a failed mutation (the same contract as the ledger).
+   */
+  private async noteStatus(card: TicketCard, verb: StatusVerb, input: { key?: string | null; text?: string; detail?: string }, actor: string): Promise<void> {
+    const store = this.dricket;
+    if (store === null) {
+      this.options.events?.status?.(card.path, new Date().toISOString(), verb, input.text ?? input.key ?? '');
+      return;
+    }
+    const text = renderStatusComment({ verb, ...input });
+    if (text === null) {
+      return;
+    }
+    try {
+      await this.storeBoard.comment(store, card.id, text, actor);
+    } catch (error) {
+      this.host.log(`tickets: the ${verb} comment on ${card.id} could not be written: ${messageOf(error)}`, 'warn');
+    }
   }
 
   /**
@@ -594,6 +642,14 @@ export class EngineBoardService {
     const found = await this.findCard(id);
     if (found === null) {
       return [];
+    }
+    if (this.dricket !== null) {
+      // E14-6: on a store the verbs are the first lines of the ticket's comments.
+      try {
+        return statusLinesOfComments(await this.storeBoard.comments(this.dricket, id));
+      } catch {
+        return [];
+      }
     }
     const text = await this.readOptional(found.vault.id, statusLogPathOf(found.card.path));
     return text === null ? [] : parseStatusLog(text);
@@ -2247,7 +2303,8 @@ export class EngineBoardService {
       pushRemote: snap.pushRemote,
     });
     // E7: the ledger's phase line rides the successful move.
-    if (result.ok) {
+    // On a store the stage history is dk's (and derivable), so no `phase` line (E14-6).
+    if (result.ok && this.dricket === null) {
       this.options.events?.ledger({ kind: 'phase', ticket: card.id, from, to });
     }
     return result;
@@ -2380,7 +2437,7 @@ export class EngineBoardService {
         const finished = card.meta.awaiting === undefined ? undefined : `manual step finished by ${actor} (${card.meta.awaiting})`;
         const moved = await this.moveCard(vault, snap, card, next, actor, finished);
         if (moved.ok && finished !== undefined) {
-          this.options.events?.status?.(card.path, new Date().toISOString(), 'done', finished);
+          await this.noteStatus(card, 'done', { text: finished }, actor);
         }
         return moved;
       }
@@ -2467,7 +2524,56 @@ export class EngineBoardService {
       if (input.comments !== undefined && input.comments.length > 0) {
         text = withReviewFeedback(await this.readCardText(vault, card), input.comments);
       }
-      return this.moveCard(vault, snap, card, to, input.actor ?? this.owner, `sent back: ${input.note.trim().slice(0, 500)}`, text);
+      const actor = input.actor ?? this.owner;
+      const moved = await this.moveCard(vault, snap, card, to, actor, `sent back: ${input.note.trim().slice(0, 500)}`, text);
+      if (moved.ok && this.dricket !== null) {
+        // E14-6: the note, whole, is a comment on the ticket (the Log line keeps the short form for the story).
+        await this.commentOn(card, `sent back: ${input.note.trim()}`, actor);
+      }
+      return moved;
+    });
+  }
+
+  /** A plain comment on a store ticket; a failure is a log line, the move it follows already happened. */
+  private async commentOn(card: TicketCard, text: string, actor: string): Promise<void> {
+    const store = this.dricket;
+    if (store === null) {
+      return;
+    }
+    try {
+      await this.storeBoard.comment(store, card.id, text, actor);
+    } catch (error) {
+      this.host.log(`tickets: the comment on ${card.id} could not be written: ${messageOf(error)}`, 'warn');
+    }
+  }
+
+  /**
+   * The owner's answer to a Needs-you decision (E14-6): a `resolved: <key>`
+   * comment closing the key, the answer as its detail. The key defaults to the
+   * ticket's only open `needs-decision`/`blocked` key. On the files backend
+   * the status log gets the `resolved` line (the answer text has no home there).
+   */
+  answerNeed(input: { id: string; key?: string; text?: string; actor?: string }): Promise<BoardMutationResult> {
+    return this.enqueue(async () => {
+      await this.refreshDricket();
+      const found = await this.findCard(input.id);
+      if (found === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const open = openStatusItems(await this.statusOf(input.id)).filter((item) => item.key !== null);
+      let key = slugStatusKey(input.key ?? '');
+      if (key === null && (input.key ?? '').trim() === '') {
+        key = open.length === 1 ? open[0]!.key : null;
+      }
+      if (key === null) {
+        return { ok: false, error: open.length === 0 ? `${input.id} has no open decision to answer` : 'name the decision key to answer' };
+      }
+      if (!open.some((item) => item.key === key)) {
+        return { ok: false, error: `${input.id} has no open decision "${key}"` };
+      }
+      await this.noteStatus(found.card, 'resolved', { key, ...(input.text !== undefined && input.text.trim() !== '' ? { detail: input.text } : {}) }, input.actor ?? this.owner);
+      this.announceChanged();
+      return { ok: true };
     });
   }
 

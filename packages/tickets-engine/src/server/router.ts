@@ -184,6 +184,20 @@ function parseSendBack(body: unknown): Parsed<{ id: string; note: string; commen
   return { ok: true, value: { ...rest, note, ...(comments.length > 0 ? { comments } : {}) } };
 }
 
+/** The answer to a Needs-you decision (E14-6): the key it closes (optional when one is open) and the answer text. */
+function parseAnswerNeed(body: unknown): Parsed<{ id: string; key?: string; text?: string }> {
+  const obj = asObject(body);
+  if (obj === null) {
+    return { ok: false, error: 'bad answer payload' };
+  }
+  const key = typeof obj['key'] === 'string' ? obj['key'].trim() : '';
+  const text = typeof obj['text'] === 'string' ? obj['text'].trim() : '';
+  if (key === '' && text === '') {
+    return { ok: false, error: 'an answer needs a key or a text' };
+  }
+  return { ok: true, value: { id: (obj as { id: string }).id, ...(key === '' ? {} : { key }), ...(text === '' ? {} : { text: text.slice(0, 4000) }) } };
+}
+
 /** One owner message into a persona's coaching thread (U4, concept §4.5). */
 function parseThreadSend(body: unknown): Parsed<{ text: string }> {
   const obj = asObject(body);
@@ -493,7 +507,7 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
   if (req.path === '/api/attachments') {
     return write('attachment', parseAttachment(body), (cmd) => port.saveAttachment(cmd, actor));
   }
-  const ticket = /^\/api\/tickets\/([^/]+)\/(move|claim|archive|refine|save|accept|send-back|parts|release|flow-edit|flow-save|flow-draft)$/.exec(req.path);
+  const ticket = /^\/api\/tickets\/([^/]+)\/(move|claim|archive|refine|save|accept|send-back|answer|parts|release|flow-edit|flow-save|flow-draft)$/.exec(req.path);
   if (ticket !== null) {
     const id = decodeURIComponent(ticket[1]!);
     if (!TICKET_ID_PATTERN.test(id)) {
@@ -517,6 +531,8 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
         return write(`accept ${id}`, { ok: true, value: { id } }, (cmd) => port.ticketAccept(cmd, actor));
       case 'send-back':
         return write(`send-back ${id}`, parseSendBack(withId), (cmd) => port.ticketSendBack(cmd, actor));
+      case 'answer':
+        return write(`answer ${id}`, parseAnswerNeed(withId), (cmd) => port.ticketAnswerNeed(cmd, actor));
       case 'parts':
         return write(`parts ${id}`, parsePlanPartsEdit(withId), (cmd) => port.planPartsEdit(cmd, actor));
       case 'release':

@@ -19,7 +19,7 @@
  */
 import { InjectionToken } from '@angular/core';
 import { maskFenceLines, maskFences } from '../../../../shared/markdown/fences';
-import type { McEstimate, McPlanStatus, McTicketUsage, McVerlaufEntry } from '../api/dto';
+import type { McEstimate, McPlanStatus, McTicketComment, McTicketUsage, McVerlaufEntry } from '../api/dto';
 
 // --- action replies ----------------------------------------------------------
 
@@ -929,6 +929,8 @@ export interface TicketDoc {
    * chapter — the yaml box and the gate pills' costs stay hidden then.
    */
   readonly verlauf: readonly McVerlaufEntry[];
+  /** The ticket's store comments (E14-6), oldest first; absent without any. */
+  readonly comments?: readonly McTicketComment[];
 }
 
 // --- the priority chip and the blocker line ---------------------------------------

@@ -561,9 +561,25 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   `build -> build`) so a failed run need not retreat a column; (6) the real checks: a run
   on a throw-away ticket killed with SIGKILL and taken over after a shortened lease
   (`dricket.toml` `lease_min`) on a second instance. Needs E14-5.
-- **E14-6 — Comments, signals, ledger.** Send-back notes and Needs-you answers
-  as comments, keyed status verbs as comments (`working:` not persisted), ledger
-  to the meta repo. Needs E14-4 and dk R-08.
+- **E14-6 follow-ups** (comments, status verbs and the ledger shipped as milestone
+  159; no dk feature was missing: Drey reads the `comments/` files itself, so R-08
+  is not needed). Open: (1) the **chain orchestrator's** `working`/`done`/`blocked`/
+  `failed`/`paused` events still go to `FleetEventWriter.status` (a `.status.log`
+  file) — they move onto `dk comment` with the orchestrator port (E14-5b (1));
+  (2) an **answer reaches the next run only through the thread**: the answer is a
+  `resolved: <key>` comment, but nothing yet hands it to the persona's next
+  instruction, and the run does not release to `needs-input` and re-claim on it
+  (E14-5b (3), Q-03); (3) **no Needs-you answer control** in Mission Control or Drey —
+  the route (`POST /api/tickets/<id>/answer`) and the engine method (`answerNeed`)
+  exist, the button does not; (4) the story builder ("How it got here") reads the
+  Log only, so a send-back shows from the short Log line, never from the comment;
+  (5) a comment is not editable and the thread has no composer (a free comment from
+  the board needs one `dk comment` call behind an input); (6) the ledger file sits
+  in the meta vault's working tree and rides that repository's next commit
+  (`tickets/_meta/ledger.jsonl`, uncommitted by Drey, as before); a meta vault that
+  is also the store's checkout would make dk flag it `unexpected-path` — keep them
+  two folders; (7) the real check on a second instance (answer from the phone, a
+  send-back from the Ready card) — only the engine services ran, on a scratch store.
 - **E14-7 — Cut-over.** Freeze, final import, flip `tickets.backend`, smoke,
   owner round. Needs E14-3..6, E14-8. The migration tool (E14-3 + E14-3b,
   milestones 153/158) writes real numbers and creation data and **no placeholder
@@ -592,7 +608,7 @@ checks use a scratch store and a second instance, never `drey-tickets`.
 | E13-12 Settings → Tickets in Drey | **Stays valid** except the pipeline/column editor: **waits** for OD-4 (stage vocabulary) and Q-05 (who edits `dricket.toml`). |
 | E11-1c video size rule, E11-1b, E11-2b, E10-3b/4b/5b, E10-7, E12-3b/5/7/8 | **Stay valid** (videos stay outside git; UI follow-ups). |
 | E11-4 cost table and estimate; `## Verlauf` writer | **Stay valid**; the writer moves inside the runner's claim (E14-5); history for the estimate comes from `dk log` (dk R-07). |
-| E7 ledger and status log | **Reshaped** (E14-6): ledger relocates to the meta repo; status log becomes keyed comments. No new work on `.status.log` files. |
+| E7 ledger and status log | **Reshaped, shipped on the board side** (E14-6, milestone 159): the ledger stays in the meta vault, `phase` lines dropped on a store; the status log is keyed comments. No new work on `.status.log` files. |
 | E2b-4 engine announces its writes | **Reshaped** into E14-8; do not extend. |
 | Fleet stability remainder, "Takeover follow-ups", req-78 (red gate sends back) | **Wait**: claims, takeover and moves are re-based on `dk` in E14-5; do not start new claim/takeover code. |
 | req-66 remote (refine, claim routes, R7 push), req-75 W5 capture, W9 audit runs | **Stay valid**; their write calls go through the port. |

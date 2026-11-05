@@ -1,7 +1,7 @@
 import { promises as fsp } from 'node:fs';
 import * as path from 'node:path';
 import type { BoardSnapshot } from '../contracts/tickets';
-import type { TicketDetail, TicketStore } from '../ports/ticket-store';
+import type { TicketComment, TicketDetail, TicketStore } from '../ports/ticket-store';
 import { diffBoards, renderBoardDiff, type BoardDiff } from './board-diff';
 import { assembleBoardFromRecords, type RecordsBoardInput } from './store-board';
 import type { AddOptions, AddResult, Claim, ClaimOptions, PutOptions, ReleaseOptions, ReleaseResult } from '../ports/ticket-store';
@@ -135,6 +135,20 @@ export class StoreBoardSource {
     const result = await this.storeFactory(settings).release(id, options);
     this.sourceFor(settings).feed?.notifyOwnWrite();
     return result;
+  }
+
+  /** A ticket's comments from the checkout's `comments/` files, oldest first (E14-6); empty without a checkout. */
+  async comments(settings: StoreSettings, id: string): Promise<readonly TicketComment[]> {
+    const source = this.sourceFor(settings);
+    return source.files === null ? [] : source.files.comments(id);
+  }
+
+  /** Appends a comment through `dk comment` (never a file write) and announces the change. */
+  async comment(settings: StoreSettings, id: string, text: string, actor: string): Promise<void> {
+    const source = this.sourceFor(settings);
+    const store = source.files ?? this.storeFactory(settings);
+    await store.comment(id, text, { actor });
+    source.feed?.notifyOwnWrite();
   }
 
   /** One ticket as it is stored now (any stage, archived ones too); needs a checkout. */
