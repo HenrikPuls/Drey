@@ -366,6 +366,17 @@ owner confirms scope and order before any of it starts:
   about; today they cannot be selected or opened. Check the reader on both backends
   (files, dricket: the archived/done folders and the board's "this week" filter) and
   add an explicit way to reach older ones (search or "Show older").
+- **E13-23 — Mission Control ticket page on the phone: three cleanups** (owner markup
+  2026-11-05, screenshot `docs/design/work-panel/mc-ticket-owner-markup-2026-11-05.jpg`,
+  T-0091 on iPhone; outside the list; same code as E13-20/21, ships with or right after it).
+  (1) The line **"Chain: standard flow + the frontmatter delta · tap to adjust" is removed**
+  (the red scribble): tapping a phase in the phase strip is enough to adjust. (2) **The phase
+  is shown once**: the `phase: prioritized` text line under the title goes; the badge at the
+  top (PRIORITIZED) stays and becomes **colour-filled** in the phase's colour (it is outlined
+  today). (3) **The editor mode switch Live | View | Source moves to the top** of the page
+  (next to the edit control in the header, not in the text flow), and the page can be
+  switched away from View — View stays the default where results are presented (E12-6).
+  Check the same three points on the Drey desktop ticket page and the iPad layout.
 - **E12-9c — The default pipeline: Inbox · Plan · Build · Review · Sign Off · Done**
   (owner decision 2026-11-05, answering E12-9b Q1; outside the list). The default pipeline
   of a new board has six columns, in this order, with who works each: **1 Inbox** (manual —
