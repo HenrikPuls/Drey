@@ -374,6 +374,14 @@ owner confirms scope and order before any of it starts:
   manual and its screenshots, the phone capture button label. Existing boards and stores
   keep their columns (a default never renames what a user has). Open from E12-9b: Q2 team
   seeding, Q3 default worker (still undecided).
+- **E12-9d — "Initialize board" seeds the default team** (owner decision 2026-11-05,
+  answering E12-9b Q2: yes). A new board gets the default team of decision D7 — **Paul**
+  (plans), **Ben**, **Ralf**, **Tessa** (roles as in the concept) — plus "You" and Pia as
+  Mission Control itself, each with worker, model, colour and prompt. Which persona works
+  which column follows E12-9c (Plan, Build = agents; Inbox, Review, Sign Off = manual). The
+  default worker is **still open** (E12-9b Q3: `opencode` or `claude-code`) and blocks the
+  seed. The names are plain persona files, so the owner's idea of a squirrel crew ("Nutty
+  Nutcracker" …) is a later naming choice, not a code change. Existing boards keep their team.
 - **E13-22 — Settings: one page width, a section tree and search** (owner request
   2026-11-05, outside the list; modelled on VS Code's settings). The settings overlay
   grows with the window (wider than today's 640 px cap) and **every page uses the same
@@ -384,7 +392,7 @@ owner confirms scope and order before any of it starts:
   a whole, a click on an entry scrolls to its section and the current section is
   highlighted while scrolling; a search field at the top filters all pages' settings.
   Applies to the shared scaffold (`src/app/settings/settings-ui.css`, plugin pages
-  via `PluginSettingsHost`), so every page benefits. After E12-9b (labels in the same
+  via `PluginSettingsHost`), so every page benefits. After E12-9c/9d (labels in the same
   files).
 - **E12-11 — Work panel body** (proposed by the E12-10 audit; M). One 40 px
   header row with the icons *filter · New idea · Open Board tab · grip*; the
