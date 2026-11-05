@@ -358,12 +358,87 @@ owner confirms scope and order before any of it starts:
   (`docs/design/work-panel/`). Audit every default name against the canvas, list the
   deviations with the canvas reference, then change the defaults, the seed/fixture
   data, the manual and the screenshots. Existing user configs keep their names.
-- **E12-10 — Mask audit against the design** (owner report 2026-11-05: many screens
-  do not yet match the design state). A screen-by-screen audit of Drey's Work panel
-  and Mission Control (desktop and phone) against the canvas files in
-  `docs/design/work-panel/*.dc.html` and `handoff/`; one table per screen (matches,
-  deviates how, size), screenshots of scratch English data, the result ordered into
-  roadmap items (extends `convergence-gaps.md`; nothing is rebuilt in this item).
+**Proposed by the E12-10 audit (2026-11-05, documentation only)** — evidence, ids
+and screenshots in
+[`mask-audit-2.md`](../docs/design/work-panel/mask-audit-2.md); 60 sized
+deviations (38 S, 16 M, 6 L) grouped so one session takes one group without
+file collisions; ordered by user value (the first group is the screen the owner
+looks at most). Proposals only: the owner confirms scope and order before any of
+it starts. Ids in brackets are rows of the audit.
+
+- **E12-11 — Work panel body** (proposed by the E12-10 audit; M). One 40 px
+  header row with the icons *filter · New idea · Open Board tab · grip*; the
+  Workers cards leave the panel (they live in Team and Capacity; the Workers tab
+  and Chain log retire); Needs you comes first; the footer reads `Team · Ben,
+  Tessa busy` and opens the Team tab; rows keep the title on its own line with the
+  age at the right and one grey detail line instead of mono state words; the
+  git warning becomes a one-line dismissible note [A-01–A-06, A-09, A-10].
+  Files: `plugins/tickets/renderer/work-panel.ts`, `work-groups.ts`, the panel
+  part of `board.css`. Supersedes E13-14.
+- **E12-12 — The ticket page: header and Ticket | Thread | Review** (proposed by
+  the E12-10 audit; M). Builds on E13-20/E13-21: the form row above the title
+  (priority, repo, worker, branch, `Refine with agent`, `Plan with agent`) goes
+  — the strip carries id, status caps (`NEEDS YOU`, `PLAN TO APPROVE`, `READY TO
+  TRY`), kind chip, persona, step, cost with its basis inline; the question of a
+  waiting run is readable next to the document; the thread header does not
+  truncate a title that fits; a ticket without a run does not open a pre-filled
+  dialog composer; tab titles are `T-0121 · Title` for every kind [B-01–B-03,
+  C-03, D-01, D-02, D-05]. Files: `ticket-document/`, `ticket-header.ts`,
+  the thread and wait views.
+- **E12-13 — Mission Control chrome** (proposed by the E12-10 audit; M). Section
+  labels, chips, tabs, settings headings and persona roles go from uppercase mono
+  to sentence-case sans (mono stays for ids and code), 33 rules in
+  `libs/mission-ui`; the iPad empty state loses the developer sentence; the chat
+  placeholder fits and the field shows its focus ring; the gate-chain sheet's
+  green buttons take the accent; raw words (`frontmatter delta`) leave the chrome
+  [N-01, N-04, N-05, N-06, I-06, I-07, K-05, J-02, F-03]. Files: `apps/mission-control`
+  styles, `libs/mission-ui/src/**/*.css` and templates. Fits with E12-5's device rules —
+  one session may take both.
+- **E12-14 — Mission Control Work rows and the iPad layout** (proposed by the
+  E12-10 audit; M). A ticket is listed once (the Needs-you copy no longer repeats
+  under its column); rows show a detail line, age, persona and cost; Settings
+  details (Devices, Appearance, Chat) take the middle and right area instead of a
+  ~120 px column; the Engine row holds more than one word; `Away and alerts` and
+  `Repositories` wait for E12-3b [K-03, K-04, N-02, N-03, N-07]. Files:
+  `libs/mission-ui/src/work/`, `settings/`, `apps/mission-control/src/app/`
+  (touches the same stylesheet as E12-13 — run after it, or together).
+- **E12-15 — Capacity band and status bar** (proposed by the E12-10 audit; M).
+  The band shows only while Board or Team is the active tab and is one line
+  (completes E13-13's rest); two status items `$4.10 today` and `● 3 need you`,
+  `in Work` while in Notes (E13-15); the title-bar `Capture by voice` button once
+  the owner has ruled on its chord (E13-16); the Team header counts every card
+  and shows the state summary [I-01, I-03, I-04, L-04, L-05]. Files:
+  `plugins/tickets/renderer/team/capacity-view.ts`, `status-slot.ts`,
+  `src/app/status-bar/`, `src/app/titlebar/`.
+- **E12-16 — Board and Team completion** (proposed by the E12-10 audit; M, partly
+  L). `Filter: all personas` and `Cost by column` (E13-17); empty columns say
+  `Empty` quietly, `New idea` moves to the board header; `New persona`, `Remove
+  from team`, editable Setup, the Friction tab, the Setup fields and `Talk to …
+  1:1` (E13-19) [H-01–H-03, I-02]. Files: `plugins/tickets/renderer/board/`,
+  `team/team-view.ts`.
+- **E12-17 — Parts block in the ticket** (E13-10, restated; L). The screenshot
+  evidence is the raw Markdown list with `persona:` / `reason:` lines
+  [F-01, E-02]; no change of scope — this entry only records that the audit found
+  it as the largest single gap on the desk.
+- **E12-18 — Views and tabs polish** (proposed by the E12-10 audit; S). Views
+  menu descriptions, shortcut text and `Edit views…`; `Go to the Work view` in the
+  tab menu; `2 here · 3 elsewhere`; the dock strip no longer wraps its tenth icon
+  [L-01–L-03, L-06] (extends E13-18). Files: `src/app/titlebar/`,
+  `src/app/windows/`, `src/app/panes/` tab menu. Do after D-6 (same files).
+- **E12-19 — Assistant labels, review layout, settings leftovers** (proposed by
+  the E12-10 audit; S). Text labels on the target switch; a splitter and a
+  taller diff in the Review tab; `Pause when the budget is spent` (needs
+  E12-3b's setting first); the Default flow row without the ticket dropdown;
+  the Settings list no longer clips `Panels & plugins`; the disabled `Split`
+  button says why; flow wording `Move earlier / Add a gate after this one /
+  Remove this gate` [M-01, R-01, R-02, K-01, K-02, E-03, J-01].
+- **E12-20 — Audit fixtures and the canvas export** (proposed by the E12-10
+  audit; S). Export boards 4a–7j next to the stale repo copies (or delete the
+  copies), and add the fixtures the audit could not seed: an MC ticket with a
+  waiting question, one with proof and a diff, an MC plan to approve, an MC shape
+  session, the Views menu, a dricket-store Work panel — then run the audit's
+  remaining rows [Z-02, A-08, B-02, R-04, F-02]. Docs and e2e fixtures only.
+
 - **E12-7 — Token alignment** (owner decision 2026-11-04: the Anthrazit design
   system wins). Milestone 136 on branch `design-to-code` owns it: peach / pink /
   mint tokens in the three themes, badges re-pointed, radii 4/8/16, a 13 px
