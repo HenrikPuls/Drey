@@ -31,6 +31,19 @@
   engine returned); **Show older** at the foot of the group loads the archive once and lists the tail under
   a search field (no placeholder text). Mission Control: a *Done this week* group under the phase groups,
   rows open the ticket screen, **Show older** with the same search.
+- **E13-23 (folded into this milestone), Mission Control ticket page.** The line "Chain: standard flow + the
+  frontmatter delta · tap to adjust" is gone (the gate strip itself still opens the chain sheet); the
+  `phase: <id>` text line under the title is gone (the badge at the top carries the phase, now
+  **colour-filled** in the phase's colour); the **Live | View | Source** switch (`mc-ticket-mode`)
+  **replaces the edit pencil** at the top right of the header (owner correction): View is where the
+  ticket is read (the default), picking **Live** or **Source** opens the editor in that mode — the
+  editor overlay (`mc-ticket-edit`) now edits the file in the Markdown surface (`mc-markdown`, `[mode]` /
+  `[modeBar]`) instead of a plain textarea, shows the same switch on top, and keeps its footer **Save** /
+  **Cancel** (Cancel asks "Discard changes?" when dirty; **View** in the switch means Cancel, so unsaved
+  text never vanishes silently). Read-only devices show no switch. Nothing else relied on the pencil
+  (`toggleEdit` and its CSS are gone; `vm.editing` / `savedFlash` unchanged). Drey's desktop ticket page
+  needed none of it: no chain hint, no phase line, and its editor modes are in the `⋯` menu; the iPad
+  layout is the same Mission Control view.
 - **Tests:** `ticket-faces.spec.ts` (default face from run state, the strip is the same three buttons with
   one active), `view.spec.ts` (MC default face, run/need rules, switching), `work-panel.spec.ts` (Done row
   click, Show older + search), `work.spec.ts` (MC Done group, Show older, `olderDoneOf`),

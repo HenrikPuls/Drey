@@ -44,14 +44,21 @@
   min-height: 0;
   width: 100%;
   padding: 12px;
-  border: 0;
-  outline: none;
-  resize: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--bg);
   color: var(--text);
-  font-family: var(--mono);
-  font-size: calc(13px * var(--mc-text, 1));
-  line-height: 1.7;
+}
+
+.edit-head {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.spacer {
+  flex: 1;
 }
 
 /* -- the conflict block -------------------------------------------------------- */

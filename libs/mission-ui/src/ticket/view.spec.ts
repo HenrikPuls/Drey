@@ -306,7 +306,8 @@ interface TicketSurface {
   personaTitle(persona: string): string;
   cost(): string | null;
   costTotal(): string | null;
-  fmLine(): string;
+  onModePick(mode: 'live' | 'view' | 'source'): void;
+  editModeValue(): 'live' | 'source';
   readOnly(): boolean;
   steps(): ReturnType<typeof gateStepsOf>;
   bodyText(): string;
@@ -354,7 +355,6 @@ interface TicketSurface {
   toggleSendBack(): void;
   sendBack(): Promise<void>;
   editing(): boolean;
-  toggleEdit(): void;
   changeByChat(): void;
   galIndex(): number;
   onGalScroll(gal: HTMLElement): void;
@@ -1030,14 +1030,14 @@ describe('TicketView head card', () => {
     const vm = surface(setup(makeFake({ docValue: doc })));
     expect(vm.persona()).toBe('pia');
     expect(vm.personaTitle('pia')).toBe('Pia');
-    expect(vm.fmLine()).toBe('phase: design · persona: pia');
   });
 
   it('stays silent without a persona: the chip and the fm slot drop out', () => {
     const vm = surface(setup(makeFake({ docValue: DOC })));
     expect(vm.persona()).toBeNull();
-    expect(vm.fmLine()).toBe('phase: verify');
   });
+
+
 
   it('keeps the cost slots empty while the doc carries no usage and no Verlauf costs', () => {
     const vm = surface(setup(makeFake({ docValue: DOC })));
@@ -1347,25 +1347,28 @@ describe('TicketView', () => {
     expect(dismissed).toBe(1);
   });
 
-  it('hands the raw file to the editor: enter on the toggle, exit when it is open', () => {
+  it('the header switch replaces the pencil: Live or Source opens the editor in that mode, View stays (E13-23)', () => {
     const fake = makeFake({ docValue: FULL_DOC });
     const vm = surface(setup(fake));
 
-    vm.toggleEdit();
+    vm.onModePick('view');
+    expect(fake.calls.enterEdit).toBe(0);
+
+    vm.onModePick('source');
     expect(fake.calls.enterEdit).toBe(1);
-    expect(fake.calls.exitEdit).toBe(0);
+    expect(vm.editModeValue()).toBe('source');
 
     fake.editingValue = true;
-    vm.toggleEdit();
-    expect(fake.calls.exitEdit).toBe(1);
+    vm.onModePick('live');
+    expect(fake.calls.enterEdit).toBe(1);
+    expect(vm.editModeValue()).toBe('live');
   });
 
   it('never edits on a read-only device', () => {
     const fake = makeFake({ docValue: FULL_DOC, readOnlyValue: true });
     const vm = surface(setup(fake));
-    vm.toggleEdit();
+    vm.onModePick('live');
     expect(fake.calls.enterEdit).toBe(0);
-    expect(fake.calls.exitEdit).toBe(0);
   });
 
   it('shows the editor’s save flash without closing anything', () => {

@@ -60,32 +60,6 @@
   color: var(--text-3);
 }
 
-.tedit {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  margin-left: 8px;
-  color: var(--text-2);
-  cursor: pointer;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  transition: all 0.15s ease;
-}
-
-.tedit svg {
-  width: 16px;
-  height: 16px;
-}
-
-.tedit.on {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-}
-
 /* -- the scroll body ----------------------------------------------------------
    The layer (.ticket-layer) is the ONE vertical scroll owner of the ticket
    screen; .page is plain flow inside it — no overflow-y and no
@@ -291,32 +265,6 @@
 .proof-total b {
   font-weight: 400;
   color: var(--warn);
-}
-
-.chain-hint {
-  margin: -10px 0 10px;
-  padding: 0;
-  font-family: var(--mono);
-  font-size: calc(13px * var(--mc-text, 1));
-  letter-spacing: 0.08em;
-  color: var(--text-3);
-  text-align: left;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  transition: color 0.15s ease;
-}
-
-.chain-hint:hover {
-  color: var(--accent);
-}
-
-.chain-hint:disabled {
-  cursor: default;
-}
-
-.chain-hint:disabled:hover {
-  color: var(--text-3);
 }
 
 /* -- the markdown body ------------------------------------------------------------- */
@@ -1839,4 +1787,16 @@ details.think .step-body {
 /* E13-20: the faces strip sits between the header and the page, on the page gutter. */
 .seg {
   margin: 6px 16px 0;
+}
+
+/* E13-23: the phase badge is colour-filled in the phase's colour (inline), dark text on it. */
+.phase.filled {
+  color: var(--bg);
+  background: var(--text-2);
+  border-color: transparent;
+}
+
+/* The Live | View | Source switch sits in the header beside the pencil. */
+.hdr .mdx-seg {
+  flex: none;
 }

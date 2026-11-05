@@ -21,6 +21,8 @@ import {
   type QuestionCardVm,
 } from '../work/work.model';
 import { Markdown } from '../markdown/markdown';
+import type { MdMode } from '../markdown/mode';
+import { TicketEditMode, TicketModeSwitch } from './mode-switch';
 import { planPartsOf, planSectionOf } from '../plan/plan.model';
 import {
   ACCEPT_ARM_WINDOW_MS,
@@ -121,7 +123,7 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
   templateUrl: './view.html',
   styleUrls: ['../seg.css', './view.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, Markdown],
+  imports: [NgTemplateOutlet, Markdown, TicketModeSwitch],
 })
 export class TicketView {
   protected readonly vm = inject(MC_TICKET);
@@ -257,15 +259,6 @@ export class TicketView {
    */
   protected readonly cost = computed<string | null>(() => usdLabelOf(this.doc()?.usage?.cost ?? null));
 
-  /** The mono frontmatter line under the title: `phase: x · persona: y`. */
-  protected readonly fmLine = computed(() => {
-    const doc = this.doc();
-    if (doc === null) {
-      return '';
-    }
-    const persona = this.persona();
-    return persona === null ? `phase: ${doc.phase}` : `phase: ${doc.phase} · persona: ${persona}`;
-  });
 
   protected readonly steps = computed<GateStep[]>(() => {
     const doc = this.doc();
@@ -857,19 +850,27 @@ export class TicketView {
   // --- the raw-edit exception path (rendered by mc-ticket-edit) --------------------
 
   /**
-   * The edit pencil in the header: the vm owns the mode so the view and
-   * the editor agree on it — the view yields the overlay to the editor
-   * while the mode stands.
+   * The Live | View | Source switch in the header, where the edit pencil was
+   * (E13-23): View is where the ticket is read; Live and Source are how the
+   * owner edits — picking one opens the editor in that mode. The vm owns the
+   * editing state so the view and the editor agree on it; the view yields
+   * the overlay to the editor while it stands.
    */
   protected readonly editing = computed(() => this.vm.editing());
 
-  protected toggleEdit(): void {
-    if (this.readOnly() || this.isEmpty()) {
+  private readonly editMode = inject(TicketEditMode);
+
+  /** The mode the editor opens in (spec lens). */
+  protected editModeValue(): 'live' | 'source' {
+    return this.editMode.mode();
+  }
+
+  protected onModePick(mode: MdMode): void {
+    if (mode === 'view' || this.readOnly() || this.isEmpty()) {
       return;
     }
-    if (this.vm.editing()) {
-      this.vm.exitEdit();
-    } else {
+    this.editMode.mode.set(mode);
+    if (!this.vm.editing()) {
       this.vm.enterEdit();
     }
   }

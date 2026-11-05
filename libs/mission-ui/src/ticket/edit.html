@@ -1,20 +1,25 @@
 @if (vm.editing()) {
   <section class="editor" aria-label="Raw edit">
+    <header class="edit-head">
+      <span class="spacer"></span>
+      <mc-ticket-mode [active]="editMode.mode()" (pick)="onModePick($event)" />
+    </header>
     <p class="warning" role="alert">
       <span class="warning-glyph" aria-hidden="true">⚠</span>
       Raw mode — this file is the machine interface. A stray character breaks parsers. The chat is
       the safe way to change a ticket.
     </p>
-    <textarea
-      class="raw"
-      [value]="text()"
-      (input)="onInput($event)"
-      aria-label="Ticket file text"
-      autocomplete="off"
-      autocapitalize="off"
-      autocorrect="off"
-      spellcheck="false"
-    ></textarea>
+    <div class="raw">
+      <mc-markdown
+        [text]="text()"
+        surface="ticket-edit"
+        label="Ticket file text"
+        [editable]="true"
+        [mode]="editMode.mode()"
+        [modeBar]="false"
+        (textChange)="onText($event)"
+      />
+    </div>
     @if (saveError(); as error) {
       <div class="conflict" role="alert">
         <p class="conflict-text">{{ error }}</p>
