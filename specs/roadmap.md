@@ -433,7 +433,7 @@ owner confirms scope and order before any of it starts:
   [L-01–L-03, L-06] (extends E13-18). Files: `src/app/titlebar/`,
   `src/app/windows/`, `src/app/panes/` tab menu. Do after D-6 (same files).
 - **E12-19 — Assistant labels, review layout, settings leftovers** (proposed by
-  the E12-10 audit; S). Text labels on the target switch; a splitter and a
+  the E12-10 audit; S). (The target switch stays icon-only: the owner adjusted the Assistant layout himself on 2026-11-05, see `docs/design/work-panel/assistant-owner-layout-2026-11-05.png`; audit row M-01 is withdrawn.) A splitter and a
   taller diff in the Review tab; `Pause when the budget is spent` (needs
   E12-3b's setting first); the Default flow row without the ticket dropdown;
   the Settings list no longer clips `Panels & plugins`; the disabled `Split`

@@ -178,6 +178,13 @@ Built: [desk-tab-menu.png](audit-2-screenshots/desk-tab-menu.png), [desk-open-wi
 
 ## 13. Assistant header and targets (DeskWork right column, 7a)
 
+> **Owner note 2026-11-05:** the owner adjusted the Assistant panel layout himself after the design:
+> header = list icon, a rounded pill with three icon-only targets (chat, rocket, team), the conversation title, `+`;
+> messages with a `vault context · N sections` chip; composer with an `Ask anything …` field, a mic and a send button, a row of
+> attach / edit / vault / web / read icons and the model name on the right. [assistant-owner-layout-2026-11-05.png](assistant-owner-layout-2026-11-05.png)
+> is the reference for this panel; deviations below that contradict it (M-01 'text labels on the target switch') are withdrawn.
+
+
 Built: [desk-assistant-target.png](audit-2-screenshots/desk-assistant-target.png), the right column in every Work-view shot.
 
 | id | Deviation | Evidence | Gap id | Size |
