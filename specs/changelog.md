@@ -1,3 +1,28 @@
+### Milestone 162 — E14-9a: decommission inventory — class A is empty
+
+**Not yet manually verified by the owner.** Roadmap E14-9 (split by the owner, 2026-11-05):
+part (a) now removes only legacy code that the cut-over (E14-7) demonstrably does not need, part
+(b) comes after the cut-over and the owner's round. Part (a) is **documentation only**: the
+inventory (`docs/design/dricket/decommission.md`) classifies every legacy ticket write path and
+piece of machinery with production callers as evidence, and class A turned out **empty**.
+
+- **Why empty.** `tickets.backend=files` is the default and stays the rollback after the flip (the
+  reverse converter writes a legacy vault only the `files` backend can run), so the files backend's
+  readers and writers are all needed until the owner's round: folder numbering and the drift pass
+  (`phase-dirs`, `normalize`, `transition` IO), run and claim stamps (`runs.ts`), the `.status.log`
+  writer (`event-writer`), the ledger writers, `FileTicketStore` and `files-guard` are class B;
+  the reverse converter, the migration tool's legacy reader, the shadow diff, `ticket-schema.md`
+  and the legacy phone remote are class C (the phone remote touches no ticket file but is the
+  fallback "until the owner verifies" Mission Control).
+- **What the scan also showed.** `core/ticket-files.ts` / `ticket-board.ts` / `transition.ts`'s
+  pure patchers are used by the dricket bridge itself, so they are not legacy and not in (b); the
+  migration tool imports none of the legacy core, so it is unaffected by any later removal.
+- **Class A** is three orphan helpers (`parkLine`, `phaseIdFromTitle`, `columnWorkerPin`, about 40
+  lines, no caller outside their own spec) — not part of the decommission, left for part (b).
+- **Specs, docs:** roadmap E14-9 → **E14-9b** with the exact class B/C scope; ADR-0090 "Later
+  change — the decommission is split"; migration plan §7/§8 and `docs/05` point at the inventory.
+  No code changed, so no test was added or removed; `ticket-schema.md` stays until (b).
+
 ### Milestone 161 — E14-8: change detection hardened, checked in a running app
 
 **Not yet manually verified by the owner.** Roadmap E14-8, ADR-0090. The watcher, the

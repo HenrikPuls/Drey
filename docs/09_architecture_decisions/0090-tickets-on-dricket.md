@@ -292,3 +292,18 @@ written back with `put --claim` — two commits, so R-31 stays a nice-to-have. A
 releases (to `needs-input` when the store has the stage) and re-claims on the answer with a new epoch; a killed
 runner's `agent-<run>@<host>` claims are released as their owner before the first dispatch and on request. Chapters a
 worker itself writes into the ticket still have no door on a store (roadmap E14-5c).
+
+## Later change — the decommission is split (E14-9a, 2026-11-05)
+
+**Decision (owner, 2026-11-05).** Decision 9's "legacy code deleted only 30 days later" is replaced
+by two parts. Part (a) removes legacy code that nothing before the cut-over (E14-7) needs; part (b)
+removes the rest after the cut-over **and the owner's verification round**, with no fixed number of
+days. The `files` backend stays whole until then because it is also the rollback (the reverse
+converter writes a legacy vault only it can run).
+
+**Result of part (a).** The inventory (`docs/design/dricket/decommission.md`) found class A —
+removable now — empty: every legacy writer is live on the default backend, and the migration tool
+(own legacy reader), the shadow mode and `legacy-bridge` do not depend on the legacy core they would
+share a name with. The dricket path itself runs on `core/ticket-files.ts`, `ticket-board.ts` and the
+pure patchers of `transition.ts`, so those are not decommissioned at all. Part (b)'s exact scope is
+the roadmap's E14-9b.
