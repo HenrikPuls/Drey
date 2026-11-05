@@ -57,7 +57,7 @@ import { cleanWorktrees, listOrphans, removeWorktree, type CleanupReport } from 
 import { unlinkShared } from '../fleet/worktrees';
 import { statusLogPathOf } from '../fleet/event-writer';
 import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } from '../fleet/worktree-home';
-import { type ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, InteractiveMode, PermissionMode, RunInfo, FleetPools } from '../fleet/protocol';
+import { type ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, InteractiveMode, PermissionMode, RunDkTarget, RunInfo, FleetPools } from '../fleet/protocol';
 import { type EngineHost, type EngineVaultChangeEvent, EngineVault, FleetPort } from './host';
 import { handoverFromConfig, handoverOverrideKeys } from './handover-config';
 import { appendMemory, memoryPathFor, parseMemoryEntries, toggleMemoryPin } from './persona-store';
@@ -515,11 +515,25 @@ export class EngineBoardService {
     );
   }
 
+  /**
+   * Why the chain may not be switched on, or null. The chain orchestrator picks its tickets
+   * from the vault's ticket files; on `tickets.backend = dricket` those do not exist (E14-5b
+   * ports it onto the store). Owner-started runs claim through dk and work.
+   */
+  async chainRefusal(): Promise<string | null> {
+    return (await this.refreshDricket()) === null
+      ? null
+      : 'The chain does not dispatch on the dricket backend yet (E14-5b) - start runs from the cards';
+  }
+
   /** Keeps the runner's chain config in step with the pipeline (never spawns). */
   private async syncChainConfig(
     vault: { readonly path: string } | null,
     pipeline: readonly PipelinePhase[],
   ): Promise<ChainConfig | null> {
+    if (this.dricket !== null) {
+      return null; // the dispatcher reads ticket files: never point it at a vault whose tickets live in a store
+    }
     const defaultPersona = ((await this.host.configGet<string>('personas.default')) ?? '').trim() || null;
     const chain: ChainConfig | null =
       vault !== null && pipeline.some((phase) => isAutoPhase(phase))
@@ -1834,9 +1848,46 @@ export class EngineBoardService {
     return this.dricket;
   }
 
-  /** The refusal for the fleet's own ticket writes (claims, run stamps), which re-base on `dk` in E14-5. */
-  private dricketFleetRefusal(what: string): string | null {
-    return this.dricket === null ? null : `${what} is not available on the dricket backend yet — the fleet claims through dk in E14-5`;
+  /**
+   * Where a run of this board claims its ticket (E14-5): the store, the stage a release
+   * may retreat to (dk refuses an agent's same-stage release) and whether the store has a
+   * `blocked` stage to park in. Trailers are opt-in (`tickets.dk.trailers`).
+   */
+  private async runTarget(store: StoreSettings, pipeline: readonly PipelinePhase[], phaseId: string): Promise<RunDkTarget> {
+    const index = pipeline.findIndex((p) => p.id === phaseId);
+    const trailers = await this.host.configGet<boolean | string>('dk.trailers');
+    return {
+      bin: store.dkPath,
+      store: store.dkStore,
+      dataDir: store.dkDataDir,
+      checkout: store.dkCheckout,
+      parkStage: pipeline.some((p) => p.id === 'blocked') ? 'blocked' : null,
+      retreatStage: index > 0 ? pipeline[index - 1]!.id : null,
+      trailers: trailers === true || trailers === 'true',
+    };
+  }
+
+  /** A human's claim takeover / release on a dricket ticket: `dk claim` / `dk release`, dk decides (E14-5). */
+  private async setClaimInStore(
+    store: StoreSettings,
+    input: { id: string; mode: 'takeover' | 'release'; actor?: string },
+  ): Promise<BoardMutationResult> {
+    const found = await this.findCard(input.id);
+    if (found === null) {
+      return { ok: false, error: `${input.id} is not on the board` };
+    }
+    const actor = input.actor ?? this.owner;
+    try {
+      if (input.mode === 'takeover') {
+        await this.storeBoard.claim(store, input.id, { actor, kind: 'human', size: 'S' });
+      } else {
+        await this.storeBoard.release(store, input.id, { actor, stage: found.card.phase });
+      }
+    } catch (error) {
+      return { ok: false, error: messageOf(error) };
+    }
+    this.announceChanged();
+    return { ok: true };
   }
 
   /**
@@ -2483,8 +2534,9 @@ export class EngineBoardService {
 
   setClaim(input: { id: string; mode: 'takeover' | 'release'; actor?: string }): Promise<BoardMutationResult> {
     return this.enqueue(async () => {
-      if ((await this.refreshDricket()) !== null) {
-        return { ok: false, error: this.dricketFleetRefusal('Taking over or releasing a claim')! };
+      const store = await this.refreshDricket();
+      if (store !== null) {
+        return this.setClaimInStore(store, input);
       }
       const found = await this.findCard(input.id);
       if (found === null) {
@@ -2548,9 +2600,7 @@ export class EngineBoardService {
     interactive: InteractiveMode | null;
   }): Promise<{ ok: boolean; error?: string; runId?: string }> {
     return this.enqueue(async () => {
-      if ((await this.refreshDricket()) !== null) {
-        return { ok: false, error: this.dricketFleetRefusal('Starting a run')! };
-      }
+      const dricket = await this.refreshDricket();
       const vault = await this.detect();
       if (vault === null) {
         return { ok: false, error: 'no tickets vault detected' };
@@ -2569,7 +2619,7 @@ export class EngineBoardService {
       if (card === null || phaseId === null) {
         return { ok: false, error: `${input.ticketId} is not on the board` };
       }
-      if (card.meta.run !== null && !(await this.clearEndedRunStamp(vault, card))) {
+      if (dricket === null && card.meta.run !== null && !(await this.clearEndedRunStamp(vault, card))) {
         return { ok: false, error: `${card.id} already has a live run — stop it first` };
       }
       const blocked = blockedRefusal(card);
@@ -2589,7 +2639,7 @@ export class EngineBoardService {
         .filter((name) => name !== card.meta.repo)
         .map((name) => snap.repos.find((r) => r.name === name)!)
         .filter((r) => r !== undefined);
-      const text = await this.host.read(vault.id, card.path);
+      const text = await this.readCardText(vault, card);
       let prompt: string | null = null;
       if (input.interactive !== null) {
         // req-65: the dialog's brief — the phase's `interactive:` ref,
@@ -2682,6 +2732,7 @@ export class EngineBoardService {
         ...(personaDispatch !== null ? { persona: personaDispatch } : {}),
         ...(input.handover !== null ? { handover: input.handover } : input.interactive !== null ? { handover: 'auto' } : {}),
         ...(input.interactive !== null ? { interactive: input.interactive } : {}),
+        ...(dricket !== null ? { dk: await this.runTarget(dricket, snap.pipeline, phaseId) } : {}),
       });
       if (!composed.ok) {
         return { ok: false, error: composed.error };

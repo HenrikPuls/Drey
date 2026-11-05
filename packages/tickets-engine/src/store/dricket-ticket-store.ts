@@ -9,6 +9,7 @@ import {
   type AddOptions,
   type AddResult,
   type ClaimOptions,
+  type CommentOptions,
   type ExtendOptions,
   type LeaseExtension,
   type PutOptions,
@@ -109,6 +110,11 @@ export class DricketTicketStore implements TicketStore {
       maxExtensions: numberOrNull(data['max_extensions']),
       leaseUntil: textOrNull(data['lease_until']),
     };
+  }
+
+  /** `dk comment <id> -m <text>`: a new file under `comments/`, never a write to `ticket.md`. */
+  async comment(id: string, text: string, options: CommentOptions, call: CallOptions = {}): Promise<void> {
+    await this.dk.call(['comment', dricketId(id), '-m', text], { write: true, actor: options.actor, ...signalOf(call) });
   }
 
   /**

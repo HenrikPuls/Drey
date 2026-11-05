@@ -39,6 +39,7 @@ function fakeStore(details: TicketDetail[]): TicketStore & { shows: string[] } {
     claim: () => Promise.reject(new Error('read-only')),
     release: () => Promise.reject(new Error('read-only')),
     extend: () => Promise.reject(new Error('read-only')),
+    comment: () => Promise.reject(new Error('read-only')),
     comments: () => Promise.resolve([]),
   };
 }

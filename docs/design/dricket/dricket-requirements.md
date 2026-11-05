@@ -47,6 +47,7 @@ structs, `dk` itself was not run (see `fit-analysis.md` §0).
 | R-27 | `dk init` writes a `dricket.toml` that stays valid with a custom `[stages]` | Nice (found in E14-2) |
 | R-29 | `dk --trace` / `DK_TRACE`: per-step timing of what one call does | Nice (found in the E14-4 comparison) |
 | R-30 | Fewer git processes per command: a read needs about three, `ls` one batch read | Needed for dricket's own speed; moot for Drey's board (E14-4 reads files) |
+| R-31 | An agent may release a ticket into the stage it is in (`build -> build`) | Nice (found in E14-5) |
 | Q-01 | Account model: service account or own accounts | Question |
 | Q-02 | Owner id grammar | Question |
 | Q-03 | Waiting for a human inside a claim | Question |
@@ -354,6 +355,20 @@ the heading exactly (`^## Result\s*$`), and append log lines inside the `## Log`
 section (before the next `## ` heading, else at the end). Until then Drey keeps
 `## Log` as the last chapter and never passes `-m` to `release` (it writes its
 own `## Result` through `put`/`commit`).
+
+### R-31 An agent may release into the stage it is in
+
+**Evidence (dk v0.6.1, E14-5).** `dk claim t-10` on a ticket in `inbox` moves it into the first
+claim stage (`build`); `dk release t-10 --stage inbox` works, but on a ticket that already sat in
+`build` the release is refused: `agent may not release t-10 from build to build` (exit 14).
+
+**Why Drey cares.** A failed, stopped or blocked run should give its ticket back where it was.
+For a ticket that was already in the working stage there is no such release; Drey's runner
+retreats it to the stage before (`prioritized`), which moves the card a column left on every
+failed retry.
+
+**Proposal.** Allow a release into the current stage for the claim's kind (the lease ends, the
+stage stays), or a `release --keep-stage`.
 
 ### R-15 `validate` cost grows with history
 

@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { EngineBoardService } from './board-service';
 import type { EngineHost, EngineVault, FleetPort } from './host';
 import { TicketsGit } from '../core/tickets-git';
-import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools } from '../fleet/protocol';
+import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools, type RunRequest } from '../fleet/protocol';
 import { assertDkVersion, MIN_DK_VERSION } from '../store/dk-process';
 
 /**
@@ -286,12 +286,47 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     expect(await service.releasePlan({ id: 'T-0001', scope: 'all' })).toMatchObject({ ok: false });
   });
 
-  it('refuses the fleet-owned writes until E14-5', async () => {
-    expect(await service.setClaim({ id: 'T-0002', mode: 'takeover' })).toMatchObject({ ok: false, error: expect.stringContaining('E14-5') });
-    expect(await service.startRun({ ticketId: 'T-0002', workerChoice: null, permissionMode: 'accept-edits', handover: null, interactive: null })).toMatchObject({
-      ok: false,
-      error: expect.stringContaining('E14-5'),
-    });
+  it('takes a claim and gives it back through dk (E14-5): dk alone decides', async () => {
+    expect(await service.setClaim({ id: 'T-0002', mode: 'takeover', actor: 'henrik' })).toMatchObject({ ok: true });
+    expect(field('t-2', 'owner')).toBe('henrik');
+    // A second human cannot take over a live lease: dk's exit 11 is the answer, not a TypeScript rule.
+    expect(await service.setClaim({ id: 'T-0002', mode: 'takeover', actor: 'ben' })).toMatchObject({ ok: false, error: expect.stringContaining('claimed') });
+    expect(await service.setClaim({ id: 'T-0002', mode: 'release', actor: 'henrik' })).toMatchObject({ ok: true });
+    expect(field('t-2', 'owner')).toBe('');
+  });
+
+  it('starts a run on a dricket ticket: the request carries the store, the runner claims (E14-5)', async () => {
+    const kt = abs('kt').split(path.sep).join('/');
+    await fsp.writeFile(abs('tickets/_meta/repos.md'), `---\nrepos:\n  kt:\n    url: https://example.test/kt.git\n    path: '${kt}'\n---\n`, 'utf8');
+    const text = dkShow('t-2')
+      .replace(/^repos:.*/m, 'repos: kt')
+      .replace('## Log', '## Plan\n\n### Acceptance criteria\n\n- [ ] `echo ok`\n\n## Log');
+    dk(['put', 't-2', '-F', writeTemp(text), '--claim', '--if-version', String(rev('t-2'))]);
+    await fsp.mkdir(abs('tickets/_meta/prompts'), { recursive: true });
+    await fsp.writeFile(abs('tickets/_meta/prompts/build-default.md'), 'Build the ticket.\n', 'utf8');
+    const started: RunRequest[] = [];
+    const fleet: FleetPort = {
+      runs: async () => [],
+      start: async (request) => {
+        started.push(request);
+        return { ok: false, error: 'stub: not spawning' };
+      },
+      configureChain: async () => undefined,
+    };
+    const runner = new EngineBoardService(hostOf(), new TicketsGit(() => 'git', async () => ''), 'opencode', 'accept-edits', '', fleet, '/fleet', normalizeFleetCaps({}), normalizeFleetPools({}), normalizeFleetHandover({}), 'owner@test', {});
+    try {
+      const reply = await runner.startRun({ ticketId: 'T-0002', workerChoice: null, permissionMode: 'accept-edits', handover: null, interactive: null });
+      expect(reply).toMatchObject({ ok: false, error: 'stub: not spawning' });
+      expect(started).toHaveLength(1);
+      expect(started[0]!.dk).toMatchObject({ store: storeDir, trailers: false, parkStage: null, retreatStage: 'inbox' });
+      expect(started[0]!.ticketId).toBe('T-0002');
+    } finally {
+      runner.dispose();
+    }
+  });
+
+  it('keeps the chain off on the dricket backend until E14-5b', async () => {
+    expect(await service.chainRefusal()).toContain('E14-5b');
   });
 
   function writeTemp(text: string): string {

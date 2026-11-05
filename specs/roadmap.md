@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153–155 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153–156 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -544,10 +544,22 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   the real-run check of the watcher and the write moves on a second instance
   (never run here: the checks ran on a scratch store through the engine's
   services, not in a running app).
-- **E14-5 — Fleet on `dk`.** Claim before the worker spawns, extend, release
-  with stage/message, exit 13 stops the worker, takeover by lease, park =
-  `blocked` + comment, optional `Dricket-*` trailers and `dk validate
-  --trailers` in the commit step. Needs E14-1. Parallel with E14-2, E14-3.
+- **E14-5b — The chain on a store, and the rest of the fleet's chapters** (rest of
+  E14-5; the run lease shipped as milestone 156). Owner-started runs already claim,
+  extend, release and stop on exit 13 through `dk`; what is left: (1) the **chain
+  orchestrator** reads its board from ticket files (`orchestrator.ts` over
+  `ticketsVaultPath`) — port it onto `StoreBoardSource`, then lift `chainRefusal`; its
+  pools skip tickets by `claimedBy`, which the store board already maps from the owner,
+  and a ticket whose lease ran out reads as unclaimed, so dispatch is the takeover;
+  (2) `## Verlauf` / `## Handover` / `## Verification` and the settle's persona
+  lesson written **inside the claim** (`put --claim`/`commit`; the runner's Verlauf line is
+  skipped on dricket today); (3) needs-input: release + re-claim on the answer (dricket
+  Q-03); (4) a crashed runner's claim blocks its ticket until the lease ends — release
+  leftovers of detached runs at `adopt` (they have the same owner id) and a
+  "release leftover claims" action; (5) dricket **R-31** (an agent's same-stage release,
+  `build -> build`) so a failed run need not retreat a column; (6) the real checks: a run
+  on a throw-away ticket killed with SIGKILL and taken over after a shortened lease
+  (`dricket.toml` `lease_min`) on a second instance. Needs E14-5.
 - **E14-6 — Comments, signals, ledger.** Send-back notes and Needs-you answers
   as comments, keyed status verbs as comments (`working:` not persisted), ledger
   to the meta repo. Needs E14-4 and dk R-08.

@@ -37,6 +37,28 @@ export type PermissionMode = 'accept-edits' | 'bypass';
  */
 export type InteractiveMode = 'plan';
 
+/** Where a run's ticket is claimed and released (E14-5): the store the board runs on. */
+export interface RunDkTarget {
+  /** `dk` executable; empty = `dk` on PATH. */
+  readonly bin: string;
+  /** The dricket store (`tickets.dk.store`). */
+  readonly store: string;
+  /** `DK_DATA_DIR`; empty = dk's default. */
+  readonly dataDir: string;
+  /** The checkout the board reads (`tickets.dk.checkout`); empty = none. */
+  readonly checkout: string;
+  /**
+   * The stage a parked ticket (a manual step follows, or the worker is blocked)
+   * is released to, with a comment. Null = it stays in its stage with the comment:
+   * the owner's store may have no `blocked` stage (`dricket.toml` `[stages]`).
+   */
+  readonly parkStage: string | null;
+  /** The stage before the working one, for a release that may not stay put (dk refuses `build -> build` for an agent). */
+  readonly retreatStage: string | null;
+  /** Workers put `Dricket-*` trailers on their commits and the gate runs `dk validate --trailers` (off by default). */
+  readonly trailers: boolean;
+}
+
 /**
  * What the runner needs to start one run. One run = one ticket = one
  * worktree on the deterministic branch (ADR-0075); the ticket-file
@@ -168,6 +190,14 @@ export interface RunRequest {
    * Null on an owner-started run.
    */
   readonly column?: string | null;
+  /**
+   * E14-5 (ADR-0090): the ticket lives in a dricket store. Present = the runner
+   * claims through `dk` before the worker spawns, keeps the lease alive, gives
+   * the ticket up with a stage and a message, and writes NO ticket file (no
+   * `run:` stamp, no Log line, no folder move). Absent = the files backend,
+   * every older sender.
+   */
+  readonly dk?: RunDkTarget;
 }
 
 /** How the run's worktree was obtained — `prepareWorktree` (T-0047) is

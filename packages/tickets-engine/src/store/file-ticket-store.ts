@@ -5,6 +5,7 @@ import {
   type CallOptions,
   type Claim,
   type ClaimOptions,
+  type CommentOptions,
   type ExtendOptions,
   type LeaseExtension,
   type ReleaseOptions,
@@ -91,6 +92,10 @@ export class FileTicketStore implements TicketStore {
 
   extend(_id: string, _options: ExtendOptions): Promise<LeaseExtension> {
     return Promise.reject(new TicketStoreError('unsupported', 'the files backend has no leases to extend'));
+  }
+
+  comment(_id: string, _text: string, _options: CommentOptions): Promise<void> {
+    return Promise.reject(new TicketStoreError('unsupported', 'the files backend has no comments (a legacy ticket carries a ## Log)'));
   }
 
   comments(_id: string, _call?: CallOptions): Promise<readonly TicketComment[]> {

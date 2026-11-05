@@ -583,11 +583,23 @@ const plugin: MainPluginModule = {
 
     ctx.ipc.handle('chainMaster', async (payload) => {
       const cmd = parseChainMaster(payload);
+      if (cmd.ok && cmd.value.mode === 'run') {
+        const refusal = await board.chainRefusal();
+        if (refusal !== null) {
+          return { ok: false, error: refusal };
+        }
+      }
       return cmd.ok ? chainResult(await fleet.setMaster(cmd.value.mode)) : cmd;
     });
 
     ctx.ipc.handle('chainColumn', async (payload) => {
       const cmd = parseChainColumn(payload);
+      if (cmd.ok && cmd.value.mode === 'playing') {
+        const refusal = await board.chainRefusal();
+        if (refusal !== null) {
+          return { ok: false, error: refusal };
+        }
+      }
       return cmd.ok ? chainResult(await fleet.setColumn(cmd.value.phase, cmd.value.mode)) : cmd;
     });
 

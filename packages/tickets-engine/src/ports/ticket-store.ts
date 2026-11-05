@@ -106,6 +106,11 @@ export interface LeaseExtension {
   readonly leaseUntil: string | null;
 }
 
+/** Who writes a comment (`DK_OWNER`); the claim's owner is not required — comments never touch `ticket.md`. */
+export interface CommentOptions {
+  readonly actor: string;
+}
+
 export interface TicketComment {
   readonly author: string;
   readonly at: string;
@@ -170,6 +175,8 @@ export interface TicketStore {
   claim(id: string, options: ClaimOptions, call?: CallOptions): Promise<Claim>;
   release(id: string, options: ReleaseOptions, call?: CallOptions): Promise<ReleaseResult>;
   extend(id: string, options: ExtendOptions, call?: CallOptions): Promise<LeaseExtension>;
+  /** Appends a comment (`dk comment`); it never conflicts with the claim's owner (E14-5: park notes). */
+  comment(id: string, text: string, options: CommentOptions, call?: CallOptions): Promise<void>;
   comments(id: string, call?: CallOptions): Promise<readonly TicketComment[]>;
 }
 

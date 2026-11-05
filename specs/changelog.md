@@ -1,3 +1,71 @@
+### Milestone 156 — E14-5: the fleet runner claims through `dk`
+
+**Not yet manually verified by the owner.** Owner request (roadmap E14-5, ADR-0090 later
+change). With `tickets.backend = dricket` a fleet run now claims its ticket through `dk`
+before anything else, keeps the lease alive, and gives the ticket up through `dk release`
+— and writes **no ticket file** (no `run:` stamp, no Log line, no folder move, no
+bookkeeping commit). The `files` backend is untouched: a run request without `dk` takes
+exactly the old paths. **Scope:** the owner-started run (card ▶, the dialogs, the
+Assistant) — the chain orchestrator is E14-5b (roadmap); the chain refuses to switch on
+while the board runs on dricket, so it can never dispatch from stale files.
+
+- **`RunLease`** (`fleet/run-lease.ts`, new): one per run, over the `TicketStore` port.
+  `claim()` (shows the stage first, then `dk claim --kind agent`, idempotent for the same
+  owner), a keep-alive that extends at half the time left (`dk extend`, min 30 s, retried
+  after 60 s, ended quietly when dk's extension budget is spent), `release(candidates, note)`
+  and `comment()`. **Exit 13 anywhere fences the lease**: the keep-alive stops, nothing is
+  written any more, `onLost` fires once. The owner id is `agent-<run id>@<host>` in dk's
+  owner grammar — stable per run, so a runner that restarts re-claims its own ticket
+  idempotently (`resumeLease` in `adopt`).
+- **`RunSupervisor`** (`fleet/runs.ts`): `request.dk` (`RunDkTarget`: bin, store, dataDir,
+  checkout, park stage, retreat stage, trailers) switches the run onto dricket. **The claim
+  is the first thing `start` does** — a ticket someone else holds (exit 11) refuses the
+  start before a worktree is prepared or a worker spawns; a worktree failure gives the
+  claim back. Every ticket write funnels through `patchTicket` (now a no-op on dk) and
+  the one give-up point `clearRunStamp` (now `releaseDk`). **Green gate + next phase** =
+  `release --stage <next phase>` (the release IS the move). **Park** (a manual step
+  follows, or the worker ended `BLOCKED:`) = comment + release to the park stage, which is
+  `blocked` only when the pipeline has such a phase — the owner's migrated store has no
+  `blocked` stage, so the ticket then keeps its stage with the comment. **Failed /
+  stopped / done-without-move** = release back to where the ticket sat before the claim
+  (dk may have moved it into the claim stage); if dk refuses (an agent may not release
+  `build -> build`) the stage before the working one (`retreatStage`). **Exit 13**
+  (`onClaimLost`): the worker is stopped, the run fails with "claim lost", no release, no
+  comment — takeover by lease is dk's decision (claim after `lease_until` + 20 min grace),
+  the stale runner finds out at its next call.
+- **The note is a comment, never `release -m`** — dk's `-m` replaces the body chapters
+  between `## Result` and `## Log` (dricket R-21, still open in v0.6.1), and Drey's tickets
+  keep several there. `TicketStore.comment` is new (`dk comment -m`; `FileTicketStore`
+  refuses).
+- **Trailers (opt-in, `tickets.dk.trailers`)**: the worker's instruction gets the four
+  `Dricket-*` trailers with the claim's epoch (`## Commit trailers`), and the gate runs
+  `dk validate --trailers <base>..HEAD` in the worktree after the acceptance commands; a
+  commit without them is a red gate. Workers never see `dk` or its identity.
+- **Board service**: `startRun` no longer refuses on dricket — it reads the card text from
+  the store (`readCardText`), composes the request with `dk` (`runTarget`) and hands it to
+  the runner. `setClaim` on dricket is a human's `dk claim` (takeover only after a lease
+  ran out — dk's exit 11 is the answer, not a TypeScript rule) / `dk release` at the card's
+  stage. `chainRefusal()` + the plugin's chain commands: the chain cannot be switched on
+  on dricket (E14-5b), and `syncChainConfig` never points the dispatcher at a vault whose
+  tickets live in a store.
+- **Specs:** `run-lease.spec.ts` (8: owner grammar, trailer lines, claim + keep-alive
+  schedule, exit 13 fence, retry/budget, comment-then-release candidate walk, refused
+  claim), `runs-dk.spec.ts` (12: claim before worktree and worker, refused start spawns
+  nothing, green move = release with comment and an untouched vault, red gate, retreat
+  stage, park with and without a park stage, unknown-stage fallback, `BLOCKED:`, exit 13
+  on the extension and on the release, trailers + red gate, no `dk` → no store call),
+  `run-lease-dk.spec.ts` (against a real `dk` on a scratch store: claim, foreign claim
+  refused, extend, comment, release, epoch kept), `board-service-dricket.spec.ts`
+  (takeover/release through dk, `startRun` composes the request with the store, the chain
+  refusal). Specs replaced: "refuses the fleet-owned writes until E14-5".
+- **Not done (roadmap E14-5b):** the chain orchestrator on a store; `## Verlauf` /
+  `## Handover` / `## Verification` written inside the claim (the settle's Verlauf line is
+  skipped on dricket — no data is lost, the chapter just stops growing for dk runs);
+  workers still read their brief from the request, but a worker that edits the ticket
+  chapters has no door yet; needs-input release/re-claim (Q-03); the real takeover run
+  (SIGKILL a run, wait out a shortened lease) and a real run on a throw-away ticket were
+  not made.
+
 ### Milestone 155 — E14-4b: the board's write moves on the `dk put` path
 
 **Not yet manually verified by the owner.** Owner request (roadmap E14-4b, ADR-0090

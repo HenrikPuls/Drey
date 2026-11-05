@@ -215,3 +215,30 @@ resumes by matching the existing children by title and filling stubs left empty.
 The fleet's own ticket writes (claim takeover / release, run stamps) are refused on
 dricket until E14-5 re-bases them on `dk claim`. The editor save hook and ticket documents
 opened from the checkout are E14-4c (they sit in `note-manager`, not in the board).
+
+## Later change — the run lease (E14-5, 2026-11-05)
+
+**Decision.** A fleet run on `tickets.backend = dricket` claims, extends and releases its ticket
+through `dk` and writes no ticket file. One `RunLease` per run (`fleet/run-lease.ts`) sequences
+the calls over the `TicketStore` port; every decision stays in `dk` — lease length by size, epoch,
+takeover after `lease_until` + grace, stage rules. The run request carries the store (`RunRequest.dk`),
+so the runner process needs no backend setting of its own and an old request without it runs the
+files paths unchanged.
+
+**Rules this fixes.**
+- The claim is the first act of `start`: refused (exit 11) means no worktree and no worker.
+- The owner id is per run (`agent-<run id>@<host>`, dk's `[a-z0-9._@-]`): fencing tells two runs
+  of one ticket apart, and an adopted run re-claims idempotently.
+- Exit 13 on any call fences the run: the worker is stopped, nothing more is written.
+- **A note is a comment, never `release -m`** (dricket R-21 would replace the chapters between
+  `## Result` and `## Log`). The release names a target stage only.
+- A move is `release --stage <next phase>`. A run that moves nothing releases to the stage the
+  ticket sat in before the claim (dk moves a claimed ticket into the first claim stage), else to the
+  stage before the working one — an agent may not release into the stage it is in.
+- Park = comment + release to `blocked` **when the pipeline has such a stage**; the migrated store
+  has none (`inbox prioritized build commit done`), so a parked ticket keeps its stage with the
+  comment — OD-4 decides whether `blocked` joins the vocabulary.
+- `Dricket-*` trailers and `dk validate --trailers` in the gate are opt-in (`tickets.dk.trailers`).
+
+**Not decided here, left open (roadmap E14-5b).** The chain orchestrator still reads ticket files and
+is refused while the board runs on dricket; chapters written inside the claim; needs-input re-claim.
