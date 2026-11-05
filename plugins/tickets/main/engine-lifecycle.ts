@@ -132,6 +132,21 @@ export async function syncConfig(client: ConfigSyncClient, ctx: {
 }
 
 /**
+ * The ticket store's keys (`backend`, `dk.*`) alone, pushed whenever the board is
+ * fetched: Settings -> Tickets writes them to the plugin config, the engine reads its
+ * own, and a changed checkout or sync interval must apply without a restart (E14-4c).
+ * Only keys the plugin config holds travel (a cleared field arrives as an empty value).
+ */
+export async function syncStoreConfig(client: ConfigSyncClient, ctx: { config: { get<T>(key: string): Promise<T | undefined> } }): Promise<void> {
+  for (const key of STORE_SETTING_KEYS) {
+    const value = await ctx.config.get<unknown>(key);
+    if (value !== undefined) {
+      await client.invoke('configSet', { key, value }).catch(() => undefined);
+    }
+  }
+}
+
+/**
  * Pushes the assistant LLM settings into the engine as the `chat.*` keys
  * the Mission Control bridge reads. Every key travels every time -- a
  * cleared model or key arrives as `null` instead of leaving the old value

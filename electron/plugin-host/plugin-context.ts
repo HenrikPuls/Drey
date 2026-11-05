@@ -70,7 +70,7 @@ export async function runVaultTool(
 /** `ctx.vault`: file IO in the vaults, with the plugin's id as the history origin. */
 export function buildVaultContext(
   pluginId: string,
-  deps: Pick<PluginHostDeps, 'vaultManager' | 'vaultAnnouncer' | 'confirmWrite' | 'managedVaults' | 'registerVaultAt'>,
+  deps: Pick<PluginHostDeps, 'vaultManager' | 'vaultAnnouncer' | 'confirmWrite' | 'managedVaults' | 'registerVaultAt' | 'documentRoutes'>,
   manifestName: string,
   onChanged: (cb: (event: VaultChangeEvent) => void) => Unsubscribe,
 ): MainPluginContext['vault'] {
@@ -144,6 +144,11 @@ export function buildVaultContext(
     // One-click vault registration (SDK 1.33, T-0045): the composed
     // round — register + watcher sync + full refresh — lives in the dep.
     register: (path) => deps.registerVaultAt(path),
+    // Documents this plugin writes through its own engine (SDK 1.44, E14-4c).
+    routeDocuments: (route) => {
+      deps.documentRoutes.set(pluginId, manifestName, route);
+      return () => deps.documentRoutes.clearRoute(pluginId, route);
+    },
   };
 }
 

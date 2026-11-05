@@ -267,6 +267,39 @@ function openTicketFile(api: DreyPluginApi, path: string): void {
   }
 }
 
+/**
+ * E14-4c: with the dricket backend a ticket's document is a file of the store's
+ * checkout (a vault of its own), not a card path of the tickets vault. Opens it in
+ * the editor and returns true; false = not a dricket ticket, the caller opens the
+ * vault file as before. A declined or failed checkout registration is told once.
+ */
+async function openDricketDocument(api: DreyPluginApi, id: string): Promise<boolean> {
+  let reply: { ok: boolean; document?: { vaultId: string; path: string } | null; error?: string };
+  try {
+    reply = (await invokeBoard('ticketDocument', { id })) as typeof reply;
+  } catch {
+    return false;
+  }
+  if (!reply.ok) {
+    await api.ui.showMessage(reply.error ?? 'The ticket document could not be opened.', 'Tickets');
+    return true;
+  }
+  if (reply.document == null) {
+    return false;
+  }
+  await api.documents.open(reply.document.path, undefined, { vaultId: reply.document.vaultId });
+  return true;
+}
+
+/** Opens the ticket's document: the store checkout's on dricket, else the vault file. */
+function openTicketCard(api: DreyPluginApi, card: TicketCard): void {
+  void openDricketDocument(api, card.id).then((opened) => {
+    if (!opened) {
+      openTicketFile(api, card.path);
+    }
+  });
+}
+
 /** Outlines the Work row whose ticket file (or thread) is the active tab. */
 function markOpenCard(api: DreyPluginApi): void {
   const active = api.documents.active();
@@ -1780,6 +1813,11 @@ function threadRun(ticketId: string): RunInfo | null {
  * the next ticket opens there.
  */
 async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<void> {
+  // A dricket ticket opens as its checkout document alone: the file/thread pair is
+  // anchored on the vault card path (E14-4c leaves the pairing to a later step).
+  if (await openDricketDocument(api, card.id)) {
+    return;
+  }
   if (snapshot?.vaultId == null) {
     return;
   }
@@ -1915,7 +1953,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   fileLink.addEventListener('click', () => {
     const card = boardCard(ticketId);
     if (card !== null) {
-      openTicketFile(api, card.path);
+      openTicketCard(api, card);
     }
   });
   const controls = el('span', 'tickets-takeover-controls');
@@ -3310,7 +3348,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       ...deskDeps(api),
       rowOf,
       openSendBack: (ticketId) => openSendBackModal(api, ticketId),
-      openTicketFile: (card) => openTicketFile(api, card.path),
+      openTicketFile: (card) => openTicketCard(api, card),
       storage: () => window.localStorage,
     });
     const documentExtension = createTicketDocumentExtension({

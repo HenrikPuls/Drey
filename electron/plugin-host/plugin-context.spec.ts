@@ -5,6 +5,7 @@ import type { ToolSpec } from '../../shared/llm';
 import type { LlmChatOptions } from '../llm';
 import type { VaultCallOptions } from '../mcp';
 import { ManagedVaults } from './managed-vaults';
+import { DocumentRoutes } from './document-routes';
 import { assistantVaultOptions, buildLlmContext, buildVaultContext, runVaultTool } from './plugin-context';
 
 /**
@@ -264,6 +265,7 @@ describe('buildVaultContext - the ctx.vault of a plugin', () => {
     let subscribed: ((event: unknown) => void) | null = null;
     const confirmWrite = vi.fn(async (request: { path: string }) => request.path === 'ok.md');
     const managedVaults = new ManagedVaults();
+    const documentRoutes = new DocumentRoutes();
     const registerVaultAt = vi.fn(async (folderPath: string): Promise<{ id: string; name: string; path: string }> => ({
       id: 'v9',
       name: 'Registered',
@@ -276,6 +278,7 @@ describe('buildVaultContext - the ctx.vault of a plugin', () => {
         vaultAnnouncer: () => announcer as never,
         confirmWrite,
         managedVaults,
+        documentRoutes,
         registerVaultAt: registerVaultAt as never,
       },
       'My Plugin',
@@ -286,7 +289,7 @@ describe('buildVaultContext - the ctx.vault of a plugin', () => {
         };
       },
     );
-    return { ctx, vaultManager, announcer, confirmWrite, managedVaults, registerVaultAt, subscribed: () => subscribed };
+    return { ctx, vaultManager, announcer, confirmWrite, managedVaults, documentRoutes, registerVaultAt, subscribed: () => subscribed };
   }
 
   it('reads and writes with the plugin id as the history origin', async () => {
@@ -336,6 +339,7 @@ describe('buildVaultContext - the ctx.vault of a plugin', () => {
         vaultAnnouncer: () => null as never,
         confirmWrite: undefined,
         managedVaults: new ManagedVaults(),
+        documentRoutes: new DocumentRoutes(),
         registerVaultAt: (async (folderPath: string) => folderPath) as never,
       },
       'My Plugin',
@@ -366,6 +370,17 @@ describe('buildVaultContext - the ctx.vault of a plugin', () => {
     expect(h.managedVaults.managedBy('v2')).toBe('My Plugin');
     h.ctx.markManaged(null);
     expect(h.ctx.managedBy('v2')).toBeNull();
+  });
+
+  it('routeDocuments claims documents under the manifest name; the unsubscribe drops only that route', () => {
+    const h = vaultHarness();
+    const route = { owns: (_v: string, p: string) => p.startsWith('tickets/'), save: vi.fn() };
+    const off = h.ctx.routeDocuments(route);
+    expect(h.documentRoutes.routeFor('v1', 'tickets/a.md')).toMatchObject({ label: 'My Plugin' });
+    expect(h.documentRoutes.refusal('v1', 'tickets/a.md')).toContain('managed by My Plugin');
+    expect(h.documentRoutes.refusal('v1', 'notes/a.md')).toBeNull();
+    off();
+    expect(h.documentRoutes.routeFor('v1', 'tickets/a.md')).toBeNull();
   });
 
   it('announceChanges sends an empty round as a full refresh', () => {

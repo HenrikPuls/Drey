@@ -53,6 +53,8 @@ export type {
 } from '../llm';
 
 export type {
+  DocumentRoute,
+  DocumentRouteSaveResult,
   MainChatOptions,
   MainPluginContext,
   MainPluginModule,

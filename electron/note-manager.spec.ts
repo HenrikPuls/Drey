@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { NoteSavedEvent, SaveHookResult } from '../shared/plugin-api';
+import type { DocumentRoute, NoteSavedEvent, SaveHookResult } from '../shared/plugin-api';
+import { DocumentRoutes } from './plugin-host';
 import { createTempVaults, type TempVaults } from './testing/temp-vaults';
 
 const env = vi.hoisted(() => ({ userData: '' }));
@@ -295,5 +296,61 @@ describe('NoteManager save conflicts', () => {
     expect(writes[1].content).toMatch(/^---\nupdated: "\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d"\n---\nbody\n$/);
     expect(writes[1].content).not.toContain('2020-01-01');
     expect(writes[1].content).not.toContain('created');
+  });
+});
+
+describe('documents a plugin writes through its own engine (SDK 1.44, E14-4c)', () => {
+  const route = (saved: unknown[]): DocumentRoute => ({
+    owns: (_vaultId, p) => p === 'tickets' || p.startsWith('tickets/'),
+    save: async (request) => {
+      saved.push(request);
+      return request.body.includes('stale')
+        ? { conflict: { content: 'stored\n', modifiedMs: 7 } }
+        : { content: `${request.body}rev 2\n`, modifiedMs: 5 };
+    },
+  });
+  const routes = (saved: unknown[]): DocumentRoutes => {
+    const registry = new DocumentRoutes();
+    registry.set('tickets', 'Tickets', route(saved));
+    return registry;
+  };
+
+  it('hands the save to the route: no file is written, no hook fires, no frontmatter is touched', async () => {
+    const saved: unknown[] = [];
+    const h = hooks();
+    const manager = new NoteManager(vault, h, routes(saved));
+    vaults.put(vaults.a, 'tickets/t/0000/t-1/ticket.md', 'on disk\n');
+
+    const result = await manager.saveNote({ path: 'tickets/t/0000/t-1/ticket.md', body: '---\nupdated: "2020"\n---\nedit\n', eol: '\n', force: true });
+
+    expect(saved).toEqual([{ vaultId: expect.any(String), path: 'tickets/t/0000/t-1/ticket.md', body: '---\nupdated: "2020"\n---\nedit\n', force: true }]);
+    expect(result).toEqual({ path: 'tickets/t/0000/t-1/ticket.md', content: '---\nupdated: "2020"\n---\nedit\nrev 2\n', modifiedMs: 5 });
+    expect(vaults.read(vaults.a, 'tickets/t/0000/t-1/ticket.md')).toBe('on disk\n');
+    expect(h.events).toEqual([]);
+  });
+
+  it('turns the route\'s conflict into the ordinary save-conflict answer', async () => {
+    const manager = new NoteManager(vault, hooks(), routes([]));
+    const result = await manager.saveNote({ path: 'tickets/x/ticket.md', body: 'stale edit\n', eol: '\n', baseModifiedMs: 3 });
+    expect(result).toEqual({ path: 'tickets/x/ticket.md', content: 'stale edit\n', modifiedMs: 3, conflict: { content: 'stored\n', modifiedMs: 7 } });
+  });
+
+  it('saves other notes as before, and the guard refuses every other write of an owned path', async () => {
+    const registry = routes([]);
+    vault.setMutationGuard((vaultId, p) => registry.refusal(vaultId, p));
+    const manager = new NoteManager(vault, hooks(), registry);
+    await manager.saveNote({ path: 'notes/a.md', body: 'free\n', eol: '\n' });
+    expect(vaults.read(vaults.a, 'notes/a.md')).toBe('free\n');
+
+    await expect(vault.writeFile('tickets/t.md', 'x')).rejects.toThrow('managed by Tickets');
+    await expect(vault.writeBinaryFile('tickets/t.png', new Uint8Array([1]))).rejects.toThrow('managed by Tickets');
+    await expect(vault.createFile('tickets/new.md')).rejects.toThrow('managed by Tickets');
+    await expect(vault.createDirectory('tickets/dir')).rejects.toThrow('managed by Tickets');
+    await expect(vault.deleteEntry('tickets/t.md')).rejects.toThrow('managed by Tickets');
+    await expect(vault.renameEntry('notes/a.md', 'tickets/a.md')).rejects.toThrow('managed by Tickets');
+    await expect(vault.renameEntry('tickets/t.md', 'notes/t.md')).rejects.toThrow('managed by Tickets');
+    await expect(vault.copyEntry('notes/a.md', 'tickets')).rejects.toThrow('managed by Tickets');
+    // Reading and unrelated paths stay free.
+    await expect(vault.writeFile('notes/b.md', 'ok')).resolves.toBeGreaterThan(0);
   });
 });

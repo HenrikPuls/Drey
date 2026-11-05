@@ -12,7 +12,9 @@ import { promises as fsp, existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { archivedTicketIds, nextTicketId, TICKETS_ARCHIVE_DIR, TICKET_ID_PATTERN, type BoardSnapshot, FolderStatus, PipelinePhase, ProjectRef, PromptEntry, PromptListing, RepoCandidate, RepoRef, ReposListing, TicketCard, TicketForm, TicketPriority, TicketTrack } from '../contracts/tickets';
 import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply } from '../contracts/changes';
-import { type RefineReply, TicketReply, AttachmentReply } from '../contracts/replies';
+import { type RefineReply, TicketReply, AttachmentReply, type DocumentSaveReply, type TicketDocumentLocation } from '../contracts/replies';
+import { documentRelPath, idOfDocumentPath } from '../store/document-paths';
+import { detailFromContent } from '../store/dricket-ticket-store';
 import { assembleBoard, parseRepos, addPipelinePhase, patchPipelinePhase, removePipelinePhase, renamePipelinePhase, parsePipeline, reorderPipelinePhases, reposFileText, reposProse } from '../core/ticket-board';
 import { newTicketFileText, parseTicketFile, patchTicketFile, patchBlockedBy, patchChain, patchForm, patchTrack, ticketPathParts, withLogLine } from '../core/ticket-files';
 import { withPlanSection } from '../core/plan-section';
@@ -38,7 +40,7 @@ import { planWorktreeRemoval } from '../core/worktree-removal';
 import { TicketsGit, type RepoLocation } from '../core/tickets-git';
 import { TicketStoreError } from '../ports/ticket-store';
 import { FileTicketStore } from '../store/file-ticket-store';
-import { createDricketStore, groupByStage, readStoreSettings, type StoreListing, type StoreSettings } from '../store/store-settings';
+import { checkoutOf, createDricketStore, groupByStage, readStoreSettings, type StoreListing, type StoreSettings } from '../store/store-settings';
 import { recordToBoardFile } from '../store/store-board';
 import type { TicketDetail } from '../ports/ticket-store';
 import { ARCHIVED_LABEL, type BridgeOptions } from '../store/legacy-bridge';
@@ -1777,6 +1779,66 @@ export class EngineBoardService {
     const next = this.queueTail.catch(() => undefined).then(op);
     this.queueTail = next;
     return next;
+  }
+
+  // --- ticket documents of a dricket store in the editor (E14-4c, ADR-0090) -----
+
+  /**
+   * Where the ticket's document is: the store's checkout and the checkout-relative path
+   * (`tickets/<prefix>/<shard>/<id>/ticket.md`). Null on the files backend, without a
+   * checkout, and for a ticket the store does not have: the caller then opens the vault
+   * file as before.
+   */
+  async ticketDocument(input: { id: string }): Promise<TicketDocumentLocation | null> {
+    const store = await this.refreshDricket();
+    const checkout = store === null ? null : checkoutOf(store);
+    const relPath = documentRelPath(input.id);
+    if (store === null || checkout === null || relPath === null) {
+      return null;
+    }
+    try {
+      await this.storeBoard.record(store, input.id);
+    } catch {
+      return null;
+    }
+    return { checkout, path: relPath };
+  }
+
+  /**
+   * The editor's save of a ticket document (E14-4c): the tab's text goes back through
+   * `dk put --claim --if-version <rev>` — never as a file. `rev` is the one the tab read,
+   * taken from the text itself; `force` (the save-conflict merge was resolved against the
+   * stored document) puts on the rev the store has now. Exit 12 is a `conflict` reply with
+   * the document as stored, nothing written; dk judges the document, a refusal comes back
+   * as `error` with dk's own message.
+   */
+  saveDocument(input: { path: string; text: string; force?: boolean }): Promise<DocumentSaveReply> {
+    return this.enqueue(async () => {
+      const store = await this.refreshDricket();
+      if (store === null) {
+        return { ok: false, error: 'Ticket documents are saved through dricket; the dricket backend is off.' };
+      }
+      const id = idOfDocumentPath(input.path);
+      if (id === null) {
+        return { ok: false, error: `${input.path} is not a ticket document.` };
+      }
+      try {
+        const current = await this.storeBoard.record(store, id);
+        const expectedRev = input.force === true ? current.rev : detailFromContent(input.text).rev;
+        if (expectedRev === null) {
+          return { ok: false, error: 'The document has no rev: it cannot be saved. Reload the ticket.' };
+        }
+        const outcome = await this.storeBoard.write(store, id, input.text, { expectedRev });
+        if (!outcome.ok) {
+          return { ok: false, conflict: { text: outcome.conflict.current.text, rev: outcome.conflict.current.rev } };
+        }
+        const saved = await this.storeBoard.record(store, id);
+        this.announceChanged();
+        return { ok: true, text: saved.text, rev: saved.rev ?? outcome.result.rev };
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+    });
   }
 
   // --- the ticket write door (E14-4b, ADR-0090) ---------------------------------

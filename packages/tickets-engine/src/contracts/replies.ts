@@ -21,3 +21,19 @@ export interface AttachmentReply {
   readonly error?: string;
   readonly warning?: string;
 }
+
+/** Where a dricket ticket's document is: the store's checkout and the checkout-relative path (E14-4c). */
+export interface TicketDocumentLocation {
+  readonly checkout: string;
+  readonly path: string;
+}
+
+/**
+ * The editor save of a ticket document (E14-4c): the document as stored after the
+ * write, the document as stored when the ticket moved on (dk exit 12, nothing written),
+ * or dk's refusal.
+ */
+export type DocumentSaveReply =
+  | { readonly ok: true; readonly text: string; readonly rev: number }
+  | { readonly ok: false; readonly conflict: { readonly text: string; readonly rev: number | null } }
+  | { readonly ok: false; readonly error: string };

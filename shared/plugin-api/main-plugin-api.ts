@@ -69,6 +69,30 @@ export type SaveHook = (
 ) => Promise<SaveHookResult | void> | SaveHookResult | void;
 
 /**
+ * A plugin's claim on documents in a vault (SDK 1.44, E14-4c): the files
+ * live in a store the plugin writes through its own engine (the tickets
+ * plugin's dricket checkout). The base then (1) hands the editor's save of
+ * such a document to the route instead of writing the file, and (2) refuses
+ * every other route that would write, create, move or delete one
+ * ("read-only guard"). Reading and opening stay ordinary.
+ */
+export interface DocumentRoute {
+  /** Whether the route owns this document or folder. Synchronous: the guard asks on every mutation. */
+  owns(vaultId: string, path: string): boolean;
+  /**
+   * The editor's save of an owned document. `body` is the tab's text (LF lines);
+   * `force` means the save-conflict merge was resolved against `conflict.content`.
+   * Throw to refuse with a message the user sees.
+   */
+  save(request: { vaultId: string; path: string; body: string; force: boolean }): Promise<DocumentRouteSaveResult>;
+}
+
+/** What the route reports: the document as stored now, or the stored version that was in the way. */
+export type DocumentRouteSaveResult =
+  | { content: string; modifiedMs: number }
+  | { conflict: { content: string; modifiedMs: number } };
+
+/**
  * Scope for a section search (ADR-0051). Omitted = the active vault (the
  * pre-multi-vault behavior); `{ kind: 'vault' }` = exactly one registered
  * vault; `{ kind: 'all' }` = every registered vault, hits stamped with
@@ -502,6 +526,12 @@ export interface MainPluginContext {
      * basename becomes the name, an already-registered folder throws.
      */
     register(path: string): Promise<VaultRegistration>;
+    /**
+     * Claims documents of a vault for THIS plugin (SDK 1.44, E14-4c): their editor
+     * save goes to `route.save` and every other write path is refused. One route per
+     * plugin; a second call replaces the first; deactivation drops it.
+     */
+    routeDocuments(route: DocumentRoute): Unsubscribe;
   };
 
   /**

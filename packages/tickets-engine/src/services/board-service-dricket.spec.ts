@@ -241,6 +241,34 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     await service.setPriority({ id: 'T-0001', priority: 'high' });
   });
 
+  it('saves a ticket document from the editor through put (E14-4c): rev from the text, exit 12 is a conflict, force re-bases', async () => {
+    const location = await service.ticketDocument({ id: 'T-0001' });
+    expect(location).toEqual({ checkout: storeDir, path: 'tickets/t/0000/t-1/ticket.md' });
+    const onDisk = (): string => readFileSync(path.join(storeDir, ...location!.path.split('/')), 'utf8');
+    const first = onDisk();
+    const before = rev('t-1');
+
+    const saved = await service.saveDocument({ path: location!.path, text: first.replace('Capture by voice.', 'Capture by voice, edited.') });
+    expect(saved).toMatchObject({ ok: true, rev: before + 1 });
+    expect(dkShow('t-1')).toContain('Capture by voice, edited.');
+    expect(onDisk()).toContain('Capture by voice, edited.');
+
+    // The tab still holds the text of `before`: the ticket moved on, nothing is written.
+    const stale = await service.saveDocument({ path: location!.path, text: first.replace('Capture by voice.', 'Lost edit.') });
+    expect(stale).toMatchObject({ ok: false, conflict: { rev: before + 1 } });
+    expect((stale as { conflict: { text: string } }).conflict.text).toContain('Capture by voice, edited.');
+    expect(dkShow('t-1')).not.toContain('Lost edit.');
+    expect(rev('t-1')).toBe(before + 1);
+
+    // The merge was resolved against the stored document: force puts on the rev dk has now.
+    const forced = await service.saveDocument({ path: location!.path, text: onDisk().replace('edited.', 'merged.'), force: true });
+    expect(forced).toMatchObject({ ok: true, rev: before + 2 });
+    expect(dkShow('t-1')).toContain('Capture by voice, merged.');
+
+    expect(await service.saveDocument({ path: 'tickets/t/0000/t-1/comments/x.md', text: 'x' })).toMatchObject({ ok: false });
+    expect(await service.ticketDocument({ id: 'T-0999' })).toBeNull();
+  });
+
   it('moves a card, accepts it into the terminal column and archives it; unarchive brings it back', async () => {
     expect(await service.transition({ id: 'T-0001', from: 'inbox', to: 'build' })).toMatchObject({ ok: true });
     expect(field('t-1', 'stage')).toBe('build');
