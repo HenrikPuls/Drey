@@ -112,6 +112,17 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   slot; the sweep session writes each reproducible defect it finds as D-11… with steps,
   expected/actual and a screenshot, and this entry is removed when it has reported.
 
+- **D-5b — Mission Control on the phone still wobbles under small finger movements**
+  (owner report 2026-11-05, follow-up of D-5/milestone 143 and D-7 d). Small drags and
+  finger jitter move the page by a few pixels (rubber-band, scroll chaining, the visual
+  viewport panning); the **controls — header, tab bar, composer, bottom bar — must stay
+  fixed and not move at all**, only the content area scrolls. Find every source on iOS
+  Safari and the installed home-screen app (`overscroll-behavior`, `touch-action`,
+  `position: fixed` + `visualViewport` offsets, `body` scroll vs an inner scroller,
+  `-webkit-overflow-scrolling`, address-bar collapse), make one scroller own the scroll,
+  and extend the scroll-contract spec so a regression is caught. Cannot be fully proven
+  in Chromium: the owner confirms on the phone.
+
 _Shipped defects:_ D-1, Mission Control chat reaching no model, shipped as
 milestone 131; D-2, the paired-devices list and pairing from Mission
 Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
