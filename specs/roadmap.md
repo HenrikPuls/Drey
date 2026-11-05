@@ -90,6 +90,28 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
+- **D-7 — Mission Control chat on the phone about a ticket** (owner report 2026-11-05,
+  real vault, iPhone). (a) Asking about a ticket that exists (e.g. T-0091) gets "not in
+  the current board excerpt": the chat does not receive that ticket — find why (the
+  excerpt's limit or filter: done/archived, column, count; the ticket route the chat
+  engine uses) and give the chat the ticket by id (load it on demand / a tool, not a
+  fixed excerpt); (b) the chat field must NOT be pre-filled with a ticket-id prefix;
+  (c) after sending a message the view switches back (it must stay where it is);
+  (d) opening the keyboard pushes the upper part of the page out of view — the page
+  must shrink the area at the bottom instead (visual viewport / `dvh`, the header and
+  the thread stay put; relates to D-5). Reproduce each with a test or a recorded
+  fixture first.
+
+- **D-9 — Tickets panel footer on a dricket board** (found 2026-11-05 by the verify-round
+  sessions). On `tickets.backend = dricket` the footer still says "The tickets vault is
+  not a git repository — transitions are not versioned." — wrong: every move is a `dk`
+  commit. Show the store state instead (store path, branch, head, sync age / "local
+  store") on the dricket backend; keep the text only for a files vault that really is no
+  repository.
+- **D-10 — Defects found by the running-app sweep** (owner request 2026-11-05): an open
+  slot; the sweep session writes each reproducible defect it finds as D-11… with steps,
+  expected/actual and a screenshot, and this entry is removed when it has reported.
+
 _Shipped defects:_ D-1, Mission Control chat reaching no model, shipped as
 milestone 131; D-2, the paired-devices list and pairing from Mission
 Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
@@ -329,17 +351,52 @@ owner confirms scope and order before any of it starts:
   team, editable Setup, Friction tab, Notify / Runs after / This week /
   Typical run fields, "Talk to <name> 1:1 in the Assistant" (with E13-5), the
   per-persona slot share (needs an engine count) (G-14).
-- **E12-9b — Defaults the audit left open** (owner decision needed, from
-  `docs/design/work-panel/default-names-audit.md`). Q1: does the default pipeline gain
-  `review`, `verify`, `approve` (concept §5.1)? Q2: does "Initialize board" seed the team
-  Paul, Ben, Ralf, Tessa (D7)? Q3: default worker `opencode` or `claude-code`? Q1 touches the
-  dricket `[stages]` vocabulary and `DEFAULT_MIGRATION_CONFIG`.
-- **E12-10 — Mask audit against the design** (owner report 2026-11-05: many screens
-  do not yet match the design state). A screen-by-screen audit of Drey's Work panel
-  and Mission Control (desktop and phone) against the canvas files in
-  `docs/design/work-panel/*.dc.html` and `handoff/`; one table per screen (matches,
-  deviates how, size), screenshots of scratch English data, the result ordered into
-  roadmap items (extends `convergence-gaps.md`; nothing is rebuilt in this item).
+- **E13-23 — Mission Control ticket page on the phone: three cleanups** (owner markup
+  2026-11-05, screenshot `docs/design/work-panel/mc-ticket-owner-markup-2026-11-05.jpg`,
+  T-0091 on iPhone; outside the list; same code as E13-20/21, ships with or right after it).
+  (1) The line **"Chain: standard flow + the frontmatter delta · tap to adjust" is removed**
+  (the red scribble): tapping a phase in the phase strip is enough to adjust. (2) **The phase
+  is shown once**: the `phase: prioritized` text line under the title goes; the badge at the
+  top (PRIORITIZED) stays and becomes **colour-filled** in the phase's colour (it is outlined
+  today). (3) **The editor mode switch Live | View | Source moves to the top** of the page
+  (next to the edit control in the header, not in the text flow), and the page can be
+  switched away from View — View stays the default where results are presented (E12-6).
+  Check the same three points on the Drey desktop ticket page and the iPad layout.
+- **E12-9c — The default pipeline: Inbox · Plan · Build · Review · Sign Off · Done**
+  (owner decision 2026-11-05, answering E12-9b Q1; outside the list). The default pipeline
+  of a new board has six columns, in this order, with who works each: **1 Inbox** (manual —
+  the owner triages), **2 Plan** (agent), **3 Build** (agent), **4 Review** (manual — the
+  owner reviews), **5 Sign Off** (manual — this is where the work is committed: it takes
+  the role of today's `commit` column and its checkpoint discipline), **6 Done**. The first
+  column is titled **Inbox** again (this reverses E12-9's "Ideas", milestone 164 — the canvas
+  boards say "Ideas" but the owner decides "Inbox"). Consequences to carry through: the
+  engine's default pipeline and flow defaults (Plan returns as an agent column — check
+  req-93 "just-in-time planning", the plan columns left the default pipeline there; the
+  Review and Sign Off gates are manual: the human-persona gate of milestone 132/E10-6, a
+  parked ticket + notification, Accept / Send back); stage ids and the claim stages
+  (`dk` claim stages = the agent columns Plan and Build); the dricket `[stages]` default
+  (`values`, `initial`, `terminal`, `claim`) and `DEFAULT_MIGRATION_CONFIG.stages`, the reverse
+  converter, `dk init`/the scratch scripts (`scripts/verify-dricket.ps1`), fixtures, the
+  manual and its screenshots, the phone capture button label. Existing boards and stores
+  keep their columns (a default never renames what a user has). Open from E12-9b: Q2 team
+  seeding, Q3 default worker (still undecided).
+- **E10-8 — Kimi Code as a selectable worker** (owner request 2026-11-05, outside the
+  list). The fleet has two worker adapters, `opencode` and `claude-code`
+  (`packages/tickets-engine/src/fleet/providers.ts`, `settings-workers.ts`); Kimi Code
+  (the `kimi` CLI) has none, only a price row in `core/model-prices.ts`. Add a `kimi`
+  adapter (headless/stream protocol of the installed CLI — investigate `kimi --help`
+  and what the repo's `kimi-code` skill already learned), its Settings → Tickets worker
+  fields (pool size, probe, compaction like the others), persona worker choice, cost
+  rows, and its place in the worker probe. Opt-in, off until the owner picks it.
+- **E12-9d — "Initialize board" seeds the default team** (owner decision 2026-11-05,
+  answering E12-9b Q2: yes). A new board gets the default team of decision D7 — **Paul**
+  (plans), **Ben**, **Ralf**, **Tessa** (roles as in the concept) — plus "You" and Pia as
+  Mission Control itself, each with worker, model, colour and prompt. Which persona works
+  which column follows E12-9c (Plan, Build = agents; Inbox, Review, Sign Off = manual). The
+  default worker is **`opencode`** (owner decision 2026-11-05, E12-9b Q3: it supports all
+  providers; the engine's `defaultWorker` already is `opencode`); `claude-code` stays
+  selectable, and so must **Kimi Code** (see E10-8) — both are what the owner uses today. The names are plain persona files, so the owner's idea of a squirrel crew ("Nutty
+  Nutcracker" …) is a later naming choice, not a code change. Existing boards keep their team.
 - **E13-22 — Settings: one page width, a section tree and search** (owner request
   2026-11-05, outside the list; modelled on VS Code's settings). The settings overlay
   grows with the window (wider than today's 640 px cap) and **every page uses the same
@@ -350,8 +407,81 @@ owner confirms scope and order before any of it starts:
   a whole, a click on an entry scrolls to its section and the current section is
   highlighted while scrolling; a search field at the top filters all pages' settings.
   Applies to the shared scaffold (`src/app/settings/settings-ui.css`, plugin pages
-  via `PluginSettingsHost`), so every page benefits. After E12-9b (labels in the same
+  via `PluginSettingsHost`), so every page benefits. After E12-9c/9d (labels in the same
   files).
+- **E12-11 — Work panel body** (proposed by the E12-10 audit; M). One 40 px
+  header row with the icons *filter · New idea · Open Board tab · grip*; the
+  Workers cards leave the panel (they live in Team and Capacity; the Workers tab
+  and Chain log retire); Needs you comes first; the footer reads `Team · Ben,
+  Tessa busy` and opens the Team tab; rows keep the title on its own line with the
+  age at the right and one grey detail line instead of mono state words; the
+  git warning becomes a one-line dismissible note [A-01–A-06, A-09, A-10].
+  Files: `plugins/tickets/renderer/work-panel.ts`, `work-groups.ts`, the panel
+  part of `board.css`. Supersedes E13-14.
+- **E12-12 — The ticket page: header and Ticket | Thread | Review** (proposed by
+  the E12-10 audit; M). Builds on E13-20/E13-21: the form row above the title
+  (priority, repo, worker, branch, `Refine with agent`, `Plan with agent`) goes
+  — the strip carries id, status caps (`NEEDS YOU`, `PLAN TO APPROVE`, `READY TO
+  TRY`), kind chip, persona, step, cost with its basis inline; the question of a
+  waiting run is readable next to the document; the thread header does not
+  truncate a title that fits; a ticket without a run does not open a pre-filled
+  dialog composer; tab titles are `T-0121 · Title` for every kind [B-01–B-03,
+  C-03, D-01, D-02, D-05]. Files: `ticket-document/`, `ticket-header.ts`,
+  the thread and wait views.
+- **E12-13 — Mission Control chrome** (proposed by the E12-10 audit; M). Section
+  labels, chips, tabs, settings headings and persona roles go from uppercase mono
+  to sentence-case sans (mono stays for ids and code), 33 rules in
+  `libs/mission-ui`; the iPad empty state loses the developer sentence; the chat
+  placeholder fits and the field shows its focus ring; the gate-chain sheet's
+  green buttons take the accent; raw words (`frontmatter delta`) leave the chrome
+  [N-01, N-04, N-05, N-06, I-06, I-07, K-05, J-02, F-03]. Files: `apps/mission-control`
+  styles, `libs/mission-ui/src/**/*.css` and templates. Fits with E12-5's device rules —
+  one session may take both.
+- **E12-14 — Mission Control Work rows and the iPad layout** (proposed by the
+  E12-10 audit; M). A ticket is listed once (the Needs-you copy no longer repeats
+  under its column); rows show a detail line, age, persona and cost; Settings
+  details (Devices, Appearance, Chat) take the middle and right area instead of a
+  ~120 px column; the Engine row holds more than one word; `Away and alerts` and
+  `Repositories` wait for E12-3b [K-03, K-04, N-02, N-03, N-07]. Files:
+  `libs/mission-ui/src/work/`, `settings/`, `apps/mission-control/src/app/`
+  (touches the same stylesheet as E12-13 — run after it, or together).
+- **E12-15 — Capacity band and status bar** (proposed by the E12-10 audit; M).
+  The band shows only while Board or Team is the active tab and is one line
+  (completes E13-13's rest); two status items `$4.10 today` and `● 3 need you`,
+  `in Work` while in Notes (E13-15); the title-bar `Capture by voice` button once
+  the owner has ruled on its chord (E13-16); the Team header counts every card
+  and shows the state summary [I-01, I-03, I-04, L-04, L-05]. Files:
+  `plugins/tickets/renderer/team/capacity-view.ts`, `status-slot.ts`,
+  `src/app/status-bar/`, `src/app/titlebar/`.
+- **E12-16 — Board and Team completion** (proposed by the E12-10 audit; M, partly
+  L). `Filter: all personas` and `Cost by column` (E13-17); empty columns say
+  `Empty` quietly, `New idea` moves to the board header; `New persona`, `Remove
+  from team`, editable Setup, the Friction tab, the Setup fields and `Talk to …
+  1:1` (E13-19) [H-01–H-03, I-02]. Files: `plugins/tickets/renderer/board/`,
+  `team/team-view.ts`.
+- **E12-17 — Parts block in the ticket** (E13-10, restated; L). The screenshot
+  evidence is the raw Markdown list with `persona:` / `reason:` lines
+  [F-01, E-02]; no change of scope — this entry only records that the audit found
+  it as the largest single gap on the desk.
+- **E12-18 — Views and tabs polish** (proposed by the E12-10 audit; S). Views
+  menu descriptions, shortcut text and `Edit views…`; `Go to the Work view` in the
+  tab menu; `2 here · 3 elsewhere`; the dock strip no longer wraps its tenth icon
+  [L-01–L-03, L-06] (extends E13-18). Files: `src/app/titlebar/`,
+  `src/app/windows/`, `src/app/panes/` tab menu. Do after D-6 (same files).
+- **E12-19 — Assistant labels, review layout, settings leftovers** (proposed by
+  the E12-10 audit; S). (The Assistant's top row and its way of input stay as the owner adjusted them on 2026-11-05 — `docs/design/work-panel/assistant-owner-layout-2026-11-05.png`: icon-only target switch, composer with its field text, mic, send, icon row and model name; audit row M-01 is withdrawn. Only how the chat itself looks may follow the design.) A splitter and a
+  taller diff in the Review tab; `Pause when the budget is spent` (needs
+  E12-3b's setting first); the Default flow row without the ticket dropdown;
+  the Settings list no longer clips `Panels & plugins`; the disabled `Split`
+  button says why; flow wording `Move earlier / Add a gate after this one /
+  Remove this gate` [M-01, R-01, R-02, K-01, K-02, E-03, J-01].
+- **E12-20 — Audit fixtures and the canvas export** (proposed by the E12-10
+  audit; S). Export boards 4a–7j next to the stale repo copies (or delete the
+  copies), and add the fixtures the audit could not seed: an MC ticket with a
+  waiting question, one with proof and a diff, an MC plan to approve, an MC shape
+  session, the Views menu, a dricket-store Work panel — then run the audit's
+  remaining rows [Z-02, A-08, B-02, R-04, F-02]. Docs and e2e fixtures only.
+
 - **E12-7 — Token alignment** (owner decision 2026-11-04: the Anthrazit design
   system wins). Milestone 136 on branch `design-to-code` owns it: peach / pink /
   mint tokens in the three themes, badges re-pointed, radii 4/8/16, a 13 px

@@ -66,6 +66,10 @@
 - **Docs:** manual (Views), docs/05, ADR-0089 "Later change — D-6", AUTHORING.
   Not checked in a running app (unit tests and typecheck only).
 
+### E12-10 — Mask audit 2 (documentation only; no milestone number taken, no code changed)
+
+**Not yet manually verified by the owner.** The owner reported on 2026-11-05 that many screens do not match the design. [`docs/design/work-panel/mask-audit-2.md`](../docs/design/work-panel/mask-audit-2.md) audits 16 screen groups (Work panel, Needs you, thread, ticket document, Shape, plan to approve, Ready/Review, Board, Team/Capacity, Flow, Settings, views/tabs/status bar, Assistant, Mission Control Work, and the superseded boards) against the canvas, **with the app running** on English scratch data: Drey under Playwright with isolated engine homes, Mission Control from a scratch engine at phone and iPad size. 60 sized deviations (38 S, 16 M, 6 L), 31 of them new against `convergence-gaps.md`; ten of its rows verified fixed. 28 screenshots are in `docs/design/work-panel/audit-2-screenshots/`. The result is ordered into proposals E12-11 – E12-20 in `specs/roadmap.md` (proposals, marked as such). Not covered, and said so in the document: a waiting-question and a proof/diff ticket on Mission Control, the MC plan card and shape session, the Views menu (judged from code), and pixel measurements against the live canvas (the canvas is not in the repo).
+
 ### Tooling — `scripts/verify-dricket.ps1` (part A of the cut-over guide in one command)
 
 **Not yet manually verified by the owner.** A script plus a doc fix, no app behaviour changed: it seeds a scratch dricket store (`E:\dkv`, six English tickets incl. a comment, a dependency and an expired foreign claim) and starts the built app in an isolated profile (own USERPROFILE/APPDATA/userData, so the real `~/.drey-engine` and settings are never touched; `-Remote`, `-Reset`, a before/after fingerprint of the real locations). `cutover-guide.md` part A corrected: no `-Multi` or closing of the normal Drey needed, the engine still needs a tiny tickets vault.
