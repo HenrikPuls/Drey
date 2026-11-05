@@ -637,8 +637,13 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   the handler, and `SessionService.restore` suspends it while tabs come back.
   Since E13-13 (SDK 1.41) `FileOpenerRegistry.homeViewOf(path, vaultId)` also
   consults path rules (`documents.registerHomeViewRule`); the tickets plugin's
-  `renderer/view-preset.ts` registers the **Work** preset and the rule that
-  sends ticket files of the board vault there.
+  `renderer/view-preset.ts` registers the **Work** preset only; since D-6 no
+  rule sends ticket files there (selecting a ticket never switches the view).
+  Since D-6 a view's layout is saved only by "Save view": `ViewService.baselines`
+  (`localStorage['drey.views.saved']`: `DockService.layout()` + `PaneService.snapshot()`
+  per view) is the saved layout, `modified` compares the working layout with it
+  (docks, split tree and tab sets; not the active tab), `saveActive` /
+  `revertActive` act on it; `SessionService` still restores the working layout.
 - `PaneService` (`src/app/panes/`, ADR-0037) — the split-view editor
   layout: an arbitrary tree of row/column splits down to leaf panes, each
   a `{ tabs, active }` record. `PaneLayout` renders the tree recursively

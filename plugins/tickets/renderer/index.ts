@@ -3263,8 +3263,8 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     fleetListeners.add(() => announceWaits(api));
     // So does a fleet that stopped by itself: a tripped breaker, a spent quota.
     fleetListeners.add(() => announceChainAlerts(api));
-    // The Work view (E13-13): the preset, and ticket files opening there.
-    registerWorkView(api, () => snapshot?.vaultId ?? null);
+    // The Work view (E13-13): the preset. Ticket files open in the current view (D-6).
+    registerWorkView(api);
     api.ui.registerWidget(createTicketsWidget(api));
     // The rows' persona chips read the same directory as the Team tab.
     teamStore(api).subscribe(notifyViews);
@@ -3466,7 +3466,6 @@ const plugin: { activate(api: DreyPluginApi): void } = {
 
     api.ui.registerDocKind({
       kind: THREAD_KIND,
-      homeView: WORK_VIEW_ID,
       icon: 'messages-square',
       serialize: () => (threadTicketId === null ? null : { ticketId: threadTicketId }),
       restore: (_path, data) => {

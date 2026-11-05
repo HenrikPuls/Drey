@@ -91,6 +91,10 @@ export class ViewSwitcher {
     void this.views.remove(view.id);
   }
 
+  protected revert(): void {
+    void this.views.revertActive();
+  }
+
   protected saveAs(): void {
     this.closeMenu();
     this.views.openSavePrompt();

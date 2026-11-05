@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import type { Unsubscribe, ViewPresetContrib } from '../../../shared/plugin-api/renderer';
-import { DockService } from '../dock';
-import { DEFAULT_VIEW_ID, PaneService } from '../panes/pane.service';
+import { DockService, type DockLayout } from '../dock';
+import { DEFAULT_VIEW_ID, PaneService, type PaneLayoutSnapshot } from '../panes/pane.service';
 import { EditorService } from '../services/editor.service';
 import { HomeViewRouter } from '../services/home-view-router.service';
 import { LogService } from '../services/log.service';
@@ -25,7 +25,14 @@ export interface ViewNamePrompt {
   readonly initial: string;
 }
 
+/** What "Save view" keeps of one view: its docks and its pane tree with the tabs. */
+interface SavedLayout {
+  readonly dock: DockLayout;
+  readonly panes: PaneLayoutSnapshot;
+}
+
 const KEY = 'drey.views';
+const SAVED_KEY = 'drey.views.saved';
 const NOTES: ViewDef = { id: DEFAULT_VIEW_ID, label: 'Notes', builtin: true };
 
 /**
@@ -41,6 +48,13 @@ const NOTES: ViewDef = { id: DEFAULT_VIEW_ID, label: 'Notes', builtin: true };
  * views are listed in `localStorage['drey.views']` (small per-machine window
  * state, like the dock layout); a preset comes back from its plugin at every
  * start, and its layout waits in the dock/pane slots under its id.
+ *
+ * A view's layout is saved only by "Save view" (D-6): `baselines` holds the
+ * saved layout per view (`localStorage['drey.views.saved']`); everything
+ * the user does afterwards -- a panel resize, a tab opened, a ticket
+ * selected -- changes the working layout only, which `modified` reports and
+ * "Revert view" drops. The working layout still rides the session restore
+ * like open tabs do; it is never the saved one.
  */
 @Injectable({ providedIn: 'root' })
 export class ViewService {
@@ -62,6 +76,13 @@ export class ViewService {
   readonly assistantTarget = computed<string | null>(() => this.active().assistantTarget ?? null);
   /** True from start until `settleStartup` while the stored active view might be a preset not yet registered. */
   private unsettled = false;
+
+  private readonly baselines = signal<Readonly<Record<string, SavedLayout>>>(this.readBaselines());
+  /** True while the active view's working layout differs from its saved one (D-6). */
+  readonly modified = computed<boolean>(() => {
+    const saved = this.baselines()[this._activeId()];
+    return saved !== undefined && fingerprint(this.currentLayout()) !== fingerprint(saved);
+  });
 
   /** The name field's request, shown by the title bar; null while closed. */
   readonly prompt = signal<ViewNamePrompt | null>(null);
@@ -149,6 +170,7 @@ export class ViewService {
     this.dock.switchView(id);
     this.panes.switchView(id);
     this._activeId.set(id);
+    this.adoptBaseline(id);
   }
 
   /** `Ctrl+1`…`Ctrl+9`: the view at 0-based `index`; a missing one does nothing. */
@@ -167,6 +189,80 @@ export class ViewService {
     }
     const at = views.findIndex((v) => v.id === this._activeId());
     this.switchTo(views[(at + 1) % views.length].id);
+  }
+
+  // --- saved layouts (D-6) ---------------------------------------------------
+
+  /**
+   * Once the session is restored: the active view's layout, as it stands,
+   * is its saved one when it has none yet (a first start, or one that
+   * predates saved layouts). Other views adopt theirs when first shown.
+   */
+  adoptBaselines(): void {
+    this.adoptBaseline(this._activeId());
+  }
+
+  /** "Save view": the working layout of the active view becomes its saved one. */
+  saveActive(): void {
+    this.setBaseline(this._activeId(), this.currentLayout());
+  }
+
+  /**
+   * "Revert view": the active view goes back to its saved layout. A tab
+   * opened since that no other view shows is closed (asking about unsaved
+   * changes; a cancelled prompt keeps it in this view).
+   */
+  async revertActive(): Promise<void> {
+    const id = this._activeId();
+    const saved = this.baselines()[id];
+    if (saved === undefined) {
+      return;
+    }
+    const before = this.panes.tabsOfView(id);
+    this.dock.applyLayout(saved.dock);
+    const open = new Set(this.editor.openDocs().map((d) => d.key));
+    this.panes.restore(saved.panes, (path) => open.has(path));
+    for (const key of before) {
+      if (this.panes.viewsHolding(key).length === 0 && !(await this.editor.closeTab(key))) {
+        this.panes.showInView(id, key);
+      }
+    }
+  }
+
+  private currentLayout(): SavedLayout {
+    return { dock: this.dock.layout(), panes: this.panes.snapshot() };
+  }
+
+  private adoptBaseline(id: string): void {
+    if (this.baselines()[id] === undefined) {
+      this.setBaseline(id, this.currentLayout());
+    }
+  }
+
+  private setBaseline(id: string, layout: SavedLayout): void {
+    this.baselines.update((all) => ({ ...all, [id]: layout }));
+    this.persistBaselines();
+  }
+
+  private persistBaselines(): void {
+    try {
+      localStorage.setItem(SAVED_KEY, JSON.stringify({ views: this.baselines() }));
+    } catch {
+      // Storage disabled: the saved layouts last for this session.
+    }
+  }
+
+  private readBaselines(): Readonly<Record<string, SavedLayout>> {
+    try {
+      const raw = localStorage.getItem(SAVED_KEY);
+      const views = (raw ? (JSON.parse(raw) as { views?: unknown }).views : null) as Record<string, SavedLayout> | null;
+      if (typeof views === 'object' && views !== null) {
+        return views;
+      }
+    } catch {
+      // A damaged store: every view adopts its current layout again.
+    }
+    return {};
   }
 
   // --- the name field ------------------------------------------------------
@@ -254,6 +350,8 @@ export class ViewService {
     this.dock.dropView(id);
     this.panes.dropView(id);
     this.user.update((views) => views.filter((v) => v.id !== id));
+    this.baselines.update(({ [id]: _gone, ...rest }) => rest);
+    this.persistBaselines();
     this.persist();
   }
 
@@ -314,4 +412,18 @@ export class ViewService {
     }
     return [];
   }
+}
+
+/**
+ * What makes two layouts "the same view": docks, split tree and which tabs
+ * sit in which pane. Which tab is active or focused is not layout.
+ */
+function fingerprint(layout: SavedLayout): string {
+  const { root, panes, dock } = layout.panes;
+  return JSON.stringify({
+    dock: layout.dock,
+    root,
+    tabs: Object.fromEntries(Object.entries(panes).map(([id, pane]) => [id, pane.tabs])),
+    docked: dock ?? null,
+  });
 }

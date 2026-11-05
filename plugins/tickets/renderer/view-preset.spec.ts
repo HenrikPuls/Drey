@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
-import { WORK_VIEW_ID, createTicketHomeRule, createWorkPreset, registerWorkView } from './view-preset';
+import type { DreyPluginApi, PluginDocKindContrib } from '../../../shared/plugin-api/renderer';
+import { registerFlowKind } from './flow/register';
+import { WORK_VIEW_ID, createWorkPreset, registerWorkView } from './view-preset';
+import type { DeskDeps } from './desk-deps';
 
 describe('the Work preset', () => {
   it('arranges Tickets left, the Assistant right and the Capacity band below', () => {
@@ -15,49 +17,33 @@ describe('the Work preset', () => {
   });
 });
 
-describe('the ticket home rule', () => {
-  const rule = (vault: string | null) => createTicketHomeRule(() => vault);
-
-  it('sends a ticket file of the board vault to Work', () => {
-    const r = rule('v1');
-    expect(r.homeView).toBe(WORK_VIEW_ID);
-    expect(r.matches('tickets/50-build/T-0042.md', 'v1')).toBe(true);
-    expect(r.matches('tickets/inbox/T-10000.md', 'v1')).toBe(true);
-  });
-
-  it('leaves notes, other vaults and ticket-like names elsewhere alone', () => {
-    const r = rule('v1');
-    expect(r.matches('notes/T-0042.md', 'v1')).toBe(false);
-    expect(r.matches('tickets/50-build/T-0042.md', 'v2')).toBe(false);
-    expect(r.matches('tickets/50-build/T-0042.md', null)).toBe(false);
-  });
-
-  it('matches nothing while no tickets repository is set up', () => {
-    expect(rule(null).matches('tickets/50-build/T-0042.md', null)).toBe(false);
-  });
-
-  it('follows the board vault when it changes', () => {
-    let vault: string | null = 'v1';
-    const r = createTicketHomeRule(() => vault);
-    vault = 'v2';
-    expect(r.matches('tickets/50-build/T-0042.md', 'v1')).toBe(false);
-    expect(r.matches('tickets/50-build/T-0042.md', 'v2')).toBe(true);
-  });
-});
-
-describe('registerWorkView', () => {
-  it('registers both and unregisters both', () => {
+describe('selecting a ticket never changes the active view (D-6)', () => {
+  it('registerWorkView registers the preset only -- no home rule that pulls ticket files into Work', () => {
     const offPreset = vi.fn();
-    const offRule = vi.fn();
+    const registerHomeViewRule = vi.fn(() => vi.fn());
     const api = {
       ui: { registerViewPreset: vi.fn(() => offPreset) },
-      documents: { registerHomeViewRule: vi.fn(() => offRule) },
+      documents: { registerHomeViewRule },
     } as unknown as DreyPluginApi;
-    const off = registerWorkView(api, () => null);
+    const off = registerWorkView(api);
     expect(api.ui.registerViewPreset).toHaveBeenCalledTimes(1);
-    expect(api.documents.registerHomeViewRule).toHaveBeenCalledTimes(1);
+    expect(registerHomeViewRule).not.toHaveBeenCalled();
     off();
     expect(offPreset).toHaveBeenCalled();
-    expect(offRule).toHaveBeenCalled();
+  });
+
+  it('the Flow tab (opened from a selected ticket) names no home view', () => {
+    let kind: PluginDocKindContrib | null = null;
+    const api = {
+      ui: {
+        registerDocKind: vi.fn((k: PluginDocKindContrib) => {
+          kind = k;
+          return () => undefined;
+        }),
+      },
+    } as unknown as DreyPluginApi;
+    registerFlowKind(api, {} as DeskDeps);
+    expect(kind).not.toBeNull();
+    expect((kind as unknown as PluginDocKindContrib).homeView).toBeUndefined();
   });
 });

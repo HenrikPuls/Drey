@@ -242,3 +242,19 @@ preset names the target by id (the tickets plugin's Mission Control is
   `HomeViewRouter` (an opener's `homeView` first, then the rules in
   registration order). The base still knows no tickets.
 - Naming: view "Work", dock panel "Tickets" (id `tickets` unchanged).
+
+## Later change — D-6: selecting never switches, saving is explicit
+
+- **No home rule for tickets.** The tickets plugin no longer registers a
+  home-view rule and its thread and Flow kinds name no `homeView`: selecting
+  or opening a ticket (panel, Files tree, `[[T-0121]]`, switcher) opens it as a
+  tab in the **current** view's focused pane — the view the user is in keeps
+  its own layout. Board and Team, opened on purpose, still name Work. The
+  generic seam (`homeView`, `registerHomeViewRule`) stays for other plugins.
+- **A view is saved only by "Save view".** `ViewService` keeps a saved layout
+  per view (docks + pane tree with tabs); every later change (resize, tab
+  opened or moved, panel moved) only changes the working layout, shown as a
+  dot with *Save view* / *Revert view* in the switcher and the View menu. The
+  working layout still survives a restart through the session restore (like
+  open tabs); it is never the saved layout. First start after this change:
+  a view's current layout is adopted as its saved one.
