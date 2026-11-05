@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { assertDkVersion, DkProcess } from '../store/dk-process';
 import { DricketTicketStore } from '../store/dricket-ticket-store';
 import { applyPlan, assertScratchStore, initScratchStore, scratchConfigToml } from './apply';
-import { buildPlan, DEFAULT_MIGRATION_CONFIG, rewriteAttachmentLinks, type ConversionPlan } from './convert';
+import { buildPlan, DEFAULT_MIGRATION_CONFIG, rewriteAttachmentLinks, type ConversionPlan, type MigrationConfig } from './convert';
 import { stubDocument } from './dricket-doc';
 import { parseLegacyTicket, readLegacyVault, type LegacyTicket } from './legacy-vault';
 import { reverseTicket } from './reverse';
@@ -26,9 +26,21 @@ const FIXTURE = path.join(__dirname, 'fixtures', 'legacy-vault');
 const vault = readLegacyVault(FIXTURE);
 const SELECTED = ['T-0010', 'T-0012', 'T-0014', 'T-0017', 'T-0020', 'T-0066', 'T-0085'];
 const DK_SELECTED = SELECTED;
-const dkPlan: ConversionPlan = buildPlan(vault, { ...DEFAULT_MIGRATION_CONFIG, selected: DK_SELECTED });
-const plan: ConversionPlan = buildPlan(vault, { ...DEFAULT_MIGRATION_CONFIG, selected: SELECTED });
-const PHASES = DEFAULT_MIGRATION_CONFIG.stages;
+/**
+ * The vocabulary of a store that already exists with the pre-E12-9c default (inbox, prioritized,
+ * build, commit, done): the converter and the reverse converter stay general for it, and the
+ * round trip below proves a faithful copy. The new default's mapping is tested in convert.spec.ts
+ * and in the "new default" block at the end of the dk run.
+ */
+const OLD_VOCABULARY: Omit<MigrationConfig, 'selected'> = {
+  ...DEFAULT_MIGRATION_CONFIG,
+  stages: ['inbox', 'prioritized', 'build', 'commit', 'done'],
+  claim: ['build', 'commit'],
+  legacyPhases: {},
+};
+const dkPlan: ConversionPlan = buildPlan(vault, { ...OLD_VOCABULARY, selected: DK_SELECTED });
+const plan: ConversionPlan = buildPlan(vault, { ...OLD_VOCABULARY, selected: SELECTED });
+const PHASES = OLD_VOCABULARY.stages;
 const PHASE_DIRS = { inbox: '10-inbox', prioritized: '20-prioritized', build: '50-build', commit: '60-commit', done: '80-done' };
 
 /** What the legacy header must look like after the round trip: the original minus the declared differences. */
@@ -162,10 +174,19 @@ describe('scratch store guard and configuration', () => {
     expect(() => assertScratchStore(long, { legacyRoot: path.resolve('elsewhere', 'legacy') })).toThrow(/keep it under/);
   });
 
-  it('writes Drey stages, priorities, no quota', () => {
-    const toml = scratchConfigToml(DEFAULT_MIGRATION_CONFIG, 'owner@legion');
+  it('writes the existing vocabulary for a store that keeps its columns', () => {
+    const toml = scratchConfigToml(OLD_VOCABULARY, 'owner@legion');
     expect(toml).toContain('values = ["inbox", "prioritized", "build", "commit", "done"]');
     expect(toml).toContain('claim = ["build", "commit"]');
+  });
+
+  it('writes the new default: six stages, the agent columns claim, no quota (E12-9c)', () => {
+    const toml = scratchConfigToml(DEFAULT_MIGRATION_CONFIG, 'owner@legion');
+    expect(toml).toContain('values = ["inbox", "plan", "build", "review", "sign-off", "done"]');
+    expect(toml).toContain('initial = "inbox"');
+    expect(toml).toContain('terminal = ["done"]');
+    expect(toml).toContain('claim = ["plan", "build"]');
+    expect(toml).toContain('cancelled = "cancelled"');
     expect(toml).toContain('quota_tickets_per_day = 0');
     expect(toml).toContain('values = ["urgent", "high", "normal", "low"]');
   });
@@ -231,7 +252,7 @@ describe.skipIf(!found.ok)('apply into a scratch dricket store (real dk)', () =>
   });
 
   it('refuses to apply a plan with a live run or a build claim unless told to', async () => {
-    await initScratchStore({ bin, storeDir, env, config: DEFAULT_MIGRATION_CONFIG, admin: 'owner@legion' });
+    await initScratchStore({ bin, storeDir, env, config: OLD_VOCABULARY, admin: 'owner@legion' });
     dk = new DkProcess({ bin, store: storeDir, dataDir: path.join(root, 'data'), env });
     await expect(applyPlan(dkPlan, { storeDir, env, actor: 'owner@legion' })).rejects.toThrow(/refusing to apply: T-0012/);
   }, 60_000);
@@ -294,6 +315,25 @@ describe.skipIf(!found.ok)('apply into a scratch dricket store (real dk)', () =>
   }, 60_000);
 
   it('initScratchStore refuses a directory that is not empty', async () => {
-    await expect(initScratchStore({ bin, storeDir, env, config: DEFAULT_MIGRATION_CONFIG, admin: 'owner@legion' })).rejects.toThrow(/not empty/);
+    await expect(initScratchStore({ bin, storeDir, env, config: OLD_VOCABULARY, admin: 'owner@legion' })).rejects.toThrow(/not empty/);
   }, 60_000);
+
+  it('new default (E12-9c): a re-run migration lands the legacy phases in the new columns and dk validate is clean', async () => {
+    const newStore = path.join(root, 'store-new');
+    const newData = path.join(root, 'data-new');
+    await initScratchStore({ bin, storeDir: newStore, env, config: DEFAULT_MIGRATION_CONFIG, admin: 'owner@legion' });
+    const newPlan = buildPlan(vault, { ...DEFAULT_MIGRATION_CONFIG, selected: DK_SELECTED });
+    const result = await applyPlan(newPlan, { storeDir: newStore, env, actor: 'owner@legion', allowBlocking: true });
+    expect(result.complete).toBe(true);
+    const newDk = new DkProcess({ bin, store: newStore, dataDir: newData, env });
+    const newBoard = new DricketTicketStore(newDk);
+    expect((await newBoard.show('T-0010')).stage).toBe('inbox');
+    expect((await newBoard.show('T-0012')).stage).toBe('build');
+    expect((await newBoard.show('T-0014')).stage).toBe('done');
+    const t20 = await newBoard.show('T-0020');
+    expect(t20.stage).toBe('inbox'); // was prioritized: the owner's manual queue, never an agent column
+    expect(t20.extensions['x-legacy-phase']).toBe('prioritized');
+    const out = execFileSync(bin, ['validate'], { env: { ...env, DK_STORE: newStore, DK_DATA_DIR: newData, DK_OWNER: 'owner@legion' }, encoding: 'utf8', windowsHide: true });
+    expect(out).toBeDefined();
+  }, 600_000);
 });

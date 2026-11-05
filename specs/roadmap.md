@@ -356,24 +356,16 @@ owner confirms scope and order before any of it starts:
   about; today they cannot be selected or opened. Check the reader on both backends
   (files, dricket: the archived/done folders and the board's "this week" filter) and
   add an explicit way to reach older ones (search or "Show older").
-- **E12-9c — The default pipeline: Inbox · Plan · Build · Review · Sign Off · Done**
-  (owner decision 2026-11-05, answering E12-9b Q1; outside the list). The default pipeline
-  of a new board has six columns, in this order, with who works each: **1 Inbox** (manual —
-  the owner triages), **2 Plan** (agent), **3 Build** (agent), **4 Review** (manual — the
-  owner reviews), **5 Sign Off** (manual — this is where the work is committed: it takes
-  the role of today's `commit` column and its checkpoint discipline), **6 Done**. The first
-  column is titled **Inbox** again (this reverses E12-9's "Ideas", milestone 164 — the canvas
-  boards say "Ideas" but the owner decides "Inbox"). Consequences to carry through: the
-  engine's default pipeline and flow defaults (Plan returns as an agent column — check
-  req-93 "just-in-time planning", the plan columns left the default pipeline there; the
-  Review and Sign Off gates are manual: the human-persona gate of milestone 132/E10-6, a
-  parked ticket + notification, Accept / Send back); stage ids and the claim stages
-  (`dk` claim stages = the agent columns Plan and Build); the dricket `[stages]` default
-  (`values`, `initial`, `terminal`, `claim`) and `DEFAULT_MIGRATION_CONFIG.stages`, the reverse
-  converter, `dk init`/the scratch scripts (`scripts/verify-dricket.ps1`), fixtures, the
-  manual and its screenshots, the phone capture button label. Existing boards and stores
-  keep their columns (a default never renames what a user has). Open from E12-9b: Q2 team
-  seeding, Q3 default worker (still undecided).
+- **E12-9d — Follow-ups of the default pipeline (E12-9c, milestone 166)** (S–M). Open: (1) **Plan →
+  Build has no checkpoint** in the default (both agent columns): decide whether a finished plan
+  should park for the owner (a `persona: you` pin / an inserted `manual` gate in the default
+  chain) — today the owner inserts one per ticket; (2) **Sign Off is manual**, so the merge and
+  push of `commit-default` is by hand or by a session working the checkpoint (BOARD.md) — decide
+  whether Sign Off should offer "Merge and push" as an owner-started agent run; (3) a **reverse
+  converter that reads the store's own stage list** (today `--stages a,b,c`, default the new
+  six); (4) the Work panel's *Prioritized* group is empty on a new board (its queue is Inbox only
+  while Plan is an agent column) — keep, rename or retire it; (5) E12-9b Q2 (team seeding) and Q3
+  (default worker) are still open.
 - **E13-22 — Settings: one page width, a section tree and search** (owner request
   2026-11-05, outside the list; modelled on VS Code's settings). The settings overlay
   grows with the window (wider than today's 640 px cap) and **every page uses the same

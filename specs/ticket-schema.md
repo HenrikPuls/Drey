@@ -13,8 +13,8 @@ Top-level rules, once, up front:
   the identity.** A ticket file moves between directories; its name
   never changes.
 - **Phase directories are numbered** (T-0041): `NN-<id>` with `NN` the
-  phase's 1-based pipeline position × 10 — `10-inbox`, `20-prioritized`,
-  … `80-done`. The number lives ONLY in the directory name: `entered-*`
+  phase's 1-based pipeline position × 10 — `10-inbox`, `20-plan`,
+  … `60-done` in the shipped default. The number lives ONLY in the directory name: `entered-*`
   keys and branch names keep the clean id.
 - **Every phase transition is one git commit** (`git mv` semantics +
   the frontmatter stamp), message format
@@ -65,10 +65,11 @@ Top-level rules, once, up front:
       ledger.jsonl    # the fleet event ledger (E7) — see The fleet ledger
     10-inbox/
       T-0042.md       # one ticket per file, in its current phase's folder
-    20-prioritized/
+    20-plan/
     30-build/
-    40-commit/
-    50-done/
+    40-review/
+    50-sign-off/
+    60-done/
     archive/          # reserved (T-0041): archived tickets, never a column
     attachments/      # reserved (req-66 R8): images a paired device
                       #   uploaded — binary only, never a column, never
@@ -810,14 +811,30 @@ the ticket file, and the ticket file never embeds it.
 ---
 push: origin
 phases:
-  - { id: inbox, title: Ideas, handover: manual }
-  - { id: prioritized, title: Prioritized, handover: manual }
+  - { id: inbox, title: Inbox, handover: manual }
+  - { id: plan, title: Plan, claim: true, handover: agent plan-default }
   - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default, color: '#c96442' }
-  - { id: commit, title: Commit, handover: agent commit-default }
+  - { id: review, title: Review, handover: manual }
+  - { id: sign-off, title: Sign Off, handover: manual }
   - { id: done, title: Done, handover: none }
 ---
 Prose for humans. The board follows this file on refresh.
 ```
+
+**The shipped default (E12-9c, owner decision 2026-11-05)** — what "Initialize board"
+writes on an empty tickets repository: **Inbox** (manual, the owner's triage queue,
+the capture target) · **Plan** (agent, `plan-default`; the first worker column, so a
+run there gates structurally — the plan writes the acceptance criteria) · **Build**
+(agent, `build-default`; the machine gate and the proof belong to Build) · **Review**
+(manual) · **Sign Off** (manual — where the work is committed: merged into the
+integration branch and pushed; it takes the role of the former `commit` column and
+the checkpoint discipline of `plugins/tickets/BOARD.md`) · **Done**. Review and Sign
+Off are the owner's checkpoints (see "Agent lane rules"): *Accept* is the forward move,
+*Send back* the ordinary send-back to Build. dk claim stages: `plan`, `build`. Boards
+and stores that exist keep their columns — a default is written only into an empty
+repository. Before E12-9c the default was `inbox · prioritized · build · commit ·
+done` (and between req-93 and E12-9 the first column was titled *Inbox*, for one
+release *Ideas*); such boards are unchanged and fully supported.
 
 - `id`: `[a-z][a-z0-9-]*`, unique, = the phase (the stripped directory
   name). The first phase is the capture target; the last is terminal —
@@ -944,7 +961,9 @@ sits to the **working column's next phase** (a pulled ticket goes
 `prioritized` → `commit` in one step). A manual column between
 automatic columns is the owner's **checkpoint**: the machine never
 pulls across it, and only the owner's moves cross it (refine /
-implement / park). Backward moves are human moves — the one exception
+implement / park). A manual column that directly follows a checkpoint
+is one too (E12-9c: Review → Sign Off), so the whole run of the
+owner's columns after a worker column raises Needs-you cards. Backward moves are human moves — the one exception
 is the circuit breaker's park into inbox, always logged.
 
 **Dispatch order** (req-63): one candidate list over every playing

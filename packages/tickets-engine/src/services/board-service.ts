@@ -79,17 +79,19 @@ const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PLAN_INTERACTIVE_PROMPT = 'plan-interactive-default';
 const DEFAULT_PIPELINE = `---
 phases:
-  - { id: inbox, title: Ideas, handover: manual }
-  - { id: prioritized, title: Prioritized, handover: manual }
+  - { id: inbox, title: Inbox, handover: manual }
+  - { id: plan, title: Plan, claim: true, handover: agent plan-default }
   - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default }
-  - { id: commit, title: Commit, handover: agent commit-default }
+  - { id: review, title: Review, handover: manual }
+  - { id: sign-off, title: Sign Off, handover: manual }
   - { id: done, title: Done, handover: none }
 ---
 The pipeline: ordered phases (first = capture target, last = terminal),
 configurable per handover (manual | agent <prompt-ref> | ci | none).
-Prioritized is the owner's checkpoint: clarify the task and its
-acceptance criteria there; the build step derives file-level detail
-itself, against the code it finds. See specs/ticket-schema.md.
+Inbox is the owner's triage queue: move a ticket into Plan when it is
+worth planning. Plan and Build are worked by agents; Review and Sign Off
+are the owner's checkpoints (Sign Off is where the work is committed:
+merged and pushed). See specs/ticket-schema.md.
 Edit freely; the board follows on refresh.
 `;
 const DEFAULT_REPOS = `---

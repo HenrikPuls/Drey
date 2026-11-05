@@ -53,10 +53,10 @@ function normalise(p: string): string {
 }
 
 /** `dricket.toml` for the scratch store: Drey's stages and priorities, no quota. */
-export function scratchConfigToml(config: Pick<MigrationConfig, 'stages' | 'priorities' | 'defaultPriority'>, admin: string): string {
+export function scratchConfigToml(config: Pick<MigrationConfig, 'stages' | 'claim' | 'priorities' | 'defaultPriority'>, admin: string): string {
   const list = (items: readonly string[]): string => `[${items.map((s) => `"${s}"`).join(', ')}]`;
   const terminal = config.stages[config.stages.length - 1]!;
-  const claim = config.stages.filter((s) => s === 'build' || s === 'commit');
+  const claim = config.claim.filter((s) => config.stages.includes(s));
   return [
     'schema_version = 1',
     '',
@@ -83,7 +83,7 @@ export interface ScratchStoreOptions {
   readonly bin: string;
   readonly storeDir: string;
   readonly env: NodeJS.ProcessEnv;
-  readonly config: Pick<MigrationConfig, 'stages' | 'priorities' | 'defaultPriority'>;
+  readonly config: Pick<MigrationConfig, 'stages' | 'claim' | 'priorities' | 'defaultPriority'>;
   readonly admin: string;
   readonly exec?: ExecFn;
 }

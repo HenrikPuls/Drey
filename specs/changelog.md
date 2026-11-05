@@ -1,3 +1,39 @@
+### Milestone 166 — E12-9c: the default pipeline is Inbox · Plan · Build · Review · Sign Off · Done
+
+**Not yet manually verified by the owner.** Owner decision 2026-11-05 (answering E12-9b Q1; outside the
+list). Design note: `docs/design/work-panel/default-pipeline.md`.
+
+- **New boards.** "Initialize board" writes six columns: `inbox` **Inbox** (manual, capture target) ·
+  `plan` **Plan** (agent `plan-default`, claim) · `build` **Build** (agent `build-default`, claim,
+  wip 3; the machine gate and proof stay inside Build) · `review` **Review** (manual) · `sign-off`
+  **Sign Off** (manual — where the work is committed; takes the role of `commit` and its checkpoint
+  discipline) · `done`. The first column is titled **Inbox** again (reverses E12-9's "Ideas",
+  milestone 164; the id and folder were always `inbox`). The phone capture button already follows the
+  first column's title (*Create in Inbox*). Existing boards and stores keep their columns — a default is
+  only written into an empty repository (test with the old five-column pipeline: untouched, same
+  columns, same checkpoints).
+- **Engine rule widened.** `checkpointPhaseIds`: a manual column that directly follows a checkpoint is
+  one too, so Sign Off (behind the manual Review) raises Needs-you cards. No shipped pipeline had two
+  manual columns after a worker column; the old default's checkpoints are unchanged (spec).
+- **dricket.** `DEFAULT_MIGRATION_CONFIG`: stages `inbox plan build review sign-off done`, new `claim:
+  ['plan','build']` (the scratch config no longer hard-codes `build|commit`), new `legacyPhases`
+  (`prioritized` → `inbox`, `commit` → `sign-off`; matching ids stay; other phases skip as before).
+  `stageOfLegacyPhase`, the shadow diff maps legacy phases the same way; the reverse converter takes
+  `--stages a,b,c` (default the new six). `scripts/verify-dricket.ps1` seeds the six stages and a
+  matching `pipeline.md`. No `blocked` stage (unchanged). Checked against dk v0.6.2
+  (`docs/protocol.md`): the first claim stage is now `plan`; Review/Sign Off stay out of `claim` so
+  `dk next` never offers owner work to agents.
+- **Docs.** Manual (default pipeline, Inbox wording, Accept → Sign Off), `specs/ticket-schema.md`
+  (default, folders, checkpoint rule), ADR-0090, `plugins/tickets/BOARD.md` (Sign Off = the commit
+  checkpoint), the E12-9 audit rows. `e2e/manual-screenshots.spec.ts` holds no ticket data, so nothing
+  to change there; the e2e specs that spell their own five-column pipeline play an existing board.
+- **Tests.** `board-service.spec.ts` (six columns, handovers, claim stages, checkpoints; old default
+  untouched), `chain.spec.ts` (checkpoints of the new and the old default, the dispatcher works Plan and
+  Build only), `convert.spec.ts` (mapping), `roundtrip.spec.ts` (old vocabulary still round-trips; new
+  default: toml, and a real-dk re-run migration landing in the new columns with `dk validate` clean).
+- **Left out → roadmap E12-9d.** A checkpoint between Plan and Build, an agent "Merge and push" at Sign
+  Off, a reverse converter reading the store's stages, the empty *Prioritized* group, E12-9b Q2/Q3.
+
 ### Milestone 163 — D-6: selecting a ticket never changes the view, a view saves only by "Save view"
 
 **Not yet manually verified by the owner.** Owner report 2026-11-05, roadmap D-6.

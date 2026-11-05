@@ -928,7 +928,7 @@ shows everything again.
 
 **Everyday use.** Capture with the **+** in the panel header: a title,
 a priority, optionally one or more repositories and a description land
-as `T-00xx.md` in the inbox (req-72: the repositories are checkboxes —
+as `T-00xx.md` in the Inbox (req-72: the repositories are checkboxes —
 the first checked one is the primary, where the fleet tests; the
 others get their own worktrees on the same branch). The ticket file is
 an ordinary note (description, plan, executable acceptance criteria and
@@ -980,7 +980,7 @@ comment on that line, Shift-click a second number for a range, then add
 the comment (Ctrl+Enter). The footer button names how many you wrote:
 **Send back with 2 comments** moves the ticket back to the agent with each
 comment (file, line, text) in its Handover, so the next run reads them;
-**Accept and move to Commit** accepts as on the Ready card. Both show only
+**Accept and move to Sign Off** accepts as on the Ready card (the label names the next column). Both show only
 while the ticket waits at one of your checkpoints.
 
 **The Flow tab.** *Change flow* under the chain in a ticket's header
@@ -1035,9 +1035,10 @@ the item, the second moves the ticket to `tickets/archive/` — out of
 the list, kept in git; delete files there yourself when you are sure;
 moving one back into a phase folder revives it).
 
-Phase folders are numbered (`10-inbox` … `80-done`) — the number is
+Phase folders are numbered (`10-inbox` … `60-done` in the shipped default) — the number is
 cosmetics for sorting in a file browser; everything inside a ticket
-keeps the plain phase name. **Moving the file yourself counts as a
+keeps the plain phase name (the first column is titled *Inbox* on a new
+board; its id and folder are `inbox`). **Moving the file yourself counts as a
 move**: drag or `git mv` a ticket into another phase folder and the
 next refresh completes the transition exactly like a move from the
 menu — stamp, log line, one commit. Validation findings (a hand-edited
@@ -1393,7 +1394,7 @@ an id the list does not know. The prompt is chosen from the files in
 `tickets/_meta/prompts/`. Every change is one commit; the Work panel follows.
 
 **Reordering columns.** Drag a row by its grip, or focus a row and press
-Alt+↑ / Alt+↓. Inbox (where new tickets land) and Done stay first and
+Alt+↑ / Alt+↓. The first column (the Inbox, where new tickets land) and Done stay first and
 last. A move rewrites `pipeline.md` and renames the phase folders to
 their new numbers in one commit; the line under the table says what
 moved, with **Undo**. A column whose tickets are being worked on right
@@ -1404,7 +1405,7 @@ column* adds a checkpoint after the column you pick (by default just
 before Done); give it a worker to make it run itself. The pencil next to
 a column's name renames it in place — only the name changes, its folder
 and tickets stay. The bin removes a column after a second click, and
-only while it holds no tickets (move them first). Inbox and Done cannot
+only while it holds no tickets (move them first). The first column and Done cannot
 be removed.
 
 **Defaults and Advanced.** In Settings → Tickets a field you left empty
@@ -1414,7 +1415,7 @@ a repository's policy, worktrees base, launch command, agent
 instructions and link folders) sit under **Advanced**.
 
 **Number folders.** Phase folders carry their column number
-(`10-inbox`, `20-prioritized`, …). A repository from before that — or one
+(`10-inbox`, `20-plan`, …). A repository from before that — or one
 with a folder you numbered by hand — shows a banner; **Number folders**
 renames every folder to its number in one commit. Tickets keep their
 columns.
@@ -1463,7 +1464,7 @@ yourself, end the turn only when they pass. The runner still re-runs
 the gate: green moves the ticket one column right, red parks it (the
 failure lands in the Log, the ticket waits). A column that goes red
 too often trips its **circuit breaker**: it holds, and its next ticket
-parks in Inbox with a reason — re-prioritize it when you're ready, and
+parks in the Inbox with a reason — re-prioritize it when you're ready, and
 press **Resume** on the panel's alert once the cause is fixed.
 After a red gate the column cools down for a minute before it fires
 again.
@@ -1471,9 +1472,16 @@ again.
 Where a worker column meets your judgment, the pipeline stays yours: a
 column without a worker between two worker columns is your
 **checkpoint** — the machine never pulls across it; you review, edit,
-and move the ticket on, back a column, or back to Inbox. The shipped
-default has none (Build flows into Commit on its own); add a manual
-column between two worker columns and it becomes your checkpoint. A
+and move the ticket on, back a column, or back to the Inbox. The shipped
+default is **Inbox · Plan · Build · Review · Sign Off · Done**: Inbox is
+your triage queue, Plan and Build are worker columns (a finished plan flows
+into Build on its own; the machine gate that checks the work belongs to
+Build), and **Review** and **Sign Off** are your checkpoints — you read the
+change in Review (*Accept* moves it on, *Send back* returns it to Build
+with a note), and Sign Off is where the work is committed: merged into the
+integration branch and pushed, then moved to Done. Boards that existed before
+keep the columns they have. Add a manual
+column between two worker columns and it becomes a checkpoint too. A
 manual column *before* the first worker column is your queue — the
 machine never pulls from it: refine and plan your tickets there (the
 build worker derives file-level detail itself, at run time) and move
@@ -1728,7 +1736,10 @@ automatically.
   command palette) keeps the current arrangement under a name and
   switches to it; the title bar then shows one button per view, and
   `Ctrl+1` … `Ctrl+9` or *View → Switch view* jump between them. A
-  view comes back exactly as you left it. Right-click a view you made
+  view is saved only when you say so: change a panel, a split or a tab and the
+  switcher shows a dot with *Save view* and *Revert view* (also in the *View*
+  menu); *Save view* keeps the arrangement, *Revert view* returns to the saved
+  one. Until you save, the change lasts for the session only. Right-click a view you made
   to rename or delete it; *Notes* is always there. Tabs belong to
   views: another view's tabs are hidden, and one tab can be shown in
   several views — its context menu has *Show this tab in* with a
@@ -1740,9 +1751,10 @@ automatically.
   document that belongs to such a view (a tab the plugin names for it)
   switches there first. The tickets plugin offers **Work** (`Ctrl+2`):
   the Tickets panel on the left, the Assistant on the right and the
-  Capacity band below. Opening a ticket — from the Files panel, a
-  `[[T-0121]]` link or the quick switcher — or the Board or Team tab
-  switches to Work; Notes is `Ctrl+1`.
+  Capacity band below. Opening a ticket — from the Tickets panel, the Files panel, a
+  `[[T-0121]]` link or the quick switcher — never changes the view: the
+  ticket opens as a tab in the view you are in. Opening the Board or
+  Team tab switches to Work; Notes is `Ctrl+1`.
 - **Open windows** panel lists the open documents of the current view,
   and under *In other views* the rest, each with a *Show here* button:
 
@@ -2053,7 +2065,7 @@ history store is deliberately outside it).
 ---
 
 *Manual for Drey 0.8.1; manual content last changed
-2026-11-04. Screenshots were captured automatically from
+2026-11-05. Screenshots were captured automatically from
 the built app (Anthrazit theme, 1600Ã—1000) by
 `e2e/manual-screenshots.spec.ts` — run
 `$env:DREY_MANUAL_SHOTS='1'; npm run e2e:run -- manual-screenshots`
