@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153–158 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153–160 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -545,31 +545,27 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   ref check and the real-run check of the watcher, the write moves and the editor
   save on a second instance move to E14-8 (never run in a live app: the checks
   ran through the engine services on a scratch store).
-- **E14-5b — The chain on a store, and the rest of the fleet's chapters** (rest of
-  E14-5; the run lease shipped as milestone 157). Owner-started runs already claim,
-  extend, release and stop on exit 13 through `dk`; what is left: (1) the **chain
-  orchestrator** reads its board from ticket files (`orchestrator.ts` over
-  `ticketsVaultPath`) — port it onto `StoreBoardSource`, then lift `chainRefusal`; its
-  pools skip tickets by `claimedBy`, which the store board already maps from the owner,
-  and a ticket whose lease ran out reads as unclaimed, so dispatch is the takeover;
-  (2) `## Verlauf` / `## Handover` / `## Verification` and the settle's persona
-  lesson written **inside the claim** (`put --claim`/`commit`; the runner's Verlauf line is
-  skipped on dricket today); (3) needs-input: release + re-claim on the answer (dricket
-  Q-03); (4) a crashed runner's claim blocks its ticket until the lease ends — release
-  leftovers of detached runs at `adopt` (they have the same owner id) and a
-  "release leftover claims" action; (5) dricket **R-31** (an agent's same-stage release,
-  `build -> build`) so a failed run need not retreat a column; (6) the real checks: a run
-  on a throw-away ticket killed with SIGKILL and taken over after a shortened lease
-  (`dricket.toml` `lease_min`) on a second instance. Needs E14-5.
+- **E14-5c — What E14-5b left** (milestone 160 shipped the chain on a store, `chainRefusal` lifted,
+  `## Verlauf` inside the claim, R-31 as a write-back, needs-input release + re-claim, leftover claims).
+  Open: (1) the **worker's own ticket chapters** (`## Handover`, the plan's acceptance criteria) have no
+  door on a store - the instruction names a ticket path the worker cannot edit there; a run-scoped
+  copy of the ticket that the runner `put`s back inside the claim (`RunLease.patchInClaim`) is the shape;
+  (2) a **"release leftover claims" button** in Drey / Mission Control (the runner route
+  `POST /claims/release-leftovers`, `FleetPort.releaseLeftoverClaims` and the plugin invoke
+  `chainReleaseLeftovers` exist; the chain also runs it once per store before its first dispatch);
+  (3) a **re-claim after a wait** lands in dk's first claim stage - unchecked for a ticket that waited in
+  a later claim stage (`commit`), and with commit trailers on the claim is kept through a wait instead (the epoch
+  the trailers carry must stand); (4) the chain on a **remote store**: the runner does not `dk sync` (the
+  engine's change feed does); (5) a real run with a real worker on a second instance - only the scratch-store
+  checks of milestone 160 were made; (6) dricket **R-31** stays a "nice" (one commit instead of two for a
+  same-stage release), not requested.
 - **E14-6 follow-ups** (comments, status verbs and the ledger shipped as milestone
   159; no dk feature was missing: Drey reads the `comments/` files itself, so R-08
-  is not needed). Open: (1) the **chain orchestrator's** `working`/`done`/`blocked`/
-  `failed`/`paused` events still go to `FleetEventWriter.status` (a `.status.log`
-  file) — they move onto `dk comment` with the orchestrator port (E14-5b (1));
+  is not needed). Open: (1) ~~the chain orchestrator's status events~~ (milestone 160: on a store a run's end is the run's own release
+  comment, the chain's parks are `paused:` comments, `working:` is not persisted);
   (2) an **answer reaches the next run only through the thread**: the answer is a
   `resolved: <key>` comment, but nothing yet hands it to the persona's next
-  instruction, and the run does not release to `needs-input` and re-claim on it
-  (E14-5b (3), Q-03); (3) **no Needs-you answer control** in Mission Control or Drey —
+  instruction (a run that waits for the owner now releases and re-claims on the answer, milestone 160, Q-03); (3) **no Needs-you answer control** in Mission Control or Drey —
   the route (`POST /api/tickets/<id>/answer`) and the engine method (`answerNeed`)
   exist, the button does not; (4) the story builder ("How it got here") reads the
   Log only, so a send-back shows from the short Log line, never from the comment;

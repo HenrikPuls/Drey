@@ -549,9 +549,7 @@ Drey has one user, the owner; effort that only serves a second user is not spent
   their commits into the store directly with git (numbers and creation data preserved, no
   placeholders), then `dk validate` must pass. No `dk add --id`. Drey item: E14-3b is rewritten
   accordingly.
-- **R-31 open.** Whether the same-stage release is a real problem is to be shown first: a failed
-  run could write the ticket with `dk put --claim` without changing the stage instead of
-  `dk release --stage`. Only if that is refused too does R-31 go to dricket.
+- **R-31 not needed (checked 2026-11-05 against dk v0.6.2, Drey milestone 160).** `put --claim` is refused while the writer holds the claim, and `release --stage <same>` is refused for an agent (exit 14) - but after a release one stage back, `put --claim --if-version` with the stage line set back moves the ticket into the claim stage unclaimed, also for an agent owner. Drey does that (two commits, the card ends where it sat). R-31 stays a nice-to-have (one commit instead of two); nothing is asked of dricket.
 - **Q-03 accepted:** a run that waits for an answer releases to `needs-input` and re-claims on
   the answer (new epoch).
 - **Q-05 closed:** `dricket.toml` is edited by hand; Drey reads it and offers "open the file".
