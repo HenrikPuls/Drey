@@ -453,6 +453,15 @@ owner decides.
   deleted by hand. `dk init --stages a,b,c` (or an init that omits the legacy
   table) would give a valid store in one step. Drey's scratch stores strip the
   table in test setup.
+- **Status 2026-11-05 (R-29, R-30, and R-26 below):** implemented in dricket on
+  branch `claude/r29-r30-trace-fewer-git-processes-8f3cf1` (commits `1d0e601`,
+  `fbc16c4`; not merged, not released). dricket numbers its own requirements
+  separately: there the trace is dricket R-26 and the reads are dricket R-27 (ADR-0014
+  maps them), so ids in dricket's changelog differ from this file. Verified
+  here on the 91-ticket store: `show` 16 -> 4 git processes, 0.39 -> 0.18 s;
+  `ls --json` 107 -> 5, 2.4 -> 0.2 s; stdout of `show` and `ls` identical to
+  v0.6.0; 8 parallel `show` calls 8 of 8 succeed (v0.6.0: 4 of 8 fail with exit
+  128, which also closes R-26 in this file); dricket's `go test ./...` passes.
 - **R-29 Trace.** `dk --trace` (or `DK_TRACE=1`) prints one line per step the
   call performs on stderr (or as JSON with `--json`): the step's name (config
   read, repo discovery, private-copy refresh, CAS attempt N, backoff wait,
