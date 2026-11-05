@@ -46,6 +46,7 @@ import { recordToBoardFile } from '../store/store-board';
 import type { TicketDetail } from '../ports/ticket-store';
 import { ARCHIVED_LABEL, type BridgeOptions } from '../store/legacy-bridge';
 import { StoreBoardSource } from '../store/store-board-source';
+import { storeFooterLine } from '../store/store-footer';
 import { loadShippedPrompts } from '../core/default-prompts';
 import { type AttachmentCommand, RefineCommand } from '../core/commands';
 import { nextImprovementId, parseFriction, parseImprovements, renderImprovements, type FrictionLine, type ImprovementDraft, type ImprovementProposal } from '../core/improvements';
@@ -455,7 +456,7 @@ export class EngineBoardService {
     const store = await readStoreSettings(this.host.configGet.bind(this.host));
     this.dricket = store.backend === 'dricket' ? store : null;
     const snapshot = store.backend === 'dricket'
-      ? await this.storeBoard.board(store, common)
+      ? await this.dricketSnapshot(store, common)
       : assembleBoard({
         ...common,
         files,
@@ -473,6 +474,12 @@ export class EngineBoardService {
     await this.refreshHandover(snapshot);
     await this.syncChainConfig(vault, snapshot.pipeline);
     return snapshot;
+  }
+
+  /** The dricket board: the store is itself a git repository, so the footer names the store, not the vault's repository state (D-9). */
+  private async dricketSnapshot(store: StoreSettings, common: Parameters<StoreBoardSource['board']>[1]): Promise<BoardSnapshot> {
+    const board = await this.storeBoard.board(store, common);
+    return { ...board, isGitRepo: true, storeLine: await storeFooterLine(store) };
   }
 
   /**

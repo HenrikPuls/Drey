@@ -494,6 +494,8 @@ export interface BoardSnapshot {
   readonly activeVaultName: string | null;
   /** False when the tickets vault is not a git repo (transitions unversioned). */
   readonly isGitRepo: boolean;
+  /** On the dricket backend: where the tickets live (store, branch, head, sync) — the panel's footer line (D-9). */
+  readonly storeLine?: string | null;
   /** The configured default fleet worker (M84). */
   readonly defaultWorker: string;
   readonly pipeline: readonly PipelinePhase[];

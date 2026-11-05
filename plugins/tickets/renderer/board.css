@@ -19,6 +19,7 @@
   flex-direction: column;
 }
 
+.tickets-store-line,
 .tickets-warn {
   flex: none;
   padding: 4px 8px;
