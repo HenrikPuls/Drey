@@ -1,3 +1,21 @@
+### Fix — shadow run of the board on the migrated store (E14-2 follow-up)
+
+**Not yet manually verified by the owner.** `tickets.backend = shadow` driven against a fresh
+migration of the legacy vault (25 non-done tickets + 66 placeholders = 91 records, dk v0.6.1;
+an isolated engine home, copies of `drey-tickets` and of the store — the owner's
+`~/.drey-engine`, the live board and `E:dkbmig` were not touched).
+
+- **Result:** 24 of 25 tickets identical, 1 declared difference (T-0017: the legacy
+  `blocked-by T-0049` points at a done ticket outside the migrated set; the migration drops
+  it by design), column order identical. The first run against the owner's earlier store
+  also showed T-0088..T-0090 as placeholders — created in the legacy vault after that
+  apply (data drift, gone after a re-migration).
+- **Reader bug fixed:** `assembleBoardFromRecords` showed the 66 import placeholders
+  (label `placeholder`, stage `cancelled`, "Unused number T-00xx") as cards in the terminal
+  column. They keep a number free and are not tickets: the board now leaves them off, like
+  archived records (`PLACEHOLDER_LABEL` in `store/legacy-bridge.ts`). Spec in `store-board.spec.ts`.
+- Findings for the cut-over are in the roadmap (E14-2 follow-ups).
+
 ### Milestone 155 — E14-4b: the board's write moves on the `dk put` path
 
 **Not yet manually verified by the owner.** Owner request (roadmap E14-4b, ADR-0090

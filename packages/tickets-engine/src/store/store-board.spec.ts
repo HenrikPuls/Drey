@@ -168,6 +168,21 @@ describe('assembleBoardFromRecords', () => {
     expect(card('T-0006').blocked).toEqual([]);
   });
 
+  it('leaves import placeholders (number gaps) and archived tickets off the board', () => {
+    const board = assembleBoardFromRecords({
+      ...BASE,
+      records: [
+        det({ id: 'T-0001', stage: 'inbox' }),
+        det({ id: 'T-0002', stage: 'cancelled', title: 'Unused number T-0002', labels: ['placeholder'] }),
+        det({ id: 'T-0003', stage: 'done', labels: ['archived'] }),
+        det({ id: 'T-0004', stage: 'build', dependsOn: ['T-0002'] }),
+      ],
+    });
+    const ids = board.columns.flatMap((c) => c.tickets.map((t) => t.id));
+    expect(ids.sort()).toEqual(['T-0001', 'T-0004']);
+    expect(board.columns.find((c) => c.phase.id === 'build')!.tickets[0]!.blocked).toEqual([]);
+  });
+
   it('shows an unmapped stage as an unknown column with a warning', () => {
     const board = assembleBoardFromRecords({ ...BASE, records: [det({ id: 'T-0001', stage: 'needs-input' })] });
     const column = board.columns.find((c) => c.phase.id === 'needs-input');
