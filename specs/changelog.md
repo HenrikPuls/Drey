@@ -1,3 +1,26 @@
+### Milestone 169 — E14-7 rehearsal: BOM-safe reader, `--include-archive`, reverse carries comments
+
+**Not yet manually verified by the owner.** Found by rehearsing the cut-over on a copy of the real vault
+([`docs/design/dricket/rehearsal-2026-11-06.md`](../docs/design/dricket/rehearsal-2026-11-06.md)); the
+guide `cutover-guide.md` was corrected in the same change.
+
+- **Reader:** a ticket file with a UTF-8 byte order mark (an editor on Windows adds one) was "unreadable —
+  no front matter fence" (the real `archive/T-0084.md`); the BOM is stripped.
+- **`--include-archive`** (default off, OD-7 stays the default): `archive/` migrates as terminal-stage
+  tickets with the label `archived` (off the board, readable through `dk ls` / `show` / search and the
+  ticket document; links into done tickets stay valid; numbers stay contiguous). The reverse converter
+  writes a ticket with that label back into `tickets/archive/`, and the label is not reported as lost.
+- **Reverse:** `x-legacy-blocked-by` / `x-legacy-parent` come back as `blocked-by` / `parent` (a link into
+  a ticket outside the set was lost on rollback); the CLI now reads the **comments** of a local store
+  (`reverse-comments.ts`, from the ticket branch's `comments/` files — `dk` cannot list them) and appends
+  them to the `## Log`; before, every comment written on dricket was silently dropped by a rollback.
+- **`--report`** into a drive root (`E:\report.md`) failed with `EPERM, mkdir 'E:\'`.
+- **Shadow diff (CLI):** an archived ticket and a shortened title are declared differences, not noise.
+- **Tests:** `convert.spec.ts` (BOM + CRLF file, `includeArchive`), `roundtrip.spec.ts` (restored
+  blocked-by, archived ticket back into `archive/`, declared archive/title), `reverse-comments.spec.ts`.
+- **Not fixed, noted in the rehearsal:** after changing `backend` / `dk.store` the engine's first shadow
+  report still describes the previous store (roadmap E14-7a).
+
 ### Milestone 163 — D-6: selecting a ticket never changes the view, a view saves only by "Save view"
 
 **Not yet manually verified by the owner.** Owner report 2026-11-05, roadmap D-6.

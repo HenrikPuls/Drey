@@ -7,7 +7,8 @@ import { applyPlan, assertScratchStore, initScratchStore } from './apply';
 import { buildPlan, DEFAULT_MIGRATION_CONFIG, type MigrationConfig } from './convert';
 import { readLegacyVault } from './legacy-vault';
 import { renderDryRun, renderReport } from './report';
-import { reverseTicket } from './reverse';
+import { reverseTicket, type DricketComment } from './reverse';
+import { readStoreComments } from './reverse-comments';
 import { collectStoreRows, rowsFromLegacy, shadowDiff, type ShadowDiff } from './shadow-diff';
 
 /**
@@ -32,7 +33,7 @@ interface Args {
 }
 
 const VALUE_OPTIONS = ['legacy', 'allow', 'store', 'report', 'dk', 'actor', 'out', 'data', 'home'];
-const FLAG_OPTIONS = ['apply', 'dry-run', 'reverse', 'allow-live-runs', 'help'];
+const FLAG_OPTIONS = ['apply', 'dry-run', 'reverse', 'allow-live-runs', 'include-archive', 'help'];
 
 export function parseArgs(argv: readonly string[]): Args {
   const flags = new Set<string>();
@@ -72,7 +73,7 @@ const USAGE = [
   '  migrate-tickets --legacy <vault> --allow <ids.txt>                               dry run (read-only)',
   '  migrate-tickets --legacy <vault> --allow <ids.txt> --apply --store <new dir>     into a scratch dricket store',
   '  migrate-tickets --reverse --store <dricket store> --out <new dir>                store -> legacy files',
-  'options: --report <file> --dk <path> --actor <id> --data <dir> --home <dir> --allow-live-runs',
+  'options: --report <file> --dk <path> --actor <id> --data <dir> --home <dir> --allow-live-runs --include-archive (archive/ -> done + label archived)',
 ].join('\n');
 
 export async function runMigrateCli(argv: readonly string[], io: CliIo, env: NodeJS.ProcessEnv = process.env): Promise<number> {
@@ -109,7 +110,7 @@ async function runForward(args: Args, io: CliIo, env: NodeJS.ProcessEnv): Promis
   if (selected.length === 0) {
     throw new Error(`${allowFile} lists no ticket ids`);
   }
-  const config: MigrationConfig = { ...DEFAULT_MIGRATION_CONFIG, selected };
+  const config: MigrationConfig = { ...DEFAULT_MIGRATION_CONFIG, selected, includeArchive: args.flags.has('include-archive') };
   const vault = readLegacyVault(legacy);
   const plan = buildPlan(vault, config);
   io.out(renderDryRun(plan));
@@ -149,7 +150,10 @@ async function runForward(args: Args, io: CliIo, env: NodeJS.ProcessEnv): Promis
   const reportPath = args.values.get('report');
   if (reportPath !== undefined) {
     const text = renderReport(plan, { legacyRoot: legacy, storeDir, generatedAt: new Date().toISOString(), dkVersion, validation }, applyResult, shadow);
-    mkdirSync(path.dirname(path.resolve(reportPath)), { recursive: true });
+    const reportDir = path.dirname(path.resolve(reportPath));
+    if (!existsSync(reportDir)) {
+      mkdirSync(reportDir, { recursive: true });
+    }
     writeFileSync(reportPath, text);
     io.out(`report written to ${reportPath}\n`);
   }
@@ -168,10 +172,16 @@ async function runReverse(args: Args, io: CliIo, env: NodeJS.ProcessEnv): Promis
   const dk = new DkProcess({ bin: args.values.get('dk') ?? 'dk', store: path.resolve(storeDir), dataDir: args.values.get('data') ?? null, env: dkEnv(args, env) });
   const store = new DricketTicketStore(dk);
   const phases = DEFAULT_MIGRATION_CONFIG.stages;
+  let comments = new Map<string, DricketComment[]>();
+  try {
+    comments = readStoreComments(path.resolve(storeDir));
+  } catch (error) {
+    io.out(`comments are NOT carried (the store's files could not be read: ${error instanceof Error ? (error.message.split('\n')[0] ?? '') : String(error)}) - they stay in the store\n`);
+  }
   let written = 0;
   for (const record of await store.list()) {
     const detail = await store.show(record.id);
-    const reversed = reverseTicket({ content: detail.text }, { phases });
+    const reversed = reverseTicket({ content: detail.text, comments: comments.get(record.id) ?? [] }, { phases });
     const target = path.join(out, reversed.relPath);
     mkdirSync(path.dirname(target), { recursive: true });
     writeFileSync(target, reversed.text);

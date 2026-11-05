@@ -101,9 +101,9 @@ export function parseLegacyTicket(text: string, relPath: string, stem: string, p
   return { id: stem, phase, relPath, header, body, text, issues };
 }
 
-/** CRLF -> LF: dricket normalises on write, so the converter does the same up front. */
+/** CRLF -> LF (dricket normalises on write, so the converter does the same up front) and no byte order mark: an editor on Windows adds one, and it hides the opening fence. */
 export function normaliseNewlines(text: string): string {
-  return text.split('\r\n').join('\n');
+  return (text.startsWith('\uFEFF') ? text.slice(1) : text).split('\r\n').join('\n');
 }
 
 export function ticketNumber(id: string): number {

@@ -33,19 +33,9 @@ const PHASE_DIRS = { inbox: '10-inbox', prioritized: '20-prioritized', build: '5
 
 /** What the legacy header must look like after the round trip: the original minus the declared differences. */
 function expectedHeader(t: LegacyTicket, p: ConversionPlan): Record<string, unknown> {
-  const migrated = new Set(p.conversions.filter((c) => c.target !== null).map((c) => c.legacyId));
   const h: Record<string, unknown> = { ...t.header };
   for (const live of ['claimed-by', 'claimed-at', 'run']) {
     delete h[live];
-  }
-  const blocked = (Array.isArray(h['blocked-by']) ? (h['blocked-by'] as string[]) : []).filter((b) => migrated.has(b));
-  if (blocked.length > 0) {
-    h['blocked-by'] = blocked;
-  } else {
-    delete h['blocked-by'];
-  }
-  if (typeof h['parent'] === 'string' && !migrated.has(h['parent'])) {
-    delete h['parent'];
   }
   if (h['priority'] === 'whenever') {
     h['priority'] = 'normal';
@@ -99,6 +89,20 @@ describe('reverse converter -- pure round trip over a dk-shaped document', () =>
     expect(r.lost.join('\n')).toMatch(/1 comment/);
   });
 
+  it('restores a blocked-by that the migration moved to x-legacy-blocked-by (a done ticket outside the set)', () => {
+    const doc = ['---', 'id: t-17', 'title: A', 'stage: inbox', 'depends: t-10', 'x-legacy-blocked-by: T-0010, T-0049', '---', '', 'x', ''].join('\n');
+    const r = reverseTicket({ content: doc }, { phases: PHASES });
+    expect(r.text).toContain('blocked-by:\n  - T-0010\n  - T-0049');
+  });
+
+  it('writes an archived ticket back into tickets/archive/ without calling the label lost', () => {
+    const p = buildPlan(vault, { ...DEFAULT_MIGRATION_CONFIG, selected: ['T-0049'], includeArchive: true });
+    const archived = p.conversions[0]!.target!;
+    const r = reverseTicket({ content: stubDocument(archived) }, { phases: PHASES, phaseDirs: PHASE_DIRS });
+    expect(r.relPath).toBe('tickets/archive/T-0049.md');
+    expect(r.lost.join('\n')).not.toMatch(/labels/);
+  });
+
   it('reads a ticket created after the cut-over (no x-legacy fields): default rank, branch from the id, folder by position', () => {
     const doc = ['---', 'id: t-92', 'title: New one', 'stage: build', 'priority: high', 'depends: t-10', '---', '', '## Description', '', 'x', ''].join('\n');
     const r = reverseTicket({ content: doc }, { phases: PHASES });
@@ -135,12 +139,21 @@ describe('shadow diff input', () => {
     expect(diff.differences.map((d) => `${d.kind}:${d.id ?? ''}`).sort()).toEqual(['depends:T-0011', 'only-in-store:T-0013', 'order:', 'stage:T-0012', 'title:T-0011']);
   });
 
+  it('declares an archived ticket (archive/ -> done + label) and a shortened title instead of reporting them', () => {
+    const long = 'x'.repeat(230);
+    const legacy = [{ ...row('T-0001', 'archive', 1), archived: true }, { ...row('T-0002', 'inbox', 1), title: long }];
+    const store = [{ ...row('T-0001', 'done', 1), archived: true }, { ...row('T-0002', 'inbox', 1), title: `…` }];
+    const diff = shadowDiff(legacy, store);
+    expect(diff.differences).toEqual([]);
+    expect(diff.declared.map((d) => d.id)).toEqual(['T-0002']);
+  });
+
   it('leaves import placeholders out of the store rows', () => {
     const rows = rowsFromRecords([
       { id: 'T-0001', stage: 'cancelled', title: 'Unused', owner: null, priority: 'normal', kind: 'human', epoch: 0, rev: 1, labels: ['placeholder'], dependsOn: [], parent: null, claimedAt: null, leaseUntil: null, size: null, branch: null, repos: [], extensions: {} },
       { id: 'T-0010', stage: 'inbox', title: 'Real', owner: null, priority: 'normal', kind: 'agent', epoch: 0, rev: 1, labels: [], dependsOn: [], parent: null, claimedAt: null, leaseUntil: null, size: null, branch: null, repos: [], extensions: { 'x-rank': '7' } },
     ]);
-    expect(rows).toEqual([{ id: 'T-0010', stage: 'inbox', title: 'Real', priority: 'normal', dependsOn: [], rank: 7 }]);
+    expect(rows).toEqual([{ id: 'T-0010', stage: 'inbox', title: 'Real', priority: 'normal', dependsOn: [], rank: 7, archived: false }]);
   });
 });
 
@@ -275,8 +288,9 @@ describe.skipIf(!found.ok)('apply into a scratch dricket store (real dk)', () =>
   it('shadow diff: the store board equals the legacy board (declared: the dangling blocker)', async () => {
     const storeRows = await collectStoreRows(new DricketTicketStore(dk));
     const diff = shadowDiff(rowsFromLegacy(vault.tickets.filter((t) => DK_SELECTED.includes(t.id))), storeRows);
-    expect(diff.differences.map((d) => `${d.kind}:${d.id}`)).toEqual(['priority:T-0014', 'title:T-0085']); // both declared by the converter: an unconfigured priority, a title over 200 characters
-    expect(diff.declared).toEqual([{ id: 'T-0017', what: 'blocked-by T-0049 is not in the store (dangling rule)' }]);
+    expect(diff.differences.map((d) => `${d.kind}:${d.id}`)).toEqual(['priority:T-0014']); // declared by the converter: an unconfigured priority
+    expect(diff.declared.map((d) => d.id)).toEqual(['T-0017', 'T-0085']); // the dangling blocker, the title over 200 characters
+    expect(diff.declared[0]).toEqual({ id: 'T-0017', what: 'blocked-by T-0049 is not in the store (dangling rule)' });
   }, 120_000);
 
   it("round trip through the REAL store: dk's own document reverses to the legacy ticket", async () => {

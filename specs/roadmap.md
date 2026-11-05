@@ -773,7 +773,16 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   obsolete): it is **re-run at the cut-over** against the frozen vault with a fresh
   allow list, into a fresh store, and `dk validate` plus the shadow comparison
   must be clean before the flip. The owner's real `drey-tickets` repository is
-  only touched then.
+  only touched then. **Rehearsed 2026-11-06 on a copy of the real vault**
+  ([`rehearsal-2026-11-06.md`](../docs/design/dricket/rehearsal-2026-11-06.md), milestone 169): ready, the
+  guide is corrected; the owner decides the archive (recommended: `--include-archive`) and
+  the stale run stamp of T-0030; merge E12-9c first so the store gets the shipped stage names.
+- **E14-7a — The engine reports the previous store after a settings change.** Found in the
+  rehearsal: after changing `backend` / `dk.store`, the first start's shadow report (and the first
+  board) still describes the old store — the engine reads its `config.json` before the app mirrors
+  the plugin config into it, and nothing re-runs the shadow afterwards. Mirror before the spawn (or
+  restart the shadow on a config change); until then the guide says to start twice and read the
+  report header. Also open: a `--phase-dirs` flag for the reverse converter (legacy folder numbers).
 - **E14-9b — Decommission, part b.** After the cut-over **and the owner's
   verification round** (owner, 2026-11-05: no fixed 30 days), delete what part (a)
   proved cannot go earlier — the inventory with callers and evidence is
