@@ -90,7 +90,15 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
-_None open._ (D-1, Mission Control chat reaching no model, shipped as
+- **D-6 — Selecting a ticket changes the active view, and views save themselves**
+  (owner report 2026-11-05, Mission Control / Drey Work). Picking a ticket always
+  switches to the Work view; that makes the user's own saved views pointless. Required:
+  selecting a ticket never changes the active view; a view's layout is saved only by
+  the explicit "Save view" action, never automatically (check what auto-saves it today:
+  tab changes, panel resizes, the ticket selection). Spec first, regression tests for
+  both behaviours.
+
+_Shipped defects:_ D-1, Mission Control chat reaching no model, shipped as
 milestone 131; D-2, the paired-devices list and pairing from Mission
 Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
 views, as milestone 140; D-4, runs.spec flaking under full-suite load, as milestone 142; D-5, the page moving on iPhone/iPad scroll
@@ -329,6 +337,33 @@ owner confirms scope and order before any of it starts:
   team, editable Setup, Friction tab, Notify / Runs after / This week /
   Typical run fields, "Talk to <name> 1:1 in the Assistant" (with E13-5), the
   per-persona slot share (needs an engine count) (G-14).
+- **E13-20 — Opening a ticket: what it shows, and Ticket / Thread / Review**
+  (owner request 2026-11-05, outside the list; after D-6). Selecting a ticket opens
+  **the ticket document by default while no run has happened yet**, and **the run
+  while the runner is active or waiting** (on a question, a gate, a quota). Thread and
+  Review are shown **above the text**, not beside it: one segmented control
+  "Ticket | Thread | Review" in the existing button styling, **identical in both the
+  ticket view and the run view**, only the active button differs. The control is a
+  per-selection choice; it does not touch the saved views (D-6). Both Mission Control
+  and Drey's Work panel.
+- **E13-21 — Old tickets stay openable** (owner request 2026-11-05, outside the list).
+  Done and archived tickets ("Done this week" and older) must open like any other
+  ticket (document, thread, review, proof) so the owner can read what a ticket was
+  about; today they cannot be selected or opened. Check the reader on both backends
+  (files, dricket: the archived/done folders and the board's "this week" filter) and
+  add an explicit way to reach older ones (search or "Show older").
+- **E12-9 — Default configuration names follow the canvas** (owner report 2026-11-05).
+  The names in the default config (pipeline columns, personas, tracks, tab and button
+  labels shipped as defaults) do not match "Drey Tickets — Workflow redesign"
+  (`docs/design/work-panel/`). Audit every default name against the canvas, list the
+  deviations with the canvas reference, then change the defaults, the seed/fixture
+  data, the manual and the screenshots. Existing user configs keep their names.
+- **E12-10 — Mask audit against the design** (owner report 2026-11-05: many screens
+  do not yet match the design state). A screen-by-screen audit of Drey's Work panel
+  and Mission Control (desktop and phone) against the canvas files in
+  `docs/design/work-panel/*.dc.html` and `handoff/`; one table per screen (matches,
+  deviates how, size), screenshots of scratch English data, the result ordered into
+  roadmap items (extends `convergence-gaps.md`; nothing is rebuilt in this item).
 - **E12-7 — Token alignment** (owner decision 2026-11-04: the Anthrazit design
   system wins). Milestone 136 on branch `design-to-code` owns it: peach / pink /
   mint tokens in the three themes, badges re-pointed, radii 4/8/16, a 13 px
