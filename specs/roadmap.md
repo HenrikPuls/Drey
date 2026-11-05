@@ -356,11 +356,24 @@ owner confirms scope and order before any of it starts:
   about; today they cannot be selected or opened. Check the reader on both backends
   (files, dricket: the archived/done folders and the board's "this week" filter) and
   add an explicit way to reach older ones (search or "Show older").
-- **E12-9b — Defaults the audit left open** (owner decision needed, from
-  `docs/design/work-panel/default-names-audit.md`). Q1: does the default pipeline gain
-  `review`, `verify`, `approve` (concept §5.1)? Q2: does "Initialize board" seed the team
-  Paul, Ben, Ralf, Tessa (D7)? Q3: default worker `opencode` or `claude-code`? Q1 touches the
-  dricket `[stages]` vocabulary and `DEFAULT_MIGRATION_CONFIG`.
+- **E12-9c — The default pipeline: Inbox · Plan · Build · Review · Sign Off · Done**
+  (owner decision 2026-11-05, answering E12-9b Q1; outside the list). The default pipeline
+  of a new board has six columns, in this order, with who works each: **1 Inbox** (manual —
+  the owner triages), **2 Plan** (agent), **3 Build** (agent), **4 Review** (manual — the
+  owner reviews), **5 Sign Off** (manual — this is where the work is committed: it takes
+  the role of today's `commit` column and its checkpoint discipline), **6 Done**. The first
+  column is titled **Inbox** again (this reverses E12-9's "Ideas", milestone 164 — the canvas
+  boards say "Ideas" but the owner decides "Inbox"). Consequences to carry through: the
+  engine's default pipeline and flow defaults (Plan returns as an agent column — check
+  req-93 "just-in-time planning", the plan columns left the default pipeline there; the
+  Review and Sign Off gates are manual: the human-persona gate of milestone 132/E10-6, a
+  parked ticket + notification, Accept / Send back); stage ids and the claim stages
+  (`dk` claim stages = the agent columns Plan and Build); the dricket `[stages]` default
+  (`values`, `initial`, `terminal`, `claim`) and `DEFAULT_MIGRATION_CONFIG.stages`, the reverse
+  converter, `dk init`/the scratch scripts (`scripts/verify-dricket.ps1`), fixtures, the
+  manual and its screenshots, the phone capture button label. Existing boards and stores
+  keep their columns (a default never renames what a user has). Open from E12-9b: Q2 team
+  seeding, Q3 default worker (still undecided).
 - **E13-22 — Settings: one page width, a section tree and search** (owner request
   2026-11-05, outside the list; modelled on VS Code's settings). The settings overlay
   grows with the window (wider than today's 640 px cap) and **every page uses the same
