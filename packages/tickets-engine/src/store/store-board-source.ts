@@ -4,7 +4,7 @@ import type { BoardSnapshot } from '../contracts/tickets';
 import type { TicketDetail, TicketStore } from '../ports/ticket-store';
 import { diffBoards, renderBoardDiff, type BoardDiff } from './board-diff';
 import { assembleBoardFromRecords, type RecordsBoardInput } from './store-board';
-import type { AddOptions, AddResult, PutOptions } from '../ports/ticket-store';
+import type { AddOptions, AddResult, Claim, ClaimOptions, PutOptions, ReleaseOptions, ReleaseResult } from '../ports/ticket-store';
 import type { DricketTicketStore } from './dricket-ticket-store';
 import { DricketFileStore, type WriteOutcome } from './dricket-file-store';
 import { FileStoreReader } from './file-store-reader';
@@ -119,6 +119,22 @@ export class StoreBoardSource {
       source.feed?.notifyOwnWrite();
     }
     return outcome;
+  }
+
+  /**
+   * A human's `dk claim` / `dk release` from the board (E14-5): dk alone decides (exit 11 while
+   * another owner's lease runs, takeover only after lease + grace). Announces the change at once.
+   */
+  async claim(settings: StoreSettings, id: string, options: ClaimOptions): Promise<Claim> {
+    const claim = await this.storeFactory(settings).claim(id, options);
+    this.sourceFor(settings).feed?.notifyOwnWrite();
+    return claim;
+  }
+
+  async release(settings: StoreSettings, id: string, options: ReleaseOptions): Promise<ReleaseResult> {
+    const result = await this.storeFactory(settings).release(id, options);
+    this.sourceFor(settings).feed?.notifyOwnWrite();
+    return result;
   }
 
   /** One ticket as it is stored now (any stage, archived ones too); needs a checkout. */

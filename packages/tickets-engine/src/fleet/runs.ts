@@ -34,6 +34,7 @@ import {
   type FleetHandoverConfig,
   type PermissionDecision,
   type QuestionAnswers,
+  type RunDkTarget,
   type RunInfo,
   type RunRequest,
   type RunState,
@@ -47,6 +48,11 @@ import {
 } from './worktrees';
 import { capTail, SANITY_CAP } from './capping';
 import { TelemetryFold, type RunTelemetry } from './telemetry';
+import { dricketTrailers, RunLease, runOwnerId, trailerInstruction } from './run-lease';
+import { TicketStoreError, type TicketStore } from '../ports/ticket-store';
+import { DkProcess } from '../store/dk-process';
+import { toDricketId } from '../store/ids';
+import { DricketTicketStore } from '../store/dricket-ticket-store';
 
 const execFileAsync = promisify(nodeExecFile);
 
@@ -187,6 +193,15 @@ export interface RunSupervisorDeps {
   readonly prepareWorktree?: (request: RunRequest, worktreePath: string) => Promise<PreparedWorktree>;
   /** Test seam over the tickets repo's git (the spec recorder). */
   readonly ticketsGit?: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths' | 'push'>;
+  /**
+   * Test seam over the dricket store a run claims through (E14-5): by default
+   * a `DricketTicketStore` over the installed `dk`, one per store.
+   */
+  readonly storeFor?: (target: RunDkTarget) => TicketStore;
+  /** Test seam over `dk validate --trailers` (the gate's trailer check): null = passes. */
+  readonly validateTrailers?: (target: RunDkTarget, worktree: string, range: string) => Promise<string | null>;
+  /** Test seam over the lease's timers. */
+  readonly leaseTimers?: { readonly set: (fn: () => void, ms: number) => unknown; readonly clear: (handle: unknown) => void };
   /** Run settled (terminal): the orchestrator's slot-freed trigger (M85). */
   readonly onRunSettled?: (info: RunInfo) => void;
   /**
@@ -198,6 +213,25 @@ export interface RunSupervisorDeps {
   readonly secondOpinion?: (request: RunRequest) => Promise<string | null>;
   /** Per-run ceilings (0 = unlimited); a run that passes one is failed, never retried at once. */
   readonly limits?: Partial<RunLimits>;
+}
+
+/** `dk validate --trailers <range>` inside the worktree; null = passes, else the output. */
+async function defaultValidateTrailers(target: RunDkTarget, worktree: string, range: string): Promise<string | null> {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  if (target.dataDir !== '') {
+    env['DK_DATA_DIR'] = target.dataDir;
+  }
+  try {
+    await execFileAsync(target.bin === '' ? 'dk' : target.bin, ['--store', target.store, 'validate', '--trailers', range], {
+      cwd: worktree,
+      env,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    return null;
+  } catch (error) {
+    const out = error as { stdout?: string; stderr?: string; message?: string };
+    return capTail(`${out.stdout ?? ''}${out.stderr ?? ''}`.trim() || (out.message ?? 'failed'), SANITY_CAP).text;
+  }
 }
 
 /** What one run may spend before the reaper stops it. */
@@ -300,6 +334,10 @@ interface LiveRun {
   settling?: Promise<void>;
   /** The run's ticket writes, one at a time (see `patchTicket`). */
   ticketQueue?: Promise<void>;
+  /** E14-5: the run's claim on its dricket ticket (`request.dk` set). */
+  lease?: RunLease;
+  /** Why the lease was lost (exit 13): the worker was stopped and the ticket is not ours to write. */
+  claimLost?: string;
 }
 
 /** The telemetry a persisted record carries, for restoring a fold (an adopted run). */
@@ -407,6 +445,8 @@ export class RunSupervisor {
   private readonly now: () => Date;
   private readonly exec: ExecFn;
   private readonly prepareWorktree: (request: RunRequest, worktreePath: string) => Promise<PreparedWorktree>;
+  /** One dk-backed store per `bin|store|dataDir` (E14-5). */
+  private readonly stores = new Map<string, TicketStore>();
 
   constructor(private readonly deps: RunSupervisorDeps) {
     this.git = deps.ticketsGit ?? new TicketsGit(() => deps.git);
@@ -626,6 +666,7 @@ export class RunSupervisor {
     void handle.exited.then((code) => void this.onWorkerExit(run, code));
     await this.persist(run);
     this.deps.log(`run ${info.id}: re-attached to its worker after the runner restarted`);
+    await this.resumeLease(run);
     if (wasDetached) {
       // The ticket's run stamp was cleared when the run was detached.
       await this.patchTicket(run, (text) =>
@@ -740,6 +781,7 @@ export class RunSupervisor {
     void handle.exited.then((code) => void this.onWorkerExit(run, code));
     await this.persist(run);
     this.deps.log(`run ${run.info.id}: resumed in place after a runner handover`);
+    await this.resumeLease(run);
     await this.appendStream(run, {
       ts: this.stamp(),
       kind: 'note',
@@ -862,6 +904,18 @@ export class RunSupervisor {
     const worktreePath = request.worktreePath;
     const scout = request.form === 'scout';
 
+    // E14-5: on a dricket store the claim comes FIRST - a ticket someone else
+    // holds refuses the start before a worktree is prepared or a worker spawns.
+    let lease: RunLease | null = null;
+    if (request.dk !== undefined) {
+      lease = this.newLease(request, id, () => this.runs.get(id) ?? null);
+      try {
+        await lease.claim();
+      } catch (error) {
+        return { ok: false, error: `${request.ticketId} could not be claimed through dk - ${messageOf(error)}` };
+      }
+    }
+
     let prepared: PreparedWorktree | null = null;
     try {
       await fsp.mkdir(dir, { recursive: true });
@@ -886,6 +940,9 @@ export class RunSupervisor {
         }
       }
     } catch (error) {
+      if (lease !== null) {
+        await lease.release(this.stayPutStages(request, lease), `run ${id} did not start - worktree failed: ${messageOf(error)}`);
+      }
       return { ok: false, error: `worktree failed: ${messageOf(error)}` };
     }
 
@@ -971,6 +1028,7 @@ export class RunSupervisor {
       eventQueue: Promise.resolve(),
       writeQueue: Promise.resolve(),
       ...(reopened ? { reopened: true } : {}),
+      ...(lease !== null ? { lease } : {}),
     };
     this.runs.set(id, run);
     const openNote = (text: string): string => `${JSON.stringify({ ts: this.stamp(), kind: 'note', text })}\n`;
@@ -1080,9 +1138,11 @@ export class RunSupervisor {
     },
   ): WorkerHandle {
     const request = run.request;
+    const trailers = this.trailerBlock(run);
     const handle = this.deps.adapter.spawn({
       cwd: run.info.worktreePath,
-      instruction: resume.instruction ?? request.instruction,
+      instruction:
+        trailers === null ? (resume.instruction ?? request.instruction) : `${resume.instruction ?? request.instruction}\n\n${trailers}`,
       model: request.model,
       permissionMode: request.permissionMode,
       contextCap: this.contextCapFor(request.model),
@@ -1908,9 +1968,13 @@ export class RunSupervisor {
    */
   private async runGate(run: LiveRun): Promise<string | null> {
     if (run.request.gate === 'structural') {
-      const text = await fsp
-        .readFile(path.join(run.request.ticketsVaultPath, run.currentRelPath), 'utf8')
-        .catch(() => null);
+      const text =
+        run.request.dk !== undefined
+          ? await this.storeOf(run.request.dk)
+              .show(run.request.ticketId)
+              .then((d) => d.text)
+              .catch(() => null)
+          : await fsp.readFile(path.join(run.request.ticketsVaultPath, run.currentRelPath), 'utf8').catch(() => null);
       if (text === null) {
         return 'the ticket file disappeared — nothing to gate';
       }
@@ -1931,12 +1995,30 @@ export class RunSupervisor {
         return `\`${command}\` failed\n\n${capped.text}`;
       }
     }
+    const target = run.request.dk;
+    if (target !== undefined && target.trailers && run.request.baseRef !== null) {
+      // E14-5: every commit of the branch must carry the Dricket-* trailers of a live claim.
+      await this.logLine(run, 'gate: dk validate --trailers');
+      const failure = await (this.deps.validateTrailers ?? defaultValidateTrailers)(
+        target,
+        run.info.worktreePath,
+        `${run.request.baseRef}..HEAD`,
+      );
+      if (failure !== null) {
+        return `dk validate --trailers failed\n\n${failure}`;
+      }
+    }
     return null;
   }
 
   private async onWorkerExit(run: LiveRun, code: number | null): Promise<void> {
     if (TERMINAL.includes(run.info.state)) {
       return; // the lease reaper got here first
+    }
+    if (run.claimLost !== undefined) {
+      // E14-5: dk answered exit 13 - the ticket is another actor's now. No gate, no move, no write.
+      await this.finish(run, 'failed');
+      return;
     }
     if (run.handover !== undefined) {
       return; // handed over: the successor decides how this run goes on
@@ -1994,6 +2076,10 @@ export class RunSupervisor {
         run,
         `blocked — ${(blocked.split('\n')[0] ?? '').slice(0, 200)} — no gate runs, the ticket stays put`,
       );
+      if (run.request.dk !== undefined) {
+        // The claim must go: park = the park stage (or its own) + the worker's words as a comment.
+        await this.parkDk(run, `run ${run.info.id} is blocked:\n\n${blocked}`);
+      }
       await this.finish(run, 'done');
       return;
     }
@@ -2003,9 +2089,13 @@ export class RunSupervisor {
     // last word is only whether the file carries one, so the owner
     // knows what waits (and a report-less end is visible, never silent).
     if (run.request.form === 'scout') {
-      const text = await fsp
-        .readFile(path.join(run.request.ticketsVaultPath, run.currentRelPath), 'utf8')
-        .catch(() => null);
+      const text =
+        run.request.dk !== undefined
+          ? await this.storeOf(run.request.dk)
+              .show(run.request.ticketId)
+              .then((d) => d.text)
+              .catch(() => null)
+          : await fsp.readFile(path.join(run.request.ticketsVaultPath, run.currentRelPath), 'utf8').catch(() => null);
       const written = text !== null && hasScoutReport(text);
       await this.logLine(
         run,
@@ -2084,6 +2174,9 @@ export class RunSupervisor {
    */
   private async parkTicketOnSuccess(run: LiveRun, personaId: string): Promise<{ ok: true } | { ok: false; error: string }> {
     const request = run.request;
+    if (request.dk !== undefined) {
+      return this.parkDk(run, `run ${run.info.id} is done - gate green; parked for ${personaId} (manual step)`);
+    }
     const here = await fsp
       .access(path.join(request.ticketsVaultPath, run.currentRelPath))
       .then(() => true)
@@ -2123,6 +2216,9 @@ export class RunSupervisor {
   /** The success transition: move + entered-stamp + one commit (board semantics). */
   private async moveTicketOnSuccess(run: LiveRun, nextPhase: string): Promise<{ ok: true } | { ok: false; error: string }> {
     const request = run.request;
+    if (request.dk !== undefined) {
+      return this.moveDk(run, nextPhase);
+    }
     const here = await fsp
       .access(path.join(request.ticketsVaultPath, run.currentRelPath))
       .then(() => true)
@@ -2320,6 +2416,11 @@ export class RunSupervisor {
    * history entry, one commit).
    */
   private async clearRunStamp(run: LiveRun, note: string | null, verlaufLine: string | null = null): Promise<void> {
+    if (run.request.dk !== undefined) {
+      // No run stamp exists on a dricket ticket: the claim is the stamp, and giving it up is the release.
+      await this.releaseDk(run, note ?? `run ${run.info.state}${usageSummary(run.info)}`);
+      return;
+    }
     try {
       await this.patchTicket(run, (text) => {
         const patched = patchTicketFile(text, {
@@ -2349,6 +2450,9 @@ export class RunSupervisor {
    * earlier one with a stale text (the cleared run stamp came back).
    */
   private patchTicket(run: LiveRun, patch: (text: string) => string): Promise<void> {
+    if (run.request.dk !== undefined) {
+      return Promise.resolve(); // E14-5: a dricket ticket is never written by a file patch
+    }
     const result = (run.ticketQueue ?? Promise.resolve()).then(() => this.patchTicketNow(run, patch));
     run.ticketQueue = result.catch(() => undefined); // the queue survives a failed write
     return result;
@@ -2448,6 +2552,138 @@ export class RunSupervisor {
     );
     run.writeQueue = write.catch(() => undefined); // the queue survives a failed write
     await write;
+  }
+
+  // --- E14-5: the run's claim on a dricket ticket (ADR-0090) -----------------------------
+
+  private storeOf(target: RunDkTarget): TicketStore {
+    if (this.deps.storeFor !== undefined) {
+      return this.deps.storeFor(target);
+    }
+    const key = `${target.bin}|${target.store}|${target.dataDir}`;
+    let store = this.stores.get(key);
+    if (store === undefined) {
+      store = new DricketTicketStore(
+        new DkProcess({
+          bin: target.bin === '' ? 'dk' : target.bin,
+          store: target.store,
+          dataDir: target.dataDir === '' ? null : target.dataDir,
+        }),
+      );
+      this.stores.set(key, store);
+    }
+    return store;
+  }
+
+  private newLease(request: RunRequest, runId: string, runOf: () => LiveRun | null): RunLease {
+    return new RunLease({
+      store: this.storeOf(request.dk!),
+      ticketId: request.ticketId,
+      actor: runOwnerId(runId),
+      runId,
+      // A dead runner's claim blocks the ticket for one lease: short for a run bounded by
+      // max-work, long for an owner's dialog. The keep-alive extends a live run.
+      size: request.interactive !== undefined ? 'L' : 'S',
+      log: this.deps.log,
+      now: this.now,
+      ...(this.deps.leaseTimers !== undefined ? { timers: this.deps.leaseTimers } : {}),
+      onLost: (why) => {
+        const run = runOf();
+        if (run !== null) {
+          void this.onClaimLost(run, why);
+        }
+      },
+    });
+  }
+
+  /** Exit 13 (or an epoch that moved): another actor owns the ticket - stop the worker, write nothing. */
+  private async onClaimLost(run: LiveRun, why: string): Promise<void> {
+    if (run.claimLost !== undefined || TERMINAL.includes(run.info.state)) {
+      return;
+    }
+    run.claimLost = why;
+    this.deps.log(`run ${run.info.id}: claim on ${run.request.ticketId} lost - ${why}`);
+    run.info = { ...run.info, state: 'stopping', gateFailure: `claim lost - ${why}` };
+    run.stopNote = `claim lost - ${why}`;
+    await this.appendStream(run, { ts: this.stamp(), kind: 'note', detail: 'runner', text: `claim lost - ${why} - the worker is stopped and the ticket is not written` });
+    if (run.handle !== null) {
+      await run.handle.stop();
+      // onWorkerExit sees claimLost and fails the run.
+    } else {
+      await this.finish(run, 'failed');
+    }
+  }
+
+  /** A run re-attached after a restart: take the claim up again (idempotent for the same owner). */
+  private async resumeLease(run: LiveRun): Promise<void> {
+    if (run.request.dk === undefined) {
+      return;
+    }
+    const lease = this.newLease(run.request, run.info.id, () => run);
+    run.lease = lease;
+    try {
+      await lease.claim();
+    } catch (error) {
+      await this.onClaimLost(run, `the claim could not be taken up again - ${messageOf(error)}`);
+    }
+  }
+
+  /** Where a ticket goes when the run does not move it: back to where it sat, else the stage before. */
+  private stayPutStages(request: RunRequest, lease: RunLease): readonly (string | null)[] {
+    return [lease.preStage, request.dk?.retreatStage ?? null];
+  }
+
+  /** The release of a run that moved nothing (failed, stopped, done without a move, detached). */
+  private async releaseDk(run: LiveRun, note: string): Promise<void> {
+    const lease = run.lease ?? this.newLease(run.request, run.info.id, () => run);
+    run.lease = lease;
+    if (lease.released || lease.fenced || run.claimLost !== undefined) {
+      lease.stopKeepAlive();
+      return;
+    }
+    const result = await lease.release(this.stayPutStages(run.request, lease), note);
+    if (!result.ok) {
+      this.deps.log(
+        `run ${run.info.id}: releasing ${run.request.ticketId} failed - ${result.error}${result.lost ? '' : ' (the claim stays until its lease ends)'}`,
+      );
+    }
+  }
+
+  /** Green gate with a next phase: the release IS the move (target stage, no file). */
+  private async moveDk(run: LiveRun, nextPhase: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    const lease = run.lease;
+    if (lease === undefined || lease.fenced) {
+      return { ok: false, error: 'the claim on the ticket was lost - nothing is moved' };
+    }
+    const note = `run ${run.info.id} done - gate green, moving to ${nextPhase}${run.request.parkFor === undefined ? '' : `; parked for ${run.request.parkFor} (manual step)`}${usageSummary(run.info)}`;
+    const result = await lease.release([nextPhase], note);
+    if (!result.ok) {
+      return { ok: false, error: result.error };
+    }
+    run.currentPhase = result.stage;
+    return { ok: true };
+  }
+
+  /** Park = the park stage (when the store has one) + a comment; otherwise the ticket keeps its stage and gets the comment. */
+  private async parkDk(run: LiveRun, comment: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    const lease = run.lease;
+    if (lease === undefined || lease.fenced) {
+      return { ok: false, error: 'the claim on the ticket was lost - nothing is parked' };
+    }
+    const target = run.request.dk!;
+    const result = await lease.release([target.parkStage, ...this.stayPutStages(run.request, lease)], comment);
+    return result.ok ? { ok: true } : { ok: false, error: result.error };
+  }
+
+  /** The trailer block for the worker's instruction, once the claim gave an epoch. */
+  private trailerBlock(run: LiveRun): string | null {
+    const target = run.request.dk;
+    const lease = run.lease;
+    if (target === undefined || !target.trailers || lease === undefined || lease.epoch === null) {
+      return null;
+    }
+    const id = toDricketId(run.request.ticketId);
+    return id === null ? null : trailerInstruction(dricketTrailers({ dricketId: id, epoch: lease.epoch, actor: lease.actor, op: 'work' }));
   }
 
   private agentActor(): string {

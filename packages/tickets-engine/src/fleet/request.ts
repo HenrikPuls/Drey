@@ -19,7 +19,7 @@ import {
 import { acceptanceCommands, ticketSections } from '../core/ticket-files';
 import { composeInstruction, composeScoutInstruction, parseWorkerValue, resolveAssignment, type Truncation } from './assignment';
 import { personaCoachingSection, personaMemorySection } from './context-pack';
-import { DEFAULT_FLEET_CAPS, type FleetCaps, type HandoverMode, type InteractiveMode, type PermissionMode, type RunRequest, type WorkerProviderId } from './protocol';
+import { DEFAULT_FLEET_CAPS, type FleetCaps, type HandoverMode, type InteractiveMode, type PermissionMode, type RunDkTarget, type RunRequest, type WorkerProviderId } from './protocol';
 import { worktreePathFor } from './worktree-home';
 
 export interface ComposeRunInput {
@@ -90,6 +90,8 @@ export interface ComposeRunInput {
    * holds the worker from turn one and never gates or moves.
    */
   readonly interactive?: InteractiveMode;
+  /** E14-5: the ticket lives in a dricket store - the run claims and releases it through `dk`. */
+  readonly dk?: RunDkTarget;
   /**
    * The persona the dispatch resolved (E3, ADR-0088) — the ladder's
    * winner, loaded from the vault by the caller; null = the assignment
@@ -316,6 +318,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     ...(input.dispatchedBy !== undefined ? { column: input.dispatchedBy } : {}),
     ...(input.handover !== undefined ? { handover: input.handover } : {}),
     ...(input.interactive !== undefined ? { interactive: input.interactive } : {}),
+    ...(input.dk !== undefined ? { dk: input.dk } : {}),
     ...(moves && input.parkFor ? { parkFor: input.parkFor } : {}),
   };
   return { ok: true, request, truncations: instruction.truncations, persona: persona?.id ?? null };

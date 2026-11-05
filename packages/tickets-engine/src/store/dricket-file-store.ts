@@ -5,6 +5,7 @@ import {
   type CallOptions,
   type Claim,
   type ClaimOptions,
+  type CommentOptions,
   type ExtendOptions,
   type LeaseExtension,
   type PutOptions,
@@ -76,6 +77,10 @@ export class DricketFileStore implements TicketStore {
 
   extend(id: string, options: ExtendOptions, call?: CallOptions): Promise<LeaseExtension> {
     return this.dk.extend(id, options, call);
+  }
+
+  comment(id: string, text: string, options: CommentOptions, call?: CallOptions): Promise<void> {
+    return this.dk.comment(id, text, options, call);
   }
 
   /**
