@@ -1,3 +1,48 @@
+### Milestone 158 — E14-3b: the migration writes the ticket files itself, no placeholders
+
+**Not yet manually verified by the owner.** Owner decision 2026-11-05 (roadmap E14-3b,
+ADR-0090, `docs/design/dricket/dricket-requirements.md` decisions): Drey has one user, so
+the migration does not wait for dricket's R-28 / R-10. `apply.ts` no longer calls
+`dk add` / `dk put`; it writes `tickets/t/<shard>/t-N/ticket.md` (+ `comments/`) in the
+exact format of dricket's `docs/protocol.md` and commits them to the scratch store's
+`tickets` branch with plain git. Nothing in the running system changed; the owner's
+`drey-tickets` repository, live board and `~/.drey-engine` were not touched (a copy of the
+vault was read).
+
+- **No placeholder pass:** the legacy number is the ticket number (`t-91`), gaps stay gaps
+  (the protocol allows them): the 22 owner-triaged tickets are 22 tickets, not 91 records.
+  `ConversionPlan.placeholderNumbers`, the `placeholder` outcome, the dry-run/report lines
+  for it and the CLI's reverse skip are gone (the board's and shadow diff's read-side filter
+  for old placeholder labels stays, harmlessly, for the old scratch stores).
+- **Real creation data:** `created_at` / `created_by` are the legacy creation stamp and
+  creator (the fallback is the apply time / the migrating identity, with a warning);
+  `x-created-at` / `x-created-by` are no longer written.
+- **Git publication:** one `git fast-import` stream into a temporary ref, one commit per
+  ticket in ascending number order (the protocol's replay wants one ticket per commit; a
+  blocker note rides in its ticket's commit), then one fast-forward-only publication:
+  `merge --ff-only` when the branch is checked out (ref, index and tree together), else
+  `update-ref old -> new` (compare-and-swap). Linear history, never a force; a pre-flight
+  checks id, body size (100 000 bytes) and the `x-` field limits before the first byte is
+  written, a store that already holds tickets is refused.
+- **Kept:** the dry-run report, the scratch-store guard and Windows path limit, the
+  allow list, `--allow-live-runs`, the report file (now with commit count and the
+  `dk validate` verdict). The CLI runs `dk validate` after the apply and exits non-zero if
+  it fails.
+- **Checked:** `dk` v0.6.1 against a copy of the real vault, the 22-id allow list, into the
+  fresh store `E:/dkb2/s`: 22 commits (+ the one comment), `dk validate` clean (history
+  replay included), the CLI's shadow diff identical (1 declared: T-0017's dangling
+  `blocked-by T-0049`), and the board built by the `tickets.backend = shadow` code path
+  (`StoreBoardSource.runShadow`) equal to the legacy board for the 22 tickets: 1
+  difference (T-0017 `blockedBy`, declared), 2 tickets only in the legacy board (T-0088,
+  T-0090 -- created after the allow list was written, not on it).
+- **Tests:** `roundtrip.spec.ts` real-dk half now applies 7 fixture tickets incl. the high
+  numbers (`validate` clean, creation data, one commit per ticket on a linear branch,
+  checkout up to date, comment file, no temp ref left, second apply refused);
+  `convert.spec.ts` for the number/creation data.
+- **Differences from the old apply:** `rev` of a fresh ticket is 0 (dk's `add` made 0, the
+  old `put` 1); commit author is the migrating actor (`<actor>@dricket.invalid`), commit
+  time is the apply time.
+
 ### Milestone 157 — E14-5: the fleet runner claims through `dk`
 
 **Not yet manually verified by the owner.** Owner request (roadmap E14-5, ADR-0090 later

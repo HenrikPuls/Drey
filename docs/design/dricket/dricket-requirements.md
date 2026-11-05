@@ -545,7 +545,7 @@ owner decides.
 
 Drey has one user, the owner; effort that only serves a second user is not spent.
 
-- **R-28 / R-10 dropped as dricket work.** The one-time migration writes the ticket files and
+- **R-28 / R-10 dropped as dricket work (done: E14-3b, Drey milestone 158).** The one-time migration writes the ticket files and
   their commits into the store directly with git (numbers and creation data preserved, no
   placeholders), then `dk validate` must pass. No `dk add --id`. Drey item: E14-3b is rewritten
   accordingly.

@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153–156 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153–158 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -535,11 +535,6 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   (the repo's scratchpad, > ~200 chars) fails with "Filename too long" /
   "clean local private worktree" — keep stores and `--data` short on Windows (dricket
   requirement candidate: report it to dk).
-- **E14-3b — Migration apply with a chosen number.** E14-3 (milestone 153)
-  fills number gaps with placeholder tickets because dk v0.6.0 cannot create a
-  ticket with a given number or creation data (R-28). When dk ships R-28 / R-10,
-  `apply.ts` creates directly and drops the placeholder pass; until then the
-  cut-over (E14-7) either accepts the placeholders or waits for dk.
 - **E14-4c follow-ups** (the editor save hook, the read-only guard, ticket
   documents from the checkout and the Settings fields shipped as milestone
   156). Open: the ticket header strip, the thread pairing and the Shape marks
@@ -570,7 +565,13 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   as comments, keyed status verbs as comments (`working:` not persisted), ledger
   to the meta repo. Needs E14-4 and dk R-08.
 - **E14-7 — Cut-over.** Freeze, final import, flip `tickets.backend`, smoke,
-  owner round. Needs E14-3..6, E14-8.
+  owner round. Needs E14-3..6, E14-8. The migration tool (E14-3 + E14-3b,
+  milestones 153/158) writes real numbers and creation data and **no placeholder
+  tickets** any more (the old scratch stores with their 69 placeholders are
+  obsolete): it is **re-run at the cut-over** against the frozen vault with a fresh
+  allow list, into a fresh store, and `dk validate` plus the shadow comparison
+  must be clean before the flip. The owner's real `drey-tickets` repository is
+  only touched then.
 - **E14-8 — Change detection.** Local store: the watcher and own-write
   announcements specified in E14-4 (that item ships the first version; this one
   hardens it: debounce tuning, miss detection, Windows checks). Remote store:

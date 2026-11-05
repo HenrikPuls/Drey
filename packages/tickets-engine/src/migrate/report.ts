@@ -13,12 +13,14 @@ export interface ReportMeta {
   readonly storeDir: string | null;
   readonly generatedAt: string;
   readonly dkVersion: string | null;
+  /** The `dk validate` verdict line after an apply; null when not run. */
+  readonly validation?: string | null;
 }
 
 export function renderDryRun(plan: ConversionPlan): string {
   const out: string[] = [];
   const migrating = plan.conversions.filter((c) => c.status === 'migrate');
-  out.push(`DRY RUN: ${migrating.length} to migrate, ${plan.conversions.length - migrating.length} skipped, ${plan.placeholderNumbers.length} placeholder number(s) needed`);
+  out.push(`DRY RUN: ${migrating.length} to migrate, ${plan.conversions.length - migrating.length} skipped`);
   for (const c of plan.conversions) {
     out.push('', ...ticketLines(c));
   }
@@ -62,9 +64,6 @@ function summaryLines(plan: ConversionPlan): string[] {
   if (plan.unreadable.length > 0) {
     out.push(`  unreadable files: ${plan.unreadable.map((u) => `${u.relPath} (${u.reason})`).join('; ')}`);
   }
-  if (plan.placeholderNumbers.length > 0) {
-    out.push(`  placeholders: ${plan.placeholderNumbers.length} cancelled tickets would fill the number gaps (dk v0.6.0 has no import with a fixed id, R-28)`);
-  }
   const blocking = plan.conversions.filter((c) => c.blocking.length > 0).map((c) => c.legacyId);
   if (blocking.length > 0) {
     out.push(`  apply is blocked by: ${blocking.join(', ')}`);
@@ -77,7 +76,7 @@ export function renderReport(plan: ConversionPlan, meta: ReportMeta, apply: Appl
   out.push(`- Generated: ${meta.generatedAt}`, `- Legacy vault (read only): \`${meta.legacyRoot}\``);
   out.push(`- Target store: ${meta.storeDir === null ? 'none (dry run)' : `\`${meta.storeDir}\``}`, `- dk: ${meta.dkVersion ?? 'not used'}`, '');
   const migrating = plan.conversions.filter((c) => c.status === 'migrate');
-  out.push('## Counts', '', `- Selected: ${plan.conversions.length + plan.missingSelected.length}`, `- Migrated (planned): ${migrating.length}`, `- Skipped: ${plan.conversions.length - migrating.length}`, `- Not found: ${plan.missingSelected.length}`, `- Placeholders: ${plan.placeholderNumbers.length}`, '');
+  out.push('## Counts', '', `- Selected: ${plan.conversions.length + plan.missingSelected.length}`, `- Migrated (planned): ${migrating.length}`, `- Skipped: ${plan.conversions.length - migrating.length}`, `- Not found: ${plan.missingSelected.length}`, '');
   out.push('## Tickets', '', '| Legacy | dricket | Stage | Title | Result |', '|---|---|---|---|---|');
   const outcome = new Map((apply?.outcomes ?? []).map((o) => [o.legacyId, o] as const));
   for (const c of plan.conversions) {
@@ -96,11 +95,11 @@ export function renderReport(plan: ConversionPlan, meta: ReportMeta, apply: Appl
   if (!any) {
     out.push('- none');
   }
-  if (plan.placeholderNumbers.length > 0) {
-    out.push('', '## Placeholders', '', `Numbers filled with cancelled placeholder tickets: ${plan.placeholderNumbers.map((n) => `t-${n}`).join(', ')}.`);
-  }
   if (apply !== null) {
-    out.push('', '## Apply', '', `- Complete: ${apply.complete ? 'yes' : 'NO'}`, `- Written: ${apply.outcomes.filter((o) => o.status !== 'failed').length}`, `- Failed: ${apply.outcomes.filter((o) => o.status === 'failed').length}`);
+    out.push('', '## Apply', '', `- Complete: ${apply.complete ? 'yes' : 'NO'}`, `- Commits: ${apply.commits}${apply.head !== null ? ` (head ${apply.head.slice(0, 10)})` : ''}`,`- Written: ${apply.outcomes.filter((o) => o.status !== 'failed').length}`, `- Failed: ${apply.outcomes.filter((o) => o.status === 'failed').length}`);
+  }
+  if (meta.validation !== undefined && meta.validation !== null) {
+    out.push('', '## dk validate', '', `- ${meta.validation}`);
   }
   if (shadow !== null) {
     out.push('', '## Shadow diff', '', `- Compared: ${shadow.compared}`, `- Identical: ${shadow.identical ? 'yes' : 'NO'}`);

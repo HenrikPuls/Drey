@@ -8,6 +8,14 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **Waiting for, or building, `dk import` / `dk add --id` (dricket R-10 / R-28)
+  for the ticket migration** (owner, 2026-11-05; E14-3b). Drey has one user; the
+  one-time migration writes the ticket files itself in the protocol's on-disk
+  format and commits them to the store's `tickets` branch with git, then
+  `dk validate` judges the result. This is a deliberate, one-shot exception to the
+  entry below (a migration, not a write path: it runs once into a fresh store and
+  is never used by the app). The number-gap placeholder tickets are gone with it.
+
 - **A TypeScript re-implementation of dricket's writes, claims and
   transitions** (owner, 2026-11-05; ADR-0090 later change, E14-4). Drey reads
   tickets from the files of the store's checkout with a **read-only** parser
