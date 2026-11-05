@@ -30,6 +30,11 @@ changed. **Not checked in a running app** (see Not done).
   and personas already live in (E14-2: the board reads them from there on a store, too) — so there was nothing to
   relocate; what changed is that a store board writes no `phase` line (dk's history derives
   it) and that no status file or ledger line goes anywhere near the checkout.
+- **Order inside one second:** dk names a comment file `<second>-<author>.md`, so the store has no order
+  finer than a second (same second = author-name order). A `resolved:` sorting before the decision it closes
+  would leave that decision open, so `statusLinesOfComments` / `commentViewsOf` fold the opening lines of a
+  timestamp before its `resolved:` (stable otherwise). Found when the board-service spec compared two
+  same-second comments; the spec now treats their relative order as unspecified.
 - **Specs:** `status-comment.spec.ts` (6), `board-service-dricket.spec.ts` (real dk: comments,
   send-back, open decision, answer, default key, refusals, no phase line, no status file),
   `runs-dk.spec.ts` (the leading verbs), `router.spec.ts` (answer route), `dto.spec.ts`.

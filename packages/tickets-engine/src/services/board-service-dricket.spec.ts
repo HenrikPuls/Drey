@@ -379,7 +379,9 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     const lines = await service.statusOf(id);
     expect(openStatusItems(lines).map((i) => [i.verb, i.key])).toEqual([['needs-decision', 'palette']]);
     const view = await service.readTicket(id);
-    expect(view.ok && view.comments?.map((c) => c.verb)).toEqual([null, 'needs-decision']);
+    // dk orders comment files by second then author, so the two comments of one second come in either order.
+    expect(view.ok && view.comments?.map((c) => c.verb)).toHaveLength(2);
+    expect(view.ok && view.comments?.map((c) => c.verb)).toEqual(expect.arrayContaining([null, 'needs-decision']));
 
     // The answer closes the key (the only open one is the default) and carries the text.
     expect(await service.answerNeed({ id, text: 'Ctrl+K' })).toEqual({ ok: true });
