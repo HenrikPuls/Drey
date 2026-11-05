@@ -361,12 +361,6 @@ owner confirms scope and order before any of it starts:
   `review`, `verify`, `approve` (concept §5.1)? Q2: does "Initialize board" seed the team
   Paul, Ben, Ralf, Tessa (D7)? Q3: default worker `opencode` or `claude-code`? Q1 touches the
   dricket `[stages]` vocabulary and `DEFAULT_MIGRATION_CONFIG`.
-- **E12-10 — Mask audit against the design** (owner report 2026-11-05: many screens
-  do not yet match the design state). A screen-by-screen audit of Drey's Work panel
-  and Mission Control (desktop and phone) against the canvas files in
-  `docs/design/work-panel/*.dc.html` and `handoff/`; one table per screen (matches,
-  deviates how, size), screenshots of scratch English data, the result ordered into
-  roadmap items (extends `convergence-gaps.md`; nothing is rebuilt in this item).
 - **E13-22 — Settings: one page width, a section tree and search** (owner request
   2026-11-05, outside the list; modelled on VS Code's settings). The settings overlay
   grows with the window (wider than today's 640 px cap) and **every page uses the same
