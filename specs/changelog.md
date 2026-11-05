@@ -1,3 +1,7 @@
+### Tooling — `scripts/verify-dricket.ps1` (part A of the cut-over guide in one command)
+
+**Not yet manually verified by the owner.** A script plus a doc fix, no app behaviour changed: it seeds a scratch dricket store (`E:\dkv`, six English tickets incl. a comment, a dependency and an expired foreign claim) and starts the built app in an isolated profile (own USERPROFILE/APPDATA/userData, so the real `~/.drey-engine` and settings are never touched; `-Remote`, `-Reset`, a before/after fingerprint of the real locations). `cutover-guide.md` part A corrected: no `-Multi` or closing of the normal Drey needed, the engine still needs a tiny tickets vault.
+
 ### Milestone 162 — E14-9a: decommission inventory — class A is empty
 
 **Not yet manually verified by the owner.** Roadmap E14-9 (split by the owner, 2026-11-05):
