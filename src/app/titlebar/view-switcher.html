@@ -29,6 +29,17 @@
       }
     </div>
   }
+  @if (views.modified()) {
+    <span class="vs-mod" role="group" aria-label="Unsaved view changes">
+      <span class="vs-dot" title="This view has unsaved changes" aria-hidden="true"></span>
+      <button type="button" class="icon-btn" title="Save view" aria-label="Save view" (click)="views.saveActive()">
+        <app-icon name="save" [size]="12" />
+      </button>
+      <button type="button" class="icon-btn" title="Revert view" aria-label="Revert view" (click)="revert()">
+        <app-icon name="rotate-ccw" [size]="12" />
+      </button>
+    </span>
+  }
 }
 
 @if (menu(); as m) {

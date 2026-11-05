@@ -5,7 +5,6 @@
  * restore, so a draft that was never saved is not kept.
  */
 import type { DreyPluginApi, Unsubscribe } from '../../../../shared/plugin-api/renderer';
-import { WORK_VIEW_ID } from '../view-preset';
 import type { DeskDeps } from '../desk-deps';
 import { flowKeyOf, flowTargetOfKey, flowTitleOf, type FlowTarget } from './flow-model';
 import { mountFlow } from './flow-view';
@@ -21,7 +20,6 @@ export function openFlowTab(api: DreyPluginApi, ticketId: string, part: number |
 export function registerFlowKind(api: DreyPluginApi, deps: DeskDeps): Unsubscribe {
   return api.ui.registerDocKind({
     kind: FLOW_KIND,
-    homeView: WORK_VIEW_ID,
     icon: 'git-branch',
     serialize: (path) => {
       const target = flowTargetOfKey(path);

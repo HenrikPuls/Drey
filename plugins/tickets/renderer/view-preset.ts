@@ -1,5 +1,4 @@
-import type { DreyPluginApi, HomeViewRuleContrib, ViewPresetContrib } from '../../../shared/plugin-api/renderer';
-import { isTicketPath } from './ticket-header';
+import type { DreyPluginApi, ViewPresetContrib } from '../../../shared/plugin-api/renderer';
 
 /**
  * The Work view (E13-13, ADR-0089): the tickets plugin's saved layout next
@@ -33,27 +32,12 @@ export function createWorkPreset(): ViewPresetContrib {
 }
 
 /**
- * Ticket files -- any phase folder of the tickets repository -- open in the
- * Work view from anywhere: the Files panel, a `[[T-0121]]` link in a note
- * (E13-4), the quick switcher. `boardVaultId` is the board's vault, null
- * while no tickets repository is set up (nothing matches then).
+ * Registers the preset; the returned function undoes it. Opening a ticket
+ * never switches the view (D-6): the document opens in the current view's
+ * own layout, so a user's saved views stay theirs. There is no home rule
+ * for ticket files and the Work view is reached on purpose (the switcher,
+ * Ctrl+N, "Go to the Work view").
  */
-export function createTicketHomeRule(boardVaultId: () => string | null): HomeViewRuleContrib {
-  return {
-    homeView: WORK_VIEW_ID,
-    matches: (path, vaultId) => {
-      const board = boardVaultId();
-      return board !== null && vaultId === board && isTicketPath(path);
-    },
-  };
-}
-
-/** Registers the preset and the ticket home rule; the returned function undoes both. */
-export function registerWorkView(api: DreyPluginApi, boardVaultId: () => string | null): () => void {
-  const offPreset = api.ui.registerViewPreset(createWorkPreset());
-  const offRule = api.documents.registerHomeViewRule(createTicketHomeRule(boardVaultId));
-  return () => {
-    offPreset();
-    offRule();
-  };
+export function registerWorkView(api: DreyPluginApi): () => void {
+  return api.ui.registerViewPreset(createWorkPreset());
 }

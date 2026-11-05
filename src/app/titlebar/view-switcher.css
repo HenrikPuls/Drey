@@ -48,6 +48,21 @@
   height: 22px;
 }
 
+.vs-mod {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+}
+
+.vs-dot {
+  width: 6px;
+  height: 6px;
+  margin-right: 2px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 .ctx-backdrop {
   position: fixed;
   inset: 0;

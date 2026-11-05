@@ -328,3 +328,97 @@ describe('ViewService presets and home views (SDK 1.39)', () => {
     expect(views.activeId()).toBe('notes');
   });
 });
+
+describe('ViewService saved layouts (D-6: a view saves only by "Save view")', () => {
+  let views: ViewService;
+  let dock: DockService;
+  let editor: EditorService;
+  let panes: PaneService;
+  const savedStore = (): { views: Record<string, unknown> } =>
+    JSON.parse(localStorage.getItem('drey.views.saved') ?? '{"views":{}}') as { views: Record<string, unknown> };
+
+  beforeEach(() => {
+    localStorage.clear();
+    window.dreyApi = {
+      readVaultFile: (p: string) => Promise.resolve({ content: `body of ${p}`, modifiedMs: 1 }),
+    } as unknown as DreyApi;
+    views = TestBed.inject(ViewService);
+    dock = TestBed.inject(DockService);
+    editor = TestBed.inject(EditorService);
+    panes = TestBed.inject(PaneService);
+    views.adoptBaselines();
+  });
+
+  afterEach(() => {
+    delete (window as { dreyApi?: unknown }).dreyApi;
+    localStorage.clear();
+  });
+
+  it('starts unmodified', () => {
+    expect(views.modified()).toBe(false);
+  });
+
+  it('a panel resize marks the view modified and saves nothing', () => {
+    const before = JSON.stringify(savedStore());
+    dock.setDockWidth('left', 321);
+    expect(views.modified()).toBe(true);
+    expect(JSON.stringify(savedStore())).toBe(before);
+  });
+
+  it('a tab change marks the view modified and saves nothing', async () => {
+    const before = JSON.stringify(savedStore());
+    await editor.openFile('a.md');
+    expect(views.modified()).toBe(true);
+    expect(JSON.stringify(savedStore())).toBe(before);
+  });
+
+  it('only switching the active tab is not a modification', async () => {
+    await editor.openFile('a.md');
+    editor.setPinned('a.md', true);
+    await editor.openFile('b.md');
+    views.saveActive();
+    editor.activate('a.md');
+    expect(views.modified()).toBe(false);
+  });
+
+  it('"Save view" keeps the layout and clears the modified state', () => {
+    dock.setDockWidth('left', 321);
+    views.saveActive();
+    expect(views.modified()).toBe(false);
+    expect(savedStore().views['notes']).toBeDefined();
+    dock.setDockWidth('left', 400);
+    expect(views.modified()).toBe(true);
+  });
+
+  it('"Revert view" brings the saved layout back, docks and tabs', async () => {
+    const width = dock.dockWidth('left');
+    await editor.openFile('a.md');
+    editor.setPinned('a.md', true);
+    views.saveActive();
+    dock.setDockWidth('left', 321);
+    await editor.openFile('b.md');
+    expect(views.modified()).toBe(true);
+
+    await views.revertActive();
+
+    expect(dock.dockWidth('left')).not.toBe(321);
+    expect(width).toBeGreaterThan(0);
+    expect(panes.tabsOfView('notes')).toEqual(['a.md']);
+    expect(views.modified()).toBe(false);
+  });
+
+  it('an unsaved change stays with the view across a switch (session-local)', () => {
+    const second = views.saveCurrentAs('Second');
+    dock.setDockWidth('left', 321);
+    views.switchTo('notes');
+    views.switchTo(second);
+    expect(dock.dockWidth('left')).toBe(321);
+    expect(views.modified()).toBe(true);
+  });
+
+  it('a view made by "Save current layout as a view" starts unmodified', () => {
+    dock.setDockWidth('left', 321);
+    views.saveCurrentAs('Second');
+    expect(views.modified()).toBe(false);
+  });
+});

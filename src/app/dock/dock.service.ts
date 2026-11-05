@@ -66,6 +66,13 @@ const DEFAULT_LEFT_W = 248;
 const DEFAULT_RIGHT_W = 340;
 const DEFAULT_BOTTOM_H = 280;
 
+/** A dock layout as a plain value: what a view's "Save view" keeps (ADR-0089, D-6). */
+export type DockLayout = DockState;
+
+function layoutOf({ dock, flexes, open, leftW, rightW, bottomH, foldedSides }: DockState): DockLayout {
+  return { dock, flexes, open, leftW, rightW, bottomH, foldedSides };
+}
+
 /** Shallow, order-sensitive array equality. */
 function sameList(a: readonly WidgetId[], b: readonly WidgetId[]): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i]);
@@ -404,6 +411,18 @@ export class DockService {
     delete this.slots[to];
     this.state.set(this.merge(this.defaultState(), next));
     this._activeView.set(to);
+    this.persist();
+    this.reconcileEnabled(this.settings.widgetsDisabled());
+  }
+
+  /** The active view's dock layout as a plain value (what "Save view" keeps). */
+  layout(): DockLayout {
+    return layoutOf(this.state());
+  }
+
+  /** "Revert view": the active view's dock goes back to a layout taken with {@link layout}. */
+  applyLayout(layout: DockLayout): void {
+    this.state.set(this.merge(this.defaultState(), layout));
     this.persist();
     this.reconcileEnabled(this.settings.widgetsDisabled());
   }
@@ -911,20 +930,11 @@ export class DockService {
 
   private persist(): void {
     try {
-      const pick = ({ dock, flexes, open, leftW, rightW, bottomH, foldedSides }: DockState): DockState => ({
-        dock,
-        flexes,
-        open,
-        leftW,
-        rightW,
-        bottomH,
-        foldedSides,
-      });
       const views: Record<string, DockState> = {};
       for (const [id, v] of Object.entries(this.slots)) {
-        views[id] = pick(v);
+        views[id] = layoutOf(v);
       }
-      views[this._activeView()] = pick(this.state());
+      views[this._activeView()] = layoutOf(this.state());
       localStorage.setItem(DockService.KEY, JSON.stringify({ active: this._activeView(), views }));
     } catch {
       // Private-mode / storage-disabled: a non-persisted session is fine.

@@ -1728,7 +1728,10 @@ automatically.
   command palette) keeps the current arrangement under a name and
   switches to it; the title bar then shows one button per view, and
   `Ctrl+1` … `Ctrl+9` or *View → Switch view* jump between them. A
-  view comes back exactly as you left it. Right-click a view you made
+  view is saved only when you say so: change a panel, a split or a tab and the
+  switcher shows a dot with *Save view* and *Revert view* (also in the *View*
+  menu); *Save view* keeps the arrangement, *Revert view* returns to the saved
+  one. Until you save, the change lasts for the session only. Right-click a view you made
   to rename or delete it; *Notes* is always there. Tabs belong to
   views: another view's tabs are hidden, and one tab can be shown in
   several views — its context menu has *Show this tab in* with a
@@ -1740,9 +1743,10 @@ automatically.
   document that belongs to such a view (a tab the plugin names for it)
   switches there first. The tickets plugin offers **Work** (`Ctrl+2`):
   the Tickets panel on the left, the Assistant on the right and the
-  Capacity band below. Opening a ticket — from the Files panel, a
-  `[[T-0121]]` link or the quick switcher — or the Board or Team tab
-  switches to Work; Notes is `Ctrl+1`.
+  Capacity band below. Opening a ticket — from the Tickets panel, the Files panel, a
+  `[[T-0121]]` link or the quick switcher — never changes the view: the
+  ticket opens as a tab in the view you are in. Opening the Board or
+  Team tab switches to Work; Notes is `Ctrl+1`.
 - **Open windows** panel lists the open documents of the current view,
   and under *In other views* the rest, each with a *Show here* button:
 

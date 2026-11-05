@@ -187,6 +187,7 @@ export class App {
     // `vault.refresh()` re-runs after saves, so the boolean guard (not just
     // the signal) keeps this to a single pass.
     const session = inject(SessionService);
+    const viewService = inject(ViewService);
     effect(() => {
       const vaultPath = this.vault.activeVaultPath();
       const loaded = this.settings.loaded();
@@ -217,6 +218,8 @@ export class App {
           // the daily note instead of gaining it a beat later.
           await this.editor.openDailyNote(formatDate(new Date()));
         }
+        // The layouts as they stand now are the saved ones until the owner saves another (D-6).
+        viewService.adoptBaselines();
         history.resume();
         window.dreyApi?.reportStartupReady?.();
       })();
@@ -447,6 +450,8 @@ export class App {
       });
     }
     keys.register({ id: 'view.next', label: 'Switch view', run: () => views.switchToNext() });
+    keys.register({ id: 'view.save', label: 'Save view', run: () => views.saveActive() });
+    keys.register({ id: 'view.revert', label: 'Revert view', run: () => void views.revertActive() });
     keys.register({
       id: 'view.saveAs',
       label: 'Save current layout as a view…',

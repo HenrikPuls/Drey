@@ -425,6 +425,8 @@ export class MenuService {
           label: 'Switch view',
           run: this.views.views().length > 1 ? () => this.run('view.next') : undefined,
         },
+        { kind: 'item', label: 'Save view', run: this.views.modified() ? () => this.run('view.save') : undefined },
+        { kind: 'item', label: 'Revert view', run: this.views.modified() ? () => this.run('view.revert') : undefined },
         { kind: 'item', label: 'Save current layout as a view…', run: () => this.run('view.saveAs') },
         ...this.contributionRows('view'),
       ],

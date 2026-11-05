@@ -1,3 +1,30 @@
+### Milestone 163 — D-6: selecting a ticket never changes the view, a view saves only by "Save view"
+
+**Not yet manually verified by the owner.** Owner report 2026-11-05, roadmap D-6.
+
+- **Cause 1.** The tickets plugin registered a home-view rule (ticket files of the board vault →
+  `tickets.work`, E13-13) and gave its thread and Flow kinds `homeView: tickets.work`;
+  `DocOpenService.openFile` asks `HomeViewRouter`, so every ticket opened from the Tickets panel,
+  the Files tree, a link or the switcher switched to Work. **Fix:** the rule and the two `homeView`s
+  are gone (`registerWorkView(api)` registers the preset only). The ticket opens as a tab in the
+  current view's focused pane — no per-view ticket slot is needed; a view's own design decides
+  where its tabs go. Board and Team (opened on purpose) still name Work. Mission Control was
+  checked: it has no views, `openTicket` there never changes the tab.
+- **Cause 2.** There was no "Save view" at all: `DockService.persist` wrote every resize/move into
+  `drey.dock` and the session snapshot every tab change into the view's slot. **Fix:**
+  `ViewService` keeps a saved layout per view (`drey.views.saved`: dock layout + pane tree);
+  `modified` compares the working layout with it (docks, splits, tab sets — not which tab is
+  active); the switcher shows a dot with **Save view** / **Revert view** icons, also *View → Save
+  view / Revert view* and commands `view.save` / `view.revert`. Revert restores docks and tabs
+  (a tab opened since that no other view shows is closed, asking about unsaved text). An unsaved
+  change still rides the session restore across a restart, like open tabs, but is never the saved
+  layout; the first start adopts each view's current layout as saved.
+- **Tests:** `view.service.spec.ts` (modified after resize / tab change, nothing written to the
+  saved store, save, revert, switch keeps the working layout, new view starts unmodified),
+  `view-preset.spec.ts` (no home rule, Flow kind without `homeView`).
+- **Docs:** manual (Views), docs/05, ADR-0089 "Later change — D-6", AUTHORING.
+  Not checked in a running app (unit tests and typecheck only).
+
 ### Tooling — `scripts/verify-dricket.ps1` (part A of the cut-over guide in one command)
 
 **Not yet manually verified by the owner.** A script plus a doc fix, no app behaviour changed: it seeds a scratch dricket store (`E:\dkv`, six English tickets incl. a comment, a dependency and an expired foreign claim) and starts the built app in an isolated profile (own USERPROFILE/APPDATA/userData, so the real `~/.drey-engine` and settings are never touched; `-Remote`, `-Reset`, a before/after fingerprint of the real locations). `cutover-guide.md` part A corrected: no `-Multi` or closing of the normal Drey needed, the engine still needs a tiny tickets vault.
