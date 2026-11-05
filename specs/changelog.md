@@ -29,6 +29,28 @@
 
 **Not yet manually verified by the owner.** A script plus a doc fix, no app behaviour changed: it seeds a scratch dricket store (`E:\dkv`, six English tickets incl. a comment, a dependency and an expired foreign claim) and starts the built app in an isolated profile (own USERPROFILE/APPDATA/userData, so the real `~/.drey-engine` and settings are never touched; `-Remote`, `-Reset`, a before/after fingerprint of the real locations). `cutover-guide.md` part A corrected: no `-Multi` or closing of the normal Drey needed, the engine still needs a tiny tickets vault.
 
+### Milestone 163 — E12-9: default names follow the canvas
+
+**Not yet manually verified by the owner.** Owner report 2026-11-05: the names in the default
+configuration do not match the design canvas. The audit is
+`docs/design/work-panel/default-names-audit.md` (26 rows, about 55 names: 5 fixed, 4 owned by
+existing items E13-14 / E13-15 / E12-7, 3 questions for the owner).
+
+- **Fixed.** A new board's first column is titled **Ideas** (the canvas never says "Inbox"; capture
+  lands in Ideas on every board). Only the title changed: the id and folder stay `inbox`, so the
+  dricket stage vocabulary, `10-inbox`, `entered-inbox` and the migration are untouched. The phone
+  capture button reads `Create in <first column's title>`; the Pipeline settings hint no longer names
+  columns; the manual, the `ticket-schema.md` example and the scratch `pipeline.md` of
+  `scripts/verify-dricket.ps1` follow.
+- **Existing boards keep their names.** `initialize` refuses a vault that has a `pipeline.md`
+  and writes nothing; a spec checks that an existing `Inbox` title survives untouched.
+- **Not changed (questions).** Whether the default pipeline gains review / verify / approve (Q1),
+  whether "Initialize board" seeds the default team Paul, Ben, Ralf, Tessa (Q2), the default worker
+  (Q3). dricket side: no change needed; `[stages]` would change only for Q1 or an id rename
+  (see the audit).
+- **Tests.** `board-service.spec.ts` "default names (E12-9)": new board → Ideas with id `inbox`;
+  existing board → refused, file byte-identical, title Inbox.
+
 ### Milestone 162 — E14-9a: decommission inventory — class A is empty
 
 **Not yet manually verified by the owner.** Roadmap E14-9 (split by the owner, 2026-11-05):

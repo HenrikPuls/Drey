@@ -344,12 +344,11 @@ owner confirms scope and order before any of it starts:
   about; today they cannot be selected or opened. Check the reader on both backends
   (files, dricket: the archived/done folders and the board's "this week" filter) and
   add an explicit way to reach older ones (search or "Show older").
-- **E12-9 — Default configuration names follow the canvas** (owner report 2026-11-05).
-  The names in the default config (pipeline columns, personas, tracks, tab and button
-  labels shipped as defaults) do not match "Drey Tickets — Workflow redesign"
-  (`docs/design/work-panel/`). Audit every default name against the canvas, list the
-  deviations with the canvas reference, then change the defaults, the seed/fixture
-  data, the manual and the screenshots. Existing user configs keep their names.
+- **E12-9b — Defaults the audit left open** (owner decision needed, from
+  `docs/design/work-panel/default-names-audit.md`). Q1: does the default pipeline gain
+  `review`, `verify`, `approve` (concept §5.1)? Q2: does "Initialize board" seed the team
+  Paul, Ben, Ralf, Tessa (D7)? Q3: default worker `opencode` or `claude-code`? Q1 touches the
+  dricket `[stages]` vocabulary and `DEFAULT_MIGRATION_CONFIG`.
 - **E12-10 — Mask audit against the design** (owner report 2026-11-05: many screens
   do not yet match the design state). A screen-by-screen audit of Drey's Work panel
   and Mission Control (desktop and phone) against the canvas files in
