@@ -1385,11 +1385,12 @@ A column with a **worker** runs itself. Settings → *Tickets* shows the
 tickets repository's folder at the top (the folder button opens it) and
 the **Pipeline** as one table, a row per column in pipeline order: its
 folder number (`10`, `20`, …), name, a *Runs itself* or *Checkpoint*
-chip with the folder, then the **worker** (OpenCode or Claude Code;
+chip with the folder, then the **worker** (OpenCode, Claude Code or Kimi Code;
 *Manual* means a column only you move tickets through), the **model**
 and the **prompt**. A manual column shows dashes there. The model field is a
 picker: click it to see what the worker offers (OpenCode lists its own
-`provider/model` ids, Claude Code its aliases), type to filter, or type
+`provider/model` ids, Claude Code its aliases, Kimi Code the models of its
+configuration), type to filter, or type
 an id the list does not know. The prompt is chosen from the files in
 `tickets/_meta/prompts/`. Every change is one commit; the Work panel follows.
 
@@ -1483,7 +1484,7 @@ by `blocked-by` never enters a pool while a blocker is open — the
 chain log line names it and its blockers.
 
 **Each worker has its own settings.** Settings → *Tickets* → *Workers*
-has a switch between **OpenCode** and **Claude Code**. It opens on your
+has a switch between **OpenCode**, **Claude Code** and **Kimi Code**. It opens on your
 default worker and shows only the settings of the selected worker:
 - **Pool size**: how many of its runs go at once.
 - **Resume compact threshold**: the worker's own value for the shared
@@ -1491,6 +1492,10 @@ default worker and shows only the settings of the selected worker:
 - **Pool probe** (OpenCode only).
 - **Dispatched-run permissions** (Claude Code only). OpenCode takes its
   permissions from its own configuration and asks in the ticket's thread.
+  Kimi Code asks in the thread too (approvals and its questions); install it
+  with its own installer and run `kimi login` once in a terminal. Its models
+  are hosted (`api.kimi.ai`, `api.z.ai`), so it is opt-in: the default worker
+  stays OpenCode. Its cost is estimated from a price table, not reported.
 
 **How many runs go at once** is set per worker, not per column: the
 **Pool size** of each worker (one when empty). Every run of that worker takes a

@@ -178,7 +178,7 @@ function personaPatchError(input: {
     return `the role is one of ${PERSONA_ROLES.join(', ')}`;
   }
   if (input.worker !== undefined && input.worker.trim() === '') {
-    return 'the worker is not empty ("opencode", "claude-code" or "api")';
+    return 'the worker is not empty ("opencode", "claude-code", "kimi" or "api")';
   }
   if (input.model !== undefined && input.model.trim() === '') {
     return 'the default model is not empty';
@@ -3363,8 +3363,8 @@ export class EngineBoardService {
       }
       if (input.worker !== undefined) {
         const worker = input.worker?.trim() ?? '';
-        if (worker !== '' && worker !== 'opencode' && worker !== 'claude-code') {
-          return { ok: false, error: 'the worker is "opencode" or "claude-code"' };
+        if (worker !== '' && worker !== 'opencode' && worker !== 'claude-code' && worker !== 'kimi') {
+          return { ok: false, error: 'the worker is "opencode", "claude-code" or "kimi"' };
         }
       }
       if (input.color !== undefined) {

@@ -61,7 +61,7 @@ export interface Persona {
   readonly kind: PersonaKind;
   readonly title: string;
   readonly role: PersonaRole;
-  /** The CLI harness (`claude-code` | `opencode` | `api`). */
+  /** The CLI harness (`claude-code` | `opencode` | `kimi` | `api`). */
   readonly worker: string;
   readonly models: PersonaModels;
   /** UI color (`#rrggbb`), chips and avatars. */

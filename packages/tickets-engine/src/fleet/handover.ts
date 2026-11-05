@@ -22,6 +22,8 @@ import type { FleetHandoverConfig, HandoverMode, RunState, WorkerProviderId } fr
  * Which providers can compact a session natively (T-0049):
  * - opencode: `POST /api/session/{id}/compact` — measured (spike 2):
  *   200, a `compaction` message, the context halved, ~0.75k tokens.
+ * - kimi: `/compact` as an ACP prompt (E10-8) — the wire log shows a
+ *   `full_compaction.begin` (source `manual`) for it.
  * - claude-code: `'none'` for now — spike 1 proved `/compact` routes
  *   natively as a stream-json user message, but its OAuth was expired,
  *   so no effect was observed. One-line flip once verified.
@@ -29,6 +31,7 @@ import type { FleetHandoverConfig, HandoverMode, RunState, WorkerProviderId } fr
 export const COMPACT_CAPABILITY: Readonly<Record<WorkerProviderId, 'native' | 'none'>> = {
   opencode: 'native',
   'claude-code': 'none',
+  kimi: 'native',
 };
 
 /** The run a handover could resume — the newest terminal record of the

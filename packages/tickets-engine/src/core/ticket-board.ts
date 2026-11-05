@@ -173,7 +173,7 @@ export function parsePipeline(text: string): PipelineParse {
 // --- pipeline.md patching (the settings dialog's writer, M85) ----------------
 
 export interface PhasePoolPatch {
-  /** `opencode` or `claude-code` sets the worker (and the `agent` handover);
+  /** `opencode`, `claude-code` or `kimi` sets the worker (and the `agent` handover);
    *  null clears it — the column becomes a manual step and loses its pool. */
   readonly worker?: string | null;
   /** The model pin; an empty string or null clears it. */

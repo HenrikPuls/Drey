@@ -6,6 +6,7 @@
  * text field and shows why the list is empty.
  */
 import { execFile } from 'node:child_process';
+import { nodeKimiProbeSeams, probeKimi } from './kimi-probe';
 
 export interface WorkerModels {
   readonly worker: string;
@@ -50,6 +51,10 @@ export async function listWorkerModels(
 ): Promise<WorkerModels> {
   if (worker === 'claude-code') {
     return { worker, models: CLAUDE_CODE_MODELS, note: 'Aliases; a full model id also works.' };
+  }
+  if (worker === 'kimi') {
+    const probe = await probeKimi(nodeKimiProbeSeams(exec));
+    return { worker, models: probe.models, note: probe.note };
   }
   if (worker !== 'opencode') {
     return { worker, models: [], note: 'A manual column has no worker.' };

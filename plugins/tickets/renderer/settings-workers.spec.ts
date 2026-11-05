@@ -30,7 +30,12 @@ describe('RUNNER_FIELDS (req-71)', () => {
     expect(field?.fallback).toBe('accept-edits');
   });
 
-  it('keeps control ids unique across both runners', () => {
+  it('gives Kimi Code a pool and a compact override, and no probe or permission flag of its own', () => {
+    expect(RUNNER_LABEL.kimi).toBe('Kimi Code');
+    expect(keysOf('kimi')).toEqual(['fleet.pool.kimi.size', 'fleet.compactAboveTokens.kimi']);
+  });
+
+  it('keeps control ids unique across all runners', () => {
     const ids = WORKER_PROVIDERS.flatMap((p) => RUNNER_FIELDS[p].map((f) => f.id));
     expect(new Set(ids).size).toBe(ids.length);
   });

@@ -14,6 +14,12 @@ describe('listWorkerModels', () => {
     expect(res.models).toContain('sonnet');
   });
 
+  it('lists the models of the Kimi config and says when the CLI is missing', async () => {
+    const missing = await listWorkerModels('kimi', () => Promise.reject(new Error('ENOENT')));
+    expect(missing.models).toEqual([]);
+    expect(missing.note).toMatch(/not installed/);
+  });
+
   it('turns a failing CLI into an empty list with a note', async () => {
     const res = await listWorkerModels('opencode', () => Promise.reject(new Error('ENOENT')));
     expect(res.models).toEqual([]);
