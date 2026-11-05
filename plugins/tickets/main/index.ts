@@ -653,6 +653,9 @@ const plugin: MainPluginModule = {
 
     ctx.ipc.handle('chainAbort', async () => chainResult(await fleet.abortAll()));
 
+    // E14-5b: the owner's "release leftover claims" - agent claims a killed runner left on a dricket store.
+    ctx.ipc.handle('chainReleaseLeftovers', async () => board.releaseLeftoverClaims());
+
     // --- the team (E13-8, E12-4): the remote port's own reads and controls ---
     // The Team tab and the Capacity band show what the phone shows, so they
     // ask the engine's port (through the invoke allowlist), not a copy.

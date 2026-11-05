@@ -271,5 +271,14 @@ comment carrying the answer; a dk run's release comments lead with `done:` / `fa
 vault the pipeline, repos and personas already live in); `phase` lines are not written on a store
 (derivable from dk's history). Nothing writes a status file or a ledger line into the checkout.
 
-**Not decided here, left open (roadmap E14-5b).** The chain orchestrator still reads ticket files and
-is refused while the board runs on dricket; chapters written inside the claim; needs-input re-claim.
+**Later change (E14-5b, the chain and the claim's chapters).** The chain orchestrator runs on a store: its board is
+`assembleBoardFromRecords` over the checkout's files (the meta vault keeps pipeline, repos, personas and prompts),
+its own writes — the ci move, the breaker's and the manual gate's parks, a Log line — are legacy-shaped patches written with
+`dk put --claim --if-version`, never a file, and it stamps no claim (the run's lease claims; a ticket whose lease ran out
+reads as unclaimed, so dispatch is the takeover). Inside a claim the runner writes with `dk put -F` (no `--claim`, no
+`--if-version`: the claim fences a stale writer, dk refuses `--claim` on a held ticket): the `## Verlauf` line goes in just before the
+release. A same-stage release (dk refuses an agent's `build -> build`, dricket R-31) is released one stage back and
+written back with `put --claim` — two commits, so R-31 stays a nice-to-have. A run that waits for the owner (Q-03)
+releases (to `needs-input` when the store has the stage) and re-claims on the answer with a new epoch; a killed
+runner's `agent-<run>@<host>` claims are released as their owner before the first dispatch and on request. Chapters a
+worker itself writes into the ticket still have no door on a store (roadmap E14-5c).

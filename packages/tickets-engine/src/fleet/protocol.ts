@@ -53,6 +53,8 @@ export interface RunDkTarget {
    * the owner's store may have no `blocked` stage (`dricket.toml` `[stages]`).
    */
   readonly parkStage: string | null;
+  /** E14-5b (Q-03): the stage a run that waits for the owner is released to; null = it stays where it is, unclaimed. Absent on older runners. */
+  readonly needsInputStage?: string | null;
   /** The stage before the working one, for a release that may not stay put (dk refuses `build -> build` for an agent). */
   readonly retreatStage: string | null;
   /** Workers put `Dricket-*` trailers on their commits and the gate runs `dk validate --trailers` (off by default). */
@@ -672,9 +674,28 @@ export type ChainMaster = 'run' | 'halted';
 export type ColumnMode = 'playing' | 'held';
 
 /** What the plugin tells the runner about its world (idempotent POST). */
+/**
+ * Where the chain finds its tickets when the board runs on dricket (E14-5b, ADR-0090): the same
+ * settings the board reads, handed to the runner process. The tickets are read from the checkout's
+ * files and written only through `dk`; `ticketsVaultPath` stays the META vault (pipeline, repos,
+ * personas, prompts, worktrees).
+ */
+export interface ChainStoreConfig {
+  /** `dk` executable; empty = `dk` on PATH. */
+  readonly dkPath: string;
+  readonly dkStore: string;
+  readonly dkDataDir: string;
+  /** The checkout the board is read from (`tickets.dk.checkout`); empty = the local store itself. */
+  readonly dkCheckout: string;
+  /** Commit trailers + `dk validate --trailers` in the gate (`tickets.dk.trailers`). */
+  readonly trailers: boolean;
+}
+
 export interface ChainConfig {
-  /** Absolute path of the tickets vault to orchestrate. */
+  /** Absolute path of the tickets vault to orchestrate (on dricket: the meta vault). */
   readonly ticketsVaultPath: string;
+  /** E14-5b: set while `tickets.backend = dricket`: the tickets come from this store, not from ticket files. */
+  readonly store?: ChainStoreConfig;
   /** Git executable for ticket commits (the plugin's gitPath or `git`). */
   readonly git: string;
   /** The plugin's configured default worker (the assignment ring's floor). */
@@ -689,6 +710,33 @@ export interface ChainConfig {
   readonly pools?: FleetPools;
   /** The handover thresholds (T-0049); absent = `DEFAULT_FLEET_HANDOVER`. */
   readonly handover?: FleetHandoverConfig;
+}
+
+/** The store settings of a request body (the chain config, the release-leftovers action); null when it names no store. */
+export function normalizeChainStore(value: unknown): ChainStoreConfig | null {
+  if (value === null || typeof value !== 'object') {
+    return null;
+  }
+  const v = value as Record<string, unknown>;
+  const text = (...keys: string[]): string => {
+    for (const key of keys) {
+      if (typeof v[key] === 'string') {
+        return (v[key] as string).trim();
+      }
+    }
+    return '';
+  };
+  const dkStore = text('dkStore', 'store');
+  if (dkStore === '') {
+    return null;
+  }
+  return {
+    dkPath: text('dkPath', 'bin'),
+    dkStore,
+    dkDataDir: text('dkDataDir', 'dataDir'),
+    dkCheckout: text('dkCheckout', 'checkout'),
+    trailers: v['trailers'] === true,
+  };
 }
 
 /** The chain's control state as the runner reports it. */

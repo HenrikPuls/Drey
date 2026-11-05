@@ -60,7 +60,8 @@ import { cleanWorktrees, listOrphans, removeWorktree, type CleanupReport } from 
 import { unlinkShared } from '../fleet/worktrees';
 import { statusLogPathOf } from '../fleet/event-writer';
 import { legacyWorktreeBase, worktreeBaseFor, worktreePathFor, WORKTREES_DIR } from '../fleet/worktree-home';
-import { type ChainConfig, FleetCaps, FleetHandoverConfig, HandoverMode, InteractiveMode, PermissionMode, RunDkTarget, RunInfo, FleetPools } from '../fleet/protocol';
+import { dkTargetFor, retreatStages } from '../fleet/dk-target';
+import { type ChainConfig, type ChainStoreConfig, FleetCaps, FleetHandoverConfig, HandoverMode, InteractiveMode, PermissionMode, RunDkTarget, RunInfo, FleetPools } from '../fleet/protocol';
 import { type EngineHost, type EngineVaultChangeEvent, EngineVault, FleetPort } from './host';
 import { handoverFromConfig, handoverOverrideKeys } from './handover-config';
 import { appendMemory, memoryPathFor, parseMemoryEntries, toggleMemoryPin } from './persona-store';
@@ -519,14 +520,49 @@ export class EngineBoardService {
   }
 
   /**
-   * Why the chain may not be switched on, or null. The chain orchestrator picks its tickets
-   * from the vault's ticket files; on `tickets.backend = dricket` those do not exist (E14-5b
-   * ports it onto the store). Owner-started runs claim through dk and work.
+   * Why the chain may not be switched on, or null. On `tickets.backend = dricket` the chain reads
+   * its tickets from the store's checkout (E14-5b), so it needs one: an explicit
+   * `tickets.dk.checkout`, or a local `tickets.dk.store` directory. A remote store without a
+   * checkout would leave the runner one `dk` call per ticket; that is refused.
    */
   async chainRefusal(): Promise<string | null> {
-    return (await this.refreshDricket()) === null
-      ? null
-      : 'The chain does not dispatch on the dricket backend yet (E14-5b) - start runs from the cards';
+    const store = await this.refreshDricket();
+    if (store === null) {
+      return null;
+    }
+    if (store.dkStore === '') {
+      return 'The chain needs the dricket store (tickets.dk.store)';
+    }
+    return checkoutOf(store) === null
+      ? 'The chain reads the store from its checkout: set tickets.dk.checkout (a remote store has none yet)'
+      : null;
+  }
+
+  /**
+   * "Release leftover claims" (E14-5b (4)): a runner that was killed with a run in flight leaves its
+   * `agent-<run>@<host>` claim on the ticket until the lease ends. The runner releases every agent
+   * claim of this host that no live run holds - back to where the ticket sat, else one stage back.
+   */
+  async releaseLeftoverClaims(): Promise<{ readonly ok: true; readonly released: readonly string[]; readonly skipped: readonly { readonly id: string; readonly reason: string }[] } | { readonly ok: false; readonly error: string }> {
+    const store = await this.refreshDricket();
+    if (store === null) {
+      return { ok: false, error: 'There are no dk claims on the files backend' };
+    }
+    const snap = await this.snapshot();
+    try {
+      if (this.fleet.releaseLeftoverClaims === undefined) {
+        return { ok: false, error: 'this fleet port cannot release claims' };
+      }
+      return await this.fleet.releaseLeftoverClaims(await this.chainStoreOf(store), retreatStages(snap.pipeline));
+    } catch (error) {
+      return { ok: false, error: messageOf(error) };
+    }
+  }
+
+  /** The store the chain and the leftover release hand to the runner process. */
+  private async chainStoreOf(store: StoreSettings): Promise<ChainStoreConfig> {
+    const trailers = await this.host.configGet<boolean | string>('dk.trailers');
+    return { dkPath: store.dkPath, dkStore: store.dkStore, dkDataDir: store.dkDataDir, dkCheckout: store.dkCheckout, trailers: trailers === true || trailers === 'true' };
   }
 
   /** Keeps the runner's chain config in step with the pipeline (never spawns). */
@@ -534,14 +570,16 @@ export class EngineBoardService {
     vault: { readonly path: string } | null,
     pipeline: readonly PipelinePhase[],
   ): Promise<ChainConfig | null> {
-    if (this.dricket !== null) {
-      return null; // the dispatcher reads ticket files: never point it at a vault whose tickets live in a store
+    const dricket = this.dricket;
+    if (dricket !== null && (dricket.dkStore === '' || checkoutOf(dricket) === null)) {
+      return null; // the dispatcher reads the store's checkout (E14-5b): without one there is nothing to point it at
     }
     const defaultPersona = ((await this.host.configGet<string>('personas.default')) ?? '').trim() || null;
     const chain: ChainConfig | null =
       vault !== null && pipeline.some((phase) => isAutoPhase(phase))
         ? {
             ticketsVaultPath: vault.path,
+            ...(dricket !== null ? { store: await this.chainStoreOf(dricket) } : {}),
             git: this.gitPath.trim() === '' ? 'git' : this.gitPath.trim(),
             defaultWorker: this.defaultWorker,
             defaultPersona,
@@ -1972,17 +2010,7 @@ export class EngineBoardService {
    * `blocked` stage to park in. Trailers are opt-in (`tickets.dk.trailers`).
    */
   private async runTarget(store: StoreSettings, pipeline: readonly PipelinePhase[], phaseId: string): Promise<RunDkTarget> {
-    const index = pipeline.findIndex((p) => p.id === phaseId);
-    const trailers = await this.host.configGet<boolean | string>('dk.trailers');
-    return {
-      bin: store.dkPath,
-      store: store.dkStore,
-      dataDir: store.dkDataDir,
-      checkout: store.dkCheckout,
-      parkStage: pipeline.some((p) => p.id === 'blocked') ? 'blocked' : null,
-      retreatStage: index > 0 ? pipeline[index - 1]!.id : null,
-      trailers: trailers === true || trailers === 'true',
-    };
+    return dkTargetFor(await this.chainStoreOf(store), pipeline, phaseId);
   }
 
   /** A human's claim takeover / release on a dricket ticket: `dk claim` / `dk release`, dk decides (E14-5). */

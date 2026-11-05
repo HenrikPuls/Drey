@@ -130,7 +130,10 @@ export class DricketTicketStore implements TicketStore {
     const file = path.join(dir, 'ticket.md');
     try {
       await fsp.writeFile(file, text.replace(/\r\n/g, '\n'), 'utf8');
-      const args = ['put', dkId, '-F', file, '--claim', '--if-version', String(options.expectedRev)];
+      if (options.holdsClaim !== true && options.expectedRev === undefined) {
+        throw new TicketStoreError('usage', `put ${id}: an expected rev is required unless the writer holds the claim`);
+      }
+      const args = options.holdsClaim === true ? ['put', dkId, '-F', file] : ['put', dkId, '-F', file, '--claim', '--if-version', String(options.expectedRev)];
       const data = asObject(
         await this.dk.call(args, { write: true, ...(options.actor === undefined ? {} : { actor: options.actor }), ...signalOf(call) }),
         'put',
@@ -138,7 +141,7 @@ export class DricketTicketStore implements TicketStore {
       const fields = data['changed_fields'];
       return {
         id: displayOf(data),
-        rev: numberOrNull(data['rev']) ?? options.expectedRev + 1,
+        rev: numberOrNull(data['rev']) ?? (options.expectedRev ?? 0) + 1,
         commit: textOrNull(data['commit']),
         changedFields: Array.isArray(fields) ? fields.filter((f): f is string => typeof f === 'string') : [],
       };

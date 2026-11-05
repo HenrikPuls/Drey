@@ -7,6 +7,9 @@ import type { ProviderAdapter, ProviderStart, WorkerHandle } from './providers';
 import { RunSupervisor, type RunSupervisorDeps } from './runs';
 import type { RunDkTarget, RunRequest, RunState } from './protocol';
 import { FakeStore, FakeTimers } from './run-lease.fake';
+import { runOwnerId } from './run-lease';
+
+const runOwnerHost = (): string => runOwnerId('x').slice('agent-x@'.length);
 
 /**
  * E14-5: the run supervisor on a dricket store. The store is a scripted fake (what `dk`
@@ -288,6 +291,125 @@ describe('RunSupervisor on a dricket store (E14-5)', () => {
     expect(validate).toHaveBeenCalledWith(expect.objectContaining({ trailers: true }), 'W:/fleet-worktrees/T-0001', 'main..HEAD');
     expect(t.sup.get(id)?.gateFailure).toContain('no Dricket-Epoch trailer');
     expect(t.store.of('release').map((c) => c.stage)).toEqual(['prioritized']);
+  });
+
+  it('R-31: a failed run that sat in the claim stage ends where it sat - release back, then put --claim writes the stage back', async () => {
+    const t = setup();
+    t.store.stage = 'build';
+    const id = await started(t.sup, request({ nextPhase: null, nextPhaseDir: null }));
+    t.adapter.handles[0]!.fail(1);
+    await settled(t.sup, id, 'failed');
+    expect(t.store.of('release').map((c) => c.stage)).toEqual(['build', 'prioritized']);
+    const puts = t.store.of('put');
+    expect(puts).toHaveLength(1);
+    expect(puts[0]?.put).toMatchObject({ expectedRev: 4 }); // the ticket is nobody's now: a normal put --claim --if-version
+    expect(puts[0]?.put?.holdsClaim).not.toBe(true);
+    expect(t.store.stage).toBe('build');
+  });
+
+  it('a retreat whose write-back fails leaves the ticket in the retreat stage (and the run still settles)', async () => {
+    const t = setup();
+    t.store.stage = 'build';
+    t.store.failNext('put', new TicketStoreError('invalid', 'put refused', 14));
+    const id = await started(t.sup, request({ nextPhase: null, nextPhaseDir: null }));
+    t.adapter.handles[0]!.fail(1);
+    await settled(t.sup, id, 'failed');
+    expect(t.store.stage).toBe('prioritized');
+    expect(t.logs.join('\n')).toContain('stays in its retreat stage');
+  });
+
+  it('writes the Verlauf line INSIDE the claim: one put without --claim, before the release', async () => {
+    const t = setup();
+    const id = await started(t.sup, request());
+    t.adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:00Z', kind: 'usage', tokensIn: 1200, tokensOut: 300 });
+    await vi.waitFor(() => expect(t.sup.get(id)?.tokensIn).toBe(1200));
+    t.adapter.handles[0]!.result();
+    t.adapter.handles[0]!.fail(0);
+    await settled(t.sup, id, 'done');
+    const ops = t.store.calls.map((c) => c.op);
+    const put = ops.indexOf('put');
+    expect(put).toBeGreaterThan(-1);
+    expect(put).toBeLessThan(ops.indexOf('release')); // inside the claim, before it is given up
+    expect(t.store.of('put')[0]?.put).toEqual({ holdsClaim: true, actor: expect.stringMatching(/^agent-r-/) });
+    expect(t.store.text).toContain('## Verlauf');
+    expect(t.store.text).toContain('tokens');
+    expect(t.store.of('put')).toHaveLength(1); // the settle wrote no second one
+  });
+
+  it('a run that consumed nothing writes no Verlauf line', async () => {
+    const t = setup();
+    const id = await started(t.sup, request());
+    t.adapter.handles[0]!.fail(1);
+    await settled(t.sup, id, 'failed');
+    expect(t.store.of('put').filter((c) => c.put?.holdsClaim === true)).toHaveLength(0);
+  });
+
+  it('Q-03: a worker that waits for the owner gives the claim up and re-claims on the answer', async () => {
+    const t = setup();
+    const id = await started(t.sup, request({ nextPhase: null, nextPhaseDir: null }));
+    t.adapter.starts[0]!.onEvent({
+      ts: '2026-10-17T12:00:01Z',
+      kind: 'note',
+      waiting: { kind: 'question', text: 'Which shortcut?', requestId: 'q1', questions: [{ question: 'Which shortcut?', header: 'Key', options: [{ label: 'Ctrl+K', description: '' }] }] } as never,
+    });
+    await vi.waitFor(() => expect(t.store.of('release')).toHaveLength(1));
+    const wait = t.store.of('comment')[0]?.text ?? '';
+    expect(wait).toMatch(/^needs-decision: \[run-[a-z0-9-]+-waits\] /);
+    expect(t.timers.armed).toBeNull(); // no keep-alive while nobody holds the claim
+    expect(t.store.of('claim')).toHaveLength(1);
+
+    const answer = await t.sup.answerQuestion(id, { 'Which shortcut?': ['Ctrl+K'] } as never);
+    expect(answer.ok).toBe(true);
+    expect(t.store.of('claim')).toHaveLength(2); // re-claimed BEFORE the worker went on
+    expect(t.store.of('comment').map((c) => (c.text ?? '').split('\n')[0])).toContainEqual(expect.stringMatching(/^resolved: run-/));
+    expect(t.timers.armed).not.toBeNull(); // the keep-alive runs again
+    expect(t.adapter.handles[0]!.answerQuestion).toHaveBeenCalled();
+    t.adapter.handles[0]!.fail(1);
+    await settled(t.sup, id, 'failed');
+  });
+
+  it('Q-03: an answer for a ticket someone else took meanwhile is refused and the worker gets nothing', async () => {
+    const t = setup();
+    const id = await started(t.sup, request({ nextPhase: null, nextPhaseDir: null }));
+    t.adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:01Z', kind: 'note', waiting: { kind: 'question', text: 'Which?', requestId: 'q1', questions: [{ question: 'Which?', header: 'k', options: [{ label: 'a', description: '' }] }] } as never });
+    await vi.waitFor(() => expect(t.store.of('release')).toHaveLength(1));
+    t.store.failNext('claim', new TicketStoreError('claimed', 'ticket t-1 is claimed by henrik', 11));
+    const answer = await t.sup.answerQuestion(id, { 'Which?': ['a'] } as never);
+    expect(answer.ok).toBe(false);
+    expect(t.adapter.handles[0]!.answerQuestion).not.toHaveBeenCalled();
+    t.adapter.handles[0]!.fail(1);
+    await settled(t.sup, id, 'failed');
+  });
+
+  it('Q-03: with commit trailers on, the claim is kept through the wait (the epoch the trailers carry must stand)', async () => {
+    const t = setup();
+    const id = await started(t.sup, request({ nextPhase: null, nextPhaseDir: null, dk: { ...TARGET, trailers: true } }));
+    t.adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:01Z', kind: 'note', waiting: { kind: 'permission', text: 'edit x', requestId: 'p1' } });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(t.store.of('release')).toHaveLength(0);
+    t.adapter.handles[0]!.fail(1);
+    await settled(t.sup, id, 'failed');
+  });
+
+  it('release leftover claims: an agent claim of this host with no live run goes back; humans and live runs are left alone', async () => {
+    const t = setup();
+    const host = runOwnerHost();
+    const records = [
+      { id: 'T-0007', stage: 'build', owner: `agent-r-dead@${host}` },
+      { id: 'T-0008', stage: 'build', owner: 'henrik' },
+      { id: 'T-0009', stage: 'build', owner: `agent-r-x@other-host` },
+      { id: 'T-0001', stage: 'build', owner: `agent-r-live@${host}` }, // a live run holds T-0001
+    ];
+    t.store.list = (() => Promise.resolve(records)) as never;
+    const id = await started(t.sup, request({ nextPhase: null, nextPhaseDir: null }));
+    const report = await t.sup.releaseLeftoverClaims(TARGET, { build: 'prioritized' });
+    expect(report.released).toEqual(['T-0007']);
+    const releases = t.store.of('release').filter((c) => c.id === 'T-0007');
+    expect(releases[0]?.actor).toBe(`agent-r-dead@${host}`); // released AS the dead run
+    expect(releases.map((c) => c.stage)).toEqual(['build', 'prioritized']);
+    expect(t.store.of('release').filter((c) => c.id !== 'T-0007')).toHaveLength(0);
+    t.adapter.handles[0]!.fail(1);
+    await settled(t.sup, id, 'failed');
   });
 
   it('without a dk target nothing changes: no store call at all', async () => {

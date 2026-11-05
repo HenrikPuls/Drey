@@ -1,3 +1,70 @@
+### Milestone 160 — E14-5b: the chain on a dricket store, in-claim chapters, wait release, leftover claims
+
+**Not yet manually verified by the owner.** Owner request (roadmap E14-5b, ADR-0090 later
+change). With `tickets.backend = dricket` the chain orchestrator now reads its board from the
+store's checkout and writes only through `dk`; the `chainRefusal` is lifted (it now only asks for a
+checkout). `files` stays the default; nothing in the running system changed. **Checked against a
+real `dk` on scratch stores only** — never the owner's board, `drey-tickets` or a live fleet run.
+
+- **The chain on a store** (`fleet/store-chain-board.ts`, new; `orchestrator.ts`): `ChainConfig.store`
+  (`ChainStoreConfig`: dk path, store, data dir, checkout, trailers) rides `/chain/config`;
+  `ticketsVaultPath` stays the **meta vault** (pipeline, repos, personas, prompts, worktree home).
+  The board is `assembleBoardFromRecords` over `FileStoreReader` — the same assembly the engine's
+  board uses; a ticket whose lease ran out reads as unclaimed, so the dispatch **is** the takeover. The
+  chain's own writes are legacy-shaped text patches turned into a document by `legacy-bridge` and
+  written with `dk put --claim --if-version <rev>`: the ci move, the breaker's park to `inbox`, the
+  manual-gate park (`awaiting`), the ci Log line. The chain never stamps a claim (dk owns them; the run's
+  lease claims). Status verbs are comments: `paused:` for both parks; a settled run's `done:`/`failed:`/
+  `blocked:` already came from the run's own release (E14-6), so `noteSettledStatus` is skipped on a
+  store, and `working:` is not persisted. The dispatched request carries `dk` (`fleet/dk-target.ts`
+  `dkTargetFor`, now shared with the board's owner-started runs) and the stage as the next phase
+  (no phase folders).
+- **`## Verlauf` inside the claim** (`RunLease.patchInClaim`, `runs.ts` `verlaufInClaim`): the run's
+  Verlauf line is one `dk put -F` **without** `--claim`/`--if-version` (`PutOptions.holdsClaim`;
+  dk refuses `--claim` on a ticket the writer holds, the claim fences a stale writer with exit 13),
+  written just before the release of a green move, a park or a stay-put release. The settle no longer skips it
+  on dricket. The persona lesson (`memory.md`) is a meta-vault file, not a ticket write: unchanged.
+- **R-31 needed no dricket work.** Test against dk v0.6.2: `put --claim` is refused while the writer
+  holds the claim ("--claim is for unclaimed tickets"), `release --stage <same>` is refused for an agent
+  claim (exit 14) — but once the ticket is released one stage back, `put --claim --if-version` with
+  the stage line set back **does** move it into the claim stage unclaimed (agent actor, validated).
+  `RunLease.release(..., { restoreTo })` does exactly that when the same-stage release was refused:
+  two commits and a short stop one column left, the card ends where it sat. R-31 stays "Nice" in
+  `dricket-requirements.md` (one commit instead of two); not requested.
+- **Needs-input = release + re-claim (Q-03)** (`runs.ts` `releaseForWait` / `reclaimAfterWait`): when the
+  worker starts waiting for the owner (question or approval) the run comments `needs-decision: [run-<id>-waits]
+  <question>`, releases to the store's `needs-input` stage when the pipeline has one (`RunDkTarget.needsInputStage`),
+  else keeps the stage, unclaimed; the answer (`answerQuestion` / `answerPermission`, or a `waiting: null`
+  event) re-claims **before** the worker is told (a new epoch), then writes `resolved: <key>`. Someone else
+  holds the ticket then: the answer is refused and the worker gets nothing. Not done while commit trailers
+  are on (the epoch they carry must stand) and not for the owner's own dialog.
+- **Leftover claims** (`RunSupervisor.releaseLeftoverClaims`): every ticket owned by an `agent-…@<this host>`
+  identity that no starting/running/stopping run of the runner holds is released **as that owner**, back
+  where it sat (R-31 write-back) or one stage back. The runner runs it once per store before the chain's first
+  dispatch (`OrchestratorDeps.releaseLeftovers`, then re-reads the board) and the owner can ask for it:
+  `POST /claims/release-leftovers` on the runner, `FleetPort.releaseLeftoverClaims`, the tickets plugin's
+  `chainReleaseLeftovers` invoke method. A boot-adopted run's own claim was already released at `adopt`
+  (the same owner id); this covers the rest. Another host's agent claims and humans' claims are left alone.
+- **Real checks (scratch stores `E:\dkb3x`, `E:\dkb3y`, 1-minute leases through `dricket.toml`):** a real
+  `RunSupervisor` over a real dk claimed a ticket, the process was killed with `Stop-Process -Force` (the
+  Windows SIGKILL): the claim stayed (`dk claim` by another owner: exit 11, "claimed by agent-r-…@host"); a fresh
+  runner's `releaseLeftoverClaims` freed it at once, the ticket back in `build` unclaimed (epoch kept, validate
+  clean). The slow half — a takeover by another actor after lease + the fixed 20 min grace — ran in the background;
+  its result is in the hand-over note.
+- **Specs:** `runs-dk.spec.ts` (+8: R-31 write-back and its failure, Verlauf inside the claim and not for an empty run,
+  the wait release/re-claim, a refused re-claim, trailers keep the claim, leftovers), `run-lease-dk.spec.ts` (+2, real
+  dk: write-back with an agent actor, the in-claim write keeps owner and epoch, release for a wait and re-claim = a new
+  epoch), `orchestrator-store.spec.ts` (5: dispatch with the dk target and no ticket file, a held ticket, leftovers once,
+  the ci move and its red Log line as puts), `chain-store-dk.spec.ts` (real dk: the chain dispatches from a real checkout
+  and moves a ci-green ticket with one real put, `dk validate` clean), `board-service-dricket.spec.ts` (the chain
+  config names the store, the refusal is only a missing checkout).
+- **Not done (roadmap "E14-5c"):** the worker's own ticket chapters (`## Handover`, plan criteria) have **no door**
+  on a store yet — the instruction names a ticket path the worker cannot edit there, so a plan column on a store gets its
+  acceptance criteria only from the card; a "release leftover claims" **button** in Drey / Mission Control (the invoke
+  method and route exist); a re-claim after a wait lands in dk's first claim stage (unchecked for a ticket that waited in
+  a later one); the chain on a **remote** store (the runner does not `dk sync`; the engine's feed does); a real run with a
+  real worker on a second instance.
+
 ### Milestone 159 — E14-6: comments, signals and the ledger on a dricket store
 
 **Not yet manually verified by the owner.** Owner request (roadmap E14-6, ADR-0090 later

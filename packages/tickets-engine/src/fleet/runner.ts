@@ -25,17 +25,20 @@ import { claudeCodeAdapter, opencodeAdapter } from './providers';
 import { freePort, nodeSpawnFn, scrubInheritedEnv } from './procs';
 import { Orchestrator, type FleetEvents } from './orchestrator';
 import { FleetEventWriter, statusPathFor } from './event-writer';
+import { dkTargetFor, retreatStages } from './dk-target';
 import { MAX_ATTACHMENT_BYTES, RunSupervisor, type SupervisorRecord } from './runs';
 import { personaCostReport, tokenReport, type ReportRun } from './report';
 import {
   isWorkerProvider,
   normalizeFleetCaps,
   normalizeFleetHandover,
+  normalizeChainStore,
   normalizeFleetPools,
   questionAnswersOf,
   type ChainConfig,
   type ChainMaster,
   type ColumnMode,
+  type RunDkTarget,
   type RunRequest,
   type RunnerDescriptor,
 } from './protocol';
@@ -160,6 +163,16 @@ async function main(): Promise<void> {
       eventWriter.status(cardPath, at, verb, payload);
     },
   };
+  // E14-5b: one pass over all supervisors - a live run of the OTHER provider's supervisor must not read as a leftover.
+  const releaseLeftoverClaimsOf = (target: RunDkTarget, retreat: Record<string, string | null>): ReturnType<RunSupervisor['releaseLeftoverClaims']> => {
+    const live = new Set<string>();
+    for (const sup of supervisors.values()) {
+      for (const id of sup.liveTickets()) {
+        live.add(id);
+      }
+    }
+    return (supervisors.get('opencode') ?? [...supervisors.values()][0]!).releaseLeftoverClaims(target, retreat, live);
+  };
   orchestrator = new Orchestrator({
     root: args.root,
     log,
@@ -169,6 +182,16 @@ async function main(): Promise<void> {
         ? Promise.resolve(null)
         : statusPathFor(eventsVaultPath, ticketId),
     supervisorOf: (provider) => supervisors.get(provider) ?? supervisors.get('opencode')!,
+    // E14-5b: a killed runner's claims on a dricket store are released before the chain's first dispatch there.
+    releaseLeftovers: async (store, pipeline) => {
+      const report = await releaseLeftoverClaimsOf(
+        dkTargetFor(store, pipeline, pipeline[0]?.id ?? ''),
+        retreatStages(pipeline),
+      );
+      if (report.released.length > 0 || report.skipped.length > 0) {
+        log(`leftover claims: released ${report.released.join(', ') || 'none'}${report.skipped.length > 0 ? `; skipped ${report.skipped.map((s) => `${s.id} (${s.reason})`).join(', ')}` : ''}`);
+      }
+    },
     // The shipped default prompt beside the built plugin (`<plugin>/prompts/`), for
     // the "vault copy is older" note; a ref without a shipped file reads as null.
     shippedPrompt: (ref) =>
@@ -321,8 +344,10 @@ async function main(): Promise<void> {
           respond(422, { ok: false, error: 'the chain config needs a ticketsVaultPath' });
           return;
         }
+        const store = normalizeChainStore(body.store);
         const status = await orchestrator.configure({
           ticketsVaultPath: body.ticketsVaultPath,
+          ...(store === null ? {} : { store }),
           git: typeof body.git === 'string' && body.git.trim() !== '' ? body.git : 'git',
           defaultWorker: typeof body.defaultWorker === 'string' && body.defaultWorker.trim() !== '' ? body.defaultWorker : 'opencode',
           permissionMode: body.permissionMode === 'bypass' ? 'bypass' : 'accept-edits',
@@ -339,6 +364,27 @@ async function main(): Promise<void> {
           one.setHandoverConfig(normalizeFleetHandover(body.handover));
         }
         respond(200, status);
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/claims/release-leftovers') {
+        // E14-5b (4): the owner's "release leftover claims" action - agent claims of this host with no live run.
+        const body = (await readBody(req)) as { dk?: unknown; retreat?: unknown };
+        const store = normalizeChainStore(body.dk);
+        if (store === null) {
+          respond(422, { ok: false, error: 'release-leftovers needs the dricket store (dk)' });
+          return;
+        }
+        const retreat: Record<string, string | null> = {};
+        if (body.retreat !== null && typeof body.retreat === 'object') {
+          for (const [stage, before] of Object.entries(body.retreat as Record<string, unknown>)) {
+            retreat[stage] = typeof before === 'string' ? before : null;
+          }
+        }
+        try {
+          respond(200, { ok: true, ...(await releaseLeftoverClaimsOf(dkTargetFor(store, [], ''), retreat)) });
+        } catch (error) {
+          respond(200, { ok: false, error: error instanceof Error ? error.message : String(error) });
+        }
         return;
       }
       if (req.method === 'POST' && pathname === '/chain/master') {

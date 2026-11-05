@@ -25,6 +25,9 @@ import { patchTicketFile } from '../core/ticket-files';
 import { TicketsGit } from '../core/tickets-git';
 import { HUMAN_PERSONA_ID, PERSONAS_DIR, isHumanPersona, parsePersonaFile, personaModelFor, resolvePersona, type Persona, type PersonaResolution } from '../core/persona';
 import { chainPersonaAt, manualStepAfter } from '../core/manual-gate';
+import { renderStatusComment } from '../core/status-comment';
+import { dkTargetFor } from './dk-target';
+import { chainStoreIoOf, StoreChainBoard } from './store-chain-board';
 import { columnPromptRef, dispatchable, isAutoPhase, nextPhaseIdOf, planDispatch } from './chain';
 import { parseWorkerValue, resolveAssignment } from './assignment';
 import { composeRunRequest } from './request';
@@ -36,6 +39,7 @@ import { readRepoInstructions, worktreeDiffStat } from './context-pack';
 import { worktreePathFor } from './worktree-home';
 import type {
   ChainConfig,
+  ChainStoreConfig,
   ChainMaster,
   ChainStatus,
   ChainTrip,
@@ -122,6 +126,13 @@ export interface OrchestratorDeps {
    * scan (`statusPathFor`). Absent = settles write no status line.
    */
   readonly cardPathOf?: (ticketId: string) => Promise<string | null>;
+  /** E14-5b: test seam over the store door of a dricket chain (production: the checkout's files + `dk`). */
+  readonly storeChainFor?: (store: ChainStoreConfig) => StoreChainBoard;
+  /**
+   * E14-5b: gives up the claims no live run holds (a killed runner's leftovers), once per runner
+   * life and store, before the first dispatch of that store. The runner wires the supervisors' own.
+   */
+  readonly releaseLeftovers?: (store: ChainStoreConfig, pipeline: readonly PipelinePhase[]) => Promise<void>;
 }
 
 interface ChainFile {
@@ -257,6 +268,10 @@ export const SEMANTIC_BRIEF =
 
 export class Orchestrator {
   private config: ChainConfig | null = null;
+  /** E14-5b: the store doors of a dricket chain, one per store settings. */
+  private readonly storeChains = new Map<string, StoreChainBoard>();
+  /** E14-5b: the store the leftover claims were released for (once per runner life). */
+  private leftoverKey: string | null = null;
   private master: ChainMaster = 'halted';
   private readonly columns: Record<string, ColumnMode> = {};
   private readonly redStreak: Record<string, number> = {};
@@ -461,6 +476,7 @@ export class Orchestrator {
       this.config.git === config.git &&
       this.config.defaultWorker === config.defaultWorker &&
       this.config.permissionMode === config.permissionMode &&
+      JSON.stringify(this.config.store ?? null) === JSON.stringify(config.store ?? null) &&
       JSON.stringify(this.config.pools ?? null) === JSON.stringify(config.pools ?? null);
     this.config = config;
     if (!same) {
@@ -678,8 +694,8 @@ export class Orchestrator {
   private async noteSettledStatus(info: RunInfo, column: string, parkFor?: string): Promise<void> {
     const events = this.deps.events;
     const cardPathOf = this.deps.cardPathOf;
-    if (events === undefined || cardPathOf === undefined) {
-      return;
+    if (events === undefined || cardPathOf === undefined || this.config?.store !== undefined) {
+      return; // on a store the run's own release wrote the status comment (E14-6): no second line
     }
     if (info.state !== 'done' && info.state !== 'failed') {
       return;
@@ -738,7 +754,7 @@ export class Orchestrator {
       return;
     }
     try {
-      const snap = await readVaultBoard(config.ticketsVaultPath, config.defaultWorker);
+      const snap = await this.readBoardOf(config);
       const col = snap.columns.find((c) => c.phase.id === column) ?? null;
       // The ticket that failed is the one to park — not whichever sits first
       // in the column (that one may only be waiting behind it).
@@ -749,6 +765,22 @@ export class Orchestrator {
         (failedTicketId !== null ? null : (col?.tickets.find(free) ?? null));
       if (candidate === null) {
         this.deps.log(`the breaker found no candidate to park on ${column}`);
+        return;
+      }
+      const storeChain = this.storeChainOf(config);
+      if (storeChain !== null) {
+        const actor = this.agentActor();
+        const parked = await storeChain.patch(
+          candidate,
+          { toStage: 'inbox', now: this.now(), actor, action: `parked by the circuit breaker (${column}) - ${reason}`, park: reason },
+          actor,
+        );
+        if (parked) {
+          await storeChain.comment(candidate.id, renderStatusComment({ verb: 'paused', text: `parked by the circuit breaker (${column})`, detail: reason }) ?? reason, actor);
+          delete this.ticketFailures[candidate.id];
+          await this.persist();
+          this.deps.log(`parked ${candidate.id} in inbox (${column} breaker) - re-prioritizing revives it`);
+        }
         return;
       }
       const git = new TicketsGit(() => config.git);
@@ -818,6 +850,43 @@ export class Orchestrator {
     return `agent@${hostname().toLowerCase()}`;
   }
 
+  /** The store door while the chain runs on dricket (E14-5b), else null: tickets are then ticket files. */
+  private storeChainOf(config: ChainConfig): StoreChainBoard | null {
+    if (config.store === undefined) {
+      return null;
+    }
+    const key = JSON.stringify(config.store);
+    let chain = this.storeChains.get(key);
+    if (chain === undefined) {
+      chain = this.deps.storeChainFor?.(config.store) ?? new StoreChainBoard(chainStoreIoOf(config.store), (message) => this.deps.log(message));
+      this.storeChains.set(key, chain);
+    }
+    return chain;
+  }
+
+  /** The board of this pass: ticket files, or the store's tickets while the chain runs on dricket. */
+  private async readBoardOf(config: ChainConfig): Promise<BoardSnapshot> {
+    const chain = this.storeChainOf(config);
+    return chain === null ? readVaultBoard(config.ticketsVaultPath, config.defaultWorker) : chain.board(config.ticketsVaultPath, config.defaultWorker);
+  }
+
+  /** Releases a killed runner's leftover claims before the first dispatch of a store; returns the board to plan on. */
+  private async settleLeftovers(config: ChainConfig, snap: BoardSnapshot): Promise<BoardSnapshot> {
+    const key = config.store === undefined ? null : JSON.stringify(config.store);
+    if (config.store === undefined || key === this.leftoverKey || this.deps.releaseLeftovers === undefined) {
+      return snap;
+    }
+    this.leftoverKey = key;
+    await this.deps.releaseLeftovers(config.store, snap.pipeline).catch((error) => this.deps.log(`releasing leftover claims failed: ${error instanceof Error ? error.message : String(error)}`));
+    return this.readBoardOf(config);
+  }
+
+  /** True when the ticket is no longer where the snapshot saw it. */
+  private async cardMoved(config: ChainConfig, card: BoardColumn['tickets'][number]): Promise<boolean> {
+    const chain = this.storeChainOf(config);
+    return chain === null ? cardMovedOff(config.ticketsVaultPath, card.path) : chain.moved(card);
+  }
+
   private stamp(): string {
     return (this.deps.now ?? ((): Date => new Date()))().toISOString();
   }
@@ -871,7 +940,7 @@ export class Orchestrator {
     }
     this.ciSweeping = true;
     try {
-      const snap = await readVaultBoard(config.ticketsVaultPath, config.defaultWorker);
+      const snap = await this.readBoardOf(config);
       this.lastPhases = snap.pipeline;
       await this.prunePhaseState();
       for (const column of snap.columns) {
@@ -898,7 +967,7 @@ export class Orchestrator {
             continue;
           }
           await this.runCiCheck(config, snap, phase, nextPhaseId, card);
-          if (await cardMovedOff(config.ticketsVaultPath, card.path)) {
+          if (await this.cardMoved(config, card)) {
             break; // the sweep's column snapshot is stale — the next tick re-reads
           }
         }
@@ -949,6 +1018,15 @@ export class Orchestrator {
     action: string,
     claims: boolean,
   ): Promise<boolean> {
+    const storeChain = this.storeChainOf(config);
+    if (storeChain !== null) {
+      const actor = this.agentActor();
+      const moved = await storeChain.patch(card, { toStage: nextPhaseId, now: this.now(), actor, action }, actor);
+      if (moved) {
+        this.deps.log(`ci moved ${card.id} to ${nextPhaseId}`);
+      }
+      return moved;
+    }
     try {
       const git = new TicketsGit(() => config.git);
       const abs = (rel: string): string => path.join(config.ticketsVaultPath, rel);
@@ -989,6 +1067,12 @@ export class Orchestrator {
     card: BoardColumn['tickets'][number],
     what: string,
   ): Promise<void> {
+    const storeChain = this.storeChainOf(config);
+    if (storeChain !== null) {
+      const actor = this.agentActor();
+      await storeChain.patch(card, { now: this.now(), actor, action: what }, actor);
+      return;
+    }
     try {
       const git = new TicketsGit(() => config.git);
       const abs = path.join(config.ticketsVaultPath, card.path);
@@ -1146,7 +1230,7 @@ export class Orchestrator {
     }
     this.passing = true;
     try {
-      const snap = await readVaultBoard(config.ticketsVaultPath, config.defaultWorker);
+      const snap = await this.settleLeftovers(config, await this.readBoardOf(config));
       if (snap.pipeline.length === 0) {
         return;
       }
@@ -1569,6 +1653,15 @@ export class Orchestrator {
 
   /** Stamps `awaiting:` on a ticket where it sits: one Log line, one status line, one commit (failures logged, never thrown). */
   private async parkInPlace(config: ChainConfig, card: TicketCard, personaId: string, what: string): Promise<void> {
+    const storeChain = this.storeChainOf(config);
+    if (storeChain !== null) {
+      const actor = this.agentActor();
+      if (await storeChain.patch(card, { now: this.now(), actor, action: what, setAwaiting: personaId }, actor)) {
+        await storeChain.comment(card.id, renderStatusComment({ verb: 'paused', text: what }) ?? what, actor);
+        this.deps.log(`parked ${card.id} for ${personaId}: ${what}`);
+      }
+      return;
+    }
     try {
       const git = new TicketsGit(() => config.git);
       const abs = path.join(config.ticketsVaultPath, card.path);
@@ -1680,11 +1773,13 @@ export class Orchestrator {
       parkFor !== null ? (card.phase !== workingPhaseId ? workingPhaseId : null) : nextPhaseIdOf(columns, workingPhaseId);
     const nextPhaseClaims =
       nextPhaseId !== null ? snap.pipeline.find((p) => p.id === nextPhaseId)?.claim === true : false;
-    const text = await fsp
-      .readFile(path.join(config.ticketsVaultPath, card.path), 'utf8')
-      .catch(() => null);
+    const storeChain = this.storeChainOf(config);
+    const text =
+      storeChain !== null
+        ? await storeChain.cardText(card)
+        : await fsp.readFile(path.join(config.ticketsVaultPath, card.path), 'utf8').catch(() => null);
     if (text === null) {
-      this.noteSkip(card.id, `dispatch skips ${card.id}: the ticket file is unreadable`);
+      this.noteSkip(card.id, `dispatch skips ${card.id}: the ticket ${storeChain !== null ? 'could not be read from the store' : 'file is unreadable'}`);
       return 'skipped';
     }
     // The context pack (T-0048): the repo's agent instructions and the
@@ -1720,7 +1815,9 @@ export class Orchestrator {
       nextPhaseDir:
         nextPhaseId === null
           ? null
-          : resolvePhaseDir(
+          : storeChain !== null
+            ? nextPhaseId // a store has no phase folders: the stage is the phase id
+            : resolvePhaseDir(
               await listTicketDirs(path.join(config.ticketsVaultPath, 'tickets')),
               snap.pipeline.findIndex((p) => p.id === nextPhaseId) + 1,
               nextPhaseId,
@@ -1741,6 +1838,7 @@ export class Orchestrator {
       structuralGateAllowed: firstWorker?.id === workingPhaseId,
       dispatchedBy: workingPhaseId,
       parkFor,
+      ...(config.store !== undefined ? { dk: dkTargetFor(config.store, snap.pipeline, workingPhaseId) } : {}),
       // The dispatcher asks the supervisor's rules to decide (T-0049):
       // the dialog is the only place an explicit mode is chosen.
       handover: 'auto',
@@ -1786,12 +1884,15 @@ export class Orchestrator {
         persona: composed.persona ?? null,
         model: composed.request.model,
       });
-      this.deps.events?.status(
-        card.path,
-        this.stamp(),
-        'working',
-        `${workingPhaseId} on ${composed.request.model ?? 'the default model'}`,
-      );
+      if (storeChain === null) {
+        // On a store `working` is never persisted (E14-6): the run's claim is the heartbeat.
+        this.deps.events?.status(
+          card.path,
+          this.stamp(),
+          'working',
+          `${workingPhaseId} on ${composed.request.model ?? 'the default model'}`,
+        );
+      }
       this.notes.delete(card.id);
       return 'dispatched';
     }
