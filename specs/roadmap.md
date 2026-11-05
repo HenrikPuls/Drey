@@ -355,6 +355,18 @@ owner confirms scope and order before any of it starts:
   `docs/design/work-panel/*.dc.html` and `handoff/`; one table per screen (matches,
   deviates how, size), screenshots of scratch English data, the result ordered into
   roadmap items (extends `convergence-gaps.md`; nothing is rebuilt in this item).
+- **E13-22 — Settings: one page width, a section tree and search** (owner request
+  2026-11-05, outside the list; modelled on VS Code's settings). The settings overlay
+  grows with the window (wider than today's 640 px cap) and **every page uses the same
+  width** — no jumping between a narrow and a wide page; wide editors (columns,
+  workers) fill that width. Settings → Tickets is broken into sections (Store and Git,
+  Pipeline, Team and prompts, Remote and devices — to be confirmed against the real
+  page) shown as **expandable entries in the left category list**; the page scrolls as
+  a whole, a click on an entry scrolls to its section and the current section is
+  highlighted while scrolling; a search field at the top filters all pages' settings.
+  Applies to the shared scaffold (`src/app/settings/settings-ui.css`, plugin pages
+  via `PluginSettingsHost`), so every page benefits. After E12-9b (labels in the same
+  files).
 - **E12-7 — Token alignment** (owner decision 2026-11-04: the Anthrazit design
   system wins). Milestone 136 on branch `design-to-code` owns it: peach / pink /
   mint tokens in the three themes, badges re-pointed, radii 4/8/16, a 13 px
