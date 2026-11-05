@@ -1,3 +1,34 @@
+### Milestone 168 — E13-24: Mission Control phone — one app bar on every page
+
+**Not yet manually verified by the owner.** Owner markup 2026-11-06, roadmap E13-24
+(`docs/design/work-panel/mc-phone-appbar-*.jpg`).
+
+- **Before.** The shell put the ☰ alone in a row of its own (`.phonebar`) and every page put its
+  own header row (title, "‹ Settings / Appearance", "WORK drey-tickets · 1 active") below it.
+- **Now.** One shared component, `<mc-app-bar>` (`libs/mission-ui/src/app-bar/`): the leading
+  control, the title (+ optional mono sub line) and the page's own status/action (`bar-end` slot)
+  in ONE row. Leading = ☰ on a top-level page, **‹ Parent** (`back="Settings"`, `(backed)`) on a
+  sub-page. The ☰ opens the chat's history through the `MC_APP_NAV` token (the shell binds it in
+  `app.config.ts`; the chat opens its own history with `ownMenu`). The row carries
+  `env(safe-area-inset-top)` itself (status bar / Dynamic Island), is `position: sticky; top: 0`
+  in its scroll container (D-5b: only the content scrolls) and sits on the page background. From
+  768 px the top tab bar replaces the ☰ and the safe-area padding; a page's back control stays
+  where the page has no list beside it (Settings hides it, the list is on the left).
+- **Pages:** Work (title, vault sub, "n active" chip; the logo mark is gone), Team, Settings (list
+  and every sub-page with ‹ Settings), ticket page (‹ Work, id, edit pencil — E13-23 puts its
+  Live/View/Source switch into the same `bar-end` slot), the ticket's proof and thread faces
+  (‹ Ticket), persona 1:1 (‹ Team, avatar at the end), chat (☰, title, new chat). The shell's
+  `.phonebar` row is deleted.
+- **Left as it was:** the plan-to-approve and flow-editor layers and the iPad empty pane keep their
+  own headers (they are not phone pages of the list above).
+- **Tests:** `app-bar.spec.ts` (one row; ☰ vs ‹ by `back`; ☰ asks the shell; back emits and does not
+  open the menu), the scroll-contract spec (bar pinned, safe-area padding, no `.phonebar`),
+  chat spec updated to the bar. Checked in a 390 px browser against a scratch gateway with English
+  data: Work, Settings → Appearance, Team, ticket; the bar stays at `top: 0` while the ticket
+  layer scrolls. **Only the owner's iPhone can confirm the safe-area inset** (a desktop browser
+  reports 0).
+- **Docs:** manual (Mission Control phone).
+
 ### Milestone 163 — D-6: selecting a ticket never changes the view, a view saves only by "Save view"
 
 **Not yet manually verified by the owner.** Owner report 2026-11-05, roadmap D-6.

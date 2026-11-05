@@ -1252,15 +1252,18 @@ describe('Chat column structure (header / messages / composer)', () => {
     const { el } = renderChat(activeSession());
     const column = el.querySelector('.chat');
     expect(column).not.toBeNull();
-    const faces = Array.from(column!.children).map((child) => child.classList[0]);
-    expect(faces).toEqual(['hdr', 'thread', 'composer']);
+    const faces = Array.from(column!.children).map((child) =>
+      child.tagName === 'MC-APP-BAR' ? 'bar' : child.classList[0],
+    );
+    expect(faces).toEqual(['bar', 'thread', 'composer']);
   });
 
   it('carries the title and the two icon buttons in the header — and no sub line', () => {
     const { el } = renderChat(activeSession());
-    const hdr = el.querySelector('.chat > .hdr')!;
+    const hdr = el.querySelector('.chat > mc-app-bar')!;
     expect(hdr.querySelector('.ttl')!.textContent).toContain('Mission Control');
-    expect(hdr.querySelectorAll('button.hbtn').length).toBe(2);
+    expect(hdr.querySelector('button.menu-btn')!.getAttribute('aria-label')).toBe('Menu and chat history');
+    expect(hdr.querySelectorAll('button.hbtn').length).toBe(1);
     expect(hdr.querySelector('.sub')).toBeNull();
     expect(el.querySelector('.sub')).toBeNull();
   });

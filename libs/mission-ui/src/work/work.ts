@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { AppBar } from '../app-bar/app-bar';
 import {
   MC_WORK_STATE,
   SWIPE_FLASH_MS,
@@ -46,6 +47,7 @@ import {
   selector: 'mc-work',
   templateUrl: './work.html',
   styleUrl: './work.css',
+  imports: [AppBar],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Work {

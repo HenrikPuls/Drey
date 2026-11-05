@@ -1559,6 +1559,12 @@ it on, and only devices you pair get in.
    type the code. The code works once and for five minutes.
 3. On the phone, add the page to the home screen.
 
+On the phone every page has one bar at the top, below the status bar: the **☰** button
+(back to the chat with its history and the places Work, Team and Settings) at its left, or
+**‹** and the parent's name on a page opened from another (Settings → Appearance), then the
+page's title and, at the right, its own status or button. The bar stays put while the page
+scrolls beneath it.
+
 The chat's **microphone** button (next to Send) dictates into the message
 field: tap it, speak, and the words appear as you talk; tap again to stop.
 The text stays editable and is never sent for you, and typing, sending or

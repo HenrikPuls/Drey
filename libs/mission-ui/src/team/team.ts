@@ -1,4 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
+import { AppBar } from '../app-bar/app-bar';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -365,7 +366,7 @@ export function budgetPctOf(persona: Pick<McPersonaView, 'budget' | 'dailyCost'>
   templateUrl: './team.html',
   styleUrl: './team.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, AppBar],
 })
 export class Team {
   private readonly state = inject(MC_TEAM_STATE);

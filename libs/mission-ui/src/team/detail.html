@@ -1,17 +1,10 @@
 @if (isOpen()) {
   <section class="detail" role="dialog" aria-modal="true" [attr.aria-label]="title()">
-    <header class="detail-head">
-      <button type="button" class="detail-close" aria-label="Close" (click)="close()">×</button>
-      <span class="avatar" [style.background-color]="color()" aria-hidden="true">{{
+    <mc-app-bar [title]="title()" [sub]="role() || null" back="Team" (backed)="close()">
+      <span bar-end class="avatar" [style.background-color]="color()" aria-hidden="true">{{
         initialsOf(title())
       }}</span>
-      <div class="who">
-        <h1 class="title">{{ title() }}</h1>
-        @if (role()) {
-          <p class="role">{{ role() }}</p>
-        }
-      </div>
-    </header>
+    </mc-app-bar>
 
     <div class="seg" role="tablist" aria-label="Persona tabs">
       <button

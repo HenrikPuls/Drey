@@ -1,0 +1,127 @@
+/*
+ * The one app bar row (E13-24). Pinned: it sticks to the top of the scroll
+ * container it sits in (the pane, the layer), so the content scrolls
+ * beneath it and the bar never moves. It carries the status-bar /
+ * Dynamic Island inset itself, so no empty row sits above it.
+ */
+
+:host {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: block;
+  flex: none;
+}
+
+.bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: env(safe-area-inset-top) 12px 0 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.lead {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.menu-btn {
+  justify-content: center;
+}
+
+.menu-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.back {
+  gap: 2px;
+  color: var(--accent);
+}
+
+.back svg {
+  width: 22px;
+  height: 22px;
+}
+
+.back-label {
+  font-size: calc(17px * var(--mc-text, 1));
+}
+
+.hd {
+  min-width: 0;
+}
+
+.ttl {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: calc(13px * var(--mc-text, 1));
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sub {
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A sub-page: the title is a plain centred heading between back and the end slot. */
+.sub-page {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.sub-page .hd {
+  text-align: center;
+}
+
+.sub-page .ttl {
+  font-family: inherit;
+  font-size: calc(17px * var(--mc-text, 1));
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* From 768 px the shell's top tab bar replaces the shell menu control (a page's own menu, the chat history, stays). */
+@media (min-width: 768px) {
+  .bar {
+    min-height: 48px;
+    padding-top: 0;
+  }
+
+  .bar:not(.own-menu) .menu-btn {
+    display: none;
+  }
+
+  .no-wide-back .back {
+    visibility: hidden;
+  }
+}

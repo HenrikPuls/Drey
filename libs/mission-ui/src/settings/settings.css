@@ -20,17 +20,14 @@
   flex-direction: column;
   gap: 8px;
   min-width: 0;
-  padding: 16px;
+  padding: 0 16px 16px;
   overflow-y: auto;
   overscroll-behavior-y: contain;
 }
 
-.ttl {
-  margin: 0 0 8px;
-  font-size: calc(34px * var(--mc-text, 1));
-  line-height: 1.2;
-  font-weight: 700;
-  letter-spacing: -0.4px;
+/* Inside the padded list the bar runs full width; the page's own bar needs no pull. */
+.cats > mc-app-bar {
+  margin: 0 -16px 8px;
 }
 
 .group {
@@ -116,40 +113,6 @@
 
 .on-page .cats {
   display: none;
-}
-
-.page-head {
-  display: grid;
-  flex: none;
-  grid-template-columns: 96px minmax(0, 1fr) 96px;
-  align-items: center;
-  min-height: 48px;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--line);
-}
-
-.back {
-  display: flex;
-  align-items: center;
-  height: 44px;
-  padding: 0;
-  font: inherit;
-  color: var(--accent);
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-}
-
-.back svg {
-  width: 22px;
-  height: 22px;
-}
-
-.page-title {
-  margin: 0;
-  font-size: calc(17px * var(--mc-text, 1));
-  font-weight: 600;
-  text-align: center;
 }
 
 .page-body {
@@ -428,10 +391,6 @@
 
   .on-page .cats {
     display: flex;
-  }
-
-  .back {
-    visibility: hidden;
   }
 }
 

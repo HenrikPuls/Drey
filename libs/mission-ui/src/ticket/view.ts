@@ -19,6 +19,7 @@ import {
   type McPersona,
   type QuestionCardVm,
 } from '../work/work.model';
+import { AppBar } from '../app-bar/app-bar';
 import { Markdown } from '../markdown/markdown';
 import { planPartsOf, planSectionOf } from '../plan/plan.model';
 import {
@@ -118,7 +119,7 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
   templateUrl: './view.html',
   styleUrl: './view.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, Markdown],
+  imports: [NgTemplateOutlet, Markdown, AppBar],
 })
 export class TicketView {
   protected readonly vm = inject(MC_TICKET);

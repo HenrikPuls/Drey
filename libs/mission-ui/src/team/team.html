@@ -1,13 +1,5 @@
 <section class="team" aria-label="Team">
-  <header class="hdr">
-    <div class="hd">
-      <div class="ttl">Team</div>
-      @if (headerSub(); as sub) {
-        <div class="sub">{{ sub }}</div>
-      }
-    </div>
-    <div class="hspace"></div>
-  </header>
+  <mc-app-bar title="Team" [sub]="headerSub()" />
 
   <div class="chain-strip">
     <span class="strip-led" [class.on]="chainStrip().on" aria-hidden="true"></span>

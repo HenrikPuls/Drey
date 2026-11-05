@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { AppBar } from '../app-bar/app-bar';
 import { deviceListOf } from './device-list';
 import {
   ACCENTS,
@@ -50,6 +51,7 @@ export const VIDEOS_IN_GIT_WARNING =
   selector: 'mc-settings',
   templateUrl: './settings.html',
   styleUrl: './settings.css',
+  imports: [AppBar],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Settings {
