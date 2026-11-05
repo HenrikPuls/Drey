@@ -811,11 +811,11 @@ the ticket file, and the ticket file never embeds it.
 ---
 push: origin
 phases:
-  - { id: inbox, title: Inbox, handover: manual }
+  - { id: inbox, title: Inbox, handover: manual, persona: you }
   - { id: plan, title: Plan, claim: true, handover: agent plan-default }
   - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default, color: '#c96442' }
-  - { id: review, title: Review, handover: manual }
-  - { id: sign-off, title: Sign Off, handover: manual }
+  - { id: review, title: Review, handover: manual, persona: you }
+  - { id: sign-off, title: Sign Off, handover: manual, persona: you }
   - { id: done, title: Done, handover: none }
 ---
 Prose for humans. The board follows this file on refresh.
@@ -828,7 +828,9 @@ run there gates structurally — the plan writes the acceptance criteria) · **B
 (agent, `build-default`; the machine gate and the proof belong to Build) · **Review**
 (manual) · **Sign Off** (manual — where the work is committed: merged into the
 integration branch and pushed; it takes the role of the former `commit` column and
-the checkpoint discipline of `plugins/tickets/BOARD.md`) · **Done**. Review and Sign
+the checkpoint discipline of `plugins/tickets/BOARD.md`) · **Done**. The manual columns carry
+`persona: you` (the human persona, whose name is configurable — `personas.humanName`,
+Settings → Tickets → Team); Review and Sign
 Off are the owner's checkpoints (see "Agent lane rules"): *Accept* is the forward move,
 *Send back* the ordinary send-back to Build. dk claim stages: `plan`, `build`. Boards
 and stores that exist keep their columns — a default is written only into an empty
@@ -1000,7 +1002,7 @@ tickets/_meta/personas/
   | Field | Shape | Default |
   |---|---|---|
   | `title` | string | the id |
-  | `kind` | `agent \| human` | `agent` (an absent key). `human` is the owner as a team member (E10-6): `personas/you`, created once by the board service (title = config `personas.humanName`, default `You`; editable like any title). Inert for `role`/`worker`/`models`/`skills`/`budget` — the human is never dispatched, counted toward capacity or budgeted. Written only when `human` |
+  | `kind` | `agent \| human` | `agent` (an absent key). `human` is the owner as a team member (E10-6): `personas/you`, created once by the board service (title = config `personas.humanName`, default `You`; editable like any title, and Settings → Tickets → Team → *Your name* retitles it; "Initialize board" writes it with the default pipeline, whose manual columns pin it). Inert for `role`/`worker`/`models`/`skills`/`budget` — the human is never dispatched, counted toward capacity or budgeted. Written only when `human` |
   | `role` | `planner \| builder \| reviewer \| tester \| custom` | `custom` |
   | `worker` | the CLI harness (`claude-code`, `opencode`, `api`) | `opencode` |
   | `models.default` | the model nothing else decides | `opus` |

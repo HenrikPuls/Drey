@@ -76,7 +76,7 @@ const BOARD_METHODS = [
   'switchProject', 'openTicketsFolder', 'folderStatus', 'numberFolders', 'reorderPhases', 'editPhase',
   'personaLearn', 'listPersonas', 'verifyTicket', 'verifyStatus', 'estimateOf',
   'chatSessions', 'chatOpen', 'chatSend', 'chatStart', 'chatConfirm', 'chatDismiss', 'chatShapeDecide', 'chatPlanStatus',
-  'ticketDocument', 'saveDocument',
+  'ticketDocument', 'saveDocument', 'setHumanName',
   'initialize', 'onVaultEvent',
 ] as const;
 

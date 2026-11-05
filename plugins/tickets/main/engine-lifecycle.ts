@@ -74,6 +74,7 @@ async function locateTicketsVault(ctx: {
 const SYNCED_KEYS = (providers: readonly string[]): readonly string[] => [
   'gitPath',
   'defaultWorker',
+  'personas.humanName',
   'autoPermissionMode',
   'vaultId',
   ...STORE_SETTING_KEYS,

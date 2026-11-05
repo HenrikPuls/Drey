@@ -1476,7 +1476,7 @@ and move the ticket on, back a column, or back to the Inbox. The shipped
 default is **Inbox · Plan · Build · Review · Sign Off · Done**: Inbox is
 your triage queue, Plan and Build are worker columns (a finished plan flows
 into Build on its own; the machine gate that checks the work belongs to
-Build), and **Review** and **Sign Off** are your checkpoints — you read the
+Build), and **Review** and **Sign Off** are your checkpoints (with Inbox they are the columns your own persona works) — you read the
 change in Review (*Accept* moves it on, *Send back* returns it to Build
 with a note), and Sign Off is where the work is committed: merged into the
 integration branch and pushed, then moved to Done. Boards that existed before
@@ -1533,7 +1533,7 @@ And the assistant can drive runs: ask it about the fleet — it sees
 ### The Tickets settings page
 
 Settings → Tickets starts with the things you decide about the team:
-**Team** shows the personas as chips (you are *You*); *Edit team* opens the
+**Team** shows the personas as chips; you are the human persona, called *You* until you type another name into **Your name** (it applies to every column you work, the flow editor, Team and the phone); *Edit team* opens the
 Team tab. **Default flow** shows the standard flow, the columns an agent
 works with who does each; a flow is changed per ticket, so pick a ticket
 next to *Open flow editor* to open its Flow tab (the standard flow itself is

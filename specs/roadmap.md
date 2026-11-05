@@ -364,7 +364,8 @@ owner confirms scope and order before any of it starts:
   whether Sign Off should offer "Merge and push" as an owner-started agent run; (3) a **reverse
   converter that reads the store's own stage list** (today `--stages a,b,c`, default the new
   six); (4) the Work panel's *Prioritized* group is empty on a new board (its queue is Inbox only
-  while Plan is an agent column) — keep, rename or retire it; (5) E12-9b Q2 (team seeding) and Q3
+  while Plan is an agent column) — keep, rename or retire it; (5) **Open question: migration of `prioritized` tickets** — `inbox` (today) or `plan` (an agent
+  column: planning would start on arrival); (6) E12-9b Q2 (team seeding) and Q3
   (default worker) are still open.
 - **E13-22 — Settings: one page width, a section tree and search** (owner request
   2026-11-05, outside the list; modelled on VS Code's settings). The settings overlay

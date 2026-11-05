@@ -48,12 +48,17 @@ export function changedIndicesOf(flow: FlowDraft, saved: FlowDraft | null): Read
   return changed;
 }
 
-/** Who works a gate, for its row: the persona, `You` for the owner's own gates. */
+/** Who works a gate, for its row: the persona, the owner's own name for the owner's gates. */
 export function whoOf(step: FlowStepView, flow: FlowDraft): string {
   if (step.persona !== null) {
     return flow.personas.find((p) => p.id === step.persona)?.title ?? step.persona;
   }
-  return step.owner ? 'You' : 'Automatic';
+  return step.owner ? humanNameOf(flow) : 'Automatic';
+}
+
+/** The owner's display name: the human persona's title (configurable, default `You`). */
+export function humanNameOf(flow: Pick<FlowDraft, 'personas'>): string {
+  return flow.personas.find((p) => p.kind === 'human')?.title ?? 'You';
 }
 
 /** The short marks on a gate row. */

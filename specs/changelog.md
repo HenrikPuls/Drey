@@ -12,6 +12,12 @@ list). Design note: `docs/design/work-panel/default-pipeline.md`.
   first column's title (*Create in Inbox*). Existing boards and stores keep their columns — a default is
   only written into an empty repository (test with the old five-column pipeline: untouched, same
   columns, same checkpoints).
+- **Manual = the human persona (owner ruling 2026-11-05).** Inbox, Review and Sign Off carry `persona: you`
+  (`handover: manual` stays); "Initialize board" also writes `personas/you`. The name is configurable:
+  Settings → Tickets → Team → *Your name* (`personas.humanName` + one `personaPatch` of the persona's
+  title; engine method `setHumanName`); the flow editor's owner label and the Settings chips read the
+  persona title instead of a hard-coded "You". Existing boards keep their pins (none) and get the persona
+  on first sight as before.
 - **Engine rule widened.** `checkpointPhaseIds`: a manual column that directly follows a checkpoint is
   one too, so Sign Off (behind the manual Review) raises Needs-you cards. No shipped pipeline had two
   manual columns after a worker column; the old default's checkpoints are unchanged (spec).
@@ -27,8 +33,8 @@ list). Design note: `docs/design/work-panel/default-pipeline.md`.
   (default, folders, checkpoint rule), ADR-0090, `plugins/tickets/BOARD.md` (Sign Off = the commit
   checkpoint), the E12-9 audit rows. `e2e/manual-screenshots.spec.ts` holds no ticket data, so nothing
   to change there; the e2e specs that spell their own five-column pipeline play an existing board.
-- **Tests.** `board-service.spec.ts` (six columns, handovers, claim stages, checkpoints; old default
-  untouched), `chain.spec.ts` (checkpoints of the new and the old default, the dispatcher works Plan and
+- **Tests.** `board-service.spec.ts` (six columns, handovers, claim stages, persona pins, checkpoints; rename
+  of the human persona; old default untouched), `flow-model.spec.ts` (configured name), `chain.spec.ts` (checkpoints of the new and the old default, the dispatcher works Plan and
   Build only), `convert.spec.ts` (mapping), `roundtrip.spec.ts` (old vocabulary still round-trips; new
   default: toml, and a real-dk re-run migration landing in the new columns with `dk validate` clean).
 - **Left out → roadmap E12-9d.** A checkpoint between Plan and Build, an agent "Merge and push" at Sign

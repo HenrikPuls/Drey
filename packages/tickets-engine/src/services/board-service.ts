@@ -79,19 +79,20 @@ const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PLAN_INTERACTIVE_PROMPT = 'plan-interactive-default';
 const DEFAULT_PIPELINE = `---
 phases:
-  - { id: inbox, title: Inbox, handover: manual }
+  - { id: inbox, title: Inbox, handover: manual, persona: you }
   - { id: plan, title: Plan, claim: true, handover: agent plan-default }
   - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default }
-  - { id: review, title: Review, handover: manual }
-  - { id: sign-off, title: Sign Off, handover: manual }
+  - { id: review, title: Review, handover: manual, persona: you }
+  - { id: sign-off, title: Sign Off, handover: manual, persona: you }
   - { id: done, title: Done, handover: none }
 ---
 The pipeline: ordered phases (first = capture target, last = terminal),
 configurable per handover (manual | agent <prompt-ref> | ci | none).
 Inbox is the owner's triage queue: move a ticket into Plan when it is
-worth planning. Plan and Build are worked by agents; Review and Sign Off
-are the owner's checkpoints (Sign Off is where the work is committed:
-merged and pushed). See specs/ticket-schema.md.
+worth planning. Plan and Build are worked by agents; the columns the
+human persona works carry persona: you (its name is configurable) -
+Inbox, Review and Sign Off. Review and Sign Off are the owner's
+checkpoints (Sign Off is where the work is committed: merged and pushed). See specs/ticket-schema.md.
 Edit freely; the board follows on refresh.
 `;
 const DEFAULT_REPOS = `---
@@ -3881,6 +3882,23 @@ export class EngineBoardService {
    * Called where the persona is first shown (the Team list, the flow editor) -
    * never on a plain board refresh, so a vault nobody opens it in stays untouched.
    */
+  /** The configured display name of the human persona (`personas.humanName`), 'You' when unset or blank. */
+  private async humanNameOfConfig(): Promise<string> {
+    return (((await this.host.configGet<string>('personas.humanName')) ?? '').trim()) || 'You';
+  }
+
+  /**
+   * Renames the human persona (Settings -> Tickets -> Team, "Your name"): the persona file's
+   * title is what every surface shows (column pins, Team, the flow editor, the phone), so the
+   * rename is one `personaPatch`; a missing persona is created first. Blank = back to "You".
+   * The caller stores the same name in config `personas.humanName` so new boards start with it.
+   */
+  async setHumanName(name: string): Promise<BoardMutationResult> {
+    const title = name.trim() === '' ? 'You' : name.trim();
+    await this.ensureHumanPersona();
+    return this.personaPatch({ id: HUMAN_PERSONA_ID, title });
+  }
+
   ensureHumanPersona(): Promise<void> {
     return this.enqueue(async () => {
       try {
@@ -3892,8 +3910,7 @@ export class EngineBoardService {
         if ((await this.readOptional(vault.id, personaPath)) !== null) {
           return;
         }
-        const name = (((await this.host.configGet<string>('personas.humanName')) ?? '').trim()) || 'You';
-        await this.host.write(vault.id, personaPath, personaFileText(humanPersona(name)));
+        await this.host.write(vault.id, personaPath, personaFileText(humanPersona(await this.humanNameOfConfig())));
         await this.commit(vault, [personaPath], 'tickets: you persona');
         this.host.announceChanges(vault.id, [personaPath]);
         this.announceChanged();
@@ -4546,9 +4563,11 @@ export class EngineBoardService {
       }
       const shipped = await loadShippedPrompts();
       const promptPaths = [...shipped.keys()].map((ref) => `${PROMPTS_DIR}/${ref}.md`);
+      const humanPersonaPath = `${PERSONAS_DIR}/${HUMAN_PERSONA_ID}/persona.md`;
       try {
         await this.host.write(target.id, PIPELINE_PATH, DEFAULT_PIPELINE);
         await this.host.write(target.id, REPOS_PATH, DEFAULT_REPOS);
+        await this.host.write(target.id, humanPersonaPath, personaFileText(humanPersona(await this.humanNameOfConfig())));
         for (const [ref, text] of shipped) {
           await this.host.write(target.id, `${PROMPTS_DIR}/${ref}.md`, text);
         }
@@ -4560,10 +4579,10 @@ export class EngineBoardService {
       await this.ensureWorktreesIgnored(target);
       const warning = await this.commit(
         target,
-        [PIPELINE_PATH, REPOS_PATH, ...promptPaths],
+        [PIPELINE_PATH, REPOS_PATH, humanPersonaPath, ...promptPaths],
         'tickets: initialize board',
       );
-      this.host.announceChanges(target.id, [PIPELINE_PATH, REPOS_PATH, ...promptPaths]);
+      this.host.announceChanges(target.id, [PIPELINE_PATH, REPOS_PATH, humanPersonaPath, ...promptPaths]);
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };
     });
