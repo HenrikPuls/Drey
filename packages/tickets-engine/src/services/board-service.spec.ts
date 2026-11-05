@@ -176,6 +176,23 @@ describe('EngineBoardService E7 ledger writes', () => {
     expect(ledgerWrites).toEqual([{ kind: 'archived', ticket: 'T-0001' }]);
   });
 
+  it('an archived ticket still opens, is listed under Show older and counts for Done this week (E13-21)', async () => {
+    await writeTicket('T-0001', 'inbox');
+    await writeTicket('T-0002', 'inbox');
+    const service = serviceOf({ events: { ledger: (write) => ledgerWrites.push(write) } });
+    expect((await service.archive({ id: 'T-0001' })).ok).toBe(true);
+
+    const read = await service.readTicket('T-0001');
+    expect(read).toMatchObject({ ok: true, card: { id: 'T-0001', phase: 'archive', path: 'tickets/archive/T-0001.md' } });
+    expect(read.ok && read.text).toContain('T-0001');
+    expect(await service.readTicket('T-0099')).toMatchObject({ ok: false });
+    expect(await service.readTicket('../_meta/pipeline')).toMatchObject({ ok: false });
+
+    expect(await service.archivedTickets()).toMatchObject({ ok: true, tickets: [{ id: 'T-0001' }] });
+    expect(await service.archivedTickets({ query: 'nothing like this' })).toEqual({ ok: true, tickets: [] });
+    expect((await service.snapshot()).recentDone.map((d) => d.id)).toEqual(['T-0001']);
+  });
+
   it("a terminal Accept writes archived then merged (the ticket's real journey)", async () => {
     await writeTicket('T-0001', 'done'); // the pipeline's terminal phase
     const service = serviceOf({ events: { ledger: (write) => ledgerWrites.push(write) } });

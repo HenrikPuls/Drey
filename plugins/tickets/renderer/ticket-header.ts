@@ -103,6 +103,8 @@ export interface TicketHeaderDeps {
   readonly startInteractive: (card: TicketCard, mode: InteractiveMode) => void;
   /** The ticket document's strip under the chips (E13-6); absent = chips only. */
   readonly strip?: TicketStrip;
+  /** The Ticket | Thread | Review control on top of the document (E13-20); absent = none. */
+  readonly faces?: (ticketId: string) => HTMLElement;
 }
 
 export interface TicketHeader {
@@ -154,7 +156,9 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
     // E13-6: the strip (status, persona, cost, estimate, chain, gate) sits
     // between the chip row and the headline.
     const strip = deps.strip?.mount({ path, view: input.view });
-    root.append(chips, ...(strip === undefined ? [] : [strip.node]), title);
+    const ticketId = /\/(T-\d{4,})\.md$/.exec(path)?.[1];
+    const faces = ticketId === undefined ? undefined : deps.faces?.(ticketId);
+    root.append(...(faces === undefined ? [] : [faces]), chips, ...(strip === undefined ? [] : [strip.node]), title);
 
     let model: HeaderModel | null = models.get(input.frontmatter) ?? null;
     if (model === null) {

@@ -186,3 +186,15 @@ phone. Watch any worker and step in when needed.
 > the plain file; only the ticket menu's *Open ticket* still opens file and
 > thread side by side. The `beside` landing above remains the mechanism
 > of that one action.
+
+> **Later change (E13-20, owner 2026-11-05).** One face at a time replaces the
+> pair. Selecting a ticket (a Work row, *Open ticket*) opens **the ticket
+> document while no run has happened yet, the run's thread while the runner is
+> active or waiting** (`defaultFaceOf`, `plugins/tickets/renderer/ticket-faces.ts`);
+> a segmented control **Ticket | Thread | Review** tops the document, the thread
+> and the Review tab alike and switches between them, per selection and without
+> touching a saved view. The `ticketPagePlan` landing matrix and the *Ticket file*
+> link are gone; the thread tab is still one tab keyed `thread://ticket`.
+> Done and archived tickets open the same way (E13-21): `readTicket` falls back to
+> the archive, so document, thread and Review work for them too.
+

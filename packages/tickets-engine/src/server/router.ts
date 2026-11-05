@@ -396,6 +396,8 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
         return json({ ok: true, device: viewOf(device), actor });
       case '/api/board':
         return json(await port.board());
+      case '/api/archive':
+        return json({ ok: true, tickets: await port.archiveList() });
       case '/api/fleet':
         return json(await port.fleet());
       case '/api/needs':

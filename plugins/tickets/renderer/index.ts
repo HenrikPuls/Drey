@@ -21,6 +21,7 @@ import {
   type CreateResult,
   type MutationResult,
   type ProjectRef,
+  type RecentDone,
   type TicketCard,
   type TicketPriority,
   type TicketTrack,
@@ -28,7 +29,8 @@ import {
 import { needsBlockedConfirm } from './blocked-view';
 import { PRIORITY_LABEL, createGroupFoldStore, workListLivePaint, workListNode, type WorkPanelDeps } from './work-panel';
 import { createRunComposer } from './run-composer';
-import { THREAD_KEY, ticketPagePlan } from './ticket-page';
+import { THREAD_KEY } from './ticket-page';
+import { defaultFaceOf, ticketFaceSwitch, ticketRunActive, type TicketFace } from './ticket-faces';
 import { PENDING_HINT, dialogStarter } from './dialog-starters';
 import { statusSlotText } from './status-slot';
 import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups, workListSignature } from './work-groups';
@@ -345,7 +347,10 @@ async function loadWorktreesStatus(): Promise<void> {
 const runForCard = (id: string): RunInfo | null =>
   fleetRuns.find((r) => r.ticketId === id && LIVE_RUN_STATES.includes(r.state)) ?? null;
 
-/** A card by id from the current snapshot. */
+/** The cards of archived tickets opened from the Done group (E13-21): off the board's columns, read from the archive. */
+const archivedCards = new Map<string, TicketCard>();
+
+/** A card by id from the current snapshot, else one opened from the archive. */
 const boardCard = (id: string): TicketCard | null => {
   for (const column of snapshot?.columns ?? []) {
     const found = column.tickets.find((t) => t.id === id);
@@ -353,7 +358,7 @@ const boardCard = (id: string): TicketCard | null => {
       return found;
     }
   }
-  return null;
+  return archivedCards.get(id) ?? null;
 };
 
 const liveRuns = (): readonly RunInfo[] =>
@@ -670,7 +675,12 @@ function workersSection(api: DreyPluginApi): HTMLElement | null {
 function workPanelDeps(api: DreyPluginApi): WorkPanelDeps {
   const deps: WorkPanelDeps = {
     api,
-    openTicket: (card) => openTicketThread(api, card),
+    openTicket: (card) => void openTicketPage(api, card),
+    openArchived: (id) => void openArchivedTicket(api, id),
+    listArchived: async () => {
+      const reply = (await invokeBoard('archivedTickets', {})) as { ok: boolean; tickets?: RecentDone[] };
+      return reply.ok ? (reply.tickets ?? []) : [];
+    },
     setPriority: (card, priority) =>
       void runMutation('Setting the priority', () => invokeBoard('setPriority', { id: card.id, priority })),
     setTrack: (card, track) => void runMutation('Setting the track', () => invokeBoard('setTrack', { id: card.id, track })),
@@ -1691,7 +1701,6 @@ function createEndMoves(): { element: HTMLElement; paint(run: RunInfo | null): v
 const THREAD_KIND = 'tickets-thread';
 let threadTicketId: string | null = null;
 /** The ticket file the pair's file pane last showed (reused by the next ticket). */
-let pairFilePath: string | null = null;
 const threadListeners = new Set<() => void>();
 /**
  * A run to unfold when its ticket's thread shows (req-75 W4a): set by a
@@ -1802,58 +1811,57 @@ function threadRun(ticketId: string): RunInfo | null {
 }
 
 /**
- * The ticket page (ADR-0087 decision 3): the ticket file in one pane and
- * its thread beside it — since W4a the worker lives there in every state
- * (a live run's doings, an ended run's decisions: Ready card, approve,
- * accept, send back — and its next message; the run tab is gone). The
- * pair anchors on itself (the pure landing matrix: `ticketPagePlan`,
- * req-75): whatever pane is focused and whatever else is open, the two
- * tabs land in their own two panes, both re-activate on every ticket
- * switch and a third pane never appears; the focus ends on the file, so
- * the next ticket opens there.
+ * Selecting a ticket (E13-20, supersedes the file/thread pair of ADR-0087
+ * decision 3): ONE face opens -- the run (its thread) while the runner is
+ * active or waiting, the ticket document otherwise, also before any run.
+ * Thread and Review are one click away in the segmented control that tops
+ * every face; nothing here touches a saved view (D-6).
  */
 async function openTicketPage(api: DreyPluginApi, card: TicketCard): Promise<void> {
-  // A dricket ticket opens as its checkout document alone: the file/thread pair is
-  // anchored on the vault card path (E14-4c leaves the pairing to a later step).
-  if (await openDricketDocument(api, card.id)) {
+  showTicketFace(api, card, defaultFaceOf(ticketRunActive(snapshot, fleetRuns, card.id)));
+}
+
+/**
+ * A done or archived ticket opens like any other (E13-21): the engine reads it from the
+ * archive (files: `tickets/archive/`, dricket: the archived record), the document opens
+ * and the Thread / Review strip on top works through the remembered card. Never a move:
+ * the document is the ticket as it was accepted.
+ */
+async function openArchivedTicket(api: DreyPluginApi, id: string): Promise<void> {
+  const reply = (await invokeBoard('readTicket', id)) as { ok: boolean; card?: TicketCard; error?: string };
+  if (!reply.ok || reply.card === undefined) {
+    await api.ui.showMessage(reply.error ?? `${id} could not be read.`, 'Tickets');
     return;
   }
-  if (snapshot?.vaultId == null) {
-    return;
-  }
-  const vaultId = snapshot.vaultId;
-  const side = { kind: THREAD_KIND, key: THREAD_KEY, title: threadTitle(card.id) };
-  const previous = pairFilePath !== null && api.documents.get(pairFilePath) !== null ? pairFilePath : undefined;
-  const plan = ticketPagePlan({
-    fileOpen: api.documents.get(card.path) !== null,
-    threadOpen: api.documents.get(side.key) !== null,
-    previousFile: previous !== card.path ? previous : undefined,
-  });
-  await api.documents.open(card.path, undefined, { vaultId, ...plan.fileOpts });
-  pairFilePath = card.path;
-  threadTicketId = card.id;
-  for (const listener of threadListeners) {
-    listener();
-  }
-  if (plan.threadCall === 'reactivate') {
-    // One thread tab follows the ticket opened last (req-75 W1):
-    // the rename keeps its title true.
-    api.documents.rename(THREAD_KEY, side.title);
-    // addDoc on the open key reveals it -- a rename alone would leave the
-    // side backgrounded in its pane; the pair re-activates as a whole.
-    api.documents.addDoc(side.kind, side.key, side.title);
+  archivedCards.set(id, reply.card);
+  showTicketFace(api, reply.card, 'ticket');
+}
+
+/** Shows one face of a ticket: its document, its run thread or its Review tab. */
+function showTicketFace(api: DreyPluginApi, card: TicketCard, face: TicketFace): void {
+  if (face === 'thread') {
+    openTicketThread(api, card);
+  } else if (face === 'review') {
+    openReviewTab(api, card);
   } else {
-    api.documents.addDoc(side.kind, side.key, side.title, {
-      beside: card.path,
-      split: 'right',
-    });
-  }
-  if (plan.refocusFile) {
-    // The side tab's landing or re-activation took the focus: hand it back
-    // to the file, so the next ticket opens there and not beside the side.
-    await api.documents.open(card.path, undefined, { vaultId });
+    // The thread tab keeps following the ticket opened last, so the Thread button lands on this one.
+    threadTicketId = card.id;
+    for (const listener of threadListeners) {
+      listener();
+    }
+    openTicketCard(api, card);
   }
   markOpenCard(api);
+}
+
+/** The segmented control for a ticket face, wired to this plugin's openers. */
+function faceSwitchFor(api: DreyPluginApi, ticketId: string, active: TicketFace): HTMLElement {
+  return ticketFaceSwitch(active, (face) => {
+    const card = boardCard(ticketId);
+    if (card !== null) {
+      showTicketFace(api, card, face);
+    }
+  });
 }
 
 /** The Send back… modal (canvas): one note, one move back to the agent. */
@@ -1947,15 +1955,6 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   const stateWord = el('span', 'tickets-thread-state');
   const titleNode = el('span', 'tickets-thread-title');
   const metaNode = el('span', 'tickets-thread-meta');
-  const fileLink = el('button', 'tickets-thread-filelink', 'Ticket file');
-  fileLink.type = 'button';
-  fileLink.title = 'Open the ticket file in the editor';
-  fileLink.addEventListener('click', () => {
-    const card = boardCard(ticketId);
-    if (card !== null) {
-      openTicketCard(api, card);
-    }
-  });
   const controls = el('span', 'tickets-takeover-controls');
   const iconButton = (icon: string, title: string, ariaLabel: string, onClick: () => void): HTMLButtonElement => {
     const b = el('button', 'tickets-takeover-btn tickets-thread-iconbtn');
@@ -2048,7 +2047,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     paintReady();
   });
   controls.append(pauseRun, continueRun, takeOverRun, stopRun, handBackRun, resumeRun, startRun, checkpoints);
-  head.append(light, stateWord, titleNode, metaNode, readyChip, el('span', 'tickets-takeover-spacer'), fileLink, controls);
+  head.append(light, stateWord, titleNode, metaNode, readyChip, el('span', 'tickets-takeover-spacer'), controls);
 
   const endMoves = createEndMoves();
   // --- the Ready card (req-75 W3) ---------------------------------------
@@ -2570,7 +2569,6 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     if (metaNode.title !== metaTitle) {
       metaNode.title = metaTitle;
     }
-    fileLink.hidden = card === null;
     // The header's buttons come from the tested pure choice (W4a): the
     // same controls in every state, exactly one way on. Start shares
     // the composer's gate — only a dialog phase can start one by hand.
@@ -2654,7 +2652,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       pullChanges();
     }
   }, 30_000);
-  wrap.append(head, actionNotice, readyWrap, pendingHint, stepsBox, endMoves.element, decisionBar, composer.element);
+  wrap.append(faceSwitchFor(api, ticketId, 'thread'), head, actionNotice, readyWrap, pendingHint, stepsBox, endMoves.element, decisionBar, composer.element);
   host.append(wrap);
   return () => {
     alive = false;
@@ -3011,7 +3009,7 @@ function openCardMenu(
   };
   const textRow = (label: string): HTMLElement => el('span', 'tickets-menu-label', label);
 
-  item('Open ticket', () => void openTicketPage(api, card), 'The ticket file with its thread beside it');
+  item('Open ticket', () => void openTicketPage(api, card), 'The ticket document, or its run while one is active');
   menu.append(el('div', 'tickets-menu-sep'));
 
   const live = runForCard(card.id);
@@ -3349,8 +3347,9 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       rowOf,
       openSendBack: (ticketId) => openSendBackModal(api, ticketId),
       openTicketFile: (card) => openTicketCard(api, card),
+      archivedCard: (id) => archivedCards.get(id) ?? null,
       storage: () => window.localStorage,
-    });
+    }, (ticketId) => faceSwitchFor(api, ticketId, 'review'));
     const documentExtension = createTicketDocumentExtension({
       api,
       snapshot: () => snapshot,
@@ -3393,6 +3392,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
         notifyViews();
       },
       startInteractive: (card, mode) => void startInteractive(api, card, mode),
+      faces: (ticketId) => faceSwitchFor(api, ticketId, 'ticket'),
     });
     let headerVault: string | null = null;
     let unregisterHeader: (() => void) | null = null;

@@ -1023,6 +1023,21 @@ export class McState {
     void this.refreshPlan(id);
   }
 
+  /**
+   * The archive of any age, newest first (`GET /api/archive`, E13-21): what the Work
+   * tab's "Show older" lists under the Done-this-week group. A dropped desk is an empty list.
+   */
+  async loadArchive(): Promise<readonly { id: string; title: string | null; at: string }[]> {
+    const body = await this.client.raw<{ ok?: boolean; tickets?: unknown }>('/api/archive');
+    const list = Array.isArray(body?.tickets) ? (body.tickets as readonly unknown[]) : [];
+    return list.flatMap((item) => {
+      const entry = item as { id?: unknown; title?: unknown; at?: unknown } | null;
+      return entry !== null && typeof entry.id === 'string'
+        ? [{ id: entry.id, title: typeof entry.title === 'string' ? entry.title : null, at: typeof entry.at === 'string' ? entry.at : '' }]
+        : [];
+    });
+  }
+
   /** The current board view's phases, for the ticket screen's phase rail. */
   private phaseOptions(): readonly TicketPhaseOption[] {
     return this.work().groups.map((group) => ({ id: group.id, title: group.title }));

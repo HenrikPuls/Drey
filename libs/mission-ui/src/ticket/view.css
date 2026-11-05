@@ -1835,3 +1835,8 @@ details.think .step-body {
 .comment.signal .comment-text {
   font-weight: 600;
 }
+
+/* E13-20: the faces strip sits between the header and the page, on the page gutter. */
+.seg {
+  margin: 6px 16px 0;
+}

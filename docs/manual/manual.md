@@ -865,7 +865,9 @@ its heading (remembered across restarts):
 - **Prioritized** — the ideas already in the queue the fleet pulls from, each
   saying whom it waits for.
 - **Done this week** — what you accepted into the archive in the last
-  seven days, folded away by default.
+  seven days, folded away by default. A row opens the ticket like any other
+  (document, Thread, Review); **Show older** at the foot loads the whole
+  archive under a search field (id or title words).
 
 Every ticket sits in exactly one group — Needs you wins. Every
 Needs-you, Shaping and Running row carries a **phase chip** — a dot in
@@ -873,14 +875,19 @@ the phase's colour plus its name; the colours are set per column in
 Settings → Tickets → Pipeline (`color:` in pipeline.md, and without one
 a curated default palette applies). A row leads with the ticket's
 id, then the title, an age and one line; the open ticket's row is marked with an
-accent bar. Click a row to open the ticket's **thread** — the worker's
-page: the thread's header shows the run's light and who is working, and
-above its composer sits the **decision bar** (Approve → next phase,
+accent bar. Click a row to open the ticket. **What opens depends on the
+run:** the ticket document while no run has happened yet (and once the run
+is over), the **thread** — the worker's page — while the runner is active or
+waiting on a question, a gate or a permission. On top of every one of them
+sits the same **Ticket | Thread | Review** control (identical on the
+document, the thread and the Review tab, only the active button differs):
+click another button to switch. The choice is per ticket and never touches a
+saved view. The thread's header shows the run's light and who is working,
+and above its composer sits the **decision bar** (Approve → next phase,
 or Accept). The thread follows whichever ticket you
 click last — one tab, not one per ticket — and opens where your focus is,
 never as an automatic split. A ticket picked in the Files panel opens as
-a plain file tab. The row's menu **Open ticket** opens both: the ticket
-file with its thread beside it. The panel's footer carries the whole fleet: the worst light, the
+a plain file tab. The row's menu **Open ticket** opens the same default. The panel's footer carries the whole fleet: the worst light, the
 states in words and who is out there — `2 running · OpenCode 2` — with
 tokens in flight and the oldest run's age in its tooltip; when nothing
 runs but an alert stands (a halted chain, a held column, a tripped
@@ -1335,8 +1342,8 @@ editor* under Conversation targets), and the review of a finished branch
 is the Review tab. Automatic columns (agent and CI) offer no dialog — there the runner
   works the ticket, and its thread shows the run.
 
-The start opens **the ticket page**: the ticket file with its thread
-beside it, and the thread is the dialog. Nothing runs until you ask:
+The start opens **the ticket's thread** (reach the document with the
+**Ticket** button on top), and the thread is the dialog. Nothing runs until you ask:
 the worker starts quiet (it stands, no first turn of its own) and the
 prompt box comes **pre-filled with the step and its meaning** — add
 your question and send; that first message carries the dialog's brief

@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153–163 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153–165 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -329,21 +329,6 @@ owner confirms scope and order before any of it starts:
   team, editable Setup, Friction tab, Notify / Runs after / This week /
   Typical run fields, "Talk to <name> 1:1 in the Assistant" (with E13-5), the
   per-persona slot share (needs an engine count) (G-14).
-- **E13-20 — Opening a ticket: what it shows, and Ticket / Thread / Review**
-  (owner request 2026-11-05, outside the list; after D-6). Selecting a ticket opens
-  **the ticket document by default while no run has happened yet**, and **the run
-  while the runner is active or waiting** (on a question, a gate, a quota). Thread and
-  Review are shown **above the text**, not beside it: one segmented control
-  "Ticket | Thread | Review" in the existing button styling, **identical in both the
-  ticket view and the run view**, only the active button differs. The control is a
-  per-selection choice; it does not touch the saved views (D-6). Both Mission Control
-  and Drey's Work panel.
-- **E13-21 — Old tickets stay openable** (owner request 2026-11-05, outside the list).
-  Done and archived tickets ("Done this week" and older) must open like any other
-  ticket (document, thread, review, proof) so the owner can read what a ticket was
-  about; today they cannot be selected or opened. Check the reader on both backends
-  (files, dricket: the archived/done folders and the board's "this week" filter) and
-  add an explicit way to reach older ones (search or "Show older").
 - **E12-9b — Defaults the audit left open** (owner decision needed, from
   `docs/design/work-panel/default-names-audit.md`). Q1: does the default pipeline gain
   `review`, `verify`, `approve` (concept §5.1)? Q2: does "Initialize board" seed the team

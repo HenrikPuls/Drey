@@ -3717,3 +3717,48 @@ details[open] > summary > .tickets-tx-think-preview {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+
+/* E13-20: the Ticket | Thread | Review control on top of every face -- the global .seg strip, text buttons. */
+.tickets-faces {
+  align-self: flex-start;
+  margin: 8px 18px 4px;
+}
+
+.tickets-faces .icon-btn {
+  width: auto;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.tickets-faces-host {
+  display: flex;
+  flex-direction: column;
+}
+
+.tickets-review-body {
+  flex: 1;
+  min-height: 0;
+}
+
+/* E13-21: a Done row opens its ticket; "Show older" brings the archive's tail with a search field. */
+.work-done-row-open {
+  cursor: pointer;
+}
+
+.work-done-row-open:hover,
+.work-done-row-open:focus-visible {
+  background: var(--hover-bg);
+  outline: none;
+}
+
+.work-done-search {
+  box-sizing: border-box;
+  width: calc(100% - 32px);
+  margin: 4px 16px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 0.75rem;
+}

@@ -313,6 +313,47 @@
     } @empty {
       <p class="work-note">Nothing on the board.</p>
     }
+
+    <!-- E13-21: done and archived tickets open like any other; "Show older" reaches the rest. -->
+    @if (doneThisWeek().length > 0 || olderAvailable()) {
+      <section class="group group-done">
+        <h2 class="ghead">
+          <span class="ghead-title">Done this week</span>
+          <span class="cnt">· {{ doneThisWeek().length }}</span>
+        </h2>
+        @for (entry of doneThisWeek(); track entry.id) {
+          <button type="button" class="card ticket-card done-card" (click)="openDone(entry.id)">
+            <div class="card-top">
+              <span class="tid">{{ entry.id }}</span>
+            </div>
+            <h3 class="ticket-title">{{ entry.title || entry.id }}</h3>
+          </button>
+        }
+        @if (olderAvailable()) {
+          @if (!olderOpen()) {
+            <button type="button" class="btn ghost" (click)="showOlder()">Show older</button>
+          } @else {
+            <input
+              type="search"
+              class="done-search"
+              aria-label="Search older tickets"
+              [value]="olderQuery()"
+              (input)="onOlderQuery($event)"
+            />
+            @for (entry of older(); track entry.id) {
+              <button type="button" class="card ticket-card done-card" (click)="openDone(entry.id)">
+                <div class="card-top">
+                  <span class="tid">{{ entry.id }}</span>
+                </div>
+                <h3 class="ticket-title">{{ entry.title || entry.id }}</h3>
+              </button>
+            } @empty {
+              <p class="work-note">{{ olderLoading() ? 'Loading…' : 'No older tickets' }}</p>
+            }
+          }
+        }
+      </section>
+    }
   </div>
 }
 

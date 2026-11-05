@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { MC_CHAT_STATE } from '../chat/chat.model';
@@ -31,6 +32,8 @@ import {
   chainStepsOf,
   changeCountOf,
   costTableOf,
+  defaultFaceOf,
+  ticketRunActive,
   estimateLineOf,
   changeRowsOf,
   commentLabelOf,
@@ -116,7 +119,7 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
 @Component({
   selector: 'mc-ticket',
   templateUrl: './view.html',
-  styleUrl: './view.css',
+  styleUrls: ['../seg.css', './view.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgTemplateOutlet, Markdown],
 })
@@ -159,6 +162,34 @@ export class TicketView {
   /** The screen's face; every open resets it to the ticket. */
   protected readonly mode = signal<TicketMode>('ticket');
 
+  /**
+   * The segmented control "Ticket | Thread | Review" (E13-20), the same
+   * strip on every face: Review is the proof face. The choice is per
+   * selection — view state only, nothing here touches a saved view.
+   */
+  protected readonly faces: readonly { readonly face: TicketMode; readonly label: string }[] = [
+    { face: 'ticket', label: 'Ticket' },
+    { face: 'thread', label: 'Thread' },
+    { face: 'proof', label: 'Review' },
+  ];
+
+  protected setFace(face: TicketMode): void {
+    if (face === 'proof') {
+      this.openProof();
+    } else if (face === 'thread') {
+      this.openThread();
+    } else {
+      this.backToTicket();
+    }
+  }
+
+  /** True while this ticket's run is active or waiting (the default face is then the run). */
+  private runActive(): boolean {
+    const id = this.id();
+    const work = this.work;
+    return work === null ? false : ticketRunActive(id, work.runs ?? [], work.needs);
+  }
+
   protected openProof(): void {
     if (this.isEmpty()) {
       return;
@@ -189,9 +220,13 @@ export class TicketView {
    */
   private readonly resetPerTicket = effect(() => {
     this.doc()?.id;
-    this.mode.set('ticket');
+    // The face a selection opens on: the run while it is active or waiting,
+    // the ticket document otherwise (E13-20). Read untracked: a run starting
+    // later does not yank the face away from where the owner is reading.
+    untracked(() => this.mode.set(defaultFaceOf(this.runActive())));
     this.accepted.set(false);
-    this.threadDraft.set('');
+    // A run face opens with the `<id>:` prefix the thread's composer always carries.
+    this.threadDraft.set(untracked(() => (this.mode() === 'thread' ? `${this.id()}: ` : '')));
     this.threadError.set(null);
     this.threadQSelected.set(null);
     this.threadQPending.set(false);

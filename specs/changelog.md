@@ -1,3 +1,44 @@
+### Milestone 165 — E13-20 / E13-21: a ticket opens on what is true, Ticket | Thread | Review on top, old tickets stay openable
+
+**Not yet manually verified by the owner.** Owner request 2026-11-05, roadmap E13-20 and E13-21.
+
+- **E13-20, what opens.** Selecting a ticket opens **one** face: the ticket document while no run has
+  happened yet (and once the run is over), the **run's thread** while the runner is active or waiting
+  (on a question, a gate, a permission). Drey's Work panel: `openTicketPage` is now
+  `defaultFaceOf(ticketRunActive(snapshot, runs, id))` (`renderer/ticket-faces.ts`, over the Work
+  list's own row status: running / waiting / failed gate = active); the Work row click and the row
+  menu's *Open ticket* use it. The file + thread pair beside each other (ADR-0087 decision 3, the
+  `ticketPagePlan` landing matrix) is gone — `ticket-page.ts` keeps only the thread key. Mission
+  Control: the ticket view's face starts on the thread when a live run (`/api/fleet` runs now carry
+  `ticketId`) or a run need (question, permission, gate; an accept checkpoint or scout report is
+  not one) names the ticket (`defaultFaceOf` / `ticketRunActive` in `ticket.model.ts`); read untracked
+  per selection, so a run starting later does not pull the face away.
+- **E13-20, the control.** One segmented control **Ticket | Thread | Review** above the text, identical on
+  all three faces, only the active button differs. Drey: the global `.seg` + `.icon-btn` strip
+  (`ticketFaceSwitch`), on top of the ticket document (ticket header), the thread tab and the Review
+  tab; the thread's *Ticket file* link is replaced by it. Mission Control: the persona detail's `.seg`
+  tab strip, its rules moved to the shared `libs/mission-ui/src/seg.css` (both components use it); Review is
+  the proof face. A per-selection choice: no saved view is touched (D-6 contract unchanged).
+- **E13-21, the cause.** `readTicket` looked only at the board's columns, and the archive is no column, so
+  every done ticket answered "is not on the board"; on dricket the board also never filled
+  `recentDone` (the archive is a label there), so *Done this week* was always empty. Fixed:
+  `findArchived` reads `tickets/archive/<id>.md` (files) or the record carrying the `archived` label
+  (dricket) and answers like any ticket (card phase `archive`); `assembleBoardFromRecords` derives
+  `recentDone` from the archived records' `— archived` Log stamp (`archivedRecordFiles`); new engine method
+  `archivedTickets({ query, limit })` (`archivedEntriesOf`, any age, newest first, id/title words) and
+  `GET /api/archive`.
+- **E13-21, the UI.** Drey: a Done row opens its ticket (document, Thread and Review through the card the
+  engine returned); **Show older** at the foot of the group loads the archive once and lists the tail under
+  a search field (no placeholder text). Mission Control: a *Done this week* group under the phase groups,
+  rows open the ticket screen, **Show older** with the same search.
+- **Tests:** `ticket-faces.spec.ts` (default face from run state, the strip is the same three buttons with
+  one active), `view.spec.ts` (MC default face, run/need rules, switching), `work-panel.spec.ts` (Done row
+  click, Show older + search), `work.spec.ts` (MC Done group, Show older, `olderDoneOf`),
+  `normalize.spec.ts` (`archivedEntriesOf`), `store-board.spec.ts` (`recentDone` from records),
+  `board-service.spec.ts` (files backend) and `board-service-dricket.spec.ts` (real `dk`): an archived
+  ticket opens, is listed and counts for this week; `router.spec.ts` (`/api/archive`).
+- **Docs:** manual (Work panel, interactive start), docs/05, ADR-0087 later change.
+
 ### Milestone 163 — D-6: selecting a ticket never changes the view, a view saves only by "Save view"
 
 **Not yet manually verified by the owner.** Owner report 2026-11-05, roadmap D-6.

@@ -10,7 +10,7 @@
 import { randomBytes } from 'node:crypto';
 import { promises as fsp, existsSync } from 'node:fs';
 import * as path from 'node:path';
-import { archivedTicketIds, nextTicketId, TICKETS_ARCHIVE_DIR, TICKET_ID_PATTERN, type BoardSnapshot, FolderStatus, PipelinePhase, ProjectRef, PromptEntry, PromptListing, RepoCandidate, RepoRef, ReposListing, TicketCard, TicketForm, TicketPriority, TicketTrack } from '../contracts/tickets';
+import { archivedTicketIds, nextTicketId, TICKETS_ARCHIVE_DIR, TICKET_ID_PATTERN, type BoardSnapshot, type RecentDone, FolderStatus, PipelinePhase, ProjectRef, PromptEntry, PromptListing, RepoCandidate, RepoRef, ReposListing, TicketCard, TicketForm, TicketPriority, TicketTrack } from '../contracts/tickets';
 import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply } from '../contracts/changes';
 import { type RefineReply, TicketReply, AttachmentReply, type DocumentSaveReply, type TicketDocumentLocation } from '../contracts/replies';
 import { documentRelPath, idOfDocumentPath } from '../store/document-paths';
@@ -27,7 +27,7 @@ import type { PlanPartCard, PlanPartsEdit, PlanPartsReply, PlanReleaseReply, Pla
 import type { ChainEntry } from '../contracts/chain';
 import { refineTicket, revisionOf } from '../core/ticket-refine';
 import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from '../core/phase-dirs';
-import { detectDrift, recentDoneOf, type DriftDetection } from '../core/normalize';
+import { archivedEntriesOf, detectDrift, recentDoneOf, type DriftDetection } from '../core/normalize';
 import { blockedRefusal } from '../core/blocked';
 import { runTransition, type TransitionIo } from '../core/transition';
 import { openStatusItems, parseStatusLog, type StatusLine, type StatusVerb } from '../core/status-log';
@@ -42,7 +42,7 @@ import { TicketsGit, type RepoLocation } from '../core/tickets-git';
 import { TicketStoreError } from '../ports/ticket-store';
 import { FileTicketStore } from '../store/file-ticket-store';
 import { checkoutOf, createDricketStore, groupByStage, readStoreSettings, type StoreListing, type StoreSettings } from '../store/store-settings';
-import { recordToBoardFile } from '../store/store-board';
+import { archivedRecordFiles, recordToBoardFile } from '../store/store-board';
 import type { TicketDetail } from '../ports/ticket-store';
 import { ARCHIVED_LABEL, type BridgeOptions } from '../store/legacy-bridge';
 import { StoreBoardSource } from '../store/store-board-source';
@@ -616,9 +616,64 @@ export class EngineBoardService {
     return null;
   }
 
+  /**
+   * A ticket that left the board's columns -- accepted into the archive (E13-21): the
+   * files backend reads `tickets/archive/<id>.md`, dricket the record that carries the
+   * `archived` label. Read-only: it opens like any ticket, only its moves are off.
+   */
+  private async findArchived(id: string): Promise<{ vault: EngineVault; card: TicketCard; text: string } | null> {
+    const vault = await this.detect();
+    if (vault === null || !TICKET_ID_PATTERN.test(id)) {
+      return null;
+    }
+    const path = `${TICKETS_ARCHIVE_DIR}/${id}.md`;
+    let text: string;
+    try {
+      if (this.dricket === null) {
+        text = await this.host.read(vault.id, path);
+      } else {
+        const record = await this.storeBoard.record(this.dricket, id);
+        if (!record.labels.includes(ARCHIVED_LABEL)) {
+          return null;
+        }
+        text = recordToBoardFile(record, 'archive').text;
+      }
+    } catch {
+      return null;
+    }
+    const parsed = parseTicketFile(text, path);
+    const card: TicketCard = { id, path, phase: 'archive', meta: parsed.meta, worker: this.defaultWorker, blocked: [], blocks: [], issues: parsed.issues };
+    return { vault, card, text };
+  }
+
+  /**
+   * The archive's tickets of any age (E13-21 "Show older"), newest first, narrowed by
+   * `query` (id or title words): the files backend reads `tickets/archive/`, dricket the
+   * archived records. The Work panel and Mission Control list them behind "Show older".
+   */
+  async archivedTickets(input: { query?: string; limit?: number } = {}): Promise<{ ok: true; tickets: readonly RecentDone[] } | { ok: false; error: string }> {
+    try {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: true, tickets: [] };
+      }
+      const store = await this.refreshDricket();
+      const files = store === null
+        ? await Promise.all(
+            (await this.host.listMarkdownFiles(vault.id))
+              .filter((p) => p.startsWith(`${TICKETS_ARCHIVE_DIR}/`))
+              .map(async (path) => ({ path, text: await this.host.read(vault.id, path) })),
+          )
+        : archivedRecordFiles(await this.storeBoard.records(store));
+      return { ok: true, tickets: archivedEntriesOf(files, { query: input.query, limit: input.limit }) };
+    } catch (error) {
+      return { ok: false, error: messageOf(error) };
+    }
+  }
+
   /** One ticket's card and file text, for the remote's ticket view (req-66). */
   async readTicket(id: string): Promise<TicketReply> {
-    const found = await this.findCard(id);
+    const found = (await this.findCard(id)) ?? (await this.findArchived(id));
     if (found === null) {
       return { ok: false, error: `${id} is not on the board` };
     }

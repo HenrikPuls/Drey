@@ -286,7 +286,7 @@ export interface PersonaView {
 export interface TeamView {
   readonly personas: readonly PersonaView[];
   /** The fleet's runs with their raw state — the work tab counts the live ones. */
-  readonly runs: readonly { readonly state: string | null }[];
+  readonly runs: readonly { readonly state: string | null; readonly ticketId?: string }[];
   /**
    * The chain master switch off the fleet snapshot (`run` dispatches,
    * `halted` lets running work finish); null = unknown — the team's
@@ -1139,6 +1139,7 @@ export function parseTeam(personasJson: unknown, fleetJson: unknown): TeamView {
       .map((run) => rec(run))
       .map((run) => ({
         state: run !== null && typeof run['state'] === 'string' ? run['state'] : null,
+        ...(run !== null && typeof run['ticketId'] === 'string' ? { ticketId: run['ticketId'] } : {}),
       })),
     ...(chainMaster !== null ? { chainMaster } : {}),
     ...(pausedPersonas.length > 0 ? { pausedPersonas } : {}),

@@ -680,3 +680,20 @@ button:focus-visible {
   color: var(--mint, #3ecf8e);
   font-size: 14px;
 }
+
+/* E13-21: the Done group is quiet, its rows open the ticket; the search field is the sheet's field. */
+.group-done .done-card {
+  opacity: 0.8;
+}
+
+.done-search {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  margin: 6px 0;
+  padding: 0 12px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}

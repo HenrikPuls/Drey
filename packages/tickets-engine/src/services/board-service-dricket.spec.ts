@@ -291,7 +291,17 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     expect(await service.acceptTicket({ id: 'T-0001' })).toMatchObject({ ok: true });
     expect(field('t-1', 'labels')).toContain('archived');
     expect(field('t-1', 'stage')).toBe('done');
-    expect(await phaseOf('T-0001')).toBeNull();
+    expect(await phaseOf('T-0001')).toBeNull();
+
+    // E13-21: an archived ticket still opens (document, card), is listed under Show older
+    // and counts for Done this week.
+    const archived = await service.readTicket('T-0001');
+    expect(archived).toMatchObject({ ok: true, card: { id: 'T-0001', phase: 'archive' } });
+    expect(archived.ok && archived.text).toContain('T-0001');
+    expect(await service.archivedTickets()).toMatchObject({ ok: true, tickets: [{ id: 'T-0001' }] });
+    expect(await service.archivedTickets({ query: 'no-such-word' })).toEqual({ ok: true, tickets: [] });
+    expect((await service.snapshot()).recentDone.map((d) => d.id)).toEqual(['T-0001']);
+    expect(await service.readTicket('T-0999')).toMatchObject({ ok: false });
 
     expect(await service.unarchive({ id: 'T-0001', to: 'inbox' })).toMatchObject({ ok: true });
     expect(field('t-1', 'labels')).not.toContain('archived');

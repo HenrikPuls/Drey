@@ -53,6 +53,8 @@
           }
         </header>
 
+        <ng-container [ngTemplateOutlet]="faceSwitch" />
+
         <div class="page">
           <div class="card-top">
             <span class="phase" [style.color]="phaseColor()" [style.border-color]="phaseColor()">
@@ -231,6 +233,8 @@
           <span class="spacer"></span>
           <span class="tid">{{ id() }}</span>
         </header>
+
+        <ng-container [ngTemplateOutlet]="faceSwitch" />
 
         <div class="page">
           @if (proof(); as report) {
@@ -591,6 +595,8 @@
           <span class="tid">{{ id() }}</span>
         </header>
 
+        <ng-container [ngTemplateOutlet]="faceSwitch" />
+
         <div class="page thread-page">
           <h1 class="tk-title">{{ title() }}</h1>
           <p class="team-hint">filtered view of {{ id() }} — for work you talk to Mission Control</p>
@@ -892,4 +898,21 @@
       }
     </span>
   }
+</ng-template>
+
+<!-- E13-20: one segmented control, identical on the ticket, thread and review faces. -->
+<ng-template #faceSwitch>
+  <div class="seg" role="tablist" aria-label="Ticket faces">
+    @for (item of faces; track item.face) {
+      <button
+        type="button"
+        role="tab"
+        [class.on]="mode() === item.face"
+        [attr.aria-selected]="mode() === item.face"
+        (click)="setFace(item.face)"
+      >
+        {{ item.label }}
+      </button>
+    }
+  </div>
 </ng-template>

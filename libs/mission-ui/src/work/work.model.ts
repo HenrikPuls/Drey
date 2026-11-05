@@ -169,8 +169,18 @@ export interface McColumn {
   readonly unknown?: boolean;
 }
 
+/** One ticket of the archive (the board's `recentDone`, `/api/archive`): done and accepted. */
+export interface McDoneEntry {
+  readonly id: string;
+  readonly title: string | null;
+  /** The newest `— archived` Log stamp; '' when the Log has none. */
+  readonly at: string;
+}
+
 export interface McBoard {
   readonly columns: readonly McColumn[];
+  /** The tickets archived within the last seven days (E13-21: the Done-this-week group). */
+  readonly recentDone?: readonly McDoneEntry[];
   readonly checkpoints?: readonly string[];
   /**
    * The board's priority vocabulary (`/api/board` `priorities`) — read
@@ -209,6 +219,8 @@ export interface McMoveResult {
  */
 export interface McRun {
   readonly state?: string | null;
+  /** The ticket the run works on (E13-20: the ticket opens on the run while it is live). */
+  readonly ticketId?: string;
 }
 
 /**
@@ -232,6 +244,8 @@ export interface McWorkState {
    */
   readonly runs?: readonly McRun[] | null;
   moveTicket(ticketId: string, phaseId: string): Promise<McMoveResult>;
+  /** The archive of any age, newest first, for "Show older" (E13-21); absent = no such list. */
+  loadArchive?(): Promise<readonly McDoneEntry[]>;
   /** Opens the ticket screen (E5c) — the card tap's destination. */
   openTicket?(ticketId: string): void;
   /**
@@ -677,6 +691,27 @@ export function groupsOf(
     }
   }
   return groups;
+}
+
+/**
+ * The Done group's older tickets (E13-21 "Show older"): the archive minus this
+ * week's, narrowed by the search words (id or title, every word must hit). The
+ * engine already sends newest first.
+ */
+export function olderDoneOf(
+  all: readonly McDoneEntry[],
+  recent: readonly McDoneEntry[],
+  query: string,
+): readonly McDoneEntry[] {
+  const skip = new Set(recent.map((entry) => entry.id));
+  const words = query.toLowerCase().split(/\s+/).filter((word) => word !== '');
+  return all.filter((entry) => {
+    if (skip.has(entry.id)) {
+      return false;
+    }
+    const hay = `${entry.id} ${entry.title ?? ''}`.toLowerCase();
+    return words.every((word) => hay.includes(word));
+  });
 }
 
 /**

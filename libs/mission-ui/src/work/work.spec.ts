@@ -31,6 +31,7 @@ import {
   liveRunCountOf,
   needKindLabelOf,
   nextPhaseOf,
+  olderDoneOf,
   personaInitialOf,
   personaMapOf,
   questionCardOf,
@@ -1356,5 +1357,67 @@ describe('question option cards', () => {
     await work.qSend(bareNeed, work.questionCardOfNeed(bareNeed)!);
     expect(work.qIsDone(bareNeed)).toBe(false);
     expect(work.qErrorOf(bareNeed)).toBe('The answer did not go through.');
+  });
+});
+
+// --- done and archived tickets stay openable (E13-21) ---------------------------------
+
+describe('olderDoneOf', () => {
+  const all = [
+    { id: 'T-0014', title: 'Recent', at: '2026-11-04T00:00:00Z' },
+    { id: 'T-0003', title: 'Fix the login', at: '2026-01-01T00:00:00Z' },
+    { id: 'T-0002', title: 'Billing export', at: '2025-12-01T00:00:00Z' },
+  ];
+
+  it('drops this week\'s tickets and keeps the engine\'s newest-first order', () => {
+    expect(olderDoneOf(all, [all[0]!], '').map((e) => e.id)).toEqual(['T-0003', 'T-0002']);
+  });
+
+  it('narrows by id or title words, case-insensitively', () => {
+    expect(olderDoneOf(all, [all[0]!], 'LOGIN').map((e) => e.id)).toEqual(['T-0003']);
+    expect(olderDoneOf(all, [all[0]!], 't-0002').map((e) => e.id)).toEqual(['T-0002']);
+    expect(olderDoneOf(all, [all[0]!], 'billing nothing')).toEqual([]);
+  });
+});
+
+describe('Work: Done this week and Show older (E13-21)', () => {
+  interface DoneSurface {
+    doneThisWeek: Signal<readonly { id: string; title: string | null; at: string }[]>;
+    olderOpen: Signal<boolean>;
+    older: Signal<readonly { id: string }[]>;
+    showOlder(): Promise<void>;
+    onOlderQuery(event: Event): void;
+    openDone(id: string): void;
+  }
+  const done = (work: Work): DoneSurface => work as unknown as DoneSurface;
+
+  it('lists the board\'s recentDone and opens a done ticket like any other', () => {
+    const opened: string[] = [];
+    const { state } = makeFake({
+      board: { columns: [], recentDone: [{ id: 'T-0014', title: 'Recent', at: '2026-11-04T00:00:00Z' }] } as McBoard,
+      openTicket: (id: string) => void opened.push(id),
+    });
+    const work = setup(state);
+    expect(done(work).doneThisWeek().map((e) => e.id)).toEqual(['T-0014']);
+    done(work).openDone('T-0014');
+    expect(opened).toEqual(['T-0014']);
+  });
+
+  it('Show older loads the archive once, minus this week, and the search narrows it', async () => {
+    const all = [
+      { id: 'T-0014', title: 'Recent', at: '2026-11-04T00:00:00Z' },
+      { id: 'T-0003', title: 'Fix the login', at: '2026-01-01T00:00:00Z' },
+      { id: 'T-0002', title: 'Billing export', at: '2025-12-01T00:00:00Z' },
+    ];
+    const loadArchive = vi.fn(() => Promise.resolve(all));
+    const { state } = makeFake({ board: { columns: [], recentDone: [all[0]!] } as McBoard, loadArchive });
+    const work = setup(state);
+    expect(done(work).olderOpen()).toBe(false);
+    await done(work).showOlder();
+    await done(work).showOlder();
+    expect(loadArchive).toHaveBeenCalledTimes(1);
+    expect(done(work).older().map((e) => e.id)).toEqual(['T-0003', 'T-0002']);
+    done(work).onOlderQuery({ target: { value: 'billing' } } as unknown as Event);
+    expect(done(work).older().map((e) => e.id)).toEqual(['T-0002']);
   });
 });

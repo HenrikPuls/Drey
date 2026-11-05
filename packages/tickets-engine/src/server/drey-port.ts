@@ -38,7 +38,7 @@ import type {
   TicketReply,
   TicketsRemotePort,
 } from '../contracts/remote-protocol';
-import type { BoardSnapshot, CreateResult, MutationResult } from '../contracts/tickets';
+import type { BoardSnapshot, CreateResult, MutationResult, RecentDone } from '../contracts/tickets';
 import type { EstimateKey, RunEstimate } from '../core/estimate';
 import type { PlanPartsEdit, PlanPartsReply, PlanReleaseReply, PlanReleaseScope } from '../contracts/plan-approval';
 import type { FlowDraftReply, FlowOp, FlowReply, FlowSaveReply, FlowTarget } from '../contracts/flow';
@@ -59,6 +59,8 @@ const STATUS_NEEDS_CAP = 20;
 export interface RemoteBoard {
   refresh(): Promise<BoardSnapshot>;
   readTicket(id: string): Promise<TicketReply>;
+  /** The archive's tickets of any age (E13-21); a fake without it lists none. */
+  archivedTickets?(input?: { query?: string; limit?: number }): Promise<{ ok: true; tickets: readonly RecentDone[] } | { ok: false; error: string }>;
   refineTicket(input: RefineCommand & { actor?: string }): Promise<RefineReply>;
   saveAttachment(input: AttachmentCommand & { actor?: string }): Promise<AttachmentReply>;
   createTicket(input: CreateCommand & { actor?: string }): Promise<CreateResult>;
@@ -322,6 +324,11 @@ export class DreyTicketsPort implements TicketsRemotePort {
       }
     }
     return items;
+  }
+
+  async archiveList(): Promise<readonly RecentDone[]> {
+    const reply = (await this.boardService.archivedTickets?.()) ?? { ok: true as const, tickets: [] };
+    return reply.ok ? reply.tickets : [];
   }
 
   ticket(id: string): Promise<TicketReply> {
