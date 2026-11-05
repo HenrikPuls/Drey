@@ -92,6 +92,8 @@ export interface RemoteBoard {
   worktreeChangesOf(id: string): Promise<readonly WorktreeFile[]>;
   /** The Ready card's accept (E5c). */
   acceptTicket(input: { id: string; actor?: string }): Promise<MutationResult>;
+  /** The owner's answer to a Needs-you decision: a `resolved` status line / comment (E14-6). */
+  answerNeed(input: { id: string; key?: string; text?: string; actor?: string }): Promise<MutationResult>;
   /** The proof card's send-back with a mandatory note (E5c). */
   sendBack(input: { id: string; note: string; actor?: string; comments?: readonly ReviewComment[] }): Promise<MutationResult>;
   /** The E6 improvements card: one persona's proposals and counts. */
@@ -520,6 +522,10 @@ export class DreyTicketsPort implements TicketsRemotePort {
 
   ticketSendBack(cmd: { id: string; note: string; comments?: readonly ReviewComment[] }, actor: string): Promise<MutationResult> {
     return this.boardService.sendBack({ ...cmd, actor });
+  }
+
+  ticketAnswerNeed(cmd: { id: string; key?: string; text?: string }, actor: string): Promise<MutationResult> {
+    return this.boardService.answerNeed({ ...cmd, actor });
   }
 
   ticketWorktreeChanges(id: string): Promise<readonly WorktreeFile[]> {

@@ -49,6 +49,7 @@ import {
 import { capTail, SANITY_CAP } from './capping';
 import { TelemetryFold, type RunTelemetry } from './telemetry';
 import { dricketTrailers, RunLease, runOwnerId, trailerInstruction } from './run-lease';
+import { renderStatusComment, slugStatusKey } from '../core/status-comment';
 import { TicketStoreError, type TicketStore } from '../ports/ticket-store';
 import { DkProcess } from '../store/dk-process';
 import { toDricketId } from '../store/ids';
@@ -2078,7 +2079,15 @@ export class RunSupervisor {
       );
       if (run.request.dk !== undefined) {
         // The claim must go: park = the park stage (or its own) + the worker's words as a comment.
-        await this.parkDk(run, `run ${run.info.id} is blocked:\n\n${blocked}`);
+        await this.parkDk(
+          run,
+          renderStatusComment({
+            verb: 'blocked',
+            key: slugStatusKey(`run ${run.info.id}`),
+            text: (blocked.split('\n')[0] ?? '').slice(0, 200),
+            detail: `run ${run.info.id} is blocked:\n\n${blocked}`,
+          }) ?? blocked,
+        );
       }
       await this.finish(run, 'done');
       return;
@@ -2175,7 +2184,14 @@ export class RunSupervisor {
   private async parkTicketOnSuccess(run: LiveRun, personaId: string): Promise<{ ok: true } | { ok: false; error: string }> {
     const request = run.request;
     if (request.dk !== undefined) {
-      return this.parkDk(run, `run ${run.info.id} is done - gate green; parked for ${personaId} (manual step)`);
+      return this.parkDk(
+        run,
+        renderStatusComment({
+          verb: 'done',
+          text: `handed over on ${run.currentPhase} - a manual step waits for ${personaId}`,
+          detail: `run ${run.info.id} is done - gate green; parked for ${personaId} (manual step)`,
+        }) ?? personaId,
+      );
     }
     const here = await fsp
       .access(path.join(request.ticketsVaultPath, run.currentRelPath))
@@ -2641,7 +2657,16 @@ export class RunSupervisor {
       lease.stopKeepAlive();
       return;
     }
-    const result = await lease.release(this.stayPutStages(run.request, lease), note);
+    // E14-6: a failed run says so as a `failed:` status comment (the Needs-you grammar); the rest is detail.
+    const failed =
+      run.info.state === 'failed'
+        ? renderStatusComment({
+            verb: 'failed',
+            text: run.info.gateFailure !== null ? shortGateLine(run.info.gateFailure) : (((run.info.lastError ?? '').split('\n')[0] ?? '').trim() || 'the run failed'),
+            detail: note,
+          })
+        : null;
+    const result = await lease.release(this.stayPutStages(run.request, lease), failed ?? note);
     if (!result.ok) {
       this.deps.log(
         `run ${run.info.id}: releasing ${run.request.ticketId} failed - ${result.error}${result.lost ? '' : ' (the claim stays until its lease ends)'}`,
@@ -2655,7 +2680,8 @@ export class RunSupervisor {
     if (lease === undefined || lease.fenced) {
       return { ok: false, error: 'the claim on the ticket was lost - nothing is moved' };
     }
-    const note = `run ${run.info.id} done - gate green, moving to ${nextPhase}${run.request.parkFor === undefined ? '' : `; parked for ${run.request.parkFor} (manual step)`}${usageSummary(run.info)}`;
+    const narrative = `run ${run.info.id} done - gate green, moving to ${nextPhase}${run.request.parkFor === undefined ? '' : `; parked for ${run.request.parkFor} (manual step)`}${usageSummary(run.info)}`;
+    const note = renderStatusComment({ verb: 'done', text: `handed over on ${run.currentPhase}`, detail: narrative }) ?? narrative;
     const result = await lease.release([nextPhase], note);
     if (!result.ok) {
       return { ok: false, error: result.error };

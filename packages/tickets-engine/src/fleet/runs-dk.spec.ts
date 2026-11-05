@@ -184,6 +184,7 @@ describe('RunSupervisor on a dricket store (E14-5)', () => {
     const releases = t.store.of('release');
     expect(releases.map((c) => c.stage)).toEqual(['commit']);
     expect(t.store.of('comment')[0]?.text).toContain('moving to commit');
+    expect(t.store.of('comment')[0]?.text).toMatch(/^done: handed over on /); // E14-6: the keyed status verb leads
     expect(t.store.calls.map((c) => c.op)).not.toContain('extend');
     expect(await fsp.readdir(vaultDir)).toEqual([]); // not a single ticket file, folder or commit
     expect(t.timers.armed).toBeNull(); // the keep-alive ended with the release
@@ -201,6 +202,7 @@ describe('RunSupervisor on a dricket store (E14-5)', () => {
     await settled(t.sup, id, 'failed');
     expect(t.store.of('release').map((c) => c.stage)).toEqual(['prioritized']); // preStage
     expect(t.store.of('comment')).toHaveLength(1);
+    expect(t.store.of('comment')[0]?.text).toMatch(/^failed: /);
   });
 
   it('a release that may not stay put retreats to the stage before the working one', async () => {
@@ -245,6 +247,7 @@ describe('RunSupervisor on a dricket store (E14-5)', () => {
     t.adapter.handles[0]!.fail(0);
     await settled(t.sup, id, 'done');
     expect(t.store.of('comment')[0]?.text).toContain('needs the API key');
+    expect(t.store.of('comment')[0]?.text).toMatch(/^blocked: \[run-[a-z0-9-]+\] BLOCKED: needs the API key/); // a closable key, the worker's words
     expect(t.store.of('release')).toHaveLength(1);
     expect(t.order.filter((o) => o.startsWith('gate:'))).toEqual([]); // no gate on a blocked end
   });

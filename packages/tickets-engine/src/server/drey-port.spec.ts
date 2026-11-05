@@ -57,6 +57,7 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
     worktreeChangesOf: vi.fn(async () => []),
     acceptTicket: vi.fn(async () => ok),
     sendBack: vi.fn(async () => ok),
+    answerNeed: vi.fn(async () => ok),
     personaImprovements: vi.fn(async () => ({ ok: false as const, error: 'persona "pia" does not exist' })),
     decideImprovement: vi.fn(async () => ok),
     statusOf: vi.fn(async () => [] as readonly StatusLine[]),

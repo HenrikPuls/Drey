@@ -1,3 +1,43 @@
+### Milestone 159 — E14-6: comments, signals and the ledger on a dricket store
+
+**Not yet manually verified by the owner.** Owner request (roadmap E14-6, ADR-0090 later
+change). With `tickets.backend = dricket` the status verbs, the send-back note and the
+Needs-you answer are **comments** (`dk comment`), read back from the `comments/` files of the
+checkout — no dk feature was missing (dk v0.6.1 has no comment list, R-08; Drey reads the files
+itself, owner decision 2026-11-05). `files` stays the default; nothing in the running system
+changed. **Not checked in a running app** (see Not done).
+
+- **Status verbs as comments** (`core/status-comment.ts`, new): line one of a comment is the
+  status line (`needs-decision: [key] text`, `blocked: [key] text`, `resolved: key`, `done:`,
+  `failed:`, `paused:`) parsed by the status log's own parser, the comment's timestamp is its
+  `at`; detail may follow a blank line. `working:` is never persisted; a keyless `resolved:`
+  (which closes nothing) is refused. `statusOf` — and with it the Needs-you list — reads the
+  comments on a store, the `.status.log` on files.
+- **Send-back note** (`sendBack`): the move keeps the short `sent back:` Log line the story
+  reads, and the whole note is now a comment on the ticket.
+- **Needs-you answer** (`answerNeed`, invoke method + `POST /api/tickets/<id>/answer`
+  `{ key?, text? }`): writes `resolved: <key>` with the answer as detail; the key defaults to the
+  ticket's only open one, an unknown or already closed key is refused. On the files backend it
+  writes the `resolved` status line (the text has no home there).
+- **A dk run's end is a status comment**: a green move leads `done: handed over on <stage>`,
+  a manual-step park `done: ... a manual step waits for <persona>`, a `BLOCKED:` end
+  `blocked: [run-<id>] <reason>` (a key the owner's answer can close), a failed run
+  `failed: <gate line or error>`; the run's own words follow as detail.
+- **The board shows the comments**: `readTicket` carries `comments` (author, time, text, verb,
+  key; store only), `ticketComments(id)` is an invoke method, Mission Control's ticket view
+  has a Comments section (`TicketDetail.comments`).
+- **Ledger**: `tickets/_meta/ledger.jsonl` stays in the meta vault — the vault pipeline, repos
+  and personas already live in (E14-2: the board reads them from there on a store, too) — so there was nothing to
+  relocate; what changed is that a store board writes no `phase` line (dk's history derives
+  it) and that no status file or ledger line goes anywhere near the checkout.
+- **Specs:** `status-comment.spec.ts` (6), `board-service-dricket.spec.ts` (real dk: comments,
+  send-back, open decision, answer, default key, refusals, no phase line, no status file),
+  `runs-dk.spec.ts` (the leading verbs), `router.spec.ts` (answer route), `dto.spec.ts`.
+- **Not done (roadmap "E14-6 follow-ups"):** the chain orchestrator's own status events (it is
+  refused on dricket until E14-5b); handing an answer to the persona's next run and the
+  `needs-input` release/re-claim (Q-03); an answer button in Mission Control / Drey; the story
+  builder reading comments; a comment composer; a run on a second instance.
+
 ### Milestone 158 — E14-3b: the migration writes the ticket files itself, no placeholders
 
 **Not yet manually verified by the owner.** Owner decision 2026-11-05 (roadmap E14-3b,

@@ -8,6 +8,8 @@ import type { EngineHost, EngineVault, FleetPort } from './host';
 import { TicketsGit } from '../core/tickets-git';
 import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools, type RunRequest } from '../fleet/protocol';
 import { assertDkVersion, MIN_DK_VERSION } from '../store/dk-process';
+import { toDricketId } from '../store/ids';
+import { openStatusItems } from '../core/status-log';
 
 /**
  * E14-4b: the board's write moves against a REAL `dk` and a SCRATCH store —
@@ -63,6 +65,8 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
   let vault: EngineVault;
   let service: EngineBoardService;
   const saved: Record<string, string | undefined> = {};
+  const ledgerWrites: string[] = [];
+  const fileStatus: string[] = [];
   const envSet = (key: string, value: string): void => {
     if (!(key in saved)) {
       saved[key] = process.env[key];
@@ -168,7 +172,7 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
       throw new Error('no git in the spec');
     });
     const fleet: FleetPort = { runs: async () => [], start: async () => ({ ok: false, error: 'not in the spec' }), configureChain: async () => undefined };
-    service = new EngineBoardService(hostOf(), git2, 'opencode', 'accept-edits', '', fleet, '/fleet', normalizeFleetCaps({}), normalizeFleetPools({}), normalizeFleetHandover({}), 'owner@test', {});
+    service = new EngineBoardService(hostOf(), git2, 'opencode', 'accept-edits', '', fleet, '/fleet', normalizeFleetCaps({}), normalizeFleetPools({}), normalizeFleetHandover({}), 'owner@test', { events: { ledger: (write) => ledgerWrites.push(write.kind), status: (_p, _at, verb) => fileStatus.push(verb) } });
   }, 120_000);
 
   afterAll(() => {
@@ -351,6 +355,45 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     } finally {
       runner.dispose();
     }
+  });
+
+  it('keeps notes and signals as comments, answers a decision, and writes no phase ledger line or status file (E14-6)', async () => {
+    const created = await service.createTicket({ title: 'Signals', priority: 'normal', repo: null, description: 'Signal body.' });
+    expect(created).toMatchObject({ ok: true });
+    const id = (created as unknown as { id: string }).id;
+    const dkId = toDricketId(id)!;
+    ledgerWrites.length = 0;
+    expect(await service.transition({ id, from: 'inbox', to: 'build' })).toMatchObject({ ok: true });
+    expect(await service.transition({ id, from: 'build', to: 'commit' })).toMatchObject({ ok: true });
+    expect(ledgerWrites).not.toContain('phase');
+
+    // The send-back note, whole, is a comment.
+    const note = 'tests are missing for the empty case, and the button still misaligns';
+    expect(await service.sendBack({ id, note })).toMatchObject({ ok: true });
+    const afterSend = await service.ticketComments(id);
+    expect(afterSend.map((c) => c.text)).toEqual([`sent back: ${note}`]);
+    expect(afterSend[0]!.verb).toBeNull();
+
+    // A decision asked as a keyed comment shows in the status read and the ticket view; working is not persisted.
+    dk(['comment', dkId, '-m', 'needs-decision: [palette] Which shortcut should open the palette?']);
+    const lines = await service.statusOf(id);
+    expect(openStatusItems(lines).map((i) => [i.verb, i.key])).toEqual([['needs-decision', 'palette']]);
+    const view = await service.readTicket(id);
+    expect(view.ok && view.comments?.map((c) => c.verb)).toEqual([null, 'needs-decision']);
+
+    // The answer closes the key (the only open one is the default) and carries the text.
+    expect(await service.answerNeed({ id, text: 'Ctrl+K' })).toEqual({ ok: true });
+    expect(openStatusItems(await service.statusOf(id))).toEqual([]);
+    const thread = await service.ticketComments(id);
+    expect(thread[thread.length - 1]).toMatchObject({ verb: 'resolved', key: 'palette' });
+    expect(thread[thread.length - 1]!.text).toBe('resolved: palette\n\nCtrl+K');
+    expect(await service.answerNeed({ id, key: 'palette' })).toMatchObject({ ok: false });
+    expect(await service.answerNeed({ id, key: 'no-such-key', text: 'x' })).toMatchObject({ ok: false });
+
+    // The ticket file itself carries none of it; no status file landed in the meta vault.
+    expect(fileStatus).toEqual([]);
+    expect(dkShow(dkId)).not.toContain('Ctrl+K');
+    expect(await fsp.readdir(abs('tickets')).then((names) => names.filter((n) => n !== '_meta'))).toEqual([]);
   });
 
   it('keeps the chain off on the dricket backend until E14-5b', async () => {

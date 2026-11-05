@@ -628,6 +628,16 @@ export function parseVerlaufEntries(fileText: string): readonly McVerlaufEntry[]
   return entries;
 }
 
+/** One comment of a ticket kept in a dricket store (E14-6); `verb` names a status line (`needs-decision`, `blocked`, `resolved` ...). */
+export interface McTicketComment {
+  readonly author: string;
+  /** ISO stamp of the comment file. */
+  readonly at: string;
+  readonly text: string;
+  readonly verb: string | null;
+  readonly key: string | null;
+}
+
 /** The loaded ticket document plus what the screen's chrome renders around it. */
 export interface TicketDetail {
   readonly id: string;
@@ -665,6 +675,8 @@ export interface TicketDetail {
    * (tolerantly, never throwing); empty = the file carries no chapter.
    */
   readonly verlauf: readonly McVerlaufEntry[];
+  /** The ticket's comments, oldest first; absent when the desk keeps none (the files backend). */
+  readonly comments?: readonly McTicketComment[];
 }
 
 /** One file's git patch off `/api/tickets/<id>/diff`. */
@@ -1574,7 +1586,29 @@ export function parseTicketDetail(
     blocks: strArray(card['blocks']),
     ...(usage !== undefined ? { usage } : {}),
     verlauf: parseVerlaufEntries(text),
+    ...(commentsOf(body['comments']) !== undefined ? { comments: commentsOf(body['comments'])! } : {}),
   };
+}
+
+function commentsOf(value: unknown): readonly McTicketComment[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const out: McTicketComment[] = [];
+  for (const item of value) {
+    const one = rec(item);
+    if (one === null || str(one['text']) === '') {
+      continue;
+    }
+    out.push({
+      author: str(one['author']),
+      at: str(one['at']),
+      text: str(one['text']),
+      verb: str(one['verb']) === '' ? null : str(one['verb']),
+      key: str(one['key']) === '' ? null : str(one['key']),
+    });
+  }
+  return out;
 }
 
 /**
