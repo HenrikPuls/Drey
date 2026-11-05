@@ -810,7 +810,7 @@ the ticket file, and the ticket file never embeds it.
 ---
 push: origin
 phases:
-  - { id: inbox, title: Inbox, handover: manual }
+  - { id: inbox, title: Ideas, handover: manual }
   - { id: prioritized, title: Prioritized, handover: manual }
   - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default, color: '#c96442' }
   - { id: commit, title: Commit, handover: agent commit-default }

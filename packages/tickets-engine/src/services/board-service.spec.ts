@@ -986,3 +986,30 @@ describe('EngineBoardService shape seams (E10-3)', () => {
     expect((await serviceOf().readRepoFile('T-0001', 'CLAUDE.md')).ok).toBe(false);
   });
 });
+
+describe('EngineBoardService default names (E12-9)', () => {
+  const pipelinePath = (): string => path.join(vaultDir, 'tickets', '_meta', 'pipeline.md');
+
+  it('titles the first column Ideas on a new board and keeps the stage id inbox', async () => {
+    await fsp.rm(pipelinePath());
+    expect(await serviceOf().initialize('v')).toMatchObject({ ok: true });
+
+    const snap = await serviceOf().snapshot();
+    expect(snap.pipeline.map((p) => [p.id, p.title])).toEqual([
+      ['inbox', 'Ideas'],
+      ['prioritized', 'Prioritized'],
+      ['build', 'Build'],
+      ['commit', 'Commit'],
+      ['done', 'Done'],
+    ]);
+  });
+
+  it('never renames what a board already has: an existing Inbox title stays', async () => {
+    const before = await fsp.readFile(pipelinePath(), 'utf8');
+    expect(await serviceOf().initialize('v')).toMatchObject({ ok: false });
+    expect(await fsp.readFile(pipelinePath(), 'utf8')).toBe(before);
+
+    const snap = await serviceOf().snapshot();
+    expect(snap.pipeline.map((p) => p.title)).toEqual(['Inbox', 'Done']);
+  });
+});

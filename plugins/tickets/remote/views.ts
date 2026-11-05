@@ -599,7 +599,7 @@ export function captureView(ctx: Ctx): View {
   }
   const descriptionControls = imageControls(ctx, description);
   const create = button(
-    'Create in Inbox',
+    `Create in ${board?.pipeline[0]?.title ?? 'the first column'}`,
     () => {
       if (title.value.trim() === '') {
         toast('Give the ticket a title.', 'error');

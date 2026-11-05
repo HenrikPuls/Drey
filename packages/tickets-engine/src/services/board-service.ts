@@ -79,7 +79,7 @@ const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PLAN_INTERACTIVE_PROMPT = 'plan-interactive-default';
 const DEFAULT_PIPELINE = `---
 phases:
-  - { id: inbox, title: Inbox, handover: manual }
+  - { id: inbox, title: Ideas, handover: manual }
   - { id: prioritized, title: Prioritized, handover: manual }
   - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default }
   - { id: commit, title: Commit, handover: agent commit-default }

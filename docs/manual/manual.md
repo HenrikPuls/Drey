@@ -928,7 +928,7 @@ shows everything again.
 
 **Everyday use.** Capture with the **+** in the panel header: a title,
 a priority, optionally one or more repositories and a description land
-as `T-00xx.md` in the inbox (req-72: the repositories are checkboxes —
+as `T-00xx.md` in Ideas (req-72: the repositories are checkboxes —
 the first checked one is the primary, where the fleet tests; the
 others get their own worktrees on the same branch). The ticket file is
 an ordinary note (description, plan, executable acceptance criteria and
@@ -1037,7 +1037,8 @@ moving one back into a phase folder revives it).
 
 Phase folders are numbered (`10-inbox` … `80-done`) — the number is
 cosmetics for sorting in a file browser; everything inside a ticket
-keeps the plain phase name. **Moving the file yourself counts as a
+keeps the plain phase name (the first column is titled *Ideas* on a new
+board, its id and folder stay `inbox`). **Moving the file yourself counts as a
 move**: drag or `git mv` a ticket into another phase folder and the
 next refresh completes the transition exactly like a move from the
 menu — stamp, log line, one commit. Validation findings (a hand-edited
@@ -1393,7 +1394,7 @@ an id the list does not know. The prompt is chosen from the files in
 `tickets/_meta/prompts/`. Every change is one commit; the Work panel follows.
 
 **Reordering columns.** Drag a row by its grip, or focus a row and press
-Alt+↑ / Alt+↓. Inbox (where new tickets land) and Done stay first and
+Alt+↑ / Alt+↓. Ideas (where new tickets land) and Done stay first and
 last. A move rewrites `pipeline.md` and renames the phase folders to
 their new numbers in one commit; the line under the table says what
 moved, with **Undo**. A column whose tickets are being worked on right
@@ -1404,7 +1405,7 @@ column* adds a checkpoint after the column you pick (by default just
 before Done); give it a worker to make it run itself. The pencil next to
 a column's name renames it in place — only the name changes, its folder
 and tickets stay. The bin removes a column after a second click, and
-only while it holds no tickets (move them first). Inbox and Done cannot
+only while it holds no tickets (move them first). Ideas and Done cannot
 be removed.
 
 **Defaults and Advanced.** In Settings → Tickets a field you left empty
@@ -1463,7 +1464,7 @@ yourself, end the turn only when they pass. The runner still re-runs
 the gate: green moves the ticket one column right, red parks it (the
 failure lands in the Log, the ticket waits). A column that goes red
 too often trips its **circuit breaker**: it holds, and its next ticket
-parks in Inbox with a reason — re-prioritize it when you're ready, and
+parks in Ideas with a reason — re-prioritize it when you're ready, and
 press **Resume** on the panel's alert once the cause is fixed.
 After a red gate the column cools down for a minute before it fires
 again.
@@ -1471,7 +1472,7 @@ again.
 Where a worker column meets your judgment, the pipeline stays yours: a
 column without a worker between two worker columns is your
 **checkpoint** — the machine never pulls across it; you review, edit,
-and move the ticket on, back a column, or back to Inbox. The shipped
+and move the ticket on, back a column, or back to Ideas. The shipped
 default has none (Build flows into Commit on its own); add a manual
 column between two worker columns and it becomes your checkpoint. A
 manual column *before* the first worker column is your queue — the
@@ -1591,7 +1592,7 @@ On the phone, four tabs sit at the bottom:
   instead). Tap a card to open it.
 - **Runs** — the live runs first (what each worker is doing right
   now), then the recent ones. Tap one to follow it.
-- **Capture** — a new ticket into the Inbox: title, priority,
+- **Capture** — a new ticket into Ideas: title, priority,
   repository, description.
 - **Images.** Wherever a Description or Plan text is edited on the
   phone, an image can go straight in: paste it into the field, or tap

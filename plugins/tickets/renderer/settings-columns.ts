@@ -60,7 +60,7 @@ export function createColumnsSection(api: DreyPluginApi, reload: () => Promise<v
   const hint = el(
     'p',
     'section-hint',
-    'Drag a row by its grip, or press Alt+↑/↓ on a focused row, to reorder. A move rewrites pipeline.md and renumbers the phase folders in one commit. Inbox and Done stay first and last. The pencil renames a column (its tickets stay), the bin removes an empty one.',
+    'Drag a row by its grip, or press Alt+↑/↓ on a focused row, to reorder. A move rewrites pipeline.md and renumbers the phase folders in one commit. The first and the last column stay in place. The pencil renames a column (its tickets stay), the bin removes an empty one.',
   );
 
   const table = el('div', 'tset-table');

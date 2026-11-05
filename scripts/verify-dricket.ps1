@@ -233,7 +233,7 @@ function Invoke-Git([string]$Dir, [string[]]$Arguments) {
 $PIPELINE = @'
 ---
 phases:
-  - { id: inbox, title: Inbox, handover: manual }
+  - { id: inbox, title: Ideas, handover: manual }
   - { id: prioritized, title: Prioritized, handover: manual }
   - { id: build, title: Build, handover: agent build-default }
   - { id: commit, title: Commit, handover: manual }
