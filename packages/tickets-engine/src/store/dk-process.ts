@@ -15,8 +15,13 @@ import { TicketStoreError, type TicketStoreErrorKind } from '../ports/ticket-sto
  * reads, a serial queue per store for writes and a small read concurrency.
  */
 
-/** The oldest dk this engine speaks to (the v0.5 local-CAS CLI). */
-export const MIN_DK_VERSION = '0.5.0';
+/**
+ * The oldest dk this engine speaks to: v0.6.0 has `put --claim --if-version`
+ * (E14-4's write path). v0.6.1 is recommended — it fixes the parallel-read
+ * failure and starts far fewer git processes (R-26, R-30).
+ */
+export const MIN_DK_VERSION = '0.6.0';
+export const RECOMMENDED_DK_VERSION = '0.6.1';
 
 /** The envelope schema version the decoder understands. */
 export const DK_SCHEMA_VERSION = 1;
@@ -68,6 +73,8 @@ export interface ExecOptions {
   readonly env: NodeJS.ProcessEnv;
   readonly timeoutMs: number | null;
   readonly signal: AbortSignal | undefined;
+  /** Working directory; undefined = the engine's own (`dk sync` runs inside a checkout). */
+  readonly cwd?: string | undefined;
 }
 
 /** Injectable for unit tests; the default spawns for real. */
@@ -81,6 +88,7 @@ export const defaultExec: ExecFn = (file, args, options) =>
       {
         env: options.env,
         windowsHide: true,
+        ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
         maxBuffer: 64 * 1024 * 1024,
         encoding: 'utf8',
         ...(options.timeoutMs === null ? {} : { timeout: options.timeoutMs }),
@@ -204,6 +212,8 @@ export interface DkCallOptions {
   readonly actor?: string;
   readonly write: boolean;
   readonly signal?: AbortSignal;
+  /** Run inside this directory (`dk sync` needs a ticket checkout). */
+  readonly cwd?: string;
 }
 
 export class DkProcess {
@@ -288,6 +298,7 @@ export class DkProcess {
       env: this.env(call.actor),
       timeoutMs: call.write ? null : (this.options.readTimeoutMs ?? 30_000),
       signal: call.signal,
+      cwd: call.cwd,
     });
     if (result.failure !== null) {
       throw this.spawnError(result);

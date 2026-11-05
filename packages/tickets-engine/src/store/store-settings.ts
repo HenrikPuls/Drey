@@ -23,9 +23,20 @@ export interface StoreSettings {
   readonly dkStore: string;
   /** Private working copies (`DK_DATA_DIR`); empty = dk's default. */
   readonly dkDataDir: string;
+  /**
+   * The checkout the board is read from (E14-4): the files of the store's
+   * ticket branch. Empty = the store directory itself when `dk.store` is a
+   * local directory; a remote store (`<remote>#<branch>`) needs one (it must
+   * not live in OneDrive). No checkout = reads fall back to one `dk` call per ticket.
+   */
+  readonly dkCheckout: string;
+  /** Seconds between two `dk sync` rounds of a remote store; 0 = off. Default 30. */
+  readonly dkSyncSeconds: number;
 }
 
-export const STORE_SETTING_KEYS = ['backend', 'dk.path', 'dk.store', 'dk.dataDir'] as const;
+export const DEFAULT_SYNC_SECONDS = 30;
+
+export const STORE_SETTING_KEYS = ['backend', 'dk.path', 'dk.store', 'dk.dataDir', 'dk.checkout', 'dk.syncSeconds'] as const;
 
 export async function readStoreSettings(configGet: <T>(key: string) => Promise<T | undefined>): Promise<StoreSettings> {
   const text = async (key: string): Promise<string> => ((await configGet<string>(key)) ?? '').trim();
@@ -35,7 +46,28 @@ export async function readStoreSettings(configGet: <T>(key: string) => Promise<T
     dkPath: await text('dk.path'),
     dkStore: await text('dk.store'),
     dkDataDir: await text('dk.dataDir'),
+    dkCheckout: await text('dk.checkout'),
+    dkSyncSeconds: syncSecondsOf(await configGet<unknown>('dk.syncSeconds')),
   };
+}
+
+function syncSecondsOf(value: unknown): number {
+  const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN;
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_SYNC_SECONDS;
+}
+
+/**
+ * Where the board's files are: the explicit checkout, else the store itself
+ * when it is a local directory (what `dk.store` holds for a local store);
+ * null for a remote store without a checkout.
+ */
+export function checkoutOf(settings: StoreSettings): string | null {
+  if (settings.dkCheckout !== '') {
+    return settings.dkCheckout;
+  }
+  const store = settings.dkStore;
+  const isDirectory = store !== '' && !store.includes('#') && !/^[a-z][a-z0-9+.-]*:\/\//i.test(store) && !/^[^\/]+@[^\/]+:/.test(store);
+  return isDirectory ? store : null;
 }
 
 export function createDricketStore(settings: StoreSettings, env?: NodeJS.ProcessEnv): DricketTicketStore {

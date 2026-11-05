@@ -1,3 +1,7 @@
+import { promises as fsp } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import {
   TicketStoreError,
   type CallOptions,
@@ -5,6 +9,8 @@ import {
   type ClaimOptions,
   type ExtendOptions,
   type LeaseExtension,
+  type PutOptions,
+  type PutResult,
   type ReleaseOptions,
   type ReleaseResult,
   type StoreCapabilities,
@@ -101,6 +107,41 @@ export class DricketTicketStore implements TicketStore {
       maxExtensions: numberOrNull(data['max_extensions']),
       leaseUntil: textOrNull(data['lease_until']),
     };
+  }
+
+  /**
+   * Replaces the whole ticket in ONE `dk put <id> -F <file> --claim --if-version <rev>`
+   * (protocol.md "One-step change under a short claim"): claim, write and release
+   * land in a single commit. A ticket that changed since `expectedRev` is exit 12
+   * (`conflict`); a ticket someone else holds is exit 11 (`claimed`). The queue of
+   * the store's `DkProcess` makes the engine the single writer.
+   */
+  async put(id: string, text: string, options: PutOptions, call: CallOptions = {}): Promise<PutResult> {
+    const dkId = dricketId(id);
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-put-'));
+    const file = path.join(dir, 'ticket.md');
+    try {
+      await fsp.writeFile(file, text.replace(/\r\n/g, '\n'), 'utf8');
+      const args = ['put', dkId, '-F', file, '--claim', '--if-version', String(options.expectedRev)];
+      const data = asObject(
+        await this.dk.call(args, { write: true, ...(options.actor === undefined ? {} : { actor: options.actor }), ...signalOf(call) }),
+        'put',
+      );
+      const fields = data['changed_fields'];
+      return {
+        id: displayOf(data),
+        rev: numberOrNull(data['rev']) ?? options.expectedRev + 1,
+        commit: textOrNull(data['commit']),
+        changedFields: Array.isArray(fields) ? fields.filter((f): f is string => typeof f === 'string') : [],
+      };
+    } finally {
+      await fsp.rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  /** `dk sync` inside a ticket checkout: fetch and fast-forward it (a no-op for a local store, which shares the ref). */
+  async sync(checkout: string, call: CallOptions = {}): Promise<void> {
+    await this.dk.call(['sync'], { write: true, cwd: checkout, ...signalOf(call) });
   }
 
   comments(): Promise<readonly TicketComment[]> {

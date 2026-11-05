@@ -52,8 +52,9 @@ describe('version gate', () => {
   });
 
   it('refuses an old dk with a clear error naming both versions and the path', () => {
-    expect(() => assertDkVersion('v0.4.0', 'C:\\dk.exe')).toThrow(/dk 0\.4\.0 at C:\\dk\.exe is too old: Drey needs dk 0\.5\.0 or newer/);
+    expect(() => assertDkVersion('v0.4.0', 'C:\\dk.exe')).toThrow(/dk 0\.4\.0 at C:\\dk\.exe is too old: Drey needs dk 0\.6\.0 or newer/);
     expect(() => assertDkVersion('v0.4.0', 'dk')).toThrow(expect.objectContaining({ kind: 'too-old' }));
+    expect(() => assertDkVersion('v0.5.0', 'dk')).toThrow(expect.objectContaining({ kind: 'too-old' }));
     expect(() => assertDkVersion(`v${MIN_DK_VERSION}`, 'dk')).not.toThrow();
     expect(() => assertDkVersion('v0.6.1', 'dk')).not.toThrow();
     expect(() => assertDkVersion('dev', 'dk')).not.toThrow();
@@ -114,7 +115,7 @@ describe('exit code table', () => {
 
 describe('DkProcess', () => {
   it('passes --json first, the actor as DK_OWNER and the store as DK_STORE', async () => {
-    const { exec, calls } = scripted('v0.5.0', [ok({ tickets: null })]);
+    const { exec, calls } = scripted('v0.6.0', [ok({ tickets: null })]);
     const dk = new DkProcess({ bin: 'dk', store: '/s-env', dataDir: '/data', env: { PATH: 'x' }, exec });
     await dk.call(['ls'], { write: false, actor: 'ben.run-1' });
     expect(calls[0]!.args).toEqual(['--json', 'ls']);
@@ -122,7 +123,7 @@ describe('DkProcess', () => {
   });
 
   it('times reads out but never writes', async () => {
-    const { exec, calls } = scripted('v0.5.0', [ok({}), ok({})]);
+    const { exec, calls } = scripted('v0.6.0', [ok({}), ok({})]);
     const dk = new DkProcess({ bin: 'dk', store: '/s-timeout', readTimeoutMs: 1234, exec });
     await dk.call(['ls'], { write: false });
     await dk.call(['claim', 't-1'], { write: true, actor: 'a' });
@@ -134,7 +135,7 @@ describe('DkProcess', () => {
     const gates = new Map<string, () => void>();
     const exec: ExecFn = async (_f, args) => {
       if (args[0] === '--version') {
-        return { stdout: 'version: v0.5.0\n', stderr: '', code: 0, failure: null };
+        return { stdout: 'version: v0.6.0\n', stderr: '', code: 0, failure: null };
       }
       const key = args[args.length - 1]!;
       log.push(`start ${key}`);
@@ -168,7 +169,7 @@ describe('DkProcess', () => {
     const aborting: ExecFn = (_f, args) =>
       Promise.resolve(
         args[0] === '--version'
-          ? { stdout: 'version: v0.5.0\n', stderr: '', code: 0, failure: null }
+          ? { stdout: 'version: v0.6.0\n', stderr: '', code: 0, failure: null }
           : { stdout: '', stderr: '', code: null, failure: 'ABORT_ERR' },
       );
     await expect(new DkProcess({ bin: 'dk', store: '/s-c', exec: aborting }).call(['ls'], { write: true })).rejects.toMatchObject({ kind: 'cancelled' });

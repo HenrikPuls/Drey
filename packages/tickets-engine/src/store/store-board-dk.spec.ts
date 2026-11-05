@@ -100,7 +100,7 @@ describe.skipIf(!found.ok)('the board over a real dk store', { timeout: 120_000 
     dk(['claim', '--size', 'S', 't-3'], 'ben.run-1');
     dk(['claim', '--size', 'S', 't-4'], 'owner@scratch');
     dk(['release', '--stage', 'commit', 't-4'], 'owner@scratch');
-    settings = { backend: 'dricket', shadow: false, dkPath: bin === 'dk' ? '' : bin, dkStore: storeDir, dkDataDir: path.join(root, 'data') };
+    settings = { backend: 'dricket', shadow: false, dkPath: bin === 'dk' ? '' : bin, dkStore: storeDir, dkDataDir: path.join(root, 'data'), dkCheckout: '', dkSyncSeconds: 30 };
   }, 120_000);
 
   afterAll(() => {

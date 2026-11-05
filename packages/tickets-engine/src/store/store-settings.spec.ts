@@ -19,7 +19,7 @@ describe('tickets.backend', () => {
   it('reads the four keys, trimmed', async () => {
     const values: Record<string, string> = { backend: 'dricket', 'dk.path': ' C:\\x\\dk.exe ', 'dk.store': 'E:\\scratch' };
     const settings = await readStoreSettings(<T>(key: string) => Promise.resolve(values[key] as T | undefined));
-    expect(settings).toEqual({ backend: 'dricket', shadow: false, dkPath: 'C:\\x\\dk.exe', dkStore: 'E:\\scratch', dkDataDir: '' });
+    expect(settings).toEqual({ backend: 'dricket', shadow: false, dkPath: 'C:\\x\\dk.exe', dkStore: 'E:\\scratch', dkDataDir: '', dkCheckout: '', dkSyncSeconds: 30 });
   });
 
   it('reads shadow as files plus the shadow flag', async () => {

@@ -22,7 +22,7 @@ function storeAnswering(...names: string[]): { store: DricketTicketStore; argv: 
   const queue = [...names];
   const exec: ExecFn = (_f, args) => {
     if (args[0] === '--version') {
-      return Promise.resolve({ stdout: 'version: v0.5.0\n', stderr: '', code: 0, failure: null });
+      return Promise.resolve({ stdout: 'version: v0.6.0\n', stderr: '', code: 0, failure: null });
     }
     argv.push([...args]);
     return Promise.resolve(fixture(queue.shift()!));
@@ -88,7 +88,7 @@ describe('DricketTicketStore over captured dk v0.5.0 output', () => {
   it('says comments cannot be read yet and names the requirement', async () => {
     const { store } = storeAnswering();
     await expect(store.comments()).rejects.toMatchObject({ kind: 'unsupported', message: expect.stringContaining('R-08') });
-    expect(await store.capabilities()).toEqual({ backend: 'dricket', comments: false, leases: true, version: 'v0.5.0' });
+    expect(await store.capabilities()).toEqual({ backend: 'dricket', comments: false, leases: true, version: 'v0.6.0' });
   });
 
   it('reads extension keys and dependencies from a ticket document', () => {

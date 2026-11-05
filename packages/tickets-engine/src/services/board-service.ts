@@ -304,7 +304,10 @@ export class EngineBoardService {
     /** The optional extras (E7 ledger writes); `{}` keeps the service event-free. */
     private readonly options: BoardServiceOptions = {},
   ) {
-    this.storeBoard = new StoreBoardSource(path.join(host.userRoot, 'shadow'), (message, level) => host.log(message, level));
+    this.storeBoard = new StoreBoardSource(path.join(host.userRoot, 'shadow'), (message, level) => host.log(message, level), undefined, createDricketStore, {
+      // E14-4: the store's own writes, its file watcher and the remote sync round announce a changed board.
+      onChange: () => this.announceChanged(),
+    });
   }
 
   /** The board's emit, debounced — one push per burst of changes. */
