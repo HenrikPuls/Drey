@@ -4,10 +4,11 @@ import type { BoardSnapshot } from '../contracts/tickets';
 import type { TicketDetail, TicketStore } from '../ports/ticket-store';
 import { diffBoards, renderBoardDiff, type BoardDiff } from './board-diff';
 import { assembleBoardFromRecords, type RecordsBoardInput } from './store-board';
-import type { PutOptions } from '../ports/ticket-store';
+import type { AddOptions, AddResult, PutOptions } from '../ports/ticket-store';
 import type { DricketTicketStore } from './dricket-ticket-store';
 import { DricketFileStore, type WriteOutcome } from './dricket-file-store';
 import { FileStoreReader } from './file-store-reader';
+import { legacyToDricketDocument, type BridgeOptions } from './legacy-bridge';
 import { StoreChangeFeed, type WatchFn } from './store-change-feed';
 import { StoreReader } from './store-reader';
 import { checkoutOf, createDricketStore, type StoreSettings } from './store-settings';
@@ -118,6 +119,39 @@ export class StoreBoardSource {
       source.feed?.notifyOwnWrite();
     }
     return outcome;
+  }
+
+  /** One ticket as it is stored now (any stage, archived ones too); needs a checkout. */
+  async record(settings: StoreSettings, id: string): Promise<TicketDetail> {
+    const source = this.sourceFor(settings);
+    if (source.files === null) {
+      throw new Error('no ticket checkout configured (tickets.dk.checkout, or a local tickets.dk.store)');
+    }
+    return source.files.show(id);
+  }
+
+  /**
+   * The board's write: `legacyText` is the patched legacy-shaped ticket (what the
+   * board mutations produce), `current` the record it was made on. The dricket
+   * document is derived from `current` (`legacy-bridge`) and written with
+   * `put --claim --if-version current.rev`; exit 12 comes back as a conflict.
+   */
+  async writeLegacy(settings: StoreSettings, current: TicketDetail, legacyText: string, bridge: BridgeOptions): Promise<WriteOutcome> {
+    if (current.rev === null) {
+      throw new Error(`${current.id} has no rev: the store did not report one`);
+    }
+    return this.write(settings, current.id, legacyToDricketDocument(current.text, legacyText, bridge), { expectedRev: current.rev });
+  }
+
+  /** Creates an unclaimed ticket through `dk add`; dk allocates the number. */
+  async add(settings: StoreSettings, options: AddOptions): Promise<AddResult> {
+    const source = this.sourceFor(settings);
+    if (source.files === null) {
+      throw new Error('no ticket checkout configured (tickets.dk.checkout, or a local tickets.dk.store)');
+    }
+    const created = await source.files.add(options);
+    source.feed?.notifyOwnWrite();
+    return created;
   }
 
   /** `dk sync` of a remote store now (refresh, board open, before a claim); a local store shares the ref and needs none. */

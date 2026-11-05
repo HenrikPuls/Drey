@@ -193,3 +193,25 @@ Change detection is three-part: own writes announce directly, a file watcher
 (200 ms debounce) catches foreign writers, a remote store adds a periodic
 `dk sync` (`tickets.dk.syncSeconds`, default 30) and on-demand syncs. Without a
 checkout the engine falls back to the E14-2 reader (one `dk show` per ticket).
+
+## Later change — the board writes through one bridge (E14-4b, 2026-11-05)
+
+**Decision.** The board's mutations keep their pure text patchers (refine, header
+edits, parts, flow, the transition machine). On `tickets.backend = dricket` they run
+on the record folded into the legacy shape and the result is turned back into a
+dricket document by `store/legacy-bridge.ts` — the inverse of `recordToBoardFile` —
+and written with `dk put --claim --if-version <rev>`. There is no second writer and no
+TypeScript copy of a dricket decision: the bridge only maps header fields and carries
+the body; claims, leases, epochs, stage rules and validation stay in `dk`.
+
+**Moves and the archive.** A move is a `put` with the target stage (variant A: stage =
+phase id). The archive has no stage of its own in dricket: it is the terminal stage plus
+the label `archived`, and the board hides labelled records (migration plan §3 / OD-7).
+Capture is `dk add --unclaimed` (dk allocates the number, R-28) plus one `put`; the parts
+release is children first (`add` with parent and depends, then `put`), parent last, and
+resumes by matching the existing children by title and filling stubs left empty.
+
+**Consequences.** Exit 12 never overwrites: the caller is told the ticket changed.
+The fleet's own ticket writes (claim takeover / release, run stamps) are refused on
+dricket until E14-5 re-bases them on `dk claim`. The editor save hook and ticket documents
+opened from the checkout are E14-4c (they sit in `note-manager`, not in the board).

@@ -1,6 +1,7 @@
 import { stringify } from 'yaml';
 import type { BoardSnapshot, PipelinePhase } from '../contracts/tickets';
 import type { TicketDetail } from '../ports/ticket-store';
+import { ARCHIVED_LABEL } from './legacy-bridge';
 import { assembleBoard, type AssembleInput, type BoardFile } from '../core/ticket-board';
 
 /**
@@ -168,7 +169,8 @@ export function assembleBoardFromRecords(input: RecordsBoardInput): BoardSnapsho
   // The phases are needed to place records, and are parsed by `assembleBoard`
   // later anyway; a first assembly with no tickets gives them without a second parser.
   const probe = assembleBoard({ ...input, files: [], recentDone: [] });
-  const files = input.records.map((record) => {
+  // An accepted (archived) ticket is off the board, like a file in tickets/archive/ (E14-4b: the archive is a label).
+  const files = input.records.filter((record) => !record.labels.includes(ARCHIVED_LABEL)).map((record) => {
     const { phase } = resolvePhase(record, probe.pipeline);
     return recordToBoardFile(record, phase);
   });

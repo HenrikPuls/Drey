@@ -129,6 +129,23 @@ export interface PutResult {
   readonly changedFields: readonly string[];
 }
 
+/** A new ticket (E14-4b): `dk add --unclaimed`; the number is dk's (R-28). */
+export interface AddOptions {
+  readonly title: string;
+  readonly priority?: string;
+  readonly kind?: 'human' | 'agent';
+  /** Display id of the ticket this one is a part of. */
+  readonly parent?: string;
+  /** Display ids this ticket waits for. */
+  readonly dependsOn?: readonly string[];
+  readonly actor?: string;
+}
+
+/** What `dk add` created: the display id; the document is at `rev` 0. */
+export interface AddResult {
+  readonly id: string;
+}
+
 /** What a backend can do — the engine asks instead of guessing from a version. */
 export interface StoreCapabilities {
   readonly backend: TicketBackend;
