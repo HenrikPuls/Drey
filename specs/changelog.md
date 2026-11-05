@@ -29,7 +29,7 @@
 
 **Not yet manually verified by the owner.** A script plus a doc fix, no app behaviour changed: it seeds a scratch dricket store (`E:\dkv`, six English tickets incl. a comment, a dependency and an expired foreign claim) and starts the built app in an isolated profile (own USERPROFILE/APPDATA/userData, so the real `~/.drey-engine` and settings are never touched; `-Remote`, `-Reset`, a before/after fingerprint of the real locations). `cutover-guide.md` part A corrected: no `-Multi` or closing of the normal Drey needed, the engine still needs a tiny tickets vault.
 
-### Milestone 163 — E12-9: default names follow the canvas
+### Milestone 164 — E12-9: default names follow the canvas
 
 **Not yet manually verified by the owner.** Owner report 2026-11-05: the names in the default
 configuration do not match the design canvas. The audit is
