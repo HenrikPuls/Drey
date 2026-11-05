@@ -10,6 +10,16 @@ describe('viewportVarsOf (D-7d)', () => {
     expect(viewportVarsOf({ height: 508.4, offsetTop: 0 }, 844)).toEqual({ vh: '508px', top: '0px' });
   });
 
+  it('ignores a bar collapsing or an inset change — only a keyboard resizes the frame (D-5b)', () => {
+    expect(viewportVarsOf({ height: 800, offsetTop: 0 }, 844)).toEqual({ vh: null, top: null });
+    expect(viewportVarsOf({ height: 800, offsetTop: 30 }, 844)).toEqual({ vh: null, top: null });
+  });
+
+  it('leaves a pinch-zoomed viewport alone (D-5b)', () => {
+    expect(viewportVarsOf({ height: 400, offsetTop: 120, scale: 2 }, 844)).toEqual({ vh: null, top: null });
+    expect(viewportVarsOf({ height: 500, offsetTop: 0, scale: 1 }, 844)).toEqual({ vh: '500px', top: '0px' });
+  });
+
   it('carries the pan iOS adds to reveal the focused field, never a negative one', () => {
     expect(viewportVarsOf({ height: 508, offsetTop: 120.6 }, 844)).toEqual({ vh: '508px', top: '121px' });
     expect(viewportVarsOf({ height: 508, offsetTop: -3 }, 844)).toEqual({ vh: '508px', top: '0px' });
@@ -65,6 +75,35 @@ describe('trackVisualViewport (D-7d)', () => {
     viewport.height = 844;
     viewport.fire('resize');
     expect(props.size).toBe(0);
+  });
+
+  it('re-reads the viewport on focus changes — also when iOS never sends the closing resize (D-5b)', () => {
+    const { host, props, viewport } = fakeHost();
+    const listeners = new Map<string, () => void>();
+    const timers: { fn: () => void; ms: number }[] = [];
+    const wired = {
+      ...host,
+      addEventListener: (type: string, listener: () => void) => void listeners.set(type, listener),
+      setTimeout: (fn: () => void, ms: number) => void timers.push({ fn, ms }),
+    } as unknown as ViewportHost;
+    trackVisualViewport(wired);
+
+    viewport.height = 500;
+    viewport.offsetTop = 90;
+    listeners.get('focusin')!();
+    expect(props.get('--mc-vh')).toBe('500px');
+
+    // The keyboard closes; iOS fires no resize. The blur alone must restore the frame.
+    viewport.height = 844;
+    viewport.offsetTop = 0;
+    listeners.get('focusout')!();
+    expect(props.size).toBe(0);
+    expect(timers.map((t) => t.ms)).toEqual([120, 400, 900, 120, 400, 900]);
+
+    // A late settle after the animation re-reads once more.
+    viewport.height = 500;
+    timers[3]!.fn();
+    expect(props.get('--mc-vh')).toBe('500px');
   });
 
   it('does nothing without a visual viewport', () => {

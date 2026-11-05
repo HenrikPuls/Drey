@@ -82,6 +82,30 @@ describe('scroll contract (D-5)', () => {
     expect(missing).toEqual([]);
   });
 
+  it('D-5b: the shell is no scroller — .pane is the one scroller of the phone column, the bars stay put', () => {
+    const app = rules(join(ROOT, 'apps/mission-control/src/app/app.css'));
+    const shell = app.find((r) => r.selector === '.shell');
+    expect(shell?.body).toMatch(/overflow\s*:\s*hidden/);
+    expect(shell?.body).not.toMatch(/overflow-y\s*:\s*(auto|scroll)/);
+    const pane = app.find((r) => r.selector === '.pane');
+    expect(pane?.body).toMatch(/overflow-y\s*:\s*auto/);
+  });
+
+  it('D-5b: the touch guard and the viewport tracker are installed at boot', () => {
+    const main = readFileSync(join(ROOT, 'apps/mission-control/src/main.ts'), 'utf8');
+    expect(main).toContain('lockPageScroll(window)');
+    expect(main).toContain('trackVisualViewport(window)');
+  });
+
+  it('D-5b: no text field is under 16 px, which would make iOS zoom the page on focus', () => {
+    const base = rules(join(ROOT, 'apps/mission-control/src/styles.css'));
+    const guard = base.find((r) => r.selector.includes('textarea') && /font-size\s*:\s*max\(16px,\s*1em\)\s*!important/.test(r.body));
+    expect(guard?.selector).toMatch(/input/);
+    expect(guard?.selector).toMatch(/select/);
+    const html = base.find((r) => r.selector.startsWith('html,') && r.selector.includes('body'));
+    expect(html?.body).toMatch(/touch-action\s*:\s*manipulation/);
+  });
+
   it('the app host keeps its :host rule', () => {
     const app = rules(join(ROOT, 'apps/mission-control/src/app/app.css'));
     expect(app.some((r) => r.selector === ':host')).toBe(true);

@@ -41,6 +41,56 @@
 - **(e) Ghost text.** The phone composer's placeholder was a sample command; it now shows the
   same text as Drey's desktop Assistant composer, "Ask anything …", from one shared constant
   (`shared/composer-placeholder.ts`) both import. The desktop composer itself is unchanged.
+- **(f) D-5b — the chrome stays completely fixed** (owner report: small finger movements still
+  wobble the page by a few pixels; folded into this milestone because it owns the same viewport
+  code). Sources found, each fixed: (1) a finger starting on a bar (header, tab bar, composer
+  row) or on a scroller with nothing to scroll still rubber-bands the whole frame on iOS, and a
+  scroller dragged past its end chains into it before iOS 16 — `overscroll-behavior` alone cannot
+  stop either. New `app/scroll-lock.ts` judges every one-finger `touchmove` (non-passive, document
+  level): it goes through only if the nearest scrolling ancestor can still scroll in the dragged
+  direction (dominant axis), otherwise it is cancelled; pinch is never touched; the document is put
+  back to scroll 0 on any `scroll`. (2) `.shell` had `overflow-x: hidden` only, which computes
+  `overflow-y` to `auto` — a second scroller around the real one; it is now `overflow: hidden`, so
+  `.pane` owns the scroll of the phone column. (3) The D-7d keyboard logic followed *any* visual
+  viewport difference, so a collapsing browser bar or an inset change moved the frame by a few
+  pixels, and pinch zoom shrank it: it now reacts only to a drop of at least 120 px (a keyboard)
+  and never while zoomed (`scale > 1`).
+  Tests: `scroll-lock.spec.ts` (move judgement, scroll-room lookup, a simulated drag on header /
+  content / content end / pinch in jsdom), `viewport.spec.ts` (bar collapse, zoom),
+  `mission-control-scroll-contract.spec.ts` (shell is no scroller, `.pane` is; both installed at
+  boot). **Chromium cannot prove** the iOS behaviour: neither the rubber band of the standalone
+  app, the address-bar collapse of Safari, nor `touchmove` cancellation semantics are reproduced
+  by it — the owner confirms on the iPhone in the browser and in the installed home-screen app.
+  Not covered: scrollers that are themselves fixed layers (`.ticket-layer`, `.persona-layer`) keep
+  their own `overflow-y: auto` with `overscroll-behavior: contain`; the touch guard keeps them from
+  chaining, but they were not restructured.
+- **(f2) D-5b — the trigger and the suspects.** The owner's trigger: after the chat composer has
+  been used once (focus, the field grows, blur) the page wobbles by a few pixels for the rest of
+  the session — a persistent state change. Suspects, in order of likelihood, all addressed:
+  (1) **iOS focus zoom**: the composer text was 14 px; iOS zooms the page in when a field under
+  16 px takes focus and can leave it zoomed (`visualViewport.scale > 1`) and pannable after the
+  blur — exactly "small finger movements shift everything afterwards". Every text field is now at
+  least `max(16px, 1em)` (`!important`, global in `styles.css`; no loss of pinch zoom), and
+  `touch-action: manipulation` on `html`/`body` removes the double-tap zoom. (2) **Stale
+  keyboard state**: the D-7d variables could stay at the keyboard's values if iOS closes the
+  keyboard without a final `visualViewport` resize (Done key, tap outside); `viewport.ts` now also
+  re-reads on `focusin`/`focusout` (again at 120/400/900 ms), `orientationchange`, `pageshow`,
+  `resize` and every `touchend`. (3) The earlier items of (f) (touch guard, `.shell` no scroller,
+  keyboard threshold, zoom ignored).
+  **`?debug=scroll`** (`app/scroll-debug.ts`): opt-in overlay; it samples `scrollY`, the visual
+  viewport's `offsetTop`/`pageTop`/`scale`/height, `innerHeight`, the body box and the top/bottom
+  of `.shell`, `.hdr`, `.phonebar`, `.tabbar`, `.composer`, `mc-root`, logs every change with a
+  timestamp and the running event, shows the last lines on screen and offers "copy log"
+  (`window.__mcScrollLog`). Nothing is stored or sent. **Repro attempt in Chromium** (iPhone 14
+  emulation, production build, stubbed API; scratch script, not committed): jitter drags of 2–8 px
+  on header / thread / composer, pulls at both ends, a two-finger touch, a tiny tap, focus + six
+  lines in the composer + a faked keyboard (`--mc-vh`) + blur + clearing the draft — 16 checks,
+  **no movement** of any bar, of `scrollY`, `visualViewport.offsetTop/pageTop` or the scale (the
+  composer only grows and shrinks with its text, as intended). That is the expected result
+  for Chromium and proves only the structure; **it cannot prove** the iOS-specific causes — focus
+  zoom, a missing keyboard-close resize, the rubber band of Safari and of the installed app. The
+  owner confirms on the iPhone (browser and home-screen app), with `?debug=scroll` if it still
+  moves, and sends the copied log.
 - **Tests (red first):** `core/chat-ticket-refs.spec.ts`; `chat-service-named.spec.ts` (done,
   beyond-the-cap and archived tickets by `T-0091` / `t-91` / `#91`, comments, unknown id, follow-up,
   huge file cut, no read when nothing is named, digest hint); `chat-llm.spec.ts` (block order);

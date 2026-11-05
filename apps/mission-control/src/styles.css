@@ -97,8 +97,20 @@
   background: transparent;
 }
 
+/* D-5b: iOS zooms the page in when a form field under 16 px takes focus, and can
+   leave it zoomed and pannable by a few pixels after the blur — the "wobble after the
+   chat field was used". Every text field is at least 16 px; the component rules that
+   set 13–14 px lose to this one. */
+input:not([type='checkbox']):not([type='radio']):not([type='range']),
+textarea,
+select {
+  font-size: max(16px, 1em) !important;
+}
+
 html,
 body {
+  /* No double-tap zoom either: a tap with a tiny movement must not change the scale. */
+  touch-action: manipulation;
   height: 100%;
   /* D-5: the installed PWA is an app frame, not a page — the document never
      scrolls or rubber-bands; only the content regions below scroll, each with

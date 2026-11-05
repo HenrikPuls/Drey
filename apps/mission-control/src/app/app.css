@@ -17,7 +17,7 @@
   display: flex;
   flex-direction: column;
   height: 100%; /* the body is the visible area (D-7d) */
-  overflow-x: hidden; /* columns never shift — no horizontal page scroll */
+  overflow: hidden; /* D-5b: the shell never scrolls; the .pane below is the one scroller, the bars around it stay put */
 }
 
 /* The scroll container each tab view lives in (phone: the one column).
