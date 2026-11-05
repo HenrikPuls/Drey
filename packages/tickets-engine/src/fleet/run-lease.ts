@@ -56,6 +56,32 @@ export function trailerInstruction(trailers: readonly string[]): string {
   ].join('\n');
 }
 
+/** `stage:` of a ticket document set to `stage` (the first header line only); null when the document has no stage line. */
+export function withStage(text: string, stage: string): string | null {
+  const eol = text.includes(String.fromCharCode(13)) ? String.fromCharCode(13, 10) : String.fromCharCode(10);
+  const lines = text.split(eol);
+  if (lines[0] !== '---') {
+    return null;
+  }
+  const close = lines.indexOf('---', 1);
+  const at = lines.findIndex((line, i) => i > 0 && (close < 0 || i < close) && /^stage:/.test(line));
+  if (at < 0) {
+    return null;
+  }
+  lines[at] = `stage: ${stage}`;
+  return lines.join(eol);
+}
+
+export interface LeaseReleaseOptions {
+  /**
+   * The stage the ticket should END in when the release itself may not stay put (R-31: dk
+   * refuses an agent's `build -> build` release). If this candidate was refused and a later one
+   * took the ticket, one `put --claim` writes it back — dk allows the move once nobody holds the
+   * ticket. Two commits and a short stop in the retreat stage, but the card ends where it sat.
+   */
+  readonly restoreTo?: string | null;
+}
+
 export type LeaseRelease =
   | { readonly ok: true; readonly stage: string }
   | { readonly ok: false; readonly lost: boolean; readonly error: string };
@@ -146,7 +172,7 @@ export class RunLease {
    * body chapters between `## Result` and `## Log` (dricket requirement R-21, open),
    * and Drey's tickets keep several chapters there.
    */
-  async release(candidates: readonly (string | null)[], note: string | null): Promise<LeaseRelease> {
+  async release(candidates: readonly (string | null)[], note: string | null, options: LeaseReleaseOptions = {}): Promise<LeaseRelease> {
     if (this.fenced) {
       return { ok: false, lost: true, error: 'the claim was lost - nothing is written' };
     }
@@ -159,6 +185,7 @@ export class RunLease {
     }
     const stages = [...new Set(candidates.filter((s): s is string => s !== null && s !== ''))];
     let last = 'no target stage';
+    let restoreRefused = false;
     for (const stage of stages.length > 0 ? stages : [undefined]) {
       try {
         const answer = await this.options.store.release(this.options.ticketId, {
@@ -166,6 +193,10 @@ export class RunLease {
           ...(stage === undefined ? {} : { stage }),
         });
         this.released = true;
+        if (restoreRefused && options.restoreTo !== undefined && options.restoreTo !== null && answer.stage !== options.restoreTo) {
+          const restored = await this.restoreStage(options.restoreTo);
+          return { ok: true, stage: restored ? options.restoreTo : answer.stage };
+        }
         return { ok: true, stage: answer.stage };
       } catch (error) {
         if (error instanceof TicketStoreError && error.kind === 'claim-lost') {
@@ -173,12 +204,91 @@ export class RunLease {
           return { ok: false, lost: true, error: error.message };
         }
         last = errorText(error);
+        if (stage !== undefined && stage === options.restoreTo && error instanceof TicketStoreError && error.kind === 'invalid') {
+          restoreRefused = true;
+        }
         if (!(error instanceof TicketStoreError && error.kind === 'invalid')) {
           break; // a network or store failure does not get better with another stage
         }
       }
     }
     return { ok: false, lost: false, error: last };
+  }
+
+  /**
+   * Writes the ticket back into `stage` after a release that had to retreat (R-31, E14-5b): the
+   * ticket is nobody's now, so `put --claim --if-version` may move it. A failure is a log line —
+   * the ticket then simply stays in the retreat stage, as it did before this write existed.
+   */
+  private async restoreStage(stage: string): Promise<boolean> {
+    const store = this.options.store;
+    if (store.put === undefined) {
+      return false;
+    }
+    try {
+      const detail = await store.show(this.options.ticketId);
+      if (detail.stage === stage || detail.rev === null) {
+        return detail.stage === stage;
+      }
+      const text = withStage(detail.text, stage);
+      if (text === null) {
+        return false;
+      }
+      await store.put(this.options.ticketId, text, { expectedRev: detail.rev, actor: this.options.actor });
+      return true;
+    } catch (error) {
+      this.options.log(`run ${this.options.runId}: ${this.options.ticketId} stays in its retreat stage - the way back to ${stage} failed: ${errorText(error)}`);
+      return false;
+    }
+  }
+
+  /**
+   * One read-modify-write of the ticket INSIDE the claim (`## Verlauf`, the settle's chapters): `dk put`
+   * without `--claim`. Returns false (and logs) when the store cannot, the claim is gone or the
+   * patch changed nothing; exit 13 fences the lease. Never throws: a chapter is not worth a failed run.
+   */
+  async patchInClaim(patch: (text: string) => string): Promise<boolean> {
+    const store = this.options.store;
+    if (this.fenced || this.released || store.put === undefined) {
+      return false;
+    }
+    try {
+      const detail = await store.show(this.options.ticketId);
+      const next = patch(detail.text);
+      if (next === detail.text) {
+        return false;
+      }
+      await store.put(this.options.ticketId, next, { holdsClaim: true, actor: this.options.actor });
+      return true;
+    } catch (error) {
+      if (error instanceof TicketStoreError && error.kind === 'claim-lost') {
+        this.fence(error.message);
+      } else {
+        this.options.log(`run ${this.options.runId}: writing ${this.options.ticketId} inside the claim failed - ${errorText(error)}`);
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Takes the ticket up again after a release made for a wait (Q-03: a run that waits for the
+   * owner gives the claim up and re-claims on the answer — a new epoch). Throws dk's error when
+   * another actor holds the ticket now (exit 11); the caller tells the owner.
+   */
+  async reclaim(): Promise<Claim> {
+    const claim = await this.options.store.claim(this.options.ticketId, {
+      actor: this.options.actor,
+      size: this.options.size,
+      kind: 'agent',
+    });
+    this.epoch = claim.epoch;
+    this.leaseUntil = claim.leaseUntil;
+    this.released = false;
+    this.fenced = false;
+    this.extendStopped = false;
+    this.options.log(`run ${this.options.runId}: re-claimed ${this.options.ticketId}${claim.epoch !== null ? ` (epoch ${claim.epoch})` : ''}`);
+    this.scheduleExtend();
+    return claim;
   }
 
   /** A comment on the ticket (park notes); a failure is a log line, never a failed run. */

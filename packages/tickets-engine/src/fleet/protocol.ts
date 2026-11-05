@@ -53,6 +53,8 @@ export interface RunDkTarget {
    * the owner's store may have no `blocked` stage (`dricket.toml` `[stages]`).
    */
   readonly parkStage: string | null;
+  /** E14-5b (Q-03): the stage a run that waits for the owner is released to; null = it stays where it is, unclaimed. Absent on older runners. */
+  readonly needsInputStage?: string | null;
   /** The stage before the working one, for a release that may not stay put (dk refuses `build -> build` for an agent). */
   readonly retreatStage: string | null;
   /** Workers put `Dricket-*` trailers on their commits and the gate runs `dk validate --trailers` (off by default). */

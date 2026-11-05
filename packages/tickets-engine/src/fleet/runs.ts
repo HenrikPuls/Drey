@@ -337,6 +337,12 @@ interface LiveRun {
   ticketQueue?: Promise<void>;
   /** E14-5: the run's claim on its dricket ticket (`request.dk` set). */
   lease?: RunLease;
+  /** E14-5b (Q-03): the claim was given up while the worker waits for the owner; the answer re-claims. */
+  waitReleased?: boolean;
+  /** The decision key of the open wait (`needs-decision` / `resolved`). */
+  waitKey?: string;
+  /** E14-5b: the Verlauf line went into the ticket inside the claim - the settle must not write another. */
+  verlaufWritten?: boolean;
   /** Why the lease was lost (exit 13): the worker was stopped and the ticket is not ours to write. */
   claimLost?: string;
 }
@@ -431,6 +437,12 @@ export function linkNote(report: LinkReport): string {
     ...report.skipped.map((s) => `left out ${s.path} (${s.reason})`),
   ].filter((part) => part !== '');
   return `worktree links: ${parts.join('; ')}`;
+}
+
+/** What {@link RunSupervisor.releaseLeftoverClaims} did. */
+export interface LeftoverClaimsReport {
+  readonly released: readonly string[];
+  readonly skipped: readonly { readonly id: string; readonly reason: string }[];
 }
 
 export class RunSupervisor {
@@ -942,7 +954,7 @@ export class RunSupervisor {
       }
     } catch (error) {
       if (lease !== null) {
-        await lease.release(this.stayPutStages(request, lease), `run ${id} did not start - worktree failed: ${messageOf(error)}`);
+        await lease.release(this.stayPutStages(request, lease), `run ${id} did not start - worktree failed: ${messageOf(error)}`, { restoreTo: lease.preStage });
       }
       return { ok: false, error: `worktree failed: ${messageOf(error)}` };
     }
@@ -1755,6 +1767,14 @@ export class RunSupervisor {
       const what = event.waiting.kind === 'question' ? 'asks the owner' : 'waits for approval';
       this.deps.log(`run ${run.info.id} (${run.info.ticketId}) ${what}: ${event.waiting.text.slice(0, 200)}`);
       await this.logLine(run, `${what} — ${event.waiting.text.slice(0, 400)}`);
+      await this.releaseForWait(run, `${what}: ${event.waiting.text}`);
+    } else if (event.waiting === null && run.waitReleased === true) {
+      // The wait ended without our answer path (the owner answered in the worker's own UI): take the ticket up again.
+      await this.reclaimAfterWait(run, null).then((outcome) => {
+        if (!outcome.ok) {
+          void this.onClaimLost(run, outcome.error);
+        }
+      });
     }
   }
 
@@ -1773,6 +1793,10 @@ export class RunSupervisor {
     }
     if (run.handle === null || run.handle.answerPermission === undefined) {
       return { ok: false, error: `the ${run.info.provider} worker takes no approvals` };
+    }
+    const reclaimed = await this.reclaimAfterWait(run, `${decision}: ${waiting.text}`);
+    if (!reclaimed.ok) {
+      return { ok: false, error: reclaimed.error };
     }
     if (!(await run.handle.answerPermission(waiting.requestId, decision))) {
       return { ok: false, error: 'the worker took no answer — the request may be gone' };
@@ -1801,6 +1825,10 @@ export class RunSupervisor {
     const said = answersText(waiting.questions, answers);
     if (Object.keys(answers).length === 0) {
       return { ok: false, error: 'the answer is empty' };
+    }
+    const reclaimed = await this.reclaimAfterWait(run, said);
+    if (!reclaimed.ok) {
+      return { ok: false, error: reclaimed.error };
     }
     if (!(await run.handle.answerQuestion(waiting.requestId, answers))) {
       return { ok: false, error: 'the worker took no answer — the question may be gone' };
@@ -2362,7 +2390,9 @@ export class RunSupervisor {
    * which a concurrent board write could see a half-written file.
    */
   private verlaufLineFor(run: LiveRun, state: RunState): string | null {
-    const { tokensIn, tokensOut, costUsd: cost } = run.info;
+    const { tokensIn, tokensOut } = run.info;
+    // Inside the claim the line is written before the settle: the end stamp and the price-table estimate are the settle's own fallbacks, applied here.
+    const cost = run.info.costUsd ?? (run.info.endedAt === null ? costOf(run.info.model ?? null, tokensIn, tokensOut) : null);
     if (tokensIn === 0 && tokensOut === 0 && (cost === null || cost <= 0)) {
       return null;
     }
@@ -2375,7 +2405,7 @@ export class RunSupervisor {
         tokensOut,
         cost,
         startedAt: run.info.startedAt,
-        endedAt: run.info.endedAt,
+        endedAt: run.info.endedAt ?? this.stamp(),
         state,
       }),
     );
@@ -2644,6 +2674,138 @@ export class RunSupervisor {
     }
   }
 
+  /**
+   * Q-03 (accepted 2026-11-05): a run that waits for the owner may wait for days, but dk's lease
+   * is bounded (max lease, 3 extensions) - so the claim is GIVEN UP for the wait and taken again on
+   * the answer (a new epoch). The ticket carries the question as a `needs-decision:` comment (the
+   * Needs-you grammar) and goes to the store's `needs-input` stage when it has one, else stays where
+   * it is, unclaimed. Not done when commit trailers are on (the epoch they carry must stay) or for
+   * the owner's own dialog (nothing waits there).
+   */
+  private async releaseForWait(run: LiveRun, text: string): Promise<void> {
+    const target = run.request.dk;
+    const lease = run.lease;
+    if (target === undefined || lease === undefined || target.trailers || run.request.interactive !== undefined) {
+      return;
+    }
+    if (run.waitReleased === true || lease.released || lease.fenced || run.claimLost !== undefined) {
+      return;
+    }
+    const key = slugStatusKey(`run ${run.info.id} waits`) ?? undefined;
+    const note = renderStatusComment({
+      verb: 'needs-decision',
+      ...(key === undefined ? {} : { key }),
+      text: (text.split('\n')[0] ?? '').slice(0, 200) || 'waits for the owner',
+      detail: `run ${run.info.id} waits for the owner:\n\n${text}`,
+    });
+    const result = await lease.release([target.needsInputStage ?? null, ...this.stayPutStages(run.request, lease)], note, { restoreTo: lease.preStage });
+    if (!result.ok) {
+      this.deps.log(`run ${run.info.id}: giving up the claim for the wait failed - ${result.error} (the lease keeps running)`);
+      return;
+    }
+    run.waitReleased = true;
+    if (key !== undefined) {
+      run.waitKey = key;
+    }
+    this.deps.log(`run ${run.info.id}: ${run.request.ticketId} released to ${result.stage} for the wait; the answer re-claims it`);
+  }
+
+  /** The owner answered: take the ticket up again (a new epoch) before the worker goes on; ok when nothing was released. */
+  private async reclaimAfterWait(run: LiveRun, answer: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (run.waitReleased !== true) {
+      return { ok: true };
+    }
+    const lease = run.lease;
+    if (lease === undefined) {
+      return { ok: true };
+    }
+    try {
+      await lease.reclaim();
+    } catch (error) {
+      // Someone else holds the ticket now: the worker must not go on writing for a ticket that is not ours.
+      return { ok: false, error: `${run.request.ticketId} could not be re-claimed for the answer - ${messageOf(error)}` };
+    }
+    run.waitReleased = false;
+    const key = run.waitKey;
+    if (key !== undefined) {
+      const resolved = renderStatusComment({ verb: 'resolved', key, ...(answer === null ? {} : { detail: answer }) });
+      if (resolved !== null) {
+        await lease.comment(resolved);
+      }
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Gives up the claims no live run of this runner holds (E14-5b (4)): a runner killed with a
+   * run in flight leaves its `agent-<run>@<host>` claim on the ticket until the lease ends, and a
+   * boot-adopted run released only what it still had a record of. Every ticket owned by an
+   * agent identity of THIS host that no starting / running / stopping run holds is released as
+   * that owner: where it sat when dk takes that (R-31 write-back), else one stage back. Never
+   * touches another host's claims or a human's.
+   */
+  async releaseLeftoverClaims(
+    target: RunDkTarget,
+    retreatByStage: Readonly<Record<string, string | null>>,
+  ): Promise<LeftoverClaimsReport> {
+    const store = this.storeOf(target);
+    const released: string[] = [];
+    const skipped: { id: string; reason: string }[] = [];
+    const host = runOwnerId('x').slice('agent-x@'.length);
+    const live = new Set<string>();
+    for (const run of this.runs.values()) {
+      if (['starting', 'running', 'stopping'].includes(run.info.state)) {
+        live.add(run.request.ticketId);
+      }
+    }
+    for (const record of await store.list({})) {
+      const owner = record.owner;
+      if (owner === null || !owner.startsWith('agent-') || !owner.endsWith(`@${host}`) || live.has(record.id)) {
+        continue;
+      }
+      const lease = new RunLease({
+        store,
+        ticketId: record.id,
+        actor: owner,
+        runId: 'leftover',
+        size: 'S',
+        log: this.deps.log,
+        onLost: () => undefined,
+      });
+      lease.preStage = record.stage;
+      const result = await lease.release(
+        [record.stage, retreatByStage[record.stage] ?? null],
+        'the claim of a run that no longer exists, released',
+        { restoreTo: record.stage },
+      );
+      if (result.ok) {
+        released.push(record.id);
+        this.deps.log(`released the leftover claim of ${owner} on ${record.id} (now in ${result.stage})`);
+      } else {
+        skipped.push({ id: record.id, reason: result.error });
+      }
+    }
+    return { released, skipped };
+  }
+
+  /**
+   * The run's `## Verlauf` line, written INSIDE the claim (E14-5b): one `dk put` that appends it
+   * just before the release, so the chapter and the hand-back stay one story (on files the settle
+   * patch carries it). The line is the same as on files; a run that consumed nothing writes none.
+   * Once per run: a second call (park after a failed move) finds the line written.
+   */
+  private async verlaufInClaim(run: LiveRun, lease: RunLease, state: RunState): Promise<void> {
+    if (run.verlaufWritten === true) {
+      return;
+    }
+    run.verlaufWritten = true;
+    const line = this.verlaufLineFor(run, state);
+    if (line === null) {
+      return;
+    }
+    await lease.patchInClaim((text) => appendVerlaufEntry(text, line));
+  }
+
   /** Where a ticket goes when the run does not move it: back to where it sat, else the stage before. */
   private stayPutStages(request: RunRequest, lease: RunLease): readonly (string | null)[] {
     return [lease.preStage, request.dk?.retreatStage ?? null];
@@ -2666,7 +2828,8 @@ export class RunSupervisor {
             detail: note,
           })
         : null;
-    const result = await lease.release(this.stayPutStages(run.request, lease), failed ?? note);
+    await this.verlaufInClaim(run, lease, run.info.state);
+    const result = await lease.release(this.stayPutStages(run.request, lease), failed ?? note, { restoreTo: lease.preStage });
     if (!result.ok) {
       this.deps.log(
         `run ${run.info.id}: releasing ${run.request.ticketId} failed - ${result.error}${result.lost ? '' : ' (the claim stays until its lease ends)'}`,
@@ -2682,6 +2845,7 @@ export class RunSupervisor {
     }
     const narrative = `run ${run.info.id} done - gate green, moving to ${nextPhase}${run.request.parkFor === undefined ? '' : `; parked for ${run.request.parkFor} (manual step)`}${usageSummary(run.info)}`;
     const note = renderStatusComment({ verb: 'done', text: `handed over on ${run.currentPhase}`, detail: narrative }) ?? narrative;
+    await this.verlaufInClaim(run, lease, 'done');
     const result = await lease.release([nextPhase], note);
     if (!result.ok) {
       return { ok: false, error: result.error };
@@ -2697,7 +2861,8 @@ export class RunSupervisor {
       return { ok: false, error: 'the claim on the ticket was lost - nothing is parked' };
     }
     const target = run.request.dk!;
-    const result = await lease.release([target.parkStage, ...this.stayPutStages(run.request, lease)], comment);
+    await this.verlaufInClaim(run, lease, 'done');
+    const result = await lease.release([target.parkStage, ...this.stayPutStages(run.request, lease)], comment, { restoreTo: lease.preStage });
     return result.ok ? { ok: true } : { ok: false, error: result.error };
   }
 

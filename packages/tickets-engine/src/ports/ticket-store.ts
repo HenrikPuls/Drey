@@ -119,8 +119,14 @@ export interface TicketComment {
 
 /** A whole-ticket write (E14-4): the document replaces the stored one in one commit. */
 export interface PutOptions {
-  /** The `rev` the edit was made on (`--if-version`); a ticket at another rev is `conflict`. */
-  readonly expectedRev: number;
+  /** The `rev` the edit was made on (`--if-version`); a ticket at another rev is `conflict`. Omitted only with {@link holdsClaim}. */
+  readonly expectedRev?: number;
+  /**
+   * The writer already holds the ticket's claim (a run settling inside its lease, E14-5b): the
+   * write is `dk put -F` without `--claim` and without `--if-version` (dk refuses `--claim` on a
+   * ticket the writer holds, and the claim itself fences a stale writer with exit 13).
+   */
+  readonly holdsClaim?: boolean;
   /** Who writes (`DK_OWNER`); omitted = dk's own profile identity. */
   readonly actor?: string;
 }
@@ -178,6 +184,8 @@ export interface TicketStore {
   /** Appends a comment (`dk comment`); it never conflicts with the claim's owner (E14-5: park notes). */
   comment(id: string, text: string, options: CommentOptions, call?: CallOptions): Promise<void>;
   comments(id: string, call?: CallOptions): Promise<readonly TicketComment[]>;
+  /** Whole-ticket write (`dk put`); a store without it (a scripted fake) leaves the runner's in-claim chapters unwritten. */
+  put?(id: string, text: string, options: PutOptions, call?: CallOptions): Promise<PutResult>;
 }
 
 /**

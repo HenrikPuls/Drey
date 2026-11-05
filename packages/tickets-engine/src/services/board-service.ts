@@ -1980,6 +1980,7 @@ export class EngineBoardService {
       dataDir: store.dkDataDir,
       checkout: store.dkCheckout,
       parkStage: pipeline.some((p) => p.id === 'blocked') ? 'blocked' : null,
+      needsInputStage: pipeline.some((p) => p.id === 'needs-input') ? 'needs-input' : null,
       retreatStage: index > 0 ? pipeline[index - 1]!.id : null,
       trailers: trailers === true || trailers === 'true',
     };

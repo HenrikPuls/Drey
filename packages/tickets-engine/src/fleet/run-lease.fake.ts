@@ -5,6 +5,8 @@ import {
   type CommentOptions,
   type ExtendOptions,
   type LeaseExtension,
+  type PutOptions,
+  type PutResult,
   type ReleaseOptions,
   type ReleaseResult,
   type TicketDetail,
@@ -13,12 +15,14 @@ import {
 
 /** What the fake store saw, in order: `claim`, `show`, `extend`, `comment`, `release`. */
 export interface StoreCall {
-  readonly op: 'show' | 'claim' | 'extend' | 'comment' | 'release';
+  readonly op: 'show' | 'claim' | 'extend' | 'comment' | 'release' | 'put';
   readonly id: string;
   readonly actor?: string;
   readonly stage?: string;
   readonly text?: string;
   readonly size?: string;
+  /** `put`: the options the write carried. */
+  readonly put?: PutOptions;
 }
 
 /**
@@ -32,6 +36,9 @@ export class FakeStore implements TicketStore {
   epoch = 1;
   stage = 'prioritized';
   leaseUntil = '2026-10-17T14:00:00Z';
+  /** The document `show` answers and `put` replaces (its stage line follows `stage`). */
+  text = '---\nid: t-1\nstage: prioritized\nrev: 4\n---\n\n## Description\n\nx\n\n## Log\n\n- start\n';
+  rev = 4;
   /** Stages a release accepts; others answer `invalid` (exit 14). */
   stages: readonly string[] = ['inbox', 'prioritized', 'build', 'commit', 'done'];
   /** A release to the stage the ticket is in is refused (dk: an agent may not release `build -> build`). */
@@ -74,7 +81,7 @@ export class FakeStore implements TicketStore {
 
   show(id: string): Promise<TicketDetail> {
     this.calls.push({ op: 'show', id });
-    return Promise.resolve({ id, stage: this.stage, text: '', body: '' } as unknown as TicketDetail);
+    return Promise.resolve({ id, stage: this.stage, rev: this.rev, text: this.text.replace(/^stage:.*$/m, `stage: ${this.stage}`), body: '' } as unknown as TicketDetail);
   }
 
   claim(id: string, options: ClaimOptions): Promise<Claim> {
@@ -101,7 +108,21 @@ export class FakeStore implements TicketStore {
     if (stage === this.claimStage) {
       return Promise.reject(new TicketStoreError('invalid', `agent may not release ${id} from ${stage} to ${stage}`, 14));
     }
+    this.stage = stage;
     return Promise.resolve({ id, stage });
+  }
+
+  put(id: string, text: string, options: PutOptions): Promise<PutResult> {
+    this.calls.push({ op: 'put', id, put: options, text, ...(options.actor === undefined ? {} : { actor: options.actor }) });
+    try {
+      this.check('put');
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    this.text = text;
+    this.rev += 1;
+    this.stage = /^stage:\s*(\S+)/m.exec(text)?.[1] ?? this.stage;
+    return Promise.resolve({ id, rev: this.rev, commit: null, changedFields: ['body'] });
   }
 
   extend(id: string, options: ExtendOptions): Promise<LeaseExtension> {
