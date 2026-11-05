@@ -1,3 +1,48 @@
+### Milestone 155 — E14-4b: the board's write moves on the `dk put` path
+
+**Not yet manually verified by the owner.** Owner request (roadmap E14-4b, ADR-0090
+later change). With `tickets.backend = dricket` every ticket write of the board
+service goes through the milestone-154 door (`dk put --claim --if-version <rev>`),
+never as a file. `files` stays the default; nothing in the running system changed.
+**Scope:** everything of E14-4b except the editor save hook and ticket documents
+opening from the checkout, which move to **E14-4c** (they live in
+`electron/note-manager.ts`, a different surface) — see the roadmap.
+
+- **One bridge, no second write path** (`store/legacy-bridge.ts`, pure): the board
+  already folds a record into the legacy ticket shape (`recordToBoardFile`) and every
+  mutation is a text patch of that shape. `legacyToDricketDocument(current, patched,
+  { stage, archived })` is the inverse fold: header edits become dricket fields
+  (`priority`, `repos`, `depends`, `parent`, `x-` keys incl. `x-chain`/`x-entered-*`),
+  the body is carried byte for byte, identity / claim / lease / `rev` fields and
+  unmanaged `x-` fields stay as dk has them. Decides nothing; `dk put` validates.
+- **Board service** (`board-service.ts`): one door — `readCardText` / `writeCardText` /
+  `commitCard` — behind refine, `ticketSave` (stale `baseRevision` still refuses; a
+  ticket that moved on between read and put, dk exit 12, is a `conflict` reply and
+  nothing is written), priority / track / form / plan / chain / blocked-by, parts edit
+  and the part flow save. Moves (transition, accept, send back, archive, unarchive) run
+  the unchanged transition machine over a store IO adapter (`dricketTransitionIo`): the
+  `put` carries the target stage; **archive = stage of the terminal phase + label
+  `archived`** (archived records leave the board, like `tickets/archive/`; unarchive
+  removes it). **Capture** = `dk add --unclaimed` (dk allocates the number) + one `put`
+  of the capture document. **Parts release** = children first (`add` with title,
+  parent, depends, then `put` of the part ticket), parent's Log line last; a failure
+  names the tickets that exist, and approving again matches them by title, **fills a stub
+  left empty** and mints only the rest. `DricketTicketStore.add`,
+  `StoreBoardSource.record / writeLegacy / add`, `EngineBoardService.dispose` (stops the
+  watcher; the engine calls it on close).
+- **Refused on dricket until E14-5** (fleet-owned writes): take over / release a claim,
+  start a run (`run:` stamps). The drift pass and phase-folder numbering do not run
+  (the store owns the layout).
+- **Specs:** `legacy-bridge.spec.ts` (round trip, edits, labels, `x-phase`),
+  `board-service-dricket.spec.ts` (real dk, scratch store: capture, edits, stale save,
+  exit 12, transition / send back / accept / unarchive, release + resume, refusals).
+- **Known limits:** writes carry dk's own identity (the remote's `owner@device` actor
+  appears only in the body's Log lines); a dk exit 12 on a move says "changed in the
+  meantime" (move failed) rather than offering a merge; the `archived` label is the
+  only archive marker (OD-7: nothing migrated into it). **Not checked in a running
+  app** (no watcher or sync round observed live); checked through the engine services on
+  a scratch store only.
+
 ### Milestone 154 — E14-4 (part 1): the file reader, the `dk put` write path, change detection
 
 **Not yet manually verified by the owner.** Owner decision 2026-11-05 (roadmap

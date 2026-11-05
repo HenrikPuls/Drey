@@ -1,5 +1,7 @@
 import {
   TicketStoreError,
+  type AddOptions,
+  type AddResult,
   type CallOptions,
   type Claim,
   type ClaimOptions,
@@ -92,6 +94,13 @@ export class DricketFileStore implements TicketStore {
       }
       throw error;
     }
+  }
+
+  /** Creates an unclaimed ticket (`dk add`); returns once the checkout shows it, so the caller can read and fill it. */
+  async add(options: AddOptions, call?: CallOptions): Promise<AddResult> {
+    const created = await this.dk.add(options, call);
+    await this.waitForCheckout(created.id, 0, call);
+    return created;
   }
 
   /** `dk sync` in the checkout: fetch and fast-forward (refresh, board open, before a claim, the periodic round). */

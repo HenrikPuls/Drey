@@ -6,6 +6,8 @@ import {
   TicketStoreError,
   type CallOptions,
   type Claim,
+  type AddOptions,
+  type AddResult,
   type ClaimOptions,
   type ExtendOptions,
   type LeaseExtension,
@@ -137,6 +139,30 @@ export class DricketTicketStore implements TicketStore {
     } finally {
       await fsp.rm(dir, { recursive: true, force: true });
     }
+  }
+
+  /**
+   * Creates an unclaimed ticket (`dk add --unclaimed`): dk allocates the number and
+   * writes a valid stub (title, priority, parent, depends); the caller fills the
+   * rest with one `put` at rev 0. The stub is already a complete, linked ticket, so
+   * a failure between the two calls leaves a ticket, not a hole.
+   */
+  async add(options: AddOptions, call: CallOptions = {}): Promise<AddResult> {
+    const args = ['add', '-m', options.title, '--unclaimed', '--kind', options.kind ?? 'human'];
+    if (options.priority !== undefined) {
+      args.push('--priority', options.priority);
+    }
+    if (options.parent !== undefined) {
+      args.push('--parent', dricketId(options.parent));
+    }
+    if (options.dependsOn !== undefined && options.dependsOn.length > 0) {
+      args.push('--depends', options.dependsOn.map(dricketId).join(','));
+    }
+    const data = asObject(
+      await this.dk.call(args, { write: true, ...(options.actor === undefined ? {} : { actor: options.actor }), ...signalOf(call) }),
+      'add',
+    );
+    return { id: displayOf(data) };
   }
 
   /** `dk sync` inside a ticket checkout: fetch and fast-forward it (a no-op for a local store, which shares the ref). */

@@ -437,6 +437,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
       closed = true;
       improvements.dispose();
       verify.dispose();
+      board.dispose();
       await remoteService.stop();
       server.close();
       await once(server, 'close').catch(() => undefined);
