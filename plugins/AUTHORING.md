@@ -111,6 +111,11 @@ leaves the app on the previous build. Verify with
   active view's preset `assistantTarget`) and their `on…Change` listeners are
   for the Assistant. The host attaches no meaning to any of it; namespace
   the target ids.
+  1.44 added `ctx.vault.routeDocuments(route)` (main side): a plugin that writes
+  documents through its own engine claims them (`owns(vaultId, path)`); the
+  editor's save goes to `route.save` (answer: the stored text and mtime, or a
+  `conflict` for the merge view) and every other write, create, move or delete
+  of them is refused.
   1.43 also gave a target an optional `icon` (the switcher draws icons, not words).
   1.43 added two optional parts to conversation targets: `onThreadChange(cb)`
   (the thread changed without a call from the Assistant -- the Assistant reads

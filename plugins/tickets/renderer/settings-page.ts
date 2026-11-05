@@ -87,7 +87,7 @@ export function createTicketsSettingsPage(api: DreyPluginApi, hooks: Pick<DeskSe
         },
       });
       const lower = el('h2', 'tset-desk-divider', 'Pipeline and workers');
-      body.append(desk.root, remote.root, lower, repo, columns.root, repos.root, prompts.root, fleetSection(api), workers.root);
+      body.append(desk.root, remote.root, storeSection(api), lower, repo, columns.root, repos.root, prompts.root, fleetSection(api), workers.root);
 
       // The board's change events cover every write here and the runner's.
       const off = api.backend.on('board-changed', () => {
@@ -155,5 +155,25 @@ function fleetSection(api: DreyPluginApi): HTMLElement {
   );
   advanced.append(advancedRows);
   section.append(head, rows, advanced);
+  return section;
+}
+
+// --- the dricket ticket store (E14-4c; plugin config, read live by the engine) --
+
+function storeSection(api: DreyPluginApi): HTMLElement {
+  const section = el('section', 'tset-section');
+  section.setAttribute('aria-labelledby', 'tset-store-head');
+  const head = el('div', 'tset-section-head');
+  const title = el('h3', undefined, 'Ticket store');
+  title.id = 'tset-store-head';
+  head.append(title);
+  const sync = numberConfig(api, 'dk.syncSeconds');
+  sync.placeholder = '30';
+  const rows = el('div', 'tset-kv');
+  rows.append(
+    ...kv('tset-dk-checkout', 'Checkout', textConfig(api, 'dk.checkout'), 'Working copy of the store\'s ticket branch. Empty: the store folder itself. Not in OneDrive.'),
+    ...kv('tset-dk-sync', 'Sync interval — seconds', sync, '0 turns it off. Remote stores only.'),
+  );
+  section.append(head, rows);
   return section;
 }

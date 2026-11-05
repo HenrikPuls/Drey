@@ -40,6 +40,7 @@ import type { AssistantToolbox } from '../mcp-client';
 import type { VaultManager } from '../vault-manager';
 import type { VaultChangeAnnouncer } from '../vault-change-announcer';
 import { ManagedVaults } from './managed-vaults';
+import type { DocumentRoutes } from './document-routes';
 import { PluginConfigStore } from './plugin-config-store';
 import { ACTIONS_CONFIG_KEY, ACTIONS_PLUGIN_ID, migrateLegacyActions } from './actions-migration';
 import {
@@ -97,6 +98,8 @@ export interface PluginHostDeps {
    * each other (ADR-0044).
    */
   readonly managedVaults: ManagedVaults;
+  /** Documents a plugin writes through its own engine (SDK 1.44, E14-4c): the editor save is routed, other writes refused. */
+  readonly documentRoutes: DocumentRoutes;
   /**
    * Registers an existing folder as a vault AND runs the same round the
    * `vaultAdd` IPC handler runs — watcher sync + one full refresh — for
@@ -620,6 +623,7 @@ export class PluginHost {
       }
       // A deactivated plugin manages no vault anymore (SDK 1.32).
       this.deps.managedVaults.clearPlugin(id);
+      this.deps.documentRoutes.clearPlugin(id);
     }
     this.activated.clear();
   }
@@ -661,6 +665,7 @@ export class PluginHost {
       this.activated.delete(id);
       // A quarantined plugin manages no vault anymore (SDK 1.32).
       this.deps.managedVaults.clearPlugin(id);
+      this.deps.documentRoutes.clearPlugin(id);
       this.discovered.set(id, {
         ...discovered,
         status: 'failed',

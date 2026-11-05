@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153–155 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153–156 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -525,25 +525,22 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   it and read `~/.drey-engine/shadow/board-diff.md` until it is identical; the
   500-ticket benchmark no longer waits for dk R-05: reads move to the file
   reader (E14-4, milestone 154) and the comparison of both read paths runs first there;
-  ticket documents under `dricket` come with E14-4c.
+  ticket documents under `dricket` shipped with E14-4c (milestone 156).
 - **E14-3b — Migration apply with a chosen number.** E14-3 (milestone 153)
   fills number gaps with placeholder tickets because dk v0.6.0 cannot create a
   ticket with a given number or creation data (R-28). When dk ships R-28 / R-10,
   `apply.ts` creates directly and drops the placeholder pass; until then the
   cut-over (E14-7) either accepts the placeholders or waits for dk.
-- **E14-4c — The editor save hook and ticket documents from the checkout**
-  (rest of E14-4b; the board's write moves shipped as milestone 155). A ticket
-  document of a dricket store opens in an editor tab from the checkout and its
-  save goes through the engine (`ticketSave` with the `rev` the tab read,
-  `put --claim --if-version`, exit 12 -> the ordinary save-conflict merge of
-  ADR-0060) instead of writing the file: a `note:save` hook in
-  `electron/note-manager.ts` for paths under the store checkout, plus a
-  read-only guard on every other route. Needs milestone 155. Also open from 154:
-  a Settings page for `tickets.dk.checkout` / `tickets.dk.syncSeconds` (config
-  keys only today), the 5 s ref check (only if the watcher is seen to miss), and
-  the real-run check of the watcher and the write moves on a second instance
-  (never run here: the checks ran on a scratch store through the engine's
-  services, not in a running app).
+- **E14-4c follow-ups** (the editor save hook, the read-only guard, ticket
+  documents from the checkout and the Settings fields shipped as milestone
+  156). Open: the ticket header strip, the thread pairing and the Shape marks
+  for a checkout document (they key on the vault card path, so a dricket ticket
+  opens as a plain document today); the checkout vault is not marked managed
+  in Source control (one `markManaged` claim per plugin, taken by the tickets
+  vault); `saveAsset` into the checkout's `tickets/` tree is not guarded; the 5 s
+  ref check and the real-run check of the watcher, the write moves and the editor
+  save on a second instance move to E14-8 (never run in a live app: the checks
+  ran through the engine services on a scratch store).
 - **E14-5 — Fleet on `dk`.** Claim before the worker spawns, extend, release
   with stage/message, exit 13 stops the worker, takeover by lease, park =
   `blocked` + comment, optional `Dricket-*` trailers and `dk validate

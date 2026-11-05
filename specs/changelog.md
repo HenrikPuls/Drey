@@ -1,3 +1,58 @@
+### Milestone 156 — E14-4c: ticket documents of a dricket store in the editor, saved through the engine
+
+**Not yet manually verified by the owner.** Owner request (roadmap E14-4c, ADR-0090
+later change). With `tickets.backend = dricket` a ticket opens in an editor tab from
+the store's checkout and its save is a `dk put`, never a file write; every other route
+that would change those files is refused. `files` stays the default; nothing in the
+running system changed. **Not checked in a running app** (see Known limits).
+
+- **A new base seam, SDK 1.44 `ctx.vault.routeDocuments(route)`** (`DocumentRoute`:
+  `owns(vaultId, path)`, `save(request)`): a plugin claims documents it writes through
+  its own engine. `electron/plugin-host/document-routes.ts` holds the claims (one per
+  plugin, dropped on deactivation); `NoteManager.saveNote` hands an owned document to
+  `route.save` **before** the mtime guard — nothing is written there, `updated:` is not
+  bumped, no save hook fires — and maps the route's answer onto the ordinary
+  `NoteSaveResult` (a `conflict` becomes the ADR-0060 merge view). `VaultManager` got a
+  mutation guard (`assertMutable`) on `writeFile`, `writeBinaryFile`, `createFile`,
+  `createDirectory`, `deleteEntry`, `renameEntry` (both ends) and `copyEntry` (destination):
+  the file tree, MCP/assistant vault tools and plugins all meet "… is managed by Tickets
+  and cannot be changed here". Reading and opening are never refused. This is the
+  roadmap's "`note:save` hook plus read-only guard": a hook after the write could not
+  prevent the file write, so the interception sits in front of it.
+- **Engine** (`EngineBoardService`, invoke methods `ticketDocument`, `saveDocument`):
+  `ticketDocument({id})` → `{ checkout, path }` (`tickets/<prefix>/<shard>/<id>/ticket.md`,
+  `store/document-paths.ts`) or null off dricket; `saveDocument({path, text, force})` →
+  `put --claim --if-version <rev>` on the **raw dricket document** with the `rev` read
+  from the text itself (the tab's), through the same single writer and queue as the board.
+  Exit 12 comes back as `{ conflict: { text, rev } }` with the stored document, nothing
+  written; `force` (the merge was resolved against the stored document) re-bases on the
+  rev dk has now; dk's own refusal is an `error`. Deviation from the roadmap wording:
+  the existing `ticketSave` takes the *legacy-shaped* text the phone edits, so the tab —
+  which shows the dricket file — gets its own method instead of a second bridge.
+- **Plugin** (`plugins/tickets/main/ticket-documents.ts`): the checkout must be (or lie
+  inside) a registered vault; `TicketDocuments` owns that vault's `tickets/` tree,
+  translates vault paths to checkout paths, and answers the save with the document as
+  stored (LF) and its mtime. Opening a ticket (`openTicketPage`, the thread's "Ticket
+  file", the Review tab) asks `ticketDocument`; when the checkout is no vault yet the
+  user is asked once ("Add the ticket checkout as a vault?") before `ctx.vault.register`.
+  The store keys (`backend`, `dk.*`) are pushed to the engine on every board fetch, so a
+  changed checkout applies without a restart.
+- **Settings → Tickets → Ticket store:** "Checkout" (`tickets.dk.checkout`) and "Sync
+  interval — seconds" (`tickets.dk.syncSeconds`, empty = 30, 0 = off).
+- **Specs:** `board-service-dricket.spec.ts` (real dk: location, save, stale rev =
+  conflict, force, non-document path), `document-paths.spec.ts`, `ticket-documents.spec.ts`
+  (ownership, nesting in a bigger vault, register-on-ask, save/force/conflict/refusal),
+  `note-manager.spec.ts` (route, conflict, the guard on every route),
+  `plugin-context.spec.ts` (`routeDocuments`).
+- **Known limits:** a checkout document is a plain tab — the ticket header strip, the
+  thread pairing and the Shape marks key on the vault card path; the checkout vault is
+  not marked managed in Source control (one claim per plugin); `saveAsset` into the
+  checkout's `tickets/` tree is unguarded; after an exit 12 the merge result keeps the
+  tab's own `rev:` line, which is why a forced save re-bases on the stored rev instead
+  of reading it. The 5 s ref check was not built (the watcher was not seen to miss);
+  the live check of watcher, write moves and editor save on a second instance moves to
+  E14-8.
+
 ### Milestone 155 — E14-4b: the board's write moves on the `dk put` path
 
 **Not yet manually verified by the owner.** Owner request (roadmap E14-4b, ADR-0090

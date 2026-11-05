@@ -15,6 +15,7 @@
  */
 import type { NoteSavedEvent, SaveHookResult, Unsubscribe } from '../shared/plugin-api';
 import type { VaultManager } from './vault-manager';
+import type { DocumentRoutes } from './plugin-host';
 import { NoteSaveRequest, NoteSaveResult } from '../shared/ipc-api';
 import { touchUpdated } from '../shared/frontmatter';
 
@@ -37,6 +38,7 @@ export class NoteManager {
   constructor(
     private readonly vault: VaultManager,
     private readonly hooks: NoteSaveHooks,
+    private readonly routes?: DocumentRoutes,
   ) {}
 
   async saveNote(request: NoteSaveRequest): Promise<NoteSaveResult> {
@@ -45,6 +47,19 @@ export class NoteManager {
     // vault), used for the write AND the save-hook event's identity.
     const vaultId = this.vault.resolveVaultId(request.vaultId);
     const toDisk = (text: string): string => (eol === '\r\n' ? text.replace(/\n/g, '\r\n') : text);
+
+    // A document a plugin writes through its own engine (SDK 1.44, E14-4c, the
+    // tickets plugin's dricket checkout): the route saves it, nothing is written
+    // here, `updated:` is not bumped and no save hook fires -- the engine owns
+    // the document, a conflict is the route's answer (dk exit 12).
+    const owner = this.routes?.routeFor(vaultId, relPath) ?? null;
+    if (owner !== null) {
+      const outcome = await owner.route.save({ vaultId, path: relPath, body, force: request.force === true });
+      if ('conflict' in outcome) {
+        return { path: relPath, content: body, modifiedMs: request.baseModifiedMs ?? 0, conflict: outcome.conflict };
+      }
+      return { path: relPath, content: outcome.content, modifiedMs: outcome.modifiedMs };
+    }
 
     // The conflict guard (ADR-0060): the tab says which state of the file
     // it edited; a different one on disk means somebody else wrote in

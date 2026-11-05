@@ -7,6 +7,7 @@
  */
 export { PluginHost, type PluginHostDeps } from './plugin-host';
 export { ManagedVaults } from './managed-vaults';
+export { DocumentRoutes } from './document-routes';
 export { PluginInstaller, type PluginInstallerDeps } from './plugin-installer';
 export {
   discoverPlugins,

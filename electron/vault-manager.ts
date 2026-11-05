@@ -180,6 +180,24 @@ export class VaultManager {
     }
   }
 
+  /**
+   * The read-only guard of documents a plugin writes through its own engine (SDK 1.44,
+   * E14-4c): returns the reason a path may not be changed here, or null. Every mutating
+   * route of this class asks it; reading is never refused.
+   */
+  private mutationGuard: ((vaultId: string, relativePath: string) => string | null) | null = null;
+
+  setMutationGuard(guard: ((vaultId: string, relativePath: string) => string | null) | null): void {
+    this.mutationGuard = guard;
+  }
+
+  private assertMutable(vaultId: string, relativePath: string): void {
+    const reason = this.mutationGuard?.(vaultId, relativePath.split('\\').join('/')) ?? null;
+    if (reason !== null) {
+      throw new Error(reason);
+    }
+  }
+
   private persist(): void {
     writeRegistryFile({ version: 2, vaults: this.registry, activeVaultId: this.activeVaultId });
   }
@@ -451,6 +469,7 @@ export class VaultManager {
     opts?: { origin?: string; throttled?: boolean },
   ): Promise<number> {
     const resolvedVault = this.registrationFor(vaultId);
+    this.assertMutable(resolvedVault.id, relativePath);
     const filePath = this.resolveInVault(relativePath, resolvedVault.id);
     if (this.history !== undefined && NOTE_FILE.test(relativePath)) {
       const previous = await fsp.readFile(filePath, 'utf-8').catch(() => null);
@@ -483,6 +502,7 @@ export class VaultManager {
    */
   async writeBinaryFile(relativePath: string, bytes: Uint8Array, vaultId?: string): Promise<number> {
     const resolvedVault = this.registrationFor(vaultId);
+    this.assertMutable(resolvedVault.id, relativePath);
     const filePath = this.resolveInVault(relativePath, resolvedVault.id);
     await fsp.mkdir(path.dirname(filePath), { recursive: true });
     await atomicWriteFile(filePath, bytes);
@@ -620,6 +640,7 @@ export class VaultManager {
    */
   async createFile(relativePath: string, vaultId?: string): Promise<string> {
     const resolvedVault = this.registrationFor(vaultId);
+    this.assertMutable(resolvedVault.id, relativePath);
     const filePath = this.resolveInVault(relativePath, resolvedVault.id);
     if (fs.existsSync(filePath)) {
       throw new Error(`Already exists: ${relativePath}`);
@@ -633,6 +654,7 @@ export class VaultManager {
   /** Creates a directory at `relativePath`; rejects if anything is there. */
   async createDirectory(relativePath: string, vaultId?: string): Promise<string> {
     const resolvedVault = this.registrationFor(vaultId);
+    this.assertMutable(resolvedVault.id, relativePath);
     const dirPath = this.resolveInVault(relativePath, resolvedVault.id);
     if (fs.existsSync(dirPath)) {
       throw new Error(`Already exists: ${relativePath}`);
@@ -679,6 +701,7 @@ export class VaultManager {
     opts?: { trash?: boolean },
   ): Promise<{ trashed: boolean }> {
     const resolvedVault = this.registrationFor(vaultId);
+    this.assertMutable(resolvedVault.id, relativePath);
     const target = this.resolveInVault(relativePath, resolvedVault.id);
     if (target === path.resolve(resolvedVault.path)) {
       throw new Error('Refusing to delete the vault root.');
@@ -717,6 +740,8 @@ export class VaultManager {
   async renameEntry(fromRel: string, toRel: string, fromVaultId?: string, toVaultId?: string): Promise<string> {
     const fromVault = this.registrationFor(fromVaultId);
     const toVault = toVaultId ? this.registrationFor(toVaultId) : fromVault;
+    this.assertMutable(fromVault.id, fromRel);
+    this.assertMutable(toVault.id, toRel);
     const from = this.resolveInVault(fromRel, fromVault.id);
     const to = this.resolveInVault(toRel, toVault.id);
     if (from === path.resolve(fromVault.path)) {
@@ -792,6 +817,7 @@ export class VaultManager {
   async copyEntry(srcRel: string, destDirRel: string, srcVaultId?: string, destVaultId?: string): Promise<string> {
     const srcVault = this.registrationFor(srcVaultId);
     const destVault = destVaultId ? this.registrationFor(destVaultId) : srcVault;
+    this.assertMutable(destVault.id, destDirRel);
     const src = this.resolveInVault(srcRel, srcVault.id);
     if (!fs.existsSync(src)) {
       throw new Error(`Not found: ${srcRel}`);

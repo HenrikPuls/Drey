@@ -13,7 +13,7 @@ import { McpHttpTransport, PluginMcpTools, VaultTools, createVaultMcpServer } fr
 import { AssistantToolbox, McpClientManager, createMcpClientManager } from './mcp-client';
 import { NoteManager } from './note-manager';
 import { OwnWriteLedger } from './own-write-ledger';
-import { ManagedVaults, PluginHost, PluginInstaller, type PluginHostDeps } from './plugin-host';
+import { DocumentRoutes, ManagedVaults, PluginHost, PluginInstaller, type PluginHostDeps } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
 import { UpdateService } from './updater/update-service';
@@ -187,6 +187,8 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
   // structured vaults through ctx.vault.markManaged, the git plugin's
   // read-only guard reads them back through ctx.vault.managedBy.
   const managedVaults = new ManagedVaults();
+  const documentRoutes = new DocumentRoutes();
+  vaultManager.setMutationGuard((vaultId, relativePath) => documentRoutes.refusal(vaultId, relativePath));
   // One-click vault registration for plugins (SDK 1.33, T-0045): the
   // same composed round the `vaultAdd` IPC handler runs — register the
   // folder, sync the watcher to the new registry, then one full refresh
@@ -215,6 +217,7 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
     llmTasks,
     vaultTools,
     managedVaults,
+    documentRoutes,
     registerVaultAt,
     assistantToolbox,
     mcpTools: pluginMcpTools,
@@ -238,7 +241,7 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
   const noteManager = new NoteManager(vaultManager, {
     onNoteSaved: (hook) => host.save.onNoteSaved(hook),
     emitNoteSaved: (event) => host.emitNoteSaved(event),
-  });
+  }, documentRoutes);
   const spellcheck = new SpellcheckService(appConfig);
   const mcpHttp = new McpHttpTransport(() =>
     createVaultMcpServer(vaultTools, app.getVersion(), pluginMcpTools),

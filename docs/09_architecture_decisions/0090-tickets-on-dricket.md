@@ -215,3 +215,23 @@ resumes by matching the existing children by title and filling stubs left empty.
 The fleet's own ticket writes (claim takeover / release, run stamps) are refused on
 dricket until E14-5 re-bases them on `dk claim`. The editor save hook and ticket documents
 opened from the checkout are E14-4c (they sit in `note-manager`, not in the board).
+
+## Later change — ticket documents in the editor (E14-4c, 2026-11-05)
+
+**Decision.** A dricket ticket opens in an ordinary editor tab from the files of the store's
+checkout, and the tab's save is a `dk put --claim --if-version <rev>` (the `rev` the tab read,
+taken from the document text) through the engine, never a file write. The seam is generic and
+base-owned (SDK 1.44, `ctx.vault.routeDocuments`): a plugin claims documents; `NoteManager`
+hands their save to the plugin *before* anything is written, `VaultManager` refuses every other
+mutation of them, and the Files tree, the MCP and assistant vault tools and other plugins meet
+the same refusal. Exit 12 becomes the ADR-0060 save-conflict merge; a merge resolved against the
+stored document saves with `force` and re-bases on the stored rev.
+
+**Why not a save hook.** Save hooks (ADR-0044 rule 4) run after the write; the write is exactly
+what must not happen. **Why a second engine method.** `ticketSave` takes the legacy-shaped text
+of the phone's edit mode; the tab shows the dricket file, so it gets `saveDocument` instead of a
+second bridge.
+
+**Consequences.** The checkout has to be a registered vault (the user is asked once). A checkout
+document is a plain document: header strip, thread pairing and Shape marks follow later. The
+checks ran on a scratch store; E14-8 owns the live check.

@@ -8,6 +8,8 @@
  * reaches the same engine through the gateway's pairing.
  */
 import { execFile } from 'node:child_process';
+import { promises as fsp } from 'node:fs';
+import { dialog } from 'electron';
 import type { MainPluginContext, MainPluginModule } from '../../../shared/plugin-api';
 import {
   DEFAULT_PRIORITY_CONFIG,
@@ -46,7 +48,9 @@ import { createFleetMcpTools } from './mcp-tools';
 import { listWorkerModels } from './worker-models';
 import { EngineClient } from './engine-client';
 import { PathAnnouncer } from './path-announcer';
-import { ensureEngine, syncChatConfig } from './engine-lifecycle';
+import { ensureEngine, syncChatConfig, syncStoreConfig } from './engine-lifecycle';
+import { TicketDocuments } from './ticket-documents';
+import { checkoutOf, readStoreSettings } from '../../../packages/tickets-engine/src/store/store-settings';
 import { registerChatIpc } from './chat-ipc';
 import { MissionControlHost, createMissionControlView } from './mission-control';
 
@@ -178,7 +182,46 @@ const plugin: MainPluginModule = {
         }
       },
     });
+
+    // Ticket documents of a dricket store in the editor (E14-4c): the checkout is a
+    // vault, its tickets/ tree is routed -- the editor save goes through the engine
+    // (dk put --if-version), every other write of it is refused by the base.
+    const engineConfig = <T,>(key: string): Promise<T | undefined> => client.invoke('configGet', { key }) as Promise<T | undefined>;
+    const documents = new TicketDocuments({
+      vaults: () => ctx.vault.listVaults(),
+      checkout: async () => {
+        const settings = await readStoreSettings(engineConfig);
+        return settings.backend === 'dricket' ? checkoutOf(settings) : null;
+      },
+      locate: (id) => board.ticketDocument({ id }),
+      saveDocument: (input) => board.saveDocument(input),
+      registerCheckout: async (checkout) => {
+        const answer = await dialog.showMessageBox({
+          type: 'question',
+          title: 'Tickets',
+          message: 'Add the ticket checkout as a vault?',
+          detail: `${checkout}\n\nTicket documents open in the editor from this folder. They stay read-only except for saving a ticket, which goes through dricket.`,
+          buttons: ['Add vault', 'Cancel'],
+          defaultId: 0,
+          cancelId: 1,
+        });
+        if (answer.response !== 0) {
+          return false;
+        }
+        await ctx.vault.register(checkout);
+        return true;
+      },
+      modifiedMs: async (absolutePath) => (await fsp.stat(absolutePath)).mtimeMs,
+    });
+    ctx.vault.routeDocuments(documents.route);
+    void documents.refresh().catch(() => undefined);
+    ctx.ipc.handle('ticketDocument', (payload) => {
+      const id = typeof payload === 'object' && payload !== null ? (payload as { id?: unknown }).id : undefined;
+      return typeof id === 'string' ? documents.open(id) : { ok: false, error: 'bad ticket document payload' };
+    });
     ctx.ipc.handle('board', async () => {
+      await syncStoreConfig(client, ctx).catch(() => undefined);
+      void documents.refresh().catch(() => undefined);
       const snap = await board.refresh();
       priorities = snap.priorities;
       return withHostVaultId(snap);

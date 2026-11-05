@@ -183,7 +183,12 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   plugin-managed vault registry (`managed-vaults.ts`: `ctx.vault
   .markManaged`/`managedBy`, SDK 1.32, ADR-0082 — one claim per plugin,
   cleared on deactivation/quarantine; the git plugin's read-only guard
-  reads it), and the local
+  reads it), the document-route registry (`document-routes.ts`: `ctx.vault
+  .routeDocuments`, SDK 1.44, E14-4c, ADR-0090 — `NoteManager` hands the editor
+  save of a claimed document to the plugin, `VaultManager.setMutationGuard`
+  refuses every other write; the tickets plugin's `main/ticket-documents.ts` is
+  the one user: the dricket checkout's `tickets/` tree, saved through the
+  engine's `saveDocument`), and the local
   package installer (`plugin-installer.ts`, ADR-0068: native `.zip` pick,
   discovery-grade validation, extract-swap under `<userData>/plugins/`
   preserving `config.json`, remove — applies on restart).
