@@ -540,3 +540,24 @@ owner decides.
   commits/h, 0 invariant violations, claim p50 about 0.65 s, p95 about 4 s)
   says contention is not the risk — per-call latency and the narrow write
   surface are.
+
+## Owner decisions of 2026-11-05 (answers to the open dricket questions)
+
+Drey has one user, the owner; effort that only serves a second user is not spent.
+
+- **R-28 / R-10 dropped as dricket work.** The one-time migration writes the ticket files and
+  their commits into the store directly with git (numbers and creation data preserved, no
+  placeholders), then `dk validate` must pass. No `dk add --id`. Drey item: E14-3b is rewritten
+  accordingly.
+- **R-31 open.** Whether the same-stage release is a real problem is to be shown first: a failed
+  run could write the ticket with `dk put --claim` without changing the stage instead of
+  `dk release --stage`. Only if that is refused too does R-31 go to dricket.
+- **Q-03 accepted:** a run that waits for an answer releases to `needs-input` and re-claims on
+  the answer (new epoch).
+- **Q-05 closed:** `dricket.toml` is edited by hand; Drey reads it and offers "open the file".
+- **Q-04 not asked:** a secret-scan refusal (exit 19) is surfaced to the owner; no allowlist work
+  until it actually happens.
+- **Windows path length (found in E14-2/E14-4):** dricket sets `core.longpaths=true` on its git
+  calls, or documents short store and data paths. Not a Drey fix.
+- **R-27 wanted:** `dk init` writes a `dricket.toml` that stays valid with a custom `[stages]`, as
+  the default configuration.
