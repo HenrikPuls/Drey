@@ -543,8 +543,8 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   in Source control (one `markManaged` claim per plugin, taken by the tickets
   vault); `saveAsset` into the checkout's `tickets/` tree is not guarded; the 5 s
   ref check and the real-run check of the watcher, the write moves and the editor
-  save on a second instance move to E14-8 (never run in a live app: the checks
-  ran through the engine services on a scratch store).
+  save shipped with milestone 161 (E14-8: a 10 s ref check as a safety net, the run in
+  a built app on a scratch store, the checkout vault flagged managed).
 - **E14-5c — What E14-5b left** (milestone 160 shipped the chain on a store, `chainRefusal` lifted,
   `## Verlauf` inside the claim, R-31 as a write-back, needs-input release + re-claim, leftover claims).
   Open: (1) the **worker's own ticket chapters** (`## Handover`, the plan's acceptance criteria) have no
@@ -577,19 +577,13 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   two folders; (7) the real check on a second instance (answer from the phone, a
   send-back from the Ready card) — only the engine services ran, on a scratch store.
 - **E14-7 — Cut-over.** Freeze, final import, flip `tickets.backend`, smoke,
-  owner round. Needs E14-3..6, E14-8. The migration tool (E14-3 + E14-3b,
+  owner round. Needs E14-3..6 (E14-8 shipped, milestone 160). The migration tool (E14-3 + E14-3b,
   milestones 153/158) writes real numbers and creation data and **no placeholder
   tickets** any more (the old scratch stores with their 69 placeholders are
   obsolete): it is **re-run at the cut-over** against the frozen vault with a fresh
   allow list, into a fresh store, and `dk validate` plus the shadow comparison
   must be clean before the flip. The owner's real `drey-tickets` repository is
   only touched then.
-- **E14-8 — Change detection.** Local store: the watcher and own-write
-  announcements specified in E14-4 (that item ships the first version; this one
-  hardens it: debounce tuning, miss detection, Windows checks). Remote store:
-  periodic `dk sync` plus the on-demand syncs, or `dk changes` / the
-  `ls-remote` recipe to avoid a fetch when nothing moved. The checkout is
-  registered as plugin-managed (no Source-control writes). Reshapes **E2b-4**.
 - **E14-9 — Decommission.** Delete the file write paths and the legacy
   machinery 30 days after the cut-over; supersede the parts of
   `ticket-schema.md`; the manual; retire the legacy phone remote.
@@ -605,7 +599,7 @@ checks use a scratch store and a second instance, never `drey-tickets`.
 | E11-1c video size rule, E11-1b, E11-2b, E10-3b/4b/5b, E10-7, E12-3b/5/7/8 | **Stay valid** (videos stay outside git; UI follow-ups). |
 | E11-4 cost table and estimate; `## Verlauf` writer | **Stay valid**; the writer moves inside the runner's claim (E14-5); history for the estimate comes from `dk log` (dk R-07). |
 | E7 ledger and status log | **Reshaped, shipped on the board side** (E14-6, milestone 159): the ledger stays in the meta vault, `phase` lines dropped on a store; the status log is keyed comments. No new work on `.status.log` files. |
-| E2b-4 engine announces its writes | **Reshaped** into E14-8; do not extend. |
+| E2b-4 engine announces its writes | **Reshaped** into E14-8 (shipped, milestone 160); do not extend. |
 | Fleet stability remainder, "Takeover follow-ups", req-78 (red gate sends back) | **Wait**: claims, takeover and moves are re-based on `dk` in E14-5; do not start new claim/takeover code. |
 | req-66 remote (refine, claim routes, R7 push), req-75 W5 capture, W9 audit runs | **Stay valid**; their write calls go through the port. |
 | ADR-0076 file layout, T-0041 numbered folders, req-50/req-86 "Number folders" and column renaming, archive folder and marker, "a file move is a ticket move" and the drift pass, `entered-*`, the `run:` map, `claimed-by`/`claimed-at`, the pipeline `push:` key | **Obsolete after E14-7** (kept only as a read fallback for migrated tickets); do not extend. |

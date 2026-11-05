@@ -513,9 +513,11 @@ export interface MainPluginContext {
      * Source control panel, but its mutating actions are refused as
      * "Managed by <name>" — the plugin owns the structured history.
      * One mark per plugin — marking again moves the claim; `null`
-     * clears it (a re-detect that found nothing).
+     * clears it (a re-detect that found nothing). SDK 1.45: a list marks
+     * several vaults at once (the tickets plugin: a store checkout that is
+     * a vault of its own and lies inside another); an empty list clears.
      */
-    markManaged(vaultId: string | null): void;
+    markManaged(vaultId: string | readonly string[] | null): void;
     /** The managing plugin's display name for a vault, or null. */
     managedBy(vaultId: string): string | null;
     /**

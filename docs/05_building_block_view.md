@@ -181,7 +181,8 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   (`plugin-host.ts`: activate/quarantine, `plugin://` root resolution),
   per-plugin config store (`plugin-config-store.ts`), the
   plugin-managed vault registry (`managed-vaults.ts`: `ctx.vault
-  .markManaged`/`managedBy`, SDK 1.32, ADR-0082 — one claim per plugin,
+  .markManaged`/`managedBy`, SDK 1.32, ADR-0082; SDK 1.45: a list of vaults, the tickets
+  plugin flags every vault that holds the dricket checkout — one claim per plugin,
   cleared on deactivation/quarantine; the git plugin's read-only guard
   reads it), the document-route registry (`document-routes.ts`: `ctx.vault
   .routeDocuments`, SDK 1.44, E14-4c, ADR-0090 — `NoteManager` hands the editor

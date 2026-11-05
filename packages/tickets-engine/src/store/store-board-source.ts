@@ -9,7 +9,8 @@ import type { DricketTicketStore } from './dricket-ticket-store';
 import { DricketFileStore, type WriteOutcome } from './dricket-file-store';
 import { FileStoreReader } from './file-store-reader';
 import { legacyToDricketDocument, type BridgeOptions } from './legacy-bridge';
-import { StoreChangeFeed, type WatchFn } from './store-change-feed';
+import { StoreChangeFeed, type StoreChangeFeedStats, type WatchFn } from './store-change-feed';
+import { headFingerprint, remoteMovedProbe } from './store-git-probe';
 import { StoreReader } from './store-reader';
 import { checkoutOf, createDricketStore, type StoreSettings } from './store-settings';
 
@@ -22,6 +23,14 @@ export interface StoreBoardSourceOptions {
   readonly watch?: WatchFn;
   /** The `dk` store of the file path (reads of tickets never use it; writes, claims and syncs do). */
   readonly dkFactory?: (settings: StoreSettings) => DricketTicketStore;
+  /** Ceiling of a watcher burst before it announces anyway; default 1 s. */
+  readonly maxWaitMs?: number;
+  /** The checkout's HEAD commit (the echo comparison and the ref check); default `git rev-parse HEAD`. Specs pass a stub or `null` for none. */
+  readonly fingerprint?: ((dir: string) => () => Promise<string | null>) | null;
+  /** Ref check period; default 10 s, null = off. */
+  readonly refCheckEveryMs?: number | null;
+  /** Has the remote moved (periodic sync gate); default `git ls-remote`. `null` = always sync. */
+  readonly remoteMoved?: ((dir: string) => () => Promise<boolean>) | null;
 }
 
 interface Source {
@@ -82,8 +91,12 @@ export class StoreBoardSource {
           onChange: this.options.onChange,
           ...(this.options.debounceMs === undefined ? {} : { debounceMs: this.options.debounceMs }),
           ...(this.options.watch === undefined ? {} : { watch: this.options.watch }),
+          ...(this.options.maxWaitMs === undefined ? {} : { maxWaitMs: this.options.maxWaitMs }),
+          ...(this.options.refCheckEveryMs === undefined ? {} : { refCheckEveryMs: this.options.refCheckEveryMs }),
+          ...(this.options.fingerprint === null ? {} : { fingerprint: (this.options.fingerprint ?? headFingerprint)(checkout) }),
           syncEveryMs: remote && settings.dkSyncSeconds > 0 ? settings.dkSyncSeconds * 1000 : null,
           sync: () => files.sync(),
+          ...(remote && this.options.remoteMoved !== null ? { remoteMoved: (this.options.remoteMoved ?? remoteMovedProbe)(checkout) } : {}),
           log: this.log,
         });
       feed?.start();
@@ -190,6 +203,11 @@ export class StoreBoardSource {
     if (source.remote && source.feed !== null) {
       await source.feed.syncNow();
     }
+  }
+
+  /** What the change feed has seen so far (watcher events, announcements, ref-check misses, syncs); null without a checkout. */
+  changeStats(settings: StoreSettings): StoreChangeFeedStats | null {
+    return this.sourceFor(settings).feed?.stats() ?? null;
   }
 
   /** The store's tickets; throws a readable error when `dk` or the store is not usable. */

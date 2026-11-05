@@ -1,3 +1,61 @@
+### Milestone 161 — E14-8: change detection hardened, checked in a running app
+
+**Not yet manually verified by the owner.** Roadmap E14-8, ADR-0090. The watcher, the
+own-write announcements and the periodic `dk sync` of milestones 154/156 were provoked on
+Windows and then run **in the built app** against a scratch store. `files` stays the default;
+the owner's `~/.drey-engine`, live board and `drey-tickets` repository were not touched
+(temp home, temp store, the spawned engine killed after each test).
+
+- **What was provoked** (raw `fs.watch` recursive on a scratch store, foreign `dk`/`git`
+  subprocesses): 20 serial `dk add` — all 20 tickets reported; `git reset --hard` over 15
+  tickets and back, a branch checkout that rewrites the tree — every changed ticket file reported,
+  last event within a few ms of the end. **One real miss:** while the event loop is blocked for
+  seconds (a busy process), Windows' change buffer overflows — 6 adds produced one event. Nothing
+  was lost in normal operation, so the ref check was built as a safety net, not as the mechanism.
+  (`.git` churn is most of all events and cannot be excluded by `fs.watch`; it is filtered
+  after the fact.)
+- **Debounce** (`store-change-feed.ts`): trailing quiet period (200 ms) with a ceiling
+  (`maxWaitMs`, 1 s) instead of a window from the first event — a commit that rewrites many files
+  is one announcement of the finished tree, and a burst that never goes quiet still announces.
+- **Own-write echo, no longer swallowed blind.** A foreign write that landed inside the 200 ms after
+  an own write used to wait for the next event. Now an own write remembers HEAD; events in the echo
+  window announce again only when HEAD moved (a foreign commit), else they count as dropped echoes.
+- **Ref check** (miss detection): every 10 s the checkout's HEAD (`git rev-parse HEAD`, ~50 ms)
+  is compared with the last announced one; a move no watcher event reported announces, is counted
+  (`refMisses`) and logged once as a warning. Skipped while a watcher event is pending or fresh.
+  `StoreBoardSource.changeStats()` exposes the counters (announcements, watcher events, dropped echoes,
+  ref misses, syncs, skipped syncs).
+- **Remote store:** the periodic `dk sync` now asks `git ls-remote` first (plain git, no new dk
+  feature: dk v0.6.2 has no `changes` verb) and skips the sync while the remote tip is the
+  checkout's HEAD — ~150 ms against ~400 ms for a `dk sync` that finds nothing (local remote). The
+  upstream is read once; any failure answers "moved" (sync as before). On-demand syncs (refresh,
+  board open, before a claim) always run in full.
+- **Plugin-managed checkout.** SDK **1.45**: `ctx.vault.markManaged` also takes a list; the tickets
+  plugin flags every registered vault that holds the dricket checkout (the checkout vault itself or a
+  bigger vault around it), so Source control refuses commit/push/discard there ("Managed by Tickets")
+  and the flag clears when the backend is off.
+- **Checked in the running app** (`e2e/tickets-dricket-live.spec.ts`, built app, scratch store,
+  temp engine home; screenshots in the session notes folder): a foreign `dk add` on the board after
+  ~1.0–1.1 s (the `dk` run itself is ~0.6 s); a burst of 8 foreign adds — every row there, the last
+  about a second after `dk` returned at worst; a foreign `dk put` rewrite of a title on the board
+  after ~1.3–1.6 s; the board's own write (`setPriority` = one `dk put`) followed at once by a
+  foreign add — both on the board; a ticket document opened from the row menu, edited and saved with
+  Ctrl+S — the store gained `dricket: put t-1`; the git plugin reports the checkout vault as
+  "Managed by Tickets". Remote store (bare remote, separate clone as checkout, sync every 2 s): a push
+  from elsewhere on the board after ~3.0 s; the board's own write is on the remote at once.
+- **Specs:** `store-change-feed.spec.ts` (ceiling, own-write echo with and without HEAD, miss
+  detection, no false miss while the watcher is on it, probe-gated sync), `store-git-probe.spec.ts`
+  (fake git + real git), `dricket-file-store-dk.spec.ts` (real watcher + real `dk`: burst, foreign
+  write right behind an own write, a silent watcher caught by the ref check), `ticket-documents.spec.ts`,
+  `managed-vaults.spec.ts`, `e2e/tickets-dricket-live.spec.ts` (skipped without `dk` >= 0.6.2).
+- **Not checked / known limits:** no real network remote (a local bare repository stands in; the
+  probe's timing over a network is unmeasured); the e2e needs `dist/mission-control` built (the
+  engine refuses to start without it); the engine's own log is in the temp home, which the spec
+  removes (`DKL_KEEP=1` keeps it); the 10 s ref-check period and the 1 s ceiling are judgement
+  values, not tuned against a long real-use log; the managed flag follows the board refresh and the
+  ticket-document open (a checkout vault registered later is flagged at the next one); the legacy
+  tickets vault is not flagged by the standalone engine (`markManaged` there is a no-op) — unchanged.
+
 ### Milestone 160 — E14-5b: the chain on a dricket store, in-claim chapters, wait release, leftover claims
 
 **Not yet manually verified by the owner.** Owner request (roadmap E14-5b, ADR-0090 later

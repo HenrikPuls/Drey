@@ -121,6 +121,77 @@ describe.skipIf(!found.ok)('DricketFileStore over a real dk store', { timeout: 1
     }
   });
 
+  describe('change detection against a real watcher and a foreign dk (E14-8)', () => {
+    const settingsOf = (): StoreSettings => ({ backend: 'dricket', shadow: false, dkPath: bin === 'dk' ? '' : bin, dkStore: storeDir, dkDataDir: path.join(root, 'data'), dkCheckout: '', dkSyncSeconds: 30 });
+    const makeSource = (onChange: () => void, extra: Partial<ConstructorParameters<typeof StoreBoardSource>[4]> = {}): StoreBoardSource =>
+      new StoreBoardSource(path.join(root, 'report'), () => undefined, 0, undefined, {
+        onChange,
+        dkFactory: () => new DricketTicketStore(new DkProcess({ bin, store: storeDir, dataDir: path.join(root, 'data'), env, readConcurrency: 1 })),
+        ...extra,
+      });
+    const waitFor = async (predicate: () => boolean, ms = 8000): Promise<void> => {
+      const end = Date.now() + ms;
+      while (!predicate() && Date.now() < end) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(predicate()).toBe(true);
+    };
+
+    it('announces a foreign dk write the watcher sees, one announcement for its burst', async () => {
+      const onChange = vi.fn();
+      const source = makeSource(onChange);
+      source.fileStore(settingsOf());
+      try {
+        await new Promise((r) => setTimeout(r, 300));
+        onChange.mockClear();
+        dk(['add', '--unclaimed', '-m', 'Foreign one'], 'terminal@scratch');
+        await waitFor(() => onChange.mock.calls.length >= 1);
+        await new Promise((r) => setTimeout(r, 600));
+        expect(onChange.mock.calls.length).toBeLessThanOrEqual(2);
+        expect((await source.records(settingsOf())).some((r) => r.title === 'Foreign one')).toBe(true);
+      } finally {
+        source.dispose();
+      }
+    });
+
+    it('announces a foreign write that lands right behind an own write', async () => {
+      const onChange = vi.fn();
+      const source = makeSource(onChange);
+      const settings = settingsOf();
+      try {
+        const t = (await source.records(settings)).find((r) => r.id === 'T-0001')!;
+        await new Promise((r) => setTimeout(r, 300));
+        onChange.mockClear();
+        const own = await source.write(settings, 'T-0001', t.text.replace(/^title: .*$/m, 'title: Own write'), { expectedRev: (await source.record(settings, 'T-0001')).rev! });
+        expect(own.ok).toBe(true);
+        const afterOwn = onChange.mock.calls.length;
+        dk(['add', '--unclaimed', '-m', 'Foreign right behind'], 'terminal@scratch');
+        await waitFor(() => (source.changeStats(settings)?.announcements ?? 0) > afterOwn);
+        await new Promise((r) => setTimeout(r, 1500));
+        expect((await source.records(settings)).some((r) => r.title === 'Foreign right behind')).toBe(true);
+        expect(source.changeStats(settings)?.refMisses).toBe(0);
+      } finally {
+        source.dispose();
+      }
+    });
+
+    it('a watcher that reports nothing is caught by the ref check', async () => {
+      const onChange = vi.fn();
+      const source = makeSource(onChange, { watch: () => ({ close: () => undefined }), refCheckEveryMs: 200 });
+      const settings = settingsOf();
+      try {
+        source.fileStore(settings);
+        await new Promise((r) => setTimeout(r, 400));
+        onChange.mockClear();
+        dk(['add', '--unclaimed', '-m', 'Unwatched'], 'terminal@scratch');
+        await waitFor(() => onChange.mock.calls.length >= 1);
+        expect(source.changeStats(settings)?.refMisses).toBe(1);
+      } finally {
+        source.dispose();
+      }
+    });
+  });
+
   function writeTemp(text: string): string {
     const file = path.join(root, `edit-${Math.random().toString(36).slice(2)}.md`);
     writeFileSync(file, text);
