@@ -173,8 +173,9 @@ the app needs no feature flag of its own.
    capture a ticket; move it; start a run on a throw-away ticket in a scratch
    work repo; stop it; check the claim/epoch/lease, the ledger and the
    Verlauf; pair the phone.
-7. Keep the legacy checkout read-only on disk for 30 days; delete the
-   `files` backend code only in E14-9.
+7. Keep the legacy checkout read-only on disk until the owner's round is over; delete the
+   `files` backend code only in E14-9b (owner, 2026-11-05: no fixed 30 days; E14-9a, the
+   inventory in [`decommission.md`](decommission.md), removed nothing that early).
 
 ## 8. Staged work (proposed roadmap items)
 
@@ -194,7 +195,7 @@ listed in `dricket-requirements.md`, not here.
 | **E14-6** | Comments and signals: send-back note and Needs-you answers as comments; keyed status verbs as comments; `needs.ts` reads them; `working:` ephemeral; ledger relocated to meta; story builder reads both Log shapes | E14-4; dk v0.6 R-08 | E14-8 | 1 session | status/needs parity spec (same Needs-you list from either source) | answer a `needs-decision` from the phone |
 | **E14-8** | Change detection: `dk changes` poll in the engine (or the `ls-remote` recipe), announce own writes, watcher exclusion/plugin-managed registration, Source-control guard | E14-1; dk v0.8 R-09 for the efficient form | E14-4, E14-6 | 1 session | poll spec with fake clock; announce spec | change a ticket from a second clone; board refreshes within the interval |
 | **E14-7** | Cut-over (§7): freeze, final import, flip, smoke; owner round | E14-3, 4, 5, 6, 8; dk v0.8 | — | the owner + 1 session | the full release gate (`npm run test:all`) + e2e on the scratch rig | §7 smoke on the real rig |
-| **E14-9** | Decommission: delete `FileTicketStore` write paths, normalize, phase-dirs, status-log files, `run:` stamping, folder settings; supersede `ticket-schema.md` parts; manual; remove the legacy phone remote | E14-7 + 30 days | — | 1 session | gate | — |
+| **E14-9** | Decommission: delete `FileTicketStore` write paths, normalize, phase-dirs, status-log files, `run:` stamping, folder settings; supersede `ticket-schema.md` parts; manual; remove the legacy phone remote | E14-7 + the owner's round (9a: inventory, [`decommission.md`](decommission.md)) | — | 1 session | gate | — |
 
 Parallelism: after E14-1 three sessions run in disjoint files — **E14-2**
 (`core/ticket-board`, `ticket-files`), **E14-3** (`migrate/`, new), **E14-5**

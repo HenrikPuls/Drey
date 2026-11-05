@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153–160 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153–162 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -584,9 +584,25 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   allow list, into a fresh store, and `dk validate` plus the shadow comparison
   must be clean before the flip. The owner's real `drey-tickets` repository is
   only touched then.
-- **E14-9 — Decommission.** Delete the file write paths and the legacy
-  machinery 30 days after the cut-over; supersede the parts of
-  `ticket-schema.md`; the manual; retire the legacy phone remote.
+- **E14-9b — Decommission, part b.** After the cut-over **and the owner's
+  verification round** (owner, 2026-11-05: no fixed 30 days), delete what part (a)
+  proved cannot go earlier — the inventory with callers and evidence is
+  [`docs/design/dricket/decommission.md`](../docs/design/dricket/decommission.md)
+  (part a, milestone 162, found class A empty and removed nothing). Exact scope: (1) the
+  files forks of the board writers, phase-folder numbering ("Number folders", reorder
+  renumbering), the drift pass, the file IO half of `core/transition.ts` (keep its pure
+  patchers — the dricket bridge uses them), `core/phase-dirs.ts`, `core/normalize.ts`;
+  (2) run / claim stamps and takeover-as-overwrite on files, the `.status.log` writer,
+  the files-only ledger writers (the ledger path in the meta vault stays),
+  `FileTicketStore`, `files-guard`; (3) the `files` and `shadow` modes of
+  `tickets.backend`, the migration tool's legacy reader, the shadow diff, the reverse
+  converter and `scripts/migrate-tickets.mjs` — only once the owner confirms no rollback
+  is wanted; (4) the legacy phone remote (`plugins/tickets/remote/`, `fallback-client`,
+  the `engine-main` fallback, the two `tickets-remote*` e2e specs) once Mission Control on
+  the phone is verified — a product decision, nothing depends on it; (5) supersede
+  `specs/ticket-schema.md` and the ADR-0076 file layout; the manual. Not in scope:
+  `core/ticket-files.ts`, `ticket-board.ts`, `legacy-bridge.ts` (the dricket path runs on them).
+  Three orphan helpers (`parkLine`, `phaseIdFromTitle`, `columnWorkerPin`) can go with it.
 
 **What this does to running or planned items** (marks, not reordering):
 
