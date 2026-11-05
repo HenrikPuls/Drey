@@ -388,6 +388,17 @@ owner confirms scope and order before any of it starts:
   (next to the edit control in the header, not in the text flow), and the page can be
   switched away from View — View stays the default where results are presented (E12-6).
   Check the same three points on the Drey desktop ticket page and the iPad layout.
+- **E13-24 — Mission Control phone: one app bar** (owner markup 2026-11-06, screenshots
+  `docs/design/work-panel/mc-phone-appbar-{work,settings,settings-sub}-2026-11-06.jpg`;
+  outside the list). Today the hamburger (☰) sits alone in its own row and every page puts
+  its own header (title, "‹ Settings / Appearance", "WORK drey-tickets · 1 active") in a
+  second row below it. Required: **one app bar row** on every phone page: the leading
+  slot is the ☰ menu on top-level pages and **becomes the back control (‹) on sub-pages**
+  (Settings → Appearance …), followed by the page title (and the right-side status/action
+  such as "1 active"), all in the SAME row; no empty row above. Safe-area aware (status bar
+  / Dynamic Island), fixed like the other chrome (D-5b). Applies to Work, Settings and its
+  sub-pages, Team, Board, the ticket page (E13-23 keeps its own back + mode switch in
+  that bar), chat and the iPad layout where the same pattern is used.
 - **E12-9c — The default pipeline: Inbox · Plan · Build · Review · Sign Off · Done**
   (owner decision 2026-11-05, answering E12-9b Q1; outside the list). The default pipeline
   of a new board has six columns, in this order, with who works each: **1 Inbox** (manual —
