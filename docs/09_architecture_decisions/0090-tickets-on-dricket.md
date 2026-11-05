@@ -157,3 +157,39 @@ cost of one `dk` call, local store as default) are in
 [`dricket-requirements.md`](../design/dricket/dricket-requirements.md).
 Not yet answered by any measurement: `dk` call latency on Windows, `ls` at 1 000
 tickets, `validate` at 10 000 commits, behaviour with CRLF checkouts.
+
+## Later change — reads from the files, writes through `dk put` (E14-4, 2026-11-05)
+
+**Decision (owner, 2026-11-05).** Drey no longer asks `dk` for what it can
+read: the board is built from the files of the store's checkout
+(`tickets/<prefix>/<shard>/<id>/ticket.md`, `comments/`, the format in
+dricket's `docs/protocol.md`) by a **read-only parser**
+(`store/file-store-reader.ts`) behind the `TicketStore` read port, reusing the
+flat front-matter reader and `detailFromContent`. Writes stay in `dk`:
+`dk put <id> -F <file> --claim --if-version <rev>` (one commit, `rev` + 1),
+claim, release and extend; the engine is the single writer, one queue per store
+(`DkProcess`). Exit 12 is re-read and handed back to the caller to ask.
+
+**Why.** Measured on the 91-ticket migrated store (`performance.md`): a board
+build through `dk` is one `ls` plus one `show` per ticket, 29 s on v0.6.0 and
+7.7 s on v0.6.1; the file read is 4 - 18 ms. Nearly all of a `dk` call is
+git process starts. No amount of caching makes a 30 s board refresh usable, and
+v0.6.1 only shrinks it.
+
+**Deviation from "no TypeScript re-implementation of dricket".** The reader
+knows dricket's *file format* (parse only). It re-implements no decision:
+claims, transitions, leases, epochs, validation and every write stay in `dk`.
+One rule is applied on read — the lease-expiry rule of protocol.md (a claim past
+`lease_until` plus the 20 minute grace reports as unclaimed, `epoch` stays, the
+raw `text` is untouched) — because a board that shows a dead claim as live is
+wrong, and `ls` would not tell either. If the format changes the reader breaks
+loudly in its equality spec against `dk` (`DREY_E144_STORE`), not silently.
+
+**Consequences.** `MIN_DK_VERSION` is 0.6.0 (`put --claim`); v0.6.1 is
+recommended (parallel reads, fewer git processes). The checkout must be a
+working tree of the store's ticket branch and **must not live in OneDrive**; a
+local store is its own checkout, a remote store needs `tickets.dk.checkout`.
+Change detection is three-part: own writes announce directly, a file watcher
+(200 ms debounce) catches foreign writers, a remote store adds a periodic
+`dk sync` (`tickets.dk.syncSeconds`, default 30) and on-demand syncs. Without a
+checkout the engine falls back to the E14-2 reader (one `dk show` per ticket).

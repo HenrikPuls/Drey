@@ -15,7 +15,7 @@ phases:
 ---
 `;
 const BASE = { vaultId: 'v', vaultName: 'v', activeVaultName: 'v', isGitRepo: true, defaultWorker: 'opencode', pipelineText: PIPELINE, reposText: null };
-const SETTINGS: StoreSettings = { backend: 'files', shadow: true, dkPath: '', dkStore: 'E:/scratch', dkDataDir: '' };
+const SETTINGS: StoreSettings = { backend: 'files', shadow: true, dkPath: '', dkStore: 'https://example.invalid/t.git#tickets', dkDataDir: '', dkCheckout: '', dkSyncSeconds: 30 };
 
 function detail(id: string, rev: number, extra: Partial<TicketDetail> = {}): TicketDetail {
   return {

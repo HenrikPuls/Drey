@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153 and 154 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -524,36 +524,27 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   `tickets.backend = shadow` against the migrated store once E14-3 has produced
   it and read `~/.drey-engine/shadow/board-diff.md` until it is identical; the
   500-ticket benchmark no longer waits for dk R-05: reads move to the file
-  reader (E14-4) and the comparison of both read paths runs first there;
-  ticket documents under `dricket` come with E14-4.
+  reader (E14-4, milestone 154) and the comparison of both read paths runs first there;
+  ticket documents under `dricket` come with E14-4b.
 - **E14-3b — Migration apply with a chosen number.** E14-3 (milestone 153)
   fills number gaps with placeholder tickets because dk v0.6.0 cannot create a
   ticket with a given number or creation data (R-28). When dk ships R-28 / R-10,
   `apply.ts` creates directly and drops the placeholder pass; until then the
   cut-over (E14-7) either accepts the placeholders or waits for dk.
-- **E14-4 — Write path and file reader** (owner decision 2026-11-05: Drey
-  works on the state in the file system, not on an extra `dk` call per read).
-  *Reads* leave `dk`: the board is built from the files of the store's
-  checkout (`tickets/<prefix>/<shard>/<id>/ticket.md` and `comments/`, the
-  contract in dricket's `docs/protocol.md`) by a **read-only** parser behind
-  the existing `TicketStore` read port; the lease-expiry rule is applied by
-  the reader. *Writes* stay `dk put <id> -F <file> --claim --if-version <rev>`
-  (dk >= 0.6.0, so `MIN_DK_VERSION` rises to 0.6.0), the engine the single
-  writer with one queue per store; exit 12 -> re-read and ask. Change
-  detection: the engine's own writes announce directly; a file watcher
-  (about 200 ms debounce) on the checkout catches foreign writers; a remote
-  store adds a periodic `dk sync` (default 30 s, configurable) and a sync on
-  demand (refresh, board open, before a claim); a 5 s ref check is added only
-  if the watcher is seen to miss. The store must not live in OneDrive. The
-  deviation from "no TypeScript re-implementation" (a read-only format
-  parser; claims, transitions and writes stay in `dk`) is recorded in
-  ADR-0090 and `specs/decisions.md` with this item. The comparison of the
-  `dk` read path and the file read path is measured
-  ([performance.md](../docs/design/dricket/performance.md): 29 s vs 18 ms for
-  91 tickets). Then capture, refine, header edits, moves, accept/send back,
-  `ticketSave` with `rev`, parts release (resumable), flow save, the editor
-  save hook. Needs E14-2. The only item that rewrites `board-service.ts`
-  heavily; no other change to that file beside it.
+- **E14-4b — The write moves on the file/`dk put` path** (rest of E14-4; the
+  file reader, `dk put` write door and change detection shipped as milestone
+  154). Re-target the board's direct file writes to
+  `StoreBoardSource.write` (`put --claim --if-version <rev>`, exit 12 -> re-read
+  and ask): capture, refine, header edits, moves, accept/send back,
+  `ticketSave` with `rev`, parts release (children first, parent last,
+  resumable), flow save, the editor save hook; ticket documents under
+  `dricket` open from the checkout. The board service reads and writes through
+  one `TicketStore` per backend. Needs milestone 154. The only item that
+  rewrites `board-service.ts` heavily; no other change to that file beside it.
+  Also open from 154: a Settings page for `tickets.dk.checkout` /
+  `tickets.dk.syncSeconds` (config keys only today), the 5 s ref check (only if
+  the watcher is seen to miss), and the real-run check of the watcher on a
+  second instance.
 - **E14-5 — Fleet on `dk`.** Claim before the worker spawns, extend, release
   with stage/message, exit 13 stops the worker, takeover by lease, park =
   `blocked` + comment, optional `Dricket-*` trailers and `dk validate
@@ -577,8 +568,8 @@ checks use a scratch store and a second instance, never `drey-tickets`.
 
 | Item | Effect |
 |---|---|
-| E13-9 Shape in Drey (running) | **Stays valid** (UI, live edit, plan delta). Finish on the `files` backend; it must add **no new direct file writer**; its write path is re-targeted in E14-4 (needs dk R-02). |
-| E13-10 Plan to approve in the ticket | **Stays valid**; the `### Parts` block is body text. The engine routes (`parts`, `release`) are the contract: build the widget against them and put **no direct file write** behind them; the release becomes children-first, parent-last, resumable in E14-4. |
+| E13-9 Shape in Drey (running) | **Stays valid** (UI, live edit, plan delta). Finish on the `files` backend; it must add **no new direct file writer**; its write path is re-targeted in E14-4b (needs dk R-02). |
+| E13-10 Plan to approve in the ticket | **Stays valid**; the `### Parts` block is body text. The engine routes (`parts`, `release`) are the contract: build the widget against them and put **no direct file write** behind them; the release becomes children-first, parent-last, resumable in E14-4b. |
 | E13-11 Flow tab, E13-13..19 (Work view rest, panel naming, status bar, capture button, board filter, views polish, team completion) | **Stay valid** (UI/DTO driven). |
 | E13-12 Settings → Tickets in Drey | **Stays valid** except the pipeline/column editor: **waits** for OD-4 (stage vocabulary) and Q-05 (who edits `dricket.toml`). |
 | E11-1c video size rule, E11-1b, E11-2b, E10-3b/4b/5b, E10-7, E12-3b/5/7/8 | **Stay valid** (videos stay outside git; UI follow-ups). |

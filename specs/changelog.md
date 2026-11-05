@@ -1,3 +1,46 @@
+### Milestone 154 — E14-4 (part 1): the file reader, the `dk put` write path, change detection
+
+**Not yet manually verified by the owner.** Owner decision 2026-11-05 (roadmap
+E14-4, ADR-0090 later change): Drey works on the files of the store's checkout,
+not on an extra `dk` call per read. This part ships reads, the write door and
+change detection behind `tickets.backend = dricket`; the UI moves of E14-4
+(capture, refine, header edits, moves, accept/send back, `ticketSave` with
+`rev`, parts release, flow save, editor save hook) are split off as **E14-4b**
+(roadmap) because they rewrite `board-service.ts` and nothing else may touch it
+meanwhile. `files` stays the default; nothing in the running system changed.
+
+- **File reader** (`store/file-store-reader.ts`, read-only): walks
+  `tickets/<prefix>/<shard>/<id>/ticket.md` of a checkout, parses with
+  `detailFromContent`, comments from `comments/` (oldest first), applies the
+  **lease-expiry rule** (claim past `lease_until` + 20 min grace reads as
+  unclaimed, `epoch` kept, raw `text` untouched). Equality with the `dk` read
+  path on the 91-ticket migrated store: every ticket identical. Measured:
+  **4 ms** (warm) / 18 ms (earlier median) against **29.4 s** (dk 0.6.0) and
+  **7.7 s** (dk 0.6.1) for `ls` + one `show` each.
+- **Write path** (`DricketTicketStore.put`, `DricketFileStore.write`):
+  `dk put <id> -F <tmp> --claim --if-version <rev>` (one commit, 0.6 s). Exit 12
+  comes back as `{ ok: false, conflict: { current } }` — the ticket re-read — so the
+  caller asks; exit 11 / 17 / 14 throw typed errors. The checkout must show the new
+  `rev` before `write` returns (one `dk sync` if it does not, else an error).
+  `DkProcess` already queues writes per store: the engine is the single writer.
+  `MIN_DK_VERSION` is **0.6.0** (v0.6.1 recommended: R-26 and R-30 fixed).
+- **Change detection** (`store/store-change-feed.ts`): own writes announce at once,
+  a recursive `fs.watch` on the checkout (200 ms debounce, `.git` ignored) catches
+  foreign writers, a remote store (`tickets.dk.checkout` set, differing from
+  `tickets.dk.store`) adds a periodic `dk sync` (`tickets.dk.syncSeconds`, default
+  30, 0 = off) plus a sync on first read. `StoreBoardSource` wires it and
+  `board-service` forwards the announcement to `announceChanged` (one line).
+- **Settings:** `tickets.dk.checkout` (empty = the store directory when
+  `tickets.dk.store` is a local directory), `tickets.dk.syncSeconds`. No checkout =
+  reads fall back to the E14-2 `dk` reader. The checkout must not live in OneDrive.
+- **Specs:** `file-store-reader.spec.ts` (fixtures + the equality check, enabled by
+  `DREY_E144_STORE=<store copy>`, `DREY_DK_BIN`), `store-change-feed.spec.ts`,
+  `dricket-file-store-dk.spec.ts` (real dk, scratch store: put, conflict, foreign
+  claim, announcement), version gate in `dk-process.spec.ts`.
+- **Known limits:** a foreign write inside the 200 ms window after an own write is
+  announced by the next event only (E14-8 hardens); the 5 s ref check is not built
+  (only if the watcher is seen to miss).
+
 ### Milestone 153 — E14-3: the ticket migration tool
 
 **Not yet manually verified by the owner.** Owner request 2026-11-04 (roadmap

@@ -112,6 +112,23 @@ export interface TicketComment {
   readonly text: string;
 }
 
+/** A whole-ticket write (E14-4): the document replaces the stored one in one commit. */
+export interface PutOptions {
+  /** The `rev` the edit was made on (`--if-version`); a ticket at another rev is `conflict`. */
+  readonly expectedRev: number;
+  /** Who writes (`DK_OWNER`); omitted = dk's own profile identity. */
+  readonly actor?: string;
+}
+
+export interface PutResult {
+  readonly id: string;
+  /** The ticket's `rev` after the write. */
+  readonly rev: number;
+  readonly commit: string | null;
+  /** Header keys the write changed (`rev` excluded), then `body`; empty for a no-op. */
+  readonly changedFields: readonly string[];
+}
+
 /** What a backend can do — the engine asks instead of guessing from a version. */
 export interface StoreCapabilities {
   readonly backend: TicketBackend;

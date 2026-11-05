@@ -8,6 +8,16 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **A TypeScript re-implementation of dricket's writes, claims and
+  transitions** (owner, 2026-11-05; ADR-0090 later change, E14-4). Drey reads
+  tickets from the files of the store's checkout with a **read-only** parser
+  (the one deliberate deviation from "no re-implementation": it parses the
+  format, it decides nothing) and writes only through
+  `dk put --claim --if-version`, claim, release and extend. Not re-proposed: a
+  second writer would need dricket's fencing, validation and CAS rules in two
+  places. Reads through `dk` (one process per ticket, 29 s for 91 tickets) were
+  the alternative; they are only the fallback when no checkout is configured.
+
 - **"Refine with agent" and the `refine-interactive-default` prompt**
   (owner, 2026-11-04; removed in E13-9, milestone 144). The checkpoint
   companion dialog — a worker that walks plan review, review or commit with
