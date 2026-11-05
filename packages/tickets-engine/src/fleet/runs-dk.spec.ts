@@ -361,7 +361,7 @@ describe('RunSupervisor on a dricket store (E14-5)', () => {
     const answer = await t.sup.answerQuestion(id, { 'Which shortcut?': ['Ctrl+K'] } as never);
     expect(answer.ok).toBe(true);
     expect(t.store.of('claim')).toHaveLength(2); // re-claimed BEFORE the worker went on
-    expect(t.store.of('comment').map((c) => c.text.split('\n')[0])).toContainEqual(expect.stringMatching(/^resolved: run-/));
+    expect(t.store.of('comment').map((c) => (c.text ?? '').split('\n')[0])).toContainEqual(expect.stringMatching(/^resolved: run-/));
     expect(t.timers.armed).not.toBeNull(); // the keep-alive runs again
     expect(t.adapter.handles[0]!.answerQuestion).toHaveBeenCalled();
     t.adapter.handles[0]!.fail(1);

@@ -2736,6 +2736,17 @@ export class RunSupervisor {
     return { ok: true };
   }
 
+  /** The tickets this supervisor's starting / running / stopping runs hold. */
+  liveTickets(): ReadonlySet<string> {
+    const live = new Set<string>();
+    for (const run of this.runs.values()) {
+      if (['starting', 'running', 'stopping'].includes(run.info.state)) {
+        live.add(run.request.ticketId);
+      }
+    }
+    return live;
+  }
+
   /**
    * Gives up the claims no live run of this runner holds (E14-5b (4)): a runner killed with a
    * run in flight leaves its `agent-<run>@<host>` claim on the ticket until the lease ends, and a
@@ -2747,16 +2758,16 @@ export class RunSupervisor {
   async releaseLeftoverClaims(
     target: RunDkTarget,
     retreatByStage: Readonly<Record<string, string | null>>,
+    /** Tickets another supervisor of the same runner holds live (the runner keeps one supervisor per provider). */
+    alsoLive: ReadonlySet<string> = new Set(),
   ): Promise<LeftoverClaimsReport> {
     const store = this.storeOf(target);
     const released: string[] = [];
     const skipped: { id: string; reason: string }[] = [];
     const host = runOwnerId('x').slice('agent-x@'.length);
-    const live = new Set<string>();
-    for (const run of this.runs.values()) {
-      if (['starting', 'running', 'stopping'].includes(run.info.state)) {
-        live.add(run.request.ticketId);
-      }
+    const live = new Set<string>(alsoLive);
+    for (const id of this.liveTickets()) {
+      live.add(id);
     }
     for (const record of await store.list({})) {
       const owner = record.owner;

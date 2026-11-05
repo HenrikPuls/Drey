@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { EngineBoardService } from './board-service';
 import type { EngineHost, EngineVault, FleetPort } from './host';
 import { TicketsGit } from '../core/tickets-git';
-import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools, type RunRequest } from '../fleet/protocol';
+import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools, type ChainConfig, type RunRequest } from '../fleet/protocol';
 import { assertDkVersion, MIN_DK_VERSION } from '../store/dk-process';
 import { toDricketId } from '../store/ids';
 import { openStatusItems } from '../core/status-log';
@@ -67,6 +67,7 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
   const saved: Record<string, string | undefined> = {};
   const ledgerWrites: string[] = [];
   const fileStatus: string[] = [];
+  const chainConfigs: ChainConfig[] = [];
   const envSet = (key: string, value: string): void => {
     if (!(key in saved)) {
       saved[key] = process.env[key];
@@ -171,7 +172,7 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     const git2 = new TicketsGit(() => 'git', async () => {
       throw new Error('no git in the spec');
     });
-    const fleet: FleetPort = { runs: async () => [], start: async () => ({ ok: false, error: 'not in the spec' }), configureChain: async () => undefined };
+    const fleet: FleetPort = { runs: async () => [], start: async () => ({ ok: false, error: 'not in the spec' }), configureChain: async (c) => { chainConfigs.push(c); } };
     service = new EngineBoardService(hostOf(), git2, 'opencode', 'accept-edits', '', fleet, '/fleet', normalizeFleetCaps({}), normalizeFleetPools({}), normalizeFleetHandover({}), 'owner@test', { events: { ledger: (write) => ledgerWrites.push(write.kind), status: (_p, _at, verb) => fileStatus.push(verb) } });
   }, 120_000);
 
@@ -398,8 +399,18 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     expect(await fsp.readdir(abs('tickets')).then((names) => names.filter((n) => n !== '_meta'))).toEqual([]);
   });
 
-  it('keeps the chain off on the dricket backend until E14-5b', async () => {
-    expect(await service.chainRefusal()).toContain('E14-5b');
+  it('lets the chain run on a store with a checkout and refuses one without (E14-5b)', async () => {
+    expect(await service.chainRefusal()).toBeNull(); // a local store directory is its own checkout
+    await service.snapshot(); // the chain follows the pipeline: its config now names the store, not ticket files
+    expect(chainConfigs.at(-1)?.store).toMatchObject({ dkStore: storeDir, dkDataDir: path.join(root, 'data'), trailers: false });
+    expect(chainConfigs.at(-1)?.ticketsVaultPath).toBe(vaultDir);
+    const kept = config['dk.store'];
+    config['dk.store'] = 'https://example.invalid/t.git#tickets'; // remote, no tickets.dk.checkout
+    expect(await service.chainRefusal()).toContain('checkout');
+    config['dk.checkout'] = path.join(root, 'checkout');
+    expect(await service.chainRefusal()).toBeNull();
+    delete config['dk.checkout'];
+    config['dk.store'] = kept;
   });
 
   function writeTemp(text: string): string {

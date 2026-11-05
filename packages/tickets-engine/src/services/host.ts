@@ -1,5 +1,5 @@
 import type { RunInfo } from '../fleet/protocol';
-import type { ChainConfig, RunRequest } from '../fleet/protocol';
+import type { ChainConfig, ChainStoreConfig, RunRequest } from '../fleet/protocol';
 
 /**
  * The engine's host ports (ADR-0088, E2a). The service layer is pure
@@ -62,4 +62,9 @@ export interface FleetPort {
   runs(): Promise<readonly RunInfo[]>;
   start(request: RunRequest): Promise<{ ok: true; run: RunInfo } | { ok: false; error: string }>;
   configureChain(config: ChainConfig): Promise<void>;
+  /** E14-5b: the runner releases the agent claims of this host that no live run holds. */
+  releaseLeftoverClaims?(
+    store: ChainStoreConfig,
+    retreat: Readonly<Record<string, string | null>>,
+  ): Promise<{ readonly ok: true; readonly released: readonly string[]; readonly skipped: readonly { readonly id: string; readonly reason: string }[] } | { readonly ok: false; readonly error: string }>;
 }
