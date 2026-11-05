@@ -523,17 +523,36 @@ checks use a scratch store and a second instance, never `drey-tickets`.
 - **E14-2 follow-ups** (the board from the store shipped as milestone 152): run
   `tickets.backend = shadow` against the migrated store once E14-3 has produced
   it and read `~/.drey-engine/shadow/board-diff.md` until it is identical; the
-  500-ticket benchmark waits for dk R-05 (one `ls` call carries every field);
+  500-ticket benchmark no longer waits for dk R-05: reads move to the file
+  reader (E14-4) and the comparison of both read paths runs first there;
   ticket documents under `dricket` come with E14-4.
 - **E14-3b — Migration apply with a chosen number.** E14-3 (milestone 153)
   fills number gaps with placeholder tickets because dk v0.6.0 cannot create a
   ticket with a given number or creation data (R-28). When dk ships R-28 / R-10,
   `apply.ts` creates directly and drops the placeholder pass; until then the
   cut-over (E14-7) either accepts the placeholders or waits for dk.
-- **E14-4 — Write path.** Capture, refine, header edits, moves, accept/send
-  back, `ticketSave` with `rev`, parts release (resumable), flow save, the editor
-  save hook. Needs E14-2 and dk v0.7. The only item that rewrites
-  `board-service.ts` heavily; no other change to that file beside it.
+- **E14-4 — Write path and file reader** (owner decision 2026-11-05: Drey
+  works on the state in the file system, not on an extra `dk` call per read).
+  *Reads* leave `dk`: the board is built from the files of the store's
+  checkout (`tickets/<prefix>/<shard>/<id>/ticket.md` and `comments/`, the
+  contract in dricket's `docs/protocol.md`) by a **read-only** parser behind
+  the existing `TicketStore` read port; the lease-expiry rule is applied by
+  the reader. *Writes* stay `dk put <id> -F <file> --claim --if-version <rev>`
+  (dk >= 0.6.0, so `MIN_DK_VERSION` rises to 0.6.0), the engine the single
+  writer with one queue per store; exit 12 -> re-read and ask. Change
+  detection: the engine's own writes announce directly; a file watcher
+  (about 200 ms debounce) on the checkout catches foreign writers; a remote
+  store adds a periodic `dk sync` (default 30 s, configurable) and a sync on
+  demand (refresh, board open, before a claim); a 5 s ref check is added only
+  if the watcher is seen to miss. The store must not live in OneDrive. The
+  deviation from "no TypeScript re-implementation" (a read-only format
+  parser; claims, transitions and writes stay in `dk`) is recorded in
+  ADR-0090 and `specs/decisions.md` with this item. First step: a measured
+  comparison of the `dk` read path and the file read path on the migrated
+  store. Then capture, refine, header edits, moves, accept/send back,
+  `ticketSave` with `rev`, parts release (resumable), flow save, the editor
+  save hook. Needs E14-2. The only item that rewrites `board-service.ts`
+  heavily; no other change to that file beside it.
 - **E14-5 — Fleet on `dk`.** Claim before the worker spawns, extend, release
   with stage/message, exit 13 stops the worker, takeover by lease, park =
   `blocked` + comment, optional `Dricket-*` trailers and `dk validate
@@ -543,9 +562,12 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   to the meta repo. Needs E14-4 and dk R-08.
 - **E14-7 — Cut-over.** Freeze, final import, flip `tickets.backend`, smoke,
   owner round. Needs E14-3..6, E14-8.
-- **E14-8 — Change detection.** The engine polls (`dk changes` or the
-  `ls-remote` recipe), announces its own writes, checkout registered as
-  plugin-managed (no watcher, no Source-control writes). Reshapes **E2b-4**.
+- **E14-8 — Change detection.** Local store: the watcher and own-write
+  announcements specified in E14-4 (that item ships the first version; this one
+  hardens it: debounce tuning, miss detection, Windows checks). Remote store:
+  periodic `dk sync` plus the on-demand syncs, or `dk changes` / the
+  `ls-remote` recipe to avoid a fetch when nothing moved. The checkout is
+  registered as plugin-managed (no Source-control writes). Reshapes **E2b-4**.
 - **E14-9 — Decommission.** Delete the file write paths and the legacy
   machinery 30 days after the cut-over; supersede the parts of
   `ticket-schema.md`; the manual; retire the legacy phone remote.
