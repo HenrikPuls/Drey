@@ -413,7 +413,9 @@ owner confirms scope and order before any of it starts:
   `Mod+Alt+T`, ruled, E13-16/G-13) lives in `index.ts` too; the Crew header
   counts every card and shows the state summary [I-01, I-03, I-04, L-04, L-05]
   (`team/team-view.ts`). The Autopilot item becomes three-state with req-95b
-  (`TODO(req-95b)` in `status-slot.ts`).
+  (`TODO(req-95b)` in `status-slot.ts`; until then Paused reads as Off). Also the
+  Capacity panel: outside the Board and Crew tabs its content hides, but the bottom
+  dock keeps an empty "Capacity" frame of full height in the Work view.
 - **E12-16 — Board and Crew completion** (proposed by the E12-10 audit; M, partly
   L). `Filter: all personas` and `Cost by column` (E13-17); empty columns say
   `Empty` quietly, `New idea` moves to the board header; `New persona`, `Remove
@@ -908,6 +910,8 @@ rest are kept so they still match `docs/11`.
   "Crew" and "Accept".
 
 - **Order of the canvas-2026-11-06 items (dependencies, concept §8.1):** E14-3b / E14-7 cut-over (the final import writes the six stages) → req-99b state names in the clients → req-98 cost table / estimate format → req-101 Notes clients → req-95b Autopilot clients. Shipped: req-102, req-99a, req-100, req-95a, req-97 and req-96 (with req-103, the phone menu root).
+
+- **Stale e2e specs: a Work row no longer opens the thread (found at the wave-2 integration, outside the list; req-107).** A row without a live run opens the ticket document (`defaultFaceOf`, E13-20 / E13-21). These specs still expect the thread, and fail the same way in a worktree without the merges: `work-panel` (three tests: row opens the thread, rows reuse the thread tab, ended run), `ticket-header`, `interactive-dialog` (header offers the dialog), `ticket-card-menu` (past runs submenu). They went unnoticed because they used to adopt the owner's live engine and were not read as real failures. To do: decide per spec whether the thread path is still reached (the document's Thread button) or the test goes. Also: the engine's output is discarded (`stdio: ignore`), while the 20 s error says "see the engine home log", and no such log exists.
 
 - **Migrate the existing UI strings into the catalog, area by area (follow-up of req-102 / ADR-0091; req-106).** The i18n catalog (`shared/i18n/`, ADR-0091) covers only the surfaces of the 2026-11-06 canvas round; every older surface keeps its literal English strings. Migrate as areas are touched, one area per change: move its strings into `shared/i18n/catalog/en.json` under its `<area>.` prefix, read them through the runtime's binding (`I18nService` / the `t` pipe, `api.i18n`, `McI18n`, `i18n` in main), replace assembled sentences with ICU messages and `toLocale*` calls with the `Intl` helpers, then add the area's directory to `shared/i18n/guarded-paths.json` (and the ADR's list) so the guard keeps it. Candidate order: the Work panel and the ticket page (closest to the new surfaces), Mission Control's existing pages, Settings, the editor chrome, the Files panel, the native dialogs; the assistant panel's `shared/duration.ts` retires into `formatDuration` when its area moves. Not built.
 

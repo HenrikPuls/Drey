@@ -1,12 +1,3 @@
-### Wave-2 integration — the marked strings in the catalog (follow-up of req-102)
-
-**Not yet manually verified by the owner.** Every `TODO(i18n)` of the wave-2 surfaces is gone; the words on screen are unchanged except the correct singular "1 card waiting".
-
-- **Catalog** (`shared/i18n/catalog/en.json`): `status.*`, `work.*`, `views.*`, `settings.scope.*`, `shell.*`, `menu.*`, `app_bar.*`, `common.*`.
-- **Under the guard:** `libs/mission-ui/src/shell` and `app-bar` (guarded paths + ADR-0091); `status-slot.ts` and `view-switcher.html` by the opt-in marker, which now also reads `<!-- i18n: catalog -->` in a template.
-- **Still literal, for req-106:** the rest of `plugins/tickets/renderer/index.ts`, `desk-settings.ts`, `tab-bar.html` and the chat history's Today / Yesterday / Earlier groups, which the phone menu reuses (`chat.ts`).
-- **Specs:** `literal-guard.spec` (the template marker), `status-slot.spec`, `menu.spec`.
-
 ### req-96 — Mission Control: the desktop-like iPad with panes saved per orientation, the phone menu as the root screen
 
 **Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list
@@ -51,6 +42,17 @@
   chat's empty-state line "Earlier chats are in the menu (top left)", and the root-level
   `MC_APP_NAV` provider in `app.config.ts` that the shell now shadows. Every new string is marked
   `TODO(i18n)` for the req-102 catalog.
+
+### Wave-2 integration — strings in the catalog, the worktree e2e cause, one engine home per launch
+
+**Not yet manually verified by the owner.** Every `TODO(i18n)` of the wave-2 surfaces is gone; the words on screen are unchanged except the correct singular "1 card waiting".
+
+- **Catalog** (`shared/i18n/catalog/en.json`): `status.*`, `work.*`, `views.*`, `settings.scope.*`, `shell.*`, `menu.*`, `app_bar.*`, `common.*`.
+- **Under the guard:** `libs/mission-ui/src/shell` and `app-bar` (guarded paths + ADR-0091); `status-slot.ts` and `view-switcher.html` by the opt-in marker, which now also reads `<!-- i18n: catalog -->` in a template.
+- **Still literal, for req-106:** the rest of `plugins/tickets/renderer/index.ts`, `desk-settings.ts`, `tab-bar.html` and the chat history's Today / Yesterday / Earlier groups, which the phone menu reuses (`chat.ts`).
+- **Specs:** `literal-guard.spec` (the template marker), `status-slot.spec`, `menu.spec`.
+- **The engine starts without `dist/mission-control`** (`server/client-dir.ts`, spec beside it). A partial rebuild killed it at startup, which was the blank window and the failed `tickets` activation in worktrees (`docs/11`).
+- **e2e:** every launch gets its own engine home and the fixture stops that engine; the remote specs load the gateway from `packages/tickets-engine`, where it has been built since ADR-0088; `desk-board-team` and `work-view` follow E12-15's band rule, D-6 and the Crew's fifth persona. Six specs fail the same way without the merges: roadmap req-107.
 
 ### Milestone 180 — E12-15: Capacity band rule and the status-bar items (boards 7a, 7e, 7h)
 
