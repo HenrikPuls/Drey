@@ -306,6 +306,7 @@ describe('parseNeeds', () => {
     expect(needs).toEqual([
       {
         kind: 'report',
+        phase: 'ready',
         ticketId: 'T-0004',
         title: 'Which storage backs the index?',
         summary: '1 of 2 decisions open — Which storage should back the index?',
