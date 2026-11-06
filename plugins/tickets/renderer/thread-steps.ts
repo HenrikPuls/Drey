@@ -203,7 +203,7 @@ export type CheckpointControl = 'launch' | 'accept' | 'sendback';
 /**
  * The thread header's checkpoint actions (req-81, owner request
  * 2026-10-31): a ticket waiting on the owner (a checkpoint need —
- * Ready to try, Review, Plan to approve) carries its actions in the
+ * Ready to try, Review, Plan to accept) carries its actions in the
  * status row beside the run controls, whatever the Ready card shows —
  * they are always there, in every state of the card. Launch only for a
  * repo ticket (a removed worktree says so on click, as a mutation

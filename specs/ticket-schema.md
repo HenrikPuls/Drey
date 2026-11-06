@@ -344,7 +344,7 @@ of the Plan and removes it for fewer than two parts.
 | `priority` | one id of the board's configured vocabulary | Required. The vocabulary is the vault's own — `_meta/pipeline.md`'s `priorities:` list (default `urgent \| high \| normal \| low`); the list's order IS the weight, first = highest. An omitted or unknown id reads as the vocabulary's default (its middle entry) with a warning badge; machine writers always write a vocabulary word. See [Priorities](#priorities-priorities-in-pipelinemd). |
 | `track` | `auto \| shape` | Optional (req-75 W1b, ADR-0087 decision 2). The ticket's triage track: `auto` runs on its own, `shape` goes through the plan-mode dialog with the owner. Absent (or any other value — a warning) reads as not triaged; set from the Work panel's row menu (Track ›) until W5c/W6 fill it from triage. |
 | `form` | `ship \| scout` | Optional (concept §5.6, E8). The ticket's form: `ship` (the default — an absent key reads as ship) is the known way, plan → worktree → gate → move. `scout` is exploration only: a scout run reads repo/history/data and writes the ticket's `## Report` section — no worktree, no diff, no gate, no move; the report surfaces as a card in "Needs you" and the owner promotes the ticket to ship from there. Any other value warns (`form must be ship or scout — read as ship`) and reads as ship. See [The scout form](#the-scout-form-e8-concept-56). |
-| `chain` | list of strings | Optional (concept §5.7, E9). The ticket's **delta** against the pipeline's standard flow — the standard flow itself is team configuration in `_meta/pipeline.md` and applies to every ticket silently; the ticket stores only the deviations, one declarative entry per item in the strict grammar: `insert <phase>[(<persona>[, notify] \| notify)] after\|before <anchor>` (add a gate at the anchor — a standard-flow phase may be revisited this way, at most once), `skip <phase>` (bypass a gate), `notify <phase>` (the notify rule: a card lands in "Needs you" when the gate completes), `move <phase> after\|before <anchor>` (a standard gate runs elsewhere, E10-5), `assign <phase> <persona>` (a standard gate's persona, E10-5); an inserted gate may be the manual step `manual` / `manual-<word>` (E10-6, see "The manual step"). Absent (or empty) reads as the standard flow. An entry outside the grammar warns and drops (`chain entry "<raw>" is not readable — expected e.g. "insert design after review"`). See [The chain delta](#the-chain-delta-e9-concept-57). |
+| `chain` | list of strings | Optional (concept §5.7, E9). The ticket's **delta** against the pipeline's standard flow — the standard flow itself is crew configuration in `_meta/pipeline.md` and applies to every ticket silently; the ticket stores only the deviations, one declarative entry per item in the strict grammar: `insert <phase>[(<persona>[, notify] \| notify)] after\|before <anchor>` (add a gate at the anchor — a standard-flow phase may be revisited this way, at most once), `skip <phase>` (bypass a gate), `notify <phase>` (the notify rule: a card lands in "Needs you" when the gate completes), `move <phase> after\|before <anchor>` (a standard gate runs elsewhere, E10-5), `assign <phase> <persona>` (a standard gate's persona, E10-5); an inserted gate may be the manual step `manual` / `manual-<word>` (E10-6, see "The manual step"). Absent (or empty) reads as the standard flow. An entry outside the grammar warns and drops (`chain entry "<raw>" is not readable — expected e.g. "insert design after review"`). See [The chain delta](#the-chain-delta-e9-concept-57). |
 | `parent` | ticket id | Optional (E10, concept v2 §5.9). Set on a ticket that is one **part** of a split plan: `parent: T-0130` names the ticket whose `### Parts` list produced it. The parent keeps the plan; the part carries its own description, builder persona and `chain:` delta (a per-part scope — the parent's `chain:` never leaks into a part). A value that is no ticket id, or the ticket's own id, warns and reads as no parent; whether the parent still exists is not checked (a finished parent is archived). |
 | `proof` | `ui \| tests` | Optional pin (E11, concept v2 §5.3). Overrides the Handover's proof declaration (see [Proof mode](#proof-mode-e11)). Absent, or any other value (a warning), means no pin; with no pin and no readable declaration the mode reads as `ui`. |
 | `rank` | integer 0-999999 | Default `5000`. Fine ordering inside derived order. |
@@ -631,7 +631,7 @@ The `## Report` section stays in the file as history.
 
 ### The chain delta (E9, concept §5.7)
 
-The pipeline's standard flow is **team configuration**
+The pipeline's standard flow is **crew configuration**
 (`_meta/pipeline.md`) and applies to every ticket **silently**. A
 ticket stores only its **delta** — declarative entries in the
 frontmatter's `chain:` list:
@@ -830,7 +830,7 @@ run there gates structurally — the plan writes the acceptance criteria) · **B
 integration branch and pushed; it takes the role of the former `commit` column and
 the checkpoint discipline of `plugins/tickets/BOARD.md`) · **Done**. The manual columns carry
 `persona: you` (the human persona, whose name is configurable — `personas.humanName`,
-Settings → Tickets → Team); Review and Sign
+Settings → Tickets → Crew); Review and Sign
 Off are the owner's checkpoints (see "Agent lane rules"): *Accept* is the forward move,
 *Send back* the ordinary send-back to Build. dk claim stages: `plan`, `build`. Boards
 and stores that exist keep their columns — a default is written only into an empty
@@ -1002,7 +1002,7 @@ tickets/_meta/personas/
   | Field | Shape | Default |
   |---|---|---|
   | `title` | string | the id |
-  | `kind` | `agent \| human` | `agent` (an absent key). `human` is the owner as a team member (E10-6): `personas/you`, created once by the board service (title = config `personas.humanName`, default `You`; editable like any title, and Settings → Tickets → Team → *Your name* retitles it; "Initialize board" writes it with the default pipeline, whose manual columns pin it). Inert for `role`/`worker`/`models`/`skills`/`budget` — the human is never dispatched, counted toward capacity or budgeted. Written only when `human` |
+  | `kind` | `agent \| human` | `agent` (an absent key). `human` is the owner as a crew member (E10-6): `personas/you`, created once by the board service (title = config `personas.humanName`, default `You`; editable like any title, and Settings → Tickets → Crew → *Your name* retitles it; "Initialize board" writes it with the default pipeline, whose manual columns pin it). Inert for `role`/`worker`/`models`/`skills`/`budget` — the human is never dispatched, counted toward capacity or budgeted. Written only when `human` |
   | `role` | `planner \| builder \| reviewer \| tester \| custom` | `custom` |
   | `worker` | the CLI harness (`claude-code`, `opencode`, `api`) | `opencode` |
   | `models.default` | the model nothing else decides | `opus` |
@@ -1010,7 +1010,7 @@ tickets/_meta/personas/
   | `models.router` | `off \| budget \| escalate-on-fail` — a router only ever picks inside the pool | `off` |
   | `color` | `#rrggbb`, the chips and avatars | `#a78bfa` |
   | `skills` | reusable skill files under `_meta/skills/` the persona carries | `[]` |
-  | `budget` | USD per day — the Team card shows the day's costs against it | unset (null) |
+  | `budget` | USD per day — the Crew card shows the day's costs against it | unset (null) |
 
 - `prompt.md` — the longform persona prompt, free Markdown. When a
   persona resolves at dispatch, this file is the run's instruction base,

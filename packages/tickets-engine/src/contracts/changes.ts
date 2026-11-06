@@ -251,7 +251,7 @@ export interface ChangesReply {
 
 /**
  * The ISO stamp of the owner's newest `plan-review -> build` Log line —
- * the thread's "plan approved" moment (req-75 W4a). Only the owner's
+ * the thread's "plan accepted" moment (req-75 W4a). Only the owner's
  * move counts: the fleet's own moves carry another actor.
  */
 export function planApprovedOf(ticketText: string): string | null {

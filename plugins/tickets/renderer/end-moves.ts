@@ -66,7 +66,7 @@ export function interactiveEndMoves(mode: InteractiveMode, phaseId: string, colu
   }
   if (after !== null) {
     moves.push({
-      label: `Approve → ${after.title}`,
+      label: `Accept → ${after.title}`,
       toPhase: after.id,
       title: `You settled the open points in this dialog — skip your own checkpoint and feed ${after.title} directly`,
     });

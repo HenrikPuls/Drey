@@ -56,7 +56,7 @@ phases:
   notion of "the human's column": the dispatcher never touches them (it only reads
   agent columns; the pin is the declared owner, not a dispatch input). The persona is
   written by "Initialize board" together with `pipeline.md`; an existing board gets it on
-  first sight (Team, flow editor) and keeps whatever pins it has. **Review is a
+  first sight (Crew, flow editor) and keeps whatever pins it has. **Review is a
   checkpoint** (manual with an automatic predecessor): it raises a *checkpoint* card in
   Needs you, **Accept** is the ordinary forward move (Review → Sign Off), **Send back**
   the ordinary send-back (nearest earlier agent column = Build, mandatory note,
@@ -83,13 +83,13 @@ phases:
   commit-default` (+ `claim: true`) on its Sign Off column.
 - Personas: no persona is seeded (E12-9b Q2/Q3 are still open); Plan and Build resolve
   through the ordinary ladder (column `persona:` → role defaults → fleet default worker).
-  "Default personas" therefore means: planner role for Plan, builder for Build once a team
+  "Default personas" therefore means: planner role for Plan, builder for Build once a crew
   exists; Review/Sign Off are the human persona *You* by definition (manual).
 
 - **The human persona's name is configurable** (`personas.humanName`, default `You`):
-  Settings → Tickets → Team → *Your name* writes the config key (new boards start with it)
+  Settings → Tickets → Crew → *Your name* writes the config key (new boards start with it)
   and retitles `personas/you/persona.md` (one `personaPatch`, one commit). Every surface
-  shows the persona's *title* — column pins, Team, the flow editor, the Settings chips,
+  shows the persona's *title* — column pins, Crew, the flow editor, the Settings chips,
   the phone — so one rename applies everywhere; the former hard-coded "You" in the flow
   editor and the Settings chips now read it. A blank name returns to `You`.
 

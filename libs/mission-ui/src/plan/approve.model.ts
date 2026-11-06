@@ -1,6 +1,6 @@
 /**
- * The plan to approve's view models and pure helpers (E10-4, concept v2
- * §5.9, design boards "iPad: Plan to approve" and the phone's full-screen
+ * The plan to accept's view models and pure helpers (E10-4, concept v2
+ * §5.9, design boards "iPad: Plan to accept" and the phone's full-screen
  * version): one card per part, the owner's list edits, the start rule,
  * the build estimate (only with at least three similar runs, decision
  * D9) and Mission Control's proposal. The wire is `GET/POST
@@ -170,7 +170,7 @@ export function proposalOf(cards: readonly McPartCard[]): PlanProposal {
   const released = cards.length - open.length;
   const lead =
     released === 0
-      ? `Mission Control proposes to approve all ${open.length} parts.`
+      ? `Mission Control proposes to accept all ${open.length} parts.`
       : `Mission Control proposes to release the ${open.length === 1 ? 'last part' : `remaining ${open.length} parts`}.`;
   const rule =
     first.index === 0
@@ -178,7 +178,7 @@ export function proposalOf(cards: readonly McPartCard[]): PlanProposal {
       : `Part ${first.index + 1} starts when part ${first.index} is done; each part after it follows the one before.`;
   return {
     text: `${lead} ${rule}`,
-    approveLabel: 'Approve and run',
+    approveLabel: 'Accept and run',
     firstLabel: open.length > 1 ? `Run part ${first.index + 1} only` : null,
   };
 }

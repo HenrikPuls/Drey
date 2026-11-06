@@ -259,7 +259,7 @@ describe('route', () => {
     expect(remote.ticketWorktreeChanges).toHaveBeenCalledWith('T-0052');
   });
 
-  it('routes the plan to approve: the cards, the list edits and the release', async () => {
+  it('routes the plan to accept: the cards, the list edits and the release', async () => {
     const { deps, devices, remote } = setup();
     const { token } = await devices.add('iPhone 15', false, new Date());
     const auth = `Bearer ${token}`;

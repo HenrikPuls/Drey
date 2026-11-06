@@ -1,6 +1,6 @@
 @if (isOpen()) {
   <section class="detail" role="dialog" aria-modal="true" [attr.aria-label]="title()">
-    <mc-app-bar [title]="title()" [sub]="role() || null" back="Team" (backed)="close()">
+    <mc-app-bar [title]="title()" [sub]="role() || null" back="Crew" (backed)="close()">
       <span bar-end class="avatar" [style.background-color]="color()" aria-hidden="true">{{
         initialsOf(title())
       }}</span>

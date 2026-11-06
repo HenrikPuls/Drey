@@ -62,7 +62,7 @@ describe('primaryActionOf', () => {
     expect(primaryActionOf(snap, 'plan-review', card('T-0002'), [])).toEqual({
       kind: 'approve',
       to: 'build',
-      label: 'Approve → Build',
+      label: 'Accept → Build',
     });
     expect(primaryActionOf(snap, 'build', card('T-0003'), [])).toEqual({ kind: 'run', label: 'Run agent' });
     expect(primaryActionOf(snap, 'done', card('T-0004'), [])).toBeNull();

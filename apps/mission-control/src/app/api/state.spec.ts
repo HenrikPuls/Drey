@@ -1965,7 +1965,7 @@ describe('McState shape mode (E10-3)', () => {
     expect(state.splitProposal()).toBeNull();
   });
 
-  describe('the plan to approve (E10-4)', () => {
+  describe('the plan to accept (E10-4)', () => {
     const PARTS = {
       ok: true,
       ticket: 'T-0130',

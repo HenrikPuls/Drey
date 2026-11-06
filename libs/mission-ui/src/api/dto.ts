@@ -1722,7 +1722,7 @@ export function parsePlanStatus(json: unknown): McPlanStatus | null {
   return { version: num(body['version']), edits: num(body['edits']) ?? 0, summary: strOrNull(body['summary']), marks };
 }
 
-// --- the plan to approve (E10-4) -------------------------------------------------------
+// --- the plan to accept (E10-4) -------------------------------------------------------
 
 export type McPartState = 'new' | 'queued' | 'running' | 'active' | 'done';
 
@@ -1736,7 +1736,7 @@ export interface McPartFlowStep {
   readonly notify: boolean;
 }
 
-/** One card of the plan to approve (`GET /api/tickets/<id>/parts`). */
+/** One card of the plan to accept (`GET /api/tickets/<id>/parts`). */
 export interface McPartCard {
   readonly index: number;
   readonly title: string;

@@ -457,7 +457,7 @@ speech bubble (**Model**), a rocket (**Mission Control**) and two heads
 
 - **Model** is the chat described here: the provider from Settings →
   Assistant, with the composer's chips and tools.
-- **Mission Control** is the team's contact (Pia). It knows the board and
+- **Mission Control** is the crew's contact (Pia). It knows the board and
   proposes changes as cards with **Confirm** and **Dismiss**; nothing changes
   until you confirm. A question from Paul, the planner, appears as a card
   above the composer — tap an answer to send it — and his words carry the
@@ -466,7 +466,7 @@ speech bubble (**Model**), a rocket (**Mission Control**) and two heads
   Z.ai GLM); with a CLI provider it answers with an error card saying so.
   The head's list button opens the earlier Mission Control chats, `+`
   starts a new one.
-- **1:1** opens a menu of the team's agent personas. Your messages go into
+- **1:1** opens a menu of the crew's agent personas. Your messages go into
   that persona's thread, which the persona reads before the next run.
 
 #### Shape a ticket in the editor {#shape-in-editor}
@@ -491,7 +491,7 @@ repository and rewrites **only the `## Plan` chapter** of the open file.
   next message, or write your own answer.
 - When he is ready, the thread shows **Split** / **Keep as one**. *Keep as
   one* moves the ticket into the build queue; *Split* records the choice and
-  leads to the plan to approve.
+  leads to the plan to accept.
 
 On a target the composer keeps the **Vault** chip (off by default; the same
 picker as on Model) and **Prompts**. With the chip on, the note sections that
@@ -840,7 +840,7 @@ its heading (remembered across restarts):
   thread its options are one-tap pills, each with a leading dot and the
   recommended one's filled), an approval it wants
   (*Approval*), a red gate or a failed run (*Gate red*, *Run failed*),
-  a plan to approve (*Plan to approve*), a review (*Review*), and a
+  a plan to accept (*Plan to accept*), a review (*Review*), and a
   finished ticket (*Ready to try*). The buttons for the last three live
   in the ticket's thread, not on the row.
 - **Running** — everything on its way through the pipeline. The
@@ -883,7 +883,7 @@ sits the same **Ticket | Thread | Review** control (identical on the
 document, the thread and the Review tab, only the active button differs):
 click another button to switch. The choice is per ticket and never touches a
 saved view. The thread's header shows the run's light and who is working,
-and above its composer sits the **decision bar** (Approve → next phase,
+and above its composer sits the **decision bar** (Accept → next phase,
 or Accept). The thread follows whichever ticket you
 click last — one tab, not one per ticket — and opens where your focus is,
 never as an automatic split. A ticket picked in the Files panel opens as
@@ -1143,9 +1143,9 @@ the **persona** that works on it (the live run's, else the ticket's pin, else
 the column's) and the **cost** of the ticket so far, written as on the phone
 (`$1.20`); a ticket without a known cost shows none.
 
-**Board, Team and Capacity.** Three more surfaces show the whole desk, from
-the Work panel's **⋯** menu (*Board*, *Team*) or the command palette
-(*Open the Board*, *Open the Team*, *Show the Capacity band*):
+**Board, Crew and Capacity.** Three more surfaces show the whole desk, from
+the Work panel's **⋯** menu (*Board*, *Crew*) or the command palette
+(*Open the Board*, *Open the Crew*, *Show the Capacity band*):
 
 - **Board** (an editor tab) — the pipeline as columns. A card shows the
   ticket's id, what it is doing (*Running*, *Waiting*, *Plan*), its persona,
@@ -1154,7 +1154,7 @@ the Work panel's **⋯** menu (*Board*, *Team*) or the command palette
   parts that are not tickets yet hang under the planning ticket as *P1*,
   *P2*. A click opens the ticket; **New idea** in the first column captures
   one. *Done this week* is the last column.
-- **Team** (an editor tab) — a card per persona: its state (*idle*,
+- **Crew** (an editor tab) — a card per persona: its state (*idle*,
   *running*, *waiting*, *stuck*, *paused*), the day's cost against its
   budget, and one row per live run. A run that stopped making progress
   turns amber and offers **Nudge** (asks the worker for a status line),
@@ -1169,7 +1169,7 @@ the Work panel's **⋯** menu (*Board*, *Team*) or the command palette
   model, pool, phases, cost; **Pause** or **Resume** the persona).
 - **Capacity** (a panel for the bottom dock) — one line: how many of the
   worker slots are busy, the pool chips, what each persona is doing right
-  now, today's cost, **Pause all** and **Open Team ›**.
+  now, today's cost, **Pause all** and **Open Crew ›**.
 
 **Workers.** While workers run, a *Workers* section tops the Work panel:
 one card per worker with its state in words (*Building*, *Paused*,
@@ -1204,7 +1204,7 @@ header always offers exactly one way on: Stop while the run lives
 run ended with a session, **Resume session** continues the
 conversation later in a new worker that answers and then waits for
 your prompts. Above the steps, the thread says **Shaped with you**
-when you approved this ticket's plan, and a **Changes so far** box
+when you accepted this ticket's plan, and a **Changes so far** box
 lists what the branch carries against its base — each file, its
 status, the lines added and removed — beside **Safe beside others**
 (✓ own worktree). Two quick prompts sit above the prompt box: **What
@@ -1355,7 +1355,7 @@ message in the thread starts the phase's dialog too, quiet the same
 way. (A Claude Code worker starts as today, running its first turn.)
 Ending the dialog
 is a move, right in the thread: a plan dialog offers **Finish → Plan
-review** and **Approve → Build** (when you settled the open points
+review** and **Accept → Build** (when you settled the open points
 yourself, your own checkpoint can be skipped). A click stops the run and makes the move — the same one-commit
 move as from the menu. Closing the tab without a move keeps everything:
 the reservation stays on the ticket (the fleet will not pick it up), and
@@ -1544,9 +1544,9 @@ And the assistant can drive runs: ask it about the fleet — it sees
 
 ### The Tickets settings page
 
-Settings → Tickets starts with the things you decide about the team:
-**Team** shows the personas as chips; you are the human persona, called *You* until you type another name into **Your name** (it applies to every column you work, the flow editor, Team and the phone); *Edit team* opens the
-Team tab. **Default flow** shows the standard flow, the columns an agent
+Settings → Tickets starts with the things you decide about the crew:
+**Crew** shows the personas as chips; you are the human persona, called *You* until you type another name into **Your name** (it applies to every column you work, the flow editor, Crew and the phone); *Edit crew* opens the
+Crew tab. **Default flow** shows the standard flow, the columns an agent
 works with who does each; a flow is changed per ticket, so pick a ticket
 next to *Open flow editor* to open its Flow tab (the standard flow itself is
 set below, in the pipeline table). **Budget and runners** shows the daily
@@ -1579,7 +1579,7 @@ it on, and only devices you pair get in.
 3. On the phone, add the page to the home screen.
 
 On the phone every page has one bar at the top, below the status bar: the **☰** button
-(back to the chat with its history and the places Work, Team and Settings) at its left, or
+(back to the chat with its history and the places Work, Crew and Settings) at its left, or
 **‹** and the parent's name on a page opened from another (Settings → Appearance), then the
 page's title and, at the right, its own status or button. The bar stays put while the page
 scrolls beneath it.
@@ -1681,7 +1681,7 @@ Log on the second tab, and its latest run on the third. The text
 renders its formatting — **bold**, *italic*, `code`, tables, rules
 and smaller in-section headings — both in the ticket and in a run's
 replies and results. The big button at the bottom is the step that
-fits: **Approve → <next column>** in a checkpoint column, **Run
+fits: **Accept → <next column>** in a checkpoint column, **Run
 agent** in an agent column (starting a run opens its transcript, so
 you see what the worker does), **Move to <next column>** otherwise.
 **Move…** lists every column with the commit the move makes; **⋯**
@@ -1772,7 +1772,7 @@ automatically.
   Capacity band below. Opening a ticket — from the Tickets panel, the Files panel, a
   `[[T-0121]]` link or the quick switcher — never changes the view: the
   ticket opens as a tab in the view you are in. Opening the Board or
-  Team tab switches to Work; Notes is `Ctrl+1`.
+  Crew tab switches to Work; Notes is `Ctrl+1`.
 - **Open windows** panel lists the open documents of the current view,
   and under *In other views* the rest, each with a *Show here* button:
 

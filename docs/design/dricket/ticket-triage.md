@@ -13,7 +13,7 @@ shipped work; nothing here was checked in a running app.
 
 | Ticket | Reason | Evidence |
 |---|---|---|
-| T-0079 Plan to approve, one card per part | Shipped as E10-4 | changelog milestone 126; roadmap keeps only the follow-up E10-4b |
+| T-0079 Plan to accept, one card per part | Shipped as E10-4 | changelog milestone 126; roadmap keeps only the follow-up E10-4b |
 | T-0087 Re-integrate T-0043 settings round 2 | Superseded: the column CRUD lives in the flow editor (E10-5, milestone 128), the settings page in E13-12 (milestone 146); the stale branch `t/T-0043` is not needed | changelog 128 / 146. Not compared line by line with the old branch |
 
 ## Close at the fleet cut-over, do not migrate (3)

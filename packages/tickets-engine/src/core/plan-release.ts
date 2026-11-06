@@ -1,6 +1,6 @@
 /**
  * Releasing a plan's parts (E10-4, concept v2 §5.9): the pure half of
- * the "Plan to approve" card. A part is a line of the parent's
+ * the "Plan to accept" card. A part is a line of the parent's
  * `### Parts` until the owner approves; then it becomes its own ticket
  * (`parent:`, the builder's `persona:`, its own `chain:` delta, and a
  * `blocked-by:` on the part before it, so the order of the plan is the

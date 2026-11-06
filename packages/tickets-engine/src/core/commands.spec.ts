@@ -194,7 +194,7 @@ describe('parseAttachment', () => {
   });
 });
 
-describe('the plan to approve commands (E10-4)', () => {
+describe('the plan to accept commands (E10-4)', () => {
   it('reads the three list edits', () => {
     expect(parsePlanPartsEdit({ id: 'T-0130', op: 'persona', index: 1, persona: 'ben' })).toEqual({
       ok: true,

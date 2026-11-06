@@ -913,7 +913,7 @@ export class TicketView {
     return at >= 0 && (build < 0 ? at <= 1 : at < build);
   });
 
-  // --- the plan to approve (E10-4) ---------------------------------------------------
+  // --- the plan to accept (E10-4) ---------------------------------------------------
 
   /** How many parts the plan lists; the approval is offered from two on, on a ticket that is not finished. */
   protected readonly planParts = computed(() => {

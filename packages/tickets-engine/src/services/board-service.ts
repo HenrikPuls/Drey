@@ -1251,7 +1251,7 @@ export class EngineBoardService {
     });
   }
 
-  // --- the plan to approve (E10-4, concept v2 §5.9) ----------------------------
+  // --- the plan to accept (E10-4, concept v2 §5.9) ----------------------------
 
   /** The build queue's phase: `build`, else the phase after the first, else the first. */
   private buildPhaseOf(snap: BoardSnapshot): PipelinePhase | null {
@@ -1268,7 +1268,7 @@ export class EngineBoardService {
   }
 
   /**
-   * The cards of a ticket's plan to approve: its `### Parts` with the
+   * The cards of a ticket's plan to accept: its `### Parts` with the
    * ticket each part became (by title among the tickets that name this
    * one as `parent:`), the state and the lock that follows, each part's
    * flow from the build gate on, and the personas the picker offers. A
@@ -1842,7 +1842,7 @@ export class EngineBoardService {
     } catch (error) {
       this.announceChanged();
       const so = done.length === 0 ? '' : ` Released so far: ${done.join(', ')}.`;
-      return { ok: false, error: `release stopped: ${messageOf(error)}.${so} Approve again to continue — the parts that exist are kept.` };
+      return { ok: false, error: `release stopped: ${messageOf(error)}.${so} Accept again to continue — the parts that exist are kept.` };
     }
     this.announceChanged();
     return { ok: true, tickets: done };

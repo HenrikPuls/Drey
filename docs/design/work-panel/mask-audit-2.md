@@ -9,7 +9,7 @@ State audited: branch `desktop-integration` at `4cb1642c` (milestones 1–162), 
 - **Drey desktop:** the built Electron app under Playwright against English scratch vaults (the e2e fixtures `desk-board-team`, `review-tab`, `shape-in-drey`, `flow-settings`, `assistant-targets`, plus one extra scratch spec that was deleted afterwards). Every run used a temp `USERPROFILE` / `--user-data-dir`, so the engine was spawned from this build, never adopted. Screenshots 1920×1203.
 - **Mission Control:** a scratch engine on a temp home and a temp vault (7 English tickets, 4 personas), Mission Control served from `dist/mission-control`, driven by Playwright Chromium at 390×844 (phone) and 1180×820 (iPad). Nothing touched the owner's real vault, `drey-tickets` or `~/.drey-engine`.
 - **Design source:** the canvas itself is not in the repo. The comparators were (a) the eleven stale repo copies `docs/design/work-panel/*.dc.html` (text, colours, radii, fonts read from the markup), (b) the board-by-board table of the earlier design-to-code audit (canvas version 1793758350-594f, boards 4a–7j) and `desktop-integration.md`, (c) `convergence-gaps.md` and the roadmap. **Pixel-level spacing against the live canvas was not measured** — where a row says "layout" it is a structural difference visible in the screenshot, not a measured pixel delta. Tokens come from `handoff/DESIGN.md` and the Anthrazit table in the earlier audit.
-- **Not captured** (fixture work, listed so the gap is explicit): MC ticket screen with a **waiting question** (4b/5a) and with **proof + diff** (5h/7j on the phone); MC **plan to approve** card (5c/5e; the seed has Parts but no proposal, so the card did not render); MC **shape** session (4c/5b); the **Views menu** (7h; the right-click did not open in the scratch run, judged from `view-switcher.html`); the Work panel in a dricket store. These sections say "code only".
+- **Not captured** (fixture work, listed so the gap is explicit): MC ticket screen with a **waiting question** (4b/5a) and with **proof + diff** (5h/7j on the phone); MC **plan to accept** card (5c/5e; the seed has Parts but no proposal, so the card did not render); MC **shape** session (4c/5b); the **Views menu** (7h; the right-click did not open in the scratch run, judged from `view-switcher.html`); the Work panel in a dricket store. These sections say "code only".
 - **A mistake worth stating:** a first e2e batch included three specs that do **not** isolate their engine home (`ticket-card-menu`, `ticket-header`, `ticket-document`) and so adopted the owner's live engine. The owner's tickets repo showed no new commit after the batch started (last commit 22:10, batch started later) and the specs failed at the first lookup; the affected spec ids (T-0090, T-0091) exist on the real board, so the owner may want to glance at `git log` there. Those specs were not run again; the ticket-document screenshot is the owner-verified-era copy from the milestone-129 session's notes folder.
 
 Legend. **Seen** = visible in a screenshot (path under `audit-2-screenshots/`). **Code** = read from source or strings only. **Gap id** = `convergence-gaps.md` row: *fixed* (verified shipped), *open*, *partly*, *new* (not listed before). Size: **S** ≤ half a day, **M** one focused session, **L** several sessions or needs an owner/design decision first.
@@ -23,18 +23,18 @@ Legend. **Seen** = visible in a screenshot (path under `audit-2-screenshots/`). 
 | L | 6 |
 | **Sized deviations** | **60** (the ids in the tables below; 6 more rows are "matches the design" and carry no size) |
 
-Against the 35 rows of `convergence-gaps.md`: **verified fixed** G-01 (Work view), G-02 (targets), G-03 (Review tab), G-09 (Settings → Tickets), G-10 (panel title), G-13 (chord label), G-16 (Flow tab), G-18 (composer mic), G-23 (pastel tokens), G-30 (video rule); G-06 and G-08 are fixed per the changelog and were not re-checked on screen. **Still open or only partly fixed:** G-04 (`Plan with agent` still in the ticket header, Shape works), G-05 (no Parts block), G-11 (Workers block and footer, no Open Board icon), G-12 (one status item), G-14 (Team), G-15 (Board filter), G-19 (strings), G-24–26 (token residue), G-28 (menus), G-29 (header chips). Closed or decided: G-07, 17, 27, 31, 32. Documentation-only rows (G-20–22, 33–35) are out of scope for a screen audit. **New: 31 deviations** that no earlier row names (marked *new*).
+Against the 35 rows of `convergence-gaps.md`: **verified fixed** G-01 (Work view), G-02 (targets), G-03 (Review tab), G-09 (Settings → Tickets), G-10 (panel title), G-13 (chord label), G-16 (Flow tab), G-18 (composer mic), G-23 (pastel tokens), G-30 (video rule); G-06 and G-08 are fixed per the changelog and were not re-checked on screen. **Still open or only partly fixed:** G-04 (`Plan with agent` still in the ticket header, Shape works), G-05 (no Parts block), G-11 (Workers block and footer, no Open Board icon), G-12 (one status item), G-14 (Crew), G-15 (Board filter), G-19 (strings), G-24–26 (token residue), G-28 (menus), G-29 (header chips). Closed or decided: G-07, 17, 27, 31, 32. Documentation-only rows (G-20–22, 33–35) are out of scope for a screen audit. **New: 31 deviations** that no earlier row names (marked *new*).
 
 ## 1. Work panel (Home 2a, DeskWork 7a, left half)
 
-Design: `Home.dc.html` (panel 340 px: one 40 px header row `Work` + icons; groups **Needs you · Shaping · Running · Ideas · Done this week**; one-line footer `3 workers · Local 2/2 · Claude Code 1/3` + `Workers` link); 7a retitles it **Tickets**, adds the icons *filter · New idea · Open Board tab · drag* and a footer *Team · Ben, Tessa busy*; row = id · kind chip · persona · title · line · age · cost.
+Design: `Home.dc.html` (panel 340 px: one 40 px header row `Work` + icons; groups **Needs you · Shaping · Running · Ideas · Done this week**; one-line footer `3 workers · Local 2/2 · Claude Code 1/3` + `Workers` link); 7a retitles it **Tickets**, adds the icons *filter · New idea · Open Board tab · drag* and a footer *Crew · Ben, Tessa busy*; row = id · kind chip · persona · title · line · age · cost.
 Built: `plugins/tickets/renderer/work-panel.ts`, `work-groups.ts`, `board.css`. Screenshot: [desk-work-view.png](audit-2-screenshots/desk-work-view.png), [desk-waiting-ticket.png](audit-2-screenshots/desk-waiting-ticket.png).
 
 | id | Deviation | Evidence | Gap id | Size |
 |---|---|---|---|---|
 | A-01 | **Header is three stacked rows (about 140 px) instead of one 40 px row**: vault dropdown + filter on row one, `Tickets 2 need you` with `+`, refresh, play/pause/stop on row two, an extra `…` on row three; the header icons are not ordered *filter · New idea · Open Board tab · grip* | Seen | new | M |
 | A-02 | **A Workers block (live worker cards) sits above the groups** and takes half the panel; the cards repeat the question text, say `Looks stuck`, `Waits for your answer`, `Context — not reported yet`. Board 3b is superseded; 7a has no worker cards in the panel, workers live in Team/Capacity. Needs you is pushed below the fold | Seen | G-11 partly | M |
-| A-03 | Footer is `1 need attention · 1 stalled · OpenC…` (truncated) + `Workers` link; design says `Team · Ben, Tessa busy` and links the Team tab. The Workers tab and Chain log still exist behind `…` | Seen | G-11 open | S |
+| A-03 | Footer is `1 need attention · 1 stalled · OpenC…` (truncated) + `Workers` link; design says `Crew · Ben, Tessa busy` and links the Crew tab. The Workers tab and Chain log still exist behind `…` | Seen | G-11 open | S |
 | A-04 | No **Open Board tab** icon in the header (Board only in `…`) | Seen | G-11 open | S |
 | A-05 | **Row title truncates at 340 px** (`Outline: drag headi…`) because persona chip + cost + kind chip take the line; the second line mixes phase dot, kind chip, a mono excerpt (`Queued waits for …`, `Building Run…`). Design: title on its own line, age right, one grey detail line | Seen | new | S |
 | A-06 | Running rows show the mono strings `Queued`, `Building Running …` (a state word plus a raw status line) instead of a step line (`Step 2 · drop handler in …`) | Seen | new | S |
@@ -92,7 +92,7 @@ Built: [desk-shape.png](audit-2-screenshots/desk-shape.png) — editor + Assista
 | E-03 | `Split` button disabled-grey beside `Keep as one` looks unavailable; no hint why | Seen | new | S |
 | E-04 | MC shape (phone 4c, iPad 5b): **code only** — raw-mode editor opens as a full text view with a warning bar (`Raw mode — this file is the machine interface…`), see [mc-pad-ticket-edit.png](audit-2-screenshots/mc-pad-ticket-edit.png). No `You / model / Show diff` switch, no formatting strip, no tinted marks (E10-3b / E12-6 follow-ups) | Seen | E10-3b open | L |
 
-## 6. Plan to approve (Orchestrator 2c → DeskPlan 7c, PadPlan 5c, PhonePlan 5e)
+## 6. Plan to accept (Orchestrator 2c → DeskPlan 7c, PadPlan 5c, PhonePlan 5e)
 
 Design: Parts block under the ticket header — persona per part, ↑↓ / delete, `starts first` / `after P1 · blocked-by P1`, per-part estimate `from N runs` or `not yet · fewer than 3 runs`, `Typical total $a–b`, `Ask Mission Control to change the split`, `Flow: standard · Plan, Build, Review, Test · Change flow ›`, `Approve plan`.
 Built on the desk: nothing — the ticket's Parts show as a Markdown list ([desk-plan-ticket-thread.png](audit-2-screenshots/desk-plan-ticket-thread.png), [desk-shape.png](audit-2-screenshots/desk-shape.png), [mc-phone-ticket-plan.png](audit-2-screenshots/mc-phone-ticket-plan.png)).
@@ -127,19 +127,19 @@ Built: [desk-board.png](audit-2-screenshots/desk-board.png).
 | H-03 | `New idea` sits inside the **Inbox** column header, the board design has it in the board header | Seen | new | S |
 | H-04 | Cards: id + title only in the scratch data (cost/persona chips arrive with ledger data — present in the e2e fixture, matches 7e there) | Seen | — | — |
 
-## 9. Team and Capacity (Workers 3b → Team 5d, 7f; Capacity band 7e)
+## 9. Crew and Capacity (Workers 3b → Crew 5d, 7f; Capacity band 7e)
 
-Design: Team head `1 running · 2 waiting · 1 stuck`, `Today $ of $`, `Pause all`, `Stop all`, persona cards (state, ticket, Nudge / Hand to Claude Code / Stop), detail tabs `Setup · Memory · 12 · Friction · 3`, `Talk to Ben 1:1 in the Assistant`, `New persona`, `Remove from team`.
+Design: Crew head `1 running · 2 waiting · 1 stuck`, `Today $ of $`, `Pause all`, `Stop all`, persona cards (state, ticket, Nudge / Hand to Claude Code / Stop), detail tabs `Setup · Memory · 12 · Friction · 3`, `Talk to Ben 1:1 in the Assistant`, `New persona`, `Remove from crew`.
 Built: [desk-team.png](audit-2-screenshots/desk-team.png), capacity band in every Work-view screenshot, [mc-phone-team.png](audit-2-screenshots/mc-phone-team.png), [mc-pad-team-detail.png](audit-2-screenshots/mc-pad-team-detail.png).
 
 | id | Deviation | Evidence | Gap id | Size |
 |---|---|---|---|---|
-| I-01 | Team header reads `Team  4 personas` — the grid shows **five** cards (the `You` card is not counted) and the design's state summary and `Today $` are absent; the pool chips `Local 2/2`, `Claude Code 0/3` are as designed | Seen | new | S |
-| I-02 | `New persona`, `Remove from team`, editable Setup, `Friction` tab, `Notify` / `Runs after` / `This week` / `Typical run`, `Talk to … 1:1` — all missing (desk tabs `1:1 / Memory / Setup`) | Seen / code | G-14 **open** | L |
-| I-03 | **Capacity band is always open in the Work view** (about 330 px of the centre), with the persona list stacked vertically in the middle and a large empty left/right; it should appear only while Board or Team is the active tab (7e) and be one line | Seen | E13-13 rest | M |
+| I-01 | Crew header reads `Crew  4 personas` — the grid shows **five** cards (the `You` card is not counted) and the design's state summary and `Today $` are absent; the pool chips `Local 2/2`, `Claude Code 0/3` are as designed | Seen | new | S |
+| I-02 | `New persona`, `Remove from crew`, editable Setup, `Friction` tab, `Notify` / `Runs after` / `This week` / `Typical run`, `Talk to … 1:1` — all missing (desk tabs `1:1 / Memory / Setup`) | Seen / code | G-14 **open** | L |
+| I-03 | **Capacity band is always open in the Work view** (about 330 px of the centre), with the persona list stacked vertically in the middle and a large empty left/right; it should appear only while Board or Crew is the active tab (7e) and be one line | Seen | E13-13 rest | M |
 | I-04 | Persona colour dots in Capacity (blue, purple, amber, teal) are plain hex colours from the persona files, outside the three pastels | Seen | new | S |
-| I-05 | Duplicated surfaces: the Workers cards in the panel (A-02), the Capacity band and the Team tab all list workers | Seen | G-11 | (A-02) |
-| I-06 | MC team (phone 6d): `Chain` master switch, `Pause all after this step`, `Stop all` as designed; persona cards show role in **uppercase mono** (`BUILDER · BUILD`), a full-width `Pause` button per persona | Seen | new | S |
+| I-05 | Duplicated surfaces: the Workers cards in the panel (A-02), the Capacity band and the Crew tab all list workers | Seen | G-11 | (A-02) |
+| I-06 | MC crew (phone 6d): `Chain` master switch, `Pause all after this step`, `Stop all` as designed; persona cards show role in **uppercase mono** (`BUILDER · BUILD`), a full-width `Pause` button per persona | Seen | new | S |
 | I-07 | MC pad 1:1 detail: tabs `1:1 / MEMORY / SETUP` (mono uppercase), `Teach Ben something…`, `No improvement proposals yet — the loop aggregates friction into drafts.` explanatory prose (breaks "no unnecessary UI text") | Seen | new | S |
 
 ## 10. Flow editor (PadFlow 5i; the Flow tab 7)
@@ -157,7 +157,7 @@ Built: [desk-settings-tickets.png](audit-2-screenshots/desk-settings-tickets.png
 
 | id | Deviation | Evidence | Gap id | Size |
 |---|---|---|---|---|
-| K-01 | Desk Settings → Tickets rebuilt: Team (`Edit team`), Default flow (`Open flow editor`), Daily budget, Runners (`Manage`); page description matches 7g. Missing: `Pause when the budget is spent`, runners dialog (E13-12b), the budget row is text (`$12 across 3 personas · $0 spent today`); the Default flow row has a ticket dropdown beside `Standard flow` that makes it look like a ticket flow | Seen | G-09 **fixed** (partly, E13-12b) | S |
+| K-01 | Desk Settings → Tickets rebuilt: Crew (`Edit crew`), Default flow (`Open flow editor`), Daily budget, Runners (`Manage`); page description matches 7g. Missing: `Pause when the budget is spent`, runners dialog (E13-12b), the budget row is text (`$12 across 3 personas · $0 spent today`); the Default flow row has a ticket dropdown beside `Standard flow` that makes it look like a ticket flow | Seen | G-09 **fixed** (partly, E13-12b) | S |
 | K-02 | Settings root list is not in the design's order: `Panels & plugins` clipped at the top of the left list (title overlaps) | Seen | new | S |
 | K-03 | MC settings root has four rows (`Appearance`, `Chat`, `Devices`, `Engine`); design 6c adds `Away and alerts`, `Repositories`. The `Engine` row's only content is `Videos`, a one-word row | Seen | G-19 / E12-3b open | M |
 | K-04 | **MC iPad: Settings → Devices is crushed into a ~120 px column** inside the three-column layout (title `Devi…` cut, name field overlapped by its label, `Show pairing code` wrapped to three lines) — the detail should take the middle/right area (design: settings as a full master-detail page) | Seen | new | M |
@@ -179,7 +179,7 @@ Built: [desk-tab-menu.png](audit-2-screenshots/desk-tab-menu.png), [desk-open-wi
 ## 13. Assistant header and targets (DeskWork right column, 7a)
 
 > **Owner note 2026-11-05:** the owner adjusted the Assistant panel layout himself after the design:
-> header = list icon, a rounded pill with three icon-only targets (chat, rocket, team), the conversation title, `+`;
+> header = list icon, a rounded pill with three icon-only targets (chat, rocket, crew), the conversation title, `+`;
 > messages with a `vault context · N sections` chip; composer with an `Ask anything …` field, a mic and a send button, a row of
 > attach / edit / vault / web / read icons and the model name on the right. [assistant-owner-layout-2026-11-05.png](assistant-owner-layout-2026-11-05.png)
 > is the reference for this panel in two parts that STAY as they are: the **top row** (header with list icon, target pill, title, `+`)
@@ -215,7 +215,7 @@ Built: [mc-phone-work.png](audit-2-screenshots/mc-phone-work.png), [mc-pad-work.
 | Screen | Status |
 |---|---|
 | Main (1) "The flow, idea to running code" | Overview only, no UI to compare. |
-| Workers (3b) | Superseded by Team (5d/7f); the code still ships the Workers tab and Chain log tab behind `…` and the footer link (A-02, A-03) — delete with E12-11. |
+| Workers (3b) | Superseded by Crew (5d/7f); the code still ships the Workers tab and Chain log tab behind `…` and the footer link (A-02, A-03) — delete with E12-11. |
 | Orchestrator (2c) | Superseded by 7c (F-01) and MC 5c (F-02). |
 | PhoneCapture (4d) | The canvas still holds it as a text-capture sheet; the phone has capture only through the chat composer (mic button, M149); the board is not marked superseded. Owner call whether the board goes (see Z-02). |
 
@@ -235,7 +235,7 @@ See `specs/roadmap.md` → Now → "Proposed by the E12-10 audit". Summary of th
 3. E12-13 Mission Control chrome (N-01, N-04, N-05, N-06, I-06, I-07, K-05, J-02, F-03) — `apps/mission-control`, `libs/mission-ui` CSS and templates.
 4. E12-14 Mission Control iPad layout and Work rows (K-04, N-02, N-03, N-07, K-03).
 5. E12-15 Capacity band and status bar (I-03, L-04, L-05, I-01, I-04, A-03, A-04).
-6. E12-16 Team and Board completion (H-01–H-03, I-02) — extends E13-17, E13-19.
+6. E12-16 Crew and Board completion (H-01–H-03, I-02) — extends E13-17, E13-19.
 7. E12-17 Parts block (F-01) — this is E13-10, restated with the screenshot evidence; stays one item.
 8. E12-18 Views and tabs polish (L-01–L-03, L-06) — extends E13-18.
 9. E12-19 Assistant header labels + review layout + settings leftovers (M-01, R-01, R-02, K-01, K-02, E-03, J-01).

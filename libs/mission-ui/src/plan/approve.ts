@@ -17,7 +17,7 @@ import {
 } from './approve.model';
 
 /**
- * Plan to approve (E10-4, concept v2 §5.9, design boards "iPad: Plan to
+ * Plan to accept (E10-4, concept v2 §5.9, design boards "iPad: Plan to
  * approve" and its phone twin): one card per part of a shaped plan with
  * the builder, the reason, the flow row, the start rule and the build
  * estimate; move and delete (a second press deletes); a released part is

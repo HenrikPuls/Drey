@@ -8,6 +8,23 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **Renaming stored identifiers to "Crew" / "Accept"** (owner, 2026-11-06; milestone
+  173). The design canvas "Drey Tickets — Workflow redesign" settled two words:
+  the area is **Crew**, never "Team", and the decision verb is **Accept**, never
+  "Approve" or "Sign off". The change is wording only — what a user or reader
+  sees. Everything persisted or part of a contract keeps its name: ticket, chain
+  and frontmatter values, phase and gate kinds (the `approve` checkpoint action,
+  the `sign-off` stage id), file and folder names (`team/`, `approve.ts`), routes
+  (`/api/tickets/<id>/accept` already existed), setting keys, IPC channels, CSS
+  classes, MCP tool names, the Mission Control tab id `team`, and git/branch names.
+  Where such an identifier reaches a screen it carries a display label ("Accept").
+  Also unchanged: the **tool-call approval** of external tools and MCP writes
+  (`approval: ask | allow`, the approval dialog, a worker waiting for a tool
+  permission) — a permission to run a tool, not the owner's decision on a plan or
+  result — and the dated entries of `specs/changelog.md`, which record what was
+  written then. Renaming the stored values was weighed and is listed as a
+  roadmap follow-up with its migration, not done.
+
 - **Waiting for, or building, `dk import` / `dk add --id` (dricket R-10 / R-28)
   for the ticket migration** (owner, 2026-11-05; E14-3b). Drey has one user; the
   one-time migration writes the ticket files itself in the protocol's on-disk

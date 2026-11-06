@@ -147,7 +147,7 @@ promotion commit never deletes it.
 
 ## The chain delta (E9, concept §5.7)
 
-The pipeline's standard flow is team configuration
+The pipeline's standard flow is crew configuration
 (`_meta/pipeline.md`) and applies silently; a ticket stores only
 its **delta** in the frontmatter's `chain:` list — one declarative
 entry per item:

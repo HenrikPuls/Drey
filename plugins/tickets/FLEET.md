@@ -363,7 +363,7 @@ budget) · `ciBackoff` · `tripped` (per column `{reason, at}` while the
 breaker holds it; playing the column clears it and resets the
 column's `redStreak`) · `ownerHold` (per ticket the phase whose run the
 owner stopped; the ticket holds until it moves or a newer run starts) ·
-`pausedPersonas` (the personas the owner paused from the Team view; their
+`pausedPersonas` (the personas the owner paused from the Crew view; their
 tickets hold until the persona is played again — U4) · `handoverAt`
 (written by a runner retiring for a newer build; a successor booting
 within five minutes keeps the master switch as it stood — any other boot

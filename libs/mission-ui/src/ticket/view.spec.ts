@@ -2179,7 +2179,7 @@ describe('TicketView plan marks', () => {
   });
 });
 
-describe('TicketView plan to approve (E10-4)', () => {
+describe('TicketView plan to accept (E10-4)', () => {
   interface ApproveSurface {
     planParts(): number;
     canApprove(): boolean;

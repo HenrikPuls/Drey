@@ -530,7 +530,7 @@ export class ChatService implements ChatServicePort {
    * The owner's tap on Paul's split proposal. `keep` moves the ticket from
    * its phase into the build queue through the board's own transition —
    * the same path a confirmed card takes; `split` only records the choice
-   * (the plan to approve, E10-4, picks it up). Either way the decision
+   * (the plan to accept, E10-4, picks it up). Either way the decision
    * line lands in the session file.
    */
   async shapeDecide(input: { readonly file: string; readonly choice: ChatSplitChoice }): Promise<ChatShapeResult> {

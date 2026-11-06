@@ -182,10 +182,10 @@ describe('workListNode', () => {
     expect(row.querySelector('button.work-action')).toBeNull();
   });
 
-  it('a checkpoint after the plan column reads as a plan to approve', () => {
+  it('a checkpoint after the plan column reads as a plan to accept', () => {
     const list = workListNode(deps(), board({ 'plan-review': [card('T-0004', 'plan-review')] }), [], createGroupFoldStore(null), () => undefined);
     const row = list.querySelector<HTMLElement>('.work-group-needs .work-row')!;
-    expect(row.querySelector('.work-kind')?.textContent).toBe('Plan to approve');
+    expect(row.querySelector('.work-kind')?.textContent).toBe('Plan to accept');
     expect(row.querySelector('.work-row-line')?.textContent).toBe('plan ready');
   });
 

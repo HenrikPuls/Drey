@@ -575,7 +575,7 @@ export class McState {
     this.planFlush = flush;
   }
 
-  /** The owner's tap on Paul's split proposal. "Split into N tickets" leads on to the plan to approve. */
+  /** The owner's tap on Paul's split proposal. "Split into N tickets" leads on to the plan to accept. */
   async shapeDecide(file: string, choice: 'keep' | 'split'): Promise<McReply> {
     const shaped = this.chat().active?.ticket ?? null;
     const body = await this.client
@@ -601,7 +601,7 @@ export class McState {
     return { ok: true };
   }
 
-  // --- the plan to approve (E10-4) -----------------------------------------
+  // --- the plan to accept (E10-4) -----------------------------------------
 
   /** The ticket whose plan is up for approval; null = the screen is closed. */
   readonly approvalTicket = signal<string | null>(null);
@@ -609,7 +609,7 @@ export class McState {
   readonly approval = signal<McPlanApproval | null>(null);
   readonly approvalError = signal<string | null>(null);
 
-  /** Opens the plan to approve of one ticket (after "Split into N tickets", or from the ticket face). */
+  /** Opens the plan to accept of one ticket (after "Split into N tickets", or from the ticket face). */
   async openApproval(ticket: string): Promise<void> {
     if (this.approvalTicket() !== ticket) {
       this.approval.set(null);

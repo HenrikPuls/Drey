@@ -1,5 +1,5 @@
 /**
- * The "Plan to approve" contract (E10-4, concept v2 §5.9): what the
+ * The "Plan to accept" contract (E10-4, concept v2 §5.9): what the
  * desk answers for a ticket whose plan lists parts, and the owner's
  * edits and release on it. Pure shapes — the logic is
  * `core/plan-release.ts`, the service `BoardService`.
@@ -33,7 +33,7 @@ export interface PartFlowStep {
   readonly notify: boolean;
 }
 
-/** One card of the plan to approve. */
+/** One card of the plan to accept. */
 export interface PlanPartCard {
   /** 0-based position in the plan's parts list. */
   readonly index: number;

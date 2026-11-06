@@ -14,7 +14,7 @@ ticket's Log.
 | `Workers.dc.html` | All workers, see and step in, a stuck worker | W4 |
 | `Ready.dc.html` | Ready to try: changes, Launch this version, Accept and merge, Send back | W3 |
 | `Shaping.dc.html` | Shape track: plan-mode dialog with project context chips, the plan beside it | W6 |
-| `Orchestrator.dc.html` | Plan to approve: phase tickets, routing, touches, gates | W6, W7 |
+| `Orchestrator.dc.html` | Plan to accept: phase tickets, routing, touches, gates | W6, W7 |
 | `PhoneInbox.dc.html` … `PhoneCapture.dc.html` | The phone client as a chat | W8 |
 
 **State after the Mission Control redesign (2026-11-04).** The files above are
@@ -25,7 +25,7 @@ also holds the iPad boards 5a–5i, the phone boards 5e, 5g, 6a–6d and the
 desktop row "Desktop in Drey", boards 7a–7j (`DeskWork`, `DeskShape`,
 `DeskPlan`, `DeskReview`, `DeskBoard`, `DeskTeam`, `DeskSettings`, `DeskViews`,
 `DeskTabs`, `DeskReady`), which are binding for E13. `Shaping` (2b) and
-`Orchestrator` (2c) are superseded by 7b and 7c, `Workers` (3b) by the Team
+`Orchestrator` (2c) are superseded by 7b and 7c, `Workers` (3b) by the Crew
 view (5d, 7f). The board-by-board comparison with the code is in
 [convergence-gaps.md](convergence-gaps.md); the whole concept is
 [architecture-concept-v2.md](architecture-concept-v2.md).

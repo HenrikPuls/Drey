@@ -186,7 +186,7 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   the build output** (engine-main) — the strangler tightens one more loop,
   and the legacy remote stays the fallback until the owner verifies; no
   cutover. **`PersonaView` is the wire DTO** the new device route
-  `GET /api/personas` returns, and the Team tab renders it personas-only
+  `GET /api/personas` returns, and the Crew tab renders it personas-only
   (concept §4.3 — one card per persona: avatar on the persona colour,
   role, worker/model, the state-coloured live-run chip; cards read-only).
   **The shell is phone-first** per concept §7 and the owner's 2026-11-02
@@ -295,22 +295,22 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   the design canvas and updated the concept; owner decisions D5–D12 are
   closed. What this changes in the record above:
   - **Decision 8 is replaced.** Req-75 W6 (the Shape track) is *recut*
-    — E10-2 – E10-4 carry it as Shape mode with Paul, Plan to approve
+    — E10-2 – E10-4 carry it as Shape mode with Paul, Plan to accept
     and the plan delta; W7 (orchestrator: overlap guard, `touches:`,
     rules-file routing) and W8 (the phone as a chat client) are
     *dropped* (D5), the chain delta and Mission Control being what they
     were for; W9 (audit runs) stays.
   - **Names (D7).** *Pia* is the name of Mission Control, the one
     central contact; the planner persona formerly called Pia is **Paul**,
-    the design persona is dropped. The default team is Paul, Ben, Ralf,
+    the design persona is dropped. The default crew is Paul, Ben, Ralf,
     Tessa.
-  - **Team states (E12-4, milestone 115).** `POST /api/runs/<id>/handoff`
+  - **Crew states (E12-4, milestone 115).** `POST /api/runs/<id>/handoff`
     (stop, wait, restart on Claude Code, fresh) and `ChainStatus.poolSize`
     join the engine surface; the persona detail's Chat and 1:1 are one tab.
   - **Navigation supersedes E5b's bottom tab bar.** On a phone a menu
-    replaces it (chat with its history is home; Work, Team, Settings
+    replaces it (chat with its history is home; Work, Crew, Settings
     behind the menu); from 768 px a top tab bar (Work with a needs-you
-    counter, Chat, Team, Settings) and a right dock (Chat | Capacity |
+    counter, Chat, Crew, Settings) and a right dock (Chat | Capacity |
     history list). Chat history is a screen over the `_meta/chat/` files
     (old sessions read-only). Persona detail Chat and 1:1 merge into one
     conversation (D8).
@@ -367,11 +367,11 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     tap — Paul's split proposal is a card in the session
     (`POST …/split/keep|split`): "Keep as one ticket" moves the ticket
     into the build queue through the board's own transition, "Split into
-    N tickets" records the choice for the plan to approve (E10-4); N is
+    N tickets" records the choice for the plan to accept (E10-4); N is
     counted from the plan's `### Parts`, never fixed. Questions are
     answer cards above the composer (pick, then send; the pick is never
     the action).
-  - **Plan to approve (E10-4, milestone 126) — the owner's tap releases,
+  - **Plan to accept (E10-4, milestone 126) — the owner's tap releases,
     the chat proposes nothing.** The approval is a tap on the plan card
     itself (`POST /api/tickets/<id>/release`), not a chat proposal card:
     the plan is the shared document the owner just read, the screen
@@ -401,7 +401,7 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     (`POST …/flow-draft`) is one bridge turn under its own prompt that
     answers a `setChain` command; the desk reads it back through the same
     guard as a hand edit, and it is never written by the draft.
-- **E10-6 (milestone 132):** the owner is a team member. A persona file may
+- **E10-6 (milestone 132):** the owner is a crew member. A persona file may
   say `kind: human` (`personas/you`, created on first sight with the title
   from config `personas.humanName`, default "You"); a human persona is never
   dispatched, counted toward capacity or budgeted. A manual gate is either an
@@ -451,13 +451,13 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
   frontmatter fold, plugin extensions) stays desktop-only in
   `src/app/editor/`.
 - **Shared UI lib and the desktop surfaces (E12 – E13, milestones 112 – 130).**
-  The Mission Control screens (Work, Chat, Ticket, Plan, Flow, Team, Capacity,
+  The Mission Control screens (Work, Chat, Ticket, Plan, Flow, Crew, Capacity,
   Settings, Pairing) live in `libs/mission-ui` (`@mission-ui/*`), which
   `apps/mission-control` composes; the lib has its own spec project, so the
   `test:app` chain runs three Angular suites (drey, mission-control,
   mission-ui). Drey does not import the lib (it is Angular; the plugin
   renderers are plain DOM): the desktop surfaces of E13 (ticket document,
-  Board, Team, Capacity band) read the same engine surface and re-implement the
+  Board, Crew, Capacity band) read the same engine surface and re-implement the
   few word helpers. The engine's invoke allowlist gained `estimateOf`
   (E13-6) and `TEAM_METHODS` (E13-8: the remote port's `personas`,
   `handoffRun`, `chainPersonaPause`, persona thread and memory reads,
@@ -504,7 +504,7 @@ plugin folder, no npm workspaces, and a renderer/remote bundling guard
     contract `contracts/flow.ts` is the single shape.
 
   - **Settings → Tickets in Drey (E13-12, milestone 146).** The page's top
-    rows (Team, Default flow, Budget and runners, Walkthrough videos) read the
+    rows (Crew, Default flow, Budget and runners, Walkthrough videos) read the
     engine's own answers (`personas`, the board snapshot, `settingsRead`) and
     write only `videos.inGit` / `videos.maxMb`, through `settingsPatch` ->
     `RemoteService.settings()` — the `SettingsAccess` the phone's Settings

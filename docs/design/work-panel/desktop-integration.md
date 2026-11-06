@@ -4,7 +4,7 @@ Status: design, confirmed by the owner on 2026-11-04 as "A+" (native
 tabs with the Assistant at the centre). **Built so far (state of milestone
 132):** views (E13-1, 123, ADR-0089), view presets and home views (E13-2, 127),
 the status bar slot (E13-3, 124), the link fallback (E13-4, 125), the ticket as
-a document (E13-6, 129), the Board and Team tabs and the Capacity band (E13-8,
+a document (E13-6, 129), the Board and Crew tabs and the Capacity band (E13-8,
 130), the Review tab (E13-7, 139). **Also built since:** Assistant conversation targets (E13-5, milestone 138). **Built since:** Shape in Drey (E13-9, milestone 144). **Not built:** the Parts block (E13-10), the Flow tab (E13-11),
 Settings → Tickets (E13-12), the Work view preset (E13-13); the roadmap holds
 the order. The boards are in the design canvas "Drey Tickets — Workflow
@@ -20,14 +20,14 @@ no Drey editor, no dock panels, no split panes, and no link to the other tools
 bigger copy of the iPad layout. It uses what Drey already has.
 
 Names follow the owner decision D7: **Pia is Mission Control**, the one contact;
-**Paul** is the planner persona; the default team is Paul, Ben, Ralf, Tessa.
+**Paul** is the planner persona; the default crew is Paul, Ben, Ralf, Tessa.
 
 ## The sorting rule
 
 | What it is for | Where it lives |
 |---|---|
 | Overview and navigation | Dock panel (Tickets, Capacity) |
-| Read, write, decide | Editor tab (ticket, Board, Review, Team, Flow) |
+| Read, write, decide | Editor tab (ticket, Board, Review, Crew, Flow) |
 | Ask and steer | Assistant panel, with a conversation target |
 | State on the side | Status bar item, panel header status |
 
@@ -39,12 +39,12 @@ Names follow the owner decision D7: **Pia is Mission Control**, the one contact;
 | Pipeline overview, parts under their ticket, cost per column | Editor tab **Board** (new tab kind) |
 | A ticket | Its Markdown file in the normal editor. The header strip shows persona, phase, cost, estimate, chain and the gate |
 | Shape | The ticket in the editor plus Mission Control (Pia) in the Assistant, the ticket attached as a note. Paul, the planner persona, edits through live edit (ADR-0049); the owner types in the same document |
-| Plan to approve | A **Parts block** inside the ticket (editor widget) written as `### Parts` |
+| Plan to accept | A **Parts block** inside the ticket (editor widget) written as `### Parts` |
 | Review, proof | Editor tab **Review**: proof strip (video, chapters, screenshots), file list with viewed, Changes or Whole file, line comments, Send back / Accept. A file opens in the real editor |
-| Chat | Assistant panel. Target **Model** is plain chat, no agent, no tools. Target **Mission Control** is the team. A 1:1 per persona is a third target |
-| Team, capacity, cost | Editor tab **Team** plus the **Capacity** panel in the bottom dock; fleet summary in the status bar |
+| Chat | Assistant panel. Target **Model** is plain chat, no agent, no tools. Target **Mission Control** is the crew. A 1:1 per persona is a third target |
+| Crew, capacity, cost | Editor tab **Crew** plus the **Capacity** panel in the bottom dock; fleet summary in the status bar |
 | Flow editor | Editor tab **Flow**; the default flow is also in Settings |
-| Settings | Settings, **Tickets**: team, default flow, budget, runners, devices and pairing. Appearance is Drey's own |
+| Settings | Settings, **Tickets**: crew, default flow, budget, runners, devices and pairing. Appearance is Drey's own |
 
 ## Parity with the mobile client (owner, 2026-11-04)
 
@@ -76,7 +76,7 @@ title bar (Ctrl+1, Ctrl+2, a Views menu; board 7h).
 - **Notes** is today's Drey: Files, Calendar, Outline, Backlinks; the Assistant
   talks to the model.
 - **Work** is the arrangement of boards 7a to 7f: Tickets panel, ticket, Board,
-  Review, Team; the Assistant talks to Mission Control.
+  Review, Crew; the Assistant talks to Mission Control.
 - Opening a ticket (a chip in a note, a notification, the capture hotkey)
   switches to Work. Opening a note from Work switches to Notes. The status bar
   and the Assistant history are global; a signal from the other view shows as
@@ -105,7 +105,7 @@ title bar (Ctrl+1, Ctrl+2, a Views menu; board 7h).
 2. **Assistant conversation targets.** Model (any LLM provider, no tools, no
    agent), Mission Control, 1:1 per persona. This is what makes the Assistant
    part of the work instead of a separate chat.
-3. **New editor tab kinds**: Board, Review, Team, Flow, built on the existing
+3. **New editor tab kinds**: Board, Review, Crew, Flow, built on the existing
    `registerDocKind`; Review uses the existing `DiffView`.
 4. **Parts block** as an editor widget under the ticket header.
 5. **Links fall back to other vaults** (owner, 2026-11-04). Wikilinks are
@@ -162,6 +162,6 @@ of this step.
 
 Views first and mandatory (they decide where everything else sits), then view presets, then the ticket header with
 the gate, the Assistant targets (Shape needs them), the
-Parts block, the Review tab, the Board tab, the Team tab and Capacity, Flow, and
+Parts block, the Review tab, the Board tab, the Crew tab and Capacity, Flow, and
 the status bar item. Each step is its own milestone and gets its own roadmap
 entry before work starts; this file does not claim a milestone number.
