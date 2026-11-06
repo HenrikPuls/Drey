@@ -82,7 +82,7 @@ interface FakeTicket extends TicketVm {
   phaseColorValue: string | null;
   readOnlyValue: boolean;
   attachmentUrls: ReadonlyMap<string, string>;
-  calls: { accept: number; sendBack: string[]; save: string[]; onClose: number; enterEdit: number; exitEdit: number; reload: number; proposeChain: string[]; prefillChat: string[] };
+  calls: { openChat: number; accept: number; sendBack: string[]; save: string[]; onClose: number; enterEdit: number; exitEdit: number; reload: number; proposeChain: string[]; prefillChat: string[] };
   acceptReply: TicketActionReply;
   sentComments: readonly ReviewComment[];
   sendBackReply: TicketActionReply;
@@ -100,6 +100,7 @@ function makeFake(patch: Partial<FakeTicket> = {}): FakeTicket {
     readOnlyValue: false,
     attachmentUrls: new Map<string, string>(),
     calls: {
+      openChat: 0,
       accept: 0,
       sendBack: [] as string[],
       save: [] as string[],
@@ -156,6 +157,9 @@ function makeFake(patch: Partial<FakeTicket> = {}): FakeTicket {
     },
     proposeChain(text: string): void {
       this.calls.proposeChain.push(text);
+    },
+    openChat(): void {
+      this.calls.openChat += 1;
     },
     prefillChat(text: string): void {
       this.calls.prefillChat.push(text);
@@ -1415,19 +1419,13 @@ describe('TicketView', () => {
     expect(vm.fontSize()).toBe(15);
   });
 
-  it('prefills the chat with the ticket context through the vm prefill path', () => {
+  it('opens the chat without any ticket-id prefix in the field (D-7b)', () => {
     const fake = makeFake({ docValue: DOC });
     const vm = surface(setup(fake));
     vm.changeByChat();
-    expect(fake.calls.prefillChat).toEqual(['T-0042: ']);
+    expect(fake.calls.openChat).toBe(1);
+    expect(fake.calls.prefillChat).toEqual([]);
     expect(fake.calls.proposeChain).toEqual([]);
-  });
-
-  it('falls back to the chain prefill path while the vm ships no prefillChat', () => {
-    const fake = makeFake({ docValue: DOC, prefillChat: undefined });
-    const vm = surface(setup(fake));
-    vm.changeByChat();
-    expect(fake.calls.proposeChain).toEqual(['T-0042: ']);
   });
 
   it('swaps the actions for the mint done ring once the accept lands', async () => {
@@ -1675,7 +1673,8 @@ describe('TicketView faces', () => {
     const vm = setupFaces(fake, { chat: chatState([{ role: 'owner', text: 'T-0042: hi', thought: null, at: '' }]) });
     vm.openThread();
     expect(vm.mode()).toBe('thread');
-    expect(vm.threadDraft()).toBe('T-0042: ');
+    expect(vm.threadDraft()).toBe('');
+    vm.onThreadDraft(noteEvent('half-typed'));
 
     fake.docValue = { ...DOC, id: 'T-0043', text: '' };
     TestBed.flushEffects();
@@ -1729,13 +1728,40 @@ describe('TicketView faces', () => {
     const vm = setupFaces(makeFake({ docValue: FULL_DOC }), { chat });
     vm.openThread();
     expect(vm.threadItems()).toHaveLength(2);
-    expect(vm.threadDraft()).toBe('T-0042: ');
+    expect(vm.threadDraft()).toBe(''); // D-7b: no pre-filled id prefix
 
-    vm.onThreadDraft(noteEvent('T-0042: do it this way'));
+    // The thread lists messages that name the ticket, so a message that does
+    // not gets the id in front when it goes out; one that does stays as typed.
+    vm.onThreadDraft(noteEvent('do it this way'));
     await vm.threadSend();
-    expect(sent).toEqual(['T-0042: do it this way']);
+    vm.onThreadDraft(noteEvent('T-0042 is the one'));
+    await vm.threadSend();
+    expect(sent).toEqual(['T-0042: do it this way', 'T-0042 is the one']);
     expect(vm.threadDraft()).toBe('');
     expect(vm.threadError()).toBeNull();
+  });
+
+  it('a refetched doc of the same ticket keeps the open face and the draft (D-7c)', () => {
+    const doc = signal<TicketDoc | null>({ ...DOC, text: PROOF_TEXT });
+    const fake = makeFake();
+    fake.doc = () => doc();
+    const vm = setupFaces(fake);
+    TestBed.flushEffects();
+    vm.openThread();
+    vm.onThreadDraft(noteEvent('what is the status?'));
+
+    // Sending a message makes the app reload the board and the ticket: a new
+    // doc object for the SAME ticket must not bounce the owner to the ticket face.
+    doc.set({ ...DOC, text: `${PROOF_TEXT}
+more` });
+    TestBed.flushEffects();
+    expect(vm.mode()).toBe('thread');
+    expect(vm.threadDraft()).toBe('what is the status?');
+
+    doc.set({ ...DOC, id: 'T-0043', text: '' });
+    TestBed.flushEffects();
+    expect(vm.mode()).toBe('ticket');
+    expect(vm.threadDraft()).toBe('');
   });
 
   it('without an open session the composer starts one; a refusal surfaces inline', async () => {

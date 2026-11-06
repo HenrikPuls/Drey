@@ -361,6 +361,7 @@ export const appConfig: ApplicationConfig = {
           },
           proposeChain: (text) => state.prefillChat(text),
           prefillChat: (text) => state.prefillChat(text),
+          openChat: () => state.openChat(),
           save: async (text) => {
             const reply = await state.saveTicket(text);
             return reply.ok ? { ok: true } : { ok: false, error: reply.error };

@@ -313,6 +313,28 @@ describe('createChatBridge', () => {
     }
   });
 
+  it('puts the tickets the owner named after the digest, before any desktop reference (D-7a)', async () => {
+    const calls: RecordedCall[] = [];
+    const bridge = createChatBridge({
+      config: chatConfig({ 'chat.baseUrl': 'http://127.0.0.1:1234/v1', 'chat.model': 'glm-5' }),
+      fetch: fakeFetch(calls, [frame('{"say":"Done."}')]),
+    });
+    await bridge.runTurn({
+      text: 'what is T-0091?',
+      history: [],
+      board: BOARD,
+      named: '## Tickets the owner named\n\n### T-0091\n\nThe DONE ticket body.',
+      reference: 'VAULT CONTEXT',
+      emit: () => undefined,
+    });
+
+    const body = JSON.parse(String(calls[0]!.init.body)) as { messages: { role: string; content: string }[] };
+    const system = body.messages[0]!.content;
+    expect(system.indexOf(BOARD)).toBeLessThan(system.indexOf('The DONE ticket body.'));
+    expect(system.indexOf('The DONE ticket body.')).toBeLessThan(system.indexOf('VAULT CONTEXT'));
+    expect(system).toContain('Tickets the owner named');
+  });
+
   it('prompts the promote intent — the scout → ship promotion is one of the six intents', async () => {
     const calls: RecordedCall[] = [];
     const bridge = createChatBridge({

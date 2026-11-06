@@ -109,7 +109,7 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
  * view of the active chat session: the messages whose text names the
  * ticket plus the proposal cards whose command does, the question's
  * option card ('Auswahl nie = Aktion' — a tap marks only, the send row
- * acts), and a composer prefilled with the `<id>:` context that sends
+ * acts), and an empty composer (the id goes in front on send) that sends
  * into the active session like the chat tab does. Read-only paired
  * devices watch: the writing actions hide entirely.
  */
@@ -170,12 +170,9 @@ export class TicketView {
     if (this.isEmpty()) {
       return;
     }
+    // D-7b: the composer opens empty — the ticket context travels with the
+    // send (threadSend), never as text in the owner's field.
     this.mode.set('thread');
-    // The composer inherits the ticket context as the `<id>:` prefix —
-    // one prefill per open, the owner's own edits keep.
-    if (this.threadDraft().trim() === '') {
-      this.threadDraft.set(`${this.id()}: `);
-    }
   }
 
   /** Back to the ticket face (the proof/thread header's back arrow). */
@@ -187,8 +184,16 @@ export class TicketView {
    * A fresh ticket starts on its ticket face with a clean thread — the
    * ring belongs to one accept only, and the draft to one open.
    */
+  /**
+   * The open ticket's id as a value-compared signal: `doc()` is a new object
+   * on every reload (a sent message reloads the board and the ticket), and
+   * an effect reading `doc()?.id` re-runs on each of them — it bounced the
+   * owner out of the thread face right after sending (D-7c).
+   */
+  private readonly docId = computed(() => this.doc()?.id ?? null);
+
   private readonly resetPerTicket = effect(() => {
-    this.doc()?.id;
+    this.docId();
     this.mode.set('ticket');
     this.accepted.set(false);
     this.threadDraft.set('');
@@ -595,7 +600,7 @@ export class TicketView {
     return threadItemsOf(doc.id, active.messages, active.proposals);
   });
 
-  /** The thread composer's draft — prefilled with the `<id>:` context on open. */
+  /** The thread composer's draft — empty on open; the ticket id is added on send. */
   protected readonly threadDraft = signal('');
   protected readonly threadSending = signal(false);
   protected readonly threadError = signal<string | null>(null);
@@ -619,10 +624,14 @@ export class TicketView {
    */
   protected async threadSend(): Promise<void> {
     const chat = this.chat;
-    const text = this.threadDraft().trim();
-    if (chat === null || text === '' || this.threadSending() || this.readOnly()) {
+    const typed = this.threadDraft().trim();
+    if (chat === null || typed === '' || this.threadSending() || this.readOnly()) {
       return;
     }
+    // The thread lists the messages that name its ticket, and the desk reads
+    // the ticket the message names: the id goes in front unless typed already.
+    const id = this.id();
+    const text = id === '' || typed.includes(id) ? typed : `${id}: ${typed}`;
     this.threadError.set(null);
     this.threadSending.set(true);
     try {
@@ -851,8 +860,7 @@ export class TicketView {
     if (doc === null) {
       return;
     }
-    const prefill = this.vm.prefillChat ?? this.vm.proposeChain;
-    prefill.call(this.vm, `${doc.id}: `);
+    this.vm.openChat?.();
   }
 
   // --- shape mode (E10-3) ---------------------------------------------------------

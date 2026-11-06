@@ -94,6 +94,112 @@ list). Design note: `docs/design/work-panel/default-pipeline.md`.
 - **Left out → roadmap E12-9d.** A checkpoint between Plan and Build, an agent "Merge and push" at Sign
   Off, a reverse converter reading the store's stages, the empty *Prioritized* group, E12-9b Q2/Q3.
 
+### Milestone 165 — D-7: the phone chat about a ticket (named tickets, no id prefix, no view bounce, iOS keyboard)
+
+**Not yet manually verified by the owner.** Owner report 2026-11-05, real vault, iPhone; roadmap D-7.
+
+- **(a) Cause — "not in the current board excerpt".** The mission prompt's board digest
+  (`boardDigest` in `chat-service.ts`) lists *open* tickets only — the terminal column is
+  skipped — and is capped near 2 KB, so a done ticket and any ticket past the cap are invisible to
+  the model, which then reasonably says the ticket is not there. Second cause, found while
+  reproducing on both backends: an **accepted ticket leaves the board** (`tickets/archive/` on the
+  files backend, the `archived` label on dricket), and `readTicket` — the only per-ticket read —
+  finds cards on the board only, so even an on-demand read would have failed for exactly the
+  tickets the owner asks about (T-0091 is such a ticket).
+- **Fix.** `ticketRefsOf` (`core/chat-ticket-refs.ts`) reads `T-0091`, `t-91`, `#91` as one
+  canonical id (a word, `#fff`, `ST-91` are no ids; at most five). Each turn the chat service
+  attaches the tickets the owner **named** — in this message, else in the last three owner
+  messages, so "and who merged it?" keeps its ticket — as a `## Tickets the owner named`
+  block after the digest: the ticket's file (cut at 8,000 characters) and, on dricket, its latest
+  20 comments; an unknown id is attached as an error line so the model never guesses. New
+  `BoardService.readAnyTicket` = the board card, else the archive (both backends). The digest now
+  says it lists open tickets only; the mission prompt's rules were adjusted in step
+  (`specs/classifier-spec.md`). The block rides the call only, never the session file.
+- **(b) No id prefix.** The ticket thread's composer opened prefilled with `<id>: ` and "Change by
+  chat" prefilled the chat with the same prefix. Both are gone: the composer opens empty;
+  "Change by chat" calls the new `openChat()` (leave the ticket, show the chat, empty draft). The
+  thread lists messages that name its ticket, so `threadSend` puts the id in front of a message
+  that does not contain it as it goes out (not in the field); the desk resolves it as in (a).
+- **(c) The view bounced back after a send.** The ticket screen's per-ticket reset effect read
+  `doc()?.id` — a dependency on the whole `doc` computed, which is a new object on every board /
+  ticket reload (a sent message triggers one) — so it reset the face to *Ticket* and cleared the
+  draft each time. It now tracks a value-compared `docId` computed: the reset happens when the
+  ticket changes, not when it reloads.
+- **(d) iOS keyboard.** Safari keeps the layout viewport full-height and shrinks and pans the
+  *visual* viewport, which pushed header and thread out of view (D-5's `body { inset: 0 }` followed
+  the layout viewport). `apps/mission-control/src/app/viewport.ts` publishes `--mc-vh` (visual
+  viewport height) and `--mc-vv-top` (its pan) on `<html>` while the keyboard is up (and removes
+  them otherwise); `body` is `top/left/right: 0; height: var(--mc-vh, 100%); transform:
+  translateY(var(--mc-vv-top, 0px))`. The transform makes the body the containing block of every
+  `position: fixed` layer (ticket screen, sheets, overlays), so their `inset: 0` / `bottom: 0`
+  follow the visible area too. `100dvh` sizes of the shell and the ticket fullscreen are now
+  `100%` of that body; the document is scrolled back to 0 while the keyboard is up.
+- **(e) Ghost text.** The phone composer's placeholder was a sample command; it now shows the
+  same text as Drey's desktop Assistant composer, "Ask anything …", from one shared constant
+  (`shared/composer-placeholder.ts`) both import. The desktop composer itself is unchanged.
+- **(f) D-5b — the chrome stays completely fixed** (owner report: small finger movements still
+  wobble the page by a few pixels; folded into this milestone because it owns the same viewport
+  code). Sources found, each fixed: (1) a finger starting on a bar (header, tab bar, composer
+  row) or on a scroller with nothing to scroll still rubber-bands the whole frame on iOS, and a
+  scroller dragged past its end chains into it before iOS 16 — `overscroll-behavior` alone cannot
+  stop either. New `app/scroll-lock.ts` judges every one-finger `touchmove` (non-passive, document
+  level): it goes through only if the nearest scrolling ancestor can still scroll in the dragged
+  direction (dominant axis), otherwise it is cancelled; pinch is never touched; the document is put
+  back to scroll 0 on any `scroll`. (2) `.shell` had `overflow-x: hidden` only, which computes
+  `overflow-y` to `auto` — a second scroller around the real one; it is now `overflow: hidden`, so
+  `.pane` owns the scroll of the phone column. (3) The D-7d keyboard logic followed *any* visual
+  viewport difference, so a collapsing browser bar or an inset change moved the frame by a few
+  pixels, and pinch zoom shrank it: it now reacts only to a drop of at least 120 px (a keyboard)
+  and never while zoomed (`scale > 1`).
+  Tests: `scroll-lock.spec.ts` (move judgement, scroll-room lookup, a simulated drag on header /
+  content / content end / pinch in jsdom), `viewport.spec.ts` (bar collapse, zoom),
+  `mission-control-scroll-contract.spec.ts` (shell is no scroller, `.pane` is; both installed at
+  boot). **Chromium cannot prove** the iOS behaviour: neither the rubber band of the standalone
+  app, the address-bar collapse of Safari, nor `touchmove` cancellation semantics are reproduced
+  by it — the owner confirms on the iPhone in the browser and in the installed home-screen app.
+  Not covered: scrollers that are themselves fixed layers (`.ticket-layer`, `.persona-layer`) keep
+  their own `overflow-y: auto` with `overscroll-behavior: contain`; the touch guard keeps them from
+  chaining, but they were not restructured.
+- **(f2) D-5b — the trigger and the suspects.** The owner's trigger: after the chat composer has
+  been used once (focus, the field grows, blur) the page wobbles by a few pixels for the rest of
+  the session — a persistent state change. Suspects, in order of likelihood, all addressed:
+  (1) **iOS focus zoom**: the composer text was 14 px; iOS zooms the page in when a field under
+  16 px takes focus and can leave it zoomed (`visualViewport.scale > 1`) and pannable after the
+  blur — exactly "small finger movements shift everything afterwards". Every text field is now at
+  least `max(16px, 1em)` (`!important`, global in `styles.css`; no loss of pinch zoom), and
+  `touch-action: manipulation` on `html`/`body` removes the double-tap zoom. (2) **Stale
+  keyboard state**: the D-7d variables could stay at the keyboard's values if iOS closes the
+  keyboard without a final `visualViewport` resize (Done key, tap outside); `viewport.ts` now also
+  re-reads on `focusin`/`focusout` (again at 120/400/900 ms), `orientationchange`, `pageshow`,
+  `resize` and every `touchend`. (3) The earlier items of (f) (touch guard, `.shell` no scroller,
+  keyboard threshold, zoom ignored).
+  **`?debug=scroll`** (`app/scroll-debug.ts`): opt-in overlay; it samples `scrollY`, the visual
+  viewport's `offsetTop`/`pageTop`/`scale`/height, `innerHeight`, the body box and the top/bottom
+  of `.shell`, `.hdr`, `.phonebar`, `.tabbar`, `.composer`, `mc-root`, logs every change with a
+  timestamp and the running event, shows the last lines on screen and offers "copy log"
+  (`window.__mcScrollLog`). Nothing is stored or sent. **Repro attempt in Chromium** (iPhone 14
+  emulation, production build, stubbed API; scratch script, not committed): jitter drags of 2–8 px
+  on header / thread / composer, pulls at both ends, a two-finger touch, a tiny tap, focus + six
+  lines in the composer + a faked keyboard (`--mc-vh`) + blur + clearing the draft — 16 checks,
+  **no movement** of any bar, of `scrollY`, `visualViewport.offsetTop/pageTop` or the scale (the
+  composer only grows and shrinks with its text, as intended). That is the expected result
+  for Chromium and proves only the structure; **it cannot prove** the iOS-specific causes — focus
+  zoom, a missing keyboard-close resize, the rubber band of Safari and of the installed app. The
+  owner confirms on the iPhone (browser and home-screen app), with `?debug=scroll` if it still
+  moves, and sends the copied log.
+- **Tests (red first):** `core/chat-ticket-refs.spec.ts`; `chat-service-named.spec.ts` (done,
+  beyond-the-cap and archived tickets by `T-0091` / `t-91` / `#91`, comments, unknown id, follow-up,
+  huge file cut, no read when nothing is named, digest hint); `chat-llm.spec.ts` (block order);
+  `board-service.spec.ts` + `board-service-dricket.spec.ts` (`readAnyTicket` on a done and an
+  archived ticket on **both backends**; the dricket one runs against a real `dk`);
+  `ticket/view.spec.ts` (empty composer, id added on send, `openChat`, reload keeps face and draft —
+  verified to fail without the fix); `state.spec.ts` (`openChat`); `chat.spec.ts` (phone placeholder equals the desktop constant); `viewport.spec.ts`;
+  `shared/mission-control-scroll-contract.spec.ts` (body is the visible area; nothing sized by
+  `100vh`/`100dvh`).
+- **Not checked:** no real iPhone / iPad — Chromium cannot reproduce the iOS keyboard's visual
+  viewport pan; the logic and the CSS contract are unit-tested only. The real owner vault (T-0091)
+  was not touched: the reproduction is a scratch vault and a scratch dricket store in the specs.
+
 ### Milestone 163 — D-6: selecting a ticket never changes the view, a view saves only by "Save view"
 
 **Not yet manually verified by the owner.** Owner report 2026-11-05, roadmap D-6.

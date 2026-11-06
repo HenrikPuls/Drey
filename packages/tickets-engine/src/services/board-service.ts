@@ -640,6 +640,34 @@ export class EngineBoardService {
     };
   }
 
+  /**
+   * One ticket by id for the chat (D-7a): a card on the board, else an archived
+   * ticket — an accepted ticket leaves the board (`tickets/archive/` on the files
+   * backend, the `archived` label on dricket) and `readTicket` knows no card for
+   * it. Text and comments only: an archived ticket has no card to show.
+   */
+  async readAnyTicket(id: string): Promise<{ readonly ok: true; readonly text: string; readonly comments?: readonly TicketCommentView[] } | { readonly ok: false; readonly error: string }> {
+    const onBoard = await this.readTicket(id);
+    if (onBoard.ok) {
+      return { ok: true, text: onBoard.text, ...(onBoard.comments === undefined ? {} : { comments: onBoard.comments }) };
+    }
+    const vault = await this.detect();
+    if (vault === null) {
+      return onBoard;
+    }
+    try {
+      const store = this.dricket;
+      if (store !== null) {
+        const record = await this.storeBoard.record(store, id);
+        return { ok: true, text: recordToBoardFile(record, record.stage).text, comments: await this.commentsOf(store, id) };
+      }
+      const archived = (await this.host.listMarkdownFiles(vault.id)).find((p) => p === `${TICKETS_ARCHIVE_DIR}/${id}.md`);
+      return archived === undefined ? onBoard : { ok: true, text: await this.host.read(vault.id, archived) };
+    } catch {
+      return onBoard; // the store does not know the id either: the honest "not on the board"
+    }
+  }
+
   /** The ticket's comments read from the store's `comments/` files, oldest first (E14-6); empty off dricket. */
   async ticketComments(id: string): Promise<readonly TicketCommentView[]> {
     await this.refreshDricket();

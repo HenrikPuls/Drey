@@ -283,7 +283,7 @@
         [disabled]="readOnly()"
         (input)="onDraft($event)"
         (keydown)="onComposerKeydown($event)"
-        placeholder="“New ticket: …” or “T-0084 back to Ralf”…"
+        [placeholder]="placeholder"
         aria-label="Message to Mission Control"></textarea>
       @if (dictation.supported) {
         <button

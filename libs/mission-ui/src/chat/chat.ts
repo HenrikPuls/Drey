@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
+import { COMPOSER_PLACEHOLDER } from '../../../../shared/composer-placeholder';
 import { Dictation, browserDictationEnv, clockOf } from './dictation';
 import { PlanPane } from '../plan/plan-pane';
 import { MC_PLAN_STATE, planRowSubtitleOf, planSectionOf, splitLabelOf } from '../plan/plan.model';
@@ -529,6 +530,8 @@ export class Chat {
   }
 
   private readonly composing = signal(false);
+  /** The composer's ghost text — the same string as Drey's Assistant panel (D-7e). */
+  protected readonly placeholder = COMPOSER_PLACEHOLDER;
   private readonly draft = signal('');
   /**
    * The microphone (E12-8): interim speech fills the draft live, the final

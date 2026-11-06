@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163 and 166–168 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163 and 165–168 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -90,17 +90,7 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
-- **D-7 — Mission Control chat on the phone about a ticket** (owner report 2026-11-05,
-  real vault, iPhone). (a) Asking about a ticket that exists (e.g. T-0091) gets "not in
-  the current board excerpt": the chat does not receive that ticket — find why (the
-  excerpt's limit or filter: done/archived, column, count; the ticket route the chat
-  engine uses) and give the chat the ticket by id (load it on demand / a tool, not a
-  fixed excerpt); (b) the chat field must NOT be pre-filled with a ticket-id prefix;
-  (c) after sending a message the view switches back (it must stay where it is);
-  (d) opening the keyboard pushes the upper part of the page out of view — the page
-  must shrink the area at the bottom instead (visual viewport / `dvh`, the header and
-  the thread stay put; relates to D-5). Reproduce each with a test or a recorded
-  fixture first.
+None open.
 
 - **D-9 — Tickets panel footer on a dricket board** (found 2026-11-05 by the verify-round
   sessions). On `tickets.backend = dricket` the footer still says "The tickets vault is
@@ -127,7 +117,7 @@ _Shipped defects:_ D-1, Mission Control chat reaching no model, shipped as
 milestone 131; D-2, the paired-devices list and pairing from Mission
 Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
 views, as milestone 140; D-4, runs.spec flaking under full-suite load, as milestone 142; D-5, the page moving on iPhone/iPad scroll
-(owner report 2026-11-04), as milestone 143; D-6, selecting a ticket switching the view and views saving themselves, as milestone 163; D-8, the flaky gate specs, as milestone 168 — see the changelog.)
+(owner report 2026-11-04), as milestone 143; D-6, selecting a ticket switching the view and views saving themselves, as milestone 163; D-8, the flaky gate specs, as milestone 168; D-7, the phone chat about a ticket (unknown ticket, id prefix, view switching back, iOS keyboard) and D-5b (the phone wobble), as milestone 165 — see the changelog.)
 
 ### Now (small, daily value)
 

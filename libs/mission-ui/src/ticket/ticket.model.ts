@@ -1032,6 +1032,12 @@ export interface TicketVm {
    */
   prefillChat?(text: string): void;
   /**
+   * The ticket view's 'Change by chat' CTA (D-7b): leaves the ticket for the
+   * chat with an empty composer — no `<id>:` text in the owner's field; the
+   * desk resolves the ticket ids the owner types. Optional like `prefillChat`.
+   */
+  openChat?(): void;
+  /**
    * The ticket face's 'Shape with Paul' (E10-3): opens the chat on this
    * ticket's shape session. Optional — an adapter without shape sessions
    * leaves it off and the button hides.
@@ -1080,6 +1086,7 @@ const EMPTY_TICKET: TicketVm = {
   onClose: () => undefined,
   proposeChain: () => undefined,
   prefillChat: () => undefined,
+  openChat: () => undefined,
   save: () => Promise.resolve({ ok: false, error: 'Not connected to a desk.' }),
   accept: () => Promise.resolve({ ok: false, error: 'Not connected to a desk.' }),
   sendBack: () => Promise.resolve({ ok: false, error: 'Not connected to a desk.' }),

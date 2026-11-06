@@ -97,8 +97,20 @@
   background: transparent;
 }
 
+/* D-5b: iOS zooms the page in when a form field under 16 px takes focus, and can
+   leave it zoomed and pannable by a few pixels after the blur — the "wobble after the
+   chat field was used". Every text field is at least 16 px; the component rules that
+   set 13–14 px lose to this one. */
+input:not([type='checkbox']):not([type='radio']):not([type='range']),
+textarea,
+select {
+  font-size: max(16px, 1em) !important;
+}
+
 html,
 body {
+  /* No double-tap zoom either: a tap with a tiny movement must not change the scale. */
+  touch-action: manipulation;
   height: 100%;
   /* D-5: the installed PWA is an app frame, not a page — the document never
      scrolls or rubber-bands; only the content regions below scroll, each with
@@ -109,7 +121,18 @@ body {
 
 body {
   position: fixed; /* iOS ignores overflow:hidden on body alone for touch drags */
-  inset: 0;
+  /* D-7d: the body IS the visible area. With the iOS keyboard open the layout
+     viewport keeps its full height and the visual viewport shrinks and pans;
+     viewport.ts publishes both (--mc-vh, --mc-vv-top), so the frame ends where
+     the keyboard starts and the header and the thread stay where they are.
+     The transform makes the body the containing block of every position:fixed
+     layer below (ticket screen, sheets, overlays): their inset:0 and bottom:0
+     follow the visible area too, not the keyboard-covered layout viewport. */
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--mc-vh, 100%);
+  transform: translateY(var(--mc-vv-top, 0px));
   width: 100%;
   margin: 0;
   background: var(--bg);
