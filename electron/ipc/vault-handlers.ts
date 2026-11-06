@@ -134,6 +134,11 @@ export function registerVaultHandlers({
       vaultManager.readFile(relativePath, vaultId),
   );
   ipcMain.handle(
+    IPC_CHANNELS.vaultReadFileIfPresent,
+    (_event, relativePath: string, vaultId?: string): Promise<VaultFileContent | null> =>
+      vaultManager.readFileIfPresent(relativePath, vaultId),
+  );
+  ipcMain.handle(
     IPC_CHANNELS.vaultWriteFile,
     async (
       _event,

@@ -48,6 +48,40 @@ function containsRun(lines: readonly string[], block: readonly string[]): boolea
   return false;
 }
 
+const FRONTMATTER_FENCE = '---';
+const STORE_COUNTER = /^rev:\s*\d+\s*$/;
+
+/** The line of the leading frontmatter that holds an integer `rev:`, or -1. */
+function storeCounterLine(lines: readonly string[]): number {
+  if (lines[0] !== FRONTMATTER_FENCE) {
+    return -1;
+  }
+  for (let i = 1; i < lines.length && lines[i] !== FRONTMATTER_FENCE; i++) {
+    if (STORE_COUNTER.test(lines[i]!)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * `mine` with the `rev:` of `disk` (D-16). The counter a ticket store bumps on every write is no
+ * text anyone wrote: another writer's bump always differs from the tab's, and asking the owner to
+ * pick a number says nothing -- the store numbers the next write itself. Only an integer `rev:` in
+ * the leading frontmatter of both versions counts.
+ */
+export function settleStoreCounter(disk: string, mine: string): string {
+  const diskLines = disk.split('\n');
+  const mineLines = mine.split('\n');
+  const onDisk = storeCounterLine(diskLines);
+  const inMine = storeCounterLine(mineLines);
+  if (onDisk === -1 || inMine === -1) {
+    return mine;
+  }
+  mineLines[inMine] = diskLines[onDisk]!;
+  return mineLines.join('\n');
+}
+
 /**
  * Splits two versions of a note into the blocks they share and the blocks
  * where they differ (ADR-0060, the merge view). `base` -- what the tab

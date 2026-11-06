@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PipelinePhase } from '../../../../packages/tickets-engine/src/contracts/tickets';
 import type { PersonaView } from '../../shared/remote-protocol';
-import { autopilotStateOf, budgetLineOf, maxMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, usd } from './desk-model';
+import { autopilotStateOf, budgetLineOf, maxMbOf, missingShippedPrompts, parseDeskVideos, runnersLineOf, standardFlowOf, usd } from './desk-model';
 
 const persona = (id: string, extra: Partial<PersonaView> = {}): PersonaView => ({
   id,
@@ -61,6 +61,20 @@ describe('desk settings model', () => {
     expect(maxMbOf('')).toBeNull();
     expect(maxMbOf('2.5')).toBeNull();
     expect(maxMbOf('-3')).toBeNull();
+  });
+});
+
+describe('missingShippedPrompts (D-17)', () => {
+  const listing = (entries: string[], shipped: string[]) => ({ folder: '/p', entries: entries.map((ref) => ({ ref, text: '', shipped: shipped.includes(ref) })), shipped });
+  const phases = (...handovers: string[]): readonly PipelinePhase[] => handovers.map((handover, i) => ({ id: `p${i}`, handover, prompt: null })) as unknown as readonly PipelinePhase[];
+
+  it('names a shipped prompt the pipeline uses and the vault lacks', () => {
+    expect(missingShippedPrompts(phases('manual', 'agent build-default'), listing([], ['build-default', 'plan-default']))).toEqual(['build-default']);
+  });
+
+  it('leaves a prompt alone that is there, and one Drey does not ship', () => {
+    expect(missingShippedPrompts(phases('agent build-default'), listing(['build-default'], ['build-default']))).toEqual([]);
+    expect(missingShippedPrompts(phases('agent my-own'), listing([], ['build-default']))).toEqual([]);
   });
 });
 

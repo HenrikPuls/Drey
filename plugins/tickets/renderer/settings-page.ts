@@ -6,6 +6,7 @@ import { el, iconButton, kv, mutate, numberConfig, selectConfig, textConfig } fr
 import { createPromptsSection } from './settings-prompts';
 import { createRemoteSection } from './settings-remote';
 import { createReposSection } from './settings-repos';
+import { missingShippedPrompts } from './settings/desk-model';
 import { createDeskSettings, type DeskSettingsHooks } from './settings/desk-settings';
 import { TICKETS_ENTRIES, TICKETS_SECTIONS, type TicketsSectionId } from './settings-sections';
 import { createWorkersSection } from './settings-workers';
@@ -45,9 +46,10 @@ export function createTicketsSettingsPage(api: DreyPluginApi, hooks: Pick<DeskSe
       repo.append(el('span', 'tset-muted', 'Tickets repository'), repoPath, openRepo);
 
       let disposed = false;
+      let seededPrompts = false;
       let timer: ReturnType<typeof setTimeout> | null = null;
       const load = async (): Promise<void> => {
-        const [snap, folders, listing, reposListing, configured] = await Promise.all([
+        const [snap, folders, firstListing, reposListing, configured] = await Promise.all([
           api.backend.invoke('board') as Promise<BoardSnapshot>,
           api.backend.invoke('folders') as Promise<FolderStatus>,
           api.backend.invoke('prompts') as Promise<PromptListing>,
@@ -56,6 +58,13 @@ export function createTicketsSettingsPage(api: DreyPluginApi, hooks: Pick<DeskSe
         ]);
         if (disposed) {
           return;
+        }
+        // A column names a prompt Drey ships and the vault lacks: add it once (D-17), never overwriting.
+        let listing = firstListing;
+        if (!seededPrompts && missingShippedPrompts(snap.pipeline, firstListing).length > 0) {
+          seededPrompts = true;
+          await mutate(api, 'promptRestore');
+          listing = (await api.backend.invoke('prompts')) as PromptListing;
         }
         repoPath.textContent = folders.root ?? 'No tickets vault detected';
         openRepo.disabled = folders.root === null;

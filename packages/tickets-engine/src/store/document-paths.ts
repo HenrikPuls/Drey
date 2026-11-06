@@ -1,3 +1,4 @@
+import { parseFlatDocument } from './flat-frontmatter';
 import { toDisplayId, toDricketId } from './ids';
 
 /**
@@ -18,6 +19,20 @@ export function documentRelPath(id: string, ticketsDir: string = TICKETS_DIR): s
   const [prefix, number] = mapped.split('-') as [string, string];
   const shard = String(Math.floor(Number(number) / 1000)).padStart(4, '0');
   return `${ticketsDir}/${prefix}/${shard}/${mapped}/ticket.md`;
+}
+
+/**
+ * What a ticket document is called on screen (D-15), `T-0003 · Pin tabs to the left`,
+ * as the thread tab has it: every document's file is `ticket.md`, which tells two open
+ * tickets apart from nothing. Null when the path is no ticket document.
+ */
+export function documentTitle(relPath: string, text: string, ticketsDir: string = TICKETS_DIR): string | null {
+  const id = idOfDocumentPath(relPath, ticketsDir);
+  if (id === null) {
+    return null;
+  }
+  const title = parseFlatDocument(text).fields['title']?.trim();
+  return title === undefined || title === '' ? id : `${id} · ${title}`;
 }
 
 const DOCUMENT = /^([^/]+)\/([^/]+)\/([^/]+)\/ticket\.md$/;

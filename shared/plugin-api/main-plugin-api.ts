@@ -95,6 +95,11 @@ export interface DocumentRoute {
    * Throw to refuse with a message the user sees.
    */
   save(request: { vaultId: string; path: string; body: string; force: boolean }): Promise<DocumentRouteSaveResult>;
+  /**
+   * SDK 1.48: what an owned document is called on screen (its tab, the Assistant's chip)
+   * when its file name says nothing; asked on every read. Null keeps the file name.
+   */
+  title?(vaultId: string, path: string, content: string): string | null;
 }
 
 /** What the route reports: the document as stored now, or the stored version that was in the way. */

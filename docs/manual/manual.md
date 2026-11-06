@@ -864,7 +864,7 @@ its heading (remembered across restarts):
   unfolds the rest.
 - **Prioritized** — the ideas already in the queue the fleet pulls from, each
   saying whom it waits for.
-- **Done this week** — what you accepted into the archive in the last
+- **Done this week** — what reached Done or the archive in the last
   seven days, folded away by default. A row opens the ticket like any other
   (document, Thread, Review); **Show older** at the foot loads the whole
   archive under a search field (id or title words).

@@ -9,7 +9,7 @@
  */
 import { execFile } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
-import { dialog } from 'electron';
+import { BrowserWindow, dialog } from 'electron';
 import type { MainPluginContext, MainPluginModule } from '../../../shared/plugin-api';
 import {
   DEFAULT_PRIORITY_CONFIG,
@@ -49,7 +49,7 @@ import { listWorkerModels } from './worker-models';
 import { EngineClient } from './engine-client';
 import { PathAnnouncer } from './path-announcer';
 import { ensureEngine, syncChatConfig, syncNotesVault, syncStoreConfig } from './engine-lifecycle';
-import { TicketDocuments } from './ticket-documents';
+import { TicketDocuments, askToAddCheckout } from './ticket-documents';
 import { checkoutOf, readStoreSettings } from '../../../packages/tickets-engine/src/store/store-settings';
 import { registerChatIpc } from './chat-ipc';
 import { MissionControlHost, createMissionControlView } from './mission-control';
@@ -200,22 +200,16 @@ const plugin: MainPluginModule = {
       },
       locate: (id) => board.ticketDocument({ id }),
       saveDocument: (input) => board.saveDocument(input),
-      registerCheckout: async (checkout) => {
-        const answer = await dialog.showMessageBox({
-          type: 'question',
-          title: 'Tickets',
-          message: 'Add the ticket checkout as a vault?',
-          detail: `${checkout}\n\nTicket documents open in the editor from this folder. They stay read-only except for saving a ticket, which goes through dricket.`,
-          buttons: ['Add vault', 'Cancel'],
-          defaultId: 0,
-          cancelId: 1,
-        });
-        if (answer.response !== 0) {
-          return false;
-        }
-        await ctx.vault.register(checkout);
-        return true;
-      },
+      registerCheckout: (checkout) =>
+        askToAddCheckout<BrowserWindow>(
+          {
+            window: () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows().find((w) => !w.getParentWindow()) ?? null,
+            showMessageBox: (parent, options) =>
+              parent === null ? dialog.showMessageBox({ ...options }) : dialog.showMessageBox(parent, { ...options }),
+            register: (folder) => ctx.vault.register(folder),
+          },
+          checkout,
+        ),
       modifiedMs: async (absolutePath) => (await fsp.stat(absolutePath)).mtimeMs,
       // The checkout's history is written by dk: no Source-control commit, push or discard on it.
       markManaged: (vaultIds) => ctx.vault.markManaged(vaultIds),
@@ -476,6 +470,24 @@ const plugin: MainPluginModule = {
       const note = sendBackNoteOf(typeof raw['note'] === 'string' ? raw['note'] : '', comments.length);
       const cmd = parseSendBack(comments.length > 0 ? { ...raw, note } : payload);
       return cmd.ok ? board.sendBack(comments.length > 0 ? { ...cmd.value, comments } : cmd.value) : cmd;
+    });
+
+    // A ticket off the board's columns (E13-21, D-13): the Done rows, "Show older", a thread that stays open.
+    ctx.ipc.handle('readTicket', (payload) => {
+      const id = typeof payload === 'string' ? payload : typeof payload === 'object' && payload !== null ? (payload as { id?: unknown }).id : undefined;
+      return typeof id === 'string' ? board.readTicket(id) : { ok: false, error: 'bad ticket payload' };
+    });
+    ctx.ipc.handle('archivedTickets', (payload) => {
+      const p = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+      return board.archivedTickets({
+        ...(typeof p['query'] === 'string' ? { query: p['query'] } : {}),
+        ...(typeof p['limit'] === 'number' ? { limit: p['limit'] } : {}),
+      });
+    });
+    // The thread's comments on a store (E14-6, D-12); off dricket the engine answers none.
+    ctx.ipc.handle('ticketComments', async (payload) => {
+      const cmd = parseTicketId(payload, 'ticketComments');
+      return cmd.ok ? board.ticketComments(cmd.value.id) : [];
     });
 
     ctx.ipc.handle('changes', async (payload) => {

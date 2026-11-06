@@ -49,6 +49,10 @@
   color: var(--text-2);
 }
 
+.tset-desk-step select {
+  margin-left: 6px;
+}
+
 .tset-desk-step:not(:last-child)::after {
   margin-left: 6px;
   color: var(--text-4);

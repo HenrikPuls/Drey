@@ -54,10 +54,31 @@ describe('Settings → Tickets desk rows', () => {
     const { desk, hooks } = setup();
     await settle();
     expect([...desk.root.querySelectorAll('.tset-desk-chip')].map((n) => n.textContent)).toEqual(['Paul', 'You']);
-    expect(desk.root.querySelector('.tset-desk-step')?.textContent).toBe('Build · Paul');
+    expect(desk.root.querySelector('.tset-desk-step')?.textContent).toContain('Build · Paul');
     expect(desk.root.textContent).toContain('$10 across 1 persona · $1 spent today');
     button(desk.root, 'Edit crew').click();
     expect(hooks.openTeam).toHaveBeenCalled();
+  });
+
+  it('D-17: a Build step offers workers, and changing one writes the column', async () => {
+    const { desk, invoke } = setup();
+    await settle();
+    const worker = desk.root.querySelector<HTMLSelectElement>('select[aria-label="Worker for Build"]');
+    expect(worker).not.toBeNull();
+    expect([...worker!.options].map((o) => o.textContent)).toEqual(['OpenCode', 'Claude Code', 'Kimi Code']);
+    expect([...worker!.options].some((o) => o.textContent?.includes('T-0002'))).toBe(false);
+    worker!.value = 'claude-code';
+    worker!.dispatchEvent(new Event('change'));
+    await settle();
+    expect(invoke).toHaveBeenCalledWith('columns', { phase: 'build', worker: 'claude-code' });
+  });
+
+  it('D-17: the ticket pick is its own labelled row, not part of the step', async () => {
+    const { desk } = setup();
+    await settle();
+    const pick = desk.root.querySelector('select[aria-label="Ticket to edit the flow of"]');
+    expect(pick?.closest('.tset-desk-flow')).toBeNull();
+    expect([...desk.root.querySelectorAll('.tset-kv-label')].map((l) => l.textContent)).toContain('Flow of one ticket');
   });
 
   it('opens the flow editor on the picked ticket, not an inbox idea', async () => {

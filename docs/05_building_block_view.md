@@ -191,7 +191,8 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   save of a claimed document to the plugin, `VaultManager.setMutationGuard`
   refuses every other write; the tickets plugin's `main/ticket-documents.ts` is
   the one user: the dricket checkout's `tickets/` tree, saved through the
-  engine's `saveDocument`), and the local
+  engine's `saveDocument`; SDK 1.48: the route's optional `title` names a document on
+  screen, through `VaultManager.setDocumentTitles` and the read's `title`), and the local
   package installer (`plugin-installer.ts`, ADR-0068: native `.zip` pick,
   discovery-grade validation, extract-swap under `<userData>/plugins/`
   preserving `config.json`, remove — applies on restart).

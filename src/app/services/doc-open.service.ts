@@ -94,7 +94,7 @@ export class DocOpenService {
     vaultId?: string,
     opts: {
       keepFocused?: boolean;
-      prefetched?: { content: string; modifiedMs: number };
+      prefetched?: { content: string; modifiedMs: number; title?: string };
       pinned?: boolean;
       split?: DocSplit;
       beside?: string;
@@ -170,11 +170,12 @@ export class DocOpenService {
     this.store.isLoading.set(true);
     this.store.error.set(null);
     try {
-      const { content, modifiedMs } =
+      const { content, modifiedMs, title } =
         opts.prefetched ??
         (await this.api.readVaultFile(relativePath, resolvedVault ?? undefined));
       this.store.add({
         ...this.makeDoc(relativePath, resolvedVault, content, modifiedMs, true),
+        ...(title === undefined ? {} : { name: title }),
         ...pin,
       });
       this.closeReplacedTab(victim);
@@ -489,8 +490,8 @@ export class DocOpenService {
     vaultId: string | null,
   ): Promise<{ path: string; content: string; modifiedMs: number } | null> {
     try {
-      const { content, modifiedMs } = await this.api!.readVaultFile(path, vaultId ?? undefined);
-      return { path, content, modifiedMs };
+      const found = await this.api!.readVaultFileIfPresent(path, vaultId ?? undefined);
+      return found === null ? null : { path, content: found.content, modifiedMs: found.modifiedMs };
     } catch {
       return null;
     }

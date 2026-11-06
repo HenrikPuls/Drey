@@ -4,6 +4,8 @@ import type { TicketDetail } from '../ports/ticket-store';
 import { ARCHIVED_LABEL, PLACEHOLDER_LABEL } from './legacy-bridge';
 import { assembleBoard, type AssembleInput, type BoardFile } from '../core/ticket-board';
 import { recentDoneOf } from '../core/normalize';
+import { statusLinesOfComments } from '../core/status-comment';
+import { openStatusItems } from '../core/status-log';
 
 /**
  * The board over a store's `TicketDetail[]` instead of ticket files (E14-2,
@@ -43,6 +45,8 @@ export const EXTENSION_KEYS = ['worker', 'persona', 'track', 'form', 'proof', 'a
 
 export interface RecordsBoardInput extends Omit<AssembleInput, 'files'> {
   readonly records: readonly TicketDetail[];
+  /** The tickets' comments by id (the read of `comments/` is the caller's): the source of the snapshot's `openStatus` (D-12). */
+  readonly comments?: ReadonlyMap<string, readonly { readonly at: string; readonly text: string }[]>;
 }
 
 export interface PhaseResolution {
@@ -172,13 +176,23 @@ export function assembleBoardFromRecords(input: RecordsBoardInput): BoardSnapsho
   const probe = assembleBoard({ ...input, files: [], recentDone: [] });
   // An accepted (archived) ticket is off the board, like a file in tickets/archive/ (E14-4b: the archive is a label);
   // so is an import placeholder, which only keeps a legacy number free (shadow run, E14-2 follow-up).
-  const files = input.records.filter((record) => !record.labels.includes(ARCHIVED_LABEL) && !record.labels.includes(PLACEHOLDER_LABEL)).map((record) => {
+  const onBoard = input.records.filter((record) => !record.labels.includes(ARCHIVED_LABEL) && !record.labels.includes(PLACEHOLDER_LABEL));
+  const files = onBoard.map((record) => {
     const { phase } = resolvePhase(record, probe.pipeline);
     return recordToBoardFile(record, phase);
   });
   // Done this week (E13-21): the archive is a label here, so the same window the files
   // board reads from `tickets/archive/` is read from the archived records' Log stamps.
-  return assembleBoard({ ...input, files, recentDone: input.recentDone ?? recentDoneOf(archivedRecordFiles(input.records), Date.now()) });
+  const board = assembleBoard({ ...input, files, recentDone: input.recentDone ?? recentDoneOf(archivedRecordFiles(input.records), Date.now()) });
+  const comments = input.comments;
+  if (comments === undefined) {
+    return board;
+  }
+  // Needs you on every client (D-12): an open decision of a ticket on the board, from the snapshot alone.
+  const openStatus = onBoard.flatMap((record) =>
+    openStatusItems(statusLinesOfComments(comments.get(record.id) ?? [])).map((item) => ({ ticketId: record.id, ...item })),
+  );
+  return { ...board, openStatus };
 }
 
 /** The archived records as the archive files the files board would hold (E13-21). */

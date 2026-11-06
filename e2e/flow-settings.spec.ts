@@ -120,7 +120,9 @@ test.describe('Flow tab and Settings → Tickets (E13-11, E13-12)', () => {
     const settings = page.locator('.tset-desk');
     await expect(settings).toBeVisible({ timeout: 15_000 });
     await expect(settings.locator('.tset-desk-chip')).toHaveText(['Ben', 'Paul', 'Ralf', 'You']);
-    await expect(settings.locator('.tset-desk-step')).toHaveText(['Plan · Paul', 'Build · Ben', 'Review · Ralf']);
+    await expect(settings.locator('.tset-desk-step')).toHaveText([/^Plan · Paul/, /^Build · Ben/, /^Review · Ralf/]);
+    // D-17: a step offers workers, never tickets.
+    await expect(settings.locator('select[aria-label="Worker for Build"] option')).toHaveText(['OpenCode', 'Claude Code', 'Kimi Code']);
     await expect(settings).toContainText('$12 across 3 personas');
     await expect(settings.locator('#tset-videos-limit')).not.toHaveValue('');
     await expect(settings.locator('#tset-videos-in-git')).not.toBeChecked();

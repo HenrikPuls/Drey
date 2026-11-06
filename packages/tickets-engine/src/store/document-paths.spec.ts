@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { documentRelPath, idOfDocumentPath } from './document-paths';
+import { documentRelPath, documentTitle, idOfDocumentPath } from './document-paths';
 
 describe('ticket document paths (E14-4c)', () => {
   it('maps a display id to the sharded checkout path and back', () => {
@@ -7,6 +7,16 @@ describe('ticket document paths (E14-4c)', () => {
     expect(documentRelPath('T-1500')).toBe('tickets/t/0001/t-1500/ticket.md');
     expect(idOfDocumentPath('tickets/t/0000/t-63/ticket.md')).toBe('T-0063');
     expect(idOfDocumentPath('tickets\\t\\0001\\t-1500\\ticket.md')).toBe('T-1500');
+  });
+
+  it('titles a ticket document with its id and title (D-15)', () => {
+    const text = '---\nid: t-3\ntitle: Pin tabs to the left\nstage: inbox\nrev: 4\n---\nBody\n';
+    expect(documentTitle('tickets/t/0000/t-3/ticket.md', text)).toBe('T-0003 · Pin tabs to the left');
+    expect(documentTitle('tickets\\t\\0000\\t-3\\ticket.md', text)).toBe('T-0003 · Pin tabs to the left');
+    // No title in the text yet: the id still tells two tabs apart.
+    expect(documentTitle('tickets/t/0000/t-3/ticket.md', 'no frontmatter')).toBe('T-0003');
+    // Anything else in the tree keeps its own name.
+    expect(documentTitle('tickets/t/0000/t-3/comments/a.md', text)).toBeNull();
   });
 
   it('knows nothing else as a ticket document', () => {

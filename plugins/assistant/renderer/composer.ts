@@ -132,7 +132,8 @@ export function mountComposer(
       kind === 'scratch'
         ? `Unsaved tab: ${path} — attached via a .drafts/ snapshot at send time`
         : path;
-    chip.appendChild(el('span', 'chip-name', baseName(path)));
+    // What the tab calls it: every ticket document's file is `ticket.md` (D-15).
+    chip.appendChild(el('span', 'chip-name', api.documents.get(path)?.name ?? baseName(path)));
     const remove = el('button', 'chip-x', '×') as HTMLButtonElement;
     remove.type = 'button';
     remove.title =

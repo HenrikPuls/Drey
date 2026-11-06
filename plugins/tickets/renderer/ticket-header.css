@@ -65,7 +65,8 @@
   color: var(--text-4);
 }
 
-.tickets-head-prio-urgent {
+.tickets-head-prio-urgent,
+.tickets-head-prio-critical {
   color: var(--status-deleted);
   border-color: var(--status-deleted);
 }

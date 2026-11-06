@@ -28,6 +28,8 @@ import {
   type TicketUsage,
 } from '../contracts/tickets';
 import { checkpointPhaseIds } from '../fleet/chain';
+import { withTerminalTickets } from './normalize';
+import { READY_STATE } from './pipeline-states';
 import { runDependencyPass } from './blocked';
 import { parseTicketFile, ticketPathParts } from './ticket-files';
 
@@ -725,6 +727,8 @@ export interface AssembleInput {
    * the pure assembly stays ledger-free. Default: none.
    */
   readonly ticketUsage?: Record<string, TicketUsage>;
+  /** A store's own priority vocabulary (D-11): replaces pipeline.md's. Default: pipeline.md decides. */
+  readonly priorities?: PriorityConfig;
 }
 
 /** Files under `tickets/` that are neither `_meta` nor ticket-shaped. */
@@ -735,9 +739,10 @@ function strayFileIssue(path: string): TicketIssue {
 export function assembleBoard(input: AssembleInput): BoardSnapshot {
   const issues: TicketIssue[] = [];
 
-  const pipelineParse = input.pipelineText === null
+  const parsedPipeline = input.pipelineText === null
     ? { phases: [], pushRemote: null, priorities: DEFAULT_PRIORITY_CONFIG, error: 'tickets/_meta/pipeline.md is missing', issues: [] }
     : parsePipeline(input.pipelineText);
+  const pipelineParse = input.priorities === undefined ? parsedPipeline : { ...parsedPipeline, priorities: input.priorities };
   if (pipelineParse.error !== null) {
     issues.push({ level: 'error', message: pipelineParse.error });
   }
@@ -765,6 +770,7 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     blocks: readonly string[];
   }
   const byPhase = new Map<string, AssemblyCard[]>();
+  const textById = new Map<string, string>();
   for (const file of input.files) {
     // The reserved archive folder (T-0041): beside `_meta`, never a
     // column, never a counter, never a stray badge — invisible here.
@@ -822,6 +828,7 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     const list = byPhase.get(parts.phase) ?? [];
     list.push(card);
     byPhase.set(parts.phase, list);
+    textById.set(parts.stem, file.text);
   }
 
   // An id in more than one phase is ambiguous — every occurrence carries
@@ -906,6 +913,10 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     columns,
     issues,
     checkpoints: [...checkpointPhaseIds(columns)],
-    recentDone: [...(input.recentDone ?? [])],
+    // With a Ready to try stage, Done asks nothing and no other group lists it: without this a ticket
+    // accepted there vanishes (D-13). Without that stage its terminal column is a Needs-you row.
+    recentDone: phaseIds.has(READY_STATE)
+      ? withTerminalTickets(input.recentDone ?? [], (byPhase.get(terminalPhase) ?? []).map((card) => ({ card, text: textById.get(card.id) ?? '' })), terminalPhase, Date.now())
+      : [...(input.recentDone ?? [])],
   };
 }

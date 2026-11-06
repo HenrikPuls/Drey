@@ -241,7 +241,7 @@ export class SessionService {
   /** One tab's parallel-read result: the backup and/or file content, if any. */
   private async prefetchTab(tab: SessionTab): Promise<{
     backup: string | null;
-    file: { content: string; modifiedMs: number } | null;
+    file: { content: string; modifiedMs: number; title?: string } | null;
   }> {
     // Only the base text kind reads anything (the same `data`-member
     // discrimination `restoreTab` uses); doc kinds carry their payload.
@@ -256,7 +256,7 @@ export class SessionService {
         ? await this.api
             .readVaultFile(tab.path, tab.vaultId ?? undefined)
             .then(
-              (f) => ({ content: f.content, modifiedMs: f.modifiedMs }),
+              (f) => ({ content: f.content, modifiedMs: f.modifiedMs, ...(f.title === undefined ? {} : { title: f.title }) }),
               () => null,
             )
         : null;
@@ -265,7 +265,7 @@ export class SessionService {
 
   private async restoreTab(
     tab: SessionTab,
-    pre: { backup: string | null; file: { content: string; modifiedMs: number } | null },
+    pre: { backup: string | null; file: { content: string; modifiedMs: number; title?: string } | null },
   ): Promise<boolean> {
     const key = docKey(tab.vaultId, tab.path);
     if (tab.kind === 'image' || tab.kind === 'pdf') {

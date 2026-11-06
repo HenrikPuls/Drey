@@ -1,3 +1,5 @@
+import { createServer } from 'node:net';
+import type { AddressInfo } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
 import { DeviceRegistry, FailureLimiter, PairingCodes } from './auth';
 import { route, type RemoteRequest, type RouterDeps } from './router';
@@ -146,6 +148,42 @@ describe('the chat settings (D-1, E12-3b)', () => {
     const stuck = await chatSettingsOf(memory({ 'chat.provider': 'copilot-cli', 'chat.model': 'gpt' }));
     expect(stuck.problem).toMatch(/GitHub Copilot CLI.*cannot talk to this provider/);
     expect(stuck.hasKey).toBe(false);
+  });
+});
+
+describe('enabling the remote on a taken port (D-19)', () => {
+  it('leaves the switch off, stored too, and says why', async () => {
+    const blocker = createServer();
+    await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', resolve));
+    const port = (blocker.address() as AddressInfo).port;
+    const store = new Map<string, unknown>();
+    const service = new RemoteService({
+      config: {
+        get: async <T>(key: string) => store.get(key) as T | undefined,
+        set: async <T>(key: string, value: T) => void store.set(key, value),
+      },
+      port: {} as unknown as TicketsRemotePort,
+      clientDir: '',
+      log: () => undefined,
+      onChanged: () => undefined,
+    });
+    try {
+      await service.init();
+      const status = await service.configure({ enabled: true, port });
+      expect(status.config.enabled).toBe(false);
+      expect(status.listening).toBeNull();
+      expect(status.error).toBe(`port ${port} is already in use — choose another`);
+      expect(store.get('remote.enabled')).toBe(false);
+      // The owner can try again: the port stays, the error goes with the next attempt.
+      await new Promise<void>((resolve) => blocker.close(() => resolve()));
+      const again = await service.configure({ enabled: true });
+      expect(again.config.enabled).toBe(true);
+      expect(again.error).toBeNull();
+      expect(again.listening).not.toBeNull();
+    } finally {
+      blocker.close();
+      await service.stop();
+    }
   });
 });
 

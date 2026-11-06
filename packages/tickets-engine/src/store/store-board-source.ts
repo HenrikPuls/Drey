@@ -1,6 +1,6 @@
 import { promises as fsp } from 'node:fs';
 import * as path from 'node:path';
-import type { BoardSnapshot } from '../contracts/tickets';
+import type { BoardSnapshot, PriorityConfig } from '../contracts/tickets';
 import type { TicketComment, TicketDetail, TicketStore } from '../ports/ticket-store';
 import { diffBoards, renderBoardDiff, type BoardDiff } from './board-diff';
 import { assembleBoardFromRecords, type RecordsBoardInput } from './store-board';
@@ -11,6 +11,7 @@ import { FileStoreReader } from './file-store-reader';
 import { legacyToDricketDocument, type BridgeOptions } from './legacy-bridge';
 import { StoreChangeFeed, type StoreChangeFeedStats, type WatchFn } from './store-change-feed';
 import { headFingerprint, remoteMovedProbe } from './store-git-probe';
+import { readStorePriorities } from './store-priorities';
 import { StoreReader } from './store-reader';
 import { checkoutOf, createDricketStore, type StoreSettings } from './store-settings';
 
@@ -31,6 +32,8 @@ export interface StoreBoardSourceOptions {
   readonly refCheckEveryMs?: number | null;
   /** Has the remote moved (periodic sync gate); default `git ls-remote`. `null` = always sync. */
   readonly remoteMoved?: ((dir: string) => () => Promise<boolean>) | null;
+  /** The store's priority vocabulary; default `git show <config ref>:dricket.toml`. */
+  readonly readPriorities?: (checkout: string) => Promise<PriorityConfig | null>;
 }
 
 interface Source {
@@ -42,7 +45,12 @@ interface Source {
   readonly feed: StoreChangeFeed | null;
   readonly remote: boolean;
   synced: boolean;
+  /** The last read of the store's `[priorities]` (D-11). */
+  priorities?: { readonly at: number; readonly value: PriorityConfig | null };
 }
+
+/** `dricket.toml` changes by an admin's commit, rarely: a board read does not pay a git process each time. */
+const PRIORITIES_MAX_AGE_MS = 60_000;
 
 /**
  * The glue between the board service and the dricket store: builds the store
@@ -244,12 +252,43 @@ export class StoreBoardSource {
   /** The board from the store; a store that cannot be read gives an empty board with one error issue. */
   async board(settings: StoreSettings, input: Omit<RecordsBoardInput, 'records'>): Promise<BoardSnapshot> {
     try {
-      return assembleBoardFromRecords({ ...input, records: await this.records(settings) });
+      const records = await this.records(settings);
+      const [priorities, comments] = await Promise.all([this.prioritiesOf(settings), this.commentsByTicket(settings, records)]);
+      return assembleBoardFromRecords({ ...input, records, comments, ...(priorities === null ? {} : { priorities }) });
     } catch (error) {
       const message = `dricket store: ${error instanceof Error ? error.message : String(error)}`;
       const empty = assembleBoardFromRecords({ ...input, records: [] });
       return { ...empty, issues: [{ level: 'error', message }, ...empty.issues] };
     }
+  }
+
+  /** The store's priority vocabulary (D-11), re-read at most once a minute; null when no ref holds a `dricket.toml`. */
+  private async prioritiesOf(settings: StoreSettings): Promise<PriorityConfig | null> {
+    const source = this.sourceFor(settings);
+    const checkout = checkoutOf(settings);
+    if (checkout === null) {
+      return null;
+    }
+    const now = Date.now();
+    if (source.priorities === undefined || now - source.priorities.at >= PRIORITIES_MAX_AGE_MS) {
+      source.priorities = { at: now, value: await (this.options.readPriorities ?? readStorePriorities)(checkout) };
+    }
+    return source.priorities.value;
+  }
+
+  /** Every ticket's comments for the board's Needs-you rows (D-12); one unreadable ticket has none. */
+  private async commentsByTicket(settings: StoreSettings, records: readonly TicketDetail[]): Promise<ReadonlyMap<string, readonly TicketComment[]>> {
+    const files = this.sourceFor(settings).files;
+    const out = new Map<string, readonly TicketComment[]>();
+    if (files === null) {
+      return out;
+    }
+    await Promise.all(
+      records.map(async (record) => {
+        out.set(record.id, await files.comments(record.id).catch(() => []));
+      }),
+    );
+    return out;
   }
 
   /** The last comparison, or null before the first shadow run finished. */

@@ -1,3 +1,47 @@
+### Milestone 181 — D-11 to D-22: the sweep's defects on a dricket store
+
+**Not yet manually verified by the owner.** Build plan row 3.8; each defect red-then-green, on a scratch store
+where a real `dk` matters (`board-service-sweep.spec.ts`, and the running app in
+`e2e/tickets-dricket-sweep.spec.ts`).
+
+- **D-11, priorities.** On a store the vocabulary is the store's own: `[priorities]` of `dricket.toml`, read from
+  the store's config ref (`store/store-priorities.ts`, at most once a minute), with dk's starting set when the file
+  has no table. The menu, the header guard and the chat read it from the snapshot as before. The status bar wraps
+  the whole message. `Critical` has a label and the urgent chip colours.
+- **D-12, comments.** The thread shows a store ticket's comments, as written (`thread-comments.ts`, the
+  `ticketComments` handler in main). A first line `Decision needed: …` is a `needs-decision` keyed by its words, so
+  the answer closes it. The snapshot carries the open fold (`openStatus`), so `needsOf` raises the row on every
+  client; the desktop chip reads Decision or Blocked.
+- **D-13, archived tickets.** Main had no handler for `readTicket` and `archivedTickets`, which the renderer has
+  called since E13-21; `handlers-complete.spec.ts` now finds any renderer method without one. On a board with Ready
+  to try, a ticket in Done was in no group at all: it is now under Done this week for seven days
+  (`withTerminalTickets`). An open thread reads its card from the archive instead of "(not on the board)". The
+  engine's own archive path was already right.
+- **D-14, checkout prompt.** One prompt, modal to the app window, which comes to the front; further clicks wait for
+  the same answer. A decline can be asked again.
+- **D-15, tab titles (SDK 1.48).** A `DocumentRoute` may name its documents (`title`), `vault:read-file` carries the
+  title and the tab, its session restore and the Assistant's chip use it: `T-0003 · Pin tabs to the left`. The title
+  is taken when the document is read, so a tab keeps the old one after a retitle until it is reopened.
+- **D-16, `rev:` in the merge.** An integer `rev:` in the leading frontmatter takes the disk's value before the
+  merge is built (`settleStoreCounter`), for every note. If nothing else differs nothing is asked.
+- **D-17, Default flow.** Each agent step has a worker select that writes the column; the ticket pick is its own row
+  "Flow of one ticket". Opening Settings adds a shipped prompt a column names and the vault lacks, never overwriting
+  (one commit in the meta vault), so `build-default` resolves and a dispatch no longer skips.
+- **D-18.** The gateway sends `base-uri 'self'`; Mission Control's `<base href="/">` stays.
+- **D-19.** A remote start that fails turns `remote.enabled` off and keeps the reason; the chip shows it. A failure at
+  app start leaves the setting on, so a port taken for a moment does not undo the owner's choice.
+- **D-20.** `readVaultFileIfPresent` (`vault:read-file-if-present`) answers null for an absent note; the daily-note
+  probe uses it, so Electron logs no stack trace for it.
+- **D-21, reproduced and fixed.** With the Ready card up, the composer ended at 641 px in a pane ending at 493 px.
+  The card now gives way first, the thread clips and its steps keep 96 px.
+- **D-22.** The open step line stays hidden without a run (its `display: flex` beat `[hidden]`).
+- **Specs:** `board-service-sweep.spec.ts`, `store-priorities.spec.ts`, `handlers-complete.spec.ts`,
+  `thread-comments.spec.ts`, `board-css.spec.ts`, `conflict.service.spec.ts`, cases in `document-paths`,
+  `ticket-documents`, `merge-model`, `editor.service`, `vault-manager`, `store-board`, `work-groups`, `desk-model`,
+  `desk-settings`, `settings-remote`, `gateway`, `settings`.
+- **Not done:** the document's header and face strip on a store (D-23, handed to W3.3); a comment composer stays an
+  E14-6 follow-up.
+
 ### req-96 — Mission Control: the desktop-like iPad with panes saved per orientation, the phone menu as the root screen
 
 **Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list

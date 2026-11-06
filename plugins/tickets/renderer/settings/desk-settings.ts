@@ -8,12 +8,13 @@
  * engine's own settings guard (E12-3) — nothing is defined twice.
  */
 import type { DreyPluginApi } from '../../../../shared/plugin-api/renderer';
+import { parseHandover } from '../../../../packages/tickets-engine/src/contracts/tickets';
 import { WORKER_PROVIDERS } from '../../../../packages/tickets-engine/src/fleet/protocol';
 import { fleetSettingDefault } from '../../shared/fleet-defaults';
 import type { PersonaView } from '../../shared/remote-protocol';
 import type { BoardSnapshot } from '../../shared/tickets';
 import { RUNNER_LABEL } from '../settings-workers';
-import { el, textButton } from '../settings-dom';
+import { el, mutate, textButton } from '../settings-dom';
 import { autopilotStateOf, budgetLineOf, maxMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, type DeskVideos } from './desk-model';
 
 export interface DeskSettingsHooks {
@@ -101,7 +102,8 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   });
   const flowTools = el('div', 'tset-desk-tools');
   flowTools.append(ticketPick, openFlow);
-  flow.grid.append(...row('Standard flow', value(flowStrip, flowTools)));
+  // Two rows on purpose (D-17): the steps offer workers; which ticket's flow to edit is another question.
+  flow.grid.append(...row('Standard flow', value(flowStrip)), ...row('Flow of one ticket', value(flowTools)));
 
   // --- Budget and runners ------------------------------------------------
   const budget = section('tset-budget-head', 'Budget and runners');
@@ -195,6 +197,15 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
         if (item.who !== null) {
           li.append(document.createTextNode(` · ${item.who}`));
         }
+        const phase = snapshot?.pipeline.find((candidate) => candidate.id === item.id);
+        const worker = el('select');
+        worker.setAttribute('aria-label', `Worker for ${item.title}`);
+        for (const id of WORKER_PROVIDERS) {
+          worker.append(Object.assign(el('option', undefined, RUNNER_LABEL[id]), { value: id }));
+        }
+        worker.value = phase?.worker ?? parseHandover(phase?.handover ?? '').worker ?? snapshot?.defaultWorker ?? WORKER_PROVIDERS[0]!;
+        worker.addEventListener('change', () => void mutate(api, 'columns', { phase: item.id, worker: worker.value }));
+        li.append(worker);
         return li;
       }),
     );

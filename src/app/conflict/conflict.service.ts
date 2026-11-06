@@ -1,4 +1,5 @@
 import { Injectable, signal } from '@angular/core';
+import { settleStoreCounter } from './merge-model';
 
 /** One conflict awaiting an answer. */
 export interface PendingConflict {
@@ -36,9 +37,14 @@ export class ConflictService {
     if (this.pending() !== null) {
       return Promise.resolve(null);
     }
+    const mine = settleStoreCounter(conflict.disk, conflict.mine);
+    if (mine === conflict.disk) {
+      return Promise.resolve(mine); // nothing but the store's counter differed: nothing to decide
+    }
     return new Promise<string | null>((resolve) => {
       this.pending.set({
         ...conflict,
+        mine,
         resolve: (result) => {
           this.pending.set(null);
           resolve(result);

@@ -49,6 +49,7 @@ export const IPC_CHANNELS = {
   vaultGetActiveId: 'vault:get-active-id',
   vaultListFiles: 'vault:list-files',
   vaultReadFile: 'vault:read-file',
+  vaultReadFileIfPresent: 'vault:read-file-if-present',
   vaultWriteFile: 'vault:write-file',
   vaultWriteBinary: 'vault:write-binary',
   vaultReadBinary: 'vault:read-binary',

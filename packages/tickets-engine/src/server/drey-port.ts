@@ -60,10 +60,7 @@ import { openStatusItems } from '../core/status-log';
 import type { StatusLine } from '../core/status-log';
 import { parseScoutReportSection } from '../core/scout';
 import { parseLedger, personaDailyCosts } from '../core/ledger';
-import { needsOf, notifyNeedsOf, reportNeedOf } from './needs';
-
-/** How many status-log needs (E7) one needs() pass appends at most. */
-const STATUS_NEEDS_CAP = 20;
+import { needsOf, notifyNeedsOf, reportNeedOf, statusNeedOf, STATUS_NEEDS_CAP } from './needs';
 
 /** The board service's part the remote uses (`BoardService` fits it). */
 export interface RemoteBoard {
@@ -263,8 +260,11 @@ export class DreyTicketsPort implements TicketsRemotePort {
       }
     }
     // E7: the tickets' status logs — every open decision or blocker is a
-    // needs-you line (capped; a broken read appends nothing).
-    items.push(...(await this.statusNeeds(board)));
+    // needs-you line (capped; a broken read appends nothing). A store's board
+    // already carries its comments' fold, and `needsOf` listed it (D-12).
+    if (board.openStatus === undefined) {
+      items.push(...(await this.statusNeeds(board)));
+    }
     // E8: the scout tickets' report cards — a `form: scout` ticket whose
     // file carries a `## Report` waits for the owner's promotion decision.
     items.push(...(await this.reportNeeds(board)));
@@ -293,15 +293,7 @@ export class DreyTicketsPort implements TicketsRemotePort {
           if (items.length >= STATUS_NEEDS_CAP) {
             return items;
           }
-          items.push({
-            kind: item.verb,
-            ticketId: card.id,
-            title: card.meta.title ?? card.id,
-            phase: column.phase.id,
-            runId: null,
-            text: item.key !== null ? `[${item.key}] ${item.text}`.trim() : item.text,
-            since: item.since,
-          });
+          items.push(statusNeedOf(card, column.phase.id, item));
         }
       }
     }

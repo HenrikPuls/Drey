@@ -26,6 +26,23 @@ export function standardFlowOf(pipeline: readonly PipelinePhase[], personas: rea
     }));
 }
 
+/**
+ * The shipped prompts the pipeline's columns name and the vault lacks (D-17). What runs is always
+ * the vault file, so such a column would skip every dispatch; the settings page seeds them instead
+ * of showing "file missing" for a prompt Drey ships.
+ */
+export function missingShippedPrompts(
+  pipeline: readonly PipelinePhase[],
+  listing: { readonly entries: readonly { readonly ref: string }[]; readonly shipped: readonly string[] },
+): readonly string[] {
+  const present = new Set(listing.entries.map((entry) => entry.ref));
+  const used = pipeline.flatMap((phase) => {
+    const ref = phase.prompt?.trim() || parseHandover(phase.handover).promptRef;
+    return parseHandover(phase.handover).mode === 'agent' && ref !== null ? [ref] : [];
+  });
+  return [...new Set(used)].filter((ref) => listing.shipped.includes(ref) && !present.has(ref));
+}
+
 export function usd(amount: number): string {
   return `$${Number.isInteger(amount) ? String(amount) : amount.toFixed(2)}`;
 }

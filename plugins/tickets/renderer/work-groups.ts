@@ -386,6 +386,10 @@ export function needKindLabel(need: NeedItem, board: BoardSnapshot): string {
       return 'Run failed';
     case 'notify':
       return 'Gate done';
+    case 'needs-decision':
+      return 'Decision';
+    case 'blocked':
+      return 'Blocked';
     default: {
       if (need.phase === READY_STATE) {
         return 'Ready to try';
@@ -474,6 +478,8 @@ export function statusLineOf(row: WorkRow, board: BoardSnapshot): string {
     case 'permission':
     case 'red-gate':
     case 'failed':
+    case 'needs-decision':
+    case 'blocked':
       return need.text;
     default: {
       switch (needKindLabel(need, board)) {

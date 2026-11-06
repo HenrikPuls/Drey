@@ -186,9 +186,15 @@ export class VaultManager {
    * route of this class asks it; reading is never refused.
    */
   private mutationGuard: ((vaultId: string, relativePath: string) => string | null) | null = null;
+  private documentTitles: ((vaultId: string, relativePath: string, content: string) => string | null) | null = null;
 
   setMutationGuard(guard: ((vaultId: string, relativePath: string) => string | null) | null): void {
     this.mutationGuard = guard;
+  }
+
+  /** What a plugin-owned document is called on screen (D-15, the document routes' `title`). */
+  setDocumentTitles(titles: ((vaultId: string, relativePath: string, content: string) => string | null) | null): void {
+    this.documentTitles = titles;
   }
 
   private assertMutable(vaultId: string, relativePath: string): void {
@@ -451,7 +457,24 @@ export class VaultManager {
       fsp.readFile(filePath, 'utf-8'),
       fsp.stat(filePath),
     ]);
-    return { content, modifiedMs: stat.mtimeMs };
+    const title = this.documentTitles?.(this.resolveVaultId(vaultId), relativePath, content) ?? null;
+    return { content, modifiedMs: stat.mtimeMs, ...(title === null ? {} : { title }) };
+  }
+
+  /**
+   * {@link readFile} for a note that may not exist yet (D-20: today's daily note):
+   * absent is an answer, null, not a rejection -- Electron prints a stack trace to the
+   * log for every rejected IPC handler. Everything else still rejects.
+   */
+  async readFileIfPresent(relativePath: string, vaultId?: string): Promise<VaultFileContent | null> {
+    try {
+      return await this.readFile(relativePath, vaultId);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
+      }
+      throw error;
+    }
   }
 
   /**

@@ -29,6 +29,7 @@ import { applyWorkFilter, isFilterActive, NO_WORK_FILTER, type FilteredGroup, ty
 import { setSquirrelPose, squirrelNode, squirrelPose } from './squirrel';
 
 export const PRIORITY_LABEL: Readonly<Record<TicketPriority, string>> = {
+  critical: 'Critical',
   urgent: 'Urgent',
   high: 'High',
   normal: 'Normal',
