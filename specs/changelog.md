@@ -43,6 +43,17 @@
   `MC_APP_NAV` provider in `app.config.ts` that the shell now shadows. Every new string is marked
   `TODO(i18n)` for the req-102 catalog.
 
+### Wave-2 follow-ups — small items left by the merged branches
+
+**Not yet manually verified by the owner.**
+
+- **The commit step settles without a client** (req-99a follow-up): the engine settles on every fleet change (`server/settle-on-fleet.ts`), so a green commit step lands in Done with nobody connected.
+- **`<engine home>/engine.log`** holds the last start's output, and the 20 s error names that file. Before, the output was discarded and the error pointed at a log that did not exist.
+- **Crew header** counts every card and carries the state summary: `5 personas · 2 waiting · 1 stuck · today $4.22`; all idle says nothing (I-01).
+- **Capacity band** (board 7e, I-03): outside the Board and Crew tabs its frame goes too, and the bottom dock falls back to its icon strip. Done in CSS, because closing the panel would mark the view's layout as changed on every tab switch.
+- **Mission Control:** the root `MC_APP_NAV` provider is gone; the shell provides its own (req-96).
+- **Specs:** `settle-on-fleet.spec`, `team-model.spec`, `e2e/desk-board-team`.
+
 ### Wave-2 integration — strings in the catalog, the worktree e2e cause, one engine home per launch
 
 **Not yet manually verified by the owner.** Every `TODO(i18n)` of the wave-2 surfaces is gone; the words on screen are unchanged except the correct singular "1 card waiting".

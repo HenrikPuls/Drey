@@ -230,7 +230,7 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
     await openFromMenu('Crew');
     const team = page.locator('.desk-team').filter({ visible: true });
     await expect(team).toBeVisible({ timeout: 15_000 });
-    await expect(team.locator('.desk-head-sub')).toHaveText('5 personas · today $4.22');
+    await expect(team.locator('.desk-head-sub')).toHaveText('5 personas · 2 waiting · 1 stuck · today $4.22');
     await expect(team.locator('.desk-chips')).toHaveText('Local 2/2Claude Code 0/3');
     await expect(team.locator('[data-persona="ben"] .desk-persona-state')).toHaveText('waiting');
     await expect(team.locator('[data-persona="tessa"] .desk-persona-state')).toHaveText('stuck');

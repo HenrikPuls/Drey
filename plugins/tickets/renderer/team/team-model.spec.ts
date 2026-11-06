@@ -192,7 +192,7 @@ describe('the team model', () => {
     expect(model.slots).toBe(5);
     expect(model.liveRuns).toBe(2);
     expect(slotsLineOf(model)).toBe('2 of 5 slots busy');
-    expect(teamHeadOf(model)).toBe('3 personas · today $3.64');
+    expect(teamHeadOf(model)).toBe('3 personas · 1 running · 1 stuck · today $3.64');
   });
 
   it('knows no cost, budget or slots when nothing reports them', () => {

@@ -111,7 +111,7 @@ describe('the Team tab', () => {
   it('shows the head, the capacity chips and a card per persona with its stuck run', () => {
     const host = document.body.appendChild(document.createElement('div'));
     mountTeam(deps(), store(personas), host);
-    expect(host.querySelector('.desk-head-sub')!.textContent).toBe('2 personas · today $3.03');
+    expect(host.querySelector('.desk-head-sub')!.textContent).toBe('2 personas · 1 stuck · today $3.03');
     expect(host.querySelector('.desk-chips')!.textContent).toBe('Local 1/2Claude Code 0/3');
     const tessa = host.querySelector('[data-persona="tessa"]')!;
     expect(tessa.querySelector('.desk-persona-state')!.textContent).toBe('stuck');
