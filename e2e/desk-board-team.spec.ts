@@ -212,7 +212,7 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
     // Scroll to the later columns; a repaint (a refreshed board) keeps the place.
     const cols = board.locator('.desk-cols');
     await build.evaluate((el) => el.scrollIntoView({ inline: 'start', block: 'nearest' }));
-    await page.locator('button[aria-label="Refresh the board"]:visible').click();
+    await openFromMenu('Refresh the board');
     await page.waitForTimeout(800);
     expect(await cols.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
     await page.screenshot({ path: testInfo.outputPath('desk-board-build.png') });

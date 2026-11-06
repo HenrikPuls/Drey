@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–175 and req-102 (the i18n catalog, ADR-0091) built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–176 and req-102 (the i18n catalog, ADR-0091) built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -363,10 +363,6 @@ and severity per item in
 [`convergence-gaps.md`](../docs/design/work-panel/convergence-gaps.md); the
 owner confirms scope and order before any of it starts:
 
-- **E13-14 — Panel naming and chrome.** The dock panel title is done
-  (milestone 141, G-10); left: an "Open Board tab" icon in its header, the footer links to
-  the Crew tab ("Crew · Ben, Tessa busy") instead of "Workers", the Workers
-  tab retires (G-11).
 - **E13-15 — Status bar items.** A separate "$4.10 today" item and a
   "● 3 need you" item, "in Work" while the Notes view is active (G-12).
 - **E13-16 — Title-bar capture button.** "Capture by voice" on the desk
@@ -414,15 +410,6 @@ owner confirms scope and order before any of it starts:
   Applies to the shared scaffold (`src/app/settings/settings-ui.css`, plugin pages
   via `PluginSettingsHost`), so every page benefits. After E12-9c/9d (labels in the same
   files).
-- **E12-11 — Work panel body** (proposed by the E12-10 audit; M). One 40 px
-  header row with the icons *filter · New idea · Open Board tab · grip*; the
-  Workers cards leave the panel (they live in Crew and Capacity; the Workers tab
-  and Chain log retire); Needs you comes first; the footer reads `Crew · Ben,
-  Tessa busy` and opens the Crew tab; rows keep the title on its own line with the
-  age at the right and one grey detail line instead of mono state words; the
-  git warning becomes a one-line dismissible note [A-01–A-06, A-09, A-10].
-  Files: `plugins/tickets/renderer/work-panel.ts`, `work-groups.ts`, the panel
-  part of `board.css`. Supersedes E13-14.
 - **E12-12 — The ticket page: header and Ticket | Thread | Review** (proposed by
   the E12-10 audit; M). Builds on E13-20/E13-21: the form row above the title
   (priority, repo, worker, branch, `Refine with agent`, `Plan with agent`) goes

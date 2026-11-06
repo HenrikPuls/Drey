@@ -1,3 +1,36 @@
+### Milestone 176 — E12-11: the Work panel body (boards 7a–7c); supersedes E13-14
+
+**Not yet manually verified by the owner.** Wave 2, session 2.6 of the build plan.
+
+- **Header.** One non-wrapping 40 px row: filter (with the board-issues chip) · **New idea** ·
+  **Open Board tab** (new icon button) · the chain's run/halt/stop · `⋯`; the host adds the grip.
+  The refresh icon moved into the `⋯` menu (*Refresh the board*); the project menu shows only
+  when there is a second project. The panel keeps its title **Tickets** (G-10 was resolved in
+  milestone 141 — a rename back to "Work" would undo it).
+- **Workers retire.** The Workers cards above the groups, the Workers tab (doc kind
+  `tickets-workers`, its `⋯` row and footer link) and the **Chain log** tab (`chain-log.ts`, its
+  spec, doc kind, `⋯` row and CSS) are gone; a session snapshot that still names those kinds
+  simply finds no opener. Needs you stays first. `workers-view.ts` stays for one reason: the Crew
+  tab imports `NUDGE_TEXT` from it (follow-up: move the constant, delete the file).
+- **Footer.** The fleet line is now the **crew line** `Crew · Ben, Tessa busy` (`Crew · idle`,
+  `Crew · 2 busy` without persona names; `crewLineOf` in `work-groups.ts`), a button that opens
+  the Crew tab; the fleet's worst light and the long form stay in its tooltip.
+- **Rows.** Title and age on the top line; under it **one grey meta line** (phase, need kind or
+  step/state, persona, with a dot between) instead of the phase chip, kind chip, mono excerpt and
+  persona chip; the cost is grey at its right end with the title *So far*. The kind keeps the
+  needs-you orange as words, no chip. The open ticket's row stays marked (accent bar). Group titles
+  are unchanged (the six-state names are req-99b).
+- **Git note.** *Not a git repository — transitions are not versioned.* is a single dismissible line
+  (dismissed for the window), not two permanent lines.
+- **Tests:** `work-panel.spec` (plain phase text, *So far*), `work-groups.spec` (`crewLineOf`),
+  `e2e/work-panel.spec.ts` (crew line, no Workers section, Open Board tab) and
+  `e2e/desk-board-team.spec.ts` (refresh through `⋯`); `chain-log.spec` removed with its module.
+- **Docs:** manual (Work panel rows, footer, header, Workers/Chain log paragraphs replaced by the
+  Crew tab), roadmap (E12-11 and E13-14 removed). Strings new here carry `// TODO(i18n)`
+  (req-102 was not merged yet): *Open Board tab*, *Refresh the board*, the git note and its
+  *Dismiss* / *Dismiss the git note*, the crew line's tooltip/aria suffix *Open the Crew tab*,
+  *So far*, *Crew · … busy / idle*.
+
 ### req-97 — Mission Control decision card as the only Accept
 
 **Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list (canvas decision 16;

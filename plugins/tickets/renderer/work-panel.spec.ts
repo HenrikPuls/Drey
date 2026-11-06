@@ -10,7 +10,6 @@ import {
   type TicketCard,
 } from '../shared/tickets';
 import { createGroupFoldStore, workListLivePaint, workListNode } from './work-panel';
-import { TAG_AUTO_PALETTE } from '../../../shared/tag-style';
 
 /** req-75 W1b: the Work list's DOM over the default eight-phase pipeline —
  *  the canvas's five groups, the rows' chips and the fold store. */
@@ -132,13 +131,12 @@ describe('workListNode', () => {
     expect(list.querySelector<HTMLElement>('.work-row[data-id="T-0003"]')!.hasAttribute('data-running')).toBe(false);
   });
 
-  it('renders the phase chip with the phase colour and title (T-0084)', () => {
+  it('renders the phase as plain grey words inside the one meta line (E12-11)', () => {
     const list = workListNode(deps(), board({ build: [card('T-0002', 'build')] }), [], createGroupFoldStore(null), () => undefined);
-    const chip = list.querySelector<HTMLElement>('.work-row .work-phase-chip')!;
-    expect(chip.title).toBe('Build');
-    expect(chip.style.getPropertyValue('--phase-color')).toBe(TAG_AUTO_PALETTE[4]);
-    expect(chip.querySelector('.work-phase-dot')).not.toBeNull();
-    expect(chip.querySelector('.work-phase-name')?.textContent).toBe('Build');
+    const phase = list.querySelector<HTMLElement>('.work-row .work-row-meta .work-meta-phase')!;
+    expect(phase.title).toBe('Build');
+    expect(phase.textContent).toBe('Build');
+    expect(list.querySelector('.work-phase-dot, .work-phase-chip')).toBeNull();
   });
 
   it('a filter hides rows, shows visible/total, and the marker clears it (T-0084)', () => {
@@ -194,7 +192,7 @@ describe('workListNode', () => {
     expect(titles(list)).toEqual(['Running', 'Shaping', 'Ideas']);
     // The sub line leads with the phase chip (T-0084), the dialog text follows.
     const sub = list.querySelector('.work-group-shaping .work-row-sub')!;
-    expect(sub.querySelector('.work-phase-name')?.textContent).toBe('Inbox');
+    expect(sub.querySelector('.work-meta-phase')?.textContent).toBe('Inbox');
     expect(sub.querySelector('.work-row-line')?.textContent).toBe('Dialog not started');
   });
 
@@ -238,6 +236,7 @@ describe('workListNode', () => {
     const build = list.querySelector<HTMLElement>('.work-group-running [data-id="T-0003"]')!;
     expect(build.querySelector('.work-row-persona')?.textContent).toBe('BEN');
     expect(build.querySelector('.work-row-cost')?.textContent).toBe('$1.20');
+    expect(build.querySelector<HTMLElement>('.work-row-cost')?.title).toBe('So far');
     const queued = list.querySelector<HTMLElement>('.work-group-prioritized [data-id="T-0002"]')!;
     expect(queued.querySelector('.work-row-queued')?.textContent).toBe('waits for BEN');
     expect(queued.querySelector('.work-row-cost')?.textContent).toBe('$0.50');
