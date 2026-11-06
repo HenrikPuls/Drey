@@ -23,6 +23,7 @@
   changelog. The stored values are a roadmap follow-up with their migration.
 - **Tests:** the specs and e2e that assert the strings follow (`approve.spec`, `view.spec`,
   `model.spec`, `end-moves.spec`, `work-groups.spec`, `desk-settings.spec`, `team-view.spec`,
+- **Concept aligned with the canvas (version 47, same milestone):** `architecture-concept-v2.md` now says what the canvas decides — no tab bar on phone and iPad (one menu behind a button), Notes on mobile, Crew / Accept wording, the five-step text size slider (15 / 16 / 17 / 19 / 21 px, L default), the Notes · Work · Crew view switch with the Layout menu, the 9a ticket card, the Review header and green checks, Confirm / Dismiss proposals, the Anthrazit tokens. What the canvas leaves open or contradicts is **not** rewritten: `convergence-gaps.md` G-36 to G-41 (iPad menu button vs sidebar, desktop web navigation, a canvas sentence slip, the Sign Off column title, the Notes API, the product name Drey Crew).
   `tickets-remote`, `desk-board-team`).
 
 ### Milestone 170 — E13-24: Mission Control phone — one app bar on every page
