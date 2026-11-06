@@ -2887,6 +2887,29 @@ details[open] > summary > .tickets-tx-think-preview {
   display: none;
 }
 
+/* A store ticket's comments, above the steps (D-12). */
+.tickets-thread-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tickets-thread-comments[hidden] {
+  display: none;
+}
+
+.tickets-thread-comment-head {
+  color: var(--text-4);
+  font-size: 12px;
+}
+
+.tickets-thread-comment-text {
+  color: var(--text-2);
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .tickets-step-mark {
   flex: none;
   width: 1em;
@@ -3032,10 +3055,17 @@ details[open] > summary > .tickets-tx-think-preview {
    right column beside the card, narrower it sits below. */
 .tickets-thread {
   container-type: inline-size;
+  /* Nothing above clips a pane's content: a thread taller than its pane paints over the band below (D-21). */
+  overflow: hidden;
+}
+
+/* The steps keep a usable height; the Ready card gives way first. */
+.tickets-thread .tickets-thread-steps {
+  min-height: 96px;
 }
 
 .tickets-ready {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -3068,7 +3098,7 @@ details[open] > summary > .tickets-tx-think-preview {
 
 .tickets-ready-body-host {
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   flex-direction: column;
   max-height: 45vh;
   min-height: 96px;

@@ -139,6 +139,48 @@ describe('recordToBoardFile', () => {
   });
 });
 
+describe('a ticket in the terminal column of a board with Ready to try (D-13)', () => {
+  const SIX = `---
+phases:
+  - { id: inbox, title: Inbox, handover: manual }
+  - { id: ready, title: Ready to try, handover: manual }
+  - { id: done, title: Done, handover: none }
+---
+`;
+  const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+  const old = new Date(Date.now() - 10 * 86_400_000).toISOString().replace(/\.\d+Z$/, 'Z');
+
+  it('stays listed under Done this week: Done asks nothing there, so no other group shows it', () => {
+    const board = assembleBoardFromRecords({
+      ...BASE,
+      pipelineText: SIX,
+      records: [
+        det({ id: 'T-0001', stage: 'done', title: 'Accepted', extensions: { 'x-entered-done': now } }),
+        det({ id: 'T-0002', stage: 'done', title: 'From a terminal', body: `\n## Log\n\n- ${now} henrik release t-2 -> done: Seeded.\n` }),
+        det({ id: 'T-0003', stage: 'done', title: 'Long ago', extensions: { 'x-entered-done': old } }),
+        det({ id: 'T-0004', stage: 'ready', title: 'Waiting' }),
+      ],
+    });
+    expect(board.recentDone.map((d) => [d.id, d.title]).sort()).toEqual([['T-0001', 'Accepted'], ['T-0002', 'From a terminal']]);
+    expect(board.recentDone.find((d) => d.id === 'T-0001')?.at).toBe(now);
+    expect(board.recentDone.find((d) => d.id === 'T-0002')?.at).toBe(now);
+  });
+
+  it('is not doubled once it is archived too', () => {
+    const board = assembleBoardFromRecords({
+      ...BASE,
+      pipelineText: SIX,
+      records: [det({ id: 'T-0001', stage: 'done', labels: ['archived'], title: 'Gone', body: `\n## Log\n\n- '${now}' owner — archived\n` })],
+    });
+    expect(board.recentDone.map((d) => d.id)).toEqual(['T-0001']);
+  });
+
+  it('leaves a board without Ready to try alone: its terminal column is a Needs-you row', () => {
+    const board = assembleBoardFromRecords({ ...BASE, records: [det({ id: 'T-0001', stage: 'done', extensions: { 'x-entered-done': now } })] });
+    expect(board.recentDone).toEqual([]);
+  });
+});
+
 describe('assembleBoardFromRecords', () => {
   const records = [
     det({ id: 'T-0001', stage: 'inbox', priority: 'low', extensions: { 'x-entered-inbox': '2026-11-01T00:00:00Z' } }),

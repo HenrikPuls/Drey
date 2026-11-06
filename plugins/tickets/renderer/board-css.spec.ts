@@ -19,6 +19,13 @@ describe('the board stylesheet', () => {
     expect(css).toMatch(/\.tickets-step-open\[hidden\][^{]*\{[^}]*display:\s*none/);
   });
 
+  it('D-21: the Ready card gives way before the thread leaves its pane', () => {
+    const css = readFileSync(path.join(__dirname, 'board.css'), 'utf8');
+    expect(css).toMatch(/\.tickets-ready\s*\{[^}]*flex:\s*0 1 auto/);
+    expect(css).toMatch(/\.tickets-ready-body-host\s*\{[^}]*flex:\s*0 1 auto/);
+    expect(css).toMatch(/\.tickets-thread\s*\{[^}]*overflow:\s*hidden/);
+  });
+
   it('D-11: the status bar shows a whole message, wrapped, not cut to "precon…"', () => {
     const text = document.createElement('span');
     text.className = 'tickets-statusbar-note-text';

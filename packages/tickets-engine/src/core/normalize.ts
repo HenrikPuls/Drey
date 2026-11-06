@@ -31,7 +31,7 @@
  * `_meta`. Human moves are logged, never blocked — lane rules stay
  * runner-only.
  */
-import { TICKETS_ARCHIVE_DIR, type PipelinePhase, type RecentDone } from '../contracts/tickets';
+import { TICKETS_ARCHIVE_DIR, type PipelinePhase, type RecentDone, type TicketMeta } from '../contracts/tickets';
 import { parseTicketFile, ticketPathParts } from './ticket-files';
 
 /** The newest machine-shaped archive marker —
@@ -89,6 +89,47 @@ export function recentDoneOf(
     .sort((a, b) => (a.t !== b.t ? b.t - a.t : a.id < b.id ? -1 : 1))
     .slice(0, RECENT_DONE_MAX)
     .map(({ id, title, at }) => ({ id, title, at }));
+}
+
+const LOG_STAMP = /^- '?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)'?/gm;
+
+/** The newest stamp of a ticket's Log lines (the Drey form and dk's own), or null. */
+function newestLogStamp(text: string): string | null {
+  let newest: string | null = null;
+  for (const match of text.matchAll(LOG_STAMP)) {
+    if (newest === null || compareStamps(match[1]!, newest) > 0) {
+      newest = match[1]!;
+    }
+  }
+  return newest;
+}
+
+/**
+ * The Done-this-week rows with the tickets still in the terminal column (D-13): reached by an
+ * Accept or from a terminal, not archived, and shown by no other group on a board with a Ready
+ * to try stage. Since entering the column, else since the newest Log line; same window and cap.
+ */
+export function withTerminalTickets(
+  archived: readonly RecentDone[],
+  terminal: readonly { readonly card: { readonly id: string; readonly meta: TicketMeta }; readonly text: string }[],
+  terminalPhase: string,
+  nowMs: number,
+): RecentDone[] {
+  const known = new Set(archived.map((entry) => entry.id));
+  const found = [...archived];
+  for (const { card, text } of terminal) {
+    const at = card.meta.entered[terminalPhase] ?? newestLogStamp(text);
+    if (known.has(card.id) || at === null || at === undefined) {
+      continue;
+    }
+    const t = Date.parse(at);
+    if (!Number.isNaN(t) && nowMs - t <= RECENT_DONE_MS) {
+      found.push({ id: card.id, title: card.meta.title, at });
+    }
+  }
+  return found
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || (a.id < b.id ? -1 : 1))
+    .slice(0, RECENT_DONE_MAX);
 }
 
 /** The most older archived tickets one "Show older" request returns (E13-21). */

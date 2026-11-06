@@ -472,6 +472,24 @@ const plugin: MainPluginModule = {
       return cmd.ok ? board.sendBack(comments.length > 0 ? { ...cmd.value, comments } : cmd.value) : cmd;
     });
 
+    // A ticket off the board's columns (E13-21, D-13): the Done rows, "Show older", a thread that stays open.
+    ctx.ipc.handle('readTicket', (payload) => {
+      const id = typeof payload === 'string' ? payload : typeof payload === 'object' && payload !== null ? (payload as { id?: unknown }).id : undefined;
+      return typeof id === 'string' ? board.readTicket(id) : { ok: false, error: 'bad ticket payload' };
+    });
+    ctx.ipc.handle('archivedTickets', (payload) => {
+      const p = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
+      return board.archivedTickets({
+        ...(typeof p['query'] === 'string' ? { query: p['query'] } : {}),
+        ...(typeof p['limit'] === 'number' ? { limit: p['limit'] } : {}),
+      });
+    });
+    // The thread's comments on a store (E14-6, D-12); off dricket the engine answers none.
+    ctx.ipc.handle('ticketComments', async (payload) => {
+      const cmd = parseTicketId(payload, 'ticketComments');
+      return cmd.ok ? board.ticketComments(cmd.value.id) : [];
+    });
+
     ctx.ipc.handle('changes', async (payload) => {
       const cmd = parseTicketId(payload, 'changes');
       return cmd.ok
