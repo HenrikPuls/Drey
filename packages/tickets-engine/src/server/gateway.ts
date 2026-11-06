@@ -9,11 +9,14 @@ import * as http from 'node:http';
 import * as path from 'node:path';
 import type { ChatChangePayload, RemoteChange } from '../contracts/remote-protocol';
 import { FALLBACK_FILES } from './fallback-client';
+import { isNotesPath, notesFailure } from './notes-routes';
 import { authorize, hostRefusal, route, type RemoteRequest, type RouterDeps } from './router';
 
 const MAX_BODY = 64 * 1024;
 /** `/api/attachments` alone may grow: 6 MB of image plus its base64 overhead. */
 const ATTACHMENT_BODY = 12 * 1024 * 1024;
+/** A note save carries the whole file; `/api/notes` may grow to this. */
+const NOTE_BODY = 4 * 1024 * 1024;
 const KEEPALIVE_MS = 25_000;
 
 const SECURITY_HEADERS: Readonly<Record<string, string>> = {
@@ -180,10 +183,12 @@ export class RemoteGateway {
 
     let body: unknown;
     if (method === 'POST' || method === 'PATCH') {
-      const cap = url.pathname === '/api/attachments' ? ATTACHMENT_BODY : MAX_BODY;
+      const notes = isNotesPath(url.pathname);
+      const cap = url.pathname === '/api/attachments' ? ATTACHMENT_BODY : notes ? NOTE_BODY : MAX_BODY;
       const raw = await readBody(req, cap);
       if (raw === null) {
-        send(res, 413, { ok: false, error: 'the request is too large' });
+        const refused = notes ? notesFailure('too_large', 'this note is too large to save from here') : { status: 413, body: { ok: false, error: 'the request is too large' } };
+        send(res, refused.status, refused.body);
         return;
       }
       if (raw.trim() !== '') {
@@ -195,14 +200,15 @@ export class RemoteGateway {
         }
       }
     }
-    const response = await route({ ...base, body }, this.options.router);
+    const response = await route({ ...base, query: url.searchParams, body }, this.options.router);
     send(res, response.status, response.body);
   }
 
   /**
    * Server-Sent Events: `board` / `fleet` / `remote` / `chat` on every
    * change — chat changes carry their `{ file, event }` stream payload,
-   * the others stay an empty JSON object. A comment line as keep-alive.
+   * the others stay an empty JSON object; `notes` (req-100) carries the
+   * changed paths. A comment line as keep-alive.
    */
   private openEvents(req: RemoteRequest, res: http.ServerResponse): void {
     const auth = authorize(req, this.options.router);
@@ -222,6 +228,9 @@ export class RemoteGateway {
     const off = this.options.router.port.onChanged((what: RemoteChange, payload?: ChatChangePayload) => {
       res.write(`event: ${what}\ndata: ${JSON.stringify(payload ?? {})}\n\n`);
     });
+    const offNotes = this.options.router.notes?.onChanged(({ changed }) => {
+      res.write(`event: notes\ndata: ${JSON.stringify({ changed })}\n\n`);
+    });
     const { router } = this.options;
     // An open stream is a connected device: the keep-alive refreshes its
     // "last connected" (D-2) — the registry persists at most once a minute.
@@ -232,6 +241,7 @@ export class RemoteGateway {
     const close = (): void => {
       clearInterval(keepAlive);
       off();
+      offNotes?.();
       this.streams.delete(res);
     };
     res.on('close', close);

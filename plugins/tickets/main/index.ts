@@ -48,7 +48,7 @@ import { createFleetMcpTools } from './mcp-tools';
 import { listWorkerModels } from './worker-models';
 import { EngineClient } from './engine-client';
 import { PathAnnouncer } from './path-announcer';
-import { ensureEngine, syncChatConfig, syncStoreConfig } from './engine-lifecycle';
+import { ensureEngine, syncChatConfig, syncNotesVault, syncStoreConfig } from './engine-lifecycle';
 import { TicketDocuments } from './ticket-documents';
 import { checkoutOf, readStoreSettings } from '../../../packages/tickets-engine/src/store/store-settings';
 import { registerChatIpc } from './chat-ipc';
@@ -89,6 +89,11 @@ const plugin: MainPluginModule = {
     const chatSignature = (llm: ReturnType<typeof ctx.appConfig.get>['llm']): string =>
       JSON.stringify([llm.enabled, llm.provider, llm.baseUrl, llm.apiKey, llm.model]);
     let pushedChat = chatSignature(ctx.appConfig.get().llm);
+    // req-100: the Notes API follows the active vault. The SDK has no event for a
+    // switch, so this runs at activation and with every board fetch.
+    const pushNotesVault = (): Promise<void> =>
+      syncNotesVault(client, ctx).catch((error: unknown) => ctx.log(`engine notes vault sync failed: ${messageOf(error)}`, 'warn'));
+    void pushNotesVault();
     ctx.appConfig.onChange((config) => {
       // Unrelated config writes (a spell-check word, a layout) change nothing here.
       if (chatSignature(config.llm) === pushedChat) {
@@ -223,6 +228,7 @@ const plugin: MainPluginModule = {
     });
     ctx.ipc.handle('board', async () => {
       await syncStoreConfig(client, ctx).catch(() => undefined);
+      void pushNotesVault();
       void documents.refresh().catch(() => undefined);
       const snap = await board.refresh();
       priorities = snap.priorities;

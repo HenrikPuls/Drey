@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { syncChatConfig, syncConfig } from './engine-lifecycle';
+import { syncChatConfig, syncConfig, syncNotesVault } from './engine-lifecycle';
 
 /**
  * The activation/adoption config sync (E5a): the assistant LLM settings
@@ -137,5 +137,21 @@ describe('syncChatConfig (D-1: Settings -> Assistant applies without a restart)'
     );
     expect(calls).toHaveLength(5);
     expect(calls[0]!.payload).toEqual({ key: 'chat.enabled', value: false });
+  });
+});
+
+describe('syncNotesVault (req-100: the Notes API follows the active vault)', () => {
+  const vault = (path: string, active: boolean, exists = true): { path: string; active: boolean; exists: boolean } => ({ path, active, exists });
+
+  it("pushes the active vault's path", async () => {
+    const calls: RecordedCall[] = [];
+    await syncNotesVault(recordingClient(calls), { vault: { listVaults: async () => [vault('E:/a', false), vault('E:/b', true)] } });
+    expect(calls).toEqual([{ method: 'configSet', payload: { key: 'notes.vaultPath', value: 'E:/b' } }]);
+  });
+
+  it('leaves the last one in place without an active vault, or when its folder is gone', async () => {
+    const calls: RecordedCall[] = [];
+    await syncNotesVault(recordingClient(calls), { vault: { listVaults: async () => [vault('E:/a', false), vault('E:/b', true, false)] } });
+    expect(calls).toEqual([]);
   });
 });

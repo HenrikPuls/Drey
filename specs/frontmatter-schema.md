@@ -152,3 +152,5 @@ files are not notes, and none of the note frontmatter fields apply.
 - `.drafts/` — untitled scratch buffers are committed here on exit as
   `.drafts/unnamed-N.md`. A dot-folder, hidden from tree and indexes.
   Only "Save as…" moves a draft out (deleting the original).
+  Never served to a paired device: the Notes API (req-100) skips every
+  dot-folder, `chats/` and every folder named `tickets`.

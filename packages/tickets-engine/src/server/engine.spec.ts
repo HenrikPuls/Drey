@@ -131,6 +131,39 @@ describe('createEngine', () => {
     expect(frames.join('')).toContain('"change":"paths"');
   });
 
+  it('serves the notes of the vault the config names, and reports a save on the paths channel (req-100)', async () => {
+    const notesVault = path.join(root, 'notes');
+    await fsp.mkdir(notesVault, { recursive: true });
+    await fsp.writeFile(path.join(notesVault, 'a.md'), 'in the active vault', 'utf8');
+    await fsp.writeFile(path.join(vault, 'hosted.md'), 'in the hosted vault', 'utf8');
+    const status = (await engine.invoke('configure', { port: 40000 + Math.floor(Math.random() * 20000) })) as { listening: string | null };
+    const client = (await engine.invoke('localClient', { name: 'Test' })) as { token: string };
+    const base = `http://${status.listening}`;
+    const headers = { authorization: `Bearer ${client.token}`, 'content-type': 'application/json' };
+    const names = async (): Promise<string[]> => {
+      const reply = (await (await fetch(`${base}/api/notes`, { headers })).json()) as { notes: { path: string }[] };
+      return reply.notes.map((note) => note.path);
+    };
+
+    // Without the key it is the hosted vault, and its tickets/ stays out of the answer.
+    expect(await names()).toEqual(['hosted.md']);
+    await engine.invoke('configSet', { key: 'notes.vaultPath', value: notesVault });
+    expect(await names()).toEqual(['a.md']);
+
+    const reports: { vaultPath: string; changed: readonly string[] }[] = [];
+    const off = engine.onPaths((change) => reports.push(change));
+    const read = (await (await fetch(`${base}/api/notes/note?path=a.md`, { headers })).json()) as { mtime: number };
+    const saved = await fetch(`${base}/api/notes/note`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ path: 'a.md', text: 'edited', baseMtime: read.mtime }),
+    });
+    off();
+    expect(saved.status).toBe(200);
+    expect(await fsp.readFile(path.join(notesVault, 'a.md'), 'utf8')).toBe('edited');
+    expect(reports).toEqual([{ vaultPath: notesVault, changed: ['a.md'], deleted: [] }]);
+  });
+
   it('round-trips config through the sync channel', async () => {
     await engine.invoke('configSet', { key: 'defaultWorker', value: 'claude-code' });
     expect(await engine.invoke('configGet', { key: 'defaultWorker' })).toBe('claude-code');

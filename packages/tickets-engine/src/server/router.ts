@@ -39,6 +39,8 @@ import type { PairingView } from './service';
 /** The registry's part the router uses (`DeviceRegistry` fits it). */
 export type DeviceAccess = Pick<DeviceRegistry, 'byToken' | 'touch' | 'add'>;
 import { hostAllowed, originAllowed } from './config';
+import type { NotesAccess } from '../contracts/notes';
+import { isNotesPath, notesFailure, routeNotes } from './notes-routes';
 
 export const REMOTE_API_VERSION = 1;
 
@@ -46,6 +48,8 @@ export interface RemoteRequest {
   readonly method: string;
   /** The URL path without query. */
   readonly path: string;
+  /** The URL's query; only the routes that read parameters look at it. */
+  readonly query?: URLSearchParams;
   readonly host: string | undefined;
   readonly origin: string | undefined;
   readonly authorization: string | undefined;
@@ -74,6 +78,8 @@ export interface RouterDeps {
   readonly settings?: SettingsAccess;
   /** Pairing from a paired device (D-2); absent on a host without it (404). */
   readonly pairingAccess?: PairingAccess;
+  /** The Notes API (req-100); absent on a host without it (404). */
+  readonly notes?: NotesAccess;
 }
 
 /** What a pairing call answers: the waiting pairing (or none) and whether a phone could open its link. */
@@ -350,7 +356,10 @@ export async function route(req: RemoteRequest, deps: RouterDeps): Promise<Remot
   }
   const device = auth.device;
   if ((req.method === 'POST' || req.method === 'PATCH') && device.readOnly) {
-    return fail(403, 'this device is paired read-only');
+    return isNotesPath(req.path) ? notesFailure('read_only', 'this device is paired read-only') : fail(403, 'this device is paired read-only');
+  }
+  if (isNotesPath(req.path) && deps.notes !== undefined) {
+    return routeNotes(req, deps.notes, device.name, deps.log);
   }
   try {
     return await dispatch(req, device, deps);

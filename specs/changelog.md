@@ -1,3 +1,45 @@
+### Milestone 174 — req-100: the Notes engine API
+
+**Not yet manually verified by the owner.** Owner decision 2026-11-06 (canvas decision 18, G-40).
+No client uses it yet: the phone and iPad screens are req-101, so nothing changes on screen.
+
+- **Now.** A paired phone or iPad reaches the notes of the active vault through the engine:
+  `GET /api/notes?folder=`, `GET /api/notes/recent?limit=`, `GET /api/notes/search?q=&limit=`,
+  `GET /api/notes/note?path=`, `POST /api/notes/note` (save) and `POST /api/notes` (create). Contract:
+  `packages/tickets-engine/src/contracts/notes.ts`; route table and sequence: `docs/06` §6.95.
+- **Save.** The guard of ADR-0060 with the same 2 ms slack: a save names the `mtime` it edited from, and
+  a note that changed since writes nothing and answers `conflict` with the text and mtime on disk, so
+  the client merges and saves again. Atomic replace; `updated:` is bumped only where the note has it;
+  the file's own line ends are kept on disk, the API always speaks `\n`. Saves in the engine run one at
+  a time, so two devices saving from one state cannot both win.
+- **Read-only devices never write.** Both POSTs answer 403 `read_only`. The pairing record already had
+  a mandatory `readOnly` flag (req-66), so no field and no default was added; an already paired device
+  keeps the access it was paired with.
+- **Never served:** a path that leaves the vault (checked on the words and again on what the path
+  resolves to, so a link or a Windows short name cannot lead out or into a hidden folder), every
+  dot-folder including `.drafts/`, `chats/` and every `tickets/` folder (`specs/decisions.md`).
+- **Search reads the files.** All words of one section, ignoring case, the same matcher as
+  `vault_search` (moved to `shared/note-search.ts`), newest notes first, 2,000 files at most. The tags
+  plugin's section index lives in the Drey process and is not available to the engine, so there is no
+  tag filter here.
+- **Which vault.** The plugin pushes Drey's active vault as the engine config key `notes.vaultPath` at
+  activation and with every board fetch; the engine keeps it for when Drey is closed and falls back to
+  the vault it hosts. The SDK has no event for a vault switch, so a switch reaches the engine with the
+  next board fetch (roadmap follow-up).
+- **Drey hears of a write** over the existing plugin-only paths channel (D-3, G-08's direction): the plugin
+  main calls `ctx.vault.announceChanges`, a clean tab reloads, a dirty one is marked and meets the merge
+  on its next save. Other devices get the new SSE event `notes` with the changed paths, no vault folder.
+- **Known gaps (roadmap follow-ups):** a save from a device runs no plugin save hooks and leaves no
+  version in File history, because both live in the Drey process.
+- **Errors** are a code plus English text: `read_only` 403, `conflict` and `exists` 200 with `ok: false`
+  (the router's rule; the client keeps the body), `not_found` and `no_vault` 404, `bad_path` and
+  `bad_request` 400, `too_large` 413 (a note may be 4 MB, the general cap stays 64 KB), `internal` 500.
+  The checks in front of the routes (401, 429, the foreign-site 403) keep their plain `error`.
+- **Specs:** `services/notes-service.spec.ts` (list, recent, search, read, save, conflict, create, every
+  excluded path, links), `server/notes-routes.spec.ts` (routes, 403, status codes, query, body cap, SSE on
+  a real socket), `shared/note-search.spec.ts`, `engine.spec.ts` (the config key and the paths channel),
+  `engine-lifecycle.spec.ts` (the active-vault push).
+
 ### req-102 — i18n for the new surfaces: one catalog, one ICU runtime, four bindings
 
 **Not yet manually verified by the owner.** Owner decision O-4 (2026-11-06), concept §7 / §8.1 step 1,

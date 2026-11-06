@@ -5,6 +5,7 @@
  * the remote's settings apply at once, unlike the fleet's.
  */
 import { networkInterfaces } from 'node:os';
+import type { NotesAccess } from '../contracts/notes';
 import type { TicketsRemotePort } from '../contracts/remote-protocol';
 import { DeviceRegistry, FailureLimiter, PairingCodes, type DeviceView, type RemoteDevice } from './auth';
 import {
@@ -82,6 +83,8 @@ export interface RemoteServiceDeps {
   readonly clientDir: string;
   /** The vault's attachment bytes for the proof gallery (E5c); null = no such file. */
   readonly attachments?: (name: string) => Promise<Uint8Array | null>;
+  /** The Notes API (req-100); absent = its routes answer 404. */
+  readonly notes?: NotesAccess;
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   /** Settings shows a fresh status (a device paired, the server stopped). */
   readonly onChanged: () => void;
@@ -123,6 +126,7 @@ export class RemoteService {
         onPaired: () => deps.onChanged(),
         settings: this.settings(),
         pairingAccess: this.pairingAccess(),
+        notes: deps.notes,
       },
     });
   }

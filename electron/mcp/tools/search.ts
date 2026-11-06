@@ -9,7 +9,7 @@
  * the search to one note. Only a `tags` filter goes to the section index,
  * which owns the tag grammar.
  */
-import { splitSections } from '../../../shared/note-sections';
+import { findLines, queryTerms, type LineHit } from '../../../shared/note-search';
 import { unsavedKey, unsavedTexts } from './current-text';
 import { cleanPath, isUnder, ResolvedVaults, ScopedVault, ToolScope } from './scope';
 import { fail, McpToolResult, ok, plural, VaultToolDeps } from './types';
@@ -20,8 +20,6 @@ const MAX_CONTEXT_LINES = 5;
 /** Bounds of one scan — a single-user local tool, but still bounded. */
 const SCAN_MAX_FILES = 2000;
 const SCAN_MAX_CHARS_PER_FILE = 512 * 1024;
-/** Matching lines shown per section in word mode; the section is the hit. */
-const LINES_PER_SECTION = 3;
 const LINE_MAX_CHARS = 240;
 
 function clampInt(raw: unknown, fallback: number, min: number, max: number): number {
@@ -33,83 +31,6 @@ function clampInt(raw: unknown, fallback: number, min: number, max: number): num
 function clip(line: string): string {
   const trimmed = line.trimEnd();
   return trimmed.length > LINE_MAX_CHARS ? `${trimmed.slice(0, LINE_MAX_CHARS)}…` : trimmed;
-}
-
-/** `query` as the terms to look for: quoted phrases stay whole, the rest splits on spaces. */
-export function queryTerms(query: string): string[] {
-  const terms: string[] = [];
-  const pattern = /"([^"]+)"|(\S+)/g;
-  for (const match of query.matchAll(pattern)) {
-    const term = (match[1] ?? match[2] ?? '').trim();
-    if (term !== '') {
-      terms.push(term);
-    }
-  }
-  return terms;
-}
-
-/** One matching line of a file, with the section it sits in. */
-interface LineHit {
-  line: number;
-  heading: string;
-}
-
-/** The lines of `content` that match, in order. `matcher` decides per mode. */
-export function findLines(
-  content: string,
-  mode: { kind: 'regex'; regex: RegExp } | { kind: 'words'; terms: string[]; caseSensitive: boolean },
-): LineHit[] {
-  const lines = content.split('\n');
-  const sections = splitSections(content);
-  const headingAt = (line: number): string => {
-    let heading = '';
-    for (const section of sections) {
-      if (section.line > line) {
-        break;
-      }
-      heading = section.heading;
-    }
-    return heading;
-  };
-
-  if (mode.kind === 'regex') {
-    const hits: LineHit[] = [];
-    for (let i = 0; i < lines.length; i++) {
-      mode.regex.lastIndex = 0;
-      if (mode.regex.test(lines[i])) {
-        hits.push({ line: i + 1, heading: headingAt(i + 1) });
-      }
-    }
-    return hits;
-  }
-
-  const fold = (text: string): string => (mode.caseSensitive ? text : text.toLowerCase());
-  const terms = mode.terms.map(fold);
-  // Section bounds: from its first line to the line before the next one.
-  // Text before the first heading is a section of its own.
-  const starts = sections.map((section) => section.line);
-  if (starts[0] !== 1) {
-    starts.unshift(1);
-  }
-  const hits: LineHit[] = [];
-  for (let s = 0; s < starts.length; s++) {
-    const from = starts[s];
-    const to = s + 1 < starts.length ? starts[s + 1] - 1 : lines.length;
-    const body = fold(lines.slice(from - 1, to).join('\n'));
-    if (!terms.every((term) => body.includes(term))) {
-      continue;
-    }
-    const heading = headingAt(from);
-    let shown = 0;
-    for (let line = from; line <= to && shown < LINES_PER_SECTION; line++) {
-      const text = fold(lines[line - 1]);
-      if (terms.some((term) => text.includes(term))) {
-        hits.push({ line, heading });
-        shown++;
-      }
-    }
-  }
-  return hits;
 }
 
 /** The hits of one file as text: the path and heading, then `line: text` rows with their context. */
