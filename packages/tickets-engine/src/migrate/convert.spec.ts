@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildPlan, DEFAULT_MIGRATION_CONFIG, firstLogEntry, flatten, rewriteAttachmentLinks, stageOfLegacyPhase, type ConversionPlan, type MigrationConfig } from './convert';
 import { patchDricketDocument, stubDocument } from './dricket-doc';
-import { readLegacyVault } from './legacy-vault';
+import { parseLegacyTicket, readLegacyVault } from './legacy-vault';
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'legacy-vault');
 const vault = readLegacyVault(FIXTURE);
@@ -29,6 +29,13 @@ describe('readLegacyVault', () => {
     const t = vault.tickets.find((x) => x.id === 'T-0010')!;
     expect(t.body.startsWith('\n## Description\n')).toBe(true);
     expect(t.text.endsWith(t.body)).toBe(true);
+  });
+
+  it('reads a file with a byte order mark and CRLF line ends (an editor on Windows adds both)', () => {
+    const text = '﻿---\r\nid: T-0150\r\ntitle: "Bom"\r\n---\r\n\r\n## Description\r\n\r\nText.\r\n';
+    const parsed = parseLegacyTicket(text, 'tickets/10-inbox/T-0150.md', 'T-0150', 'inbox');
+    expect('reason' in parsed).toBe(false);
+    expect((parsed as { header: Record<string, unknown> }).header['title']).toBe('Bom');
   });
 
   it('refuses a folder that is not a tickets vault', () => {
@@ -126,6 +133,15 @@ describe('buildPlan -- what it cannot carry', () => {
     expect(t.body).toContain('## Description\n\nFull title: Bug: it says it is finished');
     expect(t.body).toContain('Der Titel ist zu lang.');
     expect(p.conversions[0]!.warnings.join('\n')).toMatch(/shortened/);
+  });
+
+  it('with includeArchive an archived ticket becomes a done ticket labelled archived, and a blocked-by to it survives', () => {
+    const p = plan(['T-0017', 'T-0049'], { includeArchive: true });
+    const archived = target(p, 'T-0049');
+    expect(archived.stage).toBe('done');
+    expect(archived.labels).toEqual(['archived']);
+    expect(archived.extensions['x-legacy-phase']).toBe('archive');
+    expect(target(p, 'T-0017').depends).toEqual(['t-49']);
   });
 
   it('skips archived tickets, unknown phases and reports missing allow-list ids', () => {

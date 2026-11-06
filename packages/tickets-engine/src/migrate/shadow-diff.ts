@@ -24,6 +24,8 @@ export interface BoardRow {
   /** Display ids. */
   readonly dependsOn: readonly string[];
   readonly rank: number;
+  /** A legacy rchive/ ticket / a store ticket with the rchived label (migrated with --include-archive). */
+  readonly archived?: boolean;
 }
 
 /** `stageOf` maps a legacy phase to the stage the migration wrote (E12-9c: `commit` -> `sign-off`); identity by default. */
@@ -35,6 +37,7 @@ export function rowsFromLegacy(tickets: readonly LegacyTicket[], stageOf: (phase
     priority: flatten(t.header['priority']) ?? '',
     dependsOn: asStringList(t.header['blocked-by']),
     rank: rankOf(flatten(t.header['rank'])),
+    archived: t.phase === 'archive',
   }));
 }
 
@@ -49,6 +52,7 @@ export function rowsFromRecords(records: readonly TicketRecord[]): BoardRow[] {
       priority: r.priority ?? '',
       dependsOn: r.dependsOn,
       rank: rankOf(r.extensions['x-rank']),
+      archived: r.labels.includes('archived'),
     }));
 }
 
@@ -90,10 +94,12 @@ export function shadowDiff(legacy: readonly BoardRow[], store: readonly BoardRow
       differences.push({ kind: 'only-in-legacy', id: l.id, legacy: l.stage, store: '' });
       continue;
     }
-    if (l.stage !== s.stage) {
+    if (l.stage !== s.stage && !(l.archived === true && s.archived === true)) {
       differences.push({ kind: 'stage', id: l.id, legacy: l.stage, store: s.stage });
     }
-    if (l.title !== s.title) {
+    if (l.title !== s.title && isShortenedTitle(l.title, s.title)) {
+      declared.push({ id: l.id, what: 'title longer than the dk limit, shortened (the full title leads the description)' });
+    } else if (l.title !== s.title) {
       differences.push({ kind: 'title', id: l.id, legacy: l.title, store: s.title });
     }
     if (l.priority !== s.priority) {
@@ -124,6 +130,10 @@ export function shadowDiff(legacy: readonly BoardRow[], store: readonly BoardRow
     }
   }
   return { identical: differences.length === 0, differences, declared, compared: legacy.length };
+}
+
+function isShortenedTitle(full: string, cut: string): boolean {
+  return cut.endsWith('…') && cut.length < full.length && full.startsWith(cut.slice(0, -1));
 }
 
 function columnOrder(rows: readonly BoardRow[]): string[] {

@@ -1,4 +1,5 @@
 import { toDricketId } from '../store/ids';
+import { ARCHIVED_LABEL } from '../store/legacy-bridge';
 import { ticketNumber, type LegacyTicket, type LegacyVault } from './legacy-vault';
 
 /**
@@ -32,6 +33,12 @@ export interface MigrationConfig {
   readonly selected: readonly string[];
   /** dk title limit. */
   readonly maxTitleLength: number;
+  /**
+   * Migrate the legacy rchive/ too (rehearsal 2026-11-06): each becomes a ticket in the terminal stage
+   * carrying the rchived label, which keeps it off the board while dk ls / dk show / search read it.
+   * Off by default (OD-7).
+   */
+  readonly includeArchive?: boolean;
 }
 
 export const DEFAULT_MIGRATION_CONFIG: Omit<MigrationConfig, 'selected'> = {
@@ -146,7 +153,7 @@ export function buildPlan(vault: LegacyVault, config: MigrationConfig): Conversi
 
 function skipReasonOf(t: LegacyTicket, config: MigrationConfig): string | null {
   if (t.phase === 'archive') {
-    return 'archived in the legacy vault; archived tickets are not migrated (OD-7)';
+    return config.includeArchive === true ? null : 'archived in the legacy vault; archived tickets are not migrated (OD-7)';
   }
   if (stageOfLegacyPhase(t.phase, config) === null) {
     return `phase "${t.phase}" is not one of the configured stages (${config.stages.join(', ')})`;
@@ -303,13 +310,13 @@ export function convertTicket(t: LegacyTicket, config: MigrationConfig, migratin
       legacyId: t.id,
       id,
       number: ticketNumber(t.id),
-      stage: stageOfLegacyPhase(t.phase, config)!,
+      stage: t.phase === 'archive' ? config.stages[config.stages.length - 1]! : stageOfLegacyPhase(t.phase, config)!,
       title,
       priority,
       kind,
       createdAt,
       createdBy,
-      labels: [],
+      labels: t.phase === 'archive' ? [ARCHIVED_LABEL] : [],
       depends,
       parent,
       branch,

@@ -3,6 +3,7 @@ import { stringify } from 'yaml';
 import { DEFAULT_RANK, phaseDirectoryName } from '../contracts/tickets';
 import { flatList, flatText, parseFlatDocument } from '../store/flat-frontmatter';
 import { toDisplayId } from '../store/ids';
+import { ARCHIVED_LABEL } from '../store/legacy-bridge';
 import { BOOLEAN_KEYS, LIST_KEYS, NUMERIC_KEYS } from './convert';
 
 /**
@@ -72,13 +73,16 @@ export function reverseTicket(input: ReverseInput, options: ReverseOptions): Rev
   const rank = ext.find(([k]) => k === 'x-rank')?.[1];
   header['rank'] = rank !== undefined && /^-?\d+$/.test(rank) ? Number(rank) : DEFAULT_RANK;
   header['branch'] = flatText(f['branch']) ?? `t/${id}`;
-  const depends = flatList(f['depends']).map(toDisplayId);
+  const depends = [...new Set([...flatList(f['depends']).map(toDisplayId), ...flatList(f['x-legacy-blocked-by'])])];
   if (depends.length > 0) {
     header['blocked-by'] = depends;
   }
   const parent = flatText(f['parent']);
+  const legacyParent = flatText(f['x-legacy-parent']);
   if (parent !== null) {
     header['parent'] = toDisplayId(parent);
+  } else if (legacyParent !== null) {
+    header['parent'] = legacyParent;
   }
   for (const [key, value] of ext) {
     if (key.startsWith('x-entered-')) {
@@ -100,8 +104,10 @@ export function reverseTicket(input: ReverseInput, options: ReverseOptions): Rev
       header['claimed-at'] = at;
     }
   }
-  if (flatList(f['labels']).length > 0) {
-    lost.push(`labels (${flatList(f['labels']).join(', ')}) -- the legacy format has none`);
+  const archived = flatList(f['labels']).includes(ARCHIVED_LABEL);
+  const otherLabels = flatList(f['labels']).filter((l) => l !== ARCHIVED_LABEL);
+  if (otherLabels.length > 0) {
+    lost.push(`labels (${otherLabels.join(', ')}) -- the legacy format has none`);
   }
   if (flatList(f['touches']).length > 0) {
     lost.push('touches -- the legacy format has none');
@@ -118,8 +124,8 @@ export function reverseTicket(input: ReverseInput, options: ReverseOptions): Rev
   }
 
   const phaseIndex = options.phases.indexOf(stage);
-  const dir = options.phaseDirs?.[stage] ?? (phaseIndex >= 0 ? phaseDirectoryName(phaseIndex + 1, stage) : stage);
-  if (phaseIndex < 0) {
+  const dir = archived ? 'archive' : options.phaseDirs?.[stage] ?? (phaseIndex >= 0 ? phaseDirectoryName(phaseIndex + 1, stage) : stage);
+  if (phaseIndex < 0 && !archived) {
     lost.push(`stage "${stage}" is not a pipeline phase; the folder is named after it`);
   }
   const yamlText = stringify(header, { lineWidth: 0 });
