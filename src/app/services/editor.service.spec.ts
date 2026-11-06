@@ -23,6 +23,8 @@ describe('EditorService', () => {
     const fakeApi: Partial<DreyApi> = {
       readVaultFile: (relativePath: string) =>
         Promise.resolve({ content: `content of ${relativePath}`, modifiedMs: 100 }),
+      readVaultFileIfPresent: (relativePath: string) =>
+        Promise.resolve({ content: `content of ${relativePath}`, modifiedMs: 100 }),
       saveNote: (request: NoteSaveRequest) => {
         saves.push(request);
         return echoSave(request);
@@ -584,7 +586,38 @@ describe('EditorService', () => {
     });
   });
 
+  it('D-15: names a tab by the title the read brought, its path stays', async () => {
+    window.dreyApi = {
+      ...window.dreyApi,
+      readVaultFile: (relativePath: string) =>
+        Promise.resolve({ content: 'x', modifiedMs: 1, ...(relativePath.endsWith('ticket.md') ? { title: 'T-0003 · Pin tabs to the left' } : {}) }),
+    } as DreyApi;
+    await service.openFile('tickets/t/0000/t-3/ticket.md', undefined, { keepFocused: true });
+    await service.openFile('plain.md', undefined, { keepFocused: true });
+    const docs = service.openDocs();
+    expect(docs.map((d) => d.name)).toEqual(['T-0003 · Pin tabs to the left', 'plain.md']);
+    expect(docs[0]?.path).toBe('tickets/t/0000/t-3/ticket.md');
+  });
+
   describe('openDailyNote', () => {
+    it('D-20: probes with the read that answers absent, never the one that rejects', async () => {
+      const rejecting = vi.fn((relativePath: string) => Promise.reject(new Error(`ENOENT: ${relativePath}`)));
+      const probes: string[] = [];
+      window.dreyApi = {
+        ...window.dreyApi,
+        readVaultFile: rejecting,
+        readVaultFileIfPresent: (relativePath: string) => {
+          probes.push(relativePath);
+          return Promise.resolve(null);
+        },
+        buildDailyNoteContent: () => Promise.resolve('# draft\n'),
+      } as unknown as DreyApi;
+      await service.openDailyNote('2026-09-05');
+      expect(probes).toEqual(['daily/2026/09/2026-09-05.md', 'daily/2026-09-05.md']);
+      expect(rejecting).not.toHaveBeenCalled();
+      expect(service.activeIsDraft()).toBe(true);
+    });
+
     it('opens an existing daily note at the nested path', async () => {
       await service.openDailyNote('2026-09-05');
       expect(service.openPath()).toBe('daily/2026/09/2026-09-05.md');
@@ -612,10 +645,10 @@ describe('EditorService', () => {
     it('falls back to a pre-existing flat daily note', async () => {
       TestBed.resetTestingModule();
       const legacyApi: Partial<DreyApi> = {
-        readVaultFile: (relativePath: string) =>
+        readVaultFileIfPresent: (relativePath: string) =>
           relativePath === 'daily/2026-09-05.md'
             ? Promise.resolve({ content: 'legacy body', modifiedMs: 1 })
-            : Promise.reject(new Error('ENOENT')),
+            : Promise.resolve(null),
       };
       window.dreyApi = legacyApi as DreyApi;
       const legacyService = TestBed.inject(EditorService);
@@ -629,10 +662,10 @@ describe('EditorService', () => {
       TestBed.resetTestingModule();
       const journalApi: Partial<DreyApi> = {
         getConfig: () => Promise.resolve({ daily: { dir: 'Journal' } } as AppConfig),
-        readVaultFile: (relativePath: string) =>
+        readVaultFileIfPresent: (relativePath: string) =>
           relativePath === 'Journal/2026/09/2026-09-05.md'
             ? Promise.resolve({ content: 'journal body', modifiedMs: 1 })
-            : Promise.reject(new Error('ENOENT')),
+            : Promise.resolve(null),
       };
       window.dreyApi = journalApi as DreyApi;
       await TestBed.inject(SettingsService).load();
@@ -648,10 +681,10 @@ describe('EditorService', () => {
       TestBed.resetTestingModule();
       const flatApi: Partial<DreyApi> = {
         getConfig: () => Promise.resolve({ daily: { dir: 'Journal' } } as AppConfig),
-        readVaultFile: (relativePath: string) =>
+        readVaultFileIfPresent: (relativePath: string) =>
           relativePath === 'Journal/2026-09-05.md'
             ? Promise.resolve({ content: 'flat body', modifiedMs: 1 })
-            : Promise.reject(new Error('ENOENT')),
+            : Promise.resolve(null),
       };
       window.dreyApi = flatApi as DreyApi;
       await TestBed.inject(SettingsService).load();
@@ -667,9 +700,9 @@ describe('EditorService', () => {
       const reads: string[] = [];
       const strictApi: Partial<DreyApi> = {
         getConfig: () => Promise.resolve({ daily: { dir: 'Journal' } } as AppConfig),
-        readVaultFile: (relativePath: string) => {
+        readVaultFileIfPresent: (relativePath: string) => {
           reads.push(relativePath);
-          return Promise.reject(new Error('ENOENT'));
+          return Promise.resolve(null);
         },
         buildDailyNoteContent: () => Promise.resolve('# 2026-09-06\n'),
       };

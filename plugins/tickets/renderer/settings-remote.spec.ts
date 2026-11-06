@@ -30,6 +30,23 @@ async function mount(devices: RemoteStatus['devices']): Promise<HTMLElement> {
   return section.root;
 }
 
+describe('Settings → Remote access → a failed start (D-19)', () => {
+  it('shows the switch off and the reason, not "Off"', async () => {
+    const failed = {
+      ...statusOf([]),
+      config: { ...statusOf([]).config, enabled: false },
+      listening: null,
+      error: 'port 47811 is already in use — choose another',
+    } as RemoteStatus;
+    const api = { backend: { invoke: vi.fn(async () => failed), on: vi.fn(() => () => undefined) } } as unknown as DreyPluginApi;
+    const section = createRemoteSection(api);
+    await vi.waitFor(() => expect(section.root.textContent).toContain('already in use'));
+    expect(section.root.querySelector('.tset-chip.tset-error')?.textContent).toContain('already in use');
+    expect(section.root.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(false);
+    section.dispose();
+  });
+});
+
 describe('Settings → Remote access → paired devices (D-2)', () => {
   it("lists the owner's four devices with total, suffix for the doubled name and the Inactive marker", async () => {
     const root = await mount([

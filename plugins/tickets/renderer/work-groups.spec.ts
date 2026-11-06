@@ -373,6 +373,19 @@ describe('checkpointActionOf', () => {
   });
 });
 
+describe('a decision from a comment (D-12)', () => {
+  const pipeline = [{ id: 'inbox', title: 'Inbox' }, { id: 'done', title: 'Done' }];
+  const snap = { pipeline, columns: pipeline.map((phase) => ({ phase, unknown: false, tickets: [] })) } as unknown as BoardSnapshot;
+  const decision = { kind: 'needs-decision', ticketId: 'T-0001', title: 't', phase: 'inbox', runId: null, text: 'CSV or JSON?', since: null } as NeedItem;
+
+  it('reads as a decision with its question, not as a review', () => {
+    expect(needKindLabel(decision, snap)).toBe('Decision');
+    expect(needKindLabel({ ...decision, kind: 'blocked' }, snap)).toBe('Blocked');
+    const row = { need: decision, run: null } as unknown as Parameters<typeof statusLineOf>[0];
+    expect(statusLineOf(row, snap)).toBe('CSV or JSON?');
+  });
+});
+
 describe('needKindLabel', () => {
   const need = (kind: NeedItem['kind'], phase: string): NeedItem =>
     ({ kind, ticketId: 'T-0001', title: 'T', phase, runId: null, text: '', since: null }) as NeedItem;

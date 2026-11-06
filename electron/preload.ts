@@ -129,6 +129,8 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultListFiles, vaultId),
   readVaultFile: (relativePath: string, vaultId?: string): Promise<VaultFileContent> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultReadFile, relativePath, vaultId),
+  readVaultFileIfPresent: (relativePath: string, vaultId?: string): Promise<VaultFileContent | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultReadFileIfPresent, relativePath, vaultId),
   writeVaultFile: (
     relativePath: string,
     content: string,

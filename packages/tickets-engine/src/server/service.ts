@@ -271,6 +271,12 @@ export class RemoteService {
     this.config = next;
     if (restart) {
       await this.apply();
+      // D-19: a switch that says on while nothing listens is a lie, also after a restart. The port
+      // and the reason stay, so the next try is one click and status says what went wrong.
+      if (this.config.enabled && this.error !== null) {
+        this.config = { ...this.config, enabled: false };
+        await set(REMOTE_CONFIG_KEYS.enabled, false);
+      }
     }
     return this.status();
   }

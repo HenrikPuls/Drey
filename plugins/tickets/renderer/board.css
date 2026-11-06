@@ -50,7 +50,8 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
-  height: 36px;
+  height: auto;
+  min-height: 36px;
   padding: 0 12px;
   border-top: 1px solid var(--border);
   font-size: 0.75rem;
@@ -81,10 +82,12 @@
   color: var(--text-2);
 }
 
+/* The whole message, wrapped (D-11): a refusal cut to "precon…" says nothing. */
 .tickets-statusbar-note-text {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  padding: 6px 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .tickets-statusbar-note[data-kind='ok'] svg {
@@ -2304,7 +2307,8 @@ details[open] > summary > .tickets-tx-think-preview {
   line-height: 16px;
 }
 
-.work-prio-mini-urgent {
+.work-prio-mini-urgent,
+.work-prio-mini-critical {
   border-color: var(--status-deleted);
   color: var(--status-deleted);
 }
@@ -2877,6 +2881,10 @@ details[open] > summary > .tickets-tx-think-preview {
 .tickets-step-open {
   color: var(--text-heading);
   cursor: default;
+}
+
+.tickets-step-open[hidden] {
+  display: none;
 }
 
 .tickets-step-mark {

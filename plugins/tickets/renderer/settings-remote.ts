@@ -137,12 +137,13 @@ export function createRemoteSection(api: DreyPluginApi): RemoteSection {
     }
     bypass.checked = config.allowBypass;
 
-    if (!config.enabled) {
-      state.textContent = 'Off';
-      state.className = 'tset-chip tset-chip-manual';
-    } else if (next.error !== null) {
+    // The failure first (D-19): a start that failed leaves the switch off, and that is not plain "Off".
+    if (next.error !== null) {
       state.textContent = next.error;
       state.className = 'tset-chip tset-chip-manual tset-error';
+    } else if (!config.enabled) {
+      state.textContent = 'Off';
+      state.className = 'tset-chip tset-chip-manual';
     } else {
       state.textContent = `Listening on ${next.listening ?? '…'}`;
       state.className = 'tset-chip tset-chip-auto';

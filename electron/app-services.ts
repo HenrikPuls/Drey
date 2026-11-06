@@ -189,6 +189,7 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
   const managedVaults = new ManagedVaults();
   const documentRoutes = new DocumentRoutes();
   vaultManager.setMutationGuard((vaultId, relativePath) => documentRoutes.refusal(vaultId, relativePath));
+  vaultManager.setDocumentTitles((vaultId, relativePath, content) => documentRoutes.titleOf(vaultId, relativePath, content));
   // One-click vault registration for plugins (SDK 1.33, T-0045): the
   // same composed round the `vaultAdd` IPC handler runs — register the
   // folder, sync the watcher to the new registry, then one full refresh

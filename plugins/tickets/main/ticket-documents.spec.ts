@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { TicketDocuments, type TicketDocumentsDeps } from './ticket-documents';
+import { TicketDocuments, askToAddCheckout, type TicketDocumentsDeps } from './ticket-documents';
 
 const CHECKOUT = '/data/tickets-store';
 const LOCATION = { checkout: CHECKOUT, path: 'tickets/t/0000/t-63/ticket.md' };
@@ -20,6 +20,68 @@ function make(over: Partial<TicketDocumentsDeps> = {}) {
   };
   return { documents: new TicketDocuments(deps), deps };
 }
+
+describe('the checkout prompt (D-14)', () => {
+  const notAVault = { vaults: async () => [{ id: 'meta', path: '/data/meta', exists: true }] };
+
+  it('asks once while the prompt is open: every further click waits for the same answer', async () => {
+    let answer: (yes: boolean) => void = () => undefined;
+    const vaults = [{ id: 'meta', path: '/data/meta', exists: true }];
+    const registerCheckout = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          answer = (yes) => {
+            vaults.push({ id: 'co', path: CHECKOUT, exists: true });
+            resolve(yes);
+          };
+        }),
+    );
+    const { documents } = make({ vaults: async () => vaults, registerCheckout });
+    const clicks = [documents.open('T-0063'), documents.open('T-0064'), documents.open('T-0063')];
+    await vi.waitFor(() => expect(registerCheckout).toHaveBeenCalled());
+    answer(true);
+    const replies = await Promise.all(clicks);
+    expect(registerCheckout).toHaveBeenCalledTimes(1);
+    expect(replies.every((reply) => reply.ok)).toBe(true);
+  });
+
+  it('asks again after a decline, because that was an answer', async () => {
+    const registerCheckout = vi.fn(async () => false);
+    const { documents } = make({ ...notAVault, registerCheckout });
+    expect(await documents.open('T-0063')).toMatchObject({ ok: false });
+    expect(await documents.open('T-0063')).toMatchObject({ ok: false });
+    expect(registerCheckout).toHaveBeenCalledTimes(2);
+  });
+
+  it('brings the app window to the front and attaches the prompt to it', async () => {
+    const calls: string[] = [];
+    const window = { isMinimized: () => true, restore: () => calls.push('restore'), show: () => calls.push('show'), focus: () => calls.push('focus') };
+    const showMessageBox = vi.fn(async (_parent: unknown, _options: { message: string }) => ({ response: 0 }));
+    const register = vi.fn(async () => undefined);
+    expect(await askToAddCheckout({ window: () => window, showMessageBox, register }, CHECKOUT)).toBe(true);
+    expect(calls).toEqual(['restore', 'show', 'focus']);
+    expect(showMessageBox.mock.calls[0]?.[0]).toBe(window);
+    expect(showMessageBox.mock.calls[0]?.[1]).toMatchObject({ message: 'Add the ticket checkout as a vault?' });
+    expect(register).toHaveBeenCalledWith(CHECKOUT);
+  });
+
+  it('registers nothing when the prompt is cancelled', async () => {
+    const register = vi.fn(async () => undefined);
+    expect(await askToAddCheckout({ window: () => null, showMessageBox: async () => ({ response: 1 }), register }, CHECKOUT)).toBe(false);
+    expect(register).not.toHaveBeenCalled();
+  });
+});
+
+describe('the ticket document title (D-15)', () => {
+  it('names a document of the checkout by id and title, also inside a bigger vault', async () => {
+    const { documents } = make({ vaults: async () => [{ id: 'big', path: '/data', exists: true }, { id: 'co', path: CHECKOUT, exists: true }] });
+    await documents.refresh();
+    const text = '---\nid: t-63\ntitle: Pin tabs to the left\n---\n';
+    expect(documents.route.title?.('co', 'tickets/t/0000/t-63/ticket.md', text)).toBe('T-0063 · Pin tabs to the left');
+    expect(documents.route.title?.('big', 'tickets-store/tickets/t/0000/t-63/ticket.md', text)).toBe('T-0063 · Pin tabs to the left');
+    expect(documents.route.title?.('co', 'tickets/t/0000/t-63/comments/a.md', text)).toBeNull();
+  });
+});
 
 describe('TicketDocuments (E14-4c)', () => {
   it('owns the tickets tree of the checkout vault and nothing else', async () => {

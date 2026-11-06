@@ -2,7 +2,7 @@ import * as path from 'node:path';
 
 import type { DocumentRoute, DocumentRouteSaveResult } from '../../../shared/plugin-api';
 import type { DocumentSaveReply, TicketDocumentLocation } from '../../../packages/tickets-engine/src/contracts/replies';
-import { TICKETS_DIR } from '../../../packages/tickets-engine/src/store/document-paths';
+import { TICKETS_DIR, documentTitle } from '../../../packages/tickets-engine/src/store/document-paths';
 
 /**
  * Ticket documents of a dricket store in the editor (E14-4c, ADR-0090).
@@ -38,9 +38,66 @@ interface Owned {
   readonly prefix: string;
 }
 
+/** The window surface the prompt needs: the Electron seam, so the spec runs without a display. */
+export interface PromptWindow {
+  isMinimized(): boolean;
+  restore(): void;
+  show(): void;
+  focus(): void;
+}
+
+export interface CheckoutPromptDeps<W extends PromptWindow> {
+  /** The app window, or null when there is none. */
+  readonly window: () => W | null;
+  readonly showMessageBox: (parent: W | null, options: MessageBoxOptions) => Promise<{ readonly response: number }>;
+  readonly register: (checkout: string) => Promise<unknown>;
+}
+
+interface MessageBoxOptions {
+  readonly type: 'question';
+  readonly title: string;
+  readonly message: string;
+  readonly detail: string;
+  readonly buttons: string[];
+  readonly defaultId: number;
+  readonly cancelId: number;
+}
+
+/**
+ * The one question before a checkout becomes a vault (D-14): a prompt without a parent
+ * window stays behind the app and looks like nothing happened, so the app comes to the
+ * front and the prompt is modal to it.
+ */
+export async function askToAddCheckout<W extends PromptWindow>(deps: CheckoutPromptDeps<W>, checkout: string): Promise<boolean> {
+  const window = deps.window();
+  if (window !== null) {
+    if (window.isMinimized()) {
+      window.restore();
+    }
+    window.show();
+    window.focus();
+  }
+  const answer = await deps.showMessageBox(window, {
+    type: 'question',
+    title: 'Tickets',
+    message: 'Add the ticket checkout as a vault?',
+    detail: `${checkout}\n\nTicket documents open in the editor from this folder. They stay read-only except for saving a ticket, which goes through dricket.`,
+    buttons: ['Add vault', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (answer.response !== 0) {
+    return false;
+  }
+  await deps.register(checkout);
+  return true;
+}
+
 export class TicketDocuments {
   private owned: readonly Owned[] = [];
   private checkoutPath: string | null = null;
+  /** The prompt on screen: every further open waits for this one answer (D-14). */
+  private asking: Promise<boolean> | null = null;
 
   constructor(private readonly deps: TicketDocumentsDeps) {}
 
@@ -49,7 +106,22 @@ export class TicketDocuments {
     return {
       owns: (vaultId, p) => this.owns(vaultId, p),
       save: (request) => this.save(request),
+      title: (vaultId, p, content) => this.title(vaultId, p, content),
     };
+  }
+
+  /** The tab's name of a ticket document (D-15); null for anything else in the tree. */
+  private title(vaultId: string, p: string, content: string): string | null {
+    const normal = p.split('\\').join('/');
+    const owned = this.owned.find((o) => o.vaultId === vaultId && normal.startsWith(`${o.prefix}${TICKETS_DIR}/`));
+    return owned === undefined ? null : documentTitle(normal.slice(owned.prefix.length), content);
+  }
+
+  private askOnce(checkout: string): Promise<boolean> {
+    this.asking ??= this.deps.registerCheckout(checkout).finally(() => {
+      this.asking = null;
+    });
+    return this.asking;
   }
 
   /** Re-reads which registered vaults contain the checkout; run at activation and when the board refreshes. */
@@ -78,7 +150,7 @@ export class TicketDocuments {
       }
       let owned = this.nearest();
       if (owned === null) {
-        if (!(await this.deps.registerCheckout(location.checkout))) {
+        if (!(await this.askOnce(location.checkout))) {
           return { ok: false, error: 'The ticket checkout is not a vault, so its documents cannot open in the editor.' };
         }
         await this.refresh();

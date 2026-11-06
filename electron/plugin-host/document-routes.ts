@@ -36,6 +36,15 @@ export class DocumentRoutes {
     return null;
   }
 
+  /** What the owner calls this document on screen, or null: no owner, no title, or a title that failed. */
+  titleOf(vaultId: string, path: string, content: string): string | null {
+    try {
+      return this.routeFor(vaultId, path)?.route.title?.(vaultId, path, content) ?? null;
+    } catch {
+      return null; // a read never fails over a label
+    }
+  }
+
   /** Why a document may not be changed by a plain vault write, or null when it may. */
   refusal(vaultId: string, path: string): string | null {
     const owner = this.routeFor(vaultId, path);

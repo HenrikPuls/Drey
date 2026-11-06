@@ -221,6 +221,37 @@ describe('VaultManager path guard', () => {
   });
 });
 
+describe('VaultManager probing a note (D-20)', () => {
+  it('answers null for a note that does not exist yet, without rejecting', async () => {
+    const { manager } = twoVaults(new OwnWriteLedger());
+    expect(await manager.readFileIfPresent('daily/2026/11/2026-11-05.md', 'vb')).toBeNull();
+  });
+
+  it('reads a note that exists', async () => {
+    const { manager } = twoVaults(new OwnWriteLedger());
+    const mtime = await manager.writeFile('daily/a.md', 'hello', 'vb');
+    expect(await manager.readFileIfPresent('daily/a.md', 'vb')).toEqual({ content: 'hello', modifiedMs: mtime });
+  });
+
+  it('still fails for what is more than absent', async () => {
+    const { manager } = twoVaults(new OwnWriteLedger());
+    await manager.writeFile('folder/a.md', 'x', 'vb');
+    await expect(manager.readFileIfPresent('folder', 'vb')).rejects.toThrow();
+    await expect(manager.readFileIfPresent('../outside.md', 'vb')).rejects.toThrow('outside the vault');
+  });
+});
+
+describe('VaultManager and a routed document title (D-15)', () => {
+  it('adds the title the owner of a document gives it, and nothing otherwise', async () => {
+    const { manager } = twoVaults(new OwnWriteLedger());
+    const mtime = await manager.writeFile('tickets/t.md', 'body', 'vb');
+    manager.setDocumentTitles((vaultId, p, content) => (vaultId === 'vb' && p === 'tickets/t.md' ? `T · ${content}` : null));
+    expect(await manager.readFile('tickets/t.md', 'vb')).toEqual({ content: 'body', modifiedMs: mtime, title: 'T · body' });
+    const other = await manager.writeFile('note.md', 'plain', 'vb');
+    expect(await manager.readFile('note.md', 'vb')).toEqual({ content: 'plain', modifiedMs: other });
+  });
+});
+
 describe('VaultManager reading and writing', () => {
   it('writes into the named vault, creating folders, and reads it back', async () => {
     const ledger = new OwnWriteLedger();

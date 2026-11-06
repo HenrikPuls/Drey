@@ -125,6 +125,8 @@ export interface RenameLinksResult {
 export interface VaultFileContent {
   content: string;
   modifiedMs: number;
+  /** What the document's owner calls it on screen, when not its file name (a routed document, D-15). */
+  title?: string;
 }
 
 /** The vault registry, the file tree and file IO. */
@@ -209,6 +211,12 @@ export interface VaultIpc {
    * outside the vault, or if the file can't be read.
    */
   readVaultFile(relativePath: string, vaultId?: string): Promise<VaultFileContent>;
+
+  /**
+   * {@link readVaultFile} for a note that may not exist yet: null means absent. Probe with
+   * this one -- a rejected read prints a stack trace to the app log (D-20).
+   */
+  readVaultFileIfPresent(relativePath: string, vaultId?: string): Promise<VaultFileContent | null>;
 
   /**
    * Overwrites one file inside a vault with `content` (UTF-8). Same

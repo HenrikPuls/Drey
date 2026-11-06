@@ -69,6 +69,8 @@ describe('RemoteGateway', () => {
     const res = await fetch(`${base}/`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-security-policy')).toContain("script-src 'self'");
+    // D-18: Mission Control's index.html sets <base href="/">; 'none' logged a violation on every load.
+    expect(res.headers.get('content-security-policy')).toContain("base-uri 'self'");
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
     expect(await res.text()).toContain('<script src="pair.js" defer></script>');
     expect((await fetch(`${base}/pair.js`)).headers.get('content-type')).toContain('text/javascript');

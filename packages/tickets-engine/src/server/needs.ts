@@ -19,10 +19,29 @@ import { scoutNeedText } from '../contracts/scout';
 import type { BoardSnapshot, TicketCard } from '../contracts/tickets';
 import { mergeChain } from '../core/chain-delta';
 import { READY_STATE } from '../core/pipeline-states';
+import { slugStatusKey } from '../core/status-comment';
+import type { OpenStatusItem } from '../core/status-log';
 import type { RunInfo, RunState } from '../fleet/protocol';
 
 const LIVE: ReadonlySet<RunState> = new Set(['starting', 'running', 'stopping', 'detached']);
-const KIND_ORDER: readonly NeedKind[] = ['question', 'permission', 'manual', 'red-gate', 'failed', 'checkpoint'];
+const KIND_ORDER: readonly NeedKind[] = ['question', 'permission', 'needs-decision', 'blocked', 'manual', 'red-gate', 'failed', 'checkpoint'];
+
+/** How many open decisions and blockers (E7) one list carries at most: a neglected board must not flood the phone. */
+export const STATUS_NEEDS_CAP = 20;
+
+/** One open decision or blocker as a Needs-you line; a key made from the words themselves adds nothing to read. */
+export function statusNeedOf(card: TicketCard, phase: string, item: Pick<OpenStatusItem, 'verb' | 'key' | 'text' | 'since'>): NeedItem {
+  const showKey = item.key !== null && slugStatusKey(item.text) !== item.key;
+  return {
+    kind: item.verb,
+    ticketId: card.id,
+    title: titleOf(card),
+    phase,
+    runId: null,
+    text: showKey ? `[${item.key}] ${item.text}`.trim() : item.text,
+    since: item.since,
+  };
+}
 
 interface Placed {
   readonly card: TicketCard;
@@ -113,6 +132,13 @@ export function needsOf(board: BoardSnapshot, runs: readonly RunInfo[]): readonl
         text: '',
         since: card.meta.entered[phase] ?? null,
       });
+    }
+  }
+
+  for (const status of (board.openStatus ?? []).slice(0, STATUS_NEEDS_CAP)) {
+    const at = placed.get(status.ticketId);
+    if (at !== undefined) {
+      items.push(statusNeedOf(at.card, at.phase, status));
     }
   }
 

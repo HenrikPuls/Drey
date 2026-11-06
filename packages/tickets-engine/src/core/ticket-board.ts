@@ -725,6 +725,8 @@ export interface AssembleInput {
    * the pure assembly stays ledger-free. Default: none.
    */
   readonly ticketUsage?: Record<string, TicketUsage>;
+  /** A store's own priority vocabulary (D-11): replaces pipeline.md's. Default: pipeline.md decides. */
+  readonly priorities?: PriorityConfig;
 }
 
 /** Files under `tickets/` that are neither `_meta` nor ticket-shaped. */
@@ -735,9 +737,10 @@ function strayFileIssue(path: string): TicketIssue {
 export function assembleBoard(input: AssembleInput): BoardSnapshot {
   const issues: TicketIssue[] = [];
 
-  const pipelineParse = input.pipelineText === null
+  const parsedPipeline = input.pipelineText === null
     ? { phases: [], pushRemote: null, priorities: DEFAULT_PRIORITY_CONFIG, error: 'tickets/_meta/pipeline.md is missing', issues: [] }
     : parsePipeline(input.pipelineText);
+  const pipelineParse = input.priorities === undefined ? parsedPipeline : { ...parsedPipeline, priorities: input.priorities };
   if (pipelineParse.error !== null) {
     issues.push({ level: 'error', message: pipelineParse.error });
   }

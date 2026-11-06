@@ -1,7 +1,35 @@
-import { HunkSegment, MergeSegment, buildMerge, mergeResult, segmentText } from './merge-model';
+import { HunkSegment, MergeSegment, buildMerge, mergeResult, segmentText, settleStoreCounter } from './merge-model';
 
 const hunks = (segments: MergeSegment[]): HunkSegment[] =>
   segments.filter((s): s is HunkSegment => s.kind === 'hunk');
+
+describe('the store counter in the merge (D-16)', () => {
+  const ticket = (rev: number, body: string, updated = 'a'): string =>
+    `---\nid: t-3\nrev: ${rev}\nupdated_at: ${updated}\n---\n${body}\n`;
+
+  it('never shows a rev bump as a block to decide: only the text blocks remain', () => {
+    const disk = ticket(4, 'From the terminal.');
+    const mine = settleStoreCounter(disk, ticket(3, 'From the app.'));
+    const blocks = hunks(buildMerge(ticket(3, 'Original.'), disk, mine));
+    expect(blocks.map((h) => [h.disk, h.mine])).toEqual([[['From the terminal.'], ['From the app.']]]);
+  });
+
+  it('keeps a neighbouring frontmatter change as a block of its own, without the rev', () => {
+    const disk = ticket(4, 'Same.', 'terminal');
+    const mine = settleStoreCounter(disk, ticket(3, 'Same.', 'app'));
+    expect(hunks(buildMerge(ticket(3, 'Same.', 'old'), disk, mine)).map((h) => [h.disk, h.mine])).toEqual([[['updated_at: terminal'], ['updated_at: app']]]);
+  });
+
+  it('touches only an integer rev: line of the leading frontmatter', () => {
+    const text = 'no frontmatter\nrev: 3\n';
+    expect(settleStoreCounter('---\nrev: 9\n---\n', text)).toBe(text);
+    const inBody = '---\ntitle: x\n---\nrev: 3\n';
+    expect(settleStoreCounter('---\nrev: 9\ntitle: x\n---\nrev: 7\n', inBody)).toBe(inBody);
+    const named = '---\nrev: draft\n---\n';
+    expect(settleStoreCounter('---\nrev: 9\n---\n', named)).toBe(named);
+    expect(settleStoreCounter('---\ntitle: x\n---\n', '---\nrev: 3\n---\n')).toBe('---\nrev: 3\n---\n');
+  });
+});
 
 describe('merge model', () => {
   const base = 'title\n\none\ntwo\nthree\n';

@@ -66,11 +66,18 @@ export function renderStatusComment(input: StatusCommentInput): string | null {
   return detail === '' ? line : `${line}\n\n${detail}`;
 }
 
+const DECISION_NEEDED = /^decision needed:\s*(.*)$/i;
+
 /** The status line a comment carries, or null when its first line is no verb line (an ordinary comment). */
 export function parseStatusComment(at: string, text: string): StatusLine | null {
   const first = (text.split('\n')[0] ?? '').trim();
   if (first === '' || /['\n]/.test(at)) {
     return null;
+  }
+  // The form a person writes in a terminal (D-12): the same open decision, keyed by its words.
+  const asked = DECISION_NEEDED.exec(first)?.[1]?.trim();
+  if (asked !== undefined && asked !== '') {
+    return { at, verb: 'needs-decision', key: slugStatusKey(asked), text: asked };
   }
   const [line] = parseStatusLog(`- '${at}' ${first}`);
   return line ?? null;

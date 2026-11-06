@@ -477,6 +477,15 @@ export interface BoardColumn {
   readonly unknown: boolean;
 }
 
+/** One open decision or blocker of a store ticket (D-12): its comments' status fold. */
+export interface OpenTicketStatus {
+  readonly ticketId: string;
+  readonly verb: 'needs-decision' | 'blocked';
+  readonly key: string | null;
+  readonly text: string;
+  readonly since: string;
+}
+
 /** One ticket archived within the last seven days (req-75 W1b): the
  *  Done-this-week group of the Work panel. */
 export interface RecentDone {
@@ -502,8 +511,17 @@ export interface BoardSnapshot {
   readonly pipelineError: string | null;
   /** pipeline.md's optional `push:` remote (T-0041); null = never push. */
   readonly pushRemote: string | null;
-  /** The vault's priority vocabulary (pipeline.md's `priorities:`) — the order IS the weight. */
+  /**
+   * The board's priority vocabulary — the order IS the weight: pipeline.md's
+   * `priorities:` on the files backend, the store's `dricket.toml` on dricket (D-11).
+   */
   readonly priorities: PriorityConfig;
+  /**
+   * The open decisions and blockers read from the tickets' comments (dricket only, D-12):
+   * what makes a Needs-you row from the snapshot alone. Absent on the files backend,
+   * whose status logs the remote sweeps per request.
+   */
+  readonly openStatus?: readonly OpenTicketStatus[];
   readonly repos: readonly RepoRef[];
   readonly reposError: string | null;
   readonly columns: readonly BoardColumn[];
