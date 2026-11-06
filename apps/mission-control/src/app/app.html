@@ -109,6 +109,12 @@
   @if (showWork()) {
     <mc-work class="pane pane-work pane-left" />
   }
+  @if (showNotesList()) {
+    <mc-notes class="pane pane-notes pane-left" />
+  }
+  @if (showNote()) {
+    <mc-note class="pane pane-center" />
+  }
   @if (showTeam()) {
     <mc-team class="pane pane-center" [class.pane-left]="isPad()" [class.pane-team]="isPad()" />
   }

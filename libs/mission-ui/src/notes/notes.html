@@ -1,0 +1,120 @@
+<mc-app-bar [title]="'notes.title' | t" [sub]="store.vault() === '' ? null : store.vault()">
+  @if (!store.readOnly()) {
+    <button
+      bar-end
+      type="button"
+      class="icon"
+      [attr.aria-label]="'notes.new' | t"
+      [attr.title]="'notes.new' | t"
+      [attr.aria-expanded]="creating()"
+      (click)="toggleCreate()"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    </button>
+  }
+</mc-app-bar>
+
+<div class="notes">
+  <label class="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M20 20l-4-4" />
+    </svg>
+    <input
+      type="search"
+      [attr.aria-label]="'notes.search' | t"
+      [attr.placeholder]="'notes.search' | t"
+      [value]="store.query()"
+      (input)="onQuery($event)"
+    />
+  </label>
+
+  @if (creating()) {
+    <form class="create" (submit)="onCreate($event, name)">
+      <input #name type="text" [attr.aria-label]="'notes.new_name' | t" [attr.placeholder]="'notes.new_name' | t" autocapitalize="sentences" />
+      <button type="submit" class="btn primary">{{ 'notes.new_create' | t }}</button>
+      <button type="button" class="btn ghost" (click)="toggleCreate()">{{ 'notes.new_cancel' | t }}</button>
+    </form>
+    @if (createError(); as error) {
+      <p class="err" role="alert">{{ error }}</p>
+    }
+  }
+
+  @if (store.query().trim() !== '') {
+    <section class="group" [attr.aria-label]="'notes.search' | t">
+      @if (store.searchError(); as error) {
+        <p class="err" role="alert">{{ error }}</p>
+      } @else if (store.searching() && store.hits().length === 0) {
+        <p class="hint">{{ 'notes.loading' | t }}</p>
+      } @else if (store.searched() !== '' && store.hits().length === 0) {
+        <p class="hint">{{ 'notes.no_results' | t }}</p>
+      }
+      @for (hit of store.hits(); track hit.path) {
+        <button type="button" class="row" [class.cur]="hit.path === store.path()" (click)="openNote(hit.path)">
+          <span class="grow">
+            <span class="nm">{{ hit.name }}</span>
+            <small class="sub">{{ snippet(hit) || hit.path }}</small>
+          </span>
+          <small class="when">{{ age(hit) }}</small>
+        </button>
+      }
+      @if (store.truncated()) {
+        <p class="hint">{{ 'notes.truncated' | t }}</p>
+      }
+    </section>
+  } @else {
+    @if (store.listError(); as error) {
+      <div class="errbox">
+        <p class="err" role="alert">{{ error }}</p>
+        <button type="button" class="btn ghost" (click)="store.loadHome()">{{ 'notes.reload' | t }}</button>
+      </div>
+    }
+
+    @if (store.recent().length > 0) {
+      <section class="group" [attr.aria-label]="'notes.recent' | t">
+        <h2 class="cap">{{ 'notes.recent' | t }}</h2>
+        @for (entry of store.recent(); track entry.path) {
+          <button type="button" class="row" [class.cur]="entry.path === store.path()" (click)="openNote(entry.path)">
+            <span class="grow">
+              <span class="nm">{{ entry.name }}</span>
+              <small class="sub">{{ entry.path }}</small>
+            </span>
+            <small class="when">{{ age(entry) }}</small>
+          </button>
+        }
+      </section>
+    }
+
+    <section class="group" [attr.aria-label]="'notes.all' | t">
+      <h2 class="cap">{{ store.folder() === '' ? ('notes.all' | t) : folderLabel() }}</h2>
+      @if (store.folder() !== '') {
+        <button type="button" class="row folder" (click)="store.openFolder(parentPath())">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 5l-7 7 7 7" />
+          </svg>
+          <span class="grow">{{ 'notes.parent_folder' | t }}</span>
+        </button>
+      }
+      @for (folder of store.folders(); track folder.path) {
+        <button type="button" class="row folder" (click)="store.openFolder(folder.path)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          </svg>
+          <span class="grow">{{ folder.name }}</span>
+          <span class="chev" aria-hidden="true">›</span>
+        </button>
+      }
+      @for (entry of store.notes(); track entry.path) {
+        <button type="button" class="row" [class.cur]="entry.path === store.path()" (click)="openNote(entry.path)">
+          <span class="grow nm">{{ entry.name }}</span>
+          <small class="when">{{ age(entry) }}</small>
+        </button>
+      }
+      @if (store.folders().length === 0 && store.notes().length === 0 && !store.listLoading() && store.listError() === null) {
+        <p class="hint">{{ 'notes.empty' | t }}</p>
+      }
+    </section>
+  }
+</div>

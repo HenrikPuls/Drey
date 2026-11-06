@@ -25,6 +25,7 @@ import { MC_TOAST_STATE } from '@mission-ui/toast.model';
 import { MC_PLAN_STATE, type McPlanState } from '@mission-ui/plan/plan.model';
 import { MC_APPROVE_STATE, type McApproveState } from '@mission-ui/plan/approve.model';
 import { MC_FLOW_STATE, type McFlowState } from '@mission-ui/flow/flow.model';
+import { MC_NOTES_HOST, type McNotesHost } from '@mission-ui/notes/notes.model';
 
 /**
  * One shared McState for the whole shell: the chat tab consumes it
@@ -127,6 +128,20 @@ export const appConfig: ApplicationConfig = {
           undoDraft: () => state.undoFlowDraft(),
           save: () => state.saveFlow(),
           close: () => state.closeFlow(),
+        };
+      },
+    },
+    {
+      provide: MC_NOTES_HOST,
+      useFactory: (): McNotesHost => {
+        const state = inject(McState);
+        return {
+          api: state.notesApi,
+          readOnly: () => state.readOnly(),
+          changed: state.notesChanged,
+          askAbout: (path) => state.askAboutNote(path),
+          openTicket: (id) => state.openTicket(id),
+          toast: (message, kind) => state.toast(message, kind),
         };
       },
     },

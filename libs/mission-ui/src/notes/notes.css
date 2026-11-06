@@ -1,0 +1,198 @@
+/*
+ * The Notes list (req-101, boards 10k / 10n): search field, grouped rows of
+ * 52 px or more, grey when current (never the accent), 13 px floor.
+ */
+:host {
+  display: block;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: var(--text);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+}
+
+.search {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  color: var(--text-3);
+  background: var(--panel);
+  border-radius: var(--radius-control);
+}
+
+.search svg {
+  width: 18px;
+  height: 18px;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  font: inherit;
+  font-size: calc(16px * var(--mc-text, 1)); /* 16 px: Safari does not zoom */
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  outline: 0;
+}
+
+.create {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.create input {
+  flex: 1 1 160px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: calc(16px * var(--mc-text, 1));
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+
+.btn {
+  min-height: 44px;
+  padding: 0 16px;
+  font: inherit;
+  font-size: calc(14px * var(--mc-text, 1));
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+
+.btn.primary {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn.ghost {
+  background: transparent;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+
+.cap {
+  margin: 0;
+  padding: 10px 14px 4px;
+  font-size: calc(13px * var(--mc-text, 1));
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 52px;
+  padding: 6px 14px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.cap + .row {
+  border-top: 0;
+}
+
+.row.cur {
+  background: var(--panel-3);
+}
+
+.row svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--text-3);
+}
+
+.grow {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nm {
+  overflow: hidden;
+  font-size: calc(15px * var(--mc-text, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub {
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.when,
+.chev {
+  flex: none;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+.hint,
+.err {
+  margin: 0;
+  padding: 10px 14px;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+.err {
+  color: var(--danger);
+}
+
+.errbox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}

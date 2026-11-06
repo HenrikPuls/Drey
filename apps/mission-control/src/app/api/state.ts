@@ -18,6 +18,7 @@ import { computed, signal } from '@angular/core';
 import { ApiError, McClient, type McBootHints, type McEventHandlers } from './client';
 import { type McChatUploadReply } from '@mission-ui/chat/chat.model';
 import { autopilotRefusalOf, type AutopilotView, type McAutopilotReply } from '@mission-ui/autopilot/autopilot-state';
+import type { McNotesApi } from '@mission-ui/notes/notes.model';
 import {
   parsePairingView,
   parseSettings,
@@ -158,6 +159,34 @@ export class McState {
   readonly personas = signal<readonly unknown[]>([]);
   /** The paired device's read-only flag (`GET /api/me`): it watches, never mutates. */
   readonly readOnly = signal(false);
+
+  // --- the Notes clients (req-101) ----------------------------------------------
+  /** The SSE `notes` event: a counter (every frame is news) and the paths a device wrote. */
+  readonly notesChanged = signal<{ readonly seq: number; readonly paths: readonly string[] }>({ seq: 0, paths: [] });
+  /** The Notes calls over the desk, for the Notes screens. */
+  get notesApi(): McNotesApi {
+    return this.client;
+  }
+
+  private onNotesFrame(data: string): void {
+    let paths: readonly string[] = [];
+    try {
+      const changed = (JSON.parse(data) as { changed?: unknown }).changed;
+      paths = Array.isArray(changed) ? changed.filter((p): p is string => typeof p === 'string') : [];
+    } catch {
+      paths = [];
+    }
+    this.notesChanged.update((last) => ({ seq: last.seq + 1, paths }));
+  }
+
+  /**
+   * "Ask about this note": the chat opens with the note named in the
+   * composer — the owner reviews the line and sends; the model reads the
+   * note through the vault tools (the engine has no note attachment yet).
+   */
+  askAboutNote(path: string): void {
+    this.prefillChat(`About the note ${path}: `);
+  }
 
   // --- the toast pill ---------------------------------------------------------
   /** The current toast the shell's pill renders; null = nothing showing. */
@@ -312,6 +341,10 @@ export class McState {
   }
 
   private onFrame(name: string, data: string): void {
+    if (name === 'notes') {
+      this.onNotesFrame(data);
+      return;
+    }
     const event = parseChatEvent(name, data);
     switch (event.kind) {
       case 'board':
@@ -1635,7 +1668,7 @@ export class McState {
       .request<Record<string, unknown>>('POST', '/api/chain/autopilot', record)
       .catch((error: unknown) => ({
         ...fail(error),
-        ...(error instanceof ApiError && error.code !== undefined ? { code: error.code } : {}),
+        ...(error instanceof ApiError && error.code !== null ? { code: error.code } : {}),
       }));
     if (isFailure(body)) {
       return autopilotRefusalOf(body, 'The change was refused.');
@@ -1653,7 +1686,7 @@ export class McState {
       .request<Record<string, unknown>>('POST', '/api/chain/abort', {})
       .catch((error: unknown) => ({
         ...fail(error),
-        ...(error instanceof ApiError && error.code !== undefined ? { code: error.code } : {}),
+        ...(error instanceof ApiError && error.code !== null ? { code: error.code } : {}),
       }));
     if (isFailure(body) || body['ok'] !== true) {
       return autopilotRefusalOf(body, 'The change was refused.');

@@ -1585,7 +1585,7 @@ it on, and only devices you pair get in.
    type the code. The code works once and for five minutes.
 3. On the phone, add the page to the home screen.
 
-On the phone the **Menu** is the first screen: a search field, the places Work (with the
+On the phone the **Menu** is the first screen: a search field, the places Notes, Work (with the
 "Needs you" count), Crew and Settings, then the chats with Mission Control, newest first.
 Every other page has one bar at the top, below the status bar, with **‹** and the name of
 the page it came from at its left (**‹ Menu** on Work, Crew, Settings and a chat; **‹ Work**
@@ -1593,11 +1593,22 @@ on a ticket; **‹ Settings** on Appearance), then the page's title and, at the 
 status or button. The bar stays put while the page scrolls beneath it.
 
 On an iPad the app works like the desktop: a header with the **left sidebar** toggle, the
-**Work · Crew** switch and the **right sidebar** toggle. The left sidebar lists the area (the
+**Notes · Work · Crew** switch and the **right sidebar** toggle. The left sidebar lists the area (the
 tickets, the crew), the middle shows the open ticket, persona or settings, the right sidebar
 switches between the Mission Control chat and **Capacity**. Held sideways the iPad opens all three; held upright it opens the
 list and the middle, and the right sidebar slides over the page. Which sidebars are open is
 remembered on that iPad, separately for each way it is held.
+
+**Notes** (phone and iPad) reach the vault that is active on your computer, away from
+your desk. The list shows a search field, the **Recent** notes and the folders; the vault's name
+sits under the title. Tap a note to read it; the **View · Live · Source** switch above the text
+picks how it is shown. The **pencil** starts editing in Live Preview: **✕** cancels (it asks
+only if you changed something) and **✓** saves. If the note changed on your computer in the
+meantime, Mission Control shows both versions and you keep yours or the computer's. A note shows
+its tags, a link to its ticket when its header says `ticket: T-0123`, and **Ask about this
+note**, which opens the Mission Control chat with the note named. **+** in the list makes a new
+note in the open folder. A device paired **Read only** can read and search notes but has no
+pencil and no **+**. On an iPad the list is the left sidebar and the note sits in the middle.
 
 The chat's **microphone** button (next to Send) dictates into the message
 field: tap it, speak, and the words appear as you talk; tap again to stop.

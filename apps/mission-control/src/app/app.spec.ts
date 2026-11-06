@@ -43,7 +43,7 @@ describe('the tab mappings (req-96)', () => {
     expect(tabOfPlace('settings')).toBe('settings');
   });
 
-  it('Notes stays hidden until req-101 ships', () => {
-    expect(NOTES_ENABLED).toBe(false);
+  it('Notes is shown since req-101 shipped its clients', () => {
+    expect(NOTES_ENABLED).toBe(true);
   });
 });

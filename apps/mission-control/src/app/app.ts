@@ -13,6 +13,9 @@ import { Empty } from '@mission-ui/empty';
 import { Toast } from '@mission-ui/toast';
 import { Pairing } from '@mission-ui/pairing/pairing';
 import { Work } from '@mission-ui/work/work';
+import { Notes } from '@mission-ui/notes/notes';
+import { Note } from '@mission-ui/notes/note';
+import { NotesStore } from '@mission-ui/notes/notes.store';
 import { Chat } from '@mission-ui/chat/chat';
 import { Capacity } from '@mission-ui/capacity/capacity';
 import { McI18nPipe } from '@mission-ui/i18n/i18n.pipe';
@@ -41,10 +44,11 @@ export type DockTab = 'chat' | 'capacity';
 export type ShellKind = 'phone' | 'ipad' | 'desktop';
 
 /**
- * The Notes area on phone and iPad stays hidden until req-101 ships its
- * client (the menu row, the header segment). req-101 flips this.
+ * The Notes area on phone and iPad (req-101): the menu row, the header
+ * segment, the list and the note. Kept as a switch so the area can be
+ * hidden again without touching the screens.
  */
-export const NOTES_ENABLED = false;
+export const NOTES_ENABLED = true;
 
 /** A matchMedia query as a read-only signal, live via the change listener (the prototype's go()). */
 function mediaSignal(query: string): Signal<boolean> {
@@ -133,6 +137,8 @@ export function tabOfPlace(place: ShellArea | MenuPlace): McTab {
   imports: [
     McI18nPipe,
     Work,
+    Notes,
+    Note,
     Chat,
     Capacity,
     Settings,
@@ -211,6 +217,8 @@ export class App {
   protected readonly isDesktop = computed(() => this.shell() === 'desktop');
 
   protected readonly notesEnabled = NOTES_ENABLED;
+  /** The Notes screens' state: which note is open decides the phone's screen and the iPad's centre. */
+  private readonly notes = inject(NotesStore);
 
   /** The desktop dock is folded by the top bar's Chat button; open by default. */
   protected readonly dockOpen = signal(true);
@@ -256,7 +264,7 @@ export class App {
    * chat (desktop tablet only; with the dock it sits right), the shared
    * plan, or the empty pane.
    */
-  protected readonly detail = computed<'ticket' | 'persona' | 'plan' | 'team' | 'settings' | 'chat' | 'empty'>(
+  protected readonly detail = computed<'ticket' | 'persona' | 'plan' | 'team' | 'settings' | 'chat' | 'note' | 'empty'>(
     () => {
       if (this.ticketOpen() !== null) {
         return 'ticket';
@@ -267,6 +275,9 @@ export class App {
       const tab = this.wideTab();
       if (tab === 'settings') {
         return 'settings';
+      }
+      if (tab === 'notes' && this.isPad() && this.notes.path() !== null) {
+        return 'note';
       }
       if (tab === 'team' && this.isDesktop()) {
         return 'team';
@@ -320,6 +331,26 @@ export class App {
         return this.panes.left() && this.area() === 'work';
     }
   });
+
+  /**
+   * Notes: the phone's list while no note is open (the note replaces it),
+   * the iPad's left pane while Notes is the area. Not on the desktop web.
+   */
+  protected readonly showNotesList = computed(() => {
+    switch (this.shell()) {
+      case 'phone':
+        return this.tab() === 'notes' && this.notes.path() === null;
+      case 'desktop':
+        return false;
+      case 'ipad':
+        return this.panes.left() && this.area() === 'notes';
+    }
+  });
+
+  /** The open note: the phone's note screen, the iPad's centre. */
+  protected readonly showNote = computed(() =>
+    this.isPhone() ? this.tab() === 'notes' && this.notes.path() !== null : this.detail() === 'note',
+  );
 
   /** Team: the phone's Crew screen; the desktop centre while it owns it; the iPad's left pane while Crew is the area. */
   protected readonly showTeam = computed(() => {
