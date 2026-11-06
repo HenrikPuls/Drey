@@ -198,3 +198,4 @@ phone. Watch any worker and step in when needed.
 > Done and archived tickets open the same way (E13-21): `readTicket` falls back to
 > the archive, so document, thread and Review work for them too.
 
+> **Later change (2026-11-06, canvas decision 15).** The group and column names this ADR uses (Ideas, Sign Off, Commit) are superseded in what the owner sees by one state list: Inbox → Shaping → Prioritized → Building → Review → Ready to try → Done. The groups of the Work panel follow those names; Needs you and Running stay. The engine migration is roadmap item req-99; until it ships the stored stage ids stay.
