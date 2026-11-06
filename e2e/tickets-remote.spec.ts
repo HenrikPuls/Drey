@@ -5,14 +5,14 @@ import { makeDesk } from './fixtures/tickets-remote-desk';
 
 /**
  * req-66 R3: the tickets remote's phone client, in a browser at iPhone
- * size against the built gateway (`dist-electron/plugins/tickets/`) and
+ * size against the built gateway (`dist-electron/packages/tickets-engine/`) and
  * an in-memory board behind the port — the HTTP, pairing, CSP and client
  * path is the real one; only the desk's board service is a stand-in.
  * No Electron here: the client runs in Safari, not in Drey.
  */
 
 const require = createRequire(__filename);
-const dist = path.resolve('dist-electron/plugins/tickets/main/remote');
+const dist = path.resolve('dist-electron/packages/tickets-engine/src/server');
 const { RemoteService } = require(path.join(dist, 'service.js'));
 
 const PORT = 47861;

@@ -13,7 +13,7 @@ import { makeDesk } from './fixtures/tickets-remote-desk';
  */
 
 const require = createRequire(__filename);
-const dist = path.resolve('dist-electron/plugins/tickets/main/remote');
+const dist = path.resolve('dist-electron/packages/tickets-engine/src/server');
 const { RemoteService } = require(path.join(dist, 'service.js'));
 
 const PORT = 47862;

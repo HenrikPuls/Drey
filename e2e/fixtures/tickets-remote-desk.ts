@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(__filename);
-const { needsOf } = require(path.resolve('dist-electron/plugins/tickets/main/remote/needs.js'));
+const { needsOf } = require(path.resolve('dist-electron/packages/tickets-engine/src/server/needs.js'));
 
 interface Card {
   id: string;
