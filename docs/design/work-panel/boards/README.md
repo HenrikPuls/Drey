@@ -11,8 +11,12 @@ roadmap entries and the concept describe behaviour; **the board decides the
 appearance** where they disagree.
 
 Files: one `<Name>.dc.html` per board (plain HTML, inline styles; the
-`<x-dc>` / `<helmet>` wrappers and `support.js` are the canvas runtime and
-need nothing to render — a browser shows the file as it is), one
+`<x-dc>` / `<helmet>` wrappers are the canvas runtime's), `support.js` — a
+small stand-in for that runtime, so the seven boards that hold a template
+(`{{holes}}` from `renderVals()`, `<sc-for>`, `<sc-if>`: DeskClean,
+DeskPersona, DeskSettings, PadFlow, PadReview, PadSettings, PadTeam) render
+outside the canvas (it runs the board's own embedded sample-data script; the
+other 33 boards are static and ignore it), one
 `<Name>.png` rendered at the board's own size with headless Edge
 (`--window-size=<w>,<h> --screenshot`), `canvas.json` (positions, sizes,
 titles, order, notes) and `notes.md` (the sticky notes, decisions 1–31 under
