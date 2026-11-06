@@ -6,6 +6,8 @@
  * work repo in its own worktree); the tool descriptions say so.
  */
 import type { PluginMcpTool, PluginMcpToolProvider } from '../../../shared/plugin-api';
+import { autopilotOf } from '../../../packages/tickets-engine/src/fleet/autopilot';
+import type { ChainStatus } from '../../../packages/tickets-engine/src/fleet/protocol';
 
 export interface FleetMcpDeps {
   readonly status: () => Promise<{
@@ -20,7 +22,7 @@ export interface FleetMcpDeps {
       readonly costUsd: number | null;
       readonly gateFailure: string | null;
     }>;
-    chain: { readonly configured: boolean; readonly master: string } | null;
+    chain: Pick<ChainStatus, 'configured' | 'master' | 'autopilot'> | null;
   }>;
   readonly run: (input: {
     ticketId: string;
@@ -36,7 +38,7 @@ const TOOLS: readonly PluginMcpTool[] = [
   {
     name: 'fleet_status',
     description:
-      'The fleet runner\'s state: every run (id, ticket, provider, state, tokens, cost, gate failure) and the chain\'s master switch.',
+      'The fleet runner\'s state: every run (id, ticket, provider, state, tokens, cost, gate failure), the chain\'s master switch and the Autopilot state (on, paused with an optional resume time, off).',
     inputSchema: { type: 'object', properties: {} },
   },
   {
@@ -112,7 +114,9 @@ export function createFleetMcpTools(deps: FleetMcpDeps): PluginMcpToolProvider {
             chain === null
               ? 'chain: not configured'
               : `chain: ${chain.configured ? chain.master : 'not configured'}`;
-          return { text: [chainLine, ...(lines.length > 0 ? lines : ['(no runs)'])].join('\n') };
+          const autopilot = autopilotOf(chain);
+          const autopilotLine = `autopilot: ${autopilot.state}${autopilot.resumeAt === undefined ? '' : ` until ${autopilot.resumeAt}`}`;
+          return { text: [chainLine, autopilotLine, ...(lines.length > 0 ? lines : ['(no runs)'])].join('\n') };
         }
         case 'fleet_run': {
           const ticket = typeof args['ticket'] === 'string' ? args['ticket'].trim() : '';

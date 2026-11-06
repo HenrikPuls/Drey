@@ -108,7 +108,8 @@ Invoke-RestMethod "http://127.0.0.1:$($d.port)/health" -Headers $h
 | `POST /send` `{runId, text}` | steer a live run (rung: inject/resume/refused); while the run waits on a question it is the answer, not a takeover. To an ended run (done/stopped/failed) with a session it reopens that session under a new held run, the text as its first prompt — the reply carries the new `runId` |
 | `POST /permission` `{runId, decision: "once"\|"always"\|"reject"}` | answer the worker's pending approval (req-64; OpenCode) |
 | `POST /answer` `{runId, answers: {q0: "label", …}}` | answer the worker's question form — a choice, free text, or a list for a multiple choice per question key (req-64; OpenCode's `question` tool) |
-| `POST /chain/master` `{mode: "run"\|"halted"}` | master switch (daemon builds) |
+| `POST /chain/master` `{mode: "run"\|"halted"}` | master switch (daemon builds): `run` sets the Autopilot On, `halted` sets it Off |
+| `POST /chain/autopilot` `{state: "on"\|"paused"\|"off", resumeAt?}` | the Autopilot (req-95a): `resumeAt` a zoned ISO instant in the future, only on `paused`; answers the chain status, or 422 `{ok: false, error, code}`. Paired devices reach it as `POST /api/chain/autopilot` (a refusal there is a 200; a read-only device gets 403 with `code: "read_only"`, on every `/api/chain/` write) |
 | `POST /chain/column` `{phase, mode: "playing"\|"held"}` or `{phase, stop: true}` | column control |
 | `POST /chain/abort` | stop every live run |
 | `POST /shutdown` | graceful retire: stops live runs (bounded), exits. With `{handover: true}` (what Drey sends for a newer build, req-51) no run ends: live runs are left to the successor (OpenCode re-attached; a worker it cannot bind to is stopped and its session resumed in place under the same run id); 409 while a run is gating/starting/stopping |
@@ -356,7 +357,9 @@ tail and 50/4096 head). Each application is logged:
 ### chain.json fields (daemon builds)
 
 `config` (tickets vault path, git, defaultWorker, permissionMode, caps,
-handover thresholds) · `master` (`run` / `halted`) · `columns`
+handover thresholds) · `autopilot` (`{state: on | paused | off, resumeAt?}`,
+the owner's switch; the runner resumes a Paused at its time) · `master`
+(`run` / `halted`, derived from it: On runs, Paused and Off halt) · `columns`
 (per-phase `playing` / `held`) · `redStreak` · `cooldownUntil` (per
 column ISO instant) · `tokensDay` + `tokensUsed` (the per-column token
 budget) · `ciBackoff` · `tripped` (per column `{reason, at}` while the
@@ -366,8 +369,8 @@ owner stopped; the ticket holds until it moves or a newer run starts) ·
 `pausedPersonas` (the personas the owner paused from the Crew view; their
 tickets hold until the persona is played again — U4) · `handoverAt`
 (written by a runner retiring for a newer build; a successor booting
-within five minutes keeps the master switch as it stood — any other boot
-starts halted).
+within five minutes keeps the Autopilot as it stood — any other boot
+ends as Off, also a Paused whose resume time has not passed).
 
 `GET /chain` reports the same plus `quotaPausedUntil` (per provider,
 the ISO instant its quota pause ends — not persisted). The Work panel

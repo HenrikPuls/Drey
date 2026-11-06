@@ -99,6 +99,50 @@ five-hour quota ran out mid-chain; empty turns read as agent-done, a
 build column tripped its breaker on untouched code and a commit run
 moved T-0060 to done without a merge).
 
+## Later change — the Autopilot over the master (2026-11-06, req-95a; concept §6.1)
+
+The owner's switch has three states on every device: **On** (workers pick
+up tickets by themselves), **Paused** (the running step finishes, nothing
+new starts; an optional resume time) and **Off** (the owner starts every
+step). **Stop all running steps now** stays the red button above, not a
+fourth state; it ends as Off.
+
+**One record, the master derived.** `chain.json` gains
+`autopilot: { state, resumeAt? }` beside `master`; the orchestrator holds
+only the record and derives the master from it (On = `run`, Paused and Off =
+`halted`), so the dispatcher, the column brakes and the persona pause did not
+change. `setMaster` stays as an API: `run` sets On, `halted` sets Off and
+ends a pending resume time. `master` stays in the file for tools that read
+it. Pure rules: `packages/tickets-engine/src/fleet/autopilot.ts`.
+
+**The engine resumes, never a client.** The orchestrator's existing scan tick
+(15 s) compares the wall clock with `resumeAt` and turns Paused into On. We
+chose the tick over a one-shot timer: it survives a sleeping machine and has
+no delay limit, at the price of up to 15 s of lateness, which a
+"resume at 18:00" does not notice. A runner **stays alive while Paused** with
+a chain config (no idle shutdown): the respawn would boot as Off and the time
+would be lost.
+
+**The boot rule stands (O-5).** Every start ends as Off: also a Paused whose
+time has not passed, and one whose time passed while the runner was down — a
+chain never starts moving because a process started. A handover to a newer
+build remains no start (`handoverAt`, above): the whole record goes on, and a
+time that came due meanwhile fires on the successor's tick. An older
+`chain.json` without the record reads through its `master`.
+
+**The surface.** `POST /api/chain/autopilot` `{state, resumeAt?}` (a new route
+beside `/api/chain/master`, which stays for the existing clients; the runner's
+twin is `POST /chain/autopilot`) answers `{ok: true, status}` with the chain
+status, or `{ok: false, error, code}` with `bad_state`, `bad_resume_at` (off a
+Paused, not a zoned ISO instant, or not in the future) or `runner_down`.
+Reading needs no new route: `chain.autopilot` in `GET /api/fleet`, and
+`autopilotOf()` reads an older runner or none (none = Off). Every change —
+the owner's, or the runner's own resume — reaches the devices as the existing
+`fleet` change on the event stream, through the client's snapshot compare; a set
+announces at once. A **read-only device** reads all of it; every POST under
+`/api/chain/` refuses with 403 and `code: "read_only"`. `fleet_status` reports the
+state. The engine speaks codes only; the words are the clients' catalog (req-95b).
+
 ## Consequences
 
 - The board runs itself wherever a column has a worker; the owner's leverage concentrates in triage (inbox), the

@@ -14,6 +14,8 @@ import { spawn } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
 import * as path from 'node:path';
 import type {
+  AutopilotRecord,
+  AutopilotRefusal,
   ChainConfig,
   ChainStoreConfig,
   ChainMaster,
@@ -249,6 +251,24 @@ export class FleetClient {
     }
     try {
       return await this.post<ChainStatus>('/chain/master', { mode });
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The Autopilot switch (req-95). Re-reads the fleet right after, so every
+   * device hears the change now — and starts the poll that carries the
+   * runner's own later change (a resume time firing) to them.
+   */
+  async setAutopilot(record: AutopilotRecord): Promise<ChainStatus | AutopilotRefusal | null> {
+    if (!(await this.ensureRunner())) {
+      return null;
+    }
+    try {
+      const reply = await this.post<ChainStatus | AutopilotRefusal>('/chain/autopilot', record);
+      await this.runs();
+      return reply;
     } catch {
       return null;
     }

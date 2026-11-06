@@ -20,7 +20,7 @@ import type {
 } from '../core/commands';
 import type { ChatDecisionResult, ChatShapeResult, ChatSession, ChatSplitChoice, ChatSessionMeta, ChatStreamEvent, ChatTurnResult, PlanStatus } from './chat';
 import type { FleetSnapshot } from '../services/fleet-client';
-import type { ChainMaster, ChainStatus, ColumnMode, WaitQuestion } from '../fleet/protocol';
+import type { AutopilotRecord, AutopilotRefusal, ChainMaster, ChainStatus, ColumnMode, WaitQuestion } from '../fleet/protocol';
 import type { ShapedQuestion } from './question-shape';
 import type { BoardSnapshot, CreateResult, MutationResult, RecentDone, TicketCard } from './tickets';
 import type { ImprovementProposal, ImprovementState } from '../core/improvements';
@@ -69,6 +69,9 @@ export interface NeedItem {
 
 export type RunReply = { readonly ok: boolean; readonly error?: string; readonly runId?: string };
 export type ChainReply = { readonly ok: true; readonly status: ChainStatus } | { readonly ok: false; readonly error: string };
+
+/** The Autopilot write's reply (req-95): the new chain status, or a refusal with its code. */
+export type AutopilotReply = { readonly ok: true; readonly status: ChainStatus } | AutopilotRefusal;
 
 /** The 1:1's two outcomes (E6); an open proposal carries none of them yet. */
 export type ImprovementDecision = Exclude<ImprovementState, 'open'>;
@@ -166,6 +169,7 @@ export interface TicketsRemotePort {
   stream(runId: string): Promise<string>;
 
   chainMaster(mode: ChainMaster): Promise<ChainReply>;
+  chainAutopilot(record: AutopilotRecord): Promise<AutopilotReply>;
   chainColumn(phase: string, mode: ColumnMode): Promise<ChainReply>;
   chainColumnStop(phase: string): Promise<ChainReply>;
   chainAbort(): Promise<ChainReply>;

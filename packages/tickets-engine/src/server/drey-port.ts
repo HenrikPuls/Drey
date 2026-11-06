@@ -20,9 +20,19 @@ import type {
 } from '../core/commands';
 import { chainResult } from '../core/commands';
 import type { FleetSnapshot } from '../services/fleet-client';
-import type { ChainMaster, ChainStatus, ColumnMode, PermissionDecision, QuestionAnswers, RunInfo } from '../fleet/protocol';
+import type {
+  AutopilotRecord,
+  AutopilotRefusal,
+  ChainMaster,
+  ChainStatus,
+  ColumnMode,
+  PermissionDecision,
+  QuestionAnswers,
+  RunInfo,
+} from '../fleet/protocol';
 import type {
   AttachmentReply,
+  AutopilotReply,
   ChainPersonaPauseReply,
   ChainReply,
   ChatChangePayload,
@@ -141,6 +151,7 @@ export interface RemoteFleet {
   answerQuestion(runId: string, answers: QuestionAnswers): Promise<RunReply>;
   stream(runId: string): Promise<string | null>;
   setMaster(mode: ChainMaster): Promise<ChainStatus | null>;
+  setAutopilot(record: AutopilotRecord): Promise<ChainStatus | AutopilotRefusal | null>;
   setColumn(phase: string, mode: ColumnMode): Promise<ChainStatus | null>;
   stopColumn(phase: string): Promise<ChainStatus | null>;
   abortAll(): Promise<ChainStatus | null>;
@@ -426,6 +437,14 @@ export class DreyTicketsPort implements TicketsRemotePort {
 
   async chainMaster(mode: ChainMaster): Promise<ChainReply> {
     return chainResult(await this.fleetClient.setMaster(mode));
+  }
+
+  async chainAutopilot(record: AutopilotRecord): Promise<AutopilotReply> {
+    const reply = await this.fleetClient.setAutopilot(record);
+    if (reply === null) {
+      return { ok: false, error: 'runner_down', code: 'runner_down' };
+    }
+    return 'ok' in reply ? reply : { ok: true, status: reply };
   }
 
   async chainColumn(phase: string, mode: ColumnMode): Promise<ChainReply> {

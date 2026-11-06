@@ -54,6 +54,20 @@ describe('the fleet MCP tools', () => {
     expect(result.text).toContain('$0.42');
   });
 
+  it('fleet_status reports the three Autopilot states (req-95)', async () => {
+    const statusWith = async (chain: Awaited<ReturnType<FleetMcpDeps['status']>>['chain']): Promise<string> =>
+      (await createFleetMcpTools(deps({ status: async () => ({ runs: [], chain }) })).call('fleet_status', {})).text;
+    expect(await statusWith({ configured: true, master: 'run', autopilot: { state: 'on' } })).toContain('autopilot: on');
+    expect(await statusWith({ configured: true, master: 'halted', autopilot: { state: 'paused' } })).toMatch(/autopilot: paused$/m);
+    const timed = await statusWith({ configured: true, master: 'halted', autopilot: { state: 'paused', resumeAt: '2026-11-06T18:00:00.000Z' } });
+    expect(timed).toContain('chain: halted');
+    expect(timed).toContain('autopilot: paused until 2026-11-06T18:00:00.000Z');
+    expect(await statusWith({ configured: true, master: 'halted', autopilot: { state: 'off' } })).toContain('autopilot: off');
+    // An older runner reads through its master; no runner at all is Off.
+    expect(await statusWith({ configured: true, master: 'run' })).toContain('autopilot: on');
+    expect(await statusWith(null)).toContain('autopilot: off');
+  });
+
   it('fleet_run validates the ticket id and passes the choice through', async () => {
     const bad = await provider().call('fleet_run', { ticket: 'nope' });
     expect(bad.isError).toBe(true);

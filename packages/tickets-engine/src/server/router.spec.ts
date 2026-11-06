@@ -56,6 +56,7 @@ function port(): TicketsRemotePort {
     permission: vi.fn(ok),
     stream: vi.fn(async () => 'line'),
     chainMaster: vi.fn(ok),
+    chainAutopilot: vi.fn(async (record: { state: string }) => ({ ok: true, status: { master: record.state === 'on' ? 'run' : 'halted', autopilot: record } })),
     chainColumn: vi.fn(ok),
     chainColumnStop: vi.fn(ok),
     chainAbort: vi.fn(ok),
@@ -141,7 +142,7 @@ describe('route', () => {
     const foreign = await route(req({ method: 'POST', path: '/api/chain/abort', origin: 'http://evil.example', authorization: auth }), deps);
     expect(foreign.status).toBe(403);
     const readOnly = await route(req({ method: 'POST', path: '/api/chain/abort', origin: `http://${HOST}`, authorization: auth }), deps);
-    expect(readOnly).toEqual({ status: 403, body: { ok: false, error: 'this device is paired read-only' } });
+    expect(readOnly).toEqual({ status: 403, body: { ok: false, error: 'this device is paired read-only', code: 'read_only' } });
     expect((await route(req({ path: '/api/needs', authorization: auth }), deps)).status).toBe(200);
     expect((await route(req({ path: '/api/personas', authorization: auth }), deps)).status).toBe(200);
   });
@@ -526,6 +527,55 @@ describe('route', () => {
     expect(readOnly).toEqual({ status: 403, body: { ok: false, error: 'this device is paired read-only' } });
     // other methods still refuse with the updated wording
     expect((await route(req({ method: 'PUT', path: '/api/personas/pia', origin, authorization: auth, body: { title: 'x' } }), deps)).body).toEqual({ ok: false, error: 'only GET, POST and PATCH are served' });
+  });
+
+  it('routes the Autopilot (req-95): the three states, and the refusal codes', async () => {
+    const { deps, devices, remote } = setup();
+    const { token } = await devices.add('iPhone 15', false, new Date());
+    const set = (body: unknown): Promise<{ status: number; body: unknown }> =>
+      route(req({ method: 'POST', path: '/api/chain/autopilot', origin: `http://${HOST}`, authorization: `Bearer ${token}`, body }), deps);
+
+    expect(await set({ state: 'on' })).toEqual({ status: 200, body: { ok: true, status: { master: 'run', autopilot: { state: 'on' } } } });
+    expect(remote.chainAutopilot).toHaveBeenLastCalledWith({ state: 'on' });
+
+    await set({ state: 'paused', resumeAt: '2026-10-30T18:00:00+01:00' });
+    expect(remote.chainAutopilot).toHaveBeenLastCalledWith({ state: 'paused', resumeAt: '2026-10-30T17:00:00.000Z' });
+
+    await set({ state: 'off' });
+    expect(remote.chainAutopilot).toHaveBeenLastCalledWith({ state: 'off' });
+    expect(remote.chainAutopilot).toHaveBeenCalledTimes(3);
+
+    expect(await set({ state: 'run' })).toEqual({ status: 200, body: { ok: false, error: 'bad_state', code: 'bad_state' } });
+    // The router's clock says 10:00 Z: this time has passed.
+    expect(await set({ state: 'paused', resumeAt: '2026-10-30T09:00:00Z' })).toEqual({
+      status: 200,
+      body: { ok: false, error: 'bad_resume_at', code: 'bad_resume_at' },
+    });
+    expect(remote.chainAutopilot).toHaveBeenCalledTimes(3);
+  });
+
+  it('a read-only device reads the Autopilot but sets nothing and stops nothing (code read_only)', async () => {
+    const { deps, devices, remote } = setup();
+    const { token } = await devices.add('Viewer', true, new Date());
+    const auth = `Bearer ${token}`;
+    const refused = { status: 403, body: { ok: false, error: 'this device is paired read-only', code: 'read_only' } };
+    const post = (path: string, body: unknown): Promise<{ status: number; body: unknown }> =>
+      route(req({ method: 'POST', path, origin: `http://${HOST}`, authorization: auth, body }), deps);
+
+    expect(await post('/api/chain/autopilot', { state: 'on' })).toEqual(refused);
+    expect(await post('/api/chain/abort', {})).toEqual(refused);
+    expect(await post('/api/chain/master', { mode: 'run' })).toEqual(refused);
+    expect(remote.chainAutopilot).not.toHaveBeenCalled();
+    expect(remote.chainAbort).not.toHaveBeenCalled();
+    expect(remote.chainMaster).not.toHaveBeenCalled();
+
+    vi.mocked(remote.fleet).mockResolvedValue({
+      runs: [],
+      chain: { configured: true, master: 'halted', autopilot: { state: 'paused' }, columns: {}, redStreak: {}, cooldownUntil: {} },
+    });
+    const read = await route(req({ path: '/api/fleet', authorization: auth }), deps);
+    expect(read.status).toBe(200);
+    expect(read.body).toMatchObject({ chain: { autopilot: { state: 'paused' } } });
   });
 
   it('routes the chain persona pause (U4): persona and boolean paused pinned by the parser', async () => {

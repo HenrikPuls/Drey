@@ -25,6 +25,7 @@ import { kimiAdapter } from './kimi';
 import { nodeKimiUsageReader } from './kimi-usage';
 import { claudeCodeAdapter, opencodeAdapter } from './providers';
 import { freePort, nodeSpawnFn, scrubInheritedEnv } from './procs';
+import { parseAutopilotSet } from './autopilot';
 import { Orchestrator, type FleetEvents } from './orchestrator';
 import { FleetEventWriter, statusPathFor } from './event-writer';
 import { dkTargetFor, retreatStages } from './dk-target';
@@ -399,6 +400,15 @@ async function main(): Promise<void> {
         respond(200, await orchestrator.setMaster(body.mode as ChainMaster));
         return;
       }
+      if (req.method === 'POST' && pathname === '/chain/autopilot') {
+        const parsed = parseAutopilotSet(await readBody(req), new Date());
+        if (!parsed.ok) {
+          respond(422, parsed);
+          return;
+        }
+        respond(200, await orchestrator.setAutopilot(parsed.value));
+        return;
+      }
       if (req.method === 'POST' && pathname === '/chain/column') {
         const body = (await readBody(req)) as { phase?: unknown; mode?: unknown; stop?: unknown };
         if (typeof body.phase !== 'string' || body.phase.trim() === '') {
@@ -625,13 +635,14 @@ async function main(): Promise<void> {
   }, 60_000);
   reapTimer.unref();
 
-  // Idle shutdown: nothing live, the chain is not running, and nobody
-  // asked for a while — the plugin respawns the runner on demand. A
-  // running chain keeps the process alive: it is the thing that drains
-  // the board while Drey is closed (M85).
+  // Idle shutdown: nothing live, the Autopilot is Off, and nobody asked
+  // for a while — the plugin respawns the runner on demand. A running
+  // chain keeps the process alive: it is the thing that drains the board
+  // while Drey is closed (M85). So does a Paused one: the runner is what
+  // resumes it, and a respawn would boot as Off.
   const idleTimer = setInterval(() => {
     if (
-      !orchestrator.active &&
+      !orchestrator.keepsRunnerAlive &&
       !supervisorsOfLive() &&
       Date.now() - lastRequest > args.idleMs
     ) {
