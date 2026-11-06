@@ -157,7 +157,7 @@ test.describe('Phone (390×844)', () => {
     const menu = page.locator('mc-menu');
     await expect(menu).toBeVisible();
     await expect(menu.getByRole('searchbox', { name: 'Search' })).toBeVisible();
-    await expect(menu.locator('.places .row')).toHaveText([/Work/, /Crew/, /Settings/]);
+    await expect(menu.locator('.places .row')).toHaveText([/Work/, /Crew/, /Autopilot · On/, /Settings/]);
     await expect(menu.locator('.places .row', { hasText: 'Work' }).locator('.bdg')).toHaveText('2');
     await expect(menu.locator('.chats .sess')).toHaveText([/Dark mode for the PDF export/, /Why is T-0050 blocked\?/, /Plan the release notes/]);
     await expect(page.locator('button.back:visible')).toHaveCount(0);

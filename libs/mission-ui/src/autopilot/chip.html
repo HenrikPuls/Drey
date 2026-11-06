@@ -1,0 +1,18 @@
+@if (view(); as current) {
+  <button
+    type="button"
+    class="chip"
+    [attr.aria-label]="label()"
+    [attr.aria-expanded]="open()"
+    aria-haspopup="dialog"
+    (click)="open.set(!open())"
+  >
+    <span class="dot" [attr.data-tone]="tone()" aria-hidden="true"></span>
+    <span class="txt">{{ text() }}</span>
+  </button>
+  @if (open()) {
+    <div class="pop" role="dialog" [attr.aria-label]="title()">
+      <mc-autopilot-panel (done)="open.set(false)" />
+    </div>
+  }
+}

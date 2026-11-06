@@ -96,14 +96,35 @@ describe('Settings → Tickets desk rows', () => {
     expect(desk.root.textContent).toContain('whole number of megabytes');
   });
 
-  it('shows the Autopilot row from the chain master, read-only until the engine route lands', async () => {
-    const { desk } = setup();
+  it('shows the Autopilot row from the chain and switches it through chainAutopilot (req-95b)', async () => {
+    const { desk, invoke } = setup();
     await settle();
     const state = desk.root.querySelector<HTMLSelectElement>('select[aria-label="Autopilot"]')!;
     expect([...state.options].map((o) => o.textContent)).toEqual(['On', 'Paused', 'Off']);
     expect(state.value).toBe('on');
-    expect(state.disabled).toBe(true); // TODO(req-95b)
-    expect(desk.root.querySelector<HTMLInputElement>('input[type="time"]')!.type).toBe('time');
+    expect(state.disabled).toBe(false);
+    const time = desk.root.querySelector<HTMLInputElement>('input[type="time"]')!;
+    expect(time.disabled).toBe(true); // only a Paused state takes a resume time
     expect(desk.root.textContent).toContain('Resume paused autopilot at');
+    state.value = 'off';
+    state.dispatchEvent(new Event('change'));
+    await settle();
+    expect(invoke).toHaveBeenCalledWith('chainAutopilot', { state: 'off' });
+  });
+
+  it('shows a refusal of the Autopilot row as words, not a code', async () => {
+    const { desk, invoke } = setup();
+    await settle();
+    invoke.mockImplementation((method: string) =>
+      Promise.resolve(
+        method === 'chainAutopilot' ? { ok: false, error: 'this device is paired read-only', code: 'read_only' } : { master: 'run' },
+      ),
+    );
+    const state = desk.root.querySelector<HTMLSelectElement>('select[aria-label="Autopilot"]')!;
+    state.value = 'paused';
+    state.dispatchEvent(new Event('change'));
+    await settle();
+    expect(desk.root.querySelector('[role="alert"]')!.textContent).toContain('paired read-only');
+    expect(state.value).toBe('on'); // the row goes back to what the engine reports
   });
 });

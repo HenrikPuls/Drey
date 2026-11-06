@@ -164,3 +164,24 @@
   font-size: calc(15px * var(--mc-text, 1));
   color: var(--text-3);
 }
+
+/* The Autopilot row (req-95b): the state dot, green on / orange paused / grey off. */
+.ap-dot {
+  width: 10px;
+  height: 10px;
+  background: var(--text-3);
+  border-radius: 50%;
+}
+
+.ap-dot[data-tone='positive'] {
+  background: var(--ok);
+}
+
+.ap-dot[data-tone='attention'] {
+  background: var(--warn);
+}
+
+.ap-panel {
+  --mc-autopilot-row: 56px;
+  padding: 0 8px 8px;
+}

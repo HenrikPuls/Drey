@@ -1096,6 +1096,20 @@ never fails the move).
 The complete format — every field, the grammar, the agent rules — is
 specified in the repo's `specs/ticket-schema.md`.
 
+### The Autopilot switch
+
+**Autopilot** says whether the crew works by itself: **On** — workers pick up
+tickets on their own; **Paused** — the running step finishes, nothing new
+starts, optionally until a time you set (*Resume at*); **Off** — you start
+every step. It reads the same everywhere: a status-bar item *● Autopilot · On*
+left of today's cost (click it or press `Mod+Alt+P`), the chip in the iPad
+header, the play icon in the phone's app bar (Work, Crew and the chat) and the
+*Autopilot* row of the phone menu. A green dot means On, orange Paused, grey
+Off. *Stop all running steps now…* under the three states aborts every live
+run and halts the chain; it asks twice. A device paired read-only sees the
+state but cannot change it. After a restart the state is Off. The same switch
+is in Settings → Tickets → *Budget and runners*.
+
 ### Running agents on tickets (the fleet)
 
 A ticket can be worked by an **external agent CLI** — OpenCode or
@@ -2040,6 +2054,7 @@ hotkey, in [Settings â†’ Keyboard shortcuts](#settings-keyboard-shortcuts).
 | `Mod+Shift+A` | Ask the assistant about the selection |
 | `Mod+G` | Toggle line numbers |
 | `Mod+B` / `Mod+Alt+B` | Toggle left / right dock |
+| `Mod+Alt+P` | Autopilot: open the On / Paused / Off popover |
 | `Alt+Left` / `Alt+Right` | Back / forward (also mouse buttons 3/4) |
 | `Mod+Alt+Enter` / `Mod+Alt+Shift+Enter` | Split editor right / down |
 | `F6` / `Shift+F6` | Focus next / previous pane |

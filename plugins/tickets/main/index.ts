@@ -45,6 +45,7 @@ import { hostVaultIdMapper } from './host-vault-id';
 import { openTerminalAt } from './open-terminal';
 import { startWindowsDictation } from './dictation';
 import { createFleetMcpTools } from './mcp-tools';
+import { chainAutopilotOf } from './autopilot-ipc';
 import { listWorkerModels } from './worker-models';
 import { EngineClient } from './engine-client';
 import { PathAnnouncer } from './path-announcer';
@@ -642,6 +643,10 @@ const plugin: MainPluginModule = {
       }
       return cmd.ok ? chainResult(await fleet.setMaster(cmd.value.mode)) : cmd;
     });
+
+    // The Autopilot switch (req-95b): the same parse and the same refusal codes as the
+    // remote route, so the desktop item words a refusal exactly as the phone does.
+    ctx.ipc.handle('chainAutopilot', async (payload) => chainAutopilotOf(payload, new Date(), (record) => fleet.setAutopilot(record)));
 
     ctx.ipc.handle('chainColumn', async (payload) => {
       const cmd = parseChainColumn(payload);

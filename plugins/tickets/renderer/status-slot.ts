@@ -65,7 +65,10 @@ export function needsSlotOf(needsYou: number, inNotesView: boolean, t: Translate
 /** The chord the Autopilot switch is bound to (concept 6.1). */
 export const AUTOPILOT_CHORD = 'Mod+Alt+P';
 
-/** The Autopilot item (concept 6.1). TODO(req-95b): the click that changes the state. */
+/** The command a click on the Autopilot item (and the chord) runs: the popover (req-95b). */
+export const AUTOPILOT_COMMAND_ID = 'tickets.autopilot';
+
+/** The Autopilot item (concept 6.1, board 10t): green dot On, orange Paused, grey (no dot) Off. */
 export function autopilotSlotOf(autopilot: AutopilotState | null, t: Translate): StatusSlotPatch {
   if (autopilot === null) {
     return HIDDEN;
@@ -74,7 +77,7 @@ export function autopilotSlotOf(autopilot: AutopilotState | null, t: Translate):
   return {
     text: t('status.autopilot', { state }),
     tooltip: t('status.autopilot.tooltip', { state, chord: AUTOPILOT_CHORD }),
-    ...(autopilot === 'on' ? { dot: 'positive' as const } : {}),
+    ...(autopilot === 'on' ? { dot: 'positive' as const } : autopilot === 'paused' ? { dot: 'attention' as const } : {}),
   };
 }
 
@@ -96,14 +99,20 @@ export interface StatusSlotController {
 }
 
 /**
- * Creates the three items (left to right: cost, needs-you, Autopilot) and
+ * Creates the three items (left to right: Autopilot, cost, needs-you) and
  * returns the controller that keeps them current. `needsCommandId` is the
  * command a click on the needs-you item runs.
  */
-export function createStatusSlots(host: StatusSlotHost, needsCommandId: string, t: Translate): StatusSlotController {
+export function createStatusSlots(
+  host: StatusSlotHost,
+  needsCommandId: string,
+  t: Translate,
+  autopilotCommandId: string = AUTOPILOT_COMMAND_ID,
+): StatusSlotController {
   const cost = host.createStatusItem({ text: '', priority: 12 });
   const needs = host.createStatusItem({ text: '', commandId: needsCommandId, priority: 11 });
-  const autopilot = host.createStatusItem({ text: '', priority: 10 });
+  // Left of the cost item (board 10t); a click opens the popover.
+  const autopilot = host.createStatusItem({ text: '', commandId: autopilotCommandId, priority: 13 });
   const apply = (handle: StatusItemHandle, patch: StatusSlotPatch): void => {
     handle.update({ text: patch.text, tooltip: patch.tooltip, dot: patch.dot });
   };

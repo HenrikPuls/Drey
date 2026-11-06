@@ -26,6 +26,7 @@ import { PlanPane } from '@mission-ui/plan/plan-pane';
 import { PlanApprove } from '@mission-ui/plan/approve';
 import { FlowEditor } from '@mission-ui/flow/flow';
 import { MC_APP_NAV, type McAppNav } from '@mission-ui/app-bar/app-bar';
+import { AutopilotChip } from '@mission-ui/autopilot/chip';
 import { ShellHeader, type ShellArea } from '@mission-ui/shell/header';
 import { Menu, type MenuPlace } from '@mission-ui/shell/menu';
 import { Panes } from '@mission-ui/shell/panes';
@@ -146,6 +147,7 @@ export function tabOfPlace(place: ShellArea | MenuPlace): McTab {
     Toast,
     Pairing,
     ShellHeader,
+    AutopilotChip,
     Menu,
   ],
   providers: [

@@ -2,6 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, output, si
 import type { MessageKey, MessageParams } from '../../../../shared/i18n';
 import type { SessionMeta } from '../api/dto';
 import { historyGroupsOf } from '../chat/chat';
+import { MC_AUTOPILOT } from '../autopilot/autopilot-state';
+import { AutopilotPanel } from '../autopilot/panel';
+import { autopilotToneOf } from '../../../../shared/autopilot';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 import { McI18n } from '../i18n/i18n.service';
 
@@ -39,13 +42,14 @@ export function ageLabelOf(
  */
 @Component({
   selector: 'mc-menu',
-  imports: [McI18nPipe],
+  imports: [McI18nPipe, AutopilotPanel],
   templateUrl: './menu.html',
   styleUrl: './menu.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Menu {
   private readonly i18n = inject(McI18n);
+  private readonly autopilotState = inject(MC_AUTOPILOT);
 
   readonly notesEnabled = input(false);
   readonly needsCount = input(0);
@@ -60,6 +64,18 @@ export class Menu {
   readonly newChat = output<void>();
 
   protected readonly query = signal('');
+
+  /** The Autopilot row (req-95b): the state in words and its dot; null hides the row. */
+  protected readonly autopilot = computed(() => {
+    const view = this.autopilotState?.autopilot() ?? null;
+    return view === null
+      ? null
+      : {
+          text: this.i18n.t('status.autopilot', { state: this.i18n.t(`autopilot.state.${view.state}`) }),
+          tone: autopilotToneOf(view.state),
+        };
+  });
+  protected readonly autopilotOpen = signal(false);
 
   protected readonly groups = computed(() => historyGroupsOf(this.sessions(), this.now()(), this.query()));
 
