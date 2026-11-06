@@ -20,12 +20,30 @@ import type {
   FrontmatterViewInput,
 } from '../../../shared/plugin-api/renderer';
 import { stripPhasePrefix, type BoardSnapshot, type TicketIssue, type TicketMeta } from '../shared/tickets';
+import { idOfDocumentPath } from '../../../packages/tickets-engine/src/store/document-paths';
 import { maskFenceLines } from '../../../shared/markdown/fences';
 import type { TicketStrip } from './ticket-document/strip';
 
-/** A ticket file of the board: `tickets/<phase dir>/T-nnnn.md` (archive included). */
+const FILES_TICKET = /^tickets\/(?!_meta\/)[^/]+\/(T-\d{4,})\.md$/;
+
+/**
+ * The display id a ticket document's path names — both shapes of the
+ * store: the files backend's `tickets/<phase dir>/T-nnnn.md` (archive
+ * included) and the dricket store's `tickets/<prefix>/<shard>/t-N/ticket.md`
+ * (the engine's document-path contract, read and not changed). Null off a
+ * ticket document.
+ */
+export function ticketIdOfPath(path: string | null): string | null {
+  if (path === null) {
+    return null;
+  }
+  const normal = path.split('\\').join('/');
+  return FILES_TICKET.exec(normal)?.[1] ?? idOfDocumentPath(normal);
+}
+
+/** A ticket document of the board, in either store shape. */
 export function isTicketPath(path: string | null): boolean {
-  return path !== null && /^tickets\/(?!_meta\/)[^/]+\/T-\d{4,}\.md$/.test(path);
+  return ticketIdOfPath(path) !== null;
 }
 
 /**
@@ -147,7 +165,7 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
     // E13-6: the strip (status, persona, cost, estimate, chain, gate) sits
     // between the chip row and the headline.
     const strip = deps.strip?.mount({ path, view: input.view });
-    const ticketId = /\/(T-\d{4,})\.md$/.exec(path)?.[1];
+    const ticketId = ticketIdOfPath(path) ?? undefined;
     const faces = ticketId === undefined ? undefined : deps.faces?.(ticketId);
     root.append(...(faces === undefined ? [] : [faces]), chips, ...(strip === undefined ? [] : [strip.node]), title);
 
@@ -198,10 +216,11 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
       const snapshot = deps.snapshot();
       const meta = model?.meta ?? null;
       chips.replaceChildren();
-      const id = meta?.id ?? /T-\d{4,}/.exec(path)?.[0] ?? '';
+      const id = meta?.id ?? ticketIdOfPath(path) ?? '';
       chips.append(el('span', 'tickets-head-id', id));
 
-      const phaseId = phaseOfTicketPath(path);
+      // A dricket document's path carries no column: the board's card does.
+      const phaseId = phaseOfTicketPath(path) ?? snapshot?.columns.flatMap((c) => c.tickets).find((t) => t.path === path)?.phase ?? null;
       const phase = snapshot?.pipeline.find((p) => p.id === phaseId);
       const phaseChip = el(
         'span',
@@ -306,7 +325,7 @@ export function ticketLogFold(
         const text = view.state.doc.toString();
         const id = /^id:\s*['"]?(T-\d{4,})/m.exec(text)?.[1];
         const range = logSectionRange(text);
-        if (range === null || id === undefined || !path.endsWith(`/${id}.md`)) {
+        if (range === null || id === undefined || (ticketIdOfPath(path) !== id && !path.endsWith(`/${id}.md`))) {
           return;
         }
         folded.add(key);

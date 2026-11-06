@@ -19,6 +19,13 @@
   The review and flow tabs still read `Review · T-0121` / the flow title — they sit in
   `review/register.ts` and `flow/`, not in this bundle, and wait for the engine's document title
   contract (W3.8).
+- **D-23 — the header on a dricket store.** `isTicketPath` matched only the files backend's
+  `tickets/<column>/T-nnnn.md`, so on a dricket store the document had no header and no
+  Ticket | Thread | Review strip. `ticketIdOfPath` now reads both shapes (the dricket
+  `tickets/<prefix>/<shard>/t-N/ticket.md` through the engine's `idOfDocumentPath`, unchanged);
+  the phase chip falls back to the board card's phase where the path has no column. Handed to
+  this bundle by the store-defects session; its roadmap entry D-23 is not on this branch and
+  goes when the branches merge.
 - **Files:** `plugins/tickets/renderer/ticket-header.ts`, `ticket-document/{dom,model,strip,extension}.ts`,
   `ticket-document.css`, `board.css` (thread header), `index.ts` (three one-line edits: the
   strip's `i18n`, the dropped header deps, the composer pre-fill and the tab title call).
