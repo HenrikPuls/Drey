@@ -30,7 +30,14 @@ view (5d, 7f). The board-by-board comparison with the code is in
 [convergence-gaps.md](convergence-gaps.md); the whole concept is
 [architecture-concept-v2.md](architecture-concept-v2.md).
 
-The order in which the canvas boards are built, with the coverage of every board and the model per session, is in [build-plan.md](build-plan.md).
+**Since 2026-11-06 (evening) the current boards are in the repo:
+[boards/](boards/README.md)** — all 40 `.dc.html` files of the canvas with
+a PNG of each at its own size, `canvas.json` and the canvas notes. They are
+the binding reference for the look; the files listed in the table above are
+the superseded first round. The order in which the boards are built, with the
+coverage of every board, the model per session and the **fidelity rule** (§4:
+a screen is done when its screenshot matches its board), is in
+[build-plan.md](build-plan.md).
 
 How to read them: the markup is plain HTML with inline styles; `{{…}}`
 holes are filled from the `renderVals()` sample data at the bottom of

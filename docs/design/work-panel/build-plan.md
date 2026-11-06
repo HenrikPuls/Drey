@@ -2,7 +2,9 @@
 
 Status: the questions of section 3 were **decided on 2026-11-06 (afternoon)**; the roadmap ids named below exist in `specs/roadmap.md`. Planning state: branch `desktop-integration` @ `7323ac77` (2026-11-06), read-only. Sources: `CLAUDE.md`, `specs/roadmap.md`, `specs/changelog.md` (173 ↓), `docs/design/work-panel/{architecture-concept-v2,convergence-gaps,README,desktop-integration}.md`, ADR-0077/0086/0087/0088/0089/0090, and the code entry points named per row. "Built" below means present in code and specs — **nothing from milestone 97 on is owner-verified**.
 
-Capacity (owner, 2026-11-06): at most **2 Fable, 4 Opus, 6 Sonnet** sessions at once (the per-model limit); never two sessions on the same files. Wave 1 is running: **req-102 i18n catalog (Fable)**, **req-100 Notes engine API (Opus)**.
+Capacity (owner, 2026-11-06, corrected the same evening): **one pool of 6 slots** — a Fable session takes 4, Opus 2, Sonnet 1 (so 1 Fable + 1 Opus, or 1 Opus + 4 Sonnet, or 6 Sonnet); never two sessions on the same files. Waves 1–3 are merged (2026-11-06 evening, `desktop-integration`); the cut-over E14-7 is running with the owner.
+
+**Owner's verdict after wave 3 (2026-11-06 evening): the screens are only structurally similar to the boards, not the same.** The cause is the method, not the items: the sessions built from text briefs and never saw a board. Section 4 is the correction; wave 4 is a fidelity wave, not a feature wave.
 
 ## 1. Coverage: board → roadmap / changelog → status
 
@@ -86,7 +88,7 @@ Wave 2 load: Fable 1 (+req-102) = 2 · Opus 3 (+req-100) = 4 · Sonnet 6.
 
 Wave 3 load: Fable 1 · Opus 3 · Sonnet 6.
 
-### Wave 4 (after the cut-over and the owner's first round)
+### Wave 4 (as planned in the afternoon — **superseded by §4's fidelity wave**; these rows are now wave 5, after fidelity)
 
 | # | Session / branch | Model | Item(s) | Owns |
 |---|---|---|---|---|
@@ -120,7 +122,35 @@ Each question below is marked **DECIDED** with the answer. "Owner" = the owner's
 
 **Q9 — Text size steps. DECIDED (technical call):** the fifth step (XXL = 21 px, canvas decision 8) is bundled into the Appearance / theme item of wave 3 (3.7).
 
-## 4. Risks
+## 4. Fidelity rule — "done" means it looks like the board (2026-11-06 evening)
+
+The goal the owner set at the start — **the whole UI is rendered as the boards show it, not approximately** — is the acceptance criterion of every UI session from here on. The boards are in the repo: [boards/](boards/README.md) (HTML with exact measures, colours, spacing and strings; a PNG per board; the canvas notes with decisions 1–31).
+
+1. **Every UI session gets the whole boards folder**, not only its own board: the look is one system (tokens, chrome, spacing, type scale), and a session must see how its screen sits next to the others. It **changes only the files it owns** (per the wave table) — consistency comes from the shared tokens and the frame, not from one session doing everything.
+2. **Frame first, then the panels.** On the desktop the base frame (title bar, 28 px dock headers and icon strips, tab bar, meta bar, status bar, panel chrome, the tokens in `src/styles.css`) is one session (9a, Fable), merged before any panel session starts: a panel inherits its chrome from the base, so a panel built before the frame changes is wrong again afterwards. On Mission Control the shell (req-96, merged) is the frame; the per-screen sessions follow.
+3. **The comparison is part of the work.** A session starts the built app (`.\dev.ps1 -Built`, or the fake-desk e2e fixture for Mission Control), sets the window to the board's size (1440×900 / 1194×834 / 834×1194 / 390×844), takes the screenshot in the same state the board shows (same tab, same ticket, same panels open), puts it beside the PNG and writes a **deviation list**: every difference in layout, measure, colour, type, icon, string, order — each either fixed or justified in one line (a permitted deviation: the base's own chrome a plugin cannot draw into, a token in place of a hex, data instead of sample content). The list and both images go into the changelog entry. A screen with an unfixed, unjustified deviation is not done.
+4. **Review against the board before the merge.** The integrating session (Fable) opens the board and the screenshot side by side and refuses the merge on a visible difference; the owner's round follows on the integrated build with the canvas open, board by board.
+5. **SDK changes are allowed, but discussed first.** Where a board needs something the plugin SDK or the base cannot do today (a panel header drawn by the plugin, a status bar layout, a dock behaviour), the session stops, names the gap with the board and a recommendation, and the owner decides (the decision lands in the canvas notes and here); the change ships with its SDK version bump and the sample plugin updated.
+6. **Tokens, not hexes; catalog, not literals** — unchanged (README rules, ADR-0057, ADR-0091).
+
+### Wave 4 — the fidelity wave (replaces the feature list under "Wave 4" above, which moves to wave 5)
+
+Order: 4.0 first, alone; then 4.1–4.6 in parallel within the pool; 4.7 last.
+
+| # | Session | Model | Boards | Owns | Done when |
+|---|---|---|---|---|---|
+| 4.0 | `9a-frame` | **Fable** | 9a (req-104): title bar, dock headers 28 px + icon strips, tab bar, meta bar, status bar, panel chrome, ticket card, Assistant without rail; tokens | `src/styles.css`, `src/app/dock/**`, `src/app/titlebar/**`, `src/app/status-bar/**`, `src/app/panes/` tab bar, the SDK's panel header contract if 9b needs one | 9a screenshot = board; the frame rule for every panel written down |
+| 4.1 | `9b-panels` | Sonnet ×2 (Calendar+Outline; Search+Tasks+Source control) | 9b (req-105) | `src/app/calendar/`, `plugins/{outline,tags,tasks,git}/renderer` panel parts | 9b per panel = board |
+| 4.2 | `desk-work-board-crew` | Sonnet | 7a, 7e, 7f, 7k, 7h, 7i | `plugins/tickets/renderer/{work-panel,board,team}/**`, `src/app/titlebar/view-switcher.*`, `windows/` | each board = screenshot |
+| 4.3 | `desk-ticket-pages` | Sonnet | 7b, 7c, 7d, 7j (incl. E13-10 Parts block, E12-19 splitter) | `plugins/tickets/renderer/{ticket-document,review,ticket-header,ready-view}.*` | each board = screenshot |
+| 4.4 | `desk-settings-autopilot` | Sonnet | 7g, 10t desktop part | `plugins/tickets/renderer/settings/**`, `src/app/settings/**`, `status-slot.ts`, `autopilot/` | boards = screenshots; Autopilot item seen running with a scratch runner |
+| 4.5 | `mc-phone` | Sonnet | 10a–10d, 10g–10m, 10o, 10p, 10t phone part | `libs/mission-ui/src/**` phone templates/CSS, `apps/mission-control/src/app/app.*` phone rules | each board at 390×844 = screenshot |
+| 4.6 | `mc-ipad` | Sonnet | 5b–5i, 10e, 10f, 10n, 10q, 10r, 10s, 10t iPad part | `libs/mission-ui/src/**` wide templates/CSS, `shell/` | each board at 1194×834 / 834×1194 = screenshot |
+| 4.7 | `fidelity-review` | **Fable** | all | — (reads; small fixes only) | one deviation table over all 40 boards, every row fixed or owner-accepted |
+
+Engine-side items still open (req-99c phases in Building, E12-3b, E14-9b, the persisted ids) run as before in Opus sessions when the pool allows; they change no appearance.
+
+## 5. Risks
 
 - **Hot file `plugins/tickets/renderer/index.ts`** — six sessions want it; the plan gives it one owner per wave (2.6, then 3.4). Any other session that needs it rebases after that owner lands.
 - **`fleet/chain.ts` shared by 2.2 and 2.3** (stage lists vs master) — small, but the second to merge rebases.
