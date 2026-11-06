@@ -17,23 +17,114 @@
     <div class="head">
       <span class="title">Settings</span>
     </div>
+    <input
+      type="search"
+      class="search"
+      aria-label="Search settings"
+      title="Search settings"
+      autocomplete="off"
+      spellcheck="false"
+      [value]="query()"
+      (input)="onSearch($event)"
+      (keydown)="onSearchKey($event)"
+    />
     @for (category of categories(); track category.id) {
-      <button
-        type="button"
-        class="category"
-        [class.active]="selected() === category.id"
-        [attr.aria-current]="selected() === category.id ? 'page' : null"
-        (click)="selected.set(category.id)"
-      >
-        <span class="label">{{ category.label }}</span>
-        <span class="hint">{{ category.hint }}</span>
-      </button>
+      <div class="cat-row">
+        <button
+          type="button"
+          class="category"
+          [class.active]="selected() === category.id && !searching()"
+          [attr.aria-current]="selected() === category.id && !searching() ? 'page' : null"
+          (click)="selectCategory(category.id)"
+        >
+          <span class="label">{{ category.label }}</span>
+          @if (pageCount(category.id) > 0) {
+            <span class="count" [attr.aria-label]="pageCount(category.id) + ' settings'">{{ pageCount(category.id) }}</span>
+          }
+          <span class="hint">{{ category.hint }}</span>
+        </button>
+        @if (category.sections?.length) {
+          <button
+            type="button"
+            class="twisty"
+            [attr.aria-expanded]="isExpanded(category.id)"
+            [attr.aria-label]="(isExpanded(category.id) ? 'Collapse ' : 'Expand ') + category.label"
+            [title]="(isExpanded(category.id) ? 'Collapse ' : 'Expand ') + category.label"
+            (click)="toggleExpanded(category.id)"
+          >
+            <app-icon [name]="isExpanded(category.id) ? 'chevron-down' : 'chevron-right'" [size]="13" />
+          </button>
+        }
+      </div>
+      @if (category.sections?.length && isExpanded(category.id)) {
+        <div class="sections" role="group" [attr.aria-label]="category.label + ' sections'">
+          @for (section of category.sections; track section.id) {
+            <button
+              type="button"
+              class="section-entry"
+              [class.active]="
+                selected() === category.id && !searching() && currentSection() === section.id
+              "
+              [attr.aria-current]="
+                selected() === category.id && !searching() && currentSection() === section.id
+                  ? 'location'
+                  : null
+              "
+              (click)="openSection(category.id, section.id)"
+            >
+              <span class="section-label">{{ section.label }}</span>
+              @if (sectionCount(category.id, section) > 0) {
+                <span class="count">{{ sectionCount(category.id, section) }}</span>
+              }
+            </button>
+          }
+        </div>
+      }
     }
   </nav>
 
   <div class="right">
-    <div class="detail">
-      @if (settings.draft()) {
+    <div class="scope-tabs" role="tablist" aria-label="Setting scope">
+      @for (item of scopes; track item.id) {
+        <button
+          type="button"
+          role="tab"
+          class="scope-tab"
+          [class.active]="scope() === item.id"
+          [attr.aria-selected]="scope() === item.id"
+          (click)="pickScope(item.id)"
+        >
+          {{ item.label }}
+        </button>
+      }
+    </div>
+    <div #detail class="detail" (scroll)="onScroll()">
+      @if (searching()) {
+        <div class="results" role="list" aria-label="Search results">
+          @for (hit of hits(); track hit.categoryId + hit.entry.key) {
+            <button type="button" class="result" role="listitem" (click)="openHit(hit)">
+              <span class="result-where">
+                {{ hit.categoryLabel }}{{ hit.sectionLabel ? ' › ' + hit.sectionLabel : '' }}
+              </span>
+              <span class="result-label">{{ hit.entry.label }}</span>
+              @if (hit.entry.description) {
+                <span class="result-desc">{{ hit.entry.description }}</span>
+              }
+            </button>
+          } @empty {
+            <div class="no-match" role="status">
+              <p>
+                @if (query().trim() !== '') {
+                  No setting matches "{{ query().trim() }}"
+                } @else {
+                  No setting has this scope
+                }
+              </p>
+              <button type="button" class="ghost" (click)="clearSearch()">Clear search</button>
+            </div>
+          }
+        </div>
+      } @else if (settings.draft()) {
         <ng-container
           *ngComponentOutlet="selectedComponent(); inputs: selectedInputs()"
         />

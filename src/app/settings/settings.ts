@@ -1,9 +1,33 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
+  computed,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
 import { Icon } from '../icons/icon';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { SettingsService } from '../services/settings.service';
 import { SettingsCategoryRegistry } from './settings-registry.service';
+import {
+  SETTINGS_SCOPES,
+  activeSection,
+  countSettings,
+  filterHitsByScope,
+  type SettingsScope,
+  type SettingsSection,
+  searchSettings,
+  type SettingsSearchEntry,
+  type SettingsSearchHit,
+} from './settings-model';
+
+/** Distance below the scrollport's top at which a section counts as reached. */
+const SPY_OFFSET = 24;
 
 /**
  * The Settings screen: master-detail per CLAUDE.md's "UI/UX Design" -- a
@@ -56,6 +80,170 @@ export class Settings {
   /** `{ contrib }` for a plugin page, `undefined` for a core one. */
   protected readonly selectedInputs = computed(() => this.registry.inputsFor(this.selected()));
 
+  private readonly injector = inject(Injector);
+  private readonly detail = viewChild<ElementRef<HTMLElement>>('detail');
+
+  protected readonly query = signal('');
+  protected readonly scopes = SETTINGS_SCOPES;
+  /** The scope tab chosen (board 7g); `null` = none, everything shows. */
+  protected readonly scope = signal<SettingsScope | null>(null);
+  protected readonly hits = computed<readonly SettingsSearchHit[]>(() =>
+    this.query().trim() === ''
+      ? this.scope() === null
+        ? []
+        : this.scopeBrowse()
+      : filterHitsByScope(searchSettings(this.registry.searchSources(), this.query()), this.scope()),
+  );
+  /** Every setting of the chosen scope, in page order (no query typed). */
+  private scopeBrowse(): SettingsSearchHit[] {
+    return this.registry.searchSources().flatMap((source) =>
+      (source.entries ?? [])
+        .filter((entry) => entry.scope === this.scope())
+        .map((entry) => ({
+          categoryId: source.id,
+          categoryLabel: source.label,
+          sectionLabel: source.sections?.find((s) => s.id === entry.section)?.label ?? null,
+          entry,
+        })),
+    );
+  }
+  protected readonly searching = computed(() => this.query().trim() !== '' || this.scope() !== null);
+
+  protected pageCount(id: string): number {
+    return countSettings(this.registry.searchSources().find((s) => s.id === id)?.entries);
+  }
+
+  protected sectionCount(categoryId: string, section: SettingsSection): number {
+    return countSettings(
+      this.registry.searchSources().find((s) => s.id === categoryId)?.entries,
+      section.id,
+    );
+  }
+
+  protected pickScope(scope: SettingsScope): void {
+    this.scope.update((current) => (current === scope ? null : scope));
+  }
+
+  protected clearSearch(): void {
+    this.query.set('');
+    this.scope.set(null);
+  }
+
+  /** The section entry highlighted for the page's scroll position (E13-22). */
+  protected readonly currentSection = signal<string | null>(null);
+
+  /** A category's own expand/collapse choice; unset follows the selection. */
+  private readonly expandChoice = signal<Readonly<Record<string, boolean>>>({});
+
+  protected isExpanded(id: string): boolean {
+    return this.expandChoice()[id] ?? this.selected() === id;
+  }
+
+  protected toggleExpanded(id: string): void {
+    const open = this.isExpanded(id);
+    this.expandChoice.update((choice) => ({ ...choice, [id]: !open }));
+  }
+
+  protected selectCategory(id: string): void {
+    this.clearSearch();
+    this.expandChoice.update(({ [id]: _unset, ...rest }) => rest);
+    this.currentSection.set(null);
+    this.selected.set(id);
+    this.afterRender(() => {
+      this.detail()?.nativeElement.scrollTo({ top: 0 });
+      this.updateSpy();
+    });
+  }
+
+  /** A click on a section entry: its page, scrolled to the section. */
+  protected openSection(categoryId: string, sectionId: string): void {
+    this.clearSearch();
+    this.selected.set(categoryId);
+    this.afterRender(() => this.scrollToSection(sectionId));
+  }
+
+  /** A search hit: its page, scrolled to the setting. */
+  protected openHit(hit: SettingsSearchHit): void {
+    this.clearSearch();
+    this.selected.set(hit.categoryId);
+    this.afterRender(() => this.scrollToEntry(hit.entry));
+  }
+
+  protected onSearch(event: Event): void {
+    this.query.set((event.target as HTMLInputElement).value);
+  }
+
+  protected onSearchKey(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this.searching()) {
+      this.clearSearch();
+      event.stopPropagation();
+    }
+  }
+
+  protected onScroll(): void {
+    this.updateSpy();
+  }
+
+  private afterRender(work: () => void): void {
+    afterNextRender(work, { injector: this.injector });
+  }
+
+  private anchors(): { id: string; top: number }[] {
+    const root = this.detail()?.nativeElement;
+    if (!root) {
+      return [];
+    }
+    const base = root.getBoundingClientRect().top - root.scrollTop;
+    return [...root.querySelectorAll<HTMLElement>('[data-settings-section]')].map((el) => ({
+      id: el.dataset['settingsSection'] ?? '',
+      top: el.getBoundingClientRect().top - base,
+    }));
+  }
+
+  private updateSpy(): void {
+    const root = this.detail()?.nativeElement;
+    if (!root || this.searching()) {
+      return;
+    }
+    this.currentSection.set(activeSection(this.anchors(), root.scrollTop, SPY_OFFSET));
+  }
+
+  private scrollToSection(sectionId: string): void {
+    const root = this.detail()?.nativeElement;
+    const anchor = this.anchors().find((a) => a.id === sectionId);
+    if (root && anchor) {
+      root.scrollTo({ top: Math.max(0, anchor.top - SPY_OFFSET / 2), behavior: 'smooth' });
+      this.currentSection.set(sectionId);
+    }
+  }
+
+  private scrollToEntry(entry: SettingsSearchEntry): void {
+    const root = this.detail()?.nativeElement;
+    if (!root) {
+      return;
+    }
+    let target: HTMLElement | null =
+      entry.key === ''
+        ? null
+        : root.querySelector<HTMLElement>(`[data-setting-key="${CSS.escape(entry.key)}"]`);
+    if (!target && entry.key !== '') {
+      target =
+        [...root.querySelectorAll<HTMLElement>('label, h3, h4, .switch-label, .field-label')].find(
+          (el) => el.textContent?.trim().startsWith(entry.label),
+        ) ?? null;
+    }
+    if (target) {
+      const found = target;
+      found.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      found.classList.add('setting-found');
+      setTimeout(() => found.classList.remove('setting-found'), 1600);
+    } else if (entry.section) {
+      this.scrollToSection(entry.section);
+    } else {
+      root.scrollTo({ top: 0 });
+    }
+  }
+
   /** A text field took the focus: hold the automatic save until it is left. */
   protected onFocusIn(event: FocusEvent): void {
     if (isTextEntry(event.target)) {
@@ -88,6 +276,11 @@ export class Settings {
    * saving (`closeWithoutSaving`).
    */
   protected async requestClose(): Promise<void> {
+    if (this.searching()) {
+      // Escape or the backdrop first leaves the search, then the screen.
+      this.clearSearch();
+      return;
+    }
     if (await this.settings.flush()) {
       this.settings.closeScreen();
     }

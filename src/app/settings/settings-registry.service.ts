@@ -13,6 +13,8 @@ import { SettingsSpellcheck } from './spellcheck/settings-spellcheck';
 import { SettingsUpdates } from './updates/settings-updates';
 import { SettingsVault } from './vault/settings-vault';
 import { SettingsCategory } from './settings-category';
+import { CORE_ENTRIES } from './core-settings-entries';
+import type { SettingsSearchSource } from './settings-model';
 
 /**
  * The Settings screen's category registry — the data-driven list from
@@ -40,6 +42,18 @@ export class SettingsCategoryRegistry {
     ...[...this.pluginPages()].sort((a, b) => a.label.localeCompare(b.label)),
     ABOUT_CATEGORY,
   ]);
+
+  /** Every page with its sections and searchable settings -- what the search reads. */
+  readonly searchSources: Signal<readonly SettingsSearchSource[]> = computed(() =>
+    this.categories().map((c) => ({
+      id: c.id,
+      label: c.label,
+      hint: c.hint,
+      description: c.description,
+      sections: c.sections,
+      entries: c.entries ?? CORE_ENTRIES[c.id],
+    })),
+  );
 
   categoryFor(id: string): SettingsCategory | undefined {
     return this.categories().find((category) => category.id === id);
@@ -75,6 +89,9 @@ export class SettingsCategoryRegistry {
         id: page.id,
         label: page.label,
         hint: page.hint,
+        description: page.description,
+        sections: page.sections,
+        entries: page.entries,
         component,
       },
     ]);

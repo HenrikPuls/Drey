@@ -177,7 +177,38 @@ export interface PluginSettingsPageContrib {
   readonly hint: string;
   /** One sentence under the page title (SDK 1.20). */
   readonly description?: string;
+  /**
+   * Parts of a long page (SDK 1.46). The Settings screen lists them as
+   * expandable entries under the category; a click scrolls the page to the
+   * element `mount` marked `data-settings-section="<id>"`, and the entry of
+   * the section in view is highlighted while the page scrolls. The page
+   * stays ONE scrolling column -- the host owns the width.
+   */
+  readonly sections?: readonly PluginSettingsSection[];
+  /**
+   * The page's searchable settings (SDK 1.46): the Settings search matches
+   * `label`, `description` and `key` across all pages and opens the page at
+   * the setting (the element marked `data-setting-key="<key>"`, else the
+   * `section`, else the first element with this exact `label`).
+   */
+  readonly entries?: readonly PluginSettingsEntry[];
   mount(el: HTMLElement): () => void;
+}
+
+/** One section of a plugin settings page (SDK 1.46). */
+export interface PluginSettingsSection {
+  readonly id: string;
+  readonly label: string;
+}
+
+/** One searchable setting of a plugin settings page (SDK 1.46). */
+export interface PluginSettingsEntry {
+  readonly key: string;
+  readonly label: string;
+  readonly description?: string;
+  /** Who the setting is stored for (board 7g's scope tabs); unset = under no tab. */
+  readonly scope?: 'all-devices' | 'device' | 'vault';
+  readonly section?: string;
 }
 
 /**

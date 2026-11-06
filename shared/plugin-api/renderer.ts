@@ -83,6 +83,8 @@ export type {
   PluginRendererModule,
   PluginSelection,
   PluginSettingsPageContrib,
+  PluginSettingsSection,
+  PluginSettingsEntry,
   PluginStatusContext,
   PluginWidgetContrib,
   RewriteRequest,

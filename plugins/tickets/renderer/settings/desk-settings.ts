@@ -14,7 +14,7 @@ import type { PersonaView } from '../../shared/remote-protocol';
 import type { BoardSnapshot } from '../../shared/tickets';
 import { RUNNER_LABEL } from '../settings-workers';
 import { el, textButton } from '../settings-dom';
-import { budgetLineOf, maxMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, type DeskVideos } from './desk-model';
+import { autopilotStateOf, budgetLineOf, maxMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, type DeskVideos } from './desk-model';
 
 export interface DeskSettingsHooks {
   /** Opens the Team tab ("Edit crew"). */
@@ -111,6 +111,33 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   manage.addEventListener('click', hooks.manageRunners);
   budget.grid.append(...row('Daily budget', value(budgetLine)), ...row('Runners', value(runnersLine, manage)));
 
+  // Autopilot (req-95, concept 6.1). TODO(req-95b): wire the selector and the time to the
+  // engine route req-95a delivers; until it is merged the row only reads the chain master.
+  const autopilot = el('select');
+  autopilot.id = 'tset-autopilot';
+  autopilot.dataset['settingKey'] = 'autopilot';
+  autopilot.setAttribute('aria-label', 'Autopilot');
+  for (const [id, label] of [['on', 'On'], ['paused', 'Paused'], ['off', 'Off']] as const) { // TODO(i18n)
+    autopilot.append(Object.assign(el('option', undefined, label), { value: id }));
+  }
+  autopilot.disabled = true;
+  autopilot.title = 'Changing the state arrives with the autopilot engine route';
+  const resumeAt = el('input', 'mono-input');
+  resumeAt.type = 'time';
+  resumeAt.id = 'tset-autopilot-resume';
+  resumeAt.dataset['settingKey'] = 'autopilot.resumeAt';
+  resumeAt.setAttribute('aria-label', 'Resume paused autopilot at');
+  resumeAt.disabled = true;
+  const paintAutopilot = async (): Promise<void> => {
+    try {
+      const status = (await api.backend.invoke('chainStatus')) as { master?: string } | null;
+      autopilot.value = autopilotStateOf(status?.master);
+    } catch {
+      // The row keeps what it showed.
+    }
+  };
+  budget.grid.prepend(...row('Autopilot', value(autopilot)), ...row('Resume paused autopilot at', value(resumeAt)));
+
   // --- Walkthrough videos ------------------------------------------------
   const video = section('tset-videos-head', 'Walkthrough videos');
   const keep = el('input');
@@ -132,6 +159,10 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   const videoNote = el('span', 'field-hint');
   video.grid.append(...row('Videos', value(keepLabel, confirmBox, videoNote)), ...row('Largest video', value(limitBox)));
 
+  // The page's section anchors (settings-sections.ts).
+  team.root.dataset['settingsSection'] = 'crew';
+  flow.root.dataset['settingsSection'] = 'flow';
+  budget.root.dataset['settingsSection'] = 'budget';
   root.append(team.root, flow.root, budget.root, video.root);
 
   // --- painting ------------------------------------------------------------
@@ -294,6 +325,7 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
       paintFlow();
       void loadPersonas();
       void paintRunners();
+      void paintAutopilot();
       if (!asked || !confirming) {
         asked = true;
         void loadVideos();

@@ -14,6 +14,9 @@ function setup(settingsReply: unknown = videos(false)) {
         { id: 'you', kind: 'human', title: 'You', color: '#b', budget: null },
       ]);
     }
+    if (method === 'chainStatus') {
+      return Promise.resolve({ master: 'run' });
+    }
     if (method === 'settingsRead') {
       return Promise.resolve(settingsReply);
     }
@@ -58,7 +61,7 @@ describe('Settings → Tickets desk rows', () => {
   it('opens the flow editor on the picked ticket, not an inbox idea', async () => {
     const { desk, hooks } = setup();
     await settle();
-    const options = [...desk.root.querySelectorAll('select option')].map((o) => (o as HTMLOptionElement).value);
+    const options = [...desk.root.querySelectorAll('select[aria-label="Ticket to edit the flow of"] option')].map((o) => (o as HTMLOptionElement).value);
     expect(options).toEqual(['T-0002']);
     button(desk.root, 'Open flow editor').click();
     expect(hooks.openFlow).toHaveBeenCalledWith('T-0002');
@@ -89,5 +92,16 @@ describe('Settings → Tickets desk rows', () => {
     limit.value = 'many';
     limit.dispatchEvent(new Event('change'));
     expect(desk.root.textContent).toContain('whole number of megabytes');
+  });
+
+  it('shows the Autopilot row from the chain master, read-only until the engine route lands', async () => {
+    const { desk } = setup();
+    await settle();
+    const state = desk.root.querySelector<HTMLSelectElement>('select[aria-label="Autopilot"]')!;
+    expect([...state.options].map((o) => o.textContent)).toEqual(['On', 'Paused', 'Off']);
+    expect(state.value).toBe('on');
+    expect(state.disabled).toBe(true); // TODO(req-95b)
+    expect(desk.root.querySelector<HTMLInputElement>('input[type="time"]')!.type).toBe('time');
+    expect(desk.root.textContent).toContain('Resume paused autopilot at');
   });
 });

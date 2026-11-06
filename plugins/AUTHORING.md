@@ -111,6 +111,8 @@ leaves the app on the previous build. Verify with
   active view's preset `assistantTarget`) and their `on…Change` listeners are
   for the Assistant. The host attaches no meaning to any of it; namespace
   the target ids.
+  1.46 adds `sections` and `entries` to `registerSettingsPage` (see "Settings pages": the
+  section tree and the Settings search).
   1.45 lets `ctx.vault.markManaged` take a list of vault ids (an empty list clears): the tickets
   plugin flags every vault that holds its store checkout.
   1.46 added `api.i18n` (renderer) and `ctx.i18n` (main): the host's message
@@ -243,6 +245,24 @@ hint. Store a typed value on `change` (blur / Enter), not per keystroke.
 Use `api.settings` for the
 plugin's own `config.json`, `api.appConfig` only when a setting belongs
 to app-level config (read-modify-write one section per patch).
+
+### One width, sections and search (SDK 1.46)
+
+Every Settings page shares one page width, set by the host (the
+`--set-page-w` token in `settings-ui.css`); a page never sets its own
+`max-width` and wide editors simply fill the column. A long page declares
+`sections: [{ id, label }]` and marks the first element of each part in
+`mount` with `data-settings-section="<id>"` (in page order): the Settings
+list shows the sections as expandable entries under the category, a click
+scrolls the one scrolling page to the anchor, and the entry in view is
+highlighted. `entries: [{ key, label, description?, section?, scope? }]` feeds the
+search field at the top of Settings, which matches label, description and
+key across all pages and opens the page at the setting (the element marked
+`data-setting-key="<key>"`, else the section anchor). Both are optional;
+without them the page is still found by its label, hint and description.
+`scope` (`'all-devices' | 'device' | 'vault'`) says who the setting is stored
+for; the tabs above the page (*All devices*, *This device*, *This vault*) list
+the settings of one scope, and an entry without a scope sits under no tab.
 
 ### The shared form vocabulary
 
