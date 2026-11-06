@@ -105,7 +105,7 @@ class Component extends DCLogic {
       { sec: 'Assistant', sub: 'Models', name: 'Default model', desc: 'Used when you talk to the model directly, not to Mission Control.', kind: 'action', value: 'glm-5.3-flash', action: 'Change…' },
       { sec: 'Assistant', sub: 'Context', name: 'Vault context', desc: 'How many note sections the Assistant may read per question.', kind: 'field', value: '4', unit: 'sections', width: 80 },
       { sec: 'Editor', sub: 'Typing', name: 'Spellcheck languages', desc: 'Dictionaries used while you type.', kind: 'field', value: 'de, en', width: 160 },
-      { sec: T, sub: 'Crew', name: 'Personas', desc: 'Default team for new tickets. Add more, for example a security reviewer.', kind: 'action', value: 'Paul, Ben, Ralf, Tessa', action: 'Edit team' },
+      { sec: T, sub: 'Crew', name: 'Personas', desc: 'Default crew for new tickets. Add more, for example a security reviewer.', kind: 'action', value: 'Paul, Ben, Ralf, Tessa', action: 'Edit crew' },
       { sec: T, sub: 'Flow', name: 'Default flow', desc: 'Steps a new ticket runs through unless its plan says otherwise.', kind: 'action', value: 'Plan → Build → Review → Test', action: 'Open flow editor' },
       { sec: T, sub: 'Budget and runners', name: 'Daily budget', desc: 'Pause new runs when it is spent.', kind: 'field', value: '15', unit: 'USD per day', width: 80, mod: true },
       { sec: T, sub: 'Budget and runners', name: 'Pause when the budget is spent', desc: 'Running work finishes first; nothing new starts.', kind: 'check', key: 'pause' },

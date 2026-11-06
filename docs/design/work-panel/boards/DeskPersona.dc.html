@@ -55,7 +55,7 @@ a{color:#8ecbef}a:hover{color:#f4f5f6}
 </div>
 <label style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px"><span style="color: #b3b7bc">Name</span><input type="text" value="Ben" style="height: 32px; padding: 0 10px; background: #2c2d31; border: 1px solid #747980; border-radius: 8px; color: #f4f5f6; font: inherit"></label>
 <label style="display: flex; flex-direction: column; gap: 4px"><span style="color: #b3b7bc">Role</span><input type="text" value="Builder" style="height: 32px; padding: 0 10px; background: #2c2d31; border: 1px solid #747980; border-radius: 8px; color: #f4f5f6; font: inherit"></label>
-<label style="display: flex; flex-direction: column; gap: 4px"><span style="color: #b3b7bc">One line for the team list</span><input type="text" value="Builds one part of a ticket, test first." style="height: 32px; padding: 0 10px; background: #2c2d31; border: 1px solid #747980; border-radius: 8px; color: #f4f5f6; font: inherit"></label>
+<label style="display: flex; flex-direction: column; gap: 4px"><span style="color: #b3b7bc">One line for the crew list</span><input type="text" value="Builds one part of a ticket, test first." style="height: 32px; padding: 0 10px; background: #2c2d31; border: 1px solid #747980; border-radius: 8px; color: #f4f5f6; font: inherit"></label>
 </div>
 <div style="height: 1px; background: #3b3d42"></div>
 <div style="display: flex; flex-direction: column; gap: 8px">
@@ -98,7 +98,7 @@ a{color:#8ecbef}a:hover{color:#f4f5f6}
 <sc-if value="{{editOn}}" hint-placeholder-val="{{true}}">
 <div style="flex-grow: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 0 20px 12px; overflow-y: auto">
 <label for="persona-text" style="position: absolute; width: 1px; height: 1px; overflow: hidden">Instructions for Ben</label>
-<textarea id="persona-text" style="flex-grow: 1; min-height: 260px; padding: 12px 14px; background: #18191b; border: 1px solid #747980; border-radius: 8px; color: #f4f5f6; font-family: ui-monospace, Consolas, monospace; font-size: 13px; line-height: 21px; resize: none">You are Ben, the builder on this team. You implement exactly one part of a ticket, in its own worktree, and change nothing outside the files the part names.
+<textarea id="persona-text" style="flex-grow: 1; min-height: 260px; padding: 12px 14px; background: #18191b; border: 1px solid #747980; border-radius: 8px; color: #f4f5f6; font-family: ui-monospace, Consolas, monospace; font-size: 13px; line-height: 21px; resize: none">You are Ben, the builder on this crew. You implement exactly one part of a ticket, in its own worktree, and change nothing outside the files the part names.
 
 ## How you work
 - Write the failing test first.
@@ -161,7 +161,7 @@ class Component extends DCLogic {
       '<repository> CLAUDE.md, AGENTS.md  (≈ 920 tokens, read by the harness itself)',
       '',
       '<personas/ben.md>',
-      'You are Ben, the builder on this team. You implement exactly one part of a ticket …',
+      'You are Ben, the builder on this crew. You implement exactly one part of a ticket …',
       '## How you work …',
       '## Done means …'
     ].concat(st.skills.map((k) => ['', '<' + k.path + '>', k.name + ' …'].join('\n'))).concat(['', '<per run> the ticket file, the part, open answers  (≈ 600 tokens)']).join('\n');
