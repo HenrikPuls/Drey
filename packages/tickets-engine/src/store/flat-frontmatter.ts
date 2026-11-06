@@ -52,6 +52,32 @@ export function parseFlatDocument(text: string): FlatDocument {
   return { fields, body: lines.slice(end + 1).join('\n'), issues };
 }
 
+/**
+ * A front matter block with one existing field's value replaced, every other byte as
+ * it was. For an editor's buffer (the ticket header's title, D-23): nothing is written
+ * here, the save stays `dk put`. Throws on a value that would not fit one line, and on
+ * a block that is not closed or does not have the field.
+ */
+export function withFlatField(block: string, key: string, value: string): string {
+  if (/[\r\n]/.test(value)) {
+    throw new Error(`The value of ${key} must fit on one line.`);
+  }
+  const lines = block.split('\n');
+  const close = lines.findIndex((line, i) => i > 0 && line.trimEnd() === FENCE);
+  if (lines[0]?.trimEnd() !== FENCE || close < 0) {
+    throw new Error('The front matter is not closed.');
+  }
+  // The last duplicate is the one the reader takes.
+  for (let i = close - 1; i > 0; i -= 1) {
+    const line = lines[i]!;
+    if (line.startsWith(`${key}:`)) {
+      lines[i] = `${key}: ${value}${line.endsWith('\r') ? '\r' : ''}`;
+      return lines.join('\n');
+    }
+  }
+  throw new Error(`The front matter has no ${key}.`);
+}
+
 /** `a, b ,c` -> `['a','b','c']`; empty / blank -> []. */
 export function flatList(value: string | undefined): string[] {
   if (value === undefined) {

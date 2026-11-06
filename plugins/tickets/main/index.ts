@@ -51,6 +51,7 @@ import { EngineClient } from './engine-client';
 import { PathAnnouncer } from './path-announcer';
 import { ensureEngine, syncChatConfig, syncNotesVault, syncStoreConfig } from './engine-lifecycle';
 import { TicketDocuments, askToAddCheckout } from './ticket-documents';
+import { isStoreDocumentPath, storeDocumentHeader, storeDocumentHeaderEdit } from './store-document-header';
 import { checkoutOf, readStoreSettings } from '../../../packages/tickets-engine/src/store/store-settings';
 import { registerChatIpc } from './chat-ipc';
 import { MissionControlHost, createMissionControlView } from './mission-control';
@@ -272,20 +273,27 @@ const plugin: MainPluginModule = {
 
     // The ticket header in the editor (req-62): it shows the buffer's
     // frontmatter, not the file on disk, so it asks with the block itself.
-    ctx.ipc.handle('header', (payload) => {
+    // A store's document is another format: its model is the board's card (D-23).
+    ctx.ipc.handle('header', async (payload) => {
       const p = payload as { path?: unknown; frontmatter?: unknown };
       if (typeof p.path !== 'string' || typeof p.frontmatter !== 'string') {
         return { ok: false, error: 'bad header payload' };
       }
+      if (isStoreDocumentPath(p.path)) {
+        return storeDocumentHeader(p.path, p.frontmatter, await board.snapshot());
+      }
       return { ok: true, ...parseTicketFile(`${p.frontmatter}\n`, p.path, priorities) };
     });
 
-    ctx.ipc.handle('headerEdit', (payload) => {
+    ctx.ipc.handle('headerEdit', async (payload) => {
       const p = payload as { path?: unknown; frontmatter?: unknown; patch?: unknown };
       if (typeof p.path !== 'string' || typeof p.frontmatter !== 'string' || typeof p.patch !== 'object' || p.patch === null) {
         return { ok: false, error: 'bad header edit payload' };
       }
       const raw = p.patch as Record<string, unknown>;
+      if (isStoreDocumentPath(p.path)) {
+        return storeDocumentHeaderEdit(p.path, p.frontmatter, raw, await board.snapshot());
+      }
       const patch: HeaderPatch = {
         ...(typeof raw['title'] === 'string' ? { title: raw['title'] } : {}),
         ...(typeof raw['priority'] === 'string' ? { priority: raw['priority'] as TicketPriority } : {}),

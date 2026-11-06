@@ -19,8 +19,9 @@ import type {
   FrontmatterViewContrib,
   FrontmatterViewInput,
 } from '../../../shared/plugin-api/renderer';
-import { stripPhasePrefix, type BoardSnapshot, type TicketIssue, type TicketMeta } from '../shared/tickets';
+import { stripPhasePrefix, type BoardSnapshot, type TicketCard, type TicketIssue, type TicketMeta } from '../shared/tickets';
 import { idOfDocumentPath } from '../../../packages/tickets-engine/src/store/document-paths';
+import { toDisplayId } from '../../../packages/tickets-engine/src/store/ids';
 import { maskFenceLines } from '../../../shared/markdown/fences';
 import type { TicketStrip } from './ticket-document/strip';
 
@@ -75,10 +76,41 @@ export function ticketTabTitle(i18n: DreyPluginApi['i18n'], id: string, title: s
   return named === '' ? id : i18n.t('ticket.tab_title', { id, title: named });
 }
 
-/** The phase directory's id (`50-build` → `build`), or null off a ticket path. */
+/**
+ * The phase directory's id (`50-build` → `build`), or null off a ticket path.
+ * A dricket document's path names no phase (its folders are prefix and shard):
+ * there the phase is the card's.
+ */
 export function phaseOfTicketPath(path: string): string | null {
+  if (idOfDocumentPath(path) !== null) {
+    return null;
+  }
   const match = /^tickets\/([^/]+)\//.exec(path);
   return match === null ? null : stripPhasePrefix(match[1]!);
+}
+
+/**
+ * The board's card of an open document. A files-backend card's `path` is the
+ * document's; a dricket card's is a stand-in the document never has
+ * (`tickets/<phase>/T-nnnn.md`, the store's records read as board files), so a
+ * store document finds its card by the id its path names (D-23).
+ */
+export function cardOfDocument(snapshot: BoardSnapshot | null, path: string | null): TicketCard | null {
+  if (snapshot === null || path === null) {
+    return null;
+  }
+  const normal = path.split('\\').join('/');
+  const storeId = idOfDocumentPath(normal);
+  return snapshot.columns.flatMap((c) => c.tickets).find((t) => (storeId === null ? t.path === normal : t.id === storeId)) ?? null;
+}
+
+/**
+ * The display id a ticket document's text says it is, or undefined. The files
+ * backend writes `id: T-0030` (YAML, possibly quoted), the store `id: t-30`.
+ */
+export function ticketIdOfText(text: string): string | undefined {
+  const written = /^id:\s*['"]?(T-\d{4,}|t-[1-9]\d*)/m.exec(text)?.[1];
+  return written === undefined || written.startsWith('T-') ? written : toDisplayId(written);
 }
 
 /**
@@ -190,8 +222,8 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
     let model: HeaderModel | null = models.get(input.frontmatter) ?? null;
     if (model === null) {
       // Until main answers: what the board read from disk.
-      const card = deps.snapshot()?.columns.flatMap((c) => c.tickets).find((t) => t.path === path);
-      if (card !== undefined) {
+      const card = cardOfDocument(deps.snapshot(), path);
+      if (card !== null) {
         model = { meta: card.meta, issues: card.issues };
       }
       void (deps.invoke('header', { path, frontmatter: input.frontmatter }) as Promise<HeaderReply>).then((reply) => {
@@ -238,7 +270,7 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
       chips.append(el('span', 'tickets-head-id', id));
 
       // A dricket document's path carries no column: the board's card does.
-      const phaseId = phaseOfTicketPath(path) ?? snapshot?.columns.flatMap((c) => c.tickets).find((t) => t.path === path)?.phase ?? null;
+      const phaseId = phaseOfTicketPath(path) ?? cardOfDocument(snapshot, path)?.phase ?? null;
       const phase = snapshot?.pipeline.find((p) => p.id === phaseId);
       const phaseChip = el(
         'span',
@@ -341,7 +373,7 @@ export function ticketLogFold(
         // On a tab switch the text and the path arrive one after the other:
         // fold only when the text is this ticket's.
         const text = view.state.doc.toString();
-        const id = /^id:\s*['"]?(T-\d{4,})/m.exec(text)?.[1];
+        const id = ticketIdOfText(text);
         const range = logSectionRange(text);
         if (range === null || id === undefined || (ticketIdOfPath(path) !== id && !path.endsWith(`/${id}.md`))) {
           return;

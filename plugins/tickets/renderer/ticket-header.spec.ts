@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- a spec builds the real catalog; the plugin itself gets it as `api.i18n`
 import { i18n } from '../../../shared/i18n';
 import type { BoardSnapshot } from '../shared/tickets';
-import { isTicketPath, logSectionRange, phaseOfTicketPath, showsTicketDocument, ticketIdOfPath, ticketTabTitle } from './ticket-header';
+import { cardOfDocument, isTicketPath, logSectionRange, phaseOfTicketPath, showsTicketDocument, ticketIdOfPath, ticketIdOfText, ticketTabTitle } from './ticket-header';
 
 describe('isTicketPath', () => {
   it('takes ticket files in any phase folder, archive included', () => {
@@ -87,6 +87,52 @@ describe('the dricket document path (E12-12)', () => {
     expect(isTicketPath('tickets/t/0009/t-63/ticket.md')).toBe(false);
     expect(isTicketPath('tickets/t/0000/t-63/notes.md')).toBe(false);
     expect(isTicketPath('notes/t/0000/t-63/ticket.md')).toBe(false);
+  });
+});
+
+describe('phaseOfTicketPath on a store document (D-23)', () => {
+  it('reads no phase from prefix and shard, so the card decides', () => {
+    expect(phaseOfTicketPath('tickets/t/0000/t-30/ticket.md')).toBeNull();
+  });
+});
+
+describe('ticketIdOfText (D-23)', () => {
+  it('reads both forms and names the display id', () => {
+    expect(ticketIdOfText('---\nid: t-30\ntitle: x\n---\n')).toBe('T-0030');
+    expect(ticketIdOfText('---\nid: t-1204\n---\n')).toBe('T-1204');
+    expect(ticketIdOfText('---\nid: T-0042\n---\n')).toBe('T-0042');
+    expect(ticketIdOfText("---\nid: 'T-0042'\n---\n")).toBe('T-0042');
+  });
+
+  it('agrees with the id the store path names', () => {
+    const path = 'tickets/t/0000/t-30/ticket.md';
+    expect(ticketIdOfText('---\nid: t-30\n---\n')).toBe(ticketIdOfPath(path));
+  });
+
+  it('is undefined without an id of either form', () => {
+    expect(ticketIdOfText('---\nid: x-3\n---\n')).toBeUndefined();
+    expect(ticketIdOfText('# no frontmatter\n')).toBeUndefined();
+  });
+});
+
+describe('cardOfDocument (D-23)', () => {
+  const files = { id: 'T-0042', path: 'tickets/50-build/T-0042.md', phase: 'build' };
+  const stored = { id: 'T-0030', path: 'tickets/inbox/T-0030.md', phase: 'inbox' };
+  const board = { columns: [{ tickets: [files, stored] }] } as unknown as BoardSnapshot;
+
+  it('finds a files card by its path', () => {
+    expect(cardOfDocument(board, 'tickets/50-build/T-0042.md')).toBe(files);
+    expect(cardOfDocument(board, 'tickets/40-other/T-0042.md')).toBeNull();
+  });
+
+  it("finds a store card by the path's id: a dricket card's path is a stand-in", () => {
+    expect(cardOfDocument(board, 'tickets/t/0000/t-30/ticket.md')).toBe(stored);
+    expect(cardOfDocument(board, 'tickets/t/0000/t-31/ticket.md')).toBeNull();
+  });
+
+  it('finds nothing without a board or a path', () => {
+    expect(cardOfDocument(null, 'tickets/t/0000/t-30/ticket.md')).toBeNull();
+    expect(cardOfDocument(board, null)).toBeNull();
   });
 });
 

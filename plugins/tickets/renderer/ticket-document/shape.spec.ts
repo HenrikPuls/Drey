@@ -37,6 +37,23 @@ describe('shapeTargetOf', () => {
   });
 });
 
+describe('shapeTargetOf on a store document (D-23)', () => {
+  const idle = (): boolean => false;
+
+  it('names the open document, not the card stand-in path, from the checkout vault', () => {
+    expect(shapeTargetOf(snapshot, { path: 'tickets/t/0000/t-130/ticket.md', vaultId: 'checkout' }, idle)).toEqual({
+      id: 'T-0130',
+      path: 'tickets/t/0000/t-130/ticket.md',
+      label: 'T-0130.md',
+    });
+  });
+
+  it('is null past the Ideas phase and for a ticket the board does not list', () => {
+    expect(shapeTargetOf(snapshot, { path: 'tickets/t/0000/t-131/ticket.md', vaultId: 'checkout' }, idle)).toBeNull();
+    expect(shapeTargetOf(snapshot, { path: 'tickets/t/0000/t-999/ticket.md', vaultId: 'checkout' }, idle)).toBeNull();
+  });
+});
+
 describe('agoWords', () => {
   it('counts minutes, hours and days', () => {
     expect(agoWords('2026-11-04T11:59:40Z', NOW)).toBe('just now');
