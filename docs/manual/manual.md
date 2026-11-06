@@ -1555,8 +1555,9 @@ each runner takes at once; *Manage* jumps to the runner settings.
 **Walkthrough videos** has *Keep in Git* (off: videos are large and stay in
 the history once committed — switching it on asks first and can include the
 videos already there) and *Largest video* in MB. Under **Mission Control on
-other devices** you pair a phone or tablet and revoke it again (below). The
-pipeline, prompts, fleet and workers follow under *Pipeline and workers*.
+other devices** you pair a phone or tablet and revoke it again (below). Fleet and
+workers follow *Budget and runners*; *Store and Git* and *Pipeline and
+prompts* close the page.
 
 ### The board from a phone or tablet
 
@@ -1849,6 +1850,16 @@ Every change applies as you make it — there is no *Save* and no
 *Discard*. A switch or a list choice acts at once; a typed value is
 stored when you leave the field or press Enter. The footer shows
 "Changes are saved automatically" and one *Close* button.
+
+The screen grows with the window, and every page uses the same width — wide
+tables and editors fill it instead of the page jumping between a narrow and a
+wide layout. A long page is split into sections: a category with sections has a
+small arrow in the list; open it to see the sections, click one to scroll the
+page to it. The page scrolls as one column and the section in view is
+highlighted in the list. The search field at the top of the list filters the
+settings of **all** pages by name, description or key; click a result to open
+its page at that setting. `Esc` clears the search first and closes Settings on
+the second press.
 
 | Category | What lives there |
 | --- | --- |

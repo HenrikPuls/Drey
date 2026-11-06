@@ -132,6 +132,9 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   const videoNote = el('span', 'field-hint');
   video.grid.append(...row('Videos', value(keepLabel, confirmBox, videoNote)), ...row('Largest video', value(limitBox)));
 
+  // The page's section anchors (settings-sections.ts).
+  team.root.dataset['settingsSection'] = 'team-flow';
+  budget.root.dataset['settingsSection'] = 'budget';
   root.append(team.root, flow.root, budget.root, video.root);
 
   // --- painting ------------------------------------------------------------

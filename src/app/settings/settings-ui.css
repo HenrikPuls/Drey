@@ -25,6 +25,10 @@
   --set-gap: 16px; /* between fields */
   --set-control-h: var(--field-h);
   --set-control-h-compact: 28px;
+  /* E13-22: ONE page width for every Settings page -- it grows with the
+     window (the dialog does), and wide editors fill it. No page sets its
+     own cap. */
+  --set-page-w: min(100%, 1040px);
 
   font-size: var(--set-fs-body);
   line-height: 1.5;
@@ -35,7 +39,7 @@
 
 :where(.settings-ui) .pane-head {
   margin-bottom: 20px;
-  max-width: 640px;
+  max-width: var(--set-page-w);
 }
 
 :where(.settings-ui) .pane-head h2 {
@@ -58,7 +62,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--set-gap);
-  max-width: 640px;
+  max-width: var(--set-page-w);
 }
 
 /* ---- Sections ---- */
@@ -526,4 +530,12 @@
 :where(.settings-ui) input:is([type='checkbox'], [type='radio'], [type='color']):focus-visible {
   outline: 2px solid var(--accent-ring);
   outline-offset: 1px;
+}
+
+/* A setting the search opened: briefly marked (E13-22). */
+:where(.settings-ui) .setting-found {
+  border-radius: var(--radius);
+  box-shadow: 0 0 0 3px var(--accent-surface);
+  background: var(--accent-surface);
+  transition: background 0.4s, box-shadow 0.4s;
 }

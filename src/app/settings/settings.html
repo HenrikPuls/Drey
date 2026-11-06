@@ -17,23 +17,85 @@
     <div class="head">
       <span class="title">Settings</span>
     </div>
+    <input
+      type="search"
+      class="search"
+      aria-label="Search settings"
+      title="Search settings"
+      autocomplete="off"
+      spellcheck="false"
+      [value]="query()"
+      (input)="onSearch($event)"
+      (keydown)="onSearchKey($event)"
+    />
     @for (category of categories(); track category.id) {
-      <button
-        type="button"
-        class="category"
-        [class.active]="selected() === category.id"
-        [attr.aria-current]="selected() === category.id ? 'page' : null"
-        (click)="selected.set(category.id)"
-      >
-        <span class="label">{{ category.label }}</span>
-        <span class="hint">{{ category.hint }}</span>
-      </button>
+      <div class="cat-row">
+        <button
+          type="button"
+          class="category"
+          [class.active]="selected() === category.id && !searching()"
+          [attr.aria-current]="selected() === category.id && !searching() ? 'page' : null"
+          (click)="selectCategory(category.id)"
+        >
+          <span class="label">{{ category.label }}</span>
+          <span class="hint">{{ category.hint }}</span>
+        </button>
+        @if (category.sections?.length) {
+          <button
+            type="button"
+            class="twisty"
+            [attr.aria-expanded]="isExpanded(category.id)"
+            [attr.aria-label]="(isExpanded(category.id) ? 'Collapse ' : 'Expand ') + category.label"
+            [title]="(isExpanded(category.id) ? 'Collapse ' : 'Expand ') + category.label"
+            (click)="toggleExpanded(category.id)"
+          >
+            <app-icon [name]="isExpanded(category.id) ? 'chevron-down' : 'chevron-right'" [size]="13" />
+          </button>
+        }
+      </div>
+      @if (category.sections?.length && isExpanded(category.id)) {
+        <div class="sections" role="group" [attr.aria-label]="category.label + ' sections'">
+          @for (section of category.sections; track section.id) {
+            <button
+              type="button"
+              class="section-entry"
+              [class.active]="
+                selected() === category.id && !searching() && currentSection() === section.id
+              "
+              [attr.aria-current]="
+                selected() === category.id && !searching() && currentSection() === section.id
+                  ? 'location'
+                  : null
+              "
+              (click)="openSection(category.id, section.id)"
+            >
+              {{ section.label }}
+            </button>
+          }
+        </div>
+      }
     }
   </nav>
 
   <div class="right">
-    <div class="detail">
-      @if (settings.draft()) {
+    <div #detail class="detail" (scroll)="onScroll()">
+      @if (searching()) {
+        <div class="results" role="list" aria-label="Search results">
+          @for (hit of hits(); track hit.categoryId + hit.entry.key) {
+            <button type="button" class="result" role="listitem" (click)="openHit(hit)">
+              <span class="result-where">
+                {{ hit.categoryLabel }}{{ hit.sectionLabel ? ' › ' + hit.sectionLabel : '' }}
+              </span>
+              <span class="result-label">{{ hit.entry.label }}</span>
+              @if (hit.entry.description) {
+                <span class="result-desc">{{ hit.entry.description }}</span>
+              }
+            </button>
+          } @empty {
+            <p class="loading">No settings match.</p>
+          }
+        </div>
+      } @else if (settings.draft()) {
         <ng-container
           *ngComponentOutlet="selectedComponent(); inputs: selectedInputs()"
         />
