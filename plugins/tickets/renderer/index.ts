@@ -588,7 +588,9 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     if (statusBar !== null) {
       root.append(statusBar);
     }
-    if (!snap.isGitRepo) {
+    if (typeof snap.storeLine === 'string' && snap.storeLine !== '') {
+      root.append(el('div', 'tickets-store-line', snap.storeLine));
+    } else if (!snap.isGitRepo) {
       const warn = el('div', 'tickets-warn');
       warn.textContent =
         'The tickets vault is not a git repository — transitions are not versioned.';

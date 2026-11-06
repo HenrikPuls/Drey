@@ -254,6 +254,21 @@ list). Design note: `docs/design/work-panel/default-pipeline.md`.
   ticket opens, is listed and counts for this week; `router.spec.ts` (`/api/archive`).
 - **Docs:** manual (Work panel, interactive start), docs/05, ADR-0087 later change.
 
+### Milestone 171 — D-9: the Tickets panel footer names the dricket store
+
+**Not yet manually verified by the owner.** Roadmap D-9, found by the verify-round sessions.
+
+- **Behaviour.** On `tickets.backend = dricket` the footer no longer says "The tickets vault is not a git
+  repository — transitions are not versioned." It shows where the tickets live: "Ticket store <path> ·
+  branch tickets · head <sha> · local store", or "… synced every 30 s" for a remote store (checkout path,
+  sync period). The old text stays for a files vault that really is no repository. Not shown: a sync age
+  (the engine keeps none); the period stands in for it.
+- **Code.** `store/store-footer.ts` (`storeFooterLine`, git probes behind the `GitRun` seam, never throws),
+  `BoardSnapshot.storeLine` (optional), set with `isGitRepo: true` by `BoardService.dricketSnapshot`; the
+  panel draws `.tickets-store-line` (same style as the warning).
+- **Specs.** `store-footer.spec.ts` (local, remote, git unavailable). Seen in the running app on a scratch
+  store (local and remote), see the sweep in roadmap D-11 – D-22.
+
 ### Milestone 163 — D-6: selecting a ticket never changes the view, a view saves only by "Save view"
 
 **Not yet manually verified by the owner.** Owner report 2026-11-05, roadmap D-6.
