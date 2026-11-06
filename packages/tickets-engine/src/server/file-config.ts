@@ -36,6 +36,15 @@ export class FileConfigStore {
     await this.persist(data);
   }
 
+  /** Several keys in one atomic write: a reader sees all of them or none. */
+  async setMany(entries: readonly (readonly [string, unknown])[]): Promise<void> {
+    const data = await this.load();
+    for (const [key, value] of entries) {
+      data[key] = value;
+    }
+    await this.persist(data);
+  }
+
   /** Removes a key (a retired setting); a key that is not there writes nothing. */
   async delete(key: string): Promise<void> {
     const data = await this.load();

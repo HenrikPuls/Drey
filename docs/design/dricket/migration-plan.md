@@ -237,6 +237,6 @@ three scratch tickets, and the live board is untouched.
 | OD-4 | Stage vocabulary? | `[stages]` in `dricket.toml` (R-03). Interim `x-phase` only for the first slices. |
 | OD-5 | Repo split? | New `drey-board` store; existing repo becomes meta. |
 | OD-6 | What must dricket ship before E14-4 starts? | v0.7 (R-01, R-02, R-03, R-04). Anything less means building four-commit stopgaps. |
-| OD-7 | Archive? | Not migrated. |
+| OD-7 | Archive? | **Replaced by O-3 (owner, 2026-11-06): all tickets migrate once.** The archive migrates with `--include-archive`, as `done` + label `archived` (rehearsal 2026-11-06, §2). The tool's default stays off; the cut-over guide passes the flag. |
 | OD-8 | Store mode? | Local store first (no remote, fastest, no network failure mode), add a remote when a second machine joins. |
 | OD-9 | Bundling `dk` in the Drey installer | You are the copyright holder of both; GPL obliges you to offer dk's source with the binary. Either bundle plus source offer, or require `dk` on `PATH` and pin `min_version`. Recommendation: bundle a pinned `dk`, ship the source link in About. |
