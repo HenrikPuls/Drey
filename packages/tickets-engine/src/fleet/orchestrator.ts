@@ -37,7 +37,16 @@ import type { LedgerWrite } from '../core/ledger';
 import type { StatusVerb } from '../core/status-log';
 import { readRepoInstructions, worktreeDiffStat } from './context-pack';
 import { worktreePathFor } from './worktree-home';
+import {
+  AUTOPILOT_OFF,
+  autopilotAtBoot,
+  autopilotOfMaster,
+  masterOf,
+  restoreAutopilot,
+  resumeDue,
+} from './autopilot';
 import type {
+  AutopilotRecord,
   ChainConfig,
   ChainStoreConfig,
   ChainMaster,
@@ -138,7 +147,10 @@ export interface OrchestratorDeps {
 interface ChainFile {
   readonly version: 1;
   readonly config: ChainConfig | null;
+  /** Derived from `autopilot`, still written for tools that read the file (FLEET.md). */
   readonly master: ChainMaster;
+  /** The owner's switch (req-95); absent in older files, then `master` stands in. */
+  readonly autopilot?: AutopilotRecord;
   readonly columns: Record<string, ColumnMode>;
   readonly redStreak: Record<string, number>;
   readonly cooldownUntil: Record<string, string>;
@@ -272,7 +284,7 @@ export class Orchestrator {
   private readonly storeChains = new Map<string, StoreChainBoard>();
   /** E14-5b: the store the leftover claims were released for (once per runner life). */
   private leftoverKey: string | null = null;
-  private master: ChainMaster = 'halted';
+  private autopilot: AutopilotRecord = AUTOPILOT_OFF;
   private readonly columns: Record<string, ColumnMode> = {};
   private readonly redStreak: Record<string, number> = {};
   private readonly cooldownUntil: Record<string, string> = {};
@@ -312,32 +324,42 @@ export class Orchestrator {
 
   constructor(private readonly deps: OrchestratorDeps) {}
 
+  /** The master is derived, never set: On dispatches, Paused and Off halt gently. */
+  private get master(): ChainMaster {
+    return masterOf(this.autopilot);
+  }
+
   /**
    * Loads `<root>/chain.json` — the orchestration state resumes after a
-   * runner restart, but the master never does: every boot starts halted,
-   * "An" is a per-session decision (ADR-0077). A persisted "run" is
-   * written back as halted so the disk matches what the board shows.
+   * runner restart, but the Autopilot never does: every boot ends as Off,
+   * "On" is a per-session decision (ADR-0077, O-5). A persisted On or
+   * Paused is written back as Off so the disk matches what the board shows.
    * A handover is no new session: when the predecessor retired for a
-   * newer build moments ago (`handoverAt`), the master stays as it was.
+   * newer build moments ago (`handoverAt`), the record stays as it was.
    */
   async load(): Promise<void> {
     const raw = await fsp.readFile(path.join(this.deps.root, CHAIN_FILE), 'utf8').catch(() => null);
     if (raw === null) {
       return;
     }
-    let persistedRun = false;
+    let persistedMoving = false;
     try {
       const parsed = JSON.parse(raw) as ChainFile;
       if (parsed.version !== 1) {
         return;
       }
       this.config = parsed.config;
-      persistedRun = parsed.master === 'run';
+      const persisted = restoreAutopilot(parsed.autopilot) ?? autopilotOfMaster(parsed.master === 'run' ? 'run' : 'halted');
+      persistedMoving = persisted.state !== 'off';
       const handoverMs = typeof parsed.handoverAt === 'string' ? Date.parse(parsed.handoverAt) : Number.NaN;
       const handedOver = !Number.isNaN(handoverMs) && Math.abs(this.now().getTime() - handoverMs) <= HANDOVER_MASTER_MS;
-      this.master = persistedRun && handedOver ? 'run' : 'halted';
-      if (persistedRun && handedOver) {
+      this.autopilot = autopilotAtBoot(persisted, handedOver);
+      if (persisted.state === 'on' && handedOver) {
         this.deps.log('the chain keeps running across the handover from the previous build');
+      } else if (persisted.state === 'paused' && handedOver) {
+        this.deps.log('the autopilot stays paused across the handover from the previous build');
+      } else if (persistedMoving) {
+        this.deps.log(`the autopilot was ${persisted.state} before this start — it is off now (boot rule)`);
       }
       for (const [phase, mode] of Object.entries(parsed.columns ?? {})) {
         if (mode === 'playing' || mode === 'held') {
@@ -392,7 +414,7 @@ export class Orchestrator {
     } catch {
       // a torn chain.json is noise; the plugin re-configures on the next board round
     }
-    if (persistedRun) {
+    if (persistedMoving) {
       await this.persist();
     }
     this.startTimer();
@@ -402,6 +424,7 @@ export class Orchestrator {
     return {
       configured: this.config !== null,
       master: this.master,
+      autopilot: this.autopilot,
       columns: { ...this.columns },
       redStreak: { ...this.redStreak },
       cooldownUntil: { ...this.cooldownUntil },
@@ -487,13 +510,40 @@ export class Orchestrator {
     return this.status();
   }
 
-  async setMaster(mode: ChainMaster): Promise<ChainStatus> {
-    this.master = mode;
+  /**
+   * The Autopilot switch (req-95): On dispatches at once, Paused and Off
+   * start nothing new and leave running work alone. Any set replaces a
+   * pending resume time.
+   */
+  async setAutopilot(record: AutopilotRecord): Promise<ChainStatus> {
+    if (record.state !== this.autopilot.state || record.resumeAt !== this.autopilot.resumeAt) {
+      this.deps.log(`autopilot: ${record.state}${record.resumeAt === undefined ? '' : ` until ${record.resumeAt}`}`);
+    }
+    this.autopilot = record;
     await this.persist();
-    if (mode === 'run') {
+    if (record.resumeAt !== undefined) {
+      this.startTimer();
+    }
+    if (this.master === 'run') {
       await this.dispatchPass();
     }
     return this.status();
+  }
+
+  /** The two-state master API stays: `run` is On, `halted` is Off (a pending resume time ends). */
+  async setMaster(mode: ChainMaster): Promise<ChainStatus> {
+    return this.setAutopilot(autopilotOfMaster(mode));
+  }
+
+  /**
+   * Paused turns On once its resume time has come. Checked on the
+   * scan tick against the wall clock: the time survives a sleeping
+   * machine, and no delay limit applies to a far-off resume.
+   */
+  async resumeIfDue(): Promise<void> {
+    if (resumeDue(this.autopilot, this.now())) {
+      await this.setAutopilot({ state: 'on' });
+    }
   }
 
   async setColumn(phaseId: string, mode: ColumnMode): Promise<ChainStatus> {
@@ -518,7 +568,7 @@ export class Orchestrator {
 
   /** Notaus: halt the chain, then abort every live run through the stop ladder. */
   async abortAll(): Promise<ChainStatus> {
-    this.master = 'halted';
+    this.autopilot = AUTOPILOT_OFF;
     await this.persist();
     await this.stopRuns((record) => LIVE.includes(record.info.state), 'chain emergency stop (Notaus)');
     return this.status();
@@ -903,9 +953,17 @@ export class Orchestrator {
     }
   }
 
-  /** True while the chain would dispatch again — the idle shutdown waits on this. */
+  /** True while the chain would dispatch again. */
   get active(): boolean {
     return this.config !== null && this.master === 'run';
+  }
+
+  /**
+   * The idle shutdown waits on this: an On chain drains the board, and a
+   * Paused one holds a state (often a resume time) a restart would lose.
+   */
+  get keepsRunnerAlive(): boolean {
+    return this.config !== null && this.autopilot.state !== 'off';
   }
 
   // -------------------------------------------------------------------------
@@ -915,6 +973,7 @@ export class Orchestrator {
       return;
     }
     this.timer = setInterval(() => {
+      void this.resumeIfDue();
       if (this.config !== null) {
         void this.ciSweep();
       }
@@ -1152,6 +1211,7 @@ export class Orchestrator {
       version: 1,
       config: this.config,
       master: this.master,
+      autopilot: this.autopilot,
       columns: { ...this.columns },
       redStreak: { ...this.redStreak },
       cooldownUntil: { ...this.cooldownUntil },

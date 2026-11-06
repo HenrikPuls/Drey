@@ -4393,3 +4393,34 @@ which the plugin keeps on Drey's active vault; without it, the vault the engine 
 Every refusal is `{ok: false, code, error}`: `read_only` 403, `conflict` and `exists` 200, `not_found` and
 `no_vault` 404, `bad_path` and `bad_request` 400, `too_large` 413 (over 4 MB), `internal` 500. Types:
 `packages/tickets-engine/src/contracts/notes.ts`.
+
+## 6.96 Paused resumes at the time (req-95a, ADR-0077 later change)
+
+```mermaid
+sequenceDiagram
+    participant D as Device (bearer, not read-only)
+    participant G as Engine gateway
+    participant F as FleetClient
+    participant O as Orchestrator (runner)
+    participant S as Every device (event stream)
+
+    D->>G: POST /api/chain/autopilot {state: paused, resumeAt}
+    G->>F: setAutopilot (zoned, future: else {ok: false, code})
+    F->>O: POST /chain/autopilot
+    O->>O: record paused + chain.json, master derives halted
+    O-->>F: chain status
+    F->>F: re-read the fleet, the snapshot differs
+    F-->>S: fleet change, chain.autopilot = paused
+    G-->>D: {ok: true, status}
+    Note over O: the running step finishes, nothing new starts
+    loop scan tick, every 15 s
+        O->>O: resumeDue(record, wall clock)?
+    end
+    O->>O: record on + chain.json, master derives run, dispatch pass
+    F->>O: poll round (2.5 s): GET /chain
+    F-->>S: fleet change, chain.autopilot = on
+```
+
+A runner that restarts meanwhile boots as Off and the time never fires; only a handover to a
+newer build carries the record on. A set from a read-only device stops at the gateway with
+403 and `code: "read_only"`, as does Stop-now.

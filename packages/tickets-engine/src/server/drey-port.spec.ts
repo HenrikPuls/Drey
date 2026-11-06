@@ -78,6 +78,7 @@ function fakes(): { board: RemoteBoard; fleet: RemoteFleet } {
     answerQuestion: vi.fn(async () => ok),
     stream: vi.fn(async () => null),
     setMaster: vi.fn(async () => null),
+    setAutopilot: vi.fn(async () => null),
     setColumn: vi.fn(async () => null),
     stopColumn: vi.fn(async () => null),
     abortAll: vi.fn(async () => null),
@@ -197,6 +198,22 @@ describe('DreyTicketsPort', () => {
       ok: false,
       error: 'the fleet runner is not running',
     });
+  });
+
+  it('chainAutopilot wraps the runner status and keeps its refusal codes (req-95)', async () => {
+    const { board, fleet } = fakes();
+    const port = new DreyTicketsPort(board, fleet, new ChangeHub(), { allowBypass: () => false });
+    const status = { configured: true, master: 'halted' as const, autopilot: { state: 'paused' as const }, columns: {}, redStreak: {}, cooldownUntil: {} };
+    vi.mocked(fleet.setAutopilot).mockResolvedValue(status);
+    await expect(port.chainAutopilot({ state: 'paused' })).resolves.toEqual({ ok: true, status });
+    expect(fleet.setAutopilot).toHaveBeenCalledWith({ state: 'paused' });
+
+    const refusal = { ok: false as const, error: 'bad_resume_at', code: 'bad_resume_at' as const };
+    vi.mocked(fleet.setAutopilot).mockResolvedValue(refusal);
+    await expect(port.chainAutopilot({ state: 'paused', resumeAt: 'x' })).resolves.toEqual(refusal);
+
+    vi.mocked(fleet.setAutopilot).mockResolvedValue(null);
+    await expect(port.chainAutopilot({ state: 'on' })).resolves.toEqual({ ok: false, error: 'runner_down', code: 'runner_down' });
   });
 
   it('hands the actor to every board write', async () => {

@@ -29,6 +29,8 @@ import {
   type Parsed,
 } from '../core/commands';
 import { remoteActorOf, type ImprovementDecision, type TicketsRemotePort } from '../contracts/remote-protocol';
+import { parseAutopilotSet } from '../fleet/autopilot';
+import type { AutopilotRefusal } from '../fleet/protocol';
 import { parseReviewComments, sendBackNoteOf, type ReviewComment } from '../core/review-feedback';
 import type { PersonaRouter } from '../core/persona';
 import { TICKET_ID_PATTERN } from '../contracts/tickets';
@@ -356,7 +358,15 @@ export async function route(req: RemoteRequest, deps: RouterDeps): Promise<Remot
   }
   const device = auth.device;
   if ((req.method === 'POST' || req.method === 'PATCH') && device.readOnly) {
-    return isNotesPath(req.path) ? notesFailure('read_only', 'this device is paired read-only') : fail(403, 'this device is paired read-only');
+    if (isNotesPath(req.path)) {
+      return notesFailure('read_only', 'this device is paired read-only');
+    }
+    // The chain's controls (Autopilot, stop-now) refuse with a code the client maps to its catalog.
+    if (req.path.startsWith('/api/chain/')) {
+      const refusal: AutopilotRefusal = { ok: false, error: 'this device is paired read-only', code: 'read_only' };
+      return { status: 403, body: refusal };
+    }
+    return fail(403, 'this device is paired read-only');
   }
   if (isNotesPath(req.path) && deps.notes !== undefined) {
     return routeNotes(req, deps.notes, device.name, deps.log);
@@ -680,6 +690,8 @@ async function dispatch(req: RemoteRequest, device: RemoteDevice, deps: RouterDe
   switch (req.path) {
     case '/api/chain/master':
       return write('chain master', parseChainMaster(body), (cmd) => port.chainMaster(cmd.mode));
+    case '/api/chain/autopilot':
+      return write('chain autopilot', parseAutopilotSet(body, deps.now()), (record) => port.chainAutopilot(record));
     case '/api/chain/column':
       return write('chain column', parseChainColumn(body), (cmd) => port.chainColumn(cmd.phase, cmd.mode));
     case '/api/chain/column-stop':

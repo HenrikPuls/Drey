@@ -670,6 +670,22 @@ export interface TicketEdit {
 /** The master switch: `run` dispatches, `halted` lets running work finish. */
 export type ChainMaster = 'run' | 'halted';
 
+/** The Autopilot (req-95, concept §6.1): the owner's switch the master is derived from. */
+export type AutopilotState = 'on' | 'paused' | 'off';
+
+/** What `chain.json` and the chain status carry; `resumeAt` (ISO) only ever on `paused`. */
+export interface AutopilotRecord {
+  readonly state: AutopilotState;
+  readonly resumeAt?: string;
+}
+
+/** A refused Autopilot write or stop-now: the code is what a client maps to its catalog. */
+export interface AutopilotRefusal {
+  readonly ok: false;
+  readonly error: string;
+  readonly code: 'bad_state' | 'bad_resume_at' | 'runner_down' | 'read_only';
+}
+
 /** One column's brake: `playing` dispatches, `held` waits (a stop also holds). */
 export type ColumnMode = 'playing' | 'held';
 
@@ -744,6 +760,8 @@ export interface ChainStatus {
   /** True once a chain config is set (the board shows the master switch). */
   readonly configured: boolean;
   readonly master: ChainMaster;
+  /** The Autopilot record `master` derives from; absent on older runners (`autopilotOf` reads through). */
+  readonly autopilot?: AutopilotRecord;
   /** Per working column mode; a phase absent here is `playing`. */
   readonly columns: Readonly<Record<string, ColumnMode>>;
   /** Consecutive red gates per column (the circuit breaker's counter). */

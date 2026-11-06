@@ -1,3 +1,25 @@
+### req-95a — Autopilot over the chain master: the engine half
+
+**Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list (concept
+§6.1, canvas board 10t, O-5, ADR-0077 later change). No client shows it yet: that is req-95b.
+
+- **Now.** The engine holds one Autopilot record, **on**, **paused** (optional resume time) or
+  **off**, in `chain.json` beside the master, and derives the master from it (on = `run`, paused
+  and off = `halted`), so the dispatcher, the brakes and `setMaster` keep working (`run` sets on,
+  `halted` sets off). `POST /api/chain/autopilot` `{state, resumeAt?}` answers `{ok: true, status}`
+  or `{ok: false, error, code}` (`bad_state`, `bad_resume_at`, `runner_down`); the state reads as
+  `chain.autopilot` in `GET /api/fleet` and rides the `fleet` change of the event stream, a set at
+  once and the runner's own resume on the next poll round. `fleet_status` reports it.
+- **The engine resumes:** the scan tick (15 s) turns a due paused into on and dispatches; a paused
+  runner stays alive past its idle shutdown. **Boot rule:** every start ends as off, also a paused
+  whose time has not passed; a handover to a newer build is no start and keeps the record.
+- **Read-only devices** read the state; every `/api/chain/` write, Stop-now included, is refused
+  with 403 and `code: "read_only"`. Stop-now stays the existing abort and ends as off.
+- **Docs:** ADR-0077 later change, docs/06 §6.96, `plugins/tickets/FLEET.md`.
+- **Tests:** `fleet/autopilot.spec` (mapping, command, boot rule), `fleet/orchestrator-autopilot.spec`
+  (transitions, chain.json, resume on the tick, boot, handover, idle), `router.spec` (route, codes,
+  read-only), `drey-port.spec`, `fleet-client.spec` (the announce), `mcp-tools.spec`.
+
 ### req-99a — One state list in the engine and the default pipeline
 
 **Not yet manually verified by the owner.** Owner decisions 2026-11-06 (canvas decision 15, O-2, O-3, build plan Q1, Q6, Q8); engine half only, the display names are req-99b.
