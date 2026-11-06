@@ -46,8 +46,7 @@ Open work only. Everything implemented lives in
 [`changelog.md`](changelog.md); everything decided against or excluded
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
-
-**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–173 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–174 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -402,18 +401,6 @@ owner confirms scope and order before any of it starts:
   while Plan is an agent column) — keep, rename or retire it; (5) **Open question: migration of `prioritized` tickets** — `inbox` (today) or `plan` (an agent
   column: planning would start on arrival); (6) E12-9b Q2 (crew seeding) and Q3
   (default worker) are still open.
-- **E13-22 — Settings: one page width, a section tree and search** (owner request
-  2026-11-05, outside the list; modelled on VS Code's settings). The settings overlay
-  grows with the window (wider than today's 640 px cap) and **every page uses the same
-  width** — no jumping between a narrow and a wide page; wide editors (columns,
-  workers) fill that width. Settings → Tickets is broken into sections (Store and Git,
-  Pipeline, Crew and prompts, Remote and devices — to be confirmed against the real
-  page) shown as **expandable entries in the left category list**; the page scrolls as
-  a whole, a click on an entry scrolls to its section and the current section is
-  highlighted while scrolling; a search field at the top filters all pages' settings.
-  Applies to the shared scaffold (`src/app/settings/settings-ui.css`, plugin pages
-  via `PluginSettingsHost`), so every page benefits. After E12-9c/9d (labels in the same
-  files).
 - **E12-11 — Work panel body** (proposed by the E12-10 audit; M). One 40 px
   header row with the icons *filter · New idea · Open Board tab · grip*; the
   Workers cards leave the panel (they live in Crew and Capacity; the Workers tab

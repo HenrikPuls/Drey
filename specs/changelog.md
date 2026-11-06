@@ -1,3 +1,43 @@
+### Milestone 174 — E13-22: Settings — one page width, a section tree and search
+
+**Not yet manually verified by the owner.** Owner request 2026-11-05 (roadmap E13-22, outside
+the list), modelled on VS Code's settings screen.
+
+- **One width.** The dialog grows with the window (`min(1400px, 100vw − 48px)` ×
+  `min(900px, 100vh − 48px)`, category column 240 px). Every page — core and plugin — shares ONE
+  page width, the `--set-page-w` token in `settings-ui.css` (`min(100%, 1040px)`, was a 640 px
+  cap on the frame and the column); wide editors (pipeline table, prompts, workers) fill it. No
+  narrow/wide switching per page. Spec `shared/settings-width.spec.ts`.
+- **Section tree.** A page may declare `sections: [{ id, label }]`; the left list shows them as an
+  expandable group under the category (chevron button, `aria-expanded`; the selected category
+  starts open). The right side stays one scrolling column: a click scrolls to the element marked
+  `data-settings-section="<id>"`, and a scroll-spy highlights the entry of the section in view
+  (`aria-current="location"`). Pure halves in `src/app/settings/settings-model.ts`
+  (`activeSection`, `searchSettings`).
+- **Search.** A search field heads the list (aria-label only, no placeholder). It filters the
+  settings of all pages — label, description, key — and shows hits as "Page › Section / label"; a
+  hit opens the page and scrolls to the setting (`data-setting-key`, else the element showing the
+  label, else the section) with a short highlight. `Esc` clears the search before it closes
+  Settings. Core pages' entries: `core-settings-entries.ts` (a page without entries is still found
+  by its label and hint).
+- **SDK 1.46** (additive): `PluginSettingsPageContrib.sections` / `.entries`
+  (`PluginSettingsSection`, `PluginSettingsEntry`); documented in `plugins/AUTHORING.md` ("One
+  width, sections and search").
+- **Settings → Tickets** now has five sections, in canvas order (board 7g: Team, Default flow,
+  Budget and runners, Mission Control on other devices) plus the engine-room parts the board no
+  longer shows: **Team and flow**, **Budget and runners** (budget, videos, fleet, workers),
+  **Devices**, **Store and Git** (repository, ticket store, repositories), **Pipeline and
+  prompts**. The "Pipeline and workers" divider is gone; fleet and workers moved up under
+  *Budget and runners* ("Manage" scrolls to them). `settings-sections.ts`.
+- **Canvas vs. brief.** Boards 7g / 5f / 6c show a flat category list, no search and a fixed 760 px
+  page; they do not say whether the page grows, so the brief's decisions (grow with the window,
+  expandable entries, search) were built. The brief's four groups were adapted to the page's real
+  content as above. The phone/iPad settings (5f, 5g, 6c) are untouched — they are separate lists
+  of pages and need no section pattern.
+- **Specs.** `settings-model.spec.ts` (search across pages, scroll-spy), `settings.spec.ts`
+  (expandable entries, highlight while scrolling, search + open hit, no placeholder, native
+  buttons, Esc), `settings-width.spec.ts`, `settings-sections.spec.ts`.
+
 ### Milestone 173 — The Crew tab and the Accept verb: wording follows the design canvas
 
 **Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list

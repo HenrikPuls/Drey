@@ -236,7 +236,10 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   `label` and, since SDK 1.20, its `description`) in the same frame the
   core panes use; the form vocabulary is the one global Settings
   stylesheet, `src/app/settings/settings-ui.css` (author guide
-  `plugins/AUTHORING.md`).
+  `plugins/AUTHORING.md`). E13-22: one page width for every page (the
+  `--set-page-w` token), pages may declare `sections` (expandable list
+  entries + scroll-spy; `data-settings-section` anchors) and searchable `entries`
+  (SDK 1.46); the pure halves are `src/app/settings/settings-model.ts`.
 
 **SDK** (`shared/plugin-api/`) — the frozen contract both sides compile
 against: `manifest.ts` (`PluginManifest` + `validateManifest`),

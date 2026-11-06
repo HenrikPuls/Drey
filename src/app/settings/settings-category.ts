@@ -1,4 +1,5 @@
 import { Type } from '@angular/core';
+import type { SettingsSearchEntry, SettingsSection } from './settings-model';
 
 /**
  * One entry in the Settings screen's category list. The screen renders the
@@ -21,4 +22,13 @@ export interface SettingsCategory {
   hint: string;
   /** The pane component shown on the right when this category is selected. */
   component: Type<unknown>;
+  /** One sentence under the page title (searchable). */
+  description?: string;
+  /**
+   * Parts of the page, listed as expandable entries under the category.
+   * Each is the page's element carrying `data-settings-section="<id>"`.
+   */
+  sections?: readonly SettingsSection[];
+  /** The page's searchable settings (label, description, key). */
+  entries?: readonly SettingsSearchEntry[];
 }

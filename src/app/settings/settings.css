@@ -10,10 +10,11 @@
   inset: 0;
   margin: auto;
   z-index: 31;
-  width: min(920px, calc(100vw - 48px));
-  height: min(640px, calc(100vh - 48px));
+  /* Grows with the window (E13-22); the pages inside share one width. */
+  width: min(1400px, calc(100vw - 48px));
+  height: min(900px, calc(100vh - 48px));
   display: grid;
-  grid-template-columns: 200px 1fr;
+  grid-template-columns: 240px 1fr;
   /* Cap the single row at the panel height -- an implicit `auto` row would
      size to the (plugin-extended) category list and push the footer out. */
   grid-template-rows: minmax(0, 1fr);
@@ -112,6 +113,136 @@
 
 .category .hint {
   font-size: var(--set-fs-tiny);
+  color: var(--set-hint);
+}
+
+/* The search field: icon-less, no placeholder -- its label is the aria-label. */
+.search {
+  flex-shrink: 0;
+  height: var(--set-control-h-compact);
+  margin: 0 2px 8px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: var(--set-fs-small);
+  color: var(--text-primary);
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.cat-row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.cat-row .category {
+  flex: 1;
+  min-width: 0;
+}
+
+.twisty {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-5);
+  cursor: pointer;
+}
+
+.twisty:hover {
+  background: var(--hover-bg);
+  color: var(--text-2);
+}
+
+.cat-row:has(.twisty) .category {
+  padding-right: 28px;
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 0 4px 14px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+.section-entry {
+  text-align: left;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  font: inherit;
+  font-size: var(--set-fs-small);
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.section-entry:hover {
+  background: var(--hover-bg);
+}
+
+.section-entry.active {
+  background: var(--accent-surface);
+  color: var(--text-primary);
+}
+
+.category:focus-visible,
+.section-entry:focus-visible,
+.twisty:focus-visible,
+.result:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: var(--set-page-w);
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.result:hover {
+  background: var(--hover-bg);
+}
+
+.result-where {
+  font-size: var(--set-fs-tiny);
+  color: var(--set-hint);
+}
+
+.result-label {
+  font-size: var(--set-fs-body);
+  color: var(--text-primary);
+}
+
+.result-desc {
+  font-size: var(--set-fs-small);
   color: var(--set-hint);
 }
 

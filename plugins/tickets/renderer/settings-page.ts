@@ -7,7 +7,14 @@ import { createPromptsSection } from './settings-prompts';
 import { createRemoteSection } from './settings-remote';
 import { createReposSection } from './settings-repos';
 import { createDeskSettings, type DeskSettingsHooks } from './settings/desk-settings';
+import { TICKETS_ENTRIES, TICKETS_SECTIONS, type TicketsSectionId } from './settings-sections';
 import { createWorkersSection } from './settings-workers';
+
+/** Marks the first element of a part of the page (`data-settings-section`). */
+function anchored<T extends HTMLElement>(element: T, id: TicketsSectionId): T {
+  element.dataset['settingsSection'] = id;
+  return element;
+}
 
 /**
  * Settings — Tickets (M85, req-46, reworked in req-50 after the Claude
@@ -26,6 +33,7 @@ export function createTicketsSettingsPage(api: DreyPluginApi, hooks: Pick<DeskSe
     label: 'Tickets',
     hint: 'Crew, flow, budget, devices',
     description: 'The crew, the flow, the budget and the devices that reach Mission Control.',
+    entries: TICKETS_ENTRIES,
     mount: (body) => {
       body.classList.add('tset');
 
@@ -86,8 +94,21 @@ export function createTicketsSettingsPage(api: DreyPluginApi, hooks: Pick<DeskSe
           workers.root.scrollIntoView({ block: 'start', behavior: 'smooth' });
         },
       });
-      const lower = el('h2', 'tset-desk-divider', 'Pipeline and workers');
-      body.append(desk.root, remote.root, storeSection(api), lower, repo, columns.root, repos.root, prompts.root, fleetSection(api), workers.root);
+      // One scrolling page; the sections of TICKETS_SECTIONS in this order.
+      anchored(repo, 'store');
+      anchored(columns.root, 'pipeline');
+      anchored(remote.root, 'devices');
+      body.append(
+        desk.root,
+        fleetSection(api),
+        workers.root,
+        remote.root,
+        repo,
+        storeSection(api),
+        repos.root,
+        columns.root,
+        prompts.root,
+      );
 
       // The board's change events cover every write here and the runner's.
       const off = api.backend.on('board-changed', () => {
