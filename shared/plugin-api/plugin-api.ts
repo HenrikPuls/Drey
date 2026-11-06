@@ -687,6 +687,12 @@ export interface StatusItemSpec {
   readonly commandId?: string;
   /** Ordering among all plugin items, left to right; higher is further left. Default 0. */
   readonly priority?: number;
+  /**
+   * A small coloured dot before the text (SDK 1.46): `attention` is the
+   * warm orange (something needs the user), `positive` green (a thing is
+   * on). Absent = no dot. The host attaches no meaning to either.
+   */
+  readonly dot?: 'attention' | 'positive';
 }
 
 /** A live status-bar item: change it with `update`, remove it with `dispose` (SDK 1.38). */

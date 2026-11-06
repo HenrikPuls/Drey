@@ -146,7 +146,8 @@ function liveRun(id: string, ticketId: string, personaId: string, extra: Record<
 
 test.describe('Board, Team and Capacity (E13-8)', () => {
   test('shows the board, the team and the capacity band', async ({ page, electronApp }, testInfo) => {
-    await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
+    // The Work view (Ctrl+2) puts the Tickets panel and the Capacity band in place.
+    await page.keyboard.press('Control+2');
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0121"]')).toBeVisible({ timeout: 15_000 });
 
@@ -238,13 +239,17 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
     await page.screenshot({ path: testInfo.outputPath('desk-team.png') });
 
     // --- Capacity band in the bottom dock
-    await page.locator('app-dock-strip button[aria-label="Show Capacity"]').click();
     const band = page.locator('.desk-capacity').filter({ visible: true });
     await expect(band).toBeVisible({ timeout: 15_000 });
     await expect(band.locator('.desk-cap-slots')).toHaveText('2 of 5 slots busy');
     await expect(band.locator('.desk-cap-person').filter({ hasText: 'Tessa' })).toContainText('stuck on T-0126');
     await expect(band.locator('.desk-cap-today')).toHaveText('Today $4.22 of $19.00');
     await page.screenshot({ path: testInfo.outputPath('desk-capacity.png') });
+
+    // The band rule (E12-15, board 7e): visible on the Crew tab, hidden once
+    // another tab (a ticket) is the active one.
+    await panel.locator('.work-row[data-id="T-0121"]').click();
+    await expect(page.locator('.desk-capacity')).toBeHidden({ timeout: 15_000 });
     stopEngine();
   });
 });

@@ -618,6 +618,23 @@
   overflow: auto;
 }
 
+.desk-capacity[hidden] {
+  display: none;
+}
+
+/* One line (board 7e): nothing wraps, the people row gives way first. */
+.desk-capacity .desk-cap-lead,
+.desk-capacity .desk-cap-tail {
+  flex-wrap: nowrap;
+  flex: none;
+}
+
+.desk-capacity .desk-cap-people {
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .desk-cap-slots {
   font-weight: 600;
   color: var(--text-1, var(--text-2));

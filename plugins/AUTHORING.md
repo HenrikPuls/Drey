@@ -111,13 +111,14 @@ leaves the app on the previous build. Verify with
   active view's preset `assistantTarget`) and their `on…Change` listeners are
   for the Assistant. The host attaches no meaning to any of it; namespace
   the target ids.
-  1.46 adds `sections` and `entries` to `registerSettingsPage` (see "Settings pages": the
-  section tree and the Settings search).
   1.45 lets `ctx.vault.markManaged` take a list of vault ids (an empty list clears): the tickets
   plugin flags every vault that holds its store checkout.
   1.46 added `api.i18n` (renderer) and `ctx.i18n` (main): the host's message
   catalog and ICU runtime — `t(key, params)`, `lookup`, `has` and the `Intl`
   helpers (ADR-0091; see "SDK 1.46 — strings from the catalog" below).
+  1.46 also adds `sections` and `entries` to `registerSettingsPage` (see "Settings pages": the
+  section tree and the Settings search) and an optional `dot` (`attention` | `positive`) on a
+  status item: a small coloured dot before the text.
   1.44 added `ctx.vault.routeDocuments(route)` (main side): a plugin that writes
   documents through its own engine claims them (`owns(vaultId, path)`); the
   editor's save goes to `route.save` (answer: the stored text and mtime, or a

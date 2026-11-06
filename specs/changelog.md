@@ -1,3 +1,23 @@
+### Milestone 180 — E12-15: Capacity band rule and the status-bar items (boards 7a, 7e, 7h)
+
+**Not yet manually verified by the owner.**
+
+- **Capacity band** (`capacity-view.ts`): shows only while the Board or Crew tab is the active
+  tab (`bandShownFor`, over `documents.onChange`), hidden in a note or a ticket; its lead, people
+  and tail are one non-wrapping line (the people row gives way first).
+- **Status items** (`status-slot.ts`, pure + `createStatusSlots`): `$4.10 of $15 today` (neutral
+  grey, tooltip *so far*), `3 need you` with the orange dot (orange only ever means needs-you;
+  ` in Work` suffix while the Notes view is active) and a reserved `Autopilot · On` item (green
+  dot, tooltip *Autopilot: On (Mod+Alt+P)*) rendered from the chain master (run = On, halted =
+  Off, no chain = hidden); the three-state wiring is `TODO(req-95b)`.
+- **SDK 1.46:** `StatusItemSpec.dot` (`attention` | `positive`) — the status bar draws a small
+  coloured dot; status text is 13 px.
+- **Not done here (files owned by others, roadmap E12-15b):** the plugin entry still creates the
+  single old item — `index.ts` must call `createStatusSlots`; the `Capture by voice` label in
+  `index.ts`; the Crew header counts. New strings carry `TODO(i18n)`.
+- **Tests:** `status-slot.spec`, `team-view.spec` (band rule), `status-bar.spec` (dot),
+  `e2e/desk-board-team.spec.ts` (band hidden on another tab).
+
 ### Milestone 179 — E13-22: Settings — one page width, a section tree and search
 
 **Not yet manually verified by the owner.** Owner request 2026-11-05 (roadmap E13-22, outside

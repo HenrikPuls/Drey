@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–179 and req-102 (the i18n catalog, ADR-0091) built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–180 and req-102 (the i18n catalog, ADR-0091) built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -360,8 +360,6 @@ and severity per item in
 [`convergence-gaps.md`](../docs/design/work-panel/convergence-gaps.md); the
 owner confirms scope and order before any of it starts:
 
-- **E13-15 — Status bar items.** A separate "$4.10 today" item and a
-  "● 3 need you" item, "in Work" while the Notes view is active (G-12).
 - **E13-16 — Title-bar capture button.** "Capture by voice" on the desk
   boards; needs the owner's ruling on the chord first (Ctrl+Alt+N is the
   daily-note capture; tickets use Mod+Alt+T) (G-13).
@@ -410,14 +408,17 @@ owner confirms scope and order before any of it starts:
   `Repositories` wait for E12-3b [K-03, K-04, N-02, N-03, N-07]. Files:
   `libs/mission-ui/src/work/`, `settings/`, `apps/mission-control/src/app/`
   (touches the same stylesheet as E12-13 — run after it, or together).
-- **E12-15 — Capacity band and status bar** (proposed by the E12-10 audit; M).
-  The band shows only while Board or Crew is the active tab and is one line
-  (completes E13-13's rest); two status items `$4.10 today` and `● 3 need you`,
-  `in Work` while in Notes (E13-15); the title-bar `Capture by voice` button once
-  the owner has ruled on its chord (E13-16); the Crew header counts every card
-  and shows the state summary [I-01, I-03, I-04, L-04, L-05]. Files:
-  `plugins/tickets/renderer/team/capacity-view.ts`, `status-slot.ts`,
-  `src/app/status-bar/`, `src/app/titlebar/`.
+- **E12-15b — Wire the status items; capture label; Crew header** (rest of
+  E12-15, M). `plugins/tickets/renderer/index.ts` (W2.6) calls
+  `createStatusSlots` from `status-slot.ts` (inputs: today's cost and budget
+  from `teamModelOf`, the needs-you count, `chain.master`, whether the active
+  view is Notes) in place of the single `createStatusItem` + `statusSlotText`,
+  then drops `statusSlotText`; the title-bar `Capture by voice` label (chord
+  `Mod+Alt+T`, ruled, E13-16/G-13) lives in `index.ts` too; the Crew header
+  counts every card and shows the state summary [I-01, I-03, I-04, L-04, L-05]
+  (`team/team-view.ts`). The Autopilot item becomes three-state with req-95b
+  (`TODO(req-95b)` in `status-slot.ts`). Strings go through `t(key)` when
+  req-102 lands (`TODO(i18n)` marks them).
 - **E12-16 — Board and Crew completion** (proposed by the E12-10 audit; M, partly
   L). `Filter: all personas` and `Cost by column` (E13-17); empty columns say
   `Empty` quietly, `New idea` moves to the board header; `New persona`, `Remove

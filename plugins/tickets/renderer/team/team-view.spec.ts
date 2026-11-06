@@ -5,7 +5,7 @@ import type { ChainStatus, RunInfo } from '../../../../packages/tickets-engine/s
 import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
 import type { DeskDeps } from '../desk-deps';
 import { mountBoard } from '../board/board-view';
-import { bandStatusOf, mountCapacity, personaLineOf } from './capacity-view';
+import { bandShownFor, bandStatusOf, mountCapacity, personaLineOf } from './capacity-view';
 import { personaCardOf } from './team-model';
 import type { TeamStore } from './team-store';
 import { mountTeam } from './team-view';
@@ -55,9 +55,14 @@ const snapshot = {
   recentDone: [],
 } as unknown as BoardSnapshot;
 
+let activePath: string | null = 'board://all';
+
 function deps(): DeskDeps {
   return {
-    api: { ui: { icon: () => document.createElement('i') } },
+    api: {
+      ui: { icon: () => document.createElement('i') },
+      documents: { active: () => ({ path: activePath }), onChange: () => () => undefined },
+    },
     snapshot: () => snapshot,
     runs: () => runs,
     chain: () => chain,
@@ -188,6 +193,18 @@ describe('the Capacity band', () => {
     expect(host.querySelector('.desk-cap-today')!.textContent).toBe('Today $5.34 of $10.00');
     [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Open Crew ›')!.click();
     expect(open).toHaveBeenCalled();
+  });
+
+  it('shows the band only while the Board or Crew tab is active (7e)', () => {
+    expect(bandShownFor('board://all')).toBe(true);
+    expect(bandShownFor('team://all')).toBe(true);
+    expect(bandShownFor('notes/a.md')).toBe(false);
+    expect(bandShownFor(null)).toBe(false);
+    const host = document.body.appendChild(document.createElement('div'));
+    activePath = 'notes/a.md';
+    mountCapacity(deps(), store([persona({})]), host, vi.fn());
+    expect(host.querySelector<HTMLElement>('.desk-capacity')!.hidden).toBe(true);
+    activePath = 'board://all';
   });
 
   it('names a persona line and the header status', () => {

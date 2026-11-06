@@ -13,6 +13,14 @@ import type { TeamStore } from './team-store';
 
 const TICK_MS = 15_000;
 
+/** The tab identities the band belongs to (board 7e): the Board and the Crew. */
+const BAND_TABS: readonly string[] = ['board://all', 'team://all'];
+
+/** The band shows only while the Board or Crew tab is the active one; in a note or a ticket it would only be noise. */
+export function bandShownFor(activePath: string | null): boolean {
+  return activePath !== null && BAND_TABS.includes(activePath);
+}
+
 /** What one persona is doing, in a short line: idle, the ticket it works, why it stands. */
 export function personaLineOf(card: PersonaCardModel): string {
   if (card.state === 'idle' || card.state === 'paused') {
@@ -44,6 +52,10 @@ export function mountCapacity(deps: DeskDeps, store: TeamStore, host: HTMLElemen
 
   const render = (): void => {
     frame = 0;
+    root.hidden = !bandShownFor(deps.api.documents.active()?.path ?? null);
+    if (root.hidden) {
+      return;
+    }
     const model = teamModelOf(store.personas(), deps.runs(), deps.chain(), deps.titleOf, Date.now());
     const lead = h('div', 'desk-cap-lead');
     const slots = slotsLineOf(model);
@@ -81,11 +93,17 @@ export function mountCapacity(deps: DeskDeps, store: TeamStore, host: HTMLElemen
   };
   const offStore = store.subscribe(schedule);
   const offDeps = deps.subscribe(schedule);
+  const offDocs = deps.api.documents.onChange((event) => {
+    if (event.type === 'active-changed' || event.type === 'docs-changed') {
+      schedule();
+    }
+  });
   const tick = setInterval(schedule, TICK_MS);
   render();
   return () => {
     offStore();
     offDeps();
+    offDocs();
     clearInterval(tick);
     if (frame !== 0) {
       window.cancelAnimationFrame(frame);
