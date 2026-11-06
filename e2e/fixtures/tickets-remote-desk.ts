@@ -109,7 +109,7 @@ export function makeDesk() {
     activeVaultName: 'drey-tickets',
     isGitRepo: true,
     defaultWorker: 'opencode',
-    pipeline: [],
+    pipeline: PHASES.map(([id, title, handover]) => ({ id, title, handover })),
     pipelineError: null,
     pushRemote: null,
     repos: [{ name: 'drey', url: '', branch: 'main', policy: null, path: null, worker: null }],

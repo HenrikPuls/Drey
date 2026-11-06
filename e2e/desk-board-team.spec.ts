@@ -146,10 +146,18 @@ function liveRun(id: string, ticketId: string, personaId: string, extra: Record<
 
 test.describe('Board, Team and Capacity (E13-8)', () => {
   test('shows the board, the team and the capacity band', async ({ page, electronApp }, testInfo) => {
+    // The Work view exists once the plugin has registered it; Ctrl+2 before that does nothing.
+    await expect(page.locator('[role="tablist"][aria-label="Views"] [role="tab"]')).toHaveText(['Notes', 'Work'], { timeout: 30_000 });
+    // The status items (E12-15): today's cost and what waits, "in Work" from the Notes view.
+    const statusBar = page.locator('app-status-bar');
+    await expect(statusBar).toContainText(/\$\d+\.\d\d of \$\d+ today/, { timeout: 15_000 });
+    await expect(statusBar).toContainText(/needs? you in Work/);
+
     // The Work view (Ctrl+2) puts the Tickets panel and the Capacity band in place.
     await page.keyboard.press('Control+2');
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0121"]')).toBeVisible({ timeout: 15_000 });
+    await expect(statusBar).not.toContainText('in Work');
 
     await electronApp.evaluate(
       ({ BrowserWindow }, data) => {
@@ -222,7 +230,7 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
     await openFromMenu('Crew');
     const team = page.locator('.desk-team').filter({ visible: true });
     await expect(team).toBeVisible({ timeout: 15_000 });
-    await expect(team.locator('.desk-head-sub')).toHaveText('4 personas · today $4.22');
+    await expect(team.locator('.desk-head-sub')).toHaveText('5 personas · today $4.22');
     await expect(team.locator('.desk-chips')).toHaveText('Local 2/2Claude Code 0/3');
     await expect(team.locator('[data-persona="ben"] .desk-persona-state')).toHaveText('waiting');
     await expect(team.locator('[data-persona="tessa"] .desk-persona-state')).toHaveText('stuck');

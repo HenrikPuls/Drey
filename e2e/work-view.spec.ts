@@ -68,7 +68,8 @@ test.describe('The Work view (E13-13)', () => {
     await page.keyboard.press('Control+2');
     await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('.tickets-panel').filter({ visible: true })).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('.desk-capacity').filter({ visible: true })).toBeVisible({ timeout: 15_000 });
+    // The band's content shows only on the Board and Crew tabs (E12-15).
+    await expect(page.locator('.desk-capacity')).toBeHidden({ timeout: 15_000 });
     await expect(page.locator('app-dock-strip button[aria-label="Show Assistant"], app-dock-strip button[aria-label="Hide Assistant"]').first()).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('view-work.png') });
 
@@ -76,12 +77,13 @@ test.describe('The Work view (E13-13)', () => {
     await page.keyboard.press('Control+1');
     await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
 
-    // A ticket opened from Notes (here through the Files tree) lands in Work.
+    // A ticket opened from Notes (here through the Files tree) stays in the current view (D-6).
     const files = page.locator('app-files-panel');
     await files.getByText('tickets', { exact: true }).click();
     await files.getByText('40-build', { exact: true }).click();
     await files.getByText('T-0121.md', { exact: true }).click();
-    await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
+    await expect(page.locator('app-editor .tickets-doc-strip')).toBeVisible({ timeout: 15_000 });
+    await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
     await page.screenshot({ path: testInfo.outputPath('view-work-ticket.png') });
     stopEngine();
   });
