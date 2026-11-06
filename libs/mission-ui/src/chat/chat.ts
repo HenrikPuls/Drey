@@ -7,6 +7,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
@@ -520,6 +521,17 @@ export class Chat {
       this.state.chatMenu.set(false);
       this.sheetOpen.set(true);
     }
+    this.adoptPrefill();
+    // The iPad's chat pane stays mounted: a prefill that arrives later
+    // ("Ask about this note", a promote) is adopted the same way.
+    effect(() => {
+      if (this.state.chatPrefill() !== null) {
+        untracked(() => this.adoptPrefill());
+      }
+    });
+  }
+
+  private adoptPrefill(): void {
     const prefill = this.state.chatPrefill();
     if (prefill !== null) {
       this.state.chatPrefill.set(null);

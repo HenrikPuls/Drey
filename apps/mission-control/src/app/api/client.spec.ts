@@ -482,3 +482,59 @@ describe('McClient.listen', () => {
     expect(states).toEqual([true]);
   });
 });
+
+describe('ApiError keeps the code of the desk (req-101)', () => {
+  it('carries the body code, and null when the body has none', async () => {
+    const desk = new FakeDesk();
+    desk.on('GET', '/api/notes', () => ({ __status: 404, __body: { ok: false, code: 'no_vault', error: 'gone' } }));
+    desk.on('GET', '/api/board', () => ({ __status: 500, __body: { ok: false, error: 'boom' } }));
+    const client = makeClient(desk);
+    const withCode = await client.request('GET', '/api/notes').catch((caught: unknown) => caught);
+    expect(withCode).toMatchObject({ status: 404, code: 'no_vault', message: 'gone' });
+    const without = await client.request('GET', '/api/board').catch((caught: unknown) => caught);
+    expect((without as ApiError).code).toBeNull();
+  });
+});
+
+describe('the Notes calls (req-101)', () => {
+  it('GETs the folder, recent and search with encoded parameters', async () => {
+    const desk = new FakeDesk();
+    desk.on('GET', '/api/notes', () => ({ ok: true, vault: 'V', folder: '', folders: [], notes: [] }));
+    desk.on('GET', '/api/notes?folder=a%20b%2Fc', () => ({ ok: true, vault: 'V', folder: 'a b/c', folders: [], notes: [] }));
+    desk.on('GET', '/api/notes/recent?limit=8', () => ({ ok: true, vault: 'V', notes: [] }));
+    desk.on('GET', '/api/notes/search?q=big%20idea&limit=30', () => ({ ok: true, query: 'big idea', hits: [], truncated: false }));
+    desk.on('GET', '/api/notes/note?path=a%20b%2Fx.md', () => ({ ok: true, path: 'a b/x.md', name: 'x', text: 't', body: 't', tags: [], mtime: 1 }));
+    const client = makeClient(desk);
+    expect((await client.notesList()).ok).toBe(true);
+    expect(await client.notesList('a b/c')).toMatchObject({ ok: true, folder: 'a b/c' });
+    expect((await client.notesRecent()).ok).toBe(true);
+    expect(await client.notesSearch('big idea')).toMatchObject({ query: 'big idea' });
+    expect(await client.notesRead('a b/x.md')).toMatchObject({ ok: true, mtime: 1 });
+  });
+
+  it('saves with the read mtime as baseMtime and passes a 200 conflict through', async () => {
+    const desk = new FakeDesk();
+    desk.on('POST', '/api/notes/note', () => ({ ok: false, code: 'conflict', error: 'changed', disk: { text: 'D', mtime: 9 } }));
+    const client = makeClient(desk);
+    const reply = await client.notesSave('x.md', 'T', 5);
+    expect(desk.callsOf('POST', '/api/notes/note')[0]!.body).toEqual({ path: 'x.md', text: 'T', baseMtime: 5 });
+    expect(reply).toMatchObject({ ok: false, code: 'conflict', disk: { text: 'D', mtime: 9 } });
+  });
+
+  it('creates a note with POST /api/notes', async () => {
+    const desk = new FakeDesk();
+    desk.on('POST', '/api/notes', () => ({ ok: true, path: 'n.md', text: '', mtime: 3 }));
+    const client = makeClient(desk);
+    expect(await client.notesCreate('n.md')).toMatchObject({ ok: true, path: 'n.md' });
+    expect(desk.callsOf('POST', '/api/notes')[0]!.body).toEqual({ path: 'n.md', text: '' });
+  });
+
+  it('turns a refusal into a value with its code and an unreachable desk into offline', async () => {
+    const desk = new FakeDesk();
+    desk.on('POST', '/api/notes/note', () => ({ __status: 403, __body: { ok: false, code: 'read_only', error: 'ro' } }));
+    const client = makeClient(desk);
+    expect(await client.notesSave('x.md', 'T', 1)).toEqual({ ok: false, code: 'read_only', error: 'ro' });
+    const dead = new McClient({ fetch: async () => { throw new Error('down'); }, storage: desk.storage });
+    expect(await dead.notesList()).toMatchObject({ ok: false, code: 'offline' });
+  });
+});

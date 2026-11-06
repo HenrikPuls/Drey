@@ -12,6 +12,15 @@
  * so the specs run under Node with fakes; the token lives under the same
  * key the legacy client uses, so one pairing serves both apps.
  */
+import type {
+  McNotesApi,
+  NoteCreateReply,
+  NoteReadReply,
+  NoteSaveReply,
+  NotesListReply,
+  NotesRecentReply,
+  NotesSearchReply,
+} from '@mission-ui/notes/notes.model';
 import { SseParser } from './sse';
 
 /** The localStorage key the device token lives under (shared with the legacy client). */
@@ -84,10 +93,18 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** The desk's stable refusal `code` from the body (the Notes API's), null when it sent none. */
+    readonly code: string | null = null,
   ) {
     super(message);
   }
 }
+
+/** The body's `code` when it is a non-empty string. */
+const codeOf = (data: unknown): string | null => {
+  const code = (data as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && code !== '' ? code : null;
+};
 
 /** One event off the `/api/events` stream: the frame's name and raw data payload. */
 export interface McStreamEvent {
@@ -138,7 +155,7 @@ const defaultRevokeObjectUrl: McObjectUrlRevoker = (url) => {
   }
 };
 
-export class McClient {
+export class McClient implements McNotesApi {
   private readonly fetchFn: McFetch;
   private readonly store: McStorage | null;
   private readonly createObjectUrlFn: McObjectUrlFactory;
@@ -207,7 +224,7 @@ export class McClient {
     }
     if (!res.ok) {
       const message = (data as { error?: unknown } | null)?.error;
-      throw new ApiError(res.status, typeof message === 'string' ? message : `HTTP ${res.status}`);
+      throw new ApiError(res.status, typeof message === 'string' ? message : `HTTP ${res.status}`, codeOf(data));
     }
     return data as T;
   }
@@ -271,9 +288,58 @@ export class McClient {
         data = null;
       }
       const message = (data as { error?: unknown } | null)?.error;
-      throw new ApiError(res.status, typeof message === 'string' ? message : `HTTP ${res.status}`);
+      throw new ApiError(res.status, typeof message === 'string' ? message : `HTTP ${res.status}`, codeOf(data));
     }
     return this.createObjectUrlFn(await res.blob());
+  }
+
+  // --- the Notes API (req-100, milestone 174) -----------------------------------
+
+  /**
+   * One Notes call: the desk's reply as a value. A 200 `conflict` / `exists`
+   * body passes through; a refusal (4xx, 5xx) becomes `{ ok:false, code,
+   * error }` with the body's `code`, and an unreachable desk becomes the
+   * client-only `offline` — so the screens map every outcome to a catalog
+   * string and never parse the English text.
+   */
+  private async notesCall<T extends { readonly ok: boolean }>(
+    method: 'GET' | 'POST',
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
+    try {
+      return await this.request<T>(method, path, body);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        const code = error.status === 0 ? 'offline' : (error.code ?? 'internal');
+        return { ok: false, code, error: error.message } as unknown as T;
+      }
+      return { ok: false, code: 'offline', error: 'The desk does not answer.' } as unknown as T;
+    }
+  }
+
+  notesList(folder = ''): Promise<NotesListReply> {
+    return this.notesCall('GET', `/api/notes${folder === '' ? '' : `?folder=${encodeURIComponent(folder)}`}`);
+  }
+
+  notesRecent(limit = 8): Promise<NotesRecentReply> {
+    return this.notesCall('GET', `/api/notes/recent?limit=${limit}`);
+  }
+
+  notesSearch(query: string, limit = 30): Promise<NotesSearchReply> {
+    return this.notesCall('GET', `/api/notes/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+  }
+
+  notesRead(path: string): Promise<NoteReadReply> {
+    return this.notesCall('GET', `/api/notes/note?path=${encodeURIComponent(path)}`);
+  }
+
+  notesSave(path: string, text: string, baseMtime: number): Promise<NoteSaveReply> {
+    return this.notesCall('POST', '/api/notes/note', { path, text, baseMtime });
+  }
+
+  notesCreate(path: string, text = ''): Promise<NoteCreateReply> {
+    return this.notesCall('POST', '/api/notes', { path, text });
   }
 
   /** Revokes one object URL `attachment` handed out. */

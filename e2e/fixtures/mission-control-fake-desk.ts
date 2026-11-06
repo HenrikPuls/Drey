@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { NOTES_FIXTURE, isNotesPath, notesReply } from './mission-control-fake-notes';
 
 const APP_DIR = path.resolve('dist/mission-control/browser');
 
@@ -115,7 +116,7 @@ const ticket = (id: string) => {
 };
 
 const ROUTES: Record<string, () => unknown> = {
-  '/api/me': () => ({ ok: true, device: { name: 'iPad', readOnly: false } }),
+  '/api/me': () => ({ ok: true, device: { name: 'iPad', readOnly: NOTES_FIXTURE.readOnly } }),
   '/api/board': () => board,
   '/api/needs': () => needs,
   '/api/personas': () => personas,
@@ -138,6 +139,22 @@ export async function startFakeDesk(): Promise<{ origin: string; stop: () => Pro
       res.write(': open\n\n');
       streams.add(res);
       req.on('close', () => streams.delete(res));
+      return;
+    }
+    if (isNotesPath(url.pathname)) {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        let body: Record<string, unknown> = {};
+        try {
+          body = chunks.length === 0 ? {} : (JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>);
+        } catch {
+          body = {};
+        }
+        const reply = notesReply(req.method ?? 'GET', url, body);
+        res.writeHead(reply.status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(reply.body));
+      });
       return;
     }
     if (url.pathname.startsWith('/api/')) {

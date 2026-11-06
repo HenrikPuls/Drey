@@ -26,6 +26,9 @@ updated: '2026-09-05T14:32:00'
   are displayed as-is, and are **never rewritten** to the new format.
 - Always write dates as a **quoted string** — unquoted YAML dates break
   round-tripping.
+- `ticket: T-0123` (optional, any note) names the ticket a note belongs to. Nothing in
+  Drey writes it; Mission Control's Notes screens read it from the fence and show a link
+  to that ticket (req-101).
 - The editor folds frontmatter behind a collapsible pill (`▸ Frontmatter`);
   expanding it edits the raw YAML directly (no structured field editor).
 

@@ -1,3 +1,66 @@
+### req-101 — Mission Control: Notes on the phone and the iPad (clients of the Notes API)
+
+**Not yet manually verified by the owner.** Owner request 2026-11-06, canvas decision 18
+(concept §7; wave 3 of the build plan, row 3.5; boards 10k, 10l, 10n, 10p, 10r). The engine half is
+milestone 174 (req-100).
+
+- **Notes list** (`mc-notes`; the phone's Notes screen, the iPad's left pane): the **active
+  vault's name** as the header's line, a 44 px **search field** over `GET /api/notes/search`
+  (250 ms after the last key, the last query wins, hits show the first matching line with its
+  heading), **Recent** over `/api/notes/recent`, then **folders** and the notes of the open
+  folder over `GET /api/notes` (a "Parent folder" row goes back up). A **+** icon creates a note
+  in the open folder (`POST /api/notes`, name → `<name>.md`; "exists" and bad names are said in
+  words) and opens it ready to write. Rows are 52 px or more, grey when current.
+- **Note** (`mc-note`; the phone's note screen with the labelled back control "Notes", the iPad's
+  centre pane): opens in **View** of the shared Markdown surface (`mc-markdown` over
+  `libs/markdown-surface`, no new surface — Q5) with a **View · Live · Source** segmented control
+  of 44 px, the note's **tags**, a **Ticket T-… ›** link when the note's frontmatter says
+  `ticket:` (`specs/frontmatter-schema.md`) and **Ask about this note**. The **pencil** starts
+  **Live Preview**; picking Live or Source in View edits too. While editing the bar shows **X**
+  (cancel) and **✓** (save) as icons; **X asks only when the text changed** (Keep editing /
+  Discard), as does the back control and opening another note from the iPad's list.
+- **Saving** is `POST /api/notes/note` with the text and the `mtime` that was read as
+  `baseMtime`; the client **adopts the text the desk returns** (`updated:` may have moved) and
+  reads the note again for its tags. A `conflict` reply keeps the owner's draft in the editor and
+  shows **the desk's version and the owner's side by side with Keep mine / Keep the desk's**
+  ("Keep mine" saves over the disk `mtime`); a per-block merge view is a roadmap follow-up. Any other
+  refusal is shown as a catalog sentence mapped from its `code`.
+- **Live:** the SSE event `notes` refreshes the lists, the search and the open note unless the
+  owner holds unsaved changes. **Read-only device** (`/api/me` `device.readOnly`): no pencil, no
+  mode switch, no "+", and the store refuses to start editing.
+- **"Ask about this note"** opens the Mission Control chat with `About the note <path>:` in the
+  composer (the engine has no note attachment to chat yet — roadmap "Notes API gaps"). The iPad's
+  chat pane stays mounted, so `Chat` now adopts a prefill that arrives later (it only read it on
+  construction); this also fixes "Promote" on the iPad.
+- **Shell:** `NOTES_ENABLED` is **on** — the Notes segment in the iPad header, the Notes row in
+  the phone menu. iPad: Notes area = files left, note centre (the empty pane while none is open),
+  Mission Control right; the note's own "Notes" back control hides from 768 px. Phone: Menu →
+  Notes → note; the ticket link opens the ticket over the note (its back control reads "Work").
+  The desktop web has no Notes tab (unchanged).
+- **`ApiError` keeps the desk's `code`** (`ApiError.code`, null when the body has none) in both
+  the JSON and the byte reads. `McClient` gains `notesList / notesRecent / notesSearch /
+  notesRead / notesSave / notesCreate`: a 200 `conflict` / `exists` passes through, a refusal
+  becomes `{ ok:false, code, error }`, an unreachable desk the client-only code `offline`.
+- **Strings:** the `notes.*` keys in `shared/i18n/catalog/en.json` (labels, the refusal
+  sentences per code); `libs/mission-ui/src/notes/` is under the literal guard.
+- **Files:** `libs/mission-ui/src/notes/` (`notes.model.ts`, `notes.store.ts`, `notes.*`, `note.*`),
+  `apps/mission-control/src/app/api/client.ts`, `api/state.ts` (`notesChanged`, `notesApi`,
+  `askAboutNote`), `app.config.ts` (`MC_NOTES_HOST`), `app.ts` / `app.html`,
+  `libs/mission-ui/src/chat/chat.ts` (late prefill).
+- **Tests:** `notes/notes.store.spec.ts` (list, folders, debounced search, View → edit → cancel
+  asks only if changed, save with `baseMtime`, the conflict both ways, adopting the returned text,
+  read-only rule, SSE refresh, new note), `notes/notes.component.spec.ts` (what each screen shows),
+  `api/client.spec.ts` (`ApiError.code`, the six calls, conflict pass-through, refusal and offline
+  mapping), `api/state.spec.ts` (the `notes` frame, Ask about this note), `app.spec.ts`, and the
+  e2e `e2e/mission-control-notes.spec.ts` over the fake desk's Notes routes
+  (`e2e/fixtures/mission-control-fake-notes.ts`) at 390×844 and 1194×834 — list, search, View,
+  pencil, cancel question, save, conflict, ticket link, Ask, read-only device
+  (screenshots in its test output: `mc-phone-notes-list.png`, `mc-phone-note-view.png`,
+  `mc-phone-note-edit.png`, `mc-phone-note-conflict.png`, `mc-ipad-note-edit.png`, …).
+  `e2e/mission-control-shell.spec.ts` now expects the Notes segment and row.
+- **Left open (roadmap):** the pinned formatting strip (Q5), the conflict merge view, a note
+  attachment for the chat, rename / move / delete and folder creation.
+
 ### req-96 — Mission Control: the desktop-like iPad with panes saved per orientation, the phone menu as the root screen
 
 **Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list

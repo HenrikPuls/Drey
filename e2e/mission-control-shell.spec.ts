@@ -39,13 +39,13 @@ test.describe('iPad landscape (1194×834)', () => {
     await expect(shell).toBeVisible();
     await expect(page.locator('.topnav')).toHaveCount(0);
 
-    // The header: left toggle, Notes · Work · Crew (Notes hidden until req-101), Settings, right toggle.
+    // The header: left toggle, Notes · Work · Crew, Settings, right toggle.
     const header = page.locator('mc-shell-header');
     const left = header.getByRole('button', { name: 'Left sidebar' });
     const right = header.getByRole('button', { name: 'Right sidebar' });
     await expect(left).toHaveAttribute('aria-pressed', 'true');
     await expect(right).toHaveAttribute('aria-pressed', 'true');
-    await expect(header.locator('.switch .sw')).toHaveText([/Work/, /Crew/]);
+    await expect(header.locator('.switch .sw')).toHaveText([/Notes/, /Work/, /Crew/]);
     await expect(header.locator('.switch .sw.on')).toHaveText(/Work/);
     for (const control of [left, right, header.getByRole('button', { name: 'Settings' })]) {
       const box = (await control.boundingBox())!;
@@ -153,11 +153,11 @@ test.describe('Phone (390×844)', () => {
     await expect(page.locator('.topnav')).toHaveCount(0);
     await expect(page.locator('mc-shell-header')).toHaveCount(0);
 
-    // The menu: Search, the places (Notes hidden until req-101), then the chats.
+    // The menu: Search, the places, then the chats.
     const menu = page.locator('mc-menu');
     await expect(menu).toBeVisible();
     await expect(menu.getByRole('searchbox', { name: 'Search' })).toBeVisible();
-    await expect(menu.locator('.places .row')).toHaveText([/Work/, /Crew/, /Settings/]);
+    await expect(menu.locator('.places .row')).toHaveText([/Notes/, /Work/, /Crew/, /Settings/]);
     await expect(menu.locator('.places .row', { hasText: 'Work' }).locator('.bdg')).toHaveText('2');
     await expect(menu.locator('.chats .sess')).toHaveText([/Dark mode for the PDF export/, /Why is T-0050 blocked\?/, /Plan the release notes/]);
     await expect(page.locator('button.back:visible')).toHaveCount(0);

@@ -2232,3 +2232,26 @@ describe('McState shape mode (E10-3)', () => {
     expect(desk.callsOf('POST', `/api/chat/sessions/${enc(FILE_A)}/messages`)).toHaveLength(1);
   });
 });
+
+describe('the Notes slice (req-101)', () => {
+  it('counts the SSE notes event with the paths a device wrote, and tolerates a broken body', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    await state.boot({ pairCode: null, token: 't' });
+    await waitFor(() => expect(state.connected()).toBe(true));
+    expect(state.notesChanged().seq).toBe(0);
+    desk.pushEvent('notes', { changed: ['a.md', 'b/c.md'] });
+    await waitFor(() => expect(state.notesChanged()).toEqual({ seq: 1, paths: ['a.md', 'b/c.md'] }));
+    desk.pushRaw('event: notes\ndata: not json\n\n');
+    await waitFor(() => expect(state.notesChanged()).toEqual({ seq: 2, paths: [] }));
+  });
+
+  it('Ask about this note prefills the chat with the path and opens the chat tab', async () => {
+    const { desk } = makeDesk();
+    const state = makeState(desk);
+    state.tab.set('notes');
+    state.askAboutNote('ideas/plan.md');
+    expect(state.chatPrefill()).toBe('About the note ideas/plan.md:');
+    expect(state.tab()).toBe('chat');
+  });
+});

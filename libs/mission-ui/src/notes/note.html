@@ -1,0 +1,129 @@
+<mc-app-bar [title]="store.name()" [sub]="folder() === '' ? null : folder()" [back]="'notes.title' | t" [backOnWide]="false" (backed)="store.leave()">
+  @if (store.editing()) {
+    <span bar-end class="acts">
+      <button
+        type="button"
+        class="icon cancel"
+        [attr.aria-label]="'notes.cancel' | t"
+        [attr.title]="'notes.cancel' | t"
+        (click)="store.cancel()"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="icon save"
+        [disabled]="store.saving() || !store.dirty()"
+        [attr.aria-label]="'notes.save' | t"
+        [attr.title]="'notes.save' | t"
+        (click)="store.save()"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
+      </button>
+    </span>
+  } @else if (!store.readOnly() && store.noteError() === null) {
+    <button
+      bar-end
+      type="button"
+      class="icon edit"
+      [disabled]="store.noteLoading()"
+      [attr.aria-label]="'notes.edit' | t"
+      [attr.title]="'notes.edit' | t"
+      (click)="store.startEdit()"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 20h4L19 9l-4-4L4 16z" />
+        <path d="M13.5 6.5l4 4" />
+      </svg>
+    </button>
+  }
+</mc-app-bar>
+
+@if (store.noteError(); as error) {
+  <div class="errbox">
+    <p class="err" role="alert">{{ error }}</p>
+    <button type="button" class="btn ghost" (click)="store.reload()">{{ 'notes.reload' | t }}</button>
+  </div>
+} @else if (store.noteLoading() && store.base() === '') {
+  <p class="hint">{{ 'notes.loading' | t }}</p>
+} @else {
+  <div class="note" [class.editing]="store.editing()">
+    @if (!store.readOnly()) {
+      <div class="mdx-seg modes" role="group" [attr.aria-label]="'notes.mode' | t">
+        @for (m of modes; track m) {
+          <button type="button" class="mdx-seg-btn" [attr.aria-pressed]="store.mode() === m" (click)="pick(m)">
+            {{ modeLabel(m) }}
+          </button>
+        }
+      </div>
+    }
+
+    @if (store.conflict(); as conflict) {
+      <section class="conflict" role="alert" [attr.aria-label]="'notes.conflict.title' | t">
+        <h2 class="ctitle">{{ 'notes.conflict.title' | t }}</h2>
+        <div class="versions">
+          <div class="version">
+            <h3 class="vcap">{{ 'notes.conflict.disk' | t }} · {{ when() }}</h3>
+            <pre class="vtext">{{ conflict.text }}</pre>
+          </div>
+          <div class="version">
+            <h3 class="vcap">{{ 'notes.conflict.mine' | t }}</h3>
+            <pre class="vtext">{{ store.draft() }}</pre>
+          </div>
+        </div>
+        <div class="crow">
+          <button type="button" class="btn primary" [disabled]="store.saving()" (click)="store.keepMine()">{{ 'notes.conflict.keep_mine' | t }}</button>
+          <button type="button" class="btn" [disabled]="store.saving()" (click)="store.keepTheirs()">{{ 'notes.conflict.keep_theirs' | t }}</button>
+        </div>
+      </section>
+    }
+
+    @if (store.saveError(); as error) {
+      <p class="err" role="alert">{{ error }}</p>
+    }
+
+    <div class="body">
+      <mc-markdown
+        [text]="store.draft()"
+        surface="note"
+        [label]="'notes.text_label' | t"
+        [mode]="store.mode()"
+        [modeBar]="false"
+        [editable]="store.editing() && store.mode() !== 'view'"
+        (textChange)="onText($event)"
+      />
+    </div>
+
+    @if (!store.editing()) {
+      @if (store.tags().length > 0) {
+        <ul class="tags" [attr.aria-label]="'notes.tags' | t">
+          @for (tag of store.tags(); track tag) {
+            <li class="tag">#{{ tag }}</li>
+          }
+        </ul>
+      }
+      <div class="actions">
+        @if (store.ticketId(); as ticket) {
+          <button type="button" class="btn ticket" (click)="store.openTicket()">
+            {{ 'notes.ticket' | t: { id: ticket } }} <span aria-hidden="true">›</span>
+          </button>
+        }
+        <button type="button" class="btn ask" (click)="store.askAbout()">{{ 'notes.ask' | t }}</button>
+      </div>
+    }
+  </div>
+}
+
+@if (store.discardAsk() !== null) {
+  <div class="sheet-scrim">
+    <section class="sheet" role="alertdialog" [attr.aria-label]="'notes.discard.title' | t">
+      <h2 class="stitle">{{ 'notes.discard.title' | t }}</h2>
+      <button type="button" class="btn primary" (click)="store.keepEditing()">{{ 'notes.discard.keep' | t }}</button>
+      <button type="button" class="btn danger" (click)="store.confirmDiscard()">{{ 'notes.discard.drop' | t }}</button>
+    </section>
+  </div>
+}
