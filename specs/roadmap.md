@@ -96,6 +96,24 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   widgets, only the `▸ Frontmatter` pill. The vault the checkout prompt adds is the checkout itself, so that route is not
   affected. Fix: the renderer has to learn the prefix from main, or main hands it the checkout-relative path.
 
+- **D-27 — a new ticket on a store fails to open** (cut-over smoke, owner, 2026-11-06). After Create:
+  `ENOENT ... E:\projects\drey-tickets\tickets\inbox\T-0092.md`. `plugins/tickets/renderer/index.ts:1014` opens the card's
+  made-up path with `openTicketFile` instead of the store route `openDricketDocument`. The ticket is fine; opening it
+  from the board works.
+- **D-28 — the Files panel misses a store's new files** (same smoke; the cause read from the code, not run). After Create,
+  T-0092 was not in the tree of the checkout vault. The base's `VaultWatcher` follows the active vault only
+  (`electron/app-services.ts:100`), and no path event for the checkout was found: `hub.emitPaths` is fed by
+  `notes.onChanged` (`server/engine.ts:191`). An open document changed by a run or a terminal `dk put` probably goes
+  stale too; to be checked with the fix.
+- **D-29 — a run starts in Inbox and moves the ticket on** (same smoke). T-0092, in Inbox, ran from there (column `inbox`,
+  203k tokens in), went gate green and moved to Shaping, though `pipeline.md` says the fleet takes nothing from the
+  owner's columns and Building is the one agent column. The owner's words: it never showed as running and stopped by itself.
+- **D-30 — a run leaves a legacy ticket file on a store board** (same smoke; who writes it is open). During that run
+  `tickets/10-inbox/T-0092.md` appeared untracked in the meta vault, in the legacy format
+  (`entered-inbox: 2026-11-06T20:54:42Z`), though the ticket lives in the store. Left in place for the fix to look at.
+- **D-31 — a refusal says "no acceptance criteria" when they exist as prose** (same smoke). `fleet/runs.ts:1684`
+  counts only `- [ ] \`command\`` lines; the message should say so.
+
 (D-23 shipped as milestones 184 and 185, D-24 as 184; what the wave-3 smoke could not see — the Autopilot status
 item and popover in a built app with a runner — waits for the owner's round, noted in the 184 changelog entry.)
 
@@ -720,6 +738,11 @@ checks use a scratch store and a second instance, never `drey-tickets`.
     second prompt.
 
 ### Later
+
+- **req-108 — Choose the run in a ticket's Thread (owner request 2026-11-06, outside the list).** After a second run on
+  a ticket the Thread shows only that one, so the first run cannot be reached (cut-over smoke: the owner lost the way to the run).
+  The Thread needs a session picker. Sequence, the owner's ruling: **designed with Claude Design first, signed off by the owner, and
+  integrated only as part of the run's redesign**, not on its own before it.
 
 - **Text completion (autocomplete).** ⚠️ Latency with a local model is the
   open question — run a spike (time to first suggestion on the target
