@@ -40,6 +40,7 @@ import type {
 } from '../contracts/chat';
 import { titleFromDescription, type BoardSnapshot, type TicketForm, type TicketPriority } from '../contracts/tickets';
 import { parsePlanParts } from '../core/plan-parts';
+import { ticketRefsOf } from '../core/chat-ticket-refs';
 import { changedLinesOf, editsSummary, planDelta, planDeltaForModel, planSectionOf } from '../core/plan-delta';
 import type { PlanShadowStore } from './plan-shadow';
 import {
@@ -68,6 +69,9 @@ const HISTORY_LIMIT = 20;
 const DIGEST_CAP = 2_000;
 /** The ticket text a shape turn embeds in the prompt, ceiling in characters. */
 const TICKET_TEXT_CAP = 30_000;
+/** A named ticket's file in a mission turn, ceiling in characters (up to five ride one turn), and how many of its latest comments. */
+const NAMED_TICKET_CAP = 8_000;
+const NAMED_COMMENTS = 20;
 
 /** The result shape of a board mutation the confirm path executes. */
 export type ChatMutationResult =
@@ -96,7 +100,12 @@ export interface ChatBoardPort {
   /** E9 (concept §5.7): the chain-delta replacement. */
   setChain(input: { readonly id: string; readonly chain: readonly string[]; readonly actor?: string }): Promise<ChatMutationResult>;
   /** E10-2: a ticket's file text (the shared plan lives in it); optional so plain chats need nothing. */
-  readTicket?(id: string): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly error: string }>;
+  readTicket?(
+    id: string,
+  ): Promise<
+    | { readonly ok: true; readonly text: string; readonly comments?: readonly { readonly author: string; readonly at: string; readonly text: string }[] }
+    | { readonly ok: false; readonly error: string }
+  >;
   /**
    * E10-3: replaces the ticket's `## Plan` chapter — the one write a shape
    * turn lets the model make, and nothing else of the ticket changes.
@@ -107,6 +116,16 @@ export interface ChatBoardPort {
     id: string,
     path: string,
   ): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly error: string }>;
+  /**
+   * D-7a: a ticket by id wherever it is — on the board, done or archived —
+   * for the tickets the owner names; the chat falls back to `readTicket`.
+   */
+  readAnyTicket?(
+    id: string,
+  ): Promise<
+    | { readonly ok: true; readonly text: string; readonly comments?: readonly { readonly author: string; readonly at: string; readonly text: string }[] }
+    | { readonly ok: false; readonly error: string }
+  >;
   /** T-0050: the whole `blocked-by:` list replacement (empty = cleared). */
   setBlockedBy(input: { readonly id: string; readonly blockedBy: readonly string[]; readonly actor?: string }): Promise<ChatMutationResult>;
 }
@@ -168,6 +187,9 @@ function boardDigest(snap: BoardSnapshot): string {
   }
   if (snap.columns.length > 0) {
     lines.push(`columns: ${snap.columns.map((c) => `${c.phase.id} (${c.tickets.length})`).join(' → ')}`);
+    // D-7a: the digest lists open tickets only, and the model must not read
+    // that as "the ticket does not exist".
+    lines.push('Closed (terminal-column) tickets and tickets that do not fit are not listed; a ticket the owner names by id is attached below.');
   }
   const terminal = snap.columns.length === 0 ? null : snap.columns[snap.columns.length - 1]!.phase.id;
   const open = snap.columns
@@ -356,11 +378,13 @@ export class ChatService implements ChatServicePort {
     let proposals: ChatProposal[];
     try {
       const shape = ticket === null ? undefined : await this.shapeContext(ticket);
+      const named = await this.namedTickets(text, history);
       const reply = await this.deps.bridge.runTurn({
         text,
         history,
         board: boardDigest(snap),
         priorities: snap.priorities,
+        ...(named === null ? {} : { named }),
         ...(delta === null ? {} : { planDelta: planDeltaForModel(delta) }),
         ...(reference === undefined || reference.trim() === '' ? {} : { reference }),
         ...(shape === undefined ? {} : { shape }),
@@ -437,6 +461,42 @@ export class ChatService implements ChatServicePort {
       ...(thought === null ? {} : { thought }),
       proposals,
     };
+  }
+
+  /**
+   * D-7a: the tickets the owner named, read on demand. The ids come from
+   * this message, else from the latest owner messages (a follow-up such as
+   * "and who merged it?" keeps its ticket). Each ticket's file (and its
+   * comments on a store) is a block of its own; a missing one says so.
+   * Null = nothing was named.
+   */
+  private async namedTickets(text: string, history: readonly { readonly role: string; readonly text: string }[]): Promise<string | null> {
+    let ids = ticketRefsOf(text);
+    if (ids.length === 0) {
+      const recent = history.filter((m) => m.role === 'owner').slice(-3).reverse();
+      for (const message of recent) {
+        ids = ticketRefsOf(message.text);
+        if (ids.length > 0) {
+          break;
+        }
+      }
+    }
+    const reader = this.deps.board.readAnyTicket ?? this.deps.board.readTicket;
+    if (ids.length === 0 || reader === undefined) {
+      return null;
+    }
+    const blocks: string[] = [];
+    for (const id of ids) {
+      const reply = await reader.call(this.deps.board, id).catch((error: unknown) => ({ ok: false as const, error: messageOf(error) }));
+      if (!reply.ok) {
+        blocks.push(`### ${id}\n\nError: ${reply.error}`);
+        continue;
+      }
+      const body = reply.text.length > NAMED_TICKET_CAP ? `${reply.text.slice(0, NAMED_TICKET_CAP)}\n… (cut)` : reply.text;
+      const thread = (reply.comments ?? []).slice(-NAMED_COMMENTS).map((c) => `- ${c.author} · ${c.at}: ${c.text.trim()}`);
+      blocks.push(`### ${id}\n\n${body.trim()}${thread.length === 0 ? '' : `\n\n#### Thread\n\n${thread.join('\n')}`}`);
+    }
+    return `## Tickets the owner named\n\nThese are the tickets' own files, read just now — they hold the truth for these ids, whatever column they sit in (the digest above lists open tickets only).\n\n${blocks.join('\n\n')}`;
   }
 
   // --- shape mode (E10-3) -----------------------------------------------------

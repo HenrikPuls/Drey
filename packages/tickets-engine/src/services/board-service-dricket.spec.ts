@@ -176,7 +176,7 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     service = new EngineBoardService(hostOf(), git2, 'opencode', 'accept-edits', '', fleet, '/fleet', normalizeFleetCaps({}), normalizeFleetPools({}), normalizeFleetHandover({}), 'owner@test', { events: { ledger: (write) => ledgerWrites.push(write.kind), status: (_p, _at, verb) => fileStatus.push(verb) } });
   }, 120_000);
 
-  afterAll(() => {
+  afterAll(async () => {
     for (const [k, v] of Object.entries(saved)) {
       if (v === undefined) {
         delete process.env[k];
@@ -185,6 +185,7 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
       }
     }
     service?.dispose();
+    await service?.idle();
     rmSync(root, { recursive: true, force: true });
   });
 
@@ -292,6 +293,19 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     expect(field('t-1', 'labels')).toContain('archived');
     expect(field('t-1', 'stage')).toBe('done');
     expect(await phaseOf('T-0001')).toBeNull();
+    // D-7a: an accepted (archived) ticket is no card on the board, yet the chat reads it by id.
+    expect(await service.readAnyTicket('T-0001')).toMatchObject({ ok: true, text: expect.stringContaining('T-0001') });
+    expect(await service.readAnyTicket('T-0999')).toMatchObject({ ok: false });
+
+    // E13-21: an archived ticket still opens (document, card), is listed under Show older
+    // and counts for Done this week.
+    const archived = await service.readTicket('T-0001');
+    expect(archived).toMatchObject({ ok: true, card: { id: 'T-0001', phase: 'archive' } });
+    expect(archived.ok && archived.text).toContain('T-0001');
+    expect(await service.archivedTickets()).toMatchObject({ ok: true, tickets: [{ id: 'T-0001' }] });
+    expect(await service.archivedTickets({ query: 'no-such-word' })).toEqual({ ok: true, tickets: [] });
+    expect((await service.snapshot()).recentDone.map((d) => d.id)).toEqual(['T-0001']);
+    expect(await service.readTicket('T-0999')).toMatchObject({ ok: false });
 
     expect(await service.unarchive({ id: 'T-0001', to: 'inbox' })).toMatchObject({ ok: true });
     expect(field('t-1', 'labels')).not.toContain('archived');

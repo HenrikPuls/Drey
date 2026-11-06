@@ -48,6 +48,8 @@ export interface ReviewDeps {
   openSendBack(ticketId: string): void;
   /** The ticket's own file in the editor. */
   openTicketFile(card: TicketCard): void;
+  /** The card of an archived ticket opened from the Done group (E13-21); absent = none. */
+  archivedCard?(ticketId: string): TicketCard | null;
   storage(): MarkStorage | null;
 }
 
@@ -94,7 +96,9 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
   const wholeFiles = new Map<string, TicketFileReply | 'loading'>();
 
   const card = (): TicketCard | null =>
-    deps.snapshot()?.columns.flatMap((column) => column.tickets).find((ticket) => ticket.id === ticketId) ?? null;
+    deps.snapshot()?.columns.flatMap((column) => column.tickets).find((ticket) => ticket.id === ticketId) ??
+    deps.archivedCard?.(ticketId) ??
+    null;
 
   const setMarks = (next: ReviewMarks): void => {
     marks = next;

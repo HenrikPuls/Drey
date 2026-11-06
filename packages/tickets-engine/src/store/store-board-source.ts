@@ -55,6 +55,8 @@ interface Source {
 export class StoreBoardSource {
   private current: Source | null = null;
   private shadowRunning = false;
+  private shadowDone: Promise<unknown> = Promise.resolve();
+  private readonly feeds = new Set<StoreChangeFeed>();
   private shadowAt = 0;
   private lastDiff: BoardDiff | null = null;
 
@@ -100,6 +102,9 @@ export class StoreBoardSource {
           log: this.log,
         });
       feed?.start();
+      if (feed !== null) {
+        this.feeds.add(feed);
+      }
       source = { key, reader, files, feed, remote, synced: false };
     }
     this.current = source;
@@ -110,6 +115,15 @@ export class StoreBoardSource {
   dispose(): void {
     this.current?.feed?.stop();
     this.current = null;
+  }
+
+  /**
+   * Resolves when the background work is over: the watcher's HEAD reads, the ref check, a sync round (of any
+   * feed, also one replaced by new settings) and a running shadow comparison. Call after {@link dispose} before
+   * the folders are let go; the processes it waits for hold their working directory.
+   */
+  async idle(): Promise<void> {
+    await Promise.allSettled([...[...this.feeds].map((feed) => feed.idle()), this.shadowDone]);
   }
 
   /** The file store of the configured checkout, or null when reads go through `dk`. */
@@ -256,7 +270,7 @@ export class StoreBoardSource {
     }
     this.shadowRunning = true;
     this.shadowAt = now;
-    void this.runShadow(settings, input, shown).finally(() => {
+    this.shadowDone = this.runShadow(settings, input, shown).finally(() => {
       this.shadowRunning = false;
     });
   }

@@ -185,6 +185,7 @@ describe('COMPACT_CAPABILITY', () => {
   it('opencode compacts natively, claude-code not yet (spike 1 proved routing, not effect)', () => {
     expect(COMPACT_CAPABILITY['opencode']).toBe('native');
     expect(COMPACT_CAPABILITY['claude-code']).toBe('none');
+    expect(COMPACT_CAPABILITY.kimi).toBe('native');
   });
 });
 

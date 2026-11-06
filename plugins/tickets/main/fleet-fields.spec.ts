@@ -161,7 +161,7 @@ describe('worker values and the assignment ladder', () => {
     const base = { handover: null, repoWorker: null, configuredDefault: 'opencode' };
     expect(resolveAssignment({ ...base, ticketWorker: 'codex' })).toEqual({
       ok: false,
-      error: `the ticket's worker "codex" is unknown — use opencode or claude-code`,
+      error: `the ticket's worker "codex" is unknown — use opencode, claude-code or kimi`,
     });
     expect(resolveAssignment({ ...base, ticketWorker: null, repoWorker: 'codex' })).toEqual({
       ok: true,

@@ -124,6 +124,45 @@ describe('checkpoints', () => {
     expect(checkpoints.has('plan-review')).toBe(true); // between plan and build
     expect(checkpoints.has('prioritized')).toBe(false); // inbox is manual too
   });
+
+  describe('the default pipeline (E12-9c)', () => {
+    const columns = (): BoardColumn[] => [
+      column(phase('inbox'), [card('T-0001', { phase: 'inbox' })]),
+      column(phase('plan', { handover: 'agent plan-default', claim: true }), [card('T-0002', { phase: 'plan' })]),
+      column(phase('build', { handover: 'agent build-default', claim: true }), [card('T-0003', { phase: 'build' })]),
+      column(phase('review'), [card('T-0004', { phase: 'review' })]),
+      column(phase('sign-off'), [card('T-0005', { phase: 'sign-off' })]),
+      column(phase('done')),
+    ];
+
+    it('Review and Sign Off are both the owner checkpoints (the terminal column is one as before); Inbox is a plain queue', () => {
+      expect([...checkpointPhaseIds(columns())]).toEqual(['review', 'sign-off', 'done']);
+    });
+
+    it('a manual column after a checkpoint is one too, but a manual run before the first agent column is not', () => {
+      const cols = [column(phase('inbox')), column(phase('triage')), column(phase('plan', { handover: 'agent plan-default' })), column(phase('done'))];
+      expect([...checkpointPhaseIds(cols)]).toEqual(['done']); // triage is a queue; only the terminal column follows a worker
+    });
+
+    it('the old default pipeline keeps its checkpoints (only the terminal column: commit is an agent column)', () => {
+      const old = [
+        column(phase('inbox')),
+        column(phase('prioritized')),
+        column(phase('build', { handover: 'agent build-default', claim: true })),
+        column(phase('commit', { handover: 'agent commit-default' })),
+        column(phase('done')),
+      ];
+      expect([...checkpointPhaseIds(old)]).toEqual(['done']);
+    });
+
+    it('the machine works Plan and Build only: it never pulls from Inbox, Review or Sign Off', () => {
+      const plan = planDispatch(input({ columns: columns() }));
+      expect(plan.map((p) => [p.card.id, p.workingPhase]).sort()).toEqual([
+        ['T-0002', 'plan'],
+        ['T-0003', 'build'],
+      ]);
+    });
+  });
 });
 
 describe('nextPhaseIdOf', () => {

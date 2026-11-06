@@ -10,7 +10,7 @@
 import { randomBytes } from 'node:crypto';
 import { promises as fsp, existsSync } from 'node:fs';
 import * as path from 'node:path';
-import { archivedTicketIds, nextTicketId, TICKETS_ARCHIVE_DIR, TICKET_ID_PATTERN, type BoardSnapshot, FolderStatus, PipelinePhase, ProjectRef, PromptEntry, PromptListing, RepoCandidate, RepoRef, ReposListing, TicketCard, TicketForm, TicketPriority, TicketTrack } from '../contracts/tickets';
+import { archivedTicketIds, nextTicketId, TICKETS_ARCHIVE_DIR, TICKET_ID_PATTERN, type BoardSnapshot, type RecentDone, FolderStatus, PipelinePhase, ProjectRef, PromptEntry, PromptListing, RepoCandidate, RepoRef, ReposListing, TicketCard, TicketForm, TicketPriority, TicketTrack } from '../contracts/tickets';
 import { parseChanges, parseResult, planApprovedOf, storyOf, type ChangesReply } from '../contracts/changes';
 import { type RefineReply, TicketReply, AttachmentReply, type DocumentSaveReply, type TicketDocumentLocation } from '../contracts/replies';
 import { documentRelPath, idOfDocumentPath } from '../store/document-paths';
@@ -27,7 +27,7 @@ import type { PlanPartCard, PlanPartsEdit, PlanPartsReply, PlanReleaseReply, Pla
 import type { ChainEntry } from '../contracts/chain';
 import { refineTicket, revisionOf } from '../core/ticket-refine';
 import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from '../core/phase-dirs';
-import { detectDrift, recentDoneOf, type DriftDetection } from '../core/normalize';
+import { archivedEntriesOf, detectDrift, recentDoneOf, type DriftDetection } from '../core/normalize';
 import { blockedRefusal } from '../core/blocked';
 import { runTransition, type TransitionIo } from '../core/transition';
 import { openStatusItems, parseStatusLog, type StatusLine, type StatusVerb } from '../core/status-log';
@@ -42,7 +42,7 @@ import { TicketsGit, type RepoLocation } from '../core/tickets-git';
 import { TicketStoreError } from '../ports/ticket-store';
 import { FileTicketStore } from '../store/file-ticket-store';
 import { checkoutOf, createDricketStore, groupByStage, readStoreSettings, type StoreListing, type StoreSettings } from '../store/store-settings';
-import { recordToBoardFile } from '../store/store-board';
+import { archivedRecordFiles, recordToBoardFile } from '../store/store-board';
 import type { TicketDetail } from '../ports/ticket-store';
 import { ARCHIVED_LABEL, type BridgeOptions } from '../store/legacy-bridge';
 import { StoreBoardSource } from '../store/store-board-source';
@@ -79,17 +79,20 @@ const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PLAN_INTERACTIVE_PROMPT = 'plan-interactive-default';
 const DEFAULT_PIPELINE = `---
 phases:
-  - { id: inbox, title: Ideas, handover: manual }
-  - { id: prioritized, title: Prioritized, handover: manual }
+  - { id: inbox, title: Inbox, handover: manual, persona: you }
+  - { id: plan, title: Plan, claim: true, handover: agent plan-default }
   - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default }
-  - { id: commit, title: Commit, handover: agent commit-default }
+  - { id: review, title: Review, handover: manual, persona: you }
+  - { id: sign-off, title: Sign Off, handover: manual, persona: you }
   - { id: done, title: Done, handover: none }
 ---
 The pipeline: ordered phases (first = capture target, last = terminal),
 configurable per handover (manual | agent <prompt-ref> | ci | none).
-Prioritized is the owner's checkpoint: clarify the task and its
-acceptance criteria there; the build step derives file-level detail
-itself, against the code it finds. See specs/ticket-schema.md.
+Inbox is the owner's triage queue: move a ticket into Plan when it is
+worth planning. Plan and Build are worked by agents; the columns the
+human persona works carry persona: you (its name is configurable) -
+Inbox, Review and Sign Off. Review and Sign Off are the owner's
+checkpoints (Sign Off is where the work is committed: merged and pushed). See specs/ticket-schema.md.
 Edit freely; the board follows on refresh.
 `;
 const DEFAULT_REPOS = `---
@@ -178,7 +181,7 @@ function personaPatchError(input: {
     return `the role is one of ${PERSONA_ROLES.join(', ')}`;
   }
   if (input.worker !== undefined && input.worker.trim() === '') {
-    return 'the worker is not empty ("opencode", "claude-code" or "api")';
+    return 'the worker is not empty ("opencode", "claude-code", "kimi" or "api")';
   }
   if (input.model !== undefined && input.model.trim() === '') {
     return 'the default model is not empty';
@@ -349,6 +352,11 @@ export class EngineBoardService {
   /** Stops the store's file watcher and sync round (the engine is shutting down). */
   dispose(): void {
     this.storeBoard.dispose();
+  }
+
+  /** After {@link dispose}: resolves when the store's background processes ended (see `StoreBoardSource.idle`). */
+  idle(): Promise<void> {
+    return this.storeBoard.idle();
   }
 
   onChanged(listener: () => void): () => void {
@@ -616,9 +624,64 @@ export class EngineBoardService {
     return null;
   }
 
+  /**
+   * A ticket that left the board's columns -- accepted into the archive (E13-21): the
+   * files backend reads `tickets/archive/<id>.md`, dricket the record that carries the
+   * `archived` label. Read-only: it opens like any ticket, only its moves are off.
+   */
+  private async findArchived(id: string): Promise<{ vault: EngineVault; card: TicketCard; text: string } | null> {
+    const vault = await this.detect();
+    if (vault === null || !TICKET_ID_PATTERN.test(id)) {
+      return null;
+    }
+    const path = `${TICKETS_ARCHIVE_DIR}/${id}.md`;
+    let text: string;
+    try {
+      if (this.dricket === null) {
+        text = await this.host.read(vault.id, path);
+      } else {
+        const record = await this.storeBoard.record(this.dricket, id);
+        if (!record.labels.includes(ARCHIVED_LABEL)) {
+          return null;
+        }
+        text = recordToBoardFile(record, 'archive').text;
+      }
+    } catch {
+      return null;
+    }
+    const parsed = parseTicketFile(text, path);
+    const card: TicketCard = { id, path, phase: 'archive', meta: parsed.meta, worker: this.defaultWorker, blocked: [], blocks: [], issues: parsed.issues };
+    return { vault, card, text };
+  }
+
+  /**
+   * The archive's tickets of any age (E13-21 "Show older"), newest first, narrowed by
+   * `query` (id or title words): the files backend reads `tickets/archive/`, dricket the
+   * archived records. The Work panel and Mission Control list them behind "Show older".
+   */
+  async archivedTickets(input: { query?: string; limit?: number } = {}): Promise<{ ok: true; tickets: readonly RecentDone[] } | { ok: false; error: string }> {
+    try {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: true, tickets: [] };
+      }
+      const store = await this.refreshDricket();
+      const files = store === null
+        ? await Promise.all(
+            (await this.host.listMarkdownFiles(vault.id))
+              .filter((p) => p.startsWith(`${TICKETS_ARCHIVE_DIR}/`))
+              .map(async (path) => ({ path, text: await this.host.read(vault.id, path) })),
+          )
+        : archivedRecordFiles(await this.storeBoard.records(store));
+      return { ok: true, tickets: archivedEntriesOf(files, { query: input.query, limit: input.limit }) };
+    } catch (error) {
+      return { ok: false, error: messageOf(error) };
+    }
+  }
+
   /** One ticket's card and file text, for the remote's ticket view (req-66). */
   async readTicket(id: string): Promise<TicketReply> {
-    const found = await this.findCard(id);
+    const found = (await this.findCard(id)) ?? (await this.findArchived(id));
     if (found === null) {
       return { ok: false, error: `${id} is not on the board` };
     }
@@ -630,6 +693,34 @@ export class EngineBoardService {
       revision: revisionOf(found.text),
       ...(comments === null ? {} : { comments }),
     };
+  }
+
+  /**
+   * One ticket by id for the chat (D-7a): a card on the board, else an archived
+   * ticket — an accepted ticket leaves the board (`tickets/archive/` on the files
+   * backend, the `archived` label on dricket) and `readTicket` knows no card for
+   * it. Text and comments only: an archived ticket has no card to show.
+   */
+  async readAnyTicket(id: string): Promise<{ readonly ok: true; readonly text: string; readonly comments?: readonly TicketCommentView[] } | { readonly ok: false; readonly error: string }> {
+    const onBoard = await this.readTicket(id);
+    if (onBoard.ok) {
+      return { ok: true, text: onBoard.text, ...(onBoard.comments === undefined ? {} : { comments: onBoard.comments }) };
+    }
+    const vault = await this.detect();
+    if (vault === null) {
+      return onBoard;
+    }
+    try {
+      const store = this.dricket;
+      if (store !== null) {
+        const record = await this.storeBoard.record(store, id);
+        return { ok: true, text: recordToBoardFile(record, record.stage).text, comments: await this.commentsOf(store, id) };
+      }
+      const archived = (await this.host.listMarkdownFiles(vault.id)).find((p) => p === `${TICKETS_ARCHIVE_DIR}/${id}.md`);
+      return archived === undefined ? onBoard : { ok: true, text: await this.host.read(vault.id, archived) };
+    } catch {
+      return onBoard; // the store does not know the id either: the honest "not on the board"
+    }
   }
 
   /** The ticket's comments read from the store's `comments/` files, oldest first (E14-6); empty off dricket. */
@@ -3363,8 +3454,8 @@ export class EngineBoardService {
       }
       if (input.worker !== undefined) {
         const worker = input.worker?.trim() ?? '';
-        if (worker !== '' && worker !== 'opencode' && worker !== 'claude-code') {
-          return { ok: false, error: 'the worker is "opencode" or "claude-code"' };
+        if (worker !== '' && worker !== 'opencode' && worker !== 'claude-code' && worker !== 'kimi') {
+          return { ok: false, error: 'the worker is "opencode", "claude-code" or "kimi"' };
         }
       }
       if (input.color !== undefined) {
@@ -3879,6 +3970,23 @@ export class EngineBoardService {
    * Called where the persona is first shown (the Team list, the flow editor) -
    * never on a plain board refresh, so a vault nobody opens it in stays untouched.
    */
+  /** The configured display name of the human persona (`personas.humanName`), 'You' when unset or blank. */
+  private async humanNameOfConfig(): Promise<string> {
+    return (((await this.host.configGet<string>('personas.humanName')) ?? '').trim()) || 'You';
+  }
+
+  /**
+   * Renames the human persona (Settings -> Tickets -> Team, "Your name"): the persona file's
+   * title is what every surface shows (column pins, Team, the flow editor, the phone), so the
+   * rename is one `personaPatch`; a missing persona is created first. Blank = back to "You".
+   * The caller stores the same name in config `personas.humanName` so new boards start with it.
+   */
+  async setHumanName(name: string): Promise<BoardMutationResult> {
+    const title = name.trim() === '' ? 'You' : name.trim();
+    await this.ensureHumanPersona();
+    return this.personaPatch({ id: HUMAN_PERSONA_ID, title });
+  }
+
   ensureHumanPersona(): Promise<void> {
     return this.enqueue(async () => {
       try {
@@ -3890,8 +3998,7 @@ export class EngineBoardService {
         if ((await this.readOptional(vault.id, personaPath)) !== null) {
           return;
         }
-        const name = (((await this.host.configGet<string>('personas.humanName')) ?? '').trim()) || 'You';
-        await this.host.write(vault.id, personaPath, personaFileText(humanPersona(name)));
+        await this.host.write(vault.id, personaPath, personaFileText(humanPersona(await this.humanNameOfConfig())));
         await this.commit(vault, [personaPath], 'tickets: you persona');
         this.host.announceChanges(vault.id, [personaPath]);
         this.announceChanged();
@@ -4544,9 +4651,11 @@ export class EngineBoardService {
       }
       const shipped = await loadShippedPrompts();
       const promptPaths = [...shipped.keys()].map((ref) => `${PROMPTS_DIR}/${ref}.md`);
+      const humanPersonaPath = `${PERSONAS_DIR}/${HUMAN_PERSONA_ID}/persona.md`;
       try {
         await this.host.write(target.id, PIPELINE_PATH, DEFAULT_PIPELINE);
         await this.host.write(target.id, REPOS_PATH, DEFAULT_REPOS);
+        await this.host.write(target.id, humanPersonaPath, personaFileText(humanPersona(await this.humanNameOfConfig())));
         for (const [ref, text] of shipped) {
           await this.host.write(target.id, `${PROMPTS_DIR}/${ref}.md`, text);
         }
@@ -4558,10 +4667,10 @@ export class EngineBoardService {
       await this.ensureWorktreesIgnored(target);
       const warning = await this.commit(
         target,
-        [PIPELINE_PATH, REPOS_PATH, ...promptPaths],
+        [PIPELINE_PATH, REPOS_PATH, humanPersonaPath, ...promptPaths],
         'tickets: initialize board',
       );
-      this.host.announceChanges(target.id, [PIPELINE_PATH, REPOS_PATH, ...promptPaths]);
+      this.host.announceChanges(target.id, [PIPELINE_PATH, REPOS_PATH, humanPersonaPath, ...promptPaths]);
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };
     });

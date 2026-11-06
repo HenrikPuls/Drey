@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { MC_CHAT_STATE } from '../chat/chat.model';
@@ -21,6 +22,8 @@ import {
 } from '../work/work.model';
 import { AppBar } from '../app-bar/app-bar';
 import { Markdown } from '../markdown/markdown';
+import type { MdMode } from '../markdown/mode';
+import { TicketEditMode, TicketModeSwitch } from './mode-switch';
 import { planPartsOf, planSectionOf } from '../plan/plan.model';
 import {
   ACCEPT_ARM_WINDOW_MS,
@@ -32,6 +35,8 @@ import {
   chainStepsOf,
   changeCountOf,
   costTableOf,
+  defaultFaceOf,
+  ticketRunActive,
   estimateLineOf,
   changeRowsOf,
   commentLabelOf,
@@ -110,16 +115,16 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
  * view of the active chat session: the messages whose text names the
  * ticket plus the proposal cards whose command does, the question's
  * option card ('Auswahl nie = Aktion' — a tap marks only, the send row
- * acts), and a composer prefilled with the `<id>:` context that sends
+ * acts), and an empty composer (the id goes in front on send) that sends
  * into the active session like the chat tab does. Read-only paired
  * devices watch: the writing actions hide entirely.
  */
 @Component({
   selector: 'mc-ticket',
   templateUrl: './view.html',
-  styleUrl: './view.css',
+  styleUrls: ['../seg.css', './view.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, Markdown, AppBar],
+  imports: [NgTemplateOutlet, Markdown, TicketModeSwitch, AppBar],
 })
 export class TicketView {
   protected readonly vm = inject(MC_TICKET);
@@ -160,6 +165,34 @@ export class TicketView {
   /** The screen's face; every open resets it to the ticket. */
   protected readonly mode = signal<TicketMode>('ticket');
 
+  /**
+   * The segmented control "Ticket | Thread | Review" (E13-20), the same
+   * strip on every face: Review is the proof face. The choice is per
+   * selection — view state only, nothing here touches a saved view.
+   */
+  protected readonly faces: readonly { readonly face: TicketMode; readonly label: string }[] = [
+    { face: 'ticket', label: 'Ticket' },
+    { face: 'thread', label: 'Thread' },
+    { face: 'proof', label: 'Review' },
+  ];
+
+  protected setFace(face: TicketMode): void {
+    if (face === 'proof') {
+      this.openProof();
+    } else if (face === 'thread') {
+      this.openThread();
+    } else {
+      this.backToTicket();
+    }
+  }
+
+  /** True while this ticket's run is active or waiting (the default face is then the run). */
+  private runActive(): boolean {
+    const id = this.id();
+    const work = this.work;
+    return work === null ? false : ticketRunActive(id, work.runs ?? [], work.needs);
+  }
+
   protected openProof(): void {
     if (this.isEmpty()) {
       return;
@@ -171,12 +204,9 @@ export class TicketView {
     if (this.isEmpty()) {
       return;
     }
+    // D-7b: the composer opens empty — the ticket context travels with the
+    // send (threadSend), never as text in the owner's field.
     this.mode.set('thread');
-    // The composer inherits the ticket context as the `<id>:` prefix —
-    // one prefill per open, the owner's own edits keep.
-    if (this.threadDraft().trim() === '') {
-      this.threadDraft.set(`${this.id()}: `);
-    }
   }
 
   /** Back to the ticket face (the proof/thread header's back arrow). */
@@ -188,11 +218,23 @@ export class TicketView {
    * A fresh ticket starts on its ticket face with a clean thread — the
    * ring belongs to one accept only, and the draft to one open.
    */
+  /**
+   * The open ticket's id as a value-compared signal: `doc()` is a new object
+   * on every reload (a sent message reloads the board and the ticket), and
+   * an effect reading `doc()?.id` re-runs on each of them — it bounced the
+   * owner out of the thread face right after sending (D-7c).
+   */
+  private readonly docId = computed(() => this.doc()?.id ?? null);
+
   private readonly resetPerTicket = effect(() => {
-    this.doc()?.id;
-    this.mode.set('ticket');
+    this.docId();
+    // The face a selection opens on: the run while it is active or waiting,
+    // the ticket document otherwise (E13-20). Read untracked: a run starting
+    // later does not yank the face away from where the owner is reading.
+    untracked(() => this.mode.set(defaultFaceOf(this.runActive())));
     this.accepted.set(false);
-    this.threadDraft.set('');
+    // A run face opens with the `<id>:` prefix the thread's composer always carries.
+    this.threadDraft.set(untracked(() => (this.mode() === 'thread' ? `${this.id()}: ` : '')));
     this.threadError.set(null);
     this.threadQSelected.set(null);
     this.threadQPending.set(false);
@@ -223,15 +265,6 @@ export class TicketView {
    */
   protected readonly cost = computed<string | null>(() => usdLabelOf(this.doc()?.usage?.cost ?? null));
 
-  /** The mono frontmatter line under the title: `phase: x · persona: y`. */
-  protected readonly fmLine = computed(() => {
-    const doc = this.doc();
-    if (doc === null) {
-      return '';
-    }
-    const persona = this.persona();
-    return persona === null ? `phase: ${doc.phase}` : `phase: ${doc.phase} · persona: ${persona}`;
-  });
 
   protected readonly steps = computed<GateStep[]>(() => {
     const doc = this.doc();
@@ -596,7 +629,7 @@ export class TicketView {
     return threadItemsOf(doc.id, active.messages, active.proposals);
   });
 
-  /** The thread composer's draft — prefilled with the `<id>:` context on open. */
+  /** The thread composer's draft — empty on open; the ticket id is added on send. */
   protected readonly threadDraft = signal('');
   protected readonly threadSending = signal(false);
   protected readonly threadError = signal<string | null>(null);
@@ -620,10 +653,14 @@ export class TicketView {
    */
   protected async threadSend(): Promise<void> {
     const chat = this.chat;
-    const text = this.threadDraft().trim();
-    if (chat === null || text === '' || this.threadSending() || this.readOnly()) {
+    const typed = this.threadDraft().trim();
+    if (chat === null || typed === '' || this.threadSending() || this.readOnly()) {
       return;
     }
+    // The thread lists the messages that name its ticket, and the desk reads
+    // the ticket the message names: the id goes in front unless typed already.
+    const id = this.id();
+    const text = id === '' || typed.includes(id) ? typed : `${id}: ${typed}`;
     this.threadError.set(null);
     this.threadSending.set(true);
     try {
@@ -823,19 +860,27 @@ export class TicketView {
   // --- the raw-edit exception path (rendered by mc-ticket-edit) --------------------
 
   /**
-   * The edit pencil in the header: the vm owns the mode so the view and
-   * the editor agree on it — the view yields the overlay to the editor
-   * while the mode stands.
+   * The Live | View | Source switch in the header, where the edit pencil was
+   * (E13-23): View is where the ticket is read; Live and Source are how the
+   * owner edits — picking one opens the editor in that mode. The vm owns the
+   * editing state so the view and the editor agree on it; the view yields
+   * the overlay to the editor while it stands.
    */
   protected readonly editing = computed(() => this.vm.editing());
 
-  protected toggleEdit(): void {
-    if (this.readOnly() || this.isEmpty()) {
+  private readonly editMode = inject(TicketEditMode);
+
+  /** The mode the editor opens in (spec lens). */
+  protected editModeValue(): 'live' | 'source' {
+    return this.editMode.mode();
+  }
+
+  protected onModePick(mode: MdMode): void {
+    if (mode === 'view' || this.readOnly() || this.isEmpty()) {
       return;
     }
-    if (this.vm.editing()) {
-      this.vm.exitEdit();
-    } else {
+    this.editMode.mode.set(mode);
+    if (!this.vm.editing()) {
       this.vm.enterEdit();
     }
   }
@@ -852,8 +897,7 @@ export class TicketView {
     if (doc === null) {
       return;
     }
-    const prefill = this.vm.prefillChat ?? this.vm.proposeChain;
-    prefill.call(this.vm, `${doc.id}: `);
+    this.vm.openChat?.();
   }
 
   // --- shape mode (E10-3) ---------------------------------------------------------

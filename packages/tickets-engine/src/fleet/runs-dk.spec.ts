@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TicketStoreError } from '../ports/ticket-store';
 import type { ProviderAdapter, ProviderStart, WorkerHandle } from './providers';
 import { RunSupervisor, type RunSupervisorDeps } from './runs';
-import type { RunDkTarget, RunRequest, RunState } from './protocol';
+import type { RunDkTarget, RunRequest } from './protocol';
+import { drainSupervisors, markSettled, settled, trackSupervisor, waitFor } from './run-spec-support';
 import { FakeStore, FakeTimers } from './run-lease.fake';
 import { runOwnerId } from './run-lease';
 
@@ -73,7 +74,6 @@ const TARGET: RunDkTarget = {
 
 let fleetRoot = '';
 let vaultDir = '';
-const settledRuns = new WeakMap<RunSupervisor, Set<string>>();
 
 function request(overrides: Partial<RunRequest> = {}): RunRequest {
   return {
@@ -124,20 +124,16 @@ function setup(overrides: Partial<RunSupervisorDeps> = {}) {
     leaseTimers: timers,
     ...overrides,
     onRunSettled: (info) => {
-      settledRuns.get(sup)?.add(info.id);
+      markSettled(sup, info.id);
     },
   });
-  settledRuns.set(sup, new Set());
+  trackSupervisor(sup);
   const original = store.claim.bind(store);
   store.claim = (id, options) => {
     order.push('claim');
     return original(id, options);
   };
   return { sup, store, timers, adapter, order, logs };
-}
-
-async function settled(sup: RunSupervisor, id: string, state: RunState): Promise<void> {
-  await vi.waitFor(() => expect(settledRuns.get(sup)?.has(id) === true ? sup.get(id)?.state : 'not settled yet').toBe(state));
 }
 
 async function started(sup: RunSupervisor, req: RunRequest): Promise<string> {
@@ -154,6 +150,7 @@ describe('RunSupervisor on a dricket store (E14-5)', () => {
     fleetRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-fleet-'));
   });
   afterEach(async () => {
+    await drainSupervisors();
     await fsp.rm(vaultDir, { recursive: true, force: true });
     await fsp.rm(fleetRoot, { recursive: true, force: true });
   });
@@ -322,7 +319,7 @@ describe('RunSupervisor on a dricket store (E14-5)', () => {
     const t = setup();
     const id = await started(t.sup, request());
     t.adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:00Z', kind: 'usage', tokensIn: 1200, tokensOut: 300 });
-    await vi.waitFor(() => expect(t.sup.get(id)?.tokensIn).toBe(1200));
+    await waitFor(() => expect(t.sup.get(id)?.tokensIn).toBe(1200));
     t.adapter.handles[0]!.result();
     t.adapter.handles[0]!.fail(0);
     await settled(t.sup, id, 'done');
@@ -352,7 +349,7 @@ describe('RunSupervisor on a dricket store (E14-5)', () => {
       kind: 'note',
       waiting: { kind: 'question', text: 'Which shortcut?', requestId: 'q1', questions: [{ question: 'Which shortcut?', header: 'Key', options: [{ label: 'Ctrl+K', description: '' }] }] } as never,
     });
-    await vi.waitFor(() => expect(t.store.of('release')).toHaveLength(1));
+    await waitFor(() => expect(t.store.of('release')).toHaveLength(1));
     const wait = t.store.of('comment')[0]?.text ?? '';
     expect(wait).toMatch(/^needs-decision: \[run-[a-z0-9-]+-waits\] /);
     expect(t.timers.armed).toBeNull(); // no keep-alive while nobody holds the claim
@@ -372,7 +369,7 @@ describe('RunSupervisor on a dricket store (E14-5)', () => {
     const t = setup();
     const id = await started(t.sup, request({ nextPhase: null, nextPhaseDir: null }));
     t.adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:01Z', kind: 'note', waiting: { kind: 'question', text: 'Which?', requestId: 'q1', questions: [{ question: 'Which?', header: 'k', options: [{ label: 'a', description: '' }] }] } as never });
-    await vi.waitFor(() => expect(t.store.of('release')).toHaveLength(1));
+    await waitFor(() => expect(t.store.of('release')).toHaveLength(1));
     t.store.failNext('claim', new TicketStoreError('claimed', 'ticket t-1 is claimed by henrik', 11));
     const answer = await t.sup.answerQuestion(id, { 'Which?': ['a'] } as never);
     expect(answer.ok).toBe(false);

@@ -22,7 +22,7 @@ import type { ChatDecisionResult, ChatShapeResult, ChatSession, ChatSplitChoice,
 import type { FleetSnapshot } from '../services/fleet-client';
 import type { ChainMaster, ChainStatus, ColumnMode, WaitQuestion } from '../fleet/protocol';
 import type { ShapedQuestion } from './question-shape';
-import type { BoardSnapshot, CreateResult, MutationResult, TicketCard } from './tickets';
+import type { BoardSnapshot, CreateResult, MutationResult, RecentDone, TicketCard } from './tickets';
 import type { ImprovementProposal, ImprovementState } from '../core/improvements';
 import type { Persona, PersonaRouter } from '../core/persona';
 import type { ScoutReport } from './scout';
@@ -141,6 +141,8 @@ export interface TicketsRemotePort {
   fleet(): Promise<FleetSnapshot>;
   needs(): Promise<readonly NeedItem[]>;
   ticket(id: string): Promise<TicketReply>;
+  /** The archive's tickets of any age, newest first (E13-21 "Show older"). */
+  archiveList(): Promise<readonly RecentDone[]>;
 
   create(cmd: CreateCommand, actor: string): Promise<CreateResult>;
   move(cmd: TransitionCommand, actor: string): Promise<MutationResult>;

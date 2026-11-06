@@ -1032,6 +1032,12 @@ export interface TicketVm {
    */
   prefillChat?(text: string): void;
   /**
+   * The ticket view's 'Change by chat' CTA (D-7b): leaves the ticket for the
+   * chat with an empty composer — no `<id>:` text in the owner's field; the
+   * desk resolves the ticket ids the owner types. Optional like `prefillChat`.
+   */
+  openChat?(): void;
+  /**
    * The ticket face's 'Shape with Paul' (E10-3): opens the chat on this
    * ticket's shape session. Optional — an adapter without shape sessions
    * leaves it off and the button hides.
@@ -1080,6 +1086,7 @@ const EMPTY_TICKET: TicketVm = {
   onClose: () => undefined,
   proposeChain: () => undefined,
   prefillChat: () => undefined,
+  openChat: () => undefined,
   save: () => Promise.resolve({ ok: false, error: 'Not connected to a desk.' }),
   accept: () => Promise.resolve({ ok: false, error: 'Not connected to a desk.' }),
   sendBack: () => Promise.resolve({ ok: false, error: 'Not connected to a desk.' }),
@@ -1303,4 +1310,37 @@ export function planChipOf(plan: McPlanStatus | null): string | null {
     return null;
   }
   return `${plan.edits} new ${plan.edits === 1 ? 'edit' : 'edits'} of yours ${plan.edits === 1 ? 'goes' : 'go'} along`;
+}
+
+// --- the face a ticket opens on (E13-20) ----------------------------------------------
+
+/** The run states that mean the runner is active (`dto` `LIVE_RUN_STATES`). */
+const ACTIVE_RUN_STATES: readonly string[] = ['starting', 'running', 'stopping', 'detached'];
+
+/** The needs that are a checkpoint for the owner, not a run waiting (accept, a scout report). */
+const NON_RUN_NEEDS: readonly string[] = ['manual', 'report'];
+
+/**
+ * True while a ticket's run is active or waiting (on a question, a gate, a
+ * quota): a live run names it, or a run need (not an accept checkpoint) does.
+ */
+export function ticketRunActive(
+  id: string,
+  runs: readonly { readonly state?: string | null; readonly ticketId?: string }[],
+  needs: readonly { readonly kind: string; readonly ticketId?: string | null }[],
+): boolean {
+  return (
+    runs.some((run) => run.ticketId === id && run.state != null && ACTIVE_RUN_STATES.includes(run.state)) ||
+    needs.some((need) => need.ticketId === id && !NON_RUN_NEEDS.includes(need.kind))
+  );
+}
+
+/**
+ * The face a ticket opens on: the run (the thread) while the runner is
+ * active or waiting, the ticket document otherwise — also while no run has
+ * happened yet. A per-selection default; the owner's switch wins until the
+ * next ticket is selected.
+ */
+export function defaultFaceOf(runActive: boolean): 'ticket' | 'thread' {
+  return runActive ? 'thread' : 'ticket';
 }

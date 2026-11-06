@@ -13,7 +13,7 @@ import type { ChainStatus, RunInfo } from '../../../../packages/tickets-engine/s
 const LIVE_STATES: readonly string[] = ['starting', 'running', 'stopping', 'detached'];
 
 /** A provider id as the pool chips name it (the mobile client's labels). */
-const POOL_LABEL: Readonly<Record<string, string>> = { opencode: 'Local', 'claude-code': 'Claude Code' };
+const POOL_LABEL: Readonly<Record<string, string>> = { opencode: 'Local', 'claude-code': 'Claude Code', kimi: 'Kimi Code' };
 
 /** The context fill from which a stuck run's line mentions it. */
 const CONTEXT_WARN_PCT = 60;

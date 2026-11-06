@@ -266,7 +266,7 @@ files paths unchanged.
   ticket sat in before the claim (dk moves a claimed ticket into the first claim stage), else to the
   stage before the working one — an agent may not release into the stage it is in.
 - Park = comment + release to `blocked` **when the pipeline has such a stage**; the migrated store
-  has none (`inbox prioritized build commit done`), so a parked ticket keeps its stage with the
+  has none (`inbox prioritized build commit done`; the new default `inbox plan build review sign-off done`, E12-9c, has none either), so a parked ticket keeps its stage with the
   comment — OD-4 decides whether `blocked` joins the vocabulary.
 - `Dricket-*` trailers and `dk validate --trailers` in the gate are opt-in (`tickets.dk.trailers`).
 

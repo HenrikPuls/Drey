@@ -1,4 +1,4 @@
-### Milestone 168 — E13-24: Mission Control phone — one app bar on every page
+### Milestone 170 — E13-24: Mission Control phone — one app bar on every page
 
 **Not yet manually verified by the owner.** Owner markup 2026-11-06, roadmap E13-24
 (`docs/design/work-panel/mc-phone-appbar-*.jpg`).
@@ -28,6 +28,262 @@
   layer scrolls. **Only the owner's iPhone can confirm the safe-area inset** (a desktop browser
   reports 0).
 - **Docs:** manual (Mission Control phone).
+
+### Milestone 168 — D-8: the flaky gate specs fixed at the cause
+
+**Production code changed (shutdown only), test infrastructure mostly; not checked in a running app.** Owner request, roadmap D-8. Measurements, causes and rules: [`docs/testing-flakes.md`](../docs/testing-flakes.md).
+
+- **Dominant cause: oversubscription.** vitest ran one worker per core (32), many of them spawning real git / dk; real-git specs crossed the 5 s default and cleanups raced live children. `vitest.plugins.config.mts` caps the workers (cores / 4, 2-8) and puts the process-spawning specs (`packages/**`, `plugins/git/**`) in their own project with a 60 s budget. Two overlapping suites: 12-13 failed tests each before, 10 of 10 runs green after (97 s instead of 175 s).
+- **Shutdown that returned too early (production).** `createEngine` kept no handle on its startup `videos.prepare()`; `Engine` has `ready` and `close()` awaits it, `board.idle()` and `git.idle()`. New `TicketsGit.idle()`, `StoreChangeFeed.idle()` (HEAD reads, ref check, sync rounds tracked), `StoreBoardSource.idle()` (+ shadow run), `BoardService.idle()`, `RunSupervisor.idle()` (persists, worker exits, event queue, soft-pause interrupt tracked). `dispose()`/`stop()` stay synchronous.
+- **Specs.** `fleet/run-spec-support.ts` (shared by `runs.spec` / `runs-dk.spec`): `settled()` awaits the `onRunSettled` event instead of polling a clock, `waitFor` uses the test's own timeout as ceiling, supervisors are drained before temp dirs are removed. "defers while a run is in its machine gate" had a lost wake-up (release wired inside `execShell`, which can run after the blocker turned true) — a real hang on a slow machine. `videos.limitMb` spec awaits `engine.ready`; the dk file-store specs await `source.idle()` after `dispose()`.
+- **Rule** added to CLAUDE.md (Toolchain): await the shutdown before removing a temp dir.
+
+### Milestone 167 — E10-8: Kimi Code as a selectable worker
+
+**Not yet manually verified by the owner.** Owner request 2026-11-05, roadmap E10-8.
+Investigation and the full CLI findings: [`docs/design/kimi-worker.md`](../docs/design/kimi-worker.md).
+
+- **Adapter.** `kimi` (label "Kimi Code") is the third worker next to `opencode` and
+  `claude-code`: `packages/tickets-engine/src/fleet/kimi.ts` drives `kimi acp` (Agent Client
+  Protocol over stdio, pinned against kimi 2.4.1) — not `kimi -p`, which auto-approves everything
+  and reports no usage. It maps thoughts, answer text, tool calls and results to the run stream
+  (edit line counts from `Write`/`Edit` arguments), holds ACP approval requests as the run's
+  permission wait (`answerPermission`) and Kimi's `AskUserQuestion` as a question wait
+  (`answerQuestion`; a free-text reply skips the question and rides the next turn), steers by
+  cancelling a running turn and prompting next (`inject`), interrupts with `session/cancel`,
+  resumes with `session/load` (a failed load → `onResumeFailed`, the supervisor starts fresh),
+  compacts with `/compact` (`COMPACT_CAPABILITY.kimi = native`), maps the permission mode
+  (`bypass` → ACP `yolo`, `accept-edits` → `auto`) and the model through
+  `session/set_config_option`. The run ends on the prompt's `end_turn`; the process is then
+  stopped. A `QUESTION:` / `BLOCKED:` final message works as for the other workers.
+- **Tokens and cost.** ACP carries neither: `kimi-usage.ts` reads the `usage.record` lines of the
+  session's `wire.jsonl` (`~/.kimi-code`, `KIMI_HOME`) after each turn (per-call `turnUsage`,
+  totals; a resumed session's earlier spend is skipped) and the cost is computed from
+  `core/model-prices.ts` (rows added for the CLI's `k3*` / `kimi-for-coding*` aliases at the
+  Kimi K2 rate).
+- **Everywhere workers are listed:** `WorkerProviderId` / `WORKER_PROVIDERS`, pool normalisation,
+  the chain and orchestrator pools, the runner's adapter table, Settings → Tickets (Default
+  worker, column worker choice, Workers switch with pool size and compact threshold), the
+  persona worker validation and the Team worker options, the Mission Control labels, the
+  `start run` tool text, the model picker (`worker-models.ts`: the aliases of Kimi's
+  `config.toml`; `kimi-probe.ts`: installed? has a provider? — the picker's note says "run
+  `kimi login`" when not). The default worker stays `opencode`; nothing changes for existing
+  boards.
+- **Limitations** (design doc; roadmap follow-ups): no budget cap in the CLI, a question has no
+  free-text answer, no quiet start (`holdAtSpawn`) and no re-attach after a runner restart, the
+  price table is editorial, no quota/rate-limit signal was provoked (an error text from the CLI
+  reaches the existing text-based breaker).
+- **Tests:** `kimi.spec.ts` (scripted ACP agent with the shapes recorded from the real CLI:
+  handshake and brief, mode/model, resume and failed resume, compact first and usage base,
+  approval wait and answer, question by label and by free text, `QUESTION:` / `BLOCKED:`,
+  steer/interrupt, hold, failing prompt, unsupported request, stop; `parseKimiWire`),
+  `kimi-probe.spec.ts`, plus kimi cases in `settings-workers.spec.ts`, `worker-models.spec.ts`,
+  `handover.spec.ts`. **Real smoke:** a scratch run through the adapter against the logged-in
+  CLI (model `kimi-code/k3` and the config default) wrote a file, streamed its thoughts and tool
+  calls, reported 31.9 k tokens in and a cost of $0.019, and exited 0.
+- **Docs:** manual (Workers), docs/05, `docs/design/kimi-worker.md`.
+
+### Milestone 166 — E12-9c: the default pipeline is Inbox · Plan · Build · Review · Sign Off · Done
+
+**Not yet manually verified by the owner.** Owner decision 2026-11-05 (answering E12-9b Q1; outside the
+list). Design note: `docs/design/work-panel/default-pipeline.md`.
+
+- **New boards.** "Initialize board" writes six columns: `inbox` **Inbox** (manual, capture target) ·
+  `plan` **Plan** (agent `plan-default`, claim) · `build` **Build** (agent `build-default`, claim,
+  wip 3; the machine gate and proof stay inside Build) · `review` **Review** (manual) · `sign-off`
+  **Sign Off** (manual — where the work is committed; takes the role of `commit` and its checkpoint
+  discipline) · `done`. The first column is titled **Inbox** again (reverses E12-9's "Ideas",
+  milestone 164; the id and folder were always `inbox`). The phone capture button already follows the
+  first column's title (*Create in Inbox*). Existing boards and stores keep their columns — a default is
+  only written into an empty repository (test with the old five-column pipeline: untouched, same
+  columns, same checkpoints).
+- **Manual = the human persona (owner ruling 2026-11-05).** Inbox, Review and Sign Off carry `persona: you`
+  (`handover: manual` stays); "Initialize board" also writes `personas/you`. The name is configurable:
+  Settings → Tickets → Team → *Your name* (`personas.humanName` + one `personaPatch` of the persona's
+  title; engine method `setHumanName`); the flow editor's owner label and the Settings chips read the
+  persona title instead of a hard-coded "You". Existing boards keep their pins (none) and get the persona
+  on first sight as before.
+- **Engine rule widened.** `checkpointPhaseIds`: a manual column that directly follows a checkpoint is
+  one too, so Sign Off (behind the manual Review) raises Needs-you cards. No shipped pipeline had two
+  manual columns after a worker column; the old default's checkpoints are unchanged (spec).
+- **dricket.** `DEFAULT_MIGRATION_CONFIG`: stages `inbox plan build review sign-off done`, new `claim:
+  ['plan','build']` (the scratch config no longer hard-codes `build|commit`), new `legacyPhases`
+  (`prioritized` → `inbox`, `commit` → `sign-off`; matching ids stay; other phases skip as before).
+  `stageOfLegacyPhase`, the shadow diff maps legacy phases the same way; the reverse converter takes
+  `--stages a,b,c` (default the new six). `scripts/verify-dricket.ps1` seeds the six stages and a
+  matching `pipeline.md`. No `blocked` stage (unchanged). Checked against dk v0.6.2
+  (`docs/protocol.md`): the first claim stage is now `plan`; Review/Sign Off stay out of `claim` so
+  `dk next` never offers owner work to agents.
+- **Docs.** Manual (default pipeline, Inbox wording, Accept → Sign Off), `specs/ticket-schema.md`
+  (default, folders, checkpoint rule), ADR-0090, `plugins/tickets/BOARD.md` (Sign Off = the commit
+  checkpoint), the E12-9 audit rows. `e2e/manual-screenshots.spec.ts` holds no ticket data, so nothing
+  to change there; the e2e specs that spell their own five-column pipeline play an existing board.
+- **Tests.** `board-service.spec.ts` (six columns, handovers, claim stages, persona pins, checkpoints; rename
+  of the human persona; old default untouched), `flow-model.spec.ts` (configured name), `chain.spec.ts` (checkpoints of the new and the old default, the dispatcher works Plan and
+  Build only), `convert.spec.ts` (mapping), `roundtrip.spec.ts` (old vocabulary still round-trips; new
+  default: toml, and a real-dk re-run migration landing in the new columns with `dk validate` clean).
+- **Left out → roadmap E12-9d.** A checkpoint between Plan and Build, an agent "Merge and push" at Sign
+  Off, a reverse converter reading the store's stages, the empty *Prioritized* group, E12-9b Q2/Q3.
+
+### Milestone 165 — D-7: the phone chat about a ticket (named tickets, no id prefix, no view bounce, iOS keyboard)
+
+**Not yet manually verified by the owner.** Owner report 2026-11-05, real vault, iPhone; roadmap D-7.
+
+- **(a) Cause — "not in the current board excerpt".** The mission prompt's board digest
+  (`boardDigest` in `chat-service.ts`) lists *open* tickets only — the terminal column is
+  skipped — and is capped near 2 KB, so a done ticket and any ticket past the cap are invisible to
+  the model, which then reasonably says the ticket is not there. Second cause, found while
+  reproducing on both backends: an **accepted ticket leaves the board** (`tickets/archive/` on the
+  files backend, the `archived` label on dricket), and `readTicket` — the only per-ticket read —
+  finds cards on the board only, so even an on-demand read would have failed for exactly the
+  tickets the owner asks about (T-0091 is such a ticket).
+- **Fix.** `ticketRefsOf` (`core/chat-ticket-refs.ts`) reads `T-0091`, `t-91`, `#91` as one
+  canonical id (a word, `#fff`, `ST-91` are no ids; at most five). Each turn the chat service
+  attaches the tickets the owner **named** — in this message, else in the last three owner
+  messages, so "and who merged it?" keeps its ticket — as a `## Tickets the owner named`
+  block after the digest: the ticket's file (cut at 8,000 characters) and, on dricket, its latest
+  20 comments; an unknown id is attached as an error line so the model never guesses. New
+  `BoardService.readAnyTicket` = the board card, else the archive (both backends). The digest now
+  says it lists open tickets only; the mission prompt's rules were adjusted in step
+  (`specs/classifier-spec.md`). The block rides the call only, never the session file.
+- **(b) No id prefix.** The ticket thread's composer opened prefilled with `<id>: ` and "Change by
+  chat" prefilled the chat with the same prefix. Both are gone: the composer opens empty;
+  "Change by chat" calls the new `openChat()` (leave the ticket, show the chat, empty draft). The
+  thread lists messages that name its ticket, so `threadSend` puts the id in front of a message
+  that does not contain it as it goes out (not in the field); the desk resolves it as in (a).
+- **(c) The view bounced back after a send.** The ticket screen's per-ticket reset effect read
+  `doc()?.id` — a dependency on the whole `doc` computed, which is a new object on every board /
+  ticket reload (a sent message triggers one) — so it reset the face to *Ticket* and cleared the
+  draft each time. It now tracks a value-compared `docId` computed: the reset happens when the
+  ticket changes, not when it reloads.
+- **(d) iOS keyboard.** Safari keeps the layout viewport full-height and shrinks and pans the
+  *visual* viewport, which pushed header and thread out of view (D-5's `body { inset: 0 }` followed
+  the layout viewport). `apps/mission-control/src/app/viewport.ts` publishes `--mc-vh` (visual
+  viewport height) and `--mc-vv-top` (its pan) on `<html>` while the keyboard is up (and removes
+  them otherwise); `body` is `top/left/right: 0; height: var(--mc-vh, 100%); transform:
+  translateY(var(--mc-vv-top, 0px))`. The transform makes the body the containing block of every
+  `position: fixed` layer (ticket screen, sheets, overlays), so their `inset: 0` / `bottom: 0`
+  follow the visible area too. `100dvh` sizes of the shell and the ticket fullscreen are now
+  `100%` of that body; the document is scrolled back to 0 while the keyboard is up.
+- **(e) Ghost text.** The phone composer's placeholder was a sample command; it now shows the
+  same text as Drey's desktop Assistant composer, "Ask anything …", from one shared constant
+  (`shared/composer-placeholder.ts`) both import. The desktop composer itself is unchanged.
+- **(f) D-5b — the chrome stays completely fixed** (owner report: small finger movements still
+  wobble the page by a few pixels; folded into this milestone because it owns the same viewport
+  code). Sources found, each fixed: (1) a finger starting on a bar (header, tab bar, composer
+  row) or on a scroller with nothing to scroll still rubber-bands the whole frame on iOS, and a
+  scroller dragged past its end chains into it before iOS 16 — `overscroll-behavior` alone cannot
+  stop either. New `app/scroll-lock.ts` judges every one-finger `touchmove` (non-passive, document
+  level): it goes through only if the nearest scrolling ancestor can still scroll in the dragged
+  direction (dominant axis), otherwise it is cancelled; pinch is never touched; the document is put
+  back to scroll 0 on any `scroll`. (2) `.shell` had `overflow-x: hidden` only, which computes
+  `overflow-y` to `auto` — a second scroller around the real one; it is now `overflow: hidden`, so
+  `.pane` owns the scroll of the phone column. (3) The D-7d keyboard logic followed *any* visual
+  viewport difference, so a collapsing browser bar or an inset change moved the frame by a few
+  pixels, and pinch zoom shrank it: it now reacts only to a drop of at least 120 px (a keyboard)
+  and never while zoomed (`scale > 1`).
+  Tests: `scroll-lock.spec.ts` (move judgement, scroll-room lookup, a simulated drag on header /
+  content / content end / pinch in jsdom), `viewport.spec.ts` (bar collapse, zoom),
+  `mission-control-scroll-contract.spec.ts` (shell is no scroller, `.pane` is; both installed at
+  boot). **Chromium cannot prove** the iOS behaviour: neither the rubber band of the standalone
+  app, the address-bar collapse of Safari, nor `touchmove` cancellation semantics are reproduced
+  by it — the owner confirms on the iPhone in the browser and in the installed home-screen app.
+  Not covered: scrollers that are themselves fixed layers (`.ticket-layer`, `.persona-layer`) keep
+  their own `overflow-y: auto` with `overscroll-behavior: contain`; the touch guard keeps them from
+  chaining, but they were not restructured.
+- **(f2) D-5b — the trigger and the suspects.** The owner's trigger: after the chat composer has
+  been used once (focus, the field grows, blur) the page wobbles by a few pixels for the rest of
+  the session — a persistent state change. Suspects, in order of likelihood, all addressed:
+  (1) **iOS focus zoom**: the composer text was 14 px; iOS zooms the page in when a field under
+  16 px takes focus and can leave it zoomed (`visualViewport.scale > 1`) and pannable after the
+  blur — exactly "small finger movements shift everything afterwards". Every text field is now at
+  least `max(16px, 1em)` (`!important`, global in `styles.css`; no loss of pinch zoom), and
+  `touch-action: manipulation` on `html`/`body` removes the double-tap zoom. (2) **Stale
+  keyboard state**: the D-7d variables could stay at the keyboard's values if iOS closes the
+  keyboard without a final `visualViewport` resize (Done key, tap outside); `viewport.ts` now also
+  re-reads on `focusin`/`focusout` (again at 120/400/900 ms), `orientationchange`, `pageshow`,
+  `resize` and every `touchend`. (3) The earlier items of (f) (touch guard, `.shell` no scroller,
+  keyboard threshold, zoom ignored).
+  **`?debug=scroll`** (`app/scroll-debug.ts`): opt-in overlay; it samples `scrollY`, the visual
+  viewport's `offsetTop`/`pageTop`/`scale`/height, `innerHeight`, the body box and the top/bottom
+  of `.shell`, `.hdr`, `.phonebar`, `.tabbar`, `.composer`, `mc-root`, logs every change with a
+  timestamp and the running event, shows the last lines on screen and offers "copy log"
+  (`window.__mcScrollLog`). Nothing is stored or sent. **Repro attempt in Chromium** (iPhone 14
+  emulation, production build, stubbed API; scratch script, not committed): jitter drags of 2–8 px
+  on header / thread / composer, pulls at both ends, a two-finger touch, a tiny tap, focus + six
+  lines in the composer + a faked keyboard (`--mc-vh`) + blur + clearing the draft — 16 checks,
+  **no movement** of any bar, of `scrollY`, `visualViewport.offsetTop/pageTop` or the scale (the
+  composer only grows and shrinks with its text, as intended). That is the expected result
+  for Chromium and proves only the structure; **it cannot prove** the iOS-specific causes — focus
+  zoom, a missing keyboard-close resize, the rubber band of Safari and of the installed app. The
+  owner confirms on the iPhone (browser and home-screen app), with `?debug=scroll` if it still
+  moves, and sends the copied log.
+- **Tests (red first):** `core/chat-ticket-refs.spec.ts`; `chat-service-named.spec.ts` (done,
+  beyond-the-cap and archived tickets by `T-0091` / `t-91` / `#91`, comments, unknown id, follow-up,
+  huge file cut, no read when nothing is named, digest hint); `chat-llm.spec.ts` (block order);
+  `board-service.spec.ts` + `board-service-dricket.spec.ts` (`readAnyTicket` on a done and an
+  archived ticket on **both backends**; the dricket one runs against a real `dk`);
+  `ticket/view.spec.ts` (empty composer, id added on send, `openChat`, reload keeps face and draft —
+  verified to fail without the fix); `state.spec.ts` (`openChat`); `chat.spec.ts` (phone placeholder equals the desktop constant); `viewport.spec.ts`;
+  `shared/mission-control-scroll-contract.spec.ts` (body is the visible area; nothing sized by
+  `100vh`/`100dvh`).
+- **Not checked:** no real iPhone / iPad — Chromium cannot reproduce the iOS keyboard's visual
+  viewport pan; the logic and the CSS contract are unit-tested only. The real owner vault (T-0091)
+  was not touched: the reproduction is a scratch vault and a scratch dricket store in the specs.
+
+### Milestone 169 — E13-20 / E13-21: a ticket opens on what is true, Ticket | Thread | Review on top, old tickets stay openable
+
+**Not yet manually verified by the owner.** Owner request 2026-11-05, roadmap E13-20 and E13-21.
+
+- **E13-20, what opens.** Selecting a ticket opens **one** face: the ticket document while no run has
+  happened yet (and once the run is over), the **run's thread** while the runner is active or waiting
+  (on a question, a gate, a permission). Drey's Work panel: `openTicketPage` is now
+  `defaultFaceOf(ticketRunActive(snapshot, runs, id))` (`renderer/ticket-faces.ts`, over the Work
+  list's own row status: running / waiting / failed gate = active); the Work row click and the row
+  menu's *Open ticket* use it. The file + thread pair beside each other (ADR-0087 decision 3, the
+  `ticketPagePlan` landing matrix) is gone — `ticket-page.ts` keeps only the thread key. Mission
+  Control: the ticket view's face starts on the thread when a live run (`/api/fleet` runs now carry
+  `ticketId`) or a run need (question, permission, gate; an accept checkpoint or scout report is
+  not one) names the ticket (`defaultFaceOf` / `ticketRunActive` in `ticket.model.ts`); read untracked
+  per selection, so a run starting later does not pull the face away.
+- **E13-20, the control.** One segmented control **Ticket | Thread | Review** above the text, identical on
+  all three faces, only the active button differs. Drey: the global `.seg` + `.icon-btn` strip
+  (`ticketFaceSwitch`), on top of the ticket document (ticket header), the thread tab and the Review
+  tab; the thread's *Ticket file* link is replaced by it. Mission Control: the persona detail's `.seg`
+  tab strip, its rules moved to the shared `libs/mission-ui/src/seg.css` (both components use it); Review is
+  the proof face. A per-selection choice: no saved view is touched (D-6 contract unchanged).
+- **E13-21, the cause.** `readTicket` looked only at the board's columns, and the archive is no column, so
+  every done ticket answered "is not on the board"; on dricket the board also never filled
+  `recentDone` (the archive is a label there), so *Done this week* was always empty. Fixed:
+  `findArchived` reads `tickets/archive/<id>.md` (files) or the record carrying the `archived` label
+  (dricket) and answers like any ticket (card phase `archive`); `assembleBoardFromRecords` derives
+  `recentDone` from the archived records' `— archived` Log stamp (`archivedRecordFiles`); new engine method
+  `archivedTickets({ query, limit })` (`archivedEntriesOf`, any age, newest first, id/title words) and
+  `GET /api/archive`.
+- **E13-21, the UI.** Drey: a Done row opens its ticket (document, Thread and Review through the card the
+  engine returned); **Show older** at the foot of the group loads the archive once and lists the tail under
+  a search field (no placeholder text). Mission Control: a *Done this week* group under the phase groups,
+  rows open the ticket screen, **Show older** with the same search.
+- **E13-23 (folded into this milestone), Mission Control ticket page.** The line "Chain: standard flow + the
+  frontmatter delta · tap to adjust" is gone (the gate strip itself still opens the chain sheet); the
+  `phase: <id>` text line under the title is gone (the badge at the top carries the phase, now
+  **colour-filled** in the phase's colour); the **Live | View | Source** switch (`mc-ticket-mode`)
+  **replaces the edit pencil** at the top right of the header (owner correction): View is where the
+  ticket is read (the default), picking **Live** or **Source** opens the editor in that mode — the
+  editor overlay (`mc-ticket-edit`) now edits the file in the Markdown surface (`mc-markdown`, `[mode]` /
+  `[modeBar]`) instead of a plain textarea, shows the same switch on top, and keeps its footer **Save** /
+  **Cancel** (Cancel asks "Discard changes?" when dirty; **View** in the switch means Cancel, so unsaved
+  text never vanishes silently). Read-only devices show no switch. Nothing else relied on the pencil
+  (`toggleEdit` and its CSS are gone; `vm.editing` / `savedFlash` unchanged). Drey's desktop ticket page
+  needed none of it: no chain hint, no phase line, and its editor modes are in the `⋯` menu; the iPad
+  layout is the same Mission Control view.
+- **Tests:** `ticket-faces.spec.ts` (default face from run state, the strip is the same three buttons with
+  one active), `view.spec.ts` (MC default face, run/need rules, switching), `work-panel.spec.ts` (Done row
+  click, Show older + search), `work.spec.ts` (MC Done group, Show older, `olderDoneOf`),
+  `normalize.spec.ts` (`archivedEntriesOf`), `store-board.spec.ts` (`recentDone` from records),
+  `board-service.spec.ts` (files backend) and `board-service-dricket.spec.ts` (real `dk`): an archived
+  ticket opens, is listed and counts for this week; `router.spec.ts` (`/api/archive`).
+- **Docs:** manual (Work panel, interactive start), docs/05, ADR-0087 later change.
 
 ### Milestone 163 — D-6: selecting a ticket never changes the view, a view saves only by "Save view"
 

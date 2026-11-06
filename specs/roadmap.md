@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151 and 153–163 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163 and 165–169 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -90,17 +90,7 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
-- **D-7 — Mission Control chat on the phone about a ticket** (owner report 2026-11-05,
-  real vault, iPhone). (a) Asking about a ticket that exists (e.g. T-0091) gets "not in
-  the current board excerpt": the chat does not receive that ticket — find why (the
-  excerpt's limit or filter: done/archived, column, count; the ticket route the chat
-  engine uses) and give the chat the ticket by id (load it on demand / a tool, not a
-  fixed excerpt); (b) the chat field must NOT be pre-filled with a ticket-id prefix;
-  (c) after sending a message the view switches back (it must stay where it is);
-  (d) opening the keyboard pushes the upper part of the page out of view — the page
-  must shrink the area at the bottom instead (visual viewport / `dvh`, the header and
-  the thread stay put; relates to D-5). Reproduce each with a test or a recorded
-  fixture first.
+None open.
 
 - **D-9 — Tickets panel footer on a dricket board** (found 2026-11-05 by the verify-round
   sessions). On `tickets.backend = dricket` the footer still says "The tickets vault is
@@ -112,22 +102,11 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   slot; the sweep session writes each reproducible defect it finds as D-11… with steps,
   expected/actual and a screenshot, and this entry is removed when it has reported.
 
-- **D-5b — Mission Control on the phone still wobbles under small finger movements**
-  (owner report 2026-11-05, follow-up of D-5/milestone 143 and D-7 d). Small drags and
-  finger jitter move the page by a few pixels (rubber-band, scroll chaining, the visual
-  viewport panning); the **controls — header, tab bar, composer, bottom bar — must stay
-  fixed and not move at all**, only the content area scrolls. Find every source on iOS
-  Safari and the installed home-screen app (`overscroll-behavior`, `touch-action`,
-  `position: fixed` + `visualViewport` offsets, `body` scroll vs an inner scroller,
-  `-webkit-overflow-scrolling`, address-bar collapse), make one scroller own the scroll,
-  and extend the scroll-contract spec so a regression is caught. Cannot be fully proven
-  in Chromium: the owner confirms on the phone.
-
 _Shipped defects:_ D-1, Mission Control chat reaching no model, shipped as
 milestone 131; D-2, the paired-devices list and pairing from Mission
 Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
 views, as milestone 140; D-4, runs.spec flaking under full-suite load, as milestone 142; D-5, the page moving on iPhone/iPad scroll
-(owner report 2026-11-04), as milestone 143; D-6, selecting a ticket switching the view and views saving themselves, as milestone 163 — see the changelog.)
+(owner report 2026-11-04), as milestone 143; D-6, selecting a ticket switching the view and views saving themselves, as milestone 163; D-8, the flaky gate specs, as milestone 168; D-7, the phone chat about a ticket (unknown ticket, id prefix, view switching back, iOS keyboard) and D-5b (the phone wobble), as milestone 165 — see the changelog.)
 
 ### Now (small, daily value)
 
@@ -362,58 +341,6 @@ owner confirms scope and order before any of it starts:
   team, editable Setup, Friction tab, Notify / Runs after / This week /
   Typical run fields, "Talk to <name> 1:1 in the Assistant" (with E13-5), the
   per-persona slot share (needs an engine count) (G-14).
-- **E13-20 — Opening a ticket: what it shows, and Ticket / Thread / Review**
-  (owner request 2026-11-05, outside the list; after D-6). Selecting a ticket opens
-  **the ticket document by default while no run has happened yet**, and **the run
-  while the runner is active or waiting** (on a question, a gate, a quota). Thread and
-  Review are shown **above the text**, not beside it: one segmented control
-  "Ticket | Thread | Review" in the existing button styling, **identical in both the
-  ticket view and the run view**, only the active button differs. The control is a
-  per-selection choice; it does not touch the saved views (D-6). Both Mission Control
-  and Drey's Work panel.
-- **E13-21 — Old tickets stay openable** (owner request 2026-11-05, outside the list).
-  Done and archived tickets ("Done this week" and older) must open like any other
-  ticket (document, thread, review, proof) so the owner can read what a ticket was
-  about; today they cannot be selected or opened. Check the reader on both backends
-  (files, dricket: the archived/done folders and the board's "this week" filter) and
-  add an explicit way to reach older ones (search or "Show older").
-- **E13-23 — Mission Control ticket page on the phone: three cleanups** (owner markup
-  2026-11-05, screenshot `docs/design/work-panel/mc-ticket-owner-markup-2026-11-05.jpg`,
-  T-0091 on iPhone; outside the list; same code as E13-20/21, ships with or right after it).
-  (1) The line **"Chain: standard flow + the frontmatter delta · tap to adjust" is removed**
-  (the red scribble): tapping a phase in the phase strip is enough to adjust. (2) **The phase
-  is shown once**: the `phase: prioritized` text line under the title goes; the badge at the
-  top (PRIORITIZED) stays and becomes **colour-filled** in the phase's colour (it is outlined
-  today). (3) **The editor mode switch Live | View | Source moves to the top** of the page
-  (next to the edit control in the header, not in the text flow), and the page can be
-  switched away from View — View stays the default where results are presented (E12-6).
-  Check the same three points on the Drey desktop ticket page and the iPad layout.
-- **E12-9c — The default pipeline: Inbox · Plan · Build · Review · Sign Off · Done**
-  (owner decision 2026-11-05, answering E12-9b Q1; outside the list). The default pipeline
-  of a new board has six columns, in this order, with who works each: **1 Inbox** (manual —
-  the owner triages), **2 Plan** (agent), **3 Build** (agent), **4 Review** (manual — the
-  owner reviews), **5 Sign Off** (manual — this is where the work is committed: it takes
-  the role of today's `commit` column and its checkpoint discipline), **6 Done**. The first
-  column is titled **Inbox** again (this reverses E12-9's "Ideas", milestone 164 — the canvas
-  boards say "Ideas" but the owner decides "Inbox"). Consequences to carry through: the
-  engine's default pipeline and flow defaults (Plan returns as an agent column — check
-  req-93 "just-in-time planning", the plan columns left the default pipeline there; the
-  Review and Sign Off gates are manual: the human-persona gate of milestone 132/E10-6, a
-  parked ticket + notification, Accept / Send back); stage ids and the claim stages
-  (`dk` claim stages = the agent columns Plan and Build); the dricket `[stages]` default
-  (`values`, `initial`, `terminal`, `claim`) and `DEFAULT_MIGRATION_CONFIG.stages`, the reverse
-  converter, `dk init`/the scratch scripts (`scripts/verify-dricket.ps1`), fixtures, the
-  manual and its screenshots, the phone capture button label. Existing boards and stores
-  keep their columns (a default never renames what a user has). Open from E12-9b: Q2 team
-  seeding, Q3 default worker (still undecided).
-- **E10-8 — Kimi Code as a selectable worker** (owner request 2026-11-05, outside the
-  list). The fleet has two worker adapters, `opencode` and `claude-code`
-  (`packages/tickets-engine/src/fleet/providers.ts`, `settings-workers.ts`); Kimi Code
-  (the `kimi` CLI) has none, only a price row in `core/model-prices.ts`. Add a `kimi`
-  adapter (headless/stream protocol of the installed CLI — investigate `kimi --help`
-  and what the repo's `kimi-code` skill already learned), its Settings → Tickets worker
-  fields (pool size, probe, compaction like the others), persona worker choice, cost
-  rows, and its place in the worker probe. Opt-in, off until the owner picks it.
 - **E12-9d — "Initialize board" seeds the default team** (owner decision 2026-11-05,
   answering E12-9b Q2: yes). A new board gets the default team of decision D7 — **Paul**
   (plans), **Ben**, **Ralf**, **Tessa** (roles as in the concept) — plus "You" and Pia as
@@ -421,8 +348,20 @@ owner confirms scope and order before any of it starts:
   which column follows E12-9c (Plan, Build = agents; Inbox, Review, Sign Off = manual). The
   default worker is **`opencode`** (owner decision 2026-11-05, E12-9b Q3: it supports all
   providers; the engine's `defaultWorker` already is `opencode`); `claude-code` stays
-  selectable, and so must **Kimi Code** (see E10-8) — both are what the owner uses today. The names are plain persona files, so the owner's idea of a squirrel crew ("Nutty
+  selectable, and so is **Kimi Code** (milestone 167) — both are what the owner uses today. The names are plain persona files, so the owner's idea of a squirrel crew ("Nutty
   Nutcracker" …) is a later naming choice, not a code change. Existing boards keep their team.
+
+- **E12-9e — Follow-ups of the default pipeline (E12-9c, milestone 166)** (S–M). Open: (1) **Plan →
+  Build has no checkpoint** in the default (both agent columns): decide whether a finished plan
+  should park for the owner (a `persona: you` pin / an inserted `manual` gate in the default
+  chain) — today the owner inserts one per ticket; (2) **Sign Off is manual**, so the merge and
+  push of `commit-default` is by hand or by a session working the checkpoint (BOARD.md) — decide
+  whether Sign Off should offer "Merge and push" as an owner-started agent run; (3) a **reverse
+  converter that reads the store's own stage list** (today `--stages a,b,c`, default the new
+  six); (4) the Work panel's *Prioritized* group is empty on a new board (its queue is Inbox only
+  while Plan is an agent column) — keep, rename or retire it; (5) **Open question: migration of `prioritized` tickets** — `inbox` (today) or `plan` (an agent
+  column: planning would start on arrival); (6) E12-9b Q2 (team seeding) and Q3
+  (default worker) are still open.
 - **E13-22 — Settings: one page width, a section tree and search** (owner request
   2026-11-05, outside the list; modelled on VS Code's settings). The settings overlay
   grows with the window (wider than today's 640 px cap) and **every page uses the same

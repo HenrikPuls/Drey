@@ -1,3 +1,4 @@
+import { COMPOSER_PLACEHOLDER } from '../../../../shared/composer-placeholder';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type Signal, type WritableSignal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
@@ -1579,6 +1580,14 @@ describe('Chat dictation (the microphone in the composer)', () => {
     expect(mic.getAttribute('aria-pressed')).toBe('false');
     const row = Array.from(el.querySelector('.composer-row')!.children).map((c) => c.className.split(' ')[0]);
     expect(row).toEqual(['attach', 'composer-input', 'mic', 'send']);
+  });
+
+  it("the phone composer's ghost text is the desktop Assistant's, one shared constant (D-7e)", () => {
+    install();
+    const { el } = renderChat(activeSession());
+    const field = el.querySelector<HTMLTextAreaElement>('.composer-input')!;
+    expect(field.placeholder).toBe(COMPOSER_PLACEHOLDER);
+    expect(COMPOSER_PLACEHOLDER).toBe('Ask anything …');
   });
 
   it('records on tap: pressed, the recording line, speech fills the field live and nothing is sent', async () => {

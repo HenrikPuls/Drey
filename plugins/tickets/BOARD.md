@@ -1,7 +1,7 @@
 # The tickets board — owner checkpoint handling
 
 The tool-neutral guide to working the tickets board's checkpoints by
-hand — review above all the **commit → done** discipline: when a
+hand — review above all the **commit → done** discipline (on a board with the default pipeline of E12-9c the column is **Sign Off**, id `sign-off`: read `commit` below as "the Sign Off column", the discipline is the same): when a
 ticket on `commit` may move to `done`, how to prove it with git, and
 how to make the move without breaking the format. The criteria bind
 everyone the same — a human at the board, an agent on the owner's

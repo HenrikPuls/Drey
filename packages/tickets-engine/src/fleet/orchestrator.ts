@@ -222,7 +222,7 @@ export function effectivePoolSizes(
   nowMs: number,
   pausedUntil: Readonly<Partial<Record<WorkerProviderId, number>>> = {},
 ): Record<WorkerProviderId, number> {
-  const sizes: Record<WorkerProviderId, number> = { opencode: 1, 'claude-code': 1 };
+  const sizes: Record<WorkerProviderId, number> = { opencode: 1, 'claude-code': 1, kimi: 1 };
   for (const provider of WORKER_PROVIDERS) {
     let size = pools[provider].size;
     const slots = probed[provider] ?? null;
@@ -818,7 +818,7 @@ export class Orchestrator {
 
   /** The supervisors' lease-reaper round (the runner's timer calls this). */
   async reapAll(): Promise<void> {
-    for (const provider of ['opencode', 'claude-code'] as const) {
+    for (const provider of WORKER_PROVIDERS) {
       await this.deps.supervisorOf(provider).reap();
     }
   }
@@ -1102,7 +1102,7 @@ export class Orchestrator {
     // One run belongs to exactly one supervisor; a port that serves
     // several providers (a test fake) must not duplicate its records.
     const byId = new Map<string, SupervisorRecord>();
-    for (const provider of ['opencode', 'claude-code'] as const) {
+    for (const provider of WORKER_PROVIDERS) {
       for (const record of this.deps.supervisorOf(provider).records()) {
         if (!byId.has(record.info.id)) {
           byId.set(record.info.id, record);
@@ -1234,7 +1234,7 @@ export class Orchestrator {
       if (snap.pipeline.length === 0) {
         return;
       }
-      const liveByPool: Record<WorkerProviderId, number> = { opencode: 0, 'claude-code': 0 };
+      const liveByPool: Record<WorkerProviderId, number> = { opencode: 0, 'claude-code': 0, kimi: 0 };
       const busyTickets = new Set<string>();
       for (const record of this.allRecords()) {
         // A worker waiting on the owner (a question, an approval) takes no pool

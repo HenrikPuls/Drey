@@ -93,6 +93,19 @@ export class TicketsGit {
     return result;
   }
 
+  /**
+   * Resolves once no git command is running or queued in any working
+   * directory (a command queued meanwhile is waited for too). A shutting
+   * down owner awaits this before it lets go of the directories: a git
+   * child still running holds its cwd, and one that starts late writes
+   * into it (EBUSY / ENOTEMPTY when the folder is removed meanwhile).
+   */
+  async idle(): Promise<void> {
+    while (this.queues.size > 0) {
+      await Promise.all([...this.queues.values()]);
+    }
+  }
+
   private async execRetryingLock(args: readonly string[], cwd: string): Promise<string> {
     for (let attempt = 0; ; attempt++) {
       try {

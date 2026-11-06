@@ -6,6 +6,10 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { Markdown } from '../markdown/markdown';
+import type { MdMode } from '../markdown/mode';
+import { AppBar } from '../app-bar/app-bar';
+import { TicketEditMode, TicketModeSwitch } from './mode-switch';
 import { MC_TICKET } from './ticket.model';
 
 // ---------------------------------------------------------------------------
@@ -72,10 +76,12 @@ export function discardArmOf(state: DiscardArm, action: DiscardArmAction): Disca
   selector: 'mc-ticket-edit',
   templateUrl: './edit.html',
   styleUrl: './edit.css',
+  imports: [Markdown, TicketModeSwitch, AppBar],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TicketEdit {
   protected readonly vm = inject(MC_TICKET);
+  protected readonly editMode = inject(TicketEditMode);
 
   /** The typed draft; null until the owner types — the textarea then seeds from the vm's doc. */
   private readonly draft = signal<string | null>(null);
@@ -100,9 +106,21 @@ export class TicketEdit {
     }
   });
 
-  protected onInput(event: Event): void {
-    this.draft.set((event.target as HTMLTextAreaElement).value);
+  protected onText(value: string): void {
+    this.draft.set(value);
     this.discardArm.set('idle');
+  }
+
+  /**
+   * The header switch while editing: Live and Source change the editor's mode in
+   * place; View leaves editing — Cancel's meaning, so unsaved text asks first (E13-23).
+   */
+  protected onModePick(mode: MdMode): void {
+    if (mode === 'view') {
+      this.onCancel();
+    } else {
+      this.editMode.mode.set(mode);
+    }
   }
 
   protected onCancel(): void {

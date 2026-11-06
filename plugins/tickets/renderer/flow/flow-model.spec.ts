@@ -14,6 +14,7 @@ import {
   personasFor,
   runsAfterOf,
   whoOf,
+  humanNameOf,
   type FlowDraft,
 } from './flow-model';
 
@@ -92,6 +93,13 @@ describe('flow model', () => {
     expect(whoOf(f.steps[0]!, f)).toBe('Ben');
     expect(whoOf(f.steps[3]!, f)).toBe('You');
     expect(whoOf(step(9, 'x'), f)).toBe('Automatic');
+  });
+
+  it('shows the owner under the configured name of the human persona', () => {
+    const f = flow({ personas: [{ id: 'you', kind: 'human', title: 'Henrik', color: '#999999', model: '' }] });
+    expect(whoOf(step(9, 'manual', { owner: true }), f)).toBe('Henrik');
+    expect(humanNameOf(f)).toBe('Henrik');
+    expect(humanNameOf({ personas: [] })).toBe('You');
   });
 
   it('lists the marks of a gate', () => {

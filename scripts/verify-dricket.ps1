@@ -233,10 +233,11 @@ function Invoke-Git([string]$Dir, [string[]]$Arguments) {
 $PIPELINE = @'
 ---
 phases:
-  - { id: inbox, title: Ideas, handover: manual }
-  - { id: prioritized, title: Prioritized, handover: manual }
-  - { id: build, title: Build, handover: agent build-default }
-  - { id: commit, title: Commit, handover: manual }
+  - { id: inbox, title: Inbox, handover: manual }
+  - { id: plan, title: Plan, claim: true, handover: agent plan-default }
+  - { id: build, title: Build, claim: true, handover: agent build-default }
+  - { id: review, title: Review, handover: manual }
+  - { id: sign-off, title: Sign Off, handover: manual }
   - { id: done, title: Done, handover: none }
 ---
 The phases.
@@ -252,15 +253,15 @@ repos:
 $STAGES = @'
 
 [stages]
-values = ["inbox", "prioritized", "build", "commit", "done"]
+values = ["inbox", "plan", "build", "review", "sign-off", "done"]
 initial = "inbox"
 terminal = ["done"]
-claim = ["build", "commit"]
+claim = ["plan", "build"]
 cancelled = "cancelled"
 '@
 
 function New-Seed([string]$Dir) {
-    # A local dricket store with Drey's five stages, prefix t (ids t-1 ...).
+    # A local dricket store with Drey's six stages, prefix t (ids t-1 ...).
     $dkOut = Invoke-Dk -Owner 'henrik' -Arguments @('init', $Dir, 't') -Where $Dir
     if (-not $Remote) { [IO.File]::WriteAllText($storeMarker, $magic) }
     Invoke-Git $Dir @('config', 'core.autocrlf', 'false') | Out-Null
@@ -279,13 +280,13 @@ function New-Seed([string]$Dir) {
     & $add 'Rename a folder without losing links' @()
     Invoke-Dk -Owner 'henrik' -Where $Dir -Arguments @('comment', 't-1', '-m', 'Decision needed: zip everything, or only the open notes?') | Out-Null
 
-    # Stage moves: claim (inbox -> build), release to the wanted stage.
+    # Stage moves: claim (inbox -> plan, the first claim stage), release to the wanted stage.
     $move = { param($id, $stage)
         Invoke-Dk -Owner 'seed-agent@scratch' -Where $Dir -Arguments @('claim', $id, '--size', 'S', '--kind', 'human') | Out-Null
         Invoke-Dk -Owner 'seed-agent@scratch' -Where $Dir -Arguments @('release', $id, '--stage', $stage, '-m', "Seeded into $stage.") | Out-Null }
-    & $move 't-2' 'prioritized'
-    & $move 't-3' 'prioritized'
-    & $move 't-5' 'commit'
+    & $move 't-2' 'review'
+    & $move 't-3' 'review'
+    & $move 't-5' 'sign-off'
     & $move 't-6' 'done'
 
     # t-4: build, claimed by a foreign runner whose lease ended hours ago. dk has no clock
@@ -432,7 +433,7 @@ Write-Output "Isolated Drey started (launcher pid $($proc.Id)), log: $log"
 In a SECOND terminal:   . '$Profile\dk-env.ps1'    (sets DK_STORE, DK_OWNER, ... for dk and git)
 
  1. Open the Tickets panel (dock icon "Show Tickets"): the board shows t-1 .. t-5
-    (t-6 is done); t-3 is blocked by t-2; t-4 sits in Build with an expired foreign claim;
+    (t-6 is done); t-3 is blocked by t-2; t-2 and t-3 wait in Review, t-5 in Sign Off, t-4 sits in Build with an expired foreign claim;
     t-1 has a comment ("Decision needed").
  2. Live change detection:   dk add --unclaimed -m "From the terminal"
     -> a new card within ~1-2 s, no refresh.   (git -C '$storeDir' log --oneline)

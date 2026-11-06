@@ -402,6 +402,64 @@ describe('workListNode', () => {
     expect(rows[1]!.querySelector('.work-row-id')?.textContent).toBe('T-0015');
   });
 
+  it('a Done row opens its ticket on click and Enter (E13-21)', () => {
+    const folds = createGroupFoldStore(null);
+    folds.setFolded('done', false);
+    const d = { ...deps(), openArchived: vi.fn() };
+    const snap = board({}, [{ id: 'T-0014', title: 'Fix the palette race', at: new Date().toISOString() }]);
+    const list = workListNode(d, snap, [], folds, () => undefined);
+    const row = list.querySelector<HTMLElement>('.work-done-row')!;
+    expect(row.getAttribute('role')).toBe('button');
+    row.click();
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(d.openArchived.mock.calls).toEqual([['T-0014'], ['T-0014']]);
+  });
+
+  it('"Show older" lists the archive beyond this week, searchable, rows open like the others (E13-21)', async () => {
+    const folds = createGroupFoldStore(null);
+    folds.setFolded('done', false);
+    const all = [
+      { id: 'T-0014', title: 'Recent', at: new Date().toISOString() },
+      { id: 'T-0003', title: 'Fix the login', at: '2026-01-01T00:00:00Z' },
+      { id: 'T-0002', title: 'Billing export', at: '2025-12-01T00:00:00Z' },
+    ];
+    const d = { ...deps(), openArchived: vi.fn(), listArchived: vi.fn(async () => all) };
+    const snap = board({}, [all[0]!]);
+    let list = workListNode(d, snap, [], folds, () => undefined);
+    const more = [...list.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Show older')!;
+    expect(more).toBeDefined();
+    let repaint: () => void = () => undefined;
+    const rerender = (): void => repaint();
+    list = workListNode(d, snap, [], folds, rerender);
+    const wired = [...list.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Show older')!;
+    const done = new Promise<void>((resolve) => {
+      let calls = 0;
+      repaint = () => {
+        calls += 1;
+        if (calls === 2) {
+          resolve();
+        }
+      };
+    });
+    wired.click();
+    await done;
+    expect(d.listArchived).toHaveBeenCalledTimes(1);
+    const open = workListNode(d, snap, [], folds, () => undefined);
+    const ids = (): string[] =>
+      [...open.querySelectorAll<HTMLElement>('.work-done-older-rows .work-done-row')].filter((r) => !r.hidden).map((r) => r.dataset['id']!);
+    expect(ids()).toEqual(['T-0003', 'T-0002']);
+    const search = open.querySelector<HTMLInputElement>('.work-done-search')!;
+    search.value = 'LOGIN';
+    search.dispatchEvent(new Event('input'));
+    expect(ids()).toEqual(['T-0003']);
+    open.querySelector<HTMLElement>('.work-done-older-rows .work-done-row:not([hidden])')!.click();
+    expect(d.openArchived).toHaveBeenCalledWith('T-0003');
+    search.value = 'nothing';
+    search.dispatchEvent(new Event('input'));
+    expect(ids()).toEqual([]);
+    expect(open.querySelector<HTMLElement>('.work-done-older-rows .work-empty')!.hidden).toBe(false);
+  });
+
   it('says how to start when the board is empty', () => {
     const list = workListNode(deps(), board({}), [], createGroupFoldStore(null), () => undefined);
     expect(list.querySelector('.work-empty')?.textContent).toBe('No tickets yet — capture one with +');

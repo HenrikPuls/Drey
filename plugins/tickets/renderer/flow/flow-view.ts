@@ -24,6 +24,7 @@ import {
   personasFor,
   runsAfterOf,
   whoOf,
+  humanNameOf,
   type FlowDraft,
   type FlowTarget,
 } from './flow-model';
@@ -345,7 +346,7 @@ export function mountFlow(deps: FlowDeps, host: HTMLElement, target: FlowTarget)
 
     const who = section('Who');
     if (gate.owner) {
-      who.append(h('p', 'flow-val', 'You'));
+      who.append(h('p', 'flow-val', humanNameOf(flow)));
     }
     const chips = h('div', 'flow-chips');
     chips.setAttribute('role', 'group');

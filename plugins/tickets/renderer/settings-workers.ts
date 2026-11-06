@@ -16,6 +16,7 @@ export interface RunnerField {
 export const RUNNER_LABEL: Readonly<Record<WorkerProviderId, string>> = {
   opencode: 'OpenCode',
   'claude-code': 'Claude Code',
+  kimi: 'Kimi Code',
 };
 
 const poolField = (provider: WorkerProviderId): RunnerField => ({
@@ -69,6 +70,8 @@ export const RUNNER_FIELDS: Readonly<Record<WorkerProviderId, readonly RunnerFie
     },
     compactField('claude-code'),
   ],
+  // Kimi's approvals ride the card like OpenCode's (ACP permission requests), so no permission flag of its own beyond the dispatched-run mode.
+  kimi: [poolField('kimi'), compactField('kimi')],
 };
 
 /**

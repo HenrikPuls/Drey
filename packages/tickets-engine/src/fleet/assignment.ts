@@ -5,7 +5,7 @@
  * configured default, then the fleet's first provider.
  *
  * Worker values name a provider and optionally pin a model:
- * `opencode`, `claude-code`, `claude-code/sonnet`. An unreadable value
+ * `opencode`, `claude-code`, `kimi`, `claude-code/sonnet`. An unreadable value
  * is a refusal at run start — never a guess (ADR-0076).
  */
 import { isWorkerProvider, BLOCKED_MARKER, QUESTION_MARKER, type FleetCaps, type InteractiveMode, type WorkerProviderId } from './protocol';
@@ -73,7 +73,7 @@ export function resolveAssignment(input: AssignmentInput): Assignment {
     if (parsed === null) {
       if (candidate.source === 'ticket' || candidate.source === 'handover' || candidate.source === 'column') {
         // An explicit-but-unreadable pin is a refusal, not a fallback.
-        return { ok: false, error: `the ${candidate.source}'s worker "${candidate.value}" is unknown — use opencode or claude-code` };
+        return { ok: false, error: `the ${candidate.source}'s worker "${candidate.value}" is unknown — use opencode, claude-code or kimi` };
       }
       continue; // a stale repo/config default degrades to the next level
     }

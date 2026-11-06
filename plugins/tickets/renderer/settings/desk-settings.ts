@@ -66,6 +66,25 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   const editTeam = textButton('Edit team');
   editTeam.addEventListener('click', hooks.openTeam);
   team.grid.append(...row('Team', value(teamChips, editTeam)));
+  // The owner's own name: the human persona's title, shown wherever the owner works a column.
+  const humanName = el('input', 'mono-input');
+  humanName.type = 'text';
+  humanName.spellcheck = false;
+  humanName.id = 'tset-human-name';
+  humanName.setAttribute('aria-label', 'Your name');
+  humanName.addEventListener('change', () => {
+    const name = humanName.value.trim();
+    void (async () => {
+      try {
+        await api.settings.set('personas.humanName', name);
+        await api.backend.invoke('setHumanName', { name });
+      } catch {
+        // The field repaints from the engine's answer below.
+      }
+      await loadPersonas();
+    })();
+  });
+  team.grid.append(...row('Your name', value(humanName)));
 
   // --- Default flow ------------------------------------------------------
   const flow = section('tset-flow-head', 'Default flow');
@@ -122,12 +141,16 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
         const chip = el('span', 'tset-desk-chip');
         const dot = el('span', 'tset-desk-dot');
         dot.style.background = p.color;
-        chip.append(dot, document.createTextNode(p.kind === 'human' ? 'You' : p.title));
+        chip.append(dot, document.createTextNode(p.title));
         return chip;
       }),
     );
     if (personas.length === 0) {
       teamChips.textContent = 'No team yet';
+    }
+    const human = personas.find((p) => p.kind === 'human');
+    if (human !== undefined && document.activeElement !== humanName) {
+      humanName.value = human.title;
     }
     budgetLine.textContent = budgetLineOf(personas);
   };

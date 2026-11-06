@@ -118,6 +118,7 @@ describe.skipIf(!found.ok)('DricketFileStore over a real dk store', { timeout: 1
       expect((await source.records(settings)).find((r) => r.id === 'T-0001')!.title).toBe('Third');
     } finally {
       source.dispose();
+      await source.idle();
     }
   });
 
@@ -151,6 +152,7 @@ describe.skipIf(!found.ok)('DricketFileStore over a real dk store', { timeout: 1
         expect((await source.records(settingsOf())).some((r) => r.title === 'Foreign one')).toBe(true);
       } finally {
         source.dispose();
+        await source.idle();
       }
     });
 
@@ -172,6 +174,7 @@ describe.skipIf(!found.ok)('DricketFileStore over a real dk store', { timeout: 1
         expect(source.changeStats(settings)?.refMisses).toBe(0);
       } finally {
         source.dispose();
+        await source.idle();
       }
     });
 
@@ -188,6 +191,7 @@ describe.skipIf(!found.ok)('DricketFileStore over a real dk store', { timeout: 1
         expect(source.changeStats(settings)?.refMisses).toBe(1);
       } finally {
         source.dispose();
+        await source.idle();
       }
     });
   });

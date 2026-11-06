@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { buildPlan, DEFAULT_MIGRATION_CONFIG, firstLogEntry, flatten, rewriteAttachmentLinks, type ConversionPlan, type MigrationConfig } from './convert';
+import { buildPlan, DEFAULT_MIGRATION_CONFIG, firstLogEntry, flatten, rewriteAttachmentLinks, stageOfLegacyPhase, type ConversionPlan, type MigrationConfig } from './convert';
 import { patchDricketDocument, stubDocument } from './dricket-doc';
 import { readLegacyVault } from './legacy-vault';
 
@@ -73,7 +73,7 @@ describe('buildPlan -- field mapping', () => {
       'x-rank': '2500',
       'x-entered-prioritized': '2026-10-21T09:30:00Z',
     });
-    expect(t).toMatchObject({ stage: 'prioritized', priority: 'high', repos: ['drey', 'drey-tickets'], depends: ['t-10', 't-12'], parent: 't-12' });
+    expect(t).toMatchObject({ stage: 'inbox', priority: 'high', repos: ['drey', 'drey-tickets'], depends: ['t-10', 't-12'], parent: 't-12' });
   });
 
   it('rewrites ../attachments/ links and says so', () => {
@@ -129,11 +129,11 @@ describe('buildPlan -- what it cannot carry', () => {
   });
 
   it('skips archived tickets, unknown phases and reports missing allow-list ids', () => {
-    const p = plan(['T-0049', 'T-0555'], { stages: ['inbox', 'done'] });
+    const p = plan(['T-0049', 'T-0555'], { stages: ['inbox', 'done'], legacyPhases: {} });
     expect(p.conversions[0]).toMatchObject({ legacyId: 'T-0049', status: 'skip' });
     expect(p.conversions[0]!.skipReason).toMatch(/archived/);
     expect(p.missingSelected).toEqual(['T-0555']);
-    const q = plan(['T-0020'], { stages: ['inbox', 'done'] });
+    const q = plan(['T-0020'], { stages: ['inbox', 'done'], legacyPhases: {} });
     expect(q.conversions[0]!.skipReason).toMatch(/not one of the configured stages/);
   });
 
@@ -162,13 +162,44 @@ describe('helpers', () => {
   });
 });
 
+describe('the new default stages (E12-9c)', () => {
+  it('is Inbox · Plan · Build · Review · Sign Off · Done with the agent columns as claim stages', () => {
+    expect(DEFAULT_MIGRATION_CONFIG.stages).toEqual(['inbox', 'plan', 'build', 'review', 'sign-off', 'done']);
+    expect(DEFAULT_MIGRATION_CONFIG.claim).toEqual(['plan', 'build']);
+  });
+
+  it('maps the legacy phases: prioritized -> inbox, commit -> sign-off, matching ids stay', () => {
+    const config = DEFAULT_MIGRATION_CONFIG;
+    expect(stageOfLegacyPhase('inbox', config)).toBe('inbox');
+    expect(stageOfLegacyPhase('prioritized', config)).toBe('inbox');
+    expect(stageOfLegacyPhase('build', config)).toBe('build');
+    expect(stageOfLegacyPhase('commit', config)).toBe('sign-off');
+    expect(stageOfLegacyPhase('done', config)).toBe('done');
+    expect(stageOfLegacyPhase('plan', config)).toBe('plan');
+    expect(stageOfLegacyPhase('review', config)).toBe('review');
+    expect(stageOfLegacyPhase('plan-review', config)).toBeNull();
+  });
+
+  it('lands a migrated ticket in the mapped column and keeps the legacy phase as an audit field', () => {
+    const t = target(plan(['T-0020', 'T-0010', 'T-0012']), 'T-0020');
+    expect(t.stage).toBe('inbox');
+    expect(t.extensions['x-legacy-phase']).toBe('prioritized');
+    expect(target(plan(['T-0012']), 'T-0012').stage).toBe('build');
+  });
+
+  it('a mapping that points outside the configured stages is ignored (the phase is skipped)', () => {
+    const q = plan(['T-0020'], { stages: ['inbox', 'done'], legacyPhases: { prioritized: 'plan' } });
+    expect(q.conversions[0]).toMatchObject({ status: 'skip' });
+  });
+});
+
 describe('dricket document patch', () => {
   it('sets header keys, replaces x- fields and swaps the body, leaving dk-owned fields alone', () => {
     const t = target(plan(['T-0020', 'T-0010', 'T-0012']), 'T-0020');
     const base = stubDocument(t, '2026-11-04T10:00:00Z', 'owner@legion').replace('x-persona: build-default', 'x-persona: stale');
     const doc = patchDricketDocument(base, t);
     expect(doc).toMatch(/^---\nid: t-20\ncreated_at: 2026-11-04T10:00:00Z\ncreated_by: owner@legion\n/);
-    expect(doc).toContain('\nstage: prioritized\n');
+    expect(doc).toContain('\nstage: inbox\n');
     expect(doc).toContain('\ndepends: t-10, t-12\n');
     expect(doc).toContain('\nparent: t-12\n');
     expect(doc).toContain('\nrepos: drey, drey-tickets\n');

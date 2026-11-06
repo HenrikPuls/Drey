@@ -16,32 +16,15 @@
       @case ('ticket') {
         <mc-app-bar [title]="id()" back="Work" (backed)="vm.onClose()">
           @if (!readOnly()) {
-            <button
-              bar-end
-              type="button"
-              class="tedit"
-              [class.on]="editing()"
-              aria-label="Edit ticket"
-              (click)="toggleEdit()"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.9"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M16.5 4.5l3 3L8 19l-4 1 1-4L16.5 4.5z" />
-              </svg>
-            </button>
+            <mc-ticket-mode bar-end active="view" (pick)="onModePick($event)" />
           }
         </mc-app-bar>
 
+        <ng-container [ngTemplateOutlet]="faceSwitch" />
+
         <div class="page">
           <div class="card-top">
-            <span class="phase" [style.color]="phaseColor()" [style.border-color]="phaseColor()">
+            <span class="phase filled" [style.background-color]="phaseColor()" [style.border-color]="phaseColor()">
               {{ phaseTitle() }}
             </span>
             @if (persona(); as p) {
@@ -55,7 +38,6 @@
             }
           </div>
           <h1 class="tk-title">{{ title() }}</h1>
-          <p class="tk-fm">{{ fmLine() }}</p>
 
           @if (steps().length > 0) {
             <ng-container [ngTemplateOutlet]="gateBar" [ngTemplateOutletContext]="{ tappable: true }" />
@@ -65,7 +47,7 @@
           }
 
           <div class="body">
-            <mc-markdown [text]="bodyText()" surface="ticket" label="Ticket text" />
+            <mc-markdown [text]="bodyText()" surface="ticket" label="Ticket text" mode="view" [modeBar]="false" />
           </div>
 
           @if (planState(); as plan) {
@@ -202,10 +184,12 @@
       @case ('proof') {
         <mc-app-bar [title]="id()" back="Ticket" (backed)="backToTicket()" />
 
+        <ng-container [ngTemplateOutlet]="faceSwitch" />
+
         <div class="page">
           @if (proof(); as report) {
             <div class="card-top">
-              <span class="phase" [style.color]="phaseColor()" [style.border-color]="phaseColor()">
+              <span class="phase filled" [style.background-color]="phaseColor()" [style.border-color]="phaseColor()">
                 {{ phaseTitle() }}
               </span>
               @if (persona(); as p) {
@@ -546,6 +530,8 @@
           }
         </mc-app-bar>
 
+        <ng-container [ngTemplateOutlet]="faceSwitch" />
+
         <div class="page thread-page">
           <h1 class="tk-title">{{ title() }}</h1>
           <p class="team-hint">filtered view of {{ id() }} — for work you talk to Mission Control</p>
@@ -801,9 +787,6 @@
         <span class="cs-total">{{ total }}</span>
       }
     </button>
-    <button type="button" class="chain-hint" [disabled]="readOnly()" (click)="openSheet()">
-      Chain: standard flow + the frontmatter delta · tap to adjust
-    </button>
   } @else {
     <div class="gates" [class.gates-compact]="compact">
       <ng-container [ngTemplateOutlet]="gatePills" />
@@ -847,4 +830,21 @@
       }
     </span>
   }
+</ng-template>
+
+<!-- E13-20: one segmented control, identical on the ticket, thread and review faces. -->
+<ng-template #faceSwitch>
+  <div class="seg" role="tablist" aria-label="Ticket faces">
+    @for (item of faces; track item.face) {
+      <button
+        type="button"
+        role="tab"
+        [class.on]="mode() === item.face"
+        [attr.aria-selected]="mode() === item.face"
+        (click)="setFace(item.face)"
+      >
+        {{ item.label }}
+      </button>
+    }
+  </div>
 </ng-template>

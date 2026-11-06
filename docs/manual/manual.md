@@ -865,7 +865,9 @@ its heading (remembered across restarts):
 - **Prioritized** — the ideas already in the queue the fleet pulls from, each
   saying whom it waits for.
 - **Done this week** — what you accepted into the archive in the last
-  seven days, folded away by default.
+  seven days, folded away by default. A row opens the ticket like any other
+  (document, Thread, Review); **Show older** at the foot loads the whole
+  archive under a search field (id or title words).
 
 Every ticket sits in exactly one group — Needs you wins. Every
 Needs-you, Shaping and Running row carries a **phase chip** — a dot in
@@ -873,14 +875,19 @@ the phase's colour plus its name; the colours are set per column in
 Settings → Tickets → Pipeline (`color:` in pipeline.md, and without one
 a curated default palette applies). A row leads with the ticket's
 id, then the title, an age and one line; the open ticket's row is marked with an
-accent bar. Click a row to open the ticket's **thread** — the worker's
-page: the thread's header shows the run's light and who is working, and
-above its composer sits the **decision bar** (Approve → next phase,
+accent bar. Click a row to open the ticket. **What opens depends on the
+run:** the ticket document while no run has happened yet (and once the run
+is over), the **thread** — the worker's page — while the runner is active or
+waiting on a question, a gate or a permission. On top of every one of them
+sits the same **Ticket | Thread | Review** control (identical on the
+document, the thread and the Review tab, only the active button differs):
+click another button to switch. The choice is per ticket and never touches a
+saved view. The thread's header shows the run's light and who is working,
+and above its composer sits the **decision bar** (Approve → next phase,
 or Accept). The thread follows whichever ticket you
 click last — one tab, not one per ticket — and opens where your focus is,
 never as an automatic split. A ticket picked in the Files panel opens as
-a plain file tab. The row's menu **Open ticket** opens both: the ticket
-file with its thread beside it. The panel's footer carries the whole fleet: the worst light, the
+a plain file tab. The row's menu **Open ticket** opens the same default. The panel's footer carries the whole fleet: the worst light, the
 states in words and who is out there — `2 running · OpenCode 2` — with
 tokens in flight and the oldest run's age in its tooltip; when nothing
 runs but an alert stands (a halted chain, a held column, a tripped
@@ -928,7 +935,7 @@ shows everything again.
 
 **Everyday use.** Capture with the **+** in the panel header: a title,
 a priority, optionally one or more repositories and a description land
-as `T-00xx.md` in Ideas (req-72: the repositories are checkboxes —
+as `T-00xx.md` in the Inbox (req-72: the repositories are checkboxes —
 the first checked one is the primary, where the fleet tests; the
 others get their own worktrees on the same branch). The ticket file is
 an ordinary note (description, plan, executable acceptance criteria and
@@ -980,7 +987,7 @@ comment on that line, Shift-click a second number for a range, then add
 the comment (Ctrl+Enter). The footer button names how many you wrote:
 **Send back with 2 comments** moves the ticket back to the agent with each
 comment (file, line, text) in its Handover, so the next run reads them;
-**Accept and move to Commit** accepts as on the Ready card. Both show only
+**Accept and move to Sign Off** accepts as on the Ready card (the label names the next column). Both show only
 while the ticket waits at one of your checkpoints.
 
 **The Flow tab.** *Change flow* under the chain in a ticket's header
@@ -1035,10 +1042,10 @@ the item, the second moves the ticket to `tickets/archive/` — out of
 the list, kept in git; delete files there yourself when you are sure;
 moving one back into a phase folder revives it).
 
-Phase folders are numbered (`10-inbox` … `80-done`) — the number is
+Phase folders are numbered (`10-inbox` … `60-done` in the shipped default) — the number is
 cosmetics for sorting in a file browser; everything inside a ticket
-keeps the plain phase name (the first column is titled *Ideas* on a new
-board, its id and folder stay `inbox`). **Moving the file yourself counts as a
+keeps the plain phase name (the first column is titled *Inbox* on a new
+board; its id and folder are `inbox`). **Moving the file yourself counts as a
 move**: drag or `git mv` a ticket into another phase folder and the
 next refresh completes the transition exactly like a move from the
 menu — stamp, log line, one commit. Validation findings (a hand-edited
@@ -1335,8 +1342,8 @@ editor* under Conversation targets), and the review of a finished branch
 is the Review tab. Automatic columns (agent and CI) offer no dialog — there the runner
   works the ticket, and its thread shows the run.
 
-The start opens **the ticket page**: the ticket file with its thread
-beside it, and the thread is the dialog. Nothing runs until you ask:
+The start opens **the ticket's thread** (reach the document with the
+**Ticket** button on top), and the thread is the dialog. Nothing runs until you ask:
 the worker starts quiet (it stands, no first turn of its own) and the
 prompt box comes **pre-filled with the step and its meaning** — add
 your question and send; that first message carries the dialog's brief
@@ -1385,16 +1392,17 @@ A column with a **worker** runs itself. Settings → *Tickets* shows the
 tickets repository's folder at the top (the folder button opens it) and
 the **Pipeline** as one table, a row per column in pipeline order: its
 folder number (`10`, `20`, …), name, a *Runs itself* or *Checkpoint*
-chip with the folder, then the **worker** (OpenCode or Claude Code;
+chip with the folder, then the **worker** (OpenCode, Claude Code or Kimi Code;
 *Manual* means a column only you move tickets through), the **model**
 and the **prompt**. A manual column shows dashes there. The model field is a
 picker: click it to see what the worker offers (OpenCode lists its own
-`provider/model` ids, Claude Code its aliases), type to filter, or type
+`provider/model` ids, Claude Code its aliases, Kimi Code the models of its
+configuration), type to filter, or type
 an id the list does not know. The prompt is chosen from the files in
 `tickets/_meta/prompts/`. Every change is one commit; the Work panel follows.
 
 **Reordering columns.** Drag a row by its grip, or focus a row and press
-Alt+↑ / Alt+↓. Ideas (where new tickets land) and Done stay first and
+Alt+↑ / Alt+↓. The first column (the Inbox, where new tickets land) and Done stay first and
 last. A move rewrites `pipeline.md` and renames the phase folders to
 their new numbers in one commit; the line under the table says what
 moved, with **Undo**. A column whose tickets are being worked on right
@@ -1405,7 +1413,7 @@ column* adds a checkpoint after the column you pick (by default just
 before Done); give it a worker to make it run itself. The pencil next to
 a column's name renames it in place — only the name changes, its folder
 and tickets stay. The bin removes a column after a second click, and
-only while it holds no tickets (move them first). Ideas and Done cannot
+only while it holds no tickets (move them first). The first column and Done cannot
 be removed.
 
 **Defaults and Advanced.** In Settings → Tickets a field you left empty
@@ -1415,7 +1423,7 @@ a repository's policy, worktrees base, launch command, agent
 instructions and link folders) sit under **Advanced**.
 
 **Number folders.** Phase folders carry their column number
-(`10-inbox`, `20-prioritized`, …). A repository from before that — or one
+(`10-inbox`, `20-plan`, …). A repository from before that — or one
 with a folder you numbered by hand — shows a banner; **Number folders**
 renames every folder to its number in one commit. Tickets keep their
 columns.
@@ -1464,7 +1472,7 @@ yourself, end the turn only when they pass. The runner still re-runs
 the gate: green moves the ticket one column right, red parks it (the
 failure lands in the Log, the ticket waits). A column that goes red
 too often trips its **circuit breaker**: it holds, and its next ticket
-parks in Ideas with a reason — re-prioritize it when you're ready, and
+parks in the Inbox with a reason — re-prioritize it when you're ready, and
 press **Resume** on the panel's alert once the cause is fixed.
 After a red gate the column cools down for a minute before it fires
 again.
@@ -1472,9 +1480,16 @@ again.
 Where a worker column meets your judgment, the pipeline stays yours: a
 column without a worker between two worker columns is your
 **checkpoint** — the machine never pulls across it; you review, edit,
-and move the ticket on, back a column, or back to Ideas. The shipped
-default has none (Build flows into Commit on its own); add a manual
-column between two worker columns and it becomes your checkpoint. A
+and move the ticket on, back a column, or back to the Inbox. The shipped
+default is **Inbox · Plan · Build · Review · Sign Off · Done**: Inbox is
+your triage queue, Plan and Build are worker columns (a finished plan flows
+into Build on its own; the machine gate that checks the work belongs to
+Build), and **Review** and **Sign Off** are your checkpoints (with Inbox they are the columns your own persona works) — you read the
+change in Review (*Accept* moves it on, *Send back* returns it to Build
+with a note), and Sign Off is where the work is committed: merged into the
+integration branch and pushed, then moved to Done. Boards that existed before
+keep the columns they have. Add a manual
+column between two worker columns and it becomes a checkpoint too. A
 manual column *before* the first worker column is your queue — the
 machine never pulls from it: refine and plan your tickets there (the
 build worker derives file-level detail itself, at run time) and move
@@ -1483,7 +1498,7 @@ by `blocked-by` never enters a pool while a blocker is open — the
 chain log line names it and its blockers.
 
 **Each worker has its own settings.** Settings → *Tickets* → *Workers*
-has a switch between **OpenCode** and **Claude Code**. It opens on your
+has a switch between **OpenCode**, **Claude Code** and **Kimi Code**. It opens on your
 default worker and shows only the settings of the selected worker:
 - **Pool size**: how many of its runs go at once.
 - **Resume compact threshold**: the worker's own value for the shared
@@ -1491,6 +1506,10 @@ default worker and shows only the settings of the selected worker:
 - **Pool probe** (OpenCode only).
 - **Dispatched-run permissions** (Claude Code only). OpenCode takes its
   permissions from its own configuration and asks in the ticket's thread.
+  Kimi Code asks in the thread too (approvals and its questions); install it
+  with its own installer and run `kimi login` once in a terminal. Its models
+  are hosted (`api.kimi.ai`, `api.z.ai`), so it is opt-in: the default worker
+  stays OpenCode. Its cost is estimated from a price table, not reported.
 
 **How many runs go at once** is set per worker, not per column: the
 **Pool size** of each worker (one when empty). Every run of that worker takes a
@@ -1526,7 +1545,7 @@ And the assistant can drive runs: ask it about the fleet — it sees
 ### The Tickets settings page
 
 Settings → Tickets starts with the things you decide about the team:
-**Team** shows the personas as chips (you are *You*); *Edit team* opens the
+**Team** shows the personas as chips; you are the human persona, called *You* until you type another name into **Your name** (it applies to every column you work, the flow editor, Team and the phone); *Edit team* opens the
 Team tab. **Default flow** shows the standard flow, the columns an agent
 works with who does each; a flow is changed per ticket, so pick a ticket
 next to *Open flow editor* to open its Flow tab (the standard flow itself is
@@ -1598,7 +1617,7 @@ On the phone, four tabs sit at the bottom:
   instead). Tap a card to open it.
 - **Runs** — the live runs first (what each worker is doing right
   now), then the recent ones. Tap one to follow it.
-- **Capture** — a new ticket into Ideas: title, priority,
+- **Capture** — a new ticket into the Inbox: title, priority,
   repository, description.
 - **Images.** Wherever a Description or Plan text is edited on the
   phone, an image can go straight in: paste it into the field, or tap

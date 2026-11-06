@@ -20,6 +20,7 @@ const WORKER_CHOICES: ReadonlyArray<readonly [string, string]> = [
   ['', 'Manual'],
   ['opencode', 'OpenCode'],
   ['claude-code', 'Claude Code'],
+  ['kimi', 'Kimi Code'],
 ];
 
 export interface ColumnsState {

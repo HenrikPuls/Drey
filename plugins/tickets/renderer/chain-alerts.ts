@@ -48,7 +48,7 @@ function waitingLine(ids: readonly string[]): string {
 
 /** A provider id as people read it. */
 function providerLabel(provider: string): string {
-  return provider === 'opencode' ? 'OpenCode' : provider === 'claude-code' ? 'Claude Code' : provider;
+  return provider === 'opencode' ? 'OpenCode' : provider === 'claude-code' ? 'Claude Code' : provider === 'kimi' ? 'Kimi Code' : provider;
 }
 
 export function chainAlertsOf(

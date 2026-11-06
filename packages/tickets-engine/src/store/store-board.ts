@@ -1,8 +1,9 @@
 import { stringify } from 'yaml';
-import type { BoardSnapshot, PipelinePhase } from '../contracts/tickets';
+import { TICKETS_ARCHIVE_DIR, type BoardSnapshot, type PipelinePhase } from '../contracts/tickets';
 import type { TicketDetail } from '../ports/ticket-store';
 import { ARCHIVED_LABEL, PLACEHOLDER_LABEL } from './legacy-bridge';
 import { assembleBoard, type AssembleInput, type BoardFile } from '../core/ticket-board';
+import { recentDoneOf } from '../core/normalize';
 
 /**
  * The board over a store's `TicketDetail[]` instead of ticket files (E14-2,
@@ -175,5 +176,14 @@ export function assembleBoardFromRecords(input: RecordsBoardInput): BoardSnapsho
     const { phase } = resolvePhase(record, probe.pipeline);
     return recordToBoardFile(record, phase);
   });
-  return assembleBoard({ ...input, files });
+  // Done this week (E13-21): the archive is a label here, so the same window the files
+  // board reads from `tickets/archive/` is read from the archived records' Log stamps.
+  return assembleBoard({ ...input, files, recentDone: input.recentDone ?? recentDoneOf(archivedRecordFiles(input.records), Date.now()) });
+}
+
+/** The archived records as the archive files the files board would hold (E13-21). */
+export function archivedRecordFiles(records: readonly TicketDetail[]): { path: string; text: string }[] {
+  return records
+    .filter((record) => record.labels.includes(ARCHIVED_LABEL))
+    .map((record) => ({ path: `${TICKETS_ARCHIVE_DIR}/${record.id}.md`, text: recordToBoardFile(record, 'archive').text }));
 }

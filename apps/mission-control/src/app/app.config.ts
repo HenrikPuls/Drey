@@ -155,6 +155,7 @@ export const appConfig: ApplicationConfig = {
           },
           toast: (message, kind) => state.toast(message, kind),
           moveTicket: (ticketId, phaseId) => state.moveTicket(ticketId, phaseId),
+          loadArchive: () => state.loadArchive(),
           openTicket: (ticketId) => state.openTicket(ticketId),
           openTicketSendBack: (ticketId) => state.openTicketSendBack(ticketId),
           promote: (ticketId) => state.prefillChat(`promote ${ticketId}`),
@@ -377,6 +378,7 @@ export const appConfig: ApplicationConfig = {
           },
           proposeChain: (text) => state.prefillChat(text),
           prefillChat: (text) => state.prefillChat(text),
+          openChat: () => state.openChat(),
           save: async (text) => {
             const reply = await state.saveTicket(text);
             return reply.ok ? { ok: true } : { ok: false, error: reply.error };

@@ -54,14 +54,16 @@ export function columnPromptRef(phase: PipelinePhase): string | null {
 
 /**
  * The ids of the owner's checkpoint columns: manual columns whose
- * predecessor is automatic. The dispatcher never pulls across one —
+ * predecessor is automatic, and manual columns that follow a checkpoint
+ * directly (Review → Sign Off of the default pipeline, E12-9c: both are
+ * the owner's). The dispatcher never pulls across one —
  * only the owner's moves cross it (refine / implement / park).
  */
 export function checkpointPhaseIds(columns: readonly BoardColumn[]): ReadonlySet<string> {
   const checkpoints = new Set<string>();
   for (let i = 1; i < columns.length; i++) {
     const phase = columns[i]!.phase;
-    if (!isAutoPhase(phase) && isAutoPhase(columns[i - 1]!.phase)) {
+    if (!isAutoPhase(phase) && (isAutoPhase(columns[i - 1]!.phase) || checkpoints.has(columns[i - 1]!.phase.id))) {
       checkpoints.add(phase.id);
     }
   }
@@ -88,10 +90,10 @@ export interface PlanDispatchInput {
   /** Per-column mode; a phase absent here is `playing`. */
   readonly modes: Readonly<Record<string, ColumnMode>>;
   /** The parallel runs each provider's pool carries (req-63). */
-  readonly poolSize: Readonly<Record<WorkerProviderId, number>>;
+  readonly poolSize: Readonly<Partial<Record<WorkerProviderId, number>>>;
   /** Live (starting/running/stopping) runs per provider — every run, the
    *  owner's on-demand ones included, takes a pool slot. */
-  readonly liveByPool: Readonly<Record<WorkerProviderId, number>>;
+  readonly liveByPool: Readonly<Partial<Record<WorkerProviderId, number>>>;
   /** The provider that would run the card in that column (the assignment
    *  ladder); null = unresolvable — planned without a slot, so the
    *  dispatch refuses it with the reason. */
@@ -200,7 +202,7 @@ export function planDispatch(input: PlanDispatchInput): readonly PlannedDispatch
       a.position - b.position,
   );
 
-  const free: Record<WorkerProviderId, number> = { opencode: 0, 'claude-code': 0 };
+  const free: Record<WorkerProviderId, number> = { opencode: 0, 'claude-code': 0, kimi: 0 };
   for (const provider of WORKER_PROVIDERS) {
     free[provider] = (input.poolSize[provider] ?? 0) - (input.liveByPool[provider] ?? 0);
   }

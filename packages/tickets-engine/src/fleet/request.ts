@@ -110,7 +110,7 @@ export interface ComposeRunInput {
 export interface PersonaDispatch {
   /** The persona id — what `RunInfo.persona` stamps and the report groups by. */
   readonly id: string;
-  /** The harness pin (`opencode` | `claude-code`; anything unreadable leaves the ring in charge). */
+  /** The harness pin (`opencode` | `claude-code` | `kimi`; anything unreadable leaves the ring in charge). */
   readonly worker: string;
   /** The model pin. */
   readonly model: string;

@@ -451,6 +451,15 @@ export class McState {
     this.tab.set('chat');
   }
 
+  /**
+   * Leaves the ticket screen for the chat with nothing in the composer (D-7b:
+   * 'Change by chat' no longer pre-fills a ticket-id prefix).
+   */
+  openChat(): void {
+    this.closeTicket();
+    this.tab.set('chat');
+  }
+
   /** Starts a session with the first owner message and opens it; `ticket` makes it a shape session. */
   async newSession(text: string, ticket?: string): Promise<McReply> {
     this.chatFailure.set(null);
@@ -1021,6 +1030,21 @@ export class McState {
     this.ticketError.set(null);
     this.ticketDetail.set({ ...detail, phase });
     void this.refreshPlan(id);
+  }
+
+  /**
+   * The archive of any age, newest first (`GET /api/archive`, E13-21): what the Work
+   * tab's "Show older" lists under the Done-this-week group. A dropped desk is an empty list.
+   */
+  async loadArchive(): Promise<readonly { id: string; title: string | null; at: string }[]> {
+    const body = await this.client.raw<{ ok?: boolean; tickets?: unknown }>('/api/archive');
+    const list = Array.isArray(body?.tickets) ? (body.tickets as readonly unknown[]) : [];
+    return list.flatMap((item) => {
+      const entry = item as { id?: unknown; title?: unknown; at?: unknown } | null;
+      return entry !== null && typeof entry.id === 'string'
+        ? [{ id: entry.id, title: typeof entry.title === 'string' ? entry.title : null, at: typeof entry.at === 'string' ? entry.at : '' }]
+        : [];
+    });
   }
 
   /** The current board view's phases, for the ticket screen's phase rail. */

@@ -26,10 +26,11 @@ export interface BoardRow {
   readonly rank: number;
 }
 
-export function rowsFromLegacy(tickets: readonly LegacyTicket[]): BoardRow[] {
+/** `stageOf` maps a legacy phase to the stage the migration wrote (E12-9c: `commit` -> `sign-off`); identity by default. */
+export function rowsFromLegacy(tickets: readonly LegacyTicket[], stageOf: (phase: string) => string = (phase) => phase): BoardRow[] {
   return tickets.map((t) => ({
     id: t.id,
-    stage: t.phase,
+    stage: stageOf(t.phase),
     title: flatten(t.header['title']) ?? '',
     priority: flatten(t.header['priority']) ?? '',
     dependsOn: asStringList(t.header['blocked-by']),

@@ -91,6 +91,42 @@ export function recentDoneOf(
     .map(({ id, title, at }) => ({ id, title, at }));
 }
 
+/** The most older archived tickets one "Show older" request returns (E13-21). */
+export const ARCHIVE_LISTING_MAX = 200;
+
+/**
+ * Every archived ticket, any age (E13-21 "Show older"): the archive files
+ * with their newest `— archived` stamp (`''` when the Log has none, listed
+ * last), newest first, ties by id. `query` narrows by id or title (case
+ * insensitive, every word must hit). Pure, like {@link recentDoneOf}.
+ */
+export function archivedEntriesOf(
+  files: readonly { readonly path: string; readonly text: string }[],
+  options: { readonly query?: string; readonly limit?: number } = {},
+): RecentDone[] {
+  const prefix = `${TICKETS_ARCHIVE_DIR}/`;
+  const words = (options.query ?? '').toLowerCase().split(/\s+/).filter((w) => w !== '');
+  const found: { id: string; title: string | null; at: string; t: number }[] = [];
+  for (const file of files) {
+    if (!file.path.startsWith(prefix) || !file.path.endsWith('.md') || file.path.slice(prefix.length).includes('/')) {
+      continue;
+    }
+    const id = file.path.slice(prefix.length, -'.md'.length);
+    const title = parseTicketFile(file.text, file.path).meta.title;
+    const hay = `${id} ${title ?? ''}`.toLowerCase();
+    if (!words.every((word) => hay.includes(word))) {
+      continue;
+    }
+    const at = parseArchivedStamp(file.text) ?? '';
+    const t = Date.parse(at);
+    found.push({ id, title, at, t: Number.isNaN(t) ? Number.NEGATIVE_INFINITY : t });
+  }
+  return found
+    .sort((a, b) => (a.t !== b.t ? (a.t < b.t ? 1 : -1) : a.id < b.id ? -1 : 1))
+    .slice(0, options.limit ?? ARCHIVE_LISTING_MAX)
+    .map(({ id, title, at }) => ({ id, title, at }));
+}
+
 /** One drift the board's normalization owes a full transition treatment. */
 export interface DriftDetection {
   readonly kind: 'move' | 'archive';
