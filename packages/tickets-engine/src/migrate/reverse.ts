@@ -1,6 +1,7 @@
 import { stringify } from 'yaml';
 
 import { DEFAULT_RANK, phaseDirectoryName } from '../contracts/tickets';
+import { legacyPhaseOfState } from '../core/pipeline-states';
 import { flatList, flatText, parseFlatDocument } from '../store/flat-frontmatter';
 import { toDisplayId } from '../store/ids';
 import { ARCHIVED_LABEL } from '../store/legacy-bridge';
@@ -31,7 +32,10 @@ export interface ReverseInput {
 }
 
 export interface ReverseOptions {
-  /** The pipeline's phase ids in board order -- numbers the folders (`10-inbox` ...). */
+  /**
+   * The phase ids of the board written back into, in board order -- numbers the folders (`10-inbox` ...).
+   * A stage that is not one of them goes to its legacy column (`legacyPhaseOfState`, req-99a).
+   */
   readonly phases: readonly string[];
   /** Folder names as the legacy vault has them (`build` -> `50-build`); default `NN-phase` by position. */
   readonly phaseDirs?: Readonly<Record<string, string>>;
@@ -123,13 +127,14 @@ export function reverseTicket(input: ReverseInput, options: ReverseOptions): Rev
     lost.push(`${comments.length} comment(s) written into the Log as one line each`);
   }
 
-  const phaseIndex = options.phases.indexOf(stage);
-  const dir = archived ? 'archive' : options.phaseDirs?.[stage] ?? (phaseIndex >= 0 ? phaseDirectoryName(phaseIndex + 1, stage) : stage);
+  const phase = legacyPhaseOfState(stage, options.phases, flatText(f['x-legacy-phase'])) ?? stage;
+  const phaseIndex = options.phases.indexOf(phase);
+  const dir = archived ? 'archive' : options.phaseDirs?.[phase] ?? (phaseIndex >= 0 ? phaseDirectoryName(phaseIndex + 1, phase) : phase);
   if (phaseIndex < 0 && !archived) {
     lost.push(`stage "${stage}" is not a pipeline phase; the folder is named after it`);
   }
   const yamlText = stringify(header, { lineWidth: 0 });
-  return { id, phase: stage, relPath: `tickets/${dir}/${id}.md`, text: `---\n${yamlText}---\n${body}`, lost };
+  return { id, phase, relPath: `tickets/${dir}/${id}.md`, text: `---\n${yamlText}---\n${body}`, lost };
 }
 
 function typedValue(name: string, value: string): unknown {

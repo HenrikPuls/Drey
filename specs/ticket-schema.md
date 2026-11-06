@@ -65,10 +65,10 @@ Top-level rules, once, up front:
       ledger.jsonl    # the fleet event ledger (E7) — see The fleet ledger
     10-inbox/
       T-0042.md       # one ticket per file, in its current phase's folder
-    20-plan/
-    30-build/
-    40-review/
-    50-sign-off/
+    20-shaping/
+    30-prioritized/
+    40-building/
+    50-ready/
     60-done/
     archive/          # reserved (T-0041): archived tickets, never a column
     attachments/      # reserved (req-66 R8): images a paired device
@@ -812,33 +812,44 @@ the ticket file, and the ticket file never embeds it.
 push: origin
 phases:
   - { id: inbox, title: Inbox, handover: manual, persona: you }
-  - { id: plan, title: Plan, claim: true, handover: agent plan-default }
-  - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default, color: '#c96442' }
-  - { id: review, title: Review, handover: manual, persona: you }
-  - { id: sign-off, title: Sign Off, handover: manual, persona: you }
+  - { id: shaping, title: Shaping, handover: manual, persona: you }
+  - { id: prioritized, title: Prioritized, handover: manual, persona: you }
+  - { id: building, title: Building, wip: 3, claim: true, handover: agent build-default, color: '#c96442' }
+  - { id: ready, title: Ready to try, handover: manual, persona: you }
   - { id: done, title: Done, handover: none }
 ---
 Prose for humans. The board follows this file on refresh.
 ```
 
-**The shipped default (E12-9c, owner decision 2026-11-05)** — what "Initialize board"
-writes on an empty tickets repository: **Inbox** (manual, the owner's triage queue,
-the capture target) · **Plan** (agent, `plan-default`; the first worker column, so a
-run there gates structurally — the plan writes the acceptance criteria) · **Build**
-(agent, `build-default`; the machine gate and the proof belong to Build) · **Review**
-(manual) · **Sign Off** (manual — where the work is committed: merged into the
-integration branch and pushed; it takes the role of the former `commit` column and
-the checkpoint discipline of `plugins/tickets/BOARD.md`) · **Done**. The manual columns carry
-`persona: you` (the human persona, whose name is configurable — `personas.humanName`,
-Settings → Tickets → Crew); Review and Sign
-Off are the owner's checkpoints (see "Agent lane rules"): *Accept* is the forward move,
-*Send back* the ordinary send-back to Build. dk claim stages: `plan`, `build`. Boards
-and stores that exist keep their columns — a default is written only into an empty
-repository. Before E12-9c the default was `inbox · prioritized · build · commit ·
-done` (and between req-93 and E12-9 the first column was titled *Inbox*, for one
-release *Ideas*); such boards are unchanged and fully supported.
+**The shipped default (req-99a, owner decisions 2026-11-06)** — what "Initialize board"
+writes on an empty tickets repository, and the stages the dricket import writes
+(`core/pipeline-states.ts`): **Inbox** (the owner's triage queue, the capture target) ·
+**Shaping** · **Prioritized** · **Building** (agent, `build-default`; the only `claim`
+stage: plan, build, review and test are phases of the chain inside it) · **Ready to try**
+(id `ready`, the owner's checkpoint, see "Agent lane rules") · **Done**. The manual columns
+carry `persona: you` (the human persona, whose name is configurable — `personas.humanName`,
+Settings → Tickets → Crew); the fleet takes nothing from them. Building is the first worker
+column, so a run there on a ticket without acceptance criteria gates structurally.
 
-> **Target (owner, 2026-11-06, not built):** the owner-facing list becomes `Inbox → Shaping → Prioritized → Building → Ready to try → Done`, with no Sign Off, no Commit and no separate Review column and no numbered folder shown to the user (six states, O-2 confirmed 2026-11-06; Review and Ready to try are one state, and Accept there merges, pushes and lands the ticket in Done; "Review" stays an agent phase name). Mapping: Inbox → Inbox, Plan → Shaping, Build → Building, Review + Sign Off → Ready to try, Done → Done, Prioritized new and manual. The stage ids, folders, `pipeline.md` and the transition table above stay as written until the migration of roadmap item req-99 ships; then this section and the validator change in one step.
+**Accept on Ready to try is the sign-off** and no plain move: it starts the commit step
+(`commit-default`, an owner-started run) on the ticket's **target repository**: merge its
+branch, push (`plugins/tickets/BOARD.md`). A green end lands the ticket in Done, as bookkeeping;
+a `BLOCKED:` or red end leaves it on Ready to try. A ticket with no `repo:` has nothing to
+merge and moves directly. On a store dk refuses an agent's release into a terminal stage, so
+the run hands back to `ready` and the engine then makes the owner's move into `done`.
+*Send back* is the ordinary send-back to Building.
+
+Boards and stores that exist keep their columns: a default is written only into an empty
+repository, and nothing renames a folder. Earlier defaults were `inbox · plan · build ·
+review · sign-off · done` (E12-9c) and `inbox · prioritized · build · commit · done`; such boards
+are unchanged and fully supported, and Accept on them stays the move to the next column.
+**Mapping of the one migration** (`LEGACY_PHASE_STATES`; the owner migrates all tickets once
+into the dricket store, O-3): `inbox` → `inbox`, `plan` → `shaping`, `prioritized` →
+`prioritized`, `build` → `building`, `review` / `sign-off` / `commit` → `ready`, `done` → `done`;
+the old phase stays in `x-legacy-phase`. `migrate-tickets --pipeline-out` writes the matching
+`_meta/pipeline.md`, and the reverse converter goes back (`legacyPhaseOfState`).
+
+> **The rest of this file** still describes the numbered-folder layout of the old backend. Its supersession by the dricket format is E14-9: this section gives the stage vocabulary now, and the display names on every surface are req-99b.
 
 - `id`: `[a-z][a-z0-9-]*`, unique, = the phase (the stripped directory
   name). The first phase is the capture target; the last is terminal —
@@ -965,8 +976,10 @@ sits to the **working column's next phase** (a pulled ticket goes
 `prioritized` → `commit` in one step). A manual column between
 automatic columns is the owner's **checkpoint**: the machine never
 pulls across it, and only the owner's moves cross it (refine /
-implement / park). A manual column that directly follows a checkpoint
-is one too (E12-9c: Review → Sign Off), so the whole run of the
+implement / park). On the six stages that is Ready to try; Inbox, Shaping
+and Prioritized stand before the first worker column and are plain queues.
+A manual column that directly follows a checkpoint
+is one too (an older board's Review → Sign Off), so the whole run of the
 owner's columns after a worker column raises Needs-you cards. Backward moves are human moves — the one exception
 is the circuit breaker's park into inbox, always logged.
 

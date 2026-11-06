@@ -8,6 +8,13 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **An agent moving a ticket into Done on a store, and a pipeline key for Accept's run** (req-99a,
+  2026-11-06). `dk` refuses an agent's release into a terminal stage (seen in E14-5, checked again
+  on v0.6.2 with the six stages), so the commit run hands back to `ready` and the engine makes the
+  owner's move into `done`; no second identity and no dk policy change. Accept finds its run by the
+  stage id `ready` and the `commit-default` prompt, not by a new `pipeline.md` key: older boards then
+  cannot start it by accident, and the contract does not grow for one value.
+
 - **Renaming stored identifiers to "Crew" / "Accept"** (owner, 2026-11-06; milestone
   173). The design canvas "Drey Tickets — Workflow redesign" settled two words:
   the area is **Crew**, never "Team", and the decision verb is **Accept**, never

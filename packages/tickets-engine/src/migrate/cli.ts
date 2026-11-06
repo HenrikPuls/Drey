@@ -1,11 +1,13 @@
 import { mkdirSync, readdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { LEGACY_PHASE_IDS } from '../core/pipeline-states';
 import { defaultExec, DkProcess } from '../store/dk-process';
 import { DricketTicketStore } from '../store/dricket-ticket-store';
 import { applyPlan, assertScratchStore, initScratchStore } from './apply';
 import { buildPlan, DEFAULT_MIGRATION_CONFIG, stageOfLegacyPhase, type MigrationConfig } from './convert';
 import { readLegacyVault } from './legacy-vault';
+import { sixStagePipelineText } from './pipeline-text';
 import { renderDryRun, renderReport } from './report';
 import { reverseTicket, type DricketComment } from './reverse';
 import { readStoreComments } from './reverse-comments';
@@ -32,7 +34,7 @@ interface Args {
   readonly values: ReadonlyMap<string, string>;
 }
 
-const VALUE_OPTIONS = ['legacy', 'allow', 'store', 'report', 'dk', 'actor', 'out', 'data', 'home', 'stages'];
+const VALUE_OPTIONS = ['legacy', 'allow', 'store', 'report', 'dk', 'actor', 'out', 'data', 'home', 'stages', 'pipeline-out'];
 const FLAG_OPTIONS = ['apply', 'dry-run', 'reverse', 'allow-live-runs', 'include-archive', 'help'];
 
 export function parseArgs(argv: readonly string[]): Args {
@@ -74,7 +76,8 @@ const USAGE = [
   '  migrate-tickets --legacy <vault> --allow <ids.txt> --apply --store <new dir>     into a scratch dricket store',
   '  migrate-tickets --reverse --store <dricket store> --out <new dir>                store -> legacy files',
   'options: --report <file> --dk <path> --actor <id> --data <dir> --home <dir> --allow-live-runs --include-archive (archive/ -> done + label archived)',
-  '         --stages a,b,c (reverse: the stage list of the store; default inbox,plan,build,review,sign-off,done)',
+  '         --stages a,b,c (reverse: the columns of the board written back into; default inbox,prioritized,build,commit,done)',
+  '         --pipeline-out <file> (the six-stage _meta/pipeline.md of this vault, for the cut-over to commit with the import)',
 ].join('\n');
 
 export async function runMigrateCli(argv: readonly string[], io: CliIo, env: NodeJS.ProcessEnv = process.env): Promise<number> {
@@ -115,6 +118,17 @@ async function runForward(args: Args, io: CliIo, env: NodeJS.ProcessEnv): Promis
   const vault = readLegacyVault(legacy);
   const plan = buildPlan(vault, config);
   io.out(renderDryRun(plan));
+
+  const pipelineOut = args.values.get('pipeline-out');
+  if (pipelineOut !== undefined) {
+    const converted = sixStagePipelineText(readFileSync(path.join(legacy, 'tickets', '_meta', 'pipeline.md'), 'utf8'));
+    mkdirSync(path.dirname(path.resolve(pipelineOut)), { recursive: true });
+    writeFileSync(pipelineOut, converted.text);
+    io.out(`six-stage pipeline written to ${pipelineOut}\n`);
+    for (const line of converted.dropped) {
+      io.out(`  pipeline: not carried: ${line}\n`);
+    }
+  }
 
   const apply = args.flags.has('apply');
   let applyResult = null;
@@ -173,7 +187,7 @@ async function runReverse(args: Args, io: CliIo, env: NodeJS.ProcessEnv): Promis
   const dk = new DkProcess({ bin: args.values.get('dk') ?? 'dk', store: path.resolve(storeDir), dataDir: args.values.get('data') ?? null, env: dkEnv(args, env) });
   const store = new DricketTicketStore(dk);
   const stagesArg = args.values.get('stages');
-  const phases = stagesArg === undefined ? DEFAULT_MIGRATION_CONFIG.stages : stagesArg.split(',').map((s) => s.trim()).filter((s) => s !== '');
+  const phases = stagesArg === undefined ? LEGACY_PHASE_IDS : stagesArg.split(',').map((s) => s.trim()).filter((s) => s !== '');
   let comments = new Map<string, DricketComment[]>();
   try {
     comments = readStoreComments(path.resolve(storeDir));

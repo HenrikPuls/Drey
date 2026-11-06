@@ -20,6 +20,7 @@ import { newTicketFileText, parseTicketFile, patchTicketFile, patchBlockedBy, pa
 import { withPlanSection } from '../core/plan-section';
 import { applyFlowOp, type FlowOp } from '../core/flow-edit';
 import type { FlowReply, FlowSaveReply, FlowStepView, FlowTarget, FlowScope } from '../contracts/flow';
+import { BUILDING_STATE, COMMIT_STEP_PROMPT, DEFAULT_PIPELINE_TEXT, READY_STATE } from '../core/pipeline-states';
 import { isManualPhase, MANUAL_PHASE, MANUAL_TITLE, mergeChain, parseChainEntry, renderChainEntries, validateChain } from '../core/chain-delta';
 import { deletePlanPart, movePlanPart, parsePlanParts, partChainEntries, withPlanParts, type PlanPart } from '../core/plan-parts';
 import { blockerOf, indicesToMint, lockedIndices, matchPartTickets, partStateOf, partTicketText, releaseLogText, startLineOf, type PartTicket } from '../core/plan-release';
@@ -78,24 +79,6 @@ const REPO_READ_DENIED = /^(\.git|node_modules|\.env.*|\.ssh|.*\.(pem|key))$/i;
 const PROMPTS_DIR = 'tickets/_meta/prompts';
 const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const PLAN_INTERACTIVE_PROMPT = 'plan-interactive-default';
-const DEFAULT_PIPELINE = `---
-phases:
-  - { id: inbox, title: Inbox, handover: manual, persona: you }
-  - { id: plan, title: Plan, claim: true, handover: agent plan-default }
-  - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default }
-  - { id: review, title: Review, handover: manual, persona: you }
-  - { id: sign-off, title: Sign Off, handover: manual, persona: you }
-  - { id: done, title: Done, handover: none }
----
-The pipeline: ordered phases (first = capture target, last = terminal),
-configurable per handover (manual | agent <prompt-ref> | ci | none).
-Inbox is the owner's triage queue: move a ticket into Plan when it is
-worth planning. Plan and Build are worked by agents; the columns the
-human persona works carry persona: you (its name is configurable) -
-Inbox, Review and Sign Off. Review and Sign Off are the owner's
-checkpoints (Sign Off is where the work is committed: merged and pushed). See specs/ticket-schema.md.
-Edit freely; the board follows on refresh.
-`;
 const DEFAULT_REPOS = `---
 repos: {}
 ---
@@ -112,7 +95,7 @@ function messageOf(error: unknown): string {
 }
 
 export type BoardMutationResult =
-  | { readonly ok: true; readonly warning?: string; readonly moved?: number; readonly path?: string }
+  | { readonly ok: true; readonly warning?: string; readonly moved?: number; readonly path?: string; readonly runId?: string }
   | { readonly ok: false; readonly error: string };
 
 /** The card of one ticket id, wherever it sits on the board; null when absent. */
@@ -307,6 +290,9 @@ export class EngineBoardService {
   private dricket: StoreSettings | null = null;
   /** E14-4b: the record each board mutation read (ticket id -> record), so its write carries the rev it was made on. Refreshed by every read inside the queue. */
   private readonly records = new Map<string, TicketDetail>();
+  /** The commit steps Accept started on a store (ticket id -> run id), until their run settles; see {@link settleCommitSteps}. */
+  private readonly commitSteps = new Map<string, string>();
+  private settling: Promise<void> = Promise.resolve();
 
   constructor(
     /** The host ports: every Drey/Electron affordance the service needs (ADR-0088, E2a). */
@@ -357,7 +343,7 @@ export class EngineBoardService {
 
   /** After {@link dispose}: resolves when the store's background processes ended (see `StoreBoardSource.idle`). */
   idle(): Promise<void> {
-    return this.storeBoard.idle();
+    return Promise.all([this.storeBoard.idle(), this.settling]).then(() => undefined);
   }
 
   onChanged(listener: () => void): () => void {
@@ -415,6 +401,10 @@ export class EngineBoardService {
 
   /** Snapshot from files — every fetch rebuilds (no stored board state). */
   async snapshot(): Promise<BoardSnapshot> {
+    // A settled commit step lands in Done with the next read of the board (every client re-reads on a fleet change).
+    if (this.commitSteps.size > 0) {
+      this.settling = this.settling.then(() => this.settleCommitSteps()).catch((error: unknown) => this.host.log(`commit step: ${messageOf(error)}`, 'warn'));
+    }
     const [vault, vaults] = await Promise.all([
       this.detect(),
       this.host.listVaults(),
@@ -1253,9 +1243,9 @@ export class EngineBoardService {
 
   // --- the plan to accept (E10-4, concept v2 §5.9) ----------------------------
 
-  /** The build queue's phase: `build`, else the phase after the first, else the first. */
+  /** The build queue's phase: `building` (`build` on an older board), else the phase after the first, else the first. */
   private buildPhaseOf(snap: BoardSnapshot): PipelinePhase | null {
-    return snap.pipeline.find((p) => p.id === 'build') ?? snap.pipeline[1] ?? snap.pipeline[0] ?? null;
+    return snap.pipeline.find((p) => p.id === BUILDING_STATE) ?? snap.pipeline.find((p) => p.id === 'build') ?? snap.pipeline[1] ?? snap.pipeline[0] ?? null;
   }
 
   /** The tickets that name `parentId` as their parent, as the matcher reads them. */
@@ -2540,10 +2530,11 @@ export class EngineBoardService {
   /**
    * The Ready card's "Accept and merge" (req-75 W3): accept follows the
    * pipeline — in the terminal phase the archive treatment, then the
-   * worktree goes when it is clean (a dirty one stays, visibly); in any
-   * other phase the ordinary transition to the next configured phase
-   * (with an agent `commit` phase next, that step merges). No second
-   * merge implementation here.
+   * worktree goes when it is clean (a dirty one stays, visibly); on Ready
+   * to try the commit step (req-99a, below); in any other phase the
+   * ordinary transition to the next configured phase (with an agent
+   * `commit` phase next, that step merges). No second merge
+   * implementation here.
    */
   acceptTicket(input: { id: string; actor?: string }): Promise<BoardMutationResult> {
     return this.enqueue(async () => {
@@ -2558,6 +2549,9 @@ export class EngineBoardService {
       }
       const actor = input.actor ?? this.owner;
       const next = nextPhaseIdOf(snap.columns, card.phase);
+      if (next !== null && card.phase === READY_STATE && card.meta.repo !== null && (card.meta.form ?? 'ship') !== 'scout' && nextPhaseIdOf(snap.columns, next) === null) {
+        return this.startCommitStep(card.id);
+      }
       if (next !== null) {
         // E10-6: finishing a manual step is an ordinary Accept; the Log says whose step it was.
         const finished = card.meta.awaiting === undefined ? undefined : `manual step finished by ${actor} (${card.meta.awaiting})`;
@@ -2582,6 +2576,75 @@ export class EngineBoardService {
       const kept = warnings.filter((w): w is string => w !== undefined);
       return { ok: true, ...(kept.length === 0 ? {} : { warning: kept.join('; ') }) };
     });
+  }
+
+  /**
+   * Accept on Ready to try is the sign-off (req-99a, build plan Q8): an
+   * owner-started run of the commit step on the TARGET repository: merge
+   * the ticket's branch, push. On the files backend its green end moves the
+   * ticket into Done like every run. On a store dk never lets an agent
+   * release into the terminal stage, so the run moves nothing and
+   * {@link settleCommitSteps} makes the owner's move afterwards. A blocked
+   * or red end leaves the ticket where it is, and Accept again starts it
+   * again (the prompt completes at once when the work is already pushed).
+   */
+  private async startCommitStep(ticketId: string): Promise<BoardMutationResult> {
+    const live = (await this.fleetRecords()).some((r) => r.ticketId === ticketId && !['done', 'stopped', 'failed'].includes(r.state));
+    if (live) {
+      return { ok: false, error: `${ticketId} has a live run — stop it or wait for it first` };
+    }
+    const started = await this.startRunInQueue(
+      { ticketId, workerChoice: null, permissionMode: this.autoPermissionMode, handover: 'fresh', interactive: null },
+      true,
+    );
+    if (!started.ok) {
+      return { ok: false, error: started.error ?? `the commit step of ${ticketId} did not start` };
+    }
+    if (this.dricket !== null && started.runId !== undefined) {
+      this.commitSteps.set(ticketId, started.runId);
+    }
+    return { ok: true, ...(started.runId !== undefined ? { runId: started.runId } : {}) };
+  }
+
+  /**
+   * The bookkeeping half of the commit step on a store: a run that ended
+   * green moves its ticket from Ready to try into Done, as the owner who
+   * accepted. Idempotent; a run that ended otherwise only leaves the list.
+   * The list lives in memory: after an engine restart the owner's next
+   * Accept finds the work pushed and completes.
+   */
+  async settleCommitSteps(): Promise<void> {
+    if (this.commitSteps.size === 0) {
+      return;
+    }
+    const runs = await this.fleetRecords();
+    for (const [ticketId, runId] of [...this.commitSteps]) {
+      const run = runs.find((r) => r.id === runId);
+      if (run === undefined || !['done', 'stopped', 'failed'].includes(run.state)) {
+        continue;
+      }
+      this.commitSteps.delete(ticketId);
+      if (run.state !== 'done' || (run.blocked ?? null) !== null || run.gateResult === 'red') {
+        continue;
+      }
+      const moved = await this.enqueue(async (): Promise<BoardMutationResult> => {
+        const vault = await this.detect();
+        if (vault === null) {
+          return { ok: false, error: 'no tickets vault detected' };
+        }
+        const snap = await this.snapshot();
+        const card = findOnBoard(snap, ticketId);
+        const next = card === null ? null : nextPhaseIdOf(snap.columns, card.phase);
+        if (card === null || card.phase !== READY_STATE || next === null) {
+          return { ok: true }; // the owner moved it meanwhile: nothing to book
+        }
+        return this.moveCard(vault, snap, card, next, this.owner, `commit step finished (run ${runId})`);
+      });
+      if (!moved.ok) {
+        this.host.log(`commit step: ${ticketId} stays on Ready to try — ${moved.error}`, 'warn');
+      }
+      this.announceChanged();
+    }
   }
 
   /**
@@ -2893,156 +2956,171 @@ export class EngineBoardService {
      */
     interactive: InteractiveMode | null;
   }): Promise<{ ok: boolean; error?: string; runId?: string }> {
-    return this.enqueue(async () => {
-      const dricket = await this.refreshDricket();
-      const vault = await this.detect();
-      if (vault === null) {
-        return { ok: false, error: 'no tickets vault detected' };
+    return this.enqueue(() => this.startRunInQueue(input, false));
+  }
+
+  /** {@link startRun} inside the queue; `commitStep` is Accept's run on Ready to try (req-99a). */
+  private async startRunInQueue(
+    input: { ticketId: string; workerChoice: string | null; permissionMode: PermissionMode; handover: HandoverMode | 'auto' | null; interactive: InteractiveMode | null },
+    commitStep: boolean,
+  ): Promise<{ ok: boolean; error?: string; runId?: string }> {
+    const dricket = await this.refreshDricket();
+    const vault = await this.detect();
+    if (vault === null) {
+      return { ok: false, error: 'no tickets vault detected' };
+    }
+    const snap = await this.snapshot();
+    let card: TicketCard | null = null;
+    let phaseId: string | null = null;
+    for (const column of snap.columns) {
+      const found = column.tickets.find((t) => t.id === input.ticketId);
+      if (found !== undefined) {
+        card = found;
+        phaseId = column.phase.id;
+        break;
       }
-      const snap = await this.snapshot();
-      let card: TicketCard | null = null;
-      let phaseId: string | null = null;
-      for (const column of snap.columns) {
-        const found = column.tickets.find((t) => t.id === input.ticketId);
-        if (found !== undefined) {
-          card = found;
-          phaseId = column.phase.id;
-          break;
-        }
+    }
+    if (card === null || phaseId === null) {
+      return { ok: false, error: `${input.ticketId} is not on the board` };
+    }
+    if (dricket === null && card.meta.run !== null && !(await this.clearEndedRunStamp(vault, card))) {
+      return { ok: false, error: `${card.id} already has a live run — stop it first` };
+    }
+    const blocked = blockedRefusal(card);
+    if (blocked !== null) {
+      return { ok: false, error: blocked };
+    }
+    const workingPhase = snap.pipeline.find((p) => p.id === phaseId) ?? null;
+    const repo =
+      card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card!.meta.repo) ?? null);
+    // req-72: the ticket's further repos, resolved like the primary's —
+    // an unknown name refuses the start (the board badges it already).
+    const missingExtra = card.meta.repos.find((name) => name !== card.meta.repo && !snap.repos.some((r) => r.name === name));
+    if (missingExtra !== undefined) {
+      return { ok: false, error: `${card.id} names repo "${missingExtra}", but it is not in _meta/repos.md` };
+    }
+    const extraRepos = card.meta.repos
+      .filter((name) => name !== card.meta.repo)
+      .map((name) => snap.repos.find((r) => r.name === name)!)
+      .filter((r) => r !== undefined);
+    const text = await this.readCardText(vault, card);
+    let prompt: string | null = null;
+    if (input.interactive !== null) {
+      // req-65: the dialog's brief — the phase's `interactive:` ref,
+      // else the shipped plan default.
+      const ref = workingPhase?.interactive ?? PLAN_INTERACTIVE_PROMPT;
+      prompt = await this.readOptional(vault.id, `tickets/_meta/prompts/${ref}.md`);
+      if (prompt === null) {
+        return {
+          ok: false,
+          error: `the interactive prompt "${ref}" is missing — tickets/_meta/prompts/${ref}.md ("Add Drey's prompts" in the ticket settings re-adds it)`,
+        };
       }
-      if (card === null || phaseId === null) {
-        return { ok: false, error: `${input.ticketId} is not on the board` };
-      }
-      if (dricket === null && card.meta.run !== null && !(await this.clearEndedRunStamp(vault, card))) {
-        return { ok: false, error: `${card.id} already has a live run — stop it first` };
-      }
-      const blocked = blockedRefusal(card);
-      if (blocked !== null) {
-        return { ok: false, error: blocked };
-      }
-      const workingPhase = snap.pipeline.find((p) => p.id === phaseId) ?? null;
-      const repo =
-        card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card!.meta.repo) ?? null);
-      // req-72: the ticket's further repos, resolved like the primary's —
-      // an unknown name refuses the start (the board badges it already).
-      const missingExtra = card.meta.repos.find((name) => name !== card.meta.repo && !snap.repos.some((r) => r.name === name));
-      if (missingExtra !== undefined) {
-        return { ok: false, error: `${card.id} names repo "${missingExtra}", but it is not in _meta/repos.md` };
-      }
-      const extraRepos = card.meta.repos
-        .filter((name) => name !== card.meta.repo)
-        .map((name) => snap.repos.find((r) => r.name === name)!)
-        .filter((r) => r !== undefined);
-      const text = await this.readCardText(vault, card);
-      let prompt: string | null = null;
-      if (input.interactive !== null) {
-        // req-65: the dialog's brief — the phase's `interactive:` ref,
-        // else the shipped plan default.
-        const ref = workingPhase?.interactive ?? PLAN_INTERACTIVE_PROMPT;
-        prompt = await this.readOptional(vault.id, `tickets/_meta/prompts/${ref}.md`);
+    } else {
+      // The commit step's prompt is its own: Ready to try is a manual column and names none.
+      const promptRef = commitStep ? COMMIT_STEP_PROMPT : workingPhase === null ? null : columnPromptRef(workingPhase);
+      if (promptRef !== null) {
+        prompt = await this.readOptional(vault.id, `tickets/_meta/prompts/${promptRef}.md`);
         if (prompt === null) {
           return {
             ok: false,
-            error: `the interactive prompt "${ref}" is missing — tickets/_meta/prompts/${ref}.md ("Add Drey's prompts" in the ticket settings re-adds it)`,
+            error: `the handover names prompt "${promptRef}", but tickets/_meta/prompts/${promptRef}.md is missing`,
           };
         }
-      } else {
-        const promptRef = workingPhase === null ? null : columnPromptRef(workingPhase);
-        if (promptRef !== null) {
-          prompt = await this.readOptional(vault.id, `tickets/_meta/prompts/${promptRef}.md`);
-          if (prompt === null) {
-            return {
-              ok: false,
-              error: `the handover names prompt "${promptRef}", but tickets/_meta/prompts/${promptRef}.md is missing`,
-            };
-          }
-        }
       }
-      const nextPhaseId = nextPhaseIdOf(snap.columns, phaseId);
-      const nextPhaseClaims =
-        nextPhaseId !== null ? (snap.pipeline.find((p) => p.id === nextPhaseId)?.claim === true) : false;
-      // The context pack (T-0048): repo instructions, the worktree's diff
-      // stat, and the previous run's gate failure on a retry — the file
-      // reads stay here, the composer stays pure.
-      let repoInstructions: string | null = null;
-      let diffStat: string | null = null;
-      if (repo !== null && repo.path !== null) {
-        repoInstructions = await readRepoInstructions(repo.path, repo.instructions);
-        diffStat = await worktreeDiffStat(
-          this.git,
-          worktreePathFor(vault.path, repo, card.id),
-          repo.branch,
-        );
-      }
-      const gateFailure = await this.lastGateFailure(card.id);
-      // E3: the persona ladder (ticket pin > phase persona > engine
-      // default) — a resolved persona contributes worker/model/prompt/
-      // memory; an owner-picked worker in the dialog still wins.
-      const loader = personaLoader((rel) => this.host.read(vault.id, rel));
-      const personaResolution = await resolvePersonaForTicket(loader, {
-        ticketPersona: card.meta.persona,
-        phasePersona: workingPhase?.persona ?? null,
-        defaultPersona: ((await this.host.configGet<string>('personas.default')) ?? '').trim() || null,
-      });
-      let personaDispatch: PersonaDispatch | null = null;
-      if (personaResolution.persona !== null) {
-        const derived = deriveWorkerModel(personaResolution.persona, null);
-        personaDispatch = {
-          id: personaResolution.persona.id,
-          worker: derived.workerChoice,
-          model: derived.model ?? '',
-          prompt: await loader.prompt(personaResolution.persona.id),
-          memory: await loader.memory(personaResolution.persona.id),
-          coaching: await loader.thread(personaResolution.persona.id),
-        };
-      }
-      const composed = composeRunRequest({
-        card,
-        ticketText: text,
-        vaultPath: vault.path,
-        workingPhase,
-        nextPhaseId,
-        nextPhaseDir:
-          nextPhaseId === null
-            ? null
-            : resolvePhaseDir(
-                await this.ticketDirs(vault),
-                snap.pipeline.findIndex((p) => p.id === nextPhaseId) + 1,
-                nextPhaseId,
-              ),
-        pushRemote: snap.pushRemote,
-        nextPhaseClaims,
-        repo,
-        extraRepos,
-        promptText: prompt,
-        defaultWorker: this.defaultWorker,
-        permissionMode: input.permissionMode,
-        gitPath: ((await this.host.configGet<string>('gitPath')) ?? '').trim(),
-        workerChoice: input.workerChoice,
-        repoInstructions,
-        diffStat,
-        gateFailure,
-        caps: this.caps,
-        ...(personaDispatch !== null ? { persona: personaDispatch } : {}),
-        ...(input.handover !== null ? { handover: input.handover } : input.interactive !== null ? { handover: 'auto' } : {}),
-        ...(input.interactive !== null ? { interactive: input.interactive } : {}),
-        ...(dricket !== null ? { dk: await this.runTarget(dricket, snap.pipeline, phaseId) } : {}),
-      });
-      if (!composed.ok) {
-        return { ok: false, error: composed.error };
-      }
-      for (const truncation of composed.truncations) {
-        this.host.log(
-          `instruction: ${card.id} ${truncation.section} truncated: true, originalSize ${truncation.originalSize}`,
-        );
-      }
-      const outcome = await this.fleet.start(composed.request);
-      if (outcome.ok) {
-        this.announceChanged();
-        return { ok: true, runId: outcome.run.id };
-      }
-      return { ok: false, error: outcome.error };
+    }
+    // On a store the commit step moves nothing itself: dk refuses an agent's release into the terminal stage (settleCommitSteps).
+    const nextPhaseId = commitStep && dricket !== null ? null : nextPhaseIdOf(snap.columns, phaseId);
+    const nextPhaseClaims =
+      nextPhaseId !== null ? (snap.pipeline.find((p) => p.id === nextPhaseId)?.claim === true) : false;
+    // The context pack (T-0048): repo instructions, the worktree's diff
+    // stat, and the previous run's gate failure on a retry — the file
+    // reads stay here, the composer stays pure.
+    let repoInstructions: string | null = null;
+    let diffStat: string | null = null;
+    if (repo !== null && repo.path !== null) {
+      repoInstructions = await readRepoInstructions(repo.path, repo.instructions);
+      diffStat = await worktreeDiffStat(
+        this.git,
+        worktreePathFor(vault.path, repo, card.id),
+        repo.branch,
+      );
+    }
+    const gateFailure = await this.lastGateFailure(card.id);
+    // E3: the persona ladder (ticket pin > phase persona > engine
+    // default) — a resolved persona contributes worker/model/prompt/
+    // memory; an owner-picked worker in the dialog still wins.
+    const loader = personaLoader((rel) => this.host.read(vault.id, rel));
+    // The commit step is never the ticket's builder and never the human who owns the column:
+    // the persona of its own name when the crew has one (its model pin), else no persona.
+    const personaResolution = await resolvePersonaForTicket(
+      loader,
+      commitStep
+        ? { ticketPersona: null, phasePersona: COMMIT_STEP_PROMPT, defaultPersona: null }
+        : {
+            ticketPersona: card.meta.persona,
+            phasePersona: workingPhase?.persona ?? null,
+            defaultPersona: ((await this.host.configGet<string>('personas.default')) ?? '').trim() || null,
+          },
+    );
+    let personaDispatch: PersonaDispatch | null = null;
+    if (personaResolution.persona !== null) {
+      const derived = deriveWorkerModel(personaResolution.persona, null);
+      personaDispatch = {
+        id: personaResolution.persona.id,
+        worker: derived.workerChoice,
+        model: derived.model ?? '',
+        prompt: await loader.prompt(personaResolution.persona.id),
+        memory: await loader.memory(personaResolution.persona.id),
+        coaching: await loader.thread(personaResolution.persona.id),
+      };
+    }
+    const composed = composeRunRequest({
+      card,
+      ticketText: text,
+      vaultPath: vault.path,
+      workingPhase,
+      nextPhaseId,
+      nextPhaseDir:
+        nextPhaseId === null
+          ? null
+          : resolvePhaseDir(
+              await this.ticketDirs(vault),
+              snap.pipeline.findIndex((p) => p.id === nextPhaseId) + 1,
+              nextPhaseId,
+            ),
+      pushRemote: snap.pushRemote,
+      nextPhaseClaims,
+      repo,
+      extraRepos,
+      promptText: prompt,
+      defaultWorker: this.defaultWorker,
+      permissionMode: input.permissionMode,
+      gitPath: ((await this.host.configGet<string>('gitPath')) ?? '').trim(),
+      workerChoice: input.workerChoice,
+      repoInstructions,
+      diffStat,
+      gateFailure,
+      caps: this.caps,
+      ...(personaDispatch !== null ? { persona: personaDispatch } : {}),
+      ...(input.handover !== null ? { handover: input.handover } : input.interactive !== null ? { handover: 'auto' } : {}),
+      ...(input.interactive !== null ? { interactive: input.interactive } : {}),
+      ...(dricket !== null ? { dk: await this.runTarget(dricket, snap.pipeline, phaseId) } : {}),
     });
+    if (!composed.ok) {
+      return { ok: false, error: composed.error };
+    }
+    for (const truncation of composed.truncations) {
+      this.host.log(
+        `instruction: ${card.id} ${truncation.section} truncated: true, originalSize ${truncation.originalSize}`,
+      );
+    }
+    const outcome = await this.fleet.start(composed.request);
+    if (outcome.ok) {
+      this.announceChanged();
+      return { ok: true, runId: outcome.run.id };
+    }
+    return { ok: false, error: outcome.error };
   }
 
   // --- worktree cleanup (T-0044, ADR-0080) ---------------------------
@@ -4660,7 +4738,7 @@ export class EngineBoardService {
       const promptPaths = [...shipped.keys()].map((ref) => `${PROMPTS_DIR}/${ref}.md`);
       const humanPersonaPath = `${PERSONAS_DIR}/${HUMAN_PERSONA_ID}/persona.md`;
       try {
-        await this.host.write(target.id, PIPELINE_PATH, DEFAULT_PIPELINE);
+        await this.host.write(target.id, PIPELINE_PATH, DEFAULT_PIPELINE_TEXT);
         await this.host.write(target.id, REPOS_PATH, DEFAULT_REPOS);
         await this.host.write(target.id, humanPersonaPath, personaFileText(humanPersona(await this.humanNameOfConfig())));
         for (const [ref, text] of shipped) {
