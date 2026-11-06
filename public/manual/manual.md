@@ -1171,7 +1171,9 @@ the Work panel's **⋯** menu (*Board*, *Crew*) or the command palette
   model, pool, phases, cost; **Pause** or **Resume** the persona).
 - **Capacity** (a panel for the bottom dock) — one line: how many of the
   worker slots are busy, the pool chips, what each persona is doing right
-  now, today's cost, **Pause all** and **Open Crew ›**.
+  now, today's cost, **Pause all** and **Open Crew ›**. It shows only while
+  the Board or Crew tab is active; otherwise the bottom dock folds to its
+  icon strip.
 
 **Pause and stuck workers.** **Pause** (on the thread and on a Crew
 run) waits for the current action — a command or an edit — to finish and
