@@ -6,32 +6,17 @@ Decisions of 2026-11-04 are applied below (rows marked decided or resolved). Sev
 
 ## Open before implementation
 
-Found by the consistency audit of 2026-11-06 against canvas decisions 1–21 (note `decisions1104`). Each is a real choice; none is decided here. The stale statements that were not choices are fixed in the concept, roadmap, decisions, ticket schema and ADR-0087.
+Found by the consistency audit of 2026-11-06 against canvas decisions 1–21 (note `decisions1104`). The owner answered on 2026-11-06 (marked per item); O-2 is answered but its reading is still to be confirmed. The stale statements that were not choices are fixed in the concept, roadmap, decisions, ticket schema and ADR-0087.
 
-**O-1 — Where does Accept live on the desktop Review tab?** Canvas decision 16: the Mission Control decision card is the one place; the ticket body only links to it. The built Review tab (E13-7, §5.3) carries its own "Accept and merge" and "Send back with n comments".
-- (a) The Review tab keeps the diff, comments and Send back, and shows the link "Decision waiting · go to the card"; Accept exists only on the card.
-- (b) The Review tab keeps its Accept as a second view of the same decision.
-- Recommendation: (a), the literal reading of decision 16; line comments still travel with "Send back" from the Review tab, which is not the Accept.
+**O-1 — Where does Accept live on the desktop Review tab? DECIDED 2026-11-06: (a).** Accept exists only on the Mission Control decision card (canvas decision 16). The desktop Review tab keeps the diff, the line comments and "Send back with n comments", and shows the link "Decision waiting · go to the card". The built "Accept and merge" button of the Review tab (E13-7) goes away with roadmap item req-97.
 
-**O-2 — How do the old stages map onto the one state list, and where does the merge go?** Today: Inbox · Plan · Build · Review · Sign Off · Done (the old `commit` column is gone from the default since E12-9c). New: Inbox · Shaping · Prioritized · Building · Review · Ready to try · Done. Clear: Plan → Shaping, Build → Building. Not clear: *Prioritized* is a new state (a manual, ordered queue before the workers pull?), and *Sign Off* has the merge-and-push role, which "Ready to try" does not name.
-- (a) Sign Off becomes **Ready to try** (the owner tries the result); Accept there moves to Done and runs the merge as today's owner-started step; Review stays the owner's diff checkpoint.
-- (b) Review is the single owner checkpoint; Ready to try is an automatic landing state after the merge.
-- Recommendation: (a), the smallest change to the checkpoint discipline of ADR-0077 and `BOARD.md`; Prioritized as a manual column the owner fills.
+**O-2 — How do the old stages map onto the one state list, and where does the merge go? ANSWERED 2026-11-06, reading to be confirmed.** The owner's words: "sign off ist vorgesehen als schritt in dem gemerged und gepushed wird, ich als mensch bestätige damit das alles wie gewünscht implementiert ist, dann soll gemerged und gepushed werden. das heißt review ist ready to try und ist vor sign off. der agent bearbeitet und wenn er fertig ist gibt es das handover". The reading, **not yet confirmed by the owner:** Review and Ready to try are one state (the owner tries and reviews the handover); the sign-off is the Accept action on that state, which merges and pushes and lands the ticket in Done. The list then becomes `Inbox → Shaping → Prioritized → Building → Ready to try → Done` (six states, no separate Review column). Until confirmed, canvas decision 15 stays as drawn (seven states) and the concept marks it "under confirmation (O-2)"; nothing is rewritten. Still open inside this item: whether *Prioritized* is a manual queue the owner fills.
 
-**O-3 — Rename stage ids and folders, or only the display titles?** Canvas decision 15 says "the engine follows (migration needed)" and "no numbered folders in the UI". The folders (`10-inbox`, `20-plan`, …) are on disk in the tickets repository, not in the UI.
-- (a) Titles only in `pipeline.md` plus the new Prioritized column; stage ids and folders stay (no ticket moves, one commit).
-- (b) Rename ids and folders (`shaping`, `building`, `ready-to-try`) with a read-both/write-new bridge and a one-commit migration of every ticket.
-- Recommendation: (a) now, (b) only if the folder names ever reach a user; it is the cheaper, reversible step and the schema change stays small.
+**O-3 — Rename stage ids and folders, or only the display titles? DECIDED 2026-11-06 (the question falls away).** The owner migrates **all tickets once into the new dricket store format** (the E14 cut-over, `docs/design/dricket/`); the storage layout changes fundamentally, so a rename inside the old folder layout is moot. The one state list (req-99) rides on that migration: it is part of, or directly after, the cut-over (E14-3b / E14-7), not a separate rename in the old folders.
 
-**O-4 — The i18n mechanism.** Decided: catalog keys, ICU plurals, `Intl`, English first. Open: the tool. Plugin renderers are plain DOM bundled by esbuild, Mission Control is Angular, main shows native dialogs.
-- (a) A small ICU runtime (`intl-messageformat`) with JSON catalogs in `shared/`, used by main, renderer, plugins and Mission Control alike.
-- (b) Angular `$localize` for the two Angular apps plus something else for plugins and main.
-- Recommendation: (a): one mechanism for all three runtimes; `$localize` is build-time per locale and does not reach the plain-DOM plugins. Needs an ADR; the CLAUDE.md language section is edited with it.
+**O-4 — The i18n mechanism. DECIDED 2026-11-06: (a).** One ICU runtime (`intl-messageformat`) with JSON catalogs in `shared/`, used by main, renderer, plugins and Mission Control; English first. The ADR is written as part of req-102; the CLAUDE.md language section is edited with it.
 
-**O-5 — Autopilot after a restart.** ADR-0077's ruling (owner, 2026-10-18) says a chain never starts moving because the app started, so §6.1 restores the state as Off, also a Paused state whose resume time has not passed.
-- (a) Keep the ruling: Off after every start (a timed Paused ends as Off).
-- (b) Restore the last On / Paused state.
-- Recommendation: (a); (b) reverses a ruling the owner made for safety.
+**O-5 — Autopilot after a restart. DECIDED 2026-11-06: (a).** Autopilot restores as **Off** after every start (a timed Paused ends as Off); the ADR-0077 ruling of 2026-10-18 stays.
 
 | id | area | what differs | evidence | severity | proposed fix | roadmap id |
 |---|---|---|---|---|---|---|
