@@ -5,7 +5,8 @@
 - **Found only by merging them:** `ApiError.code` is `string | null` now (req-101), so the two Autopilot writes in `state.ts` test `!== null`; otherwise a refusal without a code would carry `code: null`. `desk-settings.ts` keeps `mutate` (D-17) and drops `autopilotStateOf` (req-95b).
 - **e2e fixture:** the fake desk's `/api/me` honours both `options.readOnly` (req-95b) and `NOTES_FIXTURE.readOnly` (req-101); the first alone left the read-only Notes spec with a pencil-capable device.
 - **Specs moved to the merged behaviour (E12-12 took the form row out of the header):** `ticket-header.spec.ts` (no priority or repository controls, the title stays a buffer edit), `interactive-dialog.spec.ts` (no dialog button in the header, the row menu keeps it), `ticket-document.spec.ts` (`Needs you` with the kind `Review`), `mission-control-shell.spec.ts` (the phone menu: Notes, Work, Crew, Autopilot, Settings).
-- **Upkeep:** D-23 and the finished req-96 follow-up left the roadmap; follow-ups added for the review and flow tab titles, the gate bar's bare cost and the comment composer. `docs/05` gained the Autopilot clients and the cost table and lost the header's form row.
+- **Upkeep:** the finished req-96 follow-up left the roadmap; follow-ups added for the review and flow tab titles, the gate bar's bare cost and the comment composer. `docs/05` gained the Autopilot clients and the cost table and lost the header's form row.
+- **Found by the smoke of the built app on a scratch store (open):** the board and the store's tab titles work, and the checkout prompt asks once. D-23 is only half fixed (the header still wants the board's vault) and `autopilot.css` never reaches the build (D-24); the Autopilot status item has not been seen running. Both are in Known defects.
 - **Seen once, not reproduced:** in the first full e2e run the Layout menu stood open and blocked a click in `tickets-dricket-live.spec.ts`; the spec opens no such menu. It passed twice on its own and in the second full run.
 
 ### req-101 — Mission Control: Notes on the phone and the iPad (clients of the Notes API)
@@ -137,13 +138,12 @@ milestone 174 (req-100).
   The review and flow tabs still read `Review · T-0121` / the flow title — they sit in
   `review/register.ts` and `flow/`, not in this bundle, and wait for the engine's document title
   contract (W3.8).
-- **D-23 — the header on a dricket store.** `isTicketPath` matched only the files backend's
+- **D-23, the path half only (the defect stays open, see the wave-3 integration).** `isTicketPath` matched only the files backend's
   `tickets/<column>/T-nnnn.md`, so on a dricket store the document had no header and no
   Ticket | Thread | Review strip. `ticketIdOfPath` now reads both shapes (the dricket
   `tickets/<prefix>/<shard>/t-N/ticket.md` through the engine's `idOfDocumentPath`, unchanged);
   the phase chip falls back to the board card's phase where the path has no column. Handed to
-  this bundle by the store-defects session; its roadmap entry D-23 left the roadmap with
-  the wave-3 merge.
+  this bundle by the store-defects session.
 - **Files:** `plugins/tickets/renderer/ticket-header.ts`, `ticket-document/{dom,model,strip,extension}.ts`,
   `ticket-document.css`, `board.css` (thread header), `index.ts` (three one-line edits: the
   strip's `i18n`, the dropped header deps, the composer pre-fill and the tab title call).
