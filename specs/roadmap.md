@@ -843,7 +843,11 @@ rest are kept so they still match `docs/11`.
 
 - **Notes API gaps found by req-101.** (1) "Ask about this note" cannot attach the note to the chat the way a ticket rides a shape session (`ticket` on `POST /api/chat/sessions`): the engine has no note attachment, so the composer is prefilled with `About the note <path>:` and the model reads it through the vault tools; a `note` field on the chat call would carry it as a file (ADR-0071). (2) `GET /api/notes/note` returns no ticket link; the client reads `ticket:` from the frontmatter fence itself (`specs/frontmatter-schema.md`). (3) There is no rename, move or delete and no folder creation; the clients create notes in the open folder only.
 
-- **req-96 follow-ups (shipped 2026-11-06, see the changelog; the phone-menu-as-root part of canvas decision 17 shipped with it).** The Autopilot chip slot `[autopilot]` in `mc-shell-header` for req-95b.
+- **Review and flow tab titles (follow-up of milestones 181 and 183).** The thread tab reads `T-0121 · Title` and D-15 gave a `DocumentRoute` its own title, but the review tab still reads `Review · T-0121` and the flow tab its flow title (`review/register.ts`, `flow/`); milestone 183 left them waiting for that contract, which now exists.
+
+- **The gate bar's cost line says what it is (follow-up of req-98).** `cs-total` in the ticket view's gate bar is still a bare amount beside the gate pills; every other surface reads `$1.20 so far` / `$1.84 in total`.
+
+- **Comment composer for store tickets (follow-up of D-12 and E14-6).** The thread shows a store ticket's comments since milestone 181 but cannot write one.
 
 
 - **Board 9a — Drey cleaned up (owner request 2026-11-06, outside the list; req-104).** 28 px dock headers (`--panel-head-h`, today 32 px), the panel chrome, the ticket card, the Assistant without a rail. Base plus the dock; ADR-0019 / ADR-0057 later change.

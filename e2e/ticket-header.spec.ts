@@ -3,7 +3,8 @@ import { test, expect } from './fixtures/drey';
 /**
  * The ticket header (req-62, SDK 1.34): a ticket file of the tickets vault
  * opens with a header in place of the folded frontmatter pill — the title
- * as an editable headline, the fields as a chip row — and its Log folded.
+ * as an editable headline, id and phase as a chip row (the form row left with
+ * E12-12) — and its Log folded.
  * Changes are buffer edits (dirty, undoable), never file writes.
  */
 
@@ -57,7 +58,7 @@ test.use({
 });
 
 test.describe('Ticket header in the editor (req-62)', () => {
-  test('shows title and fields, edits them as buffer changes, folds the Log', async ({ page }) => {
+  test('shows title and chips, edits the title as a buffer change, folds the Log', async ({ page }) => {
     // The owner's path: a Work row opens the ticket (E13-20).
     await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     await page.locator('.work-row[data-id="T-0042"]').filter({ visible: true }).click();
@@ -67,9 +68,9 @@ test.describe('Ticket header in the editor (req-62)', () => {
     await expect(head.locator('.tickets-head-title')).toHaveValue('Fix the palette race in CI');
     await expect(head.locator('.tickets-head-id')).toHaveText('T-0042');
     await expect(head.locator('.tickets-head-phase')).toHaveText('Plan');
-    await expect(head.locator('select[aria-label="Priority"]')).toHaveValue('high');
-    // req-72: the work repos are checkboxes, the first checked one the primary.
-    await expect(head.locator('[aria-label="Repositories"] input[value="drey"]')).toBeChecked();
+    // E12-12: no form row; priority and repositories are set from the board.
+    await expect(head.locator('select[aria-label="Priority"]')).toHaveCount(0);
+    await expect(head.locator('[aria-label="Repositories"]')).toHaveCount(0);
     await expect(page.locator('app-editor .cm-fm-pill')).toHaveCount(0);
 
     // The Log folds on first show: its lines are gone, the heading stays.
@@ -77,9 +78,7 @@ test.describe('Ticket header in the editor (req-62)', () => {
     await expect(page.locator('app-editor .cm-content')).not.toContainText('inbox -> plan');
     await page.screenshot({ path: test.info().outputPath('ticket-header.png') });
 
-    // A priority pick and a title edit are buffer edits.
-    await head.locator('select[aria-label="Priority"]').selectOption('urgent');
-    await expect(head.locator('select[aria-label="Priority"]')).toHaveValue('urgent');
+    // A title edit is a buffer edit.
     const title = head.locator('.tickets-head-title');
     await title.fill('CI: fix the palette race');
     await title.press('Enter');
@@ -88,7 +87,7 @@ test.describe('Ticket header in the editor (req-62)', () => {
     // The raw YAML shows the rewritten keys.
     await head.locator('button[aria-label="Edit the frontmatter as YAML"]').click();
     const content = page.locator('app-editor .cm-content');
-    await expect(content).toContainText('priority: urgent');
+    await expect(content).toContainText('priority: high');
     await expect(content).toContainText('title: "CI: fix the palette race"');
     await page.screenshot({ path: test.info().outputPath('ticket-header-raw.png') });
 

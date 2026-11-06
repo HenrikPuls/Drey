@@ -195,7 +195,7 @@ export async function startFakeDesk(
           : url.pathname === '/api/fleet'
             ? () => ({ ...fleet, chain })
             : url.pathname === '/api/me'
-              ? () => ({ ok: true, device: { name: 'iPad', readOnly: options.readOnly === true } })
+              ? () => ({ ok: true, device: { name: 'iPad', readOnly: options.readOnly === true || NOTES_FIXTURE.readOnly } })
               : ROUTES[url.pathname];
       if (route === undefined || (req.method !== 'GET' && req.method !== 'HEAD')) {
         res.writeHead(404, { 'content-type': 'application/json' });

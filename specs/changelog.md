@@ -1,3 +1,13 @@
+### Wave-3 integration — five branches on `desktop-integration`
+
+**Not yet manually verified by the owner.** Merged in this order: milestone 181 (D-11 to D-22), milestone 183 + req-98, req-95b, req-101, milestone 182 (E12-14, on its branch also numbered 181).
+
+- **Found only by merging them:** `ApiError.code` is `string | null` now (req-101), so the two Autopilot writes in `state.ts` test `!== null`; otherwise a refusal without a code would carry `code: null`. `desk-settings.ts` keeps `mutate` (D-17) and drops `autopilotStateOf` (req-95b).
+- **e2e fixture:** the fake desk's `/api/me` honours both `options.readOnly` (req-95b) and `NOTES_FIXTURE.readOnly` (req-101); the first alone left the read-only Notes spec with a pencil-capable device.
+- **Specs moved to the merged behaviour (E12-12 took the form row out of the header):** `ticket-header.spec.ts` (no priority or repository controls, the title stays a buffer edit), `interactive-dialog.spec.ts` (no dialog button in the header, the row menu keeps it), `ticket-document.spec.ts` (`Needs you` with the kind `Review`), `mission-control-shell.spec.ts` (the phone menu: Notes, Work, Crew, Autopilot, Settings).
+- **Upkeep:** D-23 and the finished req-96 follow-up left the roadmap; follow-ups added for the review and flow tab titles, the gate bar's bare cost and the comment composer. `docs/05` gained the Autopilot clients and the cost table and lost the header's form row.
+- **Seen once, not reproduced:** in the first full e2e run the Layout menu stood open and blocked a click in `tickets-dricket-live.spec.ts`; the spec opens no such menu. It passed twice on its own and in the second full run.
+
 ### req-101 — Mission Control: Notes on the phone and the iPad (clients of the Notes API)
 
 **Not yet manually verified by the owner.** Owner request 2026-11-06, canvas decision 18

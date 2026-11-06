@@ -58,18 +58,17 @@ test.use({
   },
 });
 test.describe('Interactive dialog affordances (req-65)', () => {
-  test('the header offers the dialog exactly where the column does', async ({ page }) => {
+  test('the header no longer carries the dialog on any column (E12-12)', async ({ page }) => {
     await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
 
-    // A row opens the ticket (E13-20), whose header carries the dialog.
+    // A row opens the ticket (E13-20); the dialog starts from the row menu, below.
     const openFileOf = async (id: string): Promise<void> => {
       await page.locator(`.work-row[data-id="${id}"]`).filter({ visible: true }).click();
       await expect(page.locator('app-editor .tickets-head')).toBeVisible({ timeout: 15_000 });
     };
 
-    // Plan column: the plan dialog.
     await openFileOf('T-0042');
-    await expect(page.locator('app-editor .tickets-head .tickets-head-dialog')).toHaveText('Plan with agent');
+    await expect(page.locator('app-editor .tickets-head .tickets-head-dialog')).toHaveCount(0);
 
     // The checkpoint: no refine dialog any more (E13-9).
     await openFileOf('T-0043');

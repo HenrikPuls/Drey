@@ -184,7 +184,8 @@ test.describe('Ticket document (E13-6)', () => {
 
     const strip = page.locator('app-editor .tickets-doc-strip');
     await expect(strip).toBeVisible({ timeout: 15_000 });
-    await expect(strip.locator('.tickets-doc-status')).toHaveText('Review');
+    await expect(strip.locator('.tickets-doc-status')).toHaveText('Needs you');
+    await expect(strip.locator('.tickets-doc-kind')).toHaveText('Review');
     await expect(strip.locator('.tickets-doc-cost-fact')).toHaveText('$1.84 in total');
     await expect(strip.locator('.tickets-doc-step')).toContainText(['Plan', 'Build', 'Review', 'Test', 'Commit']);
     await expect(strip.locator('.tickets-doc-step').first()).toContainText('Paul');
