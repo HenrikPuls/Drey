@@ -52,6 +52,7 @@
 - **Crew header** counts every card and carries the state summary: `5 personas · 2 waiting · 1 stuck · today $4.22`; all idle says nothing (I-01).
 - **Capacity band** (board 7e, I-03): outside the Board and Crew tabs its frame goes too, and the bottom dock falls back to its icon strip. Done in CSS, because closing the panel would mark the view's layout as changed on every tab switch.
 - **Mission Control:** the root `MC_APP_NAV` provider is gone; the shell provides its own (req-96).
+- **req-107, the stale e2e specs:** `work-panel`, `ticket-header`, `interactive-dialog` and `ticket-card-menu` follow what a row opens since E13-20 (the document, or the thread while a run is live; the face switch reaches the thread). Two specs push their fleet snapshot until it stays, because the engine's own first report replaces an earlier push.
 - **Specs:** `settle-on-fleet.spec`, `team-model.spec`, `e2e/desk-board-team`.
 
 ### Wave-2 integration — strings in the catalog, the worktree e2e cause, one engine home per launch
@@ -63,7 +64,7 @@
 - **Still literal, for req-106:** the rest of `plugins/tickets/renderer/index.ts`, `desk-settings.ts`, `tab-bar.html` and the chat history's Today / Yesterday / Earlier groups, which the phone menu reuses (`chat.ts`).
 - **Specs:** `literal-guard.spec` (the template marker), `status-slot.spec`, `menu.spec`.
 - **The engine starts without `dist/mission-control`** (`server/client-dir.ts`, spec beside it). A partial rebuild killed it at startup, which was the blank window and the failed `tickets` activation in worktrees (`docs/11`).
-- **e2e:** every launch gets its own engine home and the fixture stops that engine; the remote specs load the gateway from `packages/tickets-engine`, where it has been built since ADR-0088; `desk-board-team` and `work-view` follow E12-15's band rule, D-6 and the Crew's fifth persona. Six specs fail the same way without the merges: roadmap req-107.
+- **e2e:** every launch gets its own engine home and the fixture stops that engine; the remote specs load the gateway from `packages/tickets-engine`, where it has been built since ADR-0088; `desk-board-team` and `work-view` follow E12-15's band rule, D-6 and the Crew's fifth persona. Six specs failed the same way without the merges (req-107, fixed in the follow-ups above).
 
 ### Milestone 180 — E12-15: Capacity band rule and the status-bar items (boards 7a, 7e, 7h)
 
