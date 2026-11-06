@@ -935,11 +935,17 @@ rest are kept so they still match `docs/11`.
 - **Persisted "approve" / "team" / "Sign Off" values (milestone 173 follow-up, owner request 2026-11-06, outside the list).**
   The wording change of 173 left every stored or contract identifier alone. Candidates that would read better
   as the user-facing words, each needing a migration that is not done: the default pipeline's stage title
-  **Sign Off** is not a candidate any more: the owner decided on 2026-11-06 that the last column keeps its title and id `sign-off`. The rest: the engine's
+  **Sign Off** is not a candidate on its own any more: the owner fixed one state list on 2026-11-06 and the column goes away (next item). The rest: the engine's
   `approve` checkpoint action kind, the Mission Control tab id `team` and the
   `tickets-team` document kind (persisted in view layouts and the phone URL), and the `desk-team` CSS classes.
   Each is a rename with a read-both/write-new bridge and a release note; none is needed for the owner to see
   "Crew" and "Accept".
+
+- **One state list in the engine and the default pipeline (owner decisions of 2026-11-06, canvas version 58, decision 16; docs only so far).** The owner sees `Inbox → Shaping → Prioritized → Building → Review → Ready to try → Done`, with those names on every column and badge and no Commit, Ideas or numbered folder in the UI. The engine and the default pipeline follow: the manual last column "Sign Off" (id `sign-off`) and the separate `commit` column go away, and the tickets already on them move to Ready to try / Done. Needed: a migration of existing tickets (stage ids in ticket files and `pipeline.md`, read-both/write-new, one commit per board), the `specs/ticket-schema.md` change (stage list, transition table, validator), the display names in Mission Control, the desk and the phone client, and a release note. One decision lives in one place: the Mission Control decision card, with no second Accept button in the ticket body. Not built; the concept (§5.1) states it.
+
+- **Notes on phone and iPad (owner, 2026-11-06, decision 20; closes G-40's scope question, engine work open).** Readable and editable with the existing Markdown editor (View · Live · Source) over the active vault. Needed in the engine: a notes endpoint (list, search, read), a write path (with the save-conflict rule of ADR-0060), the rule that a read-only paired device (§3.6) cannot edit, and the client in `libs/mission-ui` over `libs/markdown-surface`. The iPad works like the desktop: header with the left-sidebar toggle, the Notes · Work · Crew switch and the right-sidebar toggle; landscape opens all three panes, portrait the left and the centre; the open state is saved per orientation as a persisted per-device UI setting. Cost-by-phase table and the estimate format `$3.00–5.20 · from 3 runs` / `no estimate yet (first run)` on all three layouts.
+
+- **i18n for the new surfaces (owner, 2026-11-06; widens the language convention).** Every user-visible string of the new surfaces is a catalog key: no hard-coded UI strings, no sentences built from parts, ICU plurals, `Intl` for numbers, dates and currency, layouts that tolerate 40 % longer labels. English is the first locale. Needs an ADR when the catalog mechanism is chosen (format, loader, where the catalogs live, how the three clients share them); the first implementation round covers the new surfaces, the older ones migrate as they are touched. Not built.
 
 - **Mission Control over the CLI providers (D-1 follow-up, 2026-11-04).**
   The chat bridge speaks the HTTP providers (OpenAI-compatible, Anthropic
