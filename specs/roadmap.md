@@ -124,6 +124,11 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 - **D-34 — "1 active" counts a dead run** (same smoke; not proven which run it counts). The only non-finished run was the migrated
   T-0030's `R-20261104T13124-2vrn`, `detached`, its pid gone since before the cut-over.
 
+- **D-35 — the runner still commits to the legacy vault after the cut-over** (cut-over smoke, 2026-11-06). On its start at 20:53:20Z the
+  runner removed T-0030's stale `run:` stamp from `tickets/10-inbox/T-0030.md`, added "the runner restarted" to its Log and committed
+  that to the meta vault (`b5b60c3`), though T-0030 lives in the store. Its run `R-20261104T13124-2vrn` from before the freeze is the
+  one D-34 counts. Possibly the same route as D-30; not checked. Harmless for the store, but the legacy tree should stop changing.
+
 (D-23 shipped as milestones 184 and 185, D-24 as 184; what the wave-3 smoke could not see — the Autopilot status
 item and popover in a built app with a runner — waits for the owner's round, noted in the 184 changelog entry.)
 
