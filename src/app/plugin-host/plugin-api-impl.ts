@@ -31,6 +31,7 @@ import { FileDecorationService } from '../services/file-decoration.service';
 import { FilesCommandsService } from '../services/files-commands.service';
 import { FilesOperationsRegistryService } from '../services/files-operations-registry.service';
 import { DiffDialogService } from '../diff-view';
+import { I18nService } from '../i18n';
 import { LogService } from '../services/log.service';
 import { OverlayGuardService } from '../services/overlay-guard.service';
 import { SettingsService } from '../services/settings.service';
@@ -110,6 +111,7 @@ export class PluginApiFactory {
   private readonly filesOperations = inject(FilesOperationsRegistryService);
   private readonly filesCommands = inject(FilesCommandsService);
   private readonly diffDialog = inject(DiffDialogService);
+  private readonly i18n = inject(I18nService);
   /**
    * Resolves services at call time instead of at construction
    * (`TagVocabularyService` — its first vocabulary pull waits for the
@@ -343,6 +345,10 @@ export class PluginApiFactory {
         },
         run: (id, payload) => this.keys.run(id, payload),
       },
+      // The renderer's one catalog instance (SDK 1.46, ADR-0091): the same
+      // object `I18nService` wraps, so a plugin's strings and the base's
+      // share the missing-key report.
+      i18n: this.i18n.facade,
       ui: {
         registerWidget: (widget: PluginWidgetContrib) => track(this.widgets.registerPluginWidget(widget)),
         registerSettingsPage: (page: PluginSettingsPageContrib) =>

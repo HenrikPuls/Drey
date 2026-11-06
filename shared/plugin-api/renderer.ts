@@ -19,7 +19,7 @@ export type {
 } from './plugin-ipc';
 export { PLUGIN_IPC_CHANNELS } from './plugin-ipc';
 
-export type { Unsubscribe } from './main-plugin-api';
+export type { PluginI18nApi, Unsubscribe } from './main-plugin-api';
 
 // The shared payload types the plugin surface references, re-exported so a
 // plugin imports them from one place.

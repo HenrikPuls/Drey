@@ -1,0 +1,26 @@
+{
+  "autopilot.title": "Autopilot",
+  "autopilot.state.on": "On",
+  "autopilot.state.paused": "Paused",
+  "autopilot.state.off": "Off",
+  "autopilot.stop_all": "Stop all running steps now…",
+  "autopilot.resume_at": "Resume at {time}",
+
+  "state.inbox": "Inbox",
+  "state.shaping": "Shaping",
+  "state.prioritized": "Prioritized",
+  "state.building": "Building",
+  "state.review": "Review",
+  "state.ready_to_try": "Ready to try",
+  "state.done": "Done",
+
+  "decision.accept": "Accept",
+  "decision.send_back": "Send back",
+  "decision.send_back_with_comments": "Send back with {n, plural, one {# comment} other {# comments}}",
+  "decision.waiting_go_to_card": "Decision waiting · go to the card",
+
+  "cost.estimate.range": "{low}–{high} · from {n, plural, one {# run} other {# runs}}",
+  "cost.estimate.none": "no estimate yet (first run)",
+  "cost.so_far": "so far",
+  "cost.in_total": "in total"
+}

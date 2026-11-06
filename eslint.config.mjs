@@ -68,8 +68,21 @@ const otherPluginPatterns = (id) =>
 
 const MODULES = ['llm', 'mcp', 'session', 'plugin-host'];
 
-/** `shared/<mod>/` folders that actually exist (the shared half of `llm`). */
-const SHARED_MODULES = ['llm'];
+/** `shared/<mod>/` folders with a barrel (the shared half of `llm`; the i18n catalog + facade, ADR-0091). */
+const SHARED_MODULES = ['llm', 'i18n'];
+
+/**
+ * The i18n runtime is host-owned (ADR-0091): a plugin reads the catalog
+ * through `api.i18n` / `ctx.i18n`, never by bundling `shared/i18n` (it
+ * carries the ICU library; the plugin build would fail on the package
+ * import anyway, this names the rule). Types may still be imported.
+ */
+const NO_I18N_RUNTIME = {
+  group: ['**/shared/i18n', '**/shared/i18n/**'],
+  allowTypeImports: true,
+  message:
+    'A plugin reads the catalog through `api.i18n` (renderer) / `ctx.i18n` (main) -- the host owns the one ICU runtime (ADR-0091); `import type` is fine.',
+};
 
 /** Reaching into `shared/<mod>/` from anywhere by its `shared/`-qualified path. */
 const sharedModulePatterns = SHARED_MODULES.map((mod) => ({
@@ -181,6 +194,7 @@ export default tseslint.config(
     files: [
       'electron/llm/**/*.ts',
       'shared/llm/**/*.ts',
+      'shared/i18n/**/*.ts',
       'electron/mcp/**/*.ts',
       'electron/plugin-host/**/*.ts',
       'electron/session/**/*.ts',
@@ -293,6 +307,7 @@ export default tseslint.config(
                 'A plugin works through its `MainPluginContext` and `shared/`, never a file under `electron/` (ADR-0044).',
             },
             NO_APPS,
+            NO_I18N_RUNTIME,
             ...otherPluginPatterns(id),
           ],
         },

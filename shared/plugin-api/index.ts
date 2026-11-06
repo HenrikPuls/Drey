@@ -68,6 +68,7 @@ export type {
   TaskQueryProvider,
   TaskQuerySort,
   TaskQueryStatus,
+  PluginI18nApi,
   Unsubscribe,
   VaultChangeEvent,
   VaultChangeEventKind,

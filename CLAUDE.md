@@ -32,6 +32,19 @@ interactive rules below do not apply to it) and opens this file by section.
   content is German — a German mockup or a German feature request is a
   description of the layout and behaviour, **not** an instruction to write
   German labels. Translate them.
+- **New surfaces read their strings from the catalog.** English stays the
+  first and only shipped locale, but every user-visible string of the
+  surfaces decided on 2026-11-06 (and of every area migrated since) is a
+  key in `shared/i18n/catalog/en.json`, read through the runtime's
+  binding (`i18n.t` in main, `I18nService` / the `t` pipe in the renderer,
+  `api.i18n` / `ctx.i18n` in a plugin, `McI18n` in Mission Control):
+  no literal UI strings, no sentences assembled from parts, ICU plurals,
+  `Intl` for numbers, dates and currency, layouts that tolerate labels
+  40 percent longer. The guard spec `shared/i18n/literal-guard.spec.ts`
+  fails on a literal under the guarded paths —
+  [ADR-0091](docs/09_architecture_decisions/0091-i18n-catalog-for-the-new-surfaces.md)
+  has the rule, the key scheme and the paths. The older UI migrates area
+  by area (roadmap req-103), not in one sweep.
 - **No unnecessary UI text.** Every visible string must earn its place:
   no subtitles, taglines, hint lines or explanatory prose a screen doesn't
   need to be understood (owner ruling 2026-11-03 — e.g. the chat header

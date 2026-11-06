@@ -1,3 +1,49 @@
+### req-102 — i18n for the new surfaces: one catalog, one ICU runtime, four bindings
+
+**Not yet manually verified by the owner.** Owner decision O-4 (2026-11-06), concept §7 / §8.1 step 1,
+[ADR-0091](../docs/09_architecture_decisions/0091-i18n-catalog-for-the-new-surfaces.md). Mechanism only:
+no screen changes yet; the surfaces that use it are req-95 to req-101.
+
+- **`shared/i18n/`.** `catalog/en.json` — one flat file, `<area>.<thing>[.<state>]` keys in lower snake
+  case, ICU messages; English is the first and only shipped locale (`loadCatalog` falls back to it for any
+  other tag). `createI18n` compiles a message once with `intl-messageformat` (new dependency) and gives
+  `t(key, params)` (typed: `MessageKey` is derived from the English file, a typo is a compile error),
+  `lookup` for runtime keys, `has`, and the `Intl` helpers `formatNumber`, `formatCurrency` (`$3.00`),
+  `currencyRange` (`$3.00–5.20`: the currency once, an en dash, no spaces), `formatDuration`
+  (`1 hr 4 min`, two largest units, Intl unit words), `formatDate` / `formatTime` / `formatDateTime`,
+  `formatRelative` (`in 2 hours`, `yesterday`). A missing or unformattable key returns the key and reports
+  once (`console.warn` in dev, silent in a packaged run). Sentences are never assembled: a count is an ICU
+  plural in the message, a time is formatted first and passed as `{time}`.
+- **First entries:** `autopilot.title / .state.on / .state.paused / .state.off / .stop_all / .resume_at {time}`;
+  the one state list `state.inbox … state.done` (Inbox, Shaping, Prioritized, Building, Review, Ready to try,
+  Done); `decision.accept`, `decision.send_back`, `decision.send_back_with_comments {n}`,
+  `decision.waiting_go_to_card`; `cost.estimate.range` = `{low}–{high} · from {n, plural, one {# run} other
+  {# runs}}`, `cost.estimate.none` = `no estimate yet (first run)`, `cost.so_far`, `cost.in_total`.
+- **Bindings.** Main: a plain import of the shared `i18n` instance; `main.ts` sets the missing-key reporter
+  by `app.isPackaged`. Drey renderer: `src/app/i18n/` — `I18nService` (root) and the `t` pipe
+  (`{{ key | t: params }}`). Plugins: `api.i18n` (renderer) and `ctx.i18n` (main), **SDK 1.46**
+  (`PluginI18nApi`; `plugins/AUTHORING.md`); a plugin never bundles `shared/i18n` (new lint pattern
+  `NO_I18N_RUNTIME`, type imports allowed). Mission Control: `libs/mission-ui/src/i18n/` — `McI18n`
+  (root) and its `t` pipe.
+- **Guard.** `shared/i18n/literal-guard.spec.ts` scans every `.ts` / `.html` under the directories in
+  `shared/i18n/guarded-paths.json` (the surfaces of the canvas round, listed in the ADR — the spec checks
+  the two lists agree) and every file that opts in with `// i18n: catalog`; it fails on a literal that reads
+  like text (a capitalised word, two letter words — outside imports, property names, `case` labels,
+  comparisons, `console.*`, decorator URLs) or a plain `title` / `aria-label` / `placeholder` / `alt` /
+  `label`, and on a key in `t(..)` / `key | t` the catalog lacks. `i18n-ignore` in a comment exempts
+  a line. **The existing UI is not scanned and not migrated** — roadmap req-103 does that area by area.
+- **Build:** `resolveJsonModule` on in the root and plugin tsconfigs; `shared/i18n` is a barrel module
+  like `shared/llm` (deep imports refused by lint).
+- **Specs:** `catalog.spec` (loader, fallback, key grammar, every message compiles, the first entries),
+  `facade.spec` (placeholders, plurals, the estimate line, missing key once, reporter swap, default
+  reporters, the shared instance), `intl.spec` (currency and range incl. a suffix-currency locale, numbers,
+  durations, dates, relative), `literal-guard.spec` (the detector on TS and templates, the opt-in marker,
+  the repo scan), `src/app/i18n/i18n.service.spec` and `libs/mission-ui/src/i18n/i18n.spec` (the two
+  Angular bindings with their pipes).
+- **Docs:** ADR-0091 (+ index), docs/05 (component reference, dependency rules, feature index),
+  `CLAUDE.md` Language Convention (the catalog rule), `plugins/AUTHORING.md` (SDK 1.46),
+  `specs/decisions.md` (the O-4 entry points at the ADR and lists the rejected alternatives).
+
 ### Milestone 173 — The Crew tab and the Accept verb: wording follows the design canvas
 
 **Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list
