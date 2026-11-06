@@ -51,12 +51,9 @@ import {
   verlaufLineOf,
   verlaufTotalOf,
   commentLabelOf,
-  costTableOf,
   planChipOf,
   planStatusLineOf,
-  estimateLineOf,
   sendBackLabelOf,
-  tokenWordsOf,
   viewedKeyOf,
   wholeFileRowsOf,
   type GatePhase,
@@ -1058,7 +1055,7 @@ describe('TicketView head card', () => {
     };
     const vm = surface(setup(makeFake({ docValue: doc })));
     // The head slot reads the usage figure; the bar's end slot sums the chapter.
-    expect(vm.cost()).toBe('$0.42');
+    expect(vm.cost()).toBe('$0.42 so far');
     expect(vm.costTotal()).toBe('$0.78');
     // build sits in the past, verify is current: their pills carry their phase's sum.
     const [build, verify, done] = vm.steps();
@@ -2048,59 +2045,6 @@ describe('TicketView line comments', () => {
     await vm.sendBack();
     expect(vm.comments()).toHaveLength(1);
     expect(vm.sendBackOpen()).toBe(true);
-  });
-});
-
-// --- the cost table and the estimate (E11-4) ------------------------------------------------
-
-describe('costTableOf', () => {
-  const run = (patch: Record<string, unknown> = {}) => ({
-    phase: 'build',
-    persona: 'ben',
-    model: 'sonnet',
-    tokens: '48k',
-    cost: 0.3,
-    dauer: '9m',
-    ausgang: 'handed-over',
-    ...patch,
-  });
-  const title = (id: string): string => ({ build: 'Build', review: 'Review' })[id] ?? id;
-
-  it('makes one row per settled run and totals cost and time', () => {
-    const table = costTableOf(
-      [run(), run({ phase: 'review', persona: 'ralf', model: 'haiku', cost: 0.04, dauer: '1m', tokens: '12k' })] as never,
-      title,
-    );
-    expect(table.rows).toEqual([
-      { step: 'Build', who: 'Ben · sonnet', time: '9 min', tokens: '48k', cost: '$0.30', outcome: 'handed over' },
-      { step: 'Review', who: 'Ralf · haiku', time: '1 min', tokens: '12k', cost: '$0.04', outcome: 'handed over' },
-    ]);
-    expect(table.total).toBe('$0.34');
-    expect(table.totalTime).toBe('10 min');
-  });
-
-  it('never counts an unknown cost or time as zero', () => {
-    const table = costTableOf([run({ cost: null, dauer: '', persona: null, model: null, ausgang: 'failed', phase: null })] as never, title);
-    expect(table.rows[0]).toEqual({ step: '—', who: '', time: '', tokens: '48k', cost: '—', outcome: 'failed' });
-    expect(table.total).toBeNull();
-    expect(table.totalTime).toBeNull();
-    expect(costTableOf([], title)).toEqual({ rows: [], total: null, totalTime: null });
-  });
-});
-
-describe('the estimate sentence', () => {
-  it('states figures and basis', () => {
-    const est = { gate: 'build', persona: 'ben', model: 'sonnet', runs: 6, cost: 0.3, minutes: 9, tokens: 48_000 };
-    expect(estimateLineOf(est, 'Build')).toBe('About $0.30 · 9 min · 48k tokens — median of 6 earlier Build runs by Ben on sonnet.');
-    expect(estimateLineOf({ ...est, minutes: null, tokens: null }, 'Build')).toBe(
-      'About $0.30 — median of 6 earlier Build runs by Ben on sonnet.',
-    );
-  });
-
-  it('writes tokens as the Log does', () => {
-    expect(tokenWordsOf(800)).toBe('800');
-    expect(tokenWordsOf(48_000)).toBe('48k');
-    expect(tokenWordsOf(3_400_000)).toBe('3.4M');
   });
 });
 

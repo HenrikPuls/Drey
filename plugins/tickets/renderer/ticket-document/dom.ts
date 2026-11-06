@@ -4,7 +4,8 @@
  * the view models in `model.ts`; every effect (open a picture, accept, send
  * back) arrives as a callback so the module knows no IPC and no editor.
  */
-import type { ActionBar, ChainItem, CostTable, ProofView, TicketStatus } from './model';
+import type { I18n } from '../../../../shared/i18n/types';
+import type { ActionBar, ChainItem, CostTableView, ProofView, TicketStatus } from './model';
 import { assetUrl } from './model';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
@@ -116,27 +117,29 @@ export function proofNode(deps: ProofDeps, proof: ProofView): HTMLElement {
   return root;
 }
 
-/** The Cost card at the end of the ticket: one row per settled run, the totals under it. */
-export function costNode(table: CostTable): HTMLElement {
+/**
+ * The cost-by-phase table at the end of the ticket (req-98): Phase · Model ·
+ * Tokens · Time · Cost, one row per run, a quiet `no run yet` row for a
+ * phase still to pass, the total row under them.
+ */
+export function costNode(i18n: I18n, table: CostTableView): HTMLElement {
   const root = el('section', 'tickets-doc-block tickets-doc-cost');
   root.contentEditable = 'false';
   const head = el('div', 'tickets-doc-head');
-  head.append(el('span', 'tickets-doc-kicker', 'Cost'));
-  if (table.total !== null) {
-    head.append(el('span', 'tickets-doc-total', table.total));
-  }
+  head.append(el('span', 'tickets-doc-kicker', i18n.t('cost.table.title')));
   root.append(head);
 
   const grid = el('table', 'tickets-doc-table');
+  grid.setAttribute('aria-label', i18n.t('cost.table.label'));
   const header = el('tr');
-  for (const [label, numeric] of [
-    ['Phase', false],
-    ['Model', false],
-    ['Tokens', true],
-    ['Time', true],
-    ['Cost', true],
+  for (const [key, numeric] of [
+    ['cost.table.phase', false],
+    ['cost.table.model', false],
+    ['cost.table.tokens', true],
+    ['cost.table.time', true],
+    ['cost.table.cost', true],
   ] as const) {
-    const cell = el('th', numeric ? 'is-num' : undefined, label);
+    const cell = el('th', numeric ? 'is-num' : undefined, i18n.t(key));
     cell.scope = 'col';
     header.append(cell);
   }
@@ -145,27 +148,33 @@ export function costNode(table: CostTable): HTMLElement {
   const body = el('tbody');
   for (const row of table.rows) {
     const tr = el('tr');
-    tr.append(
-      el('td', undefined, row.step),
-      el('td', 'is-muted', row.who),
-      el('td', 'is-num', row.tokens),
-      el('td', 'is-num', row.time),
-      el('td', 'is-num', row.cost),
-    );
-    if (row.outcome === 'failed' || row.outcome === 'stopped') {
+    if (row.pending) {
+      const quiet = el('td', 'is-muted', i18n.t('cost.table.no_run'));
+      quiet.colSpan = 4;
+      tr.append(el('td', undefined, row.phase), quiet);
+      tr.classList.add('is-pending');
+    } else {
+      tr.append(
+        el('td', undefined, row.phase),
+        el('td', 'is-muted', row.model),
+        el('td', 'is-num', row.tokens),
+        el('td', 'is-num', row.time),
+        el('td', 'is-num', row.cost),
+      );
+    }
+    if (row.bad) {
       tr.classList.add('is-bad');
-      tr.title = row.outcome;
     }
     body.append(tr);
   }
   const foot = el('tfoot');
   const total = el('tr');
   total.append(
-    el('td', undefined, 'Total'),
+    el('td', undefined, i18n.t('cost.table.total')),
     el('td'),
-    el('td', 'is-num', table.totalTokens ?? ''),
-    el('td', 'is-num', table.totalTime ?? ''),
-    el('td', 'is-num', table.total ?? '—'),
+    el('td', 'is-num', table.total.tokens),
+    el('td', 'is-num', table.total.time),
+    el('td', 'is-num', table.total.cost),
   );
   foot.append(total);
   grid.append(thead, body, foot);
@@ -247,10 +256,14 @@ export interface StripData {
   readonly status: TicketStatus;
   /** The persona doing (or next doing) the ticket's current step; '' when none. */
   readonly who: string;
-  /** `$1.84 in total`; null while nothing readable was spent. */
+  /** The word for why the owner is wanted (`Question`, `Gate red`); '' when none or when the caps already say it. */
+  readonly kind: string;
+  /** The current step's line (`Step: Build`); '' when the chain names none. */
+  readonly step: string;
+  /** `$1.84 in total` / `$1.20 so far` — a bare amount says what it is; null while nothing readable was spent. */
   readonly cost: string | null;
-  /** `About $0.30 · 9 min` plus its basis as the tooltip; null without an estimate. */
-  readonly estimate: { readonly short: string; readonly basis: string } | null;
+  /** `est. $3.00–5.20 · from 3 runs` or `no estimate yet (first run)`; null when no estimate is asked for. */
+  readonly estimate: string | null;
   readonly chain: readonly ChainItem[];
   /** The gate: why the ticket waits on the owner (`Waits for you: …`); '' when it does not. */
   readonly gate: string;
@@ -266,8 +279,14 @@ export function stripNode(data: StripData): HTMLElement {
 
   const facts = el('div', 'tickets-doc-facts');
   facts.append(el('span', `tickets-doc-status is-${data.status.tone}`, data.status.label));
+  if (data.kind !== '') {
+    facts.append(el('span', 'tickets-doc-kind', data.kind));
+  }
   if (data.who !== '') {
     facts.append(el('span', 'tickets-doc-who', data.who));
+  }
+  if (data.step !== '') {
+    facts.append(el('span', 'tickets-doc-step-now', data.step));
   }
   if (data.status.line !== '') {
     facts.append(el('span', 'tickets-doc-line', data.status.line));
@@ -276,9 +295,7 @@ export function stripNode(data: StripData): HTMLElement {
     facts.append(el('span', 'tickets-doc-sep', '·'), el('span', 'tickets-doc-cost-fact', data.cost));
   }
   if (data.estimate !== null) {
-    const estimate = el('span', 'tickets-doc-estimate', `est. ${data.estimate.short}`);
-    estimate.title = data.estimate.basis;
-    facts.append(el('span', 'tickets-doc-sep', '·'), estimate);
+    facts.append(el('span', 'tickets-doc-sep', '·'), el('span', 'tickets-doc-estimate', data.estimate));
   }
   root.append(facts);
 

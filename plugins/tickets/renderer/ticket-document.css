@@ -442,3 +442,27 @@
 .tickets-doc-shape-mark.is-you {
   color: var(--accent-text);
 }
+
+/* --- E12-12: the strip carries the kind chip and the step; the question is read in full --- */
+
+.tickets-doc-kind {
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  color: var(--text-3);
+  font-size: 0.75rem;
+}
+
+.tickets-doc-step-now {
+  color: var(--text-4);
+}
+
+.tickets-doc-gate {
+  /* The waiting run's question is not clipped: it wraps in full beside the document. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.tickets-doc-table tr.is-pending td {
+  color: var(--text-4);
+}

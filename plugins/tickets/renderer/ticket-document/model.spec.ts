@@ -6,15 +6,14 @@ import {
   assetUrl,
   chainOf,
   costSummary,
-  costTableOf,
   costTableOfText,
-  estimateLine,
   offsetWords,
   proofOfText,
   sectionBodyRange,
-  tokenWords,
-  usdLabel,
+  statusOf,
 } from './model';
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- a spec builds the real catalog; the plugin itself gets it as `api.i18n`
+import { i18n } from '../../../../shared/i18n';
 import { parseVerlaufEntries } from '../../../../packages/tickets-engine/src/core/verlauf';
 import type { PipelinePhase, TicketCard } from '../../shared/tickets';
 
@@ -38,13 +37,7 @@ const phase = (id: string, title: string, handover: string, persona: string | nu
   ({ id, title, handover, persona, wip: null, claim: false }) as unknown as PipelinePhase;
 
 describe('words', () => {
-  it('writes money and tokens as the phone does', () => {
-    expect(usdLabel(1.836)).toBe('$1.84');
-    expect(usdLabel(0)).toBeNull();
-    expect(usdLabel(null)).toBeNull();
-    expect(tokenWords(48_000)).toBe('48k');
-    expect(tokenWords(3_400_000)).toBe('3.4M');
-    expect(tokenWords(800)).toBe('800');
+  it('writes chapter offsets as m:ss', () => {
     expect(offsetWords(72_000)).toBe('1:12');
     expect(offsetWords(5_000)).toBe('0:05');
   });
@@ -117,33 +110,36 @@ describe('cost table', () => {
   const text = `# T\n\n## Verlauf\n\n${lines.join('\n')}\n`;
 
   it('has one row per run and never counts an unknown cost as zero', () => {
-    const table = costTableOfText(text, (id) => id.toUpperCase())!;
-    expect(table.rows.map((r) => [r.step, r.who, r.tokens, r.time, r.cost])).toEqual([
+    const table = costTableOfText(i18n, text, (id) => id.toUpperCase())!;
+    expect(table.rows.map((r) => [r.phase, r.model, r.tokens, r.time, r.cost])).toEqual([
       ['PLAN', 'Paul · sonnet', '21k', '4 min', '$0.31'],
       ['BUILD', 'Ben · sonnet', '88k', '14 min', '$0.94'],
       ['REVIEW', 'Ralf · sonnet', '30k', '', '—'],
     ]);
-    expect(table.rows[2]!.outcome).toBe('failed');
-    expect(table.total).toBe('$1.25');
-    expect(table.totalTime).toBe('18 min');
-    expect(table.totalTokens).toBe('139k');
+    expect(table.rows[2]!.bad).toBe(true);
+    expect(table.total).toEqual({ tokens: '139k', time: '18 min', cost: '$1.25' });
   });
 
-  it('is null for a ticket that has not run, and summarises so far / in total', () => {
-    expect(costTableOfText('# T\n', (id) => id)).toBeNull();
+  it('adds a quiet row for each phase of the chain without a run', () => {
+    const table = costTableOfText(i18n, text, (id) => id.toUpperCase(), [
+      { id: 'build', title: 'Build' },
+      { id: 'test', title: 'Test' },
+      { id: 'commit', title: 'Accept', checkpoint: true },
+    ])!;
+    expect(table.rows.map((r) => [r.phase, r.pending])).toEqual([
+      ['PLAN', false],
+      ['BUILD', false],
+      ['REVIEW', false],
+      ['Test', true],
+    ]);
+  });
+
+  it('is null for a ticket that has not run, and summarises so far / in total with what it is', () => {
+    expect(costTableOfText(i18n, '# T\n', (id) => id)).toBeNull();
     const entries = parseVerlaufEntries(text);
-    expect(costTableOf([], (id) => id).total).toBeNull();
-    expect(costSummary(entries, true).label).toBe('$1.25 in total');
-    expect(costSummary(entries, false).label).toBe('$1.25 so far');
-    expect(costSummary([], true).label).toBeNull();
-  });
-});
-
-describe('estimateLine', () => {
-  it('states its basis', () => {
-    expect(estimateLine({ gate: 'build', persona: 'ben', model: 'sonnet', runs: 6, cost: 0.3, minutes: 9, tokens: 48_000 }, 'Build')).toBe(
-      'About $0.30 · 9 min · 48k tokens — median of 6 earlier Build runs by Ben on sonnet.',
-    );
+    expect(costSummary(i18n, entries, true).label).toBe('$1.25 in total');
+    expect(costSummary(i18n, entries, false).label).toBe('$1.25 so far');
+    expect(costSummary(i18n, [], true).label).toBeNull();
   });
 });
 
@@ -181,5 +177,27 @@ describe('chainOf', () => {
     });
     expect(chain.find((s) => s.phase === 'plan')!.who).toBe('Tessa');
     expect(chain.find((s) => s.phase === 'review')!.skipped).toBe(true);
+  });
+});
+
+describe('statusOf', () => {
+  const board = { columns: [] } as never;
+  const row = (need: Record<string, unknown> | null, extra: Record<string, unknown> = {}) =>
+    ({ need, run: null, card: { blocked: [] }, phase: { id: 'build' }, ...extra }) as never;
+
+  it('says Needs you with the kind of the need beside it', () => {
+    const status = statusOf(i18n, row({ kind: 'question', text: 'Which one?', phase: 'build' }), board, 'Build');
+    expect(status).toMatchObject({ label: 'Needs you', tone: 'needs', kind: 'Question' });
+  });
+
+  it('says Ready to try and Plan to accept in the same caps words, with no extra kind chip', () => {
+    const ready = statusOf(i18n, row({ kind: 'checkpoint', text: '', phase: 'ready' }), board, 'Ready to try');
+    expect(ready).toMatchObject({ label: 'Ready to try', kind: '' });
+  });
+
+  it('names a running and a blocked ticket, and an idle one by its phase', () => {
+    expect(statusOf(i18n, row(null, { run: {} }), board, 'Build').label).toBe('Running');
+    expect(statusOf(i18n, row(null, { card: { blocked: ['T-0001'] } }), board, 'Build')).toMatchObject({ label: 'Blocked', line: 'by T-0001' });
+    expect(statusOf(i18n, null, board, 'Build')).toMatchObject({ label: 'Build', tone: 'idle' });
   });
 });

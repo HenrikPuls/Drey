@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { parsePlanApproval, type McEstimate, type McPartCard, type McPlanApproval } from '../api/dto';
+import { i18n } from '../../../../shared/i18n';
 import { PlanApprove } from './approve';
 import {
   MC_APPROVE_STATE,
@@ -57,6 +58,8 @@ const estimate = (cost: number, runs = 6, minutes: number | null = 9): McEstimat
   model: 'sonnet',
   runs,
   cost,
+  costLow: cost * 0.8,
+  costHigh: cost * 1.4,
   minutes,
   tokens: null,
 });
@@ -159,16 +162,17 @@ describe('the card helpers', () => {
 
 describe('the estimate (D9)', () => {
   it('shows a figure with its basis only when there is one', () => {
-    expect(estimateLineOf(estimate(0.3))).toEqual({ value: '$0.30 · 9 min', note: 'median of 6 similar runs' });
-    expect(estimateLineOf(estimate(0.3, 3, null))).toEqual({ value: '$0.30', note: 'median of 3 similar runs' });
-    expect(estimateLineOf(null)).toEqual({ value: 'not yet', note: 'fewer than 3 similar runs so far' });
+    expect(estimateLineOf(i18n, estimate(3.75, 3))).toBe('$3.00–5.25 · from 3 runs');
+    expect(estimateLineOf(i18n, { ...estimate(0.3, 1), costLow: 0.3, costHigh: 0.3 })).toBe('$0.30 · from 1 run');
+    expect(estimateLineOf(i18n, { ...estimate(0.3), costLow: null, costHigh: null })).toBe('$0.30 · from 6 runs');
+    expect(estimateLineOf(i18n, null)).toBe('no estimate yet (first run)');
   });
 
   it('sums the parts that have a basis and says how many that is', () => {
-    expect(totalLineOf([estimate(0.3), estimate(0.45), estimate(0.15)])).toEqual({ value: '$0.90', note: '' });
-    expect(totalLineOf([estimate(0.3), null, estimate(0.15)])).toEqual({ value: '$0.45', note: ' for 2 of 3 parts' });
-    expect(totalLineOf([null, null])).toEqual({ value: 'no estimate yet', note: '' });
-    expect(totalLineOf([])).toEqual({ value: 'no estimate yet', note: '' });
+    expect(totalLineOf(i18n, [estimate(1), estimate(2), estimate(3)])).toBe('$4.80–8.40 · from 6 runs');
+    expect(totalLineOf(i18n, [estimate(1), null, estimate(3)])).toBe('$3.20–5.60 · from 6 runs · for 2 of 3 parts');
+    expect(totalLineOf(i18n, [null, null])).toBe('no estimate yet (first run)');
+    expect(totalLineOf(i18n, [])).toBe('no estimate yet (first run)');
     expect(dollarsOf(1.8)).toBe('$1.80');
   });
 });
@@ -268,16 +272,16 @@ describe('PlanApprove', () => {
     expect(body).toContain('Change flow ›');
     expect(body).toContain('Runs now');
     expect(body).toContain('After part 2');
-    expect(body).toContain('Estimate $0.30 · 9 min · median of 6 similar runs');
+    expect(body).toContain('$0.24–0.42 · from 6 runs');
     expect(el.querySelector('.pa-gate')?.textContent).toContain('Part 2 starts when this one is done.');
     expect(body).toContain('Change the split: edit the plan or ask Mission Control');
   });
 
-  it('writes "not yet" for a part without a basis and a total for the parts that have one', () => {
+  it('writes "no estimate yet" for a part without a basis and a total for the parts that have one', () => {
     const { el } = mount(approval([card(0), card(1, { persona: 'paul' })]), { estimates: { ben: estimate(0.3) } });
     const body = text(el);
-    expect(body).toContain('Estimate not yet · fewer than 3 similar runs so far');
-    expect(body).toContain('Typically $0.30 for 1 of 2 parts');
+    expect(body).toContain('no estimate yet (first run)');
+    expect(body).toContain('$0.24–0.42 · from 6 runs · for 1 of 2 parts');
   });
 
   it('Change flow opens the flow editor on that part; a released part has no link', () => {

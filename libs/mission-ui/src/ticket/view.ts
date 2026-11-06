@@ -20,6 +20,10 @@ import {
   type QuestionCardVm,
 } from '../work/work.model';
 import { AppBar } from '../app-bar/app-bar';
+import { CostTable } from '../cost/cost-table';
+import { costTableOf } from '../cost/cost-table.model';
+import { McI18n } from '../i18n/i18n.service';
+import { costInTotalText, costSoFarText, estimateInlineText, noEstimateText } from '../../../../shared/cost-text';
 import { Markdown } from '../markdown/markdown';
 import type { MdMode } from '../markdown/mode';
 import { TicketEditMode, TicketModeSwitch } from './mode-switch';
@@ -30,10 +34,8 @@ import {
   chainPrefillOf,
   chainStepsOf,
   changeCountOf,
-  costTableOf,
   defaultFaceOf,
   ticketRunActive,
-  estimateLineOf,
   changeRowsOf,
   commentLabelOf,
   diffFontSizeStep,
@@ -123,10 +125,11 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
   templateUrl: './view.html',
   styleUrls: ['../seg.css', './view.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, Markdown, TicketModeSwitch, AppBar],
+  imports: [NgTemplateOutlet, Markdown, TicketModeSwitch, AppBar, CostTable],
 })
 export class TicketView {
   protected readonly vm = inject(MC_TICKET);
+  private readonly i18n = inject(McI18n);
   /** The work slice (needs/board/personas): the question CTA and the option card. */
   protected readonly work = inject(MC_WORK_STATE, { optional: true });
   /** The chat slice: the thread's filtered source and its composer's send. */
@@ -261,7 +264,14 @@ export class TicketView {
    * ledger's settled-run usage the doc carries (`usage.cost`); null when
    * the desk has none (the slot renders nothing, never a 0-fake).
    */
-  protected readonly cost = computed<string | null>(() => usdLabelOf(this.doc()?.usage?.cost ?? null));
+  protected readonly cost = computed<string | null>(() => {
+    const amount = this.doc()?.usage?.cost ?? null;
+    if (usdLabelOf(amount) === null || amount === null) {
+      return null;
+    }
+    // A bare cost says what it is (req-98): in total once the ticket waits on the owner, so far while it is worked.
+    return this.decisionWaiting() ? costInTotalText(this.i18n, amount) : costSoFarText(this.i18n, amount);
+  });
 
 
   protected readonly steps = computed<GateStep[]>(() => {
@@ -478,7 +488,12 @@ export class TicketView {
       return null;
     }
     const titles = new Map(doc.phases.map((phase) => [phase.id.toLowerCase(), phase.title]));
-    return costTableOf(doc.verlauf, (id) => titles.get(id.trim().toLowerCase()) ?? titleCaseOf(id));
+    return costTableOf(
+      this.i18n,
+      doc.verlauf,
+      (id) => titles.get(id.trim().toLowerCase()) ?? titleCaseOf(id),
+      this.steps().map((step) => ({ id: step.id, title: step.title, skipped: step.skipped })),
+    );
   });
 
   /**
@@ -492,7 +507,7 @@ export class TicketView {
       return null;
     }
     const estimate = this.vm.estimate?.(current.id, current.persona) ?? null;
-    return estimate === null ? null : estimateLineOf(estimate, current.title);
+    return estimate === null ? noEstimateText(this.i18n) : estimateInlineText(this.i18n, estimate);
   });
 
   /** The proof's pass count for the verdict line; null while there is nothing to count. */

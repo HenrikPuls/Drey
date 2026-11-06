@@ -120,7 +120,7 @@
             <div class="pa-meta">
               <span class="pa-start">{{ row.card.start }}</span>
               @if (row.estimate !== null) {
-                <span>Estimate {{ row.estimate.value }} · {{ row.estimate.note }}</span>
+                <span class="pa-estimate">{{ row.estimate }}</span>
               }
             </div>
           </article>
@@ -148,7 +148,7 @@
       @if (total(); as t) {
         @if (proposal().approveLabel !== null) {
           <p class="pa-total">
-            Typically <b>{{ t.value }}</b>{{ t.note }}, from your own past runs · nothing runs until you accept.
+            <b>{{ t }}</b> · nothing runs until you accept.
           </p>
         }
       }

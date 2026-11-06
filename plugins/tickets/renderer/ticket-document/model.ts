@@ -12,29 +12,17 @@
  */
 import { maskFenceLines } from '../../../../shared/markdown/fences';
 import { mergeChain } from '../../../../packages/tickets-engine/src/core/chain-delta';
-import { minutesOf } from '../../../../packages/tickets-engine/src/core/estimate';
 import { parseVerificationSection } from '../../../../packages/tickets-engine/src/core/verification';
 import { parseVerlaufEntries, type VerlaufEntry } from '../../../../packages/tickets-engine/src/core/verlauf';
-import type { RunEstimate } from '../../../../packages/tickets-engine/src/core/estimate';
+import { costTableOf, type CostPhase, type CostTableView } from '../../../../shared/cost-table';
+import { costInTotalText, costSoFarText } from '../../../../shared/cost-text';
+import type { I18n } from '../../../../shared/i18n/types';
 import type { VerificationReport } from '../../../../packages/tickets-engine/src/contracts/verify';
 import type { BoardSnapshot, PipelinePhase, TicketCard } from '../../shared/tickets';
 import { READY_STATE } from '../../shared/pipeline-states';
 import { ideaPhaseIds, isMachinePhase, needKindLabel, statusLineOf, type WorkRow } from '../work-groups';
 
 export const titleCase = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1);
-
-/** `$1.84` for a usable positive cost; null otherwise (an unknown cost is never `$0.00`). */
-export function usdLabel(cost: number | null | undefined): string | null {
-  return typeof cost === 'number' && Number.isFinite(cost) && cost > 0 ? `$${cost.toFixed(2)}` : null;
-}
-
-/** 48000 → `48k`, 3400000 → `3.4M`: the Log's token words. */
-export function tokenWords(n: number): string {
-  if (n >= 1_000_000) {
-    return `${(n / 1_000_000).toFixed(1)}M`;
-  }
-  return n >= 1_000 ? `${Math.round(n / 1_000)}k` : String(n);
-}
 
 // --- text ranges ------------------------------------------------------------
 
@@ -174,84 +162,21 @@ export function assetUrl(vaultId: string | null, relative: string): string {
 
 // --- the cost table ---------------------------------------------------------
 
-export interface CostRow {
-  readonly step: string;
-  /** `Ben · sonnet`; '' when the line carries neither. */
-  readonly who: string;
-  /** `48k`; '' when unknown. */
-  readonly tokens: string;
-  /** `9 min`; '' when unknown. */
-  readonly time: string;
-  /** `$0.30`, or `—` when the run recorded no cost. */
-  readonly cost: string;
-  /** `handed over` / `failed` / `stopped`; '' when unreadable. */
-  readonly outcome: string;
-}
+export type { CostPhase, CostTableView } from '../../../../shared/cost-table';
 
-export interface CostTable {
-  readonly rows: readonly CostRow[];
-  /** The sum of every known cost; null until some run cost something. */
-  readonly total: string | null;
-  readonly totalTokens: string | null;
-  readonly totalTime: string | null;
-}
-
-/** One row per settled run of the ticket's `## Verlauf`, oldest first, and the totals under it. An unknown figure never counts as zero. */
-export function costTableOf(entries: readonly VerlaufEntry[], phaseTitle: (id: string) => string): CostTable {
-  let minutes: number | null = null;
-  let cost: number | null = null;
-  let tokens: number | null = null;
-  const rows: CostRow[] = entries.map((entry) => {
-    const mins = minutesOf(entry.dauer);
-    if (mins !== null) {
-      minutes = (minutes ?? 0) + mins;
-    }
-    if (typeof entry.cost === 'number' && Number.isFinite(entry.cost) && entry.cost > 0) {
-      cost = (cost ?? 0) + entry.cost;
-    }
-    const count = tokenCountFromWords(entry.tokens);
-    if (count !== null) {
-      tokens = (tokens ?? 0) + count;
-    }
-    return {
-      step: entry.phase === null ? '—' : phaseTitle(entry.phase),
-      who: [entry.persona === null ? '' : titleCase(entry.persona), entry.model ?? ''].filter((p) => p !== '').join(' · '),
-      tokens: entry.tokens,
-      time: mins === null ? '' : `${mins} min`,
-      cost: usdLabel(entry.cost) ?? '—',
-      outcome: entry.ausgang === 'handed-over' ? 'handed over' : (entry.ausgang ?? ''),
-    };
-  });
-  return {
-    rows,
-    total: usdLabel(cost),
-    totalTokens: tokens === null ? null : tokenWords(tokens),
-    totalTime: minutes === null ? null : `${minutes} min`,
-  };
-}
-
-function tokenCountFromWords(words: string): number | null {
-  const match = /^(\d+(?:\.\d+)?)([kM]?)$/.exec(words.trim());
-  if (match === null) {
-    return null;
-  }
-  return Math.round(Number(match[1]) * (match[2] === 'M' ? 1_000_000 : match[2] === 'k' ? 1_000 : 1));
-}
-
-/** The ticket text's `## Verlauf` as a cost table; null when it holds no run. */
-export function costTableOfText(text: string, phaseTitle: (id: string) => string): CostTable | null {
+/**
+ * The ticket text's `## Verlauf` as the cost-by-phase table (req-98); null
+ * when it holds no run. `chain` adds the quiet `no run yet` rows of the
+ * phases the ticket has still to pass.
+ */
+export function costTableOfText(
+  i18n: I18n,
+  text: string,
+  phaseTitle: (id: string) => string,
+  chain: readonly CostPhase[] = [],
+): CostTableView | null {
   const entries = parseVerlaufEntries(text);
-  return entries.length === 0 ? null : costTableOf(entries, phaseTitle);
-}
-
-/** `About $0.30 · 9 min · 48k tokens — median of 6 earlier Build runs by Ben on sonnet.` */
-export function estimateLine(estimate: RunEstimate, gateTitle: string): string {
-  const figures = [
-    `About ${usdLabel(estimate.cost) ?? `$${estimate.cost.toFixed(2)}`}`,
-    ...(estimate.minutes === null ? [] : [`${estimate.minutes} min`]),
-    ...(estimate.tokens === null ? [] : [`${tokenWords(estimate.tokens)} tokens`]),
-  ].join(' · ');
-  return `${figures} — median of ${estimate.runs} earlier ${gateTitle} runs by ${titleCase(estimate.persona)} on ${estimate.model}.`;
+  return entries.length === 0 ? null : costTableOf(i18n, entries, phaseTitle, chain);
 }
 
 // --- the header strip -------------------------------------------------------
@@ -317,37 +242,58 @@ export interface TicketStatus {
   /** The chip: why the owner is needed, `Running`, `Blocked`, or the phase's title. */
   readonly label: string;
   readonly tone: StatusTone;
+  /** The word for why the owner is wanted when the caps are the generic `Needs you` (`Question`, `Gate red`); '' otherwise. */
+  readonly kind: string;
   /** The muted line after it (`checks green`, `waits for your review`); '' when none. */
   readonly line: string;
 }
 
-/** The status chip of a ticket on the board. */
-export function statusOf(row: WorkRow | null, board: BoardSnapshot, phaseTitle: string): TicketStatus {
+/**
+ * The status chip of a ticket on the board: the caps the canvas names —
+ * `NEEDS YOU`, `PLAN TO ACCEPT`, `READY TO TRY` (the CSS sets the caps) —
+ * where the owner is wanted, `Running`, `Blocked`, or the phase's title.
+ */
+export function statusOf(i18n: I18n, row: WorkRow | null, board: BoardSnapshot, phaseTitle: string): TicketStatus {
   if (row === null) {
-    return { label: phaseTitle, tone: 'idle', line: '' };
+    return { label: phaseTitle, tone: 'idle', kind: '', line: '' };
   }
   if (row.need !== null) {
-    return { label: needKindLabel(row.need, board), tone: 'needs', line: statusLineOf(row, board) };
+    const kind = needKindLabel(row.need, board);
+    const label =
+      kind === 'Ready to try'
+        ? i18n.t('ticket.status.ready_to_try')
+        : kind === 'Plan to accept'
+          ? i18n.t('ticket.status.plan_to_accept')
+          : i18n.t('ticket.status.needs_you');
+    return { label, tone: 'needs', kind: kind === 'Ready to try' || kind === 'Plan to accept' ? '' : kind, line: statusLineOf(row, board) };
   }
   if (row.run !== null) {
-    return { label: 'Running', tone: 'running', line: phaseTitle };
+    return { label: i18n.t('ticket.status.running'), tone: 'running', kind: '', line: phaseTitle };
   }
   if (row.card.blocked.length > 0) {
-    return { label: 'Blocked', tone: 'blocked', line: `by ${row.card.blocked.join(', ')}` };
+    return { label: i18n.t('ticket.status.blocked'), tone: 'blocked', kind: '', line: `by ${row.card.blocked.join(', ')}` };
   }
-  return { label: phaseTitle, tone: 'idle', line: '' };
+  return { label: phaseTitle, tone: 'idle', kind: '', line: '' };
 }
 
 export interface CostSummary {
   /** `$1.84 in total` / `$1.20 so far`; null while nothing readable was spent. */
   readonly label: string | null;
-  readonly total: string | null;
+  readonly total: number | null;
 }
 
-/** The strip's cost slot: `so far` while the ticket is still being worked, `in total` once it waits on the owner. */
-export function costSummary(entries: readonly VerlaufEntry[], waiting: boolean): CostSummary {
-  const table = costTableOf(entries, (id) => id);
-  return { total: table.total, label: table.total === null ? null : `${table.total} ${waiting ? 'in total' : 'so far'}` };
+/** The strip's cost slot: `so far` while the ticket is still being worked, `in total` once it waits on the owner — a bare amount always says what it is. */
+export function costSummary(i18n: I18n, entries: readonly VerlaufEntry[], waiting: boolean): CostSummary {
+  let sum = 0;
+  for (const entry of entries) {
+    if (typeof entry.cost === 'number' && Number.isFinite(entry.cost) && entry.cost > 0) {
+      sum += entry.cost;
+    }
+  }
+  if (sum <= 0) {
+    return { total: null, label: null };
+  }
+  return { total: sum, label: waiting ? costInTotalText(i18n, sum) : costSoFarText(i18n, sum) };
 }
 
 /** The persona that does the current step, when the pipeline or the ticket names one. */

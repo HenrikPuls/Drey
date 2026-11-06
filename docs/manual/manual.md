@@ -941,22 +941,25 @@ others get their own worktrees on the same branch). The ticket file is
 an ordinary note (description, plan, executable acceptance criteria and
 an append-only log). In the editor the ticket opens with a **header**
 instead of the folded frontmatter: the title as the headline, above it
-the id, the phase, the priority, the repositories (checkboxes), the
-worker and the
-branch. Edit the headline in place (Enter or leaving the field applies
-it, Escape restores it) and pick priority, repositories and worker —
-each change is an ordinary unsaved edit of the file, so
-Save and Undo work as for any typing. The code button at the right
+the id, the phase and, when something is wrong with the file, an issues
+badge. Edit the headline in place (Enter or leaving the field applies
+it, Escape restores it) — the change is an ordinary unsaved edit of the
+file, so Save and Undo work as for any typing. Priority, repositories and
+worker are not in the header any more: set them on the board, the card
+menu or in the frontmatter. The code button at the right
 edits the frontmatter as YAML; its header folds back to the ticket
 header. The **Log** section opens folded the first time a ticket shows
 in a session — the fold marker beside "Log" opens it.
 
 **The ticket as a document.** Under the chip row the header carries a
-**strip**: the status (why the ticket waits for you, *Running*,
-*Blocked*, or its phase), the persona doing the current step, what the
-ticket has cost so far or in total, and — when the history holds at
-least three similar runs — the **estimate** for the step now due (hover
-it for its basis). Below it the **chain** shows every step with who does
+**strip**: the status in capitals (*NEEDS YOU*, *PLAN TO ACCEPT*,
+*READY TO TRY*, *Running*, *Blocked*, or its phase), a chip that says why
+you are needed (*Question*, *Gate red* …), the persona doing the current
+step and the step, what the ticket has cost — always with what it is
+(*$1.20 so far*, *$1.84 in total*) — and the **estimate** for the step
+now due beside it: *est. $3.00–5.20 · from 3 runs* (the middle half of
+the similar earlier runs; it needs at least three), or *no estimate yet
+(first run)*. Below it the **chain** shows every step with who does
 it (*Plan Paul, Build Ben …*, a checkpoint is *you*); a step the ticket
 skips is struck, one added for this ticket is marked. A ticket that
 waits on a question shows *Waits for you:* and the question.
@@ -969,7 +972,8 @@ it, and the findings. A walkthrough over 25 MB is not kept; the block
 says so in one line instead of the player (Settings → Engine → Videos,
 *Largest video*; videos are never deleted automatically). Put the caret in the section and the Markdown
 shows again. At the very end the **Cost** table lists every settled run
-of `## Verlauf` (phase, model, tokens, time, cost) with the total.
+of `## Verlauf` (Phase · Model · Tokens · Time · Cost) with a total row;
+a phase of the chain the ticket has still to pass shows *no run yet*.
 Under it the **action bar**: *Thread* (the agent's thread of the ticket) and
 *Open Review*, and, while the ticket waits at one of your checkpoints, the
 quiet link **Decision waiting · go to the card**. There is no Accept or Send
@@ -1317,7 +1321,7 @@ ticket's plan in a conversation, or walking a checkpoint — the plan
 review, the review, the commit step — together. Where a column offers
 it, the row menu and the ticket header show a one-click start:
 
-- **Plan with agent** on the first automatic column (the plan column in
+- **Plan with agent** (row menu) on the first automatic column (the plan column in
   the default pipeline) — the worker reads the ticket
   and the repo, asks you the few things it cannot learn there, proposes
   the plan in the chat, and writes only the agreed result into the

@@ -15,7 +15,7 @@ import type { DreyPluginApi, EditorSurfaceContext } from '../../../../shared/plu
 import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
 import type { WorkRow } from '../work-groups';
 import { actionBarNode, costNode, proofNode, shapeMarksNode } from './dom';
-import { actionBarOf, costTableOfText, proofOfText, sectionBodyRange } from './model';
+import { actionBarOf, chainOf, costTableOfText, proofOfText, sectionBodyRange } from './model';
 import { planHeadingEnd, type ShapeMarks } from './shape';
 
 export interface TicketDocumentActions {
@@ -137,13 +137,23 @@ export function createTicketDocumentExtension(deps: TicketDocumentDeps): TicketD
 
       const card = cardOf(path);
       const row = card === null ? null : deps.rowOf(card);
-      const cost = costTableOfText(text, phaseTitle);
+      // The chain's phases still to run get their quiet `no run yet` row (req-98).
+      const chain =
+        card === null
+          ? []
+          : chainOf({ pipeline: snapshot.pipeline, currentPhaseId: card.phase, card, personas: [] }).map((step) => ({
+              id: step.phase,
+              title: step.title,
+              checkpoint: step.checkpoint,
+              skipped: step.skipped,
+            }));
+      const cost = costTableOfText(deps.api.i18n, text, phaseTitle, chain);
       const bar = actionBarOf(row, snapshot);
       const tail = new BlockWidget(JSON.stringify([id, cost, bar, card !== null]), () => {
         const root = document.createElement('div');
         root.className = 'tickets-doc-tail';
         if (cost !== null) {
-          root.append(costNode(cost));
+          root.append(costNode(deps.api.i18n, cost));
         }
         if (card !== null) {
           root.append(

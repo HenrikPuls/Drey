@@ -42,7 +42,7 @@ import type { WorktreeFile } from '../../../packages/tickets-engine/src/core/wor
 import { createWorkFilterStore, filterPopover, isFilterActive, NO_WORK_FILTER, type WorkFilterState } from './work-filter';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
-import { createTicketHeader, isTicketPath, ticketLogFold } from './ticket-header';
+import { createTicketHeader, isTicketPath, ticketLogFold, ticketTabTitle } from './ticket-header';
 import { WORK_VIEW_ID, registerWorkView } from './view-preset';
 import { createTicketDocumentExtension } from './ticket-document/extension';
 import { createPlanStatusStore } from './ticket-document/shape-state';
@@ -1704,9 +1704,8 @@ function openTeamDoc(api: DreyPluginApi): void {
   api.documents.addDoc(TEAM_KIND, TEAM_KEY, 'Crew');
 }
 
-function threadTitle(ticketId: string): string {
-  const title = boardCard(ticketId)?.meta.title ?? null;
-  return title === null ? `${ticketId} · thread` : `${ticketId} · ${title}`;
+function threadTitle(api: DreyPluginApi, ticketId: string): string {
+  return ticketTabTitle(api.i18n, ticketId, boardCard(ticketId)?.meta.title);
 }
 
 /** The run the thread talks to: the ticket's live run, else its newest. */
@@ -1825,7 +1824,7 @@ function openTicketThread(api: DreyPluginApi, card: TicketCard): void {
   for (const listener of threadListeners) {
     listener();
   }
-  const title = threadTitle(card.id);
+  const title = threadTitle(api, card.id);
   if (api.documents.get(THREAD_KEY) !== null) {
     api.documents.rename(THREAD_KEY, title);
   }
@@ -2398,17 +2397,17 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     },
     canStart: () => dialogMode() !== null && !isLive(threadRun(ticketId)),
     placeholder: 'Message the worker — type / for commands',
-    // The quiet start's pre-fill (req-75): while the dialog has seen no
-    // owner message — no live run and one may start (the first message
-    // starts it, quiet by the same wrap), or a live quiet run — the box
-    // opens carrying the step and its meaning.
+    // The quiet start's pre-fill (req-75): a live quiet run that has seen
+    // no owner message opens the box carrying the step and its meaning.
+    // A ticket without a run opens an empty box (E12-12): nothing is
+    // started, so nothing is drafted for the owner.
     prefill: () => {
       const mode = dialogMode();
       if (mode === null) {
         return null;
       }
       const run = threadRun(ticketId);
-      return !isLive(run) || run?.quietStart === true ? dialogStarter(mode) : null;
+      return run !== null && isLive(run) && run.quietStart === true ? dialogStarter(mode) : null;
     },
   });
 
@@ -2462,6 +2461,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     const run = threadRun(ticketId);
     const live = isLive(run);
     titleNode.textContent = card?.meta.title ?? '(not on the board)';
+    titleNode.title = titleNode.textContent;
     const status = run === null ? null : workerStatus(run, Date.now());
     // The dot: the run's light, amber the moment it waits on the owner.
     const waiting = live && run !== null && run.waiting != null;
@@ -3147,16 +3147,14 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       }
     });
     const header = createTicketHeader({
-      strip: createTicketStrip({ snapshot: () => snapshot, rowOf, invoke: invokeBoard, openFlow: (card) => openFlowTab(api, card.id) }),
+      strip: createTicketStrip({ i18n: api.i18n, snapshot: () => snapshot, rowOf, invoke: invokeBoard, openFlow: (card) => openFlowTab(api, card.id) }),
       api,
       snapshot: () => snapshot,
       invoke: invokeBoard,
-      workers: WORKER_LABEL,
       onError: (message) => {
         setNote(message, 'error');
         notifyViews();
       },
-      startInteractive: (card, mode) => void startInteractive(api, card, mode),
       faces: (ticketId) => faceSwitchFor(api, ticketId, 'ticket'),
     });
     let headerVault: string | null = null;
@@ -3211,7 +3209,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
         const saved = (data as { ticketId?: unknown } | null)?.ticketId;
         if (typeof saved === 'string' && saved !== '') {
           threadTicketId = saved;
-          api.documents.addDoc(THREAD_KIND, THREAD_KEY, threadTitle(saved));
+          api.documents.addDoc(THREAD_KIND, THREAD_KEY, threadTitle(api, saved));
         }
       },
       mount: (el) => mountThread(api, el),

@@ -10,6 +10,8 @@
  * No overlap, no touched files, no routing: decision D5 dropped them.
  */
 import { InjectionToken } from '@angular/core';
+import { estimateText, noEstimateText } from '../../../../shared/cost-text';
+import type { I18n } from '../../../../shared/i18n';
 import type { McEstimate, McPartCard, McPartFlowStep, McPartPersona, McPlanApproval } from '../api/dto';
 
 export type McApproveReply = { readonly ok: true; readonly tickets?: readonly string[] } | { readonly ok: false; readonly error: string };
@@ -106,23 +108,13 @@ export function dollarsOf(value: number): string {
   return `$${value.toFixed(2)}`;
 }
 
-export interface EstimateLine {
-  /** `$0.30 · 9 min` or `not yet`. */
-  readonly value: string;
-  /** The basis: `median of 6 similar runs`, or why there is no number. */
-  readonly note: string;
-}
-
-/** The card's estimate: only with a basis (D9); otherwise "not yet". */
-export function estimateLineOf(estimate: McEstimate | null): EstimateLine {
-  if (estimate === null) {
-    return { value: 'not yet', note: 'fewer than 3 similar runs so far' };
-  }
-  const bits = [dollarsOf(estimate.cost)];
-  if (estimate.minutes !== null) {
-    bits.push(`${estimate.minutes} min`);
-  }
-  return { value: bits.join(' · '), note: `median of ${estimate.runs} similar runs` };
+/**
+ * The card's estimate in the canvas's one format (decision 20): the
+ * middle half of the similar runs with its basis, `$3.00–5.20 · from 3
+ * runs`, or `no estimate yet (first run)` where there is no basis (D9).
+ */
+export function estimateLineOf(i18n: I18n, estimate: McEstimate | null): string {
+  return estimate === null ? noEstimateText(i18n) : estimateText(i18n, estimate);
 }
 
 /**
@@ -130,16 +122,23 @@ export function estimateLineOf(estimate: McEstimate | null): EstimateLine {
  * median of those that have a basis, with how many that covers. Parts
  * already released do not count — they cost what they cost.
  */
-export function totalLineOf(estimates: readonly (McEstimate | null)[]): { readonly value: string; readonly note: string } {
+export function totalLineOf(i18n: I18n, estimates: readonly (McEstimate | null)[]): string {
   const known = estimates.filter((e): e is McEstimate => e !== null);
   if (known.length === 0) {
-    return { value: 'no estimate yet', note: '' };
+    return noEstimateText(i18n);
   }
-  const sum = known.reduce((total, e) => total + e.cost, 0);
-  return {
-    value: dollarsOf(sum),
-    note: known.length < estimates.length ? ` for ${known.length} of ${estimates.length} parts` : '',
+  const ranged = known.every((e) => e.costLow !== null && e.costHigh !== null);
+  const sum = {
+    // The parts' runs are summed as the fewest basis any of them rests on: the claim only holds that far.
+    runs: Math.min(...known.map((e) => e.runs)),
+    cost: known.reduce((total, e) => total + e.cost, 0),
+    costLow: ranged ? known.reduce((total, e) => total + e.costLow!, 0) : null,
+    costHigh: ranged ? known.reduce((total, e) => total + e.costHigh!, 0) : null,
   };
+  const text = estimateText(i18n, sum);
+  return known.length < estimates.length
+    ? i18n.t('cost.estimate.partial', { estimate: text, known: known.length, total: estimates.length })
+    : text;
 }
 
 // --- Mission Control's proposal ----------------------------------------------------

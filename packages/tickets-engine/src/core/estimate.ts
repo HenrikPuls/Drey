@@ -22,6 +22,10 @@ export interface RunEstimate extends EstimateKey {
   readonly runs: number;
   /** Median cost in dollars. */
   readonly cost: number;
+  /** The low end of the middle half of the runs' costs (the first quartile) — the range's left figure (req-98). */
+  readonly costLow: number;
+  /** The high end of the middle half (the third quartile) — the range's right figure. */
+  readonly costHigh: number;
   /** Median wall-clock minutes; null when no matching run recorded one. */
   readonly minutes: number | null;
   /** Median tokens; null when no matching run recorded them. */
@@ -53,6 +57,15 @@ function median(values: readonly number[]): number | null {
   return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
+/** The value at fraction `p` of the sorted values, interpolating between neighbours. */
+function quantile(values: readonly number[], p: number): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const at = (sorted.length - 1) * p;
+  const below = Math.floor(at);
+  const above = Math.ceil(at);
+  return sorted[below]! + (sorted[above]! - sorted[below]!) * (at - below);
+}
+
 const same = (a: string | null, b: string): boolean => a !== null && a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /** The estimate for one triple over the history; null below the minimum. */
@@ -77,6 +90,8 @@ export function estimateFrom(history: readonly VerlaufEntry[], key: EstimateKey)
     ...key,
     runs: runs.length,
     cost: Math.round(cost * 10_000) / 10_000,
+    costLow: Math.round(quantile(runs.map((e) => e.cost!), 0.25) * 10_000) / 10_000,
+    costHigh: Math.round(quantile(runs.map((e) => e.cost!), 0.75) * 10_000) / 10_000,
     minutes: rounded(median(runs.flatMap((e) => minutesOf(e.dauer) ?? []))),
     tokens: rounded(median(runs.flatMap((e) => tokenCountOf(e.tokens) ?? []))),
   };

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { McI18n } from '../i18n/i18n.service';
 import type { McPartCard } from '../api/dto';
 import {
   MC_APPROVE_STATE,
@@ -33,6 +34,7 @@ import {
 })
 export class PlanApprove {
   private readonly state = inject(MC_APPROVE_STATE);
+  private readonly i18n = inject(McI18n);
 
   protected readonly approval = computed(() => this.state.approval());
   protected readonly error = computed(() => this.state.error());
@@ -55,7 +57,7 @@ export class PlanApprove {
     const cards = approval.parts;
     return cards.map((card) => {
       const builder = builderOf(card, approval);
-      const estimate = card.locked || builder === null ? null : estimateLineOf(this.state.estimate(approval.gate, builder.id));
+      const estimate = card.locked || builder === null ? null : estimateLineOf(this.i18n, this.state.estimate(approval.gate, builder.id));
       const room = moveRoomOf(cards, card.index);
       return {
         card,
@@ -81,6 +83,7 @@ export class PlanApprove {
       return null;
     }
     return totalLineOf(
+      this.i18n,
       approval.parts
         .filter((c) => !c.locked)
         .map((c) => {
