@@ -2691,8 +2691,10 @@ details[open] > summary > .tickets-tx-think-preview {
 }
 
 .tickets-thread-title {
-  flex: 1;
-  min-width: 0;
+  /* A title that fits is shown whole (E12-12): the meta line gives way first. */
+  flex: 1 1 auto;
+  max-width: 100%;
+  min-width: 12ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2704,7 +2706,7 @@ details[open] > summary > .tickets-tx-think-preview {
 /* The middle gives way first: the title and the meta line shrink to
    nothing before the Ticket file link and the controls lose a pixel. */
 .tickets-thread-meta {
-  flex: 0 1 auto;
+  flex: 0 100 auto;
   min-width: 0;
   max-width: 46%;
   overflow: hidden;

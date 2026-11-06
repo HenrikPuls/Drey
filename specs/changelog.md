@@ -1,3 +1,64 @@
+### Milestone 183 — E12-12: the ticket page header (boards 7j, 10j)
+
+**Not yet manually verified by the owner.** Wave 3 of the build plan, row 3.3.
+
+- **The form row is gone.** The ticket header's chip row keeps the id, the phase, the issues
+  badge and the YAML button; priority, repositories, worker, branch and `Plan with agent` left
+  the header (the card menu still starts the dialog). The strip under it carries the status in
+  caps — `NEEDS YOU`, `PLAN TO ACCEPT`, `READY TO TRY` (catalog strings, caps from CSS; Accept,
+  never Approve) — the kind chip (`Question`, `Gate red`, `Run failed` … only where the caps
+  are the generic `Needs you`), the persona, `Step: Build`, and the cost with its basis inline
+  (`$1.20 so far · est. $3.00–5.20 · from 3 runs`, req-98).
+- **The waiting run's question** is the strip's gate line, wrapped in full beside the document.
+- **The thread header** gives the title the room: the meta line shrinks first (flex shrink 100),
+  the title carries its full text as a tooltip.
+- **A ticket without a run opens an empty composer** — the pre-fill of the quiet start is kept
+  for a live quiet run only.
+- **Tab titles** go through `ticketTabTitle` (`T-0121 · Title`, the catalog key
+  `ticket.tab_title`, the title from the card's meta, never the path); the thread tab uses it.
+  The review and flow tabs still read `Review · T-0121` / the flow title — they sit in
+  `review/register.ts` and `flow/`, not in this bundle, and wait for the engine's document title
+  contract (W3.8).
+- **D-23 — the header on a dricket store.** `isTicketPath` matched only the files backend's
+  `tickets/<column>/T-nnnn.md`, so on a dricket store the document had no header and no
+  Ticket | Thread | Review strip. `ticketIdOfPath` now reads both shapes (the dricket
+  `tickets/<prefix>/<shard>/t-N/ticket.md` through the engine's `idOfDocumentPath`, unchanged);
+  the phase chip falls back to the board card's phase where the path has no column. Handed to
+  this bundle by the store-defects session; its roadmap entry D-23 left the roadmap with
+  the wave-3 merge.
+- **Files:** `plugins/tickets/renderer/ticket-header.ts`, `ticket-document/{dom,model,strip,extension}.ts`,
+  `ticket-document.css`, `board.css` (thread header), `index.ts` (three one-line edits: the
+  strip's `i18n`, the dropped header deps, the composer pre-fill and the tab title call).
+  Specs: `dom.spec.ts`, `model.spec.ts` beside them.
+
+### req-98 — The cost-by-phase table and the estimate format on every layout
+
+**Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list
+(canvas decisions 19 and 20, concept §5.4).
+
+- **The table** at the end of the ticket — desktop (`ticket-document`), iPad and phone
+  (`libs/mission-ui/src/cost/`, the new `mc-cost-table`): Phase · Model · Tokens · Time · Cost
+  and a Total row, from the `## Verlauf` runs the ticket carries; a phase of the chain that has
+  not run shows `no run yet`, quietly (a checkpoint or a skipped step has no row). Below 560 px
+  the phone layout takes over: Phase and Cost on a row, Model / Tokens / Time as one grey meta
+  line under the phase, no horizontal scroll. One pure implementation,
+  `shared/cost-table.ts`, serves both clients.
+- **The estimate** reads `$3.00–5.20 · from 3 runs` / `no estimate yet (first run)` everywhere
+  these surfaces rendered one — the plan to accept's cards and total, the ticket view's gate
+  line, the desktop strip — through `shared/cost-text.ts` over the catalog keys
+  (`cost.estimate.range|single|none|partial`, ICU plurals) and `Intl` currency. The old
+  "median of n similar runs" and "not yet" wording is gone. The plan's total sums the parts'
+  ranges and says `· for 2 of 3 parts` when some have no basis.
+- **A bare cost says what it is:** `$1.20 so far` / `$1.84 in total`
+  (`cost.amount.so_far|in_total`) on the ticket head chip and the strip.
+- **Engine (additive):** `RunEstimate` carries `costLow` / `costHigh` — the first and third
+  quartile of the matching runs' costs (the middle half) — and `parseEstimate` reads them
+  (null from an older engine: the single-amount form is shown). The gate line `cs-total` of the
+  ticket view's gate bar is still a bare amount (it shares the bar with the gate pills; left as is).
+- **Specs:** `shared/cost-*.ts` is covered by the specs of its consumers; `cost/cost-table.spec.ts`,
+  `plan/approve.spec.ts`, `ticket/view.spec.ts`, `api/dto.spec.ts`,
+  `packages/tickets-engine/src/core/estimate.spec.ts`.
+
 ### Milestone 181 — D-11 to D-22: the sweep's defects on a dricket store
 
 **Not yet manually verified by the owner.** Build plan row 3.8; each defect red-then-green, on a scratch store

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- a spec builds the real catalog; the plugin itself gets it as `api.i18n`
+import { i18n } from '../../../../shared/i18n';
 import { GO_TO_DECISION_CARD, actionBarNode, costNode, proofNode, stripNode } from './dom';
 import type { ProofView } from './model';
 
@@ -47,17 +49,22 @@ describe('proofNode', () => {
 });
 
 describe('costNode', () => {
-  it('lists the runs and the total row', () => {
-    const node = costNode({
-      rows: [{ step: 'Build', who: 'Ben · sonnet', tokens: '88k', time: '14 min', cost: '$0.94', outcome: 'handed over' }],
-      total: '$0.94',
-      totalTokens: '88k',
-      totalTime: '14 min',
-    });
+  const view = {
+    rows: [
+      { phase: 'Build', model: 'Ben · sonnet', tokens: '88k', time: '14 min', cost: '$0.94', pending: false, bad: false, meta: '' },
+      { phase: 'Review', model: '', tokens: '', time: '', cost: '', pending: true, bad: false, meta: '' },
+    ],
+    total: { tokens: '88k', time: '14 min', cost: '$0.94' },
+  };
+
+  it('lists the runs, a quiet row for a phase without a run, and the total row', () => {
+    const node = costNode(i18n, view);
     expect(Array.from(node.querySelectorAll('th')).map((c) => c.textContent)).toEqual(['Phase', 'Model', 'Tokens', 'Time', 'Cost']);
-    expect(node.querySelector('tbody tr')?.textContent).toBe('BuildBen · sonnet88k14 min$0.94');
+    const rows = Array.from(node.querySelectorAll('tbody tr'));
+    expect(rows[0]!.textContent).toBe('BuildBen · sonnet88k14 min$0.94');
+    expect(rows[1]!.textContent).toBe('Reviewno run yet');
+    expect(rows[1]!.classList.contains('is-pending')).toBe(true);
     expect(node.querySelector('tfoot tr')?.textContent).toBe('Total88k14 min$0.94');
-    expect(node.querySelector('.tickets-doc-total')?.textContent).toBe('$0.94');
   });
 });
 
@@ -106,27 +113,30 @@ describe('actionBarNode', () => {
 describe('stripNode', () => {
   it('shows status, persona, cost, estimate, chain and gate', () => {
     const node = stripNode({
-      status: { label: 'Ready to try', tone: 'needs', line: 'checks green' },
+      status: { label: 'Needs you', tone: 'needs', kind: 'Question', line: 'waits for your answer' },
       who: 'Tessa',
-      cost: '$1.84 in total',
-      estimate: { short: '$1.50', basis: 'About $1.50 — median of 5 earlier Test runs by Tessa on sonnet.' },
+      step: 'Step: Test',
+      kind: 'Question',
+      cost: '$1.20 so far',
+      estimate: 'est. $3.00–5.20 · from 3 runs',
       chain: [
         { phase: 'build', title: 'Build', state: 'past', who: 'Ben', personaId: 'ben', checkpoint: false, inserted: false, skipped: false, notify: false },
         { phase: 'commit', title: 'Accept', state: 'current', who: 'you', personaId: null, checkpoint: true, inserted: false, skipped: false, notify: false },
       ],
       gate: 'Waits for you: should it move the section?',
     });
-    expect(node.querySelector('.tickets-doc-status')?.textContent).toBe('Ready to try');
+    expect(node.querySelector('.tickets-doc-status')?.textContent).toBe('Needs you');
+    expect(node.querySelector('.tickets-doc-kind')?.textContent).toBe('Question');
+    expect(node.querySelector('.tickets-doc-step-now')?.textContent).toBe('Step: Test');
     expect(node.querySelector('.tickets-doc-who')?.textContent).toBe('Tessa');
-    expect(node.querySelector('.tickets-doc-cost-fact')?.textContent).toBe('$1.84 in total');
-    expect(node.querySelector('.tickets-doc-estimate')?.textContent).toBe('est. $1.50');
-    expect((node.querySelector('.tickets-doc-estimate') as HTMLElement).title).toContain('median of 5');
+    expect(node.querySelector('.tickets-doc-cost-fact')?.textContent).toBe('$1.20 so far');
+    expect(node.querySelector('.tickets-doc-estimate')?.textContent).toBe('est. $3.00–5.20 · from 3 runs');
     expect(Array.from(node.querySelectorAll('.tickets-doc-step')).map((s) => s.textContent)).toEqual(['✓BuildBen', '◆Acceptyou']);
     expect(node.querySelector('.tickets-doc-gate')?.textContent).toBe('Waits for you: should it move the section?');
   });
 
   it('omits what it does not have', () => {
-    const node = stripNode({ status: { label: 'Build', tone: 'idle', line: '' }, who: '', cost: null, estimate: null, chain: [], gate: '' });
-    expect(node.querySelector('.tickets-doc-who, .tickets-doc-cost-fact, .tickets-doc-estimate, .tickets-doc-chain, .tickets-doc-gate')).toBeNull();
+    const node = stripNode({ status: { label: 'Build', tone: 'idle', kind: '', line: '' }, kind: '', who: '', step: '', cost: null, estimate: null, chain: [], gate: '' });
+    expect(node.querySelector('.tickets-doc-kind, .tickets-doc-who, .tickets-doc-step-now, .tickets-doc-cost-fact, .tickets-doc-estimate, .tickets-doc-chain, .tickets-doc-gate')).toBeNull();
   });
 });

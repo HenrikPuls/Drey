@@ -1,7 +1,10 @@
 /**
- * The ticket header in the editor (req-62, SDK 1.34): an opened ticket
- * shows its title as a headline and its fields as a chip row, in place of
- * the base's folded `▸ Frontmatter` pill — and its `## Log` opens folded.
+ * The ticket header in the editor (req-62, SDK 1.34; E12-12): an opened ticket
+ * shows its title as a headline under a short chip row (id, phase, issues, the
+ * YAML escape) and the document's strip, in place of the base's folded
+ * `▸ Frontmatter` pill — and its `## Log` opens folded. The form row (priority,
+ * repositories, worker, branch, Plan with agent) is gone: those are set from
+ * the board and the card menu.
  *
  * The header draws from the BUFFER's frontmatter, not the file on disk
  * (an unsaved edit shows at once). Reading and rewriting the YAML is the
@@ -16,23 +19,42 @@ import type {
   FrontmatterViewContrib,
   FrontmatterViewInput,
 } from '../../../shared/plugin-api/renderer';
-import {
-  branchForTicket,
-  DEFAULT_PRIORITY_CONFIG,
-  stripPhasePrefix,
-  type BoardSnapshot,
-  type TicketCard,
-  type TicketIssue,
-  type TicketMeta,
-  type TicketPriority,
-} from '../shared/tickets';
+import { stripPhasePrefix, type BoardSnapshot, type TicketIssue, type TicketMeta } from '../shared/tickets';
+import { idOfDocumentPath } from '../../../packages/tickets-engine/src/store/document-paths';
 import { maskFenceLines } from '../../../shared/markdown/fences';
-import { interactiveModeFor, type InteractiveMode } from './end-moves';
 import type { TicketStrip } from './ticket-document/strip';
 
-/** A ticket file of the board: `tickets/<phase dir>/T-nnnn.md` (archive included). */
+const FILES_TICKET = /^tickets\/(?!_meta\/)[^/]+\/(T-\d{4,})\.md$/;
+
+/**
+ * The display id a ticket document's path names — both shapes of the
+ * store: the files backend's `tickets/<phase dir>/T-nnnn.md` (archive
+ * included) and the dricket store's `tickets/<prefix>/<shard>/t-N/ticket.md`
+ * (the engine's document-path contract, read and not changed). Null off a
+ * ticket document.
+ */
+export function ticketIdOfPath(path: string | null): string | null {
+  if (path === null) {
+    return null;
+  }
+  const normal = path.split('\\').join('/');
+  return FILES_TICKET.exec(normal)?.[1] ?? idOfDocumentPath(normal);
+}
+
+/** A ticket document of the board, in either store shape. */
 export function isTicketPath(path: string | null): boolean {
-  return path !== null && /^tickets\/(?!_meta\/)[^/]+\/T-\d{4,}\.md$/.test(path);
+  return ticketIdOfPath(path) !== null;
+}
+
+/**
+ * A ticket tab's title, the same for every kind of tab (E12-12): `T-0121 ·
+ * Title`. The title is the one the board's model gives (the card's meta) —
+ * never derived from the file path; a ticket the board does not know yet
+ * shows its id alone.
+ */
+export function ticketTabTitle(i18n: DreyPluginApi['i18n'], id: string, title: string | null | undefined): string {
+  const named = (title ?? '').trim();
+  return named === '' ? id : i18n.t('ticket.tab_title', { id, title: named });
 }
 
 /** The phase directory's id (`50-build` → `build`), or null off a ticket path. */
@@ -70,13 +92,6 @@ export function logSectionRange(text: string): { from: number; to: number } | nu
   return start !== null && end !== null && end > start ? { from: start, to: end } : null;
 }
 
-const PRIORITY_LABEL: Record<TicketPriority, string> = {
-  urgent: 'Urgent',
-  high: 'High',
-  normal: 'Normal',
-  low: 'Low',
-};
-
 interface HeaderModel {
   readonly meta: TicketMeta;
   readonly issues: readonly TicketIssue[];
@@ -94,13 +109,7 @@ export interface TicketHeaderDeps {
   readonly api: DreyPluginApi;
   readonly snapshot: () => BoardSnapshot | null;
   readonly invoke: (method: string, payload?: unknown) => Promise<unknown>;
-  readonly workers: ReadonlyArray<readonly [string, string]>;
   readonly onError: (message: string) => void;
-  /**
-   * Starts the owner's interactive dialog for this ticket (req-65) —
-   * the board's one-click start, shared with the card menu.
-   */
-  readonly startInteractive: (card: TicketCard, mode: InteractiveMode) => void;
   /** The ticket document's strip under the chips (E13-6); absent = chips only. */
   readonly strip?: TicketStrip;
   /** The Ticket | Thread | Review control on top of the document (E13-20); absent = none. */
@@ -156,7 +165,7 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
     // E13-6: the strip (status, persona, cost, estimate, chain, gate) sits
     // between the chip row and the headline.
     const strip = deps.strip?.mount({ path, view: input.view });
-    const ticketId = /\/(T-\d{4,})\.md$/.exec(path)?.[1];
+    const ticketId = ticketIdOfPath(path) ?? undefined;
     const faces = ticketId === undefined ? undefined : deps.faces?.(ticketId);
     root.append(...(faces === undefined ? [] : [faces]), chips, ...(strip === undefined ? [] : [strip.node]), title);
 
@@ -203,33 +212,15 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
       });
     };
 
-    const select = (
-      label: string,
-      options: ReadonlyArray<readonly [string, string]>,
-      value: string,
-      key: string,
-    ): HTMLSelectElement => {
-      const box = el('select', 'tickets-head-select');
-      box.title = label;
-      box.setAttribute('aria-label', label);
-      for (const [optionValue, optionLabel] of options) {
-        const option = el('option', undefined, optionLabel);
-        option.value = optionValue;
-        box.append(option);
-      }
-      box.value = value;
-      box.addEventListener('change', () => void apply({ [key]: box.value }));
-      return box;
-    };
-
     function paint(): void {
       const snapshot = deps.snapshot();
       const meta = model?.meta ?? null;
       chips.replaceChildren();
-      const id = meta?.id ?? /T-\d{4,}/.exec(path)?.[0] ?? '';
+      const id = meta?.id ?? ticketIdOfPath(path) ?? '';
       chips.append(el('span', 'tickets-head-id', id));
 
-      const phaseId = phaseOfTicketPath(path);
+      // A dricket document's path carries no column: the board's card does.
+      const phaseId = phaseOfTicketPath(path) ?? snapshot?.columns.flatMap((c) => c.tickets).find((t) => t.path === path)?.phase ?? null;
       const phase = snapshot?.pipeline.find((p) => p.id === phaseId);
       const phaseChip = el(
         'span',
@@ -238,75 +229,6 @@ export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
       );
       phaseChip.title = 'Phase — move the card on the board to change it';
       chips.append(phaseChip);
-
-      if (meta !== null) {
-        // The vault's vocabulary (pipeline.md's `priorities:`); an id
-        // outside the label map shows as itself.
-        const priorities = snapshot?.priorities ?? DEFAULT_PRIORITY_CONFIG;
-        const priority = select(
-          'Priority',
-          priorities.order.map((p) => [p, PRIORITY_LABEL[p] ?? p] as const),
-          meta.priority,
-          'priority',
-        );
-        priority.classList.add(`tickets-head-prio-${meta.priority}`);
-        chips.append(priority);
-
-        // req-72: the work repos as checkboxes — one ticket may name
-        // several; the first checked one is the primary (the fleet's
-        // gate repo). Unknown names stay visible, not editable here.
-        const repoGroup = el('span', 'tickets-head-checks');
-        repoGroup.title = 'Work repositories — the first checked one is the primary';
-        repoGroup.setAttribute('aria-label', 'Repositories');
-        const current = new Set(meta.repos);
-        for (const ref of snapshot?.repos ?? []) {
-          const wrap = el('label', 'tickets-head-check');
-          const input = document.createElement('input');
-          input.type = 'checkbox';
-          input.value = ref.name;
-          input.checked = current.has(ref.name);
-          input.addEventListener('change', () => {
-            const checked = Array.from(repoGroup.querySelectorAll<HTMLInputElement>('input:checked')).map((i) => i.value);
-            void apply({ repos: checked });
-          });
-          wrap.append(input, el('span', undefined, ref.name));
-          repoGroup.append(wrap);
-        }
-        for (const name of meta.repos) {
-          if (snapshot?.repos.some((r) => r.name === name) !== true) {
-            repoGroup.append(el('span', 'tickets-head-chip', `${name} (unknown)`));
-          }
-        }
-        chips.append(repoGroup);
-
-        const workerOptions: (readonly [string, string])[] = [
-          ['', `Default worker (${snapshot?.defaultWorker ?? 'board'})`],
-          ...deps.workers,
-        ];
-        if (meta.worker !== null && !deps.workers.some(([value]) => value === meta.worker)) {
-          workerOptions.push([meta.worker, meta.worker]);
-        }
-        chips.append(select('Worker', workerOptions, meta.worker ?? '', 'worker'));
-      }
-
-      if (id !== '') {
-        const branch = el('span', 'tickets-head-chip tickets-head-branch', branchForTicket(id));
-        branch.title = 'Work branch';
-        chips.append(branch);
-      }
-
-      // The one-click dialog (req-65, req-72): offered where the column
-      // offers it — plan on the first automatic column. A refused start (a live run, no repo) surfaces in
-      // the board's status bar like any action.
-      const card = snapshot?.columns.flatMap((c) => c.tickets).find((t) => t.path === path);
-      const mode = snapshot !== null && phaseId !== null ? interactiveModeFor(phaseId, snapshot.columns) : null;
-      if (card !== undefined && mode !== null) {
-        const dialog = el('button', 'tickets-head-dialog', 'Plan with agent');
-        dialog.type = 'button';
-        dialog.title = 'Plan this ticket in a dialog with a fleet worker — the ticket and the dialog open side by side';
-        dialog.addEventListener('click', () => deps.startInteractive(card, mode));
-        chips.append(dialog);
-      }
 
       const issues = model?.issues ?? [];
       if (issues.length > 0) {
@@ -403,7 +325,7 @@ export function ticketLogFold(
         const text = view.state.doc.toString();
         const id = /^id:\s*['"]?(T-\d{4,})/m.exec(text)?.[1];
         const range = logSectionRange(text);
-        if (range === null || id === undefined || !path.endsWith(`/${id}.md`)) {
+        if (range === null || id === undefined || (ticketIdOfPath(path) !== id && !path.endsWith(`/${id}.md`))) {
           return;
         }
         folded.add(key);

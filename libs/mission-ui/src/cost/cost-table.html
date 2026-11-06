@@ -1,0 +1,35 @@
+<section class="ct" [attr.aria-label]="'cost.table.label' | t">
+  <h3 class="ct-title">{{ 'cost.table.title' | t }}</h3>
+  <div class="ct-grid" role="table" [attr.aria-label]="'cost.table.label' | t">
+    <div class="ct-row ct-head" role="row">
+      <span role="columnheader">{{ 'cost.table.phase' | t }}</span>
+      <span role="columnheader">{{ 'cost.table.model' | t }}</span>
+      <span role="columnheader" class="ct-num">{{ 'cost.table.tokens' | t }}</span>
+      <span role="columnheader" class="ct-num">{{ 'cost.table.time' | t }}</span>
+      <span role="columnheader" class="ct-num">{{ 'cost.table.cost' | t }}</span>
+    </div>
+    @for (row of view().rows; track $index) {
+      <div class="ct-row" [class.ct-pending]="row.pending" [class.ct-bad]="row.bad" role="row">
+        <span class="ct-phase" role="cell">{{ row.phase }}</span>
+        @if (row.pending) {
+          <span class="ct-none" role="cell">{{ 'cost.table.no_run' | t }}</span>
+        } @else {
+          <span class="ct-model" role="cell">{{ row.model }}</span>
+          <span class="ct-num ct-tokens" role="cell">{{ row.tokens }}</span>
+          <span class="ct-num ct-time" role="cell">{{ row.time }}</span>
+          <span class="ct-num ct-cost" role="cell">{{ row.cost }}</span>
+          @if (row.meta !== '') {
+            <span class="ct-meta" aria-hidden="true">{{ row.meta }}</span>
+          }
+        }
+      </div>
+    }
+    <div class="ct-row ct-total" role="row">
+      <span class="ct-phase" role="cell">{{ 'cost.table.total' | t }}</span>
+      <span class="ct-model" role="cell"></span>
+      <span class="ct-num ct-tokens" role="cell">{{ view().total.tokens }}</span>
+      <span class="ct-num ct-time" role="cell">{{ view().total.time }}</span>
+      <span class="ct-num ct-cost" role="cell">{{ view().total.cost }}</span>
+    </div>
+  </div>
+</section>

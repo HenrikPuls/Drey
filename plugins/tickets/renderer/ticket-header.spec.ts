@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { isTicketPath, logSectionRange, phaseOfTicketPath } from './ticket-header';
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- a spec builds the real catalog; the plugin itself gets it as `api.i18n`
+import { i18n } from '../../../shared/i18n';
+import { isTicketPath, logSectionRange, phaseOfTicketPath, ticketIdOfPath, ticketTabTitle } from './ticket-header';
 
 describe('isTicketPath', () => {
   it('takes ticket files in any phase folder, archive included', () => {
@@ -58,5 +60,31 @@ describe('logSectionRange', () => {
     expect(logSectionRange('```\n## Log\n- a\n```\n')).toBeNull();
     expect(logSectionRange('## Log\n\n')).toBeNull();
     expect(logSectionRange('## Description\n\nx\n')).toBeNull();
+  });
+});
+
+describe('ticketTabTitle', () => {
+  it('reads T-0121 · Title from the title the model gives', () => {
+    expect(ticketTabTitle(i18n, 'T-0121', 'Voice capture')).toBe('T-0121 · Voice capture');
+  });
+
+  it('shows the id alone for a ticket without a known title, never a path-derived guess', () => {
+    expect(ticketTabTitle(i18n, 'T-0121', null)).toBe('T-0121');
+    expect(ticketTabTitle(i18n, 'T-0121', '  ')).toBe('T-0121');
+  });
+});
+
+describe('the dricket document path (E12-12)', () => {
+  it('recognises tickets/<prefix>/<shard>/t-N/ticket.md and names its display id', () => {
+    expect(isTicketPath('tickets/t/0000/t-63/ticket.md')).toBe(true);
+    expect(ticketIdOfPath('tickets/t/0000/t-63/ticket.md')).toBe('T-0063');
+    expect(ticketIdOfPath(['tickets', 't', '0001', 't-1204', 'ticket.md'].join(String.fromCharCode(92)))).toBe('T-1204');
+  });
+
+  it('keeps the files-backend shape and rejects look-alikes', () => {
+    expect(ticketIdOfPath('tickets/50-build/T-0042.md')).toBe('T-0042');
+    expect(isTicketPath('tickets/t/0009/t-63/ticket.md')).toBe(false);
+    expect(isTicketPath('tickets/t/0000/t-63/notes.md')).toBe(false);
+    expect(isTicketPath('notes/t/0000/t-63/ticket.md')).toBe(false);
   });
 });

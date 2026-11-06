@@ -1666,6 +1666,9 @@ export interface McEstimate {
   /** How many earlier runs the figures rest on (at least three). */
   readonly runs: number;
   readonly cost: number;
+  /** The middle half's low and high end (req-98); null from an engine that sends only the median. */
+  readonly costLow: number | null;
+  readonly costHigh: number | null;
   readonly minutes: number | null;
   readonly tokens: number | null;
 }
@@ -1686,7 +1689,7 @@ export function parseEstimate(json: unknown): McEstimate | null {
   if (typeof e['gate'] !== 'string' || typeof e['persona'] !== 'string' || typeof e['model'] !== 'string' || runs === null || cost === null || runs < 3) {
     return null;
   }
-  return { gate: e['gate'], persona: e['persona'], model: e['model'], runs, cost, minutes: num(e['minutes']), tokens: num(e['tokens']) };
+  return { gate: e['gate'], persona: e['persona'], model: e['model'], runs, cost, costLow: num(e['costLow']), costHigh: num(e['costHigh']), minutes: num(e['minutes']), tokens: num(e['tokens']) };
 }
 
 // --- the shared plan (E10-2) -----------------------------------------------------------

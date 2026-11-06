@@ -13,10 +13,14 @@ import { parseVerlaufEntries } from '../../../../packages/tickets-engine/src/cor
 import type { RunEstimate } from '../../../../packages/tickets-engine/src/core/estimate';
 import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
 import type { WorkRow } from '../work-groups';
-import { stripNode, type StripData } from './dom';
-import { chainOf, costSummary, currentStep, estimateLine, statusOf, usdLabel, type PersonaName } from './model';
+import { stripNode } from './dom';
+import { estimateInlineText, noEstimateText } from '../../../../shared/cost-text';
+import type { I18n } from '../../../../shared/i18n/types';
+import { chainOf, costSummary, currentStep, statusOf, type PersonaName } from './model';
 
 export interface TicketStripDeps {
+  /** The catalog (`api.i18n`): every word of the strip comes through it. */
+  readonly i18n: I18n;
   readonly snapshot: () => BoardSnapshot | null;
   readonly rowOf: (card: TicketCard) => WorkRow | null;
   readonly invoke: (method: string, payload?: unknown) => Promise<unknown>;
@@ -92,31 +96,27 @@ export function createTicketStrip(deps: TicketStripDeps): TicketStrip {
         const phaseTitle = phase?.title ?? card.phase;
         const chain = chainOf({ pipeline: snapshot.pipeline, currentPhaseId: card.phase, card, personas: personas ?? [] });
         const step = currentStep(chain);
-        const status = statusOf(row, snapshot, phaseTitle);
+        const status = statusOf(deps.i18n, row, snapshot, phaseTitle);
         const entries = parseVerlaufEntries(view.state.doc.toString());
-        const cost = costSummary(entries, row?.need !== null && row?.run === null);
-        let estimate: StripData['estimate'] = null;
+        const cost = costSummary(deps.i18n, entries, row?.need !== null && row?.run === null);
+        // The estimate sits beside the cost it belongs to: `$1.20 so far · est. $3.00–5.20 · from 3 runs`.
+        let estimate: string | null = null;
         if (step !== null && !step.checkpoint && step.personaId !== null && row?.run == null) {
           const found = estimateFor(step.phase, step.personaId);
-          if (found !== null) {
-            estimate = {
-              short: [usdLabel(found.cost) ?? `$${found.cost.toFixed(2)}`, found.minutes === null ? '' : `${found.minutes} min`]
-                .filter((part) => part !== '')
-                .join(' · '),
-              basis: estimateLine(found, step.title),
-            };
-          }
+          estimate = found === null ? noEstimateText(deps.i18n) : estimateInlineText(deps.i18n, found);
         }
         const need = row?.need ?? null;
         host.replaceChildren(
           stripNode({
             status,
+            kind: status.kind,
             who: step?.who ?? '',
+            step: step === null ? '' : deps.i18n.t('ticket.step', { step: step.title }),
             cost: cost.label,
             estimate,
             chain,
             ...(deps.openFlow === undefined ? {} : { onFlow: () => deps.openFlow?.(card) }),
-            gate: need !== null && need.text.trim() !== '' ? `Waits for you: ${need.text.trim()}` : '',
+            gate: need !== null && need.text.trim() !== '' ? deps.i18n.t('ticket.waits_for_you', { text: need.text.trim() }) : '',
           }),
         );
       };

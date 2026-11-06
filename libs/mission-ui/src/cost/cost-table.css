@@ -1,0 +1,123 @@
+:host {
+  display: block;
+}
+
+.ct-title {
+  margin: 0 0 8px;
+  font-size: calc(13px * var(--mc-text, 1));
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+}
+
+.ct-grid {
+  display: flex;
+  flex-direction: column;
+  font-size: calc(14px * var(--mc-text, 1));
+}
+
+/* Wide: the five columns of the board — Phase · Model · Tokens · Time · Cost. */
+.ct-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) 5.5em 5em 5.5em;
+  gap: 4px 12px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-top: 1px solid var(--border, transparent);
+}
+
+.ct-head {
+  border-top: 0;
+  padding-top: 0;
+  color: var(--text-3);
+  font-size: calc(13px * var(--mc-text, 1));
+}
+
+.ct-phase {
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ct-model,
+.ct-tokens,
+.ct-time,
+.ct-none {
+  color: var(--text-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ct-none {
+  grid-column: 2 / -1;
+}
+
+.ct-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ct-cost {
+  color: var(--text-2, inherit);
+}
+
+.ct-meta {
+  display: none;
+}
+
+.ct-bad .ct-phase {
+  color: var(--warn, inherit);
+}
+
+.ct-total {
+  border-top: 1px solid var(--text-3, currentColor);
+}
+
+.ct-total .ct-cost {
+  font-weight: 600;
+}
+
+/* Phone: Phase and Cost on a row, Model / Tokens / Time as one grey line under the phase — nothing scrolls sideways. */
+@media (max-width: 560px) {
+  .ct-head {
+    display: none;
+  }
+
+  .ct-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'phase cost' 'meta meta';
+    row-gap: 2px;
+  }
+
+  .ct-phase {
+    grid-area: phase;
+  }
+
+  .ct-cost {
+    grid-area: cost;
+  }
+
+  .ct-model,
+  .ct-tokens,
+  .ct-time {
+    display: none;
+  }
+
+  .ct-meta {
+    display: block;
+    grid-area: meta;
+    color: var(--text-3);
+    font-size: calc(13px * var(--mc-text, 1));
+  }
+
+  .ct-none {
+    grid-area: meta;
+    grid-column: auto;
+  }
+
+  .ct-total .ct-model,
+  .ct-total .ct-tokens,
+  .ct-total .ct-time {
+    display: none;
+  }
+}

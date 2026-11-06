@@ -936,7 +936,7 @@ describe('EngineBoardService estimateOf (E11-4)', () => {
     expect(await service.estimateOf(key)).toBeNull();
 
     await withHistory('T-0003', 'done', [entry(0.3)]);
-    expect(await service.estimateOf(key)).toEqual({ ...key, runs: 3, cost: 0.3, minutes: 8, tokens: 40_000 });
+    expect(await service.estimateOf(key)).toEqual({ ...key, runs: 3, cost: 0.3, costLow: 0.25, costHigh: 0.35, minutes: 8, tokens: 40_000 });
     expect(await service.estimateOf({ ...key, gate: 'review' })).toBeNull();
   });
 });

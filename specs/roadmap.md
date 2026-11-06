@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–181, plus req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169, 171–181 and 183, plus req-98, req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -90,18 +90,10 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
-- **D-23 — A ticket document on a dricket store has no header and no face strip** (M; found 2026-11-06 while
-  fixing D-12, handed to W3.3 (E12-12)). A store document's path is `tickets/t/0000/t-3/ticket.md`, while
-  `isTicketPath` in `plugins/tickets/renderer/ticket-header.ts` matches only `tickets/<phase>/T-nnnn.md`, and the
-  surface check also wants the board's vault, not the checkout vault. Steps: on a scratch store open a ticket
-  from the Work panel. Expected: the header and Ticket | Thread | Review, as on the files backend. Actual: a plain
-  editor tab; a ticket without a run has no way to its thread, so its comments (D-12) show only once a run opened
-  it. `e2e/tickets-dricket-sweep.spec.ts` shows the state.
-
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field
 pre-filled with "T-0002:". (a), (c), (d) need a model / a real phone — untested.
 
-_Shipped defects:_ D-11 to D-22, the sweep on a dricket store, shipped as milestone 181; D-1, Mission Control chat reaching no model, shipped as
+_Shipped defects:_ D-23, the ticket document's header on a dricket store, shipped as milestone 183; D-11 to D-22, the sweep on a dricket store, as milestone 181; D-1, Mission Control chat reaching no model, shipped as
 milestone 131; D-2, the paired-devices list and pairing from Mission
 Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
 views, as milestone 140; D-4, runs.spec flaking under full-suite load, as milestone 142; D-5, the page moving on iPhone/iPad scroll
@@ -346,16 +338,6 @@ owner confirms scope and order before any of it starts:
   while Plan is an agent column) — keep, rename or retire it; (5) **Open question: migration of `prioritized` tickets** — `inbox` (today) or `plan` (an agent
   column: planning would start on arrival); (6) E12-9b Q2 (crew seeding) and Q3
   (default worker) are still open.
-- **E12-12 — The ticket page: header and Ticket | Thread | Review** (proposed by
-  the E12-10 audit; M). Builds on E13-20/E13-21: the form row above the title
-  (priority, repo, worker, branch, `Refine with agent`, `Plan with agent`) goes
-  — the strip carries id, status caps (`NEEDS YOU`, `PLAN TO APPROVE`, `READY TO
-  TRY`), kind chip, persona, step, cost with its basis inline; the question of a
-  waiting run is readable next to the document; the thread header does not
-  truncate a title that fits; a ticket without a run does not open a pre-filled
-  dialog composer; tab titles are `T-0121 · Title` for every kind [B-01–B-03,
-  C-03, D-01, D-02, D-05]. Files: `ticket-document/`, `ticket-header.ts`,
-  the thread and wait views.
 - **E12-14 — Mission Control Work rows and the iPad layout** (proposed by the
   E12-10 audit; M). A ticket is listed once (the Needs-you copy no longer repeats
   under its column); rows show a detail line, age, persona and cost; Settings
@@ -857,13 +839,11 @@ rest are kept so they still match `docs/11`.
   Each is a rename with a read-both/write-new bridge and a release note; none is needed for the owner to see
   "Crew" and "Accept".
 
-- **Order of the canvas-2026-11-06 items (dependencies, concept §8.1):** guide step B repeated on the six stages → E14-3b / E14-7 cut-over (the final import writes the six stages) → req-99c phases inside Building → req-98 cost table / estimate format → req-101 Notes clients → req-95b Autopilot clients. Shipped: req-102, req-99a, req-100, req-95a, req-97, req-99b and req-96 (with req-103, the phone menu root).
+- **Order of the canvas-2026-11-06 items (dependencies, concept §8.1):** guide step B repeated on the six stages → E14-3b / E14-7 cut-over (the final import writes the six stages) → req-99c phases inside Building → req-101 Notes clients → req-95b Autopilot clients. Shipped: req-102, req-99a, req-100, req-95a, req-97, req-99b and req-96 (with req-103, the phone menu root).
 
 - **Migrate the existing UI strings into the catalog, area by area (follow-up of req-102 / ADR-0091; req-106).** The i18n catalog (`shared/i18n/`, ADR-0091) covers only the surfaces of the 2026-11-06 canvas round; every older surface keeps its literal English strings. Migrate as areas are touched, one area per change: move its strings into `shared/i18n/catalog/en.json` under its `<area>.` prefix, read them through the runtime's binding (`I18nService` / the `t` pipe, `api.i18n`, `McI18n`, `i18n` in main), replace assembled sentences with ICU messages and `toLocale*` calls with the `Intl` helpers, then add the area's directory to `shared/i18n/guarded-paths.json` (and the ADR's list) so the guard keeps it. Candidate order: the Work panel and the ticket page (closest to the new surfaces), Mission Control's existing pages, Settings, the editor chrome, the Files panel, the native dialogs; the assistant panel's `shared/duration.ts` retires into `formatDuration` when its area moves. Not built.
 
 - **Phases of the chain inside Building (req-99c; follow-up of req-99a, needs `fleet/orchestrator.ts` and `fleet/runs.ts`, which wave 2 kept apart).** The owner decided (Q6) that Plan, Build, Ralf's review and Tessa's test are phases of the chain inside the one Building stage. The engine's chain is still built from pipeline columns (`mergeChain`, `validateChain`), so today Building runs one `build-default` run and then hands over to Ready to try, the same as the live board's one agent column. To do: the gates as data of the Building column, the fleet running them one after the other inside one claim, the flow editor and gate bar showing them instead of the stages. Also decides how `review-default` and `qa-default` come back into the default flow.
-
-- **Cost-by-phase table and the estimate format on every layout (owner request 2026-11-06, outside the list; req-98).** The cost-by-phase table at the end of the ticket on desktop, iPad and phone; the estimate formats `$3.00–5.20 · from 3 runs` and `no estimate yet (first run)` (catalog strings with ICU plurals, `Intl` currency; concept §5.4). Replaces the current "median of n similar runs" / "not yet" wording in `libs/mission-ui` and the desk.
 
 - **Notes on phone and iPad — clients (owner, 2026-11-06, canvas decision 18; req-101).** No new Markdown surface: it reuses `libs/markdown-surface` and the Angular `mc-markdown`; View · Live · Source ship first, the pinned formatting strip is a follow-up of this item (Q5). Search (`GET /api/notes/search`), recent notes (`GET /api/notes/recent`) and folders (`GET /api/notes`) over the Notes API (milestone 174, `packages/tickets-engine/src/contracts/notes.ts`); a note opens (`GET /api/notes/note`) in the existing Markdown editor (View · Live · Source) from `libs/mission-ui` over `libs/markdown-surface`; the pencil starts editing in Live Preview, Cancel (X) and Save (check) are icons; tags, link to the ticket, "Ask about this note". Saving is `POST /api/notes/note` with the read `mtime` as `baseMtime`; a `conflict` reply carries the disk text and mtime for the merge, a new note is `POST /api/notes`; the client adopts the text a save returns (`updated:` may have moved) and refreshes on the SSE event `notes`. `ApiError` in `apps/mission-control/src/app/api/client.ts` drops the body today, so it has to keep the `code` for the catalog keys; a read-only device (`/api/me` `device.readOnly`) gets no pencil. Depends on the i18n catalog (req-102).
 

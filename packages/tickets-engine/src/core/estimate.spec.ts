@@ -35,7 +35,7 @@ describe('estimateFrom', () => {
 
   it('takes the median of at least three matching runs and says how many', () => {
     const history = [run({ cost: 0.2, dauer: '5m', tokens: '30k' }), run({ cost: 0.9, dauer: '40m', tokens: '200k' }), run({ cost: 0.3, dauer: '9m', tokens: '48k' })];
-    expect(estimateFrom(history, KEY)).toEqual({ ...KEY, runs: 3, cost: 0.3, minutes: 9, tokens: 48_000 });
+    expect(estimateFrom(history, KEY)).toEqual({ ...KEY, runs: 3, cost: 0.3, costLow: 0.25, costHigh: 0.6, minutes: 9, tokens: 48_000 });
   });
 
   it('averages the middle pair of an even count', () => {
