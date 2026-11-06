@@ -157,6 +157,8 @@ export interface ShapedQuestionView {
 /** One thing that waits on the owner, as the Needs-you list renders it. */
 export interface NeedView {
   readonly kind: string;
+  /** The column the ticket stands in; absent when the need names none. */
+  readonly phase?: string;
   readonly ticketId: string | null;
   readonly title: string;
   readonly summary: string;
@@ -1020,6 +1022,7 @@ export function parseNeeds(json: unknown): NeedView[] {
     const runId = strOrNull(item['runId']);
     const need: NeedView = {
       kind: NEED_KINDS.includes(kind) ? kind : 'checkpoint',
+      ...(typeof item['phase'] === 'string' ? { phase: item['phase'] } : {}),
       ticketId: strOrNull(item['ticketId']),
       title: str(item['title'], str(item['ticketId'], 'untitled')),
       summary: str(item['summary'], str(item['text'])),

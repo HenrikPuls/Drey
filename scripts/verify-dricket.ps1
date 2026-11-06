@@ -234,10 +234,10 @@ $PIPELINE = @'
 ---
 phases:
   - { id: inbox, title: Inbox, handover: manual }
-  - { id: plan, title: Plan, claim: true, handover: agent plan-default }
-  - { id: build, title: Build, claim: true, handover: agent build-default }
-  - { id: review, title: Review, handover: manual }
-  - { id: sign-off, title: Sign Off, handover: manual }
+  - { id: shaping, title: Shaping, handover: manual }
+  - { id: prioritized, title: Prioritized, handover: manual }
+  - { id: building, title: Building, claim: true, handover: agent build-default }
+  - { id: ready, title: Ready to try, handover: manual }
   - { id: done, title: Done, handover: none }
 ---
 The phases.
@@ -253,10 +253,10 @@ repos:
 $STAGES = @'
 
 [stages]
-values = ["inbox", "plan", "build", "review", "sign-off", "done"]
+values = ["inbox", "shaping", "prioritized", "building", "ready", "done"]
 initial = "inbox"
 terminal = ["done"]
-claim = ["plan", "build"]
+claim = ["building"]
 cancelled = "cancelled"
 '@
 
@@ -280,21 +280,21 @@ function New-Seed([string]$Dir) {
     & $add 'Rename a folder without losing links' @()
     Invoke-Dk -Owner 'henrik' -Where $Dir -Arguments @('comment', 't-1', '-m', 'Decision needed: zip everything, or only the open notes?') | Out-Null
 
-    # Stage moves: claim (inbox -> plan, the first claim stage), release to the wanted stage.
+    # Stage moves: claim (inbox -> building, the claim stage), release to the wanted stage.
     $move = { param($id, $stage)
         Invoke-Dk -Owner 'seed-agent@scratch' -Where $Dir -Arguments @('claim', $id, '--size', 'S', '--kind', 'human') | Out-Null
         Invoke-Dk -Owner 'seed-agent@scratch' -Where $Dir -Arguments @('release', $id, '--stage', $stage, '-m', "Seeded into $stage.") | Out-Null }
-    & $move 't-2' 'review'
-    & $move 't-3' 'review'
-    & $move 't-5' 'sign-off'
+    & $move 't-2' 'ready'
+    & $move 't-3' 'ready'
+    & $move 't-5' 'ready'
     & $move 't-6' 'done'
 
-    # t-4: build, claimed by a foreign runner whose lease ended hours ago. dk has no clock
+    # t-4: building, claimed by a foreign runner whose lease ended hours ago. dk has no clock
     # override, so the claim is committed by hand with back-dated fields (dk validate accepts it).
     $ticket = Join-Path $Dir 'tickets\t\0000\t-4\ticket.md'
     if (-not (Test-Path -LiteralPath $ticket)) { throw "seed: $ticket not found (dk layout changed?)" }
     $text = [IO.File]::ReadAllText($ticket)
-    $text = $text -replace '(?m)^stage:.*$', 'stage: build'
+    $text = $text -replace '(?m)^stage:.*$', 'stage: building'
     $text = $text -replace '(?m)^owner:.*$', 'owner: agent-r-9@scratch'
     $claimed = [DateTime]::UtcNow.AddHours(-6).ToString('yyyy-MM-ddTHH:mm:ssZ')
     $lease = [DateTime]::UtcNow.AddHours(-4).ToString('yyyy-MM-ddTHH:mm:ssZ')

@@ -416,6 +416,8 @@ Firstmate's strongest infrastructure idea: **supervising the running fleet costs
 
 > Update (2026-11-04): a `manual` chain step (E10-6, §5.7) lets the owner insert further manual gates into one ticket's chain; `approve` stays the pipeline's own checkpoint.
 
+> Update (2026-11-06): the engine half (req-99a) and the clients (req-99b) are built, and a board shows the six names once its pipeline has them, which the cut-over does for the live board. Plan, Build, review and test as phases inside Building are req-99c.
+
 ### 5.2 Flow of a verify run
 
 > Status: **built** (E4, E11-1; milestones 103, 116). The video size rule (E11-1c, milestone 147) is built. **Planned:** the proof-video follow-ups (E11-1b).

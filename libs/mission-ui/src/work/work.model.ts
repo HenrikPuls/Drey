@@ -23,6 +23,8 @@ import {
 /** One "Needs you" item: the owner is asked to act. */
 export interface McNeed {
   readonly kind: string;
+  /** The column the ticket stands in; absent when the need names none. */
+  readonly phase?: string;
   readonly ticketId?: string | null;
   readonly title: string;
   /** The question, the tool call, the gate failure — '' for a checkpoint. */
@@ -369,7 +371,10 @@ export const NEED_KIND_LABELS: Readonly<Record<string, string>> = {
 };
 
 /** The need card's kind chip; an unknown kind shows itself, never a guess. */
-export function needKindLabelOf(kind: string): string {
+export function needKindLabelOf(kind: string, phase?: string): string {
+  if (kind === 'checkpoint' && phase === 'ready') {
+    return 'Ready to try';
+  }
   return NEED_KIND_LABELS[kind] ?? kind;
 }
 
@@ -666,7 +671,7 @@ export function groupsOf(
       needs: needs.map((need, index) => ({
         key: needKeyOf(need, index),
         need,
-        kindLabel: needKindLabelOf(need.kind),
+        kindLabel: needKindLabelOf(need.kind, need.phase),
       })),
     });
   }

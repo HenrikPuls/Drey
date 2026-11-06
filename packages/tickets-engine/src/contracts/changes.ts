@@ -203,9 +203,17 @@ const MOVE_LABEL: Readonly<Record<string, string>> = {
   plan: 'Planning',
   'plan-review': 'Planned',
   build: 'Building',
+  shaping: 'Shaping',
+  building: 'Building',
+  ready: 'Ready to try',
   commit: 'Merging',
   done: 'Ready to try',
 };
+
+/** A move's words; Done after Ready to try is the end, not a result to try. */
+function moveLabelOf(from: string | null, to: string): string {
+  return to === 'done' && from === 'ready' ? 'Done' : (MOVE_LABEL[to] ?? `-> ${to}`);
+}
 
 function tokenCount(raw: string, suffix: string | undefined): number {
   const n = Number.parseFloat(raw);
@@ -261,7 +269,7 @@ export function planApprovedOf(ticketText: string): string | null {
     if (match === null) {
       continue;
     }
-    if (match[2]!.startsWith('owner@') && match[3]!.trim() === 'plan-review -> build') {
+    if (match[2]!.startsWith('owner@') && ['plan-review -> build', 'prioritized -> building'].includes(match[3]!.trim())) {
       stamp = match[1]!;
     }
   }
@@ -322,14 +330,14 @@ export function storyOf(ticketText: string): { readonly items: readonly StoryIte
       const to = runMoved[1]!;
       // A run that finishes in build is the built-and-tested beat; any other
       // column shows the move as written.
-      items.push({ at, what: phase === 'build' ? 'Built and tested' : `-> ${to}`, who: whoOf(actor, worker) });
+      items.push({ at, what: phase === 'build' || phase === 'building' ? 'Built and tested' : `-> ${to}`, who: whoOf(actor, worker) });
       phase = to;
       continue;
     }
     const moved = MOVED.exec(what);
     if (moved !== null) {
       const to = moved[2]!;
-      items.push({ at, what: MOVE_LABEL[to] ?? `-> ${to}`, who: whoOf(actor, worker) });
+      items.push({ at, what: moveLabelOf(phase, to), who: whoOf(actor, worker) });
       phase = to;
     }
   }

@@ -13,6 +13,8 @@
  *   and merged; the card is the closing report and offers only Archive.
  * - `none`: an agent works the ticket, or there is nothing to report.
  */
+import { READY_STATE } from './pipeline-states';
+
 export type StepCardKind = 'gate' | 'final' | 'none';
 
 export interface StepCardInput {
@@ -56,7 +58,8 @@ export function stepCardOf(input: StepCardInput): StepCard {
   const next = input.pipeline[at + 1]!;
   return {
     kind: 'gate',
-    acceptLabel: `Move to ${next.title}`,
+    // Ready to try is the sign-off: Accept starts the commit step (req-99a, Q8).
+    acceptLabel: input.phaseId === READY_STATE ? 'Accept' : `Move to ${next.title}`,
     canLaunch: input.launchable,
     canSendBack: at > 0,
   };

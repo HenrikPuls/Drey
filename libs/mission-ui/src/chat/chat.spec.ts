@@ -817,7 +817,7 @@ describe('Chat card decisions (toasts)', () => {
     });
     const vm = setup(fake, activeOf('s.md', [view({ id: 'p-1' })]));
     await vm.confirm('p-1');
-    expect(vm.toasts()).toContainEqual(['Confirmed — tickets/40-verify/T-0086-plan.md (Commit)', 'ok']);
+    expect(vm.toasts()).toContainEqual(['Confirmed — tickets/40-verify/T-0086-plan.md', 'ok']);
   });
 
   it('confirm without an outcome toasts plain', async () => {

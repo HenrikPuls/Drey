@@ -4424,3 +4424,31 @@ sequenceDiagram
 A runner that restarts meanwhile boots as Off and the time never fires; only a handover to a
 newer build carries the record on. A set from a read-only device stops at the gateway with
 403 and `code: "read_only"`, as does Stop-now.
+
+## 6.97 Accept on Ready to try (req-99a, req-99b)
+
+```mermaid
+sequenceDiagram
+    participant U as Owner
+    participant C as Client (Ready card, decision bar, phone)
+    participant B as Board service (engine)
+    participant F as Fleet
+    participant R as Target repository
+    participant H as Change hub
+    U->>C: Accept
+    C->>B: acceptTicket {id}
+    B->>F: start the commit step (prompt commit-default)
+    F->>R: merge the ticket's branch, push
+    F-->>H: fleet change, the run ended
+    H->>B: settleCommitSteps, with or without a client
+    alt the run ended green
+        B->>B: move ready -> done, as the owner who accepted
+    else red, failed or stopped
+        Note over B: the ticket stays on Ready to try
+    end
+```
+
+Every Accept goes through `acceptTicket`: a plain move from Ready to try to Done would skip the merge
+and push. A ticket in Done asks nothing of the owner, because the sign-off was on Ready to try. A
+board without a `ready` stage keeps its own checkpoints and the terminal column's Accept into the
+archive.

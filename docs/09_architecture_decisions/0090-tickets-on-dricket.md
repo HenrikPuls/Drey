@@ -307,3 +307,11 @@ removable now — empty: every legacy writer is live on the default backend, and
 share a name with. The dricket path itself runs on `core/ticket-files.ts`, `ticket-board.ts` and the
 pure patchers of `transition.ts`, so those are not decommissioned at all. Part (b)'s exact scope is
 the roadmap's E14-9b.
+
+## Later change — six stages, and Accept is the sign-off (req-99a, req-99b, 2026-11-06)
+
+The stages are `inbox shaping prioritized building ready done`, with `building` the agent stage.
+Accept on `ready` starts the commit step on the target repository, and a green step moves the
+ticket to `done`. Clients recognise a `ready` stage by its id. Column titles stay stored data in
+`_meta/pipeline.md`, so a board on the old phases keeps its names until the cut-over rewrites them;
+no display mapping sits on top.

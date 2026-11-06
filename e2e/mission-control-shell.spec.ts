@@ -57,7 +57,16 @@ test.describe('iPad landscape (1194×834)', () => {
     // Left = the Work list, centre = the empty pane, right = Mission Control.
     await expect(page.locator('mc-work.pane-left')).toBeVisible();
     await expect(page.locator('mc-empty.pane-center')).toBeVisible();
-    await expect(page.locator('mc-chat.pane-right')).toBeVisible();
+    await expect(page.locator('.pane-right mc-chat')).toBeVisible();
+    // The right pane switches between Mission Control and Capacity.
+    const rightTabs = page.locator('.pad-right [role="tab"]');
+    await expect(rightTabs).toHaveText(['Mission Control', 'Capacity']);
+    await rightTabs.nth(1).click();
+    await expect(page.locator('.pane-right mc-capacity')).toBeVisible();
+    await expect(page.locator('mc-chat')).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('mc-ipad-capacity.png') });
+    await rightTabs.nth(0).click();
+    await expect(page.locator('.pane-right mc-chat')).toBeVisible();
     await expect(page.locator('mc-work')).toContainText('Export the board as CSV');
     await page.screenshot({ path: testInfo.outputPath('mc-ipad-landscape.png') });
 
@@ -120,7 +129,7 @@ test.describe('iPad portrait (834×1194)', () => {
 
     // The right pane opens as an overlay over the centre, under a scrim.
     await header.getByRole('button', { name: 'Right sidebar' }).click();
-    await expect(page.locator('.shell.right-overlay mc-chat.pane-right')).toBeVisible();
+    await expect(page.locator('.shell.right-overlay .pane-right mc-chat')).toBeVisible();
     await expect(page.locator('.right-scrim')).toBeVisible();
     await expect(page.locator('mc-work.pane-left')).toBeVisible();
     expect(await panes(page, 'mc.panes.portrait')).toBe('{"left":true,"right":true}');

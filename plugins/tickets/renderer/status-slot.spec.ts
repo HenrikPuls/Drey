@@ -29,9 +29,10 @@ describe('the needs-you item', () => {
 });
 
 describe('the Autopilot item', () => {
-  it('shows On with a green dot for run, Off for halted, nothing without a chain', () => {
-    expect(autopilotSlotOf('run', t)).toEqual({ text: 'Autopilot · On', tooltip: 'Autopilot: On (Mod+Alt+P)', dot: 'positive' });
-    expect(autopilotSlotOf('halted', t)).toEqual({ text: 'Autopilot · Off', tooltip: 'Autopilot: Off (Mod+Alt+P)' });
+  it('shows On with a green dot, Paused and Off without one, nothing without a chain', () => {
+    expect(autopilotSlotOf('paused', t)).toEqual({ text: 'Autopilot · Paused', tooltip: 'Autopilot: Paused (Mod+Alt+P)' });
+    expect(autopilotSlotOf('on', t)).toEqual({ text: 'Autopilot · On', tooltip: 'Autopilot: On (Mod+Alt+P)', dot: 'positive' });
+    expect(autopilotSlotOf('off', t)).toEqual({ text: 'Autopilot · Off', tooltip: 'Autopilot: Off (Mod+Alt+P)' });
     expect(autopilotSlotOf(null, t).text).toBe('');
   });
 });
@@ -51,7 +52,7 @@ describe('createStatusSlots', () => {
     };
     const slots = createStatusSlots(host, 'tickets.showBoard', t);
     expect(specs.map((s) => s.commandId)).toEqual([undefined, 'tickets.showBoard', undefined]);
-    slots.update({ cost: 4.1, budget: 15, needsYou: 3, master: 'run', inNotesView: false });
+    slots.update({ cost: 4.1, budget: 15, needsYou: 3, autopilot: 'on', inNotesView: false });
     expect(updates.map((u) => u[0]!.text)).toEqual(['$4.10 of $15 today', '3 need you', 'Autopilot · On']);
     slots.dispose();
     expect(dispose).toHaveBeenCalledTimes(3);

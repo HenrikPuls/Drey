@@ -695,6 +695,18 @@ export interface StatusItemSpec {
   readonly dot?: 'attention' | 'positive';
 }
 
+/**
+ * A button in the title bar (`ui.registerTitlebarAction`, SDK 1.47): a short
+ * label, an optional icon and the registered command a click runs. The
+ * command's chord is added to the tooltip by the host.
+ */
+export interface TitlebarActionSpec {
+  readonly label: string;
+  /** An icon name from the host's vendored set (as for `ui.icon`). */
+  readonly icon?: string;
+  readonly commandId: string;
+}
+
 /** A live status-bar item: change it with `update`, remove it with `dispose` (SDK 1.38). */
 export interface StatusItemHandle {
   /** Replaces the given fields; the rest stay as they are. */
@@ -1062,6 +1074,8 @@ export interface DreyPluginApi {
      * the plugin is disabled. There is no colour -- the bar's own style.
      */
     createStatusItem(spec: StatusItemSpec): StatusItemHandle;
+    /** Adds a button to the title bar (SDK 1.47); the returned function removes it. */
+    registerTitlebarAction(spec: TitlebarActionSpec): Unsubscribe;
     /**
      * The shared tag chip field (SDK 1.9): colored chips with a completion
      * dropdown fed by the section-search provider's vocabulary — the same

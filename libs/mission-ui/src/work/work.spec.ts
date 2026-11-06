@@ -461,6 +461,8 @@ describe('card helpers', () => {
       notify: 'Gate done',
       manual: 'Your turn',
     });
+    expect(needKindLabelOf('checkpoint')).toBe('Checkpoint');
+    expect(needKindLabelOf('checkpoint', 'ready')).toBe('Ready to try');
     expect(needKindLabelOf('question')).toBe('Asks you');
     expect(needKindLabelOf('improvements')).toBe('Improvements');
     expect(needKindLabelOf('needs-decision')).toBe('Needs decision');

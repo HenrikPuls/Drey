@@ -3,6 +3,8 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { DockService, type SideDock } from '../dock';
 import { DocHistoryService } from '../services/doc-history.service';
 import { ThemeService } from '../services/theme.service';
+import { KeybindingService } from '../keybindings';
+import { TitlebarActionsService } from '../plugin-host';
 import { Icon } from '../icons/icon';
 import { ViewSwitcher } from './view-switcher';
 import { MenuBar } from './menu-bar';
@@ -27,6 +29,8 @@ export class Titlebar {
   protected readonly dock = inject(DockService);
   protected readonly history = inject(DocHistoryService);
   protected readonly theme = inject(ThemeService);
+  protected readonly keys = inject(KeybindingService);
+  protected readonly actions = inject(TitlebarActionsService).actions;
 
   /** An empty dock has nothing to fold; its toggle is disabled. */
   protected hasPanels(side: SideDock): boolean {

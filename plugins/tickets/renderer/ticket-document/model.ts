@@ -18,6 +18,7 @@ import { parseVerlaufEntries, type VerlaufEntry } from '../../../../packages/tic
 import type { RunEstimate } from '../../../../packages/tickets-engine/src/core/estimate';
 import type { VerificationReport } from '../../../../packages/tickets-engine/src/contracts/verify';
 import type { BoardSnapshot, PipelinePhase, TicketCard } from '../../shared/tickets';
+import { READY_STATE } from '../../shared/pipeline-states';
 import { ideaPhaseIds, isMachinePhase, needKindLabel, statusLineOf, type WorkRow } from '../work-groups';
 
 export const titleCase = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1);
@@ -377,5 +378,5 @@ export function actionBarOf(row: WorkRow | null, board: BoardSnapshot): ActionBa
   const configured = board.columns.filter((column) => !column.unknown);
   const index = configured.findIndex((column) => column.phase.id === phaseId);
   const next = index >= 0 ? configured[index + 1] : undefined;
-  return { decide, acceptLabel: next === undefined ? 'Accept' : `Accept and move to ${next.phase.title}`, ticketId: row === null ? null : row.card.id };
+  return { decide, acceptLabel: next === undefined || phaseId === READY_STATE ? 'Accept' : `Accept and move to ${next.phase.title}`, ticketId: row === null ? null : row.card.id };
 }

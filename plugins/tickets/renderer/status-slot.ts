@@ -8,7 +8,7 @@
  * entry feeds it the numbers.
  */
 import type { DreyPluginApi, StatusItemHandle, StatusItemSpec } from '../../../shared/plugin-api/renderer';
-import type { ChainMaster } from '../../../packages/tickets-engine/src/fleet/protocol';
+import type { AutopilotState } from '../../../packages/tickets-engine/src/fleet/protocol';
 
 /** The catalog's lookup (`api.i18n.t`). */
 export type Translate = DreyPluginApi['i18n']['t'];
@@ -21,8 +21,8 @@ export interface StatusSlotInput {
   readonly budget: number | null;
   /** Tickets and alerts that wait on the owner. */
   readonly needsYou: number;
-  /** The chain master; null = no chain config yet (the Autopilot item hides). */
-  readonly master: ChainMaster | null;
+  /** What the engine reports; null = no chain config yet (the Autopilot item hides). */
+  readonly autopilot: AutopilotState | null;
   /** True while the Notes view is active: the needs-you item then says where. */
   readonly inNotesView: boolean;
 }
@@ -65,20 +65,16 @@ export function needsSlotOf(needsYou: number, inNotesView: boolean, t: Translate
 /** The chord the Autopilot switch is bound to (concept 6.1). */
 export const AUTOPILOT_CHORD = 'Mod+Alt+P';
 
-/**
- * The Autopilot item. TODO(req-95b): today only run / halted exist, mapped
- * to On / Off; the three-state engine state (On / Paused / Off, concept
- * 6.1) and the click that cycles it arrive with req-95b.
- */
-export function autopilotSlotOf(master: ChainMaster | null, t: Translate): StatusSlotPatch {
-  if (master === null) {
+/** The Autopilot item (concept 6.1). TODO(req-95b): the click that changes the state. */
+export function autopilotSlotOf(autopilot: AutopilotState | null, t: Translate): StatusSlotPatch {
+  if (autopilot === null) {
     return HIDDEN;
   }
-  const state = t(master === 'run' ? 'autopilot.state.on' : 'autopilot.state.off');
+  const state = t(`autopilot.state.${autopilot}`);
   return {
     text: t('status.autopilot', { state }),
     tooltip: t('status.autopilot.tooltip', { state, chord: AUTOPILOT_CHORD }),
-    ...(master === 'run' ? { dot: 'positive' as const } : {}),
+    ...(autopilot === 'on' ? { dot: 'positive' as const } : {}),
   };
 }
 
@@ -86,7 +82,7 @@ export function statusSlotsOf(input: StatusSlotInput, t: Translate): StatusSlots
   return {
     cost: costSlotOf(input.cost, input.budget, t),
     needs: needsSlotOf(input.needsYou, input.inNotesView, t),
-    autopilot: autopilotSlotOf(input.master, t),
+    autopilot: autopilotSlotOf(input.autopilot, t),
   };
 }
 

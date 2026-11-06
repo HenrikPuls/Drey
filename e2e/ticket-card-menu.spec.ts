@@ -140,7 +140,7 @@ test.describe('Work row menu (req-70, req-75 W1)', () => {
     await expect(idea).toBeVisible({ timeout: 15_000 });
     await idea.click({ button: 'right' });
     await expect(rows.filter({ hasText: 'Queue for the fleet' })).toHaveCount(1);
-    await expect(rows.filter({ hasText: 'Back to ideas' })).toHaveCount(0);
+    await expect(rows.filter({ hasText: 'Back to Inbox' })).toHaveCount(0);
     // Move to › lists every other phase by name.
     await rows.filter({ hasText: 'Move to' }).hover();
     await expect(page.locator('.tickets-submenu .tickets-menu-item')).toHaveText(['Plan', 'Build', 'Done']);
@@ -150,7 +150,7 @@ test.describe('Work row menu (req-70, req-75 W1)', () => {
     // Plan pulls from the inbox here, so a planned ticket without a run can go back.
     const planned = page.locator('.work-row[data-id="T-0051"]').filter({ visible: true });
     await planned.click({ button: 'right' });
-    await expect(rows.filter({ hasText: 'Back to ideas' })).toHaveCount(1);
+    await expect(rows.filter({ hasText: 'Back to Inbox' })).toHaveCount(1);
     await expect(rows.filter({ hasText: 'Queue for the fleet' })).toHaveCount(0);
   });
 

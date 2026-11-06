@@ -90,6 +90,7 @@ export type {
   RewriteRequest,
   StatusItemHandle,
   StatusItemSpec,
+  TitlebarActionSpec,
   ToolbarButtonContrib,
   ConversationCard,
   ConversationCardAction,

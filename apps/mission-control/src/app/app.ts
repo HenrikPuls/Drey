@@ -15,6 +15,7 @@ import { Pairing } from '@mission-ui/pairing/pairing';
 import { Work } from '@mission-ui/work/work';
 import { Chat } from '@mission-ui/chat/chat';
 import { Capacity } from '@mission-ui/capacity/capacity';
+import { McI18nPipe } from '@mission-ui/i18n/i18n.pipe';
 import { Settings } from '@mission-ui/settings/settings';
 import { Theme } from '@mission-ui/theme';
 import { Team } from '@mission-ui/team/team';
@@ -129,6 +130,7 @@ export function tabOfPlace(place: ShellArea | MenuPlace): McTab {
   templateUrl: './app.html',
   styleUrl: './app.css',
   imports: [
+    McI18nPipe,
     Work,
     Chat,
     Capacity,
@@ -290,7 +292,7 @@ export class App {
   /** The desktop dock (column 3): wide enough and not folded. */
   protected readonly showDock = computed(() => this.isDesktop() && this.docked() && this.dockOpen());
 
-  /** Capacity: the desktop dock's second tab. */
+  /** Capacity: the desktop dock's second tab (the iPad's right pane has the same switch). */
   protected readonly showCapacity = computed(() => this.showDock() && this.dockTab() === 'capacity');
 
   /** The desktop top bar's Chat button: folds the dock, or on a narrower screen switches to the chat. */
@@ -337,7 +339,7 @@ export class App {
       case 'desktop':
         return this.docked() ? this.showDock() && this.dockTab() === 'chat' : this.tab() === 'chat';
       case 'ipad':
-        return this.panes.right();
+        return this.panes.right() && this.dockTab() === 'chat';
     }
   });
 

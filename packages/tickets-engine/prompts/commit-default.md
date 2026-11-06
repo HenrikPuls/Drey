@@ -32,7 +32,7 @@ remote, so the ticket can move to done.
   owner's move — hosts are theirs, you never call a host API. Push
   the ticket branch to the remote, log that the policy merge (pull
   request or equivalent) awaits the owner, and end blocked: the
-  ticket waits on commit.
+  ticket waits on the owner in Ready to try.
 - If the work is already on the remote's integration branch (an
   earlier push, the owner's merged PR), verify that from a fresh
   fetch and complete — the push already happened.
