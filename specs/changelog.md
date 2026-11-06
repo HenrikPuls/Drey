@@ -1,3 +1,13 @@
+### Milestone 186 — D-26: Run the chain on a dricket board reached a missing method
+
+**Not yet manually verified by the owner.** Found by the cut-over smoke on the real store (2026-11-06
+evening): the runner could not start, `no such method: chainRefusal`.
+
+- `chainRefusal` (board service, E14-5) is what the plugin's main side asks before `chainMaster` /
+  `chainColumn` switch the chain on; since the plugin reaches the board over the engine's invoke
+  channel (ADR-0088) the name had to be in `BOARD_METHODS` (`packages/tickets-engine/src/server/engine.ts`)
+  and never was — every "Run the chain" on a store died in that call. Added; `engine.spec.ts` invokes it.
+
 ### Milestone 185 — D-23 rest: a store's ticket document shows the header and widgets of a ticket
 
 **Not yet manually verified by the owner.** Found by the owner in the cut-over smoke on the real store (T-0030, E14-7):

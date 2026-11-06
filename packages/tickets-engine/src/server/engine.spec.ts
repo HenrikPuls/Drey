@@ -169,6 +169,11 @@ describe('createEngine', () => {
     expect(await engine.invoke('configGet', { key: 'defaultWorker' })).toBe('claude-code');
   });
 
+  it('serves chainRefusal on the invoke channel (D-26: the plugin asks it before Run the chain)', async () => {
+    // A files vault has no store, so there is nothing to refuse.
+    expect(await engine.invoke('chainRefusal')).toBeNull();
+  });
+
   it('refuses unknown methods and survives their error', async () => {
     const response = await fetch(`${engine.invokeUrl}/api/invoke`, {
       method: 'POST',
