@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DreyPluginApi } from '../../../../shared/plugin-api/renderer';
 import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
 import type { WorkRow } from '../work-groups';
+import { GO_TO_DECISION_CARD } from '../ticket-document/dom';
 import { ticketIdOfKey } from './register';
 import { mountReview, type ReviewDeps } from './view';
 
@@ -25,7 +26,7 @@ const snapshot = {
     { phase: { id: 'commit', title: 'Commit' }, tickets: [] },
   ],
 } as unknown as BoardSnapshot;
-const waiting = { phase: { id: 'ready' }, need: { kind: 'checkpoint' } } as unknown as WorkRow;
+const waiting = { card: { id: 'T-0121' }, phase: { id: 'ready' }, need: { kind: 'checkpoint' } } as unknown as WorkRow;
 
 function setup(overrides: Partial<ReviewDeps> = {}, vaults: { id: string; path: string }[] = []) {
   const calls: { method: string; payload: unknown }[] = [];
@@ -162,20 +163,29 @@ describe('Review tab', () => {
     ]);
   });
 
-  it('opens the plain send-back dialog when there are no comments', async () => {
-    const { host, deps, calls } = setup();
+  it('offers no Send back without comments (that decision is on the card)', async () => {
+    const { host, calls } = setup();
     await flush();
-    click(byText(host, '.tickets-review-footer .tickets-review-btn', 'Send back'));
-    expect(deps.openSendBack).toHaveBeenCalledWith('T-0121');
+    expect(byText(host, '.tickets-review-footer .tickets-review-btn', 'Send back')).toBeUndefined();
     expect(calls.some((c) => c.method === 'sendBack')).toBe(false);
   });
 
-  it('accepts with the same engine call as the Ready card', async () => {
+  it('carries no Accept, only the link "Decision waiting · go to the card" (req-97)', async () => {
     const { host, calls } = setup();
     await flush();
-    click(byText(host, '.tickets-review-footer .tickets-review-btn', 'Accept and move to Commit'));
-    await flush();
-    expect(calls.find((c) => c.method === 'acceptTicket')?.payload).toEqual({ id: 'T-0121' });
+    const footer = host.querySelector('.tickets-review-footer')!;
+    expect(footer.textContent).not.toContain('Accept');
+    const link = footer.querySelector<HTMLAnchorElement>('.tickets-review-decision-link')!;
+    expect(link.textContent).toBe('Decision waiting · go to the card');
+    const heard: string[] = [];
+    const listener = (event: Event): void => {
+      heard.push((event as CustomEvent<{ id: string }>).detail.id);
+    };
+    document.addEventListener(GO_TO_DECISION_CARD, listener);
+    link.click();
+    document.removeEventListener(GO_TO_DECISION_CARD, listener);
+    expect(heard).toEqual(['T-0121']);
+    expect(calls.some((c) => c.method === 'acceptTicket')).toBe(false);
   });
 
   it('shows no decision buttons while the ticket does not wait for the owner', async () => {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { actionBarNode, costNode, proofNode, stripNode } from './dom';
+import { GO_TO_DECISION_CARD, actionBarNode, costNode, proofNode, stripNode } from './dom';
 import type { ProofView } from './model';
 
 const proof: ProofView = {
@@ -63,19 +63,43 @@ describe('costNode', () => {
 
 describe('actionBarNode', () => {
   const icon = (): SVGElement => document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  const deps = () => ({ icon, onSendBack: vi.fn(), onAccept: vi.fn(), onThread: vi.fn(), onReview: vi.fn() });
+  const deps = () => ({ icon, onThread: vi.fn(), onReview: vi.fn() });
   const labels = (node: HTMLElement): string[] => Array.from(node.querySelectorAll('button')).map((b) => b.textContent ?? '');
+  const bar = (decide: boolean) => ({ decide, acceptLabel: 'Accept and move to Commit', ticketId: 'T-0121' });
 
-  it('offers all four at a checkpoint and calls through', () => {
+  it('carries no Accept or Send back at a checkpoint, only the link to the decision card (req-97)', () => {
     const d = deps();
-    const node = actionBarNode(d, { decide: true, acceptLabel: 'Accept and move to Commit' });
-    expect(labels(node)).toEqual(['Send back…', 'Accept and move to Commit', 'Thread', 'Open Review']);
+    const node = actionBarNode(d, bar(true));
+    expect(labels(node)).toEqual(['Thread', 'Open Review']);
+    expect(node.querySelector('.tickets-doc-decision-link')?.textContent).toBe('Decision waiting · go to the card');
     node.querySelectorAll('button').forEach((b) => b.click());
-    expect([d.onSendBack, d.onAccept, d.onThread, d.onReview].map((f) => f.mock.calls.length)).toEqual([1, 1, 1, 1]);
+    expect([d.onThread, d.onReview].map((f) => f.mock.calls.length)).toEqual([1, 1]);
   });
 
-  it('keeps only Thread and Open Review off a checkpoint', () => {
-    expect(labels(actionBarNode(deps(), { decide: false, acceptLabel: 'Accept' }))).toEqual(['Thread', 'Open Review']);
+  it('the link focuses the card that answers the event, and opens the thread when none does', () => {
+    const d = deps();
+    const node = actionBarNode(d, bar(true));
+    const link = node.querySelector<HTMLAnchorElement>('.tickets-doc-decision-link')!;
+    const seen: string[] = [];
+    const listener = (event: Event): void => {
+      const detail = (event as CustomEvent<{ id: string; handled: boolean }>).detail;
+      seen.push(detail.id);
+      detail.handled = true;
+    };
+    document.addEventListener(GO_TO_DECISION_CARD, listener);
+    link.click();
+    document.removeEventListener(GO_TO_DECISION_CARD, listener);
+    expect(seen).toEqual(['T-0121']);
+    expect(d.onThread).not.toHaveBeenCalled();
+
+    link.click();
+    expect(d.onThread).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows no link and only Thread and Open Review off a checkpoint', () => {
+    const node = actionBarNode(deps(), bar(false));
+    expect(labels(node)).toEqual(['Thread', 'Open Review']);
+    expect(node.querySelector('.tickets-doc-decision-link')).toBeNull();
   });
 });
 

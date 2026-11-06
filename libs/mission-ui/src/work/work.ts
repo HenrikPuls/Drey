@@ -10,6 +10,7 @@ import {
   nextPhaseOf,
   olderDoneOf,
   questionCardOf,
+  questionNeedOf,
   swipeActionOf,
   swipeProgressOf,
   ticketPersonaOf,
@@ -363,6 +364,15 @@ export class Work {
   protected readonly manualDone = signal<Readonly<Record<string, string>>>({});
   protected readonly manualSendBackOpen = signal<Readonly<Record<string, boolean>>>({});
   protected readonly manualNote = signal<Readonly<Record<string, string>>>({});
+
+  /**
+   * The decision card (req-97) is the one Accept: it is not offered while a
+   * question of the same ticket is open — the answer comes first.
+   */
+  protected acceptOffered(vm: NeedVm): boolean {
+    const state = this.state;
+    return state === null || questionNeedOf(state.needs, vm.need.ticketId ?? '') === null;
+  }
 
   /** The actions show only where the adapter offers them and the device may act. */
   protected canFinishManual(): boolean {

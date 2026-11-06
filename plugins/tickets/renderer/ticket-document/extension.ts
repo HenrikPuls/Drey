@@ -150,8 +150,6 @@ export function createTicketDocumentExtension(deps: TicketDocumentDeps): TicketD
             actionBarNode(
               {
                 icon: (name, size) => deps.api.ui.icon(name, size),
-                onSendBack: () => deps.actions.sendBack(card),
-                onAccept: () => deps.actions.accept(card),
                 onThread: () => deps.actions.openThread(card),
                 onReview: () => deps.actions.openReview(card),
               },

@@ -73,12 +73,14 @@
 
   @if (proposal(); as split) {
     <footer class="pp-split">
-      <span class="pp-reason">{{ split.reason }}</span>
-      <div class="pp-actions">
-        <button type="button" class="pp-btn" [disabled]="deciding()" (click)="decide('keep')">Keep as one ticket</button>
+      <span class="pp-reason">
+        {{ split.reason }}
         @if (split.parts > 1) {
-          <button type="button" class="pp-btn primary" [disabled]="deciding()" (click)="decide('split')">{{ splitLabel() }}</button>
+          <a class="pp-link" href="#" [attr.aria-disabled]="deciding()" (click)="splitLink($event)">{{ splitLabel() }}</a>
         }
+      </span>
+      <div class="pp-actions">
+        <button type="button" class="pp-btn primary" [disabled]="deciding()" (click)="decide('keep')">Keep as one ticket</button>
       </div>
     </footer>
   }

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { readyBarNode, readyCardNode, storyNode, type ReadyViewDeps } from './ready-view';
+import { focusDecisionCard, readyBarNode, readyCardNode, storyNode, type ReadyViewDeps } from './ready-view';
+import { goToDecisionCard } from './ticket-document/dom';
 import type { StepCard } from '../shared/step-card';
 import type { ParsedChanges, StoryItem, StoryTotals } from '../shared/changes';
 
@@ -174,5 +175,27 @@ describe('storyNode (req-75 W3)', () => {
     expect(storyNode({ story, totals: { minutes: null, tokens: 3_500 } }).querySelector('.tickets-story-total')!.textContent).toBe('3.5k tokens');
     expect(storyNode({ story, totals: { minutes: 3, tokens: null } }).querySelector('.tickets-story-total')!.textContent).toBe('Total 3 min');
     expect(storyNode({ story: [], totals: { minutes: null, tokens: null } }).querySelector('.tickets-story-total')).toBeNull();
+  });
+});
+
+describe('the decision card is the one Accept (req-97)', () => {
+  const data = { id: 'T-0126', title: 'Palette', track: null, repo: null, card: GATE, changes: null, result: null };
+
+  it('"Decision waiting · go to the card" focuses the card of that ticket', () => {
+    const card = readyCardNode(deps(), data);
+    document.body.append(card);
+    expect(card.dataset['decisionCard']).toBe('T-0126');
+    expect(goToDecisionCard('T-0126')).toBe(true);
+    expect(document.activeElement).toBe(card.querySelector('button'));
+    expect(goToDecisionCard('T-9999')).toBe(false);
+    card.remove();
+    expect(goToDecisionCard('T-0126')).toBe(false);
+  });
+
+  it('finds the folded bar as well, preferring the card', () => {
+    const bar = readyBarNode(deps(), data, { open: false, onToggle: vi.fn() });
+    document.body.append(bar);
+    expect(focusDecisionCard(document, 'T-0126')).toBe(true);
+    bar.remove();
   });
 });
