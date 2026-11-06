@@ -622,6 +622,20 @@
   display: none;
 }
 
+/*
+ * Outside the Board and Crew tabs the band's frame goes with its content and
+ * the bottom dock falls back to its icon strip (board 7e). In CSS, not by
+ * closing the panel: closing would mark the view's layout as changed on every
+ * tab switch.
+ */
+app-panel-frame:has(.desk-capacity[hidden]) {
+  display: none;
+}
+
+app-dock[side='bottom']:has(.desk-capacity[hidden]):not(:has(app-panel-frame:not(:has(.desk-capacity)))) {
+  height: auto !important;
+}
+
 /* One line (board 7e): nothing wraps, the people row gives way first. */
 .desk-capacity .desk-cap-lead,
 .desk-capacity .desk-cap-tail {

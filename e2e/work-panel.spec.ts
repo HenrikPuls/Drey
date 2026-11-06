@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/drey';
+import { test, expect, type Page } from './fixtures/drey';
 
 /**
  * The Work panel (req-75 W1/W1b, ADR-0087): Needs you, Shaping, Running
@@ -91,6 +91,15 @@ test.use({
   },
 });
 
+/**
+ * A row opens the ticket document, or the thread while a run is live
+ * (`defaultFaceOf`, E13-20); the face switch reaches the thread from either.
+ */
+async function openThread(page: Page, id: string): Promise<void> {
+  await page.locator(`.work-row[data-id="${id}"]`).filter({ visible: true }).click();
+  await page.locator('.tickets-faces:visible [role="tab"]', { hasText: 'Thread' }).click();
+}
+
 test.describe('Work panel (req-75 W1/W1b)', () => {
   test('groups the tickets, and a row opens the ticket thread alone', async ({ page, electronApp }, testInfo) => {
     // The Work panel gets the left dock to itself, as an owner would set it.
@@ -164,10 +173,10 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     expect(box.width).toBeLessThan(420);
     await panel.screenshot({ path: testInfo.outputPath('work-panel-narrow.png') });
 
-    // A Work row opens the thread alone (req-84): since W4a the worker
+    // The thread opens alone (req-84): since W4a the worker
     // lives there in every state (the run tab is gone) — no file pair,
     // no second pane; the thread lands where the focus is.
-    await panel.locator('.work-row[data-id="T-0104"]').click();
+    await openThread(page, 'T-0104');
     const thread = page.locator('.tickets-thread').filter({ visible: true });
     await expect(thread).toBeVisible({ timeout: 15_000 });
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Drag headings in the outline');
@@ -198,11 +207,11 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     // (req-75 W3, req-86): a gate offers the move to the next column (Launch
     // only with a worktree — none here), the terminal column Archive alone.
     const readyButtons = thread.locator('.tickets-ready-card .tickets-takeover-btn');
-    await panel.locator('.work-row[data-id="T-0105"]').click();
+    await openThread(page, 'T-0105');
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Spellcheck inside tables');
     await expect(thread.locator('.tickets-thread-decisions')).toBeHidden();
     await expect(readyButtons).toHaveText(['Move to Commit', 'Send back…']);
-    await panel.locator('.work-row[data-id="T-0106"]').click();
+    await openThread(page, 'T-0106');
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Fix the palette race in CI');
     await expect(readyButtons).toHaveText(['Archive']);
     await expect(thread.locator('.tickets-ready-section b').first()).toHaveText('What changed for you');
@@ -222,19 +231,19 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     // A second row reuses the one thread tab (req-84): the live run's
     // doings live in the thread too — never a second thread, never a
     // new pane.
-    await panel.locator('.work-row[data-id="T-0107"]').click();
+    await openThread(page, 'T-0107');
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Daily note templates per weekday');
     await expect(page.locator('.tickets-thread')).toHaveCount(1);
     await expect(page.locator('app-pane-leaf')).toHaveCount(1);
   });
 
-  test('rows reuse the one thread tab; Open ticket opens the pair', async ({ page }, testInfo) => {
+  test('rows reuse the one thread tab; Open ticket opens the document', async ({ page }, testInfo) => {
     await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0101"]')).toBeVisible({ timeout: 15_000 });
 
-    // A row opens the thread alone (req-84) — no file, no split.
-    await panel.locator('.work-row[data-id="T-0101"]').click();
+    // The thread opens alone (req-84): no file, no split.
+    await openThread(page, 'T-0101');
     const thread = page.locator('.tickets-thread').filter({ visible: true });
     await expect(thread.locator('.tickets-thread-title')).toHaveText('Dark mode for the calendar');
     await expect(page.locator('app-pane-leaf')).toHaveCount(1);
@@ -244,19 +253,19 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
       ['T-0102', 'Export tags as CSV'],
       ['T-0103', 'Faster vault search'],
     ] as const) {
-      await panel.locator(`.work-row[data-id="${id}"]`).click();
+      await openThread(page, id);
       await expect(thread.locator('.tickets-thread-title')).toHaveText(title);
       await expect(page.locator('.tickets-thread')).toHaveCount(1);
       await expect(page.locator('app-pane-leaf')).toHaveCount(1);
     }
 
-    // The row menu's Open ticket keeps the pair (req-84): the ticket file
-    // with the thread beside it — one split, and nothing stacks further.
+    // The row menu's Open ticket opens the document in place (E13-20): the
+    // thread stays one tab away on the face switch, no split.
     await panel.locator('.work-row[data-id="T-0103"] .work-row-more').click();
     await page.locator('.tickets-menu .tickets-menu-item', { hasText: 'Open ticket' }).click();
     await expect(page.locator('app-tab-bar .tab', { hasText: 'T-0103.md' })).toHaveCount(1);
-    await expect(page.locator('app-pane-leaf')).toHaveCount(2);
-    await expect(page.locator('.tickets-thread')).toHaveCount(1);
+    await expect(page.locator('app-pane-leaf')).toHaveCount(1);
+    await expect(page.locator('.tickets-faces:visible [role="tab"]', { hasText: 'Thread' })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('ticket-page-no-split.png') });
   });
 
@@ -267,26 +276,29 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
     const panel = page.locator('.tickets-panel').filter({ visible: true });
     await expect(panel.locator('.work-row[data-id="T-0107"]')).toBeVisible({ timeout: 15_000 });
-    await electronApp.evaluate(
-      ({ BrowserWindow }, data) => {
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send('plugin:event', data);
-        }
-      },
-      {
-        pluginId: 'tickets',
-        event: 'fleet-changed',
-        data: {
-          runs: [liveRun('r-ended', 'T-0107', 'plan', { state: 'done', endedAt: '2026-10-31T07:00:00Z', exitCode: 1 })],
-          chain: null,
-        },
-      },
-    );
-    await panel.locator('.work-row[data-id="T-0107"]').click();
+    await openThread(page, 'T-0107');
     const thread = page.locator('.tickets-thread').filter({ visible: true });
-    // The state word says how it ended (W4a); the meta line names the
-    // worker — and no run link: the run's doings live in the thread.
-    await expect(thread.locator('.tickets-thread-state')).toHaveText('Ended');
+    // The engine's own first fleet report replaces a push sent before it, so push until it stays.
+    await expect(async () => {
+      await electronApp.evaluate(
+        ({ BrowserWindow }, data) => {
+          for (const win of BrowserWindow.getAllWindows()) {
+            win.webContents.send('plugin:event', data);
+          }
+        },
+        {
+          pluginId: 'tickets',
+          event: 'fleet-changed',
+          data: {
+            runs: [liveRun('r-ended', 'T-0107', 'plan', { state: 'done', endedAt: '2026-10-31T07:00:00Z', exitCode: 1 })],
+            chain: null,
+          },
+        },
+      );
+      // The state word says how it ended (W4a); the meta line names the
+      // worker — and no run link: the run's doings live in the thread.
+      await expect(thread.locator('.tickets-thread-state')).toHaveText('Ended', { timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
     await expect(thread.locator('.tickets-thread-meta')).toHaveText(/^OpenCode · glm-5.3-flash/);
     await expect(thread.locator('.tickets-thread-head button[aria-label^="Open the run"]')).toHaveCount(0);
     const box = thread.locator('.tickets-composer-box');

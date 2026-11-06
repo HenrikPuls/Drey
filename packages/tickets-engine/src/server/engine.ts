@@ -1,3 +1,4 @@
+import { settleCommitStepsOnFleet } from './settle-on-fleet';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { once } from 'node:events';
 import { promises as fsp } from 'node:fs';
@@ -239,6 +240,11 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     log,
   });
   await improvements.start();
+  const stopSettling = settleCommitStepsOnFleet(
+    (listener) => hub.subscribe((what) => listener(what)),
+    () => board.settleCommitSteps(),
+    log,
+  );
 
   // The invoke table: the service instances behind an explicit allowlist.
   const table = new Map<string, (payload: unknown) => Promise<unknown>>();
@@ -453,6 +459,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
         return;
       }
       closed = true;
+      stopSettling();
       improvements.dispose();
       verify.dispose();
       board.dispose();

@@ -82,30 +82,33 @@ test.describe('Work row menu (req-70, req-75 W1)', () => {
     const row = page.locator('.work-row[data-id="T-0051"]').filter({ visible: true });
     await expect(row).toBeVisible({ timeout: 15_000 });
 
-    await electronApp.evaluate(
-      ({ BrowserWindow }, data) => {
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send('plugin:event', data);
-        }
-      },
-      {
-        pluginId: 'tickets',
-        event: 'fleet-changed',
-        data: {
-          runs: [
-            finishedRun('r1', 'plan', 'done', '2026-10-30T04:52:00Z'),
-            finishedRun('r2', 'commit', 'failed', '2026-10-29T09:48:00Z'),
-            finishedRun('r3', 'build', 'stopped', '2026-10-19T22:57:00Z'),
-          ],
-          chain: null,
-        },
-      },
-    );
-
-    await row.click({ button: 'right' });
-    await expect(page.locator(menu)).toBeVisible();
     const trigger = page.locator(`${menu} .tickets-menu-item.has-sub`, { hasText: 'Past runs' });
-    await expect(trigger).toHaveText(/Past runs \(3\)/);
+    // The engine's own first fleet report replaces a push sent before it, so push until it stays.
+    await expect(async () => {
+      await page.keyboard.press('Escape');
+      await electronApp.evaluate(
+        ({ BrowserWindow }, data) => {
+          for (const win of BrowserWindow.getAllWindows()) {
+            win.webContents.send('plugin:event', data);
+          }
+        },
+        {
+          pluginId: 'tickets',
+          event: 'fleet-changed',
+          data: {
+            runs: [
+              finishedRun('r1', 'plan', 'done', '2026-10-30T04:52:00Z'),
+              finishedRun('r2', 'commit', 'failed', '2026-10-29T09:48:00Z'),
+              finishedRun('r3', 'build', 'stopped', '2026-10-19T22:57:00Z'),
+            ],
+            chain: null,
+          },
+        },
+      );
+      await row.click({ button: 'right' });
+      await expect(trigger).toHaveText(/Past runs \(3\)/, { timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
+    await expect(page.locator(menu)).toBeVisible();
 
     await trigger.hover();
     const sub = page.locator('.tickets-submenu');

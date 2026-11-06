@@ -61,13 +61,9 @@ test.describe('Interactive dialog affordances (req-65)', () => {
   test('the header offers the dialog exactly where the column does', async ({ page }) => {
     await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
 
-    // A row opens the ticket's thread (req-84); its Ticket file link
-    // opens the file whose header carries the dialog.
+    // A row opens the ticket (E13-20), whose header carries the dialog.
     const openFileOf = async (id: string): Promise<void> => {
       await page.locator(`.work-row[data-id="${id}"]`).filter({ visible: true }).click();
-      const thread = page.locator('.tickets-thread').filter({ visible: true });
-      await expect(thread).toBeVisible({ timeout: 15_000 });
-      await thread.locator('.tickets-thread-filelink').click();
       await expect(page.locator('app-editor .tickets-head')).toBeVisible({ timeout: 15_000 });
     };
 

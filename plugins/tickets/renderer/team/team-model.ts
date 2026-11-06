@@ -285,10 +285,11 @@ export function teamModelOf(
   };
 }
 
-/** The Team tab's header: `4 personas · today $1.59`. */
+/** The Crew tab's header: `5 personas · 1 running · 1 stuck · today $1.59`; idle says nothing. */
 export function teamHeadOf(model: TeamModel): string {
   const count = `${model.personas.length} ${model.personas.length === 1 ? 'persona' : 'personas'}`;
-  return model.todayCost === null ? count : `${count} · today ${usd(model.todayCost)}`;
+  const parts = [count, ...(model.summary === 'All idle' ? [] : [model.summary])];
+  return (model.todayCost === null ? parts : [...parts, `today ${usd(model.todayCost)}`]).join(' · ');
 }
 
 /** The capacity band's head: `2 of 5 slots busy`; '' without pool sizes. */

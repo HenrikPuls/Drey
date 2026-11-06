@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { promises as fsp } from 'node:fs';
+import { closeSync, openSync, promises as fsp } from 'node:fs';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { NOTES_VAULT_KEY } from '../../../packages/tickets-engine/src/contracts/notes';
@@ -216,11 +216,14 @@ export async function syncChatConfig(client: ConfigSyncClient, llm: ChatLlmSetti
 
 /** The real process start; the spec's seam starts an engine in-process instead. */
 function spawnEngine(vaultPath: string, home: string, log: (message: string) => void): void {
+  // The last start's output, so a start that dies says why (`engine.log`).
+  const output = openSync(path.join(home, 'engine.log'), 'w');
   const child = spawn(process.execPath, [ENGINE_ENTRY(), '--vault', vaultPath, '--home', home], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     detached: true,
-    stdio: ['ignore', 'ignore', 'ignore'],
+    stdio: ['ignore', output, output],
   });
+  closeSync(output);
   child.unref();
   log(`tickets engine spawned (pid ${child.pid ?? '?'}) for ${vaultPath}`);
 }
@@ -262,7 +265,7 @@ export async function ensureEngine(
       return endpoints;
     }
     if (Date.now() > deadline) {
-      throw new Error('the tickets engine did not come up within 20 s — see the engine home log');
+      throw new Error(`the tickets engine did not come up within 20 s — see ${path.join(home, 'engine.log')}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
