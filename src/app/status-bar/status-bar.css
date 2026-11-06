@@ -65,8 +65,23 @@
   background: transparent;
   color: var(--text-3);
   font-family: var(--font-sans);
-  font-size: 11.5px;
+  font-size: 13px;
   white-space: nowrap;
+}
+
+.slot-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.slot-dot.dot-attention {
+  background: var(--status-modified);
+}
+
+.slot-dot.dot-positive {
+  background: var(--status-added);
 }
 
 .slot-btn {

@@ -78,4 +78,16 @@ describe('StatusBar', () => {
     (slots[0] as HTMLButtonElement).click();
     expect(run).toHaveBeenCalledWith('x.open');
   });
+
+  it('draws the optional dot of a status item (SDK 1.46)', () => {
+    const items = TestBed.inject(StatusItemsService);
+    items.create({ text: '3 need you', dot: 'attention' });
+    items.create({ text: 'Autopilot · On', dot: 'positive' });
+    items.create({ text: 'plain' });
+    fixture.detectChanges();
+    const slots = Array.from(el.querySelectorAll('.slot'));
+    expect(slots[0].querySelector('.slot-dot.dot-attention')).not.toBeNull();
+    expect(slots[1].querySelector('.slot-dot.dot-positive')).not.toBeNull();
+    expect(slots[2].querySelector('.slot-dot')).toBeNull();
+  });
 });

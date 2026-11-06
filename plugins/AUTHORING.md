@@ -111,6 +111,8 @@ leaves the app on the previous build. Verify with
   active view's preset `assistantTarget`) and their `on…Change` listeners are
   for the Assistant. The host attaches no meaning to any of it; namespace
   the target ids.
+  1.46 gave a status item an optional `dot` (`attention` | `positive`): a small coloured dot
+  before the text.
   1.45 lets `ctx.vault.markManaged` take a list of vault ids (an empty list clears): the tickets
   plugin flags every vault that holds its store checkout.
   1.44 added `ctx.vault.routeDocuments(route)` (main side): a plugin that writes
