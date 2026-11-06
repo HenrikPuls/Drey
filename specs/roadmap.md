@@ -129,6 +129,14 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   that to the meta vault (`b5b60c3`), though T-0030 lives in the store. Its run `R-20261104T13124-2vrn` from before the freeze is the
   one D-34 counts. Possibly the same route as D-30; not checked. Harmless for the store, but the legacy tree should stop changing.
 
+- **D-36 — a Prioritized ticket starts on its own with the Autopilot off, blocks the owner's round** (cut-over smoke, 2026-11-06; owner: "it was
+  pulled in automatically", he started none of them; the source is not found). T-0091 started three times on the real board, each time around
+  the owner's work on T-0092: 20:53:40Z, 18 s after T-0092's run, master on; 21:00:56Z and 21:39:11Z after `autopilot: off` (20:57:45Z in
+  `runner.log`), 38 s before an Accept. Together 3.7M tokens in, eight uncommitted files, each stopped by hand. The runner logs "explicit fresh
+  start" twice and "explicit resume with a native compact first", so a client sent a handover mode; `engine.log` has no `remote` line for
+  them, which points away from Mission Control's route and at Drey's `fleetStart` or another path. Runs carry `column=prioritized` while the
+  ticket's stage is building. Also check: does one action target the wrong ticket (T-0091 is the first of Prioritized)?
+
 (D-23 shipped as milestones 184 and 185, D-24 as 184; what the wave-3 smoke could not see — the Autopilot status
 item and popover in a built app with a runner — waits for the owner's round, noted in the 184 changelog entry.)
 
