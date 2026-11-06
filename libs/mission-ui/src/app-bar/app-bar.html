@@ -1,20 +1,20 @@
 <header class="bar" [class.sub-page]="back() !== null" [class.top-page]="back() === null" [class.no-wide-back]="!backOnWide()" [class.own-menu]="ownMenu()">
   @if (back(); as parent) {
-    <button type="button" class="lead back" [attr.aria-label]="'Back to ' + parent" [attr.title]="'Back to ' + parent" (click)="onBack()">
+    <button type="button" class="lead back" [attr.aria-label]="'app_bar.back_to' | t: { name: parent }" [attr.title]="'app_bar.back_to' | t: { name: parent }" (click)="onBack()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M15 5l-7 7 7 7" />
       </svg>
       <span class="back-label">{{ parent }}</span>
     </button>
   } @else {
-    <button type="button" class="lead back menu-back" aria-label="Back to Menu" title="Back to Menu" (click)="onMenuBack()">
+    <button type="button" class="lead back menu-back" [attr.aria-label]="'app_bar.back_to' | t: { name: ('menu.title' | t) }" [attr.title]="'app_bar.back_to' | t: { name: ('menu.title' | t) }" (click)="onMenuBack()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M15 5l-7 7 7 7" />
       </svg>
-      <span class="back-label">Menu</span>
+      <span class="back-label">{{ 'menu.title' | t }}</span>
     </button>
     @if (ownMenu()) {
-      <button type="button" class="lead menu-btn" aria-label="Menu and chat history" title="Menu and chat history" (click)="onOwnMenu()">
+      <button type="button" class="lead menu-btn" [attr.aria-label]="'app_bar.menu_history' | t" [attr.title]="'app_bar.menu_history' | t" (click)="onOwnMenu()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
           <path d="M4 7h16M4 12h16M4 17h16" />
         </svg>

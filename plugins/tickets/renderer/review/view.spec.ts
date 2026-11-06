@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- the spec stands in for the host, which owns the catalog at runtime
+import { i18n } from '../../../../shared/i18n';
 import type { DreyPluginApi } from '../../../../shared/plugin-api/renderer';
 import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
 import type { WorkRow } from '../work-groups';
@@ -33,6 +35,7 @@ function setup(overrides: Partial<ReviewDeps> = {}, vaults: { id: string; path: 
   const store = new Map<string, string>();
   const opened: unknown[][] = [];
   const api = {
+    i18n,
     ui: { icon: () => document.createElementNS('http://www.w3.org/2000/svg', 'svg') },
     vault: {
       readFile: async () => ({ content: '# T-0121\n', modifiedMs: 0 }),

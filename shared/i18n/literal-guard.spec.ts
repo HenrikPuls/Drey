@@ -88,6 +88,12 @@ describe('findLiteralStrings (TypeScript)', () => {
     expect(findLiteralStrings(source)).toEqual([{ line: 4, text: 'Resume now', reason: 'text' }]);
   });
 
+  it('reads the opt-in marker in a template as well as in code', () => {
+    expect(optsIn('<!-- i18n: catalog -->\n<p>x</p>')).toBe(true);
+    expect(optsIn('// i18n: catalog\nconst a = 1;')).toBe(true);
+    expect(optsIn('<p>i18n: catalog</p>')).toBe(false);
+  });
+
   it('exempts a line marked i18n-ignore, on the same or the preceding line', () => {
     const source = [
       `const brand = 'Drey Crew'; // i18n-ignore: the product name`,

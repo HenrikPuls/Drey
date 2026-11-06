@@ -4,7 +4,7 @@
  * catalog. It runs as a spec (`literal-guard.spec.ts`) over the guarded
  * paths — the directories of the surfaces decided on 2026-11-06, listed
  * in `guarded-paths.json` — and over any file that opts in with the
- * marker `// i18n: catalog` in its first lines. Nothing outside those
+ * marker `// i18n: catalog` (`<!-- i18n: catalog -->` in a template) in its first lines. Nothing outside those
  * paths is scanned: the existing UI migrates area by area (roadmap).
  *
  * The detector is a heuristic with a bias towards catching text. It is
@@ -27,7 +27,7 @@ export interface LiteralFinding {
 }
 
 /** The marker that puts a file under the guard wherever it lives. */
-export const OPT_IN_MARKER = /^\s*\/\/\s*i18n:\s*catalog\b/m;
+export const OPT_IN_MARKER = /^\s*(?:\/\/|<!--)\s*i18n:\s*catalog\b/m;
 
 /** The per-line exemption, in a comment on the same or the preceding line. */
 export const IGNORE_MARKER = 'i18n-ignore';

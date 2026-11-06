@@ -1,3 +1,4 @@
+import type { MessageKey } from '../../../shared/i18n';
 /**
  * The pure halves of the Settings screen's section tree and search (E13-22):
  * what a page declares, how a query filters the declared entries, and which
@@ -100,10 +101,10 @@ export function activeSection(
 /** Who a setting is stored for (board 7g's scope tabs). */
 export type SettingsScope = 'all-devices' | 'device' | 'vault';
 
-export const SETTINGS_SCOPES: readonly { readonly id: SettingsScope; readonly label: string }[] = [
-  { id: 'all-devices', label: 'All devices' }, // TODO(i18n)
-  { id: 'device', label: 'This device' }, // TODO(i18n)
-  { id: 'vault', label: 'This vault' }, // TODO(i18n)
+export const SETTINGS_SCOPES: readonly { readonly id: SettingsScope; readonly labelKey: MessageKey }[] = [
+  { id: 'all-devices', labelKey: 'settings.scope.all_devices' },
+  { id: 'device', labelKey: 'settings.scope.device' },
+  { id: 'vault', labelKey: 'settings.scope.vault' },
 ];
 
 /** The hits of one scope tab; `null` (no tab chosen) keeps every hit. */

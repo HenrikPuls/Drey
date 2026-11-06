@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
+import { I18nPipe } from '../i18n';
 import { Icon } from '../icons/icon';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { SettingsService } from '../services/settings.service';
@@ -47,7 +48,7 @@ const SPY_OFFSET = 24;
 @Component({
   selector: 'app-settings',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, NgComponentOutlet, OverlayGuardDirective],
+  imports: [I18nPipe, Icon, NgComponentOutlet, OverlayGuardDirective],
   templateUrl: './settings.html',
   styleUrl: './settings.css',
   host: {

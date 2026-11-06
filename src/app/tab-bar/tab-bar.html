@@ -56,10 +56,9 @@
   ></div>
   <div class="ctx-menu" [style.left.px]="m.x" [style.top.px]="m.y">
     @if (views.views().length > 1) {
-      <!-- TODO(i18n): "Go to the {view} view", "Show this tab in" -->
       @for (target of otherViewsOf(m.path); track target.view.id) {
         <button type="button" role="menuitem" (click)="goToView(m.path, target.view.id)">
-          <span class="ctx-grow">Go to the {{ target.view.label }} view</span>
+          <span class="ctx-grow">{{ 'views.go_to' | t: { view: target.view.label } }}</span>
           @if (keys.hint('view.switch.' + (target.index + 1)); as key) {
             <span class="ctx-key">{{ key }}</span>
           }
@@ -74,7 +73,7 @@
           (click)="subOpen.set(!subOpen())"
           (mouseenter)="subOpen.set(true)"
         >
-          <span class="ctx-grow">Show this tab in</span>
+          <span class="ctx-grow">{{ 'views.show_tab_in' | t }}</span>
           <span class="ctx-chev" aria-hidden="true">›</span>
         </button>
         @if (subOpen()) {

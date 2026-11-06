@@ -150,6 +150,7 @@ export function createTicketDocumentExtension(deps: TicketDocumentDeps): TicketD
             actionBarNode(
               {
                 icon: (name, size) => deps.api.ui.icon(name, size),
+                decisionLinkText: deps.api.i18n.t('decision.waiting_go_to_card'),
                 onThread: () => deps.actions.openThread(card),
                 onReview: () => deps.actions.openReview(card),
               },

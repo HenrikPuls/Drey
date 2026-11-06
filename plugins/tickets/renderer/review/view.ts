@@ -528,7 +528,7 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
       footer.append(el('span', 'tickets-review-muted', 'Not waiting for your decision'));
       return;
     }
-    const link = el('a', 'tickets-review-decision-link', 'Decision waiting · go to the card'); // TODO(i18n)
+    const link = el('a', 'tickets-review-decision-link', deps.api.i18n.t('decision.waiting_go_to_card'));
     link.href = '#';
     link.addEventListener('click', (event) => {
       event.preventDefault();

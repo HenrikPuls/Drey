@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { McI18nPipe } from '../i18n/i18n.pipe';
 
 /** The three areas of the iPad header's switch (canvas decision 12). */
 export type ShellArea = 'notes' | 'work' | 'crew';
@@ -12,9 +13,9 @@ export type ShellArea = 'notes' | 'work' | 'crew';
  * Notes segment is rendered only while `notesEnabled` says so — hidden
  * behind the feature flag until req-101 ships the Notes client.
  */
-// TODO(i18n): every label in header.html is a catalog key once req-102 is merged.
 @Component({
   selector: 'mc-shell-header',
+  imports: [McI18nPipe],
   templateUrl: './header.html',
   styleUrl: './header.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

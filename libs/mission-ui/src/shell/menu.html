@@ -1,6 +1,6 @@
 <div class="menu">
   <header class="head">
-    <h1 class="ttl">Menu</h1>
+    <h1 class="ttl">{{ 'menu.title' | t }}</h1>
   </header>
 
   <label class="search">
@@ -8,40 +8,40 @@
       <circle cx="11" cy="11" r="7" />
       <path d="M20 20l-4-4" />
     </svg>
-    <input type="search" aria-label="Search" placeholder="Search" [value]="query()" (input)="onQuery($event)" />
+    <input type="search" [attr.aria-label]="'menu.search' | t" [attr.placeholder]="'menu.search' | t" [value]="query()" (input)="onQuery($event)" />
   </label>
 
-  <nav class="places" aria-label="Places">
+  <nav class="places" [attr.aria-label]="'menu.places' | t">
     @if (notesEnabled()) {
       <button type="button" class="row" (click)="place.emit('notes')">
-        <span class="grow">Notes</span>
+        <span class="grow">{{ 'shell.notes' | t }}</span>
         <span class="chev" aria-hidden="true">›</span>
       </button>
     }
     <button type="button" class="row" (click)="place.emit('work')">
-      <span class="grow">Work</span>
+      <span class="grow">{{ 'shell.work' | t }}</span>
       @if (needsCount() > 0) {
         <span class="bdg">{{ needsCount() }}</span>
       }
       <span class="chev" aria-hidden="true">›</span>
     </button>
     <button type="button" class="row" (click)="place.emit('crew')">
-      <span class="grow">Crew</span>
+      <span class="grow">{{ 'shell.crew' | t }}</span>
       <span class="chev" aria-hidden="true">›</span>
     </button>
     <button type="button" class="row" (click)="place.emit('settings')">
-      <span class="grow">Settings</span>
+      <span class="grow">{{ 'shell.settings' | t }}</span>
       <span class="chev" aria-hidden="true">›</span>
     </button>
   </nav>
 
-  <section class="chats" aria-label="Chats with Mission Control">
-    <h2 class="cap">Mission Control</h2>
+  <section class="chats" [attr.aria-label]="'menu.chats' | t">
+    <h2 class="cap">{{ 'menu.mission_control' | t }}</h2>
     <button type="button" class="row new" (click)="newChat.emit()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
         <path d="M12 5v14M5 12h14" />
       </svg>
-      <span class="grow">New chat</span>
+      <span class="grow">{{ 'menu.new_chat' | t }}</span>
     </button>
     @for (group of groups(); track group.label) {
       <h3 class="group">{{ group.label }}</h3>
@@ -49,14 +49,14 @@
         <button type="button" class="row sess" [class.cur]="entry.file === activeFile()" (click)="openChat.emit(entry)">
           <span class="grow st">{{ entry.title }}</span>
           @if (entry.pending > 0) {
-            <span class="bdg" [attr.aria-label]="entry.pending + ' cards waiting'">{{ entry.pending }}</span>
+            <span class="bdg" [attr.aria-label]="'menu.cards_waiting' | t: { n: entry.pending }">{{ entry.pending }}</span>
           }
           <small class="when">{{ age(entry) }}</small>
         </button>
       }
     }
     @if (sessions().length === 0) {
-      <p class="hint">No chat yet.</p>
+      <p class="hint">{{ 'menu.no_chat' | t }}</p>
     }
   </section>
 </div>

@@ -63,7 +63,7 @@ describe('costNode', () => {
 
 describe('actionBarNode', () => {
   const icon = (): SVGElement => document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  const deps = () => ({ icon, onThread: vi.fn(), onReview: vi.fn() });
+  const deps = () => ({ icon, decisionLinkText: 'Decision waiting · go to the card', onThread: vi.fn(), onReview: vi.fn() });
   const labels = (node: HTMLElement): string[] => Array.from(node.querySelectorAll('button')).map((b) => b.textContent ?? '');
   const bar = (decide: boolean) => ({ decide, acceptLabel: 'Accept and move to Commit', ticketId: 'T-0121' });
 

@@ -1,3 +1,4 @@
+// i18n: catalog
 /**
  * The tickets plugin's status-bar items (SDK 1.38/1.46; boards 7a, 7h):
  * today's cost ("$4.10 of $15 today", neutral grey, tooltip "so far"),
@@ -6,8 +7,11 @@
  * half plus a small controller over `api.ui.createStatusItem`; the plugin
  * entry feeds it the numbers.
  */
-import type { StatusItemHandle, StatusItemSpec } from '../../../shared/plugin-api/renderer';
+import type { DreyPluginApi, StatusItemHandle, StatusItemSpec } from '../../../shared/plugin-api/renderer';
 import type { ChainMaster } from '../../../packages/tickets-engine/src/fleet/protocol';
+
+/** The catalog's lookup (`api.i18n.t`). */
+export type Translate = DreyPluginApi['i18n']['t'];
 
 /** What the three items are derived from. */
 export interface StatusSlotInput {
@@ -39,22 +43,23 @@ function dollars(value: number, whole: boolean): string {
   return whole && Number.isInteger(value) ? `$${value}` : `$${value.toFixed(2)}`;
 }
 
-export function costSlotOf(cost: number | null, budget: number | null): StatusSlotPatch {
+export function costSlotOf(cost: number | null, budget: number | null, t: Translate): StatusSlotPatch {
   if (cost === null) {
     return HIDDEN;
   }
-  // TODO(i18n): "of", "today", "so far"
-  const of = budget === null ? '' : ` of ${dollars(budget, true)}`;
-  return { text: `${dollars(cost, false)}${of} today`, tooltip: 'so far' };
+  const spent = dollars(cost, false);
+  const text = budget === null
+    ? t('status.cost.today', { cost: spent })
+    : t('status.cost.of_budget', { cost: spent, budget: dollars(budget, true) });
+  return { text, tooltip: t('cost.so_far') };
 }
 
-export function needsSlotOf(needsYou: number, inNotesView: boolean): StatusSlotPatch {
+export function needsSlotOf(needsYou: number, inNotesView: boolean, t: Translate): StatusSlotPatch {
   if (needsYou <= 0) {
     return HIDDEN;
   }
-  // TODO(i18n): "need you", "needs you", "in Work"
-  const text = `${needsYou} ${needsYou === 1 ? 'needs' : 'need'} you${inNotesView ? ' in Work' : ''}`;
-  return { text, tooltip: 'Open the Tickets panel', dot: 'attention' };
+  const text = t(inNotesView ? 'status.needs_you.in_work' : 'status.needs_you', { n: needsYou });
+  return { text, tooltip: t('status.open_tickets_panel'), dot: 'attention' };
 }
 
 /** The chord the Autopilot switch is bound to (concept 6.1). */
@@ -65,23 +70,23 @@ export const AUTOPILOT_CHORD = 'Mod+Alt+P';
  * to On / Off; the three-state engine state (On / Paused / Off, concept
  * 6.1) and the click that cycles it arrive with req-95b.
  */
-export function autopilotSlotOf(master: ChainMaster | null): StatusSlotPatch {
+export function autopilotSlotOf(master: ChainMaster | null, t: Translate): StatusSlotPatch {
   if (master === null) {
     return HIDDEN;
   }
-  const word = master === 'run' ? 'On' : 'Off'; // TODO(i18n)
+  const state = t(master === 'run' ? 'autopilot.state.on' : 'autopilot.state.off');
   return {
-    text: `Autopilot · ${word}`,
-    tooltip: `Autopilot: ${word} (${AUTOPILOT_CHORD})`,
+    text: t('status.autopilot', { state }),
+    tooltip: t('status.autopilot.tooltip', { state, chord: AUTOPILOT_CHORD }),
     ...(master === 'run' ? { dot: 'positive' as const } : {}),
   };
 }
 
-export function statusSlotsOf(input: StatusSlotInput): StatusSlots {
+export function statusSlotsOf(input: StatusSlotInput, t: Translate): StatusSlots {
   return {
-    cost: costSlotOf(input.cost, input.budget),
-    needs: needsSlotOf(input.needsYou, input.inNotesView),
-    autopilot: autopilotSlotOf(input.master),
+    cost: costSlotOf(input.cost, input.budget, t),
+    needs: needsSlotOf(input.needsYou, input.inNotesView, t),
+    autopilot: autopilotSlotOf(input.master, t),
   };
 }
 
@@ -99,7 +104,7 @@ export interface StatusSlotController {
  * returns the controller that keeps them current. `needsCommandId` is the
  * command a click on the needs-you item runs.
  */
-export function createStatusSlots(host: StatusSlotHost, needsCommandId: string): StatusSlotController {
+export function createStatusSlots(host: StatusSlotHost, needsCommandId: string, t: Translate): StatusSlotController {
   const cost = host.createStatusItem({ text: '', priority: 12 });
   const needs = host.createStatusItem({ text: '', commandId: needsCommandId, priority: 11 });
   const autopilot = host.createStatusItem({ text: '', priority: 10 });
@@ -108,7 +113,7 @@ export function createStatusSlots(host: StatusSlotHost, needsCommandId: string):
   };
   return {
     update(input) {
-      const slots = statusSlotsOf(input);
+      const slots = statusSlotsOf(input, t);
       apply(cost, slots.cost);
       apply(needs, slots.needs);
       apply(autopilot, slots.autopilot);

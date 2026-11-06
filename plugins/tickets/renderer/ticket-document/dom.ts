@@ -175,6 +175,8 @@ export function costNode(table: CostTable): HTMLElement {
 
 export interface ActionBarDeps {
   readonly icon: (name: string, size?: number) => SVGElement;
+  /** The link's words, from the catalog (`decision.waiting_go_to_card`). */
+  readonly decisionLinkText: string;
   readonly onThread: () => void;
   readonly onReview: () => void;
 }
@@ -220,7 +222,7 @@ export function actionBarNode(deps: ActionBarDeps, bar: ActionBar): HTMLElement 
   };
   if (bar.decide && bar.ticketId !== null) {
     const id = bar.ticketId;
-    const link = el('a', 'tickets-doc-decision-link', 'Decision waiting · go to the card'); // TODO(i18n)
+    const link = el('a', 'tickets-doc-decision-link', deps.decisionLinkText);
     link.href = '#';
     link.addEventListener('click', (event) => {
       event.preventDefault();

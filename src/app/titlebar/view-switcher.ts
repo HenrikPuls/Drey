@@ -8,6 +8,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { I18nPipe, I18nService } from '../i18n';
 import { Icon } from '../icons/icon';
 import { KeybindingService } from '../keybindings';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
@@ -41,13 +42,14 @@ interface ViewMenu {
 @Component({
   selector: 'app-view-switcher',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, OverlayGuardDirective],
+  imports: [I18nPipe, Icon, OverlayGuardDirective],
   templateUrl: './view-switcher.html',
   styleUrl: './view-switcher.css',
 })
 export class ViewSwitcher {
   protected readonly views = inject(ViewService);
   protected readonly keys = inject(KeybindingService);
+  private readonly i18n = inject(I18nService);
 
   protected readonly folded = computed(() => this.views.views().length > SEGMENT_LIMIT);
   protected readonly menu = signal<ViewMenu | null>(null);
@@ -66,7 +68,7 @@ export class ViewSwitcher {
   }
 
   protected titleOf(view: ViewDef, index: number): string {
-    const base = this.views.modified() && view.id === this.views.activeId() ? `${view.label} · unsaved changes` : view.label;
+    const base = this.views.modified() && view.id === this.views.activeId() ? this.i18n.t('views.unsaved_title', { view: view.label }) : view.label;
     return this.keys.titled(base, `view.switch.${index + 1}`);
   }
 

@@ -1,11 +1,12 @@
+<!-- i18n: catalog -->
 @if (views.views().length > 1) {
   @if (folded()) {
     <button
       type="button"
       class="vs-fold"
       aria-haspopup="menu"
-      title="Switch view"
-      aria-label="Switch view"
+      [attr.title]="'views.switch' | t"
+      [attr.aria-label]="'views.switch' | t"
       (click)="openList($event)"
     >
       <span>{{ views.active().label }}</span>
@@ -15,7 +16,7 @@
       <app-icon name="chevron-down" [size]="10" />
     </button>
   } @else {
-    <div class="vs" role="tablist" aria-label="Views">
+    <div class="vs" role="tablist" [attr.aria-label]="'views.list' | t">
       @for (view of views.views(); track view.id; let i = $index) {
         <button
           type="button"
@@ -29,7 +30,7 @@
         >
           {{ view.label }}
           @if (views.modified() && view.id === views.activeId()) {
-            <span class="vs-dot" role="img" aria-label="Unsaved layout changes"></span>
+            <span class="vs-dot" role="img" [attr.aria-label]="'views.unsaved' | t"></span>
           }
         </button>
       }
@@ -39,11 +40,11 @@
     type="button"
     class="vs-layout"
     aria-haspopup="menu"
-    title="Layout"
-    aria-label="Layout"
+    [attr.title]="'views.layout' | t"
+    [attr.aria-label]="'views.layout' | t"
     (click)="openLayout($event)"
   >
-    <span>Layout</span>
+    <span>{{ 'views.layout' | t }}</span>
     <app-icon name="chevron-down" [size]="10" />
   </button>
 }
@@ -66,11 +67,10 @@
         }
       }
       @case ('layout') {
-        <!-- TODO(i18n): every string of this menu -->
         <button type="button" role="menuitem" [disabled]="!views.modified()" (click)="save()">
           <span class="row-text">
-            <span class="row-label">Save layout</span>
-            <span class="row-desc">Keep this arrangement as the view’s layout</span>
+            <span class="row-label">{{ 'views.save_layout' | t }}</span>
+            <span class="row-desc">{{ 'views.save_layout.desc' | t }}</span>
           </span>
           @if (keys.hint('view.save'); as key) {
             <span class="ctx-key">{{ key }}</span>
@@ -78,8 +78,8 @@
         </button>
         <button type="button" role="menuitem" [disabled]="!views.modified()" (click)="reset()">
           <span class="row-text">
-            <span class="row-label">Reset to saved layout</span>
-            <span class="row-desc">Drop the changes since the last save</span>
+            <span class="row-label">{{ 'views.reset_layout' | t }}</span>
+            <span class="row-desc">{{ 'views.reset_layout.desc' | t }}</span>
           </span>
           @if (keys.hint('view.revert'); as key) {
             <span class="ctx-key">{{ key }}</span>
@@ -88,8 +88,8 @@
         <div class="ctx-sep" role="separator"></div>
         <button type="button" role="menuitem" (click)="saveAs()">
           <span class="row-text">
-            <span class="row-label">Save as new view…</span>
-            <span class="row-desc">Copy this arrangement into a view of its own</span>
+            <span class="row-label">{{ 'views.save_as' | t }}</span>
+            <span class="row-desc">{{ 'views.save_as.desc' | t }}</span>
           </span>
           @if (keys.hint('view.saveAs'); as key) {
             <span class="ctx-key">{{ key }}</span>
@@ -97,26 +97,26 @@
         </button>
         <button type="button" role="menuitem" [disabled]="views.active().builtin" (click)="rename(views.active())">
           <span class="row-text">
-            <span class="row-label">Rename view…</span>
-            <span class="row-desc">Give {{ views.active().label }} another name</span>
+            <span class="row-label">{{ 'views.rename' | t }}</span>
+            <span class="row-desc">{{ 'views.rename.desc' | t: { view: views.active().label } }}</span>
           </span>
         </button>
         <button type="button" role="menuitem" [disabled]="views.active().builtin" (click)="remove(views.active())">
           <span class="row-text">
-            <span class="row-label">Delete view</span>
-            <span class="row-desc">Tabs only this view shows are closed</span>
+            <span class="row-label">{{ 'views.delete' | t }}</span>
+            <span class="row-desc">{{ 'views.delete.desc' | t }}</span>
           </span>
         </button>
         <div class="ctx-sep" role="separator"></div>
         <button type="button" role="menuitem" (click)="editViews()">
-          <span class="row-label">Edit views…</span>
+          <span class="row-label">{{ 'views.edit' | t }}</span>
         </button>
-        <p class="foot">Switching views never changes them. Only Save layout does.</p>
+        <p class="foot">{{ 'views.never_changes' | t }}</p>
       }
       @case ('view') {
         @if (m.view; as v) {
-          <button type="button" role="menuitem" (click)="rename(v)">Rename view…</button>
-          <button type="button" role="menuitem" (click)="remove(v)">Delete view</button>
+          <button type="button" role="menuitem" (click)="rename(v)">{{ 'views.rename' | t }}</button>
+          <button type="button" role="menuitem" (click)="remove(v)">{{ 'views.delete' | t }}</button>
         }
       }
     }
@@ -125,10 +125,10 @@
 
 @if (editing()) {
   <div class="ctx-backdrop" appOverlayGuard (click)="closeEditor()"></div>
-  <div class="edit-pop" role="dialog" aria-label="Edit views">
+  <div class="edit-pop" role="dialog" [attr.aria-label]="'views.edit.title' | t">
     <div class="edit-head">
-      <span>Edit views</span>
-      <button type="button" class="icon-btn" title="Close" aria-label="Close" (click)="closeEditor()">
+      <span>{{ 'views.edit.title' | t }}</span>
+      <button type="button" class="icon-btn" [attr.title]="'common.close' | t" [attr.aria-label]="'common.close' | t" (click)="closeEditor()">
         <app-icon name="x" [size]="12" />
       </button>
     </div>
@@ -136,8 +136,8 @@
       <div class="edit-row">
         <span class="edit-name">{{ view.label }}</span>
         @if (!view.builtin) {
-          <button type="button" class="edit-act" (click)="rename(view)">Rename</button>
-          <button type="button" class="edit-act" (click)="remove(view)">Delete</button>
+          <button type="button" class="edit-act" (click)="rename(view)">{{ 'common.rename' | t }}</button>
+          <button type="button" class="edit-act" (click)="remove(view)">{{ 'common.delete' | t }}</button>
         }
       </div>
     }
@@ -153,14 +153,14 @@
       class="name-input"
       [class.rejected]="rejected()"
       [value]="p.initial"
-      aria-label="View name"
+      [attr.aria-label]="'views.name' | t"
       spellcheck="false"
       (input)="rejected.set(false)"
       (keydown.enter)="commit(name.value)"
       (keydown.escape)="cancel()"
     />
     @if (rejected()) {
-      <span class="name-error" role="alert">Pick an unused name.</span>
+      <span class="name-error" role="alert">{{ 'views.name.rejected' | t }}</span>
     }
   </div>
 }

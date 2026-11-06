@@ -117,8 +117,8 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   autopilot.id = 'tset-autopilot';
   autopilot.dataset['settingKey'] = 'autopilot';
   autopilot.setAttribute('aria-label', 'Autopilot');
-  for (const [id, label] of [['on', 'On'], ['paused', 'Paused'], ['off', 'Off']] as const) { // TODO(i18n)
-    autopilot.append(Object.assign(el('option', undefined, label), { value: id }));
+  for (const id of ['on', 'paused', 'off'] as const) {
+    autopilot.append(Object.assign(el('option', undefined, api.i18n.t(`autopilot.state.${id}`)), { value: id }));
   }
   autopilot.disabled = true;
   autopilot.title = 'Changing the state arrives with the autopilot engine route';

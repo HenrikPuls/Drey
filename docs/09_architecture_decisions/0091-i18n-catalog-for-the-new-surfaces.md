@@ -126,6 +126,7 @@ existing strings do not move in this step.
    `libs/mission-ui/src/autopilot/`, `libs/mission-ui/src/decision/`,
    `libs/mission-ui/src/cost/`, `libs/mission-ui/src/notes/`,
    `libs/mission-ui/src/ipad/`, `libs/mission-ui/src/i18n/`,
+   `libs/mission-ui/src/shell/`, `libs/mission-ui/src/app-bar/`,
    `apps/mission-control/src/app/notes/`, `src/app/i18n/`,
    `plugins/tickets/renderer/autopilot/`,
    `plugins/tickets/renderer/decision/`, `plugins/tickets/renderer/cost/`,

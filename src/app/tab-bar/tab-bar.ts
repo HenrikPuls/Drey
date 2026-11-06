@@ -5,6 +5,7 @@ import { HistoryService } from '../history';
 import { KeybindingService } from '../keybindings';
 import { PaneService, type PaneRegion } from '../panes/pane.service';
 import { TabDragService } from './tab-drag.service';
+import { I18nPipe } from '../i18n';
 import { Icon, type IconName } from '../icons/icon';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { ViewService, type ViewDef } from '../views';
@@ -34,7 +35,7 @@ interface TabMenu {
 @Component({
   selector: 'app-tab-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, OverlayGuardDirective],
+  imports: [I18nPipe, Icon, OverlayGuardDirective],
   templateUrl: './tab-bar.html',
   styleUrl: './tab-bar.css',
   host: {

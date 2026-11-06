@@ -598,12 +598,12 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     } else if (!snap.isGitRepo && !gitWarningDismissed) {
       // One line, dismissible for this window (A-09).
       const warn = el('div', 'tickets-warn');
-      const text = el('span', 'tickets-warn-text', 'Not a git repository — transitions are not versioned.'); // TODO(i18n)
-      text.title = 'The tickets vault is not a git repository — transitions are not versioned.'; // TODO(i18n)
+      const text = el('span', 'tickets-warn-text', api.i18n.t('work.git_warning'));
+      text.title = api.i18n.t('work.git_warning.long');
       const dismiss = el('button', 'icon-btn tickets-warn-close');
       dismiss.type = 'button';
-      dismiss.title = 'Dismiss'; // TODO(i18n)
-      dismiss.setAttribute('aria-label', 'Dismiss the git note'); // TODO(i18n)
+      dismiss.title = api.i18n.t('common.dismiss');
+      dismiss.setAttribute('aria-label', api.i18n.t('work.git_warning.dismiss'));
       dismiss.append(api.ui.icon('x', 11));
       dismiss.addEventListener('click', () => {
         gitWarningDismissed = true;
@@ -771,8 +771,8 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
 
       const boardButton = el('button', 'icon-btn');
       boardButton.type = 'button';
-      boardButton.title = 'Open Board tab'; // TODO(i18n)
-      boardButton.setAttribute('aria-label', 'Open Board tab'); // TODO(i18n)
+      boardButton.title = api.i18n.t('work.open_board');
+      boardButton.setAttribute('aria-label', api.i18n.t('work.open_board'));
       boardButton.append(api.ui.icon('table', 14));
       boardButton.addEventListener('click', () => openBoardDoc(api));
 
@@ -1124,7 +1124,7 @@ function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
       });
       menu.append(button);
     };
-    item('Refresh the board', 'Reads the tickets repository again', () => void refreshBoard()); // TODO(i18n)
+    item(api.i18n.t('work.refresh_board'), api.i18n.t('work.refresh_board.hint'), () => void refreshBoard());
     item('Mission Control', 'The same app in its own window — the whole desk at full size', () => {
       void invokeBoard('openMissionControl', {}).then(
         (result) => {
@@ -1320,9 +1320,8 @@ function fleetFooterNode(api: DreyPluginApi): { readonly node: HTMLElement; read
       live.map((run) => (run.persona === null || run.persona === undefined ? null : teamStore(api).nameOf(run.persona))),
       live.length,
     );
-    const title = line.long === '' ? 'Open the Crew tab' : `${line.long}\nOpen the Crew tab`; // TODO(i18n)
-    node.title = title;
-    node.setAttribute('aria-label', `${text.textContent ?? 'Crew'} — open the Crew tab`); // TODO(i18n)
+    node.title = line.long === '' ? api.i18n.t('work.crew.open') : api.i18n.t('work.crew.open_with_detail', { detail: line.long });
+    node.setAttribute('aria-label', api.i18n.t('work.crew.open_label', { line: text.textContent ?? api.i18n.t('work.crew') }));
   };
   fleetListeners.add(paint);
   const tick = setInterval(paint, 1_000);
@@ -3003,7 +3002,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
   activate(api) {
     backend = api.backend;
     statusApi = api;
-    statusSlots = createStatusSlots(api.ui, 'tickets.showBoard');
+    statusSlots = createStatusSlots(api.ui, 'tickets.showBoard', (key, params) => api.i18n.t(key, params));
     fleetListeners.add(refreshStatusItem);
     teamStore(api).subscribe(refreshStatusItem);
     api.ui.onActiveViewChange(refreshStatusItem);

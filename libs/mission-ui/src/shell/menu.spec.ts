@@ -8,6 +8,7 @@ import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 import type { SessionMeta } from '../api/dto';
+import { McI18n } from '../i18n/i18n.service';
 import { Menu, ageLabelOf, type MenuPlace } from './menu';
 
 const NOW = Date.parse('2026-11-06T12:00:00Z');
@@ -64,11 +65,13 @@ const texts = (el: HTMLElement, selector: string): string[] =>
   );
 
 describe('ageLabelOf (req-96)', () => {
+  const i18n = new McI18n();
+  const t = i18n.t.bind(i18n);
   it('reads minutes, hours or days; junk is empty', () => {
-    expect(ageLabelOf('2026-11-06T11:48:00Z', NOW)).toBe('12 min');
-    expect(ageLabelOf('2026-11-06T09:40:00Z', NOW)).toBe('2 h');
-    expect(ageLabelOf('2026-11-01T10:30:00Z', NOW)).toBe('5 d');
-    expect(ageLabelOf('never', NOW)).toBe('');
+    expect(ageLabelOf('2026-11-06T11:48:00Z', NOW, t)).toBe('12 min');
+    expect(ageLabelOf('2026-11-06T09:40:00Z', NOW, t)).toBe('2 h');
+    expect(ageLabelOf('2026-11-01T10:30:00Z', NOW, t)).toBe('5 d');
+    expect(ageLabelOf('never', NOW, t)).toBe('');
   });
 });
 

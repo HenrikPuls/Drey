@@ -1,25 +1,32 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
+import type { MessageKey, MessageParams } from '../../../../shared/i18n';
 import type { SessionMeta } from '../api/dto';
 import { historyGroupsOf } from '../chat/chat';
+import { McI18nPipe } from '../i18n/i18n.pipe';
+import { McI18n } from '../i18n/i18n.service';
 
 /** The places the phone menu leads to (canvas decision 17). */
 export type MenuPlace = 'notes' | 'work' | 'crew' | 'settings';
 
 /** The age label of a chat row: minutes, hours or days since its last update. */
-export function ageLabelOf(updatedAt: string, nowMs: number): string {
+export function ageLabelOf(
+  updatedAt: string,
+  nowMs: number,
+  t: (key: MessageKey, params?: MessageParams) => string,
+): string {
   const then = Date.parse(updatedAt);
   if (!Number.isFinite(then)) {
     return '';
   }
   const minutes = Math.max(0, Math.round((nowMs - then) / 60_000));
   if (minutes < 60) {
-    return `${minutes} min`;
+    return t('menu.age.minutes', { n: minutes });
   }
   const hours = Math.round(minutes / 60);
   if (hours < 24) {
-    return `${hours} h`;
+    return t('menu.age.hours', { n: hours });
   }
-  return `${Math.round(hours / 24)} d`;
+  return t('menu.age.days', { n: Math.round(hours / 24) });
 }
 
 /**
@@ -30,14 +37,16 @@ export function ageLabelOf(updatedAt: string, nowMs: number): string {
  * Settings, then the chats with Mission Control newest first by day with
  * New chat above them. Every row is 52 px or more.
  */
-// TODO(i18n): every label in menu.html and ageLabelOf's units are catalog keys once req-102 is merged.
 @Component({
   selector: 'mc-menu',
+  imports: [McI18nPipe],
   templateUrl: './menu.html',
   styleUrl: './menu.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Menu {
+  private readonly i18n = inject(McI18n);
+
   readonly notesEnabled = input(false);
   readonly needsCount = input(0);
   readonly sessions = input<readonly SessionMeta[]>([]);
@@ -59,6 +68,6 @@ export class Menu {
   }
 
   protected age(entry: SessionMeta): string {
-    return ageLabelOf(entry.updatedAt, this.now()());
+    return ageLabelOf(entry.updatedAt, this.now()(), (key, params) => this.i18n.t(key, params));
   }
 }

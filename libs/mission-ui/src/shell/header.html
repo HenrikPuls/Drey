@@ -4,8 +4,8 @@
     class="tgl"
     [class.on]="left()"
     [attr.aria-pressed]="left()"
-    aria-label="Left sidebar"
-    title="Left sidebar"
+    [attr.aria-label]="'shell.left_sidebar' | t"
+    [attr.title]="'shell.left_sidebar' | t"
     (click)="toggleLeft.emit()"
   >
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
@@ -14,20 +14,20 @@
     </svg>
   </button>
 
-  <nav class="switch" aria-label="Area">
+  <nav class="switch" [attr.aria-label]="'shell.area' | t">
     @if (notesEnabled()) {
       <button type="button" class="sw" [class.on]="area() === 'notes' && !settingsOn()" [attr.aria-current]="area() === 'notes' && !settingsOn() ? 'page' : null" (click)="areaChange.emit('notes')">
-        Notes
+        {{ 'shell.notes' | t }}
       </button>
     }
     <button type="button" class="sw" [class.on]="area() === 'work' && !settingsOn()" [attr.aria-current]="area() === 'work' && !settingsOn() ? 'page' : null" (click)="areaChange.emit('work')">
-      Work
+      {{ 'shell.work' | t }}
       @if (needsCount() > 0) {
         <span class="bdg">{{ needsCount() }}</span>
       }
     </button>
     <button type="button" class="sw" [class.on]="area() === 'crew' && !settingsOn()" [attr.aria-current]="area() === 'crew' && !settingsOn() ? 'page' : null" (click)="areaChange.emit('crew')">
-      Crew
+      {{ 'shell.crew' | t }}
     </button>
   </nav>
 
@@ -38,8 +38,8 @@
       class="tgl"
       [class.on]="settingsOn()"
       [attr.aria-current]="settingsOn() ? 'page' : null"
-      aria-label="Settings"
-      title="Settings"
+      [attr.aria-label]="'shell.settings' | t"
+      [attr.title]="'shell.settings' | t"
       (click)="settings.emit()"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
@@ -53,8 +53,8 @@
       class="tgl"
       [class.on]="right()"
       [attr.aria-pressed]="right()"
-      aria-label="Right sidebar"
-      title="Right sidebar"
+      [attr.aria-label]="'shell.right_sidebar' | t"
+      [attr.title]="'shell.right_sidebar' | t"
       (click)="toggleRight.emit()"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">

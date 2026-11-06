@@ -6,6 +6,7 @@ import {
   input,
   output,
 } from '@angular/core';
+import { McI18nPipe } from '../i18n/i18n.pipe';
 
 /** What the phone's "Menu" back control does on a top-level page (the shell binds it). */
 export interface McAppNav {
@@ -33,9 +34,9 @@ export const MC_APP_NAV = new InjectionToken<McAppNav | null>('mc-app-nav', {
  * status-bar inset (`env(safe-area-inset-top)`) and sticks to the top of
  * the scroll container it sits in, so only the content below moves.
  */
-// TODO(i18n): "Menu", "Back to …" and "Menu and chat history" are catalog keys once req-102 is merged.
 @Component({
   selector: 'mc-app-bar',
+  imports: [McI18nPipe],
   templateUrl: './app-bar.html',
   styleUrl: './app-bar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

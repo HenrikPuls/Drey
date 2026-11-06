@@ -94,7 +94,7 @@
           [attr.aria-selected]="scope() === item.id"
           (click)="pickScope(item.id)"
         >
-          {{ item.label }}
+          {{ item.labelKey | t }}
         </button>
       }
     </div>

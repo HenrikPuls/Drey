@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- the spec stands in for the host, which owns the catalog at runtime
+import { i18n } from '../../../../shared/i18n';
 import type { DreyPluginApi } from '../../../../shared/plugin-api/renderer';
 import type { BoardSnapshot } from '../../shared/tickets';
 import { createDeskSettings } from './desk-settings';
@@ -22,7 +24,7 @@ function setup(settingsReply: unknown = videos(false)) {
     }
     return Promise.resolve(videos(true, 40));
   });
-  const api = { backend: { invoke }, settings: { get: () => Promise.resolve(undefined) } } as unknown as DreyPluginApi;
+  const api = { i18n, backend: { invoke }, settings: { get: () => Promise.resolve(undefined) } } as unknown as DreyPluginApi;
   const hooks = { openTeam: vi.fn(), openFlow: vi.fn(), manageRunners: vi.fn() };
   const desk = createDeskSettings(api, hooks);
   document.body.append(desk.root);
