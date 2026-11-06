@@ -1,8 +1,10 @@
 /*
- * The one app bar row (E13-24). Pinned: it sticks to the top of the scroll
- * container it sits in (the pane, the layer), so the content scrolls
+ * The one app bar row (E13-24, req-96). Pinned: it sticks to the top of the
+ * scroll container it sits in (the pane, the layer), so the content scrolls
  * beneath it and the bar never moves. It carries the status-bar /
- * Dynamic Island inset itself, so no empty row sits above it.
+ * Dynamic Island inset itself, so no empty row sits above it. The leading
+ * control is a labelled back control on every phone page; a top-level
+ * page's reads "Menu".
  */
 
 :host {
@@ -37,7 +39,9 @@
   border: 0;
 }
 
+/* The page's own ☰ (the chat history): a desktop / iPad control, never on the phone. */
 .menu-btn {
+  display: none;
   justify-content: center;
 }
 
@@ -110,15 +114,25 @@
   min-width: 0;
 }
 
-/* From 768 px the shell's top tab bar replaces the shell menu control (a page's own menu, the chat history, stays). */
+/* From 768 px the shell's chrome (tab bar, iPad header) replaces the "Menu" control; a page's own ☰ shows. */
 @media (min-width: 768px) {
   .bar {
     min-height: 48px;
     padding-top: 0;
   }
 
-  .bar:not(.own-menu) .menu-btn {
+  .menu-back {
     display: none;
+  }
+
+  .own-menu .menu-btn {
+    display: flex;
+  }
+
+  /* A top-level page without its own ☰ has no leading control: the grid's first column folds. */
+  .top-page:not(.own-menu) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding-left: 16px;
   }
 
   .no-wide-back .back {

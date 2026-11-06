@@ -1,0 +1,166 @@
+/*
+ * The phone's root menu (req-96): a large title, the search field, the
+ * places as one grouped list, then the chats. Rows are 52 px, grey when
+ * active (never the accent), 13 px floor everywhere.
+ */
+:host {
+  display: block;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: env(safe-area-inset-top) 16px calc(16px + env(safe-area-inset-bottom));
+}
+
+.head {
+  display: flex;
+  align-items: flex-end;
+  min-height: 52px;
+}
+
+.ttl {
+  margin: 0;
+  font-size: calc(28px * var(--mc-text, 1));
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.search {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  color: var(--text-3);
+  background: var(--panel);
+  border-radius: var(--radius-control);
+}
+
+.search svg {
+  width: 18px;
+  height: 18px;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  font: inherit;
+  font-size: calc(16px * var(--mc-text, 1)); /* 16 px: Safari does not zoom */
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  outline: 0;
+}
+
+.places,
+.chats {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--panel);
+  border-radius: var(--radius-control);
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 52px;
+  padding: 0 16px;
+  font: inherit;
+  font-size: calc(17px * var(--mc-text, 1));
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.places .row:last-child {
+  border-bottom: 0;
+}
+
+.row.cur {
+  background: var(--panel-2);
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.st {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chev {
+  font-size: calc(22px * var(--mc-text, 1));
+  line-height: 22px;
+  color: var(--text-3);
+}
+
+.bdg {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: calc(13px * var(--mc-text, 1));
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
+  color: var(--on-pastel);
+  background: var(--accent-peach);
+  border-radius: 99px;
+}
+
+.cap {
+  margin: 0;
+  padding: 12px 16px 4px;
+  font-family: var(--mono);
+  font-size: calc(13px * var(--mc-text, 1));
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.new {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.new svg {
+  width: 20px;
+  height: 20px;
+}
+
+.group {
+  margin: 0;
+  padding: 10px 16px 2px;
+  font-size: calc(13px * var(--mc-text, 1));
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.sess:last-child {
+  border-bottom: 0;
+}
+
+.when {
+  flex: none;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+.hint {
+  margin: 0;
+  padding: 14px 16px;
+  font-size: calc(15px * var(--mc-text, 1));
+  color: var(--text-3);
+}

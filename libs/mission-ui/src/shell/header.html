@@ -1,0 +1,66 @@
+<header class="hdr" role="banner">
+  <button
+    type="button"
+    class="tgl"
+    [class.on]="left()"
+    [attr.aria-pressed]="left()"
+    aria-label="Left sidebar"
+    title="Left sidebar"
+    (click)="toggleLeft.emit()"
+  >
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16" />
+    </svg>
+  </button>
+
+  <nav class="switch" aria-label="Area">
+    @if (notesEnabled()) {
+      <button type="button" class="sw" [class.on]="area() === 'notes' && !settingsOn()" [attr.aria-current]="area() === 'notes' && !settingsOn() ? 'page' : null" (click)="areaChange.emit('notes')">
+        Notes
+      </button>
+    }
+    <button type="button" class="sw" [class.on]="area() === 'work' && !settingsOn()" [attr.aria-current]="area() === 'work' && !settingsOn() ? 'page' : null" (click)="areaChange.emit('work')">
+      Work
+      @if (needsCount() > 0) {
+        <span class="bdg">{{ needsCount() }}</span>
+      }
+    </button>
+    <button type="button" class="sw" [class.on]="area() === 'crew' && !settingsOn()" [attr.aria-current]="area() === 'crew' && !settingsOn() ? 'page' : null" (click)="areaChange.emit('crew')">
+      Crew
+    </button>
+  </nav>
+
+  <div class="end">
+    <div class="autopilot-slot"><ng-content select="[autopilot]" /></div>
+    <button
+      type="button"
+      class="tgl"
+      [class.on]="settingsOn()"
+      [attr.aria-current]="settingsOn() ? 'page' : null"
+      aria-label="Settings"
+      title="Settings"
+      (click)="settings.emit()"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+        <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+        <circle cx="16" cy="7" r="2" />
+        <circle cx="8" cy="17" r="2" />
+      </svg>
+    </button>
+    <button
+      type="button"
+      class="tgl"
+      [class.on]="right()"
+      [attr.aria-pressed]="right()"
+      aria-label="Right sidebar"
+      title="Right sidebar"
+      (click)="toggleRight.emit()"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M15 4v16" />
+      </svg>
+    </button>
+  </div>
+</header>

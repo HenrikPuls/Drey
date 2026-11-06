@@ -1,0 +1,121 @@
+/*
+ * The iPad header (req-96): 52 px, three zones — the left toggle, the
+ * centred area switch, the right group (Autopilot slot, Settings, right
+ * toggle). The two side zones share one width so the switch stays
+ * centred whatever the right group holds. Anthrazit tokens; 13 px floor.
+ */
+:host {
+  display: block;
+  flex: none;
+}
+
+.hdr {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  height: calc(52px + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) 8px 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.tgl {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: var(--text-2);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+}
+
+.tgl svg {
+  width: 22px;
+  height: 22px;
+}
+
+@media (hover: hover) {
+  .tgl:hover,
+  .sw:hover {
+    color: var(--text);
+    background: var(--panel-2);
+  }
+}
+
+.tgl:focus-visible,
+.sw:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.tgl.on {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+/* The segmented switch: one grey pill per area, the active one a lighter grey (never the accent). */
+.switch {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+
+.sw {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  height: 40px;
+  padding: 0 16px;
+  font: inherit;
+  font-size: calc(15px * var(--mc-text, 1));
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+}
+
+.sw.on {
+  color: var(--text);
+  background: var(--panel-3);
+}
+
+.bdg {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: calc(13px * var(--mc-text, 1));
+  font-weight: 700;
+  color: var(--on-pastel);
+  background: var(--accent-peach);
+  border-radius: 99px;
+}
+
+.end {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.autopilot-slot {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.autopilot-slot:empty {
+  display: none;
+}

@@ -1578,11 +1578,19 @@ it on, and only devices you pair get in.
    type the code. The code works once and for five minutes.
 3. On the phone, add the page to the home screen.
 
-On the phone every page has one bar at the top, below the status bar: the **☰** button
-(back to the chat with its history and the places Work, Crew and Settings) at its left, or
-**‹** and the parent's name on a page opened from another (Settings → Appearance), then the
-page's title and, at the right, its own status or button. The bar stays put while the page
-scrolls beneath it.
+On the phone the **Menu** is the first screen: a search field, the places Work (with the
+"Needs you" count), Crew and Settings, then the chats with Mission Control, newest first.
+Every other page has one bar at the top, below the status bar, with **‹** and the name of
+the page it came from at its left (**‹ Menu** on Work, Crew, Settings and a chat; **‹ Work**
+on a ticket; **‹ Settings** on Appearance), then the page's title and, at the right, its own
+status or button. The bar stays put while the page scrolls beneath it.
+
+On an iPad the app works like the desktop: a header with the **left sidebar** toggle, the
+**Work · Crew** switch and the **right sidebar** toggle. The left sidebar lists the area (the
+tickets, the crew), the middle shows the open ticket, persona or settings, the right sidebar
+is the Mission Control chat. Held sideways the iPad opens all three; held upright it opens the
+list and the middle, and the right sidebar slides over the page. Which sidebars are open is
+remembered on that iPad, separately for each way it is held.
 
 The chat's **microphone** button (next to Send) dictates into the message
 field: tap it, speak, and the words appear as you talk; tap again to stop.
