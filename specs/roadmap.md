@@ -114,10 +114,15 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 - **D-31 — a refusal says "no acceptance criteria" when they exist as prose** (same smoke). `fleet/runs.ts:1684`
   counts only `- [ ] \`command\`` lines; the message should say so.
 
-- **D-32 — Accept on a store does not reach Done** (cut-over smoke, 2026-11-06; the cause read from the code, not proven). The
+- **D-32 — Accept on a store does not reach Done, blocks the cut-over** (cut-over smoke, 2026-11-06, seen twice on T-0092; the cause read from the code, not proven). The
   commit step of T-0092 merged and pushed, gate green, yet the ticket went back to Ready to try and stayed there with Drey
   open. `settleCommitSteps` (`board-service.ts:2616`) drops the entry as soon as the run reads `done`; the ticket was
   still in Building until the release 2 s later, which reads as "the owner moved it meanwhile", so nothing is booked.
+
+- **D-33 — "Accepted." stays on the Work card while the ticket waits** (same smoke). `libs/mission-ui/src/work/work.ts:427` keeps the text
+  as local state, so after D-32 the card in Needs you says Accepted and offered the owner no second Accept.
+- **D-34 — "1 active" counts a dead run** (same smoke; not proven which run it counts). The only non-finished run was the migrated
+  T-0030's `R-20261104T13124-2vrn`, `detached`, its pid gone since before the cut-over.
 
 (D-23 shipped as milestones 184 and 185, D-24 as 184; what the wave-3 smoke could not see — the Autopilot status
 item and popover in a built app with a runner — waits for the owner's round, noted in the 184 changelog entry.)
