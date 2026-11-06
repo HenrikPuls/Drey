@@ -183,6 +183,24 @@ describe('assembleBoardFromRecords', () => {
     expect(board.columns.find((c) => c.phase.id === 'build')!.tickets[0]!.blocked).toEqual([]);
   });
 
+  it('lists the tickets archived this week under recentDone, like tickets/archive/ does (E13-21)', () => {
+    const log = (stamp: string): string => `## Log
+
+- '${stamp}' owner@desk — archived
+`;
+    const recent = new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString();
+    const old = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+    const board = assembleBoardFromRecords({
+      ...BASE,
+      records: [
+        det({ id: 'T-0001', stage: 'inbox' }),
+        det({ id: 'T-0003', stage: 'done', labels: ['archived'], title: 'Shipped', body: log(recent) }),
+        det({ id: 'T-0004', stage: 'done', labels: ['archived'], body: log(old) }),
+      ],
+    });
+    expect(board.recentDone).toEqual([{ id: 'T-0003', title: 'Shipped', at: recent }]);
+  });
+
   it('shows an unmapped stage as an unknown column with a warning', () => {
     const board = assembleBoardFromRecords({ ...BASE, records: [det({ id: 'T-0001', stage: 'needs-input' })] });
     const column = board.columns.find((c) => c.phase.id === 'needs-input');

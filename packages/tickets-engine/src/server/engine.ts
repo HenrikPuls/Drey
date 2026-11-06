@@ -72,7 +72,7 @@ export interface Engine {
 /** Method names the invoke channel exposes. Everything else stays internal. */
 const BOARD_METHODS = [
   'snapshot', 'storeListing', 'refresh', 'readTicket', 'refineTicket', 'setPriority', 'setTrack', 'saveAttachment',
-  'createTicket', 'transition', 'archive', 'unarchive', 'acceptTicket', 'sendBack', 'answerNeed', 'ticketComments', 'launchVersion',
+  'createTicket', 'transition', 'archive', 'unarchive', 'acceptTicket', 'sendBack', 'answerNeed', 'ticketComments', 'archivedTickets', 'launchVersion',
   'changesOf', 'worktreeChangesOf', 'removeWorktreeForTicket', 'worktreeCleanup', 'worktreeBootSweep',
   'worktreesStatus', 'setClaim', 'startRun', 'setColumnConfig', 'listPrompts', 'savePrompt',
   'restoreShippedPrompts', 'listRepos', 'saveRepos', 'pickFolder', 'scanRepos', 'listProjects',

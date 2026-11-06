@@ -278,7 +278,7 @@ export const MC_TEAM_DETAIL = new InjectionToken<TeamDetailVm>('mc-team-detail',
 @Component({
   selector: 'mc-persona-detail',
   templateUrl: './detail.html',
-  styleUrl: './detail.css',
+  styleUrls: ['../seg.css', './detail.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgTemplateOutlet],
 })

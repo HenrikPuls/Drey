@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { MC_CHAT_STATE } from '../chat/chat.model';
@@ -20,6 +21,8 @@ import {
   type QuestionCardVm,
 } from '../work/work.model';
 import { Markdown } from '../markdown/markdown';
+import type { MdMode } from '../markdown/mode';
+import { TicketEditMode, TicketModeSwitch } from './mode-switch';
 import { planPartsOf, planSectionOf } from '../plan/plan.model';
 import {
   ACCEPT_ARM_WINDOW_MS,
@@ -31,6 +34,8 @@ import {
   chainStepsOf,
   changeCountOf,
   costTableOf,
+  defaultFaceOf,
+  ticketRunActive,
   estimateLineOf,
   changeRowsOf,
   commentLabelOf,
@@ -116,9 +121,9 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
 @Component({
   selector: 'mc-ticket',
   templateUrl: './view.html',
-  styleUrl: './view.css',
+  styleUrls: ['../seg.css', './view.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, Markdown],
+  imports: [NgTemplateOutlet, Markdown, TicketModeSwitch],
 })
 export class TicketView {
   protected readonly vm = inject(MC_TICKET);
@@ -159,6 +164,34 @@ export class TicketView {
   /** The screen's face; every open resets it to the ticket. */
   protected readonly mode = signal<TicketMode>('ticket');
 
+  /**
+   * The segmented control "Ticket | Thread | Review" (E13-20), the same
+   * strip on every face: Review is the proof face. The choice is per
+   * selection — view state only, nothing here touches a saved view.
+   */
+  protected readonly faces: readonly { readonly face: TicketMode; readonly label: string }[] = [
+    { face: 'ticket', label: 'Ticket' },
+    { face: 'thread', label: 'Thread' },
+    { face: 'proof', label: 'Review' },
+  ];
+
+  protected setFace(face: TicketMode): void {
+    if (face === 'proof') {
+      this.openProof();
+    } else if (face === 'thread') {
+      this.openThread();
+    } else {
+      this.backToTicket();
+    }
+  }
+
+  /** True while this ticket's run is active or waiting (the default face is then the run). */
+  private runActive(): boolean {
+    const id = this.id();
+    const work = this.work;
+    return work === null ? false : ticketRunActive(id, work.runs ?? [], work.needs);
+  }
+
   protected openProof(): void {
     if (this.isEmpty()) {
       return;
@@ -194,9 +227,13 @@ export class TicketView {
 
   private readonly resetPerTicket = effect(() => {
     this.docId();
-    this.mode.set('ticket');
+    // The face a selection opens on: the run while it is active or waiting,
+    // the ticket document otherwise (E13-20). Read untracked: a run starting
+    // later does not yank the face away from where the owner is reading.
+    untracked(() => this.mode.set(defaultFaceOf(this.runActive())));
     this.accepted.set(false);
-    this.threadDraft.set('');
+    // A run face opens with the `<id>:` prefix the thread's composer always carries.
+    this.threadDraft.set(untracked(() => (this.mode() === 'thread' ? `${this.id()}: ` : '')));
     this.threadError.set(null);
     this.threadQSelected.set(null);
     this.threadQPending.set(false);
@@ -227,15 +264,6 @@ export class TicketView {
    */
   protected readonly cost = computed<string | null>(() => usdLabelOf(this.doc()?.usage?.cost ?? null));
 
-  /** The mono frontmatter line under the title: `phase: x · persona: y`. */
-  protected readonly fmLine = computed(() => {
-    const doc = this.doc();
-    if (doc === null) {
-      return '';
-    }
-    const persona = this.persona();
-    return persona === null ? `phase: ${doc.phase}` : `phase: ${doc.phase} · persona: ${persona}`;
-  });
 
   protected readonly steps = computed<GateStep[]>(() => {
     const doc = this.doc();
@@ -831,19 +859,27 @@ export class TicketView {
   // --- the raw-edit exception path (rendered by mc-ticket-edit) --------------------
 
   /**
-   * The edit pencil in the header: the vm owns the mode so the view and
-   * the editor agree on it — the view yields the overlay to the editor
-   * while the mode stands.
+   * The Live | View | Source switch in the header, where the edit pencil was
+   * (E13-23): View is where the ticket is read; Live and Source are how the
+   * owner edits — picking one opens the editor in that mode. The vm owns the
+   * editing state so the view and the editor agree on it; the view yields
+   * the overlay to the editor while it stands.
    */
   protected readonly editing = computed(() => this.vm.editing());
 
-  protected toggleEdit(): void {
-    if (this.readOnly() || this.isEmpty()) {
+  private readonly editMode = inject(TicketEditMode);
+
+  /** The mode the editor opens in (spec lens). */
+  protected editModeValue(): 'live' | 'source' {
+    return this.editMode.mode();
+  }
+
+  protected onModePick(mode: MdMode): void {
+    if (mode === 'view' || this.readOnly() || this.isEmpty()) {
       return;
     }
-    if (this.vm.editing()) {
-      this.vm.exitEdit();
-    } else {
+    this.editMode.mode.set(mode);
+    if (!this.vm.editing()) {
       this.vm.enterEdit();
     }
   }

@@ -139,6 +139,7 @@ export const appConfig: ApplicationConfig = {
           },
           toast: (message, kind) => state.toast(message, kind),
           moveTicket: (ticketId, phaseId) => state.moveTicket(ticketId, phaseId),
+          loadArchive: () => state.loadArchive(),
           openTicket: (ticketId) => state.openTicket(ticketId),
           openTicketSendBack: (ticketId) => state.openTicketSendBack(ticketId),
           promote: (ticketId) => state.prefillChat(`promote ${ticketId}`),

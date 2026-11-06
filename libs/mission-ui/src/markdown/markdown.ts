@@ -62,6 +62,10 @@ export class Markdown implements OnDestroy {
   readonly surface = input.required<string>();
   readonly defaultMode = input<MdMode>('view');
   readonly editable = input(false);
+  /** The owner drives the mode (E13-23: the ticket header holds the switch); null = the surface's own. */
+  readonly forcedMode = input<MdMode | null>(null, { alias: 'mode' });
+  /** False hides the surface's own mode switch (the owner draws it elsewhere). */
+  readonly modeBar = input(true);
   /** The accessible name of the surface and its controls. */
   readonly label = input('Markdown');
   readonly textChange = output<string>();
@@ -90,6 +94,12 @@ export class Markdown implements OnDestroy {
         this.mode.set(storedMode(deviceStorage(), surface, fallback));
       }
       void this.mount();
+    });
+    effect(() => {
+      const forced = this.forcedMode();
+      if (forced !== null) {
+        this.mode.set(forced);
+      }
     });
     effect(() => {
       const text = this.text();

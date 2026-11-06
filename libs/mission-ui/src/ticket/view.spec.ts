@@ -27,6 +27,8 @@ import {
   blockerNoteOf,
   chainPrefillOf,
   chainStepsOf,
+  defaultFaceOf,
+  ticketRunActive,
   changeCountOf,
   changeRowsOf,
   diffFontSizeStep,
@@ -308,7 +310,8 @@ interface TicketSurface {
   personaTitle(persona: string): string;
   cost(): string | null;
   costTotal(): string | null;
-  fmLine(): string;
+  onModePick(mode: 'live' | 'view' | 'source'): void;
+  editModeValue(): 'live' | 'source';
   readOnly(): boolean;
   steps(): ReturnType<typeof gateStepsOf>;
   bodyText(): string;
@@ -356,7 +359,6 @@ interface TicketSurface {
   toggleSendBack(): void;
   sendBack(): Promise<void>;
   editing(): boolean;
-  toggleEdit(): void;
   changeByChat(): void;
   galIndex(): number;
   onGalScroll(gal: HTMLElement): void;
@@ -1032,14 +1034,14 @@ describe('TicketView head card', () => {
     const vm = surface(setup(makeFake({ docValue: doc })));
     expect(vm.persona()).toBe('pia');
     expect(vm.personaTitle('pia')).toBe('Pia');
-    expect(vm.fmLine()).toBe('phase: design · persona: pia');
   });
 
   it('stays silent without a persona: the chip and the fm slot drop out', () => {
     const vm = surface(setup(makeFake({ docValue: DOC })));
     expect(vm.persona()).toBeNull();
-    expect(vm.fmLine()).toBe('phase: verify');
   });
+
+
 
   it('keeps the cost slots empty while the doc carries no usage and no Verlauf costs', () => {
     const vm = surface(setup(makeFake({ docValue: DOC })));
@@ -1349,25 +1351,28 @@ describe('TicketView', () => {
     expect(dismissed).toBe(1);
   });
 
-  it('hands the raw file to the editor: enter on the toggle, exit when it is open', () => {
+  it('the header switch replaces the pencil: Live or Source opens the editor in that mode, View stays (E13-23)', () => {
     const fake = makeFake({ docValue: FULL_DOC });
     const vm = surface(setup(fake));
 
-    vm.toggleEdit();
+    vm.onModePick('view');
+    expect(fake.calls.enterEdit).toBe(0);
+
+    vm.onModePick('source');
     expect(fake.calls.enterEdit).toBe(1);
-    expect(fake.calls.exitEdit).toBe(0);
+    expect(vm.editModeValue()).toBe('source');
 
     fake.editingValue = true;
-    vm.toggleEdit();
-    expect(fake.calls.exitEdit).toBe(1);
+    vm.onModePick('live');
+    expect(fake.calls.enterEdit).toBe(1);
+    expect(vm.editModeValue()).toBe('live');
   });
 
   it('never edits on a read-only device', () => {
     const fake = makeFake({ docValue: FULL_DOC, readOnlyValue: true });
     const vm = surface(setup(fake));
-    vm.toggleEdit();
+    vm.onModePick('live');
     expect(fake.calls.enterEdit).toBe(0);
-    expect(fake.calls.exitEdit).toBe(0);
   });
 
   it('shows the editor’s save flash without closing anything', () => {
@@ -2202,5 +2207,65 @@ describe('TicketView plan to approve (E10-4)', () => {
     expect(approveOf(finished).canApprove()).toBe(false);
     const without = makeFake({ docValue: { ...DOC, phase: 'prioritized', text: PARTS_TEXT } });
     expect(approveOf(without).canApprove()).toBe(false);
+  });
+});
+
+describe('TicketView default face (E13-20)', () => {
+  it('ticketRunActive: a live run or a run need counts; an accept checkpoint or another ticket does not', () => {
+    expect(ticketRunActive('T-1', [{ state: 'running', ticketId: 'T-1' }], [])).toBe(true);
+    expect(ticketRunActive('T-1', [{ state: 'done', ticketId: 'T-1' }], [])).toBe(false);
+    expect(ticketRunActive('T-1', [{ state: 'running', ticketId: 'T-2' }], [])).toBe(false);
+    expect(ticketRunActive('T-1', [], [{ kind: 'question', ticketId: 'T-1' }])).toBe(true);
+    expect(ticketRunActive('T-1', [], [{ kind: 'gate', ticketId: 'T-1' }])).toBe(true);
+    expect(ticketRunActive('T-1', [], [{ kind: 'manual', ticketId: 'T-1' }])).toBe(false);
+    expect(ticketRunActive('T-1', [], [])).toBe(false);
+  });
+
+  it('defaultFaceOf: the document before any run, the thread while a run is active or waiting', () => {
+    expect(defaultFaceOf(false)).toBe('ticket');
+    expect(defaultFaceOf(true)).toBe('thread');
+  });
+
+  interface Faces {
+    mode(): 'ticket' | 'proof' | 'thread';
+    setFace(face: 'ticket' | 'proof' | 'thread'): void;
+  }
+
+  function open(runs: McWorkState['runs'], needs: McWorkState['needs'] = []): Faces {
+    TestBed.resetTestingModule();
+    const work: McWorkState = {
+      needs,
+      board: null,
+      personas: [],
+      readOnly: false,
+      runs,
+      moveTicket: () => Promise.resolve({ ok: true }),
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: MC_TICKET, useValue: makeFake({ docValue: { ...DOC, id: 'T-0042' } }) },
+        { provide: MC_WORK_STATE, useValue: work },
+      ],
+    });
+    const view = TestBed.runInInjectionContext(() => new TicketView()) as unknown as Faces;
+    TestBed.flushEffects();
+    return view;
+  }
+
+  it('opens on the ticket document with no run, on the thread with a live run or a waiting question', () => {
+    expect(open([]).mode()).toBe('ticket');
+    expect(open([{ state: 'done', ticketId: 'T-0042' }]).mode()).toBe('ticket');
+    expect(open([{ state: 'running', ticketId: 'T-0042' }]).mode()).toBe('thread');
+    expect(open([], [{ kind: 'question', ticketId: 'T-0042', title: '', summary: '' }]).mode()).toBe('thread');
+  });
+
+  it('the segmented control switches the face and is the same strip on all three faces', () => {
+    const view = open([]);
+    view.setFace('proof');
+    expect(view.mode()).toBe('proof');
+    view.setFace('thread');
+    expect(view.mode()).toBe('thread');
+    view.setFace('ticket');
+    expect(view.mode()).toBe('ticket');
   });
 });

@@ -41,6 +41,7 @@ function port(): TicketsRemotePort {
       path === 'src/a.ts' ? { ok: true as const, text: 'a\nb\n', truncated: false } : { ok: false as const, error: 'nope' },
     ),
     ticket: vi.fn(async (id: string) => ({ ok: true, card: { id }, text: '# x' })),
+    archiveList: vi.fn(async () => [{ id: 'T-0007', title: 'Old', at: '2026-01-01T00:00:00Z' }]),
     create: vi.fn(ok),
     move: vi.fn(ok),
     claim: vi.fn(ok),
@@ -143,6 +144,13 @@ describe('route', () => {
     expect(readOnly).toEqual({ status: 403, body: { ok: false, error: 'this device is paired read-only' } });
     expect((await route(req({ path: '/api/needs', authorization: auth }), deps)).status).toBe(200);
     expect((await route(req({ path: '/api/personas', authorization: auth }), deps)).status).toBe(200);
+  });
+
+  it('serves the archive of any age for "Show older" (E13-21)', async () => {
+    const { deps, devices } = setup();
+    const { token } = await devices.add('iPhone 15', false, new Date());
+    const reply = await route(req({ path: '/api/archive', authorization: `Bearer ${token}` }), deps);
+    expect(reply).toEqual({ status: 200, body: { ok: true, tickets: [{ id: 'T-0007', title: 'Old', at: '2026-01-01T00:00:00Z' }] } });
   });
 
   it('hands the ticket id from the path and the device actor to the port', async () => {

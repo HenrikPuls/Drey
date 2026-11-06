@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163 and 165–168 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163 and 165–169 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -341,32 +341,6 @@ owner confirms scope and order before any of it starts:
   team, editable Setup, Friction tab, Notify / Runs after / This week /
   Typical run fields, "Talk to <name> 1:1 in the Assistant" (with E13-5), the
   per-persona slot share (needs an engine count) (G-14).
-- **E13-20 — Opening a ticket: what it shows, and Ticket / Thread / Review**
-  (owner request 2026-11-05, outside the list; after D-6). Selecting a ticket opens
-  **the ticket document by default while no run has happened yet**, and **the run
-  while the runner is active or waiting** (on a question, a gate, a quota). Thread and
-  Review are shown **above the text**, not beside it: one segmented control
-  "Ticket | Thread | Review" in the existing button styling, **identical in both the
-  ticket view and the run view**, only the active button differs. The control is a
-  per-selection choice; it does not touch the saved views (D-6). Both Mission Control
-  and Drey's Work panel.
-- **E13-21 — Old tickets stay openable** (owner request 2026-11-05, outside the list).
-  Done and archived tickets ("Done this week" and older) must open like any other
-  ticket (document, thread, review, proof) so the owner can read what a ticket was
-  about; today they cannot be selected or opened. Check the reader on both backends
-  (files, dricket: the archived/done folders and the board's "this week" filter) and
-  add an explicit way to reach older ones (search or "Show older").
-- **E13-23 — Mission Control ticket page on the phone: three cleanups** (owner markup
-  2026-11-05, screenshot `docs/design/work-panel/mc-ticket-owner-markup-2026-11-05.jpg`,
-  T-0091 on iPhone; outside the list; same code as E13-20/21, ships with or right after it).
-  (1) The line **"Chain: standard flow + the frontmatter delta · tap to adjust" is removed**
-  (the red scribble): tapping a phase in the phase strip is enough to adjust. (2) **The phase
-  is shown once**: the `phase: prioritized` text line under the title goes; the badge at the
-  top (PRIORITIZED) stays and becomes **colour-filled** in the phase's colour (it is outlined
-  today). (3) **The editor mode switch Live | View | Source moves to the top** of the page
-  (next to the edit control in the header, not in the text flow), and the page can be
-  switched away from View — View stays the default where results are presented (E12-6).
-  Check the same three points on the Drey desktop ticket page and the iPad layout.
 - **E13-24 — Mission Control phone: one app bar** (owner markup 2026-11-06, screenshots
   `docs/design/work-panel/mc-phone-appbar-{work,settings,settings-sub}-2026-11-06.jpg`;
   outside the list). Today the hamburger (☰) sits alone in its own row and every page puts

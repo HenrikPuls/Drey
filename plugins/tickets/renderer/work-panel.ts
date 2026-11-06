@@ -64,6 +64,10 @@ export interface WorkPanelDeps {
   readonly alerts?: readonly ChainAlert[];
   /** An alert's button: resume a column, run the chain. */
   onAlertAction?(action: ChainAlertAction): void;
+  /** Opens a done/archived ticket (E13-21): its document, with the Thread and Review faces beside it. */
+  openArchived?(id: string): void;
+  /** The archive of any age, newest first, for the Done group's "Show older" (E13-21). */
+  listArchived?(): Promise<readonly RecentDone[]>;
   /** Clears the Work filter (the hidden-by-filter marker's button, T-0084). */
   clearFilter(): void;
   /** A persona id as its name (E13-8, the rows' persona chip); absent = the id itself. */
@@ -146,7 +150,7 @@ export function workListNode(
   for (const id of WORK_GROUP_ORDER) {
     if (id === 'done') {
       if (snap.recentDone.length > 0) {
-        list.append(doneGroupNode(snap, folds, rerender));
+        list.append(doneGroupNode(deps, snap, folds, rerender));
       }
       continue;
     }
@@ -640,25 +644,102 @@ function prioritizedRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
 }
 
 /** Done this week: the archived tickets of the last 7 days, folded by default. */
-function doneGroupNode(snap: BoardSnapshot, folds: GroupFoldStore, rerender: () => void): HTMLElement {
+function doneGroupNode(deps: WorkPanelDeps, snap: BoardSnapshot, folds: GroupFoldStore, rerender: () => void): HTMLElement {
   const section = el('section', 'work-group work-group-done');
   section.dataset['group'] = 'done';
   section.append(groupHead('done', String(snap.recentDone.length), folds.isFolded('done'), folds, rerender));
   if (!folds.isFolded('done')) {
     const body = el('div', 'work-group-rows');
     for (const done of snap.recentDone) {
-      body.append(doneRowNode(done));
+      body.append(doneRowNode(deps, done));
+    }
+    if (deps.listArchived !== undefined) {
+      body.append(...olderNodes(deps, snap, rerender));
     }
     section.append(body);
   }
   return section;
 }
 
-/** A Done row is a memento, not a button: muted title and when it closed. */
-function doneRowNode(done: RecentDone): HTMLElement {
+/** A Done row opens its ticket (E13-21): the document, then Thread and Review in the strip on top. */
+function doneRowNode(deps: WorkPanelDeps, done: RecentDone): HTMLElement {
   const node = el('div', 'work-done-row');
   node.dataset['id'] = done.id;
   node.title = `${TICKETS_ARCHIVE_DIR}/${done.id}.md`;
-  node.append(idNode(done.id), el('span', 'work-done-title', done.title ?? ''), el('span', 'work-row-age', ageWords(done.at, Date.now())));
+  node.append(idNode(done.id), el('span', 'work-done-title', done.title ?? ''), el('span', 'work-row-age', done.at === '' ? '' : ageWords(done.at, Date.now())));
+  if (deps.openArchived !== undefined) {
+    node.classList.add('work-done-row-open');
+    node.tabIndex = 0;
+    node.setAttribute('role', 'button');
+    const open = (): void => deps.openArchived?.(done.id);
+    node.addEventListener('click', open);
+    node.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        open();
+      }
+    });
+  }
   return node;
+}
+
+/** "Show older" state: per window, like the folds -- never repo state. */
+const older: { open: boolean; query: string; rows: readonly RecentDone[] | null; loading: boolean } = {
+  open: false,
+  query: '',
+  rows: null,
+  loading: false,
+};
+
+/**
+ * The Done group's tail (E13-21): "Show older" loads the whole archive once and lists
+ * the tickets beyond this week under a search field (id or title words). Rows open like
+ * any Done row.
+ */
+function olderNodes(deps: WorkPanelDeps, snap: BoardSnapshot, rerender: () => void): HTMLElement[] {
+  if (!older.open) {
+    const more = el('button', 'work-ideas-more', 'Show older');
+    more.type = 'button';
+    more.addEventListener('click', () => {
+      older.open = true;
+      older.loading = true;
+      older.rows = null;
+      rerender();
+      void deps
+        .listArchived?.()
+        .catch(() => [] as readonly RecentDone[])
+        .then((rows) => {
+          older.rows = rows ?? [];
+          older.loading = false;
+          rerender();
+        });
+    });
+    return [more];
+  }
+  const recent = new Set(snap.recentDone.map((done) => done.id));
+  const rows = (older.rows ?? []).filter((done) => !recent.has(done.id));
+  const search = el('input', 'work-done-search');
+  search.type = 'search';
+  search.value = older.query;
+  search.setAttribute('aria-label', 'Search older tickets');
+  const list = el('div', 'work-done-older-rows');
+  const empty = el('div', 'work-empty', older.loading ? 'Loading…' : 'No older tickets');
+  const nodes = rows.map((done) => ({ done, node: doneRowNode(deps, done) }));
+  const apply = (): void => {
+    const words = older.query.toLowerCase().split(/\s+/).filter((word) => word !== '');
+    let shown = 0;
+    for (const { done, node } of nodes) {
+      const hay = `${done.id} ${done.title ?? ''}`.toLowerCase();
+      node.hidden = !words.every((word) => hay.includes(word));
+      shown += node.hidden ? 0 : 1;
+    }
+    empty.hidden = shown > 0;
+  };
+  search.addEventListener('input', () => {
+    older.query = search.value;
+    apply();
+  });
+  list.append(...nodes.map((entry) => entry.node), empty);
+  apply();
+  return [search, list];
 }

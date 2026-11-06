@@ -7,6 +7,7 @@ import {
   groupsOf,
   liveRunCountOf,
   nextPhaseOf,
+  olderDoneOf,
   questionCardOf,
   swipeActionOf,
   swipeProgressOf,
@@ -14,6 +15,7 @@ import {
   vaultTitleOf,
   type McAnswerReply,
   type McBoard,
+  type McDoneEntry,
   type McMoveResult,
   type McPersona,
   type McScoutReport,
@@ -58,6 +60,50 @@ export class Work {
   });
 
   protected readonly readOnly = computed(() => this.state?.readOnly ?? false);
+
+  // --- done and archived tickets stay openable (E13-21) ----------------------------------
+
+  /** The board's Done-this-week tickets: the archive's last seven days. */
+  protected readonly doneThisWeek = computed<readonly McDoneEntry[]>(
+    () => (this.state?.board as McBoard | null | undefined)?.recentDone ?? [],
+  );
+
+  /** True when the state can list the whole archive (the "Show older" button shows). */
+  protected readonly olderAvailable = computed(() => this.state?.loadArchive !== undefined);
+
+  protected readonly olderOpen = signal(false);
+  protected readonly olderLoading = signal(false);
+  private readonly olderAll = signal<readonly McDoneEntry[]>([]);
+  protected readonly olderQuery = signal('');
+
+  /** The archive beyond this week, narrowed by the search field. */
+  protected readonly older = computed(() => olderDoneOf(this.olderAll(), this.doneThisWeek(), this.olderQuery()));
+
+  /** "Show older": loads the whole archive once and lists the tail under a search field. */
+  protected async showOlder(): Promise<void> {
+    const load = this.state?.loadArchive;
+    if (load === undefined || this.olderOpen()) {
+      return;
+    }
+    this.olderOpen.set(true);
+    this.olderLoading.set(true);
+    try {
+      this.olderAll.set(await load.call(this.state));
+    } catch {
+      this.olderAll.set([]);
+    } finally {
+      this.olderLoading.set(false);
+    }
+  }
+
+  protected onOlderQuery(event: Event): void {
+    this.olderQuery.set((event.target as HTMLInputElement).value);
+  }
+
+  /** A done ticket opens like any other: document, thread, review. */
+  protected openDone(id: string): void {
+    this.state?.openTicket?.(id);
+  }
 
   /** The header sub: the board's vault name; null hides the line. */
   protected readonly vaultTitle = computed(() => vaultTitleOf(this.state?.board ?? null));

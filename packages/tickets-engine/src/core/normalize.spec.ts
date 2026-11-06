@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { phaseWithoutPoolKeys, type PipelinePhase } from '../contracts/tickets';
-import { detectDrift, parseArchivedStamp, recentDoneOf, type DriftFile } from './normalize';
+import { archivedEntriesOf, detectDrift, parseArchivedStamp, recentDoneOf, type DriftFile } from './normalize';
 
 const PIPELINE: readonly PipelinePhase[] = [
   { id: 'inbox', title: 'Inbox', wip: null, claim: false, handover: 'manual' },
@@ -309,5 +309,38 @@ describe('recentDoneOf (req-75 W1b)', () => {
       { path: 'tickets/archive/readme.md', text: '' },
     ];
     expect(recentDoneOf(files, NOW)).toEqual([]);
+  });
+});
+
+describe('archivedEntriesOf (E13-21 "Show older")', () => {
+  const archived = (id: string, stamp: string | null, title = `Ticket ${id}`): DriftFile => ({
+    path: `tickets/archive/${id}.md`,
+    text: ['---', `id: ${id}`, `title: "${title}"`, '---', '## Log', '', ...(stamp === null ? [] : [`- '${stamp}' owner@desk — archived`]), ''].join('\n'),
+  });
+
+  it('lists every age, newest first, a ticket without a stamp last', () => {
+    const files = [
+      archived('T-0001', '2026-01-01T00:00:00Z'),
+      archived('T-0002', '2026-10-01T00:00:00Z'),
+      archived('T-0003', null),
+      { path: 'tickets/10-inbox/T-0004.md', text: '' },
+    ];
+    expect(archivedEntriesOf(files).map((e) => [e.id, e.at])).toEqual([
+      ['T-0002', '2026-10-01T00:00:00Z'],
+      ['T-0001', '2026-01-01T00:00:00Z'],
+      ['T-0003', ''],
+    ]);
+  });
+
+  it('narrows by id or title words and honours the limit', () => {
+    const files = [
+      archived('T-0001', '2026-01-01T00:00:00Z', 'Fix the login'),
+      archived('T-0002', '2026-02-01T00:00:00Z', 'Login page redesign'),
+      archived('T-0003', '2026-03-01T00:00:00Z', 'Billing'),
+    ];
+    expect(archivedEntriesOf(files, { query: 'LOGIN' }).map((e) => e.id)).toEqual(['T-0002', 'T-0001']);
+    expect(archivedEntriesOf(files, { query: 'login redesign' }).map((e) => e.id)).toEqual(['T-0002']);
+    expect(archivedEntriesOf(files, { query: 't-0003' }).map((e) => e.id)).toEqual(['T-0003']);
+    expect(archivedEntriesOf(files, { limit: 1 }).map((e) => e.id)).toEqual(['T-0003']);
   });
 });

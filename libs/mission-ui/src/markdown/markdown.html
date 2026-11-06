@@ -1,12 +1,14 @@
 <div class="mdx" [class.mdx-view]="mode() === 'view'">
   <div class="mdx-bar">
-    <div class="mdx-seg" role="group" [attr.aria-label]="label() + ' mode'">
-      @for (m of modes; track m) {
-        <button type="button" class="mdx-seg-btn" [attr.aria-pressed]="mode() === m" (click)="pick(m)">
-          {{ modeLabel[m] }}
-        </button>
-      }
-    </div>
+    @if (modeBar()) {
+      <div class="mdx-seg" role="group" [attr.aria-label]="label() + ' mode'">
+        @for (m of modes; track m) {
+          <button type="button" class="mdx-seg-btn" [attr.aria-pressed]="mode() === m" (click)="pick(m)">
+            {{ modeLabel[m] }}
+          </button>
+        }
+      </div>
+    }
     @if (editable() && mode() !== 'view' && ready()) {
       <div class="mdx-strip" role="toolbar" [attr.aria-label]="label() + ' formatting'">
         @for (b of strip; track b.label) {
