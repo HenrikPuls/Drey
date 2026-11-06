@@ -5,6 +5,9 @@
 //   node scripts/migrate-tickets.mjs --legacy <vault> --allow <ids.txt>
 //   node scripts/migrate-tickets.mjs --legacy <vault> --allow <ids.txt> --apply --store <new dir> --dk <dk> [--report <file>]
 //   node scripts/migrate-tickets.mjs --reverse --store <dricket store> --out <new dir> --dk <dk>
+//
+// The cut-over passes --include-archive (all tickets migrate, O-3); the exact
+// sequence is docs/design/dricket/cutover-guide.md, section C.
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 

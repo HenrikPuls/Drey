@@ -1,3 +1,36 @@
+### Milestone 175 — E14-7a: the cut-over is one start
+
+**Not yet manually verified by the owner.** Roadmap E14-7a. The cut-over itself (E14-7) has not run;
+the real `drey-tickets` was only read.
+
+- **Before.** After a change of `backend` / `dk.store` the first start's shadow report and first
+  board described the previous store: the engine builds a board while it starts and reads its
+  own `config.json`, the app mirrored the plugin config into it only afterwards, and nothing ran the
+  shadow again (rehearsal §4; the guide said to start twice).
+- **Now.** `ensureEngine` writes the synced keys into the engine's `config.json` **before** it
+  spawns the engine (`mirrorConfig`, `plugins/tickets/main/engine-lifecycle.ts`, in one atomic write
+  through the new `FileConfigStore.setMany`). A failed mirror only warns; the sync after adoption
+  still runs. Keys the engine owns (its token) stay. The plugin config is not touched.
+- **Settled for the cut-over.** The archive migrates (`--include-archive`): the owner's O-3 "all
+  tickets migrate once" replaces OD-7 (migration plan §10), and the rehearsal recommended the same,
+  so it is no longer a question. The allow list is written fresh from the frozen vault;
+  `migrate-allow-list.txt` is marked retired.
+- **Guide.** `cutover-guide.md` section C is one sequence of exact commands with what each should
+  show: freeze, fresh allow list, dry run, import, store check, shadow, flip, smoke, the owner's
+  round. New in it: the real `pipeline.md` gets the six states at the flip (the columns come from it,
+  a stage that is no phase is an unknown column), from req-99a's `--pipeline-out`. The stage ids,
+  that flag and the rollback's default columns are taken from req-99a's hand-over; it is not merged
+  yet, so these commands have not run with the six stages, and the guide asks for step B again after
+  the merge. Corrected: the apply's exit code does **not** cover the shadow diff, and a rollback must
+  write `"backend": "files"` because a deleted key never reaches the engine.
+- **Tests:** `file-config.spec.ts` (new); `engine-lifecycle.spec.ts`: the mirror, and the real
+  `ensureEngine` over a real engine in-process, where the engine's config names a 1-ticket store and
+  the plugin a 3-ticket one: the first report counts 3 (with the mirror call removed it counts 1).
+  **Real run:** the built plugin with a real spawned engine and real `dk` on rehearsal copies (engine
+  config: the 91-ticket store, plugin: the labelled store): first start `Identical: 25 tickets`.
+  Guide commands run in PowerShell 7 on scratch data and read-only on the real vault (91 tickets,
+  0 skipped, stamps on T-0030 and T-0050, both pids dead). The app's window was not started.
+
 ### req-95a — Autopilot over the chain master: the engine half
 
 **Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list (concept

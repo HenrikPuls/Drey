@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–174 and req-102 (the i18n catalog, ADR-0091) built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–175 and req-102 (the i18n catalog, ADR-0091) built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -682,14 +682,10 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   changelog's "Shadow run" fix): the 500-ticket benchmark no longer waits for dk
   R-05 — reads moved to the file reader (E14-4, milestone 154) — and the comparison
   of both read paths runs first there; ticket documents under `dricket` come with
-  E14-4c. Findings of the shadow run that the cut-over (E14-7) has to settle:
-  the board comparison only covers the tickets that were migrated, so **done and
-  archived tickets** (not in the 22/25-ticket allow list) are not compared at all —
-  decide whether the cut-over migrates them; **re-run the migration with a fresh
-  allow list at the cut-over** (the first scratch store lacked T-0088..T-0090, created
-  in the legacy vault afterwards, and showed them as placeholders); **T-0017's
-  `blocked-by T-0049`** is dropped by the migration (T-0049 is a done legacy ticket
-  outside the set) — cosmetic, kept in `x-legacy-blocked-by`; **dk under a deep path**
+  E14-4c. Findings of the shadow run, settled for the cut-over by E14-7a: **done and
+  archived tickets** migrate (O-3, `--include-archive`), and with them **T-0017's
+  `blocked-by T-0049`** stays a real link; the **allow list** is written fresh from the
+  frozen vault (E14-7, step 2). Still true: **dk under a deep path**
   (the repo's scratchpad, > ~200 chars) fails with "Filename too long" /
   "clean local private worktree" — keep stores and `--data` short on Windows (dricket
   requirement candidate: report it to dk).
@@ -734,23 +730,39 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   is also the store's checkout would make dk flag it `unexpected-path` — keep them
   two folders; (7) the real check on a second instance (answer from the phone, a
   send-back from the Ready card) — only the engine services ran, on a scratch store.
-- **E14-7 — Cut-over.** Freeze, final import, flip `tickets.backend`, smoke,
-  owner round. Needs E14-3..6 (E14-8 shipped, milestone 160). The migration tool (E14-3 + E14-3b,
-  milestones 153/158) writes real numbers and creation data and **no placeholder
-  tickets** any more (the old scratch stores with their 69 placeholders are
-  obsolete): it is **re-run at the cut-over** against the frozen vault with a fresh
-  allow list, into a fresh store, and `dk validate` plus the shadow comparison
-  must be clean before the flip. The owner's real `drey-tickets` repository is
-  only touched then. **Rehearsed 2026-11-06 on a copy of the real vault**
-  ([`rehearsal-2026-11-06.md`](../docs/design/dricket/rehearsal-2026-11-06.md), milestone 169): ready, the
-  guide is corrected; the owner decides the archive (recommended: `--include-archive`) and
-  the stale run stamp of T-0030. **Stages (req-99a):** the import writes the six stages (`DEFAULT_MIGRATION_CONFIG`); `--pipeline-out <file>` writes the matching six-stage `_meta/pipeline.md`, which must land in the meta vault together with the flip, or every ticket shows in an unknown column. The engine's file-versus-store shadow reads one pipeline for both sides and cannot match across the rename: the clean comparison is the migration tool's (`--apply` maps the phases). The reverse's default `--stages` is now the legacy board.
-- **E14-7a — The engine reports the previous store after a settings change.** Found in the
-  rehearsal: after changing `backend` / `dk.store`, the first start's shadow report (and the first
-  board) still describes the old store — the engine reads its `config.json` before the app mirrors
-  the plugin config into it, and nothing re-runs the shadow afterwards. Mirror before the spawn (or
-  restart the shadow on a config change); until then the guide says to start twice and read the
-  report header. Also open: a `--phase-dirs` flag for the reverse converter (legacy folder numbers).
+- **E14-7 — Cut-over (wave 3, the owner present).** One start, prepared by E14-7a (milestone 175) and
+  rehearsed on a copy of the real vault
+  ([`rehearsal-2026-11-06.md`](../docs/design/dricket/rehearsal-2026-11-06.md), milestone 169). The
+  owner's real `drey-tickets` is only touched here. req-99a is merged, so the store is written
+  once with the six stages `inbox shaping prioritized building ready done` (decision 27), and step B
+  of the guide repeated after that merge: the rehearsal ran on the old names. The exact sequence, with
+  what each step should show, is
+  [`cutover-guide.md`](../docs/design/dricket/cutover-guide.md), section C:
+  1. Freeze: quit Drey, stop the engine (`engine.lock` names the pid), commit `tickets/archive`,
+     `git -C E:\projects\drey-tickets tag pre-dricket`.
+  2. Fresh allow list: `Get-ChildItem <vault>\tickets -Recurse -File -Filter 'T-*.md' | % { $_.BaseName } | sort | Set-Content <allow>`.
+  3. Dry run: `node scripts/migrate-tickets.mjs --legacy <vault> --allow <allow> --include-archive --pipeline-out <file>`
+     (`0 skipped`; check the pids of the stale run stamps, T-0030 and T-0050 today).
+  4. Import: `--legacy`, `--allow`, `--include-archive` as above, plus `--apply --allow-live-runs --store E:\projects\drey-board --dk <dk> --actor owner@legion --data E:\projects\drey-board-data --report <file>`
+     (`dk validate: clean`, `shadow diff: identical`, the comparison of record; the exit code does not cover the diff).
+  5. Store check: the six ids in `git -C <store> show main:dricket.toml`, `dk validate`, the `dk ls` count.
+  6. Shadow: plugin config `backend: shadow`, `dk.store`, `dk.dataDir`; `.\dev.ps1 -Built` once;
+     `<engine home>\shadow\board-diff.md` says `Identical` (only while no live ticket stands in `build` or
+     `commit`: it reads one pipeline for both sides); quit, stop the engine.
+  7. Flip: the `--pipeline-out` file is committed as `tickets/_meta/pipeline.md`, `backend: dricket`, `.\dev.ps1 -Built` once.
+  8. Smoke: same tickets in six columns, move, priority, editor save, comment, short fleet run,
+     Accept into Done, an archived ticket opens; each write one `dricket: ...` commit.
+  9. The owner's round; then E14-9b.
+
+  **Stages (req-99a):** the engine's file-versus-store shadow reads one pipeline for both sides and cannot match across the rename, so the clean comparison is the migration tool's (`--apply` maps the phases). The reverse's default `--stages` is now the legacy board.
+
+  **Decided:** the archive migrates (`--include-archive`, O-3 replaces OD-7). **Follow-ups, not
+  blockers:** the shadow report names the store it compared and a changed store bypasses the 30 s gap
+  in `scheduleShadow` (`store/store-board-source.ts`; matters only for an engine left running, the
+  guide stops it); the apply's exit code covers the shadow diff, and `--allow` over archive ids without
+  `--include-archive` is refused instead of skipping them with exit 0 (`migrate/cli.ts`); a
+  `--phase-dirs` flag for the reverse converter (legacy folder numbers); a commit step settles into
+  Done without a connected client (one line in `server/engine.ts`, req-99a hand-over).
 - **E14-9b — Decommission, part b.** After the cut-over **and the owner's
   verification round** (owner, 2026-11-05: no fixed 30 days), delete what part (a)
   proved cannot go earlier — the inventory with callers and evidence is

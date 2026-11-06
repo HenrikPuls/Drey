@@ -1,5 +1,6 @@
-# The owner's triage list (docs/design/dricket/ticket-triage.md, 2026-11-04): the 22 tickets that migrate.
-# Not listed: T-0079, T-0087 (obsolete), T-0088..T-0090 (runner tickets, close at the fleet cut-over).
+# RETIRED: do not use for the cut-over. Since O-3 (owner, 2026-11-06) all tickets migrate, and the
+# allow list is written fresh from the frozen vault: docs/design/dricket/cutover-guide.md, C, step 2.
+# Kept as the record of the first scratch runs (ticket-triage.md, 2026-11-04): the 22 tickets of that triage.
 T-0023 T-0024 T-0028 T-0030 T-0032 T-0033 T-0035 T-0037 T-0039
 T-0010 T-0013 T-0015 T-0016 T-0017 T-0018
 T-0066 T-0067 T-0068 T-0069 T-0070 T-0083

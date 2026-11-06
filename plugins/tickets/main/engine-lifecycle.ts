@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { NOTES_VAULT_KEY } from '../../../packages/tickets-engine/src/contracts/notes';
 import { WORKER_PROVIDERS } from '../../../packages/tickets-engine/src/fleet/protocol';
+import { FileConfigStore } from '../../../packages/tickets-engine/src/server/file-config';
 import { STORE_SETTING_KEYS } from '../../../packages/tickets-engine/src/store/store-settings';
 import { EngineClient, type EngineEndpoints } from './engine-client';
 
@@ -107,6 +108,43 @@ interface ChatLlmSettings {
   readonly model: string | null;
 }
 
+/** The plugin config's keys the engine reads, the ones the plugin config holds. */
+async function pluginEntries(ctx: { config: { get<T>(key: string): Promise<T | undefined> } }): Promise<[string, unknown][]> {
+  const entries: [string, unknown][] = [];
+  for (const key of SYNCED_KEYS(WORKER_PROVIDERS)) {
+    const value = await ctx.config.get<unknown>(key);
+    if (value !== undefined) {
+      entries.push([key, value]);
+    }
+  }
+  return entries;
+}
+
+/** The assistant LLM settings as the `chat.*` keys; every key every time, a cleared value is `null`. */
+function chatEntries(llm: ChatLlmSettings): [string, unknown][] {
+  const text = (value: string | null): string | null => (value === null || value.trim() === '' ? null : value.trim());
+  return [
+    ['chat.enabled', llm.enabled],
+    ['chat.provider', text(llm.provider)],
+    ['chat.baseUrl', text(llm.baseUrl)],
+    ['chat.apiKey', text(llm.apiKey)],
+    ['chat.model', text(llm.model)],
+  ];
+}
+
+/**
+ * The same keys {@link syncConfig} pushes, written into the engine's `config.json`
+ * BEFORE the engine is spawned (E14-7a). The engine builds its first board while it
+ * starts, before anything can reach its invoke channel, and in `shadow` mode that board
+ * writes the report: without this the first start after a change of `backend` or
+ * `dk.store` described the previous store. Only called with no engine alive, so the
+ * file has no other writer; keys the engine owns (its token, paired devices) stay.
+ */
+export async function mirrorConfig(home: string, ctx: Parameters<typeof syncConfig>[1]): Promise<void> {
+  const store = new FileConfigStore(path.join(home, 'config.json'));
+  await store.setMany([...(await pluginEntries(ctx)), ...chatEntries(ctx.appConfig.get().llm)]);
+}
+
 /** The narrow invoke surface the sync needs — EngineClient fits it. */
 interface ConfigSyncClient {
   invoke(method: string, payload?: unknown): Promise<unknown>;
@@ -124,11 +162,8 @@ export async function syncConfig(client: ConfigSyncClient, ctx: {
   config: { get<T>(key: string): Promise<T | undefined> };
   appConfig: { get(): { llm: ChatLlmSettings } };
 }): Promise<void> {
-  for (const key of SYNCED_KEYS(WORKER_PROVIDERS)) {
-    const value = await ctx.config.get<unknown>(key);
-    if (value !== undefined) {
-      await client.invoke('configSet', { key, value }).catch(() => undefined);
-    }
+  for (const [key, value] of await pluginEntries(ctx)) {
+    await client.invoke('configSet', { key, value }).catch(() => undefined);
   }
   await syncChatConfig(client, ctx.appConfig.get().llm);
 }
@@ -174,24 +209,31 @@ export async function syncNotesVault(
  * channel and is never logged.
  */
 export async function syncChatConfig(client: ConfigSyncClient, llm: ChatLlmSettings): Promise<void> {
-  const text = (value: string | null): string | null => (value === null || value.trim() === '' ? null : value.trim());
-  const chatKeys: [string, unknown][] = [
-    ['chat.enabled', llm.enabled],
-    ['chat.provider', text(llm.provider)],
-    ['chat.baseUrl', text(llm.baseUrl)],
-    ['chat.apiKey', text(llm.apiKey)],
-    ['chat.model', text(llm.model)],
-  ];
-  for (const [key, value] of chatKeys) {
+  for (const [key, value] of chatEntries(llm)) {
     await client.invoke('configSet', { key, value }).catch(() => undefined);
   }
+}
+
+/** The real process start; the spec's seam starts an engine in-process instead. */
+function spawnEngine(vaultPath: string, home: string, log: (message: string) => void): void {
+  const child = spawn(process.execPath, [ENGINE_ENTRY(), '--vault', vaultPath, '--home', home], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    detached: true,
+    stdio: ['ignore', 'ignore', 'ignore'],
+  });
+  child.unref();
+  log(`tickets engine spawned (pid ${child.pid ?? '?'}) for ${vaultPath}`);
 }
 
 export async function ensureEngine(
   ctx: Parameters<typeof locateTicketsVault>[0] & Parameters<typeof syncConfig>[1],
   log: (message: string, level?: 'info' | 'warn' | 'error') => void,
+  deps: {
+    readonly home?: string;
+    readonly spawn?: (vaultPath: string, home: string) => void | Promise<void>;
+  } = {},
 ): Promise<EngineEndpoints> {
-  const home = ENGINE_HOME();
+  const home = deps.home ?? ENGINE_HOME();
   const lock = await readLock(home);
   if (lock !== null && (await alive(lock))) {
     const endpoints = { invokeUrl: `http://127.0.0.1:${lock.invokePort}`, token: lock.token };
@@ -205,13 +247,9 @@ export async function ensureEngine(
     throw new Error('no tickets vault detected — the engine has nothing to host');
   }
   await fsp.mkdir(home, { recursive: true });
-  const child = spawn(process.execPath, [ENGINE_ENTRY(), '--vault', vault.path, '--home', home], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-    detached: true,
-    stdio: ['ignore', 'ignore', 'ignore'],
-  });
-  child.unref();
-  log(`tickets engine spawned (pid ${child.pid ?? '?'}) for ${vault.path}`);
+  // A failed mirror costs what it always cost (the adoption's sync below still runs), not the start.
+  await mirrorConfig(home, ctx).catch((error: unknown) => log(`engine config mirror failed: ${messageOf(error)}`, 'warn'));
+  await (deps.spawn ?? ((vaultPath: string, engineHome: string) => spawnEngine(vaultPath, engineHome, log)))(vault.path, home);
 
   // Adopt it through the lockfile: health-checked, up to 20 s.
   const deadline = Date.now() + 20_000;
