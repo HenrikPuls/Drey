@@ -7,9 +7,9 @@ import {
   output,
 } from '@angular/core';
 
-/** What the phone's menu control does on a page that does not handle it itself (the shell binds it). */
+/** What the phone's "Menu" back control does on a top-level page (the shell binds it). */
 export interface McAppNav {
-  /** The ☰ control: back to the chat with its history and the places open. */
+  /** Back to the phone's root screen, the menu (req-96, canvas decision 17). */
   openMenu(): void;
 }
 
@@ -19,16 +19,21 @@ export const MC_APP_NAV = new InjectionToken<McAppNav | null>('mc-app-nav', {
 });
 
 /**
- * The one app bar (E13-24): a single row at the top of every Mission
- * Control page — the leading control, the title, then the page's own
- * status or action (projected into `bar-end`), all in the same row. The
- * leading control is the ☰ menu on a top-level page and the ‹ back
- * control on a sub-page: setting `back` (the parent page's name) turns it
- * into the back control and emits `backed` on a tap. The row carries the
+ * The one app bar (E13-24, phone rule of req-96): a single row at the top
+ * of every Mission Control page — the leading control, the title, then
+ * the page's own status or action (projected into `bar-end`), all in the
+ * same row. The leading control is always a **labelled back control** to
+ * the parent page: on a sub-page the parent `back` names (and `backed`
+ * fires on a tap); on a top-level page (Work, Crew, Settings, Chat) it
+ * reads "Menu" and asks the shell for the phone's root menu — the phone
+ * has no hamburger (canvas decision 17). From 768 px the shell's own
+ * chrome (the desktop tab bar, the iPad header) takes over: the "Menu"
+ * control hides, and a page that handles the ☰ itself (`ownMenu`: the
+ * chat opens its history) shows that ☰ instead. The row carries the
  * status-bar inset (`env(safe-area-inset-top)`) and sticks to the top of
  * the scroll container it sits in, so only the content below moves.
- * From 768 px the shell's top tab bar replaces the menu control.
  */
+// TODO(i18n): "Menu", "Back to …" and "Menu and chat history" are catalog keys once req-102 is merged.
 @Component({
   selector: 'mc-app-bar',
   templateUrl: './app-bar.html',
@@ -46,18 +51,20 @@ export class AppBar {
   readonly back = input<string | null>(null);
   /** False: from 768 px the back control is hidden (the parent list sits beside the page). */
   readonly backOnWide = input(true);
-  /** The page handles the ☰ tap itself (the chat opens its own history). */
+  /** The page shows its own ☰ from 768 px (the chat opens its history). */
   readonly ownMenu = input(false);
 
   /** The back control was tapped. */
   readonly backed = output<void>();
-  /** The menu control was tapped. */
+  /** The page's own ☰ was tapped (from 768 px only). */
   readonly menu = output<void>();
 
-  protected onMenu(): void {
-    if (!this.ownMenu()) {
-      this.nav?.openMenu();
-    }
+  /** The phone's "Menu" back control: the shell's root menu. */
+  protected onMenuBack(): void {
+    this.nav?.openMenu();
+  }
+
+  protected onOwnMenu(): void {
     this.menu.emit();
   }
 

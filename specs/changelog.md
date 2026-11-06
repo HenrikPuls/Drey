@@ -1,3 +1,48 @@
+### req-96 — Mission Control: the desktop-like iPad with panes saved per orientation, the phone menu as the root screen
+
+**Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list
+(canvas decisions 12 and 17, concept §7; wave 2 of the build plan).
+
+- **iPad** (from 768 px on a touch device — a coarse pointer without hover; a mouse at the same
+  width keeps the desktop web's top tab bar, G-37): no tab bar. A 52 px header carries the
+  **left-sidebar toggle** at the far left, the segmented **Work · Crew** switch centred (the
+  **Notes** segment is built but hidden behind `NOTES_ENABLED` until req-101), and at the right
+  the **Autopilot chip slot** (`[autopilot]`, req-95b fills it), **Settings** and the
+  **right-sidebar toggle**; the toggles carry `aria-pressed`, every control is 44 px. Left = the
+  list of the area (Work: the tickets; Crew: the personas), centre = the document (ticket,
+  persona, plan to accept, Settings, else the empty pane), right = the Mission Control chat.
+  A switch to the chat tab (a promote, "Ask Mission Control") opens the right pane instead of
+  replacing the centre. **Landscape opens all three panes, portrait the left and the centre**;
+  in portrait the right pane opens as an overlay under a scrim. The open state is saved **per
+  orientation on this device** (`mc.panes.landscape` / `mc.panes.portrait` in localStorage,
+  like the appearance — D10, decision 31) and restored on start; a turn of the device restores
+  that orientation's own state.
+- **Phone** (below 768 px): the **menu is the root screen** — a search field that narrows the
+  chats, the places Work (with the "Needs you" count), Crew, Settings (Notes hidden until
+  req-101), then **New chat** and the chats with Mission Control by day. It has no back button
+  and nothing has a hamburger any more: every other screen's app bar carries **one labelled back
+  button to its parent** — Work / Crew / Settings / Chat → "Menu", Ticket → "Work", Plan →
+  "Ticket", Appearance → "Settings", persona → "Crew". The chat's own ☰ (its history) is a
+  wide-screen control only.
+- **Desktop web** (≥768 px with a mouse) is unchanged: top tab bar, Work in column 1, the dock
+  from 1024 px (canvas decision 13).
+- **Files:** `apps/mission-control/src/app/app.ts` (`shellKindOf`, `wideTabOf`, `areaOf`,
+  `tabOfPlace`; the `MC_APP_NAV` override on the shell element), `app.html`, `app.css`,
+  `api/state.ts` (`McTab` gains `menu` and `notes`; `closeSession`), `libs/mission-ui/src/shell/`
+  (`panes.ts`, `header.*`, `menu.*`), `libs/mission-ui/src/app-bar/*`.
+- **Tests:** `shell/panes.spec.ts` (defaults, the two keys, the restore on a turn, blocked
+  storage), `shell/header.spec.ts`, `shell/menu.spec.ts`, `app-bar/app-bar.spec.ts` (the back
+  rule), `apps/mission-control/src/app/app.spec.ts` (the shell rules), and the e2e
+  `e2e/mission-control-shell.spec.ts` over `e2e/fixtures/mission-control-fake-desk.ts` — the
+  built app in a stock Chromium at 1194×834, 834×1194 and 390×844 (screenshots in its test
+  output: `mc-ipad-landscape.png`, `mc-ipad-portrait.png`, `mc-phone-menu.png`, …), no engine
+  needed.
+- **Left open (roadmap):** Capacity on the iPad (the right pane shows the chat only), the
+  empty pane's stale hint line ("Tablet: work + detail · Desktop: + chat docked right"), the
+  chat's empty-state line "Earlier chats are in the menu (top left)", and the root-level
+  `MC_APP_NAV` provider in `app.config.ts` that the shell now shadows. Every new string is marked
+  `TODO(i18n)` for the req-102 catalog.
+
 ### Milestone 180 — E12-15: Capacity band rule and the status-bar items (boards 7a, 7e, 7h)
 
 **Not yet manually verified by the owner.**

@@ -67,8 +67,14 @@ import type { McFlowOp, McFlowReply } from '@mission-ui/flow/flow.model';
 
 export type PairingPhase = 'needs-code' | 'pairing' | 'ready';
 
-/** The shell's visible tab — owned here so any surface can switch to it (E8: the report card's promote drops into the chat). */
-export type McTab = 'work' | 'chat' | 'team' | 'settings';
+/**
+ * The shell's visible tab — owned here so any surface can switch to it (E8:
+ * the report card's promote drops into the chat). `menu` is the phone's
+ * root screen (req-96, canvas decision 17); `notes` the Notes area, hidden
+ * behind the shell's feature flag until req-101 ships its client. The
+ * wide layouts never show `menu`: the shell reads it as Work.
+ */
+export type McTab = 'menu' | 'notes' | 'work' | 'chat' | 'team' | 'settings';
 
 /** The colour a toast carries: ok (green), warn (amber), error (red). */
 export type ToastKind = 'ok' | 'warn' | 'error';
@@ -429,6 +435,16 @@ export class McState {
       void this.refreshPlan(session.ticket);
       void this.loadShapeDoc(session.ticket);
     }
+  }
+
+  /**
+   * Leaves the open session (req-96, the phone menu's "New chat"): the chat
+   * shows its empty state, and the next send starts a new session. No
+   * request — the sessions list keeps the entry.
+   */
+  closeSession(): void {
+    this.tail = null;
+    this.chat.update((chat) => (chat.active === null ? chat : { ...chat, active: null }));
   }
 
   // --- chat mutations -------------------------------------------------------

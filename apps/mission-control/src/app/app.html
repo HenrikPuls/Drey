@@ -1,15 +1,24 @@
 @if (pairing() !== 'ready') {
   <mc-pairing class="pairing" [phase]="pairing()" [pair]="pairCode" />
 } @else {
-<div class="shell" [class.docked]="showDock()">
-  @if (wide()) {
+<div
+  class="shell"
+  [class.phone]="isPhone()"
+  [class.ipad]="isPad()"
+  [class.desktop]="isDesktop()"
+  [class.docked]="showDock()"
+  [class.no-left]="isPad() && !panes.left()"
+  [class.no-right]="isPad() && (!panes.right() || rightOverlay())"
+  [class.right-overlay]="rightOverlay()"
+>
+  @if (isDesktop()) {
     <nav class="topnav" aria-label="Main">
       <span class="logo" aria-hidden="true">D</span>
       <button
         type="button"
         class="nt"
-        [class.on]="tab() === 'work'"
-        [attr.aria-current]="tab() === 'work' ? 'page' : null"
+        [class.on]="wideTab() === 'work'"
+        [attr.aria-current]="wideTab() === 'work' ? 'page' : null"
         (click)="goTab('work')"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
@@ -24,9 +33,9 @@
       <button
         type="button"
         class="nt"
-        [class.on]="docked() ? showDock() : tab() === 'chat'"
+        [class.on]="docked() ? showDock() : wideTab() === 'chat'"
         [attr.aria-pressed]="docked() ? showDock() : null"
-        [attr.aria-current]="!docked() && tab() === 'chat' ? 'page' : null"
+        [attr.aria-current]="!docked() && wideTab() === 'chat' ? 'page' : null"
         [attr.aria-label]="docked() ? 'Chat, docked on the right, press to fold' : 'Chat'"
         (click)="onChatTab()"
       >
@@ -38,8 +47,8 @@
       <button
         type="button"
         class="nt"
-        [class.on]="tab() === 'team'"
-        [attr.aria-current]="tab() === 'team' ? 'page' : null"
+        [class.on]="wideTab() === 'team'"
+        [attr.aria-current]="wideTab() === 'team' ? 'page' : null"
         (click)="goTab('team')"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
@@ -48,14 +57,14 @@
           <circle cx="17" cy="9" r="2.4" />
           <path d="M15.5 14.7c2.4.2 4.3 1.7 4.9 4.3" />
         </svg>
-        Team
+        Crew
       </button>
       <span class="spacer"></span>
       <button
         type="button"
         class="nt icon"
-        [class.on]="tab() === 'settings'"
-        [attr.aria-current]="tab() === 'settings' ? 'page' : null"
+        [class.on]="wideTab() === 'settings'"
+        [attr.aria-current]="wideTab() === 'settings' ? 'page' : null"
         aria-label="Settings"
         title="Settings"
         (click)="goTab('settings')"
@@ -68,17 +77,46 @@
       </button>
     </nav>
   }
+  @if (isPad()) {
+    <mc-shell-header
+      class="pad-header"
+      [area]="area()"
+      [notesEnabled]="notesEnabled"
+      [left]="panes.left()"
+      [right]="panes.right()"
+      [settingsOn]="wideTab() === 'settings'"
+      [needsCount]="needsCount()"
+      (toggleLeft)="panes.toggleLeft()"
+      (toggleRight)="panes.toggleRight()"
+      (areaChange)="onArea($event)"
+      (settings)="onPadSettings()"
+    >
+      <!-- req-95b mounts the Autopilot chip here: <mc-autopilot-chip autopilot /> -->
+    </mc-shell-header>
+  }
+  @if (showMenu()) {
+    <mc-menu
+      class="pane pane-menu"
+      [notesEnabled]="notesEnabled"
+      [needsCount]="needsCount()"
+      [sessions]="sessions()"
+      [activeFile]="activeSessionFile()"
+      (place)="onPlace($event)"
+      (openChat)="onMenuChat($event)"
+      (newChat)="onMenuNewChat()"
+    />
+  }
   @if (showWork()) {
-    <mc-work class="pane pane-work" />
+    <mc-work class="pane pane-work pane-left" />
+  }
+  @if (showTeam()) {
+    <mc-team class="pane pane-center" [class.pane-left]="isPad()" [class.pane-team]="isPad()" />
   }
   @if (showPlan()) {
     <mc-plan-pane class="pane pane-center" />
   }
   @if (showEmpty()) {
     <mc-empty class="pane pane-center" />
-  }
-  @if (showTeam()) {
-    <mc-team class="pane pane-center" />
   }
   @if (showSettings()) {
     <mc-settings class="pane pane-center" />
@@ -102,27 +140,10 @@
       }
     </aside>
   } @else if (showChat()) {
-    <mc-chat class="pane pane-chat">
-      @if (!wide()) {
-        <div chat-nav class="menu-nav">
-          <button type="button" class="menu-row" (click)="goTab('work')">
-            <span class="grow">Work</span>
-            @if (needsCount() > 0) {
-              <span class="bdg-inline">{{ needsCount() }}</span>
-            }
-            <span class="chev" aria-hidden="true">›</span>
-          </button>
-          <button type="button" class="menu-row" (click)="goTab('team')">
-            <span class="grow">Crew</span>
-            <span class="chev" aria-hidden="true">›</span>
-          </button>
-          <button type="button" class="menu-row" (click)="goTab('settings')">
-            <span class="grow">Settings</span>
-            <span class="chev" aria-hidden="true">›</span>
-          </button>
-        </div>
-      }
-    </mc-chat>
+    @if (rightOverlay()) {
+      <div class="right-scrim" (click)="panes.setRight(false)"></div>
+    }
+    <mc-chat class="pane pane-chat pane-right" role="complementary" aria-label="Mission Control" />
   }
   @if (approveOpen() !== null) {
     <div class="approve-layer">

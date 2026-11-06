@@ -1,10 +1,14 @@
 /*
- * The shell's layout skeleton (concept §7, the prototype's grid):
- * phone — one column, no tab bar (the chat menu leads to the places);
- * ≥768px — a top tab bar, Work permanently in column 1, the active
- * detail view in column 2; ≥1024px — the dock (Chat | Capacity) in
- * column 3. The views stay mounted and are placed by
- * this grid; tab()/ticketOpen() only steer what mounts where.
+ * The shell's layout skeleton (concept §7, req-96):
+ * phone — one column, the menu as the root screen, no tab bar;
+ * iPad (≥768 px on a touch device) — a 52 px header, then the grid
+ *   [left | centre | right], each sidebar folding to nothing when closed
+ *   (the right one an overlay in portrait);
+ * desktop web (≥768 px with a mouse) — a top tab bar, Work permanently in
+ *   column 1, the active detail view in column 2; ≥1024 px the dock
+ *   (Chat | Capacity) in column 3.
+ * The views stay mounted and are placed by these grids; tab()/ticketOpen()
+ * only steer what mounts where.
  */
 :host {
   display: block;
@@ -32,7 +36,7 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* The persona 1:1 — fullscreen layer on the phone, the center column from 768px. */
+/* The persona 1:1 — fullscreen layer on the phone, the centre from 768px. */
 .persona-layer {
   position: fixed;
   inset: 0;
@@ -43,8 +47,7 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* The ticket screen — fullscreen overlay on the phone (E5c), the detail
-   column from 768px. */
+/* The ticket screen — fullscreen overlay on the phone (E5c), the centre from 768px. */
 .ticket-layer {
   position: fixed;
   inset: 0;
@@ -82,59 +85,7 @@
   background: var(--bg);
 }
 
-/* The places, projected into the chat's history panel on the phone. */
-.menu-nav {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  margin: 4px 0 8px;
-  overflow: hidden;
-  background: var(--panel);
-  border-radius: var(--radius-control);
-}
-
-.menu-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 52px;
-  padding: 0 16px;
-  font: inherit;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.menu-row:last-child {
-  border-bottom: 0;
-}
-
-.grow {
-  flex: 1;
-}
-
-.chev {
-  font-size: calc(22px * var(--mc-text, 1));
-  line-height: 22px;
-  color: var(--text-3);
-}
-
-.bdg-inline {
-  min-width: 22px;
-  height: 22px;
-  padding: 0 5px;
-  font-size: calc(13px * var(--mc-text, 1));
-  line-height: 22px;
-  text-align: center;
-  color: var(--on-pastel);
-  background: var(--accent-peach);
-  border-radius: var(--radius-control);
-}
-
-/* The top tab bar (≥768): Work with the needs counter, Chat, Team, Settings. */
+/* -- desktop web: the top tab bar (≥768): Work with the needs counter, Chat, Crew, Settings. */
 .topnav {
   display: flex;
   align-items: center;
@@ -210,7 +161,7 @@
   border-radius: 99px;
 }
 
-/* The right dock: Chat | Capacity. */
+/* The desktop's right dock: Chat | Capacity. */
 .dock {
   display: flex;
   flex-direction: column;
@@ -249,63 +200,158 @@
   overscroll-behavior-y: contain;
 }
 
-/* -- tablet: Work permanently left, the detail view center --------------- */
+/* -- desktop web from 768: Work permanently left, the detail view centre ----- */
 
-@media (min-width: 768px) {
-  .shell {
-    display: grid;
-    /* Fixed side columns — the boundaries never move with the window width. */
-    grid-template-columns: 360px minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .topnav {
-    grid-column: 1 / -1;
-    grid-row: 1;
-  }
-
-  .pane {
-    flex: none;
-  }
-
-  .pane-work {
-    grid-column: 1;
-    grid-row: 2;
-    border-right: 1px solid var(--line);
-  }
-
-  .pane-center,
-  .pane-chat {
-    grid-column: 2;
-    grid-row: 2;
-    min-height: 0;
-  }
-
-  .persona-layer,
-  .approve-layer,
-  .flow-layer,
-  .ticket-layer {
-    position: relative;
-    inset: auto;
-    z-index: auto;
-    grid-column: 2;
-    grid-row: 2;
-    min-height: 0;
-    min-width: 0;
-    overflow-x: hidden;
-  }
+.shell.desktop {
+  display: grid;
+  /* Fixed side columns — the boundaries never move with the window width. */
+  grid-template-columns: 360px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
-/* -- the dock (>=1024): the chat / capacity column on the right ----------- */
+.shell.desktop .topnav {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.shell.desktop .pane {
+  flex: none;
+}
+
+.shell.desktop .pane-work {
+  grid-column: 1;
+  grid-row: 2;
+  border-right: 1px solid var(--line);
+}
+
+.shell.desktop .pane-center,
+.shell.desktop .pane-chat {
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 0;
+}
+
+.shell.desktop .persona-layer,
+.shell.desktop .approve-layer,
+.shell.desktop .flow-layer,
+.shell.desktop .ticket-layer {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+/* -- the desktop dock (>=1024): the chat / capacity column on the right ----- */
 
 @media (min-width: 1024px) {
-  .shell.docked {
+  .shell.desktop.docked {
     grid-template-columns: 340px minmax(0, 1fr) 380px;
   }
 
-  .dock {
+  .shell.desktop .dock {
     grid-column: 3;
     grid-row: 2;
     border-left: 1px solid var(--line);
   }
+}
+
+/* -- iPad (req-96): header, then [left | centre | right] by named areas ------ */
+
+.shell.ipad {
+  display: grid;
+  grid-template-areas:
+    'header header header'
+    'left centre right';
+  grid-template-columns: 320px minmax(0, 1fr) 360px;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+/* A closed sidebar folds to nothing: the centre takes its room. */
+.shell.ipad.no-left {
+  grid-template-columns: 0 minmax(0, 1fr) 360px;
+}
+
+.shell.ipad.no-right {
+  grid-template-columns: 320px minmax(0, 1fr) 0;
+}
+
+.shell.ipad.no-left.no-right {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
+}
+
+/* Portrait: the left pane is narrower, so the document keeps its width. */
+@media (orientation: portrait) {
+  .shell.ipad {
+    grid-template-columns: 300px minmax(0, 1fr) 0;
+  }
+
+  .shell.ipad.no-left {
+    grid-template-columns: 0 minmax(0, 1fr) 0;
+  }
+}
+
+.shell.ipad .pad-header {
+  grid-area: header;
+}
+
+.shell.ipad .pane {
+  flex: none;
+}
+
+.shell.ipad .pane-left {
+  grid-area: left;
+  border-right: 1px solid var(--line);
+}
+
+.shell.ipad .pane-center {
+  grid-area: centre;
+  min-height: 0;
+}
+
+.shell.ipad .pane-right {
+  grid-area: right;
+  border-left: 1px solid var(--line);
+}
+
+/* The Crew list in the left pane: the team view's own layout, in a sidebar's width. */
+.shell.ipad .pane-team {
+  grid-area: left;
+}
+
+.shell.ipad .persona-layer,
+.shell.ipad .approve-layer,
+.shell.ipad .flow-layer,
+.shell.ipad .ticket-layer {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  grid-area: centre;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+/* Portrait: the right pane opens as an overlay over the centre, under a scrim. */
+.shell.ipad.right-overlay .pane-right {
+  position: absolute;
+  top: calc(52px + env(safe-area-inset-top));
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  width: 380px;
+  max-width: 90vw;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+  box-shadow: -8px 0 24px rgb(0 0 0 / 35%);
+}
+
+.shell.ipad .right-scrim {
+  position: absolute;
+  inset: calc(52px + env(safe-area-inset-top)) 0 0 0;
+  z-index: 24;
+  background: rgb(0 0 0 / 30%);
 }
