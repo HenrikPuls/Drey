@@ -1,3 +1,48 @@
+### req-95b — Autopilot clients: the status item, the iPad chip, the phone sheet, the menu row, Settings
+
+**Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list (concept
+§6.1, gap G-42, canvas board 10t; wave 3 of the build plan, row 3.4; the engine half is req-95a).
+
+- **Desktop.** The status bar's Autopilot item sits left of the cost item: **● Autopilot · On**
+  (green dot On, orange Paused, grey nothing Off; the tooltip names `Mod+Alt+P`). A click or the
+  command `tickets.autopilot` (`Mod+Alt+P`, global) opens a popover above the status bar: **On /
+  Paused / Off** rows, a time field with **Resume at {time}** under Paused, and **Stop all running
+  steps now…** below (armed: the first tap reads "Tap again to stop everything", the second runs
+  the existing stop-all). On and Off close the popover; Paused keeps it open for the time. It
+  repaints from the plugin's fleet listener, which the engine's SSE announce drives — nothing polls.
+- **Settings → Tickets → Budget and runners.** The **Autopilot** row is now a live three-state
+  selector and **Resume paused autopilot at** a time field (enabled on Paused); a refusal reads
+  as words under the row.
+- **iPad.** A 44 px chip **● Autopilot · On** (`mc-autopilot-chip`) in the shell header's
+  `[autopilot]` slot; a tap opens the same panel as a popover.
+- **Phone.** A 44 px play icon with the state dot (`mc-autopilot-button`) in the app bar of
+  **Work, Crew and Mission Control chat** (`<mc-app-bar [autopilot]="true">`, phone width only);
+  a tap opens a bottom sheet of three **56 px rows** with Stop-now below. The **menu root** has a
+  row **Autopilot · On** that unfolds the same panel.
+- **Read-only device** (`/api/me` `device.readOnly`): the state shows, every control is disabled and
+  a note says why. **Refusals** (`read_only`, `bad_resume_at`, `bad_state`, `runner_down`, anything
+  else) read as words from the catalog on every client — never the code. `ApiError` of Mission
+  Control now carries the body's `code` so a 403 keeps it.
+- **Plugin IPC.** `chainAutopilot` (renderer → main: `parseAutopilotSet`, then `FleetClient.setAutopilot`;
+  replies `{ok: true, status}` or the engine's refusal with its code; no runner = `runner_down`).
+  The engine's invoke tables gained `setAutopilot` (`FLEET_METHODS`) and `chainAutopilot`
+  (`TEAM_METHODS`). Mission Control uses `McState.setAutopilot` over `POST /api/chain/autopilot`
+  and `stopAllQuietly` over `/api/chain/abort`; `parseTeam` folds `chain.autopilot` (read through
+  the master for an older runner) into `TeamView.autopilot`.
+- **Catalog keys added** (`shared/i18n/catalog/en.json`): `autopilot.resume_time`,
+  `autopilot.stop_all.confirm`, `autopilot.aria`, `autopilot.command`, `autopilot.close`,
+  `autopilot.refused.read_only / .bad_resume_at / .bad_state / .runner_down / .unknown`.
+  The pure rules (tone, refusal mapping, the time field ↔ zoned `resumeAt`) are `shared/autopilot.ts`.
+- **Tests.** `shared/autopilot.spec.ts` (tone, refusal mapping, resume time),
+  `plugins/tickets/main/autopilot-ipc.spec.ts`, `plugins/tickets/renderer/autopilot/popover.spec.ts`
+  (popover, the writes, refusal words), `status-slot.spec.ts` (priority, command, orange Paused),
+  `desk-settings.spec.ts` (the live row and its refusal), `libs/mission-ui/src/autopilot/autopilot.spec.ts`
+  (chip, panel, phone button and sheet, menu row, read-only rule, refusal words, `parseTeam`), and
+  `e2e/mission-control-autopilot.spec.ts` (iPad chip switch, a refused write as words, the read-only
+  device, the phone sheet's 56 px rows; the fake desk gained `POST /api/chain/autopilot`, a
+  read-only and a refusing mode). `mission-control-shell.spec.ts` expects the menu's new row.
+- **Not covered.** The desktop popover and status item were not exercised in the running Electron app.
+
 ### Milestone 183 — E12-12: the ticket page header (boards 7j, 10j)
 
 **Not yet manually verified by the owner.** Wave 3 of the build plan, row 3.3.

@@ -32,7 +32,9 @@ import { createThreadComments } from './thread-comments';
 import { THREAD_KEY } from './ticket-page';
 import { defaultFaceOf, ticketFaceSwitch, ticketRunActive, type TicketFace } from './ticket-faces';
 import { PENDING_HINT, dialogStarter } from './dialog-starters';
-import { createStatusSlots, type StatusSlotController } from './status-slot';
+import { AUTOPILOT_COMMAND_ID, createStatusSlots, type StatusSlotController } from './status-slot';
+import { createAutopilotCommand } from './autopilot/command';
+import { autopilotViewOf } from '../../../shared/autopilot';
 import { ageWords, checkpointActionOf, crewLineOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups, workListSignature } from './work-groups';
 import { readyBarNode, readyCardNode, storyNode } from './ready-view';
 import { stepCardOf } from '../shared/step-card';
@@ -378,7 +380,7 @@ const refreshStatusItem = (): void => {
     cost: team.todayCost,
     budget: team.todayBudget,
     needsYou: needs,
-    autopilot: chain === null ? null : (chain.autopilot?.state ?? (chain.master === 'run' ? 'on' : 'off')),
+    autopilot: autopilotViewOf(chain)?.state ?? null,
     inNotesView: statusApi.ui.activeViewId() === 'notes',
   });
 };
@@ -3033,6 +3035,15 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     statusApi = api;
     statusSlots = createStatusSlots(api.ui, 'tickets.showBoard', (key, params) => api.i18n.t(key, params));
     fleetListeners.add(refreshStatusItem);
+    const autopilotCommand = createAutopilotCommand({ api, view: () => autopilotViewOf(chain), applyStatus: applyChainStatus });
+    fleetListeners.add(() => autopilotCommand.refresh());
+    api.commands.register({
+      id: AUTOPILOT_COMMAND_ID,
+      label: api.i18n.t('autopilot.command'),
+      keybinding: 'Mod+Alt+P',
+      global: true,
+      run: () => autopilotCommand.toggle(),
+    });
     teamStore(api).subscribe(refreshStatusItem);
     api.ui.onActiveViewChange(refreshStatusItem);
     fleetListeners.add(fireDesk);

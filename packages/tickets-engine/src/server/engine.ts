@@ -86,13 +86,13 @@ const BOARD_METHODS = [
   'initialize', 'onVaultEvent',
 ] as const;
 
-const FLEET_METHODS = ['runs', 'start', 'chainStatus', 'stop', 'send', 'answerPermission', 'answerQuestion', 'stream', 'setMaster', 'setColumn', 'stopColumn', 'abortAll', 'startPolling', 'attach', 'control', 'log', 'status'] as const;
+const FLEET_METHODS = ['runs', 'start', 'chainStatus', 'stop', 'send', 'answerPermission', 'answerQuestion', 'stream', 'setMaster', 'setAutopilot', 'setColumn', 'stopColumn', 'abortAll', 'startPolling', 'attach', 'control', 'log', 'status'] as const;
 
 // The team's reads and controls (E13-8): the remote port's own methods, so
 // Drey's Team tab and Capacity band show exactly what the phone shows.
 // None of these names is in the board or fleet tables (a later register() wins).
 const TEAM_METHODS = [
-  'personas', 'handoffRun', 'chainPersonaPause', 'personaThread', 'personaThreadAppend',
+  'personas', 'handoffRun', 'chainPersonaPause', 'chainAutopilot', 'personaThread', 'personaThreadAppend',
   'personaMemory', 'personaMemoryAppend', 'personaMemoryPin', 'planParts',
 ] as const;
 

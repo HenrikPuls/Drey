@@ -592,7 +592,7 @@ One chat, reachable from everywhere (on the phone through the menu top left, on 
 
 ### 6.1 Autopilot — one switch for whether the crew works by itself
 
-> Status: **decided** (owner, 2026-11-06, canvas board 10t, version 58); **not built** (roadmap req-95). Convergence gap G-42.
+> Status: **built** (engine half req-95a, clients req-95b, 2026-11-06; not yet manually verified by the owner). Decided by the owner on 2026-11-06, canvas board 10t, version 58. Convergence gap G-42.
 
 Three states, the same words on every device:
 
@@ -608,7 +608,7 @@ Three states, the same words on every device:
 
 **Where the state lives.** In the engine, next to the other fleet settings: an **`autopilot` record** (`on | paused | off`, `resumeAt`) is stored beside the existing `ChainMaster` in `<userData>/fleet/chain.json`, never in the tickets repo (ADR-0076, ADR-0077); the orchestrator derives the master from it, the engine resumes at the stored time and never a client does; the engine reports it in its status and pushes a change over the event stream like any other fleet change, so every client shows the one state. The new stored parts are the *Paused* flag and the *resume at* time (the engine, not a client, resumes at that time). **Boot rule:** ADR-0077's ruling stands — a chain never starts moving because the app started, so after a restart the state is Off (a Paused state with a resume time that has not passed also comes back as Off, never as On). **Confirmed by the owner (O-5, 2026-11-06).** A **read-only paired device** (§3.6) sees the state but cannot change it, and cannot trigger Stop-now.
 
-**i18n (§7).** Catalog keys `autopilot.state.on`, `autopilot.state.paused`, `autopilot.state.off`, `autopilot.stop_all` and `autopilot.resume_at` (parameter `{time}`, formatted with `Intl`).
+**i18n (§7).** Catalog keys `autopilot.state.on`, `autopilot.state.paused`, `autopilot.state.off`, `autopilot.stop_all` and `autopilot.resume_at` (parameter `{time}`, formatted with `Intl`); req-95b added `autopilot.resume_time`, `autopilot.stop_all.confirm`, `autopilot.aria`, `autopilot.command`, `autopilot.close` and the refusal words `autopilot.refused.read_only / .bad_resume_at / .bad_state / .runner_down / .unknown`.
 
 ## 7. UI concept (phone first)
 

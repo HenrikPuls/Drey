@@ -84,6 +84,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** The refusal code a chain write's body carried (`read_only`, ...), when it had one. */
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -207,7 +209,12 @@ export class McClient {
     }
     if (!res.ok) {
       const message = (data as { error?: unknown } | null)?.error;
-      throw new ApiError(res.status, typeof message === 'string' ? message : `HTTP ${res.status}`);
+      const code = (data as { code?: unknown } | null)?.code;
+      throw new ApiError(
+        res.status,
+        typeof message === 'string' ? message : `HTTP ${res.status}`,
+        typeof code === 'string' ? code : undefined,
+      );
     }
     return data as T;
   }

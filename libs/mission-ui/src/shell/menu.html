@@ -29,6 +29,16 @@
       <span class="grow">{{ 'shell.crew' | t }}</span>
       <span class="chev" aria-hidden="true">›</span>
     </button>
+    @if (autopilot(); as pilot) {
+      <button type="button" class="row autopilot" [attr.aria-expanded]="autopilotOpen()" (click)="autopilotOpen.set(!autopilotOpen())">
+        <span class="ap-dot" [attr.data-tone]="pilot.tone" aria-hidden="true"></span>
+        <span class="grow">{{ pilot.text }}</span>
+        <span class="chev" aria-hidden="true">›</span>
+      </button>
+      @if (autopilotOpen()) {
+        <mc-autopilot-panel class="ap-panel" (done)="autopilotOpen.set(false)" />
+      }
+    }
     <button type="button" class="row" (click)="place.emit('settings')">
       <span class="grow">{{ 'shell.settings' | t }}</span>
       <span class="chev" aria-hidden="true">›</span>

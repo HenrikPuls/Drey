@@ -9,6 +9,7 @@ import {
 import { McState } from './api/state';
 import { bootHintsFromLocation } from './api/client';
 import { parsePriorities } from '@mission-ui/api/dto';
+import { MC_AUTOPILOT, type McAutopilotState } from '@mission-ui/autopilot/autopilot-state';
 import { MC_CHAT_STATE } from '@mission-ui/chat/chat.model';
 import { MC_TEAM_DETAIL, type PersonaFacts, type TeamDetailVm } from '@mission-ui/team/detail';
 import {
@@ -35,6 +36,18 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     McState,
+    {
+      provide: MC_AUTOPILOT,
+      useFactory: (): McAutopilotState => {
+        const state = inject(McState);
+        return {
+          autopilot: computed(() => state.team().autopilot ?? null),
+          readOnly: state.readOnly,
+          set: (record) => state.setAutopilot(record),
+          stopAll: () => state.stopAllQuietly(),
+        };
+      },
+    },
     { provide: MC_CHAT_STATE, useExisting: McState },
     { provide: MC_TOAST_STATE, useExisting: McState },
     { provide: MC_SETTINGS_STATE, useExisting: McState },

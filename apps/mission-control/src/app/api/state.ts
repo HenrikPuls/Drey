@@ -17,6 +17,7 @@
 import { computed, signal } from '@angular/core';
 import { ApiError, McClient, type McBootHints, type McEventHandlers } from './client';
 import { type McChatUploadReply } from '@mission-ui/chat/chat.model';
+import { autopilotRefusalOf, type AutopilotView, type McAutopilotReply } from '@mission-ui/autopilot/autopilot-state';
 import {
   parsePairingView,
   parseSettings,
@@ -1620,6 +1621,44 @@ export class McState {
     }
     await this.refreshTeam();
     this.toast(paused ? 'Chain halted — running runs finish' : 'Chain runs again', 'ok');
+    return { ok: true };
+  }
+
+  /**
+   * The Autopilot switch (`POST /api/chain/autopilot`, req-95b). No toast:
+   * the surface that asked shows a refusal as words from the catalog, keyed
+   * by the engine's code (`read_only`, `bad_resume_at`, `runner_down`, ...).
+   * A success re-folds the team, which also arrives over the event stream.
+   */
+  async setAutopilot(record: AutopilotView): Promise<McAutopilotReply> {
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', '/api/chain/autopilot', record)
+      .catch((error: unknown) => ({
+        ...fail(error),
+        ...(error instanceof ApiError && error.code !== undefined ? { code: error.code } : {}),
+      }));
+    if (isFailure(body)) {
+      return autopilotRefusalOf(body, 'The change was refused.');
+    }
+    if (body['ok'] !== true) {
+      return autopilotRefusalOf(body, 'The change was refused.');
+    }
+    await this.refreshTeam();
+    return { ok: true };
+  }
+
+  /** Stop-now from the Autopilot sheet: the chain's stop-all, its refusal as data (no toast). */
+  async stopAllQuietly(): Promise<McAutopilotReply> {
+    const body = await this.client
+      .request<Record<string, unknown>>('POST', '/api/chain/abort', {})
+      .catch((error: unknown) => ({
+        ...fail(error),
+        ...(error instanceof ApiError && error.code !== undefined ? { code: error.code } : {}),
+      }));
+    if (isFailure(body) || body['ok'] !== true) {
+      return autopilotRefusalOf(body, 'The change was refused.');
+    }
+    await this.refreshTeam();
     return { ok: true };
   }
 

@@ -1,0 +1,22 @@
+@if (view(); as current) {
+  <button type="button" class="btn" [attr.aria-label]="label()" [attr.title]="label()" (click)="open.set(true)">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" />
+    </svg>
+    <span class="dot" [attr.data-tone]="tone()" aria-hidden="true"></span>
+  </button>
+  @if (open()) {
+    <div class="scrim" (click)="open.set(false)"></div>
+    <section class="sheet" role="dialog" aria-modal="true" [attr.aria-label]="'autopilot.title' | t">
+      <header class="head">
+        <h2 class="ttl">{{ 'autopilot.title' | t }}</h2>
+        <button type="button" class="close" [attr.aria-label]="'autopilot.close' | t" (click)="open.set(false)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </header>
+      <mc-autopilot-panel (done)="open.set(false)" />
+    </section>
+  }
+}

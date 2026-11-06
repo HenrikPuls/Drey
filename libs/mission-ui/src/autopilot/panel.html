@@ -1,0 +1,44 @@
+@if (view(); as current) {
+  <div class="rows" role="radiogroup" [attr.aria-label]="'autopilot.title' | t">
+    @for (kind of kinds; track kind) {
+      <button
+        type="button"
+        class="row"
+        role="radio"
+        [attr.data-state]="kind"
+        [attr.aria-checked]="current.state === kind"
+        [class.on]="current.state === kind"
+        [disabled]="disabled()"
+        (click)="pick(kind)"
+      >
+        <span class="dot" [attr.data-tone]="tone(kind)" aria-hidden="true"></span>
+        <span class="grow">{{ 'autopilot.state.' + kind | t }}</span>
+      </button>
+      @if (kind === 'paused' && current.state === 'paused') {
+        <div class="resume">
+          <label class="resume-label" for="mc-autopilot-resume">
+            {{ resumeText() ?? ('autopilot.resume_time' | t) }}
+          </label>
+          <input
+            id="mc-autopilot-resume"
+            class="time"
+            type="time"
+            [value]="resumeValue()"
+            [disabled]="disabled()"
+            [attr.aria-label]="'autopilot.resume_time' | t"
+            (change)="onTime($event)"
+          />
+        </div>
+      }
+    }
+  </div>
+  <button type="button" class="row stop" [class.armed]="armed()" [disabled]="disabled()" (click)="stop()">
+    {{ (armed() ? 'autopilot.stop_all.confirm' : 'autopilot.stop_all') | t }}
+  </button>
+  @if (disabled()) {
+    <p class="note">{{ 'autopilot.refused.read_only' | t }}</p>
+  }
+  @if (error(); as words) {
+    <p class="note err" role="alert">{{ words }}</p>
+  }
+}

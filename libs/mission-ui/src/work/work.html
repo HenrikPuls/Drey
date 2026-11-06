@@ -1,4 +1,4 @@
-<mc-app-bar title="Work" [sub]="vaultTitle()">
+<mc-app-bar title="Work" [sub]="vaultTitle()" [autopilot]="true">
   @if (state !== null) {
     <button bar-end type="button" class="fleet" title="Chain status" (click)="onFleetTap()">
       <span class="led" [class.idle]="!fleetLive()" aria-hidden="true"></span>{{ fleetLabel() }}

@@ -27,5 +27,10 @@
       <div class="sub">{{ line }}</div>
     }
   </div>
-  <div class="end"><ng-content select="[bar-end]" /></div>
+  <div class="end">
+    <ng-content select="[bar-end]" />
+    @if (autopilot()) {
+      <mc-autopilot-button />
+    }
+  </div>
 </header>

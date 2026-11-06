@@ -6,6 +6,7 @@ import {
   input,
   output,
 } from '@angular/core';
+import { AutopilotButton } from '../autopilot/button';
 import { McI18nPipe } from '../i18n/i18n.pipe';
 
 /** What the phone's "Menu" back control does on a top-level page (the shell binds it). */
@@ -36,7 +37,7 @@ export const MC_APP_NAV = new InjectionToken<McAppNav | null>('mc-app-nav', {
  */
 @Component({
   selector: 'mc-app-bar',
-  imports: [McI18nPipe],
+  imports: [McI18nPipe, AutopilotButton],
   templateUrl: './app-bar.html',
   styleUrl: './app-bar.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -54,6 +55,8 @@ export class AppBar {
   readonly backOnWide = input(true);
   /** The page shows its own ☰ from 768 px (the chat opens its history). */
   readonly ownMenu = input(false);
+  /** The phone's Autopilot control sits in the bar (Work, Crew, Mission Control chat; req-95b). */
+  readonly autopilot = input(false);
 
   /** The back control was tapped. */
   readonly backed = output<void>();

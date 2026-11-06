@@ -7,6 +7,8 @@
  * written here are `videos.inGit` and `videos.maxMb`, through the
  * engine's own settings guard (E12-3) — nothing is defined twice.
  */
+import { autopilotViewOf, resumeAtOfTime, timeFieldOfResume, type AutopilotKind, type AutopilotView } from '../../../../shared/autopilot';
+import { writeAutopilot } from '../autopilot/controller';
 import type { DreyPluginApi } from '../../../../shared/plugin-api/renderer';
 import { parseHandover } from '../../../../packages/tickets-engine/src/contracts/tickets';
 import { WORKER_PROVIDERS } from '../../../../packages/tickets-engine/src/fleet/protocol';
@@ -15,7 +17,7 @@ import type { PersonaView } from '../../shared/remote-protocol';
 import type { BoardSnapshot } from '../../shared/tickets';
 import { RUNNER_LABEL } from '../settings-workers';
 import { el, mutate, textButton } from '../settings-dom';
-import { autopilotStateOf, budgetLineOf, maxMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, type DeskVideos } from './desk-model';
+import { budgetLineOf, maxMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, type DeskVideos } from './desk-model';
 
 export interface DeskSettingsHooks {
   /** Opens the Team tab ("Edit crew"). */
@@ -113,8 +115,8 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   manage.addEventListener('click', hooks.manageRunners);
   budget.grid.append(...row('Daily budget', value(budgetLine)), ...row('Runners', value(runnersLine, manage)));
 
-  // Autopilot (req-95, concept 6.1). TODO(req-95b): wire the selector and the time to the
-  // engine route req-95a delivers; until it is merged the row only reads the chain master.
+  // Autopilot (req-95b, concept 6.1): the same three states the status item switches; a
+  // refusal reads as words from the catalog, under the row.
   const autopilot = el('select');
   autopilot.id = 'tset-autopilot';
   autopilot.dataset['settingKey'] = 'autopilot';
@@ -122,23 +124,41 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   for (const id of ['on', 'paused', 'off'] as const) {
     autopilot.append(Object.assign(el('option', undefined, api.i18n.t(`autopilot.state.${id}`)), { value: id }));
   }
-  autopilot.disabled = true;
-  autopilot.title = 'Changing the state arrives with the autopilot engine route';
   const resumeAt = el('input', 'mono-input');
   resumeAt.type = 'time';
   resumeAt.id = 'tset-autopilot-resume';
   resumeAt.dataset['settingKey'] = 'autopilot.resumeAt';
   resumeAt.setAttribute('aria-label', 'Resume paused autopilot at');
-  resumeAt.disabled = true;
+  const autopilotNote = el('div', 'tset-kv-note');
+  autopilotNote.setAttribute('role', 'alert');
+  const autopilotT = (key: string, params?: Record<string, string | number>): string => api.i18n.t(key as never, params as never);
+  const autopilotIo = { invoke: (method: string, payload?: unknown): Promise<unknown> => api.backend.invoke(method, payload) };
   const paintAutopilot = async (): Promise<void> => {
     try {
-      const status = (await api.backend.invoke('chainStatus')) as { master?: string } | null;
-      autopilot.value = autopilotStateOf(status?.master);
+      const view = autopilotViewOf(await api.backend.invoke('chainStatus'));
+      autopilot.value = view?.state ?? 'off';
+      resumeAt.value = timeFieldOfResume(view?.resumeAt);
+      resumeAt.disabled = view?.state !== 'paused';
     } catch {
       // The row keeps what it showed.
     }
   };
-  budget.grid.prepend(...row('Autopilot', value(autopilot)), ...row('Resume paused autopilot at', value(resumeAt)));
+  const writeAutopilotRow = async (record: AutopilotView): Promise<void> => {
+    const outcome = await writeAutopilot(autopilotIo, autopilotT, record);
+    autopilotNote.textContent = outcome.ok ? '' : outcome.words;
+    await paintAutopilot();
+  };
+  autopilot.addEventListener('change', () => void writeAutopilotRow({ state: autopilot.value as AutopilotKind }));
+  resumeAt.addEventListener('change', () => {
+    const at = resumeAtOfTime(resumeAt.value, new Date());
+    if (at !== null) {
+      void writeAutopilotRow({ state: 'paused', resumeAt: at });
+    }
+  });
+  budget.grid.prepend(
+    ...row('Autopilot', value(autopilot)),
+    ...row('Resume paused autopilot at', value(resumeAt, autopilotNote)),
+  );
 
   // --- Walkthrough videos ------------------------------------------------
   const video = section('tset-videos-head', 'Walkthrough videos');

@@ -125,8 +125,19 @@ const ROUTES: Record<string, () => unknown> = {
   '/api/settings': () => ({ ok: true }),
 };
 
+export interface FakeDeskOptions {
+  /** The device `/api/me` describes (default: writable). */
+  readonly readOnly?: boolean;
+  /** `POST /api/chain/autopilot` answers with this refusal code instead of taking the change (req-95b). */
+  readonly refuseAutopilot?: 'read_only' | 'bad_resume_at' | 'runner_down';
+}
+
 /** Starts the fake desk on a free port; resolves to its origin and a stop function. */
-export async function startFakeDesk(): Promise<{ origin: string; stop: () => Promise<void> }> {
+export async function startFakeDesk(
+  options: FakeDeskOptions = {},
+): Promise<{ origin: string; stop: () => Promise<void>; autopilotWrites: () => readonly unknown[] }> {
+  const autopilotWrites: unknown[] = [];
+  const chain: Record<string, unknown> = { ...fleet.chain, autopilot: { state: 'on' } };
   if (!fs.existsSync(path.join(APP_DIR, 'index.html'))) {
     throw new Error(`Mission Control is not built: ${APP_DIR} — run npm run build:mission-control first`);
   }
@@ -140,9 +151,35 @@ export async function startFakeDesk(): Promise<{ origin: string; stop: () => Pro
       req.on('close', () => streams.delete(res));
       return;
     }
+    if (url.pathname === '/api/chain/autopilot' && req.method === 'POST') {
+      let raw = '';
+      req.on('data', (chunk: Buffer) => (raw += chunk.toString()));
+      req.on('end', () => {
+        const body = JSON.parse(raw === '' ? '{}' : raw) as { state?: string };
+        autopilotWrites.push(body);
+        if (options.refuseAutopilot !== undefined) {
+          const code = options.refuseAutopilot;
+          res.writeHead(code === 'read_only' ? 403 : 200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: code === 'read_only' ? 'this device is paired read-only' : code, code }));
+          return;
+        }
+        chain['autopilot'] = body;
+        chain['master'] = body.state === 'on' ? 'run' : 'halted';
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, status: chain }));
+      });
+      return;
+    }
     if (url.pathname.startsWith('/api/')) {
       const ticketMatch = /^\/api\/tickets\/([^/]+)$/.exec(url.pathname);
-      const route = ticketMatch !== null ? () => ticket(decodeURIComponent(ticketMatch[1]!)) : ROUTES[url.pathname];
+      const route =
+        ticketMatch !== null
+          ? () => ticket(decodeURIComponent(ticketMatch[1]!))
+          : url.pathname === '/api/fleet'
+            ? () => ({ ...fleet, chain })
+            : url.pathname === '/api/me'
+              ? () => ({ ok: true, device: { name: 'iPad', readOnly: options.readOnly === true } })
+              : ROUTES[url.pathname];
       if (route === undefined || (req.method !== 'GET' && req.method !== 'HEAD')) {
         res.writeHead(404, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ ok: false, error: `no fake route for ${req.method} ${url.pathname}` }));
@@ -164,6 +201,7 @@ export async function startFakeDesk(): Promise<{ origin: string; stop: () => Pro
   const port = typeof address === 'object' && address !== null ? address.port : 0;
   return {
     origin: `http://127.0.0.1:${port}`,
+    autopilotWrites: () => autopilotWrites,
     stop: () =>
       new Promise<void>((resolve) => {
         for (const stream of streams) {

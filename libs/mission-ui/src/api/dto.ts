@@ -6,6 +6,7 @@
  * fields with defaults instead of throwing: a partial desk answer must
  * never white-screen the phone.
  */
+import { autopilotViewOf, type AutopilotView } from '../../../../shared/autopilot';
 import { maskFences } from '../../../../shared/markdown/fences';
 
 // --- Work ------------------------------------------------------------------
@@ -295,6 +296,8 @@ export interface TeamView {
    * master strip shows its idle face instead of guessing.
    */
   readonly chainMaster?: 'run' | 'halted' | null;
+  /** The Autopilot off the chain block (req-95b); absent while the desk reports no chain. */
+  readonly autopilot?: AutopilotView;
   /** The persona ids the owner paused in the chain; `[]` when the desk sends none. */
   readonly pausedPersonas?: readonly string[];
   /** Per provider pool: running against effective size; absent when the desk sends no pool sizes. */
@@ -1104,6 +1107,7 @@ export function parseTeam(personasJson: unknown, fleetJson: unknown): TeamView {
   const chain = rec(fleet['chain']);
   const master = chain?.['master'];
   const chainMaster = master === 'run' || master === 'halted' ? master : null;
+  const autopilot = chain === null ? null : autopilotViewOf(chain);
   const pausedPersonas = strArray(fleet['pausedPersonas']);
   const capacity = capacityOf(chain, runs);
   const personas: PersonaView[] = [];
@@ -1145,6 +1149,7 @@ export function parseTeam(personasJson: unknown, fleetJson: unknown): TeamView {
         ...(run !== null && typeof run['ticketId'] === 'string' ? { ticketId: run['ticketId'] } : {}),
       })),
     ...(chainMaster !== null ? { chainMaster } : {}),
+    ...(autopilot !== null ? { autopilot } : {}),
     ...(pausedPersonas.length > 0 ? { pausedPersonas } : {}),
     ...(capacity.length > 0 ? { capacity } : {}),
   };
