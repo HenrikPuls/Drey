@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163, 165–169, 171 and 172 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–173 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -70,7 +70,7 @@ and suite-green but await the owner's
 rounds** — with E9 the whole E0–E9 arc stands built and the concept
 is complete, caveat:
 none of it is owner-verified yet; the next step is the owner's
-verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to approve), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) 130 (E13-8, Board and Team tabs, the Capacity band) and 131 (D-1, the Mission Control chat reaches its model: sync on change, both HTTP dialects, the error card, Settings → Chat), 132 (E10-6, you as a team member: manual steps that park the ticket and notify), 133 (E12-6, the Markdown surface lib and Mission Control's View / Live / Source) and 135 (D-2, the paired-devices list with total and last connected, and pairing from Mission Control), 136 (E12-7, the Anthrazit design decisions: pastels, radius scale, type floor, text size scale) and 137 (the text size steps S / M / L / XL) and 140 (D-3, engine writes refresh Drey's vault views), 138 (E13-5, Assistant conversation targets), 139 (E13-7, the Review tab), 141 (E13-13 first cut, the Work view), 143 (D-5, the Mission Control frame stays put on iOS) and 144 (E13-9, Shape in Drey: Paul edits the open ticket through Mission Control, the Refine button removed) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
+verification round before anything further. **Milestones 123 (E13-1, views — saved layouts with their own tabs, ADR-0089), 124 (E13-3, status bar slot), 125 (E13-4, link fallback to other vaults), 126 (E10-4, plan to accept), 127 (E13-2, view presets and home views, SDK 1.39), 128 (E10-5, flow editor), 129 (E13-6, the ticket as a document) 130 (E13-8, Board and Crew tabs, the Capacity band) and 131 (D-1, the Mission Control chat reaches its model: sync on change, both HTTP dialects, the error card, Settings → Chat), 132 (E10-6, you as a crew member: manual steps that park the ticket and notify), 133 (E12-6, the Markdown surface lib and Mission Control's View / Live / Source) and 135 (D-2, the paired-devices list with total and last connected, and pairing from Mission Control), 136 (E12-7, the Anthrazit design decisions: pastels, radius scale, type floor, text size scale) and 137 (the text size steps S / M / L / XL) and 140 (D-3, engine writes refresh Drey's vault views), 138 (E13-5, Assistant conversation targets), 139 (E13-7, the Review tab), 141 (E13-13 first cut, the Work view), 143 (D-5, the Mission Control frame stays put on iOS) and 144 (E13-9, Shape in Drey: Paul edits the open ticket through Mission Control, the Refine button removed) are built and suite-green and await the owner's round** (E13 is the desktop integration of Mission Control, below). The owner's verification round for 1–81 closed
 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
@@ -151,7 +151,7 @@ views, as milestone 140; D-4, runs.spec flaking under full-suite load, as milest
 ### Now (small, daily value)
 
 **Tickets-Engine extraction + Mission Control** (owner request, outside
-the list, 2026-11-01; migration plan approved by the owner,
+the list, 2026-11-01; migration plan accepted by the owner,
 [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)).
 The strangler restructure of the tickets system per the architecture
 concept: `packages/tickets-engine` (domain, fleet, contracts — E0/milestone 97)
@@ -217,7 +217,7 @@ canvas "Drey Tickets — Workflow redesign" is binding for the UI;
 [ADR-0088](../docs/09_architecture_decisions/0088-tickets-engine-package-cut.md)
 "Later changes" records the decisions). Worked in this order, one
 milestone at a time, a pause after each; milestone numbers are taken
-when an item ships (next free: 137; 133 = Markdown surface, 134 = the convergence audit, 135 = devices, 136 = design decisions; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = team states, 116 = proof mode + videos, 117 = diff review, 118 = line comments, 119 = cost table + estimate, 120 = parts schema, 121 = plan delta, 122 = shape mode; E12-1 – E12-4, E11, E10-1 – E10-6 shipped). Nothing here creates tickets — the
+when an item ships (next free: 137; 133 = Markdown surface, 134 = the convergence audit, 135 = devices, 136 = design decisions; 112 = specs + the English pass, 113 = navigation, 114 = settings, 115 = crew states, 116 = proof mode + videos, 117 = diff review, 118 = line comments, 119 = cost table + estimate, 120 = parts schema, 121 = plan delta, 122 = shape mode; E12-1 – E12-4, E11, E10-1 – E10-6 shipped). Nothing here creates tickets — the
 owner builds without the tickets system.
 
 - **E12-3b — Settings pages still missing.** Chat (the model rows and
@@ -234,7 +234,7 @@ owner builds without the tickets system.
   split (file list left, one file's diff right) and the viewed marks on
   the desk instead of per device; E11-2 shipped both inside the proof
   card's accordion.
-- **E10-4b — Plan to approve follow-ups.** The desktop widget is E13-10;
+- **E10-4b — Plan to accept follow-ups.** The desktop widget is E13-10;
   here: the parent ticket leaves "needs shaping" once its parts are
   released (today it stays in its phase with one Log line), a per-gate
   estimate for the whole flow (the card estimates the build gate), the
@@ -263,7 +263,7 @@ owner builds without the tickets system.
 Decided against and not on the list: an overlap guard, touches or file
 routing between parallel tickets (D5 — req-75 W7 and W8 dropped; their
 tickets closed); a separate design persona (dropped, it was only an
-example). The default team is Paul (plans), Ben (builds), Ralf
+example). The default crew is Paul (plans), Ben (builds), Ralf
 (reviews), Tessa (tests); **Pia is the name of Mission Control itself**.
 The product name "Drey Crew" needs a name check before any rollout, with
 "Kobel" as the fallback (the code is not renamed). Out of scope: away posture / return briefing,
@@ -291,7 +291,7 @@ ships.
 
 Order and dependencies (an item needs everything it names):
 
-10. **E13-10 — Plan to approve in the ticket.** The Parts block as an editor
+10. **E13-10 — Plan to accept in the ticket.** The Parts block as an editor
     widget under the header (persona per part, move / delete with a second
     press, running parts locked, flow row, estimate, Approve plan). Needs
     E13-6 (built, milestone 129); the engine side (`GET/POST /api/tickets/<id>/parts`, `POST
@@ -303,7 +303,7 @@ Order and dependencies (an item needs everything it names):
 13. **E13-13 — The Work view (rest).** The first cut is built (milestone
     141: the preset, the Tickets panel / ticket / Assistant / Capacity
     arrangement, home views, Ctrl+2). What is left: the Capacity band **only
-    while the Board or Team tab is active** (board 7e; boards 7a–7d and 7j show
+    while the Board or Crew tab is active** (board 7e; boards 7a–7d and 7j show
     no bottom dock) — today it is always shown; the centre opening on the
     Board when the view is first shown empty; **Mission Control as the
     Assistant's default target** (the `assistantTarget` field of the preset
@@ -365,7 +365,7 @@ owner confirms scope and order before any of it starts:
 
 - **E13-14 — Panel naming and chrome.** The dock panel title is done
   (milestone 141, G-10); left: an "Open Board tab" icon in its header, the footer links to
-  the Team tab ("Team · Ben, Tessa busy") instead of "Workers", the Workers
+  the Crew tab ("Crew · Ben, Tessa busy") instead of "Workers", the Workers
   tab retires (G-11).
 - **E13-15 — Status bar items.** A separate "$4.10 today" item and a
   "● 3 need you" item, "in Work" while the Notes view is active (G-12).
@@ -377,19 +377,19 @@ owner confirms scope and order before any of it starts:
 - **E13-18 — Views polish.** Views menu descriptions, shortcut text, "Edit
   views…", "Go to the Work view" in the tab menu, "2 here · 3 elsewhere" in
   Open windows (boards 7h, 7i) (G-28).
-- **E13-19 — Team tab completion.** New persona from a template, Remove from
-  team, editable Setup, Friction tab, Notify / Runs after / This week /
+- **E13-19 — Crew tab completion.** New persona from a template, Remove from
+  crew, editable Setup, Friction tab, Notify / Runs after / This week /
   Typical run fields, "Talk to <name> 1:1 in the Assistant" (with E13-5), the
   per-persona slot share (needs an engine count) (G-14).
-- **E12-9d — "Initialize board" seeds the default team** (owner decision 2026-11-05,
-  answering E12-9b Q2: yes). A new board gets the default team of decision D7 — **Paul**
+- **E12-9d — "Initialize board" seeds the default crew** (owner decision 2026-11-05,
+  answering E12-9b Q2: yes). A new board gets the default crew of decision D7 — **Paul**
   (plans), **Ben**, **Ralf**, **Tessa** (roles as in the concept) — plus "You" and Pia as
   Mission Control itself, each with worker, model, colour and prompt. Which persona works
   which column follows E12-9c (Plan, Build = agents; Inbox, Review, Sign Off = manual). The
   default worker is **`opencode`** (owner decision 2026-11-05, E12-9b Q3: it supports all
   providers; the engine's `defaultWorker` already is `opencode`); `claude-code` stays
   selectable, and so is **Kimi Code** (milestone 167) — both are what the owner uses today. The names are plain persona files, so the owner's idea of a squirrel crew ("Nutty
-  Nutcracker" …) is a later naming choice, not a code change. Existing boards keep their team.
+  Nutcracker" …) is a later naming choice, not a code change. Existing boards keep their crew.
 
 - **E12-9e — Follow-ups of the default pipeline (E12-9c, milestone 166)** (S–M). Open: (1) **Plan →
   Build has no checkpoint** in the default (both agent columns): decide whether a finished plan
@@ -400,14 +400,14 @@ owner confirms scope and order before any of it starts:
   converter that reads the store's own stage list** (today `--stages a,b,c`, default the new
   six); (4) the Work panel's *Prioritized* group is empty on a new board (its queue is Inbox only
   while Plan is an agent column) — keep, rename or retire it; (5) **Open question: migration of `prioritized` tickets** — `inbox` (today) or `plan` (an agent
-  column: planning would start on arrival); (6) E12-9b Q2 (team seeding) and Q3
+  column: planning would start on arrival); (6) E12-9b Q2 (crew seeding) and Q3
   (default worker) are still open.
 - **E13-22 — Settings: one page width, a section tree and search** (owner request
   2026-11-05, outside the list; modelled on VS Code's settings). The settings overlay
   grows with the window (wider than today's 640 px cap) and **every page uses the same
   width** — no jumping between a narrow and a wide page; wide editors (columns,
   workers) fill that width. Settings → Tickets is broken into sections (Store and Git,
-  Pipeline, Team and prompts, Remote and devices — to be confirmed against the real
+  Pipeline, Crew and prompts, Remote and devices — to be confirmed against the real
   page) shown as **expandable entries in the left category list**; the page scrolls as
   a whole, a click on an entry scrolls to its section and the current section is
   highlighted while scrolling; a search field at the top filters all pages' settings.
@@ -416,9 +416,9 @@ owner confirms scope and order before any of it starts:
   files).
 - **E12-11 — Work panel body** (proposed by the E12-10 audit; M). One 40 px
   header row with the icons *filter · New idea · Open Board tab · grip*; the
-  Workers cards leave the panel (they live in Team and Capacity; the Workers tab
-  and Chain log retire); Needs you comes first; the footer reads `Team · Ben,
-  Tessa busy` and opens the Team tab; rows keep the title on its own line with the
+  Workers cards leave the panel (they live in Crew and Capacity; the Workers tab
+  and Chain log retire); Needs you comes first; the footer reads `Crew · Ben,
+  Tessa busy` and opens the Crew tab; rows keep the title on its own line with the
   age at the right and one grey detail line instead of mono state words; the
   git warning becomes a one-line dismissible note [A-01–A-06, A-09, A-10].
   Files: `plugins/tickets/renderer/work-panel.ts`, `work-groups.ts`, the panel
@@ -451,17 +451,17 @@ owner confirms scope and order before any of it starts:
   `libs/mission-ui/src/work/`, `settings/`, `apps/mission-control/src/app/`
   (touches the same stylesheet as E12-13 — run after it, or together).
 - **E12-15 — Capacity band and status bar** (proposed by the E12-10 audit; M).
-  The band shows only while Board or Team is the active tab and is one line
+  The band shows only while Board or Crew is the active tab and is one line
   (completes E13-13's rest); two status items `$4.10 today` and `● 3 need you`,
   `in Work` while in Notes (E13-15); the title-bar `Capture by voice` button once
-  the owner has ruled on its chord (E13-16); the Team header counts every card
+  the owner has ruled on its chord (E13-16); the Crew header counts every card
   and shows the state summary [I-01, I-03, I-04, L-04, L-05]. Files:
   `plugins/tickets/renderer/team/capacity-view.ts`, `status-slot.ts`,
   `src/app/status-bar/`, `src/app/titlebar/`.
-- **E12-16 — Board and Team completion** (proposed by the E12-10 audit; M, partly
+- **E12-16 — Board and Crew completion** (proposed by the E12-10 audit; M, partly
   L). `Filter: all personas` and `Cost by column` (E13-17); empty columns say
   `Empty` quietly, `New idea` moves to the board header; `New persona`, `Remove
-  from team`, editable Setup, the Friction tab, the Setup fields and `Talk to …
+  from crew`, editable Setup, the Friction tab, the Setup fields and `Talk to …
   1:1` (E13-19) [H-01–H-03, I-02]. Files: `plugins/tickets/renderer/board/`,
   `team/team-view.ts`.
 - **E12-17 — Parts block in the ticket** (E13-10, restated; L). The screenshot
@@ -483,7 +483,7 @@ owner confirms scope and order before any of it starts:
 - **E12-20 — Audit fixtures and the canvas export** (proposed by the E12-10
   audit; S). Export boards 4a–7j next to the stale repo copies (or delete the
   copies), and add the fixtures the audit could not seed: an MC ticket with a
-  waiting question, one with proof and a diff, an MC plan to approve, an MC shape
+  waiting question, one with proof and a diff, an MC plan to accept, an MC shape
   session, the Views menu, a dricket-store Work panel — then run the audit's
   remaining rows [Z-02, A-08, B-02, R-04, F-02]. Docs and e2e fixtures only.
 
@@ -776,8 +776,8 @@ checks use a scratch store and a second instance, never `drey-tickets`.
 | Item | Effect |
 |---|---|
 | E13-9 Shape in Drey (running) | **Stays valid** (UI, live edit, plan delta). Finish on the `files` backend; it must add **no new direct file writer**; its write path is re-targeted by milestone 155 (E14-4b: every board write is `put`). |
-| E13-10 Plan to approve in the ticket | **Stays valid**; the `### Parts` block is body text. The engine routes (`parts`, `release`) are the contract: build the widget against them and put **no direct file write** behind them; the release is children-first, parent-last, resumable on dricket since milestone 155. |
-| E13-11 Flow tab, E13-13..19 (Work view rest, panel naming, status bar, capture button, board filter, views polish, team completion) | **Stay valid** (UI/DTO driven). |
+| E13-10 Plan to accept in the ticket | **Stays valid**; the `### Parts` block is body text. The engine routes (`parts`, `release`) are the contract: build the widget against them and put **no direct file write** behind them; the release is children-first, parent-last, resumable on dricket since milestone 155. |
+| E13-11 Flow tab, E13-13..19 (Work view rest, panel naming, status bar, capture button, board filter, views polish, crew completion) | **Stay valid** (UI/DTO driven). |
 | E13-12 Settings → Tickets in Drey | **Stays valid** except the pipeline/column editor: **waits** for OD-4 (stage vocabulary) and Q-05 (who edits `dricket.toml`). |
 | E11-1c video size rule, E11-1b, E11-2b, E10-3b/4b/5b, E10-7, E12-3b/5/7/8 | **Stay valid** (videos stay outside git; UI follow-ups). |
 | E11-4 cost table and estimate; `## Verlauf` writer | **Stay valid**; the writer moves inside the runner's claim (E14-5); history for the estimate comes from `dk log` (dk R-07). |
@@ -931,6 +931,21 @@ rest are kept so they still match `docs/11`.
   own.
 
 ### Follow-ups of shipped milestones (none committed)
+
+- **Persisted "approve" / "team" / "Sign Off" values (milestone 173 follow-up, owner request 2026-11-06, outside the list).**
+  The wording change of 173 left every stored or contract identifier alone. Candidates that would read better
+  as the user-facing words, each needing a migration that is not done: the default pipeline's stage title
+  **Sign Off** is not a candidate on its own any more: the owner fixed one state list on 2026-11-06 and the column goes away (next item). The rest: the engine's
+  `approve` checkpoint action kind, the Mission Control tab id `team` and the
+  `tickets-team` document kind (persisted in view layouts and the phone URL), and the `desk-team` CSS classes.
+  Each is a rename with a read-both/write-new bridge and a release note; none is needed for the owner to see
+  "Crew" and "Accept".
+
+- **One state list in the engine and the default pipeline (owner decisions of 2026-11-06, canvas version 58, decision 16; docs only so far).** The owner sees `Inbox → Shaping → Prioritized → Building → Review → Ready to try → Done`, with those names on every column and badge and no Commit, Ideas or numbered folder in the UI. The engine and the default pipeline follow: the manual last column "Sign Off" (id `sign-off`) and the separate `commit` column go away, and the tickets already on them move to Ready to try / Done. Needed: a migration of existing tickets (stage ids in ticket files and `pipeline.md`, read-both/write-new, one commit per board), the `specs/ticket-schema.md` change (stage list, transition table, validator), the display names in Mission Control, the desk and the phone client, and a release note. One decision lives in one place: the Mission Control decision card, with no second Accept button in the ticket body. Not built; the concept (§5.1) states it.
+
+- **Notes on phone and iPad (owner, 2026-11-06, decision 20; closes G-40's scope question, engine work open).** Readable and editable with the existing Markdown editor (View · Live · Source) over the active vault. Needed in the engine: a notes endpoint (list, search, read), a write path (with the save-conflict rule of ADR-0060), the rule that a read-only paired device (§3.6) cannot edit, and the client in `libs/mission-ui` over `libs/markdown-surface`. The iPad works like the desktop: header with the left-sidebar toggle, the Notes · Work · Crew switch and the right-sidebar toggle; landscape opens all three panes, portrait the left and the centre; the open state is saved per orientation as a persisted per-device UI setting. Cost-by-phase table and the estimate format `$3.00–5.20 · from 3 runs` / `no estimate yet (first run)` on all three layouts.
+
+- **i18n for the new surfaces (owner, 2026-11-06; widens the language convention).** Every user-visible string of the new surfaces is a catalog key: no hard-coded UI strings, no sentences built from parts, ICU plurals, `Intl` for numbers, dates and currency, layouts that tolerate 40 % longer labels. English is the first locale. Needs an ADR when the catalog mechanism is chosen (format, loader, where the catalogs live, how the three clients share them); the first implementation round covers the new surfaces, the older ones migrate as they are touched. Not built.
 
 - **Mission Control over the CLI providers (D-1 follow-up, 2026-11-04).**
   The chat bridge speaks the HTTP providers (OpenAI-compatible, Anthropic

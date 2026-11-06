@@ -21,7 +21,7 @@ desktop-integration.md`, boards 7a to 7i.
 ## Context
 
 Drey has one layout: three docks, a centre pane tree, one set of open tabs.
-That fits a note app. Bringing the agent system (tickets, board, review, team,
+That fits a note app. Bringing the agent system (tickets, board, review, crew,
 Mission Control in the Assistant) onto the desktop puts a second kind of work
 next to notes. With one layout the two compete for the same docks and the same
 tab bar, and every switch of activity means rearranging panels and closing or
@@ -233,7 +233,7 @@ preset names the target by id (the tickets plugin's Mission Control is
 
 - The tickets plugin is the first preset provider: `tickets.work` ("Work") with
   the Tickets panel left, the Assistant right, the Capacity band below; the
-  Board, Team and thread kinds name it as `homeView`.
+  Board, Crew and thread kinds name it as `homeView`.
 - A file opener claims by name suffix, so it cannot name the home view of
   ticket Markdown files (`tickets/<phase>/T-nnnn.md`) without taking every
   `.md`. The seam is therefore generic and small:
@@ -249,7 +249,7 @@ preset names the target by id (the tickets plugin's Mission Control is
   home-view rule and its thread and Flow kinds name no `homeView`: selecting
   or opening a ticket (panel, Files tree, `[[T-0121]]`, switcher) opens it as a
   tab in the **current** view's focused pane — the view the user is in keeps
-  its own layout. Board and Team, opened on purpose, still name Work. The
+  its own layout. Board and Crew, opened on purpose, still name Work. The
   generic seam (`homeView`, `registerHomeViewRule`) stays for other plugins.
 - **A view is saved only by "Save view".** `ViewService` keeps a saved layout
   per view (docks + pane tree with tabs); every later change (resize, tab

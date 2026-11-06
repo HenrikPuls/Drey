@@ -78,9 +78,9 @@ export class App {
   protected readonly tab = this.state.tab;
   /** The ticket screen: fullscreen overlay on the phone, detail column from 768 px. */
   protected readonly ticketOpen = this.state.ticketOpen;
-  /** The plan to approve (E10-4): a layer under the ticket screen, so a part's ticket opens over it. */
+  /** The plan to accept (E10-4): a layer under the ticket screen, so a part's ticket opens over it. */
   protected readonly approveOpen = this.state.approvalTicket;
-  /** The flow editor (E10-5): a layer above the ticket screen and the plan to approve. */
+  /** The flow editor (E10-5): a layer above the ticket screen and the plan to accept. */
   protected readonly flowOpen = this.state.flowTarget;
   /** The open persona 1:1 (same layering as the ticket). */
   protected readonly personaOpen = this.state.personaDetail;

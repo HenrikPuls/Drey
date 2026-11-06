@@ -666,7 +666,7 @@ const plugin: MainPluginModule = {
       return typeof value === 'string' && value !== '' ? value : null;
     };
     ctx.ipc.handle('personas', () => client.invoke('personas'));
-    // The Board's "plan to approve": a ticket's parts that are no tickets yet.
+    // The Board's "plan to accept": a ticket's parts that are no tickets yet.
     ctx.ipc.handle('planParts', (payload) => {
       const id = str(payload, 'id');
       return id === null ? { ok: false, error: 'bad plan parts payload' } : client.invoke('planParts', id);

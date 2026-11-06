@@ -24,8 +24,8 @@ export function createTicketsSettingsPage(api: DreyPluginApi, hooks: Pick<DeskSe
   return {
     id: 'tickets',
     label: 'Tickets',
-    hint: 'Team, flow, budget, devices',
-    description: 'The team, the flow, the budget and the devices that reach Mission Control.',
+    hint: 'Crew, flow, budget, devices',
+    description: 'The crew, the flow, the budget and the devices that reach Mission Control.',
     mount: (body) => {
       body.classList.add('tset');
 

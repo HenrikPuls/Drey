@@ -218,7 +218,7 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
     await page.screenshot({ path: testInfo.outputPath('desk-board-build.png') });
 
     // --- Team
-    await openFromMenu('Team');
+    await openFromMenu('Crew');
     const team = page.locator('.desk-team').filter({ visible: true });
     await expect(team).toBeVisible({ timeout: 15_000 });
     await expect(team.locator('.desk-head-sub')).toHaveText('4 personas · today $4.22');

@@ -180,7 +180,7 @@ export interface PlanPartsEditCommand {
 
 const PERSONA_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
-/** The plan to approve's list edit (E10-4): `{op:'persona', index, persona|null}`, `{op:'move', from, to}`, `{op:'delete', index}`. */
+/** The plan to accept's list edit (E10-4): `{op:'persona', index, persona|null}`, `{op:'move', from, to}`, `{op:'delete', index}`. */
 export function parsePlanPartsEdit(payload: unknown): Parsed<PlanPartsEditCommand> {
   const p = record(payload);
   if (typeof p['id'] !== 'string') {

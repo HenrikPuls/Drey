@@ -51,7 +51,7 @@ describe('Settings → Tickets desk rows', () => {
     expect([...desk.root.querySelectorAll('.tset-desk-chip')].map((n) => n.textContent)).toEqual(['Paul', 'You']);
     expect(desk.root.querySelector('.tset-desk-step')?.textContent).toBe('Build · Paul');
     expect(desk.root.textContent).toContain('$10 across 1 persona · $1 spent today');
-    button(desk.root, 'Edit team').click();
+    button(desk.root, 'Edit crew').click();
     expect(hooks.openTeam).toHaveBeenCalled();
   });
 

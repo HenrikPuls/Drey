@@ -1044,7 +1044,7 @@ export interface TicketVm {
    */
   shape?(ticketId: string): void;
   /**
-   * The ticket face's 'Plan to approve' (E10-4): opens the approval of
+   * The ticket face's 'Plan to accept' (E10-4): opens the approval of
    * the plan's parts. Optional — an adapter without it hides the button.
    */
   approvePlan?(ticketId: string): void;

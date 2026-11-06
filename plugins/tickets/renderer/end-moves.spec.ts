@@ -63,7 +63,7 @@ describe('interactiveEndMoves', () => {
     const moves = interactiveEndMoves('plan', 'plan', COLUMNS);
     expect(moves.map((m) => m.toPhase)).toEqual(['plan-review', 'build']);
     expect(moves[0]!.label).toBe('Finish → plan-review');
-    expect(moves[1]!.label).toBe('Approve → build');
+    expect(moves[1]!.label).toBe('Accept → build');
   });
 
   it('a run left over from the refine dialog offers no end move', () => {

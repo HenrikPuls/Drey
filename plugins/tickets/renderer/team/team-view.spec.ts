@@ -186,7 +186,7 @@ describe('the Capacity band', () => {
     expect(host.querySelector('.desk-cap-slots')!.textContent).toBe('1 of 5 slots busy');
     expect([...host.querySelectorAll('.desk-cap-person')].map((p) => p.textContent)).toEqual(['Benidle', 'Tessastuck on T-0126']);
     expect(host.querySelector('.desk-cap-today')!.textContent).toBe('Today $5.34 of $10.00');
-    [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Open Team ›')!.click();
+    [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Open Crew ›')!.click();
     expect(open).toHaveBeenCalled();
   });
 

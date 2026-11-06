@@ -69,7 +69,7 @@ export function mountCapacity(deps: DeskDeps, store: TeamStore, host: HTMLElemen
       textButton(model.halted ? 'Resume all' : 'Pause all', 'desk-btn', model.halted ? 'Let the chain dispatch again' : 'Let running work finish and start nothing new', () =>
         void deps.chainAction('chainMaster', { mode: model.halted ? 'run' : 'halted' }),
       ),
-      textButton('Open Team ›', 'desk-btn desk-btn-link', 'Open the Team tab', openTeam),
+      textButton('Open Crew ›', 'desk-btn desk-btn-link', 'Open the Crew tab', openTeam),
     );
     root.replaceChildren(lead, people, tail);
   };

@@ -1,7 +1,7 @@
 {
   "name": "Drey Mission Control",
   "short_name": "Mission",
-  "description": "The tickets board, the team and the one chat — phone-first.",
+  "description": "The tickets board, the crew and the one chat — phone-first.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#101216",

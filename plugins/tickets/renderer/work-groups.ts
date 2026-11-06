@@ -362,7 +362,7 @@ export function checkpointActionOf(board: BoardSnapshot, phaseId: string): Check
   if (next === undefined) {
     return { kind: 'accept', label: 'Accept' };
   }
-  return { kind: 'approve', to: next.phase.id, label: `Approve → ${next.phase.title}` };
+  return { kind: 'approve', to: next.phase.id, label: `Accept → ${next.phase.title}` };
 }
 
 /** The kind chip of a Needs-you row (req-75 W1b): one short word for why. */
@@ -382,12 +382,12 @@ export function needKindLabel(need: NeedItem, board: BoardSnapshot): string {
       const configured = board.columns.filter((column) => !column.unknown);
       const index = configured.findIndex((column) => column.phase.id === need.phase);
       // The terminal phase holds a result to try; a checkpoint right
-      // after the plan column holds a plan to approve.
+      // after the plan column holds a plan to accept.
       if (index === configured.length - 1) {
         return 'Ready to try';
       }
       const firstMachine = configured.findIndex((column) => isMachinePhase(column.phase));
-      return index - 1 === firstMachine ? 'Plan to approve' : 'Review';
+      return index - 1 === firstMachine ? 'Plan to accept' : 'Review';
     }
   }
 }
@@ -463,7 +463,7 @@ export function statusLineOf(row: WorkRow, board: BoardSnapshot): string {
         case 'Ready to try':
           // `<n> files · checks green` is W3's; until then the checks say it.
           return 'checks green';
-        case 'Plan to approve':
+        case 'Plan to accept':
           return 'plan ready';
         default:
           return 'waits for your review';

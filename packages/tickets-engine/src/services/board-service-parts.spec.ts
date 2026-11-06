@@ -9,7 +9,7 @@ import { newTicketFileText, patchTicketFile } from '../core/ticket-files';
 import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools } from '../fleet/protocol';
 
 /**
- * E10-4: the plan to approve against a real temp vault — the cards of a
+ * E10-4: the plan to accept against a real temp vault — the cards of a
  * ticket's `### Parts` (persona, flow, state, lock, start rule), the
  * list edits (persona pick, move, delete) with the locks, and the
  * release that mints one ticket per part with `parent:`, `persona:`,

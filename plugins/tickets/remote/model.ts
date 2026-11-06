@@ -78,7 +78,7 @@ export function primaryActionOf(
   const column = board.columns.find((c) => c.phase.id === phaseId) ?? null;
   const next = nextColumnOf(board, phaseId);
   if (next !== null && board.checkpoints.includes(phaseId)) {
-    return { kind: 'approve', to: next.phase.id, label: `Approve → ${next.phase.title}` };
+    return { kind: 'approve', to: next.phase.id, label: `Accept → ${next.phase.title}` };
   }
   if (column !== null && parseHandover(column.phase.handover).mode === 'agent') {
     return { kind: 'run', label: 'Run agent' };

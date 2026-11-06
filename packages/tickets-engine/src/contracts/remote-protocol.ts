@@ -220,7 +220,7 @@ export interface TicketsRemotePort {
   ticketFile(id: string, path: string): Promise<TicketFileReply>;
   /** The run estimate from the owner's own history; null below three similar runs (E11-4). */
   estimate(key: EstimateKey): Promise<RunEstimate | null>;
-  /** The plan to approve (E10-4): a ticket's parts with their tickets, states, flows and the persona picker. */
+  /** The plan to accept (E10-4): a ticket's parts with their tickets, states, flows and the persona picker. */
   planParts(id: string): Promise<PlanPartsReply>;
   /** One owner edit on the parts list: persona pick, move, delete (E10-4). */
   planPartsEdit(cmd: { id: string; edit: PlanPartsEdit }, actor: string): Promise<MutationResult>;

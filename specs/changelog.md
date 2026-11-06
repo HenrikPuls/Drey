@@ -1,3 +1,32 @@
+### Milestone 173 — The Crew tab and the Accept verb: wording follows the design canvas
+
+**Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list
+(canvas "Drey Tickets — Workflow redesign", decisions 10 and 11).
+
+- **Now.** The area is called **Crew** everywhere a user or reader sees it, never "Team": the
+  Mission Control tab, menu row and back link, the desktop Crew tab (Work panel `⋯` menu, command
+  *Open the Crew*, tab title, header), the Capacity band's **Open Crew ›**, Settings → Tickets
+  (**Crew** section, **Edit crew**, *No crew yet*, the page hint and description), the phone's
+  manifest and page description. The decision verb is **Accept** (plans and results), never
+  "Approve": the checkpoint button reads **Accept → <next column>** (Work panel, ticket page,
+  phone), the plan screen is **Plan to accept** with **Accept and run**, the kind chip *Plan to
+  accept*, the shaped-with-you line *plan accepted*, the release-stopped error *Accept again to
+  continue*.
+- **Docs and specs** carry the same words: the manual (regenerated into `public/manual/`), docs/05
+  and docs/06, the ADR prose, `docs/design/**`, `specs/roadmap.md`, `specs/ticket-schema.md`,
+  `plugins/tickets/*.md`. The canvas files `*.dc.html` under `docs/design/` are the design source
+  and were left to the canvas itself.
+- **Deliberately unchanged** (`specs/decisions.md`): every stored or contract identifier (the
+  `approve` checkpoint action kind, the `sign-off` stage id and its **Sign Off** default title,
+  `team/` folders, the tab id `team`, `tickets-team`, `desk-team` classes, IPC, routes, setting
+  keys), the tool-call approval of external tools and MCP writes, and the older entries of this
+  changelog. The stored values are a roadmap follow-up with their migration.
+- **Tests:** the specs and e2e that assert the strings follow (`approve.spec`, `view.spec`,
+  `model.spec`, `end-moves.spec`, `work-groups.spec`, `desk-settings.spec`, `team-view.spec`,
+- **Concept aligned with the canvas (version 47, same milestone):** `architecture-concept-v2.md` now says what the canvas decides — no tab bar on phone and iPad (one menu behind a button), Notes on mobile, Crew / Accept wording, the five-step text size slider (15 / 16 / 17 / 19 / 21 px, L default), the Notes · Work · Crew view switch with the Layout menu, the 9a ticket card, the Review header and green checks, Confirm / Dismiss proposals, the Anthrazit tokens. What the canvas leaves open or contradicts is **not** rewritten: `convergence-gaps.md` G-36 to G-41 (iPad menu button vs sidebar, desktop web navigation, a canvas sentence slip, the Sign Off column title, the Notes API, the product name Drey Crew).
+- **Concept follows canvas version 58 (docs only, same milestone):** one state list (Inbox, Shaping, Prioritized, Building, Review, Ready to try, Done; the engine migration is a roadmap item, G-39 reversed), one decision in one place (the Mission Control decision card), the phone menu as root screen, the desktop-like iPad with per-orientation saved panes, editable Notes (G-40 decided, engine work on the roadmap), the cost-by-phase table, the estimate format, and the i18n requirement (decision entry + roadmap item); the Autopilot switch is only listed as open proposal G-42. No code changed.
+  `tickets-remote`, `desk-board-team`).
+
 ### Milestone 170 — E13-24: Mission Control phone — one app bar on every page
 
 **Not yet manually verified by the owner.** Owner markup 2026-11-06, roadmap E13-24

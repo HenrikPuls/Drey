@@ -82,7 +82,7 @@ export interface RemoteBoard {
   ticketFile(id: string, path: string): Promise<TicketFileReply>;
   /** The run estimate from the owner's own history; null below three similar runs (E11-4). */
   estimateOf(key: EstimateKey): Promise<RunEstimate | null>;
-  /** The plan to approve's cards, edits and release (E10-4). */
+  /** The plan to accept's cards, edits and release (E10-4). */
   planParts(id: string): Promise<PlanPartsReply>;
   flowOf(target: FlowTarget): Promise<FlowReply>;
   flowEdit(input: FlowTarget & { chain: readonly string[]; edit: FlowOp }): Promise<FlowReply>;

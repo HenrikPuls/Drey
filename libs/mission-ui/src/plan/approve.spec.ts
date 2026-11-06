@@ -177,9 +177,9 @@ describe("Mission Control's proposal", () => {
   it('proposes all parts, the first running now, with a choice to run only the first', () => {
     const p = proposalOf([card(0), card(1), card(2)]);
     expect(p.text).toBe(
-      'Mission Control proposes to approve all 3 parts. Part 1 runs now; each part after it starts when the one before it is done.',
+      'Mission Control proposes to accept all 3 parts. Part 1 runs now; each part after it starts when the one before it is done.',
     );
-    expect(p.approveLabel).toBe('Approve and run');
+    expect(p.approveLabel).toBe('Accept and run');
     expect(p.firstLabel).toBe('Run part 1 only');
   });
 
@@ -256,7 +256,7 @@ describe('PlanApprove', () => {
       estimates: { ben: estimate(0.3) },
     });
     const body = text(el);
-    expect(body).toContain('Plan to approve · 3 parts');
+    expect(body).toContain('Plan to accept · 3 parts');
     expect(body).toContain('Voice capture for tickets');
     expect(el.querySelectorAll('.pa-card')).toHaveLength(3);
     expect(body).toContain('Part title 1');
@@ -353,7 +353,7 @@ describe('PlanApprove', () => {
   it('approves everything, or only the first part', async () => {
     const { el, released, click, settle } = mount(approval([card(0), card(1), card(2)]));
     const buttons = Array.from(el.querySelectorAll('.pa-buttons .pa-btn')) as HTMLButtonElement[];
-    expect(buttons.map((b) => b.textContent!.trim())).toEqual(['Run part 1 only', 'Approve and run']);
+    expect(buttons.map((b) => b.textContent!.trim())).toEqual(['Run part 1 only', 'Accept and run']);
     click('.pa-buttons .pa-btn', 0);
     await settle();
     click('.pa-buttons .pa-btn', 1);

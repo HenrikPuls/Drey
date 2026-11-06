@@ -1175,7 +1175,7 @@ function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
       );
     });
     item('Board', 'The pipeline as columns, parts under their ticket, cost per column', () => openBoardDoc(api));
-    item('Team', 'The personas, their runs and budgets, capacity, Pause all', () => openTeamDoc(api));
+    item('Crew', 'The personas, their runs and budgets, capacity, Pause all', () => openTeamDoc(api));
     item('Workers', 'Every live worker as a card — what it does, its context, its controls', () => openWorkersDoc(api));
     item('Chain log', 'What the fleet daemon did (dispatches, skips, gates), as a readonly editor tab', () => openChainLog(api));
     item('Clean up worktrees…', 'Removes every worktree whose ticket has no live run, then prunes', () => void runWorktreesCleanup());
@@ -1782,7 +1782,7 @@ function openBoardDoc(api: DreyPluginApi): void {
 }
 
 function openTeamDoc(api: DreyPluginApi): void {
-  api.documents.addDoc(TEAM_KIND, TEAM_KEY, 'Team');
+  api.documents.addDoc(TEAM_KIND, TEAM_KEY, 'Crew');
 }
 
 /** Opens (or focuses) the Workers tab. */
@@ -2177,7 +2177,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       pipeline: snap.pipeline.map((p) => ({ id: p.id, title: p.title })),
       phaseId: card.phase,
       atCheckpoint: kind !== null,
-      planGate: kind === 'Plan to approve',
+      planGate: kind === 'Plan to accept',
       hasReport: (reply?.changes ?? null) !== null || (reply?.result ?? null) !== null,
       launchable: reply?.launchable ?? false,
     });
@@ -2281,7 +2281,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       );
     } else {
       decisionBar.append(
-        decisionButton(action.label, `Your review is done — move the ticket on to ${action.label.replace('Approve → ', '')}`, true, () =>
+        decisionButton(action.label, `Your review is done — move the ticket on to ${action.label.replace('Accept → ', '')}`, true, () =>
           moveTicket(api, card, action.to),
         ),
       );
@@ -2620,7 +2620,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     const approved = readyReply?.planApproved ?? null;
     shapedLine.hidden = approved === null;
     if (approved !== null) {
-      shapedLine.textContent = `Shaped with you · plan approved ${ageWords(approved, Date.now())}`;
+      shapedLine.textContent = `Shaped with you · plan accepted ${ageWords(approved, Date.now())}`;
     }
     paintSteps();
     // The box follows the runs: a state change re-pulls, a live run every 30 s.
@@ -3307,7 +3307,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       mount: (el) => mountCapacity(deskDeps(api), teamStore(api), el, () => openTeamDoc(api)),
     });
     api.commands.register({ id: 'tickets.openBoard', label: 'Open the Board', run: () => openBoardDoc(api) });
-    api.commands.register({ id: 'tickets.openTeam', label: 'Open the Team', run: () => openTeamDoc(api) });
+    api.commands.register({ id: 'tickets.openTeam', label: 'Open the Crew', run: () => openTeamDoc(api) });
     api.commands.register({ id: 'tickets.showCapacity', label: 'Show the Capacity band', run: () => api.ui.revealWidget('tickets-capacity') });
     api.ui.registerSettingsPage(
       createTicketsSettingsPage(api, {

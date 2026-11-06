@@ -368,7 +368,7 @@ describe('workListSignature — what re-renders the Work list (T-0086)', () => {
 
 describe('checkpointActionOf', () => {
   it('approves into the next phase', () => {
-    expect(checkpointActionOf(board({}), 'plan-review')).toEqual({ kind: 'approve', to: 'build', label: 'Approve → Build' });
+    expect(checkpointActionOf(board({}), 'plan-review')).toEqual({ kind: 'approve', to: 'build', label: 'Accept → Build' });
   });
 });
 
@@ -386,7 +386,7 @@ describe('needKindLabel', () => {
 
   it('a checkpoint after the plan column is a plan; the terminal phase is ready; the rest review', () => {
     const snap = board({});
-    expect(needKindLabel(need('checkpoint', 'plan-review'), snap)).toBe('Plan to approve');
+    expect(needKindLabel(need('checkpoint', 'plan-review'), snap)).toBe('Plan to accept');
     expect(needKindLabel(need('checkpoint', 'review'), snap)).toBe('Review');
     expect(needKindLabel(need('checkpoint', 'done'), snap)).toBe('Ready to try');
   });

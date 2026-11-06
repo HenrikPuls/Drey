@@ -17,7 +17,7 @@ import { el, textButton } from '../settings-dom';
 import { budgetLineOf, maxMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, type DeskVideos } from './desk-model';
 
 export interface DeskSettingsHooks {
-  /** Opens the Team tab ("Edit team"). */
+  /** Opens the Team tab ("Edit crew"). */
   readonly openTeam: () => void;
   /** Opens the Flow tab of a ticket. */
   readonly openFlow: (ticketId: string) => void;
@@ -61,11 +61,11 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
   let asked = false;
 
   // --- Team --------------------------------------------------------------
-  const team = section('tset-team-head', 'Team');
+  const team = section('tset-team-head', 'Crew');
   const teamChips = el('div', 'tset-desk-chips');
-  const editTeam = textButton('Edit team');
+  const editTeam = textButton('Edit crew');
   editTeam.addEventListener('click', hooks.openTeam);
-  team.grid.append(...row('Team', value(teamChips, editTeam)));
+  team.grid.append(...row('Crew', value(teamChips, editTeam)));
   // The owner's own name: the human persona's title, shown wherever the owner works a column.
   const humanName = el('input', 'mono-input');
   humanName.type = 'text';
@@ -146,7 +146,7 @@ export function createDeskSettings(api: DreyPluginApi, hooks: DeskSettingsHooks)
       }),
     );
     if (personas.length === 0) {
-      teamChips.textContent = 'No team yet';
+      teamChips.textContent = 'No crew yet';
     }
     const human = personas.find((p) => p.kind === 'human');
     if (human !== undefined && document.activeElement !== humanName) {

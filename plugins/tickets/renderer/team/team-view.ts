@@ -339,7 +339,7 @@ export function mountTeam(deps: DeskDeps, store: TeamStore, host: HTMLElement): 
     const model = teamModelOf(store.personas(), deps.runs(), deps.chain(), deps.titleOf, Date.now());
     const head = h('header', 'desk-head');
     const title = h('div', 'desk-head-title');
-    title.append(h('h2', 'desk-h', 'Team'), h('span', 'desk-head-sub', store.loaded() ? teamHeadOf(model) : 'Loading…'));
+    title.append(h('h2', 'desk-h', 'Crew'), h('span', 'desk-head-sub', store.loaded() ? teamHeadOf(model) : 'Loading…'));
     const controls = h('div', 'desk-head-controls');
     const today = todayNode(model);
     if (today !== null) {

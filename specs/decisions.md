@@ -8,6 +8,27 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **Renaming stored identifiers to "Crew" / "Accept"** (owner, 2026-11-06; milestone
+  173). The design canvas "Drey Tickets — Workflow redesign" settled two words:
+  the area is **Crew**, never "Team", and the decision verb is **Accept**, never
+  "Approve" or "Sign off". The change is wording only — what a user or reader
+  sees. Everything persisted or part of a contract keeps its name: ticket, chain
+  and frontmatter values, phase and gate kinds (the `approve` checkpoint action,
+  the `sign-off` stage id), file and folder names (`team/`, `approve.ts`), routes
+  (`/api/tickets/<id>/accept` already existed), setting keys, IPC channels, CSS
+  classes, MCP tool names, the Mission Control tab id `team`, and git/branch names.
+  Where such an identifier reaches a screen it carries a display label ("Accept").
+  Also unchanged: the **tool-call approval** of external tools and MCP writes
+  (`approval: ask | allow`, the approval dialog, a worker waiting for a tool
+  permission) — a permission to run a tool, not the owner's decision on a plan or
+  result — and the dated entries of `specs/changelog.md`, which record what was
+  written then. Renaming the stored values was weighed and is listed as a
+  roadmap follow-up with its migration, not done. Decided the same day (canvas decisions 12 to 15): the product name stays "Drey Crew" while the tab and area is "Crew", and the iPad's menu button shows and hides a sidebar that is on by default from a width set in code.
+
+- **UI text is English by convention — widened to a catalog (owner, 2026-11-06).** CLAUDE.md says everything the UI displays is English; that stays the first-locale rule, but the way strings live changes for the new surfaces: every user-visible string is a catalog key (no hard-coded UI strings, no sentences assembled from parts, ICU plurals, `Intl` for numbers, dates and currency, layouts tolerant of 40 % longer labels). English remains the only shipped locale until another is asked for. CLAUDE.md's language section is **not** edited by this docs round; it is changed when the catalog mechanism lands, with its ADR (roadmap item "i18n for the new surfaces").
+
+- **The pipeline's last column is not named "Sign Off" any more (owner, 2026-11-06, canvas decision 16; reverses the entry above of the same day).** One state list `Inbox → Shaping → Prioritized → Building → Review → Ready to try → Done`; no Sign Off, no Commit, no Ideas, no numbered folders in the UI. The engine follows (roadmap item). The product stays "Drey Crew", the tab and area "Crew". Accept lives only on the Mission Control decision card, never a second time in the ticket body.
+
 - **Waiting for, or building, `dk import` / `dk add --id` (dricket R-10 / R-28)
   for the ticket migration** (owner, 2026-11-05; E14-3b). Drey has one user; the
   one-time migration writes the ticket files itself in the protocol's on-disk

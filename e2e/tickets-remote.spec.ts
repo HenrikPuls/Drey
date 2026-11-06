@@ -100,7 +100,7 @@ test('approves a checkpoint, moves through the sheet, and captures', async ({ pa
   await page.locator('.seg button', { hasText: 'Log' }).click();
   await expect(page.locator('.li-log')).toContainText('created in inbox');
 
-  await page.locator('.btn-primary', { hasText: 'Approve → Build' }).click();
+  await page.locator('.btn-primary', { hasText: 'Accept → Build' }).click();
   await expect(page.locator('.toast')).toContainText('T-0053 moved');
   expect(calls.at(-1)).toMatchObject({ what: 'move', args: [{ id: 'T-0053', from: 'plan-review', to: 'build' }, 'owner@iphone'] });
 
@@ -342,7 +342,7 @@ test.describe('on an iPad in landscape (R6)', () => {
     await page.locator('.kcard[data-id="T-0053"]').click();
     await expect(page.locator('.detail .ticket-title')).toHaveText('Phase chip moves the ticket');
     await expect(page.locator('.kcard[data-id="T-0053"]')).toHaveClass(/selected/);
-    await expect(page.locator('.detail .btn-primary')).toHaveText('Approve → Build');
+    await expect(page.locator('.detail .btn-primary')).toHaveText('Accept → Build');
 
     // Hold, then drag into another column: a transition.
     // The selection's reveal centers the selected column; both the source card

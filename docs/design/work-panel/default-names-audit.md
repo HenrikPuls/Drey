@@ -32,7 +32,7 @@ a roadmap item) · **question** (owner decides; not changed).
 | 7 | Work panel groups Needs you · Shaping · Running · Prioritized · Ideas · Done this week — `plugins/tickets/renderer/work-panel.ts:36-54` | Same names, same order — `Home.dc.html`, concept §6 | match | none |
 | 8 | Track chips **Auto** / **Shape** / **Triage** — `work-panel.ts:615`; **Auto track** / **Shape track** on the Ready card — `ready-view.ts:75`; menu rows "Auto — runs on its own", "Shape — a plan-mode dialog with you" — `index.ts:3055-3056` | "Triage", "Auto track", "Shape track" — `Main.dc.html` | match (the short chip form is a size deviation, not a naming one) | none |
 | 9 | Ready-to-try buttons **Move to <next column>**, **Archive** — `ready-view.ts` | "Accept and merge" in `Ready.dc.html` | match (README records req-86 as a deliberate deviation) | none |
-| 10 | Default personas: **none are shipped** — "Initialize board" writes `pipeline.md`, `repos.md` and the prompts only (`board-service.ts:4540-4553`); the Team view starts with only the human persona **You** (`personas.humanName`, `board-service.ts:3893`) | Default team **Paul, Ben, Ralf, Tessa**, roles planner / builder / reviewer / tester; **Pia is Mission Control itself**; no design persona — concept D7, §4.2 | **question** | Q2 |
+| 10 | Default personas: **none are shipped** — "Initialize board" writes `pipeline.md`, `repos.md` and the prompts only (`board-service.ts:4540-4553`); the Crew view starts with only the human persona **You** (`personas.humanName`, `board-service.ts:3893`) | Default crew **Paul, Ben, Ralf, Tessa**, roles planner / builder / reviewer / tester; **Pia is Mission Control itself**; no design persona — concept D7, §4.2 | **question** | Q2 |
 | 11 | Human persona title **You** — `board-service.ts:3893`, `flow-model.ts:56` | "you" / "You" — concept §5.7, `Orchestrator.dc.html` ("ask me") | match | none |
 | 12 | Persona role enum `planner · builder · reviewer · tester · custom` — `core/persona.ts:36` | same — concept §4.2 | match | none |
 | 13 | Persona and fleet default worker **opencode** (`contracts/fleet-defaults.ts:8`, `core/persona.ts:105` parse default) | `claude-code` in the concept's example persona (§4.2, "Paul") — an example, not a stated default | **question** | Q3 |
@@ -43,7 +43,7 @@ a roadmap item) · **question** (owner decides; not changed).
 | 18 | Settings → Tickets → Pipeline hint "Inbox and Done stay first and last" — `plugins/tickets/renderer/settings-columns.ts:63` | first column is Ideas by default | **deviates** | "The first and the last column stay in place." (true for any title) |
 | 19 | Manual wording "Inbox (where new tickets land)", "parks in Inbox", "back to Inbox", "Capture — a new ticket into the Inbox" — `docs/manual/manual.md` | Ideas | **deviates** | Reworded to Ideas; folder ids (`10-inbox`) stay and are said to. |
 | 20 | Dock panel title **Work** — `plugins/tickets/renderer/index.ts:688,3222` | **Tickets** — boards, ADR, desktop-integration (G-10) | owned | E13-14 |
-| 21 | Panel footer **Workers** link, no "Team · Ben, Tessa busy" — `index.ts:1264-1269` (G-11) | Team footer — boards 7a–7c | owned | E13-14 |
+| 21 | Panel footer **Workers** link, no "Crew · Ben, Tessa busy" — `index.ts:1264-1269` (G-11) | Crew footer — boards 7a–7c | owned | E13-14 |
 | 22 | Status-bar item "2 running · 3 need you" as one item (G-12) | split cost / need-you items — boards 7a, 7h, 7i | owned | E13-15 |
 | 23 | Title-bar capture label / chord (G-13) | Ctrl+Alt+T | owned | E12-7 |
 | 24 | Scratch dricket store `[stages] values = ["inbox","prioritized","build","commit","done"]` — `scripts/verify-dricket.ps1:254`, `migrate/convert.ts:31` (`DEFAULT_MIGRATION_CONFIG`) | stage **ids** are storage, not display; titles live in `pipeline.md` | match (ids) | none in Drey; see "dricket side" below. The scratch `pipeline.md` of `verify-dricket.ps1` now titles the first column Ideas to match a new board. |
@@ -69,13 +69,13 @@ canvas boards 7e (DeskBoard) and 7g (DeskSettings), which would show the default
 columns and "Default flow", are not in the repo. Which columns does the default show,
 and in which order?
 
-**Q2 — Should "Initialize board" seed the default team Paul, Ben, Ralf, Tessa?**
+**Q2 — Should "Initialize board" seed the default crew Paul, Ben, Ralf, Tessa?**
 Decision D7 fixes the names and roles (planner, builder, reviewer, tester), but no code
-creates them: a new board has only the human persona *You*, so the Team view, "Plan
+creates them: a new board has only the human persona *You*, so the Crew view, "Plan
 Paul, Build Ben …" in the manual and the flow editor's persona pins show nothing until
 the owner adds personas by hand. Seeding needs, per persona, a `persona.md`, a
 `prompt.md`, a worker, a model and a colour; a seeded persona also takes part in the
-resolution ladder. Seed them (with which worker and model), or keep the team empty
+resolution ladder. Seed them (with which worker and model), or keep the crew empty
 until the owner builds it?
 
 **Q3 — Default worker `opencode` or `claude-code`?** The fleet and the persona parser

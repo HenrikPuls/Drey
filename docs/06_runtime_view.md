@@ -3800,14 +3800,14 @@ The widgets read the buffer, so an unsaved edit shows at once; the board's
 refresh and a change of the fleet's wait/run signature repaint every open
 ticket document (a `StateEffect`, no document change).
 
-## 6.78 The desk surfaces: Team, Capacity and Board repaint from one store (E13-8)
+## 6.78 The desk surfaces: Crew, Capacity and Board repaint from one store (E13-8)
 
 ```mermaid
 sequenceDiagram
     participant E as Tickets engine
     participant X as index.ts store (snapshot, runs, chain)
     participant T as TeamStore
-    participant V as Board / Team tab, Capacity band
+    participant V as Board / Crew tab, Capacity band
     participant O as Owner
 
     E-->>X: board-changed / fleet-changed (SSE, debounced)
