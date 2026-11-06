@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import { parseFlowDraft, parseFlowEdit, parseFlowSave, type Parsed } from '../core/commands';
 import { TicketsGit } from '../core/tickets-git';
 import type { ChatBridge } from '../contracts/chat';
+import { NOTES_VAULT_KEY } from '../contracts/notes';
 import { remoteActorOf, type ChatChangePayload } from '../contracts/remote-protocol';
 import type { VerifyHarness } from '../contracts/verify';
 import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools } from '../fleet/protocol';
@@ -16,6 +17,7 @@ import { ChatService } from '../services/chat-service';
 import { AGGREGATOR_SYSTEM_PROMPT, createChatBridge } from '../services/chat-llm';
 import { FleetClient } from '../services/fleet-client';
 import { ImprovementsService } from '../services/improvements-service';
+import { NotesService } from '../services/notes-service';
 import { VerifyService } from '../services/verify-service';
 import { VideoService } from '../services/video-service';
 import { FilePlanShadowStore } from '../services/plan-shadow';
@@ -176,10 +178,21 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   });
 
   const remotePort = new DreyTicketsPort(board, fleet, hub, { allowBypass: () => remoteService.allowBypass() }, chat);
+  // req-100: the active vault's notes for paired devices. Drey keeps the key on
+  // its active vault; without Drey it is the last one it named, or the hosted vault.
+  const notes = new NotesService({
+    root: async () => {
+      const named = await config.get<unknown>(NOTES_VAULT_KEY);
+      return typeof named === 'string' && path.isAbsolute(named) ? named : opts.vaultPath;
+    },
+    log,
+  });
+  notes.onChanged(({ vaultPath, changed }) => hub.emitPaths({ vaultPath, changed, deleted: [] }));
   const remoteService: RemoteService = new RemoteService({
     config,
     port: remotePort,
     clientDir: opts.clientDir,
+    notes,
     // E5c: the proof card's gallery — attachment bytes straight from the
     // vault, authorized per device token (the gateway stays vault-agnostic).
     attachments: async (name) => {

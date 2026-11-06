@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–173 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–174 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -932,6 +932,9 @@ rest are kept so they still match `docs/11`.
 
 ### Follow-ups of shipped milestones (none committed)
 
+- **Device saves in File history and save hooks (follow-up of req-100).** A note saved from a phone or iPad runs no plugin save hooks and leaves no version under `<userData>/history/`, because both live in the Drey process and the engine also serves with Drey closed. The conflict guard still protects the text; only the "File history…" row is missing. To decide: a version store the engine can write, or a catch-up when Drey next hears of the path.
+- **An SDK event for the active vault (follow-up of req-100).** The Notes API follows Drey's active vault by a push at activation and with every board fetch; a switch without a board fetch reaches the engine late. A `ctx.vault` event for the switch would make it immediate.
+
 - **Persisted "approve" / "team" / "Sign Off" values (milestone 173 follow-up, owner request 2026-11-06, outside the list).**
   The wording change of 173 left every stored or contract identifier alone. Candidates that would read better
   as the user-facing words, each needing a migration that is not done: the default pipeline's stage title
@@ -941,7 +944,7 @@ rest are kept so they still match `docs/11`.
   Each is a rename with a read-both/write-new bridge and a release note; none is needed for the owner to see
   "Crew" and "Accept".
 
-- **Order of the canvas-2026-11-06 items (dependencies, concept §8.1):** req-102 i18n catalog → req-99 state list in the engine → req-97 decision card and req-98 cost table / estimate format → req-100 Notes engine API → req-101 Notes clients → req-96 iPad panes → req-95 Autopilot (engine side independent; strings from the catalog).
+- **Order of the canvas-2026-11-06 items (dependencies, concept §8.1):** req-102 i18n catalog → req-99 state list in the engine → req-97 decision card and req-98 cost table / estimate format → req-101 Notes clients → req-96 iPad panes → req-95 Autopilot (engine side independent; strings from the catalog).
 
 - **i18n for the new surfaces (owner, 2026-11-06; req-102; widens the language convention).** Every user-visible string of the new surfaces is a catalog key: no hard-coded UI strings, no sentences built from parts, ICU plurals, `Intl` for numbers, dates and currency, layouts that tolerate 40 % longer labels. English is the first locale. Needs an ADR when the catalog mechanism is chosen (format, loader, where the catalogs live, how the three clients share them); the first implementation round covers the new surfaces, the older ones migrate as they are touched. Not built.
 
@@ -951,9 +954,7 @@ rest are kept so they still match `docs/11`.
 
 - **Cost-by-phase table and the estimate format on every layout (owner request 2026-11-06, outside the list; req-98).** The cost-by-phase table at the end of the ticket on desktop, iPad and phone; the estimate formats `$3.00–5.20 · from 3 runs` and `no estimate yet (first run)` (catalog strings with ICU plurals, `Intl` currency; concept §5.4). Replaces the current "median of n similar runs" / "not yet" wording in `libs/mission-ui` and the desk.
 
-- **Notes engine API (owner, 2026-11-06, canvas decision 18; req-100; closes G-40's scope question).** The vault is reachable from a paired phone or iPad: a notes endpoint (list, search, read) over the **active vault**, a write path with the save-conflict rule of ADR-0060, and the rule that a **read-only paired device** (§3.6) cannot write. No new file writer beside the existing note save pipeline. Tests: the endpoint, the conflict, the read-only refusal. Must land before the Notes clients.
-
-- **Notes on phone and iPad — clients (owner, 2026-11-06, canvas decision 18; req-101).** Search, recent notes and folders over the req-100 endpoint; a note opens in the existing Markdown editor (View · Live · Source) from `libs/mission-ui` over `libs/markdown-surface`; the pencil starts editing in Live Preview, Cancel (X) and Save (check) are icons; tags, link to the ticket, "Ask about this note". Depends on req-100 and on the i18n catalog (req-102).
+- **Notes on phone and iPad — clients (owner, 2026-11-06, canvas decision 18; req-101).** Search (`GET /api/notes/search`), recent notes (`GET /api/notes/recent`) and folders (`GET /api/notes`) over the Notes API (milestone 174, `packages/tickets-engine/src/contracts/notes.ts`); a note opens (`GET /api/notes/note`) in the existing Markdown editor (View · Live · Source) from `libs/mission-ui` over `libs/markdown-surface`; the pencil starts editing in Live Preview, Cancel (X) and Save (check) are icons; tags, link to the ticket, "Ask about this note". Saving is `POST /api/notes/note` with the read `mtime` as `baseMtime`; a `conflict` reply carries the disk text and mtime for the merge, a new note is `POST /api/notes`; the client adopts the text a save returns (`updated:` may have moved) and refreshes on the SSE event `notes`. `ApiError` in `apps/mission-control/src/app/api/client.ts` drops the body today, so it has to keep the `code` for the catalog keys; a read-only device (`/api/me` `device.readOnly`) gets no pencil. Depends on the i18n catalog (req-102).
 
 - **iPad panes with the open state saved per orientation (owner request 2026-11-06, outside the list; req-96).** Build the desktop-like iPad of concept §7: header with the left-sidebar toggle, the Notes · Work · Crew switch and the right-sidebar toggle; left = list of the area, centre = document, right = Mission Control or Capacity; landscape opens all three, portrait the left and the centre; the open state is saved per orientation and restored (a per-device UI setting, D10); tests for the layout rules and the persistence.
 

@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
+import { NOTES_VAULT_KEY } from '../../../packages/tickets-engine/src/contracts/notes';
 import { WORKER_PROVIDERS } from '../../../packages/tickets-engine/src/fleet/protocol';
 import { STORE_SETTING_KEYS } from '../../../packages/tickets-engine/src/store/store-settings';
 import { EngineClient, type EngineEndpoints } from './engine-client';
@@ -144,6 +145,21 @@ export async function syncStoreConfig(client: ConfigSyncClient, ctx: { config: {
     if (value !== undefined) {
       await client.invoke('configSet', { key, value }).catch(() => undefined);
     }
+  }
+}
+
+/**
+ * Tells the engine which vault its Notes API serves (req-100): Drey's active
+ * vault. The engine outlives Drey and keeps the last one named, so a phone
+ * still reaches the notes with Drey closed. No active vault changes nothing.
+ */
+export async function syncNotesVault(
+  client: ConfigSyncClient,
+  ctx: { vault: { listVaults(): Promise<readonly { path: string; exists: boolean; active: boolean }[]> } },
+): Promise<void> {
+  const active = (await ctx.vault.listVaults()).find((vault) => vault.active && vault.exists);
+  if (active !== undefined) {
+    await client.invoke('configSet', { key: NOTES_VAULT_KEY, value: active.path });
   }
 }
 

@@ -4340,3 +4340,56 @@ sequenceDiagram
 
 The tool never writes to the legacy vault and refuses to apply a plan that contains a
 live-run stamp or a claim in build unless told to (`--allow-live-runs`).
+
+## 6.95 A phone saves a note, conflict included (req-100, milestone 174)
+
+```mermaid
+sequenceDiagram
+    participant PH as Phone (paired)
+    participant GW as RemoteGateway + router
+    participant NS as NotesService (engine)
+    participant FS as Vault folder
+    participant PL as Tickets plugin main
+    participant DR as Drey vault layer
+    PH->>GW: GET /api/notes/note?path=topics/boat.md (Bearer)
+    GW->>NS: read — grammar, then what the path resolves to
+    NS->>FS: read file, stat
+    NS-->>PH: {text, frontmatter, body, tags, mtime: M1}
+    Note over PH: the owner edits; meanwhile Drey saves the note (M2)
+    PH->>GW: POST /api/notes/note {path, text, baseMtime: M1} (Origin checked)
+    alt the device is paired read-only
+        GW-->>PH: 403 {code: read_only} — NotesService is not called
+    end
+    GW->>NS: save, in the one write queue
+    NS->>FS: read file, stat → M2
+    alt M1 and M2 differ by more than 2 ms
+        NS-->>PH: 200 {ok: false, code: conflict, disk: {text, mtime: M2}} — nothing written
+        Note over PH: the client merges mine against disk (req-101)
+        PH->>GW: POST /api/notes/note {path, merged, baseMtime: M2}
+        GW->>NS: save
+    end
+    NS->>FS: touchUpdated, the file's own line ends, temp file + fsync + rename
+    NS-->>PH: 200 {ok: true, text, mtime: M3}
+    NS-->>PL: paths channel {vaultPath, changed: [path]} (invoke SSE, bearer)
+    PL->>DR: PathAnnouncer → ctx.vault.announceChanges (batched)
+    Note over DR: tree and indexes refresh, a clean tab reloads, a dirty tab is marked and meets the ADR-0060 merge
+    GW-->>PH: other devices: event notes {changed: [path]}
+```
+
+The engine reads and writes the files itself, because it serves the phone with Drey closed. A save
+from a device runs no plugin save hooks and leaves no File history version; both live in the Drey
+process (roadmap follow-up). The vault is the one named by the engine config key `notes.vaultPath`,
+which the plugin keeps on Drey's active vault; without it, the vault the engine hosts.
+
+| Route | Answers |
+|---|---|
+| `GET /api/notes?folder=<rel>` | One folder (root when absent): `{ok, vault, folder, folders[], notes[]}`, a note being `{path, name, mtime, size}` |
+| `GET /api/notes/recent?limit=<n>` | `{ok, vault, notes[]}`, newest mtime first (default 30, at most 100) |
+| `GET /api/notes/search?q=<words>&limit=<n>` | `{ok, query, truncated, hits[]}`: all words in one section, ignoring case, a hit carrying up to 5 `{line, heading, text}` |
+| `GET /api/notes/note?path=<rel>` | `{ok, path, name, text, frontmatter, body, tags, mtime}` |
+| `POST /api/notes/note` `{path, text, baseMtime}` | `{ok, path, text, mtime}`, or `conflict` with `disk` |
+| `POST /api/notes` `{path, text?}` | `{ok, path, text, mtime}`, or `exists`; missing folders are created |
+
+Every refusal is `{ok: false, code, error}`: `read_only` 403, `conflict` and `exists` 200, `not_found` and
+`no_vault` 404, `bad_path` and `bad_request` 400, `too_large` 413 (over 4 MB), `internal` 500. Types:
+`packages/tickets-engine/src/contracts/notes.ts`.
