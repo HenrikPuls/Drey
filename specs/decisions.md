@@ -8,6 +8,13 @@ one means moving it back to the roadmap with a new justification.
 
 ## Excluded ideas
 
+- **Board 9b "Drey today — Calendar, Source control, Outline, Search and Tasks redesigned" as a
+  target** (owner, 2026-11-06 evening; was req-105). The owner: "9b ist kein Zieldesign" — the board
+  stays in the canvas and in `docs/design/work-panel/boards/` as a sketch of how the panels could
+  look, but no session builds it and the fidelity rule does not measure the panels against it. The
+  frame of 9a (req-104) remains the target for the dock headers and the panel chrome; the panels'
+  content stays as it is.
+
 - **An agent moving a ticket into Done on a store, and a pipeline key for Accept's run** (req-99a,
   2026-11-06). `dk` refuses an agent's release into a terminal stage (seen in E14-5, checked again
   on v0.6.2 with the six stages), so the commit run hands back to `ready` and the engine makes the

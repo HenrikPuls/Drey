@@ -855,7 +855,6 @@ rest are kept so they still match `docs/11`.
 
 - **Board 9a — Drey cleaned up (owner request 2026-11-06, outside the list; req-104).** 28 px dock headers (`--panel-head-h`, today 32 px), the panel chrome, the ticket card, the Assistant without a rail. Base plus the dock; ADR-0019 / ADR-0057 later change.
 
-- **Board 9b — panels redesigned (owner request 2026-11-06, outside the list; req-105).** Calendar, Source control, Outline, Search and Tasks as drawn; the base and four plugins' panel parts; e2e screenshots regenerated.
 
 - **Mission Control over the CLI providers (D-1 follow-up, 2026-11-04).**
   The chat bridge speaks the HTTP providers (OpenAI-compatible, Anthropic

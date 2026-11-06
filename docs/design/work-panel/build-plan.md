@@ -25,7 +25,7 @@ Status: **built** / **partly** / **open** / **unmapped** (no roadmap id exists �
 | 7j Ticket ready to try | E13-6 (129), E11-4 (119, `costTableOf`), E13-20/21 (169); open: **req-97**, **req-98** | partly | `ticket-document/model.ts:199` cost table; `ready-view.ts:160` + `end-moves.ts:69` "Accept → …" |
 | 7k Persona setup | E12-4 (115), E13-8 (130); open: E12-16/E13-19 (editable Setup, New persona, Friction) | partly | `team/team-view.ts` tabs 1:1/Memory/Setup read-only |
 | 9a Drey cleaned up (28 px dock headers, ticket card, Assistant without rail) | ticket card: E13-20 (169); Assistant row: owner-fixed 2026-11-05 (E12-19 note); **dock header height and panel chrome: no item** | unmapped | `--panel-head-h` = 32 px in `src/styles.css` / `dock/`; owner layout png `assistant-owner-layout-2026-11-05.png` |
-| 9b Panels redesigned (Calendar, Source control, Outline, Search, Tasks) | **no roadmap item** | unmapped | `src/app/calendar/`, `plugins/git|outline|tags|tasks/renderer` |
+| 9b Panels redesigned (Calendar, Source control, Outline, Search, Tasks) | **not a target** (owner, 2026-11-06 evening; `specs/decisions.md`; req-105 withdrawn) | sketch only | — |
 | **iPad** | | | |
 | 5b Shape / 5c Plan / 5d Crew / 5i Flow editor | E10-3 (122), E10-4 (126), E12-4 (115), E10-5 (128); open: **req-96** header + panes, req-98 format, E10-5b, E12-19 wording | partly | `apps/mission-control/src/app/app.html` wide layout = top tab bar Work/Chat/Team/Settings + right dock, not the Notes·Work·Crew header |
 | 5f Settings | E12-3 (114), D-2 (135), E12-7 (136/137); open: E12-3b, E12-14, **5-step text size** | partly | `libs/mission-ui/src/theme.ts:66` `TEXT_SIZES = ['S','M','L','XL']` (canvas decision 8 wants S/M/L/XL/XXL) |
@@ -139,8 +139,8 @@ Order: 4.0 first, alone; then 4.1–4.6 in parallel within the pool; 4.7 last.
 
 | # | Session | Model | Boards | Owns | Done when |
 |---|---|---|---|---|---|
-| 4.0 | `9a-frame` | **Fable** | 9a (req-104): title bar, dock headers 28 px + icon strips, tab bar, meta bar, status bar, panel chrome, ticket card, Assistant without rail; tokens | `src/styles.css`, `src/app/dock/**`, `src/app/titlebar/**`, `src/app/status-bar/**`, `src/app/panes/` tab bar, the SDK's panel header contract if 9b needs one | 9a screenshot = board; the frame rule for every panel written down |
-| 4.1 | `9b-panels` | Sonnet ×2 (Calendar+Outline; Search+Tasks+Source control) | 9b (req-105) | `src/app/calendar/`, `plugins/{outline,tags,tasks,git}/renderer` panel parts | 9b per panel = board |
+| 4.0 | `9a-frame` | **Fable** | 9a (req-104): title bar, dock headers 28 px + icon strips, tab bar, meta bar, status bar, panel chrome, ticket card, Assistant without rail; tokens | `src/styles.css`, `src/app/dock/**`, `src/app/titlebar/**`, `src/app/status-bar/**`, `src/app/panes/` tab bar, the SDK's panel header contract if a plugin panel needs one | 9a screenshot = board; the frame rule for every panel written down |
+| ~~4.1~~ | ~~`9b-panels`~~ | — | **9b is not a target design** (owner, 2026-11-06 evening; `specs/decisions.md`). The panels keep their content; only the frame of 4.0 (headers, chrome) reaches them. | — | — |
 | 4.2 | `desk-work-board-crew` | Sonnet | 7a, 7e, 7f, 7k, 7h, 7i | `plugins/tickets/renderer/{work-panel,board,team}/**`, `src/app/titlebar/view-switcher.*`, `windows/` | each board = screenshot |
 | 4.3 | `desk-ticket-pages` | Sonnet | 7b, 7c, 7d, 7j (incl. E13-10 Parts block, E12-19 splitter) | `plugins/tickets/renderer/{ticket-document,review,ticket-header,ready-view}.*` | each board = screenshot |
 | 4.4 | `desk-settings-autopilot` | Sonnet | 7g, 10t desktop part | `plugins/tickets/renderer/settings/**`, `src/app/settings/**`, `status-slot.ts`, `autopilot/` | boards = screenshots; Autopilot item seen running with a scratch runner |

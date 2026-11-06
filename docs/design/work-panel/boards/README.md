@@ -50,7 +50,7 @@ above.
 | 7j · Ticket ready to try: proof, checks, screenshots, cost table, accept | `DeskReady` | 1440×900 | desktop |
 | 7k · Persona setup: profile, picture, work, permissions, prompt blocks | `DeskPersona` | 1440×900 | desktop |
 | 9a · Drey today, cleaned up — ticket T-0017 in Work, Assistant without the rail | `DeskClean` | 1440×900 | desktop |
-| 9b · Drey today — Calendar, Source control, Outline, Search and Tasks redesigned | `DeskPanels` | 1440×900 | desktop |
+| 9b · Drey today — Calendar, Source control, Outline, Search and Tasks redesigned — **not a target design** (owner, 2026-11-06; a sketch, nothing is measured against it) | `DeskPanels` | 1440×900 | desktop |
 | 10a · Mission Control, answer card with big touch targets | `MPhoneChat` | 390×844 | phone |
 | 10b · menu: the root screen with Notes, Work, Crew, Settings and chats | `MPhoneMenu` | 390×844 | phone |
 | 10c · Work: the desktop ticket list, sized for touch | `MPhoneWork` | 390×844 | phone |

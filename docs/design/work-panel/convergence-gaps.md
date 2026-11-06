@@ -24,7 +24,7 @@ Found by the consistency audit of 2026-11-06 against canvas decisions 1–21 (no
 - **Q6 (owner):** Shaping and Prioritized manual, Building the only agent claim stage, Ready to try manual, Accept = sign-off.
 - **Q8 (owner):** Accept merges and pushes the **developed program's repository** (the target repo the agents changed), not the dricket store; the commit step `commit-default` runs as an owner-started run under the stop ladder; when green, the dricket ticket moves to Done as bookkeeping.
 - **Q3, Q4, Q5, Q9 (technical calls):** the `autopilot` record beside `ChainMaster` in `chain.json`, boot writes Off; iPad pane state per device in `localStorage` by orientation; Notes reuse `libs/markdown-surface` and `mc-markdown`, the formatting strip later; the fifth text-size step with the Appearance work of wave 3.
-- **Q7:** roadmap ids req-103 (phone menu root, part of req-96), req-104 (board 9a), req-105 (board 9b).
+- **Q7:** roadmap ids req-103 (phone menu root, part of req-96), req-104 (board 9a), req-105 (board 9b — **withdrawn 2026-11-06 evening: 9b is not a target design**, `specs/decisions.md`).
 
 | id | area | what differs | evidence | severity | proposed fix | roadmap id |
 |---|---|---|---|---|---|---|
