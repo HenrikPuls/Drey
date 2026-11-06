@@ -317,6 +317,12 @@
   border-left: 1px solid var(--line);
 }
 
+.shell.ipad .pad-right {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 /* The Crew list in the left pane: the team view's own layout, in a sidebar's width. */
 .shell.ipad .pane-team {
   grid-area: left;
