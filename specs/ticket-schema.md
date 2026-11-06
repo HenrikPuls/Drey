@@ -838,7 +838,7 @@ repository. Before E12-9c the default was `inbox · prioritized · build · comm
 done` (and between req-93 and E12-9 the first column was titled *Inbox*, for one
 release *Ideas*); such boards are unchanged and fully supported.
 
-> **Target (owner, 2026-11-06, not built):** the owner-facing list becomes `Inbox → Shaping → Prioritized → Building → Review → Ready to try → Done`, with no Sign Off and no Commit column and no numbered folder shown to the user. The stage ids, folders, `pipeline.md` and the transition table above stay as written until the migration of roadmap item req-99 ships; then this section and the validator change in one step.
+> **Target (owner, 2026-11-06, not built):** the owner-facing list becomes `Inbox → Shaping → Prioritized → Building → Ready to try → Done`, with no Sign Off, no Commit and no separate Review column and no numbered folder shown to the user (six states, O-2 confirmed 2026-11-06; Review and Ready to try are one state, and Accept there merges, pushes and lands the ticket in Done; "Review" stays an agent phase name). Mapping: Inbox → Inbox, Plan → Shaping, Build → Building, Review + Sign Off → Ready to try, Done → Done, Prioritized new and manual. The stage ids, folders, `pipeline.md` and the transition table above stay as written until the migration of roadmap item req-99 ships; then this section and the validator change in one step.
 
 - `id`: `[a-z][a-z0-9-]*`, unique, = the phase (the stripped directory
   name). The first phase is the capture target; the last is terminal —
