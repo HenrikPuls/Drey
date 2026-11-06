@@ -27,6 +27,22 @@
   color: var(--text-3);
 }
 
+/* The non-git note (A-09): one line, ellipsized, with its own dismiss. */
+.tickets-warn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tickets-warn-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The status bar under the Work list (req-59): one row, the message and the warning pill right. */
 .tickets-statusbar {
   flex: none;
@@ -120,8 +136,17 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  flex-wrap: wrap;
-  row-gap: 4px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  height: 40px;
+}
+
+/* New idea · Open Board tab: the two actions that follow the filter (E12-11). */
+.tickets-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
 }
 
 .tickets-head-group {
@@ -702,38 +727,6 @@
   margin: 4px 0 0;
   font-size: 12px;
   color: var(--text-3);
-}
-
-/* The fleet daemon's chain log as a readonly editor tab (T-0007 review):
-   a tail that follows the bottom while the view is scrolled down. */
-.tickets-chain-log {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-main);
-}
-
-.tickets-chain-log-bar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-right: 16px;
-}
-
-.tickets-chain-log-hint {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 6px 16px;
-  font-size: 12px;
-  opacity: 0.85;
-}
-
-.tickets-chain-log-out {
-  flex: 1 1 auto;
-  min-height: 0;
 }
 
 /* ---- the takeover tab: transcript above, prompt box below ---- */
@@ -2232,37 +2225,15 @@ details[open] > summary > .tickets-tx-think-preview {
   color: var(--text-4);
 }
 
+/* The kind of what waits, as words in the needs-you orange (no chip, E12-11). */
 .work-kind {
   flex: none;
-  padding: 0 6px;
-  border-radius: var(--radius-chip);
-  background: var(--accent-peach);
-  color: var(--on-pastel);
-  font-size: 12px;
+  color: var(--accent-peach);
   font-weight: 600;
-  line-height: 17px;
 }
 
-/* The phase chip (T-0084): a dot in the phase's colour plus its name.
- *  The name carries the meaning (colour-blind safe), the colour anchors
- *  it; the text keeps the theme's own colour. */
-.work-phase-chip {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-
-.work-phase-dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--phase-color, var(--text-5));
-}
-
-.work-phase-name {
+/* The phase as plain grey words (E12-11); the name carries the meaning. */
+.work-meta-phase {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2300,7 +2271,6 @@ details[open] > summary > .tickets-tx-think-preview {
 
 .work-run-step {
   flex: none;
-  color: var(--text-primary);
   font-size: 0.75rem;
 }
 
@@ -2309,9 +2279,7 @@ details[open] > summary > .tickets-tx-think-preview {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--text-5);
 }
 
 .work-row-more {
@@ -3415,17 +3383,6 @@ details[open] > summary > .tickets-tx-think-preview {
   font-size: 0.75rem;
 }
 
-.tickets-statusbar-fleet-numbers {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-}
-
-/* A narrow panel drops the numbers; they stay in the tooltip. */
-.tickets-statusbar-fleet[data-narrow] .tickets-statusbar-fleet-numbers {
-  display: none;
-}
-
 /* The settings submenus' radio rows (Track ›, Priority ›). */
 .tickets-menu-radio {
   display: inline-flex;
@@ -3687,36 +3644,66 @@ details[open] > summary > .tickets-tx-think-preview {
   font-size: 0.75rem;
 }
 
-/* The footer's Workers text link (req-75 W4b), at the right end. */
-.tickets-statusbar-link {
-  flex: none;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  color: var(--accent-fg);
-  font: inherit;
-  font-size: 0.75rem;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-/* Persona chip and cost on every row (E13-8, mobile list parity). */
-.work-row-persona {
-  flex: none;
-  padding: 0 7px;
-  border-radius: 999px;
-  background: var(--accent-surface);
-  color: var(--accent-fg, var(--accent));
-  font-size: 12px;
-  white-space: nowrap;
-}
-
+/* The cost: grey, at the meta line's right end — orange only ever means "needs you" (canvas decision 20). */
 .work-row-cost {
   flex: none;
   margin-left: auto;
-  color: var(--text-3);
+  color: var(--text-4);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+/* The one grey meta line of a row (E12-11, boards 7a–7c): phase, kind, step or
+   state and the persona as plain words with a dot between; ellipsized. */
+.work-row-meta {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--text-4);
+}
+
+.work-row-meta > * {
+  flex: none;
+}
+
+.work-row-meta > .work-row-line,
+.work-row-meta > .work-run-line {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.work-row-meta > :not([hidden]) ~ :not([hidden])::before {
+  content: '·';
+  margin: 0 5px;
+}
+
+.work-row-persona {
+  color: var(--text-4);
+  font-size: 12px;
+}
+
+/* The footer's crew line (E12-11): a button — one click opens the Crew tab. */
+button.tickets-statusbar-fleet {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+button.tickets-statusbar-fleet:hover {
+  color: var(--text-primary);
+}
+
+button.tickets-statusbar-fleet:focus-visible {
+  outline: 2px solid var(--accent-ring, var(--accent));
+  outline-offset: 2px;
 }
 
 /* E13-20: the Ticket | Thread | Review control on top of every face -- the global .seg strip, text buttons. */

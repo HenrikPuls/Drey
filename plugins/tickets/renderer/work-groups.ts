@@ -471,3 +471,16 @@ export function statusLineOf(row: WorkRow, board: BoardSnapshot): string {
     }
   }
 }
+
+/**
+ * The panel footer's crew line (boards 7a-7c): who is out there, in words —
+ * `Crew · Ben, Tessa busy`; `Crew · idle` while nothing runs. Names come from
+ * the live runs' personas; a run without one counts as a plain number.
+ */
+export function crewLineOf(names: readonly (string | null | undefined)[], liveRuns: number): string {
+  if (liveRuns === 0) {
+    return 'Crew · idle';
+  }
+  const unique = [...new Set(names.filter((name): name is string => typeof name === 'string' && name !== ''))];
+  return unique.length > 0 ? `Crew · ${unique.join(', ')} busy` : `Crew · ${liveRuns} busy`;
+}

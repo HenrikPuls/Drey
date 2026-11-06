@@ -869,13 +869,11 @@ its heading (remembered across restarts):
   (document, Thread, Review); **Show older** at the foot loads the whole
   archive under a search field (id or title words).
 
-Every ticket sits in exactly one group — Needs you wins. Every
-Needs-you, Shaping and Running row carries a **phase chip** — a dot in
-the phase's colour plus its name; the colours are set per column in
-Settings → Tickets → Pipeline (`color:` in pipeline.md, and without one
-a curated default palette applies). A row leads with the ticket's
-id, then the title, an age and one line; the open ticket's row is marked with an
-accent bar. Click a row to open the ticket. **What opens depends on the
+Every ticket sits in exactly one group — Needs you wins. A row
+leads with the ticket's id, the title and an age; under it sits **one grey
+line** — the phase, what waits on you or what the worker does, the
+persona — and at its right end the ticket's cost in grey (hover it: *So
+far*). The open ticket's row is marked with an accent bar. Click a row to open the ticket. **What opens depends on the
 run:** the ticket document while no run has happened yet (and once the run
 is over), the **thread** — the worker's page — while the runner is active or
 waiting on a question, a gate or a permission. On top of every one of them
@@ -887,14 +885,16 @@ and above its composer sits the **decision bar** (Accept → next phase,
 or Accept). The thread follows whichever ticket you
 click last — one tab, not one per ticket — and opens where your focus is,
 never as an automatic split. A ticket picked in the Files panel opens as
-a plain file tab. The row's menu **Open ticket** opens the same default. The panel's footer carries the whole fleet: the worst light, the
-states in words and who is out there — `2 running · OpenCode 2` — with
-tokens in flight and the oldest run's age in its tooltip; when nothing
-runs but an alert stands (a halted chain, a held column, a tripped
-breaker, a provider out of quota) the line shows the alert itself. The
-header keeps the project menu, **+**, refresh, run/halt, abort and
-**⋯**, wrapping onto a second row at narrow widths instead of out of
-view; the header's **+** captures a new idea.
+a plain file tab. The row's menu **Open ticket** opens the same default. The panel's footer is the **crew line** — the fleet's worst light and who
+is out there, `Crew · Ben, Tessa busy` (`Crew · idle` when nothing runs);
+a click opens the Crew tab, and its tooltip carries tokens in flight and
+the oldest run's age. A halted chain, a held column, a tripped breaker or a
+provider out of quota show as an alert row above the groups. The header
+is one row: the filter, **New idea** (captures a new idea), **Open Board
+tab**, then run/halt, abort and **⋯** (refresh, Mission Control, Board,
+Crew, clean up worktrees); the project menu appears only with a second
+project. When the tickets vault is not a git repository, a one-line note at
+the foot says so — dismiss it with its ×.
 
 **The step card** (req-75 W3, reworked in req-86). At the end of a
 step, the thread shows a card above the transcript that follows where the
@@ -1129,12 +1129,10 @@ does now — a bold state word (*Planning*, *Building*, *Merging*,
 *Waiting for you*, *Idle*) beside the run's dot, one muted line with
 the worker, its model, how long it has been at it and how full its
 context is (hover it for the numbers: turns, tokens, working time),
-and the controls — **Pause**, **Take over** and **Stop**. While
-workers run, the panel header sums up the whole fleet
-next to its buttons (`● 1 running · 18.9M tok · 26:22`): the worst
-light, the states in words, the tokens in flight and how long the
-oldest live run has been at it — hover it for the long form; a narrow
-panel keeps only the light and the states.
+and the controls — **Pause**, **Take over** and **Stop**. The Work
+panel's footer names who is out there — `Crew · Ben, Tessa busy`
+(`Crew · idle` while nothing runs), with the fleet's worst light
+before it; hover it for the long form, click it to open the Crew tab.
 
 **Prioritized, persona and cost on every row.** The ideas already in the
 fleet's queue are their own group, **Prioritized**, between Shaping and
@@ -1171,17 +1169,12 @@ the Work panel's **⋯** menu (*Board*, *Crew*) or the command palette
   worker slots are busy, the pool chips, what each persona is doing right
   now, today's cost, **Pause all** and **Open Crew ›**.
 
-**Workers.** While workers run, a *Workers* section tops the Work panel:
-one card per worker with its state in words (*Building*, *Paused*,
-*Looks stuck*, *Waits for your answer*), the ticket, what it is doing
-now, its working time, context and tokens, and Pause / Continue,
-**Tell…** (a line that reaches the worker as your next message) and
-Stop on the card; a worker that looks stuck also offers **Nudge**, which
-asks it for a status line. **Pause** waits for the current action (a
-command or an edit) to finish and then pauses — it never cuts one off
-half-way. A worker silent for ten minutes is flagged *Looks
-stuck*; after forty it is stopped and the step retries with a growing
-wait.
+**Pause and stuck workers.** **Pause** (on the thread and on a Crew
+run) waits for the current action — a command or an edit — to finish and
+then pauses; it never cuts one off half-way. A worker silent for ten
+minutes is flagged *Looks stuck*; after forty it is stopped and the step
+retries with a growing wait. The Work panel itself shows no worker
+cards: they live in the Crew tab and the Capacity band.
 
 **The worker on the ticket.** The thread's conversation is the
 ticket's story in steps: each earlier run of the ticket is one folded
@@ -1212,7 +1205,7 @@ are you doing and why?** and **Stop after this step** — a click fills
 the box, you send. While a turn runs, the thread shows the worker's
 pulse above the prompt box: a small squirrel that runs while the worker
 works, sprints while output arrives fast and sits when there is nothing
-to do — the same squirrel marks the Running rows and the Workers cards
+to do — the same squirrel marks the Running rows and the Crew cards
 — beside what the worker is doing, for how long and the tokens written
 so far.
 
@@ -1240,8 +1233,7 @@ live on OpenCode workers: a tool step appears as the worker calls it
 and reply text grows while it is written. The view follows new output
 while you are at the bottom; scrolled up, it stays put and a
 **↓ New output** button brings you back. Only OpenCode workers can be
-taken over for now. **Chain log** in the header's **⋯** menu opens the
-fleet daemon's log in a read-only tab. When a run ends, the ticket's Log line records the
+taken over for now. When a run ends, the ticket's Log line records the
 tokens it used — how much of the input came from the provider's cache,
 and the cost, when the provider reports one (flat coding plans report
 none). A run that continues an earlier session counts only its own
@@ -1253,27 +1245,15 @@ of that ticket carries the failed gate's output (its tail) so the
 worker fixes it first and continues the branch instead of starting
 over.
 
-**All workers at a glance.** The **Workers** link at the right end of
-the Work panel's footer (also in the header's **⋯** menu) opens one
-tab with a card per live run: its dot, the ticket's title and how long
-it has been at it, one line with the state, the worker, its model and
-how full its context is, and what it does now with the two actions
-before it. Each card carries the thread's controls — **Pause** (a
-pause **Continue** undoes), **Tell…** (a one-line input right in the
-card), **Take over** and **Stop**; a run that waits on you offers
-**Answer** instead, which opens the ticket page. A busy worker
-without progress — no edit for eight minutes, the same file read
-again and again, or the runner itself flagging it — is flagged
-**Looks stuck** (the card's border says so too): **Nudge** sends a
-canned status request — one line on what it is doing, or a question
-when it is blocked —,
-**Hand to …** stops the run and starts the same ticket on the other
-worker, **Stop** ends it; the ticket thread's header shows the same
-*Looks stuck* word. The top row sums the pools up — who runs of how
-many slots per worker, what waits in the queue — and its two buttons
-act on everything at once: **Pause all after this step** and the armed
-**Stop all** (click twice). The tab's footer counts the workers and
-the day's tokens.
+**All workers at a glance.** The **Crew** tab (the footer line, or the
+Work panel's **⋯** menu) shows a card per persona with one row per live
+run, and the controls act on a run or on everything at once — **Nudge**,
+**Hand to Claude Code**, **Stop**, **Pause all** and the armed **Stop
+all** (click twice); see *Board, Crew and Capacity* above. A busy worker
+without progress — no edit for eight minutes, the same file read again
+and again, or the runner itself flagging it — is flagged **Looks
+stuck**; the ticket thread's header shows the same word. The fleet
+daemon's log is on disk as `runner.log` under the app's data folder.
 
 Every run's instruction is a **context pack**, assembled in a fixed
 order: the repo's own agent instructions (the file its **Agent

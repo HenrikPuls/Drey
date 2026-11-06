@@ -18,6 +18,7 @@ import {
   queueTargetOf,
   rowStatusOf,
   runningStepOf,
+  crewLineOf,
   statusLineOf,
   workGroups,
   workListSignature,
@@ -499,5 +500,17 @@ describe('statusLineOf (Needs-you lines)', () => {
       }),
     ]);
     expect(statusLineOf(groups.needs[0]!, snap)).toBe('Which database?');
+  });
+});
+
+describe('crewLineOf', () => {
+  it('names the busy personas once each', () => {
+    expect(crewLineOf(['Ben', 'Tessa', 'Ben'], 3)).toBe('Crew · Ben, Tessa busy');
+  });
+  it('counts runs without a persona', () => {
+    expect(crewLineOf([null, undefined, ''], 2)).toBe('Crew · 2 busy');
+  });
+  it('says idle when nothing runs', () => {
+    expect(crewLineOf([], 0)).toBe('Crew · idle');
   });
 });

@@ -154,9 +154,11 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(rows('ideas').first()).toHaveAttribute('data-id', 'T-0101');
     await expect(panel.locator('.work-row[data-id="T-0103"] .work-row-queued')).toHaveText('Queued');
     await expect(panel.locator('.work-row[data-id="T-0102"] .work-track')).toHaveText('Triage');
-    // The footer names the workers out there (the fleet chip left the
-    // header): one running, one waiting on the owner.
-    await expect(panel.locator('.tickets-statusbar-fleet')).toHaveText(/1 running · 1 need attention · OpenCode 2/);
+    // The footer is the crew line (E12-11): who is busy, one click to the Crew tab; the
+    // header is one row ending in the Open Board tab icon, and no Workers cards sit above the groups.
+    await expect(panel.locator('.tickets-statusbar-fleet')).toHaveText('Crew · 2 busy');
+    await expect(panel.locator('.tickets-workers')).toHaveCount(0);
+    await expect(page.locator('button[aria-label="Open Board tab"]:visible')).toHaveCount(1);
 
     const box = (await panel.boundingBox())!;
     expect(box.width).toBeLessThan(420);

@@ -10,7 +10,6 @@ import { createTranscriptView } from './transcript-view';
 import { formatWatch, parseStreamEvents } from './watch-format';
 import { newWaits } from './waiting';
 import { interactiveEndMoves, interactiveModeFor, type InteractiveMode } from './end-moves';
-import { asParagraphs, chainLogStamp, visibleChainLog } from './chain-log';
 import { chainAlertsOf, newChainAlerts, type ChainAlert } from './chain-alerts';
 import type { DreyPluginApi, PluginWidgetContrib, StatusItemHandle } from '../../../shared/plugin-api/renderer';
 import {
@@ -33,13 +32,12 @@ import { THREAD_KEY } from './ticket-page';
 import { defaultFaceOf, ticketFaceSwitch, ticketRunActive, type TicketFace } from './ticket-faces';
 import { PENDING_HINT, dialogStarter } from './dialog-starters';
 import { statusSlotText } from './status-slot';
-import { ageWords, checkpointActionOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups, workListSignature } from './work-groups';
+import { ageWords, checkpointActionOf, crewLineOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups, workListSignature } from './work-groups';
 import { readyBarNode, readyCardNode, storyNode } from './ready-view';
 import { stepCardOf } from '../shared/step-card';
 import type { ChangesReply } from '../shared/changes';
 import { checkpointControls, headerControls, liveStateWord, threadSteps, durationWords, type ThreadStep } from './thread-steps';
 import { stuckOf } from './stuck';
-import { mountWorkers, type WorkerPoolEntry, type WorkersViewDeps } from './workers-view';
 import type { WorktreeFile } from '../../../packages/tickets-engine/src/core/worktree-changes';
 import { createWorkFilterStore, filterPopover, isFilterActive, NO_WORK_FILTER, type WorkFilterState } from './work-filter';
 import { createTicketsSettingsPage } from './settings-page';
@@ -73,7 +71,6 @@ import {
   WORKER_LABEL,
   workerLabelOf,
 } from './worker-status';
-import { NUDGE_TEXT, workersNode, type WorkerCardAction } from './workers-view';
 import type { DeskDeps } from './desk-deps';
 import { createTeamStore, type TeamStore } from './team/team-store';
 import { createConversationProvider } from './conversation/targets';
@@ -539,11 +536,14 @@ function boardViewControlsNode(api: DreyPluginApi): { node: HTMLElement; dispose
   return { node, dispose: () => headerViewPainters.delete(paint) };
 }
 
+/** The non-git note was dismissed in this window (A-09); it returns on the next start. */
+let gitWarningDismissed = false;
+
 function buildBoardView(api: DreyPluginApi): BoardView {
   const root = el('div', 'tickets-view');
   // The footer's fleet line is a live node: created once per mount,
   // moved between renders by `append` (append moves, never clones).
-  const fleet = fleetFooterNode();
+  const fleet = fleetFooterNode(api);
   /** The list's scroll survives every re-render (the DOM is rebuilt). */
   const restoreScroll = (): (() => void) => {
     const top = root.querySelector<HTMLElement>('.work-list')?.scrollTop ?? 0;
@@ -579,10 +579,6 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     if (issues !== null) {
       root.append(issues);
     }
-    const workers = workersSection(api);
-    if (workers !== null) {
-      root.append(workers);
-    }
     root.append(workListNode(workPanelDeps(api), snap, fleetRuns, folds, notifyViews, workFilter.get()));
     const statusBar = statusBarNode(api, snap, fleet.node);
     if (statusBar !== null) {
@@ -590,10 +586,21 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     }
     if (typeof snap.storeLine === 'string' && snap.storeLine !== '') {
       root.append(el('div', 'tickets-store-line', snap.storeLine));
-    } else if (!snap.isGitRepo) {
+    } else if (!snap.isGitRepo && !gitWarningDismissed) {
+      // One line, dismissible for this window (A-09).
       const warn = el('div', 'tickets-warn');
-      warn.textContent =
-        'The tickets vault is not a git repository — transitions are not versioned.';
+      const text = el('span', 'tickets-warn-text', 'Not a git repository — transitions are not versioned.'); // TODO(i18n)
+      text.title = 'The tickets vault is not a git repository — transitions are not versioned.'; // TODO(i18n)
+      const dismiss = el('button', 'icon-btn tickets-warn-close');
+      dismiss.type = 'button';
+      dismiss.title = 'Dismiss'; // TODO(i18n)
+      dismiss.setAttribute('aria-label', 'Dismiss the git note'); // TODO(i18n)
+      dismiss.append(api.ui.icon('x', 11));
+      dismiss.addEventListener('click', () => {
+        gitWarningDismissed = true;
+        warn.remove();
+      });
+      warn.append(text, dismiss);
       root.append(warn);
     }
   };
@@ -615,14 +622,6 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     if (list !== null) {
       workListLivePaint(list, workPanelDeps(api), snap, fleetRuns);
     }
-    // The Workers cards carry moving text too (activity, clocks): swap the
-    // section in place — it is small, and nothing in it holds focus.
-    const old = root.querySelector<HTMLElement>('.tickets-workers');
-    const typing = old !== null && old.contains(document.activeElement);
-    const fresh = typing ? null : workersSection(api);
-    if (old !== null && fresh !== null) {
-      old.replaceWith(fresh);
-    }
   };
   fleetListeners.add(paintLive);
   const tick = setInterval(paintLive, 1_000);
@@ -638,39 +637,6 @@ function buildBoardView(api: DreyPluginApi): BoardView {
   };
   render();
   return view;
-}
-
-/** The Workers section over the live runs (null while none lives). */
-function workersSection(api: DreyPluginApi): HTMLElement | null {
-  return workersNode(
-    {
-      api,
-      open: (ticketId) => {
-        const card = boardCard(ticketId);
-        if (card !== null) {
-          openTicketThread(api, card);
-        }
-      },
-      act: (runId: string, action: WorkerCardAction, text?: string) => {
-        if (action === 'stop') {
-          void runMutation('Stopping the worker', () => invokeBoard('fleetStop', { runId, reason: null }));
-          return;
-        }
-        if (action === 'tell' || action === 'nudge') {
-          void runMutation(action === 'nudge' ? 'Nudging' : 'Sending', () =>
-            invokeBoard('fleetSend', { runId, text: text ?? NUDGE_TEXT }),
-          );
-          return;
-        }
-        const control = action === 'pause' ? 'softpause' : 'release';
-        void runMutation(action === 'pause' ? 'Pausing' : 'Continuing', () =>
-          invokeBoard('fleetControl', { action: control, runId }),
-        );
-      },
-    },
-    liveRuns(),
-    Date.now(),
-  );
 }
 
 /** What the Work list may do — the store's actions, behind one seam. */
@@ -776,7 +742,7 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
         if (active !== undefined) {
           project.value = active.id;
         }
-        project.hidden = projects.length === 0;
+        project.hidden = projects.length < 2;
       };
       projectPainters.add(paintProjects);
       project.addEventListener('change', () => {
@@ -794,21 +760,22 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
         }
       });
 
-      const refreshButton = el('button', 'icon-btn');
-      refreshButton.type = 'button';
-      refreshButton.title = 'Refresh the board';
-      refreshButton.setAttribute('aria-label', 'Refresh the board');
-      refreshButton.append(api.ui.icon('refresh-cw', 14));
-      refreshButton.addEventListener('click', () => void refreshBoard());
+      const boardButton = el('button', 'icon-btn');
+      boardButton.type = 'button';
+      boardButton.title = 'Open Board tab'; // TODO(i18n)
+      boardButton.setAttribute('aria-label', 'Open Board tab'); // TODO(i18n)
+      boardButton.append(api.ui.icon('table', 14));
+      boardButton.addEventListener('click', () => openBoardDoc(api));
 
-      // req-75 W1b, T-0086: project · board issues · spacer · + · refresh ·
-      // master · ⋯ — the fleet status lives in the footer now, at every
-      // width, and the head wraps instead of clipping when narrow.
+      // E12-11 (boards 7a–7c): one 40 px row, never wrapping — filter ·
+      // New idea · Open Board tab, then the chain's run/halt/stop and the
+      // overflow (refresh, Mission Control, Crew, worktrees); the host
+      // adds the grip. The project switch shows only with a second project.
       const viewControls = boardViewControlsNode(api);
-      const actions = el('span', 'tickets-head-group');
-      actions.append(newButton, refreshButton);
+      const actions = el('span', 'tickets-head-actions');
+      actions.append(newButton, boardButton);
       host.classList.add('tickets-panel-head');
-      host.append(project, viewControls.node, el('span', 'tickets-head-spacer'), actions, masterControlNode(api), headerMenuButton(api));
+      host.append(project, viewControls.node, actions, el('span', 'tickets-head-spacer'), masterControlNode(api), headerMenuButton(api));
       return () => {
         projectPainters.delete(paintProjects);
         viewControls.dispose();
@@ -821,16 +788,7 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       views.add(view);
       panel.append(view.root);
       view.render();
-      // The footer's fleet line follows the panel's width (req-60).
-      const widthObserver = new ResizeObserver((entries) => {
-        panelWidth = entries[0]?.contentRect.width ?? 0;
-        for (const listener of panelWidthListeners) {
-          listener();
-        }
-      });
-      widthObserver.observe(panel);
       return () => {
-        widthObserver.disconnect();
         views.delete(view);
         view.dispose();
       };
@@ -1126,7 +1084,7 @@ function masterControlNode(api: DreyPluginApi): HTMLElement {
 function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
   const more = el('button', 'icon-btn');
   more.type = 'button';
-  more.title = 'More — mission control, workers, chain log, clean up worktrees';
+  more.title = 'More — refresh, Mission Control, Board, Crew, clean up worktrees';
   more.setAttribute('aria-label', 'More actions');
   more.setAttribute('aria-haspopup', 'menu');
   more.append(api.ui.icon('more-horizontal', 14));
@@ -1157,6 +1115,7 @@ function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
       });
       menu.append(button);
     };
+    item('Refresh the board', 'Reads the tickets repository again', () => void refreshBoard()); // TODO(i18n)
     item('Mission Control', 'The same app in its own window — the whole desk at full size', () => {
       void invokeBoard('openMissionControl', {}).then(
         (result) => {
@@ -1176,8 +1135,6 @@ function headerMenuButton(api: DreyPluginApi): HTMLButtonElement {
     });
     item('Board', 'The pipeline as columns, parts under their ticket, cost per column', () => openBoardDoc(api));
     item('Crew', 'The personas, their runs and budgets, capacity, Pause all', () => openTeamDoc(api));
-    item('Workers', 'Every live worker as a card — what it does, its context, its controls', () => openWorkersDoc(api));
-    item('Chain log', 'What the fleet daemon did (dispatches, skips, gates), as a readonly editor tab', () => openChainLog(api));
     item('Clean up worktrees…', 'Removes every worktree whose ticket has no live run, then prunes', () => void runWorktreesCleanup());
     document.body.append(menu);
     const anchor = more.getBoundingClientRect();
@@ -1273,12 +1230,6 @@ async function runChainAction(method: string, payload: unknown): Promise<void> {
 function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null, fleet: HTMLElement | null): HTMLElement | null {
   const bar = el('div', 'tickets-statusbar');
   const right = el('span', 'tickets-statusbar-right');
-  // The Workers link (req-75 W4b): a text link at the footer's right
-  // end — the tab is one click away wherever the board is.
-  const workersLink = el('button', 'tickets-statusbar-link', 'Workers');
-  workersLink.type = 'button';
-  workersLink.title = 'Every live worker — what it does, its context, its controls';
-  workersLink.addEventListener('click', () => openWorkersDoc(api));
   if (note !== '') {
     const message = el('span', 'tickets-statusbar-note');
     message.dataset['kind'] = noteKind;
@@ -1305,7 +1256,6 @@ function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null, fleet: HT
     right.append(message);
   }
   if (snap === null) {
-    right.append(workersLink);
     if (right.childElementCount === 0) {
       return null;
     }
@@ -1334,57 +1284,44 @@ function statusBarNode(api: DreyPluginApi, snap: BoardSnapshot | null, fleet: HT
   if (fleet !== null) {
     bar.append(fleet);
   }
-  right.append(workersLink);
   bar.append(right);
   return bar;
 }
 
-/** The Work panel's current width (its body is as wide as its header); 0 before the first measure. */
-let panelWidth = 0;
-const panelWidthListeners = new Set<() => void>();
-
-/** Below this panel width the footer's fleet line drops its numbers (they stay in the tooltip). */
-const FOOTER_FLEET_NARROW_PX = 360;
-
 /**
- * The footer's fleet line (T-0086): the one live fleet display at every
- * width — the header chip is gone. The worst light, the states in
- * words, who is out there, tokens in flight and the oldest run's age
- * (`fleetLine`); the long form in the tooltip. A live node with its own
- * paint (every fleet update, once a second, the panel's width) — built
- * once per mounted view, moved between renders by `append`, so the text
- * updates in place and no rebuild can flicker it.
+ * The footer's crew line (E12-11, boards 7a–7c): `Crew · Ben, Tessa busy`
+ * — who is out there, in words — and one click opens the Crew tab. The
+ * light is the fleet's worst state (`fleetLine`), its long form the tooltip.
+ * A live node with its own paint (every fleet update, once a second) —
+ * built once per mounted view, moved between renders by `append`, so the
+ * text updates in place and no rebuild can flicker it.
  */
-function fleetFooterNode(): { readonly node: HTMLElement; readonly dispose: () => void } {
-  const node = el('span', 'tickets-statusbar-fleet');
+function fleetFooterNode(api: DreyPluginApi): { readonly node: HTMLElement; readonly dispose: () => void } {
+  const node = el('button', 'tickets-statusbar-fleet');
+  node.type = 'button';
   const light = el('span', 'tickets-light');
-  const text = el('span');
-  const numbers = el('span', 'tickets-statusbar-fleet-numbers');
-  node.append(light, text, numbers);
+  const text = el('span', 'tickets-statusbar-fleet-text');
+  node.append(light, text);
+  node.addEventListener('click', () => openTeamDoc(api));
   const paint = (): void => {
-    const line = fleetLine(liveRuns(), currentChainAlerts(), Date.now());
-    node.toggleAttribute('data-narrow', panelWidth > 0 && panelWidth < FOOTER_FLEET_NARROW_PX);
+    const live = liveRuns();
+    const line = fleetLine(live, currentChainAlerts(), Date.now());
     light.className = `tickets-light tickets-light-${line.light}`;
-    text.textContent = line.text;
-    numbers.textContent = line.numbers;
-    numbers.hidden = line.numbers === '';
-    if (line.long === '') {
-      node.removeAttribute('title');
-      node.removeAttribute('aria-label');
-    } else {
-      node.title = line.long;
-      node.setAttribute('aria-label', line.long);
-    }
+    text.textContent = crewLineOf(
+      live.map((run) => (run.persona === null || run.persona === undefined ? null : teamStore(api).nameOf(run.persona))),
+      live.length,
+    );
+    const title = line.long === '' ? 'Open the Crew tab' : `${line.long}\nOpen the Crew tab`; // TODO(i18n)
+    node.title = title;
+    node.setAttribute('aria-label', `${text.textContent ?? 'Crew'} — open the Crew tab`); // TODO(i18n)
   };
   fleetListeners.add(paint);
-  panelWidthListeners.add(paint);
   const tick = setInterval(paint, 1_000);
   paint();
   return {
     node,
     dispose: () => {
       fleetListeners.delete(paint);
-      panelWidthListeners.delete(paint);
       clearInterval(tick);
     },
   };
@@ -1711,32 +1648,6 @@ const threadListeners = new Set<() => void>();
  */
 let threadFocusRun: string | null = null;
 
-// --- the Workers tab (req-75 W4b) ---------------------------------------------
-
-const WORKERS_KIND = 'tickets-workers';
-const WORKERS_KEY = 'workers://all';
-
-/**
- * The provider pools as the Workers tab shows them (W4b): read once at
- * activation from the same config keys the main side reads — pool sizes
- * apply on restart, so one read mirrors the daemon's own view.
- */
-let workerPools: readonly WorkerPoolEntry[] = [
-  { id: 'opencode', label: 'OpenCode', size: 1 },
-  { id: 'claude-code', label: 'Claude Code', size: 1 },
-  { id: 'kimi', label: 'Kimi Code', size: 1 },
-];
-
-const readWorkerPools = async (api: DreyPluginApi): Promise<void> => {
-  const entries = await Promise.all(
-    WORKER_LABEL.map(async ([id, label]) => {
-      const size = await api.settings.get<number>(`fleet.pool.${id}.size`);
-      return { id, label, size: typeof size === 'number' && size >= 1 ? size : 1 };
-    }),
-  );
-  workerPools = entries;
-};
-
 // --- the desk surfaces (E13-8): Board and Team tabs, the Capacity band ------------
 
 const BOARD_KIND = 'tickets-board';
@@ -1783,11 +1694,6 @@ function openBoardDoc(api: DreyPluginApi): void {
 
 function openTeamDoc(api: DreyPluginApi): void {
   api.documents.addDoc(TEAM_KIND, TEAM_KEY, 'Crew');
-}
-
-/** Opens (or focuses) the Workers tab. */
-function openWorkersDoc(api: DreyPluginApi): void {
-  api.documents.addDoc(WORKERS_KIND, WORKERS_KEY, 'Workers');
 }
 
 function threadTitle(ticketId: string): string {
@@ -2669,166 +2575,6 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
 }
 
 
-/**
- * The fleet daemon's chain log as a readonly editor tab: the same lines
- * land in `<userData>/plugins/fleet/runner.log` (T-0007 review finding 2).
- */
-const CHAIN_LOG_KIND = 'tickets-chain-log';
-const CHAIN_LOG_KEY = 'chain-log://fleet-daemon';
-
-/** Lines stamped at or before this instant are hidden ("Clear"); the
- *  daemon's ring buffer and runner.log on disk stay untouched. */
-let chainLogClearedAt = '';
-
-/** Opens (or focuses) the fleet daemon's log tab. */
-function openChainLog(api: DreyPluginApi): void {
-  api.documents.addDoc(CHAIN_LOG_KIND, CHAIN_LOG_KEY, 'Fleet daemon log');
-}
-
-/**
- * The log's pane body: a readonly tail that follows the bottom while the
- * view is scrolled down. Scrolling up pauses the follow; scrolling back
- * to the bottom resumes it — the terminal behavior (owner ruling).
- */
-function mountChainLog(api: DreyPluginApi, host: HTMLElement): () => void {
-  const wrap = el('div', 'tickets-chain-log');
-  const bar = el('div', 'tickets-chain-log-bar');
-  const hint = el('div', 'tickets-chain-log-hint');
-  hint.textContent =
-    'Also on disk as <userData>/plugins/fleet/runner.log — follows the tail while you are at the bottom; scroll up to hold, back down to resume.';
-  const clear = el('button', 'icon-btn');
-  clear.type = 'button';
-  clear.title = 'Clear the view — only lines logged from now on are shown (the file on disk is kept)';
-  clear.setAttribute('aria-label', 'Clear log');
-  clear.textContent = 'Clear';
-  bar.append(hint, clear);
-  let lastText = '';
-  // The host's own Markdown editor, read-only: the log is one fenced block,
-  // and the view itself follows the tail while it is scrolled to the bottom.
-  const view = api.ui.createMarkdownView({ mode: 'view', readOnly: true, content: asParagraphs('Loading the daemon log…') });
-  view.element.classList.add('tickets-chain-log-out');
-  let alive = true;
-  const pull = (): void => {
-    void invokeBoard('fleetLog').then((result) => {
-      if (!alive) {
-        return;
-      }
-      lastText = (result as { text?: string }).text ?? '';
-      render();
-    });
-  };
-  const render = (): void => {
-    const text = visibleChainLog(lastText, chainLogClearedAt);
-    view.setContent(
-      asParagraphs(
-        text === ''
-          ? chainLogClearedAt === ''
-            ? '(the daemon has not logged anything yet)'
-            : '(cleared — new lines appear here)'
-          : text,
-      ),
-    );
-  };
-  clear.addEventListener('click', () => {
-    const stamps = lastText.split('\n').map(chainLogStamp).filter((x) => x !== '');
-    const newest = stamps[stamps.length - 1];
-    if (newest !== undefined) {
-      chainLogClearedAt = newest;
-    }
-    render();
-  });
-  pull();
-  const timer = setInterval(pull, 2_000);
-  wrap.append(bar, view.element);
-  host.append(wrap);
-  return () => {
-    alive = false;
-    clearInterval(timer);
-    view.dispose();
-  };
-}
-
-// --- the Workers tab's wiring (req-75 W4b) ------------------------------------
-
-/** What the Workers tab may do — the board's seams, one factory. */
-function workersViewDeps(api: DreyPluginApi): WorkersViewDeps {
-  return {
-    // Only the watchable runs get a card: a detached run has no stream
-    // to pull and no controls to send — the ticket page says "not connected".
-    runs: () => liveRuns(),
-    stream: (runId) =>
-      invokeBoard('fleetStream', { runId })
-        .then((result) => (result as { text?: string }).text ?? '')
-        .catch(() => ''),
-    pools: () => workerPools,
-    queue: () => {
-      const snap = snapshot;
-      if (snap === null || snap.vaultId === null) {
-        return null;
-      }
-      const queued = workGroups(snap, fleetRuns).running.filter((row) => row.run === null);
-      const blocked = queued.find((row) => row.card.blocked.length > 0);
-      return {
-        count: queued.length,
-        blocked: blocked === undefined ? null : { title: blocked.card.meta.title ?? blocked.card.id, blocker: blocked.card.blocked[0]! },
-      };
-    },
-    titleOf: (ticketId) => boardCard(ticketId)?.meta.title ?? ticketId,
-    providerLabel: workerLabelOf,
-    todayTokens: () => {
-      const today = new Date();
-      const sameDay = (iso: string): boolean => {
-        const at = new Date(iso);
-        return at.getFullYear() === today.getFullYear() && at.getMonth() === today.getMonth() && at.getDate() === today.getDate();
-      };
-      return fleetRuns.filter((run) => sameDay(run.startedAt)).reduce((sum, run) => sum + run.tokensIn + run.tokensOut, 0);
-    },
-    // Pause is the soft pause the thread's header carries (milestone 94):
-    // Continue releases the step again; takeover stays the third control.
-    control: (action, runId) => {
-      const request = action === 'pause' ? 'softpause' : action === 'continue' ? 'release' : 'takeover';
-      const label = action === 'pause' ? 'Pausing' : action === 'continue' ? 'Continuing' : 'Taking over';
-      void runMutation(label, () => invokeBoard('fleetControl', { action: request, runId }));
-    },
-    stop: (runId, reason) =>
-      runMutation('Stopping the worker', () => invokeBoard('fleetStop', { runId, reason })).then((result) => result.ok),
-    send: (runId, text) => {
-      void runMutation('Telling the worker', () => invokeBoard('fleetSend', { runId, text }));
-    },
-    startRun: (ticketId, provider) => {
-      if (boardCard(ticketId) === null) {
-        return;
-      }
-      void runMutation('Starting the run', () => invokeBoard('fleetStart', { id: ticketId, worker: provider, permissionMode: 'accept-edits' }));
-    },
-    // Pause all: every live run paused after its current step under one
-    // busy line — each one resumes with its card's Continue (W4b).
-    pauseAll: () => {
-      const runs = liveRuns();
-      if (runs.length === 0) {
-        return;
-      }
-      void runMutation('Pausing every worker', async () => {
-        const results = await Promise.all(runs.map((run) => invokeBoard('fleetControl', { action: 'softpause', runId: run.id })));
-        const refused = results.filter((result) => (result as { ok?: boolean }).ok === false);
-        return refused.length === 0 ? { ok: true } : (refused[0] as MutationResult);
-      });
-    },
-    // Stop all: the chain's emergency stop — the master switch's ■ (W4b).
-    stopAll: () => void runChainAction('chainAbort', {}),
-    openTicket: (ticketId) => {
-      const card = boardCard(ticketId);
-      if (card !== null) {
-        void openTicketPage(api, card);
-      }
-    },
-    onRunsChanged: (listener) => {
-      fleetListeners.add(listener);
-      return () => fleetListeners.delete(listener);
-    },
-  };
-}
-
 // --- the card context menu ----------------------------------------------------
 
 /** ArrowUp / ArrowDown move the focus through a `.tickets-menu`'s enabled rows. */
@@ -3417,32 +3163,6 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       documentExtension.repaint();
     };
 
-    // The fleet daemon's chain log: a readonly, tail-following editor tab
-    // (T-0007 review finding 2). Stateless — the session snapshot reopens
-    // it from the fixed key.
-    api.ui.registerDocKind({
-      kind: CHAIN_LOG_KIND,
-      icon: 'scroll-text',
-      serialize: () => null,
-      restore: () => openChainLog(api),
-      mount: (el) => mountChainLog(api, el),
-      statusText: () => 'fleet daemon',
-    });
-
-    // The Workers tab (req-75 W4b): every live run as a card. Stateless —
-    // the session snapshot reopens it from the fixed key.
-    api.ui.registerDocKind({
-      kind: WORKERS_KIND,
-      icon: 'users',
-      serialize: () => null,
-      restore: () => openWorkersDoc(api),
-      mount: (host) => mountWorkers(workersViewDeps(api), host),
-      statusText: () => {
-        const n = liveRuns().length;
-        return n === 0 ? null : `${n} running`;
-      },
-    });
-
     // The Board and the Team (E13-8): stateless tabs; the session snapshot
     // reopens them from their fixed keys.
     api.ui.registerDocKind({
@@ -3520,7 +3240,6 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       applyFleetSnapshot((payload ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
     void invokeBoard('fleetStatus').then((result) =>
       applyFleetSnapshot((result ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
-    void readWorkerPools(api).catch(() => undefined);
 
     // New ticket from anywhere (req-75 W5a, SDK 1.37): the system-wide
     // chord raises Drey, reveals the board and opens the create modal.

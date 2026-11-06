@@ -1,7 +1,8 @@
 /**
  * The Work panel's list (req-75 W1/W1b, ADR-0087): Needs you, Shaping,
  * Running, Ideas and Done this week as collapsible groups of the
- * canvas's two-line rows, so it reads in a ~240 px side dock. Plain DOM
+ * canvas's two-line rows (E12-11, boards 7a–7c: id, title and age, then
+ * one grey meta line and the cost), so it reads in a ~240 px side dock. Plain DOM
  * over `work-groups.ts`; a row is information plus one click — it opens
  * the ticket where the decision is made. Every action goes back through
  * the deps; this file holds no board state of its own beyond which
@@ -472,14 +473,18 @@ function issuesBadge(card: TicketCard): HTMLElement | null {
   return badge;
 }
 
-/** A row's phase chip (T-0084): a dot in the phase's colour plus its
- *  name — the name carries the meaning, the colour anchors it. */
+/** A row's phase as plain grey words (board 7a: one meta line, no chips). */
 function phaseChipNode(row: WorkRow): HTMLElement {
-  const chip = el('span', 'work-phase-chip');
-  chip.style.setProperty('--phase-color', row.phaseColor);
-  chip.title = row.phase.title;
-  chip.append(el('span', 'work-phase-dot'), el('span', 'work-phase-name', row.phase.title));
-  return chip;
+  const phase = el('span', 'work-meta-phase', row.phase.title);
+  phase.title = row.phase.title;
+  return phase;
+}
+
+/** The one grey meta line's text part: its pieces run together, a dot between (CSS). */
+function metaLine(...parts: readonly HTMLElement[]): HTMLElement {
+  const meta = el('span', 'work-row-meta');
+  meta.append(...parts);
+  return meta;
 }
 
 /** The persona a row belongs to: the live run's, the ticket's pin, else the column's. */
@@ -498,21 +503,25 @@ function costNode(row: WorkRow): HTMLElement | null {
   return typeof cost === 'number' && Number.isFinite(cost) ? el('span', 'work-row-cost', usd(cost)) : null;
 }
 
-/** The persona chip and the cost every row carries (mobile list parity, E13-8). */
-function metaNodes(deps: WorkPanelDeps, row: WorkRow): HTMLElement[] {
-  const nodes: HTMLElement[] = [];
+/** The persona's name as grey meta text (mobile list parity, E13-8); null = none. */
+function personaNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement[] {
   const who = personaIdOf(row);
-  if (who !== null) {
-    const chip = el('span', 'work-row-persona', personaLabel(deps, who));
-    chip.title = `Persona: ${personaLabel(deps, who)}`;
-    nodes.push(chip);
+  if (who === null) {
+    return [];
   }
+  const text = el('span', 'work-row-persona', personaLabel(deps, who));
+  text.title = `Persona: ${personaLabel(deps, who)}`;
+  return [text];
+}
+
+/** The cost, grey, at the line's right end; its title says it is the cost so far. */
+function costNodes(row: WorkRow): HTMLElement[] {
   const cost = costNode(row);
-  if (cost !== null) {
-    cost.title = 'Settled cost of the ticket so far';
-    nodes.push(cost);
+  if (cost === null) {
+    return [];
   }
-  return nodes;
+  cost.title = 'So far';
+  return [cost];
 }
 
 /** A Needs-you row: title + age, then the phase chip, the kind chip and why it waits. */
@@ -532,7 +541,12 @@ function rowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HTMLEl
   node.append(top);
   if (need !== null) {
     const line = el('div', 'work-row-sub');
-    line.append(phaseChipNode(row), el('span', 'work-kind', needKindLabel(need, snap)), el('span', 'work-row-line', statusLineOf(row, snap)), ...metaNodes(deps, row));
+    const kind = needKindLabel(need, snap);
+    line.append(
+      // The phase word is dropped when the kind already says it (*Review* in Review).
+      metaLine(...(kind === row.phase.title ? [] : [phaseChipNode(row)]), el('span', 'work-kind', kind), el('span', 'work-row-line', statusLineOf(row, snap)), ...personaNode(deps, row)),
+      ...costNodes(row),
+    );
     node.append(line);
   }
   return node;
@@ -560,7 +574,7 @@ function shapingRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
   top.append(el('span', 'work-row-age', ageWords(row.run?.startedAt ?? card.meta.entered[row.phase.id] ?? null, Date.now())), more);
   node.append(top);
   const sub = el('div', 'work-row-sub');
-  sub.append(phaseChipNode(row), el('span', 'work-row-line', shapingDialogLine(row)), ...metaNodes(deps, row));
+  sub.append(metaLine(phaseChipNode(row), el('span', 'work-row-line', shapingDialogLine(row)), ...personaNode(deps, row)), ...costNodes(row));
   node.append(sub);
   return node;
 }
@@ -593,7 +607,11 @@ function runningRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow):
   // paint can fill it without touching the row's bones (T-0086).
   const line = el('span', 'work-run-line', step.line);
   line.hidden = step.line === '';
-  sub.append(step.live ? runSquirrel(row.run) : el('span', 'work-run-dot work-run-dot-queued'), phaseChipNode(row), el('span', 'work-run-step', step.step), line, ...metaNodes(deps, row));
+  sub.append(
+    step.live ? runSquirrel(row.run) : el('span', 'work-run-dot work-run-dot-queued'),
+    metaLine(phaseChipNode(row), el('span', 'work-run-step', step.step), line, ...personaNode(deps, row)),
+    ...costNodes(row),
+  );
   node.append(sub);
   return node;
 }
@@ -621,7 +639,7 @@ function ideaRowNode(deps: WorkPanelDeps, snap: BoardSnapshot, row: WorkRow): HT
     track === null
       ? 'Not triaged yet — pick a track from the menu'
       : `Track: ${track === 'auto' ? 'Auto — runs on its own' : 'Shape — a plan-mode dialog with you'}`;
-  node.append(chip, ...metaNodes(deps, row), more);
+  node.append(chip, ...costNodes(row), more);
   return node;
 }
 
@@ -635,11 +653,7 @@ function prioritizedRowNode(deps: WorkPanelDeps, row: WorkRow): HTMLElement {
   const wait = el('span', 'work-row-queued', who === null ? 'Queued' : `waits for ${personaLabel(deps, who)}`);
   wait.title = 'Queued for the fleet - the next free worker takes it';
   node.append(wait);
-  const cost = costNode(row);
-  if (cost !== null) {
-    node.append(cost);
-  }
-  node.append(more);
+  node.append(...costNodes(row), more);
   return node;
 }
 
