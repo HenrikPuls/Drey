@@ -734,22 +734,24 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   rehearsed on a copy of the real vault
   ([`rehearsal-2026-11-06.md`](../docs/design/dricket/rehearsal-2026-11-06.md), milestone 169). The
   owner's real `drey-tickets` is only touched here. **Needs req-99a merged**, so the store is written
-  once with the six stages (decision 27); the guide holds two marked slots for it (stage ids, the
-  `pipeline.md` text). The exact sequence, with what each step should show, is
+  once with the six stages `inbox shaping prioritized building ready done` (decision 27), and step B
+  of the guide repeated after that merge: the rehearsal ran on the old names. The exact sequence, with
+  what each step should show, is
   [`cutover-guide.md`](../docs/design/dricket/cutover-guide.md), section C:
   1. Freeze: quit Drey, stop the engine (`engine.lock` names the pid), commit `tickets/archive`,
      `git -C E:\projects\drey-tickets tag pre-dricket`.
   2. Fresh allow list: `Get-ChildItem <vault>\tickets -Recurse -File -Filter 'T-*.md' | % { $_.BaseName } | sort | Set-Content <allow>`.
-  3. Dry run: `node scripts/migrate-tickets.mjs --legacy <vault> --allow <allow> --include-archive`
+  3. Dry run: `node scripts/migrate-tickets.mjs --legacy <vault> --allow <allow> --include-archive --pipeline-out <file>`
      (`0 skipped`; check the pids of the stale run stamps, T-0030 and T-0050 today).
-  4. Import: the same plus `--apply --allow-live-runs --store E:\projects\drey-board --dk <dk> --actor owner@legion --data E:\projects\drey-board-data --report <file>`
-     (`dk validate: clean`, `shadow diff: identical`; the exit code does not cover the diff).
+  4. Import: `--legacy`, `--allow`, `--include-archive` as above, plus `--apply --allow-live-runs --store E:\projects\drey-board --dk <dk> --actor owner@legion --data E:\projects\drey-board-data --report <file>`
+     (`dk validate: clean`, `shadow diff: identical`, the comparison of record; the exit code does not cover the diff).
   5. Store check: the six ids in `git -C <store> show main:dricket.toml`, `dk validate`, the `dk ls` count.
   6. Shadow: plugin config `backend: shadow`, `dk.store`, `dk.dataDir`; `.\dev.ps1 -Built` once;
-     `<engine home>\shadow\board-diff.md` says `Identical`; quit, stop the engine.
-  7. Flip: `tickets/_meta/pipeline.md` gets the six states (committed), `backend: dricket`, `.\dev.ps1 -Built` once.
+     `<engine home>\shadow\board-diff.md` says `Identical` (only while no live ticket stands in `build` or
+     `commit`: it reads one pipeline for both sides); quit, stop the engine.
+  7. Flip: the `--pipeline-out` file is committed as `tickets/_meta/pipeline.md`, `backend: dricket`, `.\dev.ps1 -Built` once.
   8. Smoke: same tickets in six columns, move, priority, editor save, comment, short fleet run,
-     an archived ticket opens; each one `dricket: ...` commit.
+     Accept into Done, an archived ticket opens; each write one `dricket: ...` commit.
   9. The owner's round; then E14-9b.
 
   **Decided:** the archive migrates (`--include-archive`, O-3 replaces OD-7). **Follow-ups, not
@@ -757,7 +759,8 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   in `scheduleShadow` (`store/store-board-source.ts`; matters only for an engine left running, the
   guide stops it); the apply's exit code covers the shadow diff, and `--allow` over archive ids without
   `--include-archive` is refused instead of skipping them with exit 0 (`migrate/cli.ts`); a
-  `--phase-dirs` flag for the reverse converter (legacy folder numbers).
+  `--phase-dirs` flag for the reverse converter (legacy folder numbers); a commit step settles into
+  Done without a connected client (one line in `server/engine.ts`, req-99a hand-over).
 - **E14-9b — Decommission, part b.** After the cut-over **and the owner's
   verification round** (owner, 2026-11-05: no fixed 30 days), delete what part (a)
   proved cannot go earlier — the inventory with callers and evidence is

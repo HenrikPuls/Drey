@@ -17,10 +17,12 @@ the real `drey-tickets` was only read.
   `migrate-allow-list.txt` is marked retired.
 - **Guide.** `cutover-guide.md` section C is one sequence of exact commands with what each should
   show: freeze, fresh allow list, dry run, import, store check, shadow, flip, smoke, the owner's
-  round. New in it: the real `pipeline.md` must get the six states at the flip (the columns come from
-  it, a stage that is no phase is an unknown column), and two marked slots wait for req-99a (stage
-  ids, pipeline text). Corrected: the apply's exit code does **not** cover the shadow diff, and a
-  rollback must write `"backend": "files"` because a deleted key never reaches the engine.
+  round. New in it: the real `pipeline.md` gets the six states at the flip (the columns come from it,
+  a stage that is no phase is an unknown column), from req-99a's `--pipeline-out`. The stage ids,
+  that flag and the rollback's default columns are taken from req-99a's hand-over; it is not merged
+  yet, so these commands have not run with the six stages, and the guide asks for step B again after
+  the merge. Corrected: the apply's exit code does **not** cover the shadow diff, and a rollback must
+  write `"backend": "files"` because a deleted key never reaches the engine.
 - **Tests:** `file-config.spec.ts` (new); `engine-lifecycle.spec.ts`: the mirror, and the real
   `ensureEngine` over a real engine in-process, where the engine's config names a 1-ticket store and
   the plugin a 3-ticket one: the first report counts 3 (with the mirror call removed it counts 1).

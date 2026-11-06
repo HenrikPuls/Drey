@@ -158,22 +158,24 @@ Time: about 15 minutes, mostly the two production builds (`.\dev.ps1 -Built` bui
 
 **Before you begin**
 
-- A and B are clean.
 - Merged into `desktop-integration`: **req-99a** (the six stages in the migration config and the
-  engine; session W2.2) and **E14-7a** (this guide). Without req-99a the store is created with the
-  old stage names, so stop.
-- The stage ids below come from req-99a:
+  engine, `--pipeline-out`; session W2.2) and **E14-7a** (this guide). Without req-99a the store is
+  created with the old stage names and `--pipeline-out` is refused, so stop.
+- A is clean, and **B was repeated after that merge**: the rehearsal of 2026-11-06 ran on the old
+  stage names, so this sequence has not yet run with the six.
+- The stage ids (`packages/tickets-engine/src/core/pipeline-states.ts`, from req-99a; the migration
+  writes them without a flag, and `dricket.toml` gets `claim = ["building"]`):
 
-  <!-- SLOT req-99a: confirm these ids against DEFAULT_MIGRATION_CONFIG in
-       packages/tickets-engine/src/migrate/convert.ts once W2.2 is merged, then delete this comment. -->
-  | State | Stage id (from req-99a, **to confirm at merge**) | From the legacy phase |
+  | State | Stage id | From the legacy phase |
   |---|---|---|
   | Inbox | `inbox` | `inbox` (23 tickets today) |
-  | Shaping | `shaping` | - |
+  | Shaping | `shaping` | `plan` (0) |
   | Prioritized | `prioritized` | `prioritized` (2) |
   | Building | `building` | `build` (0) |
-  | Ready to try | `ready-to-try` | `commit` (0) |
+  | Ready to try | `ready` | `review`, `sign-off`, `commit` (0) |
   | Done | `done` | `done` (0), and `archive` (66) with the label `archived` |
+
+  Any other phase is skipped with a reason in the dry run, never guessed.
 
 Set the names once. They are used by every step below, so stay in this one terminal:
 
@@ -183,6 +185,7 @@ $store  = 'E:\projects\drey-board'        # OD-5; must not exist yet
 $data   = 'E:\projects\drey-board-data'
 $allow  = 'E:\projects\drey-board-allow.txt'
 $report = 'E:\projects\drey-board-report.md'
+$pipeline = 'E:\projects\drey-board-pipeline.md'
 $dk     = (Get-Command dk).Source
 $plugin = "$env:APPDATA\drey\plugins\tickets\config.json"
 function Stop-DreyEngine {
@@ -232,15 +235,18 @@ Get-ChildItem "$legacy\tickets" -Recurse -File -Filter 'T-*.md' | ForEach-Object
 
 Shows the number of ticket files (91 on 2026-11-06).
 
-**3. Dry run.** Reads only, 3 s:
+**3. Dry run.** Reads the vault only, 3 s. It also writes the six-state pipeline for step 7 to
+`$pipeline`, outside the vault:
 
 ```powershell
-node scripts/migrate-tickets.mjs --legacy $legacy --allow $allow --include-archive | Tee-Object "$report.dry.txt" | Select-String 'DRY RUN|BLOCKS APPLY' -Context 0,0
+node scripts/migrate-tickets.mjs --legacy $legacy --allow $allow --include-archive --pipeline-out $pipeline | Tee-Object "$report.dry.txt" | Select-String 'DRY RUN|BLOCKS APPLY|pipeline'
 ```
 
-Shows `DRY RUN: <n> to migrate, 0 skipped`, with `<n>` the count from step 2. Each `BLOCKS APPLY`
-line is a ticket with a `run:` stamp. Open `"$report.dry.txt"` to see which: on 2026-11-06 T-0030
-(pid 27872) and T-0050 (pid 49864). Check that no such process is alive:
+Shows `DRY RUN: <n> to migrate, 0 skipped`, with `<n>` the count from step 2. `pipeline: not
+carried:` lines name what the new pipeline drops: expect the agent `commit` column's budget and
+persona, since Ready to try is the owner's checkpoint. Each `BLOCKS APPLY` line is a ticket with a
+`run:` stamp. Open `"$report.dry.txt"` to see which: on 2026-11-06 T-0030 (pid 27872) and T-0050
+(pid 49864). Check that no such process is alive:
 
 ```powershell
 Select-String -Path "$legacy\tickets\*\T-*.md" -Pattern '^\s*pid:' | ForEach-Object { $_.Line.Trim() + '  ' + $_.Filename }
@@ -260,7 +266,8 @@ node scripts/migrate-tickets.mjs --legacy $legacy --allow $allow --include-archi
 
 Exits 0. Read the last lines: `dk validate: clean` and `shadow diff: identical, <n> declared`.
 **The exit code does not cover the shadow diff**, so a line that says `<n> difference(s)` is a
-stop: see the `Shadow diff` part of `$report`.
+stop: see the `Shadow diff` part of `$report`. This is the comparison of record, because it maps
+each legacy phase to its new stage and so holds across the rename.
 
 **5. Check the store on its own.**
 
@@ -271,11 +278,11 @@ $env:DK_STORE = $store; $env:DK_OWNER = 'owner@legion'; $env:DK_DATA_DIR = $data
 (& $dk ls | Measure-Object -Line).Lines
 ```
 
-The `[stages]` line lists the six ids from the table, in that order. `dk validate` is clean. The
-`ls` count equals the ticket count from step 2.
+The `[stages]` line lists the six ids from the table, in that order, and `claim` is `["building"]`.
+`dk validate` is clean. The `ls` count equals the ticket count from step 2.
 
-**6. Shadow against the real vault.** One start. The UI still shows the files board and nothing is
-written to the store:
+**6. Shadow in the app.** One start. The UI still shows the files board and nothing is written to
+the store. This checks the app's reader over the new store; step 4 already compared the content:
 
 ```powershell
 Set-TicketsConfig @{ 'backend' = 'shadow'; 'dk.store' = $store; 'dk.dataDir' = $data }
@@ -292,8 +299,12 @@ Get-Content "$env:USERPROFILE\.drey-engine\shadow\board-diff.md" -TotalCount 6
 `Generated` is now and the verdict is `**Identical**: <n> tickets on both sides`, with `<n>` the
 tickets outside the archive (25 on 2026-11-06). The app wrote the new settings into the engine's
 `config.json` before it started the engine, so this describes the new store on the first start
-(E14-7a). A ticket that stands in `build` or `commit` at the freeze shows a declared
-`phase: build -> building` line. That is the renaming, not a fault. Anything else is a stop.
+(E14-7a).
+
+Identical is only possible while every live ticket stands in a phase whose id did not change
+(`inbox`, `prioritized`, `done`), which is true today. This report reads one pipeline for both sides,
+so it cannot match across the rename: a ticket in `build` or `commit` at the freeze shows a `phase`
+difference. Such a line is expected when step 4 was clean. Anything else is a stop.
 
 Then quit Drey and stop the engine:
 
@@ -305,16 +316,12 @@ Stop-DreyEngine
 
 The columns come from `tickets/_meta/pipeline.md` in the meta vault, not from the store, and a
 stage that is not a phase there shows as an unknown column. The file still lists `inbox,
-prioritized, build, commit, done`, so it gets the six states in the same step:
-
-<!-- SLOT req-99a: W2.2 names the pipeline text and whether a tool writes it. If it ships a default
-     pipeline file or converter, replace the next paragraph with that one command. -->
-Edit `$legacy\tickets\_meta\pipeline.md` so its `phases:` list holds the six stage ids from the
-table with their titles: `shaping` and `prioritized` manual, `building` with what `build` carries
-today (`wip`, `claim`, `handover: agent`, `persona`, `token-budget`), `ready-to-try` a manual
-checkpoint, `done` terminal. Then:
+prioritized, build, commit, done`, so the converted one from step 3 goes in with the flip. The
+tool never writes the vault, so this copy is the one write:
 
 ```powershell
+Copy-Item $pipeline "$legacy\tickets\_meta\pipeline.md"
+git -C $legacy diff --stat -- tickets/_meta/pipeline.md
 git -C $legacy add tickets/_meta/pipeline.md
 git -C $legacy commit -m "pipeline: the six states (dricket cut-over)"
 Set-TicketsConfig @{ 'backend' = 'dricket' }
@@ -328,6 +335,8 @@ Set-TicketsConfig @{ 'backend' = 'dricket' }
 - open a ticket document (asks once to add the checkout as a vault), edit, Ctrl+S;
 - one comment;
 - one short fleet run on a throw-away ticket: claim, extend and release show in `dk show`;
+- Accept on that ticket in Ready to try: the commit step runs, and with Drey open the ticket lands
+  in Done (while the step holds its claim, dk shows the ticket in Building);
 - an old ticket opens: `dk show t-49`.
 
 ```powershell
@@ -356,11 +365,12 @@ When you are satisfied, E14-9b deletes the legacy code (scope in
   ```
 
   Archived tickets go into `tickets/archive/`, comments become Log lines, and new tickets keep their
-  ids above the old maximum. Make a **fresh clone** of `drey-tickets`, replace its `tickets/<phase>/`
-  and `tickets/archive/` ticket files with the output, review `git diff`, commit, and point Drey at
-  it with `"backend": "files"`. **Keep the six-state `pipeline.md` in this case:** the output folders
-  carry the new stage ids, numbered by position (the board ignores the numbers). Not carried back:
-  labels, `touches`, claim leases, run stamps.
+  ids above the old maximum. The output folders are the legacy columns (`inbox, prioritized, build,
+  commit, done`, the default of `--stages`), numbered by position, which the board ignores. Make a
+  **fresh clone** of `drey-tickets`, replace its `tickets/<phase>/` and `tickets/archive/` ticket
+  files with the output, restore the old pipeline there (`git checkout pre-dricket --
+  tickets/_meta/pipeline.md`), review `git diff`, commit, and point Drey at it with
+  `"backend": "files"`. Not carried back: labels, `touches`, claim leases, run stamps.
 
 ## Known gaps (not blockers for A–C)
 
@@ -371,4 +381,5 @@ claims" button (runs automatically at start); chain on a remote store does not
 made on a second instance; the shadow report does not name the store it compared, and
 an engine left running can skip a run for up to 30 s after its last one (stopping the
 engine avoids both, step 6); the reverse converter has no flag for the legacy folder
-numbers. Full list: `specs/roadmap.md`, E14-5c, E14-6 and E14-7 follow-ups.
+numbers; a commit step only settles into Done while a client is fetching the board
+(req-99a hand-over: one line in `server/engine.ts`, open). Full list: `specs/roadmap.md`, E14-5c, E14-6 and E14-7 follow-ups.
