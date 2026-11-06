@@ -90,21 +90,8 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
-- **D-23 — A ticket document on a dricket store still has no header and no face strip** (M; found 2026-11-06 while
-  fixing D-12; the path half shipped in milestone 183, the rest found by the wave-3 smoke on a scratch store).
-  `ticketIdOfPath` now reads the store's path, but `showsTicket` in `plugins/tickets/renderer/ticket-header.ts`
-  still wants `context.vaultId() === snapshot.vaultId`, and a store document lives in the checkout vault, not the
-  board's. Steps: on a scratch store open a ticket from the Work panel and add the checkout vault. Expected: the
-  header and Ticket | Thread | Review, as on the files backend. Actual: the tab is titled `T-0001 · …`, the
-  document is a plain editor tab under the base's Frontmatter pill. A ticket without a run has no way to its thread,
-  so its comments (D-12) show only once a run opened it.
-- **D-24 — The Autopilot popover has no styles in a built app** (S; found by the wave-3 smoke). `plugin.json` lists
-  `renderer/autopilot/autopilot.css`, but `scripts/build-plugins.mjs` copies only `renderer/*.css`, so the file is
-  not in `dist-electron` and every start logs a 404 for `plugin://tickets/renderer/autopilot/autopilot.css`. Move the
-  file up beside the other stylesheets or copy nested CSS, and add a build check that every listed stylesheet exists.
-  In the same round: the status item and the popover have still not been seen in the running app. On a scratch
-  profile without a runner the item stayed hidden, also after Run the chain, and `Mod+Alt+P` opened nothing; whether
-  that is only the missing runner is not diagnosed.
+None open. (D-23 and D-24 shipped as milestone 184; what the wave-3 smoke could not see — the Autopilot status
+item and popover in a built app with a runner — waits for the owner's round, noted in that changelog entry.)
 
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field
 pre-filled with "T-0002:". (a), (c), (d) need a model / a real phone — untested.
@@ -113,7 +100,7 @@ _Shipped defects:_ D-11 to D-22, the sweep on a dricket store, shipped as milest
 milestone 131; D-2, the paired-devices list and pairing from Mission
 Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
 views, as milestone 140; D-4, runs.spec flaking under full-suite load, as milestone 142; D-5, the page moving on iPhone/iPad scroll
-(owner report 2026-11-04), as milestone 143; D-6, selecting a ticket switching the view and views saving themselves, as milestone 163; D-8, the flaky gate specs, as milestone 168; D-7, the phone chat about a ticket (unknown ticket, id prefix, view switching back, iOS keyboard) and D-5b (the phone wobble), as milestone 165; D-9, the Tickets panel footer on a dricket board, as milestone 171 — see the changelog.)
+(owner report 2026-11-04), as milestone 143; D-6, selecting a ticket switching the view and views saving themselves, as milestone 163; D-8, the flaky gate specs, as milestone 168; D-7, the phone chat about a ticket (unknown ticket, id prefix, view switching back, iOS keyboard) and D-5b (the phone wobble), as milestone 165; D-9, the Tickets panel footer on a dricket board, as milestone 171; D-11 to D-22, the sweep's store defects, as milestone 181; D-23 (the store's ticket header) and D-24 (the Autopilot stylesheet in the build), as milestone 184 — see the changelog.)
 
 ### Now (small, daily value)
 

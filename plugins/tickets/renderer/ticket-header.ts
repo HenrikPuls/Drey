@@ -47,6 +47,24 @@ export function isTicketPath(path: string | null): boolean {
 }
 
 /**
+ * Whether an editor surface shows one of the board's tickets (D-23). On the
+ * files backend a ticket lives in the board's vault, so the vault must match.
+ * A dricket store's documents open from the **checkout** vault (E14-4c), which
+ * is not the board's: there the path shape plus a ticket the board lists is
+ * the proof — a stray `tickets/t/…/ticket.md` in some other vault stays plain.
+ */
+export function showsTicketDocument(snapshot: BoardSnapshot | null, vaultId: string | null, path: string | null): boolean {
+  const id = ticketIdOfPath(path);
+  if (id === null || snapshot?.vaultId == null) {
+    return false;
+  }
+  if (vaultId === snapshot.vaultId) {
+    return true;
+  }
+  return idOfDocumentPath((path ?? '').split('\\').join('/')) === id && snapshot.columns.some((c) => c.tickets.some((t) => t.id === id));
+}
+
+/**
  * A ticket tab's title, the same for every kind of tab (E12-12): `T-0121 ·
  * Title`. The title is the one the board's model gives (the card's meta) —
  * never derived from the file path; a ticket the board does not know yet
@@ -133,9 +151,9 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   return node;
 };
 
-/** The surface shows a ticket of the board's vault. */
+/** The surface shows a ticket of the board (its vault, or the store's checkout vault). */
 const showsTicket = (snapshot: BoardSnapshot | null, context: EditorSurfaceContext): boolean =>
-  snapshot?.vaultId != null && context.vaultId() === snapshot.vaultId && isTicketPath(context.path());
+  showsTicketDocument(snapshot, context.vaultId(), context.path());
 
 export function createTicketHeader(deps: TicketHeaderDeps): TicketHeader {
   // Parsed frontmatter by its text: a header drawn again after its own edit

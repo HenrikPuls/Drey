@@ -45,7 +45,7 @@ import type { WorktreeFile } from '../../../packages/tickets-engine/src/core/wor
 import { createWorkFilterStore, filterPopover, isFilterActive, NO_WORK_FILTER, type WorkFilterState } from './work-filter';
 import { createTicketsSettingsPage } from './settings-page';
 import { createFilesOperationsHandler, ticketsContextMenuItems } from './files-guard';
-import { createTicketHeader, isTicketPath, ticketLogFold, ticketTabTitle } from './ticket-header';
+import { createTicketHeader, showsTicketDocument, ticketLogFold, ticketTabTitle } from './ticket-header';
 import { WORK_VIEW_ID, registerWorkView } from './view-preset';
 import { createTicketDocumentExtension } from './ticket-document/extension';
 import { createPlanStatusStore } from './ticket-document/shape-state';
@@ -3158,8 +3158,8 @@ const plugin: { activate(api: DreyPluginApi): void } = {
           }
         },
       },
-      matches: (context) =>
-        snapshot?.vaultId != null && context.vaultId() === snapshot.vaultId && isTicketPath(context.path()),
+      // D-23: a store's documents open from the checkout vault, not the board's.
+      matches: (context) => showsTicketDocument(snapshot, context.vaultId(), context.path()),
       actions: {
         accept: (card) => void runMutation(`Accepting ${card.id}`, () => invokeBoard('acceptTicket', { id: card.id })),
         sendBack: (card) => openSendBackModal(api, card.id),

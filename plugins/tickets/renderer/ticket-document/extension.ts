@@ -17,6 +17,7 @@ import type { WorkRow } from '../work-groups';
 import { actionBarNode, costNode, proofNode, shapeMarksNode } from './dom';
 import { actionBarOf, chainOf, costTableOfText, proofOfText, sectionBodyRange } from './model';
 import { planHeadingEnd, type ShapeMarks } from './shape';
+import { ticketIdOfPath } from '../ticket-header';
 
 export interface TicketDocumentActions {
   accept(card: TicketCard): void;
@@ -90,8 +91,9 @@ export function createTicketDocumentExtension(deps: TicketDocumentDeps): TicketD
       }
       const text = state.doc.toString();
       const id = /^id:\s*['"]?(T-\d{4,})/m.exec(text)?.[1];
-      // On a tab switch the text and the path arrive one after the other.
-      if (id === undefined || !path.endsWith(`/${id}.md`)) {
+      // On a tab switch the text and the path arrive one after the other; the
+      // path names the id in both store shapes (`T-nnnn.md`, `t-N/ticket.md` — D-23).
+      if (id === undefined || ticketIdOfPath(path) !== id) {
         return Decoration.none;
       }
       const phaseTitle = (phase: string): string => snapshot.pipeline.find((p) => p.id === phase)?.title ?? phase;

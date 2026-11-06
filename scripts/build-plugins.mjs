@@ -8,7 +8,7 @@
  *   plugins/<id>/shared/*.ts        -> dist-electron/plugins/<id>/shared/*.js  (tsc, CJS, for main/)
  *   plugins/<id>/renderer/index.ts  -> dist-electron/plugins/<id>/renderer/index.js (esbuild, one ES module)
  *   plugins/<id>/plugin.json        -> dist-electron/plugins/<id>/plugin.json
- *   plugins/<id>/renderer/*.css     -> dist-electron/plugins/<id>/renderer/*.css
+ *   plugins/<id>/renderer/**\/*.css  -> dist-electron/plugins/<id>/renderer/**\/*.css (every sheet plugin.json lists must land)
  *   plugins/<id>/remote/app.ts      -> dist-electron/plugins/<id>/remote/app.js (esbuild, one IIFE script;
  *                                      the tickets remote's phone client, req-66 — served over HTTP, not plugin://)
  *   plugins/<id>/remote/<assets>    -> dist-electron/plugins/<id>/remote/ (html, css, manifest, icon)
@@ -38,7 +38,7 @@
  */
 import { build } from 'esbuild';
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -59,6 +59,19 @@ function run(config) {
   const result = spawnSync(process.execPath, [tsc, '-p', config], { stdio: 'inherit' });
   if (result.status !== 0) {
     throw new Error(`tsc failed for ${config}`);
+  }
+}
+
+/** Copies the `.css` files under `src` to the same relative paths under `dest` (sources there are bundled, not copied). */
+function copyNestedCss(src, dest) {
+  for (const file of readdirSync(src)) {
+    const from = path.join(src, file);
+    if (statSync(from).isDirectory()) {
+      copyNestedCss(from, path.join(dest, file));
+    } else if (file.endsWith('.css')) {
+      mkdirSync(dest, { recursive: true });
+      cpSync(from, path.join(dest, file));
+    }
   }
 }
 
@@ -145,12 +158,23 @@ for (const entry of readdirSync(pluginsDir)) {
   // Static assets the bundler does not emit (stylesheets): copy explicitly.
   if (existsSync(rendererSrc)) {
     for (const file of readdirSync(rendererSrc)) {
-      // A sub-folder holds sources esbuild already bundled into index.js (E13-6: ticket-document/; E13-8: board/, team/).
-      if (!file.endsWith('.ts') && !file.endsWith('.js') && !statSync(path.join(rendererSrc, file)).isDirectory()) {
+      // A sub-folder holds sources esbuild already bundled into index.js (E13-6: ticket-document/; E13-8: board/, team/)
+      // — and, since req-95b, a stylesheet beside them (`autopilot/autopilot.css`): nested CSS is copied at its path (D-24).
+      if (statSync(path.join(rendererSrc, file)).isDirectory()) {
+        copyNestedCss(path.join(rendererSrc, file), path.join(pluginOut, 'renderer', file));
+      } else if (!file.endsWith('.ts') && !file.endsWith('.js')) {
         const dest = path.join(pluginOut, 'renderer');
         mkdirSync(dest, { recursive: true });
         cpSync(path.join(rendererSrc, file), path.join(dest, file));
       }
+    }
+  }
+  // Every stylesheet the manifest lists must be in the output, or the renderer logs a 404 per start (D-24).
+  const manifest = JSON.parse(readFileSync(path.join(pluginDir, 'plugin.json'), 'utf8'));
+  for (const sheet of manifest.css ?? []) {
+    if (!existsSync(path.join(pluginOut, ...sheet.split('/')))) {
+      console.error(`build-plugins: ${entry}/plugin.json lists ${sheet}, but the build did not produce it`);
+      process.exit(1);
     }
   }
   // A browser client the plugin serves itself (the tickets remote, req-66,

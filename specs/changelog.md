@@ -1,3 +1,24 @@
+### Milestone 184 — D-23 and D-24: the store's ticket documents get their header, the Autopilot stylesheet reaches the build
+
+**Not yet manually verified by the owner.** Both found by the wave-3 smoke on a scratch dricket store.
+
+- **D-23.** `showsTicketDocument` (`plugins/tickets/renderer/ticket-header.ts`) replaces the "same vault as the
+  board" test in the header and in the ticket-document extension's `matches` (`index.ts`): a files-backend
+  ticket still has to sit in the board's vault; a dricket document opens from the **checkout** vault (E14-4c),
+  so there the store's path shape plus a ticket the board lists is the proof — a stray `tickets/t/…/ticket.md`
+  in some other vault stays a plain note. The extension's own guard compared the path with `/<id>.md`, which a
+  store's `ticket.md` never matches; it now asks `ticketIdOfPath`. On a store a ticket without a run therefore
+  reaches its thread and comments (D-12) from the header again.
+- **D-24.** `scripts/build-plugins.mjs` copies `.css` files under renderer sub-folders at their path
+  (`autopilot/autopilot.css`, req-95b) and fails the build when a stylesheet `plugin.json` lists is missing from
+  the output.
+- **Tests:** `ticket-header.spec.ts` (`showsTicketDocument`: files shape only in the board vault, store shape from
+  the checkout vault when the board lists the ticket, stray store-shaped file, no board); the build check ran
+  against the built `dist-electron/plugins/tickets/renderer/autopilot/autopilot.css`.
+- **Still not seen running:** the Autopilot status item and its popover in the built app (the item stayed hidden
+  on a scratch profile without a runner, `Mod+Alt+P` opened nothing) — the owner's round or a scratch runner
+  decides whether that is only the missing runner.
+
 ### Wave-3 integration — five branches on `desktop-integration`
 
 **Not yet manually verified by the owner.** Merged in this order: milestone 181 (D-11 to D-22), milestone 183 + req-98, req-95b, req-101, milestone 182 (E12-14, on its branch also numbered 181).

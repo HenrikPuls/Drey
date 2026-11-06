@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- a spec builds the real catalog; the plugin itself gets it as `api.i18n`
 import { i18n } from '../../../shared/i18n';
-import { isTicketPath, logSectionRange, phaseOfTicketPath, ticketIdOfPath, ticketTabTitle } from './ticket-header';
+import type { BoardSnapshot } from '../shared/tickets';
+import { isTicketPath, logSectionRange, phaseOfTicketPath, showsTicketDocument, ticketIdOfPath, ticketTabTitle } from './ticket-header';
 
 describe('isTicketPath', () => {
   it('takes ticket files in any phase folder, archive included', () => {
@@ -86,5 +87,33 @@ describe('the dricket document path (E12-12)', () => {
     expect(isTicketPath('tickets/t/0009/t-63/ticket.md')).toBe(false);
     expect(isTicketPath('tickets/t/0000/t-63/notes.md')).toBe(false);
     expect(isTicketPath('notes/t/0000/t-63/ticket.md')).toBe(false);
+  });
+});
+
+describe('showsTicketDocument (D-23)', () => {
+  const board = {
+    vaultId: 'board',
+    columns: [{ tickets: [{ id: 'T-0063' }] }],
+  } as unknown as BoardSnapshot;
+
+  it('shows a files-backend ticket only in the board vault', () => {
+    expect(showsTicketDocument(board, 'board', 'tickets/50-build/T-0042.md')).toBe(true);
+    expect(showsTicketDocument(board, 'other', 'tickets/50-build/T-0042.md')).toBe(false);
+  });
+
+  it('shows a store document from the checkout vault when the board lists the ticket', () => {
+    expect(showsTicketDocument(board, 'checkout', 'tickets/t/0000/t-63/ticket.md')).toBe(true);
+    expect(showsTicketDocument(board, 'checkout', ['tickets', 't', '0000', 't-63', 'ticket.md'].join(String.fromCharCode(92)))).toBe(true);
+  });
+
+  it('keeps a stray store-shaped file plain when the board does not know the ticket', () => {
+    expect(showsTicketDocument(board, 'checkout', 'tickets/t/0000/t-64/ticket.md')).toBe(false);
+  });
+
+  it('shows nothing without a board or off a ticket path', () => {
+    expect(showsTicketDocument(null, 'board', 'tickets/50-build/T-0042.md')).toBe(false);
+    expect(showsTicketDocument({ ...board, vaultId: null } as unknown as BoardSnapshot, null, 'tickets/50-build/T-0042.md')).toBe(false);
+    expect(showsTicketDocument(board, 'board', 'tickets/_meta/pipeline.md')).toBe(false);
+    expect(showsTicketDocument(board, 'board', null)).toBe(false);
   });
 });
