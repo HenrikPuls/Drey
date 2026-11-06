@@ -28,6 +28,7 @@ import {
 import { needsBlockedConfirm } from './blocked-view';
 import { PRIORITY_LABEL, createGroupFoldStore, workListLivePaint, workListNode, type WorkPanelDeps } from './work-panel';
 import { createRunComposer } from './run-composer';
+import { createThreadComments } from './thread-comments';
 import { THREAD_KEY } from './ticket-page';
 import { defaultFaceOf, ticketFaceSwitch, ticketRunActive, type TicketFace } from './ticket-faces';
 import { PENDING_HINT, dialogStarter } from './dialog-starters';
@@ -2223,6 +2224,11 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
   transcript.element.classList.add('tickets-takeover-transcript');
   const empty = el('div', 'tickets-thread-empty');
   stepsBox.append(shapedLine, stepsHost, openHead, transcript.element, empty);
+  // A store ticket's comments, above its steps (D-12).
+  const threadComments = createThreadComments({ ticketId, invoke: invokeBoard, now: Date.now });
+  stepsBox.insertBefore(threadComments.element, stepsHost);
+  // An open thread survives its ticket's archive (D-13): the card is read once from the archive.
+  let archivedAsked = false;
   // The column scrolls as one: the transcript's own scroller is neutral
   // here (CSS), and this follow keeps the live tail in view.
   let stepsFollow = true;
@@ -2459,6 +2465,19 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
 
   const paint = (): void => {
     const card = boardCard(ticketId);
+    threadComments.refresh();
+    if (card === null && !archivedAsked) {
+      archivedAsked = true;
+      void invokeBoard('readTicket', ticketId)
+        .then((reply) => {
+          const read = reply as { ok: boolean; card?: TicketCard };
+          if (alive && read.ok && read.card !== undefined) {
+            archivedCards.set(ticketId, read.card);
+            paint();
+          }
+        })
+        .catch(() => undefined);
+    }
     const run = threadRun(ticketId);
     const live = isLive(run);
     titleNode.textContent = card?.meta.title ?? '(not on the board)';
