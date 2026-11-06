@@ -98,12 +98,17 @@ test.describe('Views chrome (E12-18)', () => {
 
     // Open windows: a new note that only Work shows.
     await page.locator('app-tab-bar .add').first().click();
+    // The new tab opens asynchronously; `.last()` before that is plain.md.
+    await expect(page.locator('app-tab-bar .tab').last()).toContainText('untitled');
     await page.locator('app-tab-bar .tab').last().click({ button: 'right' });
     await page.locator('app-tab-bar .ctx-menu').first().getByText('Show this tab in').hover();
     await page.locator('app-tab-bar .ctx-sub').getByText('Work', { exact: true }).click();
+    // The menu must be gone first: a right-click on its backdrop only closes it.
+    await expect(page.locator('app-tab-bar .ctx-menu')).toHaveCount(0);
     await page.locator('app-tab-bar .tab').last().click({ button: 'right' });
     await page.locator('app-tab-bar .ctx-menu').first().getByText('Show this tab in').hover();
     await page.locator('app-tab-bar .ctx-sub').getByText('Notes', { exact: true }).click();
+    await expect(page.locator('app-tab-bar .ctx-menu')).toHaveCount(0);
     await page.locator('app-dock-strip button[data-widget="windows"]').first().waitFor();
     await expect(page.locator('app-open-windows .group')).toHaveText(['In this view', 'In other views']);
     await expect(page.locator('app-panel-frame', { hasText: 'Open windows' }).first()).toContainText('1 here · 1 elsewhere');

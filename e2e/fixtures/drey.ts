@@ -266,10 +266,9 @@ export const test = base.extend<DreyFixtures>({
 
     await use(app);
 
-    // A live engine holds `app.close()` up for about a minute.
-    if (ownedByFixture) {
-      stopEngineOf(home);
-    }
+    // A live engine holds `app.close()` up for about a minute. That goes for a
+    // spec's own home too: a failed test never reaches the spec's stopEngine().
+    stopEngineOf(home);
 
     // The save-before-exit prompt (bug-5): a test that leaves a dirty
     // document makes main's intercepted close show the exit dialog, which
