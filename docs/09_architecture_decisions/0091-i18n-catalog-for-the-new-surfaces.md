@@ -150,7 +150,7 @@ existing strings do not move in this step.
 - **The existing UI is not migrated.** Settings, the editor chrome, the
   Files panel, the Work panel, Mission Control's existing pages and every
   native dialog keep their literal English strings. They move area by
-  area as they are touched — roadmap follow-up **req-103** ("migrate the
+  area as they are touched — roadmap follow-up **req-106** ("migrate the
   existing UI strings into the catalog, area by area"), each area
   extending the guarded paths when it is done.
 - **No second locale ships.** `SUPPORTED_LOCALES` is `['en']`; a second
@@ -201,7 +201,7 @@ existing strings do not move in this step.
   spec failure in a plugin (`unknown-key`); plurals and number formats
   are right on the first run; a second locale is a file, not a code
   change; a reviewer can grep `en.json` for everything a surface says.
-- Negative: two kinds of strings live side by side until req-103 lands —
+- Negative: two kinds of strings live side by side until req-106 lands —
   a reader has to know which area has migrated (the guarded-paths list
   says). The guard is a heuristic: a text literal shaped like code
   (`'px'`, a one-word lowercase label such as `'now'`) slips past, a

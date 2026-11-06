@@ -1533,14 +1533,15 @@ Settings → Tickets starts with the things you decide about the crew:
 Crew tab. **Default flow** shows the standard flow, the columns an agent
 works with who does each; a flow is changed per ticket, so pick a ticket
 next to *Open flow editor* to open its Flow tab (the standard flow itself is
-set below, in the pipeline table). **Budget and runners** shows the daily
+set below, in the pipeline table). **Budget and runners** starts with the **Autopilot** state (*On*, *Paused*, *Off*) and *Resume paused autopilot at*, then shows the daily
 budgets of the personas added up with today's spending, and how many runs
 each runner takes at once; *Manage* jumps to the runner settings.
 **Walkthrough videos** has *Keep in Git* (off: videos are large and stay in
 the history once committed — switching it on asks first and can include the
 videos already there) and *Largest video* in MB. Under **Mission Control on
-other devices** you pair a phone or tablet and revoke it again (below). The
-pipeline, prompts, fleet and workers follow under *Pipeline and workers*.
+other devices** you pair a phone or tablet and revoke it again (below). Fleet and
+workers follow *Budget and runners*; *Store and Git* and *Pipeline and
+prompts* close the page.
 
 ### The board from a phone or tablet
 
@@ -1742,18 +1743,23 @@ automatically.
   collapse them to their 32 px headers. The whole layout persists
   across restarts.
 - **Views** — a view is a saved layout: its own docks and panels, split
-  panes and open tabs. *View → Save current layout as a view…* (or the
-  command palette) keeps the current arrangement under a name and
-  switches to it; the title bar then shows one button per view, and
-  `Ctrl+1` … `Ctrl+9` or *View → Switch view* jump between them. A
-  view is saved only when you say so: change a panel, a split or a tab and the
-  switcher shows a dot with *Save view* and *Revert view* (also in the *View*
-  menu); *Save view* keeps the arrangement, *Revert view* returns to the saved
-  one. Until you save, the change lasts for the session only. Right-click a view you made
-  to rename or delete it; *Notes* is always there. Tabs belong to
+  panes and open tabs. The title bar shows the views as one segmented
+  control (*Notes · Work · …*) with a **Layout ▾** menu beside it;
+  `Ctrl+1` … `Ctrl+9` or *View → Switch view* jump between them. A view is
+  saved only when you say so: change a panel, a split or a tab and a dot
+  appears on that view. *Layout* then offers *Save layout* (keeps the
+  arrangement) and *Reset to saved layout* (returns to the saved one);
+  until you save, the change lasts for the session only. Switching views
+  never changes them. *Save as new view…* keeps the current arrangement
+  under a name and switches to it, *Rename view…* and *Delete view* act on
+  the view you are in (*Notes* is always there and cannot be renamed or
+  deleted), and *Edit views…* lists them all. Tabs belong to
   views: another view's tabs are hidden, and one tab can be shown in
-  several views — its context menu has *Show this tab in* with a
-  check per view. Closing a tab only takes it out of the current
+  several views — its context menu has *Go to the Work view* (for each
+  other view that shows the tab) and *Show this tab in ›* with a check
+  per view. The Open windows panel reads *2 here · 3 elsewhere*, with the
+  tabs *In this view* above those *In other views*, each with *Show here*.
+  Closing a tab only takes it out of the current
   view while another view still shows it; it closes for good (asking
   about unsaved changes) with the last one. *Reset layout* resets the
   current view only. A plugin can offer views of its own: they appear in
@@ -1841,6 +1847,21 @@ Every change applies as you make it — there is no *Save* and no
 *Discard*. A switch or a list choice acts at once; a typed value is
 stored when you leave the field or press Enter. The footer shows
 "Changes are saved automatically" and one *Close* button.
+
+The screen grows with the window, and every page uses the same width — wide
+tables and editors fill it instead of the page jumping between a narrow and a
+wide layout. A long page is split into sections: a category with sections has a
+small arrow in the list; open it to see the sections, click one to scroll the
+page to it. The page scrolls as one column and the section in view is
+highlighted in the list. The search field at the top of the list filters the
+settings of **all** pages by name, description or key; click a result to open
+its page at that setting. `Esc` clears the search first and closes Settings on
+the second press. Each page and section shows how many settings it holds. When
+nothing matches, the list says *No setting matches "…"* with a *Clear search*
+button. The tabs *All devices*, *This device* and *This vault* above the page
+narrow the list to the settings stored for that scope (the app on this computer,
+the vault you have open, or shared by every device); click the tab again to
+show everything.
 
 | Category | What lives there |
 | --- | --- |

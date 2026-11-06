@@ -44,7 +44,7 @@ interactive rules below do not apply to it) and opens this file by section.
   fails on a literal under the guarded paths —
   [ADR-0091](docs/09_architecture_decisions/0091-i18n-catalog-for-the-new-surfaces.md)
   has the rule, the key scheme and the paths. The older UI migrates area
-  by area (roadmap req-103), not in one sweep.
+  by area (roadmap req-106), not in one sweep.
 - **No unnecessary UI text.** Every visible string must earn its place:
   no subtitles, taglines, hint lines or explanatory prose a screen doesn't
   need to be understood (owner ruling 2026-11-03 — e.g. the chat header

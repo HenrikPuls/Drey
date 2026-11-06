@@ -374,7 +374,7 @@ no screen changes yet; the surfaces that use it are req-95 to req-101.
   like text (a capitalised word, two letter words — outside imports, property names, `case` labels,
   comparisons, `console.*`, decorator URLs) or a plain `title` / `aria-label` / `placeholder` / `alt` /
   `label`, and on a key in `t(..)` / `key | t` the catalog lacks. `i18n-ignore` in a comment exempts
-  a line. **The existing UI is not scanned and not migrated** — roadmap req-103 does that area by area.
+  a line. **The existing UI is not scanned and not migrated** — roadmap req-106 does that area by area.
 - **Build:** `resolveJsonModule` on in the root and plugin tsconfigs; `shared/i18n` is a barrel module
   like `shared/llm` (deep imports refused by lint).
 - **Specs:** `catalog.spec` (loader, fallback, key grammar, every message compiles, the first entries),
