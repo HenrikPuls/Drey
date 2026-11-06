@@ -1,3 +1,25 @@
+### Milestone 188 — D-35: the fleet event carries the fleet again
+
+**Not yet manually verified by the owner.** Owner request, outside the list; found by checking the Autopilot item in the
+built app on a scratch store. Since E2b (ADR-0088, `c9d0b1fa`) the engine's `fleet` frame is a bare signal and the plugin
+sent `fleet-changed` without a snapshot; the renderer read that as an empty fleet, so every fleet event set `chain` to null
+and emptied its run list. The Autopilot item vanished on the first change (it never showed after Run the chain), an open
+popover went blank, and the writes reached the runner regardless. By the code, live runs also dropped out of the Work panel
+and the crew line until the next direct read; that was not seen, the scratch store has no worker.
+
+- **Fix.** `plugins/tickets/main/fleet-snapshot.ts`: on each signal main reads `runs` and `chainStatus` from the engine and
+  sends them as the snapshot. Reads never overlap, a signal during a read means one more read, and a failed read sends nothing,
+  so the renderer keeps what it has. The frame stays a signal: the phone clients read it the same way.
+- **Tests:** `fleet-snapshot.spec.ts` (new); `e2e/tickets-fleet-snapshot.spec.ts` (new, a real engine and runner in a temp home,
+  red on `c8b13b6a`, green with the fix): the item appears after Run the chain, stays, and follows Paused and Off; the popover
+  keeps its rows. The other specs that show runs push the snapshot into the channel themselves, which is why none saw this.
+- **Seen in the built app on a scratch store:** the item appears after Run the chain and follows Paused, the popover keeps its
+  rows, no console errors. **Not seen:** a real `Mod+Alt+P` press (the chord is registered with the OS, synthetic keys do not
+  reach it), the second click of Stop all, a resume time, and a live run in the panel.
+- **Gate and e2e:** `test:all` green, 6574 passed, 1 skipped. `npm run e2e`: 233 passed, 16 skipped, 3 failed, none from this
+  change (D-37, each fails the same way on `c8b13b6a`).
+- **Left open:** D-36 (roadmap), the popover does not match its board; D-37, the three e2e specs.
+
 ### Milestone 187 — D-32: Accept on a store reaches Done when the runner releases after the run
 
 **Not yet manually verified by the owner.** Found by the cut-over smoke on the real store (2026-11-06

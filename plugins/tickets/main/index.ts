@@ -46,6 +46,7 @@ import { openTerminalAt } from './open-terminal';
 import { startWindowsDictation } from './dictation';
 import { createFleetMcpTools } from './mcp-tools';
 import { chainAutopilotOf } from './autopilot-ipc';
+import { createFleetSnapshotSender } from './fleet-snapshot';
 import { listWorkerModels } from './worker-models';
 import { EngineClient } from './engine-client';
 import { PathAnnouncer } from './path-announcer';
@@ -130,9 +131,18 @@ const plugin: MainPluginModule = {
       log: ctx.log,
     });
     const announcer = pathAnnouncer;
+    const sendFleetSnapshot = createFleetSnapshotSender(
+      fleet,
+      (snapshot) => ctx.ipc.emit('fleet-changed', snapshot),
+      (error) => ctx.log(`engine fleet read failed: ${messageOf(error)}`, 'warn'),
+    );
     engineEvents = client.onEvent(
       (what) => {
-        ctx.ipc.emit(what === 'board' ? 'board-changed' : what === 'fleet' ? 'fleet-changed' : 'remote-changed');
+        if (what === 'fleet') {
+          void sendFleetSnapshot();
+        } else {
+          ctx.ipc.emit(what === 'board' ? 'board-changed' : 'remote-changed');
+        }
       },
       undefined,
       (event) => announcer.add(event),
