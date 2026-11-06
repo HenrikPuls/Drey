@@ -2623,25 +2623,36 @@ export class EngineBoardService {
       if (run === undefined || !['done', 'stopped', 'failed'].includes(run.state)) {
         continue;
       }
-      this.commitSteps.delete(ticketId);
       if (run.state !== 'done' || (run.blocked ?? null) !== null || run.gateResult === 'red') {
+        this.commitSteps.delete(ticketId);
         continue;
       }
-      const moved = await this.enqueue(async (): Promise<BoardMutationResult> => {
+      // D-32: the run reads `done` before the runner releases its claim (the
+      // release follows a moment later), so a green step whose ticket is still
+      // in the claim stage is not settled yet — it waits for the next change
+      // (fleet or board) instead of being dropped as "the owner moved it".
+      const settled = await this.enqueue(async (): Promise<BoardMutationResult & { pending?: true }> => {
         const vault = await this.detect();
         if (vault === null) {
           return { ok: false, error: 'no tickets vault detected' };
         }
         const snap = await this.snapshot();
         const card = findOnBoard(snap, ticketId);
+        if (card !== null && card.phase !== READY_STATE && snap.pipeline.some((p) => p.id === card.phase && p.claim)) {
+          return { ok: true, pending: true };
+        }
         const next = card === null ? null : nextPhaseIdOf(snap.columns, card.phase);
         if (card === null || card.phase !== READY_STATE || next === null) {
           return { ok: true }; // the owner moved it meanwhile: nothing to book
         }
         return this.moveCard(vault, snap, card, next, this.owner, `commit step finished (run ${runId})`);
       });
-      if (!moved.ok) {
-        this.host.log(`commit step: ${ticketId} stays on Ready to try — ${moved.error}`, 'warn');
+      if (settled.ok && settled.pending === true) {
+        continue;
+      }
+      this.commitSteps.delete(ticketId);
+      if (!settled.ok) {
+        this.host.log(`commit step: ${ticketId} stays on Ready to try — ${settled.error}`, 'warn');
       }
       this.announceChanged();
     }

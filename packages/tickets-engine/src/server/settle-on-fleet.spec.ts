@@ -13,13 +13,16 @@ describe('settleCommitStepsOnFleet', () => {
     return { fire: (what: string) => fire(what), off, log, stop };
   }
 
-  it('settles on a fleet change and on nothing else', () => {
+  it('settles on a fleet change and on a board change (D-32: the release lands after the run), on nothing else', () => {
     const settle = vi.fn(() => Promise.resolve());
     const { fire } = setup(settle);
-    fire('board');
+    fire('remote');
+    fire('chat');
     expect(settle).not.toHaveBeenCalled();
     fire('fleet');
     expect(settle).toHaveBeenCalledTimes(1);
+    fire('board');
+    expect(settle).toHaveBeenCalledTimes(2);
   });
 
   it('logs a failure instead of leaving it unhandled', async () => {

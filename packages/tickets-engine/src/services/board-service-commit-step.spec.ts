@@ -326,6 +326,21 @@ describe.skipIf(!found.ok)('Accept on a store with the six stages (real dk)', { 
     expect(() => dk(['validate'])).not.toThrow();
   });
 
+  it('a run that reads done while its claim is still held waits for the release, then lands in Done (D-32)', async () => {
+    const { id, dkId } = await readyTicket('Late release');
+    const accepted = (await service.acceptTicket({ id })) as { runId?: string };
+    const runId = accepted.runId!;
+    // The runner's record says done + green, but its claim is not released yet: the ticket is still in Building.
+    agentRun(dkId, 'late');
+    runs = [runInfo(runId, id, 'done', { gateResult: 'green' })];
+    await service.settleCommitSteps();
+    expect(stageOf(dkId)).toBe('building');
+    // The release a moment later: the next settle books the move.
+    dk(['--json', 'release', '--stage', 'ready', '-m', 'merged', dkId], 'agent-late@test');
+    await service.settleCommitSteps();
+    expect(stageOf(dkId)).toBe('done');
+  });
+
   it('a blocked or failed commit step leaves the ticket on Ready to try', async () => {
     const blocked = await readyTicket('Blocked');
     const a = (await service.acceptTicket({ id: blocked.id })) as { runId?: string };

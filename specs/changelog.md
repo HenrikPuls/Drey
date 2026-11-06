@@ -1,3 +1,19 @@
+### Milestone 187 — D-32: Accept on a store reaches Done when the runner releases after the run
+
+**Not yet manually verified by the owner.** Found by the cut-over smoke on the real store (2026-11-06
+evening, twice on T-0092): the commit step merged and pushed, the gate was green, and the ticket stayed on
+Ready to try.
+
+- The run's record reads `done` a moment before the runner releases its claim (a store write), so
+  `settleCommitSteps` found the ticket still in Building, read that as "the owner moved it meanwhile",
+  dropped the step and booked nothing. Now a green step whose ticket is still in a claim stage stays
+  pending (`board-service.ts`), and the engine settles on **board** changes as well as fleet changes
+  (`server/settle-on-fleet.ts`), so the release itself triggers the move into Done.
+- **Tests:** `board-service-commit-step.spec.ts` (real `dk`: done + green while the claim is held → stays
+  in Building; after the release → Done), `settle-on-fleet.spec.ts`.
+- The roadmap entry D-32 (with D-33, D-34 from the same smoke) lives on the cut-over branch and leaves
+  the roadmap when that branch merges.
+
 ### Milestone 186 — D-26: Run the chain on a dricket board reached a missing method
 
 **Not yet manually verified by the owner.** Found by the cut-over smoke on the real store (2026-11-06
