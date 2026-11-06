@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–173 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–174 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -374,9 +374,6 @@ owner confirms scope and order before any of it starts:
   daily-note capture; tickets use Mod+Alt+T) (G-13).
 - **E13-17 — Board filter and cost toggle.** "Filter: all personas" and
   "Cost by column" on the Board tab (board 7e) (G-15).
-- **E13-18 — Views polish.** Views menu descriptions, shortcut text, "Edit
-  views…", "Go to the Work view" in the tab menu, "2 here · 3 elsewhere" in
-  Open windows (boards 7h, 7i) (G-28).
 - **E13-19 — Crew tab completion.** New persona from a template, Remove from
   crew, editable Setup, Friction tab, Notify / Runs after / This week /
   Typical run fields, "Talk to <name> 1:1 in the Assistant" (with E13-5), the
@@ -468,11 +465,6 @@ owner confirms scope and order before any of it starts:
   evidence is the raw Markdown list with `persona:` / `reason:` lines
   [F-01, E-02]; no change of scope — this entry only records that the audit found
   it as the largest single gap on the desk.
-- **E12-18 — Views and tabs polish** (proposed by the E12-10 audit; S). Views
-  menu descriptions, shortcut text and `Edit views…`; `Go to the Work view` in the
-  tab menu; `2 here · 3 elsewhere`; the dock strip no longer wraps its tenth icon
-  [L-01–L-03, L-06] (extends E13-18). Files: `src/app/titlebar/`,
-  `src/app/windows/`, `src/app/panes/` tab menu. Do after D-6 (same files).
 - **E12-19 — Assistant labels, review layout, settings leftovers** (proposed by
   the E12-10 audit; S). (The Assistant's top row and its way of input stay as the owner adjusted them on 2026-11-05 — `docs/design/work-panel/assistant-owner-layout-2026-11-05.png`: icon-only target switch, composer with its field text, mic, send, icon row and model name; audit row M-01 is withdrawn. Only how the chat itself looks may follow the design.) A splitter and a
   taller diff in the Review tab; `Pause when the budget is spent` (needs

@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { OpenWindows } from './open-windows';
 import { EditorService } from '../services/editor.service';
 import { VaultService } from '../vault';
+import { ViewService } from '../views';
 import { DreyApi } from '../../../shared/ipc-api';
 
 describe('OpenWindows', () => {
@@ -68,5 +69,23 @@ describe('OpenWindows', () => {
     firstClose.click();
 
     expect(editor.openDocs().map((d) => d.path)).toEqual(['b.md']);
+  });
+
+  it('groups "In this view" and "In other views" once another view holds a document', async () => {
+    await editor.openFile('a.md');
+    const views = TestBed.inject(ViewService);
+    views.saveCurrentAs('Work');
+    await editor.openFile('b.md', undefined, { keepFocused: true }); // only in Work
+    views.switchTo('notes');
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect([...host.querySelectorAll('.group')].map((g) => g.textContent?.trim())).toEqual([
+      'In this view',
+      'In other views',
+    ]);
+    (host.querySelector('.show-here') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(host.querySelector('.group')).toBeNull(); // nothing elsewhere any more
   });
 });

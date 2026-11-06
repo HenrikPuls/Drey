@@ -69,6 +69,10 @@ describe('DockStrip', () => {
     expect(button.getAttribute('aria-pressed')).toBe('false');
   });
 
+  it('keeps the row on one line however many icons it holds (E12-18)', () => {
+    expect(getComputedStyle(fixture.nativeElement as HTMLElement).flexWrap).toBe('nowrap');
+  });
+
   it('marks the drop slot while a panel drag targets this dock', () => {
     dock.dragging.set('windows');
     dock.dropDock.set('left');

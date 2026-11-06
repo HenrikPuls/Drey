@@ -3,6 +3,7 @@ import { TabBar } from './tab-bar';
 import { EditorService } from '../services/editor.service';
 import { PaneService } from '../panes/pane.service';
 import { KeybindingService } from '../keybindings';
+import { ViewService } from '../views';
 import { DreyApi } from '../../../shared/ipc-api';
 
 describe('TabBar', () => {
@@ -187,5 +188,31 @@ describe('TabBar', () => {
     const newPaneId = panes.paneIds().find((id) => id !== 'p1')!;
     expect(panes.pane(newPaneId)!.tabs).toEqual(['a.md']);
     expect(panes.focusedId()).toBe(newPaneId);
+  });
+
+  it('shows "Go to the Work view" and a "Show this tab in ›" flyout when other views exist', () => {
+    const views = TestBed.inject(ViewService);
+    const second = views.saveCurrentAs('Work'); // a.md and b.md now show in both views
+    views.switchTo('notes');
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    compiled
+      .querySelectorAll('.tab')[0]
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
+    fixture.detectChanges();
+
+    const first = compiled.querySelector('.ctx-menu > button') as HTMLButtonElement;
+    expect(first.textContent).toContain('Go to the Work view');
+    expect(compiled.querySelector('.ctx-sub')).toBeNull();
+
+    const sub = compiled.querySelector('.ctx-sub-wrap > button') as HTMLButtonElement;
+    expect(sub.textContent).toContain('Show this tab in');
+    sub.click();
+    fixture.detectChanges();
+    const names = [...compiled.querySelectorAll('.ctx-sub button .ctx-grow')].map((b) => b.textContent?.trim());
+    expect(names).toEqual(['Notes', 'Work']);
+
+    first.click();
+    expect(views.activeId()).toBe(second);
   });
 });

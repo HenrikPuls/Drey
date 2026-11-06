@@ -7,7 +7,7 @@ import { PaneService, type PaneRegion } from '../panes/pane.service';
 import { TabDragService } from './tab-drag.service';
 import { Icon, type IconName } from '../icons/icon';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
-import { ViewService } from '../views';
+import { ViewService, type ViewDef } from '../views';
 
 interface TabMenu {
   x: number;
@@ -127,13 +127,34 @@ export class TabBar {
   protected openMenu(event: MouseEvent, path: string): void {
     event.preventDefault();
     event.stopPropagation();
+    this.subOpen.set(false);
     this.menu.set({
-      x: Math.min(event.clientX, window.innerWidth - 168),
-      // The menu grew to eight rows with the dock-move and pin entries (ADR-0038).
-      // ...plus one row per view for "Show this tab in" (ADR-0089).
-      y: Math.min(event.clientY, window.innerHeight - 270 - (this.views.views().length > 1 ? 26 * (this.views.views().length + 1) : 0)),
+      // Room on the right for the "Show this tab in ›" flyout (ADR-0089).
+      x: Math.min(event.clientX, window.innerWidth - (this.views.views().length > 1 ? 330 : 168)),
+      // The menu grew to eight rows with the dock-move and pin entries (ADR-0038),
+      // plus the view rows (ADR-0089).
+      y: Math.min(event.clientY, window.innerHeight - 270 - (this.views.views().length > 1 ? 60 : 0)),
       path,
     });
+  }
+
+  /** The "Show this tab in ›" flyout. */
+  protected readonly subOpen = signal(false);
+
+  /** The other views that show the tab, with their position (their `Ctrl+n`). */
+  protected otherViewsOf(path: string): Array<{ view: ViewDef; index: number }> {
+    const holding = this.views.viewsOfTab(path);
+    return this.views
+      .views()
+      .map((view, index) => ({ view, index }))
+      .filter((v) => v.view.id !== this.views.activeId() && holding.includes(v.view.id));
+  }
+
+  /** "Go to the <view> view": switches there and brings the tab forward. */
+  protected goToView(path: string, viewId: string): void {
+    this.closeMenu();
+    this.views.switchTo(viewId);
+    this.editor.activate(path);
   }
 
   protected closeMenu(): void {

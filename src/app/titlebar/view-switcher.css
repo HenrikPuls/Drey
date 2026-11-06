@@ -48,19 +48,134 @@
   height: 22px;
 }
 
-.vs-mod {
+.vs-btn {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  margin-left: 6px;
+  gap: 6px;
 }
 
+/* The layout of this view differs from its saved one (D-6). */
 .vs-dot {
+  flex: none;
   width: 6px;
   height: 6px;
-  margin-right: 2px;
   border-radius: 50%;
   background: var(--accent);
+}
+
+.vs-layout {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-4);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.vs-layout:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.ctx-menu.wide {
+  min-width: 280px;
+}
+
+.ctx-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+  background: transparent;
+  color: var(--text-3);
+}
+
+.ctx-menu button {
+  justify-content: space-between;
+}
+
+.row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.row-label {
+  color: inherit;
+}
+
+.row-desc {
+  font-size: 11px;
+  color: var(--text-5);
+}
+
+.ctx-key {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-7);
+}
+
+.foot {
+  margin: 4px 9px 4px;
+  font-size: 11px;
+  color: var(--text-5);
+}
+
+.edit-pop {
+  position: fixed;
+  top: calc(var(--bar-h) + 2px);
+  left: 50%;
+  z-index: 41;
+  transform: translateX(-50%);
+  min-width: 280px;
+  padding: 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--popover-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--popover-shadow);
+}
+
+.edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 6px 6px;
+  font-size: 12px;
+  color: var(--text-heading);
+}
+
+.edit-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.edit-name {
+  flex: 1;
+}
+
+.edit-act {
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-4);
+  font-size: 12px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.edit-act:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
 }
 
 .ctx-backdrop {
