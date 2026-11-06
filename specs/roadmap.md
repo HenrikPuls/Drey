@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–180, plus req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–181, plus req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -90,59 +90,18 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
-None open.
-
-- **D-11 — Priority menu offers a value the dricket store rejects** (S; sweep 2026-11-05, scratch dricket
-  store, `docs/design/work-panel/sweep-screenshots/08-priority-sub.png`, `10-after-priority.png`). Steps: Work → a row's `…` → Priority → Urgent.
-  Expected: the change is written (one `dk put` commit). Actual: nothing is written; the status bar shows
-  "precondition failed: priority "urgent" is not one of critical, high, normal, low", truncated to "precon…".
-  The menu lists Urgent/High/Normal/Low (the files vault's vocabulary), the store's is critical/high/normal/low.
-  Fix: offer the store's own vocabulary on a dricket board; show the whole message (title/wrap).
-- **D-12 — A dricket ticket's comments do not show on the desktop** (M; sweep, `docs/design/work-panel/sweep-screenshots/14-t1-thread.png`,
-  `15-t2-thread-comment.png`). Steps: `dk comment t-2 -m "…"`, open T-0002's thread tab. Expected: the comment
-  in the thread (E14-6). Actual: the thread shows only "No run on this ticket yet."; Mission Control on the
-  phone shows the same comment under COMMENTS. Also T-0001's seeded "Decision needed: …" comment raises no
-  Needs-you row on the board (Needs you lists only plan/ready rows).
-- **D-13 — An archived dricket ticket vanishes** (M; sweep, `docs/design/work-panel/sweep-screenshots/13-after-archive.png`). Steps: open T-0006
-  (Done, "Ready to try") → Archive. Expected: it shows under Done this week (E13-20/21) and its thread stays
-  readable. Actual: the ticket leaves the list, no "Done this week" group appears, and the open thread tab
-  turns into an empty "(not on the board)" page.
-- **D-14 — "Open ticket" / "Ticket file" give no feedback while the checkout prompt is open** (S; sweep,
-  `docs/design/work-panel/sweep-screenshots/05-open-ticket.png`). Steps: first open of a ticket document on a local dricket store. Expected: one
-  "Add the ticket checkout as a vault?" prompt. Actual: the native prompt (invisible when the app window is
-  not in front) is answered with nothing in the app; every further click stacks another prompt, and the
-  second and later ones end in "That folder is already registered as vault …" dialogs.
-- **D-15 — Every ticket document tab is called "ticket.md"** (S; sweep, `docs/design/work-panel/sweep-screenshots/05-open-ticket.png`,
-  `06-after-save.png`). Expected: id and title (T-0003 · Pin tabs to the left), as the thread tabs have it.
-  Actual: all documents are `…/t-N/ticket.md`; two open tickets are indistinguishable, and the Assistant
-  attaches a chip "ticket.md".
-- **D-16 — The save-conflict merge shows the `rev:` bump as a conflicting block** (S; sweep,
-  `docs/design/work-panel/sweep-screenshots/07-conflict.png`). Steps: edit a ticket in the app, `dk put` the same ticket from a terminal, Ctrl+S.
-  Expected: only the text blocks to decide. Actual: "rev: 4 | rev: 3" is block 1 of 2; the owner must know
-  to tick the on-disk side. The merge itself and "Save result" (one put commit, rev 5) work.
-- **D-17 — Settings → Tickets → Default flow: the Build step's dropdown lists tickets** (M; sweep,
-  `docs/design/work-panel/sweep-screenshots/20-settings-tickets.png`; area of E12-9 / E10-8 — owners of those sessions should look). Expected:
-  workers/agents. Actual: options "T-0002 · Spellcheck for daily notes", "T-0004 …", "T-0003 …", "T-0005 …";
-  the flow's handover select shows "build-default (file missing)".
-- **D-18 — Mission Control page logs a CSP error** (S; sweep, phone viewport). `index.html` sets
-  `<base href="/">` under `base-uri 'none'`: "Setting the document's base URI … violates … base-uri 'none'"
-  on every load. The page works; drop the base tag or allow `'self'`.
-- **D-19 — Enabling Mission Control on a taken port leaves the switch on** (S; sweep). Steps: Settings →
-  Tickets → Enabled while port 47811 is used. Expected: switch back off / clear failure state. Actual:
-  switch stays on, the only sign is the chip "port 47811 is already in use — choose another".
-- **D-20 — The main log prints stack traces for a missing daily note on every start** (S; sweep,
-  `app.log.err` of a fresh profile): `Error occurred in handler for 'vault:read-file': ENOENT …/daily/2026/11/2026-11-05.md`
-  and the flat path. Probing a note that does not exist yet should answer "absent" without an error.
-- **D-21 — Thread pane overlaps the Capacity band** (S; seen once, `docs/design/work-panel/sweep-screenshots/12-ready-to-try.png`). After opening a
-  Ready-to-try ticket the composer is drawn over the "Capacity" header of the bottom band; a later render
-  was fine. Needs a reproduction with the Work view's default sizes.
-- **D-22 — Empty run row in a thread without a run** (S; sweep, `docs/design/work-panel/sweep-screenshots/02-open-ticket.png`). Above "No run on
-  this ticket yet." a stray bullet and chevron (an empty step row) are drawn.
+- **D-23 — A ticket document on a dricket store has no header and no face strip** (M; found 2026-11-06 while
+  fixing D-12, handed to W3.3 (E12-12)). A store document's path is `tickets/t/0000/t-3/ticket.md`, while
+  `isTicketPath` in `plugins/tickets/renderer/ticket-header.ts` matches only `tickets/<phase>/T-nnnn.md`, and the
+  surface check also wants the board's vault, not the checkout vault. Steps: on a scratch store open a ticket
+  from the Work panel. Expected: the header and Ticket | Thread | Review, as on the files backend. Actual: a plain
+  editor tab; a ticket without a run has no way to its thread, so its comments (D-12) show only once a run opened
+  it. `e2e/tickets-dricket-sweep.spec.ts` shows the state.
 
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field
 pre-filled with "T-0002:". (a), (c), (d) need a model / a real phone — untested.
 
-_Shipped defects:_ D-1, Mission Control chat reaching no model, shipped as
+_Shipped defects:_ D-11 to D-22, the sweep on a dricket store, shipped as milestone 181; D-1, Mission Control chat reaching no model, shipped as
 milestone 131; D-2, the paired-devices list and pairing from Mission
 Control, as milestone 135; D-3, engine writes not refreshing Drey's vault
 views, as milestone 140; D-4, runs.spec flaking under full-suite load, as milestone 142; D-5, the page moving on iPhone/iPad scroll

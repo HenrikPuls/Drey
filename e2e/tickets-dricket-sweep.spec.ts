@@ -218,14 +218,30 @@ test('the sweep defects on the store', async ({ page, electronApp }, testInfo) =
   expect(fit.ready).toBeGreaterThan(0);
   expect(fit.composer).toBeLessThanOrEqual(fit.pane + 1);
 
-  // D-13: a ticket in Done is listed under Done this week and opens from there.
+  // D-12: the ticket's comments are in the thread.
+  await expect(thread).toContainText('The dictionary ships with the app.');
+  await shot('thread-comments');
+
+  // D-13: archived from the board, the open thread stays readable, comments included.
+  await row('T-0002').hover();
+  await row('T-0002').locator('button[aria-label="More"], .work-row-more').first().click();
+  await page.locator('.tickets-menu-item', { hasText: 'Archive' }).click();
+  await page.locator('.tickets-menu-item', { hasText: 'click again' }).click();
+  await expect.poll(() => shown('t-2')).toMatch(/^labels: .*archived/m);
+  await expect(row('T-0002')).toHaveCount(0, { timeout: 15_000 });
+  const threadTitle = page.locator('.tickets-thread-title').filter({ visible: true });
+  await expect(threadTitle).toHaveText('Spellcheck for daily notes', { timeout: 15_000 });
+  await expect(thread).toContainText('The dictionary ships with the app.');
+  await shot('thread-after-archive');
+
+  // D-13: it and the ticket that reached Done from a terminal are under Done this week and open from there.
   const done = panel.locator('.work-group-done');
   await expect(done).toContainText('Done this week');
-  await expect(done).toContainText('1');
   await done.locator('button, [role="button"]').first().click();
-  await expect(done).toContainText('Rename a folder without losing links');
+  await expect(done).toContainText('Spellcheck for daily notes');
   await done.getByText('Rename a folder without losing links').click();
   await expect(page.locator('app-tab-bar').filter({ visible: true }).getByText('T-0006 · Rename a folder without losing links', { exact: true })).toBeVisible({ timeout: 15_000 });
   await shot('done-this-week');
-
+  // D-15: the Assistant's chip calls the document what its tab does.
+  await expect(page.locator('.composer-chips .chip-name').filter({ visible: true }).first()).toHaveText('T-0006 · Rename a folder without losing links', { timeout: 15_000 });
 });

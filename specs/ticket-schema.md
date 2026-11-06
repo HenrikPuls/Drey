@@ -431,6 +431,9 @@ every header edit's priority guard (`setPriority`, the remote refine,
 the raw-edit save, `createTicket` — a foreign word refuses with a
 readable error instead of being written).
 
+On a dricket store the vocabulary is the store's: `[priorities]` of `dricket.toml` on its `main` branch, dk's
+starting set `critical | high | normal | low` without that table. `pipeline.md`'s list then does not apply (D-11).
+
 ### Body sections
 
 Free Markdown; the section headings below are convention that Drey and
@@ -804,6 +807,9 @@ their own lines only — an older line is never rewritten or reordered;
 readers are tolerant (a broken line is skipped, never guessed). The
 log is plain text a human may read and append; it never lives inside
 the ticket file, and the ticket file never embeds it.
+
+On a store the verbs are comments (E14-6). A first line `Decision needed: <question>` is also read as
+`needs-decision`, keyed by the slug of the question, the form a person types in a terminal (D-12).
 
 ## `_meta/pipeline.md` — the phases and their handovers
 
