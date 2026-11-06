@@ -2,6 +2,7 @@ import { app, globalShortcut, ipcMain, Menu } from 'electron';
 import * as fs from 'node:fs';
 import { IPC_CHANNELS, type StartupProgressReport } from '../shared/ipc-api';
 import { UI_SCALE_FACTORS } from '../shared/app-config';
+import { i18n, silentMissingKey } from '../shared/i18n';
 import type { LostSecrets } from './app-config';
 import {
   rendererDevServerUrl,
@@ -69,6 +70,12 @@ function listenForDevRestart(): void {
 
 // Electron wants privileged schemes declared at module load, before `ready`.
 registerPrivilegedSchemes();
+
+// The catalog's missing-key report (ADR-0091): once per key into the field
+// log while developing; a packaged app shows the key and stays quiet.
+i18n.setMissingKeyReporter(
+  app.isPackaged ? silentMissingKey : (key) => logLine(`[main/i18n] no message for "${key}"`),
+);
 
 /** Everything `whenReady` built; null before, and when startup failed early. */
 let services: AppServices | null = null;

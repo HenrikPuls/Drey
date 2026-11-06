@@ -31,6 +31,16 @@ import type {
 } from './search-types';
 import type { VaultFileEntry, VaultRegistration, VaultStatus } from '../ipc-api';
 import type { PluginManifest } from './manifest';
+import type { I18n } from '../i18n';
+
+/**
+ * What a plugin gets as `api.i18n` (renderer) and `ctx.i18n` (main) since
+ * SDK 1.46 (ADR-0091): the host's `t(key, params)` over the shared
+ * catalog and its `Intl` helpers. The same shape in both halves; a plugin
+ * may `import type { MessageKey } from '../../shared/i18n'` to type the
+ * keys it uses, never the module's runtime.
+ */
+export type PluginI18nApi = I18n;
 
 /** Fired after a note save has been written to disk (ADR-0044 rule 4). */
 export interface NoteSavedEvent {
@@ -637,6 +647,13 @@ export interface MainPluginContext {
   readonly mcp: {
     registerTools(provider: PluginMcpToolProvider): void;
   };
+
+  /**
+   * The host's message catalog and ICU runtime (SDK 1.46, ADR-0091) for
+   * the strings a plugin's main side shows — native dialog text, tool
+   * results a user reads. Same shape as the renderer's `api.i18n`.
+   */
+  readonly i18n: PluginI18nApi;
 
   /** Structured log line into the field log, prefixed with the plugin id. */
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;

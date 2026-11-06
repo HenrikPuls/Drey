@@ -13,6 +13,7 @@
 import { pathToFileURL } from 'node:url';
 import * as path from 'node:path';
 import { app, type BrowserWindow, type WebContents } from 'electron';
+import { i18n } from '../../shared/i18n';
 import {
   PLUGIN_IPC_CHANNELS,
   type MainPluginContext,
@@ -730,6 +731,10 @@ export class PluginHost {
       mcp: {
         registerTools: (provider) => this.deps.mcpTools.register(id, provider),
       },
+      // The host's one catalog instance (SDK 1.46, ADR-0091) -- shared with
+      // the base's own main-side strings, so the missing-key reporter main
+      // set at startup covers plugins too.
+      i18n,
       log: (message, level) => this.deps.log(`plugin "${id}": ${message}`, level ?? 'info'),
     };
   }

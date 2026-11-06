@@ -1,0 +1,18 @@
+{
+  "//": "ADR-0091: the directories of the surfaces decided on 2026-11-06 (roadmap req-95 to req-101), repo-relative, forward slashes. Every .ts/.html file below one of them is scanned by literal-guard.spec.ts; specs and .d.ts are not. A file elsewhere opts in with `// i18n: catalog` in its first lines. Add a directory here when a new surface gets one; keep the ADR's list in step.",
+  "paths": [
+    "libs/mission-ui/src/autopilot",
+    "libs/mission-ui/src/decision",
+    "libs/mission-ui/src/cost",
+    "libs/mission-ui/src/notes",
+    "libs/mission-ui/src/ipad",
+    "libs/mission-ui/src/i18n",
+    "apps/mission-control/src/app/notes",
+    "src/app/i18n",
+    "plugins/tickets/renderer/autopilot",
+    "plugins/tickets/renderer/decision",
+    "plugins/tickets/renderer/cost",
+    "packages/tickets-engine/src/autopilot",
+    "packages/tickets-engine/src/notes"
+  ]
+}

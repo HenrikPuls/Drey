@@ -33,7 +33,7 @@ import type {
 } from './search-types';
 import type { TagEntry, VaultFileEntry, VaultStatus } from '../ipc-api';
 import type { PluginManifest } from './manifest';
-import type { Unsubscribe } from './main-plugin-api';
+import type { PluginI18nApi, Unsubscribe } from './main-plugin-api';
 
 // The Files-seam shapes live in main-plugin-api.ts (DOM-free, so a
 // plugin's shared ground can import them on both sides); re-exported
@@ -798,6 +798,15 @@ import type { LlmModelListing } from '../llm';
 export interface DreyPluginApi {
   readonly pluginId: string;
   readonly manifest: PluginManifest;
+
+  /**
+   * The host's message catalog and ICU runtime (SDK 1.46, ADR-0091):
+   * `t(key, params)` for every user-visible string of a new surface, plus
+   * the `Intl` helpers for numbers, currency, durations, dates and times.
+   * Plugins never import `shared/i18n` at runtime — the host owns the one
+   * instance, like the CodeMirror modules (ADR-0044 rule 1).
+   */
+  readonly i18n: PluginI18nApi;
 
   /** The active/open documents: read, observe, navigate, insert, rewrite, save. */
   readonly documents: {

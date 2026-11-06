@@ -113,6 +113,9 @@ leaves the app on the previous build. Verify with
   the target ids.
   1.45 lets `ctx.vault.markManaged` take a list of vault ids (an empty list clears): the tickets
   plugin flags every vault that holds its store checkout.
+  1.46 added `api.i18n` (renderer) and `ctx.i18n` (main): the host's message
+  catalog and ICU runtime — `t(key, params)`, `lookup`, `has` and the `Intl`
+  helpers (ADR-0091; see "SDK 1.46 — strings from the catalog" below).
   1.44 added `ctx.vault.routeDocuments(route)` (main side): a plugin that writes
   documents through its own engine claims them (`owns(vaultId, path)`); the
   editor's save goes to `route.save` (answer: the stored text and mtime, or a
@@ -537,3 +540,32 @@ through its tab by every vault tool (ADR-0071).
 - Split first, then add: the pane the option splits becomes focused, and
   the tab lands there. The resulting layout persists with the session
   like any pane tree.
+
+## SDK 1.46 — strings from the catalog
+
+- `api.i18n` (renderer) and `ctx.i18n` (main) are the host's message
+  catalog and ICU runtime ([ADR-0091](../docs/09_architecture_decisions/0091-i18n-catalog-for-the-new-surfaces.md)).
+  Both have the same shape (`PluginI18nApi`): `t(key, params?)` for a key
+  the English catalog has (`MessageKey`, a compile-time union — import it
+  as a type from `shared/i18n` if you want your keys checked), `lookup(key,
+  params?)` for a key computed at runtime (`` `state.${id}` ``), `has(key)`,
+  and the `Intl` helpers `formatNumber`, `formatCurrency`, `currencyRange`
+  (`$3.00–5.20` as `{ low, high, text }`), `formatDuration` (`1 hr 4 min`),
+  `formatDate`, `formatTime`, `formatDateTime` and `formatRelative`.
+- A missing key never throws: the key text comes back and the host
+  reports it once (a console warning in a dev run). Fill every placeholder
+  the message has — `t('autopilot.resume_at', { time: api.i18n.formatTime(at) })`;
+  a plural takes the number: `t('cost.estimate.range', { low, high, n })`.
+- The catalog is `shared/i18n/catalog/en.json`, one flat file for the base
+  and every plugin. Keys are `<area>.<thing>[.<state>]` in lower snake
+  case; a plugin's own area is its id or feature (`tickets.board.empty`).
+  Add the key in the same change as its first use.
+- **Never import `shared/i18n` at runtime** — lint and the bundle step both
+  refuse it. The host owns the one ICU instance (the same rule as the
+  CodeMirror modules); `import type` is fine.
+- The surfaces of the 2026-11-06 canvas round are under the literal-string
+  guard (`shared/i18n/literal-guard.spec.ts`): a text literal in a `.ts`
+  or `.html` file under a guarded path fails the suite. A new file of
+  yours joins the guard with `// i18n: catalog` in its first lines; an
+  unavoidable literal (a product name) is exempted per line with
+  `i18n-ignore` in a comment.

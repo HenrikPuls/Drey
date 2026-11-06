@@ -44,6 +44,8 @@ half).
 | Renderer and main process never import each other. They meet in `shared/ipc-api.ts`. | lint |
 | The base never imports a plugin. It reaches plugin behaviour only through a registry the plugin filled. | lint |
 | A plugin imports only its own folder and `shared/`. Never `src/`, never `electron/`, never another plugin. | lint, both halves (ADR-0044 would allow the main half `electron/`; no plugin uses that, and the rule keeps it so). The plugin build also fails on it for the renderer half |
+| A plugin never imports `shared/i18n` at runtime — it reads the catalog through `api.i18n` / `ctx.i18n`; the host owns the one ICU runtime. `import type` is fine. | lint ([ADR-0091](09_architecture_decisions/0091-i18n-catalog-for-the-new-surfaces.md)); the bundle step fails on the package import too |
+| A `.ts` / `.html` file under a guarded path (`shared/i18n/guarded-paths.json`, the surfaces of the 2026-11-06 canvas round) holds no literal user-visible string and names no key the catalog lacks. | spec (`shared/i18n/literal-guard.spec.ts`, ADR-0091) |
 | `libs/markdown-surface/` (CodeMirror 6, the dialect, Live Preview) imports only its own folder and `shared/` — no Angular, no `src/`, no `electron/`. | lint (E12-6) |
 | A plugin does not load its own CodeMirror or Angular. | lint |
 | A plugin's renderer half has no Node access. | lint |
@@ -260,6 +262,8 @@ the external tool servers) and `plugins.ts` (`PluginsIpc`). `DreyApi`
 is the sum of the slices. A new channel goes into its topic file;
 importers keep using `shared/ipc-api` (the same shape as
 `shared/app-config.ts` over `shared/config/`).
+
+**Shared, `shared/i18n/` (ADR-0091, req-102):** the one message catalog and ICU runtime for the surfaces decided on 2026-11-06. `catalog/en.json` is a flat `key → ICU message` file (keys `<area>.<thing>[.<state>]`, lower snake case, held to `MESSAGE_KEY_PATTERN` by the catalog spec); `catalog.ts` loads it (`loadCatalog`, `resolveLocale` — any locale falls back to `en`, the only one shipped) and derives `MessageKey` from it, so a typo is a compile error; `facade.ts`'s `createI18n` compiles each message once with `intl-messageformat` and exposes `t(key, params)` / `lookup` / `has` plus the `Intl` helpers of `intl.ts` (`formatCurrency`, `currencyRange` → `$3.00–5.20`, `formatDuration` → `1 hr 4 min`, `formatDate` / `formatTime` / `formatDateTime`, `formatRelative`); a missing or unformattable key returns the key and reports once (`warnMissingKey` / `silentMissingKey`). The barrel exports the shared English instance `i18n`. **Bindings:** main imports `i18n` (reporter set in `main.ts` by `app.isPackaged`); the renderer wraps a second instance in `I18nService` + the `t` pipe (`src/app/i18n/`); the plugin host hands that service's facade to plugins as `api.i18n` and the shared instance as `ctx.i18n` (SDK 1.46, `PluginI18nApi`); Mission Control has `McI18n` + its `t` pipe (`libs/mission-ui/src/i18n/`). A plugin never bundles `shared/i18n` (lint). **Guard:** `literal-guard.ts` finds user-visible literals in `.ts` (TypeScript AST) and `.html` (text nodes, plain `title` / `aria-label` / `placeholder` / `alt` / `label`) and unknown keys in `t(..)` / `'key' | t`; its spec scans the directories in `guarded-paths.json` and every file opting in with `// i18n: catalog`, exempting lines marked `i18n-ignore`. The existing UI is not under the guard until it migrates (req-103).
 
 **Plugins** (`plugins/<id>/`, thirteen shipped — `drawio`, the diagram
 editor tab of milestone 64, is described in §5.37): `templates`,
@@ -1007,6 +1011,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Spellcheck (+ language auto-detect) | `electron/spellcheck.ts`, `src/app/editor/spellcheck/` | Base | ADR-0013, ADR-0056 |
 | Appearance (accent, scale, fonts) + themes | `src/app/services/appearance.service.ts`, `theme.service.ts`, `src/app/settings/` | Base | ADR-0020, ADR-0035 |
 | Keybindings + commands, configurable shortcuts | `src/app/keybindings/`, `shared/keybindings.ts` (chord grammar), Settings → "Keyboard shortcuts" (`src/app/settings/shortcuts/`), `electron/capture-hotkey.ts` | Base | ADR-0073 |
+| Message catalog + ICU runtime for the new surfaces (`t(key, params)`, ICU plurals, `Intl` numbers / currency / durations / dates, missing key → the key, reported once) | `shared/i18n/` (`catalog/en.json`, `catalog.ts`, `facade.ts`, `intl.ts`, `types.ts`, `index.ts` with the shared `i18n` instance); bindings: `electron/main.ts` (reporter), `src/app/i18n/` (`I18nService`, `t` pipe), `src/app/plugin-host/plugin-api-impl.ts` + `electron/plugin-host/plugin-host.ts` (`api.i18n` / `ctx.i18n`, SDK 1.46), `libs/mission-ui/src/i18n/` (`McI18n`, `t` pipe); the guard: `shared/i18n/literal-guard.ts` + `.spec.ts`, `guarded-paths.json` | Base | ADR-0091, req-102 |
 | Palette (files / commands, `Mod+P`) | `src/app/palette/` | Base | M59 |
 | Panes, splits, tab DnD, pinning | `src/app/panes/`, `src/app/dnd/`, `src/app/tab-bar/` | Base | ADR-0037–0039 |
 | Docks, panels, icon strips, layout state | `src/app/dock/` | Base | ADR-0019 (+ M69 later change), ADR-0034 |
