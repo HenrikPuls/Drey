@@ -8,6 +8,7 @@ import { TicketsGit } from '../core/tickets-git';
 import { newTicketFileText } from '../core/ticket-files';
 import type { LedgerWrite } from '../core/ledger';
 import { normalizeFleetCaps, normalizeFleetHandover, normalizeFleetPools } from '../fleet/protocol';
+import { parseHandover } from '../contracts/tickets';
 
 /**
  * E7: the board service's ledger writes and the status read, against a
@@ -987,21 +988,90 @@ describe('EngineBoardService shape seams (E10-3)', () => {
   });
 });
 
-describe('EngineBoardService default names (E12-9)', () => {
+describe('EngineBoardService default pipeline (E12-9c)', () => {
   const pipelinePath = (): string => path.join(vaultDir, 'tickets', '_meta', 'pipeline.md');
 
-  it('titles the first column Ideas on a new board and keeps the stage id inbox', async () => {
+  it('seeds Inbox · Plan · Build · Review · Sign Off · Done on a new board', async () => {
     await fsp.rm(pipelinePath());
     expect(await serviceOf().initialize('v')).toMatchObject({ ok: true });
 
     const snap = await serviceOf().snapshot();
     expect(snap.pipeline.map((p) => [p.id, p.title])).toEqual([
-      ['inbox', 'Ideas'],
+      ['inbox', 'Inbox'],
+      ['plan', 'Plan'],
+      ['build', 'Build'],
+      ['review', 'Review'],
+      ['sign-off', 'Sign Off'],
+      ['done', 'Done'],
+    ]);
+    expect(snap.pipeline.map((p) => parseHandover(p.handover).mode)).toEqual(['manual', 'agent', 'agent', 'manual', 'manual', 'none']);
+    expect(snap.pipeline.filter((p) => p.claim).map((p) => p.id)).toEqual(['plan', 'build']);
+    // The columns the human persona works carry its pin; the agent columns carry none (the ladder decides).
+    expect(snap.pipeline.map((p) => [p.id, p.persona])).toEqual([
+      ['inbox', 'you'],
+      ['plan', null],
+      ['build', null],
+      ['review', 'you'],
+      ['sign-off', 'you'],
+      ['done', null],
+    ]);
+    // ...and the persona they name exists from the first minute, titled You.
+    const personaFile = await fsp.readFile(path.join(vaultDir, 'tickets', '_meta', 'personas', 'you', 'persona.md'), 'utf8');
+    expect(personaFile).toContain('kind: human');
+    expect(personaFile).toMatch(/title: ['"]?You['"]?\s/);
+    // Review and Sign Off are both the owner's checkpoints; Inbox (before the first agent column) is a plain queue.
+    expect([...snap.checkpoints]).toEqual(['review', 'sign-off', 'done']);
+  });
+
+  it('renames the human persona: one title on the persona file, blank goes back to You', async () => {
+    await fsp.rm(pipelinePath());
+    expect(await serviceOf().initialize('v')).toMatchObject({ ok: true });
+    const file = path.join(vaultDir, 'tickets', '_meta', 'personas', 'you', 'persona.md');
+
+    expect(await serviceOf().setHumanName('  Henrik ')).toMatchObject({ ok: true });
+    expect(await fsp.readFile(file, 'utf8')).toMatch(/title: ['"]?Henrik['"]?\s/);
+    const named = await serviceOf().listPersonas();
+    expect(named.filter((p) => p.kind === 'human').map((p) => [p.id, p.title])).toEqual([['you', 'Henrik']]);
+
+    expect(await serviceOf().setHumanName('')).toMatchObject({ ok: true });
+    expect((await serviceOf().listPersonas()).find((p) => p.kind === 'human')?.title).toBe('You');
+  });
+
+  it('an existing board gets the human persona created on first sight and keeps its columns', async () => {
+    // The shared board of this suite predates the pins: its columns carry none.
+    const snap = await serviceOf().snapshot();
+    expect(snap.pipeline.every((p) => p.persona === null)).toBe(true);
+    await serviceOf().ensureHumanPersona();
+    expect((await serviceOf().listPersonas()).some((p) => p.kind === 'human' && p.title === 'You')).toBe(true);
+    expect((await serviceOf().snapshot()).pipeline.every((p) => p.persona === null)).toBe(true);
+  });
+
+  it('leaves a board with the old default pipeline exactly as it is', async () => {
+    const oldDefault = [
+      '---',
+      'phases:',
+      '  - { id: inbox, title: Inbox, handover: manual }',
+      '  - { id: prioritized, title: Prioritized, handover: manual }',
+      '  - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default }',
+      '  - { id: commit, title: Commit, handover: agent commit-default }',
+      '  - { id: done, title: Done, handover: none }',
+      '---',
+      'Mine.',
+      '',
+    ].join('\n');
+    await fsp.writeFile(pipelinePath(), oldDefault);
+    expect(await serviceOf().initialize('v')).toMatchObject({ ok: false });
+    expect(await fsp.readFile(pipelinePath(), 'utf8')).toBe(oldDefault);
+
+    const snap = await serviceOf().snapshot();
+    expect(snap.pipeline.map((p) => [p.id, p.title])).toEqual([
+      ['inbox', 'Inbox'],
       ['prioritized', 'Prioritized'],
       ['build', 'Build'],
       ['commit', 'Commit'],
       ['done', 'Done'],
     ]);
+    expect([...snap.checkpoints]).toEqual(['done']);
   });
 
   it('never renames what a board already has: an existing Inbox title stays', async () => {

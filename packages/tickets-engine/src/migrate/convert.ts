@@ -18,6 +18,13 @@ import { ticketNumber, type LegacyTicket, type LegacyVault } from './legacy-vaul
 export interface MigrationConfig {
   /** The configured `[stages]` values, in board order. */
   readonly stages: readonly string[];
+  /** The configured `claim` stages: the agent columns (E12-9c). */
+  readonly claim: readonly string[];
+  /**
+   * Legacy phase -> stage, for a phase that is not a stage id itself (E12-9c): the old default's
+   * `prioritized` and `commit` have no column of the same name in the new default.
+   */
+  readonly legacyPhases: Readonly<Record<string, string>>;
   /** The configured priority values; the first match of the legacy value wins. */
   readonly priorities: readonly string[];
   readonly defaultPriority: string;
@@ -28,11 +35,22 @@ export interface MigrationConfig {
 }
 
 export const DEFAULT_MIGRATION_CONFIG: Omit<MigrationConfig, 'selected'> = {
-  stages: ['inbox', 'prioritized', 'build', 'commit', 'done'],
+  stages: ['inbox', 'plan', 'build', 'review', 'sign-off', 'done'],
+  claim: ['plan', 'build'],
+  legacyPhases: { prioritized: 'inbox', commit: 'sign-off' },
   priorities: ['urgent', 'high', 'normal', 'low'],
   defaultPriority: 'normal',
   maxTitleLength: 200,
 };
+
+/** The stage a legacy phase lands in: the phase itself when it is a stage, else the configured mapping, else null. */
+export function stageOfLegacyPhase(phase: string, config: Pick<MigrationConfig, 'stages' | 'legacyPhases'>): string | null {
+  if (config.stages.includes(phase)) {
+    return phase;
+  }
+  const mapped = config.legacyPhases[phase];
+  return mapped !== undefined && config.stages.includes(mapped) ? mapped : null;
+}
 
 /** Header keys that never travel: live execution state (the cut-over requires none). */
 const LIVE_STATE_KEYS: ReadonlySet<string> = new Set(['claimed-by', 'claimed-at', 'run']);
@@ -130,7 +148,7 @@ function skipReasonOf(t: LegacyTicket, config: MigrationConfig): string | null {
   if (t.phase === 'archive') {
     return 'archived in the legacy vault; archived tickets are not migrated (OD-7)';
   }
-  if (!config.stages.includes(t.phase)) {
+  if (stageOfLegacyPhase(t.phase, config) === null) {
     return `phase "${t.phase}" is not one of the configured stages (${config.stages.join(', ')})`;
   }
   if (toDricketId(t.id) === null) {
@@ -285,7 +303,7 @@ export function convertTicket(t: LegacyTicket, config: MigrationConfig, migratin
       legacyId: t.id,
       id,
       number: ticketNumber(t.id),
-      stage: t.phase,
+      stage: stageOfLegacyPhase(t.phase, config)!,
       title,
       priority,
       kind,

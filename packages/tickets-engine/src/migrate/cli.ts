@@ -4,7 +4,7 @@ import path from 'node:path';
 import { defaultExec, DkProcess } from '../store/dk-process';
 import { DricketTicketStore } from '../store/dricket-ticket-store';
 import { applyPlan, assertScratchStore, initScratchStore } from './apply';
-import { buildPlan, DEFAULT_MIGRATION_CONFIG, type MigrationConfig } from './convert';
+import { buildPlan, DEFAULT_MIGRATION_CONFIG, stageOfLegacyPhase, type MigrationConfig } from './convert';
 import { readLegacyVault } from './legacy-vault';
 import { renderDryRun, renderReport } from './report';
 import { reverseTicket } from './reverse';
@@ -31,7 +31,7 @@ interface Args {
   readonly values: ReadonlyMap<string, string>;
 }
 
-const VALUE_OPTIONS = ['legacy', 'allow', 'store', 'report', 'dk', 'actor', 'out', 'data', 'home'];
+const VALUE_OPTIONS = ['legacy', 'allow', 'store', 'report', 'dk', 'actor', 'out', 'data', 'home', 'stages'];
 const FLAG_OPTIONS = ['apply', 'dry-run', 'reverse', 'allow-live-runs', 'help'];
 
 export function parseArgs(argv: readonly string[]): Args {
@@ -73,6 +73,7 @@ const USAGE = [
   '  migrate-tickets --legacy <vault> --allow <ids.txt> --apply --store <new dir>     into a scratch dricket store',
   '  migrate-tickets --reverse --store <dricket store> --out <new dir>                store -> legacy files',
   'options: --report <file> --dk <path> --actor <id> --data <dir> --home <dir> --allow-live-runs',
+  '         --stages a,b,c (reverse: the stage list of the store; default inbox,plan,build,review,sign-off,done)',
 ].join('\n');
 
 export async function runMigrateCli(argv: readonly string[], io: CliIo, env: NodeJS.ProcessEnv = process.env): Promise<number> {
@@ -142,7 +143,7 @@ async function runForward(args: Args, io: CliIo, env: NodeJS.ProcessEnv): Promis
     const store = new DricketTicketStore(dk);
 
     const migratedIds = new Set(plan.conversions.filter((c) => c.target !== null).map((c) => c.legacyId));
-    shadow = shadowDiff(rowsFromLegacy(vault.tickets.filter((t) => migratedIds.has(t.id))), await collectStoreRows(store));
+    shadow = shadowDiff(rowsFromLegacy(vault.tickets.filter((t) => migratedIds.has(t.id)), (phase) => stageOfLegacyPhase(phase, config) ?? phase), await collectStoreRows(store));
     io.out(`shadow diff: ${shadow.identical ? 'identical' : `${shadow.differences.length} difference(s)`}, ${shadow.declared.length} declared\n`);
   }
 
@@ -167,7 +168,8 @@ async function runReverse(args: Args, io: CliIo, env: NodeJS.ProcessEnv): Promis
   }
   const dk = new DkProcess({ bin: args.values.get('dk') ?? 'dk', store: path.resolve(storeDir), dataDir: args.values.get('data') ?? null, env: dkEnv(args, env) });
   const store = new DricketTicketStore(dk);
-  const phases = DEFAULT_MIGRATION_CONFIG.stages;
+  const stagesArg = args.values.get('stages');
+  const phases = stagesArg === undefined ? DEFAULT_MIGRATION_CONFIG.stages : stagesArg.split(',').map((s) => s.trim()).filter((s) => s !== '');
   let written = 0;
   for (const record of await store.list()) {
     const detail = await store.show(record.id);

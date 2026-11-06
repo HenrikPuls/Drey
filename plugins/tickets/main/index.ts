@@ -744,6 +744,11 @@ const plugin: MainPluginModule = {
       }
     });
 
+    ctx.ipc.handle('setHumanName', (payload) => {
+      const p = payload as { name?: unknown };
+      return board.setHumanName(typeof p.name === 'string' ? p.name : '');
+    });
+
     ctx.ipc.handle('initialize', async (payload) => {
       const p = payload as { vaultId?: unknown };
       return board.initialize(typeof p.vaultId === 'string' ? p.vaultId : null);

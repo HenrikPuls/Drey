@@ -54,14 +54,16 @@ export function columnPromptRef(phase: PipelinePhase): string | null {
 
 /**
  * The ids of the owner's checkpoint columns: manual columns whose
- * predecessor is automatic. The dispatcher never pulls across one —
+ * predecessor is automatic, and manual columns that follow a checkpoint
+ * directly (Review → Sign Off of the default pipeline, E12-9c: both are
+ * the owner's). The dispatcher never pulls across one —
  * only the owner's moves cross it (refine / implement / park).
  */
 export function checkpointPhaseIds(columns: readonly BoardColumn[]): ReadonlySet<string> {
   const checkpoints = new Set<string>();
   for (let i = 1; i < columns.length; i++) {
     const phase = columns[i]!.phase;
-    if (!isAutoPhase(phase) && isAutoPhase(columns[i - 1]!.phase)) {
+    if (!isAutoPhase(phase) && (isAutoPhase(columns[i - 1]!.phase) || checkpoints.has(columns[i - 1]!.phase.id))) {
       checkpoints.add(phase.id);
     }
   }

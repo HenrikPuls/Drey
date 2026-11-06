@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163, 167 and 168 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163 and 166–168 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -432,6 +432,18 @@ owner confirms scope and order before any of it starts:
   providers; the engine's `defaultWorker` already is `opencode`); `claude-code` stays
   selectable, and so is **Kimi Code** (milestone 167) — both are what the owner uses today. The names are plain persona files, so the owner's idea of a squirrel crew ("Nutty
   Nutcracker" …) is a later naming choice, not a code change. Existing boards keep their team.
+
+- **E12-9e — Follow-ups of the default pipeline (E12-9c, milestone 166)** (S–M). Open: (1) **Plan →
+  Build has no checkpoint** in the default (both agent columns): decide whether a finished plan
+  should park for the owner (a `persona: you` pin / an inserted `manual` gate in the default
+  chain) — today the owner inserts one per ticket; (2) **Sign Off is manual**, so the merge and
+  push of `commit-default` is by hand or by a session working the checkpoint (BOARD.md) — decide
+  whether Sign Off should offer "Merge and push" as an owner-started agent run; (3) a **reverse
+  converter that reads the store's own stage list** (today `--stages a,b,c`, default the new
+  six); (4) the Work panel's *Prioritized* group is empty on a new board (its queue is Inbox only
+  while Plan is an agent column) — keep, rename or retire it; (5) **Open question: migration of `prioritized` tickets** — `inbox` (today) or `plan` (an agent
+  column: planning would start on arrival); (6) E12-9b Q2 (team seeding) and Q3
+  (default worker) are still open.
 - **E13-22 — Settings: one page width, a section tree and search** (owner request
   2026-11-05, outside the list; modelled on VS Code's settings). The settings overlay
   grows with the window (wider than today's 640 px cap) and **every page uses the same

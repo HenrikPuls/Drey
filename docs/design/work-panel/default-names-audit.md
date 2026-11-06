@@ -17,6 +17,8 @@ says so and the item is a **question** — nothing was guessed.
 Verdicts: **match** · **deviates** (fixed in this item) · **owned** (deviates, already
 a roadmap item) · **question** (owner decides; not changed).
 
+> **E12-9c (2026-11-05, milestone 166) supersedes rows 1, 17, 18, 19, 24 and 26 and answers Q1:** the owner decided the default pipeline `Inbox · Plan · Build · Review · Sign Off · Done`, the first column is titled **Inbox** again, and the shipped samples/manual/scratch pipeline follow. See [default-pipeline.md](default-pipeline.md).
+
 ## Table
 
 | # | Default as shipped (file:line) | Name in the design (file / section) | Verdict | Action |
