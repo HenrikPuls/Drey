@@ -935,8 +935,7 @@ rest are kept so they still match `docs/11`.
 - **Persisted "approve" / "team" / "Sign Off" values (milestone 173 follow-up, owner request 2026-11-06, outside the list).**
   The wording change of 173 left every stored or contract identifier alone. Candidates that would read better
   as the user-facing words, each needing a migration that is not done: the default pipeline's stage title
-  **Sign Off** (id `sign-off`; only new boards seed the title, existing `pipeline.md` files keep theirs, and it
-  would read "Accept → Accept" next to the Accept button until the owner names that column), the engine's
+  **Sign Off** is not a candidate any more: the owner decided on 2026-11-06 that the last column keeps its title and id `sign-off`. The rest: the engine's
   `approve` checkpoint action kind, the Mission Control tab id `team` and the
   `tickets-team` document kind (persisted in view layouts and the phone URL), and the `desk-team` CSS classes.
   Each is a rename with a read-both/write-new bridge and a release note; none is needed for the owner to see

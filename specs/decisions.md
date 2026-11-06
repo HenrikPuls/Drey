@@ -23,7 +23,7 @@ one means moving it back to the roadmap with a new justification.
   permission) — a permission to run a tool, not the owner's decision on a plan or
   result — and the dated entries of `specs/changelog.md`, which record what was
   written then. Renaming the stored values was weighed and is listed as a
-  roadmap follow-up with its migration, not done.
+  roadmap follow-up with its migration, not done. Decided the same day (canvas decisions 12 to 15): the default pipeline's last column keeps its title "Sign Off" (id `sign-off`), the product name stays "Drey Crew" while the tab and area is "Crew", and the iPad's menu button shows and hides a sidebar that is on by default from a width set in code.
 
 - **Waiting for, or building, `dk import` / `dk add --id` (dricket R-10 / R-28)
   for the ticket migration** (owner, 2026-11-05; E14-3b). Drey has one user; the
