@@ -2,6 +2,7 @@ import { promises as fsp } from 'node:fs';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { createEngine, removeEngineLock, writeEngineLock } from './engine';
+import { clientDirOf } from './client-dir';
 
 /**
  * The standalone tickets-engine process (ADR-0088, E2b). Started by the
@@ -56,9 +57,7 @@ async function main(): Promise<void> {
   // client otherwise — the strangler hand-over (E5b).
   const repoRoot = path.resolve(__dirname, '../../../..', '..');
   const builtApp = path.join(repoRoot, 'dist', 'mission-control', 'browser');
-  const clientDir = (await fsp.stat(path.join(builtApp, 'index.html'))).isFile()
-    ? builtApp
-    : path.resolve(__dirname, '../../../..', 'plugins', 'tickets', 'remote');
+  const clientDir = await clientDirOf(builtApp, path.resolve(__dirname, '../../../..', 'plugins', 'tickets', 'remote'));
   await fsp.mkdir(opts.home, { recursive: true });
   const engine = await createEngine({
     vaultPath: opts.vault,
