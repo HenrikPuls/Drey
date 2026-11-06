@@ -14,3 +14,17 @@ describe('Settings -> Tickets sections (E13-22)', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 });
+
+describe('Settings -> Tickets, the board 7g sections and rows', () => {
+  it('lists Crew, Default flow and Budget and runners first, in that order', () => {
+    expect(TICKETS_SECTIONS.slice(0, 3).map((s) => s.label)).toEqual(['Crew', 'Default flow', 'Budget and runners']);
+  });
+  it('finds the two Autopilot rows under Budget and runners', () => {
+    const rows = TICKETS_ENTRIES.filter((e) => e.key.startsWith('autopilot'));
+    expect(rows.map((e) => e.label)).toEqual(['Autopilot', 'Resume paused autopilot at']);
+    expect(rows.every((e) => e.section === 'budget')).toBe(true);
+  });
+  it('gives every entry a scope', () => {
+    expect(TICKETS_ENTRIES.every((e) => e.scope !== undefined)).toBe(true);
+  });
+});

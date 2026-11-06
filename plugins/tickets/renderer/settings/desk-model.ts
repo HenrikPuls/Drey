@@ -82,3 +82,14 @@ export function maxMbOf(text: string): number | null {
   const n = Number(text.trim());
   return text.trim() !== '' && Number.isInteger(n) && n > 0 ? n : null;
 }
+
+export type AutopilotState = 'on' | 'paused' | 'off';
+
+/**
+ * The Autopilot row's state as far as the engine tells it today: the chain
+ * master is `run` (On) or `halted` (Off). A timed Paused arrives with the
+ * engine route of req-95a.
+ */
+export function autopilotStateOf(master: string | null | undefined): AutopilotState {
+  return master === 'run' ? 'on' : 'off';
+}

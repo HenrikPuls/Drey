@@ -206,6 +206,8 @@ export interface PluginSettingsEntry {
   readonly key: string;
   readonly label: string;
   readonly description?: string;
+  /** Who the setting is stored for (board 7g's scope tabs); unset = under no tab. */
+  readonly scope?: 'all-devices' | 'device' | 'vault';
   readonly section?: string;
 }
 

@@ -15,7 +15,12 @@ import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { SettingsService } from '../services/settings.service';
 import { SettingsCategoryRegistry } from './settings-registry.service';
 import {
+  SETTINGS_SCOPES,
   activeSection,
+  countSettings,
+  filterHitsByScope,
+  type SettingsScope,
+  type SettingsSection,
   searchSettings,
   type SettingsSearchEntry,
   type SettingsSearchHit,
@@ -79,10 +84,50 @@ export class Settings {
   private readonly detail = viewChild<ElementRef<HTMLElement>>('detail');
 
   protected readonly query = signal('');
+  protected readonly scopes = SETTINGS_SCOPES;
+  /** The scope tab chosen (board 7g); `null` = none, everything shows. */
+  protected readonly scope = signal<SettingsScope | null>(null);
   protected readonly hits = computed<readonly SettingsSearchHit[]>(() =>
-    searchSettings(this.registry.searchSources(), this.query()),
+    this.query().trim() === ''
+      ? this.scope() === null
+        ? []
+        : this.scopeBrowse()
+      : filterHitsByScope(searchSettings(this.registry.searchSources(), this.query()), this.scope()),
   );
-  protected readonly searching = computed(() => this.query().trim() !== '');
+  /** Every setting of the chosen scope, in page order (no query typed). */
+  private scopeBrowse(): SettingsSearchHit[] {
+    return this.registry.searchSources().flatMap((source) =>
+      (source.entries ?? [])
+        .filter((entry) => entry.scope === this.scope())
+        .map((entry) => ({
+          categoryId: source.id,
+          categoryLabel: source.label,
+          sectionLabel: source.sections?.find((s) => s.id === entry.section)?.label ?? null,
+          entry,
+        })),
+    );
+  }
+  protected readonly searching = computed(() => this.query().trim() !== '' || this.scope() !== null);
+
+  protected pageCount(id: string): number {
+    return countSettings(this.registry.searchSources().find((s) => s.id === id)?.entries);
+  }
+
+  protected sectionCount(categoryId: string, section: SettingsSection): number {
+    return countSettings(
+      this.registry.searchSources().find((s) => s.id === categoryId)?.entries,
+      section.id,
+    );
+  }
+
+  protected pickScope(scope: SettingsScope): void {
+    this.scope.update((current) => (current === scope ? null : scope));
+  }
+
+  protected clearSearch(): void {
+    this.query.set('');
+    this.scope.set(null);
+  }
 
   /** The section entry highlighted for the page's scroll position (E13-22). */
   protected readonly currentSection = signal<string | null>(null);
@@ -100,7 +145,7 @@ export class Settings {
   }
 
   protected selectCategory(id: string): void {
-    this.query.set('');
+    this.clearSearch();
     this.expandChoice.update(({ [id]: _unset, ...rest }) => rest);
     this.currentSection.set(null);
     this.selected.set(id);
@@ -112,14 +157,14 @@ export class Settings {
 
   /** A click on a section entry: its page, scrolled to the section. */
   protected openSection(categoryId: string, sectionId: string): void {
-    this.query.set('');
+    this.clearSearch();
     this.selected.set(categoryId);
     this.afterRender(() => this.scrollToSection(sectionId));
   }
 
   /** A search hit: its page, scrolled to the setting. */
   protected openHit(hit: SettingsSearchHit): void {
-    this.query.set('');
+    this.clearSearch();
     this.selected.set(hit.categoryId);
     this.afterRender(() => this.scrollToEntry(hit.entry));
   }
@@ -130,7 +175,7 @@ export class Settings {
 
   protected onSearchKey(event: KeyboardEvent): void {
     if (event.key === 'Escape' && this.searching()) {
-      this.query.set('');
+      this.clearSearch();
       event.stopPropagation();
     }
   }
@@ -233,7 +278,7 @@ export class Settings {
   protected async requestClose(): Promise<void> {
     if (this.searching()) {
       // Escape or the backdrop first leaves the search, then the screen.
-      this.query.set('');
+      this.clearSearch();
       return;
     }
     if (await this.settings.flush()) {

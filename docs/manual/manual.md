@@ -1549,7 +1549,7 @@ Settings → Tickets starts with the things you decide about the crew:
 Crew tab. **Default flow** shows the standard flow, the columns an agent
 works with who does each; a flow is changed per ticket, so pick a ticket
 next to *Open flow editor* to open its Flow tab (the standard flow itself is
-set below, in the pipeline table). **Budget and runners** shows the daily
+set below, in the pipeline table). **Budget and runners** starts with the **Autopilot** state (*On*, *Paused*, *Off*) and *Resume paused autopilot at*, then shows the daily
 budgets of the personas added up with today's spending, and how many runs
 each runner takes at once; *Manage* jumps to the runner settings.
 **Walkthrough videos** has *Keep in Git* (off: videos are large and stay in
@@ -1859,7 +1859,12 @@ page to it. The page scrolls as one column and the section in view is
 highlighted in the list. The search field at the top of the list filters the
 settings of **all** pages by name, description or key; click a result to open
 its page at that setting. `Esc` clears the search first and closes Settings on
-the second press.
+the second press. Each page and section shows how many settings it holds. When
+nothing matches, the list says *No setting matches "…"* with a *Clear search*
+button. The tabs *All devices*, *This device* and *This vault* above the page
+narrow the list to the settings stored for that scope (the app on this computer,
+the vault you have open, or shared by every device); click the tab again to
+show everything.
 
 | Category | What lives there |
 | --- | --- |

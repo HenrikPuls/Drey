@@ -63,11 +63,13 @@ describe('Settings screen (E13-22)', () => {
     fixture.detectChanges();
   };
   const entries = (): HTMLElement[] => [...root.querySelectorAll<HTMLElement>('.section-entry')];
+  const labels = (): (string | undefined)[] => entries().map((e) => e.querySelector('.section-label')?.textContent?.trim());
   const category = (label: string): HTMLElement =>
     [...root.querySelectorAll<HTMLElement>('.category')].find((c) => c.textContent?.includes(label))!;
 
   it('lists sections under the selected category, expandable and collapsible', () => {
-    expect(entries().map((e) => e.textContent?.trim())).toEqual(['Part one', 'Part two']);
+    expect(labels()).toEqual(['Part one', 'Part two']);
+    expect(entries().map((e) => e.querySelector('.count')?.textContent?.trim())).toEqual([undefined, '1']);
     expect(root.querySelectorAll('.twisty')).toHaveLength(1);
     const twisty = root.querySelector<HTMLElement>('.twisty')!;
     expect(twisty.getAttribute('aria-expanded')).toBe('true');
@@ -96,7 +98,7 @@ describe('Settings screen (E13-22)', () => {
     detail.dispatchEvent(new Event('scroll'));
     fixture.detectChanges();
     const active = root.querySelector('.section-entry.active')!;
-    expect(active.textContent?.trim()).toBe('Part two');
+    expect(active.querySelector('.section-label')?.textContent?.trim()).toBe('Part two');
     expect(active.getAttribute('aria-current')).toBe('location');
   });
 
@@ -141,5 +143,45 @@ describe('Settings screen (E13-22)', () => {
     fixture.detectChanges();
     expect(search.value).toBe('');
     expect(root.querySelector('.results')).toBeNull();
+  });
+
+  const typeQuery = (text: string): void => {
+    const search = root.querySelector<HTMLInputElement>('input[type="search"]')!;
+    search.value = text;
+    search.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+  };
+
+  it('names the query when nothing matches and offers to clear the search', () => {
+    typeQuery('zzzqq');
+    expect(root.querySelector('.no-match')?.textContent).toContain('No setting matches "zzzqq"');
+    click(root.querySelector('.no-match button'));
+    expect(root.querySelector('.no-match')).toBeNull();
+    expect(root.querySelector<HTMLInputElement>('input[type="search"]')!.value).toBe('');
+  });
+
+  it('shows the count of a page beside its label', () => {
+    expect(category('Long').querySelector('.count')?.textContent?.trim()).toBe('1');
+  });
+
+  it('offers the three scope tabs, filters the hits by scope and toggles back', () => {
+    const tabs = [...root.querySelectorAll<HTMLElement>('.scope-tab')];
+    expect(tabs.map((t) => t.textContent?.trim())).toEqual(['All devices', 'This device', 'This vault']);
+    expect(tabs.every((t) => t.getAttribute('role') === 'tab')).toBe(true);
+    typeQuery('watch');
+    click(tabs[1]);
+    expect(tabs[1].getAttribute('aria-selected')).toBe('true');
+    expect(root.querySelector('.no-match')).not.toBeNull();
+    click(tabs[2]);
+    expect(root.querySelector('.result-label')?.textContent).toBe('Watch the vault for external changes');
+    click(tabs[2]);
+    expect(tabs[2].getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('lists every setting of a scope when a tab is chosen without a query', () => {
+    click(root.querySelectorAll('.scope-tab')[2]);
+    const labelsShown = [...root.querySelectorAll('.result-label')].map((r) => r.textContent);
+    expect(labelsShown).toContain('Watch the vault for external changes');
+    expect(labelsShown).not.toContain('Theme');
   });
 });

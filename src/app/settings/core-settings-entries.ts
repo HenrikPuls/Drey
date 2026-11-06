@@ -1,4 +1,4 @@
-import type { SettingsSearchEntry } from './settings-model';
+import type { SettingsScope, SettingsSearchEntry } from './settings-model';
 
 /**
  * The searchable settings of the core pages (E13-22), by category id. The
@@ -8,7 +8,7 @@ import type { SettingsSearchEntry } from './settings-model';
  */
 const e = (key: string, label: string, description?: string): SettingsSearchEntry => ({ key, label, description });
 
-export const CORE_ENTRIES: Readonly<Record<string, readonly SettingsSearchEntry[]>> = {
+const RAW_ENTRIES: Readonly<Record<string, readonly SettingsSearchEntry[]>> = {
   appearance: [
     e('theme', 'Theme', 'Drey, Anthrazit or Cyberpunk'),
     e('fontSize', 'Base font size', 'Text size of the interface'),
@@ -49,3 +49,29 @@ export const CORE_ENTRIES: Readonly<Record<string, readonly SettingsSearchEntry[
   widgets: [e('widgets', 'Panels & plugins', 'Toggle panels and plugins')],
   spellcheck: [e('spelling', 'Spelling', 'Dictionaries and language')],
 };
+
+/**
+ * Who each core page's settings are stored for (decision D10: appearance
+ * and the app's own behaviour per device, the vault's per vault, the model
+ * and tool connections shared by every device).
+ */
+const PAGE_SCOPE: Readonly<Record<string, SettingsScope>> = {
+  appearance: 'device',
+  shortcuts: 'device',
+  spellcheck: 'device',
+  updates: 'device',
+  widgets: 'device',
+  daily: 'vault',
+  entry: 'vault',
+  vault: 'vault',
+  llm: 'all-devices',
+  mcp: 'all-devices',
+  tools: 'all-devices',
+};
+
+export const CORE_ENTRIES: Readonly<Record<string, readonly SettingsSearchEntry[]>> = Object.fromEntries(
+  Object.entries(RAW_ENTRIES).map(([page, entries]) => [
+    page,
+    entries.map((entry) => ({ ...entry, scope: entry.scope ?? PAGE_SCOPE[page] })),
+  ]),
+);

@@ -252,11 +252,14 @@ Every Settings page shares one page width, set by the host (the
 `mount` with `data-settings-section="<id>"` (in page order): the Settings
 list shows the sections as expandable entries under the category, a click
 scrolls the one scrolling page to the anchor, and the entry in view is
-highlighted. `entries: [{ key, label, description?, section? }]` feeds the
+highlighted. `entries: [{ key, label, description?, section?, scope? }]` feeds the
 search field at the top of Settings, which matches label, description and
 key across all pages and opens the page at the setting (the element marked
 `data-setting-key="<key>"`, else the section anchor). Both are optional;
 without them the page is still found by its label, hint and description.
+`scope` (`'all-devices' | 'device' | 'vault'`) says who the setting is stored
+for; the tabs above the page (*All devices*, *This device*, *This vault*) list
+the settings of one scope, and an entry without a scope sits under no tab.
 
 ### The shared form vocabulary
 

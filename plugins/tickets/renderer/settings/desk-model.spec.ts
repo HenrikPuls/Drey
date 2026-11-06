@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PipelinePhase } from '../../../../packages/tickets-engine/src/contracts/tickets';
 import type { PersonaView } from '../../shared/remote-protocol';
-import { budgetLineOf, maxMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, usd } from './desk-model';
+import { autopilotStateOf, budgetLineOf, maxMbOf, parseDeskVideos, runnersLineOf, standardFlowOf, usd } from './desk-model';
 
 const persona = (id: string, extra: Partial<PersonaView> = {}): PersonaView => ({
   id,
@@ -61,5 +61,13 @@ describe('desk settings model', () => {
     expect(maxMbOf('')).toBeNull();
     expect(maxMbOf('2.5')).toBeNull();
     expect(maxMbOf('-3')).toBeNull();
+  });
+});
+
+describe('autopilotStateOf', () => {
+  it('reads the chain master: run is On, anything else Off', () => {
+    expect(autopilotStateOf('run')).toBe('on');
+    expect(autopilotStateOf('halted')).toBe('off');
+    expect(autopilotStateOf(null)).toBe('off');
   });
 });

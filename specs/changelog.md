@@ -23,18 +23,35 @@ the list), modelled on VS Code's settings screen.
 - **SDK 1.46** (additive): `PluginSettingsPageContrib.sections` / `.entries`
   (`PluginSettingsSection`, `PluginSettingsEntry`); documented in `plugins/AUTHORING.md` ("One
   width, sections and search").
-- **Settings → Tickets** now has five sections, in canvas order (board 7g: Team, Default flow,
+- **Settings → Tickets** now has six sections, in canvas order (board 7g: Crew, Default flow,
   Budget and runners, Mission Control on other devices) plus the engine-room parts the board no
-  longer shows: **Team and flow**, **Budget and runners** (budget, videos, fleet, workers),
-  **Devices**, **Store and Git** (repository, ticket store, repositories), **Pipeline and
-  prompts**. The "Pipeline and workers" divider is gone; fleet and workers moved up under
-  *Budget and runners* ("Manage" scrolls to them). `settings-sections.ts`.
+  longer shows: **Crew**, **Default flow**, **Budget and runners** (autopilot, budget, videos,
+  fleet, workers), **Devices**, **Store and Git** (repository, ticket store, repositories),
+  **Pipeline and prompts**. The "Pipeline and workers" divider is gone; fleet and workers moved
+  up under *Budget and runners* ("Manage" scrolls to them). `settings-sections.ts`.
+- **Counts, no-match, scope tabs (second pass, wave 2.9).** Each category and each section shows
+  how many settings it holds (`countSettings`). A search without a hit says `No setting matches
+  "…"` with a *Clear search* button. Three tabs above the page — **All devices / This device /
+  This vault** — filter the hits by the scope a setting is stored for (`SettingsSearchEntry.scope`,
+  SDK 1.46 `PluginSettingsEntry.scope`; a tab clicked again clears it; a tab without a query lists
+  every setting of that scope). Scopes follow decision D10: appearance, shortcuts, spelling,
+  updates and panels per device, daily notes, entry format and the vault per vault, LLM, MCP and
+  assistant tools shared by all devices; the Tickets entries are per vault except the git path and
+  ticket-store checkout (this device) and the devices (all devices).
+- **Autopilot rows (req-95, UI only).** *Budget and runners* starts with **Autopilot** (On /
+  Paused / Off selector) and **Resume paused autopilot at** (time). Both are disabled and the
+  selector only reads the chain master today (`run` = On, `halted` = Off): the engine route of
+  req-95a was not merged when this shipped. `TODO(req-95b)` in `desk-settings.ts` wires them.
+- **Strings.** The shared i18n catalog (req-102) was not merged; the new strings are marked
+  `TODO(i18n)` (`SETTINGS_SCOPES`, the Autopilot options) or still plain literals in the template.
+- **Merge note.** The first attempt (branch `claude/e13-22-settings-88a3c3`, never merged) was
+  merged in as the base and renumbered 173 → 174, because 173 is the Crew-tab milestone.
 - **Canvas vs. brief.** Boards 7g / 5f / 6c show a flat category list, no search and a fixed 760 px
   page; they do not say whether the page grows, so the brief's decisions (grow with the window,
   expandable entries, search) were built. The brief's four groups were adapted to the page's real
   content as above. The phone/iPad settings (5f, 5g, 6c) are untouched — they are separate lists
   of pages and need no section pattern.
-- **Specs.** `settings-model.spec.ts` (search across pages, scroll-spy), `settings.spec.ts`
+- **Specs.** `settings-model.spec.ts` (search across pages, scroll-spy, scope filter, counts), `settings.spec.ts`
   (expandable entries, highlight while scrolling, search + open hit, no placeholder, native
   buttons, Esc), `settings-width.spec.ts`, `settings-sections.spec.ts`.
 
