@@ -16,12 +16,14 @@
   --line: #3b3d42;
   --text: #f4f5f6;
   --text-2: #b3b7bc;
-  --text-3: #8a8f96;
+  --text-3: #92979e; /* G-25: 4.68:1 on --panel-2 (was 4.22) */
   --accent: #8ecbef;
   --ok: #93c47f;
-  --warn: #e0bb6e;
+  --warn: #e8a25a; /* the one orange: needs you */
   --danger: #ee8f89;
   --violet: #a78bfa;
+  --control-border: #747980; /* borders only, never text (2.5:1 on --panel-3) */
+  --on-accent: #101113;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Helvetica, Arial, sans-serif;
   --radius-chip: 4px; /* chip, tag, badge */

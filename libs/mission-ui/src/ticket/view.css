@@ -50,10 +50,8 @@
 
 .phase {
   padding: 3px 8px;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
   color: var(--text-2);
   border: 1px solid var(--line);
   border-radius: var(--radius-chip);
@@ -240,10 +238,8 @@
 
 .tk-sec {
   margin: 16px 0 6px;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
   color: var(--accent);
 }
 
@@ -498,10 +494,8 @@
 
 .findings-title {
   margin: 0 0 4px;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--danger);
 }
 
@@ -830,7 +824,6 @@
 }
 
 .sendback-text:focus {
-  outline: none;
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
@@ -927,7 +920,7 @@
 .fs-btn {
   display: grid;
   min-width: 40px;
-  height: 36px;
+  height: 44px;
   padding: 0 8px;
   place-items: center;
   font-family: var(--mono);
@@ -943,7 +936,7 @@
   position: static;
   flex: none;
   width: 36px;
-  height: 36px;
+  height: 44px;
   font-size: calc(22px * var(--mc-text, 1));
 }
 
@@ -1042,11 +1035,9 @@
 
 .sheet-label {
   margin: 0;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
   font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
   color: var(--text-3);
 }
 
@@ -1059,7 +1050,7 @@
 .sheet-select {
   flex: 1;
   min-width: 0;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 8px;
   font-size: calc(14px * var(--mc-text, 1));
   color: var(--text);
@@ -1171,8 +1162,10 @@ details.think summary::-webkit-details-marker {
   display: none;
 }
 
-details.think summary:hover {
-  color: var(--text-2);
+@media (hover: hover) {
+  details.think summary:hover {
+    color: var(--text-2);
+  }
 }
 
 details.think .chev {
@@ -1212,10 +1205,8 @@ details.think .step-body {
 
 .thread-card .ck {
   margin-bottom: 6px;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
   color: var(--accent);
 }
 
@@ -1284,8 +1275,10 @@ details.think .step-body {
     background 0.15s ease;
 }
 
-.opt:hover {
-  border-color: var(--accent);
+@media (hover: hover) {
+  .opt:hover {
+    border-color: var(--accent);
+  }
 }
 
 .opt:disabled {
@@ -1334,10 +1327,8 @@ details.think .step-body {
 .opt .rec {
   flex: none;
   margin-left: auto;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--ok);
 }
 
@@ -1381,7 +1372,6 @@ details.think .step-body {
   line-height: 1.45;
   color: var(--text);
   resize: none;
-  outline: none;
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: var(--radius-dialog);
@@ -1400,7 +1390,7 @@ details.think .step-body {
   display: grid;
   flex: none;
   width: 42px;
-  height: 42px;
+  height: 44px;
   cursor: pointer;
   place-items: center;
   color: var(--bg);
@@ -1560,8 +1550,10 @@ details.think .step-body {
   cursor: pointer;
 }
 
-.lnb:hover {
-  text-decoration: underline;
+@media (hover: hover) {
+  .lnb:hover {
+    text-decoration: underline;
+  }
 }
 
 .ccard {
@@ -1683,7 +1675,6 @@ details.think .step-body {
 
 .pmark-who {
   color: var(--text-3);
-  text-transform: lowercase;
 }
 
 .pmark.by-you .pmark-who {
@@ -1716,11 +1707,9 @@ details.think .step-body {
   background: transparent;
   border: 0;
   color: var(--text-2);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
-  letter-spacing: 0.12em;
   text-align: left;
-  text-transform: uppercase;
   cursor: pointer;
 }
 
