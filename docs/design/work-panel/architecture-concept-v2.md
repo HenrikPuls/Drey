@@ -35,6 +35,7 @@ Where this edition deviates from the German text because a later decision or the
 | — | **Canvas of 2026-11-06 (version 47):** no top or bottom tab bar on phone and iPad — one menu (Search, Notes, Work, Crew, Settings, chats with Mission Control) behind a menu button; mobile gets **Notes**; the area is called **Crew** everywhere, never Team; the decision verb is **Accept** (plans and results), never Approve or Sign off; text size is a five-step slider S / M / L / XL / XXL = 15 / 16 / 17 / 19 / 21 px with L as default | §3.4a, §5.9, §7 |
 | — | **Canvas of 2026-11-06 (version 58, owner decisions 12–20):** (12) the iPad menu button shows and hides a sidebar; (13) desktop web keeps its top tab bar; (14) the product stays **Drey Crew**, the tab and area **Crew**; (15) the last pipeline column keeps its name — **reversed by 16**; (16) **one state list** `Inbox → Shaping → Prioritized → Building → Review → Ready to try → Done`, used by every column and badge, no Commit, no Ideas, no numbered folders in the UI; the engine and the default pipeline follow (§5.1); (17) **one decision, one place:** the Mission Control decision card, no second Accept button in the ticket body; (18) phone: the menu is the root screen, back buttons carry a label, no hamburger; (19) the iPad works like the desktop (§7); (20) Notes on phone and iPad are **readable and editable** with the existing Markdown editor, vault = the active vault; cost-by-phase table on desktop, iPad and phone; estimate format `$3.00–5.20 · from 3 runs` / `no estimate yet (first run)` | §5.1, §5.3, §5.4, §7 |
 | — | **i18n is provided for from this implementation round on** (owner, 2026-11-06): every user-visible string of the new surfaces is a catalog key — no hard-coded UI strings, no sentences built from parts, ICU plurals, `Intl` for numbers, dates and currency, layouts tolerate 40 % longer labels; English is the first locale. This widens the CLAUDE.md language convention (see `specs/decisions.md`) | §7 |
+| — | **Autopilot switch** (owner, 2026-11-06, board 10t): On / Paused / Off with the same words on every device, over the ADR-0077 chain master; status-bar item with `Mod+Alt+P`, iPad header chip, phone app-bar icon and sheet; the state lives in the engine | §6.1 |
 | — | Stay with the LLM integration Drey already has: the `LlmRouter` and the providers in Settings; no new registry (owner, 2026-11-04) | §4.7, §6 |
 
 > **Names (state of 2026-11-04, decision D7).** "Pia" is, in this edition, Mission Control itself, the place the owner talks to. The planner persona that earlier drafts called "Pia" is now **Paul**; the text says "Paul" wherever the planner is meant. Default crew: Paul, Ben, Ralf, Tessa. The design persona is dropped; examples of extra gates use a security review by Ralf. (The German D7 row says "Paul is Mission Control itself"; that is a slip for "Pia", corrected here and in the roadmap.)
@@ -583,6 +584,26 @@ One chat, reachable from everywhere (on the phone through the menu top left, on 
 **Away posture ("I'm away"):** also taken from Firstmate and important for everyday phone-first use: you tell the Mission chat in one sentence what applies during your absence — "away until 6 pm, merge only if proof is green, start nothing new". The sentence is stored **verbatim** as a posture record (no parser that "interprets" it — Mission Control acts on it at the moment of the event) and mechanically bound: everything reversible may keep running, everything destructive / irreversible can never be pre-authorised — whatever the sentence says. On return a **return briefing** is ready in the chat: what landed, what waits, what was escalated. *(Out of scope for now, owner, 2026-11-03/04: away posture and return briefing are not on the roadmap.)*
 
 ---
+
+### 6.1 Autopilot — one switch for whether the crew works by itself
+
+> Status: **decided** (owner, 2026-11-06, canvas board 10t, version 58); **not built** (roadmap req-95). Convergence gap G-42.
+
+Three states, the same words on every device:
+
+| State | Meaning | Fleet semantics (ADR-0077) |
+|---|---|---|
+| **On** | workers pick up tickets by themselves | the chain master is **on** |
+| **Paused** | the running step finishes, nothing new starts; optional **resume at** time | the master's **gentle halt** ("brake after the step"), plus a stored resume time |
+| **Off** | the owner starts every step | the master is **off**; manual starts stay possible |
+
+**Stop all running steps now…** is a separate, confirmed action, not a fourth state. It is the existing red stop of ADR-0077 (abort every live run through the stop ladder and halt); afterwards the state is Off.
+
+**Reach.** Desktop: a status-bar item and the shortcut `Mod+Alt+P`. iPad: a chip in the header. Phone: an icon in the app bar on Work, Crew and the chat; it opens a sheet with three rows of 56 px (On, Paused, Off) and the Stop-now action below. The state dot is green (On), peach (Paused) or grey (Off); every device shows the same state.
+
+**Where the state lives.** In the engine, next to the other fleet settings: the runner persists the master in `<userData>/fleet/chain.json`, never in the tickets repo (ADR-0076, ADR-0077); the engine reports it in its status and pushes a change over the event stream like any other fleet change, so every client shows the one state. The new stored parts are the *Paused* flag and the *resume at* time (the engine, not a client, resumes at that time). **Boot rule:** ADR-0077's ruling stands — a chain never starts moving because the app started, so after a restart the state is Off (a Paused state with a resume time that has not passed also comes back as Off, never as On). A **read-only paired device** (§3.6) sees the state but cannot change it, and cannot trigger Stop-now.
+
+**i18n (§7).** Catalog keys `autopilot.state.on`, `autopilot.state.paused`, `autopilot.state.off`, `autopilot.stop_all` and `autopilot.resume_at` (parameter `{time}`, formatted with `Intl`).
 
 ## 7. UI concept (phone first)
 
