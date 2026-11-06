@@ -123,6 +123,21 @@ describe('needsOf', () => {
   });
 });
 
+describe('needsOf on the six stages (req-99b)', () => {
+  it('waits on Ready to try and asks nothing of Done', () => {
+    const snap = board(
+      [column('building', []), column('ready', [card('T-1', 'ready')]), column('done', [card('T-2', 'done')])],
+      ['ready', 'done'],
+    );
+    expect(needsOf(snap, []).map((i) => i.ticketId)).toEqual(['T-1']);
+  });
+
+  it('keeps the terminal checkpoint of a board without that stage', () => {
+    const snap = board([column('build', []), column('done', [card('T-2', 'done')])], ['done']);
+    expect(needsOf(snap, []).map((i) => i.ticketId)).toEqual(['T-2']);
+  });
+});
+
 describe('reportNeedOf', () => {
   const report: ScoutReport = {
     writtenAt: '2026-11-02T14:32:00Z',

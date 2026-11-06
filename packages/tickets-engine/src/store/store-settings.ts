@@ -97,7 +97,7 @@ export type StoreListing =
   | { readonly ok: false; readonly backend: TicketBackend; readonly error: string };
 
 /** Known stages first in the order a ticket travels, the rest alphabetically. Display only — no stage logic. */
-const STAGE_ORDER = ['open', 'inbox', 'prioritized', 'in-progress', 'build', 'review', 'commit', 'blocked', 'done', 'cancelled'];
+const STAGE_ORDER = ['open', 'inbox', 'shaping', 'prioritized', 'in-progress', 'building', 'build', 'review', 'ready', 'commit', 'blocked', 'done', 'cancelled'];
 
 export function groupByStage(records: readonly TicketRecord[]): StoreColumn[] {
   const byStage = new Map<string, TicketRecord[]>();

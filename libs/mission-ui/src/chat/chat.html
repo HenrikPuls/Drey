@@ -142,7 +142,7 @@
                 <div class="ck">{{ ckDoneOf(item.proposal) }}</div>
                 <ng-container [ngTemplateOutlet]="richBody" [ngTemplateOutletContext]="{ $implicit: item.proposal }" />
                 @if (item.proposal.outcome !== null && item.proposal.outcome !== '') {
-                  <p class="outcome">→ {{ item.proposal.outcome }} (Commit)</p>
+                  <p class="outcome">→ {{ item.proposal.outcome }}</p>
                 }
               </div>
             } @else {

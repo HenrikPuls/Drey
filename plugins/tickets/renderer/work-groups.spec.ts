@@ -514,3 +514,44 @@ describe('crewLineOf', () => {
     expect(crewLineOf([], 0)).toBe('Crew · idle');
   });
 });
+
+describe('the six stages (req-99b)', () => {
+  const SIX: readonly PipelinePhase[] = [
+    phase('inbox', 'manual'),
+    phase('shaping', 'manual'),
+    phase('prioritized', 'manual'),
+    phase('building', 'agent build-default'),
+    phase('ready', 'manual'),
+    phase('done', 'none'),
+  ];
+  const six = (placed: Record<string, readonly TicketCard[]>): BoardSnapshot =>
+    ({
+      columns: SIX.map((p): BoardColumn => ({ phase: p, unknown: false, tickets: placed[p.id] ?? [] })),
+      checkpoints: ['ready', 'done'],
+      recentDone: [],
+    }) as unknown as BoardSnapshot;
+  const need = (id: string, at: string): NeedItem =>
+    ({ kind: 'checkpoint', ticketId: id, title: id, phase: at, runId: null, text: '', since: null }) as NeedItem;
+
+  it('calls a ticket on Ready to try that, on every chip', () => {
+    expect(needKindLabel(need('T-1', 'ready'), six({}))).toBe('Ready to try');
+  });
+
+  it('accepts on Ready to try through the commit step, not a plain move to Done', () => {
+    expect(checkpointActionOf(six({}), 'ready')).toEqual({ kind: 'sign-off', label: 'Accept' });
+  });
+
+  it('asks nothing of a ticket in Done', () => {
+    const groups = workGroups(six({ ready: [card('T-1', 'ready')], done: [card('T-2', 'done')] }), []);
+    expect(ids(groups.needs)).toEqual(['T-1']);
+    expect(ids(groups.running)).toEqual([]);
+    expect(ids(groups.ideas)).toEqual([]);
+  });
+
+  it('names the step of a run in Building and of the commit step on Ready to try', () => {
+    const rowAt = (at: string): Parameters<typeof runningStepOf>[0] =>
+      ({ phase: SIX.find((p) => p.id === at)!, run: run({ activity: '' }), card: card('T-1', at) }) as unknown as Parameters<typeof runningStepOf>[0];
+    expect(runningStepOf(rowAt('building'), six({})).step).toBe('Building');
+    expect(runningStepOf(rowAt('ready'), six({})).step).toBe('Merging');
+  });
+});

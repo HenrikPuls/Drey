@@ -1175,7 +1175,7 @@ export class Chat {
       return;
     }
     const outcome = this.active()?.proposals.find((proposal) => proposal.id === id)?.outcome ?? null;
-    this.toast(outcome !== null && outcome !== '' ? `Confirmed — ${outcome} (Commit)` : 'Confirmed');
+    this.toast(outcome !== null && outcome !== '' ? `Confirmed — ${outcome}` : 'Confirmed');
   }
 
   protected async dismiss(id: string): Promise<void> {

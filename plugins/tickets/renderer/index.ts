@@ -377,7 +377,7 @@ const refreshStatusItem = (): void => {
     cost: team.todayCost,
     budget: team.todayBudget,
     needsYou: needs,
-    master: chain?.master ?? null,
+    autopilot: chain === null ? null : (chain.autopilot?.state ?? (chain.master === 'run' ? 'on' : 'off')),
     inNotesView: statusApi.ui.activeViewId() === 'notes',
   });
 };
@@ -2113,7 +2113,7 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
       const deps = {
         onLaunch: () => void runMutation(`Launching ${ticketId}`, () => invokeBoard('launchVersion', { id: ticketId })),
         onAccept: () =>
-          void runMutation(`${step.kind === 'final' ? 'Archiving' : 'Moving'} ${ticketId}`, () =>
+          void runMutation(`${step.kind === 'final' ? 'Archiving' : step.acceptLabel === 'Accept' ? 'Accepting' : 'Moving'} ${ticketId}`, () =>
             invokeBoard('acceptTicket', { id: ticketId }),
           ),
         onSendBack: () => sendBackModal(),
@@ -2187,7 +2187,13 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     const action = checkpointActionOf(snapshot, need.phase);
     const live = runForCard(ticketId);
     decisionBar.replaceChildren();
-    if (action.kind === 'accept') {
+    if (action.kind === 'sign-off') {
+      decisionBar.append(
+        decisionButton(action.label, 'Accept the result — it is merged and pushed, then the ticket moves to Done', true, () =>
+          void runMutation(`Accepting ${ticketId}`, () => invokeBoard('acceptTicket', { id: ticketId })),
+        ),
+      );
+    } else if (action.kind === 'accept') {
       decisionBar.append(
         decisionButton(action.label, 'Accept the result — the ticket goes to the archive', true, () =>
           void runMutation(`Accepting ${ticketId}`, () => invokeBoard('archive', { id: ticketId })),
@@ -2510,9 +2516,13 @@ function mountThreadOf(api: DreyPluginApi, host: HTMLElement, ticketId: string):
     sendBackCp.hidden = !cpShow.has('sendback');
     if (checkpoint !== null && snapshot !== null) {
       const action = checkpointActionOf(snapshot, checkpoint.phase);
-      const accepting = action.kind === 'accept';
-      acceptCp.title = accepting ? 'Accept — the ticket goes to the archive' : `${action.label} — move the ticket on`;
-      acceptCp.setAttribute('aria-label', accepting ? 'Accept' : action.label);
+      acceptCp.title =
+        action.kind === 'sign-off'
+          ? 'Accept — it is merged and pushed, then the ticket moves to Done'
+          : action.kind === 'accept'
+            ? 'Accept — the ticket goes to the archive'
+            : `${action.label} — move the ticket on`;
+      acceptCp.setAttribute('aria-label', action.kind === 'approve' ? action.label : 'Accept');
     }
     // The quiet start's hint (req-75): the run waits for the first send.
     pendingHint.hidden = !(live && run !== null && run.quietStart === true);
@@ -2780,7 +2790,7 @@ function openCardMenu(
   // Back to ideas: a queued idea, or one the fleet has not picked up yet.
   const queuedAt = firstPhase === null ? null : queueTargetOf(pipeline, firstPhase);
   if (firstPhase !== null && card.phase !== firstPhase && live === null && (ideaPhaseIds(pipeline).includes(card.phase) || card.phase === queuedAt)) {
-    item('Back to ideas', () => moveTicket(api, card, firstPhase), 'Out of the queue — back to the ideas');
+    item('Back to Inbox', () => moveTicket(api, card, firstPhase), 'Out of the queue — back to the Inbox');
   }
   const targets = columns.filter((c) => c.phase.id !== card.phase);
   if (targets.length > 0) {

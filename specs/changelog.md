@@ -43,6 +43,19 @@
   `MC_APP_NAV` provider in `app.config.ts` that the shell now shadows. Every new string is marked
   `TODO(i18n)` for the req-102 catalog.
 
+### req-99b — The six state names on every client; Accept on Ready to try is the sign-off
+
+**Not yet manually verified by the owner.** Column titles come from `_meta/pipeline.md`, so the live board shows the six names from the cut-over (E14-7) on; until then it keeps its own. This change removes what was hard-coded around them.
+
+- **Fixed: Accept on Ready to try could skip the merge.** The thread's decision bar made a plain move to Done on a six-stage board. It now goes through `acceptTicket` like the Ready card, so the commit step runs.
+- **Fixed: Done asked for the owner.** Every ticket in the terminal column counted as Needs you, on the desk and in the phone's badge. With a `ready` stage it no longer does; a board without that stage keeps its terminal checkpoint. Done tickets stay on the Board's Done column; the panel's *Done this week* still lists archived ones.
+- **Words:** the Needs-you chip reads *Ready to try* on that stage (it would have read *Plan to accept*), on the desk and on the phone. Accept is plain **Accept**. The Work panel's Ideas group is **Inbox**, with **Back to Inbox** in the row menu. A run reads *Building* in Building and *Merging* on Ready to try. The chat's "(Commit)" is gone.
+- **Autopilot status item** shows On, Paused or Off from `chain.autopilot`; Paused no longer reads as Off. The click stays req-95b.
+- **Engine, old names gone:** `contracts/changes.ts` (*Built and tested* in Building, Done after Ready to try, the plan stamp on `prioritized -> building`), `services/chat-service.ts` (split "keep" goes to Building), `store/store-settings.ts`, `prompts/commit-default.md`. `scripts/verify-dricket.ps1` seeds the six stages (not run: it needs `dk` and launches the app).
+- **Release note:** GitHub generates the release notes (`ci.yml`), so there is no file to add. This entry is the text for the next release.
+- **Docs:** manual, `docs/06` §6.97, ADR-0090 later change, concept §5.1, `specs/decisions.md`.
+- **Specs:** `work-groups.spec`, `step-card.spec`, `needs.spec`, `status-slot.spec`, `work.spec`, `chat.spec`.
+
 ### Wave-2 follow-ups — small items left by the merged branches
 
 **Not yet manually verified by the owner.**

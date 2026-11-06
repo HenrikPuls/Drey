@@ -59,3 +59,14 @@ describe('stepCardOf', () => {
     expect(stepCardOf({ ...base, phaseId: 'ghost' }).kind).toBe('none');
   });
 });
+
+describe('Ready to try (req-99b)', () => {
+  it('offers Accept, not a move to Done', () => {
+    const pipeline = [
+      { id: 'building', title: 'Building' },
+      { id: 'ready', title: 'Ready to try' },
+      { id: 'done', title: 'Done' },
+    ];
+    expect(stepCardOf({ ...base, pipeline, phaseId: 'ready' }).acceptLabel).toBe('Accept');
+  });
+});

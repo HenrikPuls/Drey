@@ -855,7 +855,7 @@ its heading (remembered across restarts):
 - **Shaping** — the tickets you reserved for a dialog with a worker
   (interactive); the row says whether the dialog runs, pauses or has
   not started, and how many turns it has.
-- **Ideas** — the backlog before the machine, highest priority first
+- **Inbox** — the backlog before the machine, highest priority first
   (a blocker before what it blocks, as in Running; a small *Urgent*/*High* chip marks the ones that matter), newest
   first within a priority. The chip on the right is its track —
   **Auto** (runs on its own), **Shape** (a plan-mode dialog with you)
@@ -881,8 +881,8 @@ sits the same **Ticket | Thread | Review** control (identical on the
 document, the thread and the Review tab, only the active button differs):
 click another button to switch. The choice is per ticket and never touches a
 saved view. The thread's header shows the run's light and who is working,
-and above its composer sits the **decision bar** (Accept → next phase,
-or Accept). The thread follows whichever ticket you
+and above its composer sits the **decision bar** (Accept, or Accept → next
+phase on a board with other checkpoints). The thread follows whichever ticket you
 click last — one tab, not one per ticket — and opens where your focus is,
 never as an automatic split. A ticket picked in the Files panel opens as
 a plain file tab. The row's menu **Open ticket** opens the same default. The panel's footer is the **crew line** — the fleet's worst light and who
@@ -1140,7 +1140,7 @@ before it; hover it for the long form, click it to open the Crew tab.
 
 **Prioritized, persona and cost on every row.** The ideas already in the
 fleet's queue are their own group, **Prioritized**, between Shaping and
-Ideas; a row says whom it waits for (*waits for Ben*). Every row also carries
+Inbox; a row says whom it waits for (*waits for Ben*). Every row also carries
 the **persona** that works on it (the live run's, else the ticket's pin, else
 the column's) and the **cost** of the ticket so far, written as on the phone
 (`$1.20`); a ticket without a known cost shows none.
@@ -1467,14 +1467,14 @@ Where a worker column meets your judgment, the pipeline stays yours: a
 column without a worker between two worker columns is your
 **checkpoint** — the machine never pulls across it; you review, edit,
 and move the ticket on, back a column, or back to the Inbox. The shipped
-default is **Inbox · Plan · Build · Review · Sign Off · Done**: Inbox is
-your triage queue, Plan and Build are worker columns (a finished plan flows
-into Build on its own; the machine gate that checks the work belongs to
-Build), and **Review** and **Sign Off** are your checkpoints (with Inbox they are the columns your own persona works) — you read the
-change in Review (*Accept* moves it on, *Send back* returns it to Build
-with a note), and Sign Off is where the work is committed: merged into the
-integration branch and pushed, then moved to Done. Boards that existed before
-keep the columns they have. Add a manual
+default is **Inbox · Shaping · Prioritized · Building · Ready to try · Done**:
+Inbox, Shaping and Prioritized are your columns and the machine takes nothing
+from them; you move a ticket into **Building**, the one worker column. **Ready
+to try** is your checkpoint: *Send back* returns the ticket to Building with a
+note, and *Accept* is the sign-off. It starts the commit step on the program's
+repository (the ticket's branch is merged and pushed), and when that is green
+the ticket lands in **Done**, which asks nothing more of you. Boards that existed
+before keep the columns they have. Add a manual
 column between two worker columns and it becomes a checkpoint too. A
 manual column *before* the first worker column is your queue — the
 machine never pulls from it: refine and plan your tickets there (the

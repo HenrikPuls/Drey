@@ -105,7 +105,7 @@ describe('workListNode', () => {
 
   it('shows Running before Ideas, hides Needs you and Shaping while empty', () => {
     const list = workListNode(deps(), board({ inbox: [card('T-0001', 'inbox')], build: [card('T-0002', 'build')] }), [], createGroupFoldStore(null), () => undefined);
-    expect(titles(list)).toEqual(['Running', 'Ideas']);
+    expect(titles(list)).toEqual(['Running', 'Inbox']);
     expect(list.querySelectorAll('.work-row')).toHaveLength(2);
   });
 
@@ -189,7 +189,7 @@ describe('workListNode', () => {
 
   it('an interactive ticket shapes: the group shows, with the dialog not started', () => {
     const list = workListNode(deps(), board({ inbox: [card('T-0005', 'inbox', { interactive: true })] }), [], createGroupFoldStore(null), () => undefined);
-    expect(titles(list)).toEqual(['Running', 'Shaping', 'Ideas']);
+    expect(titles(list)).toEqual(['Running', 'Shaping', 'Inbox']);
     // The sub line leads with the phase chip (T-0084), the dialog text follows.
     const sub = list.querySelector('.work-group-shaping .work-row-sub')!;
     expect(sub.querySelector('.work-meta-phase')?.textContent).toBe('Inbox');
@@ -389,7 +389,7 @@ describe('workListNode', () => {
       { id: 'T-0015', title: null, at: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString() },
     ]);
     const list = workListNode(deps(), snap, [], folds, rerender);
-    expect(titles(list)).toEqual(['Running', 'Ideas', 'Done this week']);
+    expect(titles(list)).toEqual(['Running', 'Inbox', 'Done this week']);
     expect(list.querySelector('.work-done-row')).toBeNull();
     folds.setFolded('done', false);
     const open = workListNode(deps(), snap, [], folds, rerender);

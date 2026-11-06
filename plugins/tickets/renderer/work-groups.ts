@@ -14,6 +14,7 @@
  * phase's `color:` in pipeline.md or the default palette by position —
  * the panel draws it as the row's phase chip.
  */
+import { BUILDING_STATE, READY_STATE } from '../shared/pipeline-states';
 import type { NeedItem } from '../shared/remote-protocol';
 import {
   DEFAULT_PRIORITY_CONFIG,
@@ -234,6 +235,8 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
   // Needs you: the remote's list (questions, approvals, red gates, failed
   // runs, checkpoints), plus every ticket in the terminal phase — the
   // owner accepts it into the archive. One row per ticket, first reason wins.
+  // With a Ready to try stage the sign-off is there, and Done asks nothing.
+  const signsOffBeforeTerminal = pipeline.some((phase) => phase.id === READY_STATE);
   const needs: WorkRow[] = [];
   const seen = new Set<string>();
   for (const need of needsOf(board, runs)) {
@@ -244,7 +247,7 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
     seen.add(need.ticketId);
     needs.push(row(at.card, at.column, need));
   }
-  if (terminal !== null) {
+  if (terminal !== null && !signsOffBeforeTerminal) {
     const column = configured[configured.length - 1]!;
     for (const card of column.tickets) {
       if (seen.has(card.id)) {
@@ -269,7 +272,7 @@ export function workGroups(board: BoardSnapshot, runs: readonly RunInfo[]): Work
   const shaping: { row: WorkRow; position: number; index: number }[] = [];
   const running: { row: WorkRow; position: number; index: number }[] = [];
   for (const { card, column, index } of placed.values()) {
-    if (seen.has(card.id)) {
+    if (seen.has(card.id) || (signsOffBeforeTerminal && column.phase.id === terminal)) {
       continue;
     }
     // Shaping: the owner works this ticket in an interactive dialog —
@@ -353,9 +356,14 @@ export function rowStatusOf(row: WorkRow): WorkStatus {
 /** What a checkpoint asks of the owner: approve into the next phase, or accept into the archive. */
 export type CheckpointAction =
   | { readonly kind: 'approve'; readonly to: string; readonly label: string }
+  /** Accept on Ready to try (req-99a, Q8): it starts the commit step, never a plain move. */
+  | { readonly kind: 'sign-off'; readonly label: string }
   | { readonly kind: 'accept'; readonly label: string };
 
 export function checkpointActionOf(board: BoardSnapshot, phaseId: string): CheckpointAction {
+  if (phaseId === READY_STATE) {
+    return { kind: 'sign-off', label: 'Accept' };
+  }
   const configured = board.columns.filter((column) => !column.unknown);
   const index = configured.findIndex((column) => column.phase.id === phaseId);
   const next = index >= 0 ? configured[index + 1] : undefined;
@@ -379,6 +387,9 @@ export function needKindLabel(need: NeedItem, board: BoardSnapshot): string {
     case 'notify':
       return 'Gate done';
     default: {
+      if (need.phase === READY_STATE) {
+        return 'Ready to try';
+      }
       const configured = board.columns.filter((column) => !column.unknown);
       const index = configured.findIndex((column) => column.phase.id === need.phase);
       // The terminal phase holds a result to try; a checkpoint right
@@ -404,7 +415,13 @@ export function runningStepOf(row: WorkRow, board: BoardSnapshot): RunningStep {
   if (run !== null) {
     const title = board.columns.find((c) => c.phase.id === row.phase.id)?.phase.title ?? row.phase.title;
     const step =
-      row.phase.id === 'plan' ? 'Planning' : row.phase.id === 'build' ? 'Building' : row.phase.id === 'commit' ? 'Merging' : title;
+      row.phase.id === 'plan'
+        ? 'Planning'
+        : row.phase.id === 'build' || row.phase.id === BUILDING_STATE
+          ? 'Building'
+          : row.phase.id === 'commit' || row.phase.id === READY_STATE
+            ? 'Merging'
+            : title;
     return { step, line: (run.activity ?? '').trim(), live: true };
   }
   const blocker = row.card.blocked[0];

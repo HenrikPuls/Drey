@@ -333,7 +333,7 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
 
     // The canvas order (W1b, E13-8): Needs you, Running, Shaping, Prioritized,
     // Ideas — the seeded review checkpoint and finished ticket fill the first.
-    await expect(panel.locator('.work-group-title')).toHaveText(['Needs you', 'Running', 'Shaping', 'Prioritized', 'Ideas']);
+    await expect(panel.locator('.work-group-title')).toHaveText(['Needs you', 'Running', 'Shaping', 'Prioritized', 'Inbox']);
 
     // The filter popover: the Idle chip keeps the idle ideas — the queued
     // one (and only it) goes.

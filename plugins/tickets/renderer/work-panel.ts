@@ -40,7 +40,7 @@ const GROUP_TITLE: Readonly<Record<WorkGroupId, string>> = {
   shaping: 'Shaping',
   running: 'Running',
   prioritized: 'Prioritized',
-  ideas: 'Ideas',
+  ideas: 'Inbox',
   done: 'Done this week',
 };
 
@@ -394,7 +394,7 @@ function appendIdeas(
       });
       body.append(clear);
     } else {
-      body.append(el('div', 'work-group-empty', 'No ideas yet — capture one with +'));
+      body.append(el('div', 'work-group-empty', 'Inbox is empty — capture a ticket with +'));
     }
     return;
   }
@@ -408,7 +408,7 @@ function appendIdeas(
     more.type = 'button';
     const rest = rows.length - shown.length;
     more.textContent = allOpen ? 'Show fewer' : `${rows.length - IDEAS_SHOWN} more`;
-    more.title = allOpen ? `Fold the ideas back to the first ${IDEAS_SHOWN}` : `Show ${rest} more idea${rest === 1 ? '' : 's'}`;
+    more.title = allOpen ? `Fold the Inbox back to the first ${IDEAS_SHOWN}` : `Show ${rest} more idea${rest === 1 ? '' : 's'}`;
     more.addEventListener('click', () => {
       folds.setFolded(IDEAS_ALL, allOpen);
       rerender();

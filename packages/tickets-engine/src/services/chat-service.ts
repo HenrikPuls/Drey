@@ -563,7 +563,7 @@ export class ChatService implements ChatServicePort {
       }
       const phases = snap.pipeline.map((p) => p.id);
       const from = column.phase.id;
-      const to = phases.includes('build') ? 'build' : (phases[phases.indexOf(from) + 1] ?? null);
+      const to = phases.includes('building') ? 'building' : phases.includes('build') ? 'build' : (phases[phases.indexOf(from) + 1] ?? null);
       if (to === null || phases.indexOf(to) <= phases.indexOf(from)) {
         return { ok: false, error: `${ticket} is already past the build queue` };
       }

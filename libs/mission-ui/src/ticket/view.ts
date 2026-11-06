@@ -881,7 +881,7 @@ export class TicketView {
       return false;
     }
     const at = doc.phases.findIndex((phase) => phase.id === doc.phase);
-    const build = doc.phases.findIndex((phase) => phase.id === 'build');
+    const build = doc.phases.findIndex((phase) => phase.id === 'build' || phase.id === 'building');
     return at >= 0 && (build < 0 ? at <= 1 : at < build);
   });
 
