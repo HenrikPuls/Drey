@@ -1026,7 +1026,8 @@ dictation is always recoverable. The button needs the language model
 on (Settings → LLM); while the call runs it stays disabled, and a
 reply it cannot read changes nothing.
 
-**From anywhere.** The same dialog is one chord away outside Drey:
+**From anywhere.** The title bar's **Capture by voice** button opens the same
+dialog, and it is one chord away outside Drey:
 `Ctrl+Alt+T` anywhere in Windows brings Drey to the front, opens the
 board and opens the dialog on Description with dictation already
 started (a failed start shows the hint — press Win+H yourself, or
@@ -1576,7 +1577,7 @@ status or button. The bar stays put while the page scrolls beneath it.
 On an iPad the app works like the desktop: a header with the **left sidebar** toggle, the
 **Work · Crew** switch and the **right sidebar** toggle. The left sidebar lists the area (the
 tickets, the crew), the middle shows the open ticket, persona or settings, the right sidebar
-is the Mission Control chat. Held sideways the iPad opens all three; held upright it opens the
+switches between the Mission Control chat and **Capacity**. Held sideways the iPad opens all three; held upright it opens the
 list and the middle, and the right sidebar slides over the page. Which sidebars are open is
 remembered on that iPad, separately for each way it is held.
 

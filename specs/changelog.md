@@ -43,6 +43,14 @@
   `MC_APP_NAV` provider in `app.config.ts` that the shell now shadows. Every new string is marked
   `TODO(i18n)` for the req-102 catalog.
 
+### E13-16 + req-96 follow-up — Capture by voice in the title bar, Capacity on the iPad
+
+**Not yet manually verified by the owner.**
+
+- **Capture by voice** is a title-bar button (mic icon, tooltip with the chord). It runs `tickets.newTicket`, which opens the new ticket with dictation. **SDK 1.47:** `ui.registerTitlebarAction({ label, icon?, commandId })`.
+- **Capacity on the iPad:** the right pane has a Mission Control · Capacity switch, the same two views as the desktop dock. The choice lasts until the app reloads.
+- **Specs:** `titlebar-actions.service.spec`, `e2e/mission-control-shell`, `e2e/desk-board-team`.
+
 ### req-99b — The six state names on every client; Accept on Ready to try is the sign-off
 
 **Not yet manually verified by the owner.** Column titles come from `_meta/pipeline.md`, so the live board shows the six names from the cut-over (E14-7) on; until then it keeps its own. This change removes what was hard-coded around them.

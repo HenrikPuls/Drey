@@ -148,6 +148,8 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
   test('shows the board, the team and the capacity band', async ({ page, electronApp }, testInfo) => {
     // The Work view exists once the plugin has registered it; Ctrl+2 before that does nothing.
     await expect(page.locator('[role="tablist"][aria-label="Views"] [role="tab"]')).toHaveText(['Notes', 'Work'], { timeout: 30_000 });
+    // The title-bar capture button runs the same command as its chord (E13-16).
+    await expect(page.locator('app-titlebar .tb-action', { hasText: 'Capture by voice' })).toHaveAttribute('title', 'Capture by voice (Ctrl Alt T)');
     // The status items (E12-15): today's cost and what waits, "in Work" from the Notes view.
     const statusBar = page.locator('app-status-bar');
     await expect(statusBar).toContainText(/\$\d+\.\d\d of \$\d+ today/, { timeout: 15_000 });

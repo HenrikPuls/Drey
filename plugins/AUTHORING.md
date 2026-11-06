@@ -113,6 +113,7 @@ leaves the app on the previous build. Verify with
   the target ids.
   1.45 lets `ctx.vault.markManaged` take a list of vault ids (an empty list clears): the tickets
   plugin flags every vault that holds its store checkout.
+  1.47 adds `ui.registerTitlebarAction({ label, icon?, commandId })`: a button in the title bar.
   1.46 added `api.i18n` (renderer) and `ctx.i18n` (main): the host's message
   catalog and ICU runtime — `t(key, params)`, `lookup`, `has` and the `Intl`
   helpers (ADR-0091; see "SDK 1.46 — strings from the catalog" below).

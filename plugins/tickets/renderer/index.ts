@@ -3257,6 +3257,11 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     void invokeBoard('fleetStatus').then((result) =>
       applyFleetSnapshot((result ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
 
+    api.ui.registerTitlebarAction({
+      label: api.i18n.t('work.capture_by_voice'),
+      icon: 'mic',
+      commandId: 'tickets.newTicket',
+    });
     // New ticket from anywhere (req-75 W5a, SDK 1.37): the system-wide
     // chord raises Drey, reveals the board and opens the create modal.
     // Global — the base registers it with the OS; it never also fires

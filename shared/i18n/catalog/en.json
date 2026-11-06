@@ -38,6 +38,7 @@
   "work.open_board": "Open Board tab",
   "work.refresh_board": "Refresh the board",
   "work.refresh_board.hint": "Reads the tickets repository again",
+  "work.capture_by_voice": "Capture by voice",
   "work.crew": "Crew",
   "work.crew.open": "Open the Crew tab",
   "work.crew.open_with_detail": "{detail}\nOpen the Crew tab",
@@ -81,6 +82,8 @@
   "shell.notes": "Notes",
   "shell.work": "Work",
   "shell.crew": "Crew",
+  "shell.capacity": "Capacity",
+  "shell.right_pane": "Right pane",
   "shell.settings": "Settings",
 
   "menu.title": "Menu",

@@ -27,4 +27,5 @@ export {
   type ContributableMenu,
 } from './menu-contributions.service';
 export { StatusItemsService, type StatusItemView } from './status-items.service';
+export { TitlebarActionsService, type TitlebarActionView } from './titlebar-actions.service';
 export { HOST_CODEMIRROR } from './runtime-exports';

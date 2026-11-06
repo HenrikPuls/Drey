@@ -360,9 +360,6 @@ and severity per item in
 [`convergence-gaps.md`](../docs/design/work-panel/convergence-gaps.md); the
 owner confirms scope and order before any of it starts:
 
-- **E13-16 — Title-bar capture button.** "Capture by voice" on the desk
-  boards; needs the owner's ruling on the chord first (Ctrl+Alt+N is the
-  daily-note capture; tickets use Mod+Alt+T) (G-13).
 - **E13-17 — Board filter and cost toggle.** "Filter: all personas" and
   "Cost by column" on the Board tab (board 7e) (G-15).
 - **E13-19 — Crew tab completion.** New persona from a template, Remove from
@@ -408,13 +405,6 @@ owner confirms scope and order before any of it starts:
   `Repositories` wait for E12-3b [K-03, K-04, N-02, N-03, N-07]. Files:
   `libs/mission-ui/src/work/`, `settings/`, `apps/mission-control/src/app/`
   (touches the same stylesheet as E12-13 — run after it, or together).
-- **E12-15b — Capture label** (rest of E12-15, S; the status items, Crew header and
-  empty Capacity frame shipped). The title-bar `Capture by voice` label (chord
-  `Mod+Alt+T`, ruled, E13-16/G-13) lives in `index.ts` too; the Crew header
-  counts every card and shows the state summary [I-01, I-03, I-04, L-04, L-05]
-  (`team/team-view.ts`). The Autopilot item becomes three-state with req-95b
-  (`TODO(req-95b)` in `status-slot.ts`; until then Paused reads as Off). The button
-  needs a title-bar seam the SDK does not have yet.
 - **E12-16 — Board and Crew completion** (proposed by the E12-10 audit; M, partly
   L). `Filter: all personas` and `Cost by column` (E13-17); empty columns say
   `Empty` quietly, `New idea` moves to the board header; `New persona`, `Remove
@@ -914,13 +904,11 @@ rest are kept so they still match `docs/11`.
 
 - **Phases of the chain inside Building (req-99c; follow-up of req-99a, needs `fleet/orchestrator.ts` and `fleet/runs.ts`, which wave 2 kept apart).** The owner decided (Q6) that Plan, Build, Ralf's review and Tessa's test are phases of the chain inside the one Building stage. The engine's chain is still built from pipeline columns (`mergeChain`, `validateChain`), so today Building runs one `build-default` run and then hands over to Ready to try, the same as the live board's one agent column. To do: the gates as data of the Building column, the fleet running them one after the other inside one claim, the flow editor and gate bar showing them instead of the stages. Also decides how `review-default` and `qa-default` come back into the default flow.
 
-- **Where a commit run shows (req-99a follow-up). Owner's call, one value in `dricket.toml`:** with `claim = ["building"]` a commit run shows the ticket in Building while it holds the claim; `claim = ["building", "ready"]` keeps it on Ready to try but makes `ready` a dk claim stage, which Q6 names Building alone for.
-
 - **Cost-by-phase table and the estimate format on every layout (owner request 2026-11-06, outside the list; req-98).** The cost-by-phase table at the end of the ticket on desktop, iPad and phone; the estimate formats `$3.00–5.20 · from 3 runs` and `no estimate yet (first run)` (catalog strings with ICU plurals, `Intl` currency; concept §5.4). Replaces the current "median of n similar runs" / "not yet" wording in `libs/mission-ui` and the desk.
 
 - **Notes on phone and iPad — clients (owner, 2026-11-06, canvas decision 18; req-101).** No new Markdown surface: it reuses `libs/markdown-surface` and the Angular `mc-markdown`; View · Live · Source ship first, the pinned formatting strip is a follow-up of this item (Q5). Search (`GET /api/notes/search`), recent notes (`GET /api/notes/recent`) and folders (`GET /api/notes`) over the Notes API (milestone 174, `packages/tickets-engine/src/contracts/notes.ts`); a note opens (`GET /api/notes/note`) in the existing Markdown editor (View · Live · Source) from `libs/mission-ui` over `libs/markdown-surface`; the pencil starts editing in Live Preview, Cancel (X) and Save (check) are icons; tags, link to the ticket, "Ask about this note". Saving is `POST /api/notes/note` with the read `mtime` as `baseMtime`; a `conflict` reply carries the disk text and mtime for the merge, a new note is `POST /api/notes`; the client adopts the text a save returns (`updated:` may have moved) and refreshes on the SSE event `notes`. `ApiError` in `apps/mission-control/src/app/api/client.ts` drops the body today, so it has to keep the `code` for the catalog keys; a read-only device (`/api/me` `device.readOnly`) gets no pencil. Depends on the i18n catalog (req-102).
 
-- **req-96 follow-ups (shipped 2026-11-06, see the changelog; the phone-menu-as-root part of canvas decision 17 shipped with it).** (1) **Capacity on the iPad**: the right pane shows the Mission Control chat only; the desktop dock's Capacity tab has no iPad place yet. (2) The Notes segment and menu row wait behind `NOTES_ENABLED` (`app.ts`) for req-101; the Autopilot chip slot `[autopilot]` in `mc-shell-header` for req-95b.
+- **req-96 follow-ups (shipped 2026-11-06, see the changelog; the phone-menu-as-root part of canvas decision 17 shipped with it).** The Notes segment and menu row wait behind `NOTES_ENABLED` (`app.ts`) for req-101; the Autopilot chip slot `[autopilot]` in `mc-shell-header` for req-95b.
 
 - **Autopilot clients (owner request 2026-11-06, outside the list; req-95b; the engine half req-95a is built, ADR-0077 later change).** Build the clients of concept §6.1 over `POST /api/chain/autopilot` and `chain.autopilot` (`autopilotOf()`): the desktop status-bar item with `Mod+Alt+P`, the iPad header chip, the phone app-bar icon with its sheet of three 56 px rows, the catalog keys `autopilot.state.on / .paused / .off`, `autopilot.stop_all`, `autopilot.resume_at {time}`, the refusal codes (`read_only`, `bad_resume_at`, `bad_state`, `runner_down`) mapped to words, and tests (the three clients, the read-only rule). The desktop path also needs `chainAutopilot` / `setAutopilot` in the engine's `TEAM_METHODS` / `FLEET_METHODS` and the plugin's IPC. On shipping, mark concept §6.1 and gap G-42 built. Depends on the i18n catalog item for the keys.
 

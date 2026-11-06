@@ -37,6 +37,20 @@
 
 <span class="spacer"></span>
 
+@for (action of actions(); track action.key) {
+  <button
+    type="button"
+    class="tb-action"
+    [title]="keys.titled(action.spec.label, action.spec.commandId)"
+    (click)="keys.run(action.spec.commandId)"
+  >
+    @if (action.icon; as icon) {
+      <app-icon [name]="icon" [size]="13" />
+    }
+    <span>{{ action.spec.label }}</span>
+  </button>
+}
+
 <ng-container
   [ngTemplateOutlet]="dockToggle"
   [ngTemplateOutletContext]="{ side: 'right', icon: 'panel-right' }"

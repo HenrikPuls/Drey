@@ -42,6 +42,7 @@ import { HOST_CODEMIRROR } from './runtime-exports';
 import { highlightCode } from './code-highlight';
 import { mountMarkdownView } from './markdown-view';
 import { StatusItemsService } from './status-items.service';
+import { TitlebarActionsService } from './titlebar-actions.service';
 import { ConversationTargetsService } from './conversation-targets.service';
 import { browserNotificationApi, showOsNotification } from './os-notify';
 import { dreyHighlightStyle } from '@markdown-surface/editor-theme';
@@ -105,6 +106,7 @@ export class PluginApiFactory {
   private readonly contextMenuItems = inject(EditorContextMenuRegistry);
   private readonly toolbarButtons = inject(ToolbarContributionsService);
   private readonly statusItems = inject(StatusItemsService);
+  private readonly titlebarActions = inject(TitlebarActionsService);
   private readonly conversationTargets = inject(ConversationTargetsService);
   private readonly log = inject(LogService);
   private readonly decorations = inject(FileDecorationService);
@@ -424,6 +426,7 @@ export class PluginApiFactory {
         highlightCode: async (code, lang) =>
           highlightCode(code, lang, await this.codeHighlightStyle()),
         icon: (name, size) => createIconElement(name, size),
+        registerTitlebarAction: (spec) => track(this.titlebarActions.register(spec)),
         createStatusItem: (spec) => {
           const handle = this.statusItems.create(spec);
           track(handle.remove);
