@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { AppBar } from '../app-bar/app-bar';
+import { McI18n } from '../i18n/i18n.service';
 import { deviceListOf } from './device-list';
 import {
   ACCENTS,
@@ -57,6 +58,7 @@ export const VIDEOS_IN_GIT_WARNING =
 export class Settings {
   protected readonly theme = inject(Theme);
   private readonly state = inject(MC_SETTINGS_STATE, { optional: true });
+  private readonly i18n = inject(McI18n);
 
   protected readonly pages = SETTINGS_PAGES;
   protected readonly themes = THEMES;
@@ -117,8 +119,12 @@ export class Settings {
       case 'devices': {
         const count = this.view()?.devices.length;
         return count === undefined ? '' : `${count} paired`;      }
-      case 'engine':
-        return '';
+      case 'engine': {
+        const videos = this.view()?.videos;
+        return videos === undefined
+          ? ''
+          : this.i18n.t(videos.inGit ? 'settings.engine.summary_in_git' : 'settings.engine.summary_out', { mb: videos.maxMb });
+      }
     }
   }
 
@@ -161,6 +167,9 @@ export class Settings {
   protected pickSize(size: TextSize): void {
     this.theme.setTextSize(size);
   }
+
+  /** The chosen step's place on the control (0 = S); the steps up to it are tinted. */
+  protected readonly sizeIndex = computed(() => this.sizes.indexOf(this.theme.textSize()));
 
   protected onCompact(event: Event): void {
     this.theme.setCompact((event.target as HTMLInputElement).checked);

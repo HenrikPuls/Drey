@@ -67,8 +67,8 @@
 
             <h3 class="cap">Text size</h3>
             <div class="sizes" role="group" aria-label="Text size">
-              @for (s of sizes; track s) {
-                <button type="button" class="size" [class.on]="theme.textSize() === s" [attr.aria-pressed]="theme.textSize() === s" (click)="pickSize(s)">{{ s }}</button>
+              @for (s of sizes; track s; let i = $index) {
+                <button type="button" class="size" [class.on]="theme.textSize() === s" [class.lte]="i <= sizeIndex()" [attr.aria-pressed]="theme.textSize() === s" (click)="pickSize(s)">{{ s }}</button>
               }
             </div>
             <div class="preview" [style.background]="previewSwatch().panel">

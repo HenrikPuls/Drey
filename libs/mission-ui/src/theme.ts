@@ -1,7 +1,7 @@
 /**
  * The device's appearance (E12-3, design boards 5f / 5g): the theme
  * (Anthrazit, Drey, Cyberpunk), the highlight colour, the text size
- * S / M / L / XL, Compact lists and Reduce motion. All of it is saved on this
+ * S / M / L / XL / XXL, Compact lists and Reduce motion. All of it is saved on this
  * device only (localStorage) and applies at once: the theme and the two
  * switches ride `data-*` attributes on the document element that the
  * token blocks and component styles key off, the highlight colour is a
@@ -60,13 +60,13 @@ export const ACCENT_COLOR: Record<Exclude<AccentName, 'default'>, string> = {
   yellow: '#e6d27a',
 };
 
-/** Text sizes (owner decision 2026-11-04): S / M / L / XL, L the default (iOS body size). */
-export type TextSize = 'S' | 'M' | 'L' | 'XL';
+/** Text sizes (owner decision 2026-11-04, XXL added by E12-14 / canvas decision 8): S / M / L / XL / XXL, L the default (iOS body size). */
+export type TextSize = 'S' | 'M' | 'L' | 'XL' | 'XXL';
 
-export const TEXT_SIZES: readonly TextSize[] = ['S', 'M', 'L', 'XL'];
+export const TEXT_SIZES: readonly TextSize[] = ['S', 'M', 'L', 'XL', 'XXL'];
 
 /** The body text size in px each step stands for (the board's "L · 17 px"). */
-export const TEXT_BODY_PX: Record<TextSize, number> = { S: 15, M: 16, L: 17, XL: 19 };
+export const TEXT_BODY_PX: Record<TextSize, number> = { S: 15, M: 16, L: 17, XL: 19, XXL: 21 };
 
 /** The px every stylesheet writes its base font-sizes in (the body at the scale's origin). */
 export const TEXT_BASE_PX = 15;
@@ -77,17 +77,18 @@ export const TEXT_SCALE: Record<TextSize, number> = {
   M: TEXT_BODY_PX.M / TEXT_BASE_PX,
   L: TEXT_BODY_PX.L / TEXT_BASE_PX,
   XL: TEXT_BODY_PX.XL / TEXT_BASE_PX,
+  XXL: TEXT_BODY_PX.XXL / TEXT_BASE_PX,
 };
 
 export const DEFAULT_TEXT_SIZE: TextSize = 'L';
 
 /**
- * Earlier scales onto the current four, by the nearest body px. Version 1
+ * Earlier scales onto the current five, by the nearest body px. Version 1
  * (no marker, the first build): S 13.5, M 15, L 17.25, XL 19.5, XXL 22.5 px.
  * Version 2 (marker '2', E12-7): S 15, L 17, XL 19, XXL 21, XXXL 24 px.
  */
-const LEGACY_V1: Readonly<Record<string, TextSize>> = { S: 'S', M: 'S', L: 'L', XL: 'XL', XXL: 'XL' };
-const LEGACY_V2: Readonly<Record<string, TextSize>> = { S: 'S', L: 'L', XL: 'XL', XXL: 'XL', XXXL: 'XL' };
+const LEGACY_V1: Readonly<Record<string, TextSize>> = { S: 'S', M: 'S', L: 'L', XL: 'XL', XXL: 'XXL' };
+const LEGACY_V2: Readonly<Record<string, TextSize>> = { S: 'S', L: 'L', XL: 'XL', XXL: 'XXL', XXXL: 'XXL' };
 
 /** The marker value of the current scale. */
 export const TEXT_SIZE_SCALE_VERSION = '3';

@@ -117,6 +117,8 @@
 
 .page-body {
   display: flex;
+  width: 100%;
+  box-sizing: border-box;
   flex: 1 1 auto;
   flex-direction: column;
   gap: 12px;
@@ -201,25 +203,38 @@
 
 .sizes {
   display: flex;
-  gap: 6px;
-}
-
-.size {
-  flex: 1 1 0;
-  min-width: 0;
-  height: 48px;
-  font: inherit;
-  font-size: 15px; /* the step labels never scale with the text size */
-  color: var(--text);
-  cursor: pointer;
-  background: var(--panel);
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
 }
 
-.size.on {
+.size {
+  flex: 1 1 0;
+  min-width: 44px;
+  height: 44px;
+  font: inherit;
+  font-size: 15px; /* the step labels never scale with the text size */
+  color: var(--text-2);
+  cursor: pointer;
+  background: var(--panel);
+  border: 0;
+  border-right: 1px solid var(--line);
+}
+
+.size:last-child {
+  border-right: 0;
+}
+
+/* The steps up to the chosen one are tinted, so the control reads as a slider. */
+.size.lte {
+  color: var(--text);
   background: var(--panel-2);
-  border-color: var(--accent);
+}
+
+.size.on {
+  font-weight: 700;
+  color: var(--bg);
+  background: var(--accent);
 }
 
 .preview {

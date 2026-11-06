@@ -129,10 +129,44 @@ describe('Settings', () => {
     expect(theme.textSize()).toBe('XL');
     fixture.detectChanges();
     expect(el.querySelector('.pv-line')?.textContent).toBe('XL · 19 px body text');
+    click(el.querySelectorAll('.sizes .size')[4]!);
+    expect(theme.textSize()).toBe('XXL');
+    expect(storage.get('mc.textSize')).toBe('XXL');
+    fixture.detectChanges();
+    expect(el.querySelector('.pv-line')?.textContent).toBe('XXL · 21 px body text');
     const compact = el.querySelectorAll<HTMLInputElement>('.sw')[0]!;
     compact.checked = true;
     compact.dispatchEvent(new Event('change'));
     expect(theme.compact()).toBe(true);
+  });
+
+  it('offers five text steps S / M / L / XL / XXL, each one keeping its value', () => {
+    const { el, go, theme, fixture } = mount();
+    go('appearance');
+    const steps = Array.from(el.querySelectorAll('.sizes .size'));
+    expect(steps.map((b) => b.textContent?.trim())).toEqual(['S', 'M', 'L', 'XL', 'XXL']);
+    const lines: string[] = [];
+    for (const step of steps) {
+      click(step);
+      fixture.detectChanges();
+      lines.push(el.querySelector('.pv-line')?.textContent ?? '');
+      expect(step.getAttribute('aria-pressed')).toBe('true');
+    }
+    expect(lines).toEqual([
+      'S · 15 px body text',
+      'M · 16 px body text',
+      'L · 17 px body text, the default',
+      'XL · 19 px body text',
+      'XXL · 21 px body text',
+    ]);
+    expect(theme.textSize()).toBe('XXL');
+    expect(el.querySelectorAll('.sizes .size.lte')).toHaveLength(5);
+  });
+
+  it('the Engine row says more than one word', () => {
+    const { el } = mount();
+    const engine = Array.from(el.querySelectorAll('.cats .row')).find((r) => r.querySelector('b')?.textContent === 'Engine');
+    expect(engine?.querySelector('.val')?.textContent).toBe('Videos kept out · up to 25 MB');
   });
 
   it('revokes a device only on the second press, and never the current one', () => {

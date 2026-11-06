@@ -397,14 +397,6 @@ owner confirms scope and order before any of it starts:
   dialog composer; tab titles are `T-0121 · Title` for every kind [B-01–B-03,
   C-03, D-01, D-02, D-05]. Files: `ticket-document/`, `ticket-header.ts`,
   the thread and wait views.
-- **E12-14 — Mission Control Work rows and the iPad layout** (proposed by the
-  E12-10 audit; M). A ticket is listed once (the Needs-you copy no longer repeats
-  under its column); rows show a detail line, age, persona and cost; Settings
-  details (Devices, Appearance, Chat) take the middle and right area instead of a
-  ~120 px column; the Engine row holds more than one word; `Away and alerts` and
-  `Repositories` wait for E12-3b [K-03, K-04, N-02, N-03, N-07]. Files:
-  `libs/mission-ui/src/work/`, `settings/`, `apps/mission-control/src/app/`
-  (touches the same stylesheet as E12-13 — run after it, or together).
 - **E12-16 — Board and Crew completion** (proposed by the E12-10 audit; M, partly
   L). `Filter: all personas` and `Cost by column` (E13-17); empty columns say
   `Empty` quietly, `New idea` moves to the board header; `New persona`, `Remove

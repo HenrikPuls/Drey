@@ -98,6 +98,12 @@
   "menu.age.hours": "{n} h",
   "menu.age.days": "{n} d",
 
+  "work.row.waiting_for": "Waiting for {ids}",
+  "work.row.running": "Running now",
+
+  "settings.engine.summary_in_git": "Videos in git · up to {mb} MB",
+  "settings.engine.summary_out": "Videos kept out · up to {mb} MB",
+
   "app_bar.back_to": "Back to {name}",
   "app_bar.menu_history": "Menu and chat history"
 }

@@ -644,3 +644,32 @@ button:focus-visible {
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
 }
+
+/* E12-14, board 10c: a row is id and age, the title, one detail line, then persona, ctx and cost. */
+.age {
+  flex: none;
+  font-size: calc(13px * var(--mc-text, 1));
+  color: var(--text-3);
+}
+
+.row-detail {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0 0;
+  font-size: calc(13.5px * var(--mc-text, 1));
+  color: var(--text-2);
+}
+
+.row-detail.warn {
+  color: var(--warn);
+}
+
+.hspace {
+  flex: 1;
+}
+
+.tkcap {
+  font-family: var(--sans);
+  color: var(--text-3);
+}

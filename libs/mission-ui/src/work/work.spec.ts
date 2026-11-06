@@ -36,11 +36,14 @@ import {
   personaMapOf,
   questionCardOf,
   questionNeedOf,
+  rowAgeOf,
+  sinceOf,
   swipeActionOf,
   swipeProgressOf,
   ticketPersonaOf,
   tokensSumLabelOf,
   vaultTitleOf,
+  withoutNeedCopies,
   type McBoard,
   type McNeed,
   type McPersona,
@@ -1465,5 +1468,103 @@ describe('Work: Done this week and Show older (E13-21)', () => {
     expect(done(work).older().map((e) => e.id)).toEqual(['T-0003', 'T-0002']);
     done(work).onOlderQuery({ target: { value: 'billing' } } as unknown as Event);
     expect(done(work).older().map((e) => e.id)).toEqual(['T-0002']);
+  });
+});
+
+// --- E12-14: one row per ticket, with its detail line, age, persona and cost -----------
+
+describe('one row per ticket (E12-14)', () => {
+  const NOW = Date.parse('2026-11-06T12:00:00Z');
+  const t = (key: string, params?: Record<string, unknown>): string =>
+    `${key}${params === undefined ? '' : JSON.stringify(params)}`;
+  const build = (): McBoard => ({
+    columns: [
+      { phase: { id: 'inbox', title: 'Inbox' }, tickets: [ticket('T-0001', { title: 'An idea' })] },
+      {
+        phase: { id: 'build', title: 'Building' },
+        tickets: [
+          ticket('T-0002', { title: 'Asked', meta: { persona: 'pia' } }),
+          ticket('T-0003', {
+            title: 'Costly',
+            meta: { persona: 'pia', entered: { build: '2026-11-06T09:00:00Z' } },
+            usage: { tokensIn: 100, tokensOut: 50, cost: 1.2, runs: 1 },
+          }),
+        ],
+      },
+    ],
+  });
+
+  it('lists a ticket asked about under Needs you once: not again under its state group', () => {
+    const groups = withoutNeedCopies(
+      groupsOf([need('question', 'Pick one', { ticketId: 'T-0002' })], build(), [persona('pia')]),
+    );
+    const rows = groups.flatMap((g) => (g.kind === 'phase' ? g.tickets.map((vm) => vm.id) : []));
+    expect(rows).toEqual(['T-0001', 'T-0003']);
+    const asked = groups.flatMap((g) => (g.kind === 'needs' ? g.needs.map((vm) => vm.need.ticketId) : []));
+    expect(asked).toEqual(['T-0002']);
+    expect(new Set([...rows, ...asked]).size).toBe(3);
+  });
+
+  it('drops a state group that the need empties, and changes nothing without needs', () => {
+    const board: McBoard = {
+      columns: [{ phase: { id: 'build', title: 'Building' }, tickets: [ticket('T-0002')] }],
+    };
+    const withNeed = withoutNeedCopies(groupsOf([need('question', 'Q', { ticketId: 'T-0002' })], board, []));
+    expect(withNeed.map((g) => g.title)).toEqual(['Needs you']);
+    const plain = groupsOf([], board, []);
+    expect(withoutNeedCopies(plain)).toEqual(plain);
+  });
+
+  it('counts the age from entering the state, else from the claim; hides it without a stamp', () => {
+    const entered = ticket('T-1', {
+      meta: { entered: { build: '2026-11-06T09:00:00Z' }, claimedAt: '2026-11-01T00:00:00Z' },
+    });
+    expect(sinceOf(entered, 'build')).toBe('2026-11-06T09:00:00Z');
+    expect(sinceOf(entered, 'ready')).toBe('2026-11-01T00:00:00Z');
+    expect(sinceOf(ticket('T-2'), 'build')).toBeNull();
+    expect(rowAgeOf('2026-11-06T11:55:00Z', NOW, t)).toBe('menu.age.minutes{"n":5}');
+    expect(rowAgeOf('2026-11-06T09:00:00Z', NOW, t)).toBe('menu.age.hours{"n":3}');
+    expect(rowAgeOf('2026-11-04T12:00:00Z', NOW, t)).toBe('menu.age.days{"n":2}');
+    expect(rowAgeOf(null, NOW, t)).toBe('');
+    expect(rowAgeOf('junk', NOW, t)).toBe('');
+  });
+
+  function render(state: FakeState): HTMLElement {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [{ provide: MC_WORK_STATE, useValue: state }] });
+    const fixture = TestBed.createComponent(Work);
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('renders one row per ticket with detail line, age, persona and "$1.20 so far"', () => {
+    const base = build();
+    const board: McBoard = {
+      columns: [
+        {
+          ...base.columns[0]!,
+          tickets: [ticket('T-0001', { title: 'An idea', blocked: ['T-0009'], meta: { blockedBy: ['T-0009'] } })],
+        },
+        base.columns[1]!,
+      ],
+    };
+    const { state } = makeFake({
+      needs: [need('question', 'Pick one', { ticketId: 'T-0002' })],
+      board,
+      personas: [persona('pia')],
+      runs: [{ state: 'running', ticketId: 'T-0003' }],
+    });
+    const el = render(state);
+    const rows = Array.from(el.querySelectorAll('button.ticket-card'));
+    expect(rows.map((r) => r.querySelector('.tid')?.textContent)).toEqual(['T-0001', 'T-0003']);
+    const costly = rows[1]!;
+    expect(costly.querySelector('.ticket-title')?.textContent).toBe('Costly');
+    expect(costly.querySelector('.age')?.textContent).toMatch(/\d+ (min|h|d)/);
+    expect(costly.querySelector('.row-detail')?.textContent?.trim()).toBe('Running now');
+    expect(costly.querySelector('.pchip')?.textContent).toContain('PIA');
+    expect(costly.querySelector('.tkcost')?.textContent?.replace(/\s+/g, ' ').trim()).toBe('$1.20 so far');
+    expect(rows[0]!.querySelector('.row-detail')?.textContent?.trim()).toBe('Waiting for T-0009');
+    expect(el.querySelectorAll('.need-card')).toHaveLength(1);
+    expect(el.textContent?.match(/T-0002/g)).toHaveLength(1);
   });
 });

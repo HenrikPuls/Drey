@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { AppBar } from '../app-bar/app-bar';
+import { McI18n } from '../i18n/i18n.service';
 import {
   MC_WORK_STATE,
   SWIPE_FLASH_MS,
@@ -11,10 +12,12 @@ import {
   olderDoneOf,
   questionCardOf,
   questionNeedOf,
+  rowAgeOf,
   swipeActionOf,
   swipeProgressOf,
   ticketPersonaOf,
   vaultTitleOf,
+  withoutNeedCopies,
   type McAnswerReply,
   type McBoard,
   type McDoneEntry,
@@ -57,10 +60,38 @@ export class Work {
   /** The device state slice; null until the shell binds McState to it. */
   protected readonly state = inject(MC_WORK_STATE, { optional: true });
 
+  private readonly i18n = inject(McI18n);
+
+  /** The cost caption ("so far") beside a row's dollars. */
+  protected readonly soFar = this.i18n.t('cost.so_far');
+
+  /** The clock the rows' ages read; one tick a minute. */
+  private readonly now = signal(Date.now());
+
+  /** One row per ticket: a ticket asked about under Needs you is not listed again. */
   protected readonly groups = computed<WorkGroup[]>(() => {
     const state = this.state;
-    return state === null ? [] : groupsOf(state.needs, state.board, state.personas);
+    return state === null ? [] : withoutNeedCopies(groupsOf(state.needs, state.board, state.personas));
   });
+
+  /** The row's age (`5 min`, `3 h`, `2 d`); '' hides it. */
+  protected ageOf(vm: TicketVm): string {
+    return rowAgeOf(vm.sinceAt, this.now(), (key, params) => this.i18n.t(key, params));
+  }
+
+  /** The row's detail line: what it waits for, why it is parked, or that it runs; '' = none. */
+  protected detailOf(vm: TicketVm): string {
+    if (vm.blocked && vm.blockers.length > 0) {
+      return this.i18n.t('work.row.waiting_for', { ids: vm.blockers.join(', ') });
+    }
+    if (vm.parkedReason !== null) {
+      return vm.parkedReason;
+    }
+    const live = (this.state?.runs ?? []).some(
+      (run) => run.ticketId === vm.id && run.state !== null && run.state !== undefined && ['starting', 'running', 'stopping', 'detached'].includes(run.state),
+    );
+    return live ? this.i18n.t('work.row.running') : '';
+  }
 
   protected readonly readOnly = computed(() => this.state?.readOnly ?? false);
 
@@ -448,7 +479,9 @@ export class Work {
   }
 
   constructor() {
+    const clock = setInterval(() => this.now.set(Date.now()), 60_000);
     inject(DestroyRef).onDestroy(() => {
+      clearInterval(clock);
       if (this.flashTimer !== null) {
         clearTimeout(this.flashTimer);
       }

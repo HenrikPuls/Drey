@@ -1581,6 +1581,12 @@ switches between the Mission Control chat and **Capacity**. Held sideways the iP
 list and the middle, and the right sidebar slides over the page. Which sidebars are open is
 remembered on that iPad, separately for each way it is held.
 
+Settings → **Appearance** sets the **text size** in five steps — **S, M, L, XL, XXL** (XXL is
+the largest, 21 px body text) — with the preview underneath; it is kept per device and applies at
+once. On an iPad the Settings page uses the middle and right area. In **Work** every ticket is
+one row — id and age, title, a line saying what it waits for, the persona and the cost so far
+(**$1.20 so far**); a ticket that needs you is shown once, under **Needs you**.
+
 The chat's **microphone** button (next to Send) dictates into the message
 field: tap it, speak, and the words appear as you talk; tap again to stop.
 The text stays editable and is never sent for you, and typing, sending or

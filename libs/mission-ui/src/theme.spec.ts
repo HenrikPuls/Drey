@@ -124,17 +124,19 @@ describe('storedTheme / persistTheme', () => {
 });
 
 describe('text size scale', () => {
-  it('is S / M / L / XL = 15 / 16 / 17 / 19 px with L the default', () => {
-    expect(TEXT_SIZES).toEqual(['S', 'M', 'L', 'XL']);
-    expect(TEXT_SIZES.map((size) => TEXT_BODY_PX[size])).toEqual([15, 16, 17, 19]);
+  it('is S / M / L / XL / XXL = 15 / 16 / 17 / 19 / 21 px with L the default', () => {
+    expect(TEXT_SIZES).toEqual(['S', 'M', 'L', 'XL', 'XXL']);
+    expect(TEXT_SIZES.map((size) => TEXT_BODY_PX[size])).toEqual([15, 16, 17, 19, 21]);
+    expect(15 * TEXT_SCALE.XXL).toBeCloseTo(21);
+    expect(parseTextSize('XXL')).toBe('XXL');
     expect(DEFAULT_TEXT_SIZE).toBe('L');
     expect(TEXT_SCALE.S).toBe(1);
     expect(15 * TEXT_SCALE.L).toBeCloseTo(17);
   });
 
   it('migrates both earlier scales to the nearest step by px', () => {
-    expect(['S', 'M', 'L', 'XL', 'XXL'].map((v) => migrateLegacyTextSize(v))).toEqual(['S', 'S', 'L', 'XL', 'XL']);
-    expect(['S', 'L', 'XL', 'XXL', 'XXXL'].map((v) => migrateLegacyTextSize(v, '2'))).toEqual(['S', 'L', 'XL', 'XL', 'XL']);
+    expect(['S', 'M', 'L', 'XL', 'XXL'].map((v) => migrateLegacyTextSize(v))).toEqual(['S', 'S', 'L', 'XL', 'XXL']);
+    expect(['S', 'L', 'XL', 'XXL', 'XXXL'].map((v) => migrateLegacyTextSize(v, '2'))).toEqual(['S', 'L', 'XL', 'XXL', 'XXL']);
     expect(migrateLegacyTextSize('huge')).toBe('L');
   });
 
@@ -144,22 +146,35 @@ describe('text size scale', () => {
       getItem: (key: string) => store.get(key) ?? null,
       setItem: (key: string, value: string) => void store.set(key, value),
     } as unknown as Storage;
-    expect(storedTextSize(storage)).toBe('XL');
-    expect(store.get(TEXT_SIZE_STORAGE_KEY)).toBe('XL');
+    expect(storedTextSize(storage)).toBe('XXL');
+    expect(store.get(TEXT_SIZE_STORAGE_KEY)).toBe('XXL');
     expect(store.get(TEXT_SIZE_SCALE_KEY)).toBe('3');
-    expect(storedTextSize(storage)).toBe('XL');
+    expect(storedTextSize(storage)).toBe('XXL');
     expect(storedTextSize(null)).toBe('L');
   });
 
-  it('reads a version-2 value (E12-7) once: XXXL lands on XL, then it stays', () => {
+  it('reads a version-2 value (E12-7) once: XXXL lands on XXL, then it stays', () => {
     const store = new Map<string, string>([[TEXT_SIZE_STORAGE_KEY, 'XXXL'], [TEXT_SIZE_SCALE_KEY, '2']]);
     const storage = {
       getItem: (key: string) => store.get(key) ?? null,
       setItem: (key: string, value: string) => void store.set(key, value),
     } as unknown as Storage;
-    expect(storedTextSize(storage)).toBe('XL');
+    expect(storedTextSize(storage)).toBe('XXL');
     expect(store.get(TEXT_SIZE_SCALE_KEY)).toBe('3');
-    expect(storedTextSize(storage)).toBe('XL');
+    expect(storedTextSize(storage)).toBe('XXL');
+  });
+
+  it('keeps a current-scale XXL, and every existing step its value, across a restart', () => {
+    for (const size of TEXT_SIZES) {
+      const store = new Map<string, string>();
+      const storage = {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => void store.set(key, value),
+      } as unknown as Storage;
+      new Theme({ doc: null, storage }).setTextSize(size);
+      expect(new Theme({ doc: null, storage }).textSize()).toBe(size);
+    }
+    expect(TEXT_BODY_PX).toMatchObject({ S: 15, M: 16, L: 17, XL: 19 });
   });
 
   it('boots a stored legacy M (15 px) to S, the nearest step', () => {
