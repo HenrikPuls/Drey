@@ -9,17 +9,51 @@
  * Run via `npm run test:plugins` (or directly:
  * `node node_modules/vitest/vitest.mjs run --config vitest.plugins.config.mts`).
  */
+import { availableParallelism } from 'node:os';
 import { defineConfig } from 'vitest/config';
+
+/**
+ * Worker cap. vitest's default is one worker per core; on a 32-core box
+ * that is 32 files at once, a good share of them spawning real git / dk
+ * processes (Windows process creation is the scarce resource, not CPU).
+ * Oversubscribed, a 1-4 s real-git spec crossed the 5 s default and
+ * temp-dir cleanups raced slow children (docs/testing-flakes.md); with
+ * the cap the whole suite is both green under overlap and faster.
+ */
+const maxWorkers = Math.max(2, Math.min(8, Math.floor(availableParallelism() / 4)));
+
+/**
+ * Specs that spawn real git / dk / node processes (a single test is 1-5 s
+ * on Windows, idle). Their 5 s default measured how busy the machine was,
+ * not whether the code works, so this group states its own budget; a hung
+ * test still fails, a minute later. Everything else keeps the default.
+ */
+const PROCESS_SPECS = ['packages/**/*.spec.ts', 'plugins/git/**/*.spec.ts'];
 
 export default defineConfig({
   test: {
-    environment: 'node',
-    include: [
-      'plugins/**/*.spec.ts',
-      'packages/**/*.spec.ts',
-      'electron/**/*.spec.ts',
-      'shared/**/*.spec.ts',
-    ],
+    maxWorkers,
     globals: true,
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'processes',
+          environment: 'node',
+          include: PROCESS_SPECS,
+          testTimeout: 60_000,
+          hookTimeout: 60_000,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'units',
+          environment: 'node',
+          include: ['plugins/**/*.spec.ts', 'electron/**/*.spec.ts', 'shared/**/*.spec.ts'],
+          exclude: ['plugins/git/**/*.spec.ts', '**/node_modules/**'],
+        },
+      },
+    ],
   },
 });

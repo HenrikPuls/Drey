@@ -176,7 +176,7 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
     service = new EngineBoardService(hostOf(), git2, 'opencode', 'accept-edits', '', fleet, '/fleet', normalizeFleetCaps({}), normalizeFleetPools({}), normalizeFleetHandover({}), 'owner@test', { events: { ledger: (write) => ledgerWrites.push(write.kind), status: (_p, _at, verb) => fileStatus.push(verb) } });
   }, 120_000);
 
-  afterAll(() => {
+  afterAll(async () => {
     for (const [k, v] of Object.entries(saved)) {
       if (v === undefined) {
         delete process.env[k];
@@ -185,6 +185,7 @@ describe.skipIf(!found.ok)('the board service writing through dk', { timeout: 24
       }
     }
     service?.dispose();
+    await service?.idle();
     rmSync(root, { recursive: true, force: true });
   });
 

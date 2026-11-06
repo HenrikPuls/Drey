@@ -6,6 +6,7 @@ import type { AttachInfo, ProviderAdapter, ProviderStart, WorkerHandle } from '.
 import { execShell, HANDBACK_CONTINUE, HANDOVER_CONTINUE, limitExceeded, probeExec, RunSupervisor, STUCK_FAIL_MS, STUCK_FLAG_MS, usageSummary, type RunSupervisorDeps } from './runs';
 import { processAlive } from './procs';
 import type { RunInfo, RunRequest, RunState } from './protocol';
+import { drainSupervisors, hasSettled, markSettled, settled, trackSupervisor, waitFor } from './run-spec-support';
 import { newTicketFileText, patchTicketFile, parseTicketFile } from '../core/ticket-files';
 import { TicketsGit, type GitExecFn } from '../core/tickets-git';
 
@@ -144,21 +145,6 @@ function request(overrides: Partial<RunRequest> = {}): RunRequest {
   };
 }
 
-/**
- * The supervisors' settled run ids. `state` turns terminal in memory
- * BEFORE the settle has written the ticket (stamp cleared, Verlauf line,
- * commit, persona memory) — so a spec that waits on `state` alone and then
- * reads the ticket races the settle, and a spec that ends right after
- * races the `afterEach` cleanup (the D-4 flake under full-suite load).
- * `onRunSettled` fires as the settle's very last step: waiting on it is
- * waiting for the whole settle.
- */
-const settledRuns = new WeakMap<RunSupervisor, Set<string>>();
-
-async function settled(sup: RunSupervisor, id: string, state: RunState): Promise<void> {
-  await vi.waitFor(() => expect(settledRuns.get(sup)?.has(id) === true ? sup.get(id)?.state : 'not settled yet').toBe(state));
-}
-
 function supervisor(overrides: Partial<RunSupervisorDeps> = {}): {
   sup: RunSupervisor;
   adapter: ReturnType<typeof fakeAdapter>;
@@ -181,11 +167,11 @@ function supervisor(overrides: Partial<RunSupervisorDeps> = {}): {
     ticketsGit: git.ticketsGit,
     ...overrides,
     onRunSettled: (info) => {
-      settledRuns.get(sup)?.add(info.id);
+      markSettled(sup, info.id);
       overrides.onRunSettled?.(info);
     },
   });
-  settledRuns.set(sup, new Set());
+  trackSupervisor(sup);
   return { sup, adapter, git, gate };
 }
 
@@ -196,6 +182,7 @@ describe('RunSupervisor', () => {
   });
 
   afterEach(async () => {
+    await drainSupervisors();
     await fsp.rm(vaultDir, { recursive: true, force: true });
     await fsp.rm(fleetRoot, { recursive: true, force: true });
   });
@@ -346,8 +333,8 @@ describe('RunSupervisor', () => {
     handle.onEvent('bash npm test'); // a call starting is not the end of an action
     expect(handle.interrupt).not.toHaveBeenCalled();
     handle.onEvent('result › 41 passed');
-    await vi.waitFor(() => expect(handle.interrupt).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(sup.get(runId)!.paused).toBe(true));
+    await waitFor(() => expect(handle.interrupt).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(sup.get(runId)!.paused).toBe(true));
   });
 
   it("the column's own max-turns beats the runner default", async () => {
@@ -527,7 +514,7 @@ describe('RunSupervisor', () => {
     expect(adapter.starts[0]!.resumeRef).toBe('ses_gone');
 
     adapter.starts[0]!.onResumeFailed!('the session answered HTTP 404');
-    await vi.waitFor(() => expect(adapter.starts.length).toBe(2));
+    await waitFor(() => expect(adapter.starts.length).toBe(2));
     expect(adapter.handles[0]!.stop).toHaveBeenCalled();
     expect(adapter.starts[1]!.resumeRef).toBeNull();
     expect(adapter.starts[1]!.instruction).toBe('Do the ticket.');
@@ -664,7 +651,7 @@ describe('RunSupervisor', () => {
     const started = await sup.start(request({ ticketRelPath: rel }));
     const runId = (started as { run: { id: string } }).run.id;
     adapter.starts[0]!.onEvent({ ts: '2026-10-20T10:05:00Z', kind: 'usage', waiting: { kind: 'question', text: 'Which API?' } });
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
       expect(sup.get(runId)?.waiting).toEqual({ kind: 'question', text: 'Which API?', since: '2026-10-20T10:05:00Z' });
       expect(await fsp.readFile(path.join(vaultDir, rel), 'utf8')).toContain('asks the owner — Which API?');
     });
@@ -675,7 +662,7 @@ describe('RunSupervisor', () => {
     expect(await fsp.readFile(path.join(vaultDir, rel), 'utf8')).toContain('answered by the owner: v2');
 
     adapter.starts[0]!.onEvent({ ts: '2026-10-20T10:06:00Z', kind: 'usage', waiting: null });
-    await vi.waitFor(() => expect(sup.get(runId)?.waiting).toBeNull());
+    await waitFor(() => expect(sup.get(runId)?.waiting).toBeNull());
   });
 
   it('passes the owner\'s approval to the worker, and refuses when nothing waits for one (req-64)', async () => {
@@ -690,7 +677,7 @@ describe('RunSupervisor', () => {
       kind: 'usage',
       waiting: { kind: 'permission', text: 'bash rm -rf dist', requestId: 'per_1' },
     });
-    await vi.waitFor(() => expect(sup.get(runId)?.waiting?.kind).toBe('permission'));
+    await waitFor(() => expect(sup.get(runId)?.waiting?.kind).toBe('permission'));
     expect((await sup.answerPermission(runId, 'reject')).ok).toBe(true);
     expect(adapter.handles[0]!.answerPermission).toHaveBeenCalledWith('per_1', 'reject');
     expect(await fsp.readFile(path.join(vaultDir, rel), 'utf8')).toContain('rejected by the owner — bash rm -rf dist');
@@ -709,7 +696,7 @@ describe('RunSupervisor', () => {
       kind: 'usage',
       waiting: { kind: 'question', text: 'How should I merge?', requestId: 'frm_1', questions },
     });
-    await vi.waitFor(() => expect(sup.get(runId)?.waiting?.requestId).toBe('frm_1'));
+    await waitFor(() => expect(sup.get(runId)?.waiting?.requestId).toBe('frm_1'));
     expect((await sup.answerQuestion(runId, { q0: 'Rebase' })).ok).toBe(true);
     expect(adapter.handles[0]!.answerQuestion).toHaveBeenLastCalledWith('frm_1', { q0: 'Rebase' });
 
@@ -737,10 +724,10 @@ describe('RunSupervisor', () => {
     const runId = (started as { run: { id: string } }).run.id;
     const fire = adapter.starts[0]!.onEvent;
     fire({ ts: '2026-10-17T12:00:00Z', kind: 'usage', contextWindow: 1_000_000 });
-    await vi.waitFor(() => expect(sup.get(runId)?.contextWindow).toBe(1_000_000));
+    await waitFor(() => expect(sup.get(runId)?.contextWindow).toBe(1_000_000));
     // A later event without the field must not erase the once-set value.
     fire({ ts: '2026-10-17T12:00:01Z', kind: 'note', text: 'working' });
-    await vi.waitFor(() => expect(sup.get(runId)?.lastActivity).toBe('2026-10-17T12:00:01Z'));
+    await waitFor(() => expect(sup.get(runId)?.lastActivity).toBe('2026-10-17T12:00:01Z'));
     expect(sup.get(runId)?.contextWindow).toBe(1_000_000);
   });
 
@@ -753,13 +740,13 @@ describe('RunSupervisor', () => {
     const runId = (started as { run: { id: string } }).run.id;
     const fire = adapter.starts[0]!.onEvent;
     fire({ ts: '2026-10-17T12:05:00Z', kind: 'usage', turn: 'busy' });
-    await vi.waitFor(() => expect(sup.get(runId)?.execSince).toBe('2026-10-17T12:00:00.000Z'));
+    await waitFor(() => expect(sup.get(runId)?.execSince).toBe('2026-10-17T12:00:00.000Z'));
 
     fire({ ts: '2026-10-17T12:10:00Z', kind: 'usage', waiting: { kind: 'question', text: 'Which API?' } });
-    await vi.waitFor(() => expect(sup.get(runId)).toMatchObject({ execMs: 10 * 60_000, execSince: null }));
+    await waitFor(() => expect(sup.get(runId)).toMatchObject({ execMs: 10 * 60_000, execSince: null }));
 
     fire({ ts: '2026-10-17T12:15:00Z', kind: 'usage', turn: 'busy', waiting: null });
-    await vi.waitFor(() => expect(sup.get(runId)?.execSince).toBe('2026-10-17T12:15:00Z'));
+    await waitFor(() => expect(sup.get(runId)?.execSince).toBe('2026-10-17T12:15:00Z'));
     expect(sup.get(runId)?.execMs).toBe(10 * 60_000);
   });
 
@@ -770,10 +757,10 @@ describe('RunSupervisor', () => {
     const runId = (started as { run: { id: string } }).run.id;
     const fire = adapter.starts[0]!.onEvent;
     fire({ ts: '2026-10-17T12:10:00Z', kind: 'usage', turn: 'idle' });
-    await vi.waitFor(() => expect(sup.get(runId)).toMatchObject({ execMs: 10 * 60_000, execSince: null }));
+    await waitFor(() => expect(sup.get(runId)).toMatchObject({ execMs: 10 * 60_000, execSince: null }));
 
     fire({ ts: '2026-10-17T12:12:00Z', kind: 'usage', turn: 'busy' });
-    await vi.waitFor(() => expect(sup.get(runId)?.execSince).toBe('2026-10-17T12:12:00Z'));
+    await waitFor(() => expect(sup.get(runId)?.execSince).toBe('2026-10-17T12:12:00Z'));
     expect(sup.get(runId)?.execMs).toBe(10 * 60_000);
   });
 
@@ -788,10 +775,10 @@ describe('RunSupervisor', () => {
     // flake used to let the older idle event land last).
     fire({ ts: '2026-10-17T12:10:00Z', kind: 'usage', turn: 'idle' });
     fire({ ts: '2026-10-17T12:12:00Z', kind: 'usage', turn: 'busy' });
-    await vi.waitFor(() => expect(sup.get(runId)?.execSince).toBe('2026-10-17T12:12:00Z'));
+    await waitFor(() => expect(sup.get(runId)?.execSince).toBe('2026-10-17T12:12:00Z'));
 
     await sup.stop(runId, 'enough');
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
       expect(sup.get(runId)?.state).toBe('stopped');
       const stored = JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', runId, 'run.json'), 'utf8')) as {
         info: RunInfo;
@@ -870,7 +857,7 @@ describe('RunSupervisor', () => {
     expect(sup.get('R-busy')).toMatchObject({ execMs: 40 * 60_000, execSince: null });
 
     adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:05:00Z', kind: 'usage', turn: 'busy' });
-    await vi.waitFor(() => expect(sup.get('R-busy')?.execSince).toBe('2026-10-17T12:05:00Z'));
+    await waitFor(() => expect(sup.get('R-busy')?.execSince).toBe('2026-10-17T12:05:00Z'));
     expect(sup.get('R-busy')?.execMs).toBe(40 * 60_000);
   });
 
@@ -921,7 +908,7 @@ describe('RunSupervisor', () => {
     const outcome = await sup.stop(runId, 'because');
     expect(outcome.ok).toBe(true);
     expect(adapter.handles[0]!.stop).toHaveBeenCalledTimes(1);
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
       expect(sup.get(runId)?.state).toBe('stopped');
       expect(await fsp.readFile(path.join(vaultDir, rel), 'utf8')).toContain('stopped by the owner — because');
     });
@@ -1156,10 +1143,10 @@ describe('RunSupervisor', () => {
     runId = (started as { run: { id: string } }).run.id;
     built.adapter.handles[0]!.result();
     built.adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(holding).toBe(1));
+    await waitFor(() => expect(holding).toBe(1));
     // The settle is inside its commit: `state` is terminal, the run is not settled.
     expect(sup.get(runId)?.state).toBe('done');
-    expect(settledRuns.get(sup)?.has(runId)).toBe(false);
+    expect(hasSettled(sup, runId)).toBe(false);
     release();
     await settled(sup, runId, 'done');
     const movedRel = 'tickets/build/T-0001.md';
@@ -1250,7 +1237,7 @@ describe('RunSupervisor', () => {
     );
     // Once, and persisted: quietStart is cleared with the send.
     expect(sup.get(id)?.quietStart).toBeUndefined();
-    await vi.waitFor(async () =>
+    await waitFor(async () =>
       expect(JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')).info.quietStart).toBeUndefined(),
     );
 
@@ -1462,7 +1449,7 @@ describe('RunSupervisor', () => {
     onEvent({ ts: '2026-10-17T12:00:02Z', kind: 'usage', turnUsage: { input: 900, cacheRead: 20_000, cacheCreation: 4_000, output: 210 } });
     onEvent({ ts: '2026-10-17T12:00:03Z', kind: 'note', text: 'edit src/a.ts', tool: 'edit' });
     onEvent({ ts: '2026-10-17T12:00:04Z', kind: 'usage', turnUsage: { input: 1_100, cacheRead: 30_000, cacheCreation: null, output: 300 } });
-    await vi.waitFor(() => expect(sup.get(id)?.turns).toBe(2));
+    await waitFor(() => expect(sup.get(id)?.turns).toBe(2));
 
     const info = sup.get(id)!;
     expect(info.handoverMode).toBe('fresh');
@@ -1476,7 +1463,7 @@ describe('RunSupervisor', () => {
     // The record is durable: run.json carries the fields. The write is
     // queued behind the events and truncates before it fills — a read can
     // land on an empty or older file, so it is retried (D-4).
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
       const stored = JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')) as {
         info: { turns?: number; usage?: unknown };
       };
@@ -1494,7 +1481,7 @@ describe('RunSupervisor', () => {
     const stopped = await sup.stop(id, 'wrong direction');
     expect(stopped.ok).toBe(true);
     expect(adapter.handles[0]!.stop).toHaveBeenCalled();
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
       const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
       expect(parseTicketFile(text, rel).meta.run).toBeNull();
     });
@@ -1608,7 +1595,7 @@ describe('RunSupervisor', () => {
     // The first worker's green gate hands the step to the auditor.
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(adapter.handles.length).toBe(2));
+    await waitFor(() => expect(adapter.handles.length).toBe(2));
     // The ticket has not moved yet — the audit round runs first.
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).resolves.toBeUndefined();
 
@@ -1644,7 +1631,7 @@ describe('RunSupervisor', () => {
 
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(adapter.handles.length).toBe(2));
+    await waitFor(() => expect(adapter.handles.length).toBe(2));
     adapter.handles[1]!.result();
     adapter.handles[1]!.fail(0);
     await settled(sup, id, 'failed');
@@ -1754,6 +1741,7 @@ describe('RunSupervisor handover', () => {
   });
 
   afterEach(async () => {
+    await drainSupervisors();
     await fsp.rm(vaultDir, { recursive: true, force: true });
     await fsp.rm(fleetRoot, { recursive: true, force: true });
   });
@@ -1773,7 +1761,7 @@ describe('RunSupervisor handover', () => {
     adapter.starts[0]!.onSessionRef('ses_claude');
     const id = (started as { run: { id: string } }).run.id;
     // the session ref is persisted fire-and-forget: wait for that write to land
-    await vi.waitFor(async () =>
+    await waitFor(async () =>
       expect(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8').catch(() => '')).toContain('ses_claude'),
     );
     return id;
@@ -1833,7 +1821,7 @@ describe('RunSupervisor handover', () => {
     const id = (started as { run: { id: string } }).run.id;
     adapter.starts[0]!.onAttachInfo?.({ address: 'http://127.0.0.1:50918', password: 'pw', pid: 4242 });
     const attachPath = path.join(fleetRoot, 'runs', id, 'attach.json');
-    await vi.waitFor(async () => expect(await fsp.readFile(attachPath, 'utf8').catch(() => '')).toContain('pidStartedMs'));
+    await waitFor(async () => expect(await fsp.readFile(attachPath, 'utf8').catch(() => '')).toContain('pidStartedMs'));
     const attach = JSON.parse(await fsp.readFile(attachPath, 'utf8')) as { pid: number; pidStartedMs: number };
     expect(attach.pid).toBe(process.platform === 'win32' ? 777 : 4242);
     expect(attach.pidStartedMs).toBe(1700000000000);
@@ -1863,20 +1851,23 @@ describe('RunSupervisor handover', () => {
   });
 
   it('defers while a run is in its machine gate', async () => {
+    // The gate's promise exists before the run does: the blocker turns true
+    // when the run enters the gate state, which can be before `execShell` is
+    // called — a release wired inside `execShell` then fired into the void.
     let releaseGate: () => void = () => undefined;
+    const gateReleased = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
     const { sup, adapter } = supervisor({
       exec: noProbe,
-      execShell: () =>
-        new Promise<void>((resolve) => {
-          releaseGate = resolve;
-        }),
+      execShell: () => gateReleased,
     });
     const rel = await writeTicket();
     const started = await sup.start(request({ ticketRelPath: rel }));
     const id = (started as { run: { id: string } }).run.id;
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
-    await vi.waitFor(() => expect(sup.handoverBlocker()).toContain('machine gate'));
+    await waitFor(() => expect(sup.handoverBlocker()).toContain('machine gate'));
     releaseGate();
     await settled(sup, id, 'done');
     expect(sup.handoverBlocker()).toBeNull();
@@ -1912,7 +1903,7 @@ describe('RunSupervisor handover', () => {
     const id = await startedClaudeRun(first.sup, first.adapter);
     const base = { tokensIn: 10_000, tokensOut: 50, cacheReadTokens: 9_000, costUsd: null };
     first.adapter.starts[0]!.onUsageBase!(base);
-    await vi.waitFor(async () => expect(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')).toContain('usageBase'));
+    await waitFor(async () => expect(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')).toContain('usageBase'));
     await first.sup.handOver();
 
     const second = claudeSupervisor();
@@ -1957,7 +1948,7 @@ describe('RunSupervisor handover', () => {
     const id = await startedClaudeRun(first.sup, first.adapter);
     expect((await first.sup.takeover(id)).ok).toBe(true);
     first.adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:00Z', kind: 'usage', turn: 'idle' });
-    await vi.waitFor(() => expect(first.sup.get(id)?.turn).toBe('idle'));
+    await waitFor(() => expect(first.sup.get(id)?.turn).toBe('idle'));
     await first.sup.handOver();
 
     const second = promptless();
@@ -1973,7 +1964,7 @@ describe('RunSupervisor handover', () => {
     const busy = await startedClaudeRun(third.sup, third.adapter);
     expect((await third.sup.takeover(busy)).ok).toBe(true);
     third.adapter.starts[0]!.onEvent({ ts: '2026-10-17T12:00:00Z', kind: 'usage', turn: 'busy' });
-    await vi.waitFor(() => expect(third.sup.get(busy)?.turn).toBe('busy'));
+    await waitFor(() => expect(third.sup.get(busy)?.turn).toBe('busy'));
     await third.sup.handOver();
     const fourth = promptless();
     await fourth.sup.adopt();
@@ -2013,6 +2004,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
   });
 
   afterEach(async () => {
+    await drainSupervisors();
     await fsp.rm(vaultDir, { recursive: true, force: true });
     await fsp.rm(fleetRoot, { recursive: true, force: true });
   });
@@ -2049,7 +2041,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
     await settled(sup, id, 'done');
     // The settle's tail (persist, the ticket stamp, the memory append)
     // still runs when the state flips — poll the file, don't read it once.
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
       const memory = await fsp.readFile(memoryFile(), 'utf8');
       expect(memory.startsWith('# Memory')).toBe(true);
       expect(memory).toContain('- 2026-10-17 · T-0001 · handed-over · 12300 tokens');
@@ -2068,7 +2060,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(1);
     await settled(sup, id, 'failed');
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
       expect(await fsp.readFile(memoryFile(), 'utf8')).toContain('· failed ·');
     });
 
@@ -2076,7 +2068,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
     const id2 = (second as { run: RunInfo }).run.id;
     await sup.stop(id2, 'test');
     await settled(sup, id2, 'stopped');
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
       const memory = await fsp.readFile(memoryFile(), 'utf8');
       expect(memory).toContain('· stopped ·');
       expect(memory.split('\n').filter((line) => line.startsWith('- '))).toHaveLength(2);
@@ -2099,7 +2091,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
     await settled(sup, id, 'done');
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
       const memory = await fsp.readFile(memoryFile(), 'utf8');
       expect(memory).toContain('- 2026-10-17 · T-0001 · handed-over · 0 tokens'); // the new entry landed
     });
@@ -2125,7 +2117,7 @@ describe('RunSupervisor persona stamping and memory (E3, ADR-0088)', () => {
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
     await settled(sup, id, 'done');
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(logs.some((line) => line.includes('persona memory append failed'))).toBe(true);
     });
   });
@@ -2264,6 +2256,7 @@ describe('RunSupervisor settled cost and the Verlauf chapter (costtracking, conc
   });
 
   afterEach(async () => {
+    await drainSupervisors();
     await fsp.rm(vaultDir, { recursive: true, force: true });
     await fsp.rm(fleetRoot, { recursive: true, force: true });
   });
@@ -2284,7 +2277,7 @@ describe('RunSupervisor settled cost and the Verlauf chapter (costtracking, conc
   /** The settle's record write completed — the test only ends once the
    *  run.json on disk says done, so no queued write outlives the tmp dir. */
   const settleDurably = async (id: string): Promise<void> => {
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
       const stored = JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')) as {
         info: { state?: string };
       };
@@ -2308,7 +2301,7 @@ describe('RunSupervisor settled cost and the Verlauf chapter (costtracking, conc
     adapter.handles[0]!.fail(0);
     await settled(sup, id, 'done');
 
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
       // The fixture's clock is fixed at 12:00, so the run's dauer is 0m.
       expect(await verlaufLineOf(rel)).toBe(
         '- { phase: plan, persona: pia, model: opus, tokens: 54k, cost: 1.17, dauer: 0m, ausgang: handed-over }',
@@ -2321,7 +2314,7 @@ describe('RunSupervisor settled cost and the Verlauf chapter (costtracking, conc
     adapter.handles[1]!.result();
     adapter.handles[1]!.fail(0);
     await settled(sup, id2, 'done');
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
       const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
       const at = text.lastIndexOf('- { phase:');
       expect(text.slice(at, text.indexOf('\n', at))).toBe(
@@ -2354,7 +2347,7 @@ describe('RunSupervisor settled cost and the Verlauf chapter (costtracking, conc
     adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
     await settled(sup, id, 'done');
-    await vi.waitFor(() => expect(sup.get(id)?.costUsd).toBe(1.17));
+    await waitFor(() => expect(sup.get(id)?.costUsd).toBe(1.17));
     await settleDurably(id);
 
     // A provider-reported cost is never overwritten by the table.

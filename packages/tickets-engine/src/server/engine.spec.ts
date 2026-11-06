@@ -457,9 +457,7 @@ describe('verify (E4)', () => {
       await engine.close();
       await fsp.writeFile(path.join(home, 'config.json'), JSON.stringify({ 'videos.limitMb': 2000 }), 'utf8');
       engine = await createEngine({ vaultPath: vault, home, clientDir: path.join(root, 'client'), log: () => undefined });
-      for (let i = 0; i < 50 && (await engine.config.get('videos.limitMb')) !== undefined; i += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      }
+      await engine.ready;
       expect(await engine.config.get('videos.limitMb')).toBeUndefined();
       expect(JSON.parse(await fsp.readFile(path.join(home, 'config.json'), 'utf8'))).not.toHaveProperty('videos.limitMb');
     });

@@ -121,6 +121,12 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
     `node node_modules/vitest/vitest.mjs run --config vitest.plugins.config.mts plugins/<id>`).
     **A spec sits beside the file it tests** — `src/app/` holds only
     specs of renderer code
+  - **Test hygiene** ([docs/testing-flakes.md](docs/testing-flakes.md)): a component that
+  starts background work exposes how to wait for it (`idle()` / `ready`),
+  and a spec awaits that before it removes a temp dir — no retry loop around
+  `rm`, no clock polling where an event exists. Specs that spawn real
+  git/dk/node processes belong to the `processes` vitest project
+  (`packages/`, `plugins/git/`; `PROCESS_SPECS` in `vitest.plugins.config.mts`).
   - Lint: `node node_modules/eslint/bin/eslint.js "electron/**/*.ts" "shared/**/*.ts" "src/**/*.ts apps/**/*.ts libs/**/*.ts" "plugins/**/*.ts" "packages/**/*.ts"`
     — module barrels, the dependency rules between `shared/`, `src/`,
     `electron/`, `plugins/`, `apps/` and `libs/` (docs/05, "The dependency rules"; a
