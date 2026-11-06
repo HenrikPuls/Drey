@@ -118,10 +118,8 @@ mc-app-bar {
 }
 
 .msg .t {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
   color: var(--text-3);
 }
 
@@ -166,10 +164,8 @@ mc-app-bar {
 }
 
 .confirm .ck {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--accent);
 }
 
@@ -250,14 +246,13 @@ mc-app-bar {
 
 .composer input:focus {
   border-color: var(--accent);
-  outline: none;
 }
 
 .composer .send {
   display: grid;
   flex: none;
   width: 40px;
-  height: 40px;
+  height: 44px;
   place-items: center;
   font-size: calc(15px * var(--mc-text, 1));
   color: var(--bg);
@@ -301,10 +296,8 @@ mc-app-bar {
 
 .imp-k {
   padding: 2px 8px;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   border-radius: var(--radius-chip);
@@ -359,8 +352,6 @@ mc-app-bar {
 .content-label {
   font-size: calc(13px * var(--mc-text, 1));
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--text-2);
 }
 
@@ -433,7 +424,6 @@ mc-app-bar {
 
 .history-state {
   flex: none;
-  text-transform: lowercase;
 }
 
 .history-title {
@@ -470,10 +460,8 @@ mc-app-bar {
 .mem-entry .pin {
   margin-left: auto;
   padding: 4px 9px;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
   color: var(--text-3);
   cursor: pointer;
   background: transparent;
@@ -513,21 +501,18 @@ mc-app-bar {
 
 .mem-add textarea:focus {
   border-color: var(--accent);
-  outline: none;
 }
 
 .mem-add .btn {
-  min-height: 40px;
+  min-height: 44px;
 }
 
 /* ---------- the setup pane (the prototype's .set-row/.ghead/.promptedit) ---------- */
 
 .ghead {
   margin-top: 8px;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
   color: var(--text-3);
 }
 
@@ -550,8 +535,10 @@ mc-app-bar {
   opacity: 0.7;
 }
 
-button.set-row:not(:disabled):hover .lt {
-  color: var(--text);
+@media (hover: hover) {
+  button.set-row:not(:disabled):hover .lt {
+    color: var(--text);
+  }
 }
 
 .set-row .sl {
@@ -611,7 +598,6 @@ button.set-row:not(:disabled):hover .lt {
 
 .promptedit:focus {
   border-color: var(--accent);
-  outline: none;
 }
 
 .pacts-inline {
@@ -621,7 +607,7 @@ button.set-row:not(:disabled):hover .lt {
 
 .pacts-inline .btn {
   flex: none;
-  min-height: 40px;
+  min-height: 44px;
   padding: 9px 18px;
 }
 
@@ -748,8 +734,10 @@ button.set-row:not(:disabled):hover .lt {
   border-radius: var(--radius-control);
 }
 
-.opt:hover {
-  border-color: var(--accent);
+@media (hover: hover) {
+  .opt:hover {
+    border-color: var(--accent);
+  }
 }
 
 .opt.sel {

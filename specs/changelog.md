@@ -1,3 +1,23 @@
+### Milestone 174 — E12-13 + E12-5: Mission Control chrome and device rules
+
+**Not yet manually verified by the owner.** Wave 2, session 2.7 (canvas decisions 4 and 20, boards 10a–10t, 5b–5i).
+
+- **Casing (E12-13).** All 31 `text-transform: uppercase` rules in `libs/mission-ui` are gone and
+  their labels moved from mono to sans (section labels, chips, tabs, settings headings, persona
+  roles, sheet labels, ticket section titles); two `lowercase` transforms removed. Mono stays for ids,
+  code and the pairing code field. The iPad empty state lost its developer sentence
+  (`empty.html`); the chat composer placeholder is one line with an ellipsis.
+- **Device rules (E12-5).** Hover only under `@media (hover: hover)` (14 rules); no suppressed
+  outline any more, so the global `:focus-visible` 2 px accent ring (#8ecbef in Anthrazit) shows on
+  every control incl. iPad; 18 controls of 30–42 px raised to 44 px (header button, composer
+  send, confirm/error buttons, seg, settings rows, ticket send-back, work buttons).
+- **Tokens (G-25).** `--text-3` #8a8f96 → #92979e (4.22 → 4.68:1 on `--panel-2`); `--warn` →
+  the one orange #e8a25a (7.29:1 on `--panel`); new `--control-border` #747980 (borders only,
+  never text) and `--on-accent` #101113.
+- **Left to other sessions:** templates with placeholder text (`pairing`, `settings`, `team/detail`,
+  `flow`, `ticket/view`), gate-chain sheet green buttons and the 51×31 switches' hit area.
+- **Tests:** no logic changed; `npm run test:all` run, see the session report.
+
 ### Milestone 173 — The Crew tab and the Accept verb: wording follows the design canvas
 
 **Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list

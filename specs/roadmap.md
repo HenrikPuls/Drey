@@ -256,9 +256,6 @@ owner builds without the tickets system.
   flow under Settings → Tickets (E13-12 / E12-3), and the fleet executing
   `move` / `assign` (the dispatcher reads the delta nowhere yet — it is
   data and renders on the gate bar, the cards and the editor).
-- **E12-5 — Device rules audit.** 47/34 pt insets, 44 pt targets,
-  17/15/13 type scale, 16 px inputs, switches, large titles, pointer
-  hover, focus ring.
 
 Decided against and not on the list: an overlap guard, touches or file
 routing between parallel tickets (D5 — req-75 W7 and W8 dropped; their
@@ -433,15 +430,6 @@ owner confirms scope and order before any of it starts:
   dialog composer; tab titles are `T-0121 · Title` for every kind [B-01–B-03,
   C-03, D-01, D-02, D-05]. Files: `ticket-document/`, `ticket-header.ts`,
   the thread and wait views.
-- **E12-13 — Mission Control chrome** (proposed by the E12-10 audit; M). Section
-  labels, chips, tabs, settings headings and persona roles go from uppercase mono
-  to sentence-case sans (mono stays for ids and code), 33 rules in
-  `libs/mission-ui`; the iPad empty state loses the developer sentence; the chat
-  placeholder fits and the field shows its focus ring; the gate-chain sheet's
-  green buttons take the accent; raw words (`frontmatter delta`) leave the chrome
-  [N-01, N-04, N-05, N-06, I-06, I-07, K-05, J-02, F-03]. Files: `apps/mission-control`
-  styles, `libs/mission-ui/src/**/*.css` and templates. Fits with E12-5's device rules —
-  one session may take both.
 - **E12-14 — Mission Control Work rows and the iPad layout** (proposed by the
   E12-10 audit; M). A ticket is listed once (the Needs-you copy no longer repeats
   under its column); rows show a detail line, age, persona and cost; Settings

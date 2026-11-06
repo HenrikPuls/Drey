@@ -67,12 +67,10 @@
 .ttl {
   margin: 0;
   overflow: hidden;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
   font-weight: 700;
-  letter-spacing: 0.2em;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 

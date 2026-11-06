@@ -128,11 +128,9 @@
 
 .cap {
   margin: 4px 0 -4px;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: calc(13px * var(--mc-text, 1));
   font-weight: 400;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--accent);
 }
 
@@ -163,7 +161,7 @@
 
 .chip {
   display: flex;
-  height: 36px;
+  height: 44px;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
@@ -234,10 +232,8 @@
 }
 
 .pv-accent {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 13px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .pv-line {
@@ -287,7 +283,7 @@
 
 .num {
   width: 88px;
-  height: 36px;
+  height: 44px;
   padding: 0 8px;
   font: inherit;
   font-size: 16px;
@@ -299,7 +295,7 @@
 }
 
 .act {
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 12px;
   font: inherit;
   color: var(--danger);
@@ -429,7 +425,7 @@
 
 .txt {
   width: 160px;
-  height: 36px;
+  height: 44px;
   padding: 0 8px;
   font: inherit;
   font-size: 16px;
