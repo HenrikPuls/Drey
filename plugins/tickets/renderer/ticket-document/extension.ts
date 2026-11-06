@@ -17,7 +17,7 @@ import type { WorkRow } from '../work-groups';
 import { actionBarNode, costNode, proofNode, shapeMarksNode } from './dom';
 import { actionBarOf, chainOf, costTableOfText, proofOfText, sectionBodyRange } from './model';
 import { planHeadingEnd, type ShapeMarks } from './shape';
-import { ticketIdOfPath } from '../ticket-header';
+import { cardOfDocument, ticketIdOfPath, ticketIdOfText } from '../ticket-header';
 
 export interface TicketDocumentActions {
   accept(card: TicketCard): void;
@@ -80,9 +80,6 @@ export function createTicketDocumentExtension(deps: TicketDocumentDeps): TicketD
   }
 
   const factory = (context: EditorSurfaceContext): unknown => {
-    const cardOf = (path: string): TicketCard | null =>
-      deps.snapshot()?.columns.flatMap((column) => column.tickets).find((ticket) => ticket.path === path) ?? null;
-
     const build = (state: import('@codemirror/state').EditorState): import('@codemirror/view').DecorationSet => {
       const snapshot = deps.snapshot();
       const path = context.path();
@@ -90,7 +87,7 @@ export function createTicketDocumentExtension(deps: TicketDocumentDeps): TicketD
         return Decoration.none;
       }
       const text = state.doc.toString();
-      const id = /^id:\s*['"]?(T-\d{4,})/m.exec(text)?.[1];
+      const id = ticketIdOfText(text);
       // On a tab switch the text and the path arrive one after the other; the
       // path names the id in both store shapes (`T-nnnn.md`, `t-N/ticket.md` — D-23).
       if (id === undefined || ticketIdOfPath(path) !== id) {
@@ -137,7 +134,7 @@ export function createTicketDocumentExtension(deps: TicketDocumentDeps): TicketD
         }
       }
 
-      const card = cardOf(path);
+      const card = cardOfDocument(snapshot, path);
       const row = card === null ? null : deps.rowOf(card);
       // The chain's phases still to run get their quiet `no run yet` row (req-98).
       const chain =

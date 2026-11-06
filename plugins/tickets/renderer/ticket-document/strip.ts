@@ -16,6 +16,7 @@ import type { WorkRow } from '../work-groups';
 import { stripNode } from './dom';
 import { estimateInlineText, noEstimateText } from '../../../../shared/cost-text';
 import type { I18n } from '../../../../shared/i18n/types';
+import { cardOfDocument } from '../ticket-header';
 import { chainOf, costSummary, currentStep, statusOf, type PersonaName } from './model';
 
 export interface TicketStripDeps {
@@ -85,7 +86,7 @@ export function createTicketStrip(deps: TicketStripDeps): TicketStrip {
       host.className = 'tickets-doc-strip-host';
       const paint = (): void => {
         const snapshot = deps.snapshot();
-        const card = snapshot?.columns.flatMap((column) => column.tickets).find((ticket) => ticket.path === path) ?? null;
+        const card = cardOfDocument(snapshot, path);
         if (snapshot === null || card === null) {
           host.replaceChildren();
           return;

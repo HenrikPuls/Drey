@@ -9,7 +9,8 @@
  * the marked lines. Nothing is recomputed here.
  */
 import type { PlanMark } from '../../../../packages/tickets-engine/src/contracts/chat';
-import type { BoardSnapshot, TicketCard } from '../../shared/tickets';
+import type { BoardSnapshot } from '../../shared/tickets';
+import { cardOfDocument, showsTicketDocument } from '../ticket-header';
 import { ideaPhaseIds } from '../work-groups';
 
 export interface ShapeTarget {
@@ -29,18 +30,15 @@ export function shapeTargetOf(
   doc: { readonly path: string; readonly vaultId: string | null },
   runLive: (ticketId: string) => boolean,
 ): ShapeTarget | null {
-  if (snapshot === null || (snapshot.vaultId !== null && doc.vaultId !== snapshot.vaultId)) {
+  if (snapshot === null || (snapshot.vaultId !== null && doc.vaultId !== snapshot.vaultId && !showsTicketDocument(snapshot, doc.vaultId, doc.path))) {
     return null;
   }
-  const card = findCard(snapshot, doc.path);
+  const card = cardOfDocument(snapshot, doc.path);
   if (card === null || !ideaPhaseIds(snapshot.pipeline).includes(card.phase) || runLive(card.id)) {
     return null;
   }
-  return { id: card.id, path: card.path, label: `${card.id}.md` };
-}
-
-function findCard(snapshot: BoardSnapshot, path: string): TicketCard | null {
-  return snapshot.columns.flatMap((column) => column.tickets).find((ticket) => ticket.path === path) ?? null;
+  // The open document's path: a dricket card's own is a stand-in no tab has (D-23).
+  return { id: card.id, path: doc.path, label: `${card.id}.md` };
 }
 
 /** `just now`, `2 min ago`, `3 h ago`, `2 days ago`; an unreadable or future stamp reads as `just now`. */

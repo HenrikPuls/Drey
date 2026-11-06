@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–183, plus req-98, req-101, req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-06):** version 0.8.1, milestones 1–151, 153–163, 165–169 and 171–185, plus req-98, req-101, req-102 (the i18n catalog, ADR-0091), req-99a, req-95a, req-95b, req-97, req-96 and req-99b built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -90,8 +90,14 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
-None open. (D-23 and D-24 shipped as milestone 184; what the wave-3 smoke could not see — the Autopilot status
-item and popover in a built app with a runner — waits for the owner's round, noted in that changelog entry.)
+- **D-25 — a store checkout inside a larger vault shows a plain note** (found while fixing D-23, read from the code, not
+  run). `TicketDocuments` allows a checkout that lies inside a registered vault (the document path then carries a prefix),
+  but `ticketIdOfPath` and `idOfDocumentPath` expect the path to start at `tickets/`: such a document gets no header and no
+  widgets, only the `▸ Frontmatter` pill. The vault the checkout prompt adds is the checkout itself, so that route is not
+  affected. Fix: the renderer has to learn the prefix from main, or main hands it the checkout-relative path.
+
+(D-23 shipped as milestones 184 and 185, D-24 as 184; what the wave-3 smoke could not see — the Autopilot status
+item and popover in a built app with a runner — waits for the owner's round, noted in the 184 changelog entry.)
 
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field
 pre-filled with "T-0002:". (a), (c), (d) need a model / a real phone — untested.

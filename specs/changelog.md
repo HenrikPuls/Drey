@@ -1,3 +1,30 @@
+### Milestone 185 — D-23 rest: a store's ticket document shows the header and widgets of a ticket
+
+**Not yet manually verified by the owner.** Found by the owner in the cut-over smoke on the real store (T-0030, E14-7):
+milestone 184 made the header *appear*, everything behind it still spoke the files format. Reproduced on a scratch store.
+
+- **Header model.** `plugins/tickets/main/store-document-header.ts`: on a store path the `header` IPC answers from the
+  board's card (`meta`, `issues`) with the title the buffer says, instead of the files parser's "unexpected ticket path".
+- **Title edit.** Stays editable. `headerEdit` on a store path changes the one `title:` line of the flat format
+  (`withFlatField`, `flat-frontmatter.ts`) and hands the block back to the buffer; the save is the route's
+  `dk put --if-version`. Any other patch field is refused (the header edits only the title since E12-12).
+- **Phase.** `phaseOfTicketPath` reads no phase from a store path; the chip is the card's phase, no longer `t`.
+- **Widgets and Log fold.** `ticketIdOfText` reads `id: t-30` and `id: T-0030` (normalised by `toDisplayId`), so the proof
+  widget, the cost table, the action bar and the folded `## Log` draw. `cardOfDocument` replaces every
+  `ticket.path === path`: a dricket card's `path` is a stand-in (`tickets/<phase>/T-nnnn.md`) no document has, so a store
+  document finds its card by the id its path names. That also brings the strip back, and `shapeTargetOf` now names the
+  open document (specs only, Shape was not run on a store).
+- **Frontmatter as plain text: no code change.** Header detection is fine on the flat format: first open, tab switches, a
+  CRLF file and a reload all draw the header. The only route to raw lines that reproduced is the header's `<>` button, which
+  the base remembers per path for the app session (`frontmatterFoldByPath`, `editor.ts`), so they return with the tab;
+  `⌄ Frontmatter` folds back. With no title on screen, that button was the obvious thing to press; what the owner clicked is
+  not known.
+- **Tests:** `store-document.spec.ts` (new, a real store document against the header, the extension and the Log fold),
+  `store-document-header.spec.ts` (new), `ticket-header.spec.ts`, `shape.spec.ts`, `flat-frontmatter.spec.ts`; the defect
+  cases run red on `8db71910`, the guards beside them (a stray file, a tab switch in flight) pass there too. `e2e/tickets-store-document.spec.ts` (new): the whole document on a scratch store, the raw round trip, a
+  title edit ending as one `put t-1` commit, a reload.
+- **Left open:** D-25 (roadmap), a checkout inside a larger vault.
+
 ### Milestone 184 — D-23 and D-24: the store's ticket documents get their header, the Autopilot stylesheet reaches the build
 
 **Not yet manually verified by the owner.** Both found by the wave-3 smoke on a scratch dricket store.

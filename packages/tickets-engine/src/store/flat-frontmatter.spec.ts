@@ -1,6 +1,34 @@
 import { describe, expect, it } from 'vitest';
 
-import { flatInt, flatList, flatText, parseFlatDocument } from './flat-frontmatter';
+import { flatInt, flatList, flatText, parseFlatDocument, withFlatField } from './flat-frontmatter';
+
+describe('withFlatField', () => {
+  const block = '---\nid: t-1\ntitle: Old: one\nowner: \n---';
+
+  it('replaces one value and leaves every other byte', () => {
+    expect(withFlatField(block, 'title', 'New: two')).toBe('---\nid: t-1\ntitle: New: two\nowner: \n---');
+  });
+
+  it('keeps a CRLF line ending', () => {
+    expect(withFlatField('---\r\ntitle: a\r\n---', 'title', 'b')).toBe('---\r\ntitle: b\r\n---');
+  });
+
+  it('changes the duplicate the reader takes', () => {
+    const next = withFlatField('---\ntitle: a\ntitle: b\n---', 'title', 'c');
+    expect(next).toBe('---\ntitle: a\ntitle: c\n---');
+    expect(parseFlatDocument(next).fields['title']).toBe('c');
+  });
+
+  it('does not read a longer key or the body as the field', () => {
+    expect(() => withFlatField('---\ntitle-x: a\n---\ntitle: b\n', 'title', 'c')).toThrow(/no title/);
+  });
+
+  it('refuses a value that would add a line, and an unclosed block', () => {
+    expect(() => withFlatField(block, 'title', 'a\nstage: done')).toThrow(/one line/);
+    expect(() => withFlatField('---\ntitle: a\n', 'title', 'b')).toThrow(/not closed/);
+    expect(() => withFlatField('title: a\n---', 'title', 'b')).toThrow(/not closed/);
+  });
+});
 
 describe('flat front matter', () => {
   it('reads key: value lines and the body', () => {
