@@ -1,13 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { StatusItemSpec } from '../../../shared/plugin-api/renderer';
-import { autopilotSlotOf, costSlotOf, createStatusSlots, needsSlotOf, statusSlotText } from './status-slot';
-
-describe('statusSlotText (the old combined text)', () => {
-  it('joins running and needs-you', () => {
-    expect(statusSlotText(0, 0)).toBe('');
-    expect(statusSlotText(2, 3)).toBe('2 running · 3 need you');
-  });
-});
+import { autopilotSlotOf, costSlotOf, createStatusSlots, needsSlotOf } from './status-slot';
 
 describe('the cost item', () => {
   it('reads "$4.10 of $15 today", neutral, titled "so far"', () => {

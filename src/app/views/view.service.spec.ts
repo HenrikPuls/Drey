@@ -34,6 +34,20 @@ describe('ViewService', () => {
     expect(views.activeId()).toBe('notes');
   });
 
+  it('tells a listener when the active view changes (SDK 1.46)', () => {
+    const id = views.saveCurrentAs('Review');
+    expect(id).not.toBeNull();
+    const seen: string[] = [];
+    const off = views.onActiveChange(() => seen.push(views.activeId()));
+    views.switchTo(id!);
+    TestBed.tick();
+    expect(seen).toEqual([id]);
+    off();
+    views.switchTo('notes');
+    TestBed.tick();
+    expect(seen).toEqual([id]);
+  });
+
   it('saves the current layout as a view, switches to it and persists the list', async () => {
     await editor.openFile('a.md');
     dock.setDockWidth('left', 300);

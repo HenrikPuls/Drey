@@ -356,6 +356,8 @@ export class PluginApiFactory {
         registerDocKind: (kind: PluginDocKindContrib) => track(this.docKinds.register(kind)),
         registerViewPreset: (preset) => track(this.views.registerPreset(pluginId, preset)),
         switchView: (id) => this.views.switchTo(id),
+        activeViewId: () => this.views.activeId(),
+        onActiveViewChange: (listener) => track(this.views.onActiveChange(listener)),
         registerMenuContributions: (items: readonly MenuContribution[]) =>
           track(this.menuContributions.register(pluginId, items)),
         // The "Add entry" drawer it mounted into is gone (milestone 43,

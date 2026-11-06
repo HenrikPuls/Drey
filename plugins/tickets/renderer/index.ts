@@ -11,7 +11,7 @@ import { formatWatch, parseStreamEvents } from './watch-format';
 import { newWaits } from './waiting';
 import { interactiveEndMoves, interactiveModeFor, type InteractiveMode } from './end-moves';
 import { chainAlertsOf, newChainAlerts, type ChainAlert } from './chain-alerts';
-import type { DreyPluginApi, PluginWidgetContrib, StatusItemHandle } from '../../../shared/plugin-api/renderer';
+import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
 import {
   branchForTicket,
   DEFAULT_PRIORITY_CONFIG,
@@ -31,7 +31,7 @@ import { createRunComposer } from './run-composer';
 import { THREAD_KEY } from './ticket-page';
 import { defaultFaceOf, ticketFaceSwitch, ticketRunActive, type TicketFace } from './ticket-faces';
 import { PENDING_HINT, dialogStarter } from './dialog-starters';
-import { statusSlotText } from './status-slot';
+import { createStatusSlots, type StatusSlotController } from './status-slot';
 import { ageWords, checkpointActionOf, crewLineOf, ideaPhaseIds, needKindLabel, queueTargetOf, workGroups, workListSignature } from './work-groups';
 import { readyBarNode, readyCardNode, storyNode } from './ready-view';
 import { stepCardOf } from '../shared/step-card';
@@ -72,6 +72,7 @@ import {
   workerLabelOf,
 } from './worker-status';
 import type { DeskDeps } from './desk-deps';
+import { teamModelOf } from './team/team-model';
 import { createTeamStore, type TeamStore } from './team/team-store';
 import { createConversationProvider } from './conversation/targets';
 import { mountTeam } from './team/team-view';
@@ -361,16 +362,24 @@ const boardCard = (id: string): TicketCard | null => {
 const liveRuns = (): readonly RunInfo[] =>
   fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state));
 
-/** The status-bar item (SDK 1.38): "2 running · 3 need you"; hidden when both are 0. */
-let statusItem: StatusItemHandle | null = null;
+/** The status-bar items (E12-15, boards 7a / 7h): today's cost, needs-you, Autopilot. */
+let statusSlots: StatusSlotController | null = null;
+let statusApi: DreyPluginApi | null = null;
 const refreshStatusItem = (): void => {
-  if (statusItem === null) {
+  if (statusSlots === null || statusApi === null) {
     return;
   }
   const needs = snapshot === null || snapshot.vaultId === null
     ? 0
     : workGroups(snapshot, liveRuns()).needs.length + currentChainAlerts().length;
-  statusItem.update({ text: statusSlotText(liveRuns().length, needs) });
+  const team = teamModelOf(teamStore(statusApi).personas(), fleetRuns, chain, () => null, Date.now());
+  statusSlots.update({
+    cost: team.todayCost,
+    budget: team.todayBudget,
+    needsYou: needs,
+    master: chain?.master ?? null,
+    inNotesView: statusApi.ui.activeViewId() === 'notes',
+  });
 };
 
 /** Keeps the header's master switch in step (the buttons live outside the board). */
@@ -2993,13 +3002,11 @@ function openCardMenu(
 const plugin: { activate(api: DreyPluginApi): void } = {
   activate(api) {
     backend = api.backend;
-    statusItem = api.ui.createStatusItem({
-      text: '',
-      tooltip: 'Open the Tickets panel',
-      commandId: 'tickets.showBoard',
-      priority: 10,
-    });
+    statusApi = api;
+    statusSlots = createStatusSlots(api.ui, 'tickets.showBoard');
     fleetListeners.add(refreshStatusItem);
+    teamStore(api).subscribe(refreshStatusItem);
+    api.ui.onActiveViewChange(refreshStatusItem);
     fleetListeners.add(fireDesk);
     api.commands.register({
       id: 'tickets.showBoard',

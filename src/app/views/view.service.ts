@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import type { Unsubscribe, ViewPresetContrib } from '../../../shared/plugin-api/renderer';
 import { DockService, type DockLayout } from '../dock';
 import { DEFAULT_VIEW_ID, PaneService, type PaneLayoutSnapshot } from '../panes/pane.service';
@@ -87,7 +87,17 @@ export class ViewService {
   /** The name field's request, shown by the title bar; null while closed. */
   readonly prompt = signal<ViewNamePrompt | null>(null);
 
+  private readonly activeListeners = new Set<() => void>();
+
   constructor() {
+    effect(() => {
+      this._activeId();
+      untracked(() => {
+        for (const listener of [...this.activeListeners]) {
+          listener();
+        }
+      });
+    });
     // The dock layout remembers its own active view; a view that was
     // deleted since (or a damaged list) falls back to Notes.
     const stored = this.dock.activeViewId();
@@ -123,6 +133,12 @@ export class ViewService {
       this.panes.switchView(DEFAULT_VIEW_ID);
       this._activeId.set(DEFAULT_VIEW_ID);
     }
+  }
+
+  /** Fires when the active view changes (SDK 1.46, `ui.onActiveViewChange`). */
+  onActiveChange(listener: () => void): Unsubscribe {
+    this.activeListeners.add(listener);
+    return () => this.activeListeners.delete(listener);
   }
 
   // --- plugin presets (SDK 1.39) ---------------------------------------------

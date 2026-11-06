@@ -57,9 +57,11 @@
   Off, no chain = hidden); the three-state wiring is `TODO(req-95b)`.
 - **SDK 1.46:** `StatusItemSpec.dot` (`attention` | `positive`) — the status bar draws a small
   coloured dot; status text is 13 px.
-- **Not done here (files owned by others, roadmap E12-15b):** the plugin entry still creates the
-  single old item — `index.ts` must call `createStatusSlots`; the `Capture by voice` label in
-  `index.ts`; the Crew header counts. New strings carry `TODO(i18n)`.
+- **Wired at the wave-2 integration:** `index.ts` calls `createStatusSlots` (today's cost and budget
+  from `teamModelOf`, the needs-you count, `chain.master`, the active view); `statusSlotText` is gone.
+  **SDK 1.46** also gained `ui.activeViewId()` and `ui.onActiveViewChange(cb)`: the plugin had no way
+  to know the Notes view is active.
+- **Not done here (roadmap E12-15b):** the `Capture by voice` label in `index.ts`; the Crew header counts.
 - **Tests:** `status-slot.spec`, `team-view.spec` (band rule), `status-bar.spec` (dot),
   `e2e/desk-board-team.spec.ts` (band hidden on another tab).
 

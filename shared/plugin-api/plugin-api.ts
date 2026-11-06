@@ -1021,6 +1021,10 @@ export interface DreyPluginApi {
     registerViewPreset(preset: ViewPresetContrib): Unsubscribe;
     /** Make the view `id` (a preset's id, `notes`, or a user view) the active one. Unknown ids are a no-op. */
     switchView(id: string): void;
+    /** The active view's id (`notes`, a preset's id or a user view, SDK 1.46). */
+    activeViewId(): string;
+    /** Fires when the active view changes (SDK 1.46). */
+    onActiveViewChange(listener: () => void): Unsubscribe;
     registerMenuContributions(items: readonly MenuContribution[]): Unsubscribe;
     /**
      * @deprecated The "Add entry" drawer was removed in milestone 43

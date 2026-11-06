@@ -1506,9 +1506,10 @@ address into OpenCode's **Pool probe** — the server's own parallel slots
 then cap the pool. A run that fails on the provider's rate limit makes
 that pool one slot smaller for five minutes.
 
-The window's own status bar, at the bottom right, shows how the fleet
-stands — *2 running · 3 need you*; it is empty when nothing runs and
-nothing waits, and a click opens the Work panel.
+The window's own status bar, at the bottom right, shows today's cost
+(*$4.10 of $15 today*), what waits on you (*3 need you*, with an orange
+dot and *in Work* while the Notes view is active; a click opens the Work
+panel) and the Autopilot state (*Autopilot · On*).
 
 A one-row **status bar** under the Work list carries an amber pill
 when worktree folders are waiting to be cleaned up (legacy leftovers

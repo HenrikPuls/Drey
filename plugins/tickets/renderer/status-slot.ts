@@ -85,18 +85,6 @@ export function statusSlotsOf(input: StatusSlotInput): StatusSlots {
   };
 }
 
-/** The old combined text ("2 running · 3 need you"); superseded by `statusSlotsOf`, kept until the entry switches. */
-export function statusSlotText(running: number, needsYou: number): string {
-  const parts: string[] = [];
-  if (running > 0) {
-    parts.push(`${running} running`);
-  }
-  if (needsYou > 0) {
-    parts.push(`${needsYou} need you`);
-  }
-  return parts.join(' · ');
-}
-
 export interface StatusSlotHost {
   createStatusItem(spec: StatusItemSpec): StatusItemHandle;
 }

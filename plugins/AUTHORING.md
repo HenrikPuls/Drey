@@ -118,7 +118,8 @@ leaves the app on the previous build. Verify with
   helpers (ADR-0091; see "SDK 1.46 — strings from the catalog" below).
   1.46 also adds `sections` and `entries` to `registerSettingsPage` (see "Settings pages": the
   section tree and the Settings search) and an optional `dot` (`attention` | `positive`) on a
-  status item: a small coloured dot before the text.
+  status item: a small coloured dot before the text. `ui.activeViewId()` and
+  `ui.onActiveViewChange(cb)` tell a plugin which view is active.
   1.44 added `ctx.vault.routeDocuments(route)` (main side): a plugin that writes
   documents through its own engine claims them (`owns(vaultId, path)`); the
   editor's save goes to `route.save` (answer: the stored text and mtime, or a

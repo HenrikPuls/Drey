@@ -408,17 +408,12 @@ owner confirms scope and order before any of it starts:
   `Repositories` wait for E12-3b [K-03, K-04, N-02, N-03, N-07]. Files:
   `libs/mission-ui/src/work/`, `settings/`, `apps/mission-control/src/app/`
   (touches the same stylesheet as E12-13 — run after it, or together).
-- **E12-15b — Wire the status items; capture label; Crew header** (rest of
-  E12-15, M). `plugins/tickets/renderer/index.ts` (W2.6) calls
-  `createStatusSlots` from `status-slot.ts` (inputs: today's cost and budget
-  from `teamModelOf`, the needs-you count, `chain.master`, whether the active
-  view is Notes) in place of the single `createStatusItem` + `statusSlotText`,
-  then drops `statusSlotText`; the title-bar `Capture by voice` label (chord
+- **E12-15b — Capture label; Crew header** (rest of E12-15, M). The status items
+  are wired since the wave-2 integration; the title-bar `Capture by voice` label (chord
   `Mod+Alt+T`, ruled, E13-16/G-13) lives in `index.ts` too; the Crew header
   counts every card and shows the state summary [I-01, I-03, I-04, L-04, L-05]
   (`team/team-view.ts`). The Autopilot item becomes three-state with req-95b
-  (`TODO(req-95b)` in `status-slot.ts`). Strings go through `t(key)` when
-  req-102 lands (`TODO(i18n)` marks them).
+  (`TODO(req-95b)` in `status-slot.ts`).
 - **E12-16 — Board and Crew completion** (proposed by the E12-10 audit; M, partly
   L). `Filter: all personas` and `Cost by column` (E13-17); empty columns say
   `Empty` quietly, `New idea` moves to the board header; `New persona`, `Remove
