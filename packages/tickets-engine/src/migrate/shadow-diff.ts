@@ -28,7 +28,7 @@ export interface BoardRow {
   readonly archived?: boolean;
 }
 
-/** `stageOf` maps a legacy phase to the stage the migration wrote (E12-9c: `commit` -> `sign-off`); identity by default. */
+/** `stageOf` maps a legacy phase to the stage the migration wrote (req-99a: `commit` -> `ready`); identity by default. */
 export function rowsFromLegacy(tickets: readonly LegacyTicket[], stageOf: (phase: string) => string = (phase) => phase): BoardRow[] {
   return tickets.map((t) => ({
     id: t.id,

@@ -1,3 +1,4 @@
+import { CLAIM_STATE_IDS, LEGACY_PHASE_STATES, stateOfPhase, STATE_IDS } from '../core/pipeline-states';
 import { toDricketId } from '../store/ids';
 import { ARCHIVED_LABEL } from '../store/legacy-bridge';
 import { ticketNumber, type LegacyTicket, type LegacyVault } from './legacy-vault';
@@ -22,8 +23,8 @@ export interface MigrationConfig {
   /** The configured `claim` stages: the agent columns (E12-9c). */
   readonly claim: readonly string[];
   /**
-   * Legacy phase -> stage, for a phase that is not a stage id itself (E12-9c): the old default's
-   * `prioritized` and `commit` have no column of the same name in the new default.
+   * Legacy phase -> stage, for a phase that is not a stage id itself (req-99a, the mapping of O-2):
+   * `plan` -> `shaping`, `build` -> `building`, `review` / `sign-off` / `commit` -> `ready`.
    */
   readonly legacyPhases: Readonly<Record<string, string>>;
   /** The configured priority values; the first match of the legacy value wins. */
@@ -42,9 +43,9 @@ export interface MigrationConfig {
 }
 
 export const DEFAULT_MIGRATION_CONFIG: Omit<MigrationConfig, 'selected'> = {
-  stages: ['inbox', 'plan', 'build', 'review', 'sign-off', 'done'],
-  claim: ['plan', 'build'],
-  legacyPhases: { prioritized: 'inbox', commit: 'sign-off' },
+  stages: [...STATE_IDS],
+  claim: CLAIM_STATE_IDS,
+  legacyPhases: LEGACY_PHASE_STATES,
   priorities: ['urgent', 'high', 'normal', 'low'],
   defaultPriority: 'normal',
   maxTitleLength: 200,
@@ -52,11 +53,7 @@ export const DEFAULT_MIGRATION_CONFIG: Omit<MigrationConfig, 'selected'> = {
 
 /** The stage a legacy phase lands in: the phase itself when it is a stage, else the configured mapping, else null. */
 export function stageOfLegacyPhase(phase: string, config: Pick<MigrationConfig, 'stages' | 'legacyPhases'>): string | null {
-  if (config.stages.includes(phase)) {
-    return phase;
-  }
-  const mapped = config.legacyPhases[phase];
-  return mapped !== undefined && config.stages.includes(mapped) ? mapped : null;
+  return stateOfPhase(phase, config.stages, config.legacyPhases);
 }
 
 /** Header keys that never travel: live execution state (the cut-over requires none). */
@@ -267,7 +264,7 @@ export function convertTicket(t: LegacyTicket, config: MigrationConfig, migratin
       dropped.push({ key, reason: 'live execution state is not migrated' });
       if (key === 'run') {
         blocking.push('a run stamp is present: a run may still be live (the cut-over requires none)');
-      } else if (key === 'claimed-by' && t.phase === 'build') {
+      } else if (key === 'claimed-by' && t.phase === 'build') { // a legacy phase id: this reads the old vault
         blocking.push('claimed in build: the cut-over requires no live claim');
       }
       continue;

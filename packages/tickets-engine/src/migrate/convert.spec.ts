@@ -80,7 +80,7 @@ describe('buildPlan -- field mapping', () => {
       'x-rank': '2500',
       'x-entered-prioritized': '2026-10-21T09:30:00Z',
     });
-    expect(t).toMatchObject({ stage: 'inbox', priority: 'high', repos: ['drey', 'drey-tickets'], depends: ['t-10', 't-12'], parent: 't-12' });
+    expect(t).toMatchObject({ stage: 'prioritized', priority: 'high', repos: ['drey', 'drey-tickets'], depends: ['t-10', 't-12'], parent: 't-12' });
   });
 
   it('rewrites ../attachments/ links and says so', () => {
@@ -178,29 +178,35 @@ describe('helpers', () => {
   });
 });
 
-describe('the new default stages (E12-9c)', () => {
-  it('is Inbox · Plan · Build · Review · Sign Off · Done with the agent columns as claim stages', () => {
-    expect(DEFAULT_MIGRATION_CONFIG.stages).toEqual(['inbox', 'plan', 'build', 'review', 'sign-off', 'done']);
-    expect(DEFAULT_MIGRATION_CONFIG.claim).toEqual(['plan', 'build']);
+describe('the six stages (req-99a)', () => {
+  it('is Inbox · Shaping · Prioritized · Building · Ready to try · Done with Building the only claim stage', () => {
+    expect(DEFAULT_MIGRATION_CONFIG.stages).toEqual(['inbox', 'shaping', 'prioritized', 'building', 'ready', 'done']);
+    expect(DEFAULT_MIGRATION_CONFIG.claim).toEqual(['building']);
   });
 
-  it('maps the legacy phases: prioritized -> inbox, commit -> sign-off, matching ids stay', () => {
+  it('maps the legacy phases of O-2, and every stage reads as itself', () => {
     const config = DEFAULT_MIGRATION_CONFIG;
     expect(stageOfLegacyPhase('inbox', config)).toBe('inbox');
-    expect(stageOfLegacyPhase('prioritized', config)).toBe('inbox');
-    expect(stageOfLegacyPhase('build', config)).toBe('build');
-    expect(stageOfLegacyPhase('commit', config)).toBe('sign-off');
+    expect(stageOfLegacyPhase('plan', config)).toBe('shaping');
+    expect(stageOfLegacyPhase('prioritized', config)).toBe('prioritized');
+    expect(stageOfLegacyPhase('build', config)).toBe('building');
+    expect(stageOfLegacyPhase('review', config)).toBe('ready');
+    expect(stageOfLegacyPhase('sign-off', config)).toBe('ready');
+    expect(stageOfLegacyPhase('commit', config)).toBe('ready');
     expect(stageOfLegacyPhase('done', config)).toBe('done');
-    expect(stageOfLegacyPhase('plan', config)).toBe('plan');
-    expect(stageOfLegacyPhase('review', config)).toBe('review');
     expect(stageOfLegacyPhase('plan-review', config)).toBeNull();
+    for (const stage of config.stages) {
+      expect(stageOfLegacyPhase(stage, config)).toBe(stage);
+    }
   });
 
   it('lands a migrated ticket in the mapped column and keeps the legacy phase as an audit field', () => {
-    const t = target(plan(['T-0020', 'T-0010', 'T-0012']), 'T-0020');
-    expect(t.stage).toBe('inbox');
-    expect(t.extensions['x-legacy-phase']).toBe('prioritized');
-    expect(target(plan(['T-0012']), 'T-0012').stage).toBe('build');
+    const t = target(plan(['T-0012']), 'T-0012');
+    expect(t.stage).toBe('building');
+    expect(t.extensions['x-legacy-phase']).toBe('build');
+    const q = target(plan(['T-0020', 'T-0010', 'T-0012']), 'T-0020');
+    expect(q.stage).toBe('prioritized');
+    expect(q.extensions['x-legacy-phase']).toBe('prioritized');
   });
 
   it('a mapping that points outside the configured stages is ignored (the phase is skipped)', () => {
@@ -215,7 +221,7 @@ describe('dricket document patch', () => {
     const base = stubDocument(t, '2026-11-04T10:00:00Z', 'owner@legion').replace('x-persona: build-default', 'x-persona: stale');
     const doc = patchDricketDocument(base, t);
     expect(doc).toMatch(/^---\nid: t-20\ncreated_at: 2026-11-04T10:00:00Z\ncreated_by: owner@legion\n/);
-    expect(doc).toContain('\nstage: inbox\n');
+    expect(doc).toContain('\nstage: prioritized\n');
     expect(doc).toContain('\ndepends: t-10, t-12\n');
     expect(doc).toContain('\nparent: t-12\n');
     expect(doc).toContain('\nrepos: drey, drey-tickets\n');

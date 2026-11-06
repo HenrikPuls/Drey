@@ -125,7 +125,27 @@ describe('checkpoints', () => {
     expect(checkpoints.has('prioritized')).toBe(false); // inbox is manual too
   });
 
-  describe('the default pipeline (E12-9c)', () => {
+  describe('the one state list (req-99a)', () => {
+    const columns = (): BoardColumn[] => [
+      column(phase('inbox'), [card('T-0001', { phase: 'inbox' })]),
+      column(phase('shaping'), [card('T-0002', { phase: 'shaping' })]),
+      column(phase('prioritized'), [card('T-0003', { phase: 'prioritized' })]),
+      column(phase('building', { handover: 'agent build-default', claim: true }), [card('T-0004', { phase: 'building' })]),
+      column(phase('ready'), [card('T-0005', { phase: 'ready' })]),
+      column(phase('done')),
+    ];
+
+    it('Ready to try is the owner checkpoint (the terminal column follows it); Inbox, Shaping and Prioritized are plain queues', () => {
+      expect([...checkpointPhaseIds(columns())]).toEqual(['ready', 'done']);
+    });
+
+    it('the machine works Building only: it never pulls from a manual column', () => {
+      const plan = planDispatch(input({ columns: columns() }));
+      expect(plan.map((p) => [p.card.id, p.workingPhase])).toEqual([['T-0004', 'building']]);
+    });
+  });
+
+  describe('the pipeline of E12-9c', () => {
     const columns = (): BoardColumn[] => [
       column(phase('inbox'), [card('T-0001', { phase: 'inbox' })]),
       column(phase('plan', { handover: 'agent plan-default', claim: true }), [card('T-0002', { phase: 'plan' })]),

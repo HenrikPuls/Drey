@@ -1,7 +1,7 @@
 # The tickets board — owner checkpoint handling
 
 The tool-neutral guide to working the tickets board's checkpoints by
-hand — review above all the **commit → done** discipline (on a board with the default pipeline of E12-9c the column is **Sign Off**, id `sign-off`: read `commit` below as "the Sign Off column", the discipline is the same): when a
+hand — review above all the **commit → done** discipline: when a
 ticket on `commit` may move to `done`, how to prove it with git, and
 how to make the move without breaking the format. The criteria bind
 everyone the same — a human at the board, an agent on the owner's
@@ -12,6 +12,48 @@ here) and at the owner working from a terminal. The machine side —
 the fleet runner and the chain daemon — has its own guide,
 [`FLEET.md`](FLEET.md); the format itself is
 [`specs/ticket-schema.md`](../../../specs/ticket-schema.md).
+
+## The one state list (req-99a)
+
+A new board, and the dricket store after the cut-over, has six stages:
+
+| Stage id | Title | Worked by |
+|---|---|---|
+| `inbox` | Inbox | you (`persona: you`), the capture target |
+| `shaping` | Shaping | you |
+| `prioritized` | Prioritized | you |
+| `building` | Building | the fleet: the only agent `claim` stage |
+| `ready` | Ready to try | you: the owner's checkpoint |
+| `done` | Done | nobody: terminal |
+
+**Read `commit` in this guide as the column of that role on your board:**
+`ready` on the six stages, **Sign Off** (`sign-off`) on a board of E12-9c,
+`commit` on an older one. Older boards keep their columns and are fully
+supported; nothing renames them. Tickets move to the six stages once, with
+the dricket import (mapping below), never by renaming folders.
+
+Plan, build, review and test are phases of the chain inside Building, not
+stages. **Accept on Ready to try is the sign-off:** it starts the commit step
+(`commit-default`, an owner-started run under the stop ladder) on the **target
+repository**, the one the ticket's work went into, never the tickets store: it
+merges the ticket's branch and pushes. On a green end the ticket lands in Done,
+as bookkeeping. A `BLOCKED:` or red end leaves it on Ready to try; Accept again
+starts the step again, and it completes at once when the work is already on the
+remote (a protected repository's merged pull request). A ticket with no `repo:`
+has nothing to merge, and its Accept is the plain move. Send back goes to Building.
+
+On a store, `dk` never lets an agent release into a terminal stage: the commit
+run hands the ticket back to Ready to try and the engine then makes the owner's
+move into Done. While the run holds its claim, `dk` shows the ticket in Building.
+
+| Old phase | Stage |
+|---|---|
+| `inbox` | `inbox` |
+| `plan` | `shaping` |
+| `prioritized` | `prioritized` |
+| `build` | `building` |
+| `review`, `sign-off`, `commit` | `ready` |
+| `done` | `done` |
 
 ## The rule (owner ruling, 2026-10-18)
 
@@ -216,6 +258,8 @@ board ticket simply never blocks (the dependency pass's tolerance).
 
 ## What is — and is not — automated
 
+- On the six stages only Building runs itself; everything below about an
+  agent `commit` column describes older boards.
 - Whether a column runs itself is the **pipeline's call**
   (`_meta/pipeline.md`): `handover: manual` = the human's queue;
   `handover: agent <prompt-ref>` = the chain dispatches it (worker,

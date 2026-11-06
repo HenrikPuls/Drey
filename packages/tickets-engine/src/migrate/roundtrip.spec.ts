@@ -7,9 +7,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { assertDkVersion, DkProcess } from '../store/dk-process';
 import { DricketTicketStore } from '../store/dricket-ticket-store';
 import { applyPlan, assertScratchStore, initScratchStore, scratchConfigToml } from './apply';
-import { buildPlan, DEFAULT_MIGRATION_CONFIG, rewriteAttachmentLinks, type ConversionPlan, type MigrationConfig } from './convert';
+import { buildPlan, DEFAULT_MIGRATION_CONFIG, rewriteAttachmentLinks, stageOfLegacyPhase, type ConversionPlan, type MigrationConfig } from './convert';
 import { stubDocument } from './dricket-doc';
 import { parseLegacyTicket, readLegacyVault, type LegacyTicket } from './legacy-vault';
+import { LEGACY_PHASE_IDS } from '../core/pipeline-states';
 import { reverseTicket } from './reverse';
 import { collectStoreRows, rowsFromLegacy, rowsFromRecords, shadowDiff } from './shadow-diff';
 
@@ -27,10 +28,10 @@ const vault = readLegacyVault(FIXTURE);
 const SELECTED = ['T-0010', 'T-0012', 'T-0014', 'T-0017', 'T-0020', 'T-0066', 'T-0085'];
 const DK_SELECTED = SELECTED;
 /**
- * The vocabulary of a store that already exists with the pre-E12-9c default (inbox, prioritized,
- * build, commit, done): the converter and the reverse converter stay general for it, and the
- * round trip below proves a faithful copy. The new default's mapping is tested in convert.spec.ts
- * and in the "new default" block at the end of the dk run.
+ * The vocabulary of a store that keeps the columns of the legacy vault (inbox, prioritized, build,
+ * commit, done): the converter and the reverse converter stay general for it, and the round trip
+ * below proves a faithful copy. The six stages' mapping (req-99a) is tested in convert.spec.ts,
+ * in the "six stages" block below and at the end of the dk run.
  */
 const OLD_VOCABULARY: Omit<MigrationConfig, 'selected'> = {
   ...DEFAULT_MIGRATION_CONFIG,
@@ -125,6 +126,28 @@ describe('reverse converter -- pure round trip over a dk-shaped document', () =>
   });
 });
 
+describe('reverse converter -- the six stages back onto the legacy board (req-99a)', () => {
+  const sixPlan = buildPlan(vault, { ...DEFAULT_MIGRATION_CONFIG, selected: SELECTED });
+
+  for (const id of SELECTED) {
+    it(`${id}: back in the column it came from, the header and body unchanged`, () => {
+      const legacy = vault.tickets.find((t) => t.id === id)!;
+      const target = sixPlan.conversions.find((c) => c.legacyId === id)!.target!;
+      const reversed = reverseTicket({ content: stubDocument(target) }, { phases: PHASES, phaseDirs: PHASE_DIRS });
+      expect(reversed.phase).toBe(legacy.phase);
+      expect(reversed.relPath).toBe(`tickets/${PHASE_DIRS[legacy.phase as keyof typeof PHASE_DIRS]}/${id}.md`);
+      expectRoundTrip(legacy, reversed.text, reversed.relPath, sixPlan);
+    });
+  }
+
+  it('a ticket that moved on, or was created after the cut-over, takes the column its stage maps to', () => {
+    const moved = ['---', 'id: t-12', 'title: A', 'stage: ready', 'x-legacy-phase: build', '---', '', 'x', ''].join('\n');
+    expect(reverseTicket({ content: moved }, { phases: LEGACY_PHASE_IDS })).toMatchObject({ phase: 'commit', relPath: 'tickets/40-commit/T-0012.md', lost: [] });
+    const fresh = ['---', 'id: t-92', 'title: B', 'stage: shaping', '---', '', 'x', ''].join('\n');
+    expect(reverseTicket({ content: fresh }, { phases: LEGACY_PHASE_IDS })).toMatchObject({ phase: 'prioritized', relPath: 'tickets/20-prioritized/T-0092.md' });
+  });
+});
+
 describe('shadow diff input', () => {
   const legacyRows = rowsFromLegacy(vault.tickets.filter((t) => SELECTED.includes(t.id)));
 
@@ -193,12 +216,12 @@ describe('scratch store guard and configuration', () => {
     expect(toml).toContain('claim = ["build", "commit"]');
   });
 
-  it('writes the new default: six stages, the agent columns claim, no quota (E12-9c)', () => {
+  it('writes the six stages: Building the only claim stage, no quota (req-99a)', () => {
     const toml = scratchConfigToml(DEFAULT_MIGRATION_CONFIG, 'owner@legion');
-    expect(toml).toContain('values = ["inbox", "plan", "build", "review", "sign-off", "done"]');
+    expect(toml).toContain('values = ["inbox", "shaping", "prioritized", "building", "ready", "done"]');
     expect(toml).toContain('initial = "inbox"');
     expect(toml).toContain('terminal = ["done"]');
-    expect(toml).toContain('claim = ["plan", "build"]');
+    expect(toml).toContain('claim = ["building"]');
     expect(toml).toContain('cancelled = "cancelled"');
     expect(toml).toContain('quota_tickets_per_day = 0');
     expect(toml).toContain('values = ["urgent", "high", "normal", "low"]');
@@ -332,7 +355,7 @@ describe.skipIf(!found.ok)('apply into a scratch dricket store (real dk)', () =>
     await expect(initScratchStore({ bin, storeDir, env, config: OLD_VOCABULARY, admin: 'owner@legion' })).rejects.toThrow(/not empty/);
   }, 60_000);
 
-  it('new default (E12-9c): a re-run migration lands the legacy phases in the new columns and dk validate is clean', async () => {
+  it('six stages (req-99a): the import lands the legacy phases in the new stages, dk validate is clean, the store reverses to the legacy board', async () => {
     const newStore = path.join(root, 'store-new');
     const newData = path.join(root, 'data-new');
     await initScratchStore({ bin, storeDir: newStore, env, config: DEFAULT_MIGRATION_CONFIG, admin: 'owner@legion' });
@@ -342,11 +365,20 @@ describe.skipIf(!found.ok)('apply into a scratch dricket store (real dk)', () =>
     const newDk = new DkProcess({ bin, store: newStore, dataDir: newData, env });
     const newBoard = new DricketTicketStore(newDk);
     expect((await newBoard.show('T-0010')).stage).toBe('inbox');
-    expect((await newBoard.show('T-0012')).stage).toBe('build');
+    expect((await newBoard.show('T-0012')).stage).toBe('building');
     expect((await newBoard.show('T-0014')).stage).toBe('done');
     const t20 = await newBoard.show('T-0020');
-    expect(t20.stage).toBe('inbox'); // was prioritized: the owner's manual queue, never an agent column
+    expect(t20.stage).toBe('prioritized'); // the owner's manual queue, never an agent column
     expect(t20.extensions['x-legacy-phase']).toBe('prioritized');
+    for (const id of DK_SELECTED) {
+      const legacy = vault.tickets.find((t) => t.id === id)!;
+      const detail = await newBoard.show(id);
+      const reversed = reverseTicket({ content: detail.text }, { phases: PHASES, phaseDirs: PHASE_DIRS });
+      expect(reversed.phase, id).toBe(legacy.phase);
+      expectRoundTrip(legacy, reversed.text, reversed.relPath, newPlan);
+    }
+    const shadow = shadowDiff(rowsFromLegacy(vault.tickets.filter((t) => DK_SELECTED.includes(t.id)), (phase) => stageOfLegacyPhase(phase, DEFAULT_MIGRATION_CONFIG) ?? phase), await collectStoreRows(newBoard));
+    expect(shadow.differences.map((d) => `${d.kind}:${d.id}`)).toEqual(['priority:T-0014']); // declared by the converter
     const out = execFileSync(bin, ['validate'], { env: { ...env, DK_STORE: newStore, DK_DATA_DIR: newData, DK_OWNER: 'owner@legion' }, encoding: 'utf8', windowsHide: true });
     expect(out).toBeDefined();
   }, 600_000);
