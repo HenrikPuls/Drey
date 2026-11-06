@@ -5,8 +5,7 @@ tabs with the Assistant at the centre). **Built so far (state of milestone
 132):** views (E13-1, 123, ADR-0089), view presets and home views (E13-2, 127),
 the status bar slot (E13-3, 124), the link fallback (E13-4, 125), the ticket as
 a document (E13-6, 129), the Board and Crew tabs and the Capacity band (E13-8,
-130), the Review tab (E13-7, 139). **Also built since:** Assistant conversation targets (E13-5, milestone 138). **Built since:** Shape in Drey (E13-9, milestone 144). **Not built:** the Parts block (E13-10), the Flow tab (E13-11),
-Settings → Tickets (E13-12), the Work view preset (E13-13); the roadmap holds
+130), the Review tab (E13-7, 139). **Also built since:** Assistant conversation targets (E13-5, milestone 138). **Built since:** Shape in Drey (E13-9, milestone 144), the Flow tab (E13-11, milestone 145), Settings → Tickets (E13-12, milestone 146) and the first cut of the Work view preset (E13-13, milestone 141). **Not built:** the Parts block (E13-10) and the rest of E13-13 (the Assistant target of the preset); the roadmap holds
 the order. The boards are in the design canvas "Drey Tickets — Workflow
 redesign", row "Desktop in Drey", boards 7a to 7j. The whole concept is in
 [architecture-concept-v2.md](architecture-concept-v2.md) (§3.4a).

@@ -30,6 +30,8 @@ view (5d, 7f). The board-by-board comparison with the code is in
 [convergence-gaps.md](convergence-gaps.md); the whole concept is
 [architecture-concept-v2.md](architecture-concept-v2.md).
 
+The order in which the canvas boards are built, with the coverage of every board and the model per session, is in [build-plan.md](build-plan.md).
+
 How to read them: the markup is plain HTML with inline styles; `{{…}}`
 holes are filled from the `renderVals()` sample data at the bottom of
 each file — that sample data shows realistic content, not strings to

@@ -18,6 +18,14 @@ Found by the consistency audit of 2026-11-06 against canvas decisions 1–21 (no
 
 **O-5 — Autopilot after a restart. DECIDED 2026-11-06: (a).** Autopilot restores as **Off** after every start (a timed Paused ends as Off); the ADR-0077 ruling of 2026-10-18 stays.
 
+**Build-plan questions Q1–Q9 (decided 2026-11-06, afternoon; full text in [build-plan.md](build-plan.md) section 3).**
+- **Q1 (owner):** the six-state vocabulary and the mapping land in the engine **before** the dricket cut-over import (req-99a → E14-7); this sharpens O-3: the engine half is not "after" the cut-over.
+- **Q2 (owner):** on the desktop Accept lives on **both** Mission Control surfaces (Work panel Needs-you row / Ready card, and the Assistant decision card); the ticket document, Review tab and ticket strip lose theirs; no engine change. This refines O-1.
+- **Q6 (owner):** Shaping and Prioritized manual, Building the only agent claim stage, Ready to try manual, Accept = sign-off.
+- **Q8 (owner):** Accept merges and pushes the **developed program's repository** (the target repo the agents changed), not the dricket store; the commit step `commit-default` runs as an owner-started run under the stop ladder; when green, the dricket ticket moves to Done as bookkeeping.
+- **Q3, Q4, Q5, Q9 (technical calls):** the `autopilot` record beside `ChainMaster` in `chain.json`, boot writes Off; iPad pane state per device in `localStorage` by orientation; Notes reuse `libs/markdown-surface` and `mc-markdown`, the formatting strip later; the fifth text-size step with the Appearance work of wave 3.
+- **Q7:** roadmap ids req-103 (phone menu root, part of req-96), req-104 (board 9a), req-105 (board 9b).
+
 | id | area | what differs | evidence | severity | proposed fix | roadmap id |
 |---|---|---|---|---|---|---|
 | G-01 | design/code | The **Work view does not exist**: the tickets plugin registers no view preset, so the switcher has nothing to switch to; Board, Crew, Capacity and ticket tabs have no home (boards 7a–7f show it) | no `registerViewPreset` in `plugins/tickets/renderer`; host ready `src/app/views/view.service.ts:125-128` | blocks use | register the Work preset (Tickets panel left, Assistant right, Capacity band with the Board) | E13-13 |
