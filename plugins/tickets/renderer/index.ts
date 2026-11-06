@@ -1713,6 +1713,7 @@ const WORKERS_KEY = 'workers://all';
 let workerPools: readonly WorkerPoolEntry[] = [
   { id: 'opencode', label: 'OpenCode', size: 1 },
   { id: 'claude-code', label: 'Claude Code', size: 1 },
+  { id: 'kimi', label: 'Kimi Code', size: 1 },
 ];
 
 const readWorkerPools = async (api: DreyPluginApi): Promise<void> => {

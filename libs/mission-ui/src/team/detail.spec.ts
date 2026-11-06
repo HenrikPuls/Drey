@@ -668,7 +668,7 @@ describe('the setup tab’s pure moves', () => {
   });
 
   it('the worker sheet offers the desk’s harnesses', () => {
-    expect(WORKER_OPTIONS).toEqual(['claude-code', 'opencode']);
+    expect(WORKER_OPTIONS).toEqual(['claude-code', 'opencode', 'kimi']);
   });
 });
 
@@ -962,7 +962,7 @@ describe('the setup tab', () => {
     const vm = surface(setup(fake));
     await vm.pick('worker', 'opencode');
     expect(fake.patched).toEqual([{ worker: 'opencode' }]);
-    expect(vm.workerOptions()).toEqual(['claude-code', 'opencode']);
+    expect(vm.workerOptions()).toEqual(['claude-code', 'opencode', 'kimi']);
   });
 
   it('the skill switch PATCHes the new list and toggles at once', async () => {

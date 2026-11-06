@@ -133,7 +133,7 @@ export function nextRouterOf(current: PersonaRouterView): PersonaRouterView {
 }
 
 /** The workers the setup sheet offers (the desk's harnesses). */
-export const WORKER_OPTIONS: readonly string[] = ['claude-code', 'opencode'];
+export const WORKER_OPTIONS: readonly string[] = ['claude-code', 'opencode', 'kimi'];
 
 /** The skill list a toggle produces: the name dropped when carried, added when not. */
 export function skillsToggled(skills: readonly string[], name: string): readonly string[] {

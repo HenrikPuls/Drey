@@ -35,6 +35,15 @@ export const MODEL_PRICES: Readonly<Record<string, ModelPrice>> = {
   'glm-5.2': { input: 0.6, output: 2.2 },
   // Moonshot's Kimi K2 list rate (approximate, editorially maintained).
   'kimi-k2': { input: 0.6, output: 2.5 },
+  // The Kimi Code CLI's aliases (E10-8) bill at the same editorial rate; the
+  // highspeed tiers cost twice the usage, not twice the tokens — not modelled.
+  k3: { input: 0.6, output: 2.5 },
+  'k3-256k': { input: 0.6, output: 2.5 },
+  'k3.1-pro': { input: 0.6, output: 2.5 },
+  'k3.1-pro-highspeed': { input: 0.6, output: 2.5 },
+  'kimi-for-coding': { input: 0.6, output: 2.5 },
+  'kimi-for-coding-highspeed': { input: 0.6, output: 2.5 },
+  'glm-5.3-highspeed': { input: 1, output: 3 },
 };
 
 /** The table key for a wire model string: the part after the last `/`, lowercase. */

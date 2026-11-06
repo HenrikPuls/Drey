@@ -7,6 +7,51 @@
 - **Specs.** `fleet/run-spec-support.ts` (shared by `runs.spec` / `runs-dk.spec`): `settled()` awaits the `onRunSettled` event instead of polling a clock, `waitFor` uses the test's own timeout as ceiling, supervisors are drained before temp dirs are removed. "defers while a run is in its machine gate" had a lost wake-up (release wired inside `execShell`, which can run after the blocker turned true) — a real hang on a slow machine. `videos.limitMb` spec awaits `engine.ready`; the dk file-store specs await `source.idle()` after `dispose()`.
 - **Rule** added to CLAUDE.md (Toolchain): await the shutdown before removing a temp dir.
 
+### Milestone 167 — E10-8: Kimi Code as a selectable worker
+
+**Not yet manually verified by the owner.** Owner request 2026-11-05, roadmap E10-8.
+Investigation and the full CLI findings: [`docs/design/kimi-worker.md`](../docs/design/kimi-worker.md).
+
+- **Adapter.** `kimi` (label "Kimi Code") is the third worker next to `opencode` and
+  `claude-code`: `packages/tickets-engine/src/fleet/kimi.ts` drives `kimi acp` (Agent Client
+  Protocol over stdio, pinned against kimi 2.4.1) — not `kimi -p`, which auto-approves everything
+  and reports no usage. It maps thoughts, answer text, tool calls and results to the run stream
+  (edit line counts from `Write`/`Edit` arguments), holds ACP approval requests as the run's
+  permission wait (`answerPermission`) and Kimi's `AskUserQuestion` as a question wait
+  (`answerQuestion`; a free-text reply skips the question and rides the next turn), steers by
+  cancelling a running turn and prompting next (`inject`), interrupts with `session/cancel`,
+  resumes with `session/load` (a failed load → `onResumeFailed`, the supervisor starts fresh),
+  compacts with `/compact` (`COMPACT_CAPABILITY.kimi = native`), maps the permission mode
+  (`bypass` → ACP `yolo`, `accept-edits` → `auto`) and the model through
+  `session/set_config_option`. The run ends on the prompt's `end_turn`; the process is then
+  stopped. A `QUESTION:` / `BLOCKED:` final message works as for the other workers.
+- **Tokens and cost.** ACP carries neither: `kimi-usage.ts` reads the `usage.record` lines of the
+  session's `wire.jsonl` (`~/.kimi-code`, `KIMI_HOME`) after each turn (per-call `turnUsage`,
+  totals; a resumed session's earlier spend is skipped) and the cost is computed from
+  `core/model-prices.ts` (rows added for the CLI's `k3*` / `kimi-for-coding*` aliases at the
+  Kimi K2 rate).
+- **Everywhere workers are listed:** `WorkerProviderId` / `WORKER_PROVIDERS`, pool normalisation,
+  the chain and orchestrator pools, the runner's adapter table, Settings → Tickets (Default
+  worker, column worker choice, Workers switch with pool size and compact threshold), the
+  persona worker validation and the Team worker options, the Mission Control labels, the
+  `start run` tool text, the model picker (`worker-models.ts`: the aliases of Kimi's
+  `config.toml`; `kimi-probe.ts`: installed? has a provider? — the picker's note says "run
+  `kimi login`" when not). The default worker stays `opencode`; nothing changes for existing
+  boards.
+- **Limitations** (design doc; roadmap follow-ups): no budget cap in the CLI, a question has no
+  free-text answer, no quiet start (`holdAtSpawn`) and no re-attach after a runner restart, the
+  price table is editorial, no quota/rate-limit signal was provoked (an error text from the CLI
+  reaches the existing text-based breaker).
+- **Tests:** `kimi.spec.ts` (scripted ACP agent with the shapes recorded from the real CLI:
+  handshake and brief, mode/model, resume and failed resume, compact first and usage base,
+  approval wait and answer, question by label and by free text, `QUESTION:` / `BLOCKED:`,
+  steer/interrupt, hold, failing prompt, unsupported request, stop; `parseKimiWire`),
+  `kimi-probe.spec.ts`, plus kimi cases in `settings-workers.spec.ts`, `worker-models.spec.ts`,
+  `handover.spec.ts`. **Real smoke:** a scratch run through the adapter against the logged-in
+  CLI (model `kimi-code/k3` and the config default) wrote a file, streamed its thoughts and tool
+  calls, reported 31.9 k tokens in and a cost of $0.019, and exited 0.
+- **Docs:** manual (Workers), docs/05, `docs/design/kimi-worker.md`.
+
 ### Milestone 163 — D-6: selecting a ticket never changes the view, a view saves only by "Save view"
 
 **Not yet manually verified by the owner.** Owner report 2026-11-05, roadmap D-6.

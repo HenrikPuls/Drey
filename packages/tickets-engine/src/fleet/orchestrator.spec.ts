@@ -1577,6 +1577,7 @@ describe('provider pools (req-63)', () => {
     expect(normalizeFleetPools(undefined)).toEqual({
       opencode: { size: 1, probeUrl: null },
       'claude-code': { size: 1, probeUrl: null },
+      kimi: { size: 1, probeUrl: null },
     });
     expect(normalizeFleetPools({ opencode: { size: 0, probeUrl: 'ftp://x' } }).opencode).toEqual({
       size: 1,
@@ -1589,7 +1590,7 @@ describe('provider pools (req-63)', () => {
   });
 
   it('the effective size is capped by a probe and shrunk by a rate limit, never below one', () => {
-    expect(effectivePoolSizes(pools, {}, {}, 0)).toEqual({ opencode: 4, 'claude-code': 2 });
+    expect(effectivePoolSizes(pools, {}, {}, 0)).toEqual({ opencode: 4, 'claude-code': 2, kimi: 1 });
     expect(effectivePoolSizes(pools, { opencode: 2 }, {}, 0).opencode).toBe(2);
     expect(effectivePoolSizes(pools, { opencode: 8 }, {}, 0).opencode).toBe(4);
     const shrink = { 'claude-code': { count: 5, untilMs: RATE_LIMIT_SHRINK_MS } };

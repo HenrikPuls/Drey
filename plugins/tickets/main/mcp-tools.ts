@@ -42,7 +42,7 @@ const TOOLS: readonly PluginMcpTool[] = [
   {
     name: 'fleet_run',
     description:
-      'Starts an agent run for one ticket (the ticket id, e.g. "T-0007"): the worker works the ticket in its own worktree; on a green machine gate the runner moves the ticket one column right. The optional worker overrides the assignment ("opencode", "claude-code").',
+      'Starts an agent run for one ticket (the ticket id, e.g. "T-0007"): the worker works the ticket in its own worktree; on a green machine gate the runner moves the ticket one column right. The optional worker overrides the assignment ("opencode", "claude-code", "kimi").',
     inputSchema: {
       type: 'object',
       properties: {

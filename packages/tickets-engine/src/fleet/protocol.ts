@@ -16,9 +16,9 @@ import type { ShapedQuestion } from '../contracts/question-shape';
 import type { TicketForm } from '../contracts/tickets';
 
 /** The workers of milestone 84, in fleet order (the assignment default). */
-export type WorkerProviderId = 'opencode' | 'claude-code';
+export type WorkerProviderId = 'opencode' | 'claude-code' | 'kimi';
 
-export const WORKER_PROVIDERS: readonly WorkerProviderId[] = ['opencode', 'claude-code'];
+export const WORKER_PROVIDERS: readonly WorkerProviderId[] = ['opencode', 'claude-code', 'kimi'];
 
 export function isWorkerProvider(value: unknown): value is WorkerProviderId {
   return typeof value === 'string' && (WORKER_PROVIDERS as readonly string[]).includes(value);
@@ -373,7 +373,7 @@ export function normalizeFleetPools(value: unknown): FleetPools {
       probeUrl: typeof probe === 'string' && /^https?:\/\/\S+$/.test(probe.trim()) ? probe.trim() : null,
     };
   };
-  return { opencode: one('opencode'), 'claude-code': one('claude-code') };
+  return { opencode: one('opencode'), 'claude-code': one('claude-code'), kimi: one('kimi') };
 }
 /** One question of OpenCode's `question` tool (a field of its pending form). */
 export interface WaitQuestion {

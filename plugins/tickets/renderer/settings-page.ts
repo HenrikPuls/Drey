@@ -130,6 +130,7 @@ function fleetSection(api: DreyPluginApi): HTMLElement {
       selectConfig(api, 'defaultWorker', [
         ['opencode', 'OpenCode'],
         ['claude-code', 'Claude Code'],
+        ['kimi', 'Kimi Code'],
       ], 'opencode'),
       'For a run no ticket, column or repository assigns a worker to.',
     ),

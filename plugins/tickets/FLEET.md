@@ -480,3 +480,7 @@ the vault is older than the shipped default (v0 < v2)`) and Settings →
 Tickets → Prompts › *Reset to the shipped version* brings the fixes in.
 The marker line never reaches the model. Bump the number when a shipped
 prompt changes in substance.
+
+## Kimi Code (E10-8)
+
+`kimi` is the third adapter (`packages/tickets-engine/src/fleet/kimi.ts`): `kimi acp` over stdio, approvals and questions held for the owner, `/compact` native, resume by `session/load`. Tokens come from Kimi's wire log, cost from the price table. See `docs/design/kimi-worker.md`.

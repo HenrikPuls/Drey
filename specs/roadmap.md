@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163 and 168 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
+**Status (2026-11-04):** version 0.8.1, milestones 1–151, 153–163, 167 and 168 built (109–111 are recorded in the changelog by the convergence audit backfill) — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
@@ -417,14 +417,12 @@ owner confirms scope and order before any of it starts:
   manual and its screenshots, the phone capture button label. Existing boards and stores
   keep their columns (a default never renames what a user has). Open from E12-9b: Q2 team
   seeding, Q3 default worker (still undecided).
-- **E10-8 — Kimi Code as a selectable worker** (owner request 2026-11-05, outside the
-  list). The fleet has two worker adapters, `opencode` and `claude-code`
-  (`packages/tickets-engine/src/fleet/providers.ts`, `settings-workers.ts`); Kimi Code
-  (the `kimi` CLI) has none, only a price row in `core/model-prices.ts`. Add a `kimi`
-  adapter (headless/stream protocol of the installed CLI — investigate `kimi --help`
-  and what the repo's `kimi-code` skill already learned), its Settings → Tickets worker
-  fields (pool size, probe, compaction like the others), persona worker choice, cost
-  rows, and its place in the worker probe. Opt-in, off until the owner picks it.
+- **E10-8 follow-ups — Kimi Code worker** (shipped as milestone 167, limits recorded in
+  `docs/design/kimi-worker.md`): (a) verify the quota/rate-limit stop reason against a real
+  limit and teach the breaker its text if it differs; (b) a free-text answer to `AskUserQuestion`
+  has no ACP channel — revisit when the CLI offers one; (c) a re-attach after a runner restart
+  (ACP `session/load` into a fresh process could carry the run on); (d) a billing-aware price
+  row for the `-highspeed` tiers ("2x usage cost").
 - **E12-9d — "Initialize board" seeds the default team** (owner decision 2026-11-05,
   answering E12-9b Q2: yes). A new board gets the default team of decision D7 — **Paul**
   (plans), **Ben**, **Ralf**, **Tessa** (roles as in the concept) — plus "You" and Pia as
@@ -432,7 +430,7 @@ owner confirms scope and order before any of it starts:
   which column follows E12-9c (Plan, Build = agents; Inbox, Review, Sign Off = manual). The
   default worker is **`opencode`** (owner decision 2026-11-05, E12-9b Q3: it supports all
   providers; the engine's `defaultWorker` already is `opencode`); `claude-code` stays
-  selectable, and so must **Kimi Code** (see E10-8) — both are what the owner uses today. The names are plain persona files, so the owner's idea of a squirrel crew ("Nutty
+  selectable, and so is **Kimi Code** (milestone 167) — both are what the owner uses today. The names are plain persona files, so the owner's idea of a squirrel crew ("Nutty
   Nutcracker" …) is a later naming choice, not a code change. Existing boards keep their team.
 - **E13-22 — Settings: one page width, a section tree and search** (owner request
   2026-11-05, outside the list; modelled on VS Code's settings). The settings overlay

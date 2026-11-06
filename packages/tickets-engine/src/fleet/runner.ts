@@ -21,6 +21,8 @@ import { promises as fsp } from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
 import { fleetBuildStamp } from './build-stamp';
+import { kimiAdapter } from './kimi';
+import { nodeKimiUsageReader } from './kimi-usage';
 import { claudeCodeAdapter, opencodeAdapter } from './providers';
 import { freePort, nodeSpawnFn, scrubInheritedEnv } from './procs';
 import { Orchestrator, type FleetEvents } from './orchestrator';
@@ -127,6 +129,7 @@ async function main(): Promise<void> {
   const adapters = {
     opencode: opencodeAdapter(nodeSpawnFn()),
     'claude-code': claudeCodeAdapter(nodeSpawnFn()),
+    kimi: kimiAdapter(nodeSpawnFn(), nodeKimiUsageReader()),
   };
   let orchestrator: Orchestrator | null = null;
   const supervisors = new Map<string, RunSupervisor>(

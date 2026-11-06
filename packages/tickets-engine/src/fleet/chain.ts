@@ -88,10 +88,10 @@ export interface PlanDispatchInput {
   /** Per-column mode; a phase absent here is `playing`. */
   readonly modes: Readonly<Record<string, ColumnMode>>;
   /** The parallel runs each provider's pool carries (req-63). */
-  readonly poolSize: Readonly<Record<WorkerProviderId, number>>;
+  readonly poolSize: Readonly<Partial<Record<WorkerProviderId, number>>>;
   /** Live (starting/running/stopping) runs per provider — every run, the
    *  owner's on-demand ones included, takes a pool slot. */
-  readonly liveByPool: Readonly<Record<WorkerProviderId, number>>;
+  readonly liveByPool: Readonly<Partial<Record<WorkerProviderId, number>>>;
   /** The provider that would run the card in that column (the assignment
    *  ladder); null = unresolvable — planned without a slot, so the
    *  dispatch refuses it with the reason. */
@@ -200,7 +200,7 @@ export function planDispatch(input: PlanDispatchInput): readonly PlannedDispatch
       a.position - b.position,
   );
 
-  const free: Record<WorkerProviderId, number> = { opencode: 0, 'claude-code': 0 };
+  const free: Record<WorkerProviderId, number> = { opencode: 0, 'claude-code': 0, kimi: 0 };
   for (const provider of WORKER_PROVIDERS) {
     free[provider] = (input.poolSize[provider] ?? 0) - (input.liveByPool[provider] ?? 0);
   }
