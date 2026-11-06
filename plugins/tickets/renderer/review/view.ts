@@ -11,7 +11,7 @@ import type { ReviewComment } from '../../../../packages/tickets-engine/src/core
 import type { TicketDiff, TicketFileReply } from '../../../../packages/tickets-engine/src/core/worktree-changes';
 import type { RunInfo } from '../../../../packages/tickets-engine/src/fleet/protocol';
 import type { BoardSnapshot, MutationResult, TicketCard } from '../../shared/tickets';
-import { proofNode } from '../ticket-document/dom';
+import { goToDecisionCard, proofNode } from '../ticket-document/dom';
 import { actionBarOf, proofOfText, type ProofView } from '../ticket-document/model';
 import type { WorkRow } from '../work-groups';
 import {
@@ -487,32 +487,23 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
     paintFooter();
   };
 
-  const decide = async (kind: 'sendBack' | 'accept'): Promise<void> => {
+  /** Send back with the line comments; the one Accept lives on the decision card (req-97). */
+  const sendBackWithComments = async (): Promise<void> => {
     const current = card();
-    if (current === null || busy) {
-      return;
-    }
-    if (kind === 'sendBack' && marks.comments.length === 0) {
-      deps.openSendBack(ticketId);
+    if (current === null || busy || marks.comments.length === 0) {
       return;
     }
     busy = true;
     note = null;
     paintFooter();
-    const result =
-      kind === 'accept'
-        ? await deps.mutate(`Accepting ${ticketId}`, () => deps.invoke('acceptTicket', { id: ticketId }))
-        : await deps.mutate(`Sending ${ticketId} back`, () =>
-            deps.invoke('sendBack', { id: ticketId, note: '', comments: marks.comments }),
-          );
+    const result = await deps.mutate(`Sending ${ticketId} back`, () =>
+      deps.invoke('sendBack', { id: ticketId, note: '', comments: marks.comments }),
+    );
     busy = false;
     if (result.ok) {
       setMarks(EMPTY_MARKS);
       composer = null;
-      note = {
-        text: kind === 'accept' ? 'Accepted.' : 'Sent back — the comments are in the ticket’s Handover.',
-        error: false,
-      };
+      note = { text: 'Sent back — the comments are in the ticket’s Handover.', error: false };
       paintAll();
     } else {
       setNote(result.error ?? 'The change was refused.', true);
@@ -537,12 +528,19 @@ export function mountReview(deps: ReviewDeps, host: HTMLElement, ticketId: strin
       footer.append(el('span', 'tickets-review-muted', 'Not waiting for your decision'));
       return;
     }
+    const link = el('a', 'tickets-review-decision-link', 'Decision waiting · go to the card'); // TODO(i18n)
+    link.href = '#';
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      goToDecisionCard(ticketId);
+    });
+    footer.append(link);
     const count = marks.comments.length;
-    const back = button(sendBackLabelOf(count), '', 'corner-down-left', 'Send the ticket back with your comments as feedback', () => void decide('sendBack'));
-    const accept = button(bar.acceptLabel, 'is-primary', 'check', 'Accept the result', () => void decide('accept'));
-    back.disabled = busy;
-    accept.disabled = busy;
-    footer.append(back, accept);
+    if (count > 0) {
+      const back = button(sendBackLabelOf(count), '', 'corner-down-left', 'Send the ticket back with your comments as feedback', () => void sendBackWithComments());
+      back.disabled = busy;
+      footer.append(back);
+    }
   };
 
   const paintAll = (): void => {

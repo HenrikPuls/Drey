@@ -140,6 +140,12 @@ export class PlanPane {
     }
   }
 
+  /** "Split into n tickets" is a link in the hint (req-97): one primary action per card. */
+  protected splitLink(event: Event): void {
+    event.preventDefault();
+    void this.decide('split');
+  }
+
   protected async decide(choice: 'keep' | 'split'): Promise<void> {
     if (this.deciding()) {
       return;

@@ -152,8 +152,8 @@
                   <p class="need-summary">{{ vm.need.summary }}</p>
                 }
               </article>
-            } @else if (vm.need.kind === 'manual') {
-              <article class="card qcard need-card need-manual">
+            } @else if (vm.need.kind === 'manual' || vm.need.kind === 'checkpoint') {
+              <article class="card qcard need-card need-manual" [attr.id]="'decision-' + (vm.need.ticketId ?? '')">
                 <div class="qk">{{ vm.kindLabel }}</div>
                 <div class="card-top">
                   @if (vm.need.ticketId) {
@@ -187,9 +187,11 @@
                       <button type="button" class="btn" (click)="toggleManualSendBack(vm)">Cancel</button>
                     } @else {
                       <button type="button" class="btn" (click)="toggleManualSendBack(vm)">Send back…</button>
-                      <button type="button" class="btn btn-primary" [disabled]="manualPending()[vm.key]" (click)="manualAccept(vm)">
-                        {{ manualPending()[vm.key] ? 'Accepting…' : 'Accept' }}
-                      </button>
+                      @if (acceptOffered(vm)) {
+                        <button type="button" class="btn btn-primary" [disabled]="manualPending()[vm.key]" (click)="manualAccept(vm)">
+                          {{ manualPending()[vm.key] ? 'Accepting…' : 'Accept' }}
+                        </button>
+                      }
                     }
                   </div>
                 } @else {

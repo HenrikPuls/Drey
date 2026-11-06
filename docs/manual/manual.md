@@ -970,9 +970,12 @@ says so in one line instead of the player (Settings → Engine → Videos,
 *Largest video*; videos are never deleted automatically). Put the caret in the section and the Markdown
 shows again. At the very end the **Cost** table lists every settled run
 of `## Verlauf` (phase, model, tokens, time, cost) with the total.
-Under it the **action bar**: *Send back…* and *Accept and move to
-<next column>* while the ticket waits at one of your checkpoints, and
-always *Thread* (the agent's thread of the ticket) and *Open Review*.
+Under it the **action bar**: *Thread* (the agent's thread of the ticket) and
+*Open Review*, and, while the ticket waits at one of your checkpoints, the
+quiet link **Decision waiting · go to the card**. There is no Accept or Send
+back here: you decide in one place, the decision card (the Ready card in the
+ticket's thread; on the phone and iPad the card in Mission Control's Work
+list). The link takes you to that card.
 
 **The Review tab.** *Open Review* opens a tab **Review · T-0121** with the
 ticket's proof on top (the same block as in the document) and the changes
@@ -986,9 +989,10 @@ added; otherwise *Open in editor* opens a copy. Click a **line number** to
 comment on that line, Shift-click a second number for a range, then add
 the comment (Ctrl+Enter). The footer button names how many you wrote:
 **Send back with 2 comments** moves the ticket back to the agent with each
-comment (file, line, text) in its Handover, so the next run reads them;
-**Accept and move to Sign Off** accepts as on the Ready card (the label names the next column). Both show only
-while the ticket waits at one of your checkpoints.
+comment (file, line, text) in its Handover, so the next run reads them (the
+button shows only once you wrote a comment). The Review tab has no Accept
+either: while the ticket waits at one of your checkpoints its footer shows
+the link **Decision waiting · go to the card**.
 
 **The Flow tab.** *Change flow* under the chain in a ticket's header
 opens **Flow · T-0121**: the gates the ticket will still pass, each with who

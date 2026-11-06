@@ -348,10 +348,8 @@ interface TicketSurface {
   stepChange(file: TicketDiffFile, direction: -1 | 1, host: HTMLElement): void;
   result(): { kind: 'error' | 'note'; text: string } | null;
   savedFlash(): string | null;
-  arm(): { armed: boolean; since: number };
-  acceptPending(): boolean;
-  accepted(): boolean;
-  acceptTap(): void;
+  decisionWaiting(): boolean;
+  goToDecisionCard(event: Event): void;
   sendBackOpen(): boolean;
   note(): string;
   sendBackPending(): boolean;
@@ -1185,54 +1183,6 @@ describe('TicketView', () => {
     expect(vm.viewer()).toBeNull();
   });
 
-  it('arms Accept on the first tap and executes on the second', async () => {
-    const fake = makeFake({ docValue: FULL_DOC });
-    const vm = surface(setup(fake));
-
-    vm.acceptTap();
-    expect(vm.arm().armed).toBe(true);
-    expect(fake.calls.accept).toBe(0);
-
-    vm.acceptTap();
-    expect(fake.calls.accept).toBe(1);
-    expect(vm.arm().armed).toBe(false);
-
-    await Promise.resolve();
-    expect(vm.result()).toEqual({ kind: 'note', text: 'Accepted.' });
-  });
-
-  it('shows the accept refusal inline and surfaces a warning as the note', async () => {
-    const refusing = makeFake({ docValue: FULL_DOC, acceptReply: { ok: false, error: 'the gate is red' } });
-    const vm = surface(setup(refusing));
-    vm.acceptTap();
-    vm.acceptTap();
-    await Promise.resolve();
-    expect(vm.result()).toEqual({ kind: 'error', text: 'the gate is red' });
-
-    const warning = makeFake({
-      docValue: FULL_DOC,
-      acceptReply: { ok: true, warning: 'The worktree has uncommitted changes and was kept' },
-    });
-    const vm2 = surface(setup(warning));
-    vm2.acceptTap();
-    vm2.acceptTap();
-    await Promise.resolve();
-    expect(vm2.result()).toEqual({
-      kind: 'note',
-      text: 'The worktree has uncommitted changes and was kept',
-    });
-  });
-
-  it('never accepts on a read-only device', async () => {
-    const fake = makeFake({ docValue: FULL_DOC, readOnlyValue: true });
-    const vm = surface(setup(fake));
-    vm.acceptTap();
-    vm.acceptTap();
-    await Promise.resolve();
-    expect(fake.calls.accept).toBe(0);
-    expect(vm.arm().armed).toBe(false);
-  });
-
   it('sends back only with a non-empty note and closes the panel on success', async () => {
     const fake = makeFake({ docValue: FULL_DOC });
     const vm = surface(setup(fake));
@@ -1431,27 +1381,6 @@ describe('TicketView', () => {
     expect(fake.calls.openChat).toBe(1);
     expect(fake.calls.prefillChat).toEqual([]);
     expect(fake.calls.proposeChain).toEqual([]);
-  });
-
-  it('swaps the actions for the mint done ring once the accept lands', async () => {
-    const fake = makeFake({ docValue: FULL_DOC });
-    const vm = surface(setup(fake));
-    expect(vm.accepted()).toBe(false);
-
-    vm.acceptTap();
-    vm.acceptTap();
-    await Promise.resolve();
-    expect(fake.calls.accept).toBe(1);
-    expect(vm.accepted()).toBe(true);
-    expect(vm.result()).toEqual({ kind: 'note', text: 'Accepted.' });
-
-    const refusing = makeFake({ docValue: FULL_DOC, acceptReply: { ok: false, error: 'the gate is red' } });
-    const vm2 = surface(setup(refusing));
-    vm2.acceptTap();
-    vm2.acceptTap();
-    await Promise.resolve();
-    expect(vm2.accepted()).toBe(false);
-    expect(vm2.result()).toEqual({ kind: 'error', text: 'the gate is red' });
   });
 
   it('syncs the gallery dots with the scroll position and taps back', () => {
@@ -1671,6 +1600,37 @@ describe('TicketView faces', () => {
     const bare = setupFaces(makeFake({ docValue: { ...DOC, text: '## Description\n\nNothing verified.' } }));
     expect(bare.proofCta()).toBeNull();
     expect(bare.proofRecommendation()).toBeNull();
+  });
+
+  it('the ticket body offers no Accept; with a checkpoint waiting it links to the decision card (req-97)', () => {
+    const waiting: McNeed = { kind: 'checkpoint', ticketId: 'T-0042', title: 'Accept?', summary: '' };
+    const fake = makeFake({ docValue: FULL_DOC });
+    const seen: string[] = [];
+    (fake as unknown as TicketVm).goToDecisionCard = (id) => {
+      seen.push(id);
+    };
+    const vm = setupFaces(fake, { work: workState({ needs: [waiting] }) });
+    expect('acceptTap' in vm).toBe(false);
+    expect(vm.decisionWaiting()).toBe(true);
+    const event = { preventDefault: () => undefined } as unknown as Event;
+    vm.goToDecisionCard(event);
+    expect(seen).toEqual(['T-0042']);
+    expect(fake.calls.accept).toBe(0);
+    expect(fake.calls.onClose).toBe(0);
+
+    // Without an adapter hook the link returns to the Work list, where the card is.
+    const bare = makeFake({ docValue: FULL_DOC });
+    const plain = setupFaces(bare, { work: workState({ needs: [waiting] }) });
+    plain.goToDecisionCard(event);
+    expect(bare.calls.onClose).toBe(1);
+  });
+
+  it('shows no link while nothing waits, and none while a question is open', () => {
+    const idle = setupFaces(makeFake({ docValue: FULL_DOC }), { work: workState() });
+    expect(idle.decisionWaiting()).toBe(false);
+    const waiting: McNeed = { kind: 'checkpoint', ticketId: 'T-0042', title: 'Accept?', summary: '' };
+    const asking = setupFaces(makeFake({ docValue: FULL_DOC }), { work: workState({ needs: [waiting, ASKING_NEED] }) });
+    expect(asking.decisionWaiting()).toBe(false);
   });
 
   it('switching tickets resets the face, the draft and the option card', () => {

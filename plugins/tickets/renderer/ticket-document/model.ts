@@ -357,17 +357,19 @@ export function currentStep(chain: readonly ChainItem[]): ChainItem | null {
 // --- the action bar ---------------------------------------------------------
 
 export interface ActionBar {
-  /** Send back and Accept make sense only while the ticket waits on the owner at a checkpoint. */
+  /** True while the ticket waits on the owner at a checkpoint: the bar then links to the decision card. */
   readonly decide: boolean;
-  /** The accept button's words: `Accept and move to Commit`, or `Accept` at the end. */
+  /** The accept button's words (`Accept and move to Commit`); the decision card's, not the bar's (req-97). */
   readonly acceptLabel: string;
+  /** The ticket the link points at; null without a row. */
+  readonly ticketId: string | null;
 }
 
 /**
  * The bar under the ticket. Accept names the column it moves the ticket to
  * (`Accept and move to Commit`); at the last configured column it is plain
- * `Accept` (the archive). Send back and Accept show only for a ticket at an
- * owner checkpoint.
+ * `Accept` (the archive). The bar draws no Accept itself: for a ticket at an
+ * owner checkpoint (`decide`) it links to the decision card (req-97).
  */
 export function actionBarOf(row: WorkRow | null, board: BoardSnapshot): ActionBar {
   const decide = row !== null && row.need !== null && row.need.kind === 'checkpoint';
@@ -375,5 +377,5 @@ export function actionBarOf(row: WorkRow | null, board: BoardSnapshot): ActionBa
   const configured = board.columns.filter((column) => !column.unknown);
   const index = configured.findIndex((column) => column.phase.id === phaseId);
   const next = index >= 0 ? configured[index + 1] : undefined;
-  return { decide, acceptLabel: next === undefined ? 'Accept' : `Accept and move to ${next.phase.title}` };
+  return { decide, acceptLabel: next === undefined ? 'Accept' : `Accept and move to ${next.phase.title}`, ticketId: row === null ? null : row.card.id };
 }

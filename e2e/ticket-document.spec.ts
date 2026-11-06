@@ -207,7 +207,9 @@ test.describe('Ticket document (E13-6)', () => {
     await expect(cost.locator('tfoot')).toContainText('$1.84');
 
     const bar = page.locator('app-editor .tickets-doc-actions');
-    await expect(bar.locator('button')).toHaveText(['Send back…', 'Accept and move to Done', 'Thread', 'Open Review']);
+    // req-97: no Accept / Send back here, only the link to the decision card.
+    await expect(bar.locator('button')).toHaveText(['Thread', 'Open Review']);
+    await expect(bar.locator('.tickets-doc-decision-link')).toHaveText('Decision waiting · go to the card');
     await page.screenshot({ path: test.info().outputPath('ticket-document-ready.png') });
 
     // Live Preview rule: the caret in the section shows its Markdown.

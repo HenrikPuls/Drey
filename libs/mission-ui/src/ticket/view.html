@@ -460,20 +460,7 @@
             </p>
           }
 
-          @if (accepted()) {
-            <div class="done-wrap" role="status">
-              <div class="done-ring">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M4 12.5l5 5L20 6.5" />
-                </svg>
-              </div>
-              <h3 class="done-title">Accepted</h3>
-              @if (result(); as r) {
-                <p class="done-note">{{ r.text }}</p>
-              }
-              <button type="button" class="btn ghost done-back" (click)="vm.onClose()">Back to work</button>
-            </div>
-          } @else if (!readOnly()) {
+          @if (!readOnly()) {
             <div class="actions">
               @if (sendBackOpen()) {
                 <div class="sendback">
@@ -502,14 +489,12 @@
                 </div>
               } @else {
                 <div class="action-row">
-                  <button type="button" class="btn ghost" (click)="toggleSendBack()">{{ sendBackLabel() }}</button>
-                  <button
-                    type="button"
-                    class="btn primary"
-                    [disabled]="acceptPending()"
-                    (click)="acceptTap()">
-                    {{ acceptPending() ? 'Accepting…' : arm().armed ? 'Tap again to accept' : 'Accept and merge' }}
-                  </button>
+                  @if (decisionWaiting()) {
+                    <a class="lnb decision-link" href="#" (click)="goToDecisionCard($event)">Decision waiting · go to the card</a>
+                  }
+                  @if (comments().length > 0) {
+                    <button type="button" class="btn ghost" (click)="toggleSendBack()">{{ sendBackLabel() }}</button>
+                  }
                 </div>
               }
             </div>

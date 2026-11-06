@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
   computed,
   effect,
   inject,
@@ -26,11 +25,8 @@ import type { MdMode } from '../markdown/mode';
 import { TicketEditMode, TicketModeSwitch } from './mode-switch';
 import { planPartsOf, planSectionOf } from '../plan/plan.model';
 import {
-  ACCEPT_ARM_WINDOW_MS,
-  ACCEPT_DISARMED,
   DEFAULT_DIFF_FONT_SIZE,
   MC_TICKET,
-  acceptArmReduce,
   chainPrefillOf,
   chainStepsOf,
   changeCountOf,
@@ -58,7 +54,6 @@ import {
   verlaufTotalOf,
   viewedKeyOf,
   wholeFileRowsOf,
-  type AcceptArmState,
   type ChangeRow,
   type GateStep,
   type ProofReport,
@@ -67,6 +62,9 @@ import {
   type ThreadItem,
   type TicketDiffFile,
 } from './ticket.model';
+
+/** The need kinds that are a decision waiting for the owner (the card on the Work tab carries them). */
+const DECISION_NEEDS: readonly string[] = ['checkpoint', 'manual'];
 
 const titleCaseOf = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1);
 
@@ -107,9 +105,10 @@ export type TicketMode = 'ticket' | 'proof' | 'thread';
  * box (`<n/n> green.` + the tester's recommendation when the stamp names
  * one), the criteria checklist with their evidence lines, the screenshot
  * gallery with its scroll-synced dots and the fullscreen viewer, the git
- * diff with the magnifier into the fullscreen zoom, and the two owner
- * actions — 'Send back…' with its mandatory note, the armed
- * 'Accept and merge' whose mint done ring takes over once accepted.
+ * diff with the magnifier into the fullscreen zoom, and the owner's
+ * link 'Decision waiting · go to the card' (the one Accept is on the Work
+ * tab's decision card, req-97) and 'Send back with n comments…' once line
+ * comments exist.
  *
  * The **thread** mode (prototype screen 04) is the ticket's filtered
  * view of the active chat session: the messages whose text names the
@@ -232,7 +231,6 @@ export class TicketView {
     // the ticket document otherwise (E13-20). Read untracked: a run starting
     // later does not yank the face away from where the owner is reading.
     untracked(() => this.mode.set(defaultFaceOf(this.runActive())));
-    this.accepted.set(false);
     // A run face opens with the `<id>:` prefix the thread's composer always carries.
     this.threadDraft.set(untracked(() => (this.mode() === 'thread' ? `${this.id()}: ` : '')));
     this.threadError.set(null);
@@ -741,57 +739,31 @@ export class TicketView {
   /** The dim save confirmation the editor set through `vm.flashSaved()`; it closes nothing. */
   protected readonly savedFlash = computed(() => this.vm.savedFlash());
 
-  // --- the armed two-step Accept ---------------------------------------------
+  // --- the link to the decision card (req-97) ---------------------------------
 
-  protected readonly arm = signal<AcceptArmState>(ACCEPT_DISARMED);
-  protected readonly acceptPending = signal(false);
-  /** True once an accept landed — the mint done ring takes over the actions. */
-  protected readonly accepted = signal(false);
-  private armTimer: ReturnType<typeof setTimeout> | null = null;
-
-  constructor() {
-    inject(DestroyRef).onDestroy(() => this.clearArmTimer());
-  }
-
-  protected acceptTap(): void {
-    if (this.acceptPending() || this.readOnly() || this.isEmpty()) {
-      return;
+  /**
+   * The owner checkpoint waiting on this ticket, if any: the card that
+   * carries the one Accept lives on the Work tab (canvas decision 16), so
+   * this body only points at it. An open question comes first — while one
+   * waits, Accept is not offered and neither is the link.
+   */
+  protected readonly decisionWaiting = computed<boolean>(() => {
+    const work = this.work;
+    const doc = this.doc();
+    if (work === null || doc === null || this.questionNeed() !== null) {
+      return false;
     }
-    const outcome = acceptArmReduce(this.arm(), { kind: 'tap', now: Date.now() });
-    this.arm.set(outcome.state);
-    this.clearArmTimer();
-    if (outcome.execute) {
-      void this.doAccept();
-    } else if (outcome.state.armed) {
-      this.armTimer = setTimeout(() => {
-        this.arm.set(acceptArmReduce(this.arm(), { kind: 'tick', now: Date.now() }).state);
-      }, ACCEPT_ARM_WINDOW_MS);
-    }
-  }
+    return work.needs.some((need) => need.ticketId === doc.id && DECISION_NEEDS.includes(need.kind));
+  });
 
-  private async doAccept(): Promise<void> {
-    this.acceptPending.set(true);
-    this.result.set(null);
-    try {
-      const reply = await this.vm.accept();
-      this.result.set(
-        reply.ok
-          ? { kind: 'note', text: reply.warning ?? 'Accepted.' }
-          : { kind: 'error', text: reply.error ?? 'The accept failed.' },
-      );
-      this.accepted.set(reply.ok);
-    } catch {
-      this.result.set({ kind: 'error', text: 'The accept failed.' });
-    } finally {
-      this.acceptPending.set(false);
-      this.arm.set(ACCEPT_DISARMED);
-    }
-  }
-
-  private clearArmTimer(): void {
-    if (this.armTimer !== null) {
-      clearTimeout(this.armTimer);
-      this.armTimer = null;
+  /** "Decision waiting · go to the card": the adapter focuses the card, else back to the Work list. */
+  protected goToDecisionCard(event: Event): void {
+    event.preventDefault();
+    const id = this.doc()?.id ?? '';
+    if (this.vm.goToDecisionCard !== undefined) {
+      this.vm.goToDecisionCard(id);
+    } else {
+      this.vm.onClose();
     }
   }
 

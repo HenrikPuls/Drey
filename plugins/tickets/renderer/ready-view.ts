@@ -10,6 +10,7 @@
 import type { ParsedChanges, StoryItem, StoryTotals } from '../shared/changes';
 import type { StepCard } from '../shared/step-card';
 import type { TicketTrack } from '../shared/tickets';
+import { GO_TO_DECISION_CARD, type GoToDecisionCardDetail } from './ticket-document/dom';
 import { formatTokens } from './worker-status';
 
 /** What the card's buttons do (the thread wires them to its IPC seams). */
@@ -66,6 +67,7 @@ const NOTHING_ELSE = 'Nothing else you can see has changed.';
  */
 export function readyCardNode(deps: ReadyViewDeps, data: ReadyData): HTMLElement {
   const root = el('div', 'tickets-ready-card');
+  root.dataset['decisionCard'] = data.id;
 
   const head = el('div', 'tickets-ready-head');
   head.append(el('span', 'tickets-ready-kicker', data.id));
@@ -182,6 +184,7 @@ export function readyBarNode(
   state: { readonly open: boolean; onToggle(): void },
 ): HTMLElement {
   const bar = el('div', 'tickets-ready-bar');
+  bar.dataset['decisionCard'] = data.id;
   const toggle = el('button', 'icon-btn tickets-ready-fold');
   toggle.type = 'button';
   toggle.title = state.open ? 'Fold the card away' : 'Unfold the card';
@@ -222,4 +225,31 @@ export function storyNode(data: StoryData): HTMLElement {
     root.append(el('span', 'tickets-story-total', parts.join(' · ')));
   }
   return root;
+}
+
+/**
+ * "Decision waiting · go to the card" (req-97): the ticket document's and the
+ * Review tab's link asks the card of that ticket to take the focus — it
+ * scrolls into view and its first button (Launch / Accept) is focused. The
+ * card that answers marks the event handled; the link falls back to opening
+ * the thread otherwise.
+ */
+export function focusDecisionCard(root: ParentNode, id: string): boolean {
+  const cards = Array.from(root.querySelectorAll<HTMLElement>('[data-decision-card]')).filter((node) => node.dataset['decisionCard'] === id);
+  const card = cards.find((node) => node.classList.contains('tickets-ready-card')) ?? cards[0];
+  if (card === undefined) {
+    return false;
+  }
+  card.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  card.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
+  return true;
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener(GO_TO_DECISION_CARD, (event) => {
+    const detail = (event as CustomEvent<GoToDecisionCardDetail>).detail;
+    if (focusDecisionCard(document, detail.id)) {
+      detail.handled = true;
+    }
+  });
 }

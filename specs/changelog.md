@@ -1,3 +1,29 @@
+### req-97 — Mission Control decision card as the only Accept
+
+**Not yet manually verified by the owner.** Owner request 2026-11-06, outside the list (canvas decision 16;
+O-1 decided in `docs/design/work-panel/convergence-gaps.md`; concept §5.3).
+
+- **One decision, one place.** Accept (and Send back with its mandatory note) lives only on the decision
+  card: the Ready card of the ticket thread on the desktop, and the Needs-you card of the Work tab in Mission
+  Control on phone and iPad. The ticket document's action bar, the Review tab's footer and the Mission Control
+  ticket body lose Accept (the two-step "Accept and merge" and its done ring are gone with it) and show the quiet
+  link **Decision waiting · go to the card** instead. On the desktop the link focuses the Ready card
+  (`drey:tickets-go-to-decision-card` event, answered in `ready-view.ts`) and opens the thread when no card is on
+  screen; on Mission Control it calls the adapter's optional `goToDecisionCard` (else returns to the Work list).
+- **Review tab:** keeps the diff, the line comments and **Send back with n comments** (the button shows only once
+  a comment exists); the plain Send back and Accept are the card's.
+- **Mission Control Work card:** a `checkpoint` need gets the same Accept / Send back card as a manual step (same
+  endpoints, no engine change; the `approve` command and `/api/tickets/<id>/accept` stay). While a question of the
+  same ticket is open, Accept is not offered, and the ticket body shows no link then either.
+- **Plan pane (phone):** one primary button per card — *Keep as one ticket*; **Split into n tickets** is a link in
+  the hint text.
+- **Tests:** `dom.spec` (link, event, fallback), `review/view.spec`, `ready-view.spec` (focus), the mission-ui
+  `ticket/view.spec` and `work/work.spec` (the arm tests of the ticket body replaced), `e2e/ticket-document.spec`.
+- **Left open:** the older phone client of the tickets remote (`plugins/tickets/main/remote`,
+  `e2e/tickets-remote*.spec`, still "Accept → Build") and the desktop Assistant target card's Split / Keep as one;
+  the link styles (`.tickets-doc-decision-link`, `.tickets-review-decision-link`, `.decision-link`, `.pp-link`) wait
+  for the CSS owner; strings are `// TODO(i18n)` for req-102.
+
 ### Milestone 175 — E14-7a: the cut-over is one start
 
 **Not yet manually verified by the owner.** Roadmap E14-7a. The cut-over itself (E14-7) has not run;

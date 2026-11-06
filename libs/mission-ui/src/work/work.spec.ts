@@ -674,6 +674,50 @@ describe('the manual-step card (E10-6)', () => {
   });
 });
 
+describe('the decision card is the one Accept (req-97)', () => {
+  interface DecisionSurface {
+    groups(): WorkGroup[];
+    canFinishManual(): boolean;
+    acceptOffered(vm: NeedVm): boolean;
+    manualAccept(vm: NeedVm): Promise<void>;
+  }
+
+  function setupDecision(needs: McNeed[]) {
+    const accepted: string[] = [];
+    const { state } = makeFake({ needs });
+    state.finishManual = (id: string) => {
+      accepted.push(id);
+      return Promise.resolve({ ok: true });
+    };
+    state.sendBackManual = () => Promise.resolve({ ok: true });
+    const vm = setup(state) as unknown as DecisionSurface;
+    const group = vm.groups()[0];
+    if (group?.kind !== 'needs') {
+      throw new Error('expected the needs group');
+    }
+    return { vm, cards: group.needs, accepted };
+  }
+
+  it('a checkpoint need gets the same Accept / Send back card as a manual step', async () => {
+    const { vm, cards, accepted } = setupDecision([need('checkpoint', 'Ready to try', { ticketId: 'T-0007' })]);
+    expect(vm.canFinishManual()).toBe(true);
+    expect(vm.acceptOffered(cards[0]!)).toBe(true);
+    await vm.manualAccept(cards[0]!);
+    expect(accepted).toEqual(['T-0007']);
+  });
+
+  it('does not offer Accept while a question of the same ticket is open', () => {
+    const { vm, cards } = setupDecision([
+      need('checkpoint', 'Ready to try', { ticketId: 'T-0007' }),
+      need('question', 'Which way?', { ticketId: 'T-0007' }),
+      need('checkpoint', 'Another', { ticketId: 'T-0008' }),
+    ]);
+    const byTicket = (id: string) => cards.find((card) => card.need.kind === 'checkpoint' && card.need.ticketId === id)!;
+    expect(vm.acceptOffered(byTicket('T-0007'))).toBe(false);
+    expect(vm.acceptOffered(byTicket('T-0008'))).toBe(true);
+  });
+});
+
 describe('Work', () => {
   // Pipeline order: inbox → build → done. Render order reads the other
   // way round: build, inbox (done is empty — no group at all).

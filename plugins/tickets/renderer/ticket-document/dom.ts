@@ -175,13 +175,36 @@ export function costNode(table: CostTable): HTMLElement {
 
 export interface ActionBarDeps {
   readonly icon: (name: string, size?: number) => SVGElement;
-  readonly onSendBack: () => void;
-  readonly onAccept: () => void;
   readonly onThread: () => void;
   readonly onReview: () => void;
 }
 
-/** Send back…, Accept and move to <column>, Thread, Open Review — the bar under the ticket. */
+/** The DOM event of "Decision waiting · go to the card": `detail.id` names the ticket (req-97). */
+export const GO_TO_DECISION_CARD = 'drey:tickets-go-to-decision-card';
+
+export interface GoToDecisionCardDetail {
+  readonly id: string;
+  /** A card that is on screen sets it; still false after dispatch = no card is showing. */
+  handled: boolean;
+}
+
+/**
+ * Asks the decision card of the ticket to take the focus. Returns whether a
+ * card answered (the Ready card of the thread does, `ready-view.ts`).
+ */
+export function goToDecisionCard(id: string): boolean {
+  const detail: GoToDecisionCardDetail = { id, handled: false };
+  document.dispatchEvent(new CustomEvent<GoToDecisionCardDetail>(GO_TO_DECISION_CARD, { detail }));
+  return detail.handled;
+}
+
+/**
+ * The bar under the ticket: Thread and Open Review. While a decision waits
+ * it leads with the quiet link "Decision waiting · go to the card" instead of
+ * Accept / Send back — the decision is made on the Mission Control card only
+ * (req-97, canvas decision 16). With no card on screen the link opens the
+ * thread, where the Ready card sits.
+ */
 export function actionBarNode(deps: ActionBarDeps, bar: ActionBar): HTMLElement {
   const root = el('div', 'tickets-doc-actions');
   root.contentEditable = 'false';
@@ -195,11 +218,18 @@ export function actionBarNode(deps: ActionBarDeps, bar: ActionBar): HTMLElement 
     node.addEventListener('click', run);
     return node;
   };
-  if (bar.decide) {
-    root.append(
-      button('Send back…', '', 'corner-down-left', deps.onSendBack, 'Send the ticket back to the agent with a note'),
-      button(bar.acceptLabel, 'is-primary', 'check', deps.onAccept),
-    );
+  if (bar.decide && bar.ticketId !== null) {
+    const id = bar.ticketId;
+    const link = el('a', 'tickets-doc-decision-link', 'Decision waiting · go to the card'); // TODO(i18n)
+    link.href = '#';
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (!goToDecisionCard(id)) {
+        deps.onThread();
+        setTimeout(() => goToDecisionCard(id), 300);
+      }
+    });
+    root.append(link);
   }
   root.append(el('span', 'tickets-doc-spacer'));
   root.append(

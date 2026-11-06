@@ -1020,6 +1020,11 @@ export interface TicketVm {
   /** The back arrow: the shell closes the screen. */
   onClose(): void;
   /**
+   * "Decision waiting · go to the card" (req-97): brings the ticket's decision card
+   * on the Work tab into view. Optional: without it the link just closes the ticket.
+   */
+  goToDecisionCard?(ticketId: string): void;
+  /**
    * The gate sheet's interventions (E9, concept §5.7): prefill the chat
    * composer with the setChain command the sheet built — one mutation
    * path, the owner reviews and sends, the proposal card confirms.
