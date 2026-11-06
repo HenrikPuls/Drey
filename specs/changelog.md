@@ -1,3 +1,37 @@
+### Milestone 178 — E12-18 (with E13-18): the Views chrome as boards 7h and 7i show it
+
+**Not yet manually verified by the owner.** Roadmap items E12-18 and E13-18 (gap G-28, audit rows
+L-01–L-03 and L-06).
+
+- **One control, one menu.** The title bar's view switch is a single segmented control
+  (*Notes · Work · …*); the loose dot, *Save view* and *Revert view* icons are gone. A dot sits on
+  the view whose layout changed, and ONE **Layout ▾** menu beside it holds *Save layout*,
+  *Reset to saved layout*, *Save as new view…*, *Rename view…*, *Delete view*, each with a
+  description line and the chord in effect (shown when one is bound), then **Edit views…** (a
+  small list with Rename / Delete of the views you made) and the footnote *Switching views never
+  changes them. Only Save layout does.* Save and Reset are disabled until the layout changed;
+  Rename and Delete are disabled on Notes and plugin presets. The D-6 semantics are unchanged:
+  views save explicitly, selecting a view never saves or alters it. The right-click menu of a
+  user view stays.
+- **Tab menu** (`src/app/tab-bar/`): **Go to the Work view** (one row per other view that shows
+  the tab, with its `Ctrl+n`) and **Show this tab in ›** as a flyout with a check per view
+  (replacing the flat label + list).
+- **Open windows:** the header reads **2 here · 3 elsewhere** once other views hold tabs this one
+  does not (just the count otherwise); the list has **In this view** above **In other views**
+  (with **Show here**).
+- **Dock strip:** ten icons stay on one row at any dock width — the buttons shrink to 18 px
+  before they wrap (audit L-06).
+- **Strings** are English and marked `TODO(i18n)` in the switcher and tab menu (req-102's
+  `t(key)` was not merged yet).
+- **Specs / tests:** `view-switcher.spec.ts` (new), `tab-bar.spec.ts`, `open-windows.spec.ts`,
+  `dock-strip.spec.ts`, `widget-registry.service.spec.ts`; e2e `views-chrome.spec.ts` (Layout menu,
+  tab menu, Open windows, one-row strip); screenshots in
+  `docs/design/work-panel/e12-18-screenshots/`. The manual's *Views* paragraph is rewritten.
+- **Not done:** the *View* menu bar still lists *Save view* / *Revert view* / *Save current layout
+  as a view…* under their old names (the menu bar is the title-bar session's); the boards 7h/7i
+  themselves are not in the repository, so the description wording and the footnote follow the
+  roadmap/gap text and the D-6 rules rather than a pixel check.
+
 ### Milestone 177 — E12-13 + E12-5: Mission Control chrome and device rules
 
 **Not yet manually verified by the owner.** Wave 2, session 2.7 (canvas decisions 4 and 20, boards 10a–10t, 5b–5i).

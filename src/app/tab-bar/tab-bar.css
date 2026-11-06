@@ -201,3 +201,22 @@
 .ctx-grow {
   flex: 1;
 }
+
+/* "Show this tab in ›": the views as a flyout to the right of its row. */
+.ctx-sub-wrap {
+  position: relative;
+}
+
+.ctx-sub {
+  position: absolute;
+  left: 100%;
+  top: -4px;
+  min-width: 130px;
+  margin-left: 2px;
+}
+
+.ctx-chev {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-6);
+}

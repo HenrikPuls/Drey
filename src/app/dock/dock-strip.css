@@ -3,12 +3,13 @@
    24px icon button + 2 x 3px padding + 1px border-bottom = 31px, and the
    min-height raises that to 32px -- with 4px padding the content alone
    would need 32px and the box would render 33px, one pixel taller than
-   the headers and the tab bar next to it. A narrow dock wraps it onto a
-   second row rather than clipping icons. */
+   the headers and the tab bar next to it. Ten icons stay on one row at any
+   dock width: the buttons shrink (E12-18) instead of wrapping the last one
+   onto a second row. */
 :host {
   display: flex;
   flex: none;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 2px;
   min-height: var(--panel-head-h);
@@ -16,6 +17,12 @@
   box-sizing: border-box;
   border-bottom: 1px solid var(--border);
   user-select: none;
+}
+
+/* Shrinks before it wraps: 24px at most, 18px at least (icon 15px). */
+.icon-btn {
+  flex: 0 1 var(--icon-btn);
+  min-width: 18px;
 }
 
 /* Open panels: a quiet neutral fill instead of the accent -- several are

@@ -9,6 +9,9 @@
       (click)="openList($event)"
     >
       <span>{{ views.active().label }}</span>
+      @if (views.modified()) {
+        <span class="vs-dot" aria-hidden="true"></span>
+      }
       <app-icon name="chevron-down" [size]="10" />
     </button>
   } @else {
@@ -25,21 +28,24 @@
           (contextmenu)="openMenu($event, view)"
         >
           {{ view.label }}
+          @if (views.modified() && view.id === views.activeId()) {
+            <span class="vs-dot" role="img" aria-label="Unsaved layout changes"></span>
+          }
         </button>
       }
     </div>
   }
-  @if (views.modified()) {
-    <span class="vs-mod" role="group" aria-label="Unsaved view changes">
-      <span class="vs-dot" title="This view has unsaved changes" aria-hidden="true"></span>
-      <button type="button" class="icon-btn" title="Save view" aria-label="Save view" (click)="views.saveActive()">
-        <app-icon name="save" [size]="12" />
-      </button>
-      <button type="button" class="icon-btn" title="Revert view" aria-label="Revert view" (click)="revert()">
-        <app-icon name="rotate-ccw" [size]="12" />
-      </button>
-    </span>
-  }
+  <button
+    type="button"
+    class="vs-layout"
+    aria-haspopup="menu"
+    title="Layout"
+    aria-label="Layout"
+    (click)="openLayout($event)"
+  >
+    <span>Layout</span>
+    <app-icon name="chevron-down" [size]="10" />
+  </button>
 }
 
 @if (menu(); as m) {
@@ -49,19 +55,91 @@
     (click)="closeMenu()"
     (contextmenu)="$event.preventDefault(); closeMenu()"
   ></div>
-  <div class="ctx-menu" role="menu" [style.left.px]="m.x" [style.top.px]="m.y">
-    @if (m.view === null) {
-      @for (view of views.views(); track view.id) {
-        <button type="button" role="menuitemradio" [attr.aria-checked]="view.id === views.activeId()" (click)="pick(view)">
-          <span class="check">{{ view.id === views.activeId() ? '✓' : '' }}</span>
-          {{ view.label }}
-        </button>
+  <div class="ctx-menu" [class.wide]="m.kind === 'layout'" role="menu" [style.left.px]="m.x" [style.top.px]="m.y">
+    @switch (m.kind) {
+      @case ('list') {
+        @for (view of views.views(); track view.id) {
+          <button type="button" role="menuitemradio" [attr.aria-checked]="view.id === views.activeId()" (click)="pick(view)">
+            <span class="check">{{ view.id === views.activeId() ? '✓' : '' }}</span>
+            {{ view.label }}
+          </button>
+        }
       }
-      <div class="ctx-sep" role="separator"></div>
-      <button type="button" role="menuitem" (click)="saveAs()">Save current layout as a view…</button>
-    } @else {
-      <button type="button" role="menuitem" (click)="rename(m.view)">Rename…</button>
-      <button type="button" role="menuitem" (click)="remove(m.view)">Delete view</button>
+      @case ('layout') {
+        <!-- TODO(i18n): every string of this menu -->
+        <button type="button" role="menuitem" [disabled]="!views.modified()" (click)="save()">
+          <span class="row-text">
+            <span class="row-label">Save layout</span>
+            <span class="row-desc">Keep this arrangement as the view’s layout</span>
+          </span>
+          @if (keys.hint('view.save'); as key) {
+            <span class="ctx-key">{{ key }}</span>
+          }
+        </button>
+        <button type="button" role="menuitem" [disabled]="!views.modified()" (click)="reset()">
+          <span class="row-text">
+            <span class="row-label">Reset to saved layout</span>
+            <span class="row-desc">Drop the changes since the last save</span>
+          </span>
+          @if (keys.hint('view.revert'); as key) {
+            <span class="ctx-key">{{ key }}</span>
+          }
+        </button>
+        <div class="ctx-sep" role="separator"></div>
+        <button type="button" role="menuitem" (click)="saveAs()">
+          <span class="row-text">
+            <span class="row-label">Save as new view…</span>
+            <span class="row-desc">Copy this arrangement into a view of its own</span>
+          </span>
+          @if (keys.hint('view.saveAs'); as key) {
+            <span class="ctx-key">{{ key }}</span>
+          }
+        </button>
+        <button type="button" role="menuitem" [disabled]="views.active().builtin" (click)="rename(views.active())">
+          <span class="row-text">
+            <span class="row-label">Rename view…</span>
+            <span class="row-desc">Give {{ views.active().label }} another name</span>
+          </span>
+        </button>
+        <button type="button" role="menuitem" [disabled]="views.active().builtin" (click)="remove(views.active())">
+          <span class="row-text">
+            <span class="row-label">Delete view</span>
+            <span class="row-desc">Tabs only this view shows are closed</span>
+          </span>
+        </button>
+        <div class="ctx-sep" role="separator"></div>
+        <button type="button" role="menuitem" (click)="editViews()">
+          <span class="row-label">Edit views…</span>
+        </button>
+        <p class="foot">Switching views never changes them. Only Save layout does.</p>
+      }
+      @case ('view') {
+        @if (m.view; as v) {
+          <button type="button" role="menuitem" (click)="rename(v)">Rename view…</button>
+          <button type="button" role="menuitem" (click)="remove(v)">Delete view</button>
+        }
+      }
+    }
+  </div>
+}
+
+@if (editing()) {
+  <div class="ctx-backdrop" appOverlayGuard (click)="closeEditor()"></div>
+  <div class="edit-pop" role="dialog" aria-label="Edit views">
+    <div class="edit-head">
+      <span>Edit views</span>
+      <button type="button" class="icon-btn" title="Close" aria-label="Close" (click)="closeEditor()">
+        <app-icon name="x" [size]="12" />
+      </button>
+    </div>
+    @for (view of views.views(); track view.id) {
+      <div class="edit-row">
+        <span class="edit-name">{{ view.label }}</span>
+        @if (!view.builtin) {
+          <button type="button" class="edit-act" (click)="rename(view)">Rename</button>
+          <button type="button" class="edit-act" (click)="remove(view)">Delete</button>
+        }
+      </div>
     }
   </div>
 }

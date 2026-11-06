@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { WidgetRegistryService } from './widget-registry.service';
 import { CORE_WIDGETS } from './widget-registry';
+import { PaneService } from '../panes/pane.service';
 
 describe('WidgetRegistryService', () => {
   beforeEach(() => {
@@ -29,6 +30,17 @@ describe('WidgetRegistryService', () => {
     unsubscribe();
     expect(registry.isPlugin('spec')).toBe(false);
     expect(registry.widgets().map((w) => w.id)).toEqual(CORE_WIDGETS.map((w) => w.id));
+  });
+
+  it('Open windows reads "N here · M elsewhere" once other views hold tabs', () => {
+    const registry = TestBed.inject(WidgetRegistryService);
+    const panes = TestBed.inject(PaneService);
+    const status = (): string | null | undefined =>
+      registry.descriptor('windows')?.status?.({ collapsed: false });
+    panes.open('a.md');
+    expect(status()).toBe('1');
+    panes.showInView('other', 'b.md');
+    expect(status()).toBe('1 here · 1 elsewhere');
   });
 
   it('gives every core widget a strip icon', () => {

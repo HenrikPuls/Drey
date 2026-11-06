@@ -1734,18 +1734,23 @@ automatically.
   collapse them to their 32 px headers. The whole layout persists
   across restarts.
 - **Views** — a view is a saved layout: its own docks and panels, split
-  panes and open tabs. *View → Save current layout as a view…* (or the
-  command palette) keeps the current arrangement under a name and
-  switches to it; the title bar then shows one button per view, and
-  `Ctrl+1` … `Ctrl+9` or *View → Switch view* jump between them. A
-  view is saved only when you say so: change a panel, a split or a tab and the
-  switcher shows a dot with *Save view* and *Revert view* (also in the *View*
-  menu); *Save view* keeps the arrangement, *Revert view* returns to the saved
-  one. Until you save, the change lasts for the session only. Right-click a view you made
-  to rename or delete it; *Notes* is always there. Tabs belong to
+  panes and open tabs. The title bar shows the views as one segmented
+  control (*Notes · Work · …*) with a **Layout ▾** menu beside it;
+  `Ctrl+1` … `Ctrl+9` or *View → Switch view* jump between them. A view is
+  saved only when you say so: change a panel, a split or a tab and a dot
+  appears on that view. *Layout* then offers *Save layout* (keeps the
+  arrangement) and *Reset to saved layout* (returns to the saved one);
+  until you save, the change lasts for the session only. Switching views
+  never changes them. *Save as new view…* keeps the current arrangement
+  under a name and switches to it, *Rename view…* and *Delete view* act on
+  the view you are in (*Notes* is always there and cannot be renamed or
+  deleted), and *Edit views…* lists them all. Tabs belong to
   views: another view's tabs are hidden, and one tab can be shown in
-  several views — its context menu has *Show this tab in* with a
-  check per view. Closing a tab only takes it out of the current
+  several views — its context menu has *Go to the Work view* (for each
+  other view that shows the tab) and *Show this tab in ›* with a check
+  per view. The Open windows panel reads *2 here · 3 elsewhere*, with the
+  tabs *In this view* above those *In other views*, each with *Show here*.
+  Closing a tab only takes it out of the current
   view while another view still shows it; it closes for good (asking
   about unsaved changes) with the last one. *Reset layout* resets the
   current view only. A plugin can offer views of its own: they appear in

@@ -1,6 +1,9 @@
 @if (shown().length === 0 && elsewhere().length === 0) {
   <p class="empty">Nothing open.</p>
 } @else {
+  @if (elsewhere().length > 0) {
+    <div class="group">In this view</div>
+  }
   <div class="list">
     @for (doc of shown(); track doc.key) {
       <div class="row" [class.active]="doc.key === editor.activePath()" [title]="doc.path">

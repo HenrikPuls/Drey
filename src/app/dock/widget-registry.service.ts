@@ -62,7 +62,18 @@ export class WidgetRegistryService {
           ? `${String(calendar.viewMonth() + 1).padStart(2, '0')}/${calendar.viewYear()}`
           : null,
       // The open tabs of the active view (ADR-0089).
-      windows: () => String(panes.tabsOfView(panes.activeViewId()).length),
+      // "2 here · 3 elsewhere" once another view holds tabs this one does not (board 7i).
+      windows: () => {
+        const here = panes.tabsOfView(panes.activeViewId());
+        const shown = new Set(here);
+        let elsewhere = 0;
+        for (const key of panes.allTabKeys()) {
+          if (!shown.has(key)) {
+            elsewhere++;
+          }
+        }
+        return elsewhere === 0 ? String(here.length) : `${here.length} here · ${elsewhere} elsewhere`;
+      },
     };
 
     this.coreWidgets = CORE_WIDGETS.map((w) => {
