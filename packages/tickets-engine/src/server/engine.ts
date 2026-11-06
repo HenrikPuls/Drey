@@ -63,6 +63,9 @@ export interface Engine {
   onEvent(listener: (what: 'board' | 'fleet' | 'remote' | 'chat', payload?: ChatChangePayload) => void): () => void;
   /** The files engine writes touched (D-3): the plugin-only paths channel. */
   onPaths(listener: (change: PathsChange) => void): () => void;
+  /** Settles once the startup housekeeping that runs behind `createEngine` (the videos folder, the retired config key) has finished. */
+  readonly ready: Promise<void>;
+  /** Stops the engine; resolves only after the startup housekeeping ended, so no file is written after it. */
   close(): Promise<void>;
 }
 
@@ -153,7 +156,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
   // candidates (and the scan's startup IO has settled).
   await verify.initialScan;
   // E11-1: the videos folder and its ignore rule exist from the start (E11-1c: nothing is ever deleted).
-  void videos.prepare();
+  const startupWork = videos.prepare().then(() => undefined, () => undefined);
 
   // E5a: the Mission Control chat — sessions under `tickets/_meta/chat/`,
   // one mission turn per owner message, every mutation a proposal card
@@ -422,6 +425,7 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
     invokeUrl,
     token,
     config,
+    ready: startupWork,
     invoke: (method, payload) => {
       const fn = table.get(method);
       if (fn === undefined) {
@@ -440,6 +444,9 @@ export async function createEngine(opts: EngineOptions): Promise<Engine> {
       verify.dispose();
       board.dispose();
       await remoteService.stop();
+      await startupWork;
+      await board.idle();
+      await git.idle();
       server.close();
       await once(server, 'close').catch(() => undefined);
     },

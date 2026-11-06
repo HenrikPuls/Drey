@@ -93,11 +93,34 @@ export class StoreChangeFeed {
   private interval: ReturnType<typeof setInterval> | null = null;
   private refInterval: ReturnType<typeof setInterval> | null = null;
   private syncing: Promise<void> | null = null;
+  private readonly pending = new Set<Promise<unknown>>();
   private stopped = true;
   private warnedMiss = false;
   private counters = { announcements: 0, ownWrites: 0, watcherEvents: 0, echoesDropped: 0, refMisses: 0, syncs: 0, syncsSkipped: 0 };
 
   constructor(private readonly options: StoreChangeFeedOptions) {}
+
+  /** Remembers a background step (a HEAD read, a ref check, a sync round) so {@link idle} can wait for it. */
+  private track<T>(work: Promise<T>): Promise<T> {
+    this.pending.add(work);
+    const forget = (): void => {
+      this.pending.delete(work);
+    };
+    work.then(forget, forget);
+    return work;
+  }
+
+  /**
+   * Resolves when no background step is running any more. `stop()` is
+   * synchronous and only prevents new work; a git / dk child started
+   * before it still runs and holds its working directory, so an owner
+   * about to remove the directory awaits this after `stop()`.
+   */
+  async idle(): Promise<void> {
+    while (this.pending.size > 0) {
+      await Promise.allSettled([...this.pending]);
+    }
+  }
 
   stats(): StoreChangeFeedStats {
     return { ...this.counters };
@@ -121,14 +144,14 @@ export class StoreChangeFeed {
     }
     const every = this.options.syncEveryMs ?? null;
     if (every !== null && every > 0 && this.options.sync !== undefined) {
-      this.interval = setInterval(() => void this.periodicSync(), every);
+      this.interval = setInterval(() => void this.track(this.periodicSync()), every);
       this.interval.unref();
     }
     if (this.options.fingerprint !== undefined) {
-      void this.rememberHead();
+      void this.track(this.rememberHead());
       const refEvery = this.options.refCheckEveryMs === undefined ? DEFAULT_REF_CHECK_MS : this.options.refCheckEveryMs;
       if (refEvery !== null && refEvery > 0) {
-        this.refInterval = setInterval(() => void this.refCheck(), refEvery);
+        this.refInterval = setInterval(() => void this.track(this.refCheck()), refEvery);
         this.refInterval.unref();
       }
     }
@@ -164,14 +187,14 @@ export class StoreChangeFeed {
     const window = this.options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
     this.echoUntil = Date.now() + window;
     if (this.options.fingerprint !== undefined) {
-      this.ownFingerprint = this.rememberHead();
+      this.ownFingerprint = this.track(this.rememberHead());
     }
     if (this.echoTimer !== null) {
       clearTimeout(this.echoTimer);
     }
     this.echoTimer = setTimeout(() => {
       this.echoTimer = null;
-      void this.endEchoWindow();
+      void this.track(this.endEchoWindow());
     }, window);
     this.echoTimer.unref();
   }
@@ -184,13 +207,13 @@ export class StoreChangeFeed {
     }
     if (this.syncing === null) {
       this.counters.syncs += 1;
-      this.syncing = sync()
+      this.syncing = this.track(sync()
         .catch((error: unknown) => {
           this.options.log?.(`tickets: dk sync failed: ${error instanceof Error ? error.message : String(error)}`, 'warn');
         })
         .finally(() => {
           this.syncing = null;
-        });
+        }));
     }
     return this.syncing;
   }
@@ -210,7 +233,7 @@ export class StoreChangeFeed {
     this.counters.announcements += 1;
     this.options.onChange();
     if (this.options.fingerprint !== undefined) {
-      void this.rememberHead();
+      void this.track(this.rememberHead());
     }
   }
 

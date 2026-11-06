@@ -351,6 +351,11 @@ export class EngineBoardService {
     this.storeBoard.dispose();
   }
 
+  /** After {@link dispose}: resolves when the store's background processes ended (see `StoreBoardSource.idle`). */
+  idle(): Promise<void> {
+    return this.storeBoard.idle();
+  }
+
   onChanged(listener: () => void): () => void {
     this.changeListeners.add(listener);
     return () => this.changeListeners.delete(listener);

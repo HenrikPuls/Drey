@@ -676,7 +676,7 @@ export class RunSupervisor {
     if (stored.info.held === true) {
       handle.setHold?.(true);
     }
-    void handle.exited.then((code) => void this.onWorkerExit(run, code));
+    void handle.exited.then((code) => this.track(this.onWorkerExit(run, code)));
     await this.persist(run);
     this.deps.log(`run ${info.id}: re-attached to its worker after the runner restarted`);
     await this.resumeLease(run);
@@ -777,9 +777,9 @@ export class RunSupervisor {
         onEvent: (event) => void this.onEvent(run, event),
         onSessionRef: (ref) => {
           run.info = { ...run.info, sessionRef: ref };
-          void this.persist(run);
+          this.track(this.persist(run));
         },
-        onAttachInfo: (info) => void this.recordAttach(run, info),
+        onAttachInfo: (info) => this.track(this.recordAttach(run, info)),
       });
     } catch (error) {
       this.deps.log(`run ${stored.info.id}: the handed-over session could not be resumed — ${messageOf(error)}`);
@@ -791,7 +791,7 @@ export class RunSupervisor {
     if (held) {
       handle.setHold?.(true);
     }
-    void handle.exited.then((code) => void this.onWorkerExit(run, code));
+    void handle.exited.then((code) => this.track(this.onWorkerExit(run, code)));
     await this.persist(run);
     this.deps.log(`run ${run.info.id}: resumed in place after a runner handover`);
     await this.resumeLease(run);
@@ -1085,7 +1085,7 @@ export class RunSupervisor {
       // A resume the adapter cannot establish respawns fresh under the
       // same run id (T-0049) — only the resolution path asks for that.
       ...(decision !== null && resumeRef !== null
-        ? { onResumeFailed: (reason: string) => void this.freshFallback(run, reason) }
+        ? { onResumeFailed: (reason: string) => this.track(this.freshFallback(run, reason)) }
         : {}),
     });
     run.info = { ...run.info, state: 'running', pid: handle.pid };
@@ -1169,19 +1169,19 @@ export class RunSupervisor {
       onEvent: (event) => void this.onEvent(run, event),
       onSessionRef: (ref) => {
         run.info = { ...run.info, sessionRef: ref };
-        void this.persist(run);
+        this.track(this.persist(run));
       },
-      onAttachInfo: (info) => void this.recordAttach(run, info),
+      onAttachInfo: (info) => this.track(this.recordAttach(run, info)),
       onUsageBase: (base) => {
         run.usageBase = base;
-        void this.persist(run);
+        this.track(this.persist(run));
       },
       ...(resume.onResumeFailed !== undefined ? { onResumeFailed: resume.onResumeFailed } : {}),
     });
     run.handle = handle;
     void handle.exited.then((code) => {
       if (run.handle === handle) {
-        void this.onWorkerExit(run, code);
+        this.track(this.onWorkerExit(run, code));
       }
     });
     return handle;
@@ -1686,6 +1686,30 @@ export class RunSupervisor {
     return failures;
   }
 
+  /** Background work a callback started (persists, exits, event folds): remembered so {@link idle} can wait for it. */
+  private readonly background = new Set<Promise<unknown>>();
+
+  private track(work: Promise<unknown>): void {
+    this.background.add(work);
+    const forget = (): void => {
+      this.background.delete(work);
+    };
+    work.then(forget, forget);
+  }
+
+  /**
+   * Resolves when none of the work the supervisor started on its own
+   * (event folds, persists, a worker exit's settle, a pause's interrupt)
+   * is still running. A caller about to remove the fleet root or a
+   * tickets vault awaits this first: that work writes ticket and run
+   * files, and one still in flight lands in a folder being deleted.
+   */
+  async idle(): Promise<void> {
+    while (this.background.size > 0) {
+      await Promise.allSettled([...this.background]);
+    }
+  }
+
   private onEvent(run: LiveRun, event: NormalizedEvent): void {
     // Set in the synchronous prefix: the worker's exit can race the event
     // delivery, and `agentDone` must already be true when the exit decides.
@@ -1696,7 +1720,7 @@ export class RunSupervisor {
     if (run.softPause === true && isActionBoundary(event)) {
       // The action the owner waited for has finished: pause now.
       run.softPause = false;
-      void this.interrupt(run.info.id).catch(() => undefined);
+      this.track(this.interrupt(run.info.id).catch(() => undefined));
     }
     if (event.kind === 'result') {
       run.softPause = false; // the turn ended by itself — nothing left to pause
@@ -1710,6 +1734,7 @@ export class RunSupervisor {
     run.eventQueue = run.eventQueue
       .then(() => this.applyEvent(run, event))
       .catch((error) => this.deps.log(`run ${run.info.id}: folding an event failed — ${messageOf(error)}`));
+    this.track(run.eventQueue);
   }
 
   /** The queued half of an event: stream append, fold, record — one at a time. */
@@ -1772,7 +1797,7 @@ export class RunSupervisor {
       // The wait ended without our answer path (the owner answered in the worker's own UI): take the ticket up again.
       await this.reclaimAfterWait(run, null).then((outcome) => {
         if (!outcome.ok) {
-          void this.onClaimLost(run, outcome.error);
+          this.track(this.onClaimLost(run, outcome.error));
         }
       });
     }
@@ -1931,7 +1956,7 @@ export class RunSupervisor {
           // The worker finished its turn and left: the exit handler owns the
           // gate. A lost exit event is replayed, never reaped as a failure
           // (the reaper used to fail runs whose last message was "done").
-          void this.onWorkerExit(run, null);
+          this.track(this.onWorkerExit(run, null));
           continue;
         }
         run.info = { ...run.info, gateFailure: 'lease lost — the worker process is gone; reaped' };
@@ -2172,7 +2197,7 @@ export class RunSupervisor {
           onEvent: (event) => void this.onEvent(run, event),
           onSessionRef: (ref) => {
             run.info = { ...run.info, sessionRef: ref };
-            void this.persist(run);
+            this.track(this.persist(run));
           },
         });
         run.handle = handle;
@@ -2180,7 +2205,7 @@ export class RunSupervisor {
         run.info = { ...run.info, state: 'running', pid: handle.pid };
         await this.logLine(run, 'second opinion — a fresh worker reviews the step before it moves');
         await this.persist(run);
-        void handle.exited.then((code) => void this.onWorkerExit(run, code));
+        void handle.exited.then((code) => this.track(this.onWorkerExit(run, code)));
         return;
       }
     }
@@ -2636,7 +2661,7 @@ export class RunSupervisor {
       onLost: (why) => {
         const run = runOf();
         if (run !== null) {
-          void this.onClaimLost(run, why);
+          this.track(this.onClaimLost(run, why));
         }
       },
     });

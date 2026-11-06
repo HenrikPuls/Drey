@@ -1,3 +1,12 @@
+### Milestone 168 — D-8: the flaky gate specs fixed at the cause
+
+**Production code changed (shutdown only), test infrastructure mostly; not checked in a running app.** Owner request, roadmap D-8. Measurements, causes and rules: [`docs/testing-flakes.md`](../docs/testing-flakes.md).
+
+- **Dominant cause: oversubscription.** vitest ran one worker per core (32), many of them spawning real git / dk; real-git specs crossed the 5 s default and cleanups raced live children. `vitest.plugins.config.mts` caps the workers (cores / 4, 2-8) and puts the process-spawning specs (`packages/**`, `plugins/git/**`) in their own project with a 60 s budget. Two overlapping suites: 12-13 failed tests each before, 10 of 10 runs green after (97 s instead of 175 s).
+- **Shutdown that returned too early (production).** `createEngine` kept no handle on its startup `videos.prepare()`; `Engine` has `ready` and `close()` awaits it, `board.idle()` and `git.idle()`. New `TicketsGit.idle()`, `StoreChangeFeed.idle()` (HEAD reads, ref check, sync rounds tracked), `StoreBoardSource.idle()` (+ shadow run), `BoardService.idle()`, `RunSupervisor.idle()` (persists, worker exits, event queue, soft-pause interrupt tracked). `dispose()`/`stop()` stay synchronous.
+- **Specs.** `fleet/run-spec-support.ts` (shared by `runs.spec` / `runs-dk.spec`): `settled()` awaits the `onRunSettled` event instead of polling a clock, `waitFor` uses the test's own timeout as ceiling, supervisors are drained before temp dirs are removed. "defers while a run is in its machine gate" had a lost wake-up (release wired inside `execShell`, which can run after the blocker turned true) — a real hang on a slow machine. `videos.limitMb` spec awaits `engine.ready`; the dk file-store specs await `source.idle()` after `dispose()`.
+- **Rule** added to CLAUDE.md (Toolchain): await the shutdown before removing a temp dir.
+
 ### Milestone 163 — D-6: selecting a ticket never changes the view, a view saves only by "Save view"
 
 **Not yet manually verified by the owner.** Owner report 2026-11-05, roadmap D-6.
