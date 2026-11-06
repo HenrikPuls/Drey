@@ -399,30 +399,6 @@ owner confirms scope and order before any of it starts:
   / Dynamic Island), fixed like the other chrome (D-5b). Applies to Work, Settings and its
   sub-pages, Team, Board, the ticket page (E13-23 keeps its own back + mode switch in
   that bar), chat and the iPad layout where the same pattern is used.
-- **E12-9c — The default pipeline: Inbox · Plan · Build · Review · Sign Off · Done**
-  (owner decision 2026-11-05, answering E12-9b Q1; outside the list). The default pipeline
-  of a new board has six columns, in this order, with who works each: **1 Inbox** (manual —
-  the owner triages), **2 Plan** (agent), **3 Build** (agent), **4 Review** (manual — the
-  owner reviews), **5 Sign Off** (manual — this is where the work is committed: it takes
-  the role of today's `commit` column and its checkpoint discipline), **6 Done**. The first
-  column is titled **Inbox** again (this reverses E12-9's "Ideas", milestone 164 — the canvas
-  boards say "Ideas" but the owner decides "Inbox"). Consequences to carry through: the
-  engine's default pipeline and flow defaults (Plan returns as an agent column — check
-  req-93 "just-in-time planning", the plan columns left the default pipeline there; the
-  Review and Sign Off gates are manual: the human-persona gate of milestone 132/E10-6, a
-  parked ticket + notification, Accept / Send back); stage ids and the claim stages
-  (`dk` claim stages = the agent columns Plan and Build); the dricket `[stages]` default
-  (`values`, `initial`, `terminal`, `claim`) and `DEFAULT_MIGRATION_CONFIG.stages`, the reverse
-  converter, `dk init`/the scratch scripts (`scripts/verify-dricket.ps1`), fixtures, the
-  manual and its screenshots, the phone capture button label. Existing boards and stores
-  keep their columns (a default never renames what a user has). Open from E12-9b: Q2 team
-  seeding, Q3 default worker (still undecided).
-- **E10-8 follow-ups — Kimi Code worker** (shipped as milestone 167, limits recorded in
-  `docs/design/kimi-worker.md`): (a) verify the quota/rate-limit stop reason against a real
-  limit and teach the breaker its text if it differs; (b) a free-text answer to `AskUserQuestion`
-  has no ACP channel — revisit when the CLI offers one; (c) a re-attach after a runner restart
-  (ACP `session/load` into a fresh process could carry the run on); (d) a billing-aware price
-  row for the `-highspeed` tiers ("2x usage cost").
 - **E12-9d — "Initialize board" seeds the default team** (owner decision 2026-11-05,
   answering E12-9b Q2: yes). A new board gets the default team of decision D7 — **Paul**
   (plans), **Ben**, **Ralf**, **Tessa** (roles as in the concept) — plus "You" and Pia as
