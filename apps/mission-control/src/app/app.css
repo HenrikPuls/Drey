@@ -312,6 +312,13 @@
   min-height: 0;
 }
 
+/* Settings (E12-14, board 5f): the detail page takes the middle and the right area. */
+.shell.ipad .pane-settings {
+  grid-column: 2 / 4;
+  grid-row: 2;
+  background: var(--bg);
+}
+
 .shell.ipad .pane-right {
   grid-area: right;
   border-left: 1px solid var(--line);

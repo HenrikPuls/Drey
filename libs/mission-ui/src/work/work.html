@@ -256,33 +256,32 @@
               }
               <div class="card-top">
                 <span class="tid">{{ vm.id }}</span>
-                <span
-                  class="phase"
-                  [class.tinted]="vm.phaseColor !== null"
-                  [style.--pc]="vm.phaseColor ?? null"
-                  >{{ vm.phaseTitle }}</span
-                >
+                @if (vm.flagged) {
+                  <span class="flag" aria-hidden="true">⚑</span>
+                }
                 <span class="hspace"></span>
-                @if (vm.persona) {
-                  <span class="pchip">
-                    <i aria-hidden="true" [style.background-color]="vm.persona.color">{{
-                      vm.personaInitial
-                    }}</i
-                    >{{ vm.persona.title }}
-                  </span>
+                @if (ageOf(vm); as age) {
+                  <span class="age">{{ age }}</span>
                 }
               </div>
               <h3 class="ticket-title">{{ vm.title }}</h3>
-              @if (vm.blocked || vm.flagged || vm.ctxPercent !== null || vm.costLabel !== null || vm.tokensLabel !== null) {
-                <div class="meta">
+              @if (detailOf(vm); as detail) {
+                <p class="row-detail" [class.warn]="vm.blocked">
                   @if (vm.blocked) {
-                    <span class="statline warn">
-                      <span class="led amber" aria-hidden="true"></span>waiting for
-                      {{ vm.blockers.join(', ') }}
-                    </span>
+                    <span class="led amber" aria-hidden="true"></span>
                   }
-                  @if (vm.flagged) {
-                    <span class="flag" aria-hidden="true">⚑</span>
+                  {{ detail }}
+                </p>
+              }
+              @if (vm.persona || vm.ctxPercent !== null || vm.costLabel !== null || vm.tokensLabel !== null) {
+                <div class="meta">
+                  @if (vm.persona) {
+                    <span class="pchip">
+                      <i aria-hidden="true" [style.background-color]="vm.persona.color">{{
+                        vm.personaInitial
+                      }}</i
+                      >{{ vm.persona.title }}
+                    </span>
                   }
                   @if (vm.ctxPercent !== null) {
                     <span
@@ -298,7 +297,7 @@
                     <span class="tksum">{{ vm.tokensLabel }}</span>
                   }
                   @if (vm.costLabel !== null) {
-                    <span class="tkcost">{{ vm.costLabel }}</span>
+                    <span class="tkcost">{{ vm.costLabel }} <span class="tkcap">{{ soFar }}</span></span>
                   }
                 </div>
               }

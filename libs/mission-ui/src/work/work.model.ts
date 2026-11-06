@@ -10,6 +10,7 @@
  * guess.
  */
 import { InjectionToken } from '@angular/core';
+import type { MessageKey, MessageParams } from '../../../../shared/i18n';
 import {
   DEFAULT_PRIORITY_CONFIG,
   isJumpPriority,
@@ -122,6 +123,12 @@ export interface McTicketMeta {
   readonly claimedBy?: string | null;
   /** The `blocked-by:` ids as written. */
   readonly blockedBy?: readonly string[];
+  /** phase id → the newest `entered-<phase>` stamp (the row's age); absent = no age. */
+  readonly entered?: Readonly<Record<string, string>>;
+  /** When the ticket was claimed (the age's fallback). */
+  readonly claimedAt?: string | null;
+  /** Why the ticket is parked, in the engine's words (the row's detail line). */
+  readonly parkedReason?: string | null;
 }
 
 /** One ticket as the card renders it — one ticket = one card. */
@@ -328,6 +335,10 @@ export interface TicketVm {
   readonly tokensLabel: string | null;
   /** The ctx bar's percent (1–100); null = no data, the slot stays hidden. */
   readonly ctxPercent: number | null;
+  /** The stamp the row's age counts from (entered this state, else claimed); null = no age. */
+  readonly sinceAt: string | null;
+  /** The engine's parked reason; null = none (the row's detail line). */
+  readonly parkedReason: string | null;
 }
 
 /**
@@ -642,7 +653,75 @@ function ticketVmOf(
     costLabel: costLabelOf(ticket.usage?.cost ?? ticket.cost),
     tokensLabel: tokensSumLabelOf(ticket.usage),
     ctxPercent: ctxPercentOf(ticket.ctx),
+    sinceAt: sinceOf(ticket, column.phase.id),
+    parkedReason: nonBlank(ticket.meta.parkedReason),
   };
+}
+
+function nonBlank(value: string | null | undefined): string | null {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed === '' ? null : trimmed;
+}
+
+/** The stamp a row's age counts from: when it entered this state, else when it was claimed. */
+export function sinceOf(ticket: McTicket, phaseId: string): string | null {
+  return nonBlank(ticket.meta.entered?.[phaseId]) ?? nonBlank(ticket.meta.claimedAt);
+}
+
+/**
+ * A row's age: minutes, hours or days since `stamp` (the catalog's
+ * `menu.age.*` units, as the menu's chat rows); '' when the stamp is absent
+ * or unreadable — the age slot stays hidden.
+ */
+export function rowAgeOf(
+  stamp: string | null,
+  nowMs: number,
+  t: (key: MessageKey, params?: MessageParams) => string,
+): string {
+  const then = stamp === null ? Number.NaN : Date.parse(stamp);
+  if (!Number.isFinite(then)) {
+    return '';
+  }
+  const minutes = Math.max(0, Math.round((nowMs - then) / 60_000));
+  if (minutes < 60) {
+    return t('menu.age.minutes', { n: minutes });
+  }
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? t('menu.age.hours', { n: hours }) : t('menu.age.days', { n: Math.round(hours / 24) });
+}
+
+/**
+ * One row per ticket (E12-14): a ticket that stands in the Needs-you group
+ * with its card is not listed again under its state group; a state group
+ * that empties that way disappears. The need cards carry the ticket id.
+ */
+export function withoutNeedCopies(groups: readonly WorkGroup[]): WorkGroup[] {
+  const asked = new Set<string>();
+  for (const group of groups) {
+    if (group.kind === 'needs') {
+      for (const vm of group.needs) {
+        const id = vm.need.ticketId ?? '';
+        if (id !== '') {
+          asked.add(id);
+        }
+      }
+    }
+  }
+  if (asked.size === 0) {
+    return [...groups];
+  }
+  const out: WorkGroup[] = [];
+  for (const group of groups) {
+    if (group.kind !== 'phase') {
+      out.push(group);
+      continue;
+    }
+    const tickets = group.tickets.filter((vm) => !asked.has(vm.id));
+    if (tickets.length > 0) {
+      out.push({ ...group, tickets });
+    }
+  }
+  return out;
 }
 
 /**

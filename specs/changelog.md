@@ -167,6 +167,40 @@ milestone 174 (req-100).
   `plan/approve.spec.ts`, `ticket/view.spec.ts`, `api/dto.spec.ts`,
   `packages/tickets-engine/src/core/estimate.spec.ts`.
 
+### Milestone 182 — E12-14: Mission Control Work rows, the Settings detail width and the fifth text size (boards 10c, 5f, MPhoneAppearance)
+
+**Not yet manually verified by the owner.** Build-plan wave 3, row 3.7 (with Q9).
+
+- **Work rows (board 10c).** A ticket is listed once: a ticket that stands in **Needs you** with
+  its card is no longer repeated as a row under its state group, and a group that this empties
+  disappears (`withoutNeedCopies`, `work.model.ts`; `groupsOf` and the six state names are
+  unchanged). A row now shows the ticket id and, at the right, its **age** (`5 min`, `3 h`, `2 d`
+  since it entered the state, else since the claim; hidden when the desk sends no stamp), the
+  title, one **detail line** (`Waiting for T-0009` with the amber LED, the engine's parked
+  reason, or `Running now` while a run of the ticket is live), then the **persona**, the context
+  bar and the cost as **`$1.20 so far`** (`cost.so_far`). The phase chip is gone from the row —
+  the group heading is the state.
+- **Settings detail width (board 5f).** On the iPad the Settings pane spans the middle and the
+  right area (`.pane-settings`), so Devices, Appearance and Chat no longer sit in a ~190 px
+  column beside the 320 px category list; on the phone the page is full width. The **Engine** row
+  of the category list says `Videos kept out · up to 25 MB` / `Videos in git · up to 25 MB`
+  instead of nothing. `Away and alerts` and `Repositories` still wait for E12-3b.
+- **Five text sizes (board MPhoneAppearance, canvas decision 8).** **S · M · L · XL · XXL** =
+  15 · 16 · 17 · 19 · **21 px** body text, as one segmented control of five 44 px steps (the steps up
+  to the chosen one are tinted), saved per device. Every existing step keeps its value and the
+  stored-value scale marker stays `3`; an older build's `XXL` (v1, 22.5 px) and `XXL`/`XXXL` (v2,
+  21 / 24 px) now land on `XXL` instead of `XL`.
+- **Strings.** New strings are catalog keys (`work.row.waiting_for`, `work.row.running`,
+  `settings.engine.summary_in_git`, `settings.engine.summary_out`); the pages' older literals
+  migrate with their area (req-106).
+- **Specs.** `work.spec.ts` (one row per ticket, the age rule, the rendered row's fields and
+  `$1.20 so far`), `settings.spec.ts` (the five steps with their preview lines, the Engine
+  summary), `theme.spec.ts` (the XXL value, persistence of every step, the migrations), and
+  `e2e/mission-control-work-settings.spec.ts` (Settings page width at 1194 and 390 px, the 44 px
+  steps, XXL saved on the device and surviving a reload).
+- **Files outside the owned list.** `apps/mission-control/src/app/app.html|css` (one class and one
+  grid rule for the Settings pane), `shared/i18n/catalog/en.json` (four keys).
+
 ### Milestone 181 — D-11 to D-22: the sweep's defects on a dricket store
 
 **Not yet manually verified by the owner.** Build plan row 3.8; each defect red-then-green, on a scratch store
