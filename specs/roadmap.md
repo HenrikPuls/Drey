@@ -114,6 +114,11 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 - **D-31 — a refusal says "no acceptance criteria" when they exist as prose** (same smoke). `fleet/runs.ts:1684`
   counts only `- [ ] \`command\`` lines; the message should say so.
 
+- **D-32 — Accept on a store does not reach Done** (cut-over smoke, 2026-11-06; the cause read from the code, not proven). The
+  commit step of T-0092 merged and pushed, gate green, yet the ticket went back to Ready to try and stayed there with Drey
+  open. `settleCommitSteps` (`board-service.ts:2616`) drops the entry as soon as the run reads `done`; the ticket was
+  still in Building until the release 2 s later, which reads as "the owner moved it meanwhile", so nothing is booked.
+
 (D-23 shipped as milestones 184 and 185, D-24 as 184; what the wave-3 smoke could not see — the Autopilot status
 item and popover in a built app with a runner — waits for the owner's round, noted in the 184 changelog entry.)
 
@@ -738,6 +743,12 @@ checks use a scratch store and a second instance, never `drey-tickets`.
     second prompt.
 
 ### Later
+
+- **req-109 — Measure what a run uses, against a directly started session (owner request 2026-11-06, outside the list).** The
+  smoke's figures looked high: 203k tokens in (192k cached) over 18 calls to create and commit one file; T-0091, two runs, 3.3M in
+  (about 3.1M cached) without a commit of its own, the second run starting its reading over. Measure the consumption of a fleet run and of
+  the same task in a session started directly with the same model: calls, fresh and cached input, output, cost. Then decide from the
+  numbers what to cut. The runner shows `cost=0` for these runs, so the cost has to come from the provider.
 
 - **req-108 — Choose the run in a ticket's Thread (owner request 2026-11-06, outside the list).** After a second run on
   a ticket the Thread shows only that one, so the first run cannot be reached (cut-over smoke: the owner lost the way to the run).
