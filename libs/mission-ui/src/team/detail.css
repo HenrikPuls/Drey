@@ -9,7 +9,7 @@
 
 :host {
   display: block;
-  padding: 16px;
+  padding: 0 16px 16px;
 }
 
 .detail {
@@ -18,43 +18,20 @@
   gap: 14px;
 }
 
-.detail-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.detail-close {
-  order: 2;
-  margin-left: auto;
-  padding: 0 4px;
-  font-size: calc(22px * var(--mc-text, 1));
-  line-height: 1;
-  color: var(--text-2);
-  cursor: pointer;
-  background: transparent;
-  border: 0;
+mc-app-bar {
+  margin: 0 -16px;
 }
 
 .avatar {
   flex: none;
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: grid;
   place-items: center;
+  font-size: calc(13px * var(--mc-text, 1));
   font-weight: 600;
   color: var(--bg);
-}
-
-.who {
-  min-width: 0;
-}
-
-.title {
-  margin: 0;
-  font-size: calc(17px * var(--mc-text, 1));
-  font-weight: 600;
 }
 
 .role {

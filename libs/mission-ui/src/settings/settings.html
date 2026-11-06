@@ -1,6 +1,6 @@
 <div class="settings" [class.on-page]="shown() !== null">
   <section class="cats" aria-label="Settings categories">
-    <h1 class="ttl">Settings</h1>
+    <mc-app-bar title="Settings" />
     <div class="group">
       @for (p of pages; track p.id) {
         <button
@@ -23,15 +23,12 @@
 
   @if (shown(); as current) {
     <section class="page" [attr.aria-label]="labelOf(current)">
-      <header class="page-head">
-        <button type="button" class="back" aria-label="Back to Settings" (click)="back()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M15 5l-7 7 7 7" />
-          </svg>
-          Settings
-        </button>
-        <h2 class="page-title">{{ labelOf(current) }}</h2>
-      </header>
+      <mc-app-bar
+        [title]="labelOf(current)"
+        back="Settings"
+        [backOnWide]="false"
+        (backed)="back()"
+      />
 
       <div class="page-body">
         @switch (current) {

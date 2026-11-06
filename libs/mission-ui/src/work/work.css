@@ -11,57 +11,6 @@
   display: block;
 }
 
-/* ---------- header ---------- */
-
-.hdr {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 18px 12px;
-  background: color-mix(in srgb, var(--panel) 85%, transparent);
-  border-bottom: 1px solid var(--line);
-  backdrop-filter: blur(8px);
-}
-
-.logo {
-  display: grid;
-  flex: none;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  font-family: var(--mono);
-  font-size: calc(13px * var(--mc-text, 1));
-  font-weight: 700;
-  color: var(--bg);
-  background: var(--accent);
-  border-radius: var(--radius-control);
-}
-
-.hd {
-  min-width: 0;
-}
-
-.ttl {
-  font-family: var(--mono);
-  font-size: calc(13px * var(--mc-text, 1));
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
-.sub {
-  overflow: hidden;
-  font-family: var(--mono);
-  font-size: calc(13px * var(--mc-text, 1));
-  color: var(--text-3);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hspace {
-  flex: 1;
-}
-
 /* fleet status chip */
 
 .fleet {

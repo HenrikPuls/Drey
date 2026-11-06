@@ -1,20 +1,11 @@
 <div class="chat">
-  <header class="hdr">
-    <button type="button" class="hbtn" (click)="openSessions()" aria-label="Menu and chat history" title="Menu and chat history">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-        <path d="M4 7h16M4 12h16M4 17h16" />
-      </svg>
-    </button>
-    <div class="hd">
-      <h1 class="ttl">Mission Control</h1>
-    </div>
-    <span class="hspace" aria-hidden="true"></span>
-    <button type="button" class="hbtn" (click)="newChat()" aria-label="New chat" title="New chat">
+  <mc-app-bar title="Mission Control" [ownMenu]="true" (menu)="openSessions()">
+    <button bar-end type="button" class="hbtn" (click)="newChat()" aria-label="New chat" title="New chat">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
         <path d="M12 5v14M5 12h14" />
       </svg>
     </button>
-  </header>
+  </mc-app-bar>
 
   @if (shape(); as sh) {
     <div class="shapectx" aria-label="Shape session">

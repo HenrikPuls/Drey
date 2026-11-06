@@ -156,6 +156,7 @@ describe('EngineBoardService.readTicket reaches closed tickets (D-7a)', () => {
     // An archived ticket stays openable (E13-21: readTicket reaches it, as a card in the archive phase);
     // the chat reads its file by id through readAnyTicket as well (D-7a).
     expect(await service.readTicket('T-0002')).toMatchObject({ ok: true, card: { id: 'T-0002', phase: 'archive' } });
+    expect(await service.readTicket('T-0999')).toMatchObject({ ok: false });
     expect(await service.readAnyTicket('T-0001')).toMatchObject({ ok: true });
     expect(await service.readAnyTicket('T-0002')).toMatchObject({ ok: true, text: expect.stringContaining('Ticket T-0002') });
     expect(await service.readAnyTicket('T-0999')).toMatchObject({ ok: false });

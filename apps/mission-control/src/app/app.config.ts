@@ -10,6 +10,7 @@ import { McState } from './api/state';
 import { bootHintsFromLocation } from './api/client';
 import { parsePriorities } from '@mission-ui/api/dto';
 import { MC_CHAT_STATE } from '@mission-ui/chat/chat.model';
+import { MC_APP_NAV, type McAppNav } from '@mission-ui/app-bar/app-bar';
 import { MC_TEAM_DETAIL, type PersonaFacts, type TeamDetailVm } from '@mission-ui/team/detail';
 import {
   MC_TICKET,
@@ -36,6 +37,21 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     McState,
     { provide: MC_CHAT_STATE, useExisting: McState },
+    {
+      // The app bar's ☰ on every phone page: back to the chat with its history open (E13-24).
+      provide: MC_APP_NAV,
+      useFactory: (): McAppNav => {
+        const state = inject(McState);
+        return {
+          openMenu: () => {
+            state.chatMenu.set(true);
+            state.ticketOpen.set(null);
+            state.personaDetail.set(null);
+            state.tab.set('chat');
+          },
+        };
+      },
+    },
     { provide: MC_TOAST_STATE, useExisting: McState },
     { provide: MC_SETTINGS_STATE, useExisting: McState },
     {

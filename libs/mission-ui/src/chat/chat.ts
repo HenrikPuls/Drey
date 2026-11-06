@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
+import { AppBar } from '../app-bar/app-bar';
 import { COMPOSER_PLACEHOLDER } from '../../../../shared/composer-placeholder';
 import { Dictation, browserDictationEnv, clockOf } from './dictation';
 import { PlanPane } from '../plan/plan-pane';
@@ -501,7 +502,7 @@ interface SheetEntry {
   templateUrl: './chat.html',
   styleUrl: './chat.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, PlanPane],
+  imports: [NgTemplateOutlet, PlanPane, AppBar],
 })
 export class Chat {
   protected readonly state: McChatState =

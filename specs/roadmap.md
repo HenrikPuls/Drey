@@ -381,17 +381,6 @@ owner confirms scope and order before any of it starts:
   team, editable Setup, Friction tab, Notify / Runs after / This week /
   Typical run fields, "Talk to <name> 1:1 in the Assistant" (with E13-5), the
   per-persona slot share (needs an engine count) (G-14).
-- **E13-24 — Mission Control phone: one app bar** (owner markup 2026-11-06, screenshots
-  `docs/design/work-panel/mc-phone-appbar-{work,settings,settings-sub}-2026-11-06.jpg`;
-  outside the list). Today the hamburger (☰) sits alone in its own row and every page puts
-  its own header (title, "‹ Settings / Appearance", "WORK drey-tickets · 1 active") in a
-  second row below it. Required: **one app bar row** on every phone page: the leading
-  slot is the ☰ menu on top-level pages and **becomes the back control (‹) on sub-pages**
-  (Settings → Appearance …), followed by the page title (and the right-side status/action
-  such as "1 active"), all in the SAME row; no empty row above. Safe-area aware (status bar
-  / Dynamic Island), fixed like the other chrome (D-5b). Applies to Work, Settings and its
-  sub-pages, Team, Board, the ticket page (E13-23 keeps its own back + mode switch in
-  that bar), chat and the iPad layout where the same pattern is used.
 - **E12-9d — "Initialize board" seeds the default team** (owner decision 2026-11-05,
   answering E12-9b Q2: yes). A new board gets the default team of decision D7 — **Paul**
   (plans), **Ben**, **Ralf**, **Tessa** (roles as in the concept) — plus "You" and Pia as

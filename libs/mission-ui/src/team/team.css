@@ -4,55 +4,11 @@
 
 :host {
   display: block;
-  padding: 16px;
+  padding: 0 16px 16px;
 }
 
-/* ---------- header (the prototype's .hdr) ---------- */
-
-.hdr {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: -6px 0 12px;
-}
-
-.logo {
-  display: grid;
-  flex: none;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  font-family: var(--mono);
-  font-size: calc(13px * var(--mc-text, 1));
-  font-weight: 700;
-  color: var(--bg);
-  background: var(--accent);
-  border-radius: var(--radius-control);
-}
-
-.hd {
-  min-width: 0;
-}
-
-.ttl {
-  font-family: var(--mono);
-  font-size: calc(13px * var(--mc-text, 1));
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
-.sub {
-  overflow: hidden;
-  font-family: var(--mono);
-  font-size: calc(13px * var(--mc-text, 1));
-  color: var(--text-3);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hspace {
-  flex: 1;
+mc-app-bar {
+  margin: 0 -16px 12px;
 }
 
 /* ---------- the chain master strip (the prototype's .chain-strip) ---------- */

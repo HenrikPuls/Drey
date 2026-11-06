@@ -50,17 +50,6 @@
   color: var(--text);
 }
 
-.edit-head {
-  display: flex;
-  align-items: center;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--line);
-}
-
-.spacer {
-  flex: 1;
-}
-
 /* -- the conflict block -------------------------------------------------------- */
 
 .conflict {

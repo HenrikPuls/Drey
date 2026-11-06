@@ -23,6 +23,7 @@ import {
   acceptArmReduce,
   type AcceptArmState,
 } from '../ticket/ticket.model';
+import { AppBar } from '../app-bar/app-bar';
 import { initialsOf } from './team';
 
 // --- pure logic ----------------------------------------------------------------
@@ -280,7 +281,7 @@ export const MC_TEAM_DETAIL = new InjectionToken<TeamDetailVm>('mc-team-detail',
   templateUrl: './detail.html',
   styleUrls: ['../seg.css', './detail.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, AppBar],
 })
 export class PersonaDetail {
   private readonly vm = inject(MC_TEAM_DETAIL);

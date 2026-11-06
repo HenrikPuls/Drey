@@ -1,19 +1,13 @@
+<mc-app-bar title="Work" [sub]="vaultTitle()">
+  @if (state !== null) {
+    <button bar-end type="button" class="fleet" title="Chain status" (click)="onFleetTap()">
+      <span class="led" [class.idle]="!fleetLive()" aria-hidden="true"></span>{{ fleetLabel() }}
+    </button>
+  }
+</mc-app-bar>
 @if (state === null) {
   <p class="work-note">Not connected to a desk.</p>
 } @else {
-  <header class="hdr">
-    <div class="logo" aria-hidden="true">D</div>
-    <div class="hd">
-      <div class="ttl">Work</div>
-      @if (vaultTitle(); as vault) {
-        <div class="sub">{{ vault }}</div>
-      }
-    </div>
-    <div class="hspace"></div>
-    <button type="button" class="fleet" title="Chain status" (click)="onFleetTap()">
-      <span class="led" [class.idle]="!fleetLive()" aria-hidden="true"></span>{{ fleetLabel() }}
-    </button>
-  </header>
 
   <div class="groups">
     @for (group of groups(); track group.key) {

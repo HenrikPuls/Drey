@@ -82,6 +82,20 @@ describe('scroll contract (D-5)', () => {
     expect(missing).toEqual([]);
   });
 
+  it('the one app bar (E13-24) is pinned and carries the status-bar inset itself', () => {
+    const bar = rules(join(ROOT, 'libs/mission-ui/src/app-bar/app-bar.css'));
+    const host = bar.find((r) => r.selector === ':host');
+    expect(host?.body).toMatch(/position\s*:\s*sticky/);
+    expect(host?.body).toMatch(/top\s*:\s*0/);
+    const row = bar.find((r) => r.selector === '.bar');
+    expect(row?.body).toMatch(/padding\s*:\s*env\(safe-area-inset-top\)/);
+  });
+
+  it('the shell has no row of its own above the pages (the app bar is the page header)', () => {
+    const shell = readFileSync(join(ROOT, 'apps/mission-control/src/app/app.html'), 'utf8');
+    expect(shell).not.toContain('phonebar');
+  });
+
   it('D-5b: the shell is no scroller — .pane is the one scroller of the phone column, the bars stay put', () => {
     const app = rules(join(ROOT, 'apps/mission-control/src/app/app.css'));
     const shell = app.find((r) => r.selector === '.shell');

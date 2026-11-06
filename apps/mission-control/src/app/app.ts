@@ -169,9 +169,6 @@ export class App {
   /** The empty pane: only on the wide grid, while nothing else claims the center. */
   protected readonly showEmpty = computed(() => this.wide() && this.detail() === 'empty');
 
-  /** The phone's menu button shows on every screen but the chat itself. */
-  protected readonly showPhoneBar = computed(() => !this.wide() && this.tab() !== 'chat');
-
   /** A top-bar tab: sets the center tab (Work is permanent, so it clears any detail). */
   protected goTab(tab: McTab): void {
     this.state.ticketOpen.set(null);
@@ -186,12 +183,6 @@ export class App {
       this.dockTab.set('chat');
       return;
     }
-    this.goTab('chat');
-  }
-
-  /** The phone menu button on another screen: back to the chat, history open. */
-  protected openMenu(): void {
-    this.state.chatMenu.set(true);
     this.goTab('chat');
   }
 }

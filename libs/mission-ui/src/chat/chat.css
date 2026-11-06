@@ -23,35 +23,7 @@
   height: 100%;
 }
 
-/* ---------- header ---------- */
-
-.hdr {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 18px 12px;
-  background: color-mix(in srgb, var(--panel) 85%, transparent);
-  border-bottom: 1px solid var(--line);
-  backdrop-filter: blur(8px);
-}
-
-.hd {
-  min-width: 0;
-}
-
-.ttl {
-  margin: 0;
-  font-family: var(--mono);
-  font-size: calc(13px * var(--mc-text, 1));
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
-.hspace {
-  flex: 1;
-}
+/* ---------- header: the shared app bar (E13-24) ---------- */
 
 .hbtn {
   display: grid;

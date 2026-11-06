@@ -1,9 +1,8 @@
 @if (vm.editing()) {
   <section class="editor" aria-label="Raw edit">
-    <header class="edit-head">
-      <span class="spacer"></span>
-      <mc-ticket-mode [active]="editMode.mode()" (pick)="onModePick($event)" />
-    </header>
+    <mc-app-bar title="Edit" back="Ticket" (backed)="onCancel()">
+      <mc-ticket-mode bar-end [active]="editMode.mode()" (pick)="onModePick($event)" />
+    </mc-app-bar>
     <p class="warning" role="alert">
       <span class="warning-glyph" aria-hidden="true">⚠</span>
       Raw mode — this file is the machine interface. A stray character breaks parsers. The chat is

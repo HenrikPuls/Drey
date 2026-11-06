@@ -14,26 +14,11 @@
     @switch (mode()) {
       <!-- ==================== the ticket face ==================== -->
       @case ('ticket') {
-        <header class="hdr">
-          <button type="button" class="back" (click)="vm.onClose()">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.4"
-              stroke-linecap="round"
-              aria-hidden="true"
-            >
-              <path d="M15 5l-7 7 7 7" />
-            </svg>
-            Work
-          </button>
-          <span class="spacer"></span>
-          <span class="tid">{{ id() }}</span>
+        <mc-app-bar [title]="id()" back="Work" (backed)="vm.onClose()">
           @if (!readOnly()) {
-            <mc-ticket-mode active="view" (pick)="onModePick($event)" />
+            <mc-ticket-mode bar-end active="view" (pick)="onModePick($event)" />
           }
-        </header>
+        </mc-app-bar>
 
         <ng-container [ngTemplateOutlet]="faceSwitch" />
 
@@ -197,23 +182,7 @@
 
       <!-- ==================== the proof face ==================== -->
       @case ('proof') {
-        <header class="hdr">
-          <button type="button" class="back" (click)="backToTicket()">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.4"
-              stroke-linecap="round"
-              aria-hidden="true"
-            >
-              <path d="M15 5l-7 7 7 7" />
-            </svg>
-            Ticket
-          </button>
-          <span class="spacer"></span>
-          <span class="tid">{{ id() }}</span>
-        </header>
+        <mc-app-bar [title]="id()" back="Ticket" (backed)="backToTicket()" />
 
         <ng-container [ngTemplateOutlet]="faceSwitch" />
 
@@ -550,31 +519,16 @@
 
       <!-- ==================== the thread face ==================== -->
       @case ('thread') {
-        <header class="hdr">
-          <button type="button" class="back" (click)="backToTicket()">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.4"
-              stroke-linecap="round"
-              aria-hidden="true"
-            >
-              <path d="M15 5l-7 7 7 7" />
-            </svg>
-            Ticket
-          </button>
-          <span class="spacer"></span>
+        <mc-app-bar [title]="id()" back="Ticket" (backed)="backToTicket()">
           @if (threadPersona(); as chip) {
-            <span class="pchip">
+            <span bar-end class="pchip">
               <i aria-hidden="true" [style.background-color]="chip.color ?? null">
                 {{ chip.title.charAt(0).toUpperCase() }}
               </i>
               {{ chip.title }}
             </span>
           }
-          <span class="tid">{{ id() }}</span>
-        </header>
+        </mc-app-bar>
 
         <ng-container [ngTemplateOutlet]="faceSwitch" />
 

@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { Markdown } from '../markdown/markdown';
 import type { MdMode } from '../markdown/mode';
+import { AppBar } from '../app-bar/app-bar';
 import { TicketEditMode, TicketModeSwitch } from './mode-switch';
 import { MC_TICKET } from './ticket.model';
 
@@ -75,7 +76,7 @@ export function discardArmOf(state: DiscardArm, action: DiscardArmAction): Disca
   selector: 'mc-ticket-edit',
   templateUrl: './edit.html',
   styleUrl: './edit.css',
-  imports: [Markdown, TicketModeSwitch],
+  imports: [Markdown, TicketModeSwitch, AppBar],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TicketEdit {

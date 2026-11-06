@@ -1,0 +1,23 @@
+<header class="bar" [class.sub-page]="back() !== null" [class.no-wide-back]="!backOnWide()" [class.own-menu]="ownMenu()">
+  @if (back(); as parent) {
+    <button type="button" class="lead back" [attr.aria-label]="'Back to ' + parent" [attr.title]="'Back to ' + parent" (click)="onBack()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M15 5l-7 7 7 7" />
+      </svg>
+      <span class="back-label">{{ parent }}</span>
+    </button>
+  } @else {
+    <button type="button" class="lead menu-btn" aria-label="Menu and chat history" title="Menu and chat history" (click)="onMenu()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M4 7h16M4 12h16M4 17h16" />
+      </svg>
+    </button>
+  }
+  <div class="hd">
+    <h1 class="ttl">{{ title() }}</h1>
+    @if (sub(); as line) {
+      <div class="sub">{{ line }}</div>
+    }
+  </div>
+  <div class="end"><ng-content select="[bar-end]" /></div>
+</header>
