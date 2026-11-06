@@ -15,6 +15,38 @@ export type { ElectronApplication, Locator, Page } from '@playwright/test';
 const repoRoot = path.resolve(__dirname, '..', '..');
 const electronMain = path.join(repoRoot, 'dist-electron', 'electron', 'main.js');
 
+/** The home this worker started with: the real one, never handed to the app. */
+const SUITE_HOME = process.env['USERPROFILE'] ?? process.env['HOME'] ?? '';
+
+/**
+ * The home a launch runs under. The tickets engine is one process per user
+ * (`~/.drey-engine/engine.lock`, adopted by every Drey that starts), so a
+ * shared home would hand a test the owner's live engine and board, or the
+ * engine an earlier test left behind with another vault. A spec that sets
+ * `process.env.USERPROFILE` keeps its home for its whole file (it removes
+ * it in `afterAll`, so a removed one is a previous spec's, not this one's);
+ * every other launch gets a fresh home of its own.
+ */
+function launchHome(): { readonly home: string; readonly ownedByFixture: boolean } {
+  const current = process.env['USERPROFILE'] ?? process.env['HOME'] ?? '';
+  if (current !== SUITE_HOME && fs.existsSync(current)) {
+    return { home: current, ownedByFixture: false };
+  }
+  return { home: fs.mkdtempSync(path.join(os.tmpdir(), 'drey-e2e-home-')), ownedByFixture: true };
+}
+
+/** Stops the engine a launch under `home` spawned; it outlives Drey by design. */
+function stopEngineOf(home: string): void {
+  try {
+    const lock = JSON.parse(fs.readFileSync(path.join(home, '.drey-engine', 'engine.lock'), 'utf8')) as { pid?: number };
+    if (typeof lock.pid === 'number') {
+      process.kill(lock.pid);
+    }
+  } catch {
+    // no engine was started, or it is already gone
+  }
+}
+
 interface DreyFixtures {
   /**
    * A throwaway vault folder on disk, pre-registered as the active vault
@@ -211,6 +243,14 @@ export const test = base.extend<DreyFixtures>({
     if (extraPluginDir !== null) {
       env['DREY_EXTRA_PLUGIN_DIR'] = extraPluginDir;
     }
+    const { home, ownedByFixture } = launchHome();
+    env['USERPROFILE'] = home;
+    env['HOME'] = home;
+    // A home of its own has no global git identity for the app's commits.
+    env['GIT_AUTHOR_NAME'] ??= 'Drey e2e';
+    env['GIT_AUTHOR_EMAIL'] ??= 'e2e@drey.invalid';
+    env['GIT_COMMITTER_NAME'] ??= 'Drey e2e';
+    env['GIT_COMMITTER_EMAIL'] ??= 'e2e@drey.invalid';
 
     const launchPaths = launchFiles.map((file) => {
       const target = path.join(file.dir === 'vault' ? vaultDir : externalDir, file.name);
@@ -225,6 +265,11 @@ export const test = base.extend<DreyFixtures>({
     });
 
     await use(app);
+
+    // A live engine holds `app.close()` up for about a minute.
+    if (ownedByFixture) {
+      stopEngineOf(home);
+    }
 
     // The save-before-exit prompt (bug-5): a test that leaves a dirty
     // document makes main's intercepted close show the exit dialog, which
@@ -243,6 +288,10 @@ export const test = base.extend<DreyFixtures>({
       .click({ timeout: 5_000 })
       .catch(() => undefined);
     await closing;
+    if (ownedByFixture) {
+      stopEngineOf(home);
+      fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    }
     // `userDataDir` (own fixture) does the cleanup.
   },
 

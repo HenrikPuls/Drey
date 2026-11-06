@@ -113,7 +113,7 @@ async function openFromFiles(page: Page, dir: string, file: string): Promise<voi
 
 async function waitForEngine(page: Page): Promise<void> {
   // The Work panel is what starts the plugin's board (and with it the engine).
-  await page.locator('app-dock-strip button[aria-label="Show Work"]').click();
+  await page.locator('app-dock-strip button[aria-label="Show Tickets"]').click();
   await expect.poll(() => readLock() !== null, { timeout: 30_000 }).toBe(true);
   await expect
     .poll(async () => (await invokeEngine('snapshot', undefined).catch(() => ({ ok: false }))).ok, { timeout: 30_000 })
