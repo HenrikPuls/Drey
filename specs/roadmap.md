@@ -114,11 +114,6 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 - **D-31 — a refusal says "no acceptance criteria" when they exist as prose** (same smoke). `fleet/runs.ts:1684`
   counts only `- [ ] \`command\`` lines; the message should say so.
 
-- **D-32 — Accept on a store does not reach Done, blocks the cut-over** (cut-over smoke, 2026-11-06, seen twice on T-0092; the cause read from the code, not proven). The
-  commit step of T-0092 merged and pushed, gate green, yet the ticket went back to Ready to try and stayed there with Drey
-  open. `settleCommitSteps` (`board-service.ts:2616`) drops the entry as soon as the run reads `done`; the ticket was
-  still in Building until the release 2 s later, which reads as "the owner moved it meanwhile", so nothing is booked.
-
 - **D-33 — "Accepted." stays on the Work card while the ticket waits** (same smoke). `libs/mission-ui/src/work/work.ts:427` keeps the text
   as local state, so after D-32 the card in Needs you says Accepted and offered the owner no second Accept.
 - **D-34 — "1 active" counts a dead run** (same smoke; not proven which run it counts). The only non-finished run was the migrated
@@ -655,7 +650,10 @@ checks use a scratch store and a second instance, never `drey-tickets`.
   is also the store's checkout would make dk flag it `unexpected-path` — keep them
   two folders; (7) the real check on a second instance (answer from the phone, a
   send-back from the Ready card) — only the engine services ran, on a scratch store.
-- **E14-7 — Cut-over (wave 3, the owner present).** One start, prepared by E14-7a (milestone 175) and
+- **E14-7 — Cut-over (wave 3, the owner present).** **Steps 1 to 8 ran on 2026-11-06, the board runs on the store
+  ([`cutover-2026-11-06.md`](../docs/design/dricket/cutover-2026-11-06.md)). Open: step 9, the owner's first round. Owner, 2026-11-07:
+  after the UI integration, which may still change what the round would check. Nothing else of this item is left, and
+  it moves to the changelog with that round.** One start, prepared by E14-7a (milestone 175) and
   rehearsed on a copy of the real vault
   ([`rehearsal-2026-11-06.md`](../docs/design/dricket/rehearsal-2026-11-06.md), milestone 169). The
   owner's real `drey-tickets` is only touched here. req-99a is merged, so the store is written
