@@ -11,6 +11,7 @@ import { FileStoreReader } from './file-store-reader';
 import { legacyToDricketDocument, type BridgeOptions } from './legacy-bridge';
 import { StoreChangeFeed, type StoreChangeFeedStats, type WatchFn } from './store-change-feed';
 import { headFingerprint, remoteMovedProbe } from './store-git-probe';
+import { StorePathReporter, type StorePathChange } from './store-path-report';
 import { readStorePriorities } from './store-priorities';
 import { StoreReader } from './store-reader';
 import { checkoutOf, createDricketStore, type StoreSettings } from './store-settings';
@@ -19,6 +20,8 @@ import { checkoutOf, createDricketStore, type StoreSettings } from './store-sett
 export interface StoreBoardSourceOptions {
   /** The store's change feed fired: the board is stale. */
   readonly onChange?: () => void;
+  /** Which files of the checkout such a change touched (D-28); absent = nobody asks, no git round. */
+  readonly onPaths?: (change: StorePathChange) => void;
   /** Debounce of the watcher; default 200 ms. */
   readonly debounceMs?: number;
   readonly watch?: WatchFn;
@@ -65,6 +68,7 @@ export class StoreBoardSource {
   private shadowRunning = false;
   private shadowDone: Promise<unknown> = Promise.resolve();
   private readonly feeds = new Set<StoreChangeFeed>();
+  private readonly pathReporters = new Set<StorePathReporter>();
   private shadowAt = 0;
   private lastDiff: BoardDiff | null = null;
 
@@ -94,11 +98,20 @@ export class StoreBoardSource {
       const dk = (this.options.dkFactory ?? createDricketStore)(settings);
       const files = new DricketFileStore(new FileStoreReader({ root: checkout }), dk, checkout);
       const remote = settings.dkCheckout !== '' && settings.dkCheckout !== settings.dkStore;
-      const feed = this.options.onChange === undefined
+      const onChange = this.options.onChange;
+      const paths = onChange === undefined || this.options.onPaths === undefined ? null : new StorePathReporter(checkout, this.options.onPaths, this.log);
+      if (paths !== null) {
+        this.pathReporters.add(paths);
+        void paths.start();
+      }
+      const feed = onChange === undefined
         ? null
         : new StoreChangeFeed({
           dir: checkout,
-          onChange: this.options.onChange,
+          onChange: () => {
+            onChange();
+            void paths?.report();
+          },
           ...(this.options.debounceMs === undefined ? {} : { debounceMs: this.options.debounceMs }),
           ...(this.options.watch === undefined ? {} : { watch: this.options.watch }),
           ...(this.options.maxWaitMs === undefined ? {} : { maxWaitMs: this.options.maxWaitMs }),
@@ -132,6 +145,7 @@ export class StoreBoardSource {
    */
   async idle(): Promise<void> {
     await Promise.allSettled([...[...this.feeds].map((feed) => feed.idle()), this.shadowDone]);
+    await Promise.allSettled([...this.pathReporters].map((paths) => paths.idle()));
   }
 
   /** The file store of the configured checkout, or null when reads go through `dk`. */

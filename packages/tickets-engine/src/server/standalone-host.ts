@@ -100,6 +100,11 @@ export class FsEngineHost implements EngineHost {
     this.hub.emitPaths({ vaultPath: this.vault.path, changed: changedPaths, deleted: deletedPaths ?? [] });
   };
 
+  // The store's checkout is no vault of this host: the same channel names it by its folder (D-28).
+  announceStoreChanges = (checkout: string, changedPaths: readonly string[], deletedPaths: readonly string[]): void => {
+    this.hub.emitPaths({ vaultPath: checkout, changed: changedPaths, deleted: deletedPaths });
+  };
+
   markManaged = (_vaultId: string | null): void => {
     // no registry to flag outside Drey — the discipline is the engine's own
   };

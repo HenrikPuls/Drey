@@ -47,6 +47,7 @@ import { archivedRecordFiles, recordToBoardFile } from '../store/store-board';
 import type { TicketDetail } from '../ports/ticket-store';
 import { ARCHIVED_LABEL, type BridgeOptions } from '../store/legacy-bridge';
 import { StoreBoardSource } from '../store/store-board-source';
+import type { StorePathChange } from '../store/store-path-report';
 import { storeFooterLine } from '../store/store-footer';
 import { loadShippedPrompts } from '../core/default-prompts';
 import { type AttachmentCommand, RefineCommand } from '../core/commands';
@@ -319,6 +320,10 @@ export class EngineBoardService {
     this.storeBoard = new StoreBoardSource(path.join(host.userRoot, 'shadow'), (message, level) => host.log(message, level), undefined, createDricketStore, {
       // E14-4: the store's own writes, its file watcher and the remote sync round announce a changed board.
       onChange: () => this.announceChanged(),
+      // D-28: the checkout's files Drey shows, whoever changed them.
+      ...(host.announceStoreChanges === undefined
+        ? {}
+        : { onPaths: (change: StorePathChange) => host.announceStoreChanges?.(change.checkout, change.changed, change.deleted) }),
     });
   }
 

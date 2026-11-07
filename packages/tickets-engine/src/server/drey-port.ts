@@ -195,7 +195,7 @@ export class ChangeHub {
 
 /** Vault-relative paths one engine write changed / removed (a move = both). */
 export interface PathsChange {
-  /** Absolute root of the vault the engine hosts, so Drey can match its own registration. */
+  /** Absolute root of the vault the engine hosts or of a store's checkout (D-28), so Drey can match its own registration. */
   readonly vaultPath: string;
   readonly changed: readonly string[];
   readonly deleted: readonly string[];

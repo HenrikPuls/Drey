@@ -18,10 +18,13 @@ import * as path from 'node:path';
  *   reverse) counts once, as its final state.
  * - Over {@link MAX_PATHS} the round degrades to a full refresh of the
  *   vault (empty path lists) instead of a huge payload.
+ * - A report names a folder: the hosted vault or a store's checkout (D-28).
+ *   Every registered vault that holds that folder hears it, its paths
+ *   relative to that vault.
  */
 
 export interface PathsEvent {
-  /** Absolute root of the vault the engine hosts. */
+  /** Absolute root of the vault the engine hosts, or of a store's checkout. */
   readonly vaultPath: string;
   readonly changed: readonly string[];
   readonly deleted: readonly string[];
@@ -113,6 +116,26 @@ export class PathAnnouncer {
     return this.platform === 'win32' ? resolved.toLowerCase() : resolved;
   }
 
+  /**
+   * What a reported path needs in front to be relative to this vault: '' when the vault is
+   * the reported folder, `sub/dir/` when the folder lies inside it (a store's checkout in a
+   * larger vault, D-25/D-28); null when it lies outside.
+   */
+  private prefixInside(vaultPath: string, folder: string): string | null {
+    const vault = this.key(vaultPath);
+    const target = this.key(folder);
+    if (target === vault) {
+      return '';
+    }
+    const relative = path.relative(vault, target);
+    if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+      return null;
+    }
+    // Measured on the folded paths, cut from the real one: the prefix keeps the folder's own case.
+    const real = path.resolve(folder);
+    return `${real.slice(real.length - relative.length).split(path.sep).join('/')}/`;
+  }
+
   private async flush(key: string): Promise<void> {
     const batch = this.pending.get(key);
     if (batch === undefined) {
@@ -124,10 +147,6 @@ export class PathAnnouncer {
     }
     try {
       const vaults = await this.deps.listVaults();
-      const vault = vaults.find((v) => v.exists && this.key(v.path) === key);
-      if (vault === undefined) {
-        return; // the tickets vault is not registered in Drey -- nothing to refresh
-      }
       if (this.disposed) {
         return;
       }
@@ -135,15 +154,22 @@ export class PathAnnouncer {
       if (total === 0) {
         return;
       }
-      if (total > MAX_PATHS) {
-        this.deps.announce({ vaultId: vault.id, changedPaths: [] });
-        return;
+      for (const vault of vaults) {
+        // Not a vault of Drey's, in no vault of Drey's: nothing to refresh.
+        const prefix = vault.exists ? this.prefixInside(vault.path, batch.vaultPath) : null;
+        if (prefix === null) {
+          continue;
+        }
+        if (total > MAX_PATHS) {
+          this.deps.announce({ vaultId: vault.id, changedPaths: [] });
+          continue;
+        }
+        this.deps.announce({
+          vaultId: vault.id,
+          changedPaths: [...batch.changed].map((p) => `${prefix}${p}`),
+          ...(batch.deleted.size > 0 ? { deletedPaths: [...batch.deleted].map((p) => `${prefix}${p}`) } : {}),
+        });
       }
-      this.deps.announce({
-        vaultId: vault.id,
-        changedPaths: [...batch.changed],
-        ...(batch.deleted.size > 0 ? { deletedPaths: [...batch.deleted] } : {}),
-      });
     } catch (error) {
       this.deps.log?.(`vault announce failed: ${error instanceof Error ? error.message : String(error)}`, 'warn');
     }
