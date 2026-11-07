@@ -101,6 +101,25 @@ A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
   chord, a segmented On | Paused | Off, the state's one sentence and chips for the resume time and today's cost. The build opens
   a plain list of rows at the bottom left, without title, sentence or chips. Done when a screenshot matches the board.
 
+- **D-39 — A context-menu flyout closes on the way to it** (S; owner request, outside the list, 2026-11-07). The flyout cannot be
+  selected with the mouse: it folds away between its row and its panel. By the code, not reproduced yet: the one flyout in the app,
+  the tab menu's "Show this tab in", closes on `mouseleave` of `.ctx-sub-wrap` (`src/app/tab-bar/tab-bar.html`), and `.ctx-sub` sits
+  `margin-left: 2px` outside that wrap (`tab-bar.css`), so the pointer leaves it in the gap. Done when the pointer can travel from the
+  row into the flyout and pick an entry, also on a diagonal path; an e2e moves a real mouse across the gap.
+
+- **D-40 — The tickets views repaint twice per board refresh** (M; owner request, outside the list, 2026-11-07; found by D-37).
+  `refreshBoard` (`plugins/tickets/renderer/index.ts`) calls `notifyViews()` for `busy` and again when the board is in, even if nothing
+  changed, and each call rebuilds the Work header's chip and the Board's columns; the engine's first `board-changed` and vault events
+  add more rounds in the first second after a start. From reading the code a real click could get lost in a rebuild and a focused
+  card could lose focus; neither was seen. Done when a refresh that changes nothing rebuilds nothing, proved by a spec.
+
+- **D-41 — T-0091 starts on its own** (M; owner request, outside the list, 2026-11-07). Three runs on 2026-11-06: 21:53:40, 18 s after the
+  T-0092 run with the Autopilot on; 22:00:56 and 22:39:11 with the Autopilot off. `runner.log` says "explicit fresh start" and "explicit
+  resume with a native compact first", so a client asked for the start with a concrete mode; `engine.log` has no remote line for them.
+  T-0091 is the first ticket in Prioritized. Together about 3.7 million input tokens. Cause open. On the cut-over branch
+  `claude/w3-e14-7-cutover-cee921` the same finding is D-36 (`968078bf`); that merge renames it to this id, because D-36 here is the
+  Autopilot popover.
+
 (D-23 shipped as milestones 184 and 185, D-24 as 184, D-35 as 188, D-37 as 190.)
 
 D-7 (b) was reproduced on the scratch build: Mission Control → ticket → Change by chat opens the chat field
