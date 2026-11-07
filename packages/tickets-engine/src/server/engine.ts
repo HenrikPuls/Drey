@@ -101,6 +101,8 @@ const FLEET_METHODS = ['runs', 'start', 'chainStatus', 'stop', 'send', 'answerPe
 const TEAM_METHODS = [
   'personas', 'handoffRun', 'chainPersonaPause', 'chainAutopilot', 'personaThread', 'personaThreadAppend',
   'personaMemory', 'personaMemoryAppend', 'personaMemoryPin', 'planParts',
+  // The Persona page (board 7k): the phone's setup write and improvements card.
+  'personaPatch', 'personaImprovements', 'personaImprovementDecide',
 ] as const;
 
 // pair/revoke take primitive args; the invoke channel carries one object

@@ -1201,6 +1201,13 @@ the Work panel's **⋯** menu (*Board*, *Crew*) or the command palette
   Ctrl+Enter sends), **Memory** (its entries — pin the ones that must
   always ride along — and a line to teach it) and **Setup** (worker,
   model, pool, phases, cost; **Pause** or **Resume** the persona).
+  **Edit persona** on that head opens the persona's own page: its name,
+  role, model pool and instructions (the persona's `prompt.md`), its skills
+  and a suggested change from its friction findings. **Save** writes
+  everything you changed as one commit; new runs get it, running ones keep
+  the prompt they started with. **Discard** goes back to what is saved. If
+  the instructions cannot be read, the editor and Save stay off, so nothing
+  can overwrite them unread.
 - **Capacity** (a panel for the bottom dock) — one line: how many of the
   worker slots are busy, the pool chips, what each persona is doing right
   now, today's cost, **Pause all** and **Open Crew ›**. It shows only while

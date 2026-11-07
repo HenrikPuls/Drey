@@ -4464,6 +4464,27 @@ A runner that restarts meanwhile boots as Off and the time never fires; only a h
 newer build carries the record on. A set from a read-only device stops at the gateway with
 403 and `code: "read_only"`, as does Stop-now.
 
+## 6.98 Saving a persona (board 7k, milestone 201)
+
+```mermaid
+sequenceDiagram
+    participant Page as Persona page (renderer)
+    participant Vault as api.vault
+    participant Main as plugins/tickets main
+    participant Engine as BoardService.personaPatch
+    Page->>Vault: readFile prompt.md (on load)
+    Note over Page: a failed read other than a missing file:<br/>editor and Save stay disabled
+    Page->>Page: patchOf(record, draft): only the changed keys
+    alt the prompt changed
+        Page->>Vault: readFile prompt.md again
+        Note over Page: differs from what was loaded:<br/>refuse, the draft stays
+    end
+    Page->>Main: invoke personaPatch { persona, ...keys }
+    Main->>Engine: personaPatch (TEAM_METHODS)
+    Engine->>Engine: validate, write persona.md + prompt.md
+    Engine-->>Page: ok, one commit "personas: <id> updated", or the refusal
+```
+
 ## 6.97 Accept on Ready to try (req-99a, req-99b)
 
 ```mermaid

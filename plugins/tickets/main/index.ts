@@ -770,6 +770,23 @@ const plugin: MainPluginModule = {
         : client.invoke('personaMemoryPin', { persona, index: p.index, pinned: p.pinned });
     });
 
+    // The Persona page (board 7k): the same three calls the phone's persona detail makes.
+    ctx.ipc.handle('personaPatch', (payload) =>
+      str(payload, 'persona') === null ? { ok: false, error: 'bad persona patch payload' } : client.invoke('personaPatch', payload),
+    );
+    ctx.ipc.handle('personaImprovements', (payload) => {
+      const persona = str(payload, 'persona');
+      return persona === null ? { ok: false, error: 'bad persona payload' } : client.invoke('personaImprovements', persona);
+    });
+    ctx.ipc.handle('personaImprovementDecide', (payload) => {
+      const persona = str(payload, 'persona');
+      const proposal = str(payload, 'proposal');
+      const decision = str(payload, 'decision');
+      return persona === null || proposal === null || (decision !== 'accepted' && decision !== 'dismissed')
+        ? { ok: false, error: 'bad improvement payload' }
+        : client.invoke('personaImprovementDecide', { persona, proposal, decision });
+    });
+
     // T-0004: open the ticket's work checkout in the OS terminal — the
     // directory where `.\dev.ps1` (or the repo's own build) runs.
     ctx.ipc.handle('openRepoFolder', async (payload) => {
