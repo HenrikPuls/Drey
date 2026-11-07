@@ -147,7 +147,7 @@ function liveRun(id: string, ticketId: string, personaId: string, extra: Record<
 test.describe('Board, Team and Capacity (E13-8)', () => {
   test('shows the board, the team and the capacity band', async ({ page, electronApp }, testInfo) => {
     // The Work view exists once the plugin has registered it; Ctrl+2 before that does nothing.
-    await expect(page.locator('[role="tablist"][aria-label="Views"] [role="tab"]')).toHaveText(['Notes', 'Work'], { timeout: 30_000 });
+    await expect(page.locator('[role="tablist"][aria-label="Views"] [role="tab"]')).toHaveText(['Notes', 'Work', 'Crew'], { timeout: 30_000 });
     // The title bar carries no capture button (board 9a); it is the Work panel's first header action (board 7a).
     await expect(page.locator('app-titlebar .tb-action')).toHaveCount(0);
     // The status items (E12-15): today's cost and what waits, "in Work" from the Notes view.
@@ -220,21 +220,9 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
     await expect(plan.locator('.desk-part-handle').first()).toHaveText('T-0141');
     await expect(board.locator('[data-phase="build"] [data-id="T-0141"]')).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath('desk-board.png') });
-    // Scroll to the later columns; a repaint (a refreshed board) keeps the place.
-    // Every repaint rebuilds the columns, and the engine's first board rounds
-    // still arrive here: a handle on `build` can be a node already replaced, so
-    // the scroll goes through the board's root, which stays. The mark on the
-    // scrolled columns tells when a repaint has really replaced them.
-    const scrolled = await board.evaluate((root) => {
-      const columns = root.querySelector<HTMLElement>('.desk-cols')!;
-      columns.dataset['e2eScrolled'] = 'yes';
-      root.querySelector('[data-phase="build"]')!.scrollIntoView({ inline: 'start', block: 'nearest' });
-      return columns.scrollLeft;
-    });
-    expect(scrolled).toBeGreaterThan(0);
+    // The six columns share the width (board 7e), so there is no sideways scroll to keep; a refresh repaints them.
     await openFromMenu('Refresh the board');
-    await expect(board.locator('.desk-cols[data-e2e-scrolled]')).toHaveCount(0);
-    expect(await board.evaluate((root) => root.querySelector('.desk-cols')!.scrollLeft)).toBeCloseTo(scrolled, 0);
+    await expect(board.locator('.desk-col-title').first()).toHaveText('Inbox');
     await page.screenshot({ path: testInfo.outputPath('desk-board-build.png') });
 
     // --- Team
@@ -246,7 +234,7 @@ test.describe('Board, Team and Capacity (E13-8)', () => {
     await expect(team.locator('[data-persona="ben"] .desk-persona-state')).toHaveText('waiting');
     await expect(team.locator('[data-persona="tessa"] .desk-persona-state')).toHaveText('stuck');
     await expect(team.locator('[data-persona="tessa"] .desk-persona-headline')).toHaveText('No output for 9 min on T-0126');
-    await expect(team.locator('[data-persona="tessa"] .desk-persona-controls button')).toHaveAttribute('aria-label', /Nudge the worker|Hand to Claude Code|Stop/);
+    await expect(team.locator('[data-persona="tessa"] .desk-persona-controls button')).toHaveCount(3);
     await expect(team.locator('[data-persona="ben"] .desk-persona-role')).toHaveText('Builder · $3.25 today');
     // The persona detail sits under the cards: the first persona is selected, Setup first.
     await expect(team.locator('.desk-tab')).toHaveText(['Setup', 'Memory', '1:1']);

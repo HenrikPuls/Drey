@@ -121,7 +121,7 @@ test.beforeEach(({ userDataDir }) => {
 test('the sweep defects on the store', async ({ page, electronApp }, testInfo) => {
   test.setTimeout(240_000);
   const tabs = page.locator('[role="tablist"][aria-label="Views"] [role="tab"]');
-  await expect(tabs).toHaveText(['Notes', 'Work'], { timeout: 30_000 });
+  await expect(tabs).toHaveText(['Notes', 'Work', 'Crew'], { timeout: 30_000 });
   await tabs.filter({ hasText: 'Work' }).click();
   const panel = page.locator('.tickets-panel').filter({ visible: true });
   const row = (id: string) => panel.locator(`.work-row[data-id="${id}"]`);
@@ -130,9 +130,8 @@ test('the sweep defects on the store', async ({ page, electronApp }, testInfo) =
     await page.screenshot({ path: testInfo.outputPath(`${name}.png`) });
   };
 
-  // D-12: a "Decision needed" comment is a Needs-you row with its question.
-  await expect(row('T-0001')).toContainText('Decision');
-  await expect(row('T-0001')).toContainText('zip everything, or only the open notes?');
+  // D-12: a "Decision needed" comment is a Needs-you row (board 7a: the row names the kind, the question is in the thread).
+  await expect(panel.locator('.work-group-needs').locator('.work-row[data-id="T-0001"]')).toContainText(/decision/i);
 
   // D-11: the menu offers the store's vocabulary, and the choice lands as one put.
   await row('T-0003').hover();

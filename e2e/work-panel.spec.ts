@@ -141,13 +141,9 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     // Needs you: the question, the review checkpoint, the finished ticket.
     await expect(rows('needs')).toHaveCount(3);
     await expect(rows('needs').first()).toHaveAttribute('data-id', 'T-0104');
-    await expect(panel.locator('.work-row[data-id="T-0104"] .work-kind')).toHaveText('Question');
-    await expect(panel.locator('.work-row[data-id="T-0104"] .work-row-line')).toHaveText(
-      'Should dragging a heading also move the text below it?',
-    );
-    await expect(panel.locator('.work-row[data-id="T-0105"] .work-kind')).toHaveText('Review');
-    await expect(panel.locator('.work-row[data-id="T-0105"] .work-row-line')).toHaveText('waits for your review');
-    await expect(panel.locator('.work-row[data-id="T-0106"] .work-kind')).toHaveText('Ready to try');
+    await expect(panel.locator('.work-row[data-id="T-0104"] .work-kind')).toHaveText('question');
+    await expect(panel.locator('.work-row[data-id="T-0105"] .work-meta-phase')).toHaveText('Review');
+    await expect(panel.locator('.work-row[data-id="T-0106"] .work-kind')).toHaveText('ready to try');
     // Shaping holds the reserved dialog (its phase chip names the column);
     // Running the live plan run; the ideas keep their queue chip and carry
     // the triage chip.
@@ -161,8 +157,9 @@ test.describe('Work panel (req-75 W1/W1b)', () => {
     await expect(rows('prioritized')).toHaveCount(1);
     await expect(rows('ideas')).toHaveCount(2);
     await expect(rows('ideas').first()).toHaveAttribute('data-id', 'T-0101');
-    await expect(panel.locator('.work-row[data-id="T-0103"] .work-row-queued')).toHaveText('Queued');
-    await expect(panel.locator('.work-row[data-id="T-0102"] .work-track')).toHaveText('Triage');
+    // Board 7a: a Prioritized row ends in its ticket id, an Inbox row is its title alone.
+    await expect(panel.locator('.work-row[data-id="T-0103"] .work-row-id')).toHaveText('T-0103');
+    await expect(panel.locator('.work-row[data-id="T-0102"] .work-track')).toHaveCount(0);
     // The footer is the crew line (E12-11): who is busy, one click to the Crew tab; the
     // header is one row ending in the Open Board tab icon, and no Workers cards sit above the groups.
     await expect(panel.locator('.tickets-statusbar-fleet')).toHaveText('Crew · 2 busy');
