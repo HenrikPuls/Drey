@@ -80,7 +80,7 @@ On the integrated tip (204 + 205 + 206 merged) the one-push `work-panel` test "g
 | 7i | Rows | Medium grey text on the board's weight | Same size and width, Electron's stroke | text rasterization, no CSS difference found |
 | 7f (hand) | Cards with the Assistant open | Dock folded | Wrapped, three and one | owner ruling O7 |
 | 10t | `2 running · 1 stuck · 1 queued` | Shown | None | feature not yet built — req-150 |
-
+- **Spec follow-up (2026-11-07, at integration of 207):** `e2e/flow-settings.spec.ts` still expected the Crew row as "Ben, Paul, Ralf"; O12 sorts personas in pipeline order ("Paul, Ben, Ralf"). The expectation follows; no product change.
 ### Milestone 202 — wave 4.7: the fidelity review
 
 **Not yet manually verified by the owner.** Row 4.7 of the fidelity wave: one session compared 39 of the 40 boards (9b is not a target) against the built app and wrote one deviation table, [fidelity-review-2026-11.md](../docs/design/work-panel/fidelity-review-2026-11.md); the open-for-owner list comes first there. Entered and left the roadmap with this change.

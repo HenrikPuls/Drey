@@ -119,7 +119,7 @@ test.describe('Flow tab and Settings → Tickets (E13-11, E13-12)', () => {
     await page.locator('app-settings .category', { hasText: 'Tickets' }).click();
     const settings = page.locator('.tset-desk');
     await expect(settings).toBeVisible({ timeout: 15_000 });
-    await expect(settings.locator('.tset-set-controls').first()).toContainText('Ben, Paul, Ralf');
+    await expect(settings.locator('.tset-set-controls').first()).toContainText('Paul, Ben, Ralf');
     await expect(settings.locator('[aria-label="Standard flow"]')).toHaveText('Plan → Build → Review');
     await expect(settings).toContainText('$12 across 3 personas');
     const videos = page.locator('[data-settings-section="videos"]');
