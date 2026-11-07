@@ -752,6 +752,11 @@ checks use a scratch store and a second instance, never `drey-tickets`.
 
 ### Later
 
+- **req-113 — A per-ticket cost allowance** (owner request, outside the list, 2026-11-07; found by wave 4.2 against board 7a). The
+  Work panel's Running row draws its cost in orange once a run has used most of the ticket's allowance (the board: $2.05 of
+  $2.50, 82 %). No such figure exists: budgets today are per day (`todayBudget`) and per persona, not per ticket. Needs the
+  frontmatter field (ticket-schema), the engine reporting spent-of-allowance per run, and the row's orange at a threshold;
+  until then the row shows the cost plain (deviation "feature not yet built — req-113").
 - **req-112 — A model budget for the Crew, controlled by the engine** (owner request, outside the list, 2026-11-07; details
   still to be thought through by the owner — do not build before they are). The way the owner now runs the agent sessions of
   this redesign — a fixed pool of slots per model (today Fable 3, Opus 2, Sonnet 1), every task ranked by importance and
