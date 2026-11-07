@@ -506,6 +506,7 @@
     min-height: 0;
     padding: 8px 0;
     overflow: auto;
+    overscroll-behavior: contain;
   }
   .pd-rcode {
     min-width: 640px;

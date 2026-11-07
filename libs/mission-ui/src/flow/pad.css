@@ -20,6 +20,7 @@
     min-height: 0;
     padding: 16px 20px;
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .pd-fbody > * {
     flex: none;
@@ -56,6 +57,7 @@
     align-items: center;
     padding: 8px 0 4px;
     overflow: auto hidden;
+    overscroll-behavior: contain;
   }
   .pd-fcell {
     display: flex;
@@ -294,7 +296,7 @@
     cursor: pointer;
     background: var(--panel-2);
     border: 1px solid var(--control-border);
-    border-radius: 16px;
+    border-radius: var(--radius-dialog);
   }
   .pd-fswitch.on {
     background: var(--accent);

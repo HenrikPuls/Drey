@@ -92,6 +92,7 @@
     min-height: 0;
     padding: 8px 20px 20px;
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .composer {
     flex: none;
@@ -105,6 +106,7 @@
     min-height: 0;
     padding: 8px 20px 20px;
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .pd-setup > * {
     flex: none;
@@ -191,7 +193,6 @@
     width: 2px;
     height: 14px;
     background: var(--line);
-    border-radius: 1px;
   }
   .pd-costs {
     display: flex;

@@ -27,8 +27,6 @@ export class ShellHeader {
   readonly right = input.required<boolean>();
   /** Settings owns the centre. */
   readonly settingsOn = input(false);
-  /** Work's "Needs you" count; 0 hides the badge. */
-  readonly needsCount = input(0);
 
   readonly toggleLeft = output<void>();
   readonly toggleRight = output<void>();

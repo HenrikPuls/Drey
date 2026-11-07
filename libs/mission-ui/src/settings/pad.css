@@ -21,6 +21,7 @@
     width: 240px;
     border-right: 1px solid var(--line);
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .pd-cats-head {
     display: flex;
@@ -190,6 +191,7 @@
     min-height: 0;
     padding: 12px 16px 24px;
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .pd-list > * {
     flex: none;
@@ -318,6 +320,7 @@
     flex-direction: column;
     min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .pd-page > * {
     flex: none;
